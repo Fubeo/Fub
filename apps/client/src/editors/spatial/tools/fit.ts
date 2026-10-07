@@ -21,6 +21,11 @@ export const AWAY_SAMPLES = 512;
 /// Le prove di Newton dei parametri, prima di dividere un pezzo.
 export const REFINE_ROUNDS = 4;
 
+/// Quanto si scostano dai punti, in media quadratica, le cubiche rifinite,
+/// al più, in tolleranze: una cubica che resta tutta da una parte, anche
+/// entro la tolleranza, ingrassa o assottiglia un tratto.
+export const SPREAD = 0.5;
+
 type Cubic = Extract<Curve, { readonly kind: "cubic" }>;
 
 const plus = (a: Point, b: Point): Point => [a[0] + b[0], a[1] + b[1]];
@@ -136,11 +141,13 @@ export function closer(from: Point, curve: Cubic, p: Point, t: number): number {
   return denominator === 0 ? t : Math.min(1, Math.max(0, t - (dx * d1x + dy * d1y) / denominator));
 }
 
-/// Il punto più lontano dalla cubica fra quelli in mezzo, e quanto.
-function worst(points: readonly Point[], first: number, last: number, u: readonly number[], curve: Cubic): { readonly error: number; readonly at: number } {
+/// Il punto più lontano dalla cubica fra quelli in mezzo, quanto, e quanto
+/// se ne scostano tutti in media quadratica.
+function worst(points: readonly Point[], first: number, last: number, u: readonly number[], curve: Cubic): { readonly error: number; readonly at: number; readonly spread: number } {
   const from = points[first]!;
   const { c1, c2, to } = curve;
   let squared = 0;
+  let sum = 0;
   let at = Math.floor((first + last) / 2);
   for (let i = first + 1; i < last; i++) {
     const t = u[i - first]!;
@@ -153,12 +160,13 @@ function worst(points: readonly Point[], first: number, last: number, u: readonl
     const dx = b0 * from[0] + b1 * c1[0] + b2 * c2[0] + b3 * to[0] - p[0];
     const dy = b0 * from[1] + b1 * c1[1] + b2 * c2[1] + b3 * to[1] - p[1];
     const d = dx * dx + dy * dy;
+    sum += d;
     if (d > squared) {
       squared = d;
       at = i;
     }
   }
-  return { error: Math.sqrt(squared), at };
+  return { error: Math.sqrt(squared), at, spread: last - first > 1 ? Math.sqrt(sum / (last - first - 1)) : 0 };
 }
 
 /// Un pezzo adattato: la curva dal punto `first` al punto `last`, e il
@@ -172,32 +180,45 @@ export interface Fitted {
 
 /// Le cubiche che passano entro `tolerance` dai punti da `first` a `last`,
 /// partendo nel verso `t1` e arrivando nel verso `t2`: una sola se basta,
-/// altrimenti divise al punto più lontano, lisce lì.
-export function fitCubics(points: readonly Point[], lengths: readonly number[], first: number, last: number, t1: Point, t2: Point, tolerance: number, out: Fitted[]): void {
+/// altrimenti divise al punto più lontano, lisce lì. Con `polish`, anche
+/// una cubica che sta già entro `tolerance` fa le prove di Newton, finché
+/// ci resta: i parametri per la lunghezza della corda la tirano verso
+/// l'interno delle curve, e la rifinitura la riporta sui punti; e basta
+/// solo se in media quadratica sta entro [`SPREAD`] tolleranze.
+export function fitCubics(points: readonly Point[], lengths: readonly number[], first: number, last: number, t1: Point, t2: Point, tolerance: number, out: Fitted[], polish = false): void {
   const span = lengths[last]! - lengths[first]!;
   let u = points.slice(first, last + 1).map((_, i) => (span > 0 ? (lengths[first + i]! - lengths[first]!) / span : i / (last - first)));
   let curve = generate(points, first, last, u, t1, t2);
-  let { error, at } = worst(points, first, last, u, curve);
-  if (error <= tolerance || last - first < 2) {
+  const fits = (w: { readonly error: number; readonly spread: number }): boolean => w.error <= tolerance && (!polish || w.spread <= SPREAD * tolerance);
+  let found = worst(points, first, last, u, curve);
+  if (fits(found) || last - first < 2) {
+    for (let round = 0; polish && last - first >= 2 && round < REFINE_ROUNDS; round++) {
+      const now = curve;
+      const tried = u.map((t, i) => (i === 0 || i === last - first ? t : closer(points[first]!, now, points[first + i]!, t)));
+      const better = generate(points, first, last, tried, t1, t2);
+      if (!fits(worst(points, first, last, tried, better))) break;
+      [u, curve] = [tried, better];
+    }
     out.push({ first, last, curve, u });
     return;
   }
-  if (error <= tolerance * 4) {
+  if (found.error <= tolerance * 4) {
     for (let round = 0; round < REFINE_ROUNDS; round++) {
       const now = curve;
       // I capi restano ai capi.
       u = u.map((t, i) => (i === 0 || i === last - first ? t : closer(points[first]!, now, points[first + i]!, t)));
       curve = generate(points, first, last, u, t1, t2);
-      ({ error, at } = worst(points, first, last, u, curve));
-      if (error <= tolerance) {
+      found = worst(points, first, last, u, curve);
+      if (fits(found)) {
         out.push({ first, last, curve, u });
         return;
       }
     }
   }
+  const { at } = found;
   const through = throughDirection(points, at, first, last, tolerance);
-  fitCubics(points, lengths, first, at, t1, through, tolerance, out);
-  fitCubics(points, lengths, at, last, through, t2, tolerance, out);
+  fitCubics(points, lengths, first, at, t1, through, tolerance, out, polish);
+  fitCubics(points, lengths, at, last, through, t2, tolerance, out, polish);
 }
 
 /// Vero se i punti da `first` a `last` stanno tutti entro `tolerance` dalla

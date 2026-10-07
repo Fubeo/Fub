@@ -340,9 +340,9 @@ non ha segni né «Collega a una nota…», e un collegamento si toglie lo stess
 L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
-strumento Nodi, la penna di Bézier con la Curvatura, le Forbici e lo
-Spessore: [Disegni, livello Esperto](drawing-expert.md), [curve e
-tagli](drawing-curves.md), [spessore variabile](drawing-width.md).
+strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore e
+«Ricalca immagine»: [Disegni, livello Esperto](drawing-expert.md), [curve e
+tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md).
 
 ## Il livello Personalizzato
 

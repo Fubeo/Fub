@@ -42,6 +42,7 @@
 
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { compose, invert, type Matrix } from "../scene/matrix";
+import type { Elem } from "../scene/serialize";
 import { toScene, viewMatrix, viewTransform, type View } from "../view";
 import type { FontSheets } from "../picture";
 import {
@@ -146,6 +147,12 @@ export interface ScenePainter {
   /// resta com'è. `null` toglie l'attenuazione. Vale finché non la si
   /// cambia, anche dopo un `update`.
   setFocus(chain: readonly object[] | null): void;
+  /// Mostra al posto di ogni immagine di `covers` l'elemento dato, senza
+  /// titoli né id: il gruppo di tracciati che un ricalco sta per scrivere.
+  /// L'elemento prende la trasformazione che l'immagine mostra, anche
+  /// mentre un'anteprima la sposta. `null` le toglie. Valgono finché non le
+  /// si cambia, anche dopo un `update` e con ogni anteprima.
+  setCovers(covers: ReadonlyMap<PaintNode, Elem> | null): void;
   /// Sposta la camera.
   setView(view: PainterView): void;
   /// Ridisegna subito gli strati immagine che ne hanno bisogno, senza
@@ -154,6 +161,15 @@ export interface ScenePainter {
   /// Toglie tutto dal DOM e revoca ogni risorsa. Chiudere la vita di chi lo
   /// ha montato fa lo stesso.
   dispose(): void;
+}
+
+/// `elem` nel DOM di `doc`, coi figli che si vedono: i titoli, le
+/// descrizioni e gli id restano fuori.
+function drawn(doc: Document, elem: Elem): Element {
+  const el = doc.createElementNS(SVG, elem.tag);
+  for (const [name, value] of Object.entries(elem.attrs)) if (name !== "id") el.setAttribute(name, value);
+  for (const child of elem.children ?? []) if (child.tag !== "title" && child.tag !== "desc") el.append(drawn(doc, child));
+  return el;
 }
 
 /// Il margine di un'immagine attorno alla vista, per lato, in frazioni della
@@ -318,9 +334,11 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   // --- anteprima degli strumenti -------------------------------------------------
 
   let draft: PainterDraft | null = null;
+  /// Le immagini coperte da un ricalco, che si mostrano con l'anteprima.
+  let covers: ReadonlyMap<PaintNode, Elem> | null = null;
   /// I nodi che mostrano l'anteprima, da riportare alla scena.
   let drafted: NodeRecord[] = [];
-  /// I `path` che l'anteprima mostra al posto delle forme.
+  /// I `path` e i gruppi che l'anteprima mostra al posto delle forme.
   let standIns: Element[] = [];
   /// I nodi del DOM per nodo della scena, e quelli dei gruppi per
   /// contenitore: ricostruiti solo quando servono.
@@ -416,16 +434,16 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
 
   const applyDraft = (): void => {
-    if (draft === null) return;
+    if (draft === null && covers === null) return;
     const touched = new Set<NodeRecord>();
-    for (const [paint, transform] of draft.transforms ?? []) {
+    for (const [paint, transform] of draft?.transforms ?? []) {
       for (const record of recordsOf(paint)) {
         if (transform === null) record.el.removeAttribute("transform");
         else record.el.setAttribute("transform", transform);
         touched.add(record);
       }
     }
-    for (const [paint, d] of draft.paths ?? []) {
+    for (const [paint, d] of draft?.paths ?? []) {
       for (const record of recordsOf(paint)) {
         touched.add(record);
         if (record.el.localName === "path") {
@@ -440,7 +458,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
         standIns.push(stand);
       }
     }
-    for (const [paint, radii] of draft.radii ?? []) {
+    for (const [paint, radii] of draft?.radii ?? []) {
       for (const record of recordsOf(paint)) {
         for (const name of ["rx", "ry"]) {
           const value = radii[name];
@@ -451,7 +469,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
         touched.add(record);
       }
     }
-    for (const [paint, attrs] of draft.strokes ?? []) {
+    for (const [paint, attrs] of draft?.strokes ?? []) {
       for (const record of recordsOf(paint)) {
         touched.add(record);
         const stand = record.el.ownerDocument.createElementNS(SVG, "path");
@@ -470,19 +488,32 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
         standIns.push(stand);
       }
     }
-    for (const paint of draft.faded ?? []) {
+    for (const paint of draft?.faded ?? []) {
       for (const record of recordsOf(paint)) {
         record.el.style.setProperty("opacity", FADED_OPACITY);
         touched.add(record);
       }
     }
-    for (const paint of draft.hidden ?? []) {
+    for (const paint of draft?.hidden ?? []) {
       for (const record of recordsOf(paint)) {
         record.el.style.setProperty("visibility", "hidden");
         touched.add(record);
       }
     }
+    for (const [paint, elem] of covers ?? []) {
+      for (const record of recordsOf(paint)) {
+        const stand = drawn(record.el.ownerDocument, elem);
+        const transform = record.el.getAttribute("transform");
+        if (transform === null) stand.removeAttribute("transform");
+        else stand.setAttribute("transform", transform);
+        record.el.after(stand);
+        record.el.style.setProperty("visibility", "hidden");
+        standIns.push(stand);
+        touched.add(record);
+      }
+    }
     drafted = [...touched];
+    if (draft === null) return;
     const { carried, fadedContainers } = draft;
     if (carried === undefined && fadedContainers === undefined) return;
     for (const record of layers) {
@@ -505,6 +536,13 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     if (disposed) return;
     clearDraft();
     draft = next;
+    applyDraft();
+  };
+
+  const setCovers = (next: ReadonlyMap<PaintNode, Elem> | null): void => {
+    if (disposed) return;
+    clearDraft();
+    covers = next;
     applyDraft();
   };
 
@@ -892,6 +930,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     if (disposed) return;
     disposed = true;
     draft = null;
+    covers = null;
     drafted = [];
     carriedImages = [];
     fadedImages = [];
@@ -906,7 +945,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
   owner.add(dispose);
 
-  return { update, setDraft, setFocus, setView, settle, dispose };
+  return { update, setDraft, setFocus, setCovers, setView, settle, dispose };
 }
 
 /// Vero se lo strato racchiuso da `containers` sta dentro l'ultimo dei

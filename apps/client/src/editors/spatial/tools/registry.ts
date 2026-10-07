@@ -114,7 +114,8 @@ export type Feature =
   | "transform"
   | "apply"
   | "path"
-  | "boolean";
+  | "boolean"
+  | "trace";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -147,6 +148,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "apply", level: "expert", label: "draw.feature.apply" },
   { id: "path", level: "expert", label: "draw.feature.path" },
   { id: "boolean", level: "expert", label: "draw.feature.boolean" },
+  { id: "trace", level: "expert", label: "draw.feature.trace" },
 ];
 
 /// Tutte le parti, per livello, e in un livello prima gli strumenti

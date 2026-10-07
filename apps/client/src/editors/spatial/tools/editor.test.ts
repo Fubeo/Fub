@@ -19,6 +19,7 @@ import { MERGE_MS } from "./history";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { rasterize } from "./png";
 import { arrowPath } from "./shapes";
+import { inlineTracer } from "./trace-runner";
 import { appearance, LAYER } from "./test-support";
 import { DEFAULT_CURVE } from "../pen/pressure";
 import { closeRadial } from "./radial";
@@ -10011,5 +10012,193 @@ describe("il menu radiale, dal livello Standard", () => {
     surface().dispatchEvent(pointer("pointerdown", { ...PEN, button: 2, buttons: 2, pressure: 0.3, clientX: 100, clientY: 50, timeStamp: (clock += 8) }));
     expect(radial()).toBeNull();
     expect(key("F10", { shiftKey: true }).defaultPrevented).toBe(false);
+  });
+});
+
+describe("«Ricalca immagine», dal livello Esperto", () => {
+  const IMAGE = "img";
+  const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
+  const DRAWING = doc(
+    `${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}"><title>Logo</title></image><rect id="r" x="60" y="60" width="20" height="20"/></g>`,
+  );
+
+  /// Un codec con i pixel: 40 × 20, la metà sinistra nera e la destra
+  /// bianca.
+  function pixelCodec(): ImageCodec & { rects: string[]; closed: number } {
+    const fake = {
+      rects: [] as string[],
+      closed: 0,
+      async decode(): Promise<Decoded | null> {
+        return {
+          width: 40,
+          height: 20,
+          opaque: () => true,
+          encode: async () => null,
+          pixels(rect: { x: number; y: number; width: number; height: number }, most: number) {
+            fake.rects.push(`${rect.x} ${rect.y} ${rect.width} ${rect.height} ${most}`);
+            const data = new Uint8ClampedArray(rect.width * rect.height * 4);
+            for (let y = 0; y < rect.height; y++) {
+              for (let x = 0; x < rect.width; x++) {
+                const at = (y * rect.width + x) * 4;
+                data.fill(rect.x + x < 20 ? 0 : 255, at, at + 3);
+                data[at + 3] = 255;
+              }
+            }
+            return { width: rect.width, height: rect.height, data } as ImageData;
+          },
+          close() {
+            fake.closed++;
+          },
+        };
+      },
+    };
+    return fake;
+  }
+
+  /// Il ricalco nella pagina, che nei test non ha worker.
+  const tracer: DrawEditorOptions["tracer"] = (raster) => inlineTracer(raster, () => import("./trace"));
+
+  const traceButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Ricalca immagine…"]')!;
+  const bar = (): HTMLElement => [...host.querySelectorAll<HTMLElement>(".draw-paths")].find((each) => each.querySelector(".draw-paths-title")!.textContent === "Ricalca immagine")!;
+  const shown = (): string[] => [...bar().querySelectorAll("label")].filter((label) => !label.hidden).map((label) => label.querySelector("span")!.textContent ?? "");
+  const control = <E extends HTMLElement>(name: string): E =>
+    [...bar().querySelectorAll("label")].find((label) => label.textContent!.startsWith(name))!.querySelector<E>("input, select")!;
+  const status = (): string => bar().querySelector("output")!.textContent ?? "";
+  const action = (name: string): HTMLButtonElement => [...bar().querySelectorAll("button")].find((each) => each.textContent === name)!;
+  const painted = (): Element => surface().querySelector(`image[data-scene-id="${IMAGE}"]`)!;
+  /// Il gruppo che l'anteprima mostra al posto dell'immagine; `null` senza.
+  const cover = (): Element | null => {
+    const next = painted().nextElementSibling;
+    return next !== null && next.localName === "g" && !next.hasAttribute("data-scene-id") ? next : null;
+  };
+
+  /// Apre la barra e aspetta il primo ricalco.
+  async function openBar(): Promise<void> {
+    editor.select([IMAGE]);
+    traceButton().click();
+    await vi.waitFor(() => expect(status()).toMatch(/^1 forma/));
+  }
+
+  it("c'è solo all'Esperto, con un'immagine scelta da sola", () => {
+    mount(DRAWING, { level: "standard", imageCodec: pixelCodec(), tracer });
+    editor.select([IMAGE]);
+    expect(traceButton().hidden).toBe(true);
+    editor.setLevel("expert");
+    expect(traceButton().hidden).toBe(false);
+    editor.select([IMAGE, "r"]);
+    expect(traceButton().hidden).toBe(true);
+    editor.select(["r"]);
+    expect(traceButton().hidden).toBe(true);
+  });
+
+  it("ricalca i pixel che si vedono, mostra il gruppo al posto dell'immagine e lo scrive in un passo sopra di lei", async () => {
+    const codec = pixelCodec();
+    mount(DRAWING, { level: "expert", imageCodec: codec, tracer });
+    const before = editor.engine.text;
+    await openBar();
+    expect(codec.rects).toEqual(["0 0 40 20 8000000"]);
+    expect(codec.closed).toBe(1);
+    expect(shown()).toEqual(["Tipo", "Colori", "Dettaglio", "Senza il bianco"]);
+    expect(control<HTMLSelectElement>("Tipo").value).toBe("colors");
+    expect(status()).toBe("1 forma, 4 nodi, 1 colore.");
+    // L'anteprima: l'immagine non si vede, e al suo posto il gruppo, senza id.
+    expect((painted() as SVGElement).style.visibility).toBe("hidden");
+    const preview = cover()!;
+    expect([...preview.querySelectorAll("path")].map((path) => path.getAttribute("fill"))).toEqual(["#000000"]);
+    expect(preview.querySelector("[id]")).toBeNull();
+    expect(changes).toEqual([]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    action("Applica").click();
+    expect(changes).toHaveLength(1);
+    const [group] = editor.selection;
+    const text = editor.engine.text;
+    expect(text).toMatch(/<image id="img"[^>]* display="none"/);
+    const written = new RegExp(`<g id="${group}">\\s*<title>Logo</title>\\s*<path id="[^"]+" d="([^"]+)" fill="#000000"/>\\s*</g>`).exec(text);
+    expect(written).not.toBeNull();
+    // La metà nera, dove l'immagine la mostra.
+    expect(written![1]!.match(/-?\d+(\.\d+)?/g)!.map(Number).sort((a, b) => a - b)).toEqual([10, 10, 10, 10, 30, 30, 30, 30]);
+    expect(spoken()).toBe("Immagine ricalcata: 1 forma, in un gruppo. L’immagine resta, nascosta, sotto il gruppo.");
+    expect(bar().hidden).toBe(true);
+    expect(document.activeElement).toBe(surface());
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("il tipo cambia i campi, un cursore ricalca di nuovo, Esc chiude senza scrivere", async () => {
+    mount(DRAWING, { level: "expert", imageCodec: pixelCodec(), tracer });
+    await openBar();
+    const kind = control<HTMLSelectElement>("Tipo");
+    kind.value = "bw";
+    kind.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(shown()).toEqual(["Tipo", "Soglia", "Dettaglio"]);
+    // I campi aspettano le impostazioni del tipo, che li riscrivono.
+    const threshold = control<HTMLInputElement>("Soglia");
+    expect(threshold.disabled).toBe(true);
+    expect(status()).toBe("Ricalco…");
+    await vi.waitFor(() => expect(threshold.disabled).toBe(false));
+    await vi.waitFor(() => expect(status()).toBe("1 forma, 4 nodi, 1 colore."));
+    // Una soglia sotto il nero non trova inchiostro.
+    threshold.value = "0";
+    threshold.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(threshold.closest("label")!.querySelector(".draw-paths-value")!.textContent).toBe("0");
+    await vi.waitFor(() => expect(status()).toBe("Il ricalco non trova forme: prova un altro tipo o un’altra soglia."));
+    expect(cover()!.querySelector("path")).toBeNull();
+    action("Applica").click();
+    expect(spoken()).toBe("Il ricalco non trova forme: prova un altro tipo o un’altra soglia.");
+    expect(bar().hidden).toBe(false);
+    key("Escape", {}, threshold);
+    expect(bar().hidden).toBe(true);
+    expect(cover()).toBeNull();
+    expect((painted() as SVGElement).style.visibility).toBe("");
+    expect(changes).toEqual([]);
+    expect(document.activeElement).toBe(surface());
+  });
+
+  it("si chiude se cambia la scelta; riapre col tipo e i valori dell'ultimo ricalco scritto", async () => {
+    mount(DRAWING, { level: "expert", imageCodec: pixelCodec(), tracer });
+    await openBar();
+    editor.select(["r"]);
+    expect(bar().hidden).toBe(true);
+    expect(cover()).toBeNull();
+    await openBar();
+    const detail = control<HTMLInputElement>("Dettaglio");
+    detail.value = "90";
+    detail.dispatchEvent(new Event("input", { bubbles: true }));
+    await vi.waitFor(() => expect(status()).toMatch(/^1 forma/));
+    action("Applica").click();
+    editor.undo();
+    await openBar();
+    expect(control<HTMLInputElement>("Dettaglio").value).toBe("90");
+  });
+
+  it("legge un'immagine del vault da chi monta l'editor", async () => {
+    const read: string[] = [];
+    const images: DrawImages = {
+      url: async (href) => `blob:vault/${href}`,
+      read: async (href) => {
+        read.push(href);
+        return new Blob([Uint8Array.from([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
+      },
+    };
+    mount(DRAWING.replace(PNG_HREF, "immagini/logo.png"), { level: "expert", imageCodec: pixelCodec(), tracer, images });
+    await openBar();
+    expect(read).toEqual(["immagini/logo.png"]);
+  });
+
+  it("un'immagine dal web non si ricalca, e lo dice", () => {
+    mount(DRAWING.replace(PNG_HREF, "https://example.com/logo.png"), { level: "expert", imageCodec: pixelCodec(), tracer });
+    editor.select([IMAGE]);
+    traceButton().click();
+    expect(spoken()).toBe("Un’immagine dal web non si ricalca: mettila nel vault, e ricalca quella.");
+    expect(bar().hidden).toBe(true);
+  });
+
+  it("un data URI che non si legge lo dice, e la barra si chiude", async () => {
+    mount(DRAWING.replace(PNG_HREF, "data:image/png,%89PNG"), { level: "expert", imageCodec: pixelCodec(), tracer });
+    editor.select([IMAGE]);
+    traceButton().click();
+    await vi.waitFor(() => expect(spoken()).toBe("Non è un’immagine che il disegno sa leggere."));
+    expect(bar().hidden).toBe(true);
+    expect(cover()).toBeNull();
   });
 });
