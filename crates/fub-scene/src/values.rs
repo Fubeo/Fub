@@ -188,6 +188,19 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
         ],
         "font-style" => &["normal", "italic", "oblique"],
         "text-anchor" => &["start", "middle", "end"],
+        // Le risorse del disegno (formato della scena, risorse).
+        "spreadMethod" => &["pad", "reflect", "repeat"],
+        "gradientUnits"
+        | "patternUnits"
+        | "patternContentUnits"
+        | "clipPathUnits"
+        | "maskUnits"
+        | "maskContentUnits"
+        | "filterUnits" => &["userSpaceOnUse", "objectBoundingBox"],
+        "markerUnits" => &["strokeWidth", "userSpaceOnUse"],
+        "primitiveUnits" => &["userSpaceOnUse"],
+        "color-interpolation-filters" => &["auto", "sRGB", "linearRGB"],
+        "clip-rule" => &["nonzero", "evenodd"],
         _ => &[],
     };
     allowed.contains(&value)
@@ -348,6 +361,149 @@ fn skip_separator_free(bytes: &[u8], i: &mut usize) {
     while *i < bytes.len() && is_wsp(bytes[*i]) {
         *i += 1;
     }
+}
+
+/// Vero per i byte che chiudono l'id di un `url(#id)`: spazi, virgolette,
+/// parentesi e `\`, perché gli escape di CSS non si leggono.
+fn id_stop(b: u8) -> bool {
+    is_wsp(b) || matches!(b, b'"' | b'\'' | b'(' | b')' | b'\\')
+}
+
+/// Salta gli spazi da `i`.
+fn skip_wsp(bytes: &[u8], mut i: usize) -> usize {
+    while i < bytes.len() && is_wsp(bytes[i]) {
+        i += 1;
+    }
+    i
+}
+
+/// Legge `url(#id)` al byte `i` di `text`: l'id e il byte dopo la parentesi.
+/// `url` in qualunque combinazione di maiuscole ASCII, spazi facoltativi
+/// dentro le parentesi, l'id fra virgolette doppie, singole o senza.
+fn scan_url(text: &str, i: usize) -> Option<(&str, usize)> {
+    let bytes = text.as_bytes();
+    if !bytes.get(i..i + 4)?.eq_ignore_ascii_case(b"url(") {
+        return None;
+    }
+    let mut j = skip_wsp(bytes, i + 4);
+    let quote = bytes.get(j).copied().filter(|&b| b == b'"' || b == b'\'');
+    if quote.is_some() {
+        j += 1;
+    }
+    if bytes.get(j) != Some(&b'#') {
+        return None;
+    }
+    j += 1;
+    let from = j;
+    while j < bytes.len() && !id_stop(bytes[j]) {
+        j += 1;
+    }
+    if j == from {
+        return None;
+    }
+    let id = &text[from..j];
+    if let Some(quote) = quote {
+        if bytes.get(j) != Some(&quote) {
+            return None;
+        }
+        j += 1;
+    }
+    j = skip_wsp(bytes, j);
+    (bytes.get(j) == Some(&b')')).then_some((id, j + 1))
+}
+
+/// Un riferimento locale da solo, `url(#id)` con gli spazi intorno: l'id.
+pub(crate) fn reference(value: &str) -> Option<&str> {
+    let text = trim(value);
+    scan_url(text, 0)
+        .filter(|&(_, end)| end == text.len())
+        .map(|(id, _)| id)
+}
+
+/// Un `fill` o uno `stroke` che usa una risorsa: l'id e il ripiego, `none` o
+/// un colore, se è scritto.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct PaintReference<'a> {
+    pub id: &'a str,
+    pub fallback: Option<Paint>,
+}
+
+/// `fill` o `stroke` con una risorsa: `url(#id)`, seguito facoltativamente
+/// da spazi e da un ripiego, `none` o un colore di §4.
+pub(crate) fn paint_reference(value: &str) -> Option<PaintReference<'_>> {
+    let text = trim(value);
+    let (id, end) = scan_url(text, 0)?;
+    if end == text.len() {
+        return Some(PaintReference { id, fallback: None });
+    }
+    if !is_wsp(text.as_bytes()[end]) {
+        return None;
+    }
+    let fallback = paint(&text[end..])?;
+    Some(PaintReference {
+        id,
+        fallback: Some(fallback),
+    })
+}
+
+/// Ogni id che `value` nomina con `url(#id)`, in ordine, anche dentro un
+/// valore che il formato non legge, come `style` o un foglio CSS.
+pub(crate) fn url_ids(value: &str) -> Vec<&str> {
+    // `url(` non si sovrappone a sé stesso: provare ogni byte trova ogni
+    // riferimento una volta.
+    (0..value.len())
+        .filter_map(|i| scan_url(value, i).map(|(id, _)| id))
+        .collect()
+}
+
+/// L'id di un `href` locale, `#id`, letto come lo legge il parser di URL;
+/// `None` per ogni altro `href`.
+pub(crate) fn href_id(value: &str) -> Option<String> {
+    let url = url_text(value);
+    (url.len() > 1 && url.starts_with('#')).then(|| url[1..].to_owned())
+}
+
+/// Un numero SVG seguito da `%`, come frazione: il numero diviso 100.
+pub(crate) fn percentage(value: &str) -> Option<f64> {
+    let text = trim(value);
+    let body = text.strip_suffix('%')?;
+    match scan_number(body, 0)? {
+        (n, end) if end == body.len() => Some(n / 100.0),
+        _ => None,
+    }
+}
+
+/// Un numero SVG o una percentuale, come frazione: `offset`, e le coordinate
+/// di una risorsa nelle unità del riquadro.
+pub(crate) fn fraction(value: &str) -> Option<f64> {
+    number(value).or_else(|| percentage(value))
+}
+
+/// L'angolo di `orient`, in gradi: un numero SVG seguito facoltativamente
+/// da `deg`, `grad` o `rad`.
+pub(crate) fn angle(value: &str) -> Option<f64> {
+    let text = trim(value);
+    let (n, end) = scan_number(text, 0)?;
+    match &text[end..] {
+        "" | "deg" => Some(n),
+        "grad" => Some(n * 0.9),
+        "rad" => Some(n * 180.0 / std::f64::consts::PI),
+        _ => None,
+    }
+}
+
+/// Un `viewBox`: quattro numeri SVG separati da spazi o virgole, con
+/// larghezza e altezza non negative.
+pub(crate) fn view_box(value: &str) -> Option<[f64; 4]> {
+    let numbers = number_list(value)?;
+    let [x, y, w, h] = <[f64; 4]>::try_from(numbers.as_slice()).ok()?;
+    (w >= 0.0 && h >= 0.0).then_some([x, y, w, h])
+}
+
+/// Uno o due numeri SVG non negativi: `stdDeviation` e `radius`.
+pub(crate) fn one_or_two(value: &str) -> Option<Vec<f64>> {
+    let numbers = number_list(value)?;
+    ((1..=2).contains(&numbers.len()) && numbers.iter().all(|&n| n >= 0.0)).then_some(numbers)
 }
 
 /// Un `href` letto come lo legge il parser di URL: senza spazi e controlli
@@ -746,5 +902,106 @@ mod tests {
         assert!(is_javascript(" JavaScript:x"));
         assert!(!is_javascript("javascript.md"));
         assert!(!is_javascript("note/javascript:x"));
+    }
+
+    #[test]
+    fn local_references_have_one_form() {
+        for value in [
+            "url(#r1)",
+            " url( #r1 ) ",
+            "url(\"#r1\")",
+            "url('#r1')",
+            "URL(#r1)",
+            "uRl( '#r1')",
+            "url(#r1)\n",
+        ] {
+            assert_eq!(reference(value), Some("r1"), "{value}");
+        }
+        for value in [
+            "url(r1)",
+            "url(#)",
+            "url(# r1)",
+            "url(#r1",
+            "url (#r1)",
+            "url(#r1')",
+            "url(\"#r1')",
+            "url(#r(1))",
+            "url(#r\\31)",
+            "url(a.svg#r1)",
+            "url(#r1) x",
+            "url(#r1)url(#r2)",
+        ] {
+            assert_eq!(reference(value), None, "{value}");
+        }
+        assert_eq!(reference("url(#sfumatura-è)"), Some("sfumatura-è"));
+    }
+
+    #[test]
+    fn paints_with_a_resource_and_a_fallback() {
+        let with = |id, fallback| Some(PaintReference { id, fallback });
+        assert_eq!(paint_reference("url(#r1)"), with("r1", None));
+        assert_eq!(paint_reference("url(#r1) "), with("r1", None));
+        assert_eq!(
+            paint_reference("url(#r1) #ff0000"),
+            with("r1", Some(Paint::Color([255, 0, 0])))
+        );
+        assert_eq!(
+            paint_reference(" url(#r1)\tnone "),
+            with("r1", Some(Paint::None))
+        );
+        assert_eq!(
+            paint_reference("url(#r1) red"),
+            with("r1", Some(Paint::Color([255, 0, 0])))
+        );
+        for value in [
+            "url(#r1)#ff0000",
+            "url(#r1) currentColor",
+            "url(#r1) url(#r2)",
+            "url(#r1) red blue",
+            "#ff0000",
+            "none",
+        ] {
+            assert_eq!(paint_reference(value), None, "{value}");
+        }
+    }
+
+    #[test]
+    fn references_inside_any_value() {
+        assert_eq!(url_ids("url(#a) url(#b)"), ["a", "b"]);
+        assert_eq!(url_ids("fill: url('#a'); stroke: URL( #b )"), ["a", "b"]);
+        assert!(url_ids("url(a.png) url(#)").is_empty());
+        assert_eq!(url_ids("nourl(#a)"), ["a"]);
+        assert_eq!(href_id("#r1").as_deref(), Some("r1"));
+        assert_eq!(href_id(" #r1\n").as_deref(), Some("r1"));
+        assert_eq!(href_id("#"), None);
+        assert_eq!(href_id("a.svg#r1"), None);
+    }
+
+    #[test]
+    fn fractions_angles_boxes_and_pairs() {
+        assert_eq!(percentage("50%"), Some(0.5));
+        assert_eq!(percentage(" -10% "), Some(-0.1));
+        assert_eq!(percentage("50"), None);
+        assert_eq!(percentage("50 %"), None);
+        assert_eq!(percentage("%"), None);
+        assert_eq!(fraction("0.25"), Some(0.25));
+        assert_eq!(fraction("25%"), Some(0.25));
+        assert_eq!(fraction("25px"), None);
+        assert_eq!(angle("90"), Some(90.0));
+        assert_eq!(angle("90deg"), Some(90.0));
+        assert_eq!(angle("100grad"), Some(90.0));
+        assert!((angle(&format!("{}rad", std::f64::consts::PI)).unwrap() - 180.0).abs() < 1e-10);
+        for value in ["", "deg", "90 deg", "90DEG", "1turn", "90degs"] {
+            assert_eq!(angle(value), None, "{value}");
+        }
+        assert_eq!(view_box("0 0 10 20"), Some([0.0, 0.0, 10.0, 20.0]));
+        assert_eq!(view_box("-5,-5,10,10"), Some([-5.0, -5.0, 10.0, 10.0]));
+        assert_eq!(view_box("0 0 10"), None);
+        assert_eq!(view_box("0 0 -1 10"), None);
+        assert_eq!(one_or_two("2"), Some(vec![2.0]));
+        assert_eq!(one_or_two("2, 3"), Some(vec![2.0, 3.0]));
+        assert_eq!(one_or_two(""), None);
+        assert_eq!(one_or_two("1 2 3"), None);
+        assert_eq!(one_or_two("-1"), None);
     }
 }

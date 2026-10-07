@@ -44,8 +44,9 @@ sta nell'involucro del messaggio live, non nella singola operazione.
 
 - **`attrs`:** i valori sono sempre stringhe; gli attributi con un namespace
   si scrivono con il prefisso (`fub:ink`, `xlink:href`).
-- **`children`:** per `g`, `a` e `text`; `title` e `desc` sono figli ammessi
-  di qualunque elemento.
+- **`children`:** per `g`, `a` e `text`, per la `defs` della radice, le
+  [risorse](scene-format-resources.md) e il loro contenuto; `title` e `desc`
+  sono figli ammessi di qualunque elemento.
 - **`text`:** solo per `tspan`, `title` e `desc`.
 - **`runs`:** al posto di `text`, per un `tspan` che è una riga di un `text`:
   il testo della riga e i suoi pezzi, nella forma dell'operazione `text`
@@ -57,8 +58,10 @@ sta nell'involucro del messaggio live, non nella singola operazione.
 `{ "last": true }` mette l'elemento in cima all'ordine visivo, il caso normale;
 gli altri valori sono `{ "first": true }` e `{ "after": "<id del fratello>" }`.
 La radice, come genitore, si scrive `"#root"`, che non è un id valido. Sotto la
-radice `first` vuol dire subito dopo `title`, `desc` e la carta, mai prima; in
-un livello o in un gruppo, subito dopo i loro `title` e `desc`.
+radice `first` vuol dire subito dopo `title`, `desc`, le `defs` e la carta che
+stanno in testa, mai prima, e per una `defs` subito dopo `title` e `desc`,
+quindi prima della carta; in un livello o in un gruppo, subito dopo i loro
+`title` e `desc`.
 
 ### Bersaglio (`target`)
 
@@ -146,6 +149,10 @@ Altri dettagli:
   ruolo o namespace è rifiutato con `invalid-elem`.
 - **Id toccati:** un `set` su un gruppo o un livello riporta anche gli id dei
   discendenti, perché cambia come si vedono.
+- **Risorse:** un riferimento a una risorsa resta vero. In un `batch` la
+  risorsa viene prima di chi la usa, togliere una risorsa usata è `in-use`, e
+  le risorse di FubDraw che un'operazione lascia senza riferimenti se ne
+  vanno con lei: [risorse](scene-format-resources.md), §9.
 - **`set` sulla radice:** con `id` uguale a `#root` cambia soltanto l'unità e
   le guide del documento, `fub:units` e `fub:guides`, coi valori nella loro
   grammatica ([unità e guide](scene-format-rulers.md)). Ogni altro attributo
@@ -166,7 +173,8 @@ Altri dettagli:
 | `missing-target` | il bersaglio non esiste |
 | `missing-parent` | il genitore non esiste o non è un livello o un gruppo modificabile |
 | `missing-anchor` | l'`after` non esiste, non è figlio del genitore, o è l'elemento stesso |
-| `duplicate-id` | `add` con un id già presente e un elemento diverso (§8) |
+| `duplicate-id` | `add` con un id già presente e un elemento diverso (§8), o di una risorsa con un id a cui il documento rimanda già |
+| `in-use` | `remove` di una risorsa, o di una `defs` che ne contiene, a cui rimanda qualcosa fuori da ciò che si toglie; `ident` che toglie l'id a una risorsa usata |
 | `invalid-elem` | tag, attributo o valore fuori dal formato, oppure `fub:ink` non conforme |
 | `locked` | il bersaglio o il genitore stanno in un elemento bloccato (`fub:locked="true"`), oppure il bersaglio è la carta, che cambia solo con `page` |
 | `foreign` | `set`, `text` o `add` dentro un nodo estraneo |
@@ -300,7 +308,8 @@ così com'è.
   in mezzo, diventano una voce sola: resta la prima inversa e l'ultima
   operazione in avanti, e l'undo resta esatto. Così una serie di piccoli
   spostamenti, o tre colori provati di fila, si annullano in un passo. Dopo
-  un annulla o un ripeti la voce in cima non si fonde più.
+  un annulla o un ripeti la voce in cima non si fonde più, e nemmeno una
+  voce che ha tolto delle risorse.
 - **Selezione:** dopo annulla o ripeti, la selezione sono gli oggetti che il
   passo ha toccato e che ci sono ancora; dopo un salto, quelli dell'ultimo
   passo del salto.
@@ -339,8 +348,8 @@ così com'è.
   di sicurezza, un `add` con un id già presente ed elemento canonicamente
   identico si applica senza modifiche ed è segnato `duplicate`.
 - **Eco:** il PC rimanda ai client le operazioni applicate con gli elementi in
-  forma canonica, compreso il `d` calcolato. Il client sostituisce per id la
-  propria versione ottimistica.
+  forma canonica, compreso il `d` calcolato, e con le risorse che hanno
+  tolto. Il client sostituisce per id la propria versione ottimistica.
 - **Rifiuto:** su un `nack` il client annulla l'effetto ottimistico con
   l'inversa. Su uno `snapshot` riapplica sopra le proprie operazioni ancora in
   attesa.
@@ -407,6 +416,16 @@ devono verificare renderebbe il test circolare.
 | 47 | `text-runs-canonical` | i pezzi in forma canonica; l'inversa riporta i pezzi di prima |
 | 48 | `text-runs-foreign-piece` | un pezzo con un attributo della riga: rifiuto `invalid-elem` |
 | 49 | `add-text-runs` | `add` di un testo coi pezzi e la tipografia nuova, come lo scrive un duplicato |
+| 50 | `add-defs-first` | la `fub-defs` va dopo il titolo e prima della carta |
+| 51 | `add-gradient-use` | un `batch` aggiunge una sfumatura e la dà a un rettangolo, col ripiego |
+| 52 | `remove-resource-in-use` | togliere una sfumatura usata: rifiuto `in-use` |
+| 53 | `collect-private` | un `set` che toglie l'ultimo riferimento toglie la sfumatura privata e la `fub-defs` vuota; l'inversa le rimette |
+| 54 | `collect-keeps-unowned` | una sfumatura senza `fub:role` resta |
+| 55 | `collect-cascade` | togliere l'oggetto toglie il motivo privato e la sfumatura privata del suo contenuto |
+| 56 | `add-resource-dangling` | una risorsa con un id a cui un elemento estraneo rimanda già: rifiuto `duplicate-id` |
+| 57 | `set-missing-resource` | un `fill` verso una risorsa che non c'è: rifiuto `invalid-elem` |
+| 58 | `add-raw-resources` | un `raw` con una sfumatura e un motivo che la usa, nella stessa `defs` |
+| 59 | `filter-closed-list` | un filtro con `feTurbulence`: rifiuto `invalid-elem` |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

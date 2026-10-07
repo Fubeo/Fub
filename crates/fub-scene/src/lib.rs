@@ -44,14 +44,17 @@ pub use analysis::{
     MAX_IMAGE_BYTES, MIN_CONTRAST, MIN_TEXT_CONTRAST, MIN_TEXT_SIZE,
 };
 pub use brush::{Brush, BrushError, PF1, PF1_KEYS};
-pub use classify::{ElementItem, ForeignItem, Item, Layer, Role, RootItem, Stroke, Tags, Tool};
+pub use classify::{
+    ElementItem, ForeignItem, Item, Layer, Lifecycle, Role, RootItem, Stroke, Tags, Tool,
+};
 pub use diagnostics::{Code, Diagnostic, Severity};
 pub use ink::{Ink, InkError, Sample, Scale};
 pub use text::{LineEnding, Span};
 pub use xml::XmlErrorKind;
 
 use crate::text::{bom_len, Utf16Map};
-use crate::xml::{Kind, NS_FUB, NS_NONE};
+use crate::values::{href_id, url_ids};
+use crate::xml::{Kind, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
 
 /// Il namespace di SVG.
 pub const SVG_NS: &str = "http://www.w3.org/2000/svg";
@@ -265,6 +268,11 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
     if duplicate_ids(&doc, &map, &mut diagnostics) {
         read_only.push(ReadOnly::DuplicateId);
     }
+    // Di un file troncato c'è solo la testa: gli id che mancano possono stare
+    // nel resto.
+    if !truncated {
+        dangling_references(&doc, &map, &mut diagnostics);
+    }
     if truncated {
         read_only.push(ReadOnly::TooLarge);
     }
@@ -306,6 +314,55 @@ pub fn read(source: &str) -> Result<Scene, ReadError> {
 /// Segnala con S003 ogni elemento che ripete l'id di uno precedente, in
 /// qualunque namespace: un'operazione per id deve trovare un elemento solo.
 /// Restituisce vero se ce n'è almeno uno.
+/// Segnala con S014 ogni riferimento locale a un id che il documento non ha:
+/// `url(#id)` in un attributo senza prefisso o `xlink`, e `href="#id"` su un
+/// elemento SVG che non è un collegamento, dove `#id` è un'ancora. Una per
+/// id e per attributo, sull'elemento che lo scrive, in ordine.
+fn dangling_references(doc: &xml::Document<'_>, map: &Utf16Map<'_>, out: &mut Vec<Diagnostic>) {
+    let elements = || {
+        doc.nodes.iter().filter_map(|node| match &node.kind {
+            Kind::Element(element) => Some((node, element)),
+            _ => None,
+        })
+    };
+    let ids: std::collections::HashSet<&str> = elements()
+        .filter_map(|(_, element)| element.value(NS_NONE, "id"))
+        .filter(|id| !id.is_empty())
+        .collect();
+    for (node, element) in elements() {
+        for attr in &element.attrs {
+            if attr.ns != NS_NONE && attr.ns != NS_XLINK {
+                continue;
+            }
+            let named: Vec<String> = if attr.local == "href" {
+                let anchor = element.ns != NS_SVG || element.local == "a";
+                (!anchor)
+                    .then(|| href_id(&attr.value))
+                    .flatten()
+                    .into_iter()
+                    .collect()
+            } else {
+                url_ids(&attr.value)
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect()
+            };
+            let mut reported = std::collections::HashSet::new();
+            for id in named {
+                if ids.contains(id.as_str()) || !reported.insert(id.clone()) {
+                    continue;
+                }
+                let span = map.span(node.start, node.end);
+                out.push(Diagnostic::new(
+                    Code::S014,
+                    Some(span),
+                    Some(format!("{} #{id}", attr.name)),
+                ));
+            }
+        }
+    }
+}
+
 fn duplicate_ids(doc: &xml::Document<'_>, map: &Utf16Map<'_>, out: &mut Vec<Diagnostic>) -> bool {
     let mut seen = std::collections::HashSet::new();
     let mut found = false;

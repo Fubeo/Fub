@@ -1425,6 +1425,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-scene/src/values.rs::scan_url",
+            (
+                Family::AsciiCase,
+                "legge `url(#id)` con `url` in qualunque caso: i nomi di funzione CSS sono ASCII \
+                 e senza caso. Diverge da `has_url` perché qui il riferimento non è una paura \
+                 ma un'identità: ne esce l'id della risorsa, che decide se l'elemento resta \
+                 modificabile, e per S014 se il documento ha quell'id.",
+            ),
+        ),
+        (
             "crates/fub-scene/src/geometry.rs::parse_path",
             (
                 Family::AsciiCase,

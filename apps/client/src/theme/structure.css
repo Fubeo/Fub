@@ -1092,6 +1092,12 @@ html, body, #app {
   direction: ltr;
   writing-mode: initial;
 }
+/* Le risorse vive stanno in un svg senza misura, non nascosto: in un svg con
+   `display: none` i browser non disegnano sfumature, motivi e filtri. */
+.spatial-defs {
+  width: 0;
+  height: 0;
+}
 .spatial-image {
   position: absolute;
   top: 0;
@@ -2463,6 +2469,19 @@ textarea.draw-properties-input {
 }
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
   background-size: 6px 6px;
+}
+/* Una sfumatura e un motivo del disegno: un quadrato dagli angoli tondi,
+   che non è una forma della tavolozza. I punti della sfumatura e la
+   scacchiera del motivo li dipinge la pelle. */
+.draw-swatch-frame[data-shape="gradient"],
+.draw-swatch-frame[data-shape="gradient"] > .draw-swatch,
+.draw-swatch-frame[data-shape="pattern"],
+.draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
+  clip-path: inset(6% round 4px);
+}
+.draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
 }
 /* Gli attributi, come sezione delle proprietà, scorrono con loro e non
    hanno un titolo loro. */

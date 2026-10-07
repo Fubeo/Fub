@@ -124,8 +124,10 @@ async function open(doc: string): Promise<void> {
 }
 
 /// Il codice del disegno arriva dopo il montaggio: si aspetta che arrivi.
+/// La prima volta lo si trasforma tutto, e con la suite intera che gira
+/// accanto ci vuole più dei due secondi degli altri.
 async function loaded(): Promise<void> {
-  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null);
+  await waitFor("il disegno si carica", () => document.querySelector(".vector-pending") === null, 15_000);
 }
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];

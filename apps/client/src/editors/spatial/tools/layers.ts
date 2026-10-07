@@ -118,12 +118,12 @@ export function shiftLayerOps(model: DocumentModel, layers: readonly LayerInfo[]
   const below = elementChildren(model.root)[under.path[0]! - 1];
   if (below === undefined || HEAD.has(below.details?.role ?? "")) {
     plan.ops.push({ op: "move", target: self, parent: ROOT, pos: { first: true } });
-  } else if (below.details === null) {
-    // Un elemento estraneo non riceve un id: è il livello di sotto a salire
-    // sopra questo.
+  } else if (below.details === null || (below.details.role === "defs" && below.facts.id === null)) {
+    // Un elemento estraneo non riceve un id, e la `defs` della radice uno
+    // qualunque: è il livello di sotto a salire sopra questo.
     plan.ops.push({ op: "move", target: plan.idOf(layerNode(model, under), "layer"), parent: ROOT, pos: { after: self } });
   } else {
-    const after = plan.idOf(below, below.details.role === "layer" ? "layer" : "object");
+    const after = below.details.role === "defs" ? below.facts.id! : plan.idOf(below, below.details.role === "layer" ? "layer" : "object");
     plan.ops.push({ op: "move", target: self, parent: ROOT, pos: { after } });
   }
   return plan.finish([self]);

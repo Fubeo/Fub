@@ -27,7 +27,12 @@
 //   della sua regola, sul nuovo spessore.
 // - **Un gruppo o un collegamento** passano la loro trasformazione ai figli
 //   e la perdono. Uno con parti estranee la tiene, perché un elemento
-//   estraneo non cambia, e i suoi figli applicano solo la loro.
+//   estraneo non cambia, e i suoi figli applicano solo la loro; così uno
+//   con un ritaglio, una maschera o un filtro, che valgono nelle sue
+//   coordinate.
+// - **Chi usa una risorsa**, sua o ereditata, tiene la trasformazione: una
+//   sfumatura, un motivo o un marcatore vivono nelle coordinate di chi li
+//   usa, e nella geometria nuova si vedrebbero altrove.
 // - **Niente che il file non sappia scrivere.** Un oggetto la cui geometria
 //   nuova non si rileggerebbe, o il cui resto non si scrive in `matrix()`
 //   (come in «Trasforma»), resta com'è. Un percorso con una forma o uno
@@ -52,6 +57,7 @@ import { transformValue, type NewIds } from "./edit";
 import type { Unit } from "./hit";
 import { inheritedBy, passed, type Inherited } from "./outline";
 import { scaledProfile, swappedProfile, widthAttrs } from "./profile";
+import { holdsEffect, usesResources } from "./resources";
 import { arrowPath } from "./shapes";
 import { writable } from "./transform";
 
@@ -442,8 +448,10 @@ function bake(node: ElementPart, pushed: Matrix | null, from: Inherited): Baked 
   const m = pushed === null ? before : compose(pushed, before);
   const kept = (): Baked | null => keep(node, own, m, pushed !== null);
   // Una trasformazione che schiaccia il piano non ha una geometria in cui
-  // passare: l'oggetto non si vede, e resta com'è.
+  // passare: l'oggetto non si vede, e resta com'è. Chi usa una risorsa la
+  // vede nelle sue coordinate: le tiene.
   if (transformValue(m) === null || !(determinant(m) !== 0 && Number.isFinite(determinant(m)))) return kept();
+  if (usesResources(node, from)) return kept();
   const outline = STROKED.has(role) ? outlineOf(own, from) : null;
   const reshaped = reshape(node, own, m, outline !== null && outline.dashes !== null);
   if (reshaped === null) return kept();
@@ -489,9 +497,10 @@ function bakeContainer(node: ContainerNode, pushed: Matrix | null, from: Inherit
   const before = parseTransform(own.get("transform") ?? "") ?? IDENTITY;
   const m = pushed === null ? before : compose(pushed, before);
   const inner = passed(node, from);
-  // Titolo e descrizione non si disegnano.
+  // Titolo e descrizione non si disegnano. Un ritaglio, una maschera o un
+  // filtro valgono nelle coordinate del gruppo: lui tiene la sua.
   const children = elementChildren(node).filter((child) => !(child.facts.uri === SVG_NS && (child.facts.local === "title" || child.facts.local === "desc")));
-  if (transformValue(m) !== null && children.every((child) => child.details !== null)) {
+  if (transformValue(m) !== null && !holdsEffect(own) && children.every((child) => child.details !== null)) {
     const baked = children.map((child) => bake(child, m, inner));
     if (baked.every((one) => one !== null)) {
       const changes: Change[] = own.has("transform") ? [{ node, attrs: { transform: null } }] : [];

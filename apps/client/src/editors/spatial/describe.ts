@@ -65,10 +65,11 @@ export function keyOf(item: { readonly id: string | null; readonly path: readonl
 }
 
 /// I ruoli che non sono oggetti: il nome e la descrizione di chi li contiene,
-/// e la carta, che è il fondo.
-const NOT_OBJECTS: ReadonlySet<Role> = new Set<Role>(["title", "desc", "paper"]);
+/// la carta, che è il fondo, e le risorse con la `defs` che le tiene, che si
+/// vedono soltanto in chi le usa.
+const NOT_OBJECTS: ReadonlySet<Role> = new Set<Role>(["title", "desc", "paper", "defs", "resource"]);
 
-const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper">, DrawKey>> = {
+const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper" | "defs" | "resource">, DrawKey>> = {
   layer: "draw.kind.layer",
   group: "draw.kind.group",
   link: "draw.kind.link",

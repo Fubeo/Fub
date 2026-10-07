@@ -139,6 +139,18 @@ describe("l'ordine dei livelli", () => {
     expect(b).toBeDefined();
   });
 
+  it("scende sopra la defs delle risorse senza darle un id", () => {
+    const gradient = '<linearGradient id="rgggggggg"><stop offset="0" stop-color="#ffffff"/></linearGradient>';
+    for (const defs of [`<defs id="fub-defs">${gradient}</defs>`, `<defs>${gradient}</defs>`]) {
+      const opened = open(doc(`${defs}<g id="laaaaaaaa" fub:layer="A"></g><g id="lbbbbbbbb" fub:layer="B"></g>`));
+      const index = applied(opened, shiftLayerOps(opened.engine.model!, opened.index.layers, opened.index.layers[1]!, "down", ids(opened)));
+      expect(names(index)).toEqual(["B", "A"]);
+      const text = opened.engine.text;
+      expect(text).toContain(defs);
+      expect(text.indexOf(defs)).toBeLessThan(text.indexOf('id="lbbbbbbbb"'));
+    }
+  });
+
   it("lascia dove sono gli oggetti alla radice", () => {
     const opened = open(THREE);
     const index = applied(opened, shiftLayerOps(opened.engine.model!, opened.index.layers, opened.index.layers[1]!, "down", ids(opened)));

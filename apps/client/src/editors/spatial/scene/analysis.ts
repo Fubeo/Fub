@@ -92,11 +92,17 @@ export type Role =
   | "polyline"
   | "polygon"
   | "text"
-  | "image";
+  | "image"
+  /// La `defs` della radice, coi figli giudicati uno per uno (formato della
+  /// scena, risorse).
+  | "defs"
+  /// Una risorsa modificabile di una `defs` della radice (formato della scena,
+  /// risorse).
+  | "resource";
 
 /// Vero per i ruoli i cui figli si classificano uno per uno.
 export function isContainer(role: Role): boolean {
-  return role === "layer" || role === "group" || role === "link";
+  return role === "layer" || role === "group" || role === "link" || role === "defs";
 }
 
 /// Lo strumento di un tratto.
@@ -200,6 +206,10 @@ export interface Summary {
 /// perché un giorno intero sono 8,64 · 10⁷ millisecondi.
 const I64_MAX = 2 ** 63;
 
+/// Gli attributi che cambiano ciò che si vede di un elemento oltre il suo
+/// colore (formato della scena, risorse).
+const EFFECTS = ["clip-path", "mask", "filter"] as const;
+
 /// Quello che un contenitore modificabile trasmette ai figli.
 export class Context {
   private constructor(
@@ -218,6 +228,9 @@ export class Context {
     readonly fontSize: number | null,
     /// Il `font-weight` in vigore è da grassetto: `bold` o da 700 in su.
     readonly bold: boolean,
+    /// Un antenato, o l'elemento, ha un ritaglio, una maschera o un filtro
+    /// (formato della scena, risorse): i colori che si vedono non si sanno.
+    private readonly effect: boolean,
   ) {}
 
   /// Il contesto dei figli della radice. Della radice contano solo `fill` e
@@ -235,6 +248,7 @@ export class Context {
       1,
       size === undefined ? DEFAULT_FONT_SIZE : nonNegativeLength(size),
       weight !== undefined && bold(weight),
+      false,
     );
   }
 
@@ -254,6 +268,10 @@ export class Context {
     const group = groupAlpha === undefined ? null : opacity(groupAlpha);
     const size = value("font-size");
     const weight = value("font-weight");
+    const effect = EFFECTS.some((name) => {
+      const used = value(name);
+      return used !== undefined && trim(used) !== "none";
+    });
     return new Context(
       matrix,
       hidden,
@@ -262,6 +280,7 @@ export class Context {
       group === null ? this.opacity : this.opacity * group,
       size === undefined ? this.fontSize : nonNegativeLength(size),
       weight === undefined ? this.bold : bold(weight),
+      this.effect || effect,
     );
   }
 
@@ -277,6 +296,7 @@ export class Context {
       line.opacity,
       line.fontSize,
       line.bold,
+      line.effect,
     );
   }
 
@@ -290,7 +310,7 @@ export class Context {
   /// Il riempimento in vigore, distinguendo ciò che non si sa: `null` se non
   /// si sa, `"none"` se è `none`.
   fillPaint(): [Rgb, number] | "none" | null {
-    if (this.fillValue === null || this.fillOpacity === null) return null;
+    if (this.effect || this.fillValue === null || this.fillOpacity === null) return null;
     if (this.fillValue === "none") return "none";
     return [this.fillValue, this.fillOpacity * this.opacity];
   }
@@ -298,7 +318,7 @@ export class Context {
   /// Il colore della carta sul bianco della superficie; `null` se non si sa.
   paperColor(): Rgb | null {
     if (this.hidden) return WHITE;
-    if (this.fillValue === null || this.fillOpacity === null) return null;
+    if (this.effect || this.fillValue === null || this.fillOpacity === null) return null;
     if (this.fillValue === "none") return WHITE;
     return over(this.fillValue, this.fillOpacity * this.opacity, WHITE);
   }
@@ -380,6 +400,11 @@ export class Tally {
     stroke: Stroke | null,
   ): void {
     switch (role) {
+      // Le risorse non si disegnano da sole: contano gli oggetti che le
+      // usano (formato della scena, risorse).
+      case "defs":
+      case "resource":
+        return;
       case "layer":
         this.layers.push(valueOf(element, NS_FUB, "layer") ?? "");
         break;

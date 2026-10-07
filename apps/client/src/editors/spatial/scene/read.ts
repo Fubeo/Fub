@@ -16,7 +16,8 @@ import { classifyDocument, type Item } from "./classify";
 import { diagnostic, sortDiagnostics, type Diagnostic } from "./diagnostics";
 import { parseGuides, parseUnits } from "./rulers";
 import { bomUnits, lineBreakOf, lineEndingOf, SourceText, type LineEnding } from "./text";
-import { isSvg, NS_FUB, NS_NONE, parseXml, valueOf, XML_ERROR_MESSAGES, XmlError, type XmlDocument, type XmlErrorKind } from "./xml";
+import { hrefId, urlIds } from "./values";
+import { isSvg, NS_FUB, NS_NONE, NS_SVG, NS_XLINK, parseXml, valueOf, XML_ERROR_MESSAGES, XmlError, type XmlDocument, type XmlErrorKind } from "./xml";
 
 export { SVG_NS, FUB_NS, XLINK_NS } from "./xml";
 
@@ -29,6 +30,11 @@ export const MAX_EDIT_BYTES = 20 * 1024 * 1024;
 
 /// Quanti elementi può avere un documento modificabile (§11).
 export const MAX_ELEMENTS = 50_000;
+
+/// Quante risorse modificabili riceve un documento, al più: uno che ne ha di
+/// più si apre e si modifica, e non ne riceve altre (formato della scena,
+/// risorse).
+export const MAX_RESOURCES = 10_000;
 
 /// Che documento è: con `fub:version` sulla radice, o un SVG qualunque che
 /// la superficie mostra inerte e adotta con «Modifica» (§2).
@@ -126,7 +132,7 @@ export interface Opened {
   readonly truncated: boolean;
   /// Il file ha più di [`MAX_ELEMENTS`] elementi.
   readonly tooMany: boolean;
-  /// S003, S007, S008 e S011, non ancora ordinate.
+  /// S003, S007, S008, S011 e S014, non ancora ordinate.
   readonly diagnostics: Diagnostic[];
 }
 
@@ -186,6 +192,9 @@ export function openSource(source: string): Opened {
   const guides = valueOf(root, NS_FUB, "guides");
   if (guides !== undefined && parseGuides(guides) === null) diagnostics.push(diagnostic("S011", null, "fub:guides"));
   if (duplicateIds(doc, diagnostics)) readOnly.add("duplicate-id");
+  // Di un file troncato c'è solo la testa: gli id che mancano possono stare
+  // nel resto.
+  if (!truncated) danglingReferences(doc, diagnostics);
   if (truncated) readOnly.add("too-large");
   const tooMany = doc.elements > MAX_ELEMENTS;
   if (tooMany) readOnly.add("too-many-elements");
@@ -280,4 +289,34 @@ function duplicateIds(doc: XmlDocument, out: Diagnostic[]): boolean {
     }
   }
   return found;
+}
+
+/// Segnala con S014 ogni riferimento locale a un id che il documento non ha:
+/// `url(#id)` in un attributo senza prefisso o `xlink`, e `href="#id"` su un
+/// elemento SVG che non è un collegamento, dove `#id` è un'ancora. Una per
+/// id e per attributo, sull'elemento che lo scrive, in ordine.
+function danglingReferences(doc: XmlDocument, out: Diagnostic[]): void {
+  const ids = new Set<string>();
+  for (const node of doc.nodes) {
+    if (node.kind !== "element") continue;
+    const id = valueOf(node, NS_NONE, "id");
+    if (id !== undefined && id !== "") ids.add(id);
+  }
+  for (const node of doc.nodes) {
+    if (node.kind !== "element") continue;
+    for (const attr of node.attrs) {
+      if (attr.ns !== NS_NONE && attr.ns !== NS_XLINK) continue;
+      let named = urlIds(attr.value);
+      if (attr.local === "href") {
+        const id = node.ns === NS_SVG && node.local !== "a" ? hrefId(attr.value) : null;
+        named = id === null ? [] : [id];
+      }
+      const reported = new Set<string>();
+      for (const id of named) {
+        if (ids.has(id) || reported.has(id)) continue;
+        reported.add(id);
+        out.push(diagnostic("S014", doc.source.span(node.start, node.end), `${attr.name} #${id}`));
+      }
+    }
+  }
 }

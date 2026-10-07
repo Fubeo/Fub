@@ -20,7 +20,11 @@
 //! - `crlf-bom`: un disegno FubDraw con BOM e righe CRLF, testo fuori dal piano
 //!   base di Unicode e un commento su più righe: gli span UTF-16 si allontanano
 //!   dai byte;
-//! - `doctype`: un disegno con `DOCTYPE` ed entità interne, in sola lettura.
+//! - `doctype`: un disegno con `DOCTYPE` ed entità interne, in sola lettura;
+//! - `resources`: un disegno con la sua `defs` (formato della scena, risorse),
+//!   ogni tipo di risorsa, private e condivise, e gli oggetti che le usano coi
+//!   riempimenti, i marcatori, i ritagli, le maschere e i filtri; una risorsa
+//!   estranea, un riferimento del tipo sbagliato e uno a un id che manca.
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -629,10 +633,12 @@ fn foreign() -> String {
                 // Una classe CSS: estraneo.
                 .raw(r#"<path class="strada" d="M10 10 H200"/>"#)
                 .raw(r##"<path d="M10 20 H200" stroke="#999999" stroke-width="2"/>"##)
-                // Un `d` malformato, una percentuale, un `url(`.
+                // Un `d` malformato, una percentuale, un `url(` verso una
+                // risorsa del tipo sbagliato: la sfumatura nella `defs` è
+                // modificabile, ma non è un filtro.
                 .raw(r#"<path d="M10 30 L20"/>"#)
                 .raw(r#"<rect x="5%" y="0" width="10" height="10"/>"#)
-                .raw(r#"<rect x="20" y="40" width="30" height="20" fill="url(#cielo)"/>"#)
+                .raw(r#"<rect x="20" y="40" width="30" height="20" filter="url(#cielo)"/>"#)
                 // Un attributo di Inkscape non decide niente.
                 .raw(r##"<rect x="60" y="40" width="30" height="20" rx="4" fill="#cc79a7" inkscape:label="Piazza"/>"##)
                 // Un gestore di evento e un colore funzionale.
@@ -746,6 +752,247 @@ fn doctype() -> String {
     )
 }
 
+/// `resources`: la `fub-defs` dopo il titolo e prima della carta, con ogni
+/// tipo di risorsa, e un livello con chi le usa.
+fn resources() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000001")
+                .a("fub:role", "private")
+                .a("x1", 0)
+                .a("y1", 0)
+                .a("x2", 1)
+                .a("y2", 0)
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#0072b2"))
+                .child(
+                    El::new("stop")
+                        .a("offset", 1)
+                        .a("stop-color", "#56b4e9")
+                        .a("stop-opacity", "0.5"),
+                ),
+        )
+        .child(
+            El::new("radialGradient")
+                .a("id", "r00000002")
+                .a("fub:role", "private")
+                .a("cx", "0.5")
+                .a("cy", "0.5")
+                .a("r", "0.5")
+                .a("fx", "0.3")
+                .a("fy", "0.3")
+                .a("spreadMethod", "reflect")
+                .child(El::new("title").text("Sole"))
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#e69f00"))
+                .child(
+                    El::new("stop")
+                        .a("offset", "100%")
+                        .a("stop-color", "#d55e00"),
+                ),
+        )
+        .child(
+            El::new("pattern")
+                .a("id", "r00000003")
+                .a("fub:role", "shared")
+                .a("x", 0)
+                .a("y", 0)
+                .a("width", 20)
+                .a("height", 20)
+                .a("patternUnits", "userSpaceOnUse")
+                .child(
+                    El::new("rect")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 10)
+                        .a("height", 10)
+                        .a("fill", "url(#r00000001) #0072b2"),
+                ),
+        )
+        .child(
+            El::new("marker")
+                .a("id", "r00000004")
+                .a("fub:role", "shared")
+                .a("refX", 5)
+                .a("refY", 5)
+                .a("markerWidth", 10)
+                .a("markerHeight", 10)
+                .a("orient", "auto-start-reverse")
+                .a("viewBox", "0 0 10 10")
+                .child(
+                    El::new("path")
+                        .a("d", "M0 0 L10 5 L0 10 Z")
+                        .a("fill", "#000000"),
+                ),
+        )
+        .child(
+            El::new("clipPath")
+                .a("id", "r00000005")
+                .a("fub:role", "private")
+                .a("clipPathUnits", "objectBoundingBox")
+                .child(
+                    El::new("circle")
+                        .a("cx", "0.5")
+                        .a("cy", "0.5")
+                        .a("r", "0.5"),
+                ),
+        )
+        .child(
+            El::new("mask")
+                .a("id", "r00000006")
+                .a("fub:role", "private")
+                .a("maskContentUnits", "objectBoundingBox")
+                .child(
+                    El::new("rect")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 1)
+                        .a("height", 1)
+                        .a("fill", "#ffffff"),
+                ),
+        )
+        .child(
+            El::new("filter")
+                .a("id", "r00000007")
+                .a("fub:role", "shared")
+                .a("x", "-0.2")
+                .a("y", "-0.2")
+                .a("width", "1.4")
+                .a("height", "1.4")
+                .child(
+                    El::new("feGaussianBlur")
+                        .a("in", "SourceAlpha")
+                        .a("stdDeviation", 4)
+                        .a("result", "ombra"),
+                )
+                .child(
+                    El::new("feOffset")
+                        .a("in", "ombra")
+                        .a("dx", 2)
+                        .a("dy", 3)
+                        .a("result", "spostata"),
+                )
+                .child(
+                    El::new("feMerge")
+                        .child(El::new("feMergeNode").a("in", "spostata"))
+                        .child(El::new("feMergeNode").a("in", "SourceGraphic")),
+                ),
+        )
+        .child(
+            El::new("filter")
+                .a("id", "r00000008")
+                .a("fub:role", "shared")
+                .child(
+                    El::new("feDropShadow")
+                        .a("dx", 0)
+                        .a("dy", 2)
+                        .a("stdDeviation", 2)
+                        .a("flood-color", "#000000")
+                        .a("flood-opacity", "0.3"),
+                ),
+        )
+        // Una sfumatura che ne eredita un'altra, come le scrive Inkscape:
+        // estranea.
+        .raw(r##"<linearGradient id="inkscape1" xlink:href="#r00000001"/>"##);
+    // Giallo sul verde: sotto 3:1, ma dentro un filtro i colori che si
+    // vedono non si sanno.
+    let shadowed = El::new("g")
+        .a("id", "o00000005")
+        .a("filter", "url(#r00000007)")
+        .child(
+            El::new("rect")
+                .a("id", "o00000006")
+                .a("x", 40)
+                .a("y", 320)
+                .a("width", 160)
+                .a("height", 80)
+                .a("fill", "#009e73"),
+        )
+        .child(
+            El::new("text")
+                .a("id", "o00000007")
+                .a("x", 60)
+                .a("y", 370)
+                .a("fill", "#f0e442")
+                .a("font-size", 24)
+                .child(El::new("tspan").a("x", 60).a("dy", 0).text("Ombra")),
+        );
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("Risorse"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000001")
+                        .a("x", 40)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r00000001) #4593ce"),
+                )
+                .child(
+                    El::new("circle")
+                        .a("id", "o00000002")
+                        .a("cx", 400)
+                        .a("cy", 100)
+                        .a("r", 60)
+                        .a("fill", "url(#r00000002) #e69f00")
+                        .a("stroke", "url(#r00000003) #000000")
+                        .a("stroke-width", 8),
+                )
+                .child(
+                    El::new("path")
+                        .a("id", "o00000003")
+                        .a("d", "M40 250 L300 250")
+                        .a("fill", "none")
+                        .a("stroke", "#000000")
+                        .a("stroke-width", 2)
+                        .a("marker-end", "url(#r00000004)"),
+                )
+                .child(
+                    El::new("image")
+                        .a("id", "o00000004")
+                        .a("x", 500)
+                        .a("y", 40)
+                        .a("width", 160)
+                        .a("height", 120)
+                        .a("clip-path", "url(#r00000005)")
+                        .a("href", "foto.png")
+                        .child(El::new("title").text("Il porto")),
+                )
+                .child(shadowed)
+                .child(
+                    El::new("text")
+                        .a("id", "o00000008")
+                        .a("x", 300)
+                        .a("y", 370)
+                        .a("fill", "url(#r00000001) #0072b2")
+                        .a("font-size", 32)
+                        .child(El::new("tspan").a("x", 300).a("dy", 0).text("Cielo")),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000009")
+                        .a("x", 500)
+                        .a("y", 200)
+                        .a("width", 100)
+                        .a("height", 60)
+                        .a("fill", "#cc79a7")
+                        .a("mask", "url(#r00000006)")
+                        .a("filter", "url(#r00000008)"),
+                )
+                // Estranei: chi usa la sfumatura estranea, un marcatore del
+                // tipo sbagliato, un id che manca (S014).
+                .raw(r#"<rect x="500" y="300" width="100" height="60" fill="url(#inkscape1)"/>"#)
+                .raw(r##"<path d="M40 450 L300 450" stroke="#000000" marker-start="url(#r00000001)"/>"##)
+                .raw(r#"<rect x="620" y="300" width="100" height="60" fill="url(#r0000000z) #cccccc"/>"#),
+        );
+    document(&root, "\n")
+}
+
 #[test]
 fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
@@ -823,6 +1070,63 @@ fn foreign_has_one_case_per_rule() {
         .filter(|d| d.code == fub_scene::Code::S005)
         .count();
     assert_eq!(s005, 4);
+}
+
+#[test]
+fn resources_are_read_with_their_users() {
+    let scene = fixture("resources", &resources());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    assert_eq!(element(&[1]).map(|e| e.role), Some(Role::Defs));
+    // Le otto risorse modificabili, la nona estranea.
+    for at in 0..8 {
+        assert_eq!(
+            element(&[1, at]).map(|e| e.role),
+            Some(Role::Resource),
+            "{at}"
+        );
+    }
+    assert!(element(&[1, 8]).is_none());
+    assert_eq!(
+        element(&[1, 1]).and_then(|e| e.title.as_deref()),
+        Some("Sole")
+    );
+    use fub_scene::Lifecycle::*;
+    assert_eq!(element(&[1, 0]).and_then(|e| e.lifecycle), Some(Private));
+    assert_eq!(element(&[1, 3]).and_then(|e| e.lifecycle), Some(Shared));
+    // Chi usa una risorsa modificabile è modificabile; i tre estranei no.
+    for at in 0..7 {
+        assert!(element(&[3, at]).is_some(), "{at}");
+    }
+    for at in 7..10 {
+        assert!(element(&[3, at]).is_none(), "{at}");
+    }
+    // Le risorse non sono oggetti: non si contano fra le forme, e il loro
+    // contenuto non entra nelle voci.
+    assert_eq!(
+        (
+            scene.summary.counts.shapes,
+            scene.summary.counts.texts,
+            scene.summary.counts.images
+        ),
+        (5, 2, 1)
+    );
+    assert!(scene.items.iter().all(|item| match item {
+        Item::Element(element) => element.path.len() < 3 || element.path[0] != 1,
+        _ => true,
+    }));
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    // Due blocchi estranei, nella `defs` e nel livello; il giallo sul verde
+    // dentro il filtro tace, il riferimento rotto no.
+    assert_eq!(codes, [S002, S002, S014]);
+    let broken = scene.diagnostics.iter().find(|d| d.code == S014).unwrap();
+    assert_eq!(broken.detail.as_deref(), Some("fill #r0000000z"));
 }
 
 #[test]
@@ -1282,7 +1586,7 @@ fn the_folder_holds_only_what_this_test_writes() {
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
     found.sort();
-    let mut expected: Vec<String> = ["sparse", "foreign", "crlf-bom", "doctype"]
+    let mut expected: Vec<String> = ["sparse", "foreign", "crlf-bom", "doctype", "resources"]
         .iter()
         .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])
         .chain(["generated.json".to_owned()])

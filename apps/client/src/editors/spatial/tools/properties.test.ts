@@ -18,6 +18,7 @@ import {
   type TransformId,
 } from "./properties";
 import { lengthUnits, PERCENT_UNITS } from "./quantity";
+import type { PaintSample } from "./resources";
 
 let host: HTMLElement;
 let life: Lifetime;
@@ -34,6 +35,7 @@ let state: {
   width: number | null;
   opacity: number;
   fill: string | null;
+  sample: PaintSample | null;
   dash: string | null;
   anchor: string | null;
   bold: boolean | null;
@@ -63,7 +65,7 @@ function view(): PropertiesView {
     width: { ...length(state.width, "Larghezza"), min: 0.01 },
     ratio: { kind: "press", label: "Mantieni le proporzioni", on: state.ratio },
     opacity: { kind: "number", label: "Opacità", value: state.opacity, unit: "%", units: PERCENT_UNITS, relative: false, places: 0, min: 0, max: 100 },
-    fill: { kind: "paint", label: "Riempimento", value: state.fill },
+    fill: { kind: "paint", label: "Riempimento", value: state.fill, ...(state.sample === null ? {} : { sample: state.sample }) },
     dash: {
       kind: "choice",
       label: "Tratteggio",
@@ -183,6 +185,7 @@ beforeEach(() => {
     width: 80,
     opacity: 100,
     fill: "#0072b2",
+    sample: null,
     dash: "solid",
     anchor: "start",
     bold: null,
@@ -388,6 +391,34 @@ describe("i colori", () => {
     expect(calls).toEqual(["fill=#ff0000", "fill=none"]);
     expect(fill.value).toBe("Nessuno");
     expect(frame.dataset.shape).toBe("none");
+  });
+
+  it("una sfumatura o un motivo si vedono col loro nome e col loro campione", () => {
+    const image = "linear-gradient(to right, rgb(255 255 255 / 1) 0%, rgb(0 0 0 / 1) 100%)";
+    state.fill = "url(#rgggggggg)";
+    state.sample = { kind: "gradient", image };
+    mount();
+    const fill = input("fill");
+    const frame = field("fill").querySelector<HTMLElement>(".draw-swatch-frame")!;
+    const swatch = field("fill").querySelector<HTMLElement>(".draw-swatch")!;
+    expect(fill.value).toBe("Sfumatura");
+    expect(frame.dataset.shape).toBe("gradient");
+    expect(swatch.style.getPropertyValue("--swatch-image")).toBe(image);
+    // Invio senza cambiare niente non scrive.
+    press(fill, "Enter");
+    expect(calls).toEqual([]);
+    // Un colore scritto prende il posto del campione.
+    write(fill, "#ff0000");
+    expect(frame.dataset.shape).toBe("ring");
+    expect(swatch.style.getPropertyValue("--swatch-image")).toBe("");
+    press(fill, "Escape");
+    expect(frame.dataset.shape).toBe("gradient");
+    state.fill = "url(#rpppppppp)";
+    state.sample = { kind: "pattern", image: null };
+    panel.update(view());
+    expect(fill.value).toBe("Motivo");
+    expect(frame.dataset.shape).toBe("pattern");
+    expect(swatch.style.getPropertyValue("--swatch-image")).toBe("");
   });
 
   it("che non sono colori restano scritti, col messaggio", () => {

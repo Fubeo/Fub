@@ -11,6 +11,14 @@
 //!
 //! La visita usa una pila esplicita, non la ricorsione: un SVG con centomila
 //! gruppi annidati è un file valido, e non deve esaurire lo stack.
+//!
+//! Le risorse del disegno (formato della scena, risorse) si leggono in due
+//! passi: prima l'indice delle risorse modificabili nelle `defs` della radice,
+//! poi la visita, in cui un riferimento vale se porta a una risorsa dell'indice
+//! del tipo giusto. Così chi usa una sfumatura scritta dopo di lui si legge
+//! come chi la usa prima.
+
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
@@ -22,8 +30,9 @@ use crate::ink::{Ink, InkError};
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
-    dasharray, href, keyword, length, letter_spacing, non_negative_length, number_list, opacity,
-    paint, points, preserve_aspect_ratio, text_decoration, transform, Href,
+    angle, dasharray, fraction, href, is_wsp, keyword, length, letter_spacing, non_negative_length,
+    number, number_list, one_or_two, opacity, paint, paint_reference, points,
+    preserve_aspect_ratio, reference, text_decoration, transform, trim, view_box, Href, Paint,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -67,13 +76,60 @@ pub enum Role {
     Polygon,
     Text,
     Image,
+    /// Una `defs` della radice: tiene le risorse.
+    Defs,
+    /// Una risorsa modificabile in una `defs` della radice (formato della
+    /// scena, risorse).
+    Resource,
 }
 
 impl Role {
     /// Vero per i ruoli i cui figli si classificano uno per uno.
     pub fn is_container(self) -> bool {
-        matches!(self, Role::Layer | Role::Group | Role::Link)
+        matches!(self, Role::Layer | Role::Group | Role::Link | Role::Defs)
     }
+}
+
+/// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
+/// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
+/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. Senza, la
+/// risorsa resta.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Lifecycle {
+    Private,
+    Shared,
+}
+
+/// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
+/// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
+/// `mask` e `filter` ritagli, maschere e filtri.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum ResourceKind {
+    Gradient,
+    Pattern,
+    Marker,
+    Clip,
+    Mask,
+    Filter,
+}
+
+/// Il tipo della risorsa modificabile che porta un id, o `None` se nessuna
+/// risorsa modificabile lo porta.
+type Resolve<'r> = &'r dyn Fn(&str) -> Option<ResourceKind>;
+
+/// Un documento senza risorse.
+fn no_resources(_: &str) -> Option<ResourceKind> {
+    None
+}
+
+/// Dove sta un elemento: figlio della radice, di una `defs` della radice, o
+/// di un altro contenitore modificabile.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Place {
+    Root,
+    Defs,
+    Inside,
 }
 
 /// Lo strumento di un tratto.
@@ -181,6 +237,9 @@ pub struct ElementItem {
     /// sostituisce.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lines: Option<Vec<String>>,
+    /// Il ciclo di vita di una risorsa, se `fub:role` lo dice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lifecycle: Option<Lifecycle>,
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -227,6 +286,14 @@ enum Tag {
     Text,
     Tspan,
     Image,
+    Defs,
+    LinearGradient,
+    RadialGradient,
+    Pattern,
+    Marker,
+    ClipPath,
+    Mask,
+    Filter,
 }
 
 impl Tag {
@@ -249,8 +316,51 @@ impl Tag {
             "text" => Tag::Text,
             "tspan" => Tag::Tspan,
             "image" => Tag::Image,
+            "defs" => Tag::Defs,
+            "linearGradient" => Tag::LinearGradient,
+            "radialGradient" => Tag::RadialGradient,
+            "pattern" => Tag::Pattern,
+            "marker" => Tag::Marker,
+            "clipPath" => Tag::ClipPath,
+            "mask" => Tag::Mask,
+            "filter" => Tag::Filter,
             _ => return None,
         })
+    }
+
+    /// Il tipo della risorsa, per i tag delle risorse.
+    fn resource_kind(self) -> Option<ResourceKind> {
+        Some(match self {
+            Tag::LinearGradient | Tag::RadialGradient => ResourceKind::Gradient,
+            Tag::Pattern => ResourceKind::Pattern,
+            Tag::Marker => ResourceKind::Marker,
+            Tag::ClipPath => ResourceKind::Clip,
+            Tag::Mask => ResourceKind::Mask,
+            Tag::Filter => ResourceKind::Filter,
+            _ => return None,
+        })
+    }
+
+    /// Vero per le forme di §4, che possono stare nel contenuto di ogni
+    /// risorsa.
+    fn is_shape(self) -> bool {
+        use Tag::*;
+        matches!(
+            self,
+            Path | Rect | Ellipse | Circle | Line | Polyline | Polygon
+        )
+    }
+
+    /// Vero per i tag su cui valgono i riferimenti di `fill` e `stroke`,
+    /// `clip-path`, `mask` e `filter`: non le righe e i pezzi di un testo, il
+    /// cui riquadro i lettori non misurano tutti allo stesso modo.
+    fn is_drawn(self) -> bool {
+        self.is_shape() || matches!(self, Tag::Text | Tag::Image | Tag::G | Tag::A)
+    }
+
+    /// Vero per i tag su cui i browser disegnano i marcatori.
+    fn is_marked(self) -> bool {
+        matches!(self, Tag::Path | Tag::Line | Tag::Polyline | Tag::Polygon)
     }
 
     fn name(self) -> &'static str {
@@ -269,19 +379,48 @@ impl Tag {
             Tag::Text => "text",
             Tag::Tspan => "tspan",
             Tag::Image => "image",
+            Tag::Defs => "defs",
+            Tag::LinearGradient => "linearGradient",
+            Tag::RadialGradient => "radialGradient",
+            Tag::Pattern => "pattern",
+            Tag::Marker => "marker",
+            Tag::ClipPath => "clipPath",
+            Tag::Mask => "mask",
+            Tag::Filter => "filter",
         }
     }
 }
 
-/// Vero se ogni attributo di `element` rientra in §4 per il suo tag.
-fn attributes_allowed(element: &Element<'_>, tag: Tag) -> bool {
+/// Gli attributi che possono rimandare a una risorsa con `url(` (formato della
+/// scena, risorse).
+const REFERENCES: [&str; 8] = [
+    "fill",
+    "stroke",
+    "marker-start",
+    "marker-mid",
+    "marker-end",
+    "clip-path",
+    "mask",
+    "filter",
+];
+
+/// Vero se ogni attributo di `element` rientra in §4 per il suo tag, coi
+/// riferimenti risolti da `resolve`. Con `clip` l'elemento sta in un
+/// ritaglio, dove vale anche `clip-rule`.
+fn attributes_allowed(element: &Element<'_>, tag: Tag, resolve: Resolve<'_>, clip: bool) -> bool {
     element.attrs.iter().all(|attr| match attr.ns {
-        NS_NONE => !has_url(&attr.value) && svg_attribute(tag, attr.local, &attr.value),
+        NS_NONE => {
+            if clip && attr.local == "clip-rule" {
+                return keyword("clip-rule", &attr.value);
+            }
+            (REFERENCES.contains(&attr.local) || !has_url(&attr.value))
+                && svg_attribute(tag, attr.local, &attr.value, resolve)
+        }
         NS_XLINK => {
             attr.local == "href"
                 && matches!(tag, Tag::A | Tag::Image)
                 && !has_url(&attr.value)
-                && svg_attribute(tag, "href", &attr.value)
+                && svg_attribute(tag, "href", &attr.value, &no_resources)
         }
         // Un attributo nel namespace SVG non è un attributo SVG: quelli non
         // hanno namespace.
@@ -300,11 +439,31 @@ fn has_url(value: &str) -> bool {
         .any(|w| w.eq_ignore_ascii_case(b"url("))
 }
 
-/// Il giudizio su un attributo SVG senza namespace.
-fn svg_attribute(tag: Tag, name: &str, value: &str) -> bool {
+/// Vero se `value` è `none` o un `url(#id)` di una risorsa di tipo `kind`.
+fn resource_or_none(value: &str, kind: ResourceKind, resolve: Resolve<'_>) -> bool {
+    trim(value) == "none" || reference(value).is_some_and(|id| resolve(id) == Some(kind))
+}
+
+/// Il giudizio su un attributo SVG senza namespace, coi riferimenti alle
+/// risorse risolti da `resolve` (formato della scena, risorse).
+fn svg_attribute(tag: Tag, name: &str, value: &str, resolve: Resolve<'_>) -> bool {
     match name {
         "id" => !value.is_empty(),
-        "fill" | "stroke" => paint(value).is_some(),
+        "fill" | "stroke" => {
+            paint(value).is_some()
+                || (tag.is_drawn()
+                    && paint_reference(value)
+                        .and_then(|used| resolve(used.id))
+                        .is_some_and(|kind| {
+                            matches!(kind, ResourceKind::Gradient | ResourceKind::Pattern)
+                        }))
+        }
+        "marker-start" | "marker-mid" | "marker-end" => {
+            tag.is_marked() && resource_or_none(value, ResourceKind::Marker, resolve)
+        }
+        "clip-path" => tag.is_drawn() && resource_or_none(value, ResourceKind::Clip, resolve),
+        "mask" => tag.is_drawn() && resource_or_none(value, ResourceKind::Mask, resolve),
+        "filter" => tag.is_drawn() && resource_or_none(value, ResourceKind::Filter, resolve),
         "fill-opacity" | "stroke-opacity" | "opacity" => opacity(value).is_some(),
         "stroke-width" | "font-size" => non_negative_length(value).is_some(),
         "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight" | "font-style"
@@ -390,7 +549,7 @@ const NOT_IN_PIECE: [&str; 7] = [
 
 /// Vero se `id` è un pezzo di riga modificabile: un `tspan` con attributi da
 /// pezzo e solo testo dentro.
-fn allowed_piece(doc: &Document<'_>, id: NodeId) -> bool {
+fn allowed_piece(doc: &Document<'_>, id: NodeId, resolve: Resolve<'_>) -> bool {
     let Some(element) = doc.element(id).filter(|e| Tag::of(e) == Some(Tag::Tspan)) else {
         return false;
     };
@@ -398,13 +557,15 @@ fn allowed_piece(doc: &Document<'_>, id: NodeId) -> bool {
         .attrs
         .iter()
         .any(|attr| attr.ns == NS_NONE && NOT_IN_PIECE.contains(&attr.local));
-    !placed && attributes_allowed(element, Tag::Tspan) && character_data_only(doc, element)
+    !placed
+        && attributes_allowed(element, Tag::Tspan, resolve, false)
+        && character_data_only(doc, element)
 }
 
 /// Vero se `id` è un `title`, `desc` o, dentro un `text`, una riga
 /// modificabile: attributi ammessi e dentro solo testo, e per una riga anche
 /// pezzi.
-fn allowed_part(doc: &Document<'_>, id: NodeId, inside_text: bool) -> bool {
+fn allowed_part(doc: &Document<'_>, id: NodeId, inside_text: bool, resolve: Resolve<'_>) -> bool {
     let Some(element) = doc.element(id) else {
         return false;
     };
@@ -413,7 +574,7 @@ fn allowed_part(doc: &Document<'_>, id: NodeId, inside_text: bool) -> bool {
         Some(Tag::Tspan) if inside_text => Some(Tag::Tspan),
         _ => None,
     };
-    let Some(tag) = allowed.filter(|&tag| attributes_allowed(element, tag)) else {
+    let Some(tag) = allowed.filter(|&tag| attributes_allowed(element, tag, resolve, false)) else {
         return false;
     };
     if tag != Tag::Tspan {
@@ -424,7 +585,7 @@ fn allowed_part(doc: &Document<'_>, id: NodeId, inside_text: bool) -> bool {
         .iter()
         .all(|&child| match doc.nodes[child].kind {
             Kind::Text { .. } => true,
-            Kind::Element(_) => allowed_piece(doc, child),
+            Kind::Element(_) => allowed_piece(doc, child, resolve),
             _ => false,
         })
 }
@@ -443,24 +604,477 @@ fn line_text(doc: &Document<'_>, id: NodeId) -> String {
 
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
 /// `text`, i `tspan`.
-fn unit_children_allowed(doc: &Document<'_>, element: &Element<'_>, tag: Tag) -> bool {
+fn unit_children_allowed(
+    doc: &Document<'_>,
+    element: &Element<'_>,
+    tag: Tag,
+    resolve: Resolve<'_>,
+) -> bool {
     element
         .children
         .iter()
         .all(|&child| match &doc.nodes[child].kind {
             Kind::Text { blank, .. } => *blank,
-            Kind::Element(_) => allowed_part(doc, child, tag == Tag::Text),
+            Kind::Element(_) => allowed_part(doc, child, tag == Tag::Text, resolve),
             _ => false,
         })
 }
 
-/// Il ruolo di un figlio di un contenitore, o `None` se è estraneo.
-fn classify(doc: &Document<'_>, id: NodeId, under_root: bool) -> Option<(Tag, Role)> {
+// ---------------------------------------------------------------------------
+// Le risorse del disegno (formato della scena, risorse).
+// ---------------------------------------------------------------------------
+
+/// Quanti punti ha al più una sfumatura (formato della scena, risorse).
+pub(crate) const MAX_STOPS: usize = 256;
+
+/// Quante primitive ha al più un filtro, coi `feMergeNode` (formato della
+/// scena, risorse).
+pub(crate) const MAX_PRIMITIVES: usize = 64;
+
+/// Quanti `g` si annidano al più nel contenuto di una risorsa.
+pub(crate) const MAX_CONTENT_DEPTH: usize = 32;
+
+/// Le primitive dei filtri (formato della scena, risorse): un elenco chiuso,
+/// quelle di SVG 1.1 che ogni lettore disegna allo stesso modo e l'ombra di
+/// Filter Effects.
+const PRIMITIVES: [&str; 9] = [
+    "feGaussianBlur",
+    "feOffset",
+    "feFlood",
+    "feDropShadow",
+    "feColorMatrix",
+    "feComposite",
+    "feBlend",
+    "feMorphology",
+    "feMerge",
+];
+
+/// Vero se `element` è una `defs` della radice modificabile: solo `id` fra
+/// gli attributi SVG.
+fn defs_allowed(element: &Element<'_>) -> bool {
+    element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE => attr.local == "id" && !attr.value.is_empty(),
+        NS_XLINK | NS_SVG => false,
+        _ => true,
+    })
+}
+
+/// Vero se `value`, una coordinata di una risorsa, rientra nelle sue unità:
+/// nel riquadro (`in_box`) un numero o una percentuale, altrimenti una
+/// lunghezza.
+fn coordinate(value: &str, in_box: bool, non_negative: bool) -> bool {
+    let n = if in_box {
+        fraction(value)
+    } else {
+        length(value)
+    };
+    n.is_some_and(|n| !non_negative || n >= 0.0)
+}
+
+/// Le coordinate di ogni risorsa, nelle sue unità.
+fn coordinates(tag: Tag) -> &'static [&'static str] {
+    match tag {
+        Tag::LinearGradient => &["x1", "y1", "x2", "y2"],
+        Tag::RadialGradient => &["cx", "cy", "r", "fx", "fy"],
+        Tag::Pattern | Tag::Mask | Tag::Filter => &["x", "y", "width", "height"],
+        _ => &[],
+    }
+}
+
+/// Le coordinate che in `userSpaceOnUse` vanno scritte: mancando, SVG le
+/// prenderebbe in percentuale del viewport.
+fn required(tag: Tag) -> &'static [&'static str] {
+    match tag {
+        Tag::LinearGradient => &["x2"],
+        Tag::RadialGradient => &["cx", "cy", "r"],
+        Tag::Mask | Tag::Filter => &["x", "y", "width", "height"],
+        _ => &[],
+    }
+}
+
+/// L'attributo delle unità delle coordinate di ogni risorsa.
+fn units(tag: Tag) -> Option<&'static str> {
+    match tag {
+        Tag::LinearGradient | Tag::RadialGradient => Some("gradientUnits"),
+        Tag::Pattern => Some("patternUnits"),
+        Tag::Mask => Some("maskUnits"),
+        Tag::Filter => Some("filterUnits"),
+        _ => None,
+    }
+}
+
+/// Il giudizio su un attributo SVG senza namespace di una risorsa, con le
+/// coordinate nel riquadro se `in_box`.
+fn resource_attribute(tag: Tag, name: &str, value: &str, in_box: bool) -> bool {
+    use Tag::*;
+    if name == "id" {
+        return !value.is_empty();
+    }
+    if coordinates(tag).contains(&name) {
+        return coordinate(value, in_box, matches!(name, "r" | "width" | "height"));
+    }
+    let gradient = matches!(tag, LinearGradient | RadialGradient);
+    match name {
+        "gradientUnits" | "spreadMethod" => gradient && keyword(name, value),
+        "gradientTransform" => gradient && transform(value).is_some(),
+        "patternUnits" | "patternContentUnits" => tag == Pattern && keyword(name, value),
+        "patternTransform" => tag == Pattern && transform(value).is_some(),
+        "viewBox" => matches!(tag, Pattern | Marker) && view_box(value).is_some(),
+        "preserveAspectRatio" => matches!(tag, Pattern | Marker) && preserve_aspect_ratio(value),
+        "markerUnits" => tag == Marker && keyword(name, value),
+        "refX" | "refY" => tag == Marker && length(value).is_some(),
+        "markerWidth" | "markerHeight" => tag == Marker && non_negative_length(value).is_some(),
+        "orient" => {
+            tag == Marker
+                && (matches!(trim(value), "auto" | "auto-start-reverse") || angle(value).is_some())
+        }
+        "clipPathUnits" | "clip-rule" => tag == ClipPath && keyword(name, value),
+        "transform" => tag == ClipPath && transform(value).is_some(),
+        "maskUnits" | "maskContentUnits" => tag == Mask && keyword(name, value),
+        "filterUnits" | "primitiveUnits" | "color-interpolation-filters" => {
+            tag == Filter && keyword(name, value)
+        }
+        _ => false,
+    }
+}
+
+/// Vero se `element`, una risorsa di tag `tag` in una `defs` della radice, è
+/// modificabile: attributi, figli e riferimenti del suo contenuto.
+fn resource_allowed(
+    doc: &Document<'_>,
+    element: &Element<'_>,
+    tag: Tag,
+    resolve: Resolve<'_>,
+) -> bool {
+    if element.value(NS_NONE, "id").is_none_or(str::is_empty) {
+        return false;
+    }
+    let in_box = units(tag)
+        .and_then(|name| element.value(NS_NONE, name))
+        .is_none_or(|units| trim(units) != "userSpaceOnUse");
+    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE => {
+            !has_url(&attr.value) && resource_attribute(tag, attr.local, &attr.value, in_box)
+        }
+        NS_XLINK | NS_SVG => false,
+        _ => true,
+    });
+    if !attributes {
+        return false;
+    }
+    if !in_box
+        && required(tag)
+            .iter()
+            .any(|name| element.value(NS_NONE, name).is_none())
+    {
+        return false;
+    }
+    match tag {
+        Tag::LinearGradient | Tag::RadialGradient => stops_allowed(doc, element),
+        Tag::Filter => primitives_allowed(doc, element),
+        _ => {
+            // Il contenuto rimanda soltanto alle sfumature: così le risorse
+            // non si rimandano in cerchio.
+            let gradients = |id: &str| resolve(id).filter(|&kind| kind == ResourceKind::Gradient);
+            let clip = tag == Tag::ClipPath;
+            element
+                .children
+                .iter()
+                .all(|&child| content_allowed(doc, child, clip, &gradients, 1))
+        }
+    }
+}
+
+/// Vero se un nodo è spazio, `title` o `desc` ammessi: i figli che ogni
+/// risorsa può avere. `None` per un altro elemento.
+fn blank_or_meta(doc: &Document<'_>, child: NodeId) -> Option<bool> {
+    match &doc.nodes[child].kind {
+        Kind::Text { blank, .. } => Some(*blank),
+        Kind::Element(_) => {
+            let element = doc.element(child).expect("un nodo elemento è un elemento");
+            matches!(Tag::of(element), Some(Tag::Title | Tag::Desc))
+                .then(|| allowed_part(doc, child, false, &no_resources))
+        }
+        _ => Some(false),
+    }
+}
+
+/// Vero se i figli di una sfumatura sono ammessi: `stop`, al più
+/// [`MAX_STOPS`], ognuno con `offset`, `stop-color` e `stop-opacity`.
+fn stops_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
+    let mut stops = 0;
+    for &child in &element.children {
+        if let Some(plain) = blank_or_meta(doc, child) {
+            if !plain {
+                return false;
+            }
+            continue;
+        }
+        let stop = doc.element(child).expect("un nodo elemento è un elemento");
+        stops += 1;
+        if !stop.is_svg("stop") || stops > MAX_STOPS {
+            return false;
+        }
+        let attributes = stop.attrs.iter().all(|attr| match attr.ns {
+            NS_NONE => match attr.local {
+                "id" => !attr.value.is_empty(),
+                "offset" => fraction(&attr.value).is_some(),
+                "stop-color" => paint(&attr.value).is_some_and(|color| color != Paint::None),
+                "stop-opacity" => opacity(&attr.value).is_some(),
+                _ => false,
+            },
+            NS_XLINK | NS_SVG => false,
+            _ => true,
+        });
+        let empty = stop
+            .children
+            .iter()
+            .all(|&inner| matches!(doc.nodes[inner].kind, Kind::Text { blank: true, .. }));
+        if !attributes || !empty {
+            return false;
+        }
+    }
+    true
+}
+
+/// Vero se `id`, nel contenuto di una risorsa, è ammesso: spazi, `title`,
+/// `desc`, una forma, un testo e, fuori da un ritaglio, un `g` che ne
+/// contiene, fino a [`MAX_CONTENT_DEPTH`] livelli.
+fn content_allowed(
+    doc: &Document<'_>,
+    id: NodeId,
+    clip: bool,
+    resolve: Resolve<'_>,
+    depth: usize,
+) -> bool {
+    if let Some(plain) = blank_or_meta(doc, id) {
+        return plain;
+    }
+    let element = doc.element(id).expect("un nodo elemento è un elemento");
+    let Some(tag) = Tag::of(element) else {
+        return false;
+    };
+    if tag.is_shape() || tag == Tag::Text {
+        return attributes_allowed(element, tag, resolve, clip)
+            && unit_children_allowed(doc, element, tag, resolve);
+    }
+    if tag != Tag::G || clip || depth > MAX_CONTENT_DEPTH {
+        return false;
+    }
+    attributes_allowed(element, tag, resolve, false)
+        && element
+            .children
+            .iter()
+            .all(|&child| content_allowed(doc, child, clip, resolve, depth + 1))
+}
+
+/// Vero se `value`, un `result`, è un nome senza spazi.
+fn result_name(value: &str) -> bool {
+    !value.is_empty() && !value.bytes().any(is_wsp)
+}
+
+/// Quanti numeri vuole `values` per ogni tipo di `feColorMatrix`.
+fn matrix_values(kind: &str) -> Option<usize> {
+    match kind {
+        "matrix" => Some(20),
+        "saturate" | "hueRotate" => Some(1),
+        "luminanceToAlpha" => Some(0),
+        _ => None,
+    }
+}
+
+/// Il giudizio su un attributo senza namespace della primitiva `local`;
+/// `input` dice se un ingresso è ammesso.
+fn primitive_attribute(local: &str, name: &str, value: &str, input: &dyn Fn(&str) -> bool) -> bool {
+    let shadow = local == "feDropShadow";
+    match name {
+        "id" => !value.is_empty(),
+        "result" => local != "feMergeNode" && result_name(value),
+        "color-interpolation-filters" => local != "feMergeNode" && keyword(name, value),
+        "x" | "y" => local != "feMergeNode" && length(value).is_some(),
+        "width" | "height" => local != "feMergeNode" && non_negative_length(value).is_some(),
+        "in" => local != "feFlood" && local != "feMerge" && input(value),
+        "in2" => matches!(local, "feComposite" | "feBlend") && input(value),
+        "stdDeviation" => (local == "feGaussianBlur" || shadow) && one_or_two(value).is_some(),
+        "dx" | "dy" => (local == "feOffset" || shadow) && number(value).is_some(),
+        "flood-color" => {
+            (local == "feFlood" || shadow) && paint(value).is_some_and(|color| color != Paint::None)
+        }
+        "flood-opacity" => (local == "feFlood" || shadow) && opacity(value).is_some(),
+        "type" => local == "feColorMatrix" && matrix_values(value).is_some(),
+        // Il numero lo controlla chi conosce il tipo.
+        "values" => local == "feColorMatrix" && number_list(value).is_some(),
+        "operator" => match local {
+            "feComposite" => matches!(value, "over" | "in" | "out" | "atop" | "xor" | "arithmetic"),
+            "feMorphology" => matches!(value, "erode" | "dilate"),
+            _ => false,
+        },
+        "k1" | "k2" | "k3" | "k4" => local == "feComposite" && number(value).is_some(),
+        "mode" => {
+            local == "feBlend"
+                && matches!(
+                    value,
+                    "normal" | "multiply" | "screen" | "darken" | "lighten"
+                )
+        }
+        "radius" => local == "feMorphology" && one_or_two(value).is_some(),
+        _ => false,
+    }
+}
+
+/// Vero se la primitiva `element` è ammessa, con gli ingressi che rimandano
+/// a `results`, i nomi delle primitive che la precedono.
+fn primitive_allowed(doc: &Document<'_>, element: &Element<'_>, results: &HashSet<&str>) -> bool {
+    let input =
+        |value: &str| value == "SourceGraphic" || value == "SourceAlpha" || results.contains(value);
+    let local = element.local;
+    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE => {
+            !has_url(&attr.value) && primitive_attribute(local, attr.local, &attr.value, &input)
+        }
+        NS_XLINK | NS_SVG => false,
+        _ => true,
+    });
+    if !attributes {
+        return false;
+    }
+    if matches!(local, "feComposite" | "feBlend") && element.value(NS_NONE, "in2").is_none() {
+        return false;
+    }
+    if local == "feColorMatrix" {
+        let kind = element.value(NS_NONE, "type").unwrap_or("matrix");
+        let wanted = matrix_values(kind).expect("il tipo è già controllato");
+        if let Some(values) = element.value(NS_NONE, "values") {
+            let numbers = number_list(values).expect("i valori sono già controllati");
+            if numbers.len() != wanted || (kind == "saturate" && numbers[0] < 0.0) {
+                return false;
+            }
+        }
+    }
+    element
+        .children
+        .iter()
+        .all(|&child| match &doc.nodes[child].kind {
+            Kind::Text { blank, .. } => *blank,
+            Kind::Element(_) => {
+                let node = doc.element(child).expect("un nodo elemento è un elemento");
+                local == "feMerge"
+                    && node.is_svg("feMergeNode")
+                    && primitive_allowed(doc, node, results)
+            }
+            _ => false,
+        })
+}
+
+/// Vero se i figli di un filtro sono ammessi: primitive dell'elenco, al più
+/// [`MAX_PRIMITIVES`] coi `feMergeNode`, ognuna con ingressi che vengono
+/// prima.
+fn primitives_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
+    let mut results = HashSet::new();
+    let mut count = 0;
+    for &child in &element.children {
+        if let Some(plain) = blank_or_meta(doc, child) {
+            if !plain {
+                return false;
+            }
+            continue;
+        }
+        let primitive = doc.element(child).expect("un nodo elemento è un elemento");
+        if primitive.ns != NS_SVG || !PRIMITIVES.contains(&primitive.local) {
+            return false;
+        }
+        count += 1 + primitive
+            .children
+            .iter()
+            .filter(|&&inner| doc.element(inner).is_some())
+            .count();
+        if count > MAX_PRIMITIVES || !primitive_allowed(doc, primitive, &results) {
+            return false;
+        }
+        if let Some(result) = primitive.value(NS_NONE, "result") {
+            results.insert(result);
+        }
+    }
+    true
+}
+
+/// L'indice delle risorse modificabili del documento: per ogni id, il tipo
+/// della risorsa (formato della scena, risorse). Prima le sfumature, che non
+/// rimandano a niente, poi le altre, che nel contenuto possono usare le
+/// sfumature. Di due risorse con lo stesso id vale la prima, in quest'ordine:
+/// il documento è comunque in sola lettura (S003).
+fn resource_index(doc: &Document<'_>) -> HashMap<String, ResourceKind> {
+    let mut found = HashMap::new();
+    let mut others = Vec::new();
+    let judge = |found: &mut HashMap<String, ResourceKind>,
+                 element: &Element<'_>,
+                 tag: Tag,
+                 resolve: Resolve<'_>| {
+        let Some(id) = element.value(NS_NONE, "id") else {
+            return;
+        };
+        if found.contains_key(id) || !resource_allowed(doc, element, tag, resolve) {
+            return;
+        }
+        let kind = tag.resource_kind().expect("è una risorsa");
+        found.insert(id.to_owned(), kind);
+    };
+    for &child in doc.children(doc.root) {
+        let Some(defs) = doc.element(child) else {
+            continue;
+        };
+        if Tag::of(defs) != Some(Tag::Defs) || !defs_allowed(defs) {
+            continue;
+        }
+        for &inner in &defs.children {
+            let Some(element) = doc.element(inner) else {
+                continue;
+            };
+            let Some(tag) = Tag::of(element).filter(|tag| tag.resource_kind().is_some()) else {
+                continue;
+            };
+            if matches!(tag, Tag::LinearGradient | Tag::RadialGradient) {
+                judge(&mut found, element, tag, &no_resources);
+            } else {
+                others.push((element, tag));
+            }
+        }
+    }
+    let gradients = found.clone();
+    let resolve = |id: &str| gradients.get(id).copied();
+    for (element, tag) in others {
+        judge(&mut found, element, tag, &resolve);
+    }
+    found
+}
+
+/// Il ruolo di un figlio di un contenitore, o `None` se è estraneo. `place`
+/// dice dov'è il contenitore: la radice decide livelli, carta e `defs`, una
+/// `defs` della radice le risorse. `resolve` dice che cosa è la risorsa di
+/// ogni id a cui l'elemento rimanda.
+fn classify(
+    doc: &Document<'_>,
+    id: NodeId,
+    place: Place,
+    resolve: Resolve<'_>,
+) -> Option<(Tag, Role)> {
     let element = doc.element(id)?;
     let tag = Tag::of(element)?;
-    if !attributes_allowed(element, tag) {
+    if tag == Tag::Defs {
+        return (place == Place::Root && defs_allowed(element)).then_some((tag, Role::Defs));
+    }
+    if tag.resource_kind().is_some() {
+        return (place == Place::Defs && resource_allowed(doc, element, tag, resolve))
+            .then_some((tag, Role::Resource));
+    }
+    // In una `defs` stanno solo risorse, titolo e descrizione.
+    if place == Place::Defs && !matches!(tag, Tag::Title | Tag::Desc) {
         return None;
     }
+    if !attributes_allowed(element, tag, resolve, false) {
+        return None;
+    }
+    let under_root = place == Place::Root;
     let role = match tag {
         Tag::G if under_root && element.attr(NS_FUB, "layer").is_some() => Role::Layer,
         Tag::G => Role::Group,
@@ -477,7 +1091,7 @@ fn classify(doc: &Document<'_>, id: NodeId, under_root: bool) -> Option<(Tag, Ro
         }
         Tag::Tspan => return None,
         _ => {
-            if !unit_children_allowed(doc, element, tag) {
+            if !unit_children_allowed(doc, element, tag, resolve) {
                 return None;
             }
             match tag {
@@ -492,7 +1106,8 @@ fn classify(doc: &Document<'_>, id: NodeId, under_root: bool) -> Option<(Tag, Ro
                 Tag::Polyline => Role::Polyline,
                 Tag::Polygon => Role::Polygon,
                 Tag::Text => Role::Text,
-                _ => Role::Image,
+                Tag::Image => Role::Image,
+                _ => unreachable!("defs e risorse sono già giudicate"),
             }
         }
     };
@@ -542,6 +1157,8 @@ struct Pending {
 /// Un contenitore in visita.
 struct Frame {
     node: NodeId,
+    /// Dove stanno i suoi figli.
+    place: Place,
     path: Vec<usize>,
     next: usize,
     elements: usize,
@@ -556,6 +1173,8 @@ struct Builder<'d, 'a> {
     /// Falso per un documento oltre [`crate::MAX_ELEMENTS`]: le voci si
     /// contano e si scartano, e restano solo riepilogo e diagnostica.
     keep: bool,
+    /// Le risorse modificabili del documento.
+    resolve: Resolve<'d>,
     items: Vec<Item>,
     diagnostics: Vec<Diagnostic>,
     tally: Tally,
@@ -704,8 +1323,13 @@ impl Builder<'_, '_> {
         let span = self.map.span(node.start, node.end);
         let stroke = (role == Role::Stroke).then(|| self.stroke(element, span));
         // Si bloccano e si nascondono i livelli e ciò che si disegna, non il
-        // titolo, la descrizione o la carta.
-        let object = !matches!(role, Role::Title | Role::Desc | Role::Paper);
+        // titolo, la descrizione, la carta o le risorse; queste e la `defs`
+        // hanno però un nome.
+        let object = !matches!(
+            role,
+            Role::Title | Role::Desc | Role::Paper | Role::Defs | Role::Resource
+        );
+        let named = object || matches!(role, Role::Defs | Role::Resource);
         self.tally
             .element(doc, element, role, context, span, stroke.as_ref());
         if !self.keep {
@@ -735,7 +1359,7 @@ impl Builder<'_, '_> {
             varwidth: (role == Role::Width)
                 .then(|| width_geometry(element))
                 .flatten(),
-            title: object.then(|| first_title(doc, element)).flatten(),
+            title: named.then(|| first_title(doc, element)).flatten(),
             text: matches!(role, Role::Title | Role::Desc).then(|| character_data(doc, id)),
             lines: (role == Role::Text).then(|| {
                 element
@@ -745,6 +1369,13 @@ impl Builder<'_, '_> {
                     .map(|&child| line_text(doc, child))
                     .collect()
             }),
+            lifecycle: (role == Role::Resource)
+                .then(|| match element.value(NS_FUB, "role") {
+                    Some("private") => Some(Lifecycle::Private),
+                    Some("shared") => Some(Lifecycle::Shared),
+                    _ => None,
+                })
+                .flatten(),
         };
         self.items.push(Item::Element(Box::new(item)));
     }
@@ -754,6 +1385,7 @@ impl Builder<'_, '_> {
         let doc = self.doc;
         let mut stack = vec![Frame {
             node: root,
+            place: Place::Root,
             path: Vec::new(),
             next: 0,
             elements: 0,
@@ -768,7 +1400,6 @@ impl Builder<'_, '_> {
                 continue;
             };
             frame.next += 1;
-            let under_root = frame.node == root;
             match &doc.nodes[child].kind {
                 Kind::Text { blank: true, .. } => {}
                 Kind::Element(_) => {
@@ -776,7 +1407,7 @@ impl Builder<'_, '_> {
                     frame.elements += 1;
                     // Un contenitore oltre la profondità massima è un'unità.
                     let depth = frame.path.len() + 1;
-                    let class = classify(doc, child, under_root)
+                    let class = classify(doc, child, frame.place, self.resolve)
                         .filter(|&(_, role)| !role.is_container() || depth <= MAX_DEPTH);
                     match class {
                         Some((tag, role)) => {
@@ -791,6 +1422,11 @@ impl Builder<'_, '_> {
                                 self.element_item(child, tag, role, path.clone(), &context);
                                 stack.push(Frame {
                                     node: child,
+                                    place: if role == Role::Defs {
+                                        Place::Defs
+                                    } else {
+                                        Place::Inside
+                                    },
                                     path,
                                     next: 0,
                                     elements: 0,
@@ -824,11 +1460,14 @@ pub(crate) fn classify_document<'a>(
     map: &Utf16Map<'a>,
     keep: bool,
 ) -> Classified {
+    let resources = resource_index(doc);
+    let resolve = |id: &str| resources.get(id).copied();
     let mut builder = Builder {
         doc,
         map,
         lines: Lines::new(doc.source),
         keep,
+        resolve: &resolve,
         items: Vec::new(),
         diagnostics: Vec::new(),
         tally: Tally::default(),

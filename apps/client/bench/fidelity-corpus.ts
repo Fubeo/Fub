@@ -1,6 +1,7 @@
 // Il corpus del banco di fedeltà: scene piccole che insieme toccano ogni
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
-// dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, e gli estranei tipici di Inkscape, Illustrator e
+// dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, le
+// risorse di ogni tipo, e gli estranei tipici di Inkscape, Illustrator e
 // Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa.
 
 /// La misura di ogni scena, in pixel CSS.
@@ -64,6 +65,35 @@ export const FIDELITY: readonly FidelityScene[] = [
     id: "immagine",
     text: scene(`${LAYER}<image id="i1" x="20" y="20" width="96" height="96" href="${CHECKER}"/>`
       + `<image id="i2" x="140" y="40" width="80" height="40" preserveAspectRatio="none" href="${CHECKER}"/></g>`),
+  },
+  {
+    // Ogni risorsa modificabile, usata da oggetti modificabili: sul foglio
+    // stanno nella `defs` viva, in Lettura e nell'export nel file.
+    id: "risorse",
+    text: scene('<defs id="fub-defs">'
+      + '<linearGradient id="r1" fub:role="private" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2b6cb0"/>'
+      + '<stop offset="1" stop-color="#9f7aea" stop-opacity="0.6"/></linearGradient>'
+      + '<radialGradient id="r2" fub:role="private" cx="0.5" cy="0.5" r="0.5" fx="0.35" fy="0.35"><stop offset="0" stop-color="#f6ad55"/>'
+      + '<stop offset="100%" stop-color="#c53030"/></radialGradient>'
+      + '<pattern id="r3" fub:role="shared" x="0" y="0" width="12" height="12" patternUnits="userSpaceOnUse">'
+      + '<rect x="0" y="0" width="12" height="12" fill="#ffffff"/><rect x="0" y="0" width="6" height="6" fill="url(#r1) #2b6cb0"/>'
+      + '<circle cx="9" cy="9" r="3" fill="#2f855a"/></pattern>'
+      + '<marker id="r4" fub:role="shared" refX="5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse" viewBox="0 0 10 10">'
+      + '<path d="M 0 0 L 10 5 L 0 10 Z" fill="#1a202c"/></marker>'
+      + '<clipPath id="r5" fub:role="private" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath>'
+      + '<linearGradient id="r6" fub:role="private" x2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient>'
+      + '<mask id="r7" fub:role="private" maskContentUnits="objectBoundingBox"><rect x="0" y="0" width="1" height="1" fill="url(#r6) #ffffff"/></mask>'
+      + '<filter id="r8" fub:role="shared" x="-0.3" y="-0.3" width="1.6" height="1.6">'
+      + '<feDropShadow dx="3" dy="4" stdDeviation="3" flood-color="#1a202c" flood-opacity="0.5"/></filter>'
+      + '<filter id="r9" fub:role="shared" x="-0.2" y="-0.2" width="1.4" height="1.6"><feGaussianBlur in="SourceAlpha" stdDeviation="1.5" result="ombra"/>'
+      + '<feOffset in="ombra" dx="2" dy="2" result="spostata"/><feMerge><feMergeNode in="spostata"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
+      + `</defs>${LAYER}`
+      + '<rect id="o1" x="10" y="10" width="100" height="40" rx="6" fill="url(#r1) #2b6cb0" filter="url(#r8)"/>'
+      + '<circle id="o2" cx="164" cy="34" r="24" fill="url(#r2) #f6ad55" stroke="url(#r3) #2f855a" stroke-width="6"/>'
+      + '<path id="o3" d="M 16 70 L 80 70 L 112 96" fill="none" stroke="#1a202c" stroke-width="2" marker-start="url(#r4)" marker-mid="url(#r4)" marker-end="url(#r4)"/>'
+      + '<rect id="o4" x="140" y="68" width="84" height="56" fill="url(#r3) #2f855a" clip-path="url(#r5)"/>'
+      + '<rect id="o5" x="10" y="108" width="110" height="40" fill="#c53030" mask="url(#r7)"/>'
+      + '<text id="o6" x="140" y="148" font-family="Inter" font-size="18" font-weight="700" fill="url(#r1) #2b6cb0" filter="url(#r9)"><tspan x="140" dy="0">Risorse</tspan></text></g>'),
   },
   {
     id: "inkscape",

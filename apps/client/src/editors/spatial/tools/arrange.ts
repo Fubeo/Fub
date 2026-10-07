@@ -20,8 +20,9 @@
 //   separa un gruppo. Un collegamento non ne contiene un altro.
 // - **La copia è un oggetto nuovo.** Un duplicato ha id nuovi in tutto il
 //   sottoalbero, e sta sopra gli originali del suo livello, spostato di un
-//   passo; un oggetto con parti estranee non si duplica, perché
-//   un'operazione non le sa scrivere.
+//   passo; le risorse private che usa le ha copiate anche lui, e quelle
+//   condivise le condivide. Un oggetto con parti estranee non si duplica,
+//   perché un'operazione non le sa scrivere.
 // - **Allineare e distribuire** spostano soltanto, sui riquadri che si vedono,
 //   contorno compreso; gli spostamenti si arrotondano come quelli a mano.
 
@@ -36,6 +37,7 @@ import { FUB_NS, NS_SVG, SVG_NS, XLINK_NS, XML_URI, type ElementNode, type XmlDo
 import { formatNumber } from "../number";
 import { moveOps, movedMatrix, roundDelta, transformValue, type Moved, type NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
+import { holdsEffect, ResourceCopies } from "./resources";
 
 /// Dove va la selezione nell'ordine del suo livello.
 export type Order = "front" | "forward" | "backward" | "back";
@@ -293,6 +295,8 @@ function renamed(elem: Elem, ids: NewIds): Elem {
 /// originali. `null` se un oggetto ha parti che non si copiano.
 export function duplicateOps(model: DocumentModel, units: readonly Unit[], dx: number, dy: number, ids: NewIds): Arranged | null {
   const plan = new Plan(model, ids);
+  const copies = new ResourceCopies(model, ids, elemOf);
+  const adds: Op[] = [];
   const byParent = new Map<string, Unit[]>();
   for (const unit of units) {
     const list = byParent.get(parentKey(unit));
@@ -306,18 +310,20 @@ export function duplicateOps(model: DocumentModel, units: readonly Unit[], dx: n
     let after = plan.idOf(top);
     for (const unit of list) {
       const elem = elemOf(nodeOf(model, unit));
-      if (elem === null) return null;
-      const copy = renamed(elem, ids);
+      const copy = elem === null ? null : copies.adopt(renamed(elem, ids));
+      if (copy === null) return null;
       const moved = movedMatrix(unit, dx, dy) ?? unit.transform;
       const value = transformValue(moved);
       const attrs = copy.attrs as Record<string, string>;
       if (value === null) delete attrs.transform;
       else attrs.transform = value;
-      plan.ops.push({ op: "add", parent, pos: { after }, elem: copy });
+      adds.push({ op: "add", parent, pos: { after }, elem: copy });
       after = attrs.id!;
       keys.push(after);
     }
   }
+  // Le risorse prima di chi le usa.
+  plan.ops.push(...copies.ops(), ...adds);
   return plan.finish(keys);
 }
 
@@ -422,9 +428,17 @@ export function isGroup(unit: Unit): boolean {
   return unit.tag === "g" && unit.role === "group";
 }
 
-/// Separa i gruppi fra `units`: vedi [`unwrapOps`].
+/// Vero se il contenitore `unit` si toglie senza cambiare ciò che si vede:
+/// non ha un ritaglio, una maschera o un filtro, che valgono per lui intero
+/// e che i figli, da soli, non disegnerebbero allo stesso modo.
+export function unwrappable(model: DocumentModel, unit: Unit): boolean {
+  return !holdsEffect(plainAttributes(nodeOf(model, unit)));
+}
+
+/// Separa i gruppi fra `units` che si separano: vedi [`unwrapOps`] e
+/// [`unwrappable`].
 export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged {
-  return unwrapOps(model, units, ids, isGroup);
+  return unwrapOps(model, units, ids, (unit) => isGroup(unit) && unwrappable(model, unit));
 }
 
 /// Toglie i contenitori fra `units` che `unwraps` sceglie: i figli prendono
@@ -529,10 +543,11 @@ export function relinkOps(model: DocumentModel, unit: Unit, href: string, ids: N
   return plan.finish([id]);
 }
 
-/// Toglie i collegamenti fra `units`: gli oggetti restano dov'erano, come
-/// quelli di un gruppo che si separa (vedi [`unwrapOps`]).
+/// Toglie i collegamenti fra `units` che si tolgono: gli oggetti restano
+/// dov'erano, come quelli di un gruppo che si separa (vedi [`unwrapOps`] e
+/// [`unwrappable`]).
 export function unlinkOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged {
-  return unwrapOps(model, units, ids, isLink);
+  return unwrapOps(model, units, ids, (unit) => isLink(unit) && unwrappable(model, unit));
 }
 
 // ---------------------------------------------------------------------------

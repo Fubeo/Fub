@@ -137,7 +137,7 @@ import { pathData, type Elem } from "../scene/serialize";
 import { href as parseHref } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
-import { PaintBuilder, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
+import { PaintBuilder, resourcesFor, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
 import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
   addOp,
@@ -178,6 +178,7 @@ import {
   relinkOps,
   ungroupOps,
   unlinkOps,
+  unwrappable,
   type Arranged,
   type Axis,
   type Edge,
@@ -3839,10 +3840,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// La miniatura di una voce dell'albero: ciò che il disegno dipinge per
-  /// lei, dentro gli stili di chi la contiene; un oggetto inquadrato sul suo
-  /// riquadro, un livello sul foglio. La chiave cambia quando cambia ciò che
-  /// si vede: la voce, il testo dei tag di chi la contiene, che resta anche
-  /// quando il contenitore si rifà, la radice e il foglio.
+  /// lei, dentro gli stili di chi la contiene e con le risorse che usa; un
+  /// oggetto inquadrato sul suo riquadro, un livello sul foglio. La chiave
+  /// cambia quando cambia ciò che si vede: la voce, il testo dei tag di chi
+  /// la contiene, che resta anche quando il contenitore si rifà, la radice,
+  /// le risorse e il foglio.
   const thumbnailOf = (item: ElementItem): TreeThumbnail | null => {
     const model = engine.model;
     if (model === null) return null;
@@ -3856,8 +3858,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const box = layer ? sheetOf(model) : null;
     if (layer && box === null) return null;
     const frame = box === null ? "" : `|${box.x} ${box.y} ${box.width} ${box.height}`;
+    const chain = [root.attrs, ...heads.map((head) => head.attrs)];
+    const used = resourcesFor(paints, chain, scene.resources);
+    const serials = (list: readonly object[]): string => list.map((paint) => builder.serialOf(paint)).join(" ");
     return {
-      key: `${builder.serialOf(root)}|${heads.map((head) => head.head + (head.tail ?? "")).join("")}|${paints.map((paint) => builder.serialOf(paint)).join(" ")}${frame}`,
+      key: `${builder.serialOf(root)}|${heads.map((head) => head.head + (head.tail ?? "")).join("")}|${serials(paints)}|${serials(used)}${frame}`,
       draw: (owner) => {
         const count = shapeCount(paints, THUMB_PICTURE_SHAPES);
         if (count > THUMB_PICTURE_SHAPES) return null;
@@ -3865,7 +3870,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (framed === null) return null;
         const live = count <= THUMB_LIVE_SHAPES;
         const resolve = live && images !== undefined ? (href: string, life: Lifetime) => images.url(href, life) : undefined;
-        const svg = paintMiniature(paints, [root.attrs, ...heads.map((head) => head.attrs)], framed, owner, resolve);
+        const svg = paintMiniature(paints, chain, framed, owner, resolve, used);
         return live ? svg : miniaturePicture(svg, owner);
       },
     };
@@ -10505,13 +10510,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function ungroupSelection(): void {
     const units = arranging("arrange");
     if (units === null) return;
-    const groups = units.filter(isGroup).length;
-    if (groups === 0) {
+    const all = units.filter(isGroup);
+    if (all.length === 0) {
       announce(t("draw.ungroup.none"));
       return;
     }
+    const groups = all.filter((unit) => unwrappable(engine.model!, unit)).length;
+    if (groups === 0) {
+      announce(t("draw.ungroup.effect"));
+      return;
+    }
     const kept = arrange("draw.action.ungroup", ungroupOps(engine.model!, units, newIds()), null, { key: "draw.ungroup.styled" });
-    if (kept !== null) announce(`${plural(groups, "draw.ungrouped.one", "draw.ungrouped.other")}${kept}`);
+    const whole = groups < all.length ? ` ${t("draw.ungroup.effect_some")}` : "";
+    if (kept !== null) announce(`${plural(groups, "draw.ungrouped.one", "draw.ungrouped.other")}${whole}${kept}`);
   }
 
   /// Il collegamento scelto da solo, se c'è.
@@ -10571,13 +10582,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function unlinkSelection(): void {
     const units = arranging("links");
     if (units === null) return;
-    const count = units.filter(isLink).length;
-    if (count === 0) {
+    const all = units.filter(isLink);
+    if (all.length === 0) {
       announce(t("draw.unlink.none"));
       return;
     }
+    const count = all.filter((unit) => unwrappable(engine.model!, unit)).length;
+    if (count === 0) {
+      announce(t("draw.unlink.effect"));
+      return;
+    }
     const kept = arrange("draw.action.unlink", unlinkOps(engine.model!, units, newIds()), null, { key: "draw.unlink.styled" });
-    if (kept !== null) announce(`${plural(count, "draw.unlinked.one", "draw.unlinked.other")}${kept}`);
+    const whole = count < all.length ? ` ${t("draw.unlink.effect_some")}` : "";
+    if (kept !== null) announce(`${plural(count, "draw.unlinked.one", "draw.unlinked.other")}${whole}${kept}`);
   }
 
   /// Alt+Invio, o «Apri»: la nota del collegamento scelto da solo, a ogni
@@ -14382,6 +14399,7 @@ const REASONS: Readonly<Record<Reason, DrawKey>> = {
   "missing-parent": "draw.reason.missing_parent",
   "missing-anchor": "draw.reason.missing_target",
   "duplicate-id": "draw.reason.duplicate_id",
+  "in-use": "draw.reason.in_use",
   "invalid-elem": "draw.reason.invalid",
   locked: "draw.reason.locked",
   foreign: "draw.reason.foreign",

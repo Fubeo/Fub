@@ -161,7 +161,7 @@ export function flagged(model: DocumentModel, scope: ContainerNode | null, flag:
         if (container === model.root && child.kind === "container" && layer !== undefined && !layer.locked && !layer.hidden) visit(child);
         continue;
       }
-      if (details.role === "paper" || details.role === "title" || details.role === "desc") continue;
+      if (details.role === "paper" || details.role === "title" || details.role === "desc" || details.role === "defs") continue;
       if (details[flag] === true) out.push(child);
       if (child.kind === "container" && CONTAINERS.has(details.role) && details[other] !== true) visit(child);
     }

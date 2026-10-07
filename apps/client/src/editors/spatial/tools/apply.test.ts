@@ -393,6 +393,32 @@ describe("«Applica trasformazione» nei gruppi", () => {
   });
 });
 
+describe("«Applica trasformazione» con le risorse", () => {
+  const DEFS =
+    '<defs id="fub-defs"><linearGradient id="rgggggggg" x1="0" x2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient>' +
+    '<clipPath id="rcccccccc"><circle cx="5" cy="5" r="5"/></clipPath></defs>';
+
+  it("tiene la trasformazione di chi usa una risorsa, sua o ereditata", () => {
+    const opened = open(
+      doc(
+        `${DEFS}${LAYER}<rect id="r" x="0" y="0" width="10" height="10" fill="url(#rgggggggg)" transform="translate(5 0)"/>` +
+          '<g id="g" stroke="url(#rgggggggg)"><rect id="s" x="0" y="0" width="10" height="10" fill="none" transform="scale(2)"/></g>' +
+          '<rect id="t" x="0" y="0" width="10" height="10" transform="translate(5 0)"/></g>',
+      ),
+    );
+    const text = written(opened, applied(opened));
+    expect(text).toContain('<rect id="r" x="0" y="0" width="10" height="10" fill="url(#rgggggggg)" transform="translate(5 0)"/>');
+    expect(text).toContain('<rect id="s" x="0" y="0" width="10" height="10" fill="none" transform="scale(2)"/>');
+    expect(text).toContain('<rect id="t" x="5" y="0" width="10" height="10"/>');
+  });
+
+  it("non passa ai figli la trasformazione di un gruppo con un ritaglio", () => {
+    const opened = open(doc(`${DEFS}${LAYER}<g id="g" clip-path="url(#rcccccccc)" transform="translate(5 0)"><rect id="r" x="0" y="0" width="10" height="10" transform="translate(0 5)"/></g></g>`));
+    const text = written(opened, applied(opened));
+    expect(text).toContain('<g id="g" clip-path="url(#rcccccccc)" transform="translate(5 0)"><rect id="r" x="0" y="5" width="10" height="10"/></g>');
+  });
+});
+
 describe("«Applica trasformazione» quando non c'è niente da applicare", () => {
   it("non cambia un oggetto senza trasformazione, e un testo tiene la sua", () => {
     const opened = open(doc(`${LAYER}<rect id="r" x="0" y="0" width="10" height="10"/><text id="t" x="0" y="20" transform="rotate(30)"><tspan x="0" dy="0">Ciao</tspan></text></g>`));

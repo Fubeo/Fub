@@ -1,6 +1,7 @@
 // Il motore delle operazioni oltre i vettori di `vectors.test.ts`: la forma
 // della rete, i rifiuti uno per uno, i limiti, l'undo che non è esatto, i
-// rientri di un `move`, `adopt` e `page` nei casi di bordo. I testi attesi
+// rientri di un `move`, `adopt` e `page` nei casi di bordo, i riferimenti
+// alle risorse e la loro raccolta. I testi attesi
 // sono scritti a mano, e i `§` sono le sezioni di
 // `docs/reference/scene-operations.md`.
 
@@ -11,7 +12,7 @@ import { decodeInk, inkToQuantized } from "../ink/codec";
 import { pf1 } from "../ink/pf1";
 import { mergeUndo, SceneEngine, type Applied, type Outcome } from "./engine";
 import { MAX_BATCH, MAX_NESTING, MAX_OP_BYTES, MAX_VALUE_BYTES, parseWireOp, type Op, type Reason } from "./ops";
-import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene } from "./read";
+import { MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, readScene } from "./read";
 import type { Elem } from "./serialize";
 import { normalizeEol } from "./text";
 
@@ -860,5 +861,214 @@ describe("i nomi", () => {
     apply(engine, { op: "remove", target: { path: [2, 0], tag: "title" } });
     expect(named("l3f8a0c2d")).toBeUndefined();
     expect(named("o1a2b3c4d")).toBeUndefined();
+  });
+});
+
+describe("le risorse", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  /// Una sfumatura nella `defs`, col suo ciclo di vita.
+  const gradient = (id: string, role: string | null): string[] => [
+    `    <linearGradient id="${id}"${role === null ? "" : ` fub:role="${role}"`} x1="0" y1="0" x2="1" y2="0">`,
+    '      <stop offset="0" stop-color="#0072b2"/>',
+    '      <stop offset="1" stop-color="#56b4e9"/>',
+    "    </linearGradient>",
+  ];
+  /// Un rettangolo nel livello che usa `ref` per il riempimento.
+  const user = (id: string, ref: string): string => `    <rect id="${id}" x="500" y="100" width="200" height="120" fill="url(#${ref}) #0072b2"/>`;
+  const G = "r1a2b3c4d";
+  const PRIVATE = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, user("o2b3c4d5e", G), R3, END_G, END);
+  const PLAIN = lf(ROOT, TITLE, PAPER, L1, R2, R3, END_G, END);
+
+  it("una risorsa condivisa resta finché qualcuno la usa, poi se ne va con la defs", () => {
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, "shared"), END_DEFS, PAPER, L1, user("o2b3c4d5e", G), user("o3c4d5e6f", G), END_G, END);
+    const engine = SceneEngine.open(source);
+    const first = apply(engine, { op: "remove", target: "o2b3c4d5e" });
+    expect(first.forward).toEqual({ op: "remove", target: "o2b3c4d5e" });
+    expect(first.text).toBe(lf(ROOT, TITLE, DEFS, ...gradient(G, "shared"), END_DEFS, PAPER, L1, user("o3c4d5e6f", G), END_G, END));
+    const second = apply(engine, { op: "remove", target: "o3c4d5e6f" });
+    expect(second.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    expect(second.forward).toEqual({
+      op: "batch",
+      ops: [{ op: "remove", target: "o3c4d5e6f" }, { op: "remove", target: G }, { op: "remove", target: "fub-defs" }],
+    });
+    expect([...second.touched].sort()).toEqual(["fub-defs", "o3c4d5e6f", G].sort());
+    expect(applied(engine.undo(second.undo)).text).toBe(first.text);
+  });
+
+  it("la raccolta tocca solo ciò che l'operazione lascia solo", () => {
+    // Una sfumatura privata che nessuno usava resta anche se l'operazione la
+    // cambia.
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, R2, END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "set", id: G, attrs: { x2: "0.5" } });
+    expect(out.text).toBe(source.replace('x2="1"', 'x2="0.5"'));
+    expect(out.forward).toEqual({ op: "set", id: G, attrs: { x2: "0.5" } });
+  });
+
+  it("un riferimento da un elemento estraneo o da un foglio di stile tiene la risorsa", () => {
+    const foreign = '    <path style="fill:url(#r1a2b3c4d)" d="M0 0h10v10z"/>';
+    const withForeign = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, user("o2b3c4d5e", G), foreign, END_G, END);
+    const engine = SceneEngine.open(withForeign);
+    const out = apply(engine, { op: "remove", target: "o2b3c4d5e" });
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, foreign, END_G, END));
+    rejects(out.text, { op: "remove", target: G }, "in-use");
+
+    const sheet = "  <style>.sole { fill: url(#r1a2b3c4d) }</style>";
+    const withSheet = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, sheet, PAPER, L1, user("o2b3c4d5e", G), END_G, END);
+    expect(apply(SceneEngine.open(withSheet), { op: "remove", target: "o2b3c4d5e" }).text).toContain(`<linearGradient id="${G}"`);
+  });
+
+  it("chi usa e la risorsa si tolgono insieme, in un batch", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    const out = apply(engine, { op: "batch", label: "Via", ops: [{ op: "remove", target: "o2b3c4d5e" }, { op: "remove", target: G }] });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R3, END_G, END));
+    // La raccolta toglie la `defs` rimasta vuota, nello stesso batch.
+    expect(out.forward).toEqual({
+      op: "batch",
+      label: "Via",
+      ops: [{ op: "remove", target: "o2b3c4d5e" }, { op: "remove", target: G }, { op: "remove", target: "fub-defs" }],
+    });
+    expect(out.inverse).toMatchObject({ op: "batch", label: "Via" });
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(PRIVATE);
+  });
+
+  it("una defs non si toglie se qualcosa fuori usa le sue risorse", () => {
+    rejects(PRIVATE, { op: "remove", target: "fub-defs" }, "in-use");
+    // Un motivo che usa una sfumatura della stessa defs non la trattiene.
+    const pattern = [
+      '    <pattern id="r2b3c4d5e" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">',
+      `      <rect x="0" y="0" width="20" height="20" fill="url(#${G}) #0072b2"/>`,
+      "    </pattern>",
+    ];
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, null), ...pattern, END_DEFS, PAPER, L1, R2, END_G, END);
+    expect(apply(SceneEngine.open(source), { op: "remove", target: "fub-defs" }).text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, END_G, END));
+  });
+
+  it("ident non toglie l'id a una risorsa usata; a una che non lo è sì, e diventa estranea", () => {
+    rejects(PRIVATE, { op: "ident", path: [1, 0], tag: "linearGradient", id: null }, "in-use");
+    const unused = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, R2, END_G, END);
+    const engine = SceneEngine.open(unused);
+    const out = apply(engine, { op: "ident", path: [1, 0], tag: "linearGradient", id: null });
+    expect(out.text).toBe(unused.replace(` id="${G}"`, ""));
+    expect(engine.scene().some((item) => item.kind === "foreign")).toBe(true);
+  });
+
+  it("una risorsa si sposta solo fra le defs della radice; chi la usa si sposta e resta modificabile", () => {
+    const other = ['  <defs id="defs2">', "  </defs>"];
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, ...other, PAPER, L1, user("o2b3c4d5e", G), END_G, L2, R3, END_G, END);
+    rejects(source, { op: "move", target: G, parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    const engine = SceneEngine.open(source);
+    const moved = apply(engine, { op: "move", target: G, parent: "defs2", pos: { last: true } });
+    // La `defs` di FubDraw rimasta vuota se ne va con lo spostamento.
+    expect(moved.text).toBe(lf(ROOT, TITLE, '  <defs id="defs2">', ...gradient(G, "private"), "  </defs>", PAPER, L1, user("o2b3c4d5e", G), END_G, L2, R3, END_G, END));
+    const user2 = apply(engine, { op: "move", target: "o2b3c4d5e", parent: "l9k8j7h6g", pos: { last: true } });
+    expect(user2.text).toBe(lf(ROOT, TITLE, '  <defs id="defs2">', ...gradient(G, "private"), "  </defs>", PAPER, L1, END_G, L2, R3, user("o2b3c4d5e", G), END_G, END));
+    expect(engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+  });
+
+  it("set su una risorsa la lascia modificabile", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    expect(apply(engine, { op: "set", id: G, attrs: { "fub:role": "shared" } }).text).toBe(PRIVATE.replace('fub:role="private"', 'fub:role="shared"'));
+    rejects(PRIVATE, { op: "set", id: G, attrs: { href: "#altro" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, attrs: { spreadMethod: "sideways" } }, "invalid-elem");
+  });
+
+  it("set su chi usa un ritaglio e un filtro lo lascia modificabile", () => {
+    const C = "r2b3c4d5e";
+    const F = "r3c4d5e6f";
+    const clip = [`    <clipPath id="${C}" fub:role="private">`, '      <circle cx="600" cy="160" r="50"/>', "    </clipPath>"];
+    const blur = [`    <filter id="${F}" fub:role="shared">`, '      <feGaussianBlur stdDeviation="4"/>', "    </filter>"];
+    const rect = (attrs: string): string => `    <rect id="o2b3c4d5e" x="500" y="100" width="200" height="120" fill="#e69f00"${attrs}/>`;
+    const source = lf(ROOT, TITLE, DEFS, ...clip, ...blur, END_DEFS, PAPER, L1, rect(` clip-path="url(#${C})" filter="url(#${F})"`), END_G, END);
+    const engine = SceneEngine.open(source);
+    expect(apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { opacity: "0.5", transform: "rotate(10 600 160)" } }).text).toBe(
+      lf(ROOT, TITLE, DEFS, ...clip, ...blur, END_DEFS, PAPER, L1, rect(` clip-path="url(#${C})" filter="url(#${F})" opacity="0.5" transform="rotate(10 600 160)"`), END_G, END),
+    );
+    // Il ritaglio e il filtro che nessuno usa più se ne vanno, e la defs con loro.
+    const cleared = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "clip-path": null, filter: null } });
+    expect(cleared.text).toBe(lf(ROOT, TITLE, PAPER, L1, rect(' opacity="0.5" transform="rotate(10 600 160)"'), END_G, END));
+    expect(engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+  });
+
+  it("in un batch la risorsa viene prima di chi la usa", () => {
+    const elem: Elem = { tag: "linearGradient", attrs: { id: G, x1: "0", y1: "0", x2: "1", y2: "0" } };
+    const add: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [elem] } };
+    const use: Op = { op: "set", id: "o2b3c4d5e", attrs: { fill: `url(#${G}) #0072b2` } };
+    expect(SceneEngine.open(PLAIN).apply({ op: "batch", ops: [use, add] })).toMatchObject({ outcome: "rejected", reason: "invalid-elem", index: 0 });
+    expect(apply(SceneEngine.open(PLAIN), { op: "batch", ops: [add, use] }).text).toContain(`fill="url(#${G}) #0072b2"`);
+  });
+
+  it("gli id delle risorse e del loro contenuto", () => {
+    const add = (elem: Elem): Op => ({ op: "add", parent: "#root", pos: { first: true }, elem });
+    const defs = (...children: Elem[]): Elem => ({ tag: "defs", attrs: { id: "fub-defs" }, children });
+    const stop: Elem = { tag: "stop", attrs: { offset: "0", "stop-color": "#0072b2" } };
+    rejects(PLAIN, add({ tag: "defs", attrs: { id: "defs2" } }), "invalid-elem");
+    rejects(PLAIN, add(defs({ tag: "linearGradient", attrs: { x2: "1" }, children: [stop] })), "invalid-elem");
+    rejects(PLAIN, add(defs({ tag: "linearGradient", attrs: { id: "o1a2b3c4d" }, children: [stop] })), "invalid-elem");
+    rejects(PLAIN, add(defs({ tag: "linearGradient", attrs: { id: G }, children: [{ ...stop, attrs: { ...stop.attrs, id: "o1a2b3c4d" } }] })), "invalid-elem");
+    const named = apply(SceneEngine.open(PLAIN), add(defs({ tag: "linearGradient", attrs: { id: G }, children: [{ ...stop, attrs: { ...stop.attrs, id: "r0a0b0c0d" } }] })));
+    expect(named.text).toContain('<stop id="r0a0b0c0d" offset="0" stop-color="#0072b2"/>');
+    // Il contenuto di un motivo è senza id, anche un gruppo.
+    const pattern: Elem = {
+      tag: "pattern",
+      attrs: { id: G, x: "0", y: "0", width: "40", height: "40", patternUnits: "userSpaceOnUse" },
+      children: [{ tag: "g", attrs: {}, children: [{ tag: "rect", attrs: { width: "20", height: "20", fill: "#0072b2" } }] }],
+    };
+    expect(apply(SceneEngine.open(PLAIN), add(defs(pattern))).text).toContain("      <g>\n        <rect width=\"20\" height=\"20\" fill=\"#0072b2\"/>\n      </g>");
+  });
+
+  it("first sotto la radice: una defs va prima della carta, il resto dopo le defs e la carta in testa", () => {
+    const layer: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "Sfondo" } } };
+    const engine = SceneEngine.open(PRIVATE);
+    expect(apply(engine, layer).text).toBe(
+      lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, '  <g id="l0a1b2c3d" fub:layer="Sfondo">', "  </g>", L1, user("o2b3c4d5e", G), R3, END_G, END),
+    );
+    // Una defs in fondo, come la scrive Figma, non sta in testa.
+    const figma = lf(ROOT, L1, R2, END_G, '  <defs id="defs1">', ...gradient(G, null), "  </defs>", END);
+    expect(apply(SceneEngine.open(figma), layer).text).toBe(
+      lf(ROOT, '  <g id="l0a1b2c3d" fub:layer="Sfondo">', "  </g>", L1, R2, END_G, '  <defs id="defs1">', ...gradient(G, null), "  </defs>", END),
+    );
+    const defs: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" } } };
+    expect(apply(SceneEngine.open(lf(ROOT, PAPER, L1, R2, END_G, END)), defs).text).toBe(lf(ROOT, '  <defs id="fub-defs"/>', PAPER, L1, R2, END_G, END));
+  });
+
+  it("una risorsa privata raccolta da una defs che non è di FubDraw lascia la defs", () => {
+    const source = lf(ROOT, '  <defs id="defs2">', ...gradient(G, "private"), "  </defs>", PAPER, L1, user("o2b3c4d5e", G), END_G, END);
+    const out = apply(SceneEngine.open(source), { op: "set", id: "o2b3c4d5e", attrs: { fill: "#e69f00" } });
+    expect(out.text).toBe(lf(ROOT, '  <defs id="defs2">', "  </defs>", PAPER, L1, R2, END_G, END));
+  });
+
+  it("l'undo della raccolta che non è esatto rimette risorse e riferimenti", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    const out = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#e69f00" } });
+    apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#111111" } });
+    const undone = applied(engine.undo(out.undo));
+    expect(undone.text).toBe(PRIVATE.replace('fill="#009e73"', 'fill="#111111"'));
+    expect(engine.scene()).toEqual(readScene(undone.text).items);
+    // Il ripeti, dopo un altro cambiamento, raccoglie di nuovo.
+    apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#009e73" } });
+    expect(applied(engine.undo(undone.undo)).text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, R3, END_G, END));
+  });
+
+  it("due set di cui il secondo raccoglie non si fondono", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    const first = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: `url(#${G}) #000000` } });
+    const second = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#e69f00" } });
+    expect(mergeUndo(first.undo, second.undo)).toBeNull();
+  });
+
+  it("un documento non riceve risorse oltre il limite, ma si modifica", () => {
+    const many = (count: number): string => {
+      const lines: string[] = [];
+      for (let i = 0; i < count; i++) lines.push(`    <linearGradient id="r${i.toString(36).padStart(8, "0")}"/>`);
+      return lf(ROOT, DEFS, ...lines, END_DEFS, PAPER, L1, R2, END_G, END);
+    };
+    const one: Op = { op: "add", parent: "fub-defs", pos: { last: true }, elem: { tag: "linearGradient", attrs: { id: "rzzzzzzzz" } } };
+    rejects(many(MAX_RESOURCES), one, "limit");
+    const full = SceneEngine.open(many(MAX_RESOURCES + 1));
+    expect(full.apply({ op: "set", id: "o2b3c4d5e", attrs: { fill: "#000000" } }).outcome).toBe("applied");
+    expect(full.apply(one)).toMatchObject({ outcome: "rejected", reason: "limit" });
+    expect(SceneEngine.open(many(MAX_RESOURCES - 1)).apply(one).outcome).toBe("applied");
   });
 });

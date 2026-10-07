@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { doc, HEAD } from "../scene/test-support";
 import type { Op } from "../scene/ops";
-import { alignOps, boundsOf, distributeOps, duplicateOps, elemOf, groupOps, isLink, linkOps, linkTarget, nodeOf, orderOps, relinkOps, ungroupOps, unlinkOps, type Arranged } from "./arrange";
+import { elementChildren, rawOf, type ContainerNode } from "../scene/model";
+import { alignOps, boundsOf, distributeOps, duplicateOps, elemOf, groupOps, isLink, linkOps, linkTarget, nodeOf, orderOps, relinkOps, ungroupOps, unlinkOps, unwrappable, type Arranged } from "./arrange";
 import { gesture, NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { LAYER, open, type Opened } from "./test-support";
@@ -111,6 +112,44 @@ describe("duplicare", () => {
   it("non copia un oggetto con parti estranee", () => {
     const opened = open(doc(`${LAYER}<g id="ogggggggg">${RECT("oaaaaaaaa", 0)}<use href="#oaaaaaaaa"/></g></g>`));
     expect(duplicateOps(opened.engine.model!, opened.index.units, 0, 10, ids(opened))).toBeNull();
+  });
+});
+
+describe("duplicare con le risorse", () => {
+  const STOP = '<stop offset="0" stop-color="#ffffff"/>';
+
+  it("copia le risorse private una volta sola, e condivide le altre", () => {
+    const opened = open(
+      doc(
+        `<defs id="fub-defs"><linearGradient id="rgggggggg" fub:role="private">${STOP}</linearGradient>` +
+          `<linearGradient id="rhhhhhhhh" fub:role="shared">${STOP}</linearGradient>` +
+          '<clipPath id="rcccccccc" fub:role="private"><circle cx="5" cy="5" r="5"/></clipPath></defs>' +
+          `${LAYER}${RECT("oaaaaaaaa", 0, 0, ' fill="url(#rgggggggg)" stroke="url(#rhhhhhhhh)"')}` +
+          `<g id="ogggggggg" clip-path="url(#rcccccccc)">${RECT("obbbbbbbb", 20, 0, ' fill="url(#rgggggggg)"')}</g></g>`,
+      ),
+    );
+    const arranged = duplicateOps(opened.engine.model!, opened.index.units, 0, 30, ids(opened))!;
+    applied(opened, arranged);
+    const resources = elementChildren(opened.engine.holder("fub-defs") as ContainerNode);
+    expect(resources.map((resource) => resource.facts.local)).toEqual(["linearGradient", "linearGradient", "clipPath", "linearGradient", "clipPath"]);
+    const [gradient, clip] = resources.slice(3).map((resource) => resource.facts.id!);
+    expect(gradient).toMatch(/^r[a-z0-9]{8}$/);
+    // La copia è scritta come la scrive il motore, nella forma canonica.
+    expect(rawOf(resources[3]!)).toBe(`<linearGradient id="${gradient}" fub:role="private">\n  ${STOP}\n</linearGradient>`);
+    const [rect, group] = arranged.keys.map((key) => rawOf(opened.engine.holder(key)!));
+    expect(rect).toContain(`fill="url(#${gradient})"`);
+    expect(rect).toContain('stroke="url(#rhhhhhhhh)"');
+    expect(group).toContain(`clip-path="url(#${clip})"`);
+    expect(group).toContain(`fill="url(#${gradient})"`);
+  });
+
+  it("crea la defs di FubDraw se il disegno non ha una defs con un id", () => {
+    const opened = open(doc(`<defs><linearGradient id="rgggggggg" fub:role="private">${STOP}</linearGradient></defs>${LAYER}${RECT("oaaaaaaaa", 0, 0, ' fill="url(#rgggggggg)"')}</g>`));
+    const arranged = duplicateOps(opened.engine.model!, opened.index.units, 0, 30, ids(opened))!;
+    applied(opened, arranged);
+    const [copy] = elementChildren(opened.engine.holder("fub-defs") as ContainerNode);
+    expect(rawOf(opened.engine.holder(arranged.keys[0]!)!)).toContain(`fill="url(#${copy!.facts.id!})"`);
+    expect(opened.engine.text.indexOf('<defs id="fub-defs">')).toBeLessThan(opened.engine.text.indexOf(LAYER));
   });
 });
 
@@ -278,6 +317,26 @@ describe("separare", () => {
     const index = applied(opened, arranged);
     expect(keys(index)).toEqual(["oaaaaaaaa", "oxxxxxxxx", "obbbbbbbb", "occcccccc"]);
     expect(new Set(arranged.keys)).toEqual(new Set(keys(index)));
+  });
+});
+
+describe("separare con le risorse", () => {
+  const DEFS =
+    '<defs id="fub-defs"><clipPath id="rcccccccc"><circle cx="5" cy="5" r="5"/></clipPath>' +
+    '<mask id="rmmmmmmmm"><rect x="0" y="0" width="1" height="1" fill="#ffffff"/></mask></defs>';
+
+  it("lascia interi i gruppi con un ritaglio, una maschera o un filtro", () => {
+    const opened = open(doc(`${DEFS}${LAYER}<g id="ogggggggg" clip-path="url(#rcccccccc)">${RECT("oaaaaaaaa", 0)}</g><g id="ohhhhhhhh">${RECT("obbbbbbbb", 20)}</g></g>`));
+    const arranged = ungroupOps(opened.engine.model!, opened.index.units, ids(opened));
+    applied(opened, arranged);
+    expect(opened.engine.holder("ogggggggg")).not.toBeNull();
+    expect(opened.engine.holder("ohhhhhhhh")).toBeNull();
+    expect(unwrappable(opened.engine.model!, opened.reindex().get("ogggggggg")!)).toBe(false);
+  });
+
+  it("non toglie un collegamento con una maschera", () => {
+    const opened = open(doc(`${DEFS}${LAYER}<a id="oaaaaaaaa" href="nota.md" mask="url(#rmmmmmmmm)">${RECT("obbbbbbbb", 0)}</a></g>`));
+    expect(unlinkOps(opened.engine.model!, opened.index.units, ids(opened)).ops).toEqual([]);
   });
 });
 

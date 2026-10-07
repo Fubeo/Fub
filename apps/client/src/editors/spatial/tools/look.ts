@@ -47,16 +47,17 @@
 
 import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
-import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
-import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, textDecoration, trim } from "../scene/values";
+import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { Unit } from "./hit";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
+import { paintSample, resourcesOf, type PaintSample } from "./resources";
 import { arrowPath } from "./shapes";
 import {
   anchorsOf,
@@ -95,10 +96,13 @@ export interface Shared<T> {
 
 /// L'aspetto della selezione, come lo mostra il pannello.
 export interface Look {
-  /// I colori come li scrive il file, `#rrggbb` o `none`; un valore che non
-  /// è un colore, come `currentColor`, com'è scritto.
+  /// I colori come li scrive il file, `#rrggbb` o `none`; una sfumatura o un
+  /// motivo `url(#id)`, senza il ripiego; un valore che non è un colore,
+  /// come `currentColor`, com'è scritto.
   readonly fill: Shared<string>;
   readonly stroke: Shared<string>;
+  /// Come si mostrano i colori `url(#id)` di `fill` e `stroke`.
+  readonly samples: ReadonlyMap<string, PaintSample>;
   /// Lo spessore dei contorni che si vedono, nelle loro coordinate.
   readonly width: Shared<number>;
   /// L'opacità degli oggetti scelti, da 0 a 1.
@@ -224,11 +228,14 @@ interface Part {
 /// Il valore di `name` che `part` vede: il suo, o quello ereditato.
 const seen = (part: Part, name: string): string => part.own.get(name) ?? part.inherited.get(name)!;
 
-/// Un colore come lo mostra il pannello: `#rrggbb` o `none`, e com'è scritto
-/// ciò che non è un colore.
+/// Un colore come lo mostra il pannello: `#rrggbb` o `none`, una risorsa
+/// `url(#id)`, che è la stessa qualunque sia il ripiego, e com'è scritto ciò
+/// che non è un colore.
 export function paintText(value: string): string {
   const text = trim(value);
   if (text === "none") return "none";
+  const used = paintReference(text);
+  if (used !== null) return `url(#${used.id})`;
   return customColor(text) ?? text;
 }
 
@@ -366,9 +373,20 @@ export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
     return size === null ? null : Number(place(size));
   };
   const several = parts.texts.filter((part) => (richOfPart(part)?.lines.length ?? 0) > 1);
+  const fill = shared(parts.fills.map((part) => (part.role === "text" ? textOne(part, "fill", paintText) : paintText(seen(part, "fill")))));
+  const stroke = shared(parts.strokes.map((part) => paintText(seen(part, INKED.has(part.role) ? "fill" : "stroke"))));
+  const samples = new Map<string, PaintSample>();
+  let resources: Map<string, LeafNode> | null = null;
+  for (const value of [fill.value, stroke.value]) {
+    if (value === null || !value.startsWith("url(") || samples.has(value)) continue;
+    resources ??= resourcesOf(model);
+    const sample = paintSample(model, value, resources);
+    if (sample !== null) samples.set(value, sample);
+  }
   return {
-    fill: shared(parts.fills.map((part) => (part.role === "text" ? textOne(part, "fill", paintText) : paintText(seen(part, "fill"))))),
-    stroke: shared(parts.strokes.map((part) => paintText(seen(part, INKED.has(part.role) ? "fill" : "stroke")))),
+    fill,
+    stroke,
+    samples,
     width: shared([...parts.outlines.map(({ outline }) => outline.width), ...parts.widths.map(widthOf)]),
     opacity: shared(parts.chosen.map((part) => {
       const written = part.own.get("opacity");

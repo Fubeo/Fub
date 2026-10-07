@@ -175,6 +175,19 @@ const KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ["font-weight", ["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"]],
   ["font-style", ["normal", "italic", "oblique"]],
   ["text-anchor", ["start", "middle", "end"]],
+  // Le risorse del disegno (formato della scena, risorse).
+  ["spreadMethod", ["pad", "reflect", "repeat"]],
+  ["gradientUnits", ["userSpaceOnUse", "objectBoundingBox"]],
+  ["patternUnits", ["userSpaceOnUse", "objectBoundingBox"]],
+  ["patternContentUnits", ["userSpaceOnUse", "objectBoundingBox"]],
+  ["clipPathUnits", ["userSpaceOnUse", "objectBoundingBox"]],
+  ["maskUnits", ["userSpaceOnUse", "objectBoundingBox"]],
+  ["maskContentUnits", ["userSpaceOnUse", "objectBoundingBox"]],
+  ["filterUnits", ["userSpaceOnUse", "objectBoundingBox"]],
+  ["markerUnits", ["strokeWidth", "userSpaceOnUse"]],
+  ["primitiveUnits", ["userSpaceOnUse"]],
+  ["color-interpolation-filters", ["auto", "sRGB", "linearRGB"]],
+  ["clip-rule", ["nonzero", "evenodd"]],
 ]);
 
 /// Una parola chiave fra quelle elencate per `name`.
@@ -338,6 +351,133 @@ export function transform(value: string): Matrix | null {
     if (comma && i === value.length) return null;
   }
   return matrix;
+}
+
+// ---------------------------------------------------------------------------
+// Le risorse del disegno (formato della scena, risorse).
+// ---------------------------------------------------------------------------
+
+/// Un carattere che l'id dentro `url(` non può avere: spazi, virgolette,
+/// parentesi e `\`, perché gli escape di CSS non si leggono.
+function idStop(c: number): boolean {
+  return isWsp(c) || c === 0x22 || c === 0x27 || c === 0x28 || c === 0x29 || c === 0x5c;
+}
+
+/// Legge `url(#id)` al carattere `i` di `text`: l'id e l'indice dopo la
+/// parentesi. `url` in qualunque combinazione di maiuscole ASCII, spazi
+/// facoltativi dentro le parentesi, l'id fra virgolette doppie, singole o
+/// senza.
+function scanUrl(text: string, i: number): [string, number] | null {
+  if ((text.charCodeAt(i) | 0x20) !== 0x75 || (text.charCodeAt(i + 1) | 0x20) !== 0x72) return null;
+  if ((text.charCodeAt(i + 2) | 0x20) !== 0x6c || text.charCodeAt(i + 3) !== 0x28) return null;
+  let j = skipWsp(text, i + 4);
+  const quote = text.charCodeAt(j);
+  const quoted = quote === 0x22 || quote === 0x27;
+  if (quoted) j++;
+  if (text.charCodeAt(j) !== 0x23) return null;
+  const from = ++j;
+  while (j < text.length && !idStop(text.charCodeAt(j))) j++;
+  if (j === from) return null;
+  const id = text.slice(from, j);
+  if (quoted) {
+    if (text.charCodeAt(j) !== quote) return null;
+    j++;
+  }
+  j = skipWsp(text, j);
+  return text.charCodeAt(j) === 0x29 ? [id, j + 1] : null;
+}
+
+/// Un riferimento locale da solo, `url(#id)` con gli spazi intorno: l'id.
+export function reference(value: string): string | null {
+  const text = trim(value);
+  const scanned = scanUrl(text, 0);
+  return scanned !== null && scanned[1] === text.length ? scanned[0] : null;
+}
+
+/// Un `fill` o uno `stroke` che usa una risorsa.
+export interface PaintReference {
+  readonly id: string;
+  /// Il ripiego, `none` o un colore; `null` se non è scritto.
+  readonly fallback: Paint | null;
+}
+
+/// `fill` o `stroke` con una risorsa: `url(#id)`, seguito facoltativamente
+/// da spazi e da un ripiego, `none` o un colore di §4.
+export function paintReference(value: string): PaintReference | null {
+  const text = trim(value);
+  const scanned = scanUrl(text, 0);
+  if (scanned === null) return null;
+  const [id, end] = scanned;
+  if (end === text.length) return { id, fallback: null };
+  if (!isWsp(text.charCodeAt(end))) return null;
+  const fallback = paint(text.slice(end));
+  return fallback === null ? null : { id, fallback };
+}
+
+/// Ogni id che `value` nomina con `url(#id)`, in ordine, anche dentro un
+/// valore che il formato non legge, come `style` o un foglio CSS.
+export function urlIds(value: string): string[] {
+  const out: string[] = [];
+  const found = /[uU][rR][lL]\(/g;
+  for (let match = found.exec(value); match !== null; match = found.exec(value)) {
+    const scanned = scanUrl(value, match.index);
+    if (scanned !== null) out.push(scanned[0]);
+  }
+  return out;
+}
+
+/// L'id di un `href` locale, `#id`, letto come lo legge il parser di URL;
+/// `null` per ogni altro `href`.
+export function hrefId(value: string): string | null {
+  const url = urlText(value);
+  return url.length > 1 && url.startsWith("#") ? url.slice(1) : null;
+}
+
+/// Un numero SVG seguito da `%`, come frazione: il numero diviso 100.
+export function percentage(value: string): number | null {
+  const text = trim(value);
+  if (text.charCodeAt(text.length - 1) !== 0x25) return null;
+  const scanned = scanNumber(text, 0);
+  return scanned !== null && scanned[1] === text.length - 1 ? scanned[0] / 100 : null;
+}
+
+/// Un numero SVG o una percentuale, come frazione: `offset`, e le coordinate
+/// di una risorsa nelle unità del riquadro.
+export function fraction(value: string): number | null {
+  return number(value) ?? percentage(value);
+}
+
+/// L'angolo di `orient`, in gradi: un numero SVG seguito facoltativamente
+/// da `deg`, `grad` o `rad`.
+export function angle(value: string): number | null {
+  const text = trim(value);
+  const scanned = scanNumber(text, 0);
+  if (scanned === null) return null;
+  switch (text.slice(scanned[1])) {
+    case "":
+    case "deg":
+      return scanned[0];
+    case "grad":
+      return scanned[0] * 0.9;
+    case "rad":
+      return (scanned[0] * 180) / Math.PI;
+    default:
+      return null;
+  }
+}
+
+/// Un `viewBox`: quattro numeri SVG separati da spazi o virgole, con
+/// larghezza e altezza non negative.
+export function viewBox(value: string): [number, number, number, number] | null {
+  const numbers = numberList(value);
+  if (numbers === null || numbers.length !== 4 || numbers[2]! < 0 || numbers[3]! < 0) return null;
+  return [numbers[0]!, numbers[1]!, numbers[2]!, numbers[3]!];
+}
+
+/// Uno o due numeri SVG non negativi: `stdDeviation` e `radius`.
+export function oneOrTwo(value: string): number[] | null {
+  const numbers = numberList(value);
+  return numbers !== null && numbers.length >= 1 && numbers.length <= 2 && numbers.every((n) => n >= 0) ? numbers : null;
 }
 
 /// Un `href` letto come lo legge il parser di URL: senza spazi e controlli

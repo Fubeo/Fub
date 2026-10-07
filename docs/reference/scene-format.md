@@ -5,14 +5,13 @@
 > **Fonti autorevoli:** `crates/fub-scene/`, `crates/fub-format-svg/` e le
 > fixture generate in `apps/client/src/__fixtures__/scene/`.
 
-Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore,
-con pochi attributi in più nel namespace `fub`. È il contratto comune di
+Come Fub legge e scrive i disegni: SVG validi per qualunque visualizzatore, con
+pochi attributi in più nel namespace `fub`. È il contratto comune di
 `fub-scene`, del provider `svg` e della superficie TypeScript della shell; il
 perché sta nell'[ADR 0203](../decisions/0203-superfici-spaziali.md). Come la
-superficie cambia un disegno sta nelle
-[operazioni sulla scena](scene-operations.md). I `§` dei commenti nel codice
-sono le sezioni di questa pagina, tranne nel motore delle operazioni, che cita
-quelle dell'altra.
+superficie cambia un disegno sta nelle [operazioni](scene-operations.md). I `§`
+dei commenti nel codice sono le sezioni di questa pagina, tranne nel motore
+delle operazioni, che cita quelle dell'altra.
 
 ## 1. Principi
 
@@ -55,7 +54,7 @@ Radice di un documento nuovo:
   dimensioni del `viewBox`.
 - I figli della radice, in quest'ordine:
   1. `<title>`: il titolo, cambiato con l'operazione `meta`;
-  2. `<desc>`, facoltativo;
+  2. `<desc>`, facoltativo, poi la `defs` delle [risorse](scene-format-resources.md);
   3. la carta: `<rect id="fub-paper" fub:role="paper" …/>`, con la stessa
      geometria del `viewBox`, `fill="#ffffff"`, bloccata e non selezionabile.
      Cambia solo con l'operazione `page`, insieme al `viewBox`. Un documento
@@ -90,6 +89,7 @@ Radice di un documento nuovo:
 | `g` | — | livello o gruppo |
 | `a` | `href` | collegamento a un documento del vault |
 | `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto; il primo `title` di un oggetto è il suo nome |
+| `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere e filtri |
 
 **Attributi di presentazione ammessi:**
 
@@ -159,11 +159,11 @@ Radice di un documento nuovo:
 ### Regola di classificazione
 
 Un elemento è **modificabile** se il suo tag è in tabella, se tutti i suoi attributi
-e valori rientrano in questa sezione, e se nessun valore contiene `url(`.
+e valori rientrano in questa sezione, e se nessun valore contiene `url(`, se non
+un riferimento a una [risorsa](scene-format-resources.md) modificabile.
 
-- Per `g` e `a` la regola vale per ogni figlio separatamente: un livello con
-  un figlio estraneo resta un livello modificabile che contiene un blocco
-  estraneo.
+- Per `g`, `a` e la `defs` della radice la regola vale per ogni figlio da sé: un
+  livello con un figlio estraneo resta modificabile e contiene un blocco estraneo.
 - Per gli altri elementi l'elemento è un'unità con i suoi figli. Un `text` è
   modificabile solo se tutti i suoi figli sono `tspan` ammessi ([testo](scene-format-text.md)).
 - `title` e `desc` sono figli ammessi di qualunque elemento modificabile.
@@ -241,11 +241,10 @@ int      = ["-"] 1*DIGIT
   registra un campione che lo supera; chi legge un valore più grande produce
   S004. `t` può ripetersi o tornare indietro: non entra nel contorno.
 - **Inchiostro non valido:** un `fub:ink` che non rispetta la grammatica o i
-  limiti produce S004, e così un `path` con `fub:tool="pen"` o
-  `"highlighter"` a cui manca `fub:ink` o `fub:brush`. Il tratto resta un
-  elemento modificabile ma non si ridisegna: si sposta, si trasforma, si
-  ricolora e si elimina, e `d` si usa così com'è. Il documento resta
-  modificabile.
+  limiti produce S004, e così un `path` con `fub:tool="pen"` o `"highlighter"` a
+  cui manca `fub:ink` o `fub:brush`. Il tratto resta un elemento modificabile ma
+  non si ridisegna: si sposta, si trasforma, si ricolora e si elimina, e `d` si
+  usa così com'è. Il documento resta modificabile.
 - **Limiti:** al massimo 10 000 campioni e 512 KiB per `fub:ink`. Chi scrive
   divide il tratto al primo dei due limiti; l'ultimo campione del primo tratto
   è il primo del secondo. `d` non ha un limite proprio: lo limita la
@@ -324,7 +323,7 @@ il contorno che si allarga e si stringe: [spessore variabile](scene-format-width
 ### Id
 
 - Oggetti: `o` seguito da 8 caratteri base36 casuali. Livelli: `l` seguito da
-  8 caratteri. Carta: `fub-paper`.
+  8 caratteri, risorse `r`. Carta: `fub-paper`; `defs` delle risorse: `fub-defs`.
 - Un id è unico nel documento: un id casuale già usato si rigenera.
 - Un id esistente cambia solo se lo si chiede, dagli attributi del livello
   Esperto. La superficie aggiunge un id solo agli elementi che crea o modifica.
@@ -448,12 +447,11 @@ descrizione e riepilogo, con `truncated: true` (§11).
 
 ### Anteprima, documento nuovo e riferimenti
 
-- **`render_html`** emette solo un segnaposto `figure` con classe
-  `fub-scene`, `data-embed-kind="scene"`, `data-embed-doc` con l'id del
-  documento e una `figcaption` che contiene il titolo; mai un `<img>` né un
-  URL di risorsa: l'immagine la mette la shell con la risoluzione dei media.
-  Senza titolo la didascalia è il nome del file, perché è il nome accessibile
-  della figura.
+- **`render_html`** emette solo un segnaposto `figure` con classe `fub-scene`,
+  `data-embed-kind="scene"`, `data-embed-doc` con l'id del documento e una
+  `figcaption` che contiene il titolo; mai un `<img>` né un URL di risorsa:
+  l'immagine la mette la shell con la risoluzione dei media. Senza titolo la
+  didascalia è il nome del file, perché è il nome accessibile della figura.
 - **`serialize`** genera un documento nuovo con radice, titolo, carta e
   «Livello 1», in forma canonica, con righe LF e a capo finale. Il titolo è il
   primo heading di livello 1 del modello, oppure il nome del file, su una riga
@@ -495,6 +493,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | Immagine incorporata | 5 MiB | l'editor propone di ridurla |
 | Campioni per tratto | 10 000 | il tratto si divide |
 | `fub:ink` per tratto | 512 KiB | il tratto si divide; letto da un file, S004 |
+| Risorse modificabili | 10 000 | il documento si modifica, ma non ne riceve altre |
 
 ## 12. Diagnostica
 
@@ -515,6 +514,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | S011 | info | `fub:units` o `fub:guides` fuori grammatica: si ignorano e restano nel file |
 | S012 | avviso | immagine senza `title` né `desc`, e non decorativa |
 | S013 | info | testo sotto i 12 px a grandezza naturale |
+| S014 | avviso | un riferimento a un id che il documento non ha: si disegna senza la [risorsa](scene-format-resources.md) |
 
 - **S001, S009, S012, S013:** come si misurano sta in
   [accessibilità](scene-format-accessibility.md).

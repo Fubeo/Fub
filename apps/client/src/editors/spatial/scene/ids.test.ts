@@ -1,7 +1,7 @@
 // Gli id di §7: forma, uniformità dei caratteri e ritentativi.
 
 import { describe, expect, it } from "vitest";
-import { createId, isNewId, PAPER_ID, type RandomBytes } from "./ids";
+import { createId, DEFS_ID, isNewId, PAPER_ID, type RandomBytes } from "./ids";
 
 /// Una sorgente che restituisce `values` in giro, byte dopo byte.
 function cycle(values: readonly number[]): RandomBytes {
@@ -12,12 +12,14 @@ function cycle(values: readonly number[]): RandomBytes {
 }
 
 describe("gli id di FubDraw (§7)", () => {
-  it("un oggetto è o e 8 caratteri base36, un livello l e 8", () => {
+  it("un oggetto è o e 8 caratteri base36, un livello l e 8, una risorsa r e 8", () => {
     for (let i = 0; i < 200; i++) {
       expect(createId("object", () => false)).toMatch(/^o[0-9a-z]{8}$/);
       expect(createId("layer", () => false)).toMatch(/^l[0-9a-z]{8}$/);
+      expect(createId("resource", () => false)).toMatch(/^r[0-9a-z]{8}$/);
     }
     expect(PAPER_ID).toBe("fub-paper");
+    expect(DEFS_ID).toBe("fub-defs");
   });
 
   it("riconosce la forma degli id nuovi", () => {
@@ -27,6 +29,9 @@ describe("gli id di FubDraw (§7)", () => {
       expect(isNewId(id, "object"), id).toBe(false);
     }
     expect(isNewId("o7k2m9x4q", "layer")).toBe(false);
+    expect(isNewId("r1a2b3c4d", "resource")).toBe(true);
+    expect(isNewId("o7k2m9x4q", "resource")).toBe(false);
+    expect(isNewId("fub-defs", "resource")).toBe(false);
   });
 
   it("ogni carattere è uniforme: i byte da 252 in su si scartano", () => {

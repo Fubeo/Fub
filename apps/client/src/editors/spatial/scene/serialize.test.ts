@@ -122,7 +122,23 @@ describe("ordine degli attributi (§7, punto 2)", () => {
 
   it("ogni gruppo nell'ordine della specifica", () => {
     const fub = ["layer", "role", "tool", "shape", "geom", "locked", "at", "brush"].map((n) => `fub:${n}`);
-    const geometry = ["x", "y", "dy", "cx", "cy", "r", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d"];
+    const geometry = ["x", "y", "dx", "dy", "cx", "cy", "r", "fx", "fy", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d"];
+    const resource = ["offset", "refX", "refY", "markerWidth", "markerHeight", "orient", "viewBox"];
+    const units = [
+      "gradientUnits",
+      "gradientTransform",
+      "spreadMethod",
+      "patternUnits",
+      "patternContentUnits",
+      "patternTransform",
+      "markerUnits",
+      "clipPathUnits",
+      "maskUnits",
+      "maskContentUnits",
+      "filterUnits",
+      "primitiveUnits",
+    ];
+    const primitives = ["in", "in2", "result", "type", "values", "operator", "k1", "k2", "k3", "k4", "mode", "stdDeviation", "radius"];
     const presentation = [
       "fill",
       "fill-opacity",
@@ -132,15 +148,30 @@ describe("ordine degli attributi (§7, punto 2)", () => {
       "stroke-linecap",
       "stroke-linejoin",
       "stroke-dasharray",
+      "marker-start",
+      "marker-mid",
+      "marker-end",
+      "clip-path",
+      "clip-rule",
+      "mask",
+      "filter",
       "opacity",
       "display",
+      "stop-color",
+      "stop-opacity",
+      "flood-color",
+      "flood-opacity",
+      "color-interpolation-filters",
       "font-family",
       "font-size",
       "font-weight",
+      "font-style",
+      "letter-spacing",
+      "text-decoration",
       "text-anchor",
       "preserveAspectRatio",
     ];
-    const all = ["id", ...fub, ...geometry, ...presentation, "transform", "href"];
+    const all = ["id", ...fub, ...geometry, ...resource, ...units, ...primitives, ...presentation, "transform", "href"];
     const shuffled = [...all].reverse().map((name) => attr(name));
     expect(canonicalOrder(shuffled).map((a) => a.name)).toEqual(all);
   });
@@ -249,6 +280,22 @@ describe("dall'elemento di un'operazione alla forma canonica", () => {
 
   it("xml: è sempre legato", () => {
     expect(written({ tag: "text", attrs: { "xml:space": "preserve" } })).toBe('<text xml:space="preserve"/>');
+  });
+
+  it("scrive le risorse col loro contenuto, e ogni parte sta solo dove la vuole il formato", () => {
+    const stop = { tag: "stop", attrs: { offset: "0", "stop-color": "#0072b2" } };
+    expect(written({ tag: "defs", attrs: { id: "fub-defs" }, children: [{ tag: "linearGradient", attrs: { id: "r1a2b3c4d" }, children: [stop] }] })).toBe(
+      '<defs id="fub-defs">\n  <linearGradient id="r1a2b3c4d">\n    <stop offset="0" stop-color="#0072b2"/>\n  </linearGradient>\n</defs>',
+    );
+    const merge = { tag: "feMerge", attrs: {}, children: [{ tag: "feMergeNode", attrs: { in: "SourceGraphic" } }] };
+    expect(written({ tag: "filter", attrs: { id: "r1a2b3c4d" }, children: [{ tag: "feOffset", attrs: { dx: "2" } }, merge] })).toContain("<feMergeNode in=\"SourceGraphic\"/>");
+    expect(written({ tag: "pattern", attrs: { id: "r1a2b3c4d" }, children: [{ tag: "g", attrs: {}, children: [{ tag: "rect", attrs: {} }] }] })).toContain("<g>");
+    expect(rejection(stop)).toMatch(/stop sta solo dentro un linearGradient o un radialGradient/);
+    expect(rejection({ tag: "g", attrs: {}, children: [stop] })).toMatch(/stop sta solo dentro/);
+    expect(rejection({ tag: "filter", attrs: {}, children: [{ tag: "rect", attrs: {} }] })).toMatch(/rect non può stare dentro filter/);
+    expect(rejection({ tag: "pattern", attrs: {}, children: [{ tag: "feFlood", attrs: {} }] })).toMatch(/feFlood sta solo dentro un filter/);
+    expect(rejection({ tag: "filter", attrs: {}, children: [{ tag: "feMergeNode", attrs: {} }] })).toMatch(/feMergeNode sta solo dentro un feMerge/);
+    expect(rejection({ tag: "filter", attrs: {}, children: [{ tag: "feTurbulence", attrs: {} }] })).toMatch(/tag fuori dal formato/);
   });
 
   it("rifiuta le forme sbagliate", () => {

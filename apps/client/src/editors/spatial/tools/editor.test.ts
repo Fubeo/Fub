@@ -774,6 +774,24 @@ describe("disporre, dal livello Standard", () => {
     expect(editor.engine.text).not.toContain("og1g1g1g1");
   });
 
+  it("un gruppo con un ritaglio resta intero, e si dice perché", () => {
+    const source = doc(
+      '<defs id="fub-defs"><clipPath id="rcccccccc"><circle cx="5" cy="5" r="5"/></clipPath></defs>' +
+        `${LAYER}<g id="og1g1g1g1" clip-path="url(#rcccccccc)"><rect id="${A}" x="0" y="0" width="5" height="5"/></g>` +
+        `<g id="og2g2g2g2"><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`,
+    );
+    mount(source, { level: "standard" });
+    editor.select(["og1g1g1g1"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(spoken()).toBe("Non separato: un ritaglio, una maschera o un filtro valgono per tutto il gruppo.");
+    editor.select(["og1g1g1g1", "og2g2g2g2"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("1 gruppo separato. I gruppi con un ritaglio, una maschera o un filtro restano interi.");
+    expect(editor.engine.text).toContain('<g id="og1g1g1g1" clip-path="url(#rcccccccc)">');
+    expect(editor.engine.text).not.toContain("og2g2g2g2");
+  });
+
   it("«?» elenca anche i tasti per disporre", () => {
     mount(ROW, { level: "standard" });
     key("?", { shiftKey: true });
@@ -4364,6 +4382,38 @@ describe("spostare dall'albero, dal livello Standard", () => {
     expect(thumb("og1g1g1g1")!.querySelectorAll("rect")).toHaveLength(2);
     expect(host.querySelector(".draw-object-thumb > svg [data-scene-id]")).toBeNull();
     expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("una miniatura porta le risorse che la riga usa, e si rifà quando una di loro cambia", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const frame = (): void => {
+      for (let round = 0; round < 50 && frames.length > 0; round++) for (const callback of frames.splice(0)) callback(0);
+    };
+    const source = doc(
+      '<defs id="fub-defs"><linearGradient id="r1a1a1a1a" x2="1"><stop offset="0" stop-color="#0072b2"/></linearGradient>'
+        + '<filter id="r2b2b2b2b"><feDropShadow dx="1" dy="1" stdDeviation="1" flood-color="#000000"/></filter></defs>'
+        + `${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="url(#r1a1a1a1a) #0072b2"/>`
+        + '<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#000000"/></g>',
+    );
+    mount(source, { level: "standard" });
+    openAt("oa1a1a1a1");
+    frame();
+    const thumb = (id: string): Element | null => host.querySelector(`.draw-object[data-key="${id}"] .draw-object-thumb > svg`);
+    const shown = thumb("oa1a1a1a1")!;
+    // Solo la sfumatura che usa, sotto un id della miniatura.
+    const gradient = shown.querySelector("defs > linearGradient")!;
+    expect(gradient.id).toMatch(/^fubthumb\d+-r1a1a1a1a$/);
+    expect(shown.querySelectorAll("defs > *")).toHaveLength(1);
+    expect(shown.querySelector("rect")!.getAttribute("fill")).toBe(`url(#${gradient.id}) #0072b2`);
+    expect(thumb("oc3c3c3c3")!.querySelector("defs")).toBeNull();
+    // Le risorse non sono righe dell'albero.
+    expect(keys()).toEqual(["l1", "oc3c3c3c3", "oa1a1a1a1"]);
+    editor.setEngine(SceneEngine.open(source.replace('stop-color="#0072b2"', 'stop-color="#d55e00"')));
+    frame();
+    expect(thumb("oa1a1a1a1")).not.toBe(shown);
+    expect(thumb("oa1a1a1a1")!.querySelector("stop")!.getAttribute("stop-color")).toBe("#d55e00");
   });
 
   it("all'Essenziale l'albero non sposta e non ha miniature", () => {

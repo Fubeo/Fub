@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode, type ElementPart } from "../scene/model";
-import { doc } from "../scene/test-support";
-import { IMAGE_PLACEHOLDER, PaintBuilder, wholeDocumentLayer, type PaintScene } from "./paint";
-import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
+import { doc, HEAD } from "../scene/test-support";
+import { IMAGE_PLACEHOLDER, PaintBuilder, resourcesFor, wholeDocumentLayer, type PaintScene, type PaintShape } from "./paint";
+import { createSvgPainter, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
 import { createOverlay } from "./overlay";
 
 const LAYER = '<g id="l1" fub:layer="Livello 1">';
@@ -648,13 +648,13 @@ describe("lo smontaggio", () => {
   it("mostra un documento intero come un'immagine sola", async () => {
     const painter = createSvgPainter(host, owner);
     const layer = wholeDocumentLayer('<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script><rect width="9" height="9"/></svg>')!;
-    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [] });
     await decoded();
     expect(host.querySelectorAll("rect, script")).toHaveLength(0);
     const text = await blobs.get(host.querySelector("img")!.getAttribute("src")!)!.text();
     expect(text).toContain("<script>x()</script>");
     expect(text).not.toContain("background:none");
-    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [] });
     expect(urls).toBe(1);
   });
 });
@@ -743,5 +743,217 @@ describe("lo strato sopra la scena", () => {
     overlay.setHandles([{ kind: "measure", from: [390, 298], to: [395, 298], text: "5" }]);
     overlay.flush();
     expect(texts()).toEqual([["fillText", "5", 790, 590.5]]);
+  });
+});
+
+describe("le risorse vive", () => {
+  /// Le risorse del disegno, una per tipo, con ciò che il painter non porta:
+  /// titoli, id dei figli, attributi di FubDraw, una sfumatura estranea.
+  const RESOURCES: Readonly<Record<string, string>> = {
+    g1: '<linearGradient id="g1" fub:role="private" x2="1"><title>Mare</title><stop id="s0" offset="0" stop-color="#0072b2"/>'
+      + '<stop offset="1" stop-color="#56b4e9"/></linearGradient>',
+    p1: '<pattern id="p1" fub:role="shared" width="20" height="20" patternUnits="userSpaceOnUse">'
+      + '<rect id="dentro" width="10" height="10" fill="url(#g1) #0072b2" fub:nota="n"/></pattern>',
+    m1: '<marker id="m1" refX="5" refY="5" markerWidth="10" markerHeight="10" orient="auto" viewBox="0 0 10 10"><path d="M0 0 L10 5 L0 10 Z"/></marker>',
+    c1: '<clipPath id="c1" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath>',
+    k1: '<mask id="k1" maskContentUnits="objectBoundingBox"><rect width="1" height="1" fill="#ffffff"/></mask>',
+    f1: '<filter id="f1"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000"/></filter>',
+  };
+  const OBJECTS: Readonly<Record<string, string>> = {
+    a: '<rect id="a" x="0" y="0" width="5" height="5" fill="url(#p1) #4593ce" filter="url(#f1)"/>',
+    b: '<path id="b" d="M0 0 L10 0" stroke="#000000" marker-end="url(#m1)"/>',
+    g: `<g id="g" clip-path="url(#c1)" mask="url(#k1)"><rect id="c" width="5" height="5" fill="url('#g1')"/></g>`,
+    d: '<rect id="d" width="1" height="1"/>',
+  };
+
+  /// Il disegno con le risorse e gli oggetti dati, e una radice che dipinge.
+  function drawing(resources: readonly string[], objects: readonly string[]): string {
+    return `${HEAD.replace(">", ' fill="#123456">')}<defs id="fub-defs">${resources.map((id) => RESOURCES[id]).join("")}`
+      + `<linearGradient id="ink" href="#g1"/></defs>${LAYER}${objects.map((id) => OBJECTS[id]).join("")}</g></svg>`;
+  }
+  const ALL = drawing(Object.keys(RESOURCES), Object.keys(OBJECTS));
+
+  const painterRoot = (box: HTMLElement = host): Element => box.querySelector(".spatial-painter")!;
+  const prefixOf = (box: HTMLElement = host): string => {
+    const id = box.querySelector("defs > linearGradient")!.id;
+    expect(id).toMatch(/^fubdraw\d+-g1$/);
+    return id.slice(0, -"g1".length);
+  };
+
+  it("stanno in una defs prima degli strati, con gli id e i riferimenti riscritti", () => {
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(SceneEngine.open(ALL), new PaintBuilder()));
+    const root = painterRoot();
+    expect([...root.children].map((el) => el.getAttribute("class"))).toEqual(["spatial-layer spatial-defs", "spatial-layer"]);
+    const defs = root.firstElementChild!.firstElementChild!;
+    expect(defs.localName).toBe("defs");
+    // Il contenuto delle risorse eredita dalla radice, come nel file.
+    expect(defs.getAttribute("fill")).toBe("#123456");
+    const prefix = prefixOf();
+    expect([...defs.children].map((el) => el.id)).toEqual(Object.keys(RESOURCES).map((id) => prefix + id));
+    // Gli unici id del DOM sono quelli vivi delle risorse; niente titoli,
+    // niente di FubDraw, niente dell'estraneo.
+    expect([...root.querySelectorAll("[id]")].map((el) => el.id)).toEqual(Object.keys(RESOURCES).map((id) => prefix + id));
+    expect(root.querySelectorAll("title, desc, [href]")).toHaveLength(0);
+    for (const el of root.querySelectorAll("*")) for (const attr of el.attributes) expect(attr.name, el.localName).not.toMatch(/^(fub:|xmlns)/);
+    const at = (id: string): Element => root.querySelector(`[data-scene-id="${id}"]`)!;
+    expect([at("a").getAttribute("fill"), at("a").getAttribute("filter")]).toEqual([`url(#${prefix}p1) #4593ce`, `url(#${prefix}f1)`]);
+    expect(at("b").getAttribute("marker-end")).toBe(`url(#${prefix}m1)`);
+    expect([at("g").getAttribute("clip-path"), at("g").getAttribute("mask")]).toEqual([`url(#${prefix}c1)`, `url(#${prefix}k1)`]);
+    expect(at("c").getAttribute("fill")).toBe(`url(#${prefix}g1)`);
+    expect(defs.querySelector("pattern > rect")!.getAttribute("fill")).toBe(`url(#${prefix}g1) #0072b2`);
+    // Le risorse non sono oggetti.
+    expect(defs.querySelectorAll("[data-scene-id]")).toHaveLength(0);
+    expect([...root.querySelectorAll("[data-scene-id]")].map((el) => el.getAttribute("data-scene-id"))).toEqual(["l1", "a", "b", "g", "c", "d"]);
+  });
+
+  it("non lasciano entrare niente che il formato non dice, e nessun riferimento che non riscrivono", () => {
+    const painter = createSvgPainter(host, owner);
+    const shape: PaintShape = {
+      kind: "shape",
+      tag: "rect",
+      role: "rect",
+      id: "a",
+      attrs: [["width", "5"], ["fill", "url(https://example.com/x.svg#a)"], ["stroke", "url(#g1) red"], ["mask", "url(#g1) x"], ["clip-path", "url(#c1)"], ["onclick", "x()"]],
+      space: null,
+    };
+    const scene: PaintScene = {
+      root: { attrs: [], page: null, units: "px", guides: [] },
+      layers: [{ kind: "live", nodes: [shape] }],
+      resources: [
+        {
+          id: "g1",
+          tag: "linearGradient",
+          attrs: [["x2", "1"], ["href", "#fuori"], ["onload", "x()"], ["style", "fill:red"], ["id", "altro"], ["gradientTransform", "url(#fuori)"]],
+          space: null,
+          children: [
+            { tag: "stop", attrs: [["offset", "0"], ["onclick", "x()"], ["stop-color", "#ff0000"]], space: null, children: ["testo"] },
+            { tag: "script", attrs: [], space: null, children: ["parent.rubato = true"] },
+            { tag: "rect", attrs: [["width", "1"]], space: null, children: [] },
+            "testo fuori",
+          ],
+        },
+        { id: "s1", tag: "script", attrs: [], space: null, children: ["parent.rubato = true"] },
+        {
+          id: "p1",
+          tag: "pattern",
+          attrs: [["width", "4"]],
+          space: null,
+          children: [
+            { tag: "rect", attrs: [["id", "dentro"], ["fill", "url(#g1) #000000"], ["filter", "url(#f1)"], ["stroke", "url(https://example.com/x.svg#a)"]], space: null, children: [] },
+            { tag: "foreignObject", attrs: [], space: null, children: [] },
+            { tag: "image", attrs: [["href", "x.png"]], space: null, children: [] },
+            { tag: "text", attrs: [["x", "1"]], space: null, children: ["si legge", { tag: "title", attrs: [], space: null, children: ["no"] }] },
+          ],
+        },
+      ],
+    };
+    painter.update(scene);
+    const root = painterRoot();
+    for (const selector of ["script", "foreignObject", "image", "title", "[href]", "[onload]", "[onclick]", "[style]", "[filter]", "#altro", "#dentro"]) {
+      expect(root.querySelectorAll(selector), selector).toHaveLength(0);
+    }
+    const prefix = prefixOf();
+    const defs = root.querySelector("defs")!;
+    expect([...defs.children].map((el) => el.id)).toEqual([`${prefix}g1`, `${prefix}p1`]);
+    const gradient = defs.querySelector("linearGradient")!;
+    expect([...gradient.attributes].map((attr) => attr.name).sort()).toEqual(["id", "x2"]);
+    expect([...gradient.childNodes].map((node) => node.nodeName.toLowerCase())).toEqual(["stop"]);
+    expect([...gradient.firstElementChild!.attributes].map((attr) => attr.name)).toEqual(["offset", "stop-color"]);
+    expect(gradient.textContent).toBe("");
+    const content = defs.querySelector("pattern > rect")!;
+    expect([...content.attributes].map((attr) => [attr.name, attr.value])).toEqual([["fill", `url(#${prefix}g1) #000000`]]);
+    expect(defs.querySelector("pattern > text")!.textContent).toBe("si legge");
+    const rect = root.querySelector('[data-scene-id="a"]')!;
+    expect([...rect.attributes].map((attr) => [attr.name, attr.value])).toEqual([
+      ["width", "5"],
+      ["stroke", `url(#${prefix}g1) red`],
+      ["clip-path", `url(#${prefix}c1)`],
+      ["data-scene-id", "a"],
+    ]);
+  });
+
+  it("si aggiornano una per una, e la defs esce con l'ultima", () => {
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    const engine = SceneEngine.open(ALL);
+    painter.update(builder.build(engine));
+    const defs = painterRoot().querySelector("defs")!;
+    const before = [...defs.children];
+    // Un oggetto che cambia non tocca le risorse.
+    expect(engine.apply({ op: "set", id: "d", attrs: { x: "1" } }).outcome).toBe("applied");
+    painter.update(builder.build(engine));
+    [...defs.children].forEach((el, i) => expect(el).toBe(before[i]));
+    // Una risorsa che non c'è più esce; le altre restano gli stessi nodi.
+    const fewer = SceneEngine.open(drawing(["g1", "p1", "m1", "c1", "f1"], ["a", "b"]));
+    painter.update(builder.build(fewer));
+    expect(before[4]!.isConnected).toBe(false);
+    expect([...defs.children]).toEqual([before[0], before[1], before[2], before[3], before[5]]);
+    // Una che cambia si rifà con lo stesso id vivo, e chi la usa la ritrova.
+    expect(fewer.apply({ op: "set", id: "g1", attrs: { x2: "0.5" } }).outcome).toBe("applied");
+    painter.update(builder.build(fewer));
+    const changed = defs.firstElementChild!;
+    expect(changed).not.toBe(before[0]);
+    expect(before[0]!.isConnected).toBe(false);
+    expect([changed.id, changed.getAttribute("x2")]).toEqual([before[0]!.id, "0.5"]);
+    expect([...defs.children].slice(1)).toEqual([before[1], before[2], before[3], before[5]]);
+    // Senza risorse la defs se ne va, e torna con loro.
+    painter.update(builder.build(SceneEngine.open(doc(`${LAYER}<rect id="a" width="5" height="5"/></g>`))));
+    expect(painterRoot().querySelector(".spatial-defs, defs")).toBeNull();
+    painter.update(builder.build(engine));
+    expect(painterRoot().firstElementChild!.getAttribute("class")).toBe("spatial-layer spatial-defs");
+    painter.dispose();
+    expect(host.querySelector("defs")).toBeNull();
+  });
+
+  it("di due superfici nella stessa pagina non si incontrano", () => {
+    const other = document.createElement("div");
+    document.body.append(other);
+    const scene = sceneOf(SceneEngine.open(ALL), new PaintBuilder());
+    createSvgPainter(host, owner).update(scene);
+    createSvgPainter(other, owner).update(scene);
+    expect(prefixOf(host)).not.toBe(prefixOf(other));
+    for (const box of [host, other]) {
+      const fill = painterRoot(box).querySelector('[data-scene-id="a"]')!.getAttribute("fill")!;
+      const target = document.getElementById(/#([^)]+)\)/.exec(fill)![1]!)!;
+      expect(target.localName).toBe("pattern");
+      expect(painterRoot(box).contains(target)).toBe(true);
+    }
+  });
+
+  it("hanno id vivi diversi per id diversi, che url(#…) legge senza escape", () => {
+    expect(liveId("fubdraw1-", "r1a2b3c4d")).toBe("fubdraw1-r1a2b3c4d");
+    expect(liveId("fubdraw1-", "Sfumatura.1é")).toBe("fubdraw1-Sfumatura.2e.1.e9.");
+    expect(liveId("fubdraw1-", "a.")).not.toBe(liveId("fubdraw1-", "a.2e."));
+    expect(liveId("fubdraw1-", "a b")).toBe("fubdraw1-a.20.b");
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(SceneEngine.open(doc(
+      '<defs id="fub-defs"><linearGradient id="mare.1" x2="1"><stop offset="0" stop-color="#0072b2"/></linearGradient></defs>'
+        + `${LAYER}<rect id="a" width="5" height="5" fill="url(#mare.1) #0072b2"/></g>`,
+    )), new PaintBuilder()));
+    const fill = painterRoot().querySelector('[data-scene-id="a"]')!.getAttribute("fill")!;
+    expect(fill).toMatch(/^url\(#fubdraw\d+-mare\.2e\.1\) #0072b2$/);
+    expect(document.getElementById(/#([^)]+)\)/.exec(fill)![1]!)!.localName).toBe("linearGradient");
+  });
+
+  it("vanno nelle miniature, solo quelle che servono, con un prefisso loro", () => {
+    const engine = SceneEngine.open(ALL);
+    const builder = new PaintBuilder();
+    const scene = builder.build(engine);
+    const chain = [scene.root.attrs, builder.headInfo(engine.holder("l1") as ContainerNode).attrs];
+    const paints = builder.paintsOf(engine.holder("a")!);
+    const svg = paintMiniature(paints, chain, { x: 0, y: 0, width: 5, height: 5 }, owner, undefined, resourcesFor(paints, chain, scene.resources));
+    const defs = svg.querySelector("defs")!;
+    // Dentro il `g` della radice, che il contenuto eredita.
+    expect(defs.parentElement).toBe(svg.firstElementChild);
+    const ids = [...defs.children].map((el) => el.id);
+    const prefix = ids[0]!.slice(0, -"g1".length);
+    expect(prefix).toMatch(/^fubthumb\d+-$/);
+    expect(ids).toEqual(["g1", "p1", "f1"].map((id) => prefix + id));
+    const rect = [...svg.querySelectorAll("rect")].find((el) => el.closest("defs") === null)!;
+    expect(rect.getAttribute("fill")).toBe(`url(#${prefix}p1) #4593ce`);
+    // Senza risorse, nessuna defs.
+    const plain = paintMiniature(builder.paintsOf(engine.holder("b")!), chain, { x: 0, y: 0, width: 10, height: 1 }, owner);
+    expect(plain.querySelector("defs")).toBeNull();
   });
 });

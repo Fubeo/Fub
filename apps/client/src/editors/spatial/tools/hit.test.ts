@@ -89,6 +89,21 @@ describe("il riquadro di tutto il disegno", () => {
   });
 });
 
+describe("le risorse", () => {
+  it("non sono oggetti: né la defs né ciò che contiene si sceglie, si tocca o fa riquadro", () => {
+    const opened = open(doc(
+      '<defs id="fub-defs"><pattern id="p1" width="200" height="200" patternUnits="userSpaceOnUse">'
+        + '<rect id="dentro" x="0" y="0" width="200" height="200" fill="#000000"/></pattern>'
+        + '<linearGradient id="estraneo" href="#p1"/></defs>'
+        + `${LAYER}<rect id="a" x="10" y="10" width="20" height="20" fill="url(#p1) #000000"/></g>`,
+    ));
+    expect(opened.index.units.map((unit) => unit.key)).toEqual(["a"]);
+    for (const key of ["fub-defs", "p1", "dentro", "estraneo", "@0", "@0.0"]) expect(opened.index.get(key), key).toBeNull();
+    expect(opened.index.at([100, 100], 0)).toBeNull();
+    expect(opened.extent()).toEqual({ min: [10, 10], max: [30, 30] });
+  });
+});
+
 describe("il riquadro di una miniatura", () => {
   const FRAMED = doc(
     '<g id="l1" fub:layer="Nascosto" transform="translate(100 0)" display="none">'

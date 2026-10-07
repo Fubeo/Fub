@@ -69,6 +69,15 @@ describe("placeOps", () => {
     expect(children(opened, "l1")).toEqual([null, "oaaaaaaaa", "occcccccc", "obbbbbbbb", "odddddddd"]);
   });
 
+  it("lascia per prima la defs delle risorse, e non la prende per riferimento", () => {
+    const gradient = '<linearGradient id="rgggggggg"><stop offset="0" stop-color="#ffffff"/></linearGradient>';
+    const opened = open(doc(`<defs id="fub-defs">${gradient}</defs>${RECT("oaaaaaaaa", 0)}${LAYER}${RECT("obbbbbbbb", 20)}</g>`));
+    applied(opened, place(opened, ["obbbbbbbb"], "#root", "first"));
+    expect(children(opened, "#root")).toEqual(["fub-defs", "obbbbbbbb", "oaaaaaaaa", "l1"]);
+    applied(opened, place(opened, ["l1"], "#root", { after: node(opened, "fub-defs") }));
+    expect(children(opened, "#root")).toEqual(["fub-defs", "l1", "obbbbbbbb", "oaaaaaaaa"]);
+  });
+
   it("non fa niente se gli oggetti sono già lì, e salta chi si sposta quando è il riferimento", () => {
     const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", 0)}${RECT("obbbbbbbb", 20)}${RECT("occcccccc", 40)}</g>`));
     expect(place(opened, ["obbbbbbbb"], "l1", { after: node(opened, "oaaaaaaaa") })).toEqual({ ops: [], keys: ["obbbbbbbb"] });
