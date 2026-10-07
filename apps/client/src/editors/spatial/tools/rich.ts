@@ -445,7 +445,7 @@ export function restyleWhole(rich: Rich, name: string, value: string): Rich {
 // ---------------------------------------------------------------------------
 
 /// I tratti che si leggono: con almeno un carattere che non è uno spazio.
-function visibleSpans(rich: Rich): Array<{ readonly line: RichLine; readonly span: Span }> {
+export function visibleSpans(rich: Rich): Array<{ readonly line: RichLine; readonly span: Span }> {
   const out: Array<{ line: RichLine; span: Span }> = [];
   for (const line of rich.lines) for (const span of line.spans) if (span.text.trim() !== "") out.push({ line, span });
   return out;

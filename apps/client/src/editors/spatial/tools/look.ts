@@ -164,14 +164,14 @@ const INITIAL: Inherited = new Map([
 ]);
 
 /// I ruoli che hanno un riempimento.
-const FILLED: ReadonlySet<Role> = new Set(["ngon", "star", "path", "rect", "ellipse", "circle", "polyline", "polygon", "text"]);
+export const FILLED: ReadonlySet<Role> = new Set(["ngon", "star", "path", "rect", "ellipse", "circle", "polyline", "polygon", "text"]);
 
 /// I ruoli che hanno un contorno, come in `outline.ts`.
-const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
+export const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
 
 /// I ruoli tutti riempimento che si vedono come una linea: il loro colore è
 /// quello del contorno.
-const INKED: ReadonlySet<Role> = new Set(["stroke", "width"]);
+export const INKED: ReadonlySet<Role> = new Set(["stroke", "width"]);
 
 /// I ruoli che passano tutto ai figli.
 const CONTAINERS: ReadonlySet<Role> = new Set(["group", "link"]);
