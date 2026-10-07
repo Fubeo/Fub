@@ -1,8 +1,8 @@
 // Il motore delle operazioni oltre i vettori di `vectors.test.ts`: la forma
 // della rete, i rifiuti uno per uno, i limiti, l'undo che non è esatto, i
 // rientri di un `move`, `adopt` e `page` nei casi di bordo, i riferimenti
-// alle risorse e la loro raccolta. I testi attesi
-// sono scritti a mano, e i `§` sono le sezioni di
+// alle risorse e la loro raccolta, il testo in area e su tracciato. I testi
+// attesi sono scritti a mano, e i `§` sono le sezioni di
 // `docs/reference/scene-operations.md`.
 
 import { describe, expect, it } from "vitest";
@@ -1070,5 +1070,160 @@ describe("le risorse", () => {
     expect(full.apply({ op: "set", id: "o2b3c4d5e", attrs: { fill: "#000000" } }).outcome).toBe("applied");
     expect(full.apply(one)).toMatchObject({ outcome: "rejected", reason: "limit" });
     expect(SceneEngine.open(many(MAX_RESOURCES - 1)).apply(one).outcome).toBe("applied");
+  });
+});
+
+describe("il testo in area e su tracciato", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const P = "r1a2b3c4d";
+  const CURVE = `    <path id="${P}" fub:role="private" d="M100 400 C250 250 450 250 600 400"/>`;
+  const along = (content: string): string[] => [
+    '    <text id="o5e6f7g8h" fill="#000000" font-size="32" text-anchor="middle">',
+    `      <textPath startOffset="50%" href="#${P}">${content}</textPath>`,
+    "    </text>",
+  ];
+  const ALONG = lf(ROOT, TITLE, DEFS, CURVE, END_DEFS, PAPER, L1, ...along("Il testo segue"), R3, END_G, END);
+  const area = (...lines: string[]): string[] => [
+    '    <text id="o5e6f7g8h" fub:wrap="320" x="100" y="200" font-size="32">',
+    ...lines.map((line) => `      ${line}`),
+    "    </text>",
+  ];
+  const AREA = lf(
+    ROOT,
+    TITLE,
+    PAPER,
+    L1,
+    ...area('<tspan x="100" dy="0">Il testo in area va a</tspan>', '<tspan fub:join="space" x="100" dy="40">capo da solo.</tspan>'),
+    END_G,
+    END,
+  );
+
+  it("text su un testo su tracciato cambia il contenuto del textPath, coi pezzi, e l'undo lo rimette", () => {
+    const engine = SceneEngine.open(ALONG);
+    const out = apply(engine, { op: "text", id: "o5e6f7g8h", lines: [["Il testo ", { text: "segue", attrs: { "font-weight": "bold" } }, " la linea"]] });
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, CURVE, END_DEFS, PAPER, L1, ...along('Il testo <tspan font-weight="bold">segue</tspan> la linea'), R3, END_G, END));
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo segue"] });
+    const back = applied(engine.apply(out.inverse));
+    expect(back.text).toBe(ALONG);
+    expect(back.inverse).toEqual({
+      op: "text",
+      id: "o5e6f7g8h",
+      lines: [["Il testo ", { text: "segue", attrs: { "font-weight": "bold" } }, " la linea"]],
+    });
+  });
+
+  it("un testo su tracciato ha una riga sola, e non va a capo", () => {
+    rejects(ALONG, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"] }, "invalid-elem");
+    rejects(ALONG, { op: "text", id: "o5e6f7g8h", lines: [] }, "invalid-elem");
+    rejects(ALONG, { op: "text", id: "o5e6f7g8h", lines: ["Uno"], joins: [null] }, "invalid-elem");
+  });
+
+  it("joins scrive fub:join riga per riga, e l'inversa rimette quelli di prima", () => {
+    const engine = SceneEngine.open(AREA);
+    const out = apply(engine, { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area", "va a capo da", "solo."], joins: [null, "space", "space"] });
+    expect(out.text).toBe(
+      lf(
+        ROOT,
+        TITLE,
+        PAPER,
+        L1,
+        ...area(
+          '<tspan x="100" dy="0">Il testo in area</tspan>',
+          '<tspan fub:join="space" x="100" dy="40">va a capo da</tspan>',
+          '<tspan fub:join="space" x="100" dy="40">solo.</tspan>',
+        ),
+        END_G,
+        END,
+      ),
+    );
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, "space"] });
+    expect(applied(engine.apply(out.inverse)).text).toBe(AREA);
+    // Un a capo dentro una parola, e un paragrafo nuovo.
+    const word = apply(SceneEngine.open(AREA), { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "ca", "po."], joins: [null, "space", "word"] });
+    expect(word.text).toContain('<tspan fub:join="word" x="100" dy="40">po.</tspan>');
+    const split = apply(SceneEngine.open(AREA), { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, null] });
+    expect(split.text).toContain('<tspan x="100" dy="40">capo da solo.</tspan>');
+  });
+
+  it("senza joins le righe tengono il loro fub:join, e una riga nuova comincia un paragrafo", () => {
+    const out = apply(SceneEngine.open(AREA), { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo.", "Fine."] });
+    expect(out.text).toBe(
+      lf(
+        ROOT,
+        TITLE,
+        PAPER,
+        L1,
+        ...area(
+          '<tspan x="100" dy="0">Il testo in area va a</tspan>',
+          '<tspan fub:join="space" x="100" dy="40">capo da solo.</tspan>',
+          '<tspan x="100" dy="40">Fine.</tspan>',
+        ),
+        END_G,
+        END,
+      ),
+    );
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."] });
+  });
+
+  it("joins vuole una voce per riga, un testo o null", () => {
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"], joins: [null] }, "invalid-elem");
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno"], joins: "space" }, "invalid-elem");
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"], joins: [null, 1] }, "invalid-elem");
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"], joins: [null, "a\u0001"] }, "invalid-elem");
+  });
+
+  it("il tracciato di un testo è una risorsa: lo trattiene, e se ne va con lui", () => {
+    rejects(ALONG, { op: "remove", target: P }, "in-use");
+    rejects(ALONG, { op: "ident", path: [1, 0], tag: "path", id: null }, "in-use");
+    const engine = SceneEngine.open(ALONG);
+    const out = apply(engine, { op: "remove", target: "o5e6f7g8h" });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R3, END_G, END));
+    expect(out.forward).toEqual({
+      op: "batch",
+      ops: [{ op: "remove", target: "o5e6f7g8h" }, { op: "remove", target: P }, { op: "remove", target: "fub-defs" }],
+    });
+    expect(applied(engine.undo(out.undo)).text).toBe(ALONG);
+  });
+
+  it("set sul tracciato ne cambia la forma; un attributo fuori dal formato lo renderebbe estraneo", () => {
+    const engine = SceneEngine.open(ALONG);
+    expect(apply(engine, { op: "set", id: P, attrs: { d: "M600 400 C450 250 250 250 100 400" } }).text).toBe(
+      ALONG.replace("M100 400 C250 250 450 250 600 400", "M600 400 C450 250 250 250 100 400"),
+    );
+    rejects(ALONG, { op: "set", id: P, attrs: { transform: "rotate(10)" } }, "invalid-elem");
+    rejects(ALONG, { op: "set", id: P, attrs: { d: "M100 Q" } }, "invalid-elem");
+  });
+
+  it("add porta il tracciato nella defs e il testo che lo segue, coi pezzi", () => {
+    const PLAIN = lf(ROOT, TITLE, PAPER, L1, R3, END_G, END);
+    const defs: Op = {
+      op: "add",
+      parent: "#root",
+      pos: { first: true },
+      elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [{ tag: "path", attrs: { id: P, "fub:role": "private", d: "M100 400 C250 250 450 250 600 400" } }] },
+    };
+    const text: Op = {
+      op: "add",
+      parent: "l3f8a0c2d",
+      pos: { first: true },
+      elem: {
+        tag: "text",
+        attrs: { id: "o5e6f7g8h", fill: "#000000", "font-size": "32", "text-anchor": "middle" },
+        children: [{ tag: "textPath", attrs: { href: `#${P}`, startOffset: "50%" }, runs: ["Il testo segue"] }],
+      },
+    };
+    const out = apply(SceneEngine.open(PLAIN), { op: "batch", ops: [defs, text] });
+    expect(out.text).toBe(ALONG);
+    // Con raw, allo stesso modo: il testo resta com'è scritto.
+    const raw: Op = { op: "add", parent: "#root", pos: { first: true }, raw: `<defs id="fub-defs">\n${CURVE}\n${END_DEFS}` };
+    expect(apply(SceneEngine.open(PLAIN), { op: "batch", ops: [raw, text] }).text).toBe(ALONG);
+    // Un tracciato fra gli oggetti vuole un id da oggetto; nella defs, da risorsa.
+    rejects(PLAIN, { ...defs, elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [{ tag: "path", attrs: { id: "o1a2b3c4d", d: "M0 0 L10 10" } }] } }, "invalid-elem");
+    rejects(PLAIN, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "path", attrs: { id: P, d: "M0 0 L10 10" } } }, "invalid-elem");
+    // Un textPath fuori da un testo, o con dei figli, non si scrive.
+    rejects(PLAIN, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "textPath", attrs: { href: `#${P}` }, text: "No" } }, "invalid-elem");
+    // Un testo che segue un tracciato che non c'è è estraneo.
+    rejects(PLAIN, text, "invalid-elem");
   });
 });
