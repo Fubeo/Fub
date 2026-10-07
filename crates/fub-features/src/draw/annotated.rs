@@ -94,7 +94,7 @@ const SUFFIX: &str = "suffix";
 const SUFFIX_MAX: usize = 40;
 /// I caratteri che un nome di file non può avere su nessuno dei sistemi di
 /// Fub.
-const UNSAFE: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+pub(super) const UNSAFE: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
 /// Quanto può decomprimersi un flusso di oggetti o di riferimenti mentre il
 /// PDF si legge: oltre, è una bomba e non un PDF.
@@ -266,8 +266,9 @@ fn dpi(options: &serde_json::Value) -> Result<f64, PluginError> {
     }
 }
 
-/// La parola fra parentesi nel nome del file, senza gli spazi ai bordi.
-fn suffix(options: &serde_json::Value, default: &str) -> Result<String, PluginError> {
+/// La parola fra parentesi nel nome del file, senza gli spazi ai bordi: dei
+/// due PDF delle annotazioni, e della selezione di un disegno.
+pub(super) fn suffix(options: &serde_json::Value, default: &str) -> Result<String, PluginError> {
     let Some(value) = options.get(SUFFIX).filter(|value| !value.is_null()) else {
         return Ok(default.to_string());
     };

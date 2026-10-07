@@ -193,7 +193,7 @@ Un `batch` che crea la prima tavola:
   tavole sono entrate nel formato insieme alla regola di `page` che non tocca
   le carte delle tavole, prima che un lettore senza quella regola uscisse:
   la versione resta 1.
-- **Ciò che manca:** l'export di una tavola come pagina di un PDF o come
-  immagine, il colore della carta di una tavola, le tavole bloccate, le
-  guide e la griglia di una tavola. Il formato le può aggiungere come
-  attributi, senza cambiare ciò che c'è.
+- **Ciò che manca:** il colore della carta di una tavola, le tavole
+  bloccate, le guide e la griglia di una tavola. Il formato le può aggiungere
+  come attributi, senza cambiare ciò che c'è. Una tavola si esporta come
+  immagine o come pagina di un PDF ([export](scene-format-export.md)).

@@ -117,6 +117,12 @@ function lazily(
     modes,
     defaultMode: "draw",
     exports,
+    // La finestra «Esporta» della superficie, quando c'è: prima che arrivi
+    // non si apre, e «Esporta…» offre la scelta fra gli export.
+    exportWindow: {
+      available: () => surface?.exportWindow?.available() ?? false,
+      open: () => surface?.exportWindow?.open() ?? Promise.resolve(null),
+    },
     setMode(next) {
       if (surface !== null) return surface.setMode(next);
       if (!modes.some((known) => known.id === next)) throw new RangeError(`surface mode ${next} is not supported`);

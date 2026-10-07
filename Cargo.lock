@@ -1944,6 +1944,7 @@ dependencies = [
 name = "fub-features"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "camino",
  "flate2",
  "fub-abi",

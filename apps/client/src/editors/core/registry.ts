@@ -161,6 +161,17 @@ export interface SurfaceExport {
 }
 
 /**
+ * A surface's own export window: the user chooses there what goes out and how,
+ * with a preview, and the shell offers it in place of its chooser.
+ */
+export interface SurfaceExportWindow {
+  /** Whether the window can open now: not while the document is unreadable, say. */
+  available(): boolean;
+  /** Opens the window; the export to run, or `null` when the user closes it. */
+  open(): Promise<SurfaceExport | null>;
+}
+
+/**
  * A mounted shell-owned surface. No DOM or CodeMirror value crosses its
  * boundary. Past the first five members everything is a capability: the shell
  * offers a gesture where the mounted surface declares it, and never asks which
@@ -216,6 +227,11 @@ export interface EditorSurface {
    * activity panel, from which the user saves it where they choose.
    */
   readonly exports?: readonly SurfaceExport[];
+  /**
+   * The window the shell opens for «Esporta…» while it is available; the
+   * chooser of `exports` otherwise.
+   */
+  readonly exportWindow?: SurfaceExportWindow;
   /**
    * The writing gestures this surface runs on its own text — bold, heading 2,
    * a table row — by the stable id the formatting bar and the

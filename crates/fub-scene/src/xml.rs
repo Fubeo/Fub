@@ -278,6 +278,16 @@ impl Document<'_> {
             _ => None,
         }
     }
+
+    /// Il testo di sostituzione di un'entità interna, com'è: con la marcatura
+    /// e i riferimenti alle altre entità. `None` per un'entità esterna, che
+    /// nessun browser carica. Serve all'SVG pulito, che le espande.
+    pub fn internal_entity(&self, name: &str) -> Option<&str> {
+        match self.entities.get(name) {
+            Some(Entity::Internal(text)) => Some(text),
+            _ => None,
+        }
+    }
 }
 
 /// Legge `source` come documento XML con namespace.

@@ -733,4 +733,30 @@ describe("«Esporta…» su un disegno", () => {
       { target: "draw.png", selection: { kind: "documents", value: ["casa.svg"] }, options: {} },
     ]);
   });
+
+  it("dallo Standard apre la finestra «Esporta», e manda le sue scelte", async () => {
+    const host = await start(createFakeHost({ file: VAULT, draw: true, commands: [EXPORT_RUN], settings: [drawLevel("standard")] }));
+    const { t } = await import("./i18n/strings");
+    await open("casa.svg");
+    await waitFor("lo Standard", () => tools().includes("highlighter"));
+    await run("shell.doc.export");
+    await waitFor("la finestra si apre", () => document.querySelector(".draw-export form") !== null);
+    expect(choices(), "non la scelta del formato").toEqual([]);
+    const option = (label: string): HTMLInputElement =>
+      [...document.querySelectorAll<HTMLLabelElement>(".draw-export label.draw-export-option")].find((each) => each.textContent === label)!.querySelector("input")!;
+    option("PDF").checked = true;
+    option("PDF").dispatchEvent(new Event("change", { bubbles: true }));
+    document.querySelector<HTMLFormElement>(".draw-export form")!.requestSubmit();
+    await waitFor("l'export è chiesto", () => requests(host).length === 1);
+    expect(requests(host)).toEqual([
+      { target: "draw.pdf", selection: { kind: "documents", value: ["casa.svg"] }, options: { background: "paper", scope: "drawing" } },
+    ]);
+    // Il menu del riquadro ha la finestra prima dei formati.
+    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+    await settle();
+    const labels = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")].map((button) => button.querySelector(".menu-label")?.textContent ?? "");
+    const at = labels.indexOf(t("commands.doc.export"));
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(labels.slice(at, at + 3)).toEqual([t("commands.doc.export"), t("pane.export", { what: "PNG" }), t("pane.export", { what: "PDF" })]);
+  });
 });

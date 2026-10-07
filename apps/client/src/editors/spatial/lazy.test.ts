@@ -182,3 +182,39 @@ describe("dopo", () => {
     expect(lazy.buffer!.getDoc()).toBe(FOREIGN);
   });
 });
+
+describe("la finestra «Esporta»", () => {
+  it("prima che il codice arrivi non si apre; dopo è quella della superficie vera", async () => {
+    // Per ultimo: il livello letto resta ai moduli di questo file.
+    box.host = createFakeHost({
+      settings: [{
+        spec: {
+          key: "draw.level",
+          label: "Livello d'interfaccia",
+          description: "",
+          group: "Disegni",
+          scope: "vault",
+          kind: { kind: "choice", default: "essential", options: [{ value: "essential", label: "Essenziale" }, { value: "standard", label: "Standard" }] },
+          program_writable: false,
+        },
+        value: "standard",
+        source: "vault",
+      }],
+    });
+    const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+    const lazy = mount();
+    lazy.buffer!.setDoc(SOURCE);
+    expect(lazy.exportWindow!.available()).toBe(false);
+    expect(await lazy.exportWindow!.open()).toBeNull();
+    await arrive();
+    await settle();
+    expect(lazy.exportWindow!.available()).toBe(true);
+    const opening = lazy.exportWindow!.open();
+    await settle();
+    const modal = document.querySelector<HTMLElement>(".modale .draw-export")!;
+    expect(modal.querySelector("h2")!.textContent).toBe("Esporta «Casa»");
+    [...modal.querySelectorAll("button")].find((button) => button.textContent === "Annulla")!.click();
+    expect(await opening).toBeNull();
+    for (const each of document.querySelectorAll(".modale")) each.remove();
+  });
+});

@@ -45,19 +45,21 @@ import { relativeRef, resolveAgainst } from "../../rules/mirrored";
 import { identifier } from "../../ui/a11y";
 import { openLifetime, type Lifetime } from "../../ui/lifetime";
 import { notify } from "../../ui/notify";
-import type { EditorRange, EditorSelections, EditorSurface, SelectedText, SurfaceMountContext } from "../core/registry";
+import type { EditorRange, EditorSelections, EditorSurface, SelectedText, SurfaceExportWindow, SurfaceMountContext } from "../core/registry";
 import type { EditorChange } from "../core/text-operation";
 import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
 import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
-import { currentCustom, currentGrid, currentLevel, readGrid, saveGrid, watchLevel } from "./preferences";
+import { currentCustom, currentGrid, currentLevel, readExportMemory, readGrid, saveExportMemory, saveGrid, watchLevel } from "./preferences";
 import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
 import { href as parseHref } from "./scene/values";
 import { linkTarget, nodeOf } from "./tools/arrange";
-import { createDrawEditor, type DrawEditor, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
+import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
+import { exportDialog } from "./tools/export-dialog";
+import { featuresFor } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
 import { appFonts, picture, type FontSheets } from "./picture";
 
@@ -611,6 +613,56 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     return { start, end, text: new TextDecoder().decode(encoded.bytes.subarray(start, end)) };
   };
 
+  // --- «Esporta» ------------------------------------------------------------
+
+  /// Ciò che la finestra chiede al disegno, col testo che l'anteprima
+  /// deriva: la selezione soltanto dove la si vede, sul foglio, e con gli id
+  /// che riceverebbe già scritti, su una copia.
+  const exportOffer = (): DrawExport & { readonly text: string } => {
+    const offer = editor?.exportScene() ?? { scene: { selection: null, boards: [] }, naming: null, named: 0 };
+    const { selection } = offer.scene;
+    if (drawHost.hidden || selection === null) return { text, scene: { ...offer.scene, selection: null }, naming: null, named: 0 };
+    if (offer.naming === null) return { text, ...offer };
+    const applied = SceneEngine.open(text).apply(offer.naming);
+    if (applied.outcome === "applied") return { text: applied.text, ...offer };
+    // Gli id non si danno: la selezione resta senza, e la finestra lo dice.
+    const named = new Set(offer.naming.op === "batch" ? offer.naming.ops.map((op) => (op.op === "ident" ? op.id : null)) : []);
+    return { text, scene: { ...offer.scene, selection: { ...selection, ids: selection.ids.filter((id) => !named.has(id)) } }, naming: null, named: 0 };
+  };
+
+  /// La finestra «Esporta», col suo pezzo dell'editor e su un disegno che si
+  /// legge. Quando si esporta la selezione, gli oggetti scelti senza id lo
+  /// ricevono in un passo che si annulla; le scelte si ricordano.
+  const exportWindow: SurfaceExportWindow = {
+    available: () => featuresFor(level, custom).has("export") && shownEngine() !== null,
+    open: async () => {
+      const memory = await readExportMemory(context.documentId);
+      if (life.closed || shownEngine() === null) return null;
+      const base = text;
+      const offer = exportOffer();
+      const choice = await exportDialog({
+        name: drawingName(),
+        text: offer.text,
+        scene: offer.scene,
+        named: offer.named,
+        memory,
+        fonts,
+        ...(imagePort === undefined ? {} : { read: (path: string, limit: number) => imagePort.read(path, limit) }),
+      });
+      if (choice === null || life.closed) return null;
+      if (choice.memory.what === "selection" && offer.naming !== null) {
+        // Gli id sono quelli del testo di quando la finestra si è aperta.
+        if (text !== base || editor === null || !editor.perform("draw.action.export_ids", offer.naming)) {
+          notify(t("vector.export.changed"), "guasto");
+          return null;
+        }
+        editor.select(offer.scene.selection!.ids);
+      }
+      void saveExportMemory(context.documentId, choice.memory);
+      return { target: choice.target, label: () => choice.label, detail: () => "", options: () => choice.options };
+    },
+  };
+
   life.add(() => {
     unmountEditor();
     if (shownUrl !== null) URL.revokeObjectURL(shownUrl);
@@ -627,6 +679,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     modes: VECTOR_MODES,
     defaultMode: "draw",
     exports: VECTOR_EXPORTS,
+    exportWindow,
     setMode(next) {
       if (next !== "draw" && next !== "read") throw new RangeError(`surface mode ${next} is not supported`);
       if (next === mode) return;

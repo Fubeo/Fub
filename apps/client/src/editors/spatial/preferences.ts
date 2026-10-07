@@ -11,6 +11,8 @@
 //   dopo. Non entra né nel file del disegno né in quello delle impostazioni
 //   del vault, che a ogni `#` cambierebbe, e su un vault condiviso
 //   cambierebbe la griglia degli altri.
+// - **Le scelte di «Esporta»** sono anche loro uno stato della vista, per
+//   disegno: gli ultimi disegni esportati, ognuno con le sue.
 //
 // L'ultima lettura resta qui: una superficie nuova parte da lì, e la lettura
 // che fa la conferma o la corregge, senza che la barra cambi sotto gli occhi
@@ -23,6 +25,7 @@ import { t } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { notify } from "../../ui/notify";
 import { validCurve } from "./pen/pressure";
+import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
 import { DEFAULT_GRID, validClosed, validStep, validSteps, type Grid } from "./tools/grid";
 import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
 
@@ -37,6 +40,13 @@ export const CUSTOM_KEY = "draw.custom";
 
 /// La chiave dello stato di vista che ricorda la griglia.
 export const GRID_KEY = "draw.grid";
+
+/// La chiave dello stato di vista che ricorda le scelte di «Esporta».
+export const EXPORT_KEY = "draw.export";
+
+/// Di quanti disegni si ricordano le scelte di «Esporta»: gli ultimi
+/// esportati.
+export const EXPORT_MEMORIES = 100;
 
 /// Il livello di partenza, quando l'impostazione non dice niente.
 const DEFAULT_LEVEL: Level = "essential";
@@ -56,6 +66,8 @@ let lastGrid: Grid = DEFAULT_GRID;
 /// Le scritture della griglia in fila, e quante ne sono partite.
 let saving: Promise<void> = Promise.resolve();
 let saves = 0;
+/// Le scritture delle scelte di «Esporta» in fila.
+let exporting: Promise<void> = Promise.resolve();
 
 /// Il livello dell'ultima lettura.
 export function currentLevel(): Level {
@@ -182,4 +194,54 @@ export function saveGrid(grid: Grid): void {
   saving = saving
     .then(() => api.setViewState(GRID_KEY, grid))
     .catch((error: unknown) => notify(t("vector.grid.save_failed", { reason: errorText(error) }), "guasto"));
+}
+
+/// Un disegno ricordato da «Esporta»: il suo `DocId` e le sue scelte.
+interface ExportEntry {
+  readonly doc: string;
+  readonly memory: ExportMemory;
+}
+
+/// `value` come disegni ricordati, dal più recente: quelli che non si leggono
+/// come scelte non contano, e di un disegno conta il primo.
+function exportEntriesOf(value: unknown): ExportEntry[] {
+  const drawings = typeof value === "object" && value !== null ? (value as Record<string, unknown>).drawings : undefined;
+  if (!Array.isArray(drawings)) return [];
+  const entries: ExportEntry[] = [];
+  const seen = new Set<string>();
+  for (const entry of drawings as unknown[]) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { doc, memory } = entry as Record<string, unknown>;
+    const read = exportMemoryOf(memory);
+    if (typeof doc !== "string" || read === null || seen.has(doc)) continue;
+    seen.add(doc);
+    entries.push({ doc, memory: read });
+  }
+  return entries;
+}
+
+/// Le scelte di «Esporta» ricordate per il disegno `doc`; `null` se non ce ne
+/// sono, o se lo stato di vista non si legge. Legge dopo le scritture in
+/// corso.
+export async function readExportMemory(doc: string): Promise<ExportMemory | null> {
+  await exporting;
+  try {
+    return exportEntriesOf(await api.viewState<unknown>(EXPORT_KEY)).find((entry) => entry.doc === doc)?.memory ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/// Ricorda `memory` per il disegno `doc`, davanti agli altri: oltre gli
+/// ultimi `EXPORT_MEMORIES` il più vecchio si dimentica. Le scritture vanno in
+/// fila; una che non riesce non dice niente, perché l'export è partito e le
+/// scelte sono una comodità.
+export function saveExportMemory(doc: string, memory: ExportMemory): Promise<void> {
+  exporting = exporting
+    .then(async () => {
+      const others = exportEntriesOf(await api.viewState<unknown>(EXPORT_KEY).catch(() => null)).filter((entry) => entry.doc !== doc);
+      await api.setViewState(EXPORT_KEY, { drawings: [{ doc, memory }, ...others].slice(0, EXPORT_MEMORIES) });
+    })
+    .catch(() => undefined);
+  return exporting;
 }

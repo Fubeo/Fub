@@ -863,3 +863,135 @@ describe("le immagini del vault", () => {
     expect(surface.buffer!.getDoc()).toBe(SOURCE);
   });
 });
+
+describe("la finestra «Esporta»", () => {
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const dialog = (): HTMLElement | null => {
+    const all = document.querySelectorAll<HTMLElement>(".modale");
+    return all[all.length - 1] ?? null;
+  };
+  const option = (label: string): HTMLInputElement =>
+    [...dialog()!.querySelectorAll<HTMLLabelElement>("label.draw-export-option")].find((each) => each.textContent === label)!.querySelector("input")!;
+  const choose = (label: string): void => {
+    option(label).checked = true;
+    option(label).dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const submit = (): void => dialog()!.querySelector("form")!.requestSubmit();
+  const cancel = (): void => [...dialog()!.querySelectorAll("button")].find((each) => each.textContent === "Annulla")!.click();
+  /// Una casa con il tetto senza id.
+  const UNNAMED = doc(
+    `<title>Casa</title>${LAYER}<rect id="o1a2b3c4d" x="60" y="60" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/><path d="M10 10 L30 10" stroke="#000000" stroke-width="2"/></g>`,
+  );
+
+  afterEach(() => {
+    for (const modal of document.querySelectorAll(".modale")) modal.remove();
+  });
+
+  it("c'è dallo Standard, su un disegno che si legge", async () => {
+    const host = createFakeHost({ settings: [level("essential")] });
+    const mountFresh = await fresh(host);
+    const surface = mountFresh(parent);
+    await settle();
+    expect(surface.exportWindow!.available()).toBe(false);
+    await host.module.api.setSetting("draw.level", "standard");
+    await settle();
+    expect(surface.exportWindow!.available()).toBe(true);
+    surface.buffer!.setDoc("<svg");
+    expect(surface.exportWindow!.available(), "un file che non si legge").toBe(false);
+  });
+
+  it("apre la finestra sul disegno, torna la richiesta, e le scelte si ricordano", async () => {
+    const host = createFakeHost({ settings: [level("standard")] });
+    const mountFresh = await fresh(host);
+    const surface = mountFresh(parent);
+    await settle();
+    const first = surface.exportWindow!.open();
+    await settle();
+    expect(dialog()!.querySelector("h2")!.textContent).toBe("Esporta «Casa»");
+    choose("SVG");
+    submit();
+    const chosen = (await first)!;
+    expect(chosen.target).toBe("draw.svg");
+    expect(chosen.label()).toBe("SVG");
+    expect(chosen.options!()).toEqual({ background: "paper", scope: "drawing", suffix: "esportato" });
+    await settle();
+
+    const second = surface.exportWindow!.open();
+    await settle();
+    expect(option("SVG").checked, "ricordato per questo disegno").toBe(true);
+    cancel();
+    expect(await second).toBeNull();
+    expect(await host.module.api.viewState("draw.export")).toEqual({
+      drawings: [{ doc: "disegni/casa.svg", memory: { what: "drawing", off: [], format: "svg", size: { scale: 2 }, background: "paper" } }],
+    });
+  });
+
+  it("gli oggetti scelti senza id lo ricevono quando si esporta la selezione, in un passo che si annulla", async () => {
+    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const surface = mountFresh(parent);
+    surface.buffer!.setDoc(UNNAMED);
+    await settle();
+    key(parent, { key: "a", ctrlKey: true });
+    const answer = surface.exportWindow!.open();
+    await settle();
+    const selection = option("La selezione (2 oggetti)");
+    expect(selection.disabled).toBe(false);
+    expect(document.getElementById(selection.getAttribute("aria-describedby")!)!.textContent).toBe(
+      "1 oggetto scelto non ha un id: lo riceve quando esporti, in un passo che si annulla.",
+    );
+    expect(surface.buffer!.getDoc(), "la finestra non scrive").toBe(UNNAMED);
+    choose("La selezione (2 oggetti)");
+    submit();
+    const chosen = (await answer)!;
+    const written = surface.buffer!.getDoc();
+    const id = /<path id="(o[0-9a-z]{8})"/.exec(written)?.[1];
+    expect(id).toBeDefined();
+    expect(chosen.options!()).toEqual({
+      background: "paper",
+      scope: "selection",
+      selection: { ids: ["o1a2b3c4d", id], box: [9, 9, 72, 72] },
+      suffix: "selezione",
+      scale: 2,
+    });
+    expect(chosen.label()).toBe("PNG della selezione");
+    undo();
+    expect(surface.buffer!.getDoc()).toBe(UNNAMED);
+  });
+
+  it("se il disegno cambia mentre si sceglie, la selezione non si esporta e lo dice", async () => {
+    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const notices = await import("../../ui/notify");
+    notices.clearHistory();
+    const surface = mountFresh(parent);
+    surface.buffer!.setDoc(UNNAMED);
+    await settle();
+    key(parent, { key: "a", ctrlKey: true });
+    const answer = surface.exportWindow!.open();
+    await settle();
+    choose("La selezione (2 oggetti)");
+    const changed = UNNAMED.replace('x="60"', 'x="61"');
+    surface.buffer!.setDoc(changed);
+    submit();
+    expect(await answer).toBeNull();
+    expect(surface.buffer!.getDoc()).toBe(changed);
+    expect(notices.recentNotices().map(({ text, tone }) => ({ text, tone }))).toContainEqual({
+      text: "Il disegno è cambiato mentre sceglievi che cosa esportare: riapri «Esporta…» per vederlo com’è adesso.",
+      tone: "guasto",
+    });
+  });
+
+  it("in Lettura la selezione non si vede, e non si offre", async () => {
+    const mountFresh = await fresh(createFakeHost({ settings: [level("standard")] }));
+    const surface = mountFresh(parent);
+    await settle();
+    key(parent, { key: "a", ctrlKey: true });
+    surface.setMode!("read");
+    const answer = surface.exportWindow!.open();
+    await settle();
+    const labels = [...dialog()!.querySelectorAll("label.draw-export-option")].map((each) => each.textContent);
+    expect(labels).toContain("Il disegno intero");
+    expect(labels.some((label) => label!.startsWith("La selezione"))).toBe(false);
+    cancel();
+    expect(await answer).toBeNull();
+  });
+});
