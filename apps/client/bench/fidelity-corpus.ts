@@ -1,24 +1,39 @@
 // Il corpus del banco di fedeltà: scene piccole che insieme toccano ogni
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
 // dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, le
-// risorse di ogni tipo, e gli estranei tipici di Inkscape, Illustrator e
-// Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa.
+// risorse di ogni tipo, le tavole con le loro carte, e gli estranei tipici
+// di Inkscape, Illustrator e Mermaid. Ogni scena è un disegno intero, grande
+// quanto la sua resa; quella che mostra una tavola sola è più grande, e la
+// sua tavola è grande quanto la resa.
 
 /// La misura di ogni scena, in pixel CSS.
 export const FIDELITY_SIZE = { width: 240, height: 160 } as const;
 
-const HEAD = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1"'
+/// La radice di un disegno di `width` × `height`.
+const root = (width: number, height: number): string => '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1"'
   + ' xmlns:xlink="http://www.w3.org/1999/xlink" fub:version="1"'
-  + ` width="${FIDELITY_SIZE.width}" height="${FIDELITY_SIZE.height}" viewBox="0 0 ${FIDELITY_SIZE.width} ${FIDELITY_SIZE.height}">`;
+  + ` width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+const HEAD = root(FIDELITY_SIZE.width, FIDELITY_SIZE.height);
 const LAYER = '<g id="l1" fub:layer="Livello 1">';
 const scene = (body: string, head = HEAD): string => `${head}${body}</svg>`;
 
 /// Un PNG di 8 × 8 a scacchi, rosso e blu.
 const CHECKER = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAH0lEQVR4nGO4Y6MBRBoVJ4AImc2AUwJTCMLGLUEHOwA5N1UBvmzgIgAAAABJRU5ErkJggg==";
 
+/// La tavola `id`, che si chiama `name`, sul rettangolo `x y w h`.
+const board = (id: string, name: string, rect: string): string => `<view id="${id}" fub:role="board" viewBox="${rect}"><title>${name}</title></view>`;
+
+/// La carta `id` della tavola `of`, sul suo rettangolo, col colore `fill`.
+const paper = (id: string, of: string, [x, y, width, height]: readonly number[], fill: string): string =>
+  `<rect id="${id}" fub:role="paper" fub:board="${of}" x="${x}" y="${y}" width="${width}" height="${height}" fill="${fill}"/>`;
+
 export interface FidelityScene {
   readonly id: string;
   readonly text: string;
+  /// Il nome della tavola che la scena mostra da sola: il foglio la guarda
+  /// al 100%, la Lettura e l'export sono quelli del suo embed,
+  /// `![[disegno#nome]]`. Senza, la scena mostra il disegno intero.
+  readonly board?: string;
 }
 
 export const FIDELITY: readonly FidelityScene[] = [
@@ -119,6 +134,35 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<rect id="o4" x="140" y="68" width="84" height="56" fill="url(#r3) #2f855a" clip-path="url(#r5)"/>'
       + '<rect id="o5" x="10" y="108" width="110" height="40" fill="#c53030" mask="url(#r7)"/>'
       + '<text id="o6" x="140" y="148" font-family="Inter" font-size="18" font-weight="700" fill="url(#r1) #2b6cb0" filter="url(#r9)"><tspan x="140" dy="0">Risorse</tspan></text></g>'),
+  },
+  {
+    // Tre tavole: due con la carta, bianca e azzurra, una senza, che mostra
+    // il fondo. Le forme stanno sulle tavole, il testo su quella senza carta,
+    // e un rettangolo passa sopra lo spazio fra le prime due.
+    id: "tavole",
+    text: scene(paper("c1", "b1", [8, 8, 104, 72], "#ffffff") + paper("c2", "b2", [128, 8, 104, 72], "#bee3f8")
+      + board("b1", "Copertina", "8 8 104 72") + board("b2", "Evaporazione", "128 8 104 72") + board("b3", "Senza carta", "8 96 224 56")
+      + `${LAYER}<rect id="v1" x="20" y="20" width="44" height="30" fill="#2b6cb0" stroke="#1a202c" stroke-width="2"/>`
+      + '<ellipse id="v2" cx="84" cy="62" rx="18" ry="11" fill="none" stroke="#c53030" stroke-width="3"/>'
+      + '<path id="v3" d="M 140 68 C 160 22 192 72 222 26" fill="none" stroke="#2f855a" stroke-width="3" stroke-linecap="round"/>'
+      + '<rect id="v4" x="96" y="30" width="48" height="22" rx="6" fill="#f6ad55" fill-opacity="0.85" stroke="#1a202c"/>'
+      + '<text id="v5" x="20" y="132" font-family="Inter" font-size="20" fill="#1a202c"><tspan x="20" dy="0">Tre tavole</tspan></text>'
+      + '<line id="v6" x1="150" y1="110" x2="220" y2="140" stroke="#9f7aea" stroke-width="4" stroke-linecap="round"/></g>'),
+  },
+  {
+    // La seconda di due tavole, da sola come la incorpora una nota: il
+    // rettangolo che viene dalla prima e la forma che esce in basso si
+    // tagliano sul bordo, e ciò che sta sulla prima non si vede.
+    id: "tavola-sola",
+    board: "Evaporazione",
+    text: scene(paper("c1", "b1", [0, 20, 240, 160], "#ffffff") + paper("c2", "b2", [280, 20, 240, 160], "#bee3f8")
+      + board("b1", "Copertina", "0 20 240 160") + board("b2", "Evaporazione", "280 20 240 160")
+      + `${LAYER}<ellipse id="w1" cx="120" cy="100" rx="70" ry="50" fill="#c53030"/>`
+      + '<rect id="w2" x="200" y="60" width="120" height="40" fill="#2b6cb0" stroke="#1a202c" stroke-width="3"/>'
+      + '<path id="w3" d="M 300 160 C 340 90 400 200 500 120" fill="none" stroke="#2f855a" stroke-width="4"/>'
+      + '<ellipse id="w4" cx="470" cy="170" rx="40" ry="24" fill="#f6ad55" stroke="#744210" stroke-width="2"/>'
+      + '<text id="w5" x="400" y="56" font-family="Literata" font-size="22" text-anchor="middle" fill="#1a202c"><tspan x="400" dy="0">Evaporazione</tspan></text></g>',
+    root(520, 200)),
   },
   {
     id: "inkscape",

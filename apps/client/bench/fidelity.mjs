@@ -10,6 +10,7 @@
 // sempre un errore, qualunque sia il sistema. Prima del corpus il banco
 // prova sé stesso: una differenza messa apposta in una strada sola, un
 // colore, un carattere, un corsivo, un tratteggio, le risorse che mancano,
+// le carte delle tavole che mancano, una tavola mostrata senza ritaglio,
 // deve farlo diventare rosso.
 //
 // # La soglia
@@ -49,6 +50,8 @@ const PLANTED = [
   ["tipografia", "corsivo"],
   ["tratteggi", "tratteggio"],
   ["risorse", "ripiego"],
+  ["tavole", "carta"],
+  ["tavola-sola", "ritaglio"],
 ];
 const ROADS = ["read", "export"];
 const out = join(OUTPUT, "fidelity");
