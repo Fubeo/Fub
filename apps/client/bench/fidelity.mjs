@@ -21,6 +21,14 @@
 // Chromium le tre strade danno oggi gli stessi pixel su ogni scena, e la più
 // piccola delle differenze messe apposta, il tratteggio tolto, ne cambia il
 // 3%: lo 0,2% sta largo fra le due, e lascia posto a un altro browser.
+//
+// # Gli a capo
+//
+// Dopo il corpus, la prova degli a capo (`wrap-check.ts`): gli a capo che
+// FubDraw scrive in un testo in area, in italiano e in inglese, sono quelli
+// che il browser farebbe con le larghezze che disegna. Anche lei prova prima
+// sé stessa: con gli a capo della stima, che non conosce i caratteri, deve
+// diventare rossa.
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -93,6 +101,28 @@ try {
       }
     }
   }
+
+  const wrapCases = async (variant) => {
+    await page.goto(`${base}/bench/fidelity.html?wrap=check${variant ? `&variant=${variant}` : ""}`);
+    await page.waitForFunction(() => document.documentElement.dataset.fidelity !== undefined, null, { timeout: 60_000 });
+    const [state, error, wrap] = await page.evaluate(() => [document.documentElement.dataset.fidelity, document.documentElement.dataset.error, document.documentElement.dataset.wrap]);
+    if (state !== "ready") throw new Error(`a capo: ${error}`);
+    return JSON.parse(wrap);
+  };
+  const planted = (await wrapCases("stima")).filter((item) => !item.ok).length;
+  console.log(`${planted > 0 ? "ok  " : "NO  "} a capo con la stima: ${planted} paragrafi diversi`);
+  if (planted === 0) failed = true;
+  const cases = await wrapCases(null);
+  const units = (value) => value.toFixed(2);
+  for (const item of cases) {
+    if (item.ok) continue;
+    failed = true;
+    console.log(`NO   a capo, ${item.name}: fuori di ${units(item.over)}, dentro di ${units(item.under)}, scarto ${units(item.drift)} in «${item.worst}»`);
+  }
+  const lines = cases.reduce((sum, item) => sum + item.lines, 0);
+  const worst = (key) => units(Math.max(...cases.map((item) => item[key])));
+  const good = cases.every((item) => item.ok);
+  console.log(`${good ? "ok  " : "NO  "} a capo IT/EN: ${cases.length} paragrafi, ${lines} righe; fuori al più di ${worst("over")}, scarto al più ${worst("drift")}`);
 } finally {
   await close();
 }

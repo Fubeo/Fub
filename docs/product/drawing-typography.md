@@ -250,7 +250,10 @@ che i suoi testi nominano, e il corsivo soltanto se un testo lo chiede: tutti
 e sei i file insieme stanno sotto i 384 KB. Il banco di fedeltà
 (`apps/client/bench/fidelity.mjs`) confronta pixel per pixel il foglio, la
 Lettura e il PNG anche su righe con pezzi, corsivi, spaziatura e
-decorazioni, e prova di vedere un corsivo che manca.
+decorazioni, su testi in area e su tracciato, e prova di vedere un corsivo
+che manca. Prova anche gli a capo, in italiano e in inglese, in ogni
+carattere dell'app, con pezzi e spaziatura: ogni riga che FubDraw scrive sta
+nel riquadro come la disegna il browser, ed è la più lunga che ci sta.
 
 ## Il file
 

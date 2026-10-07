@@ -94,6 +94,32 @@ describe("la misura del browser", () => {
     expect(calls).toHaveLength(3);
   });
 
+  it("con la spaziatura, dove il canvas la mette, la mette lui: come SVG spegne le legature", () => {
+    const calls: string[] = [];
+    class Context {
+      font = "10px sans-serif";
+      letterSpacing = "0px";
+      measureText(text: string): { width: number } {
+        calls.push(`${this.letterSpacing}|${text}`);
+        // «fi» è una legatura larga quanto una lettera, senza spaziatura.
+        const letters = this.letterSpacing === "0px" ? text.replace("fi", "f").length : text.length;
+        return { width: letters * 50 + text.length * parseFloat(this.letterSpacing) };
+      }
+    }
+    vi.stubGlobal("OffscreenCanvas", class {
+      getContext(): Context {
+        return new Context();
+      }
+    });
+    const measure = browserMeasure()!;
+    expect(measure("fine", INTER)).toBeCloseTo(15);
+    // A corpo 10 la spaziatura 2 è 20 pixel a 100: dopo ogni lettera, senza
+    // legatura.
+    expect(measure("fine", { ...INTER, spacing: 2 })).toBeCloseTo(28);
+    expect(measure("fine", { ...INTER, spacing: 2 })).toBeCloseTo(28);
+    expect(calls).toEqual(["0px|fine", "20px|fine"]);
+  });
+
   it("un carattere che il browser non legge si stima", () => {
     fakeCanvas();
     const measure = browserMeasure()!;

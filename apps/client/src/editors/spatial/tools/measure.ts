@@ -7,7 +7,9 @@
 //   non c'è, o che non è ancora arrivato, si misura col suo ripiego, come lo
 //   disegnerebbe il browser in quel momento.
 // - **La spaziatura delle lettere** si aggiunge dopo ogni carattere, un
-//   grafema alla volta, come la applica SVG.
+//   grafema alla volta, come la applica SVG. Dove il canvas la sa mettere,
+//   la mette lui: come SVG, con la spaziatura spegne le legature, e la «Th»
+//   di Literata torna due lettere.
 // - **Dove il browser non misura**, come nelle prove, ogni carattere è largo
 //   0,6 volte il corpo: la stima del campo e del colpo.
 
@@ -76,15 +78,21 @@ export function browserMeasure(): Measure | null {
   }
   if (context === null) return null;
   const ctx = context;
+  const spaces = "letterSpacing" in ctx;
   const caches = new Map<string, Map<string, number>>();
-  /// La larghezza a [`PROBE_SIZE`] pixel; `null` se il browser non legge il
-  /// carattere.
+  /// La spaziatura che il canvas mette a [`PROBE_SIZE`] pixel: zero dove non
+  /// la sa mettere.
+  const spacedBy = (font: Font): number => (spaces && font.spacing !== 0 ? (font.spacing * PROBE_SIZE) / font.size : 0);
+  /// La larghezza a [`PROBE_SIZE`] pixel, con la spaziatura se il canvas la
+  /// mette; `null` se il browser non legge il carattere.
   const probe = (text: string, font: Font): number | null => {
     const css = cssFont(font, PROBE_SIZE);
-    let cache = caches.get(css);
+    const spaced = spacedBy(font);
+    const key = spaced === 0 ? css : `${css}|${spaced}`;
+    let cache = caches.get(key);
     if (cache === undefined) {
       cache = new Map();
-      caches.set(css, cache);
+      caches.set(key, cache);
     }
     const known = cache.get(text);
     if (known !== undefined) return known;
@@ -94,7 +102,9 @@ export function browserMeasure(): Measure | null {
     const before = ctx.font;
     ctx.font = css;
     if (ctx.font === before) return null;
+    if (spaced !== 0) ctx.letterSpacing = `${spaced}px`;
     const width = ctx.measureText(text).width;
+    if (spaced !== 0) ctx.letterSpacing = "0px";
     // Un carattere che sta ancora arrivando si misura col ripiego, e la
     // misura non si ricorda: quella dopo sarà col carattere vero.
     if (!arrived(css)) return width;
@@ -106,7 +116,8 @@ export function browserMeasure(): Measure | null {
     if (text === "" || font.size <= 0) return 0;
     const width = probe(text, font);
     if (width === null) return estimate(text, font);
-    return (width * font.size) / PROBE_SIZE + graphemes(text).length * font.spacing;
+    const after = spacedBy(font) === 0 ? graphemes(text).length * font.spacing : 0;
+    return (width * font.size) / PROBE_SIZE + after;
   };
 }
 

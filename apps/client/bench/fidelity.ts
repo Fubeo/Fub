@@ -9,6 +9,10 @@
 // i soli corsivi, che il browser fa allora inclinando il tondo, `tratteggio`
 // toglie i tratteggi all'export, `ripiego` toglie le risorse alla Lettura,
 // che mostra allora i colori di ripiego.
+//
+// `?wrap=check` prova invece gli a capo dei testi in area contro il browser
+// (`wrap-check.ts`), e ne mette gli esiti in `data-wrap`; con
+// `&variant=stima` gli a capo li misura la stima, e la prova deve vederlo.
 
 // Gli strati del foglio stanno uno sopra l'altro con le regole del tema, come
 // nell'app.
@@ -18,9 +22,11 @@ import { createSvgPainter } from "../src/editors/spatial/painter/svg-dom";
 import { appFonts, selfContained, type FontSheets } from "../src/editors/spatial/picture";
 import { SceneEngine } from "../src/editors/spatial/scene/engine";
 import { rasterize } from "../src/editors/spatial/tools/png";
+import { estimate } from "../src/editors/spatial/tools/measure";
 import { ensureTextFont, FONT_FILES } from "../src/editors/spatial/tools/text";
 import { openLifetime } from "../src/ui/lifetime";
 import { FIDELITY } from "./fidelity-corpus";
+import { wrapCases } from "./wrap-check";
 
 const params = new URLSearchParams(location.search);
 const found = FIDELITY.find((scene) => scene.id === params.get("scene"));
@@ -45,9 +51,15 @@ async function picture(id: string, blob: Blob): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  if (found === undefined) return;
+  const wrap = params.get("wrap") === "check";
+  if (found === undefined && !wrap) return;
   ensureTextFont();
   await Promise.all(FONT_FILES.map(([family, , , style]) => document.fonts.load(`${style} 16px "${family}"`)));
+  if (wrap) {
+    document.documentElement.dataset.wrap = JSON.stringify(variant === "stima" ? wrapCases(estimate) : wrapCases());
+    return;
+  }
+  if (found === undefined) return;
   await appFonts.load(found.text);
 
   const host = document.getElementById("surface")!;

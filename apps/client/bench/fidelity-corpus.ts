@@ -54,6 +54,31 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<text id="t7" x="228" y="140" fill="#2f855a" font-family="JetBrains Mono, monospace" font-size="16" font-weight="300" font-style="italic" letter-spacing="-0.5" text-anchor="end">{ corsivo: 1 }</text></g>'),
   },
   {
+    // Un testo in area allineato a sinistra, con un pezzo e una parola
+    // spezzata, e uno allineato a destra, in corsivo.
+    id: "in-area",
+    text: scene(`${LAYER}<text id="t8" fub:wrap="150" x="12" y="26" fill="#1a202c" font-family="Inter, sans-serif" font-size="15">`
+      + '<tspan x="12" dy="0">L’acqua del mare sale</tspan>'
+      + '<tspan fub:join="space" x="12" dy="19">in <tspan font-weight="bold" fill="#2b6cb0">cielo</tspan> e torna giù,</tspan>'
+      + '<tspan fub:join="space" x="12" dy="19">precipitevolissimevol</tspan>'
+      + '<tspan fub:join="word" x="12" dy="19">mente.</tspan></text>'
+      + '<text id="t9" fub:wrap="96" x="228" y="112" fill="#c53030" font-family="Literata, serif" font-size="14" font-style="italic" text-anchor="end">'
+      + '<tspan x="228" dy="0">The quick brown</tspan>'
+      + '<tspan fub:join="space" x="228" dy="18">fox jumps over</tspan>'
+      + '<tspan fub:join="space" x="228" dy="18" letter-spacing="0.5">the lazy dog.</tspan></text></g>'),
+  },
+  {
+    // Un testo su una curva, al centro, con un pezzo; uno su una linea,
+    // spaziato, con `xlink:href`.
+    id: "su-tracciato",
+    text: scene('<defs id="fub-defs"><path id="rp1a2b3c4" fub:role="private" d="M 16 130 C 60 20 180 20 224 130"/>'
+      + `<path id="rp5e6f7g8" fub:role="private" d="M 20 150 L 220 150"/></defs>${LAYER}`
+      + '<text id="t10" fill="#2b6cb0" font-family="Literata, serif" font-size="18" text-anchor="middle">'
+      + '<textPath startOffset="50%" href="#rp1a2b3c4">Sopra <tspan font-weight="bold" fill="#c53030">la</tspan> collina</textPath></text>'
+      + '<text id="t11" fill="#2f855a" font-family="JetBrains Mono, monospace" font-size="12" font-style="italic" letter-spacing="1">'
+      + '<textPath startOffset="12" xlink:href="#rp5e6f7g8">along the line</textPath></text></g>'),
+  },
+  {
     id: "gruppi",
     text: scene(`${LAYER}<g id="g1" transform="translate(60 80) rotate(-20) scale(1.2)">`
       + '<polygon id="q1" points="0,-40 38,-12 24,32 -24,32 -38,-12" fill="#ecc94b" stroke="#744210" stroke-width="2" stroke-opacity="0.5"/>'
