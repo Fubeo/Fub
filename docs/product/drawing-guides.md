@@ -31,7 +31,8 @@ entrano nel file del [disegno](drawing.md)
   col suo nodo.
 - Con la penna di **Bézier**, il nodo nuovo e la maniglia che si tira si
   fermano in linea con gli oggetti, con la pagina e coi nodi già posati, anche
-  prima del tocco, nel segmento che verrebbe.
+  prima del tocco, nel segmento che verrebbe; con la Curvatura, il punto che
+  si posa o si trascina, anche su un tracciato scelto.
 
 Anche le guide tirate dai righelli sono bersagli, finché si vedono, e
 agganciano pure con le guide intelligenti spente: [Disegni, righelli e

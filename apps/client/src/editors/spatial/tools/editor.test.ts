@@ -3378,9 +3378,12 @@ describe("da tastiera", () => {
       "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
+      "Tracciato · dal livello Esperto",
       "Nodi · dal livello Esperto",
       "Costruttore di forme · dal livello Esperto",
+      "Forbici · dal livello Esperto",
       "Bézier · dal livello Esperto",
+      "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
@@ -3442,8 +3445,9 @@ describe("da tastiera", () => {
       rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
     }));
     expect(tables).toEqual([
-      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["M", "Costruttore di forme"], ["B", "Bézier"]] },
+      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["M", "Costruttore di forme"], ["C", "Forbici"], ["B", "Bézier"]] },
       { caption: "Disponi · dal livello Esperto", rows: [["Ctrl+Shift+M", "Trasforma…"]] },
+      { caption: "Tracciato · dal livello Esperto", rows: [["Ctrl+J", "Unisce i capi più vicini dei tracciati aperti scelti; un tracciato solo si chiude"]] },
       {
         caption: "Nodi · dal livello Esperto",
         rows: [
@@ -3460,7 +3464,7 @@ describe("da tastiera", () => {
           ["Shift+L", "Segmenti in linee"],
           ["Shift+U", "Segmenti in curve"],
           ["Shift+B", "Spezza ai nodi"],
-          ["Shift+J", "Unisci i capi"],
+          ["Shift+J o Ctrl+J", "Unisci i capi"],
           ["Alt", "Tenuto, un nodo trascinato tira fuori le sue maniglie, e una maniglia trascinata si sposta da sola"],
           ["Esc", "Toglie la scelta dei nodi, poi quella dell’oggetto"],
           ["Alt+F10", "Va alla barra dei nodi"],
@@ -3480,12 +3484,29 @@ describe("da tastiera", () => {
         ],
       },
       {
+        caption: "Forbici · dal livello Esperto",
+        rows: [
+          ["Space", "Taglia dove è il cursore: Spazio e di nuovo Spazio. Spazio, le frecce e Spazio tirano il Coltello"],
+          ["Alt", "Tenuto, il Coltello taglia dritto"],
+        ],
+      },
+      {
         caption: "Bézier · dal livello Esperto",
         rows: [
           ["Space", "Un nodo dove è il cursore: Spazio e di nuovo Spazio per uno spigolo, o in mezzo le frecce per tirarne le maniglie"],
           ["Shift", "Tenuto, porta il nodo o la maniglia a passi di 15°"],
           ["Enter o Esc", "Conclude il tracciato"],
           ["Del", "Elimina l’ultimo nodo"],
+        ],
+      },
+      {
+        caption: "Curvatura · dal livello Esperto",
+        rows: [
+          ["B", "Premuto di nuovo, passa dalla penna alla Curvatura e ritorno"],
+          ["Space", "Un punto liscio dove è il cursore: Spazio e di nuovo Spazio. Su un punto in mezzo lo fa liscio o spigolo"],
+          ["Shift+C", "Il punto sotto il cursore, o l’ultimo, diventa uno spigolo"],
+          ["Shift+S", "Il punto sotto il cursore, o l’ultimo, diventa liscio"],
+          ["Alt", "Tenuto mentre si tocca, il punto nuovo è uno spigolo"],
         ],
       },
       {
@@ -5226,12 +5247,14 @@ describe("il menu Tracciato, dal livello Esperto", () => {
     expect(pathButton().getAttribute("aria-expanded")).toBe("true");
     const noStroke = "Fra gli oggetti scelti non c’è una forma col contorno.";
     const noInk = "Fra gli oggetti scelti non c’è un tratto a penna.";
+    const noOpen = "Fra gli oggetti scelti non c’è un tracciato aperto.";
     expect(entries()).toEqual([
       ["Oggetto in tracciato", false, null],
       ["Contorno in tracciato", true, noStroke],
       ["Inchiostro in tracciato", true, noInk],
       ["Scostamento…", false, null],
       ["Semplifica…", false, null],
+      ["Unisci", true, noOpen],
     ]);
     expect(formatIssues(checkAccessibility(host))).toBe("");
     closeMenus();
@@ -5243,6 +5266,7 @@ describe("il menu Tracciato, dal livello Esperto", () => {
       ["Inchiostro in tracciato", true, noInk],
       ["Scostamento…", false, null],
       ["Semplifica…", false, null],
+      ["Unisci", false, null],
     ]);
     closeMenus();
     editor.select([T]);
@@ -5254,6 +5278,7 @@ describe("il menu Tracciato, dal livello Esperto", () => {
       ["Inchiostro in tracciato", true, noInk],
       ["Scostamento…", true, noShape],
       ["Semplifica…", true, noShape],
+      ["Unisci", true, noOpen],
     ]);
     item("Scostamento…").click();
     expect(bar().hidden).toBe(true);
@@ -6048,6 +6073,8 @@ describe("i nodi, dal livello Esperto", () => {
       "Allinea in alto",
       "Allinea in mezzo",
       "Allinea in basso",
+      "Distribuisci orizzontalmente",
+      "Distribuisci verticalmente",
     ]);
     entries[1]!.click();
     expect(editor.engine.text).toContain(`<line id="${L}" x1="10" y1="10" x2="55" y2="20" stroke="#000000" stroke-width="2"/>`);
@@ -6061,6 +6088,36 @@ describe("i nodi, dal livello Esperto", () => {
     expect(spoken()).toBe("Annullato: Allineamento di nodi.");
     expect(editor.engine.text).toContain(LINES);
     for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
+  });
+
+  it("«Distribuisci» spazia i nodi scelti fra il primo e l'ultimo, che restano, e chiede almeno tre nodi", () => {
+    const ZIGZAG = doc(`${LAYER}<path id="${P}" d="M0 0 L10 30 L50 10 L60 40" fill="none" stroke="#000000" stroke-width="2"/></g>`);
+    editing(ZIGZAG);
+    const menu = (): HTMLElement[] => {
+      command("Allinea i nodi").click();
+      return [...[...document.querySelectorAll<HTMLElement>(".context-menu")].pop()!.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    };
+    const entry = (label: string): HTMLElement => menu().find((each) => each.querySelector(".menu-label")!.textContent === label)!;
+    tap(10, 30);
+    tap(50, 10, { shiftKey: true });
+    const few = entry("Distribuisci orizzontalmente");
+    expect(few.getAttribute("aria-disabled")).toBe("true");
+    expect(few.querySelector(".menu-description")!.textContent).toBe("Servono almeno tre nodi scelti.");
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+    key("a", { ctrlKey: true });
+    expect(spoken()).toBe("4 nodi scelti.");
+    entry("Distribuisci orizzontalmente").click();
+    expect(d()).toBe("M0 0 L20 30 L40 10 L60 40");
+    expect(spoken()).toBe("4 nodi distribuiti.");
+    // In verticale, nell'ordine dell'altezza: 0, 10, 30 e 40 diventano 0,
+    // 13.33, 26.67 e 40.
+    entry("Distribuisci verticalmente").click();
+    expect(d()).toBe("M0 0 L20 26.67 L40 13.33 L60 40");
+    expect(changes).toHaveLength(2);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Distribuzione di nodi.");
+    expect(d()).toBe("M0 0 L20 30 L40 10 L60 40");
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
   });
 
   it("con Maiusc si aggiungono i nodi di un altro oggetto, che si trascinano insieme; Ctrl+A sceglie le forme, poi il disegno", () => {
@@ -6695,6 +6752,288 @@ describe("il Costruttore di forme, dal livello Esperto", () => {
   });
 });
 
+describe("le Forbici e il Coltello, dal livello Esperto", () => {
+  const A = "oa9a9a9a9";
+  const L = "ol9l9l9l9";
+  const F = "of9f9f9f9";
+  const T = "ot9t9t9t9";
+  const RECT = `<rect id="${A}" x="0" y="0" width="100" height="50" fill="#d55e00"/>`;
+  const LINE = `<line id="${L}" x1="200" y1="20" x2="300" y2="20" stroke="#000000" stroke-width="2"/>`;
+  const ARROW = `<path id="${F}" fub:shape="arrow" fub:geom="300 300 400 300" d="${arrowPath(300, 300, 400, 300, 2)}" fill="none" stroke="#000000" stroke-width="2"/>`;
+  const TEXT = `<text id="${T}" x="0" y="200"><tspan x="0" dy="0">Ciao</tspan></text>`;
+  const SHAPES = doc(`${LAYER}${RECT}${LINE}${ARROW}${TEXT}</g>`);
+  /// Il `d` del tracciato `id`, com'è adesso.
+  const d = (id: string): string | null => new RegExp(`<path id="${id}" d="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
+  /// Gli id dei tracciati del disegno, in ordine.
+  const paths = (): string[] => [...editor.engine.text.matchAll(/<path id="([^"]+)"/g)].map((found) => found[1]!);
+  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
+  const scissorsTool = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-tool[aria-label="Forbici"]')!;
+
+  /// Il disegno `source`, con le Forbici e niente di scelto.
+  const cutting = (source = SHAPES): void => {
+    mount(source, { level: "expert" });
+    editor.focus();
+    key("c");
+  };
+
+  it("c'è solo all'Esperto, col tasto C", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.focus();
+    expect(scissorsTool().hidden).toBe(true);
+    key("c");
+    expect(editor.tool).not.toBe("scissors");
+    editor.setLevel("expert");
+    expect(scissorsTool().hidden).toBe(false);
+    expect(scissorsTool().title).toBe("Forbici (C)");
+    key("c");
+    expect(editor.tool).toBe("scissors");
+    expect(surface().dataset.tool).toBe("scissors");
+    expect(spoken()).toBe("Strumento: Forbici.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    expect(changes).toEqual([]);
+  });
+
+  it("un tocco sul contorno di una linea la taglia in due oggetti, scelti, in un passo che si annulla", () => {
+    cutting();
+    tap(250, 21);
+    const [, piece] = paths().filter((id) => id !== F);
+    expect(d(L)).toBe("M200 20 L250 20");
+    expect(d(piece!)).toBe("M250 20 L300 20");
+    // Il secondo pezzo sta sopra il primo, col suo aspetto.
+    expect(editor.engine.text).toContain(`<path id="${L}" d="M200 20 L250 20" stroke="#000000" stroke-width="2"/>\n<path id="${piece}" d="M250 20 L300 20" stroke="#000000" stroke-width="2"/>`);
+    expect(editor.selection).toEqual([L, piece]);
+    expect(spoken()).toBe("Tracciato tagliato in 2 pezzi.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Taglio con le Forbici.");
+    // Su un capo non c'è niente da tagliare.
+    tap(200, 20);
+    expect(spoken()).toBe("È un capo del tracciato: lì non c’è niente da tagliare.");
+    expect(changes).toHaveLength(2);
+  });
+
+  it("una forma chiusa tagliata si apre nel punto, e di nuovo si divide; tagliata in un nodo, si apre lì", () => {
+    cutting();
+    tap(101, 25);
+    expect(d(A)).toBe("M100 25 L100 50 L0 50 L0 0 L100 0 L100 25");
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M100 25 L100 50 L0 50 L0 0 L100 0 L100 25" fill="#d55e00"/>`);
+    expect(editor.selection).toEqual([A]);
+    expect(spoken()).toBe("Tracciato aperto nel punto tagliato.");
+    tap(50, 50);
+    expect(d(A)).toBe("M100 25 L100 50 L50 50");
+    expect(spoken()).toBe("Tracciato tagliato in 2 pezzi.");
+    expect(editor.selection).toHaveLength(2);
+    expect(d(editor.selection[1]!)).toBe("M50 50 L0 50 L0 0 L100 0 L100 25");
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    // Vicino a un nodo, si taglia nel nodo.
+    tap(98, 2);
+    expect(d(A)).toBe("M100 0 L100 50 L0 50 L0 0 L100 0");
+  });
+
+  it("dove non si taglia lo dice: fuori dal contorno, una freccia, un testo", () => {
+    cutting();
+    tap(50, 25);
+    expect(spoken()).toBe("Le Forbici tagliano sul contorno: tocca il bordo di un tracciato o di una forma, o un suo nodo.");
+    tap(350, 300);
+    expect(spoken()).toBe("Una freccia non si taglia: prima «Oggetto in tracciato».");
+    tap(10, 195);
+    expect(spoken()).toBe("Un testo non ha nodi: si modifica scrivendo.");
+    expect(changes).toEqual([]);
+  });
+
+  it("il puntatore sopra un contorno mostra dove si taglia", () => {
+    const layer = recording();
+    cutting();
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 250, clientY: 22, timeStamp: (clock += 8) }));
+    layer.frame();
+    // Il contorno della linea, e la croce dove taglia.
+    const drawn = layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo").map(([, x, y]) => `${Math.round(x as number)},${Math.round(y as number)}`);
+    expect(drawn).toEqual(expect.arrayContaining(["200,20", "300,20", "247,17", "253,23", "253,17", "247,23"]));
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 150, clientY: 150, timeStamp: (clock += 8) }));
+    layer.frame();
+    expect(layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo")).toEqual([]);
+  });
+
+  it("trascinato è il Coltello: divide la forma che attraversa da parte a parte, e taglia la linea dove la incrocia", () => {
+    cutting();
+    drag([[50, -20], [52, 10], [50, 40], [50, 70]]);
+    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
+    // Il tratto è la scia del trascinamento; i due pezzi chiusi sono scelti,
+    // il primo col posto e l'id del rettangolo.
+    const [, piece] = editor.selection;
+    expect(editor.selection).toEqual([A, piece]);
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L51.33 0 L52 10 L50 40 L50 50 L0 50 Z" fill="#d55e00"/>`);
+    expect(editor.engine.text).toContain(`<path id="${piece}" d="M100 0 L100 50 L50 50 L50 40 L52 10 L51.33 0 Z" fill="#d55e00"/>`);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Taglio col Coltello.");
+    // Con Alt il taglio è dritto, dal primo punto all'ultimo.
+    editor.select([]);
+    drag([[250, 0], [290, 20], [250, 40]], { altKey: true });
+    expect(d(L)).toBe("M200 20 L250 20");
+    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
+  });
+
+  it("il Coltello che entra e non esce non taglia, e dice che cosa resta intero", () => {
+    cutting();
+    drag([[50, -20], [50, 25]]);
+    expect(spoken()).toBe("Il Coltello non ha tagliato niente: una forma chiusa si divide quando il tratto la attraversa da parte a parte.");
+    drag([[350, 280], [350, 320]]);
+    expect(spoken()).toBe("Il Coltello non ha tagliato niente: una forma chiusa si divide quando il tratto la attraversa da parte a parte. 1 oggetto attraversato resta intero: frecce, tratti a penna, testi, immagini e parti di altri programmi non si tagliano.");
+    expect(changes).toEqual([]);
+  });
+
+  it("con una selezione, il Coltello taglia soltanto gli oggetti scelti", () => {
+    const B = "ob9b9b9b9";
+    const TWO = doc(`${LAYER}${RECT}<rect id="${B}" x="0" y="100" width="100" height="50" fill="#0072b2"/></g>`);
+    cutting(TWO);
+    editor.select([B]);
+    drag([[50, -20], [50, 200]]);
+    expect(editor.engine.text).toContain(RECT);
+    expect(editor.engine.text).not.toContain(`<rect id="${B}"`);
+    expect(editor.selection).toHaveLength(2);
+    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
+  });
+
+  it("dalla tastiera: il cursore dice dove taglierebbe, Spazio e Spazio tagliano, Spazio e le frecce tirano il Coltello", () => {
+    const K = "ok9k9k9k9";
+    const BOX = doc(`${LAYER}<rect id="${K}" x="150" y="100" width="100" height="100" fill="#009e73"/></g>`);
+    cutting(BOX);
+    size(400, 300);
+    key("ArrowRight", { shiftKey: true });
+    expect(spoken()).toBe("x 250, y 150: Contorno di Rettangolo, Verde, Spazio taglia qui");
+    key(" ");
+    key(" ");
+    expect(d(K)).toBe("M250 150 L250 200 L150 200 L150 100 L250 100 L250 150");
+    expect(spoken()).toBe("Tracciato aperto nel punto tagliato.");
+    editor.undo();
+    editor.select([]);
+    key("ArrowLeft", { shiftKey: true });
+    key("ArrowUp", { shiftKey: true });
+    key("ArrowUp", { shiftKey: true });
+    expect(spoken()).toBe("x 200, y 50");
+    key(" ");
+    for (let i = 0; i < 4; i++) key("ArrowDown", { shiftKey: true });
+    key(" ");
+    expect(spoken()).toBe("1 oggetto tagliato in 2 pezzi.");
+    expect(editor.selection).toHaveLength(2);
+    expect(editor.engine.text).not.toContain("<rect");
+    // Esc a metà lascia il disegno com'era.
+    const cut = editor.engine.text;
+    key(" ");
+    key("ArrowUp", { shiftKey: true });
+    key("Escape");
+    expect(editor.engine.text).toBe(cut);
+    expect(changes).toHaveLength(3);
+  });
+});
+
+describe("«Unisci», dal livello Esperto", () => {
+  const A = "oa0a0a0a0";
+  const B = "ob0b0b0b0";
+  const R = "or0r0r0r0";
+  const T = "ot0t0t0t0";
+  const FIRST = `<line id="${A}" x1="0" y1="0" x2="50" y2="0" stroke="#000000" stroke-width="2"/>`;
+  const SECOND = `<path id="${B}" d="M50 50 L50 0.5" fill="none" stroke="#0072b2" stroke-width="2"/>`;
+  const RECT = `<rect id="${R}" x="200" y="200" width="20" height="20" fill="#000000"/>`;
+  const TEXT = `<text id="${T}" x="0" y="200"><tspan x="0" dy="0">Ciao</tspan></text>`;
+  const SHAPES = doc(`${LAYER}${FIRST}${SECOND}${RECT}${TEXT}</g>`);
+  const d = (id: string): string | null => new RegExp(`<path id="${id}" d="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
+  const pathButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Tracciato"]')!;
+
+  afterEach(() => {
+    for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
+  });
+
+  it("Ctrl+J unisce i capi che si toccano in un tracciato solo, il più in basso, in un passo che si annulla", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([B, A]);
+    editor.focus();
+    key("j", { ctrlKey: true });
+    expect(d(A)).toBe("M0 0 L50 0.25 L50 50");
+    expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L50 0.25 L50 50" stroke="#000000" stroke-width="2"/>`);
+    expect(editor.engine.text).not.toContain(B);
+    expect(editor.selection).toEqual([A]);
+    expect(spoken()).toBe("Tracciati uniti: ora sono uno solo.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Unione di tracciati.");
+  });
+
+  it("un tracciato solo si chiude; capi lontani, una linea li unisce", () => {
+    const OPEN = doc(`${LAYER}<path id="${B}" d="M0 0 L50 0 L50 50" fill="none" stroke="#000000" stroke-width="2"/><line id="${A}" x1="100" y1="0" x2="150" y2="0" stroke="#000000" stroke-width="2"/></g>`);
+    mount(OPEN, { level: "expert" });
+    editor.select([B]);
+    editor.focus();
+    key("j", { ctrlKey: true });
+    expect(d(B)).toBe("M0 0 L50 0 L50 50 Z");
+    expect(spoken()).toBe("Tracciato chiuso. 1 linea nuova unisce capi lontani.");
+    editor.undo();
+    editor.select([B, A]);
+    key("j", { ctrlKey: true });
+    // Si uniscono i capi più vicini: (50, 50) e (100, 0).
+    expect(d(B)).toBe("M0 0 L50 0 L50 50 L100 0 L150 0");
+    expect(spoken()).toBe("Tracciati uniti: ora sono uno solo. 1 linea nuova unisce capi lontani.");
+  });
+
+  it("dice perché non unisce, e nel menu Tracciato è spenta senza un tracciato aperto", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.focus();
+    editor.select([R]);
+    key("j", { ctrlKey: true });
+    expect(spoken()).toBe("Un tracciato scelto è già chiuso: si uniscono soltanto i capi di tracciati aperti.");
+    editor.select([A]);
+    key("j", { ctrlKey: true });
+    expect(spoken()).toBe("Una linea sola non ha niente da chiudere.");
+    editor.select([A, T]);
+    key("j", { ctrlKey: true });
+    expect(spoken()).toBe("1 oggetto scelto non è un tracciato: gruppi, testi, immagini, frecce e tratti a penna non si uniscono.");
+    expect(changes).toEqual([]);
+    editor.select([R]);
+    pathButton().click();
+    const join = [...document.querySelectorAll<HTMLElement>('.context-menu [role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === "Unisci")!;
+    expect(join.getAttribute("aria-disabled")).toBe("true");
+    expect(join.querySelector(".menu-description")!.textContent).toBe("Fra gli oggetti scelti non c’è un tracciato aperto.");
+    expect(join.querySelector(".menu-hint")!.textContent).toBe("Ctrl+J");
+    for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
+    editor.select([A, B]);
+    pathButton().click();
+    const enabled = [...document.querySelectorAll<HTMLElement>('.context-menu [role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === "Unisci")!;
+    expect(enabled.getAttribute("aria-disabled")).not.toBe("true");
+    enabled.click();
+    expect(d(A)).toBe("M0 0 L50 0.25 L50 50");
+  });
+
+  it("sotto l'Esperto Ctrl+J non unisce", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select([A, B]);
+    editor.focus();
+    key("j", { ctrlKey: true });
+    expect(changes).toEqual([]);
+  });
+
+  it("nello strumento Nodi, due capi scelti di due forme si uniscono in una, con Ctrl+J come con Maiusc+J", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A, B]);
+    editor.focus();
+    key("n");
+    drag([[40, -10], [60, -10], [60, 10]]);
+    expect(spoken()).toBe("2 nodi scelti in 2 oggetti.");
+    key("j", { ctrlKey: true });
+    expect(d(A)).toBe("M0 0 L50 0.25 L50 50");
+    expect(editor.engine.text).not.toContain(B);
+    expect(spoken()).toBe("Capi uniti: le due forme ora sono un tracciato solo. La forma ora è un tracciato.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+  });
+});
+
 describe("la penna di Bézier, dal livello Esperto", () => {
   const EMPTY = doc(`${LAYER}</g>`);
   const R = "or3r3r3r3";
@@ -7134,7 +7473,192 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     key("?", { shiftKey: true });
     const table = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Bézier")!;
     expect([...table.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["Space", "Shift", "Enter o Esc", "Del"]);
+    const curves = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Curvatura")!;
+    expect([...curves.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["B", "Space", "Shift+C", "Shift+S", "Alt"]);
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+
+  describe("la Curvatura", () => {
+    const control = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-tool[data-tool="bezier"]')!;
+    /// La penna nel modo Curvatura.
+    const curving = (source = EMPTY): void => {
+      drawing(source);
+      key("b");
+    };
+    /// Il tocco dopo non è il secondo di un doppio tocco.
+    const later = (): void => {
+      clock += 1000;
+    };
+
+    it("è la penna premuta di nuovo, col suo nome e la sua icona, e ritorno", () => {
+      drawing();
+      const glyph = control().querySelector("svg")!.innerHTML;
+      key("b");
+      expect(editor.tool).toBe("bezier");
+      expect(spoken()).toBe("Strumento: Curvatura.");
+      expect(control().getAttribute("aria-label")).toBe("Curvatura");
+      expect(control().title).toBe("Curvatura (B)");
+      expect(control().querySelector("svg")!.innerHTML).not.toBe(glyph);
+      expect(formatIssues(checkAccessibility(host))).toBe("");
+      key("b");
+      expect(spoken()).toBe("Strumento: Bézier.");
+      expect(control().title).toBe("Bézier (B)");
+      expect(control().querySelector("svg")!.innerHTML).toBe(glyph);
+    });
+
+    it("tre punti fanno un arco: la curva passa morbida per tutti", () => {
+      curving();
+      tap(0, 100);
+      expect(spoken()).toBe("Nodo 1, liscio: x 0, y 100.");
+      tap(50, 50);
+      tap(100, 100);
+      expect(spoken()).toBe("Nodo 3, liscio: x 100, y 100.");
+      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
+      expect(changes).toEqual([]);
+      key("Enter");
+      expect(written()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
+      expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
+      expect(changes).toHaveLength(1);
+    });
+
+    it("quattro punti chiusi fanno un cerchio", () => {
+      curving();
+      for (const [x, y] of [[100, 50], [150, 100], [100, 150], [50, 100], [101, 51]] as const) tap(x, y);
+      expect(written()).toBe("M100 50 C127.61 50 150 72.39 150 100 C150 127.61 127.61 150 100 150 C72.39 150 50 127.61 50 100 C50 72.39 72.39 50 100 50 Z");
+      expect(spoken()).toBe("Tracciato chiuso aggiunto. Il disegno ha 1 oggetto.");
+    });
+
+    it("col doppio tocco, o con Alt, uno spigolo; fra due spigoli una linea", () => {
+      curving();
+      tap(0, 100);
+      tap(0, 100);
+      expect(spoken()).toBe("Nodo 1, spigolo: x 0, y 100.");
+      tap(50, 50);
+      tap(100, 100, { altKey: true });
+      expect(spoken()).toBe("Nodo 3, spigolo: x 100, y 100.");
+      tap(150, 100, { altKey: true });
+      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100 L150 100");
+      // Il doppio tocco ha posato uno spigolo in un passo solo.
+      for (let i = 0; i < 4; i++) editor.undo();
+      expect(spoken()).toBe("Annullato: Nodo 1.");
+      expect(editor.canUndo).toBe(false);
+    });
+
+    it("un trascinamento sposta un punto, un tocco in mezzo lo fa spigolo, e Annulla percorre i passi", () => {
+      curving();
+      tap(0, 100);
+      tap(50, 50);
+      tap(100, 100);
+      drag([[50, 50], [50, 30], [50, 0]]);
+      expect(spoken()).toBe("Nodo 2, liscio: x 50, y 0.");
+      expect(preview()).toMatch(/^M0 100 C[^L]* 50 0 C[^L]* 100 100$/);
+      tap(50, 0);
+      expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 0.");
+      expect(preview()).toBe("M0 100 L50 0 L100 100");
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Tipo del punto 2.");
+      expect(preview()).toMatch(/^M0 100 C[^L]* 50 0 C[^L]* 100 100$/);
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Spostamento del punto 2.");
+      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
+      expect(changes).toEqual([]);
+    });
+
+    it("un tocco sull'ultimo punto conclude, ma non subito dopo averlo posato", () => {
+      curving();
+      tap(0, 100);
+      tap(50, 50);
+      later();
+      tap(50, 50);
+      expect(written()).toBe("M0 100 L50 50");
+      expect(spoken()).toBe("Tracciato aggiunto. Il disegno ha 1 oggetto.");
+    });
+
+    it("da tastiera: Spazio posa i punti, Maiusc+C e Maiusc+S ne cambiano il tipo", () => {
+      curving();
+      for (let i = 0; i < 10; i++) key("ArrowDown");
+      key(" ");
+      key(" ");
+      expect(spoken()).toBe("Nodo 1, liscio: x 0, y 100.");
+      for (let i = 0; i < 5; i++) key("ArrowRight");
+      for (let i = 0; i < 5; i++) key("ArrowUp");
+      key(" ");
+      key(" ");
+      for (let i = 0; i < 5; i++) key("ArrowRight");
+      for (let i = 0; i < 5; i++) key("ArrowDown");
+      key(" ");
+      key(" ");
+      expect(spoken()).toBe("Nodo 3, liscio: x 100, y 100.");
+      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
+      // Sul punto in mezzo il cursore lo dice, e Maiusc+C lo fa spigolo.
+      for (let i = 0; i < 5; i++) key("ArrowLeft");
+      for (let i = 0; i < 5; i++) key("ArrowUp");
+      expect(spoken()).toBe("x 50, y 50: Nodo 2, liscio: x 50, y 50. Spazio lo fa liscio o spigolo");
+      key("C", { shiftKey: true });
+      expect(spoken()).toBe("Nodo 2, spigolo: x 50, y 50.");
+      expect(preview()).toBe("M0 100 L50 50 L100 100");
+      key("S", { shiftKey: true });
+      expect(preview()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
+      key("S", { shiftKey: true });
+      expect(spoken()).toBe("È già così: niente da cambiare. Nodo 2, liscio: x 50, y 50.");
+      key("Enter");
+      expect(written()).toBe("M0 100 C0 72.39 22.39 50 50 50 C77.61 50 100 72.39 100 100");
+    });
+
+    describe("su un tracciato scelto", () => {
+      const LINE = doc(`${LAYER}<path id="opathpath" d="M0 100 L200 100" fill="none" stroke="#000000"/></g>`);
+      const RECT = doc(`${LAYER}<rect id="orectrect" x="0" y="0" width="100" height="50" fill="#000000"/></g>`);
+
+      it("trascinato da un segmento, vi posa un punto e la curva lo segue", () => {
+        curving(LINE);
+        editor.select(["opathpath"]);
+        drag([[100, 100], [100, 50], [100, 0]]);
+        expect(written()).toBe("M0 100 C0 44.77 44.77 0 100 0 C155.23 0 200 44.77 200 100");
+        expect(spoken()).toBe("Nodo spostato: x 100, y 0.");
+        expect(editor.selection).toEqual(["opathpath"]);
+        editor.undo();
+        expect(editor.engine.text).toBe(LINE);
+      });
+
+      it("due tocchi su un punto lo fanno spigolo; un tocco lo sceglie, e Canc lo toglie", () => {
+        curving(LINE);
+        editor.select(["opathpath"]);
+        drag([[100, 100], [100, 50], [100, 0]]);
+        later();
+        tap(100, 0);
+        tap(100, 0);
+        expect(written()).toBe("M0 100 L100 0 L200 100");
+        expect(spoken()).toBe("1 nodo a spigolo.");
+        editor.undo();
+        later();
+        tap(100, 0);
+        key("Delete");
+        expect(written()).toBe("M0 100 L200 100");
+        expect(spoken()).toBe("1 nodo eliminato.");
+        // Un tocco sul segmento posa un punto, e il tracciato non cambia.
+        later();
+        tap(50, 100);
+        expect(written()).toBe("M0 100 L50 100 L200 100");
+        expect(spoken()).toBe("1 nodo aggiunto.");
+      });
+
+      it("lo spigolo di un rettangolo si sposta coi suoi lati diritti", () => {
+        curving(RECT);
+        editor.select(["orectrect"]);
+        drag([[100, 0], [110, 0], [120, 0]]);
+        expect(editor.engine.text).toMatch(/<path id="orectrect" d="M0 0 L120 0 L100 50 L0 50 Z"/);
+      });
+
+      it("con un tracciato in corso, i punti sono suoi", () => {
+        curving(LINE);
+        editor.select(["opathpath"]);
+        tap(300, 300);
+        tap(100, 100);
+        expect(spoken()).toBe("Nodo 2, liscio: x 100, y 100.");
+        key("Enter");
+        expect(editor.engine.text.match(/<path /g)).toHaveLength(2);
+      });
+    });
   });
 });
 
@@ -8359,12 +8883,15 @@ describe("il livello Personalizzato", () => {
       "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
+      "Tracciato · dal livello Esperto",
       "Costruttore di forme · dal livello Esperto",
+      "Forbici · dal livello Esperto",
       "Bézier · dal livello Esperto",
+      "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[14]!.rows).toEqual([["M", "Costruttore di forme"], ["B", "Bézier"]]);
+    expect(tables[14]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

@@ -7,7 +7,7 @@
 > che cosa resta dell'oggetto di prima.
 
 Dal [livello Esperto](drawing-expert.md) la barra della selezione ha il
-menu **«Tracciato»**, con cinque voci:
+menu **«Tracciato»**, con sei voci:
 
 - **«Oggetto in tracciato»** fa degli oggetti scelti dei tracciati (`path`),
   con ciò che si vede e le stesse regole di sempre ([Disegni, livello
@@ -18,12 +18,14 @@ menu **«Tracciato»**, con cinque voci:
 - **«Scostamento…»** disegna una forma più larga o più stretta di quella
   scelta;
 - **«Semplifica…»** toglie nodi lasciando la forma com'è, entro uno scarto
-  che si sceglie.
+  che si sceglie;
+- **«Unisci»** (`Ctrl+J`) fa dei tracciati aperti scelti uno solo, e un
+  tracciato solo lo chiude ([Disegni, curve e tagli](drawing-curves.md#unisci)).
 
 Una voce che non ha niente da cambiare fra gli oggetti scelti è spenta, e
 dice perché: «Fra gli oggetti scelti non c'è una forma col contorno.» Le
-voci non hanno tasti: si trovano nel menu, che si apre anche dalla tastiera
-come gli altri della barra.
+voci si trovano nel menu, che si apre anche dalla tastiera come gli altri
+della barra; soltanto «Unisci» ha un tasto, `Ctrl+J`.
 
 ## Contorno in tracciato
 
@@ -169,5 +171,5 @@ su un corpus di tracciati, nei due versi, è in `simplify.test.ts`.
 
 Non c'è niente da montare: il menu viene col livello Esperto, e nel
 Personalizzato è la parte «Tracciato: oggetti, contorni e inchiostro in
-tracciato, scostamento, semplifica» ([Disegni, livello
+tracciato, scostamento, semplifica, unisci» ([Disegni, livello
 Personalizzato](drawing-custom.md)).

@@ -90,9 +90,10 @@ export default defineConfig({
           }
           // La geometria dei disegni senza DOM: i nodi dei tracciati, la
           // spina dei tratti, le forme e il loro riconoscimento, le aree
-          // booleane, lo scostamento e la semplificazione. Dipendono soltanto
-          // dal formato, e gli strumenti dell'editor le usano.
-          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|fit|shapes|recognize|boolean|offset|simplify)\.ts$/.test(id)) {
+          // booleane, lo scostamento, la semplificazione, la Curvatura e i
+          // tagli. Dipendono soltanto dal formato, e gli strumenti
+          // dell'editor le usano.
+          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|fit|shapes|recognize|boolean|offset|simplify|curvature|cut)\.ts$/.test(id)) {
             return "drawing-geometry";
           }
           // I fogli di stile dei disegni: leggerli, la loro cascata e lo stile

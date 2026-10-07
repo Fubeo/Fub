@@ -27,6 +27,7 @@ export type ToolId =
   | "lasso"
   | "nodes"
   | "builder"
+  | "scissors"
   | "pen"
   | "highlighter"
   | "eraser"
@@ -63,6 +64,9 @@ export const TOOLS: readonly ToolSpec[] = [
   // La lettera di Illustrator, che la vuole con Maiusc: qui, come per gli
   // altri strumenti, da sola.
   { id: "builder", level: "expert", group: "pick", icon: "draw-builder", label: "draw.tool.builder", description: "draw.tool.builder.hint", shortcut: "m" },
+  // La lettera di Illustrator. Un tocco taglia, un trascinamento è il
+  // Coltello, che in Illustrator è uno strumento a parte.
+  { id: "scissors", level: "expert", group: "pick", icon: "draw-scissors", label: "draw.tool.scissors", description: "draw.tool.scissors.hint", shortcut: "c" },
   { id: "pen", level: "essential", group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
   { id: "highlighter", level: "standard", group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
   { id: "eraser", level: "essential", group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },

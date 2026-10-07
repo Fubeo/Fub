@@ -48,6 +48,7 @@ flowchart LR
 - [Disegni, accessibilità](product/drawing-accessibility.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, tracciati](product/drawing-paths.md)
+- [Disegni, curve e tagli](product/drawing-curves.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
