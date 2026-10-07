@@ -448,6 +448,21 @@ describe("le risorse", () => {
     for (const [i, resource] of after.entries()) expect(resource).toBe(before[i]);
   });
 
+  it("hanno il tracciato di un testo, che il testo usa col suo textPath", () => {
+    const scene = sceneOf(doc(
+      '<defs id="fub-defs"><path id="r1" fub:role="private" d="M0 50 L100 50"><title>Riva</title></path></defs>'
+        + `${LAYER}<text id="t" font-size="10"><textPath href="#r1" startOffset="50%">a <tspan font-weight="bold">b</tspan></textPath></text>`
+        + '<text id="u"><textPath xlink:href="#r1">c</textPath></text></g>',
+    ));
+    expect(scene.resources).toEqual([{ id: "r1", tag: "path", attrs: [["d", "M0 50 L100 50"]], space: null, children: [] }]);
+    const [t, u] = (live(scene, 0).nodes[0] as PaintGroup).children as [PaintShape, PaintShape];
+    expect(t.runs).toEqual([
+      { kind: "path", href: "r1", startOffset: "50%", text: "a b", parts: ["a ", { attrs: [["font-weight", "bold"]], space: null, text: "b" }] },
+    ]);
+    expect(u.runs).toEqual([{ kind: "path", href: "r1", startOffset: null, text: "c" }]);
+    expect(ids(resourcesFor([t], [], scene.resources))).toEqual(["r1"]);
+  });
+
   it("si trovano da chi le usa e da chi lo contiene, a cascata, nell'ordine della defs", () => {
     const scene = sceneOf(doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000"/><rect id="b" width="1" height="1"/></g>`));
     const layer = live(scene, 0).nodes[0] as PaintGroup;

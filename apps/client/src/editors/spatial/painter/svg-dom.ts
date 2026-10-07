@@ -1124,9 +1124,15 @@ function shapeElement(
         el.append(document.createTextNode(run.text));
         continue;
       }
-      const span = document.createElementNS(SVG, "tspan");
-      setPainted(span, run.attrs, [], prefix);
-      if (run.space !== null) span.setAttributeNS(XML, "xml:space", run.space);
+      // Un tracciato rimanda alla sua risorsa viva, come un `url(#…)`.
+      const span = document.createElementNS(SVG, run.kind === "path" ? "textPath" : "tspan");
+      if (run.kind === "path") {
+        span.setAttribute("href", `#${liveId(prefix, run.href)}`);
+        if (run.startOffset !== null) span.setAttribute("startOffset", run.startOffset);
+      } else {
+        setPainted(span, run.attrs, [], prefix);
+        if (run.space !== null) span.setAttributeNS(XML, "xml:space", run.space);
+      }
       if (run.parts === undefined) span.textContent = run.text;
       for (const part of run.parts ?? []) {
         if (typeof part === "string") {

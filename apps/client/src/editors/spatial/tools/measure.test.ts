@@ -81,6 +81,19 @@ describe("la misura del browser", () => {
     expect(calls).toEqual(["normal normal 100px Inter, sans-serif|ciao", "normal bold 100px Inter, sans-serif|ciao"]);
   });
 
+  it("non ricorda le misure di un carattere che sta ancora arrivando", () => {
+    const { calls } = fakeCanvas();
+    let loaded = false;
+    vi.stubGlobal("document", { fonts: { check: () => loaded } });
+    const measure = browserMeasure()!;
+    measure("ciao", INTER);
+    measure("ciao", INTER);
+    loaded = true;
+    measure("ciao", INTER);
+    measure("ciao", INTER);
+    expect(calls).toHaveLength(3);
+  });
+
   it("un carattere che il browser non legge si stima", () => {
     fakeCanvas();
     const measure = browserMeasure()!;

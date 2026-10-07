@@ -41,7 +41,7 @@
 // maschera o un filtro.
 
 import type { Role } from "../scene/analysis";
-import { svgAttribute } from "../scene/classify";
+import { svgAttribute, textPathTarget } from "../scene/classify";
 import {
   parseFragment,
   rawOf,
@@ -105,13 +105,22 @@ export interface TextPiece {
 
 /// Un pezzo di un `text`: gli spazi fra i `tspan` contano nella resa, e
 /// restano dove sono. Una riga ha tutto il suo testo in `text`, e quella con
-/// dei pezzi anche `parts`, il testo della riga e i pezzi in ordine.
+/// dei pezzi anche `parts`, il testo della riga e i pezzi in ordine. Un
+/// testo su tracciato ha un `textPath` al posto delle righe (formato della
+/// scena, testo): l'id del tracciato, una risorsa, e dove comincia.
 export type TextRun =
   | { readonly kind: "space"; readonly text: string }
   | {
       readonly kind: "span";
       readonly attrs: readonly PaintAttr[];
       readonly space: string | null;
+      readonly text: string;
+      readonly parts?: readonly (string | TextPiece)[];
+    }
+  | {
+      readonly kind: "path";
+      readonly href: string;
+      readonly startOffset: string | null;
       readonly text: string;
       readonly parts?: readonly (string | TextPiece)[];
     };
@@ -387,8 +396,9 @@ export const DEF_CHILDREN: ReadonlyMap<string, ReadonlySet<string>> = new Map<st
   ["tspan", new Set(["tspan"])],
 ]);
 
-/// I tag delle risorse, che stanno nella `defs` viva.
-export const RESOURCE_TAGS: ReadonlySet<string> = new Set(["linearGradient", "radialGradient", "pattern", "marker", "clipPath", "mask", "filter"]);
+/// I tag delle risorse, che stanno nella `defs` viva: anche un `path`, il
+/// tracciato di un testo.
+export const RESOURCE_TAGS: ReadonlySet<string> = new Set(["linearGradient", "radialGradient", "pattern", "marker", "clipPath", "mask", "filter", "path"]);
 
 /// Gli attributi della radice che passano agli strati vivi, se il loro
 /// valore varrebbe su un `g`: quelli che i figli ereditano, e l'opacità.
@@ -501,24 +511,32 @@ function shapeOf(leaf: LeafNode, scope: NamespaceScope): PaintShape | null {
   };
   if (tag === "text") {
     const runs: TextRun[] = [];
+    /// Il testo di una riga o di un tracciato, e i suoi pezzi se ne ha.
+    const content = (line: ElementNode): { text: string; parts?: (string | TextPiece)[] } => {
+      const parts: (string | TextPiece)[] = [];
+      let pieces = false;
+      for (const part of line.children) {
+        const inner = doc.nodes[part]!;
+        if (inner.kind === "text") parts.push(inner.value);
+        else if (inner.kind === "element") {
+          pieces = true;
+          parts.push({ ...paintedAttributes(inner), text: characters(doc, inner) });
+        }
+      }
+      const text = parts.map((part) => (typeof part === "string" ? part : part.text)).join("");
+      return pieces ? { text, parts } : { text };
+    };
     for (const child of element.children) {
       const node = doc.nodes[child]!;
       if (node.kind === "text") {
         runs.push({ kind: "space", text: node.value });
       } else if (node.kind === "element" && node.ns === NS_SVG && node.local === "tspan") {
         const span = paintedAttributes(node);
-        const parts: (string | TextPiece)[] = [];
-        let pieces = false;
-        for (const part of node.children) {
-          const inner = doc.nodes[part]!;
-          if (inner.kind === "text") parts.push(inner.value);
-          else if (inner.kind === "element") {
-            pieces = true;
-            parts.push({ ...paintedAttributes(inner), text: characters(doc, inner) });
-          }
-        }
-        const text = parts.map((part) => (typeof part === "string" ? part : part.text)).join("");
-        runs.push(pieces ? { kind: "span", attrs: span.attrs, space: span.space, text, parts } : { kind: "span", attrs: span.attrs, space: span.space, text });
+        runs.push({ kind: "span", attrs: span.attrs, space: span.space, ...content(node) });
+      } else if (node.kind === "element" && node.ns === NS_SVG && node.local === "textPath") {
+        // La classificazione ha già trovato il tracciato fra le risorse.
+        const href = textPathTarget(node);
+        if (href !== null) runs.push({ kind: "path", href, startOffset: valueOf(node, NS_NONE, "startOffset") ?? null, ...content(node) });
       }
     }
     shape.runs = runs;
@@ -587,7 +605,11 @@ export function resourcesFor(
   const visit = (node: PaintNode | PaintDef | string): void => {
     if (typeof node === "string") return;
     scan(node.attrs);
-    if ("kind" in node && node.kind === "shape") return;
+    if ("kind" in node && node.kind === "shape") {
+      // Un testo su tracciato usa il suo tracciato.
+      for (const run of node.runs ?? []) if (run.kind === "path") pending.push(run.href);
+      return;
+    }
     for (const child of node.children) visit(child);
   };
   for (const attrs of chain) scan(attrs);

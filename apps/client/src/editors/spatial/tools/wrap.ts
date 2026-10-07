@@ -18,13 +18,11 @@
 import { formatNumber } from "../number";
 import { letterSpacing, nonNegativeLength } from "../scene/values";
 import { graphemes, type Font, type Measure } from "./measure";
-import { canonicalSpans, lineText, newLeading, seenIn, type Attrs, type Caret, type Rich, type RichLine, type Span } from "./rich";
+import { canonicalSpans, JOIN, lineText, newLeading, seenIn, withoutJoin, type Attrs, type Caret, type Rich, type RichLine, type Span } from "./rich";
 
-/// Come una riga continua il paragrafo della riga prima.
+/// Come una riga continua il paragrafo della riga prima: l'attributo che
+/// lo scrive è [`JOIN`].
 export type Join = "space" | "word";
-
-/// L'attributo che lo scrive.
-export const JOIN = "fub:join";
 
 /// L'attributo della larghezza del riquadro, sul `text`.
 export const WRAP = "fub:wrap";
@@ -196,14 +194,6 @@ export function fontIn(rich: Rich, line: RichLine, span: Span | null): Font {
     style: seen("font-style") ?? "normal",
     spacing: (spacing === undefined ? null : letterSpacing(spacing)) ?? 0,
   };
-}
-
-/// Gli attributi di `attrs` senza `fub:join`.
-function withoutJoin(attrs: Attrs): Attrs {
-  if (attrs[JOIN] === undefined) return attrs;
-  const out: Record<string, string> = { ...attrs };
-  delete out[JOIN];
-  return out;
 }
 
 /// I paragrafi di `rich`, ciascuno una riga: le righe che continuano la

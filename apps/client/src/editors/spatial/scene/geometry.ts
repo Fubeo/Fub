@@ -702,33 +702,49 @@ export interface Along {
 /// frazione della lunghezza del tracciato; fuori dal tracciato si ferma al suo
 /// estremo. `null` per un tracciato lungo zero.
 export function along(segments: readonly Segment[], distance: number, share: boolean): Along | null {
-  const parts: Array<[Point, Point]> = [];
-  const lengths: number[] = [];
-  let total = 0;
-  for (const [a, b] of chords(segments)) {
-    const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
-    const l = Math.sqrt(dx * dx + dy * dy);
-    if (!(l > 0)) continue;
-    parts.push([a, b]);
-    lengths.push(l);
-    total += l;
-  }
-  if (parts.length === 0) return null;
-  let left = Math.min(Math.max(share ? distance * total : distance, 0), total);
-  for (let i = 0; i < parts.length; i++) {
-    const l = lengths[i]!;
-    if (left > l && i < parts.length - 1) {
-      left -= l;
-      continue;
+  const track = new Track(segments);
+  return track.at(share ? distance * track.length : distance);
+}
+
+/// Un tracciato misurato lungo le corde, come lo segue un testo: la sua
+/// lunghezza e il punto a ogni distanza dall'inizio.
+export class Track {
+  private readonly parts: Array<[Point, Point]> = [];
+  private readonly lengths: number[] = [];
+  readonly length: number = 0;
+
+  constructor(segments: readonly Segment[]) {
+    for (const [a, b] of chords(segments)) {
+      const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+      const l = Math.sqrt(dx * dx + dy * dy);
+      if (!(l > 0)) continue;
+      this.parts.push([a, b]);
+      this.lengths.push(l);
+      this.length += l;
     }
-    const [a, b] = parts[i]!;
-    const t = Math.min(left / l, 1);
-    return {
-      at: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
-      direction: [(b[0] - a[0]) / l, (b[1] - a[1]) / l],
-    };
   }
-  return null;
+
+  /// Il punto a `distance` dall'inizio e la sua direzione; fuori dal
+  /// tracciato si ferma al suo estremo. `null` per un tracciato lungo zero.
+  at(distance: number): Along | null {
+    const parts = this.parts;
+    if (parts.length === 0) return null;
+    let left = Math.min(Math.max(distance, 0), this.length);
+    for (let i = 0; i < parts.length; i++) {
+      const l = this.lengths[i]!;
+      if (left > l && i < parts.length - 1) {
+        left -= l;
+        continue;
+      }
+      const [a, b] = parts[i]!;
+      const t = Math.min(left / l, 1);
+      return {
+        at: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+        direction: [(b[0] - a[0]) / l, (b[1] - a[1]) / l],
+      };
+    }
+    return null;
+  }
 }
 
 /// Il numero di avvolgimento di `p` intorno ai poligoni: diverso da zero se

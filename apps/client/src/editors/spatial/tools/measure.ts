@@ -95,6 +95,9 @@ export function browserMeasure(): Measure | null {
     ctx.font = css;
     if (ctx.font === before) return null;
     const width = ctx.measureText(text).width;
+    // Un carattere che sta ancora arrivando si misura col ripiego, e la
+    // misura non si ricorda: quella dopo sarà col carattere vero.
+    if (!arrived(css)) return width;
     if (cache.size >= CACHE) cache.clear();
     cache.set(text, width);
     return width;
@@ -105,6 +108,16 @@ export function browserMeasure(): Measure | null {
     if (width === null) return estimate(text, font);
     return (width * font.size) / PROBE_SIZE + graphemes(text).length * font.spacing;
   };
+}
+
+/// Vero se il browser ha i caratteri di `css`, o se non sa dirlo.
+function arrived(css: string): boolean {
+  if (typeof document === "undefined" || document.fonts === undefined) return true;
+  try {
+    return document.fonts.check(css);
+  } catch {
+    return true;
+  }
 }
 
 /// Chiede al browser i caratteri di `fonts`, se servono: la misura di dopo

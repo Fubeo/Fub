@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { estimate } from "./measure";
 import { lineRuns, richLine, richText, type Rich } from "./rich";
-import { createTextField, type TextField } from "./text-field";
+import { createTextField, LINES_FORM, type FieldForm, type TextField } from "./text-field";
 
 const BOLD = { "font-weight": "bold" };
 const BLUE = { fill: "#0072b2" };
@@ -21,7 +22,7 @@ let finished = 0;
 let said: string[] = [];
 let changed = 0;
 
-function mount(rich: Rich): void {
+function mount(rich: Rich, form: FieldForm = LINES_FORM): void {
   if (life !== null) {
     life.close();
     field.element.remove();
@@ -36,6 +37,7 @@ function mount(rich: Rich): void {
     announce: (text) => said.push(text),
   });
   document.body.append(field.element);
+  field.form(form);
   field.open(rich);
   field.element.focus();
 }
@@ -217,6 +219,78 @@ describe("annullare e concludere", () => {
     expect(finished).toBe(3);
     expect(press("Enter").defaultPrevented).toBe(false);
     expect(finished).toBe(3);
+  });
+});
+
+describe("il testo in area e su tracciato", () => {
+  /// Un testo in area di corpo 10, largo 60: dieci grafemi per riga.
+  const AREA: Rich = {
+    attrs: { id: "o1", "fub:wrap": "60", x: "10", y: "40", "font-size": "10" },
+    inherited: TWO.inherited,
+    lines: [richLine({ x: "10", dy: "0" }, "Il testo")],
+  };
+  const AREA_FORM: FieldForm = { kind: "area", width: 60, measure: estimate };
+  const shown = (): Array<[string, string | null]> => field.rich.lines.map((line) => [rows()[field.rich.lines.indexOf(line)]!.textContent ?? "", line.attrs["fub:join"] ?? null]);
+
+  it("un testo in area va a capo da sé mentre si scrive, e il cursore segue", () => {
+    mount(AREA, AREA_FORM);
+    choose([0, 8]);
+    expect(input("insertText", " in area va")).toBe(true);
+    expect(shown()).toEqual([
+      ["Il testo", null],
+      ["in area va", "space"],
+    ]);
+    expect(field.rich.lines[1]!.attrs).toEqual({ x: "10", dy: "12.5", "fub:join": "space" });
+    // La battuta dopo arriva dove il cursore è andato, e la parola passa
+    // alla riga dopo con lui.
+    choose([1, 10]);
+    expect(input("insertText", "x")).toBe(true);
+    expect(input("insertText", "y")).toBe(true);
+    expect(shown()).toEqual([
+      ["Il testo", null],
+      ["in area", "space"],
+      ["vaxy", "space"],
+    ]);
+    // Un passo solo, che Ctrl+Z annulla.
+    press("z", { ctrlKey: true });
+    expect(richText(field.rich)).toBe("Il testo\nin area va");
+  });
+
+  it("Invio comincia un paragrafo, e cancellare dove una parola va a capo cancella il carattere prima", () => {
+    mount({ ...AREA, lines: [richLine({ x: "10", dy: "0" }, "precipitev"), richLine({ x: "10", dy: "12.5", "fub:join": "word" }, "olissimevo")] }, AREA_FORM);
+    choose([1, 0]);
+    expect(input("deleteContentBackward")).toBe(true);
+    expect(shown()).toEqual([
+      ["precipiteo", null],
+      ["lissimevo", "word"],
+    ]);
+    choose([0, 10]);
+    expect(input("deleteContentForward")).toBe(true);
+    expect(richText(field.rich)).toBe("precipiteo\nissimevo");
+    choose([1, 8]);
+    expect(input("insertParagraph")).toBe(true);
+    expect(field.rich.lines.map((line) => line.attrs)).toEqual([{ x: "10", dy: "0" }, { x: "10", dy: "12.5", "fub:join": "word" }, { x: "10", dy: "12.5" }]);
+  });
+
+  it("il riquadro è largo quanto quello del testo, col cursore fuori dalla parte dove le righe finiscono", () => {
+    mount(AREA, AREA_FORM);
+    const start = field.layout(2, () => 0.3);
+    expect([start.width, start.inset, field.element.style.width]).toEqual([122, 0, "120px"]);
+    mount({ ...AREA, attrs: { ...AREA.attrs, "text-anchor": "end" } }, AREA_FORM);
+    const end = field.layout(2, () => 0.3);
+    expect([end.width, end.inset, field.element.style.paddingLeft]).toEqual([122, 2, "2px"]);
+  });
+
+  it("un testo su tracciato ha una riga sola", () => {
+    mount({ ...AREA, attrs: { id: "o1", "font-size": "10" }, lines: [richLine({}, "Sul colle")] }, { kind: "line" });
+    expect(field.element.getAttribute("aria-multiline")).toBe("false");
+    choose([0, 3]);
+    expect(input("insertParagraph")).toBe(true);
+    expect(richText(field.rich)).toBe("Sul colle");
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: () => "a\nb" } });
+    field.element.dispatchEvent(paste);
+    expect(richText(field.rich)).toBe("Sula b colle");
   });
 });
 

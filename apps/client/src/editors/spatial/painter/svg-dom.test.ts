@@ -936,6 +936,24 @@ describe("le risorse vive", () => {
     expect(document.getElementById(/#([^)]+)\)/.exec(fill)![1]!)!.localName).toBe("linearGradient");
   });
 
+  it("hanno il tracciato di un testo, a cui il textPath vivo rimanda", () => {
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(SceneEngine.open(doc(
+      '<defs id="fub-defs"><path id="r1" fub:role="private" d="M0 50 L100 50"/></defs>'
+        + `${LAYER}<text id="t" font-size="10"><textPath href="#r1" startOffset="50%">a <tspan font-weight="bold">b</tspan></textPath></text></g>`,
+    )), new PaintBuilder()));
+    const root = painterRoot();
+    const path = root.querySelector("defs > path")!;
+    expect(path.id).toMatch(/^fubdraw\d+-r1$/);
+    expect(path.getAttribute("d")).toBe("M0 50 L100 50");
+    const along = root.querySelector('[data-scene-id="t"] > textPath')!;
+    expect(along.getAttribute("href")).toBe(`#${path.id}`);
+    expect(along.getAttribute("startOffset")).toBe("50%");
+    expect(along.textContent).toBe("a b");
+    expect(along.querySelector("tspan")!.getAttribute("font-weight")).toBe("bold");
+    expect(document.getElementById(path.id)).toBe(path);
+  });
+
   it("vanno nelle miniature, solo quelle che servono, con un prefisso loro", () => {
     const engine = SceneEngine.open(ALL);
     const builder = new PaintBuilder();
