@@ -57,6 +57,9 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   Dimensione, Peso, l'Enfasi (grassetto, corsivo, sottolineato e barrato),
   Interlinea, Spaziatura e Allineamento, per tutto il testo anche quando le
   sue parole sono diverse ([Disegni, tipografia](drawing-typography.md)).
+  Con la parte «Testo in area e su tracciato», dell'Esperto, anche il Tipo
+  di testo, da punto o in area, e la Larghezza del riquadro di un testo in
+  area ([il testo in area](drawing-typography.md#il-testo-in-area)).
 - **Disponi.** Allineare i bordi e i centri, distribuire in orizzontale e in
   verticale, e l'ordine, come la barra «Disponi» di [Disegni](drawing.md). Un
   comando che adesso non serve resta raggiungibile, sbiadito, e dice perché.

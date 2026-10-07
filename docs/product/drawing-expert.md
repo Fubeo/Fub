@@ -261,9 +261,9 @@ Lo strumento Nodi (`N`, come in Inkscape) modifica i nodi degli oggetti
 scelti: i punti per cui passano, i segmenti fra loro e le maniglie delle
 curve. Come con la Selezione diretta di Illustrator, ogni forma ha i suoi
 nodi: un tracciato, un rettangolo, un'ellisse, un cerchio, una linea, una
-spezzata, un poligono, una stella, una freccia e un tratto a penna. Un testo
-e un'immagine non ne hanno, e nemmeno una parte di un altro programma, che
-FubDraw lascia com'è: lo strumento dice perché. I nodi di più oggetti si
+spezzata, un poligono, una stella, una freccia, un tratto a penna e un [testo su
+tracciato](drawing-typography.md#il-testo-su-tracciato), quelli del tracciato che segue. Un altro testo e un'immagine non
+ne hanno, e nemmeno una parte di un altro programma: lo strumento dice perché. I nodi di più oggetti si
 modificano insieme; di un gruppo si vedono quelli di tutte le sue forme,
 finché se ne tocca una. Le regole stanno in `apps/client/src/editors/spatial/tools/nodes.ts` e, per
 le forme che non sono tracciati, in `nodable.ts` accanto.
