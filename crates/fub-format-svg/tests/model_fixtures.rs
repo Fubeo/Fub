@@ -15,7 +15,10 @@
 //! - `foreign-crlf-bom`: un SVG di un altro programma con BOM e righe CRLF,
 //!   valori fra apici singoli, un `xlink:href` accanto a `href` con lo stesso
 //!   URL, testo fuori dal piano base di Unicode e collegamenti che non sono
-//!   del vault.
+//!   del vault;
+//! - `boards`: un disegno FubDraw con quattro tavole e le loro carte: una col
+//!   nome su più righe, una senza titolo, che si chiama col suo id, e una con
+//!   il nome di una tavola prima.
 
 use std::path::PathBuf;
 
@@ -80,6 +83,11 @@ fn the_foreign_model_is_the_fixture() {
     check("foreign-crlf-bom");
 }
 
+#[test]
+fn the_boards_model_is_the_fixture() {
+    check("boards");
+}
+
 /// Le fixture dicono ciò che devono: senza questi controlli un modello
 /// sbagliato rigenerato con `UPDATE_MIRROR` passerebbe.
 #[test]
@@ -127,4 +135,29 @@ fn the_fixtures_say_what_they_claim() {
         [r#"Path("quartiere/parco.md")"#, r#"Path("foto/mappa.png")"#]
     );
     assert_eq!(model.body[0].span().start, 3);
+
+    let (source, model) = model_of("boards");
+    let outline: Vec<_> = model
+        .outline
+        .iter()
+        .map(|heading| (heading.level, heading.text.as_str()))
+        .collect();
+    assert_eq!(
+        outline,
+        [
+            (1, "Quaderno di viaggio"),
+            (2, "Copertina"),
+            (2, "Mappa del porto"),
+            (2, "b00000003"),
+            (2, "Copertina"),
+        ]
+    );
+    for heading in &model.outline[1..] {
+        let element = &source[heading.span.start..heading.span.end];
+        assert!(element.starts_with("<view "), "{element}");
+    }
+    assert_eq!(
+        model.text,
+        "Quaderno di viaggio\nQuattro tavole\nCopertina\nMappa del porto\nb00000003\nCopertina\nPartenza\nIl porto"
+    );
 }

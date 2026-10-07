@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1300 900" width="1300" height="900">
+  <title>Quaderno di viaggio</title>
+  <desc>Quattro tavole</desc>
+  <rect id="fub-paper" fub:role="paper" fub:board="b00000001" x="0" y="0" width="600" height="400" fill="#ffffff"/>
+  <rect id="c00000001" fub:role="paper" fub:board="b00000002" x="700" y="0" width="600" height="400" fill="#ffffff"/>
+  <rect id="c00000002" fub:role="paper" fub:board="b00000003" x="0" y="500" width="600" height="400" fill="#ffffff"/>
+  <rect id="c00000003" fub:role="paper" fub:board="b00000004" x="700" y="500" width="600" height="400" fill="#ffffff"/>
+  <view id="b00000001" fub:role="board" viewBox="0 0 600 400">
+    <title>Copertina</title>
+  </view>
+  <view id="b00000002" fub:role="board" viewBox="700 0 600 400">
+    <title>  Mappa
+      del  porto </title>
+    <desc>Il molo e le barche</desc>
+  </view>
+  <view id="b00000003" fub:role="board" viewBox="0 500 600 400"/>
+  <view id="b00000004" fub:role="board" viewBox="700 500 600 400">
+    <title>Copertina</title>
+  </view>
+  <g id="l3f8a0c2d" fub:layer="Livello 1">
+    <text id="o1a2b3c4d" x="100" y="200" fill="#000000" font-family="Inter, sans-serif" font-size="48">
+      <tspan x="100" dy="0">Partenza</tspan>
+    </text>
+    <a id="o2b3c4d5e" href="../note/Porto.md">
+      <text id="o3c4d5e6f" x="800" y="200" fill="#000000" font-family="Inter, sans-serif" font-size="32">
+        <tspan x="800" dy="0">Il porto</tspan>
+      </text>
+    </a>
+  </g>
+</svg>

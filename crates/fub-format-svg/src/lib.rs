@@ -8,11 +8,13 @@
 //!
 //! - [`parse`](FormatProvider::parse): il modello di §9, per indice, ricerca,
 //!   grafo e outline. Il documento intero è un blocco `fub.scene.summary`, e
-//!   dentro ci sono titolo, descrizione, testi, collegamenti e immagini del
-//!   vault con lo span del loro elemento.
+//!   dentro ci sono titolo, descrizione, tavole, testi, collegamenti e
+//!   immagini del vault con lo span del loro elemento. Il titolo e le tavole
+//!   sono le sezioni del disegno.
 //! - [`render_html`](FormatProvider::render_html): solo il segnaposto
-//!   `figure.fub-scene`. Il disegno lo mette la shell, con la risoluzione dei
-//!   media che ha già; qui non nasce mai un `<img>` né un URL di risorsa
+//!   `figure.fub-scene`, con la tavola che un embed nomina. Il disegno lo
+//!   mette la shell, con la risoluzione dei media che ha già; qui non nasce
+//!   mai un `<img>` né un URL di risorsa
 //!   ([ADR 0203](../../../docs/decisions/0203-superfici-spaziali.md)).
 //! - [`serialize`](FormatProvider::serialize): un documento nuovo, con radice,
 //!   titolo, carta e «Livello 1» (§2).
