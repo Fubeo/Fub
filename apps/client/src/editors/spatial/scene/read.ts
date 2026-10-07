@@ -36,6 +36,10 @@ export const MAX_ELEMENTS = 50_000;
 /// risorse).
 export const MAX_RESOURCES = 10_000;
 
+/// Quante tavole riceve un documento, al più: uno che ne ha di più si apre e
+/// si modifica, e non ne riceve altre (formato della scena, tavole).
+export const MAX_BOARDS = 1_000;
+
 /// Che documento è: con `fub:version` sulla radice, o un SVG qualunque che
 /// la superficie mostra inerte e adotta con «Modifica» (§2).
 export type Status = "fubdraw" | "foreign";

@@ -95,10 +95,12 @@ const OWNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 /// stanno solo dentro un altro: dove vanno lo giudica la classificazione.
 const OPEN_PARENTS: ReadonlySet<string> = new Set(["g", "a", "defs", "pattern", "marker", "clipPath", "mask"]);
 
-/// I tag di §4 e delle risorse (formato della scena, risorse).
+/// I tag di §4, delle risorse e delle tavole (formato della scena, risorse e
+/// tavole).
 export const SCENE_TAGS: ReadonlySet<string> = new Set([
   "title",
   "desc",
+  "view",
   "g",
   "a",
   "path",
@@ -226,7 +228,7 @@ export function escapeText(value: string): string {
 // Ordine degli attributi.
 // ---------------------------------------------------------------------------
 
-const FUB_ORDER = ["layer", "role", "tool", "shape", "geom", "wrap", "join", "locked", "at", "brush"];
+const FUB_ORDER = ["layer", "role", "board", "tool", "shape", "geom", "wrap", "join", "locked", "at", "brush"];
 const GEOMETRY_ORDER = [
   "x",
   "y",

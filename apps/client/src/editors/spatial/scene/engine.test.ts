@@ -1,7 +1,8 @@
 // Il motore delle operazioni oltre i vettori di `vectors.test.ts`: la forma
 // della rete, i rifiuti uno per uno, i limiti, l'undo che non è esatto, i
 // rientri di un `move`, `adopt` e `page` nei casi di bordo, i riferimenti
-// alle risorse e la loro raccolta, il testo in area e su tracciato. I testi
+// alle risorse e la loro raccolta, il testo in area e su tracciato, le
+// tavole con le loro carte. I testi
 // attesi sono scritti a mano, e i `§` sono le sezioni di
 // `docs/reference/scene-operations.md`.
 
@@ -12,7 +13,7 @@ import { decodeInk, inkToQuantized } from "../ink/codec";
 import { pf1 } from "../ink/pf1";
 import { mergeUndo, SceneEngine, type Applied, type Outcome } from "./engine";
 import { MAX_BATCH, MAX_NESTING, MAX_OP_BYTES, MAX_VALUE_BYTES, parseWireOp, type Op, type Reason } from "./ops";
-import { MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, readScene } from "./read";
+import { MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, readScene } from "./read";
 import type { Elem } from "./serialize";
 import { normalizeEol } from "./text";
 
@@ -1235,5 +1236,109 @@ describe("il testo in area e su tracciato", () => {
     rejects(PLAIN, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "textPath", attrs: { href: `#${P}` }, text: "No" } }, "invalid-elem");
     // Un testo che segue un tracciato che non c'è è estraneo.
     rejects(PLAIN, text, "invalid-elem");
+  });
+});
+
+describe("le tavole", () => {
+  const P1 = '  <rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>';
+  const P2 = '  <rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="1680" y="0" width="1600" height="1000" fill="#ffffff"/>';
+  const V1 = ['  <view id="b1a2b3c4d" fub:role="board" viewBox="0 0 1600 1000">', "    <title>Tavola 1</title>", "  </view>"];
+  const V2 = ['  <view id="b9i0j1k2l" fub:role="board" viewBox="1680 0 1600 1000">', "    <title>Tavola 2</title>", "  </view>"];
+  const TWO = lf(ROOT, TITLE, P1, P2, ...V1, ...V2, L1, R2, END_G, END);
+  const paper = (id: string, board: string, x = "1680"): Elem => ({
+    tag: "rect",
+    attrs: { id, "fub:role": "paper", "fub:board": board, x, y: "0", width: "1600", height: "1000", fill: "#ffffff" },
+  });
+  const board = (id: string, x = "3360"): Elem => ({ tag: "view", attrs: { id, "fub:role": "board", viewBox: `${x} 0 1600 1000` } });
+  const add = (parent: string, elem: Elem): Op => ({ op: "add", parent, pos: { last: true }, elem });
+
+  /// Il motivo per cui `op` si rifiuta su `source`, che resta com'era.
+  function refused(source: string, op: unknown, reason: Reason): string {
+    rejects(source, op, reason);
+    const outcome = SceneEngine.open(source).apply(op as Op);
+    return outcome.outcome === "rejected" ? outcome.detail : "";
+  }
+
+  it("la carta della pagina cambia solo con page, o diventa quella di una tavola", () => {
+    expect(refused(BASE, { op: "set", id: "fub-paper", attrs: { "fub:board": "b1a2b3c4d", fill: "#000000" } }, "locked")).toMatch(/fill/);
+    refused(BASE, { op: "set", id: "fub-paper", attrs: { "fub:board": null } }, "locked");
+    refused(BASE, { op: "move", target: "fub-paper", parent: "#root", pos: { last: true } }, "locked");
+    // Da sola, senza la tavola, non diventa niente.
+    expect(refused(BASE, { op: "set", id: "fub-paper", attrs: { "fub:board": "b1a2b3c4d" } }, "invalid-elem")).toMatch(/b1a2b3c4d/);
+  });
+
+  it("la carta di una tavola cambia in geometria e tavola, e si toglie da sola", () => {
+    refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { fill: "#000000" } }, "locked");
+    refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { "fub:role": null } }, "locked");
+    // Una tavola senza carta si legge, e si disegna senza fondo.
+    const out = apply(SceneEngine.open(TWO), { op: "remove", target: "c5e6f7g8h" });
+    expect(out.text).toBe(lf(ROOT, TITLE, P1, ...V1, ...V2, L1, R2, END_G, END));
+    // Né la carta né la tavola vanno in un livello.
+    refused(TWO, { op: "move", target: "c5e6f7g8h", parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    refused(TWO, { op: "move", target: "b9i0j1k2l", parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+  });
+
+  it("una carta nuova è di una tavola, sotto la radice, con gli id delle tavole", () => {
+    const free: Elem = { tag: "rect", attrs: { id: "c0a1b2c3d", "fub:role": "paper", x: "0", y: "0", width: "1", height: "1" } };
+    refused(TWO, add("#root", free), "invalid-elem");
+    refused(TWO, add("l3f8a0c2d", paper("c0a1b2c3d", "b9i0j1k2l")), "invalid-elem");
+    expect(refused(TWO, { op: "batch", ops: [add("#root", paper("o0a1b2c3d", "b0a1b2c3d", "3360")), add("#root", board("b0a1b2c3d"))] }, "invalid-elem")).toMatch(/carta di una tavola/);
+    expect(refused(TWO, { op: "batch", ops: [add("#root", paper("c0a1b2c3d", "o0a1b2c3d", "3360")), add("#root", board("o0a1b2c3d"))] }, "invalid-elem")).toMatch(/una tavola/);
+    // Con gli id giusti entra, dove la mette `last`.
+    const out = apply(SceneEngine.open(TWO), { op: "batch", ops: [add("#root", paper("c0a1b2c3d", "b0a1b2c3d", "3360")), add("#root", board("b0a1b2c3d"))] });
+    expect(readScene(out.text).summary.boards).toEqual(["Tavola 1", "Tavola 2", "b0a1b2c3d"]);
+  });
+
+  it("ogni tavola toccata ha al più una carta, con la sua geometria, e ogni carta la sua tavola", () => {
+    expect(refused(TWO, add("#root", paper("c0a1b2c3d", "b0z0z0z0z")), "invalid-elem")).toMatch(/b0z0z0z0z, che non c'è/);
+    expect(refused(TWO, add("#root", paper("c0a1b2c3d", "b9i0j1k2l")), "invalid-elem")).toMatch(/più di una carta/);
+    expect(refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { "fub:board": "b1a2b3c4d" } }, "invalid-elem")).toMatch(/più di una carta/);
+    expect(refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { "fub:board": null } }, "invalid-elem")).toMatch(/non ha una tavola/);
+    // Una tavola che perde l'id è estranea: la sua carta resterebbe sola.
+    expect(refused(TWO, { op: "ident", path: [4], tag: "view", id: null }, "invalid-elem")).toMatch(/b9i0j1k2l, che non c'è/);
+  });
+
+  it("un file già fuori regola altrove si modifica lo stesso, e page riporta la carta libera", () => {
+    const extra = '  <rect fub:role="paper" x="0" y="0" width="10" height="10" fill="#ffffff"/>';
+    const second = '  <rect id="c0a1b2c3d" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>';
+    const out = lf(ROOT, TITLE, P1, second, extra, P2, ...V1, ...V2, L1, R2, END_G, END);
+    const engine = SceneEngine.open(out);
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#0072b2" } });
+    // Sulla seconda tavola, che va con la sua carta, si lavora.
+    apply(engine, { op: "batch", ops: [{ op: "set", id: "b9i0j1k2l", attrs: { viewBox: "1700 0 1600 1000" } }, { op: "set", id: "c5e6f7g8h", attrs: { x: "1700" } }] });
+    // Sulla prima, che ha due carte, no; togliere la seconda sì.
+    refused(engine.text, { op: "set", id: "b1a2b3c4d", attrs: { viewBox: "0 0 1600 1000" } }, "invalid-elem");
+    apply(engine, { op: "remove", target: "c0a1b2c3d" });
+    // page riscrive la carta senza tavola, non quelle delle tavole.
+    const paged = apply(engine, { op: "page", viewBox: "0 0 3300 1000" });
+    expect(paged.text).toContain('<rect fub:role="paper" x="0" y="0" width="3300" height="1000" fill="#ffffff"/>');
+    expect(paged.text).toContain(P1);
+  });
+
+  it("le inverse rimettono anche uno stato fuori regola", () => {
+    const second = '  <rect id="c0a1b2c3d" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>';
+    const out = lf(ROOT, TITLE, P1, second, ...V1, L1, R2, END_G, END);
+    const engine = SceneEngine.open(out);
+    const removed = apply(engine, { op: "remove", target: "c0a1b2c3d" });
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#0072b2" } });
+    // Non è più esatto: passa dall'inversa, che non si guarda.
+    const undone = applied(engine.undo(removed.undo));
+    expect(undone.text).toContain(second);
+  });
+
+  it("first sotto la radice va dopo le carte e le tavole", () => {
+    const layer: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "Sfondo" } } };
+    const out = apply(SceneEngine.open(TWO), layer);
+    expect(out.text).toBe(lf(ROOT, TITLE, P1, P2, ...V1, ...V2, '  <g id="l0a1b2c3d" fub:layer="Sfondo">', END_G, L1, R2, END_G, END));
+  });
+
+  it(`il documento non riceve oltre ${MAX_BOARDS} tavole, e uno che ne ha di più si modifica`, () => {
+    const views = (count: number): string[] =>
+      Array.from({ length: count }, (_, i) => `  <view id="b${i.toString(36).padStart(8, "0")}" fub:role="board" viewBox="${i * 10} 0 5 5"/>`);
+    const full = lf(ROOT, TITLE, ...views(MAX_BOARDS), L1, R2, END_G, END);
+    expect(refused(full, add("#root", board("bzzzzzzzz")), "limit")).toMatch(new RegExp(`${MAX_BOARDS}`));
+    const over = lf(ROOT, TITLE, ...views(MAX_BOARDS + 1), L1, R2, END_G, END);
+    apply(SceneEngine.open(over), { op: "remove", target: "b00000000" });
+    apply(SceneEngine.open(over), { op: "set", id: "b00000001", attrs: { viewBox: "0 0 9 9" } });
   });
 });

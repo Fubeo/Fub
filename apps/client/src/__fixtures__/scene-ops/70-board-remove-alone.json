@@ -1,0 +1,15 @@
+{
+  "name": "board-remove-alone",
+  "description": "togliere una tavola e lasciare la sua carta è invalid-elem",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 3280 1000\" width=\"3280\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" fub:board=\"b1a2b3c4d\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <rect id=\"c5e6f7g8h\" fub:role=\"paper\" fub:board=\"b9i0j1k2l\" x=\"1680\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <view id=\"b1a2b3c4d\" fub:role=\"board\" viewBox=\"0 0 1600 1000\">\n    <title>Tavola 1</title>\n  </view>\n  <view id=\"b9i0j1k2l\" fub:role=\"board\" viewBox=\"1680 0 1600 1000\">\n    <title>Tavola 2</title>\n  </view>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "remove",
+      "target": "b9i0j1k2l"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "invalid-elem"
+  }
+}

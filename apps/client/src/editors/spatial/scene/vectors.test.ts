@@ -74,7 +74,7 @@ function sessionsWith(text: string): DocumentSessionCollection {
 }
 
 describe("i vettori delle operazioni", () => {
-  it("ci sono i 64 vettori di §9, in ordine", () => {
+  it("ci sono i 73 vettori di §9, in ordine", () => {
     expect(vectors.map((v) => v.name)).toEqual([
       "add-first-stroke",
       "add-last-in-layer",
@@ -140,6 +140,15 @@ describe("i vettori delle operazioni", () => {
       "text-path-one-line",
       "add-text-path",
       "remove-text-collects-path",
+      "board-first",
+      "board-add",
+      "board-paper-mismatch",
+      "board-move",
+      "board-set-alone",
+      "board-remove-alone",
+      "board-remove-last",
+      "page-skips-board-papers",
+      "board-free-paper",
     ]);
   });
 
