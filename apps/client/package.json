@@ -18,6 +18,7 @@
     "bench:update": "node bench/photos.mjs --update",
     "bench:a11y": "node bench/a11y.mjs",
     "bench:fidelity": "node bench/fidelity.mjs",
+    "bench:boards": "node bench/boards.mjs",
     "theme:generate": "node theme/generate.mjs",
     "theme:verify": "node theme/generate.mjs --verify"
   },
