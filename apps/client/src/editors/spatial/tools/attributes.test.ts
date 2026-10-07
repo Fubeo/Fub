@@ -142,6 +142,14 @@ describe("le righe", () => {
     const rows = first(opened).rows;
     expect(rows[rows.length - 1]).toMatchObject({ key: "fill", value: "#ff0000" });
   });
+
+  it("un gruppo che un'operazione cambia sul posto si rilegge", () => {
+    const opened = open(doc(`${LAYER}<g id="ogroup000"><rect id="oaaaaaaaa" width="1" height="1"/></g></g>`));
+    const before = first(opened);
+    expect(before.rows.some((row) => row.key === "fill")).toBe(false);
+    applied(opened, attributeOps(before, "fill", "#ff0000", ids(opened)).ops);
+    expect(first(opened).rows.find((row) => row.key === "fill")).toMatchObject({ value: "#ff0000" });
+  });
 });
 
 describe("i valori", () => {

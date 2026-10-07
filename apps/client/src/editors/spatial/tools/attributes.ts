@@ -25,7 +25,7 @@
 import type { Details, Tag } from "../scene/classify";
 import { svgAttribute } from "../scene/classify";
 import { parsePath } from "../scene/geometry";
-import { pathOf, type ElementPart } from "../scene/model";
+import { pathOf, writtenOf, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { attributeKey, canonicalOrder, pathData, type OutAttr } from "../scene/serialize";
 import {
@@ -288,16 +288,17 @@ function familiesWith(value: string): readonly string[] {
   return TEXT_FAMILIES.includes(value) ? TEXT_FAMILIES : [...TEXT_FAMILIES, value];
 }
 
-const subjects = new WeakMap<ElementPart, Subject | null>();
+const subjects = new WeakMap<ElementPart, { readonly written: string; readonly subject: Subject | null }>();
 
 /// L'oggetto `node` come lo mostra il pannello; `null` se non è un elemento
-/// modificabile. Un nodo che un'operazione non tocca resta lo stesso
-/// oggetto, e si rilegge una volta sola.
+/// modificabile. Un nodo che un'operazione non tocca si rilegge una volta
+/// sola.
 export function subjectOf(node: ElementPart): Subject | null {
   const known = subjects.get(node);
-  if (known !== undefined) return known;
+  const written = writtenOf(node);
+  if (known !== undefined && known.written === written) return known.subject;
   const subject = readSubject(node);
-  subjects.set(node, subject);
+  subjects.set(node, { written, subject });
   return subject;
 }
 

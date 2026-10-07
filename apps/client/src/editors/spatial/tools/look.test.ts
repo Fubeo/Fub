@@ -131,6 +131,15 @@ describe("l'aspetto della selezione", () => {
     expect(seen.opacity).toEqual({ count: 1, value: 1 });
   });
 
+  it("rilegge un gruppo che un'operazione cambia sul posto, e ciò che passa alle parti", () => {
+    const opened = open(doc(`${LAYER}<g id="ogroup000" fill="#009e73">${RECT("oaaaaaaaa", "")}</g></g>`));
+    const rect = (): Parameters<typeof lookOf>[1] => [opened.reindex().get("oaaaaaaaa")!];
+    expect(lookOf(opened.engine.model!, rect()).fill.value).toBe("#009e73");
+    expect(opened.engine.apply({ op: "set", id: "ogroup000", attrs: { fill: "#d55e00", opacity: "0.5" } }).outcome).toBe("applied");
+    expect(lookOf(opened.engine.model!, rect()).fill.value).toBe("#d55e00");
+    expect(lookOf(opened.engine.model!, [opened.reindex().get("ogroup000")!]).opacity.value).toBe(0.5);
+  });
+
   it("legge l'opacità degli oggetti scelti, immagini comprese", () => {
     const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#000000" opacity="0.5"')}<image id="oimage000" x="0" y="0" width="10" height="10" href="data:image/png;base64,iVBORw0KGgo=" opacity="0.5"/></g>`));
     expect(look(opened).opacity).toEqual({ count: 2, value: 0.5 });

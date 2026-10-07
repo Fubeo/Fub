@@ -55,7 +55,7 @@
 
 import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
-import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
@@ -184,29 +184,29 @@ const OPACITY_PLACES = 4;
 // Leggere.
 // ---------------------------------------------------------------------------
 
-const owns = new WeakMap<ElementPart, ReadonlyMap<string, string>>();
+const owns = new WeakMap<ElementPart, { readonly written: string; readonly own: ReadonlyMap<string, string> }>();
 
-/// Gli attributi senza namespace di `node`, letti una volta: un nodo che
-/// un'operazione cambia è un nodo nuovo.
+/// Gli attributi senza namespace di `node`, letti una volta finché non
+/// cambiano.
 function ownOf(node: ElementPart): ReadonlyMap<string, string> {
-  let own = owns.get(node);
-  if (own === undefined) {
-    own = plainAttributes(node);
-    owns.set(node, own);
-  }
+  const known = owns.get(node);
+  const written = writtenOf(node);
+  if (known !== undefined && known.written === written) return known.own;
+  const own = plainAttributes(node);
+  owns.set(node, { written, own });
   return own;
 }
 
-const passes = new WeakMap<ElementPart, { readonly from: Inherited; readonly out: Inherited }>();
+const passes = new WeakMap<ElementPart, { readonly from: Inherited; readonly own: ReadonlyMap<string, string>; readonly out: Inherited }>();
 
 /// Ciò che i figli di `node` ereditano. Un contenitore che resta lo stesso
-/// nodo sotto un genitore cambiato si rilegge, perché eredita altro.
+/// nodo si rilegge se cambia il suo tag, o se il genitore gli passa altro.
 function passedBy(node: ElementPart | null): Inherited {
   if (node === null) return INITIAL;
   const from = passedBy(node.parent);
-  const known = passes.get(node);
-  if (known !== undefined && known.from === from) return known.out;
   const own = ownOf(node);
+  const known = passes.get(node);
+  if (known !== undefined && known.from === from && known.own === own) return known.out;
   let out: Map<string, string> | null = null;
   for (const name of INITIAL.keys()) {
     const value = own.get(name);
@@ -215,7 +215,7 @@ function passedBy(node: ElementPart | null): Inherited {
     out.set(name, value);
   }
   const passed = out ?? from;
-  passes.set(node, { from, out: passed });
+  passes.set(node, { from, own, out: passed });
   return passed;
 }
 
