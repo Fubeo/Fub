@@ -91,6 +91,7 @@ flowchart LR
 - [Formato della scena, testo](reference/scene-format-text.md)
 - [Formato della scena, accessibilità](reference/scene-format-accessibility.md)
 - [Formato della scena, risorse](reference/scene-format-resources.md)
+- [Formato della scena, tavole](reference/scene-format-boards.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 
 ## Vedere stato e direzione

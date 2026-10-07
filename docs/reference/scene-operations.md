@@ -58,10 +58,10 @@ sta nell'involucro del messaggio live, non nella singola operazione.
 `{ "last": true }` mette l'elemento in cima all'ordine visivo, il caso normale;
 gli altri valori sono `{ "first": true }` e `{ "after": "<id del fratello>" }`.
 La radice, come genitore, si scrive `"#root"`, che non è un id valido. Sotto la
-radice `first` vuol dire subito dopo `title`, `desc`, le `defs` e la carta che
-stanno in testa, mai prima, e per una `defs` subito dopo `title` e `desc`,
-quindi prima della carta; in un livello o in un gruppo, subito dopo i loro
-`title` e `desc`.
+radice `first` vuol dire subito dopo `title`, `desc`, le `defs`, le carte e le
+[tavole](scene-format-boards.md) che stanno in testa, mai prima, e per una
+`defs` subito dopo `title` e `desc`, quindi prima della carta; in un livello o
+in un gruppo, subito dopo i loro `title` e `desc`.
 
 ### Bersaglio (`target`)
 
@@ -91,7 +91,7 @@ non ha id e ha quel tag; altrimenti l'operazione è rifiutata con
 | `text` | `id`, `lines` (una riga è una stringa, o la lista del suo testo e dei suoi [pezzi](scene-format-text.md)), `joins` facoltativo | sostituisce le righe di un `text` | `text` con le righe precedenti, pezzi compresi, e i `joins` di prima se l'operazione ne aveva o una riga aveva un `fub:join` |
 | `move` | `target`, `parent`, `pos` | sposta l'elemento: ordine o livello | `move` alla posizione precedente |
 | `ident` | `path`, `tag`, `id` (oppure `null` per togliere) | dà un id a un elemento modificabile che non ne ha, o gli toglie quello che ha | `ident` con l'id di prima, o con `id: null` |
-| `page` | `viewBox` (`"x y w h"`) | cambia insieme `viewBox`, `width` e `height` della radice e la geometria della carta | `page` con i valori precedenti |
+| `page` | `viewBox` (`"x y w h"`) | cambia insieme `viewBox`, `width` e `height` della radice e la geometria della carta della pagina, non quella delle carte delle tavole | `page` con i valori precedenti |
 | `meta` | `title`, `desc` (una stringa, oppure `null` per togliere) | crea, cambia o toglie titolo e descrizione della radice | `meta` con i valori precedenti |
 | `adopt` | `undo` facoltativo | «Modifica»: aggiunge `xmlns:fub` e `fub:version="1"` alla radice di un documento estraneo | `adopt` con `undo: true`, che li toglie |
 | `batch` | `ops`, `label` facoltativo | applica tutte le operazioni oppure nessuna | `batch` con le inverse in ordine inverso |
@@ -123,10 +123,11 @@ Altri dettagli:
     spazi, senza niente prima del primo o dopo l'ultimo.
   - Un elemento che, letto in quel posto, il formato ammette passa dagli
     stessi controlli di `elem` (§4): valori nei limiti di §5, id nella forma
-    degli id nuovi, niente carta, livelli solo sotto la radice, titolo e
-    descrizione della radice solo con `meta`, tratti che si leggono. Il `d`
-    di ogni tratto si riscrive col contorno ricalcolato, al suo posto o, se
-    manca, in fondo al tag d'apertura; il resto resta com'è scritto.
+    degli id nuovi, niente carta della pagina, livelli solo sotto la radice,
+    titolo e descrizione della radice solo con `meta`, tratti che si
+    leggono. Il `d` di ogni tratto si riscrive col contorno ricalcolato, al
+    suo posto o, se manca, in fondo al tag d'apertura; il resto resta com'è
+    scritto.
   - Un elemento estraneo resta com'è: la forma degli id nuovi non si chiede,
     e il limite del valore di un attributo non vale, perché conta solo
     quello dell'operazione.
@@ -153,6 +154,10 @@ Altri dettagli:
   risorsa viene prima di chi la usa, togliere una risorsa usata è `in-use`, e
   le risorse di FubDraw che un'operazione lascia senza riferimenti se ne
   vanno con lei: [risorse](scene-format-resources.md), §9.
+- **Tavole:** una tavola cambia insieme alla sua carta, in un `batch`. Alla
+  fine di ogni operazione le tavole e le carte che ha toccato vanno insieme,
+  altrimenti è `invalid-elem`; un `add` oltre 1 000 tavole è `limit`:
+  [tavole](scene-format-boards.md), §5.
 - **`joins` di `text`:** il `fub:join` di ogni riga di un [testo in
   area](scene-format-text.md#4-il-testo-in-area), una voce per riga, una
   stringa o `null` per nessuno; con `joins` ogni riga prende il suo, senza le
@@ -200,7 +205,7 @@ Altri dettagli:
 | `duplicate-id` | `add` con un id già presente e un elemento diverso (§8), o di una risorsa con un id a cui il documento rimanda già |
 | `in-use` | `remove` di una risorsa, o di una `defs` che ne contiene, a cui rimanda qualcosa fuori da ciò che si toglie; `ident` che toglie l'id a una risorsa usata |
 | `invalid-elem` | tag, attributo o valore fuori dal formato, oppure `fub:ink` non conforme |
-| `locked` | il bersaglio o il genitore stanno in un elemento bloccato (`fub:locked="true"`), oppure il bersaglio è la carta, che cambia solo con `page` |
+| `locked` | il bersaglio o il genitore stanno in un elemento bloccato (`fub:locked="true"`), oppure il bersaglio è la carta della pagina, che cambia solo con `page` |
 | `foreign` | `set`, `text` o `add` dentro un nodo estraneo |
 | `cycle` | `move` dentro un discendente dell'elemento stesso |
 | `limit` | operazione oltre i limiti (§5) |
@@ -276,7 +281,8 @@ tiene, per ogni elemento:
 - **`ident`, `adopt` e `set` su `#root`:** si riscrive solo il tag
   dell'elemento o della radice, copiando così come sono gli attributi che non
   cambiano.
-- **`page`:** si riscrivono il tag della radice e la riga della carta.
+- **`page`:** si riscrivono il tag della radice e la riga della carta della
+  pagina, se c'è; le righe delle carte delle tavole non cambiano.
 - **`meta`:** si sostituiscono, si inseriscono o si cancellano le righe di
   `title` e `desc`, all'inizio della radice.
 - **`set` su un altro elemento e `text`:** si sostituisce lo span con la nuova
@@ -455,6 +461,15 @@ devono verificare renderebbe il test circolare.
 | 62 | `text-path-one-line` | un testo su tracciato ha una riga sola: `text` con due righe, rifiuto `invalid-elem` |
 | 63 | `add-text-path` | un `batch` aggiunge la `defs` col tracciato e il testo che lo segue con `xlink:href` e i pezzi; l'inversa toglie l'uno e l'altro |
 | 64 | `remove-text-collects-path` | togliere un testo su tracciato toglie il suo tracciato privato e la `fub-defs` rimasta vuota; l'inversa li rimette |
+| 65 | `board-first` | la prima tavola nasce dalla pagina: un `batch` aggiunge il `view` con `first`, dopo la carta, e dà `fub:board` alla carta |
+| 66 | `board-add` | una tavola nuova con la sua carta, dopo l'ultima carta e dopo l'ultima tavola |
+| 67 | `board-paper-mismatch` | una tavola e la sua carta con geometrie diverse: rifiuto `invalid-elem` |
+| 68 | `board-move` | un `batch` cambia insieme il `viewBox` della tavola e la geometria della carta |
+| 69 | `board-set-alone` | il `viewBox` di una tavola senza la sua carta: rifiuto `invalid-elem` |
+| 70 | `board-remove-alone` | togliere una tavola e lasciare la sua carta: rifiuto `invalid-elem` |
+| 71 | `board-remove-last` | togliere l'ultima tavola: la carta perde `fub:board` e `page` la riporta sulla pagina |
+| 72 | `page-skips-board-papers` | `page` in un disegno con le tavole cambia soltanto la radice |
+| 73 | `board-free-paper` | una tavola nuova accanto alla carta della pagina: rifiuto `invalid-elem` |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le
