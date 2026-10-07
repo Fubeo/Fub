@@ -36,7 +36,7 @@ export const dsOf = (objects: readonly (readonly Subpath[])[]): string[] | null 
 /// Vero se `nodable` si taglia e si unisce: un tracciato o una forma. Una
 /// freccia ha un'asta sola fra due capi, e un tratto a penna resta un
 /// tratto solo.
-export const cuttable = (nodable: Nodable): boolean => nodable.kind !== "arrow" && nodable.kind !== "stroke";
+export const cuttable = (nodable: Nodable): boolean => nodable.kind !== "arrow" && nodable.kind !== "stroke" && nodable.kind !== "width";
 
 /// I sottotracciati di un taglio raccolti in oggetti: il primo coi
 /// sottotracciati che il taglio non tocca e il primo pezzo, poi un oggetto

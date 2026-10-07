@@ -130,6 +130,9 @@ export type Note =
   /// Il `d` di un poligono regolare o di una stella, che viene dai loro
   /// parametri.
   | "shape"
+  /// Il `d` di una linea a spessore variabile, che viene dalla linea e dal
+  /// profilo.
+  | "width"
   /// Un attributo `fub:*`.
   | "fubdraw"
   /// L'`href` di un collegamento, che ha il suo comando.
@@ -199,8 +202,9 @@ const GEOMETRY: Readonly<Partial<Record<Role, readonly string[]>>> = {
 function offered(role: Role): readonly string[] {
   const geometry = GEOMETRY[role] ?? [];
   switch (role) {
-    // Un tratto è tutto riempimento.
+    // Un tratto e una linea a spessore variabile sono tutti riempimento.
     case "stroke":
+    case "width":
       return [...PAINT, ...COMMON];
     // Una freccia è tutta contorno.
     case "arrow":
@@ -235,6 +239,7 @@ function rowOf(role: Role, attr: OutAttr): Row {
   if (attr.local === "d" && role === "stroke") return read("ink");
   if (attr.local === "d" && role === "arrow") return read("arrow");
   if (attr.local === "d" && (role === "ngon" || role === "star")) return read("shape");
+  if (attr.local === "d" && role === "width") return read("width");
   if (value.length > EDIT_LIMIT) return read("long");
   switch (kindOf(key)) {
     case "keyword":

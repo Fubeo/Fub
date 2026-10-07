@@ -4,9 +4,11 @@
 // annulla disfa al byte.
 
 import { describe, expect, it } from "vitest";
+import { parsePath } from "../scene/geometry";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
-import { dashOf, dashValue, lookOf, outlineOps, outlinesOf, type OutlineChange, type Outlined } from "./outline";
+import { dashOf, dashValue, lookOf, outlineOps, outlinesOf, widthLinesOf, type OutlineChange, type Outlined } from "./outline";
+import { widthAttrs } from "./profile";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
 
@@ -92,7 +94,7 @@ describe("i contorni della selezione", () => {
     const [outline] = outlinesOf(opened.engine.model!, opened.index.units);
     expect(outline).toMatchObject({ width: 4, cap: "butt", join: "bevel", dashes: "16 12" });
     expect(outline!.inherited).toEqual({ cap: "butt", join: "bevel", dashes: "16 12" });
-    expect(lookOf([outline!])).toEqual({ dash: "dashed", custom: null, cap: "butt", join: "bevel" });
+    expect(lookOf([outline!])).toEqual({ dashable: true, dash: "dashed", custom: null, cap: "butt", join: "bevel" });
   });
 
   it("nel menu: ciò che hanno tutti uguale, un tratteggio che non è del menu col suo valore, niente dove sono diversi", () => {
@@ -100,17 +102,30 @@ describe("i contorni della selezione", () => {
       const opened = open(doc(`${LAYER}${body}</g>`));
       return lookOf(outlinesOf(opened.engine.model!, opened.index.units));
     };
-    expect(of(`${RECT("oaaaaaaaa")}${RECT("obbbbbbbb")}`)).toEqual({ dash: "solid", custom: null, cap: "butt", join: "miter" });
-    expect(of(RECT("oaaaaaaaa", ' stroke="#000000" stroke-width="2" stroke-dasharray="5,1 2"'))).toEqual({ dash: "custom", custom: "5 1 2", cap: "butt", join: "miter" });
-    expect(of(`${RECT("oaaaaaaaa")}${ARROW}`)).toEqual({ dash: "solid", custom: null, cap: null, join: null });
+    expect(of(`${RECT("oaaaaaaaa")}${RECT("obbbbbbbb")}`)).toEqual({ dashable: true, dash: "solid", custom: null, cap: "butt", join: "miter" });
+    expect(of(RECT("oaaaaaaaa", ' stroke="#000000" stroke-width="2" stroke-dasharray="5,1 2"'))).toEqual({ dashable: true, dash: "custom", custom: "5 1 2", cap: "butt", join: "miter" });
+    expect(of(`${RECT("oaaaaaaaa")}${ARROW}`)).toEqual({ dashable: true, dash: "solid", custom: null, cap: null, join: null });
     expect(of(`${RECT("oaaaaaaaa", ' stroke="#000000" stroke-width="2" stroke-dasharray="5 1"')}${RECT("obbbbbbbb", ' stroke="#000000" stroke-width="2" stroke-dasharray="1 5"')}`)).toEqual({
+      dashable: true,
       dash: null,
       custom: null,
       cap: "butt",
       join: "miter",
     });
     expect(of(`${RECT("oaaaaaaaa")}${RECT("obbbbbbbb", ' stroke="#000000" stroke-width="2" stroke-dasharray="8 6"')}`).dash).toBeNull();
-    expect(of(RECT("oaaaaaaaa", ' fill="#000000"'))).toEqual({ dash: null, custom: null, cap: null, join: null });
+    expect(of(RECT("oaaaaaaaa", ' fill="#000000"'))).toEqual({ dashable: false, dash: null, custom: null, cap: null, join: null });
+  });
+
+  it("con le linee a spessore variabile: gli estremi e gli angoli di tutte, il tratteggio dei soli contorni", () => {
+    const written = widthAttrs({ cap: "round", join: "miter", profile: [[0, 2, 2], [1, 0, 0]], spine: parsePath("M0 0 L100 0")! })!;
+    const LINE = `<path id="owwwwwwww" fub:shape="width" fub:geom="${written.geom}" d="${written.d}" fill="#000000"/>`;
+    const of = (body: string) => {
+      const opened = open(doc(`${LAYER}${body}</g>`));
+      return lookOf(outlinesOf(opened.engine.model!, opened.index.units), widthLinesOf(opened.engine.model!, opened.index.units));
+    };
+    expect(of(LINE)).toEqual({ dashable: false, dash: null, custom: null, cap: "round", join: "miter" });
+    expect(of(`${RECT("oaaaaaaaa")}${LINE}`)).toEqual({ dashable: true, dash: "solid", custom: null, cap: null, join: "miter" });
+    expect(of(`<g id="ogggggggg">${LINE}</g>`).cap).toBe("round");
   });
 });
 

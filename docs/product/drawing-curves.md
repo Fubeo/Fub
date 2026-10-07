@@ -76,9 +76,10 @@ Costruttore di forme. Le regole stanno in
   la stessa curva, un arco in due archi.
 - **Dove non si taglia lo si dice**: su un capo di un tracciato aperto non
   c'è niente da tagliare; fuori dai contorni le Forbici non toccano niente;
-  una freccia chiede prima «Oggetto in tracciato»; un tratto a penna, un
-  testo e un'immagine non hanno un contorno da tagliare. Sopra una forma che
-  non si taglia, le Forbici trovano il contorno di quella sotto.
+  una freccia e una linea a spessore variabile chiedono prima «Oggetto in
+  tracciato»; un tratto a penna, un testo e un'immagine non hanno un
+  contorno da tagliare. Sopra una forma che non si taglia, le Forbici trovano
+  il contorno di quella sotto.
 - **Dalla tastiera** il cursore dice dove taglierebbe, «x 250, y 150:
   Contorno di Rettangolo, Verde, Spazio taglia qui», o in quale nodo; `Spazio`
   e di nuovo `Spazio` tagliano lì.
@@ -96,8 +97,9 @@ a parte: la scia segue il puntatore, e il taglio si fa quando si rilascia.
 - **Con `Alt`** il taglio è dritto, dal primo punto all'ultimo, e la scia lo
   mostra.
 - **Taglia gli oggetti scelti**, o senza selezione tutti quelli che
-  attraversa; i pezzi sono la selezione dopo. Frecce, tratti a penna, testi,
-  immagini e parti di altri programmi restano interi, e lo si dice: «1
+  attraversa; i pezzi sono la selezione dopo. Frecce, linee a [spessore
+  variabile](drawing-width.md), tratti a penna, testi, immagini e parti di
+  altri programmi restano interi, e lo si dice: «1
   oggetto attraversato resta intero». Resta intera anche una forma con
   sottotracciati chiusi e aperti insieme.
 - **Dalla tastiera** `Spazio` preme, le frecce tirano il tratto, `Spazio`

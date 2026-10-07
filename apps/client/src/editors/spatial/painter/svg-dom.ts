@@ -93,6 +93,11 @@ export interface PainterDraft {
   /// `ry`: un rettangolo mentre la maniglia lo arrotonda; `null` ne toglie
   /// uno. Gli altri nomi non contano.
   readonly radii?: ReadonlyMap<PaintNode, Readonly<Record<string, string | null>>>;
+  /// Le forme il cui contorno si mostra come un tracciato pieno: un
+  /// contorno che lo strumento Spessore sta per rendere a spessore
+  /// variabile. La forma resta col suo riempimento, senza contorno, e sopra
+  /// si vede un `path` con gli attributi dati, il `d` e il colore.
+  readonly strokes?: ReadonlyMap<PaintNode, Readonly<Record<string, string>>>;
   /// I nodi che la gomma sta per togliere: si vedono sbiaditi.
   readonly faded?: ReadonlySet<PaintNode>;
   /// I nodi che non si vedono: un testo mentre lo si scrive sul posto, che
@@ -115,6 +120,10 @@ const DRAFTED = ["transform", "d", "rx", "ry"] as const;
 /// Gli attributi della geometria delle forme, che il `path` al loro posto
 /// non prende.
 const SHAPE_GEOMETRY: ReadonlySet<string> = new Set(["x", "y", "width", "height", "rx", "ry", "cx", "cy", "r", "x1", "y1", "x2", "y2", "points"]);
+
+/// Gli attributi della pittura, che il contorno pieno sopra una forma non
+/// prende da lei.
+const PAINTING = /^(fill|stroke|marker)/;
 
 /// L'opacità di un nodo sbiadito dalla gomma.
 export const FADED_OPACITY = "0.25";
@@ -352,6 +361,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     if (dim === undefined) record.el.style.removeProperty("opacity");
     else record.el.style.setProperty("opacity", dim);
     record.el.style.removeProperty("visibility");
+    record.el.style.removeProperty("stroke");
   };
 
   /// Gli strati immagine che l'anteprima sposta, e quelli che sbiadisce.
@@ -439,6 +449,25 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
           else record.el.setAttribute(name, value);
         }
         touched.add(record);
+      }
+    }
+    for (const [paint, attrs] of draft.strokes ?? []) {
+      for (const record of recordsOf(paint)) {
+        touched.add(record);
+        const stand = record.el.ownerDocument.createElementNS(SVG, "path");
+        for (const { name, value } of [...record.el.attributes]) {
+          if (name !== "id" && !name.startsWith("data-") && !SHAPE_GEOMETRY.has(name) && !PAINTING.test(name)) stand.setAttribute(name, value);
+        }
+        // La pittura nello stile in linea, che vale più dei fogli di stile
+        // del disegno.
+        for (const [name, value] of Object.entries(attrs)) {
+          if (name === "d") stand.setAttribute(name, value);
+          else stand.style.setProperty(name, value);
+        }
+        stand.style.setProperty("stroke", "none");
+        record.el.style.setProperty("stroke", "none");
+        record.el.after(stand);
+        standIns.push(stand);
       }
     }
     for (const paint of draft.faded ?? []) {

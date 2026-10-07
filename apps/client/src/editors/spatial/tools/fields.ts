@@ -324,7 +324,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       const dashes: ChoiceOption[] = DASHES.map((dash) => ({ value: dash, label: t(DASH_LABELS[dash]) }));
       // Un tratteggio che non è del menu c'è, col suo valore.
       if (outline.dash === "custom") dashes.push({ value: "custom", label: t("draw.outline.custom", { value: outline.custom ?? "" }) });
-      fields.dash = { kind: "choice", label: t("draw.properties.dash"), value: outline.dash, options: dashes };
+      if (outline.dashable) fields.dash = { kind: "choice", label: t("draw.properties.dash"), value: outline.dash, options: dashes };
       if (has("outline")) {
         fields.cap = { kind: "choice", label: t("draw.properties.cap"), value: outline.cap, options: CAPS.map((cap) => ({ value: cap, label: t(CAP_LABELS[cap]) })) };
         fields.join = { kind: "choice", label: t("draw.properties.join"), value: outline.join, options: JOINS.map((join) => ({ value: join, label: t(JOIN_LABELS[join]) })) };

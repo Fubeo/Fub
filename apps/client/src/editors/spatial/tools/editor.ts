@@ -122,6 +122,7 @@ import { isDefaultCurve, pressureCurve, sameCurve, validCurve, type PenCurve } f
 import type { TouchPolicy } from "../pen/roles";
 import { pointAt } from "../scene/curves";
 import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
+import { widthsAt, type WidthPoint } from "../scene/varwidth";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
@@ -181,7 +182,7 @@ import {
   type Order,
 } from "./arrange";
 import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
-import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, type OutlineChange } from "./outline";
+import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf, type OutlineChange } from "./outline";
 import { boundsAfter, MAX_SCALE_PERCENT, MAX_SKEW, numericMatrix, numericOps } from "./transform";
 import { barSpot, type ScreenBox } from "./bar";
 import {
@@ -245,7 +246,9 @@ import {
 import { applyOps } from "./apply";
 import { pathOps } from "./topath";
 import type { Join } from "./offset";
-import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps } from "./paths";
+import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps, strokeFill } from "./paths";
+import { movedPoint, presetOf, PRESETS, profileWidth, rightOf, SpineMeasure, widthOutline, withoutPoint, withPoint, withWidths, type Preset, type WidthShape } from "./profile";
+import { holdsWidth, profileOps, widthsOf, widthTarget, writeWidth, type NoWidth, type ProfileChange, type WidthTarget } from "./width";
 import type { BooleanKind } from "./boolean";
 import { combineOps, isShape, type Refused } from "./combine";
 import { crossings, cutAt, joinAcross, joinEnds, mapSubs, nodeSpot, type Spot } from "./cut";
@@ -612,7 +615,9 @@ const RECENT_MAX = 6;
 
 /// Gli strumenti che il menu radiale offre quando chi disegna ne ha usati
 /// meno di tre: prima quelli che si alternano di più alla penna.
-const FILL_TOOLS: readonly ToolId[] = ["pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "nodes", "builder", "scissors"];
+const FILL_TOOLS: readonly ToolId[] = [
+  "pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "nodes", "builder", "scissors", "width",
+];
 
 /// La lettera dei pulsanti delle dimensioni del testo, in pixel.
 const SIZE_GLYPH_PX: readonly number[] = [12, 16, 22];
@@ -885,6 +890,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
   // Due anelli in basso, e le lame che si incrociano verso l'alto.
   "draw-scissors": ["M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M15.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M7.8 16.2L17 3", "M16.2 16.2L7 3"],
+  // Una linea che si gonfia in mezzo, e il punto che la allarga.
+  "draw-width": ["M2 12C6 7.5 18 7.5 22 12C18 16.5 6 16.5 2 12z", "M12 3v18", "M10 5l2-2 2 2", "M10 19l2 2 2-2"],
   "draw-bezier": ["M12 21L7 12l3-8h4l3 8z", "M12 21v-7.5", "M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   // Tre punti, e la curva che vi passa.
   "draw-curvature": ["M4 18C4 11 7.5 7 12 7s8 4 8 11", "M2.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M10.5 7a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M18.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
@@ -955,7 +962,20 @@ interface LinkMark {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | LassoGesture | NodesGesture | BuilderGesture | CutGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
+type Gesture =
+  | InkGesture
+  | ShapeGesture
+  | SelectGesture
+  | LassoGesture
+  | NodesGesture
+  | BuilderGesture
+  | CutGesture
+  | WidthGesture
+  | BezierGesture
+  | EraseGesture
+  | TextGesture
+  | GuideGesture
+  | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -1104,6 +1124,57 @@ interface CutSpot {
   readonly spot: Spot;
   readonly node: NodeKey | null;
   readonly at: Point;
+}
+
+/// Che cosa prende lo Spessore: il lato `side` del punto `index` del
+/// profilo, per allargarlo o stringerlo; il punto `index` in mezzo alla
+/// linea, per spostarlo; o la linea alla frazione `u` della lunghezza, dove
+/// un trascinamento aggiunge un punto e lo allarga dal lato `side`. Il lato
+/// 1 è a destra di chi percorre la linea, -1 a sinistra; 0 per chi preme
+/// sulla linea, o sui lati di un punto largo zero, che tira la parte verso
+/// cui parte il trascinamento.
+type WidthGrab =
+  | { readonly kind: "side"; readonly index: number; readonly side: WidthSide }
+  | { readonly kind: "point"; readonly index: number }
+  | { readonly kind: "line"; readonly u: number; readonly side: WidthSide };
+
+/// Un lato della linea, o nessuno ancora.
+type WidthSide = 1 | -1 | 0;
+
+/// Una linea dello Spessore nella scena: la forma, la sua linea a spessore
+/// variabile, com'è o come la diventa il suo contorno, misurata.
+interface WidthLine {
+  readonly unit: Unit;
+  readonly leaf: LeafNode;
+  readonly target: WidthTarget;
+  readonly measure: SpineMeasure;
+  /// Dalle coordinate della forma a quelle della scena, e ritorno.
+  readonly matrix: Matrix;
+  readonly inverse: Matrix;
+}
+
+/// Dove lavora lo Spessore: una linea, e ciò che prende.
+interface WidthSpot extends WidthLine {
+  readonly grab: WidthGrab;
+}
+
+/// Un gesto dello Spessore: un tocco sceglie un punto del profilo; un
+/// trascinamento allarga o stringe un lato, e senza Alt l'altro dello
+/// stesso tanto, o sposta un punto in mezzo lungo la linea.
+interface WidthGesture extends GestureBase {
+  readonly kind: "width";
+  /// Dove è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// Ciò che prende, trovato dove è sceso, o perché non prende niente.
+  spot: WidthSpot | DrawKey | null;
+  /// La linea come la lascia il trascinamento, e il suo punto che cambia.
+  shape: WidthShape | null;
+  index: number;
+  /// Il lato che il trascinamento tira, deciso quando parte.
+  side: WidthSide;
+  /// Oltre la soglia del trascinamento: prima, è un tocco.
+  dragging: boolean;
 }
 
 /// I nodi scelti, per forma: la chiave è il percorso della forma nel
@@ -1737,6 +1808,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// cursore della tastiera: il contorno della forma e il punto si vedono
   /// prima di tagliare. Vale per la scena in cui lo si è trovato.
   let cutHover: { readonly index: SceneIndex; readonly spot: CutSpot } | null = null;
+  /// Dove lavorerebbe lo Spessore sotto il puntatore che passa, o sotto il
+  /// cursore della tastiera: la linea della forma e i suoi punti si vedono
+  /// prima di toccarla. Vale per la scena in cui lo si è trovato.
+  let widthHover: { readonly index: SceneIndex; readonly spot: WidthSpot } | null = null;
+  /// Il punto del profilo scelto con lo Spessore: il percorso della sua
+  /// linea nel modello, e il suo indice. Canc lo toglie, Invio ne apre le
+  /// misure.
+  let widthPicked: { readonly path: readonly number[]; readonly point: number } | null = null;
+  /// L'ultimo tocco su un punto dello Spessore, per il doppio tocco.
+  let widthTap: { readonly path: readonly number[]; readonly point: number; readonly at: Point; readonly time: number } | null = null;
   /// Il Costruttore di forme sugli oggetti scelti, per la scena e la
   /// selezione in cui lo si è fatto; dalla scena alle coordinate delle sue
   /// regioni. `builder` è `null` se non c'è niente di scelto o se il calcolo
@@ -3390,6 +3471,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...hoverHandles());
     handles.push(...regionHandles());
     handles.push(...cutHandles());
+    handles.push(...widthHandles());
     handles.push(...pathsHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
@@ -4402,6 +4484,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const model = engine.model!;
     const index = currentIndex();
     const outlines = outlinesOf(model, units);
+    const widths = widthLinesOf(model, units);
     return {
       keys: selection.join("\n"),
       subject: units.length === 1 ? labelOf(units[0]!) : plural(units.length, "draw.describe.parts.one", "draw.describe.parts.other"),
@@ -4409,7 +4492,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       frame: frameOf(units),
       ratio: ratioOn(units),
       look: selectionLook(model, units),
-      outline: outlines.length === 0 ? null : outlineLook(outlines),
+      outline: outlines.length === 0 && widths.length === 0 ? null : outlineLook(outlines, widths),
       alignable: alignReference(units) !== null,
       drawn: drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => orderOps(model, index, units, order, newIds()).ops.length > 0) : []),
@@ -5516,6 +5599,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (live.textContent !== before) finished = (live.textContent ?? "").trim();
       recentTools = [tool, ...recentTools.filter((each) => each !== tool && each !== id)].slice(0, RECENT_MAX);
       forgetBuilder();
+      // Il punto scelto dello Spessore è dello strumento.
+      widthPicked = null;
+      widthHover = null;
     }
     tool = id;
     syncControls();
@@ -6289,6 +6375,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return { ...base, kind: "builder", from: null, end: null, mode: null, additive: false, crossed: [], trail: [], base: [...selection], dragging: false };
       case "scissors":
         return { ...base, kind: "cut", from: null, end: null, trail: [], dragging: false };
+      case "width":
+        return { ...base, kind: "width", from: null, end: null, spot: null, shape: null, index: -1, side: 0, dragging: false };
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
         return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
@@ -6981,7 +7069,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Perché la forma `nodable` non si taglia, a parole.
   const uncutText = (nodable: Nodable | NoNodes): DrawKey =>
-    typeof nodable === "string" ? NO_NODES[nodable] : nodable.kind === "arrow" ? "draw.scissors.arrow" : "draw.nodes.stroke";
+    typeof nodable === "string"
+      ? NO_NODES[nodable]
+      : nodable.kind === "arrow" ? "draw.scissors.arrow" : nodable.kind === "width" ? "draw.scissors.width" : "draw.nodes.stroke";
 
   /// Dove le Forbici tagliano vicino a `p`, un punto della scena: sul
   /// contorno della forma più in alto che vi passa, nel nodo se ci cade.
@@ -7195,6 +7285,426 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange("draw.action.knife", plan.finish(picked)) === null) return;
     announce(`${plural(objects, "draw.knife.cut.one", "draw.knife.cut.other", { pieces })}${rest}`);
   };
+
+  // --- Lo Spessore -------------------------------------------------------------
+
+  /// Quanto distano due punti.
+  const apart = (a: Point, b: Point): number => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+  /// Le linee dello Spessore delle forme, finché la forma è la stessa.
+  const widthLines = new WeakMap<LeafNode, { readonly target: WidthTarget; readonly measure: SpineMeasure } | NoWidth>();
+
+  /// La linea a spessore variabile di `leaf`, com'è o come la diventa il suo
+  /// contorno, misurata; o perché non ne ha una.
+  const widthLineOf = (leaf: LeafNode): { readonly target: WidthTarget; readonly measure: SpineMeasure } | NoWidth => {
+    let found = widthLines.get(leaf);
+    if (found === undefined) {
+      const target = widthTarget(leaf);
+      found = typeof target === "string" ? target : { target, measure: new SpineMeasure(target.shape.spine) };
+      widthLines.set(leaf, found);
+    }
+    return found;
+  };
+
+  /// Il punto `index` del profilo di `shape`, nelle coordinate della forma:
+  /// il centro sulla linea, il verso verso destra lì, e la fine dei due
+  /// lati.
+  const widthPoint = (shape: WidthShape, measure: SpineMeasure, index: number): { readonly at: Point; readonly normal: Point; readonly right: Point; readonly left: Point } => {
+    const [u, left, right] = shape.profile[index]!;
+    const { at, along } = measure.placeAt(u);
+    const normal = rightOf(along);
+    return { at, normal, right: [at[0] + normal[0] * right, at[1] + normal[1] * right], left: [at[0] - normal[0] * left, at[1] - normal[1] * left] };
+  };
+
+  /// Che cosa prende lo Spessore in `p`, un punto della scena, sulla linea
+  /// `line`: il lato o il centro più vicino di un punto del profilo, entro
+  /// `near`; altrimenti la linea, se `p` cade sul suo contorno o a meno di
+  /// `reach` da lui. Un lato si prende più vicino a lui che al centro, e a
+  /// pari distanza vince il lato, che allarga anche un punto largo zero; i
+  /// capi non si spostano, e il loro centro è la linea.
+  const widthGrabAt = (line: WidthLine, p: Point, near: number, reach: number): WidthGrab | null => {
+    const { profile } = line.target.shape;
+    const local = apply(line.inverse, p);
+    const spot = line.measure.spotAt(local);
+    // Da che parte della linea sta `p`, sullo schermo: a meno di un pixel
+    // da lei, o oltre un capo nel suo verso, non lo dice ancora.
+    const offset = (spot.along[0] * (local[1] - spot.at[1]) - spot.along[1] * (local[0] - spot.at[0])) * scaleOf(line.matrix) * camera.scale;
+    const side: WidthSide = Math.abs(offset) < 1 ? 0 : offset > 0 ? 1 : -1;
+    let best: WidthGrab | null = null;
+    let nearest = near;
+    for (let index = 0; index < profile.length; index++) {
+      const point = widthPoint(line.target.shape, line.measure, index);
+      const [, left, right] = profile[index]!;
+      const centre = apart(apply(line.matrix, point.at), p);
+      const sides: ReadonlyArray<readonly [1 | -1, Point]> = [[1, point.right], [-1, point.left]];
+      for (const [which, end] of sides) {
+        const gap = apart(apply(line.matrix, end), p);
+        if (gap <= nearest && gap <= centre) {
+          // I lati di un punto largo zero stanno sul centro.
+          best = { kind: "side", index, side: left + right > 0 ? which : side };
+          nearest = gap;
+        }
+      }
+      if (index > 0 && index < profile.length - 1 && centre < nearest) {
+        best = { kind: "point", index };
+        nearest = centre;
+      }
+    }
+    if (best !== null) return best;
+    const [left, right] = widthsAt(profile, spot.u);
+    const wide = (spot.side === 1 ? right : left) * scaleOf(line.matrix);
+    return apart(apply(line.matrix, spot.at), p) <= wide + reach ? { kind: "line", u: spot.u, side } : null;
+  };
+
+  /// Dove lavora lo Spessore vicino a `p`, un punto della scena: sulla
+  /// forma più in alto il cui contorno vi passa, o i cui punti vi stanno.
+  /// Altrimenti perché no: la forma sotto non ha un contorno che cambia
+  /// spessore, o lì non passa un contorno.
+  const widthSpotAt = (p: Point, pointer: InkPointerType): WidthSpot | DrawKey => {
+    const index = currentIndex();
+    const near = NODE_PX[pointer] / camera.scale;
+    const reach = HIT_PX[pointer] / camera.scale;
+    const around = Math.max(near, reach);
+    let refusal: DrawKey | null = null;
+    for (let i = index.units.length - 1; i >= 0; i--) {
+      const unit = index.units[i]!;
+      if (!unit.hits(p, around)) continue;
+      const shapes = unit.shapes();
+      for (let k = shapes.length - 1; k >= 0; k--) {
+        const { leaf, matrix } = shapes[k]!;
+        const found = widthLineOf(leaf);
+        const inverse = invert(matrix);
+        if (typeof found === "string" || inverse === null) {
+          if (unit.shapeAt(p, around) === leaf) refusal ??= typeof found === "string" ? NO_WIDTH[found] : "draw.nodes.flat";
+          continue;
+        }
+        const line: WidthLine = { unit, leaf, ...found, matrix, inverse };
+        const grab = widthGrabAt(line, p, near, reach);
+        if (grab !== null) return { ...line, grab };
+      }
+    }
+    return refusal ?? "draw.width.miss";
+  };
+
+  /// La linea del punto scelto dello Spessore, se c'è ancora nella scena di
+  /// adesso, e l'indice del punto.
+  const pickedWidth = (): (WidthLine & { readonly point: number }) | null => {
+    const picked = widthPicked;
+    const model = engine.model;
+    if (picked === null || model === null || tool !== "width" || !has("width")) return null;
+    let node: ElementPart | undefined = model.root;
+    for (const step of picked.path) node = node?.kind === "container" ? elementChildren(node)[step] : undefined;
+    if (node === undefined || node.kind !== "leaf") return null;
+    const units = currentIndex().units;
+    for (let at: ElementPart | null = node; at !== null; at = at.parent) {
+      const unit = units.find((each) => each.node === at);
+      const shape = unit?.shapes().find((each) => each.leaf === node);
+      if (unit === undefined || shape === undefined) continue;
+      const found = widthLineOf(shape.leaf);
+      const inverse = invert(shape.matrix);
+      if (typeof found === "string" || inverse === null || picked.point >= found.target.shape.profile.length) return null;
+      return { unit, leaf: shape.leaf, ...found, matrix: shape.matrix, inverse, point: picked.point };
+    }
+    return null;
+  };
+
+  /// Le larghezze del punto `index` del profilo di `shape` sulla linea
+  /// `line`, come si dicono: nella scena, nell'unità del documento.
+  const widthWords = (line: WidthLine, shape: WidthShape, index: number): { readonly width: string; readonly left: string; readonly right: string } => {
+    const k = scaleOf(line.matrix);
+    const [, left, right] = shape.profile[index]!;
+    return { width: lengthSpoken((left + right) * k), left: lengthSpoken(left * k), right: lengthSpoken(right * k) };
+  };
+
+  /// Il punto `index` della linea `line`, a parole.
+  const widthPointText = (line: WidthLine, index: number): string =>
+    t("draw.width.cursor.point", { index: index + 1, count: line.target.shape.profile.length, name: labelOf(line.unit), ...widthWords(line, line.target.shape, index) });
+
+  /// Dove lavora lo Spessore, a parole: il punto, o il contorno e quanto è
+  /// largo lì.
+  const widthSpotText = (found: WidthSpot): string => {
+    if (found.grab.kind !== "line") return widthPointText(found, found.grab.index);
+    const [left, right] = widthsAt(found.target.shape.profile, found.grab.u);
+    return t("draw.width.cursor.line", { name: labelOf(found.unit), width: lengthSpoken((left + right) * scaleOf(found.matrix)) });
+  };
+
+  /// Il puntatore, o il cursore della tastiera, passa sopra `p` senza
+  /// premere: con lo Spessore si vedono la linea e i punti della forma
+  /// sotto. Il dito non passa: tocca.
+  const hoverWidth = (p: Point | null, pointer: InkPointerType): void => {
+    let next: typeof widthHover = null;
+    if (p !== null && pointer !== "touch" && tool === "width" && has("width") && editable()) {
+      const found = widthSpotAt(p, pointer);
+      if (typeof found !== "string") next = { index: currentIndex(), spot: found };
+    }
+    if (next === null && widthHover === null) return;
+    widthHover = next;
+    showHandles();
+  };
+
+  /// Lo Spessore: la linea della forma sotto il puntatore e di quella col
+  /// punto scelto, sottile, coi punti del profilo e i loro lati; dove un
+  /// trascinamento aggiungerebbe un punto, quel punto, tenue. Mentre lo si
+  /// trascina, la linea come la lascia, e quanto è larga lì.
+  const widthHandles = (): OverlayHandle[] => {
+    if (tool !== "width" || !has("width")) return [];
+    const out: OverlayHandle[] = [];
+    const show = (line: WidthLine, shape: WidthShape, chosen: number, hint: boolean): void => {
+      out.push({ kind: "outline", segments: shape.spine, matrix: line.matrix, hint });
+      for (let index = 0; index < shape.profile.length; index++) {
+        const point = widthPoint(shape, line.measure, index);
+        const at = apply(line.matrix, point.at);
+        for (const end of [point.right, point.left]) {
+          const [x, y] = apply(line.matrix, end);
+          out.push({ kind: "control", x, y, node: at });
+        }
+        out.push({ kind: "node", x: at[0], y: at[1], shape: "diamond", selected: index === chosen, hint });
+      }
+    };
+    const g = current?.kind === "width" ? current : null;
+    if (g !== null && g.dragging && typeof g.spot === "object" && g.spot !== null && g.shape !== null) {
+      show(g.spot, g.shape, g.index, false);
+      if (g.end !== null) out.push({ kind: "label", x: g.end[0], y: g.end[1], text: lengthText(profileWidthAt(g.shape, g.index) * scaleOf(g.spot.matrix)) });
+      return out;
+    }
+    const picked = pickedWidth();
+    if (picked !== null) show(picked, picked.target.shape, picked.point, false);
+    const hovered = widthHover;
+    if (hovered === null || hovered.index !== currentIndex()) return out;
+    const { spot } = hovered;
+    if (picked === null || picked.leaf !== spot.leaf) show(spot, spot.target.shape, -1, true);
+    if (spot.grab.kind === "line") {
+      const { at, along } = spot.measure.placeAt(spot.grab.u);
+      const normal = rightOf(along);
+      const [left, right] = widthsAt(spot.target.shape.profile, spot.grab.u);
+      const centre = apply(spot.matrix, at);
+      for (const end of [[at[0] + normal[0] * right, at[1] + normal[1] * right], [at[0] - normal[0] * left, at[1] - normal[1] * left]] as Point[]) {
+        const [x, y] = apply(spot.matrix, end);
+        out.push({ kind: "control", x, y, node: centre });
+      }
+      out.push({ kind: "node", x: centre[0], y: centre[1], shape: "circle", selected: false, hint: true });
+    }
+    return out;
+  };
+
+  /// La larghezza del punto `index` del profilo di `shape`, da un lato
+  /// all'altro.
+  const profileWidthAt = (shape: WidthShape, index: number): number => shape.profile[index]![1] + shape.profile[index]![2];
+
+  /// Il primo punto del gesto dello Spessore: ciò che prende.
+  const widthStart = (g: WidthGesture, p: Point): void => {
+    g.from = p;
+    g.spot = widthSpotAt(p, g.pointer);
+  };
+
+  /// Il gesto `g` dello Spessore col puntatore in `g.end`: oltre la soglia
+  /// del trascinamento, il lato preso si allarga o si stringe di quanto il
+  /// puntatore si è allontanato dalla linea o avvicinato, e senza Alt
+  /// l'altro dello stesso tanto; un punto in mezzo preso al centro segue il
+  /// puntatore lungo la linea. Chi è partito sulla linea tira la parte verso
+  /// cui va.
+  const widthUpdate = (g: WidthGesture): void => {
+    const spot = g.spot;
+    if (typeof spot !== "object" || spot === null || g.from === null || g.end === null) return;
+    if (!g.dragging) {
+      if (Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale <= DRAG_PX[g.pointer]) return;
+      g.dragging = true;
+    }
+    const base = spot.target.shape;
+    const p = apply(spot.inverse, g.end);
+    const { grab } = spot;
+    let profile: WidthPoint[];
+    if (grab.kind === "point") {
+      profile = movedPoint(base.profile, grab.index, spot.measure.spotAt(p).u);
+      g.index = grab.index;
+    } else {
+      const added = grab.kind === "line" ? withPoint(base.profile, grab.u) : { profile: [...base.profile], index: grab.index };
+      const { at, normal } = widthPoint({ ...base, profile: added.profile }, spot.measure, added.index);
+      // Quanto il puntatore sta a destra della linea, nel verso del punto.
+      const across = (q: Point): number => (q[0] - at[0]) * normal[0] + (q[1] - at[1]) * normal[1];
+      if (g.side === 0) g.side = grab.side !== 0 ? grab.side : across(p) < 0 ? -1 : 1;
+      const side = g.side;
+      const delta = (across(p) - across(apply(spot.inverse, g.from))) * side;
+      const [, left, right] = added.profile[added.index]!;
+      const [pulled, other] = side === 1 ? [right + delta, alt ? left : left + delta] : [left + delta, alt ? right : right + delta];
+      profile = side === 1 ? withWidths(added.profile, added.index, other, pulled) : withWidths(added.profile, added.index, pulled, other);
+      g.index = added.index;
+    }
+    // Una linea senza nessuna larghezza non si scrive: resta l'ultima.
+    if (profileWidth(profile) > 0) g.shape = { ...base, profile };
+    showWidthDraft(g);
+  };
+
+  /// La linea del gesto `g` sul foglio, al posto di quella dipinta: una
+  /// linea a spessore variabile col contorno nuovo, una forma senza il suo
+  /// contorno e col contorno nuovo sopra.
+  const showWidthDraft = (g: WidthGesture): void => {
+    const spot = g.spot;
+    if (typeof spot !== "object" || spot === null || g.shape === null) return;
+    const outline = widthOutline(g.shape);
+    if (typeof outline === "string" || outline.length === 0) painter.setDraft(null);
+    else {
+      const d = pathData(outline);
+      const paints = builder.paintsOf(spot.leaf);
+      const fill = spot.target.converts ? strokeFill(spot.leaf) : null;
+      painter.setDraft(fill === null ? { paths: new Map(paints.map((paint) => [paint, d])) } : { strokes: new Map(paints.map((paint) => [paint, { d, ...fill }])) });
+    }
+    showHandles();
+  };
+
+  /// Il gesto dello Spessore finisce: un trascinamento scrive la linea, un
+  /// tocco sceglie il punto che tocca, e due aprono le sue misure.
+  const widthEnd = (g: WidthGesture, time: number): void => {
+    current = null;
+    const spot = g.spot;
+    if (g.dragging) {
+      if (typeof spot !== "object" || spot === null || g.shape === null) {
+        clearPreviews();
+        return;
+      }
+      const shape = g.shape;
+      if (!writeWidthLine(spot, shape, g.index, spot.grab.kind === "point" ? "draw.action.width_move" : "draw.action.width")) return;
+      if (spot.grab.kind === "point") announce(t("draw.width.moved", { percent: percentText(shape.profile[g.index]![0]) }));
+      else announce(t("draw.width.changed", widthWords(spot, shape, g.index)));
+      return;
+    }
+    showHandles();
+    if (spot === null || g.from === null) return;
+    if (typeof spot === "string") {
+      announce(t(spot));
+      return;
+    }
+    if (spot.grab.kind === "line") {
+      if (widthPicked !== null) {
+        widthPicked = null;
+        showHandles();
+      }
+      announce(t("draw.width.tap"));
+      return;
+    }
+    const point = spot.grab.index;
+    const path = pathOf(spot.leaf);
+    const tap = widthTap;
+    const twice = tap !== null && samePath(tap.path, path) && tap.point === point && time - tap.time <= DOUBLE_TAP_MS &&
+      Math.hypot(tap.at[0] - g.from[0], tap.at[1] - g.from[1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer];
+    widthPicked = { path, point };
+    widthTap = twice ? null : { path, point, at: g.from, time };
+    showHandles();
+    if (twice) void widthDialog();
+    else announcePickedWidth();
+  };
+
+  /// Dice il punto scelto dello Spessore, e che cosa ci si fa.
+  const announcePickedWidth = (): void => {
+    const picked = pickedWidth();
+    if (picked === null) return;
+    const count = picked.target.shape.profile.length;
+    announce(t("draw.width.picked", { index: picked.point + 1, count, ...widthWords(picked, picked.target.shape, picked.point) }));
+  };
+
+  /// Una frazione come percentuale, nella lingua di adesso.
+  const percentText = (value: number): string => new Intl.NumberFormat(resolvedLanguage(), { style: "percent", maximumFractionDigits: 1 }).format(value);
+
+  /// Scrive la linea `line` come `shape` in un passo di annulla, col punto
+  /// `point` scelto dopo; la selezione resta la stessa. Vero se l'ha
+  /// scritta.
+  const writeWidthLine = (line: WidthLine, shape: WidthShape, point: number | null, label: DrawKey): boolean => {
+    const model = engine.model;
+    painter.setDraft(null);
+    if (model === null) return false;
+    const plan = new Plan(model, newIds());
+    const path = writeWidth(plan, line.target, shape);
+    if (path === null) {
+      clearPreviews();
+      announce(t("draw.width.unwritable"));
+      return false;
+    }
+    const keys = selectedUnits().map((unit) => plan.keyOf(nodeOf(model, unit), unit.key));
+    const before = widthPicked;
+    widthPicked = point === null ? null : { path, point };
+    if (arrange(label, plan.finish(keys)) === null) {
+      widthPicked = before;
+      showHandles();
+      return false;
+    }
+    return true;
+  };
+
+  /// Vero se i tasti dello Spessore hanno un punto scelto su cui lavorare.
+  const widthKeysOn = (): boolean => editable() && pickedWidth() !== null;
+
+  /// Canc con lo Spessore: toglie il punto scelto. I capi restano, e anche
+  /// l'ultima larghezza della linea.
+  const deleteWidthPoint = (): void => {
+    const picked = pickedWidth();
+    if (picked === null) return;
+    const { profile } = picked.target.shape;
+    if (picked.point === 0 || picked.point === profile.length - 1) {
+      announce(t("draw.width.ends"));
+      return;
+    }
+    const left = withoutPoint(profile, picked.point);
+    if (left === null) {
+      announce(t("draw.width.last"));
+      return;
+    }
+    if (writeWidthLine(picked, { ...picked.target.shape, profile: left }, null, "draw.action.width_remove")) announce(t("draw.width.removed"));
+  };
+
+  /// Le misure del punto scelto dello Spessore, come la finestra del punto
+  /// di Illustrator: le larghezze ai due lati e, per un punto in mezzo, dove
+  /// sta lungo la linea. Si apre con Invio o con un doppio tocco.
+  async function widthDialog(): Promise<void> {
+    const picked = pickedWidth();
+    if (asking || picked === null || !editable()) return;
+    cancelGesture();
+    const opened = loads;
+    const k = scaleOf(picked.matrix);
+    const { profile } = picked.target.shape;
+    const [u, left, right] = profile[picked.point]!;
+    const inner = picked.point > 0 && picked.point < profile.length - 1;
+    const fields: FormField[] = [
+      lengthField("left", t("draw.width.left"), left * k, 0),
+      lengthField("right", t("draw.width.right"), right * k, 0),
+      ...(inner ? [{ id: "at", label: t("draw.width.at"), value: String(Math.round(u * 10000) / 100), kind: "number", min: 0, max: 100 } as const] : []),
+    ];
+    const shown = new Map(fields.map((field) => [field.id, field.value]));
+    asking = true;
+    let answer: Readonly<Record<string, string>> | null;
+    try {
+      answer = await promptForm({ title: t("draw.width.title"), message: t("draw.width.message"), okLabel: t("draw.width.ok"), fields });
+    } finally {
+      asking = false;
+    }
+    if (answer === null || disposed || loads !== opened) return;
+    // Mentre la finestra era aperta il disegno può essere cambiato: vale il
+    // punto scelto adesso, se c'è ancora. Un campo non toccato resta esatto,
+    // e se nessuno è cambiato la forma resta com'è.
+    const now = pickedWidth();
+    if (now === null || !editable()) return;
+    const typed = (id: string): string | null => {
+      const text = answer[id];
+      return text === undefined || text === shown.get(id) || !Number.isFinite(Number(text)) ? null : text;
+    };
+    if (["left", "right", "at"].every((id) => typed(id) === null)) {
+      announce(t("draw.unchanged"));
+      return;
+    }
+    const length = (id: string, unchanged: number): number => {
+      const text = typed(id);
+      return text === null ? unchanged : Math.max(0, fieldValue(text) / scaleOf(now.matrix));
+    };
+    const [, wasLeft, wasRight] = now.target.shape.profile[now.point]!;
+    let next = withWidths(now.target.shape.profile, now.point, length("left", wasLeft), length("right", wasRight));
+    const place = typed("at");
+    if (inner && place !== null) next = movedPoint(next, now.point, Number(place) / 100);
+    if (profileWidth(next) <= 0) {
+      announce(t("draw.width.last"));
+      return;
+    }
+    const shape = { ...now.target.shape, profile: next };
+    if (writeWidthLine(now, shape, now.point, "draw.action.width")) announce(t("draw.width.changed", widthWords(now, shape, now.point)));
+  }
 
   // --- I gesti dei nodi --------------------------------------------------------
 
@@ -8614,6 +9124,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hoverNodes(event.buttons === 0 ? point : null, pointer);
         hoverRegion(event.buttons === 0 ? point : null, pointer);
         hoverCut(event.buttons === 0 ? point : null, pointer);
+        hoverWidth(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -8719,6 +9230,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     hoverNodes(null, "mouse");
     hoverRegion(null, "mouse");
     hoverCut(null, "mouse");
+    hoverWidth(null, "mouse");
     if (hover !== null) {
       hover = null;
       showBezier();
@@ -8800,6 +9312,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           for (const sample of samples) cutAdd(g, toPoint(sample));
           showHandles();
           break;
+        case "width":
+          if (g.from === null) widthStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          widthUpdate(g);
+          break;
         case "bezier":
           if (g.from === null) bezierStart(g, toPoint(samples[0]!));
           g.end = toPoint(samples[samples.length - 1]!);
@@ -8869,6 +9386,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           return;
         case "cut":
           cutEnd(g);
+          return;
+        case "width":
+          widthEnd(g, stroke.timeStamp);
           return;
         case "bezier":
           bezierEnd(g, stroke.timeStamp);
@@ -9202,6 +9722,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return;
       }
     }
+    if (pressed === null && tool === "width" && has("width")) {
+      const found = widthSpotAt(p, "mouse");
+      if (typeof found !== "string") {
+        announce(`${at}: ${widthSpotText(found)}`);
+        return;
+      }
+    }
     const hit = pressed === null ? currentIndex().at(p, HIT_PX.mouse / camera.scale) : null;
     announce(hit === null ? at : `${at}: ${labelOf(hit)}`);
   };
@@ -9235,7 +9762,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       hover = { at: next, pointer: "mouse" };
       showBezier();
     }
-    if (pressed === null) hoverCut(next, "mouse");
+    if (pressed === null) {
+      hoverCut(next, "mouse");
+      hoverWidth(next, "mouse");
+    }
     announceCursor();
   };
 
@@ -10202,7 +10732,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function outlineSelection(change: OutlineChange, style: string): void {
     const units = arranging("outline");
     if (units === null) return;
-    if (outlinesOf(engine.model!, units).length === 0) {
+    const model = engine.model!;
+    if (outlinesOf(model, units).length === 0 && ("dash" in change || widthLinesOf(model, units).length === 0)) {
       announce(t("draw.outline.none"));
       return;
     }
@@ -10211,29 +10742,82 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange(label, outlined) !== null) announce(plural(outlined.changed, "draw.outlined.one", "draw.outlined.other", { style }));
   }
 
+  /// Dà il profilo `change` ai contorni scelti, e dice quanti ne ha
+  /// cambiati col nome della scelta, e quanti restano come sono.
+  function profileSelection(change: ProfileChange, style: string): void {
+    const units = arranging("width");
+    if (units === null) return;
+    const index = currentIndex();
+    if (!holdsWidth(index, units)) {
+      announce(t("draw.profile.none"));
+      return;
+    }
+    const profiled = profileOps(engine.model!, index, units, change, newIds());
+    const rest = [
+      profiled.skipped === 0 ? "" : ` ${plural(profiled.skipped, "draw.profiled.skipped.one", "draw.profiled.skipped.other")}`,
+      profiled.refused === 0 ? "" : ` ${plural(profiled.refused, "draw.profiled.refused.one", "draw.profiled.refused.other")}`,
+    ].join("");
+    if (profiled.ops.length === 0) {
+      announce(`${t("flip" in change ? "draw.profile.flat" : "draw.unchanged")}${rest}`);
+      return;
+    }
+    // Il punto scelto dello Spessore era di un altro profilo.
+    widthPicked = null;
+    if (arrange("draw.action.profile", profiled) !== null) announce(`${plural(profiled.changed, "draw.outlined.one", "draw.outlined.other", { style })}${rest}`);
+  }
+
   /// Le voci del contorno: i tratteggi, gli estremi e gli angoli, ciascuno
   /// una scelta, segnata se i contorni scelti l'hanno tutti. Un tratteggio
-  /// che non è del menu c'è, segnato e spento, col suo valore.
+  /// che non è del menu c'è, segnato e spento, col suo valore. Con lo
+  /// Spessore, i profili: quelli pronti, segnati come gli altri, e i due
+  /// che lo rovesciano.
   const outlineItems = (): MenuItem[] => {
     const model = engine.model;
-    const outlines = model === null ? [] : outlinesOf(model, selectedUnits());
-    const look = outlineLook(outlines);
+    const units = selectedUnits();
+    const outlines = model === null ? [] : outlinesOf(model, units);
+    const lines = model === null ? [] : widthLinesOf(model, units);
+    const look = outlineLook(outlines, lines);
     const none = outlines.length === 0;
-    const choice = (label: string, checked: boolean, separator: boolean, change: OutlineChange): MenuItem => ({
+    const choice = (label: string, checked: boolean, separator: boolean, change: OutlineChange, off: boolean): MenuItem => ({
       label,
       choice: "radio",
       checked,
       separator,
-      disabled: none,
+      disabled: off,
       run: () => outlineSelection(change, label),
     });
-    const items: MenuItem[] = DASHES.map((dash) => choice(t(DASH_LABELS[dash]), look.dash === dash, false, { dash }));
+    const items: MenuItem[] = DASHES.map((dash) => choice(t(DASH_LABELS[dash]), look.dash === dash, false, { dash }, none));
     if (none) items[0]!.description = t("draw.outline.none");
     if (look.dash === "custom" && look.custom !== null) {
       items.push({ label: t("draw.outline.custom", { value: look.custom }), choice: "radio", checked: true, disabled: true, run: () => {} });
     }
-    items.push(...CAPS.map((cap, at) => choice(t(CAP_LABELS[cap]), look.cap === cap, at === 0, { cap })));
-    items.push(...JOINS.map((join, at) => choice(t(JOIN_LABELS[join]), look.join === join, at === 0, { join })));
+    const ends = none && lines.length === 0;
+    items.push(...CAPS.map((cap, at) => choice(t(CAP_LABELS[cap]), look.cap === cap, at === 0, { cap }, ends)));
+    items.push(...JOINS.map((join, at) => choice(t(JOIN_LABELS[join]), look.join === join, at === 0, { join }, ends)));
+    if (!has("width")) return items;
+    const index = currentIndex();
+    const shapes = widthsOf(index, units);
+    const presets = shapes.map((shape) => presetOf(shape.profile));
+    const preset = presets.length > 0 && presets.every((each) => each === presets[0]) ? presets[0]! : null;
+    const off = shapes.length === 0;
+    PRESETS.forEach((each, at) => {
+      const label = t(PROFILE_LABELS[each]);
+      items.push({
+        label,
+        choice: "radio",
+        checked: preset === each,
+        separator: at === 0,
+        disabled: off,
+        ...(off && at === 0 ? { description: t("draw.profile.none") } : {}),
+        run: () => profileSelection({ preset: each }, label),
+      });
+    });
+    // Rovesciare un profilo uniforme non cambia niente.
+    const flat = shapes.every((shape) => presetOf(shape.profile) === "uniform");
+    for (const [flip, key] of [["along", "draw.profile.flip"], ["across", "draw.profile.swap"]] as const) {
+      const label = t(key);
+      items.push({ label, separator: flip === "along", disabled: off || flat, run: () => profileSelection({ flip }, label) });
+    }
     return items;
   };
 
@@ -10996,7 +11580,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// penna restano soli.
   const joinTwo = (chosen: readonly Editing[]): NodeChange[] | DrawKey => {
     const [first, second] = [...chosen].sort((a, b) => comparePaths(a.path, b.path)) as [Editing, Editing];
-    for (const each of [first, second]) if (!cuttable(each.nodable)) return each.nodable.kind === "arrow" ? "draw.nodes.arrow" : "draw.nodes.stroke";
+    for (const each of [first, second]) if (!cuttable(each.nodable)) return each.nodable.kind === "arrow" || each.nodable.kind === "width" ? NODES_REFUSED[each.nodable.kind] : "draw.nodes.stroke";
     const [a] = pickedIn(first);
     const [b] = pickedIn(second);
     const joined = joinAcross(first.subs, a!, second.subs, b!, compose(first.inverse, second.matrix), joinReach(first));
@@ -12015,6 +12599,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti dello Spessore, se le parti `at` lo offrono.
+  const widthKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("width")
+      ? [
+          {
+            title: t("draw.tool.width"),
+            rows: [
+              ["Space", t("draw.keys.width.drag")],
+              ["Alt", t("draw.keys.width.alt")],
+              ["Delete", t("draw.keys.width.delete")],
+              ["Enter", t("draw.keys.width.edit")],
+              ["Escape", t("draw.keys.width.deselect")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti del menu Tracciato, se le parti `at` lo offrono.
   const pathKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("path") ? [{ title: t("draw.path"), rows: [["Mod-j", t("draw.keys.join")]] }] : [];
@@ -12150,6 +12751,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...nodeToolKeys(at),
     ...builderKeys(at),
     ...scissorsKeys(at),
+    ...widthKeys(at),
     ...polygonKeys(at),
     ...recognizeKeys(at),
     ...bezierKeys(at),
@@ -13145,6 +13747,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (current === null) finishBezier(false);
       } else if (builderKeysOn() && buildChosen(false)) {
         // Col Costruttore, le regioni scelte si uniscono.
+      } else if (widthKeysOn()) {
+        // Con lo Spessore, le misure del punto scelto.
+        void widthDialog();
       } else void properties();
     } else if (event.key === "?") {
       void keys();
@@ -13153,6 +13758,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } else if ((event.key === "Delete" || event.key === "Backspace") && nodeKeysOn()) {
       // Con lo strumento Nodi Canc elimina i nodi, mai l'oggetto.
       deleteSelectedNodes();
+    } else if ((event.key === "Delete" || event.key === "Backspace") && widthKeysOn()) {
+      // Con lo Spessore, il punto scelto, mai l'oggetto.
+      if (pressed !== null || current !== null) return;
+      deleteWidthPoint();
     } else if ((event.key === "Delete" || event.key === "Backspace") && curveOn() && pressed === null && current === null && chosenCount() > 0) {
       // Con la Curvatura, i nodi scelti, e la curva si rifà.
       curveDelete();
@@ -13181,6 +13790,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if ((tool === "nodes" || curveOn()) && chosenCount() > 0) {
         setNodes(new Map());
         announceNodes();
+      } else if (pickedWidth() !== null) {
+        widthPicked = null;
+        showHandles();
+        announce(t("draw.width.unpicked"));
       } else if (builderNow() !== null && (regionsChosen.length > 0 || regionActive >= 0)) {
         regionsChosen = [];
         regionActive = -1;
@@ -13410,6 +14023,23 @@ const BUILD_REFUSALS: Readonly<Record<BuildRefused["reason"], DrawKey>> = {
 };
 
 /// Perché un oggetto non ha nodi da modificare, a parole.
+/// Perché una forma non cambia spessore, a parole.
+const NO_WIDTH: Readonly<Record<NoWidth, DrawKey>> = {
+  unstroked: "draw.width.unstroked",
+  dashed: "draw.width.dashed",
+  pieces: "draw.width.pieces",
+  foreign: "draw.width.foreign",
+  kind: "draw.width.kind",
+};
+
+/// I nomi dei profili pronti, nel menu del contorno.
+const PROFILE_LABELS: Readonly<Record<Preset, DrawKey>> = {
+  uniform: "draw.profile.uniform",
+  taper: "draw.profile.taper",
+  drop: "draw.profile.drop",
+  spindle: "draw.profile.spindle",
+};
+
 const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
   text: "draw.nodes.text",
   image: "draw.nodes.image",
@@ -13421,9 +14051,10 @@ const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
 };
 
 /// Perché una modifica dei nodi non si fa, a parole.
-const NODES_REFUSED: Readonly<Record<"arrow" | "stroke" | "long", DrawKey>> = {
+const NODES_REFUSED: Readonly<Record<"arrow" | "stroke" | "width" | "long", DrawKey>> = {
   arrow: "draw.nodes.arrow",
   stroke: "draw.nodes.stroke",
+  width: "draw.nodes.width",
   long: "draw.nodes.long",
 };
 

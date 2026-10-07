@@ -313,6 +313,7 @@ impl Tally {
             Role::Arrow
             | Role::Ngon
             | Role::Star
+            | Role::Width
             | Role::Path
             | Role::Rect
             | Role::Ellipse
@@ -460,7 +461,7 @@ fn bounds(
 ) {
     let at = |name: &str| len(element, name).unwrap_or(0.0);
     match role {
-        Role::Stroke | Role::Arrow | Role::Ngon | Role::Star | Role::Path => {
+        Role::Stroke | Role::Arrow | Role::Ngon | Role::Star | Role::Width | Role::Path => {
             if let Some(segments) = element.value(NS_NONE, "d").and_then(parse_path) {
                 out.path(&segments, m);
             }

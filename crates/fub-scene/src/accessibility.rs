@@ -166,7 +166,7 @@ impl Legibility {
                     .and_then(points)
                     .unwrap_or_default(),
             ),
-            Role::Path | Role::Arrow | Role::Ngon | Role::Star => element
+            Role::Path | Role::Arrow | Role::Ngon | Role::Star | Role::Width => element
                 .value(NS_NONE, "d")
                 .and_then(parse_path)
                 .unwrap_or_default(),

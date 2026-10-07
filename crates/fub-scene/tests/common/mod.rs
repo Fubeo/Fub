@@ -22,6 +22,15 @@ pub fn shape_cases() -> serde_json::Value {
     serde_json::from_str(&text).expect("JSON dei casi")
 }
 
+/// I casi scritti a mano dello spessore variabile, che valgono anche per la
+/// superficie: `apps/client/src/__fixtures__/scene-width/cases.json`.
+pub fn width_cases() -> serde_json::Value {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/__fixtures__/scene-width/cases.json");
+    let text = std::fs::read_to_string(&path).expect("i casi dello spessore variabile");
+    serde_json::from_str(&text).expect("JSON dei casi")
+}
+
 /// `value` coi numeri tutti in virgola mobile: `4` e `4.0` del JSON si
 /// confrontano uguali.
 pub fn as_floats(value: serde_json::Value) -> serde_json::Value {

@@ -529,6 +529,34 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  it("mostra un contorno pieno sopra una forma che resta senza contorno, e lo toglie", async () => {
+    const engine = SceneEngine.open(
+      doc(`${LAYER}<rect id="r" x="1" y="2" width="4" height="4" fill="#ff0000" stroke="#0000ff" stroke-width="2" opacity="0.5"/><circle id="c" r="2"/></g>`),
+    );
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const rect = host.querySelector(`[data-scene-id="r"]`) as SVGElement;
+    const [paint] = builder.paintsOf(engine.holder("r")!);
+    painter.setDraft({ strokes: new Map([[paint!, { d: "M0 0 L9 0 L9 1 Z", fill: "#0000ff", "fill-opacity": "0.5" }]]) });
+    const stand = rect.nextElementSibling as SVGElement;
+    expect(stand.localName).toBe("path");
+    expect([stand.getAttribute("d"), stand.getAttribute("opacity"), stand.style.fill, stand.style.fillOpacity, stand.style.stroke]).toEqual([
+      "M0 0 L9 0 L9 1 Z",
+      "0.5",
+      "#0000ff",
+      "0.5",
+      "none",
+    ]);
+    expect(["fill", "stroke", "stroke-width", "x", "data-scene-id"].some((name) => stand.hasAttribute(name))).toBe(false);
+    expect([rect.style.stroke, rect.style.visibility, rect.getAttribute("fill")]).toEqual(["none", "", "#ff0000"]);
+    painter.setDraft(null);
+    expect(rect.nextElementSibling?.localName).toBe("circle");
+    expect(rect.style.stroke).toBe("");
+    painter.dispose();
+  });
+
   it("mostra altri raggi degli angoli per un rettangolo, e li riporta a quelli dipinti", async () => {
     const engine = SceneEngine.open(doc(`${LAYER}<rect id="r" width="40" height="20" rx="2" ry="3"/><rect id="s" width="4" height="4"/></g>`));
     const builder = new PaintBuilder();

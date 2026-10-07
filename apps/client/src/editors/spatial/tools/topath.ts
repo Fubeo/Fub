@@ -5,9 +5,9 @@
 // - **Ciò che si vede resta.** Rettangoli, ellissi, cerchi, linee, spezzate
 //   e poligoni diventano il tracciato con cui SVG 2 li definisce: stesso
 //   punto di partenza e stesso verso, così anche un tratteggio comincia dove
-//   cominciava. Una freccia, un poligono regolare e una stella perdono
-//   `fub:shape` e `fub:geom`, un tratto a penna l'inchiostro e il pennello:
-//   resta il `d` che si vedeva.
+//   cominciava. Una freccia, un poligono regolare, una stella e una linea a
+//   spessore variabile perdono `fub:shape` e `fub:geom`, un tratto a penna
+//   l'inchiostro e il pennello: resta il `d` che si vedeva.
 // - **L'oggetto resta lui.** Stesso id, stesso posto fra i fratelli, stessi
 //   attributi tranne la geometria che `d` sostituisce: colori, contorno,
 //   trasformazione, titolo e gli attributi di altri programmi.
@@ -41,6 +41,7 @@ const SYNTHETIC: Readonly<Record<string, readonly string[]>> = {
   arrow: ["shape", "geom"],
   ngon: ["shape", "geom"],
   star: ["shape", "geom"],
+  width: ["shape", "geom"],
   stroke: ["tool", "ink", "brush", "at"],
 };
 
@@ -166,6 +167,7 @@ export function pathOps(model: DocumentModel, units: readonly Unit[], ids: NewId
       case "arrow":
       case "ngon":
       case "star":
+      case "width":
       case "stroke":
         plan.ops.push({ op: "set", id: plan.idOf(node), attrs: syntheticNulls(node) });
         changed++;

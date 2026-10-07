@@ -45,7 +45,9 @@ describe("il registro degli strumenti", () => {
   });
 
   it("aggiunge all'Esperto i nodi e il Costruttore accanto alla selezione e la penna di Bézier dopo le forme", () => {
-    expect(toolsFor("expert").map((tool) => tool.id)).toEqual(["select", "lasso", "nodes", "builder", "scissors", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "text"]);
+    expect(toolsFor("expert").map((tool) => tool.id)).toEqual([
+      "select", "lasso", "nodes", "builder", "scissors", "width", "pen", "highlighter", "eraser", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "text",
+    ]);
     expect(toolSpec("nodes")).toMatchObject({ level: "expert", group: "pick", shortcut: "n" });
     expect(toolSpec("bezier")).toMatchObject({ level: "expert", group: "shape", shortcut: "b" });
     expect(toolForKey(toolsFor("standard"), "n")).toBeNull();
@@ -61,6 +63,10 @@ describe("il registro degli strumenti", () => {
     expect(toolSpec("scissors")).toMatchObject({ level: "expert", group: "pick", shortcut: "c" });
     expect(toolForKey(toolsFor("standard"), "c")).toBeNull();
     expect(toolForKey(toolsFor("expert"), "C")?.id).toBe("scissors");
+    // E lo Spessore, che in Illustrator è Maiusc+W.
+    expect(toolSpec("width")).toMatchObject({ level: "expert", group: "pick", shortcut: "w" });
+    expect(toolForKey(toolsFor("standard"), "w")).toBeNull();
+    expect(toolForKey(toolsFor("expert"), "W")?.id).toBe("width");
   });
 
   it("riconosce i nomi dei livelli, e sa quali stanno sopra", () => {
@@ -77,7 +83,7 @@ describe("il registro degli strumenti", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
       "lasso", "highlighter", "polygon", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility",
-      "nodes", "builder", "scissors", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean",
+      "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
     // Ogni strumento è una parte, tranne la Selezione, che c'è sempre.

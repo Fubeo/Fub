@@ -7,6 +7,8 @@
 //   spessore. Un gruppo o un collegamento passano la scelta alle forme che
 //   contengono; un tratto a penna è tutto riempimento, un testo e
 //   un'immagine non hanno contorno, e le parti estranee non cambiano.
+// - **Una linea a spessore variabile ha estremi e angoli**, scritti in
+//   `fub:geom`, e niente tratteggio: cambiarli ne ricalcola il contorno.
 // - **Il tratteggio si misura in spessori**, così resta uguale su un
 //   contorno sottile e su uno grosso. Ciò che si vede non cambia con gli
 //   estremi: un estremo arrotondato o quadrato allunga ogni trattino di mezzo
@@ -23,9 +25,11 @@ import type { Role } from "../scene/analysis";
 import { elementChildren, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { keyword, nonNegativeLength } from "../scene/values";
+import { spineOf } from "../scene/varwidth";
 import { nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { Unit } from "./hit";
+import { widthAttrs } from "./profile";
 
 export type Dash = "solid" | "dashed" | "dotted" | "dashdot";
 export type Cap = "butt" | "round" | "square";
@@ -168,10 +172,25 @@ export function outlinesOf(model: DocumentModel, units: readonly Unit[]): Outlin
   return out;
 }
 
+/// Le linee a spessore variabile di `units`, in ordine di documento.
+export function widthLinesOf(model: DocumentModel, units: readonly Unit[]): ElementPart[] {
+  const out: ElementPart[] = [];
+  const visit = (node: ElementPart): void => {
+    const role = node.details?.role;
+    if (role === "width" && node.details?.varwidth !== undefined) out.push(node);
+    else if (role !== undefined && CONTAINERS.has(role) && node.kind === "container") for (const child of elementChildren(node)) visit(child);
+  };
+  for (const unit of units) visit(nodeOf(model, unit));
+  return out;
+}
+
 /// Il contorno dei contorni scelti, come lo mostra il menu: `null` dove non
 /// sono tutti uguali. Un tratteggio che non è del menu è `"custom"`, col
-/// suo valore se è lo stesso per tutti.
+/// suo valore se è lo stesso per tutti. Le linee a spessore variabile
+/// contano negli estremi e negli angoli, non nel tratteggio.
 export interface OutlineLook {
+  /// Vero se c'è un contorno che si tratteggia.
+  readonly dashable: boolean;
   readonly dash: Dash | "custom" | null;
   readonly custom: string | null;
   readonly cap: Cap | null;
@@ -182,15 +201,17 @@ function shared<T>(values: readonly T[]): T | null {
   return values.length > 0 && values.every((value) => value === values[0]) ? values[0]! : null;
 }
 
-export function lookOf(outlines: readonly Outline[]): OutlineLook {
+export function lookOf(outlines: readonly Outline[], widths: readonly ElementPart[] = []): OutlineLook {
   const dashes = outlines.map((outline) => dashOf(outline.dashes, outline.width, outline.cap));
   const dash = shared(dashes);
   const custom = dashes.every((one) => one === null) ? shared(outlines.map((outline) => writtenDashes(outline.dashes) ?? outline.dashes)) : null;
+  const lines = widths.map((node) => node.details!.varwidth!);
   return {
+    dashable: outlines.length > 0,
     dash: dash ?? (custom !== null ? "custom" : null),
     custom,
-    cap: shared(outlines.map((outline) => outline.cap)),
-    join: shared(outlines.map((outline) => outline.join)),
+    cap: shared([...outlines.map((outline) => outline.cap), ...lines.map((line) => line.cap)]),
+    join: shared([...outlines.map((outline) => outline.join), ...lines.map((line) => line.join)]),
   };
 }
 
@@ -235,6 +256,18 @@ export function outlineOps(model: DocumentModel, units: readonly Unit[], change:
     if (Object.keys(attrs).length === 0) continue;
     named.add(outline.node);
     plan.ops.push({ op: "set", id: plan.idOf(outline.node), attrs } satisfies Op);
+    changed++;
+  }
+  // Una linea a spessore variabile non ha tratteggio.
+  for (const node of "dash" in change ? [] : widthLinesOf(model, units)) {
+    const line = node.details!.varwidth!;
+    const cap = "cap" in change ? change.cap : line.cap;
+    const join = "join" in change ? change.join : line.join;
+    if (cap === line.cap && join === line.join) continue;
+    const written = widthAttrs({ cap, join, profile: line.profile, spine: spineOf(line) });
+    if (written === null) continue;
+    named.add(node);
+    plan.ops.push({ op: "set", id: plan.idOf(node), attrs: { "fub:geom": written.geom, d: written.d } } satisfies Op);
     changed++;
   }
   const keys = units.map((unit) => {

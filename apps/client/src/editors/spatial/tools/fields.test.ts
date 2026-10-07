@@ -251,7 +251,7 @@ describe("l'aspetto", () => {
 
 describe("il contorno", () => {
   it("ha il tratteggio dallo Standard; gli estremi e gli angoli dall'Esperto", () => {
-    const outline = { dash: "dashed" as const, custom: null, cap: "round" as const, join: null };
+    const outline = { dashable: true, dash: "dashed" as const, custom: null, cap: "round" as const, join: null };
     const standard = propertiesView(input({ selection: selection({ outline }) }));
     expect(standard.fields.dash).toMatchObject({ kind: "choice", value: "dashed" });
     expect(standard.fields.cap).toBeUndefined();
@@ -260,8 +260,16 @@ describe("il contorno", () => {
     expect(expert.fields.join).toMatchObject({ value: null });
   });
 
+  it("non offre il tratteggio alle sole linee a spessore variabile", () => {
+    const outline = { dashable: false, dash: null, custom: null, cap: "round" as const, join: "bevel" as const };
+    const expert = propertiesView(input({ level: "expert", selection: selection({ outline }) }));
+    expect(expert.fields.dash).toBeUndefined();
+    expect(expert.fields.cap).toMatchObject({ value: "round" });
+    expect(expert.fields.join).toMatchObject({ value: "bevel" });
+  });
+
   it("un tratteggio che non è del menu c'è, col suo valore", () => {
-    const view = propertiesView(input({ selection: selection({ outline: { dash: "custom", custom: "5 1 2", cap: null, join: null } }) }));
+    const view = propertiesView(input({ selection: selection({ outline: { dashable: true, dash: "custom", custom: "5 1 2", cap: null, join: null } }) }));
     const dashes = options(view.fields.dash);
     expect(dashes[dashes.length - 1]).toEqual({ value: "custom", label: "Su misura: 5 1 2" });
   });

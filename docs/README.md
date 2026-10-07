@@ -49,6 +49,7 @@ flowchart LR
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, tracciati](product/drawing-paths.md)
 - [Disegni, curve e tagli](product/drawing-curves.md)
+- [Disegni, spessore variabile](product/drawing-width.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
@@ -83,6 +84,7 @@ flowchart LR
 - [Formato della scena](reference/scene-format.md)
 - [Formato della scena, unità e guide](reference/scene-format-rulers.md)
 - [Formato della scena, poligoni e stelle](reference/scene-format-shapes.md)
+- [Formato della scena, spessore variabile](reference/scene-format-width.md)
 - [Formato della scena, accessibilità](reference/scene-format-accessibility.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
 

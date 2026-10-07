@@ -27,10 +27,16 @@
 // - **Lo scostamento** di una forma è la sua unione con la fascia larga il
 //   doppio della distanza attorno al bordo, o la differenza se la distanza è
 //   negativa.
+// - **Lo spessore variabile** è lo stesso contorno con le due parti larghe
+//   quanto dice il profilo, punto per punto: le curve si dividono nei punti
+//   del profilo, e lo scostamento di ogni pezzo ha anche la derivata della
+//   larghezza. Gli archi diventano cubiche dove la larghezza cambia; i giunti
+//   e gli estremi prendono le larghezze del punto dove stanno.
 
 import { arcCenter, reversed, type Curve } from "../scene/curves";
 import type { Segment } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
+import { spanAt, spanSlopes, spanWidths, type WidthCap, type WidthJoin, type WidthSpan } from "../scene/varwidth";
 import { combine } from "./boolean";
 
 /// Come si uniscono due curve, e come finisce un sottotracciato aperto.
@@ -388,6 +394,8 @@ function subpathsOf(segments: readonly Segment[]): Subpath[] {
 interface Measure {
   readonly total: number;
   param(s: number): number;
+  /// La lunghezza dall'inizio fino al parametro `t`.
+  lengthTo(t: number): number;
 }
 
 /// Le parti in cui si misura una cubica prima di cercare un parametro.
@@ -396,7 +404,7 @@ const MEASURE_PARTS = 16;
 function measureOf(e: Element): Measure {
   if (e.kind !== "cubic") {
     const total = e.kind === "line" ? norm(minus(e.to, e.from)) : e.radius * Math.abs(e.delta);
-    return { total, param: (s) => Math.min(1, Math.max(0, s / total)) };
+    return { total, param: (s) => Math.min(1, Math.max(0, s / total)), lengthTo: (t) => total * t };
   }
   const b = e.bez;
   const sums = [0];
@@ -404,6 +412,12 @@ function measureOf(e: Element): Measure {
   const total = sums[MEASURE_PARTS]!;
   return {
     total,
+    lengthTo(t) {
+      if (t <= 0) return 0;
+      if (t >= 1) return total;
+      const i = Math.min(MEASURE_PARTS - 1, Math.floor(t * MEASURE_PARTS));
+      return sums[i]! + lengthBetween(b, i / MEASURE_PARTS, t);
+    },
     param(s) {
       if (s <= 0) return 0;
       if (s >= total) return 1;
@@ -670,16 +684,45 @@ function pushDisk(out: Loop[], p: Point, h: number): void {
 // I pezzi.
 // ---------------------------------------------------------------------------
 
-/// Lo scostamento di `b` fra `ta` e `tb` di `s`, verso la normale se è
-/// positivo: cubiche con la derivata vera ai capi, B′ · (1 − s·κ), divise a
-/// metà finché stanno a `OFFSET_ERROR` dallo scostamento vero nei punti di
-/// controllo.
-function offsetCubic(b: Bez, scale: number, ta: number, tb: number, s: number): Side {
-  const point = (t: number, side: 1 | -1): Point => plus(bezPoint(b, t), times(normal(directionAt(b, t, side, scale)), s));
+/// Quanto il contorno di un pezzo arriva da una parte, nel parametro `t` del
+/// pezzo, e quanto cambia con `t`.
+interface Reach {
+  at(t: number): number;
+  slope(t: number): number;
+}
+
+/// Le due parti del contorno di un pezzo, non negative: verso la normale e
+/// dall'altra parte. `steady` le dà quando non cambiano lungo il pezzo.
+interface Band {
+  readonly toward: Reach;
+  readonly away: Reach;
+  readonly steady: readonly [number, number] | null;
+}
+
+const fixed = (h: number): Reach => ({ at: () => h, slope: () => 0 });
+
+/// Un contorno largo `toward` verso la normale e `away` dall'altra parte,
+/// lungo tutto il pezzo.
+function steadyBand(toward: number, away: number): Band {
+  return { toward: fixed(toward), away: fixed(away), steady: [toward, away] };
+}
+
+/// `reach` col segno: verso la normale se `sign` è positivo.
+const signed = (reach: Reach, sign: 1 | -1): Reach => ({ at: (t) => sign * reach.at(t), slope: (t) => sign * reach.slope(t) });
+
+/// Lo scostamento di `b` fra `ta` e `tb` di `s`, verso la normale dove è
+/// positivo: cubiche con la derivata vera ai capi, B′ · (1 − s·κ) + s′·N,
+/// divise a metà finché stanno a `OFFSET_ERROR` dallo scostamento vero nei
+/// punti di controllo.
+function offsetCubic(b: Bez, scale: number, ta: number, tb: number, s: Reach): Side {
+  const point = (t: number, side: 1 | -1): Point => plus(bezPoint(b, t), times(normal(directionAt(b, t, side, scale)), s.at(t)));
   const derivative = (t: number, side: 1 | -1): Point => {
     const d = bezFirst(b, t);
     const squared = dot(d, d);
-    if (squared > (1e-9 * scale) ** 2) return times(d, 1 - (s * cross(d, bezSecond(b, t))) / (squared * Math.sqrt(squared)));
+    if (squared > (1e-9 * scale) ** 2) {
+      const along = times(d, 1 - (s.at(t) * cross(d, bezSecond(b, t))) / (squared * Math.sqrt(squared)));
+      return plus(along, times(normal(times(d, 1 / Math.sqrt(squared))), s.slope(t)));
+    }
     // Dove la derivata si annulla, lo scostamento ne ha una finita: si
     // misura accanto.
     const step = 1e-7 * side;
@@ -718,17 +761,18 @@ function turnOf(b: Bez, scale: number, ta: number, tb: number, sign: number): nu
 }
 
 /// Un pezzo di cubica fra `ta` e `tb` senza flessi, dove la curvatura ha il
-/// segno `sign`; `folded` se lì il raggio di curvatura è minore di `h`. Si
-/// divide finché gira al più di un angolo retto.
-function sweepPiece(b: Bez, scale: number, ta: number, tb: number, h: number, sign: number, folded: boolean, chain: Chain, out: Loop[], depth: number): void {
+/// segno `sign`; `folded` se lì il raggio di curvatura è minore della parte
+/// del contorno da quel lato. Si divide finché gira al più di un angolo
+/// retto.
+function sweepPiece(b: Bez, scale: number, ta: number, tb: number, band: Band, sign: number, folded: boolean, chain: Chain, out: Loop[], depth: number): void {
   if (depth < MAX_DEPTH && turnOf(b, scale, ta, tb, sign) > QUARTER + 1e-9) {
     const tm = (ta + tb) / 2;
-    sweepPiece(b, scale, ta, tm, h, sign, folded, chain, out, depth + 1);
-    sweepPiece(b, scale, tm, tb, h, sign, folded, chain, out, depth + 1);
+    sweepPiece(b, scale, ta, tm, band, sign, folded, chain, out, depth + 1);
+    sweepPiece(b, scale, tm, tb, band, sign, folded, chain, out, depth + 1);
     return;
   }
-  if (folded && sign !== 0 && sweepFolded(b, scale, ta, tb, h, sign, chain, out, depth)) return;
-  chain.add(offsetCubic(b, scale, ta, tb, h), offsetCubic(b, scale, ta, tb, -h));
+  if (folded && sign !== 0 && sweepFolded(b, scale, ta, tb, band, sign, chain, out, depth)) return;
+  chain.add(offsetCubic(b, scale, ta, tb, band.toward), offsetCubic(b, scale, ta, tb, signed(band.away, -1)));
 }
 
 /// Un pezzo più stretto di `h` dalla parte della normale se `sign` è
@@ -738,24 +782,26 @@ function sweepPiece(b: Bez, scale: number, ta: number, tb: number, h: number, si
 /// di dentro, che torna indietro, e il triangolo fra X e i centri di
 /// curvatura ai capi, dove le normali toccano l'evoluta. Falso se le
 /// normali non si incrociano dove serve nemmeno dividendo il pezzo.
-function sweepFolded(b: Bez, scale: number, ta: number, tb: number, h: number, sign: number, chain: Chain, out: Loop[], depth: number): boolean {
-  const s = h * sign;
+function sweepFolded(b: Bez, scale: number, ta: number, tb: number, band: Band, sign: number, chain: Chain, out: Loop[], depth: number): boolean {
+  const inside = sign > 0 ? band.toward : signed(band.away, -1);
+  const outside = sign > 0 ? signed(band.away, -1) : band.toward;
   const [pa, pb] = [bezPoint(b, ta), bezPoint(b, tb)];
   const [na, nb] = [normal(directionAt(b, ta, 1, scale)), normal(directionAt(b, tb, -1, scale))];
   const across = cross(na, nb);
   const gap = minus(pb, pa);
   const [la, lb] = [cross(gap, nb) / across, cross(gap, na) / across];
-  if (!(la / s > 0 && la / s < 1 && lb / s > 0 && lb / s < 1)) {
+  const [sa, sb] = [inside.at(ta), inside.at(tb)];
+  if (!(la / sa > 0 && la / sa < 1 && lb / sb > 0 && lb / sb < 1)) {
     if (depth >= MAX_DEPTH) return false;
     const tm = (ta + tb) / 2;
-    sweepPiece(b, scale, ta, tm, h, sign, true, chain, out, depth + 1);
-    sweepPiece(b, scale, tm, tb, h, sign, true, chain, out, depth + 1);
+    sweepPiece(b, scale, ta, tm, band, sign, true, chain, out, depth + 1);
+    sweepPiece(b, scale, tm, tb, band, sign, true, chain, out, depth + 1);
     return true;
   }
   const x = plus(pa, times(na, la));
   chain.flush();
-  const outer = offsetCubic(b, scale, ta, tb, -s);
-  const inner = offsetCubic(b, scale, ta, tb, s);
+  const outer = offsetCubic(b, scale, ta, tb, outside);
+  const inner = offsetCubic(b, scale, ta, tb, inside);
   pushLoop(out, outer.start, [...outer.curves, line(x)]);
   pushLoop(out, x, [line(inner.start), ...inner.curves]);
   const [ea, eb] = [centerAt(b, ta, scale), centerAt(b, tb, scale)];
@@ -765,8 +811,9 @@ function sweepFolded(b: Bez, scale: number, ta: number, tb: number, h: number, s
 
 /// Una cubica: si spezza nelle cuspidi, dove gira all'indietro e il
 /// contorno fa un disco, e nei flessi; ogni tratto senza flessi nei punti
-/// dove il raggio di curvatura vale `h`.
-function sweepCubic(b: Bez, scale: number, h: number, chain: Chain, out: Loop[]): void {
+/// dove il raggio di curvatura vale la parte del contorno dal lato dove
+/// gira.
+function sweepCubic(b: Bez, scale: number, band: Band, chain: Chain, out: Loop[]): void {
   const cusps = cuspsOf(b, scale);
   const cuts = [0, ...cusps, ...inflectionsOf(b), 1].sort((m, n) => m - n);
   for (let i = 0; i + 1 < cuts.length; i++) {
@@ -774,30 +821,35 @@ function sweepCubic(b: Bez, scale: number, h: number, chain: Chain, out: Loop[])
     if (tb - ta > 1e-12) {
       const middle = (ta + tb) / 2;
       const sign = Math.sign(cross(bezFirst(b, middle), bezSecond(b, middle)));
+      const inside = sign > 0 ? band.toward : band.away;
       const f = (t: number): number => {
         const d = bezFirst(b, t);
-        return norm(d) ** 3 - h * Math.abs(cross(d, bezSecond(b, t)));
+        return norm(d) ** 3 - inside.at(t) * Math.abs(cross(d, bezSecond(b, t)));
       };
       const bounds = [ta, ...(sign === 0 ? [] : rootsOf(f, ta, tb)), tb];
       for (let k = 0; k + 1 < bounds.length; k++) {
         const [t0, t1] = [bounds[k]!, bounds[k + 1]!];
-        if (t1 - t0 > 1e-12) sweepPiece(b, scale, t0, t1, h, sign, f((t0 + t1) / 2) < 0, chain, out, 0);
+        if (t1 - t0 > 1e-12) sweepPiece(b, scale, t0, t1, band, sign, f((t0 + t1) / 2) < 0, chain, out, 0);
       }
     }
     if (i + 2 < cuts.length && cusps.includes(tb)) {
       chain.flush();
-      pushDisk(out, bezPoint(b, tb), h);
+      const h = Math.max(band.toward.at(tb), band.away.at(tb));
+      if (h > 0) pushDisk(out, bezPoint(b, tb), h);
     }
   }
 }
 
-/// Un arco di cerchio, a pezzi di un angolo retto al più. Con un raggio
-/// maggiore di `h` gli scostamenti sono archi; altrimenti ogni pezzo spazza
-/// lo spicchio fino al raggio r + h e quello opposto fino a h − r.
-function sweepCircle(e: Extract<Element, { readonly kind: "circle" }>, h: number, chain: Chain, out: Loop[]): void {
+/// Un arco di cerchio, con le parti del contorno ferme, a pezzi di un angolo
+/// retto al più. Con un raggio maggiore della parte verso il centro, `h`, gli
+/// scostamenti sono archi; altrimenti ogni pezzo spazza lo spicchio fino al
+/// raggio r + `far` e quello opposto fino a h − r.
+function sweepCircle(e: Extract<Element, { readonly kind: "circle" }>, [toward, away]: readonly [number, number], chain: Chain, out: Loop[]): void {
   const { center, radius: r, start, delta } = e;
   const pieces = Math.max(1, Math.ceil(Math.abs(delta) / QUARTER - 1e-9));
   const forward = delta > 0;
+  // La normale guarda il centro quando l'arco gira in verso positivo.
+  const [h, far] = forward ? [toward, away] : [away, toward];
   const arc = (to: Point, radius: number): Curve => ({ kind: "arc", radii: [radius, radius], rotation: 0, large: false, sweep: forward, to });
   const side = (a0: number, a1: number, radius: number): Side => {
     const [from, to] = [onCircle(center, radius, a0), onCircle(center, radius, a1)];
@@ -806,31 +858,57 @@ function sweepCircle(e: Extract<Element, { readonly kind: "circle" }>, h: number
   for (let k = 0; k < pieces; k++) {
     const [a0, a1] = [start + (delta * k) / pieces, start + (delta * (k + 1)) / pieces];
     if (h < r) {
-      // La normale guarda il centro quando l'arco gira in verso positivo.
-      const [near, far] = [side(a0, a1, r - h), side(a0, a1, r + h)];
-      chain.add(forward ? near : far, forward ? far : near);
+      const [inner, outer] = [side(a0, a1, r - h), side(a0, a1, r + far)];
+      chain.add(forward ? inner : outer, forward ? outer : inner);
       continue;
     }
     chain.flush();
-    pushLoop(out, center, [line(onCircle(center, r + h, a0)), arc(onCircle(center, r + h, a1), r + h)]);
+    pushLoop(out, center, [line(onCircle(center, r + far, a0)), arc(onCircle(center, r + far, a1), r + far)]);
     if (h > r) pushLoop(out, center, [line(onCircle(center, h - r, a0 + Math.PI)), arc(onCircle(center, h - r, a1 + Math.PI), h - r)]);
   }
 }
 
-function sweep(e: Element, h: number, chain: Chain, out: Loop[]): void {
+/// Un pezzo col suo contorno. Dove le parti cambiano lungo il pezzo, una
+/// linea è una cubica dritta e un arco sono cubiche.
+function sweep(e: Element, band: Band, chain: Chain, out: Loop[]): void {
   switch (e.kind) {
     case "line": {
-      const n = times(normal(unit(minus(e.to, e.from))), h);
-      chain.add(straight(plus(e.from, n), plus(e.to, n)), straight(minus(e.from, n), minus(e.to, n)));
+      if (band.steady === null) {
+        sweepCubic([e.from, lerp(e.from, e.to, 1 / 3), lerp(e.from, e.to, 2 / 3), e.to], norm(minus(e.to, e.from)), band, chain, out);
+        return;
+      }
+      const n = normal(unit(minus(e.to, e.from)));
+      const [toward, away] = [times(n, band.steady[0]), times(n, band.steady[1])];
+      chain.add(straight(plus(e.from, toward), plus(e.to, toward)), straight(minus(e.from, away), minus(e.to, away)));
       return;
     }
     case "cubic":
-      sweepCubic(e.bez, e.scale, h, chain, out);
+      sweepCubic(e.bez, e.scale, band, chain, out);
       return;
     case "circle":
-      sweepCircle(e, h, chain, out);
+      if (band.steady !== null) sweepCircle(e, band.steady, chain, out);
+      else for (const piece of circleCubics(e)) sweepCubic(piece.bez, piece.scale, band, chain, out);
       return;
   }
+}
+
+/// Le cubiche di un arco di cerchio, abbastanza fitte da stargli a meno di
+/// metà di `OFFSET_ERROR`, come quelle di un arco d'ellisse.
+function circleCubics(e: Extract<Element, { readonly kind: "circle" }>): Extract<Element, { readonly kind: "cubic" }>[] {
+  const error = (theta: number): number => (e.radius * 4 * Math.sin(theta / 4) ** 6) / (27 * Math.cos(theta / 4) ** 2);
+  let pieces = Math.max(1, Math.ceil(Math.abs(e.delta) / QUARTER - 1e-9));
+  while (pieces < 1024 && error(Math.abs(e.delta) / pieces) > OFFSET_ERROR / 2) pieces++;
+  const step = e.delta / pieces;
+  const k = (4 / 3) * Math.tan(step / 4) * e.radius;
+  const out: Extract<Element, { readonly kind: "cubic" }>[] = [];
+  for (let i = 0; i < pieces; i++) {
+    const [a, b] = [e.start + step * i, e.start + step * (i + 1)];
+    const p0 = i === 0 ? e.from : onCircle(e.center, e.radius, a);
+    const p3 = i === pieces - 1 ? e.to : onCircle(e.center, e.radius, b);
+    const bez: Bez = [p0, plus(p0, times([-Math.sin(a), Math.cos(a)], k)), minus(p3, times([-Math.sin(b), Math.cos(b)], k)), p3];
+    out.push({ kind: "cubic", bez, scale: legs(bez) });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -842,13 +920,16 @@ function sweep(e: Element, h: number, chain: Chain, out: Loop[]): void {
 const smooth = (d0: Point, d1: Point, h: number): boolean => Math.abs(turnBetween(d0, d1)) * h <= OFFSET_ERROR;
 
 /// Il giunto in `p` fra una curva che arriva col verso `d0` e una che parte
-/// col verso `d1`, dalla parte esterna della svolta. Lo spigolo arriva a
-/// h / cos(θ/2) da `p`, se il rapporto con h non passa il limite;
-/// altrimenti il giunto è smussato.
-function joinAt(p: Point, d0: Point, d1: Point, h: number, style: StrokeStyle, out: Loop[]): void {
+/// col verso `d1`, dalla parte esterna della svolta, dove il contorno arriva
+/// a `toward` verso la normale e ad `away` dall'altra parte. Lo spigolo
+/// arriva a h / cos(θ/2) da `p`, con h la parte esterna, se il rapporto con
+/// h non passa il limite; altrimenti il giunto è smussato.
+function joinAt(p: Point, d0: Point, d1: Point, [toward, away]: readonly [number, number], style: Pick<StrokeStyle, "join" | "miterLimit">, out: Loop[]): void {
   const turn = turnBetween(d0, d1);
   // Una curva che gira verso la normale ha il giunto dall'altra parte.
-  const reach = turn > 0 ? -h : h;
+  const reach = turn > 0 ? -away : toward;
+  const h = Math.abs(reach);
+  if (!(h > 0)) return;
   const [n0, n1] = [normal(d0), normal(d1)];
   const [a, b] = [plus(p, times(n0, reach)), plus(p, times(n1, reach))];
   if (style.join === "round") {
@@ -864,15 +945,19 @@ function joinAt(p: Point, d0: Point, d1: Point, h: number, style: StrokeStyle, o
 }
 
 /// L'estremo in `p` di un sottotracciato aperto, verso `e`, fuori dal
-/// tracciato.
-function capAt(p: Point, e: Point, h: number, cap: Cap, out: Loop[]): void {
-  const n = times(normal(e), h);
-  const [a, b] = [plus(p, n), minus(p, n)];
+/// tracciato, dove il contorno arriva a `side` dalla parte della normale di
+/// `e` e a `other` dall'altra: mezzo cerchio o mezzo quadrato sul segmento
+/// fra le due parti.
+function capAt(p: Point, e: Point, side: number, other: number, cap: Cap, out: Loop[]): void {
+  const h = (side + other) / 2;
+  if (!(h > 0)) return;
+  const n = normal(e);
+  const [a, b] = [plus(p, times(n, side)), minus(p, times(n, other))];
   if (cap === "square") {
     const f = times(e, h);
     pushLoop(out, a, [line(plus(a, f)), line(plus(b, f)), line(b)]);
   } else if (cap === "round") {
-    pushLoop(out, a, arcsAround(p, h, a, -Math.PI, b));
+    pushLoop(out, a, arcsAround(lerp(a, b, 0.5), h, a, -Math.PI, b));
   }
 }
 
@@ -909,21 +994,22 @@ function strokeSubpath(sub: Subpath, style: StrokeStyle, h: number, out: Loop[])
     }
   }
   const chain = new Chain(out);
+  const band = steadyBand(h, h);
   const join = (before: Element, after: Element): void => {
     const [d0, d1] = [endDirection(before), startDirection(after)];
     if (smooth(d0, d1, h)) return;
     chain.flush();
-    joinAt(startOf(after), d0, d1, h, style, out);
+    joinAt(startOf(after), d0, d1, [h, h], style, out);
   };
   order.forEach((e, i) => {
     if (i > 0) join(order[i - 1]!, e);
-    sweep(e, h, chain, out);
+    sweep(e, band, chain, out);
   });
   if (closing) join(order[count - 1]!, order[0]!);
   chain.flush();
   if (!sub.closed) {
-    capAt(startOf(order[0]!), times(startDirection(order[0]!), -1), h, style.cap, out);
-    capAt(endOf(order[count - 1]!), endDirection(order[count - 1]!), h, style.cap, out);
+    capAt(startOf(order[0]!), times(startDirection(order[0]!), -1), h, h, style.cap, out);
+    capAt(endOf(order[count - 1]!), endDirection(order[count - 1]!), h, h, style.cap, out);
   }
 }
 
@@ -1002,4 +1088,144 @@ export function offsetArea(segments: readonly Segment[], distance: number, style
     { segments: band, evenOdd: false, written: false, built: true },
   ];
   return first(combine(distance > 0 ? "union" : "difference", shapes, MAX_PIECES));
+}
+
+// ---------------------------------------------------------------------------
+// Lo spessore variabile.
+// ---------------------------------------------------------------------------
+
+/// Gli estremi e gli angoli di un contorno a spessore variabile. Il limite
+/// degli spigoli è quello di SVG.
+export interface ProfileStyle {
+  readonly cap: WidthCap;
+  readonly join: WidthJoin;
+}
+
+const PROFILE_MITER_LIMIT = 4;
+
+/// Un pezzo di un sottotracciato fra due punti del profilo, con le parti del
+/// suo contorno; `opens` se comincia dove comincia un pezzo del tracciato,
+/// e lì può esserci uno spigolo.
+interface Stretch {
+  readonly element: Element;
+  readonly opens: boolean;
+  readonly band: Band;
+}
+
+/// Vero se il lato `side` di `span` non cambia.
+const flat = (side: readonly [number, number, number, number]): boolean => side[0] === side[1] && side[2] === 0 && side[3] === 0;
+
+/// Le parti del contorno di `e`, una linea o una cubica, che comincia alla
+/// frazione `ua` di un sottotracciato lungo `total`, dentro il tratto `span`
+/// del profilo. Verso la normale è la destra di chi percorre la linea sullo
+/// schermo, dove l'asse y scende.
+function profileBand(e: Element, ua: number, span: WidthSpan, total: number): Band {
+  const measure = measureOf(e);
+  const u = (t: number): number => ua + measure.lengthTo(t) / total;
+  const speed = (t: number): number => (e.kind === "cubic" ? norm(bezFirst(e.bez, t)) : measure.total);
+  const side = (k: 0 | 1): Reach => ({
+    at: (t) => spanWidths(span, u(t))[k],
+    slope: (t) => (spanSlopes(span, u(t))[k] * speed(t)) / total,
+  });
+  return { toward: side(1), away: side(0), steady: null };
+}
+
+/// I pezzi di `sub` coi loro contorni: ogni pezzo si divide nei punti del
+/// profilo, e dove la larghezza cambia un arco diventa cubiche.
+function stretchesOf(sub: Subpath, spans: readonly WidthSpan[]): Stretch[] {
+  const measures = sub.elements.map(measureOf);
+  const total = measures.reduce((sum, measure) => sum + measure.total, 0);
+  if (!(total > STILL)) return [];
+  const knots = [...new Set(spans.map((span) => span.t0))].filter((u) => u > 0 && u < 1);
+  const out: Stretch[] = [];
+  const push = (e: Element, opens: boolean, ua: number, ub: number): void => {
+    const span = spans[spanAt(spans, (ua + ub) / 2)]!;
+    if (flat(span.left) && flat(span.right)) {
+      out.push({ element: e, opens, band: steadyBand(span.right[0], span.left[0]) });
+    } else if (e.kind === "circle") {
+      let u = ua;
+      circleCubics(e).forEach((piece, i) => {
+        out.push({ element: piece, opens: opens && i === 0, band: profileBand(piece, u, span, total) });
+        u += measureOf(piece).total / total;
+      });
+    } else {
+      out.push({ element: e, opens, band: profileBand(e, ua, span, total) });
+    }
+  };
+  let start = 0;
+  sub.elements.forEach((e, i) => {
+    const measure = measures[i]!;
+    const end = start + measure.total;
+    const cuts = [0, ...knots.map((u) => u * total).filter((s) => s > start + STILL && s < end - STILL).map((s) => measure.param(s - start)), 1];
+    for (let k = 0; k + 1 < cuts.length; k++) {
+      const [t0, t1] = [cuts[k]!, cuts[k + 1]!];
+      if (t1 - t0 <= 1e-12) continue;
+      const part = t0 === 0 && t1 === 1 ? e : partOf(e, t0, t1);
+      push(part, k === 0, (start + measure.lengthTo(t0)) / total, (start + measure.lengthTo(t1)) / total);
+    }
+    start = end;
+  });
+  return out;
+}
+
+/// Gli anelli di un sottotracciato col contorno del profilo `spans`. Uno
+/// chiuso comincia dal primo giunto vero, come nel contorno fermo.
+function profileSubpath(sub: Subpath, spans: readonly WidthSpan[], style: ProfileStyle, out: Loop[]): void {
+  const stretches = stretchesOf(sub, spans);
+  const count = stretches.length;
+  if (count === 0) return;
+  /// Le parti del contorno dove `before` finisce e `after` comincia.
+  const widths = (before: Stretch, after: Stretch): [number, number] => [
+    Math.max(before.band.toward.at(1), after.band.toward.at(0)),
+    Math.max(before.band.away.at(1), after.band.away.at(0)),
+  ];
+  /// Vero se fra `before` e `after` serve un giunto.
+  const corner = (before: Stretch, after: Stretch): boolean =>
+    after.opens && !smooth(endDirection(before.element), startDirection(after.element), Math.max(...widths(before, after)));
+  let order = stretches;
+  let closing = false;
+  if (sub.closed) {
+    const k = stretches.findIndex((s, i) => corner(stretches[(i + count - 1) % count]!, s));
+    if (k >= 0) {
+      order = [...stretches.slice(k), ...stretches.slice(0, k)];
+      closing = true;
+    }
+  }
+  const chain = new Chain(out);
+  const style4 = { join: style.join, miterLimit: PROFILE_MITER_LIMIT };
+  const join = (before: Stretch, after: Stretch): void => {
+    if (!corner(before, after)) return;
+    chain.flush();
+    joinAt(startOf(after.element), endDirection(before.element), startDirection(after.element), widths(before, after), style4, out);
+  };
+  order.forEach((s, i) => {
+    if (i > 0) join(order[i - 1]!, s);
+    sweep(s.element, s.band, chain, out);
+  });
+  if (closing) join(order[count - 1]!, order[0]!);
+  chain.flush();
+  if (!sub.closed) {
+    const [first, last] = [order[0]!, order[count - 1]!];
+    capAt(startOf(first.element), times(startDirection(first.element), -1), first.band.away.at(0), first.band.toward.at(0), style.cap, out);
+    capAt(endOf(last.element), endDirection(last.element), last.band.toward.at(1), last.band.away.at(1), style.cap, out);
+  }
+}
+
+/// Gli anelli del contorno a spessore variabile lungo `segments`, col
+/// profilo diviso nei tratti `spans`, tutti in verso positivo: la loro
+/// unione è l'area del contorno. Ogni sottotracciato ha il profilo lungo
+/// tutta la sua lunghezza.
+export function profileLoops(segments: readonly Segment[], spans: readonly WidthSpan[], style: ProfileStyle): Segment[] {
+  const loops: Loop[] = [];
+  if (spans.length === 0) return [];
+  for (const sub of subpathsOf(segments)) profileSubpath(sub, spans, style, loops);
+  return loops.flatMap(loopSegments);
+}
+
+/// L'area del contorno a spessore variabile lungo `segments`, come
+/// tracciato; nessun segmento se non dipinge niente.
+export function profileArea(segments: readonly Segment[], spans: readonly WidthSpan[], style: ProfileStyle): Segment[] | Refusal {
+  const loops = profileLoops(segments, spans, style);
+  if (loops.length === 0) return loops;
+  return first(combine("union", [{ segments: loops, evenOdd: false, written: false, built: true }], MAX_PIECES));
 }

@@ -78,7 +78,7 @@ Radice di un documento nuovo:
 | Elemento | Geometria | Uso |
 |---|---|---|
 | `path` con `fub:tool` `pen` o `highlighter` | `d`, `fub:ink`, `fub:brush` | tratto a mano libera: contorno pieno, `fill` senza `stroke` (§5) |
-| `path` con `fub:shape` | `d`, `fub:geom` | forma sintetica: freccia, poligono regolare, stella (§6) |
+| `path` con `fub:shape` | `d`, `fub:geom` | forma sintetica: freccia, poligono regolare, stella, spessore variabile (§6) |
 | `path` | `d` | tracciato vettoriale |
 | `rect` | `x y width height rx ry` | rettangolo |
 | `ellipse` | `cx cy rx ry` | ellisse |
@@ -158,9 +158,8 @@ Radice di un documento nuovo:
 
 ### Regola di classificazione
 
-Un elemento è **modificabile** se il suo tag è in tabella, se tutti i suoi
-attributi e valori rientrano in questa sezione, e se nessun valore contiene
-`url(`.
+Un elemento è **modificabile** se il suo tag è in tabella, se tutti i suoi attributi
+e valori rientrano in questa sezione, e se nessun valore contiene `url(`.
 
 - Per `g` e `a` la regola vale per ogni figlio separatamente: un livello con
   un figlio estraneo resta un livello modificabile che contiene un blocco
@@ -308,7 +307,8 @@ dell'orologio di chi possiede il documento, corretta con lo scarto stimato.
 ## 6. Forme sintetiche
 
 Una forma sintetica è un `path` con `fub:shape` e `fub:geom`; `d` si rigenera
-dalla geometria. Poligono regolare e stella: [poligoni e stelle](scene-format-shapes.md).
+dalla geometria. Poligono regolare e stella: [poligoni e stelle](scene-format-shapes.md);
+il contorno che si allarga e si stringe: [spessore variabile](scene-format-width.md).
 
 - **Freccia:** `fub:shape="arrow"`, `fub:geom="x1 y1 x2 y2"`. `d` contiene
   l'asta e la punta aperta: `M x1 y1 L x2 y2 M hx1 hy1 L x2 y2 L hx2 hy2`.
@@ -353,11 +353,12 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    6. gli attributi `fub:*` sconosciuti e quelli di altri namespace,
       nell'ordine originale;
    7. `fub:ink`, che è il più lungo.
-3. **Numeri:** al massimo 2 decimali per la geometria e 4 per `matrix` e per
-   il rapporto di una stella, senza zeri finali, senza esponente; `-0` si
-   scrive `0`. Si arrotonda con `floor(v × 10ⁿ + 0,5)` in doppia precisione, la
-   stessa regola in Rust e in TypeScript, e si scrivono le cifre esatte
-   dell'intero che ne risulta, anche oltre 2⁵³.
+3. **Numeri:** al massimo 2 decimali per la geometria e 4 per `matrix`, per
+   il rapporto di una stella e per le posizioni del profilo di uno spessore
+   variabile, senza zeri finali, senza esponente; `-0` si scrive `0`. Si
+   arrotonda con `floor(v × 10ⁿ + 0,5)` in doppia precisione, la stessa regola
+   in Rust e in TypeScript, e si scrivono le cifre esatte dell'intero che ne
+   risulta, anche oltre 2⁵³.
 4. **`d`:** comandi assoluti, ciascuno attaccato alle sue coordinate e
    separato dal successivo da uno spazio: `M10 20 L30 40 Z`.
 5. **Escape:** negli attributi `&amp;`, `&lt;`, `&gt;`, `&quot;`, più `&#9;`,
@@ -525,8 +526,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
 - **S005:** ogni `script`, SVG o XHTML; ogni attributo `on*`, senza badare a
   maiuscole e minuscole; ogni `href` con schema `javascript:`, anche quando lo
   imposta un `set` o un `animate`.
-- **S006:** la dimensione decodificata del data URI, su ogni `image`, anche
-  estranea.
+- **S006:** la dimensione decodificata del data URI, su ogni `image`, anche estranea.
 
 ## 13. Esempio completo
 
