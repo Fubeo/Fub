@@ -36,6 +36,7 @@ pub mod parametric;
 pub mod rulers;
 pub mod text;
 mod values;
+pub mod varwidth;
 mod xml;
 
 pub use analysis::{

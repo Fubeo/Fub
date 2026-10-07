@@ -752,6 +752,31 @@ fn polygons_and_stars_need_their_whole_grammar_or_are_paths() {
 }
 
 #[test]
+fn variable_widths_need_their_whole_grammar_or_are_paths() {
+    let cases = common::width_cases();
+    for case in cases["read"].as_array().unwrap() {
+        let geom = case["geom"].as_str().unwrap();
+        let source = doc(&format!(
+            r#"<path fub:shape="width" fub:geom="{}" d="M0 0 L10 0 L5 5 Z"/>"#,
+            geom.replace('\t', "&#9;").replace('\n', "&#10;")
+        ));
+        let item = at(&load(&source), &[0]).unwrap().clone();
+        let expected = &case["varwidth"];
+        if expected.is_null() {
+            assert_eq!(item.role, Role::Path, "{geom:?}");
+            assert_eq!(item.varwidth, None, "{geom:?}");
+        } else {
+            assert_eq!(item.role, Role::Width, "{geom:?}");
+            assert_eq!(
+                common::as_floats(serde_json::to_value(item.varwidth).unwrap()),
+                common::as_floats(expected.clone()),
+                "{geom:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn contiguous_foreign_nodes_form_one_block() {
     let source = doc(concat!(
         "\n  <rect width=\"1\"/>",

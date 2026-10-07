@@ -221,7 +221,8 @@ export class Legibility {
       case "path":
       case "arrow":
       case "ngon":
-      case "star": {
+      case "star":
+      case "width": {
         const d = valueOf(element, NS_NONE, "d");
         shape = (d === undefined ? null : parsePath(d)) ?? [];
         break;

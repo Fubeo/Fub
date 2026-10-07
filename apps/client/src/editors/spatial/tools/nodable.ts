@@ -17,6 +17,10 @@
 // - **Un tratto a penna ha i nodi della sua spina** (`spine.ts`), e resta un
 //   tratto: l'inchiostro segue la spina, e il contorno lo ricalcola il
 //   pennello. Spezzarlo o chiuderlo si rifiuta.
+// - **Una linea a spessore variabile ha i nodi della sua linea** (`profile.ts`),
+//   e resta lei: il profilo segue la linea, alla stessa frazione della
+//   lunghezza, e il contorno si ricalcola. Spezzarla in più pezzi si
+//   rifiuta.
 
 import { formatNumber } from "../number";
 import { parseBrush, type Pf1Brush } from "../ink/brush";
@@ -27,11 +31,13 @@ import type { Point } from "../scene/matrix";
 import type { ElementPart } from "../scene/model";
 import { polygonalAttrs, type Polygonal } from "../scene/parametric";
 import { pathData, type Elem } from "../scene/serialize";
+import { spineOf as widthSpine } from "../scene/varwidth";
 import { nonNegativeLength } from "../scene/values";
 import { fubAttributes, plainAttributes, type Plan } from "./arrange";
 import { shapeSegments } from "./hit";
 import { arcsAsCubics, readNodes, writeNodes, type NodeKey, type Subpath } from "./nodes";
 import { arrowPath } from "./shapes";
+import { widthAttrs, widthOutline, type WidthShape } from "./profile";
 import { fitSpine, followedInk, spineMoves, spineTolerance, type Spine } from "./spine";
 import { GEOMETRY, replaceWithPath, syntheticNulls, withoutStill } from "./topath";
 
@@ -45,7 +51,8 @@ export type Nodable =
   | { readonly kind: "shape"; readonly tag: ShapeTag; readonly attrs: ReadonlyMap<string, string>; readonly subs: readonly Subpath[] }
   | { readonly kind: "polygonal"; readonly shape: Polygonal; readonly subs: readonly Subpath[] }
   | { readonly kind: "arrow"; readonly width: number; readonly subs: readonly Subpath[] }
-  | { readonly kind: "stroke"; readonly ink: Ink; readonly brush: Pf1Brush; readonly spine: Spine; readonly subs: readonly Subpath[] };
+  | { readonly kind: "stroke"; readonly ink: Ink; readonly brush: Pf1Brush; readonly spine: Spine; readonly subs: readonly Subpath[] }
+  | { readonly kind: "width"; readonly shape: WidthShape; readonly subs: readonly Subpath[] };
 
 /// Perché un oggetto non ha nodi da modificare: un testo, un'immagine, dati
 /// che non si leggono, una forma che non disegna niente, un tratto che non
@@ -129,6 +136,12 @@ export function nodableOf(node: ElementPart, spineOf: SpineOf = freshSpine): Nod
       const width = written === undefined ? 1 : (nonNegativeLength(written) ?? 1);
       return { kind: "arrow", width, subs: [{ nodes: [[ends[0], ends[1]], [ends[2], ends[3]]], links: [{ kind: "line" }], closed: false }] };
     }
+    case "width": {
+      const v = details.varwidth;
+      if (v === undefined) return "unreadable";
+      const shape: WidthShape = { cap: v.cap, join: v.join, profile: v.profile, spine: widthSpine(v) };
+      return nodable({ kind: "width", shape, subs: readNodes(shape.spine) });
+    }
     case "stroke": {
       if (details.stroke?.redrawable !== true) return "stroke";
       const fub = fubAttributes(node);
@@ -164,8 +177,9 @@ export type Rewrite =
   /// Resta com'è: la modifica non arriva al centesimo.
   | { readonly kind: "same" }
   /// Non si fa: una freccia ha due capi e un'asta dritta, un tratto è un
-  /// tratto solo e aperto, e un inchiostro troppo lungo non si scrive.
-  | { readonly kind: "refused"; readonly reason: "arrow" | "stroke" | "long" };
+  /// tratto solo e aperto, una linea a spessore variabile è un pezzo solo, e
+  /// un inchiostro troppo lungo non si scrive.
+  | { readonly kind: "refused"; readonly reason: "arrow" | "stroke" | "width" | "long" };
 
 /// Vero se `a` e `b` hanno gli stessi nodi, gli stessi segmenti e le stesse
 /// maniglie, al centesimo.
@@ -302,6 +316,11 @@ export function rewrite(nodable: Nodable, subs: readonly Subpath[], moved: Reado
       const geom = ends.map(text);
       return { kind: "set", attrs: { "fub:geom": geom.join(" "), d: arrowPath(...(geom.map(Number) as [number, number, number, number]), nodable.width) } };
     }
+    case "width": {
+      if (subs.length !== 1) return { kind: "refused", reason: "width" };
+      const written = widthAttrs({ ...nodable.shape, spine: segments });
+      return written === null ? { kind: "refused", reason: "width" } : { kind: "set", attrs: { "fub:geom": written.geom, d: written.d } };
+    }
     case "stroke": {
       const followed = strokeFollowing(nodable, subs, moved);
       if (followed === null) return { kind: "refused", reason: "stroke" };
@@ -324,6 +343,10 @@ export function draftOf(nodable: Nodable, subs: readonly Subpath[]): string | nu
   if (nodable.kind === "stroke") {
     const followed = strokeFollowing(nodable, subs, null);
     return followed === null ? null : pf1(inkToQuantized(followed.ink), nodable.brush);
+  }
+  if (nodable.kind === "width") {
+    const outline = subs.length === 1 ? widthOutline({ ...nodable.shape, spine: writeNodes(subs) }) : null;
+    return outline === null || typeof outline === "string" || outline.length === 0 ? null : pathData(outline);
   }
   return pathData(writeNodes(subs));
 }

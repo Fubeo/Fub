@@ -8,7 +8,8 @@ import { describe, expect, it } from "vitest";
 import { pointAt } from "../scene/curves";
 import { parsePath, type Segment } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
-import { offsetArea, strokeArea, strokeLoops, type StrokeStyle } from "./offset";
+import { widthsAt, widthSpans, type WidthPoint } from "../scene/varwidth";
+import { offsetArea, profileArea, strokeArea, strokeLoops, type ProfileStyle, type StrokeStyle } from "./offset";
 
 const style = (width: number, more: Partial<StrokeStyle> = {}): StrokeStyle => ({ width, join: "miter", cap: "butt", miterLimit: 4, dashes: [], ...more });
 
@@ -350,4 +351,204 @@ describe("il tempo e i limiti", () => {
     for (let i = 0; i < 200; i++) d += ` C${next() * 400} ${next() * 400} ${next() * 400} ${next() * 400} ${next() * 400} ${next() * 400}`;
     expect(strokeArea(parsePath(d)!, style(20, { join: "round", cap: "round" }))).toBe("complex");
   }, 30000);
+});
+
+describe("lo spessore variabile", () => {
+  function profiled(d: string, profile: readonly WidthPoint[], more: Partial<ProfileStyle> = {}): Segment[] {
+    const out = profileArea(parsePath(d)!, widthSpans(profile), { cap: "butt", join: "miter", ...more });
+    if (typeof out === "string") throw new Error(`contorno non riuscito: ${out}`);
+    return out;
+  }
+
+  const expectBounds = (segments: readonly Segment[], expected: readonly number[]): void => {
+    boundsOf(segments).forEach((value, i) => expect(value, `lato ${i}`).toBeCloseTo(expected[i]!, 2));
+  };
+
+  /// ∫ f da 0 a 1, con Simpson.
+  const integral = (f: (u: number) => number): number => {
+    const n = 2000;
+    let sum = f(0) + f(1);
+    for (let k = 1; k < n; k++) sum += (k % 2 === 1 ? 4 : 2) * f(k / n);
+    return sum / (3 * n);
+  };
+
+  it("un profilo uniforme è il contorno fermo", () => {
+    const cases: [string, ProfileStyle][] = [
+      ["M0 0 L100 0", { cap: "butt", join: "miter" }],
+      ["M0 0 L100 0 L100 100", { cap: "round", join: "round" }],
+      ["M0 0 L100 0 L0 20", { cap: "square", join: "miter" }],
+      ["M0 0 C40 -60 80 60 120 0 L120 50", { cap: "square", join: "bevel" }],
+      [circle(0, 0, 50), { cap: "butt", join: "miter" }],
+      ["M0 0 C100 0 100 60 0 60", { cap: "round", join: "round" }],
+    ];
+    for (const [d, given] of cases) {
+      const ours = profiled(d, [
+        [0, 5, 5],
+        [1, 5, 5],
+      ], given);
+      const fixed = stroke(d, style(10, given));
+      expect(area(ours), d).toBeCloseTo(area(fixed), 1);
+      expectBounds(ours, boundsOf(fixed));
+    }
+  });
+
+  it("una linea che si assottiglia è un triangolo, senza estremi dove non è larga", () => {
+    const out = profiled("M0 0 L100 0", [
+      [0, 0, 0],
+      [1, 5, 5],
+    ], { cap: "round" });
+    expect(area(out)).toBeCloseTo(500 + (25 * Math.PI) / 2, 1);
+    expectBounds(out, [0, -5, 105, 5]);
+  });
+
+  it("la destra di chi percorre la linea è in basso sullo schermo, e i lati sono indipendenti", () => {
+    expectBounds(profiled("M0 0 L100 0", [
+      [0, 0, 4],
+      [1, 0, 4],
+    ]), [0, 0, 100, 4]);
+    expectBounds(profiled("M0 0 L100 0", [
+      [0, 3, 0],
+      [1, 3, 0],
+    ]), [0, -3, 100, 0]);
+    expectBounds(profiled("M100 0 L0 0", [
+      [0, 3, 0],
+      [1, 3, 0],
+    ]), [0, 0, 100, 3]);
+  });
+
+  it("un salto di larghezza è un gradino", () => {
+    const out = profiled("M0 0 L100 0", [
+      [0, 2, 2],
+      [0.5, 2, 2],
+      [0.5, 6, 6],
+      [1, 6, 6],
+    ]);
+    expect(area(out)).toBeCloseTo(800, 1);
+    expectBounds(out, [0, -6, 100, 6]);
+  });
+
+  it("l'area di una linea è l'integrale del profilo", () => {
+    const profiles: WidthPoint[][] = [
+      [
+        [0, 0, 0],
+        [0.5, 5, 5],
+        [1, 0, 0],
+      ],
+      [
+        [0, 1, 3],
+        [0.3, 6, 2],
+        [0.7, 2, 5],
+        [1, 4, 1],
+      ],
+    ];
+    for (const profile of profiles) {
+      const expected = 100 * integral((u) => widthsAt(profile, u)[0] + widthsAt(profile, u)[1]);
+      expect(area(profiled("M0 0 L100 0", profile))).toBeCloseTo(expected, 0);
+    }
+  });
+
+  it("su una curva il bordo sta alla larghezza del profilo, da ciascun lato", () => {
+    const d = "M0 0 C60 -40 140 40 200 0";
+    const profile: WidthPoint[] = [
+      [0, 1, 3],
+      [0.3, 6, 2],
+      [0.7, 2, 5],
+      [1, 4, 1],
+    ];
+    const rings = polylines(profiled(d, profile), true, 0.2);
+    const line = polylines(parsePath(d)!, false, 0.01)[0]!;
+    const lengths = [0];
+    for (let i = 1; i < line.length; i++) lengths.push(lengths[i - 1]! + Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]));
+    const total = lengths[lengths.length - 1]!;
+    for (let i = 20; i + 20 < line.length; i += 97) {
+      const [p, q] = [line[i - 1]!, line[i + 1]!];
+      const length = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      const n: Point = [-(q[1] - p[1]) / length, (q[0] - p[0]) / length];
+      const [left, right] = widthsAt(profile, lengths[i]! / total);
+      const at = (k: number): Point => [line[i]![0] + n[0] * k, line[i]![1] + n[1] * k];
+      expect(winding(rings, at(right - 0.05)), `destra dentro a ${i}`).not.toBe(0);
+      expect(winding(rings, at(right + 0.05)), `destra fuori a ${i}`).toBe(0);
+      expect(winding(rings, at(-left + 0.05)), `sinistra dentro a ${i}`).not.toBe(0);
+      expect(winding(rings, at(-left - 0.05)), `sinistra fuori a ${i}`).toBe(0);
+    }
+  });
+
+  it("una linea chiusa fa un anello, che comincia e finisce dove comincia", () => {
+    const profile: WidthPoint[] = [
+      [0, 2, 2],
+      [0.5, 8, 4],
+      [1, 2, 2],
+    ];
+    const out = profiled(circle(0, 0, 50), profile);
+    const rings = polylines(out, true, 0.2);
+    expect(winding(rings, [0, 0])).toBe(0);
+    // Il cerchio gira in verso orario sullo schermo: la destra guarda il
+    // centro.
+    const expected = (2 * Math.PI * integral((u) => {
+      const [left, right] = widthsAt(profile, u);
+      return (50 + left) ** 2 - (50 - right) ** 2;
+    })) / 2;
+    expect(area(out)).toBeCloseTo(expected, 0);
+    expect(winding(rings, [-57.9, 0])).not.toBe(0);
+    expect(winding(rings, [-58.1, 0])).toBe(0);
+    expect(winding(rings, [-46.1, 0])).not.toBe(0);
+    expect(winding(rings, [-45.9, 0])).toBe(0);
+  });
+
+  it("gli estremi tondi e quadrati stanno sul segmento fra i due lati", () => {
+    const profile: WidthPoint[] = [
+      [0, 2, 6],
+      [1, 2, 6],
+    ];
+    const round = profiled("M0 0 L100 0", profile, { cap: "round" });
+    expect(area(round)).toBeCloseTo(800 + 16 * Math.PI, 1);
+    expectBounds(round, [-4, -2, 104, 6]);
+    const square = profiled("M0 0 L100 0", profile, { cap: "square" });
+    expect(area(square)).toBeCloseTo(864, 1);
+  });
+
+  it("il giunto prende la larghezza maggiore dove la linea gira", () => {
+    const out = profiled("M0 0 L100 0 L100 100", [
+      [0, 2, 2],
+      [0.5, 2, 2],
+      [0.5, 6, 6],
+      [1, 6, 6],
+    ]);
+    expectBounds(out, [0, -6, 106, 100]);
+  });
+
+  it("una curva più stretta della larghezza e una cuspide si riempiono", () => {
+    const out = profiled("M0 0 C100 0 100 60 0 60", [
+      [0, 1, 1],
+      [0.5, 40, 40],
+      [1, 1, 1],
+    ]);
+    // In mezzo la curva passa da (75, 30) verso il basso, e la sua destra
+    // guarda dentro la U, più vicina della larghezza.
+    const rings = polylines(out, true, 0.2);
+    for (const x of [40, 60, 110]) expect(winding(rings, [x, 30]), `${x}`).not.toBe(0);
+    for (const x of [30, 120]) expect(winding(rings, [x, 30]), `${x}`).toBe(0);
+    expect(profiled("M0 0 C100 50 -50 50 50 0", [
+      [0, 1, 1],
+      [0.5, 8, 8],
+      [1, 1, 1],
+    ]).length).toBeGreaterThan(0);
+  });
+
+  it("duecento curve con un profilo irregolare, in poco tempo", () => {
+    const next = random(5);
+    let d = "M0 0";
+    let [x, y] = [0, 0];
+    for (let i = 0; i < 200; i++) {
+      const [nx, ny] = [x + 10 + next() * 20, y + (next() - 0.5) * 30];
+      d += ` C${x + 5} ${y + (next() - 0.5) * 20} ${nx - 5} ${ny + (next() - 0.5) * 20} ${nx} ${ny}`;
+      [x, y] = [nx, ny];
+    }
+    const profile: WidthPoint[] = [[0, 0, 0]];
+    for (let k = 1; k < 40; k++) profile.push([k / 40, 2 + next() * 10, 2 + next() * 10]);
+    profile.push([1, 0, 0]);
+    const begin = performance.now();
+    expect(profiled(d, profile, { cap: "round", join: "round" }).length).toBeGreaterThan(0);
+    expect(performance.now() - begin).toBeLessThan(4000);
+  });
 });

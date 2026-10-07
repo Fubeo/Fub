@@ -9,6 +9,7 @@ import type { Role } from "./analysis";
 import { MAX_DEPTH } from "./classify";
 import { at, doc, elements, first, foreign, load, role, text } from "./test-support";
 import shapes from "../../../__fixtures__/scene-shapes/cases.json";
+import widths from "../../../__fixtures__/scene-width/cases.json";
 
 describe("la classificazione (§4)", () => {
   it("ogni tag della tabella è modificabile", () => {
@@ -555,6 +556,21 @@ describe("la classificazione (§4)", () => {
         expect(item.polygonal, geom).toEqual({ shape, ...polygonal });
       }
     }
+  });
+
+  it("uno spessore variabile vuole la sua grammatica intera, altrimenti è un path", () => {
+    for (const { geom, varwidth } of widths.read) {
+      const written = geom.replace(/\t/g, "&#9;").replace(/\n/g, "&#10;");
+      const item = at(load(doc(`<path fub:shape="width" fub:geom="${written}" d="M0 0 L10 0 L5 5 Z"/>`)), [0])!;
+      if (varwidth === null) {
+        expect(item.role, geom).toBe("path");
+        expect(item.varwidth, geom).toBeUndefined();
+      } else {
+        expect(item.role, geom).toBe("width");
+        expect(item.varwidth, geom).toEqual(varwidth);
+      }
+    }
+    expect(role(load(doc('<path fub:shape="star" fub:geom="round round 0 1 1 1 1 1 M0 0 L1 0" d="M0 0"/>')), [0])).toBe("path");
   });
 
   it("i nodi estranei contigui fanno un blocco solo", () => {

@@ -90,10 +90,10 @@ export default defineConfig({
           }
           // La geometria dei disegni senza DOM: i nodi dei tracciati, la
           // spina dei tratti, le forme e il loro riconoscimento, le aree
-          // booleane, lo scostamento, la semplificazione, la Curvatura e i
-          // tagli. Dipendono soltanto dal formato, e gli strumenti
-          // dell'editor le usano.
-          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|fit|shapes|recognize|boolean|offset|simplify|curvature|cut)\.ts$/.test(id)) {
+          // booleane, lo scostamento, la semplificazione, la Curvatura, i
+          // tagli e il profilo dello spessore variabile. Dipendono soltanto
+          // dal formato, e gli strumenti dell'editor le usano.
+          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|fit|shapes|recognize|boolean|offset|simplify|curvature|cut|profile)\.ts$/.test(id)) {
             return "drawing-geometry";
           }
           // I fogli di stile dei disegni: leggerli, la loro cascata e lo stile
@@ -101,6 +101,15 @@ export default defineConfig({
           // che li chiama, e dipendono soltanto dal formato.
           if (/\/src\/editors\/spatial\/tools\/(stylesheet|selectors|cascade|styled)\.ts$/.test(id)) {
             return "drawing-styles";
+          }
+          // I comandi dei disegni senza DOM: l'indice degli oggetti che gli
+          // strumenti toccano, e ciò che fa di una scelta dei passi sul
+          // documento: disporre, il contorno, l'aspetto, i tracciati, le
+          // trasformazioni, le booleane, i tagli, lo spessore variabile e i
+          // livelli. Dipendono dal formato e dalla geometria, e l'editor li
+          // chiama.
+          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming)\.ts$/.test(id)) {
+            return "drawing-commands";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
             return "theme-series";

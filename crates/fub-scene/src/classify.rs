@@ -25,6 +25,7 @@ use crate::values::{
     dasharray, href, keyword, length, non_negative_length, number_list, opacity, paint, points,
     preserve_aspect_ratio, transform, Href,
 };
+use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
 use crate::MAX_DEPTH;
 
@@ -53,6 +54,9 @@ pub enum Role {
     Ngon,
     /// Un `path` con `fub:shape="star"` e un `fub:geom` che si legge (§6).
     Star,
+    /// Un `path` con `fub:shape="width"` e un `fub:geom` che si legge: il
+    /// contorno a spessore variabile (§6).
+    Width,
     /// Ogni altro `path`.
     Path,
     Rect,
@@ -160,6 +164,9 @@ pub struct ElementItem {
     /// La geometria di un poligono regolare o di una stella: `fub:geom` letto.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub polygonal: Option<Polygonal>,
+    /// La geometria di un contorno a spessore variabile: `fub:geom` letto.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub varwidth: Option<VarWidth>,
     /// Il testo del primo `title` figlio di un livello o di un oggetto, coi
     /// riferimenti risolti e gli spazi com'erano: il nome che qualcuno gli ha
     /// dato.
@@ -446,6 +453,7 @@ fn path_role(element: &Element<'_>) -> Role {
         Some("arrow") if arrow_geometry(element).is_some() => Role::Arrow,
         Some("polygon") if polygonal_geometry(element).is_some() => Role::Ngon,
         Some("star") if polygonal_geometry(element).is_some() => Role::Star,
+        Some("width") if width_geometry(element).is_some() => Role::Width,
         _ => Role::Path,
     }
 }
@@ -460,6 +468,11 @@ fn arrow_geometry(element: &Element<'_>) -> Option<[f64; 4]> {
 fn polygonal_geometry(element: &Element<'_>) -> Option<Polygonal> {
     let shape = PolygonalShape::parse(element.value(NS_FUB, "shape")?)?;
     read_polygonal(shape, element.value(NS_FUB, "geom")?)
+}
+
+/// `fub:geom` di un contorno a spessore variabile, se si legge.
+fn width_geometry(element: &Element<'_>) -> Option<VarWidth> {
+    read_var_width(element.value(NS_FUB, "geom")?)
 }
 
 /// Un blocco estraneo in costruzione.
@@ -661,6 +674,9 @@ impl Builder<'_, '_> {
                 .flatten(),
             polygonal: matches!(role, Role::Ngon | Role::Star)
                 .then(|| polygonal_geometry(element))
+                .flatten(),
+            varwidth: (role == Role::Width)
+                .then(|| width_geometry(element))
                 .flatten(),
             title: object.then(|| first_title(doc, element)).flatten(),
             text: matches!(role, Role::Title | Role::Desc).then(|| character_data(doc, id)),

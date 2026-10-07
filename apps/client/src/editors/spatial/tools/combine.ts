@@ -3,7 +3,8 @@
 // di Inkscape. Il comando diventa un `batch` solo.
 //
 // - **Gli operandi sono forme**: tracciati, rettangoli, ellissi, cerchi,
-//   linee, spezzate, poligoni, frecce e tratti, con l'area che riempiono.
+//   linee, spezzate, poligoni, frecce, linee a spessore variabile e tratti,
+//   con l'area che riempiono.
 //   Un gruppo, un collegamento, un testo o un'immagine fermano il comando,
 //   che lo dice.
 // - **La forma più in basso resta lei.** Diventa il tracciato del
@@ -28,7 +29,7 @@ import { shapeSegments, type Unit } from "./hit";
 import { lookOf, rewriteShape } from "./topath";
 
 /// I ruoli delle forme su cui le operazioni lavorano.
-const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "arrow", "ngon", "star", "stroke"]);
+const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "arrow", "ngon", "star", "width", "stroke"]);
 
 /// Un'operazione booleana pronta: le operazioni, e quanti tracciati ne
 /// escono.

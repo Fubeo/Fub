@@ -7,12 +7,14 @@
 // - **Chi ha che cosa.** Un riempimento l'hanno rettangoli, ellissi,
 //   cerchi, poligoni, spezzate, tracciati e testi, dove è il colore delle
 //   lettere. Un contorno l'hanno le forme di `outline.ts`, anche quelle che
-//   oggi non lo mostrano; e un tratto a penna, che è tutto riempimento ma si
-//   vede come una linea: il suo colore si legge e si scrive come contorno.
-//   Lo spessore è dei contorni che si vedono, tranne quello di un tratto a
-//   penna, che viene dall'inchiostro. Un gruppo o un collegamento passano
-//   tutto alle parti; un'immagine ha soltanto l'opacità. Una parte bloccata
-//   dentro un gruppo scelto resta com'è.
+//   oggi non lo mostrano; e un tratto a penna e una linea a spessore
+//   variabile, che sono tutti riempimento ma si vedono come una linea: il
+//   loro colore si legge e si scrive come contorno. Lo spessore è dei
+//   contorni che si vedono, tranne quello di un tratto a penna, che viene
+//   dall'inchiostro; di una linea a spessore variabile è il suo punto più
+//   largo, e cambiarlo allarga o stringe tutto il profilo. Un gruppo o un
+//   collegamento passano tutto alle parti; un'immagine ha soltanto
+//   l'opacità. Una parte bloccata dentro un gruppo scelto resta com'è.
 // - **L'opacità è dell'oggetto scelto**, gruppo compreso: non si eredita, si
 //   moltiplica, e scritta sulle parti si vedrebbe diversa dove si
 //   sovrappongono.
@@ -41,12 +43,14 @@ import type { Role } from "../scene/analysis";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
+import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
 import { keyword, length, nonNegativeLength, opacity as parseOpacity, trim } from "../scene/values";
-import { elemOf, plainAttributes, Plan, type Arranged } from "./arrange";
+import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { Unit } from "./hit";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
 import { customColor } from "./palette";
+import { profileWidth, scaledProfile, widthAttrs } from "./profile";
 import { arrowPath } from "./shapes";
 import { replaceElem } from "./topath";
 
@@ -99,6 +103,10 @@ const FILLED: ReadonlySet<Role> = new Set(["ngon", "star", "path", "rect", "elli
 
 /// I ruoli che hanno un contorno, come in `outline.ts`.
 const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
+
+/// I ruoli tutti riempimento che si vedono come una linea: il loro colore è
+/// quello del contorno.
+const INKED: ReadonlySet<Role> = new Set(["stroke", "width"]);
 
 /// I ruoli che passano tutto ai figli.
 const CONTAINERS: ReadonlySet<Role> = new Set(["group", "link"]);
@@ -171,10 +179,13 @@ interface Parts {
   /// Gli oggetti scelti, per l'opacità.
   readonly chosen: Part[];
   readonly fills: Part[];
-  /// Chi ha un contorno: le forme, e i tratti a penna col loro riempimento.
+  /// Chi ha un contorno: le forme, e i tratti a penna e le linee a spessore
+  /// variabile col loro riempimento.
   readonly strokes: Part[];
   /// I contorni che si vedono, per lo spessore.
   readonly outlines: Array<{ readonly part: Part; readonly outline: Outline }>;
+  /// Le linee a spessore variabile, anche loro per lo spessore.
+  readonly widths: Part[];
   readonly texts: Part[];
 }
 
@@ -197,7 +208,7 @@ function nodesOf(model: DocumentModel, units: readonly Unit[]): ElementPart[] {
 }
 
 function partsOf(model: DocumentModel, units: readonly Unit[]): Parts {
-  const out: Parts = { chosen: [], fills: [], strokes: [], outlines: [], texts: [] };
+  const out: Parts = { chosen: [], fills: [], strokes: [], outlines: [], widths: [], texts: [] };
   const visit = (node: ElementPart, inherited: Inherited, chosen: boolean): void => {
     const role = node.details?.role;
     // Ciò che è bloccato dentro un gruppo scelto resta com'è.
@@ -212,7 +223,8 @@ function partsOf(model: DocumentModel, units: readonly Unit[]): Parts {
     }
     if (FILLED.has(role)) out.fills.push(part);
     if (role === "text") out.texts.push(part);
-    if (role === "stroke") out.strokes.push(part);
+    if (INKED.has(role)) out.strokes.push(part);
+    if (role === "width" && node.details?.varwidth !== undefined) out.widths.push(part);
     if (OUTLINED.has(role)) {
       out.strokes.push(part);
       const outline = outlineOf(node, inherited, part.own);
@@ -230,6 +242,10 @@ function shared<T>(values: readonly (T | null)[]): Shared<T> {
   return { count: values.length, value: same ? first : null };
 }
 
+/// Lo spessore della linea a spessore variabile `part`, coi numeri come li
+/// mostra il pannello.
+const widthOf = (part: Part): number => Number(place(profileWidth(part.node.details!.varwidth!.profile)));
+
 /// Il corpo che `part` vede, o `null` se non si legge come una lunghezza.
 const sizeOf = (part: Part): number | null => nonNegativeLength(seen(part, "font-size"));
 
@@ -243,8 +259,8 @@ export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
   const parts = partsOf(model, units);
   return {
     fill: shared(parts.fills.map((part) => paintText(seen(part, "fill")))),
-    stroke: shared(parts.strokes.map((part) => paintText(seen(part, part.role === "stroke" ? "fill" : "stroke")))),
-    width: shared(parts.outlines.map(({ outline }) => outline.width)),
+    stroke: shared(parts.strokes.map((part) => paintText(seen(part, INKED.has(part.role) ? "fill" : "stroke")))),
+    width: shared([...parts.outlines.map(({ outline }) => outline.width), ...parts.widths.map(widthOf)]),
     opacity: shared(parts.chosen.map((part) => {
       const written = part.own.get("opacity");
       return written === undefined ? 1 : parseOpacity(written);
@@ -336,6 +352,28 @@ class Changes {
     }
   }
 
+  /// La linea a spessore variabile `part` spessa `width` nel punto più largo:
+  /// tutto il profilo si allarga o si stringe nella stessa proporzione, e
+  /// con lui gli estremi e gli angoli che chiede `outline`, se li dice.
+  widthTo(part: Part, width: number, outline?: { readonly cap: string; readonly join: string }): void {
+    const v = part.node.details!.varwidth!;
+    const k = width / profileWidth(v.profile);
+    const cap = trim(outline?.cap ?? "");
+    const join = trim(outline?.join ?? "");
+    if (!(k > 0 && Number.isFinite(k))) return;
+    const written = widthAttrs({
+      cap: (WIDTH_CAPS as readonly string[]).includes(cap) ? (cap as WidthCap) : v.cap,
+      join: (WIDTH_JOINS as readonly string[]).includes(join) ? (join as WidthJoin) : v.join,
+      profile: scaledProfile(v.profile, k),
+      spine: spineOf(v),
+    });
+    if (written === null) return;
+    if (written.geom !== fubAttributes(part.node).get("geom")) {
+      this.of(part)["fub:geom"] = written.geom;
+      this.of(part).d = written.d;
+    }
+  }
+
   /// Una freccia il cui spessore cambia ridisegna la punta.
   arrow(part: Part): void {
     const arrow = part.node.details?.arrow;
@@ -384,9 +422,10 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
   if ("fill" in change) {
     for (const part of parts.fills) changes.write(part, "fill", change.fill, samePaint);
   } else if ("stroke" in change) {
-    for (const part of parts.strokes) changes.write(part, part.role === "stroke" ? "fill" : "stroke", change.stroke, samePaint);
+    for (const part of parts.strokes) changes.write(part, INKED.has(part.role) ? "fill" : "stroke", change.stroke, samePaint);
   } else if ("width" in change) {
     const width = place(change.width);
+    for (const part of parts.widths) changes.widthTo(part, change.width);
     for (const { part, outline } of parts.outlines) {
       changes.write(part, "stroke-width", width, sameLength);
       // Il tratteggio del menu resta quello che si vedeva, sullo spessore
@@ -453,7 +492,7 @@ function firstPart(model: DocumentModel, unit: Unit): Part | null {
       for (const child of elementChildren(node)) visit(child, inner);
       return;
     }
-    if (FILLED.has(role) || OUTLINED.has(role) || role === "stroke" || role === "image") found = { node, role, own: ownOf(node), inherited };
+    if (FILLED.has(role) || OUTLINED.has(role) || INKED.has(role) || role === "image") found = { node, role, own: ownOf(node), inherited };
   };
   const [node] = nodesOf(model, [unit]);
   visit(node!, passedBy(node!.parent));
@@ -471,10 +510,12 @@ export function styleOf(model: DocumentModel, unit: Unit): Style | null {
   const size = part.role === "text" ? sizeOf(part) : null;
   return {
     fill: FILLED.has(part.role) ? seen(part, "fill") : null,
-    stroke: OUTLINED.has(part.role) ? seen(part, "stroke") : part.role === "stroke" ? seen(part, "fill") : null,
+    stroke: OUTLINED.has(part.role) ? seen(part, "stroke") : INKED.has(part.role) ? seen(part, "fill") : null,
     outline: OUTLINED.has(part.role)
       ? { width: seen(part, "stroke-width"), dashes: seen(part, "stroke-dasharray"), cap: seen(part, "stroke-linecap"), join: seen(part, "stroke-linejoin") }
-      : null,
+      : part.role === "width" && part.node.details?.varwidth !== undefined
+        ? { width: place(profileWidth(part.node.details.varwidth.profile)), dashes: "none", cap: part.node.details.varwidth.cap, join: part.node.details.varwidth.join }
+        : null,
     opacity,
     font: part.role === "text" && size !== null ? { family: trim(seen(part, "font-family")), size, weight: trim(seen(part, "font-weight")) } : null,
   };
@@ -497,9 +538,13 @@ export function styleOps(model: DocumentModel, units: readonly Unit[], style: St
     if (value !== null) changes.write(part, "fill", value, samePaint);
   }
   for (const part of parts.strokes) {
-    if (part.role === "stroke") {
+    if (INKED.has(part.role)) {
       const value = shown(style.stroke, style.fill);
       if (value !== null) changes.write(part, "fill", value, samePaint);
+      // Una linea a spessore variabile prende lo spessore, gli estremi e gli
+      // angoli, e il suo profilo resta.
+      const width = style.outline === null ? null : nonNegativeLength(style.outline.width);
+      if (part.role === "width" && parts.widths.includes(part) && width !== null && width > 0) changes.widthTo(part, width, style.outline!);
       continue;
     }
     if (style.stroke !== null) changes.write(part, "stroke", style.stroke, samePaint);

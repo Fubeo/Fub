@@ -10,6 +10,9 @@
 //   loro assi; cerchi e immagini con le proporzioni una scala uguale nei due
 //   versi; poligoni regolari e stelle le rotazioni e una scala uguale nei due
 //   versi, che diventano centro, raggio, rotazione e raggio degli angoli.
+//   Una linea a spessore variabile prende tutto: la linea si trasforma, le
+//   larghezze si moltiplicano come uno spessore, e un ribaltamento scambia
+//   i lati.
 //   Senza tratteggio rettangoli, ellissi, cerchi, poligoni regolari e stelle
 //   prendono anche i ribaltamenti e i quarti di giro che li lasciano uguali;
 //   con il tratteggio no, perché comincerebbe altrove.
@@ -40,6 +43,7 @@ import { parsePath, type Segment } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, mappedEllipse, toRadians, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { polygonalAttrs } from "../scene/parametric";
+import { spineOf } from "../scene/varwidth";
 import { pathData } from "../scene/serialize";
 import { length, nonNegativeLength, points as parsePoints, transform as parseTransform } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
@@ -47,6 +51,7 @@ import { fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./a
 import { transformValue, type NewIds } from "./edit";
 import type { Unit } from "./hit";
 import { inheritedBy, passed, type Inherited } from "./outline";
+import { scaledProfile, swappedProfile, widthAttrs } from "./profile";
 import { arrowPath } from "./shapes";
 import { writable } from "./transform";
 
@@ -363,6 +368,18 @@ function reshape(node: ElementPart, own: ReadonlyMap<string, string>, m: Matrix,
       if (written === null) return null;
       Object.assign(attrs, { "fub:geom": written["fub:geom"], d: written.d });
       return { ...parts, attrs };
+    }
+    case "width": {
+      const v = details.varwidth;
+      if (v === undefined) return null;
+      // Come uno spessore: esatto per rotazioni e scale uguali, una media
+      // per le altre. Ribaltata, la destra di chi percorre la linea va a
+      // sinistra.
+      const profile = scaledProfile(v.profile, Math.sqrt(Math.abs(determinant(m))));
+      const written = widthAttrs({ cap: v.cap, join: v.join, profile: determinant(m) < 0 ? swappedProfile(profile) : profile, spine: mappedSegments(spineOf(v), m) });
+      if (written === null) return null;
+      Object.assign(attrs, { "fub:geom": written.geom, d: written.d });
+      return { ...whole(m), attrs };
     }
     case "stroke": {
       if (details.stroke?.redrawable !== true) return null;

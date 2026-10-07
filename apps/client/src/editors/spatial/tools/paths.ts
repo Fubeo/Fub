@@ -10,14 +10,17 @@
 //   estremi, angoli e tratteggio, una forma piena del suo colore, al suo
 //   posto e con il suo id. Una forma anche piena diventa un gruppo, con lo
 //   stesso id, la stessa trasformazione e la stessa opacità, del
-//   riempimento sotto e del contorno sopra. Testi, immagini, tratti a penna
-//   e forme senza contorno restano come sono, e il comando li conta.
+//   riempimento sotto e del contorno sopra. Una linea a spessore variabile
+//   è già il suo contorno pieno: diventa un tracciato e basta. Testi,
+//   immagini, tratti a penna e forme senza contorno restano come sono, e il
+//   comando li conta.
 // - **«Scostamento»** aggiunge accanto a ogni forma il tracciato parallelo,
 //   a una distanza nella scena: sotto la forma se è più grande, sopra se è
 //   più piccolo, con i suoi colori e la sua trasformazione. Dopo sono scelti
 //   i tracciati nuovi.
 // - **«Semplifica»** toglie i nodi entro una tolleranza nella scena. Una
-//   forma che perde nodi diventa un tracciato; le altre restano.
+//   forma che perde nodi diventa un tracciato; le altre restano. Di una
+//   linea a spessore variabile si semplifica la linea, e il profilo resta.
 // - **«Inchiostro in tracciato»** fa di un tratto a penna la sua spina, i
 //   nodi che lo strumento Nodi mostra, col colore dell'inchiostro come
 //   contorno e lo spessore del pennello, come «Rendi forma».
@@ -29,6 +32,7 @@ import { invert, type Matrix } from "../scene/matrix";
 import type { DocumentModel, ElementPart } from "../scene/model";
 import { pathData, type Elem } from "../scene/serialize";
 import { nonNegativeLength, number } from "../scene/values";
+import { spineOf } from "../scene/varwidth";
 import { elemOf, fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { mapped } from "./boolean";
 import type { NewIds } from "./edit";
@@ -37,12 +41,13 @@ import { isPenStroke, strokePoints } from "./inkshape";
 import { writeNodes } from "./nodes";
 import { offsetArea, strokeArea, type Cap, type Join, type OffsetStyle, type StrokeStyle } from "./offset";
 import { writtenDashes } from "./outline";
+import { widthAttrs } from "./profile";
 import { nodeCount, simplified } from "./simplify";
 import { fitSpine, spineTolerance } from "./spine";
 import { GEOMETRY, replaceElem, rewriteShape, syntheticNulls, withoutStill } from "./topath";
 
 /// Le forme: ciò che ha un tracciato e un'area o un contorno.
-const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "arrow", "ngon", "star", "stroke"]);
+const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "arrow", "ngon", "star", "width", "stroke"]);
 
 /// Gli attributi di pittura che si ereditano, coi valori di SVG.
 const PAINT: ReadonlyMap<string, string> = new Map([
@@ -180,7 +185,7 @@ export const holdsShape = (index: SceneIndex, units: readonly Unit[]): boolean =
 /// Vero se fra `units`, o dentro i loro gruppi, c'è una forma col contorno
 /// che si vede: ciò che «Contorno in tracciato» cambia.
 export const holdsStroke = (index: SceneIndex, units: readonly Unit[]): boolean =>
-  holds(index, units, (unit) => unit.role !== "stroke" && strokeStyleOf(paintOf(unit.node)) !== null);
+  holds(index, units, (unit) => unit.role === "width" || (unit.role !== "stroke" && strokeStyleOf(paintOf(unit.node)) !== null));
 
 /// La selezione dopo un comando che lascia gli oggetti dove sono.
 const sameKeys = (model: DocumentModel, plan: Plan, units: readonly Unit[]): string[] => units.map((unit) => plan.keyOf(nodeOf(model, unit), unit.key));
@@ -189,6 +194,38 @@ const sameKeys = (model: DocumentModel, plan: Plan, units: readonly Unit[]): str
 // Contorno in tracciato.
 // ---------------------------------------------------------------------------
 
+/// L'elemento che prende il posto della forma `node` quando il suo contorno
+/// diventa una forma piena del suo colore, con gli attributi `outline`. Una
+/// forma senza riempimento diventa un `path`; una piena un gruppo, col
+/// riempimento sotto e il contorno sopra. `null` se ha parti che non si
+/// scrivono.
+function strokeReplaced(node: ElementPart, outline: Readonly<Record<string, string>>, ids: NewIds): Elem | null {
+  const elem = elemOf(node);
+  if (elem === null) return null;
+  const paint = paintOf(node);
+  const tag = node.details!.tag;
+  const geometry = [...(GEOMETRY[tag] ?? []), "d"];
+  const synthetic = Object.keys(syntheticNulls(node));
+  const inherited = paintOf(node.parent);
+  if (paint.get("fill") === "none" || tag === "line") {
+    const attrs = without(elem.attrs, ["id", ...geometry, ...synthetic, ...STROKE_ATTRIBUTES, "fill", "fill-opacity"]);
+    return { tag: "path", attrs: { ...attrs, ...outline, ...strokeAsFill(paint, inherited) }, ...(elem.children === undefined ? {} : { children: elem.children }) };
+  }
+  // Il gruppo prende il posto della forma: l'id, la trasformazione,
+  // l'opacità, il titolo e gli altri attributi. Dentro, il riempimento
+  // resta la forma che era, senza contorno, e il contorno le sta sopra.
+  const paints = new Set([...PAINT.keys()]);
+  const group = without(elem.attrs, ["id", ...geometry, ...synthetic, ...paints]);
+  const own = (name: string): Record<string, string> => (elem.attrs[name] === undefined ? {} : { [name]: elem.attrs[name]! });
+  const shapeAttrs: Record<string, string> = { id: ids.next("object") };
+  for (const name of [...geometry, ...synthetic]) Object.assign(shapeAttrs, own(name));
+  Object.assign(shapeAttrs, own("fill"), own("fill-opacity"));
+  if (inherited.get("stroke") !== "none") shapeAttrs.stroke = "none";
+  const fill: Elem = { tag, attrs: shapeAttrs };
+  const stroke: Elem = { tag: "path", attrs: { id: ids.next("object"), ...outline, ...strokeAsFill(paint, inherited) } };
+  return { tag: "g", attrs: group, children: [...(elem.children ?? []), fill, stroke] };
+}
+
 /// Le operazioni di «Contorno in tracciato» su `units`. La selezione resta la
 /// stessa.
 export function outlineStrokeOps(model: DocumentModel, index: SceneIndex, units: readonly Unit[], ids: NewIds): PathsDone {
@@ -196,6 +233,11 @@ export function outlineStrokeOps(model: DocumentModel, index: SceneIndex, units:
   let [changed, skipped, refused] = [0, 0, 0];
   const shape = (unit: Unit): void => {
     const node = unit.node;
+    if (unit.role === "width") {
+      if (rewriteShape(plan, node, plainAttributes(node).get("d") ?? "")) changed++;
+      else refused++;
+      return;
+    }
     const paint = paintOf(node);
     const style = unit.role === "stroke" ? null : strokeStyleOf(paint);
     if (style === null) {
@@ -214,36 +256,8 @@ export function outlineStrokeOps(model: DocumentModel, index: SceneIndex, units:
       return;
     }
     const d = pathData(area);
-    const elem = elemOf(node);
-    if (!readable(d) || elem === null) {
-      refused++;
-      return;
-    }
-    const tag = node.details!.tag;
-    const geometry = [...(GEOMETRY[tag] ?? []), "d"];
-    const synthetic = Object.keys(syntheticNulls(node));
-    const inherited = paintOf(node.parent);
-    const filled = paint.get("fill") !== "none" && tag !== "line";
-    let out: Elem;
-    if (!filled) {
-      const attrs = without(elem.attrs, ["id", ...geometry, ...synthetic, ...STROKE_ATTRIBUTES, "fill", "fill-opacity"]);
-      out = { tag: "path", attrs: { ...attrs, d, ...strokeAsFill(paint, inherited) }, ...(elem.children === undefined ? {} : { children: elem.children }) };
-    } else {
-      // Il gruppo prende il posto della forma: l'id, la trasformazione,
-      // l'opacità, il titolo e gli altri attributi. Dentro, il riempimento
-      // resta la forma che era, senza contorno, e il contorno le sta sopra.
-      const paints = new Set([...PAINT.keys()]);
-      const group = without(elem.attrs, ["id", ...geometry, ...synthetic, ...paints]);
-      const own = (name: string): Record<string, string> => (elem.attrs[name] === undefined ? {} : { [name]: elem.attrs[name]! });
-      const shapeAttrs: Record<string, string> = { id: ids.next("object") };
-      for (const name of [...geometry, ...synthetic]) Object.assign(shapeAttrs, own(name));
-      Object.assign(shapeAttrs, own("fill"), own("fill-opacity"));
-      if (inherited.get("stroke") !== "none") shapeAttrs.stroke = "none";
-      const fill: Elem = { tag, attrs: shapeAttrs };
-      const outline: Elem = { tag: "path", attrs: { id: ids.next("object"), d, ...strokeAsFill(paint, inherited) } };
-      out = { tag: "g", attrs: group, children: [...(elem.children ?? []), fill, outline] };
-    }
-    if (!replaceElem(plan, node, out)) {
+    const out = readable(d) ? strokeReplaced(node, { d }, ids) : null;
+    if (out === null || !replaceElem(plan, node, out)) {
       refused++;
       return;
     }
@@ -251,6 +265,53 @@ export function outlineStrokeOps(model: DocumentModel, index: SceneIndex, units:
   };
   visitShapes(index, units, shape, () => skipped++);
   return { ...plan.finish(sameKeys(model, plan, units)), changed, skipped, refused };
+}
+
+// ---------------------------------------------------------------------------
+// La linea a spessore variabile.
+// ---------------------------------------------------------------------------
+
+/// Il contorno che si vede di `node` e la linea che segue, nelle coordinate
+/// della forma; `null` se non ne ha uno, o se è un tratto a penna.
+export function strokeOf(node: ElementPart): { readonly style: StrokeStyle; readonly segments: Segment[] } | null {
+  const style = node.details?.role === "stroke" ? null : strokeStyleOf(paintOf(node));
+  return style === null ? null : { style, segments: segmentsOf(node) };
+}
+
+/// Il colore del contorno di `node` come riempimento: ciò che lo mostra
+/// pieno, a spessore variabile, prima di scriverlo.
+export const strokeFill = (node: ElementPart): Record<string, string> => {
+  const paint = paintOf(node);
+  return { fill: paint.get("stroke")!, "fill-opacity": paint.get("stroke-opacity")! };
+};
+
+/// L'elemento che prende il posto della forma `node` quando il suo contorno
+/// diventa una linea a spessore variabile con `geom` e `d`: come in
+/// «Contorno in tracciato», un gruppo se la forma è piena. `null` se ha
+/// parti che non si scrivono.
+export const strokeAsWidth = (node: ElementPart, geom: string, d: string, ids: NewIds): Elem | null =>
+  strokeReplaced(node, { "fub:shape": "width", "fub:geom": geom, d }, ids);
+
+/// L'elemento che prende il posto della linea a spessore variabile `node`
+/// quando torna un contorno uniforme: un `path` lungo `d`, la sua linea,
+/// col contorno spesso `width` del suo colore, con gli estremi `cap` e gli
+/// angoli `join`. Ciò che il genitore dà già non si scrive. `null` se ha
+/// parti che non si scrivono.
+export function widthAsStroke(node: ElementPart, d: string, width: number, cap: Cap, join: Join): Elem | null {
+  const elem = elemOf(node);
+  if (elem === null) return null;
+  const paint = paintOf(node);
+  const inherited = paintOf(node.parent);
+  const attrs = without(elem.attrs, ["id", "d", "fub:shape", "fub:geom", "fill", "fill-opacity", ...STROKE_ATTRIBUTES]);
+  attrs.d = d;
+  if (inherited.get("fill") !== "none") attrs.fill = "none";
+  attrs.stroke = paint.get("fill")!;
+  if (paint.get("fill-opacity") !== inherited.get("stroke-opacity")) attrs["stroke-opacity"] = paint.get("fill-opacity")!;
+  const written = formatNumber(width, 2);
+  if (written !== inherited.get("stroke-width")) attrs["stroke-width"] = written;
+  if (cap !== inherited.get("stroke-linecap")) attrs["stroke-linecap"] = cap;
+  if (join !== inherited.get("stroke-linejoin")) attrs["stroke-linejoin"] = join;
+  return { tag: "path", attrs, ...(elem.children === undefined ? {} : { children: elem.children }) };
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +390,8 @@ export function simplifyOps(model: DocumentModel, index: SceneIndex, units: read
       return;
     }
     const node = unit.node;
-    const segments = segmentsOf(node);
+    const v = unit.role === "width" ? node.details?.varwidth : undefined;
+    const segments = v === undefined ? segmentsOf(node) : spineOf(v);
     const scale = scaleOf(unit.matrix);
     const out = scale > 0 && Number.isFinite(scale) ? simplified(segments, tolerance / scale) : segments;
     const [was, is] = [nodeCount(segments), nodeCount(out)];
@@ -340,11 +402,14 @@ export function simplifyOps(model: DocumentModel, index: SceneIndex, units: read
       return;
     }
     const d = pathData(out);
-    if (!readable(d) || !rewriteShape(plan, node, d)) {
+    const written = v === undefined ? null : widthAttrs({ cap: v.cap, join: v.join, profile: v.profile, spine: out });
+    const done = v === undefined ? readable(d) && rewriteShape(plan, node, d) : written !== null;
+    if (!done) {
       after += was;
       refused++;
       return;
     }
+    if (written !== null) plan.ops.push({ op: "set", id: plan.idOf(node), attrs: { "fub:geom": written.geom, d: written.d } });
     after += is;
     changed++;
   };

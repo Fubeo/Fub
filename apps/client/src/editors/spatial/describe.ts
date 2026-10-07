@@ -79,6 +79,7 @@ const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper">, DrawKey>
   ngon: "draw.tool.polygon",
   star: "draw.tool.star",
   path: "draw.kind.path",
+  width: "draw.kind.width",
   rect: "draw.tool.rect",
   ellipse: "draw.tool.ellipse",
   circle: "draw.kind.circle",

@@ -70,7 +70,8 @@ export const DEFAULT_FONT_SIZE = 16;
 
 /// Che cosa rappresenta un elemento modificabile (§4). `ngon` e `star` sono il
 /// poligono regolare e la stella sintetici, un `path` con `fub:shape` (§6);
-/// `polygon` è l'elemento `polygon`.
+/// `polygon` è l'elemento `polygon`. `width` è il contorno a spessore
+/// variabile, sintetico anche lui.
 export type Role =
   | "title"
   | "desc"
@@ -82,6 +83,7 @@ export type Role =
   | "arrow"
   | "ngon"
   | "star"
+  | "width"
   | "path"
   | "rect"
   | "ellipse"
@@ -396,6 +398,7 @@ export class Tally {
       case "arrow":
       case "ngon":
       case "star":
+      case "width":
       case "path":
       case "rect":
       case "ellipse":
@@ -497,6 +500,7 @@ function bounds(doc: XmlDocument, element: ElementNode, role: Role, m: Matrix, o
     case "arrow":
     case "ngon":
     case "star":
+    case "width":
     case "path": {
       const d = valueOf(element, NS_NONE, "d");
       const segments = d === undefined ? null : parsePath(d);

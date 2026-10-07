@@ -516,6 +516,22 @@ fn sparse() -> String {
                 )
                 .a("fill", "#009e73"),
         )
+        // Un contorno a spessore variabile: il `d` lo calcola la superficie.
+        .child(
+            El::new("path")
+                .a("id", "o00000024")
+                .a("fub:shape", "width")
+                .a("fub:geom", "round round 0 1 1 0.4 8 6 1 0 0 M1200 960 L1300 960 L1360 1020")
+                .a(
+                    "d",
+                    "M1200 961 A1 1 0 0 1 1199 960 A1 1 0 0 1 1200 959 C1224.65 955.02 1249.29 952 1273.94 952 \
+                     C1282.63 952 1291.31 952.09 1300 952.31 A7.69 7.69 0 0 1 1305.44 954.56 \
+                     C1324.93 975.07 1343.44 996.56 1360 1020 \
+                     C1338.12 1003.06 1317.57 984.79 1297.73 965.8 C1289.8 965.94 1281.87 966 1273.94 966 \
+                     C1249.29 966 1224.65 963.87 1200 961 Z",
+                )
+                .a("fill", "#cc79a7"),
+        )
         // Un arancione sulla carta bianca: S009.
         .child(drawn(
             "o00000032",
@@ -712,7 +728,7 @@ fn sparse_is_a_complete_drawing() {
             summary.counts.shapes,
             summary.counts.foreign
         ),
-        (5, 11, 1)
+        (5, 12, 1)
     );
     let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
     use fub_scene::Code::*;

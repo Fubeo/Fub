@@ -19,7 +19,7 @@ import { utf8Length } from "./text";
 export const F32_MAX = 3.4028234663852886e38;
 
 /// Gli spazi che SVG e CSS tolgono intorno a un valore.
-function isWsp(c: number): boolean {
+export function isWsp(c: number): boolean {
   return c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d || c === 0x0c;
 }
 

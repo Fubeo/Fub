@@ -3382,6 +3382,7 @@ describe("da tastiera", () => {
       "Nodi · dal livello Esperto",
       "Costruttore di forme · dal livello Esperto",
       "Forbici · dal livello Esperto",
+      "Spessore · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
@@ -3445,7 +3446,7 @@ describe("da tastiera", () => {
       rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
     }));
     expect(tables).toEqual([
-      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["M", "Costruttore di forme"], ["C", "Forbici"], ["B", "Bézier"]] },
+      { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]] },
       { caption: "Disponi · dal livello Esperto", rows: [["Ctrl+Shift+M", "Trasforma…"]] },
       { caption: "Tracciato · dal livello Esperto", rows: [["Ctrl+J", "Unisce i capi più vicini dei tracciati aperti scelti; un tracciato solo si chiude"]] },
       {
@@ -3488,6 +3489,16 @@ describe("da tastiera", () => {
         rows: [
           ["Space", "Taglia dove è il cursore: Spazio e di nuovo Spazio. Spazio, le frecce e Spazio tirano il Coltello"],
           ["Alt", "Tenuto, il Coltello taglia dritto"],
+        ],
+      },
+      {
+        caption: "Spessore · dal livello Esperto",
+        rows: [
+          ["Space", "Allarga o stringe dove è il cursore: Spazio, le frecce e Spazio. Su un punto in mezzo, lo sposta"],
+          ["Alt", "Tenuto, cambia soltanto il lato che si tira"],
+          ["Del", "Toglie il punto dello spessore scelto"],
+          ["Enter", "Apre le misure del punto scelto"],
+          ["Esc", "Lascia il punto scelto"],
         ],
       },
       {
@@ -4912,14 +4923,22 @@ describe("il contorno, dal livello Esperto", () => {
       ["Angoli vivi", "menuitemradio", "true"],
       ["Angoli arrotondati", "menuitemradio", "false"],
       ["Angoli smussati", "menuitemradio", "false"],
+      ["Uniforme", "menuitemradio", "true"],
+      ["Affusolato", "menuitemradio", "false"],
+      ["A goccia", "menuitemradio", "false"],
+      ["A fuso", "menuitemradio", "false"],
+      ["Rovescia lungo la linea", "menuitem", null],
+      ["Scambia i lati", "menuitem", null],
     ]);
+    // Un contorno uniforme non si rovescia.
+    expect(item("Rovescia lungo la linea").getAttribute("aria-disabled")).toBe("true");
     expect(formatIssues(checkAccessibility(host))).toBe("");
     closeMenus();
     // Estremi diversi: nessuno è segnato. Il rettangolo pieno non ha contorno
     // e non conta.
     editor.select([A, B, C]);
     outline().click();
-    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Continuo", "Angoli vivi"]);
+    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Continuo", "Angoli vivi", "Uniforme"]);
     closeMenus();
     editor.setLevel("standard");
     expect(outline().hidden).toBe(true);
@@ -4948,6 +4967,33 @@ describe("il contorno, dal livello Esperto", () => {
 
     key("z", { ctrlKey: true });
     key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(SHAPES);
+  });
+
+  it("un profilo fa del contorno una linea a spessore variabile, e uniforme la riporta, in passi che si annullano", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([B]);
+    outline().click();
+    item("Affusolato").click();
+    expect(editor.engine.text).toContain(`<path id="${B}" fub:shape="width" fub:geom="round miter 0 2 2 1 0 0 M0 50 L50 50" d="`);
+    expect(spoken()).toBe("Affusolato: un contorno.");
+    expect(editor.selection).toEqual([B]);
+    outline().click();
+    // Il menu la segna, e non le offre il tratteggio.
+    expect(menu().filter((entry) => entry.getAttribute("aria-checked") === "true").map(labelOf)).toEqual(["Estremi arrotondati", "Angoli vivi", "Affusolato"]);
+    expect(item("Continuo").getAttribute("aria-disabled")).toBe("true");
+    expect(item("Estremi piatti").getAttribute("aria-disabled")).toBeNull();
+    item("Rovescia lungo la linea").click();
+    expect(editor.engine.text).toContain('fub:geom="round miter 0 0 0 1 2 2 M0 50 L50 50"');
+    expect(spoken()).toBe("Rovescia lungo la linea: un contorno.");
+    outline().click();
+    item("Estremi piatti").click();
+    expect(editor.engine.text).toContain('fub:geom="butt miter 0 0 0 1 2 2 M0 50 L50 50"');
+    outline().click();
+    item("Uniforme").click();
+    expect(editor.engine.text).toContain(`<path id="${B}" d="M0 50 L50 50" fill="none" stroke="#0072b2" stroke-width="4"/>`);
+    expect(changes).toHaveLength(4);
+    for (let i = 0; i < 4; i++) key("z", { ctrlKey: true });
     expect(editor.engine.text).toBe(SHAPES);
   });
 
@@ -6883,7 +6929,7 @@ describe("le Forbici e il Coltello, dal livello Esperto", () => {
     drag([[50, -20], [50, 25]]);
     expect(spoken()).toBe("Il Coltello non ha tagliato niente: una forma chiusa si divide quando il tratto la attraversa da parte a parte.");
     drag([[350, 280], [350, 320]]);
-    expect(spoken()).toBe("Il Coltello non ha tagliato niente: una forma chiusa si divide quando il tratto la attraversa da parte a parte. 1 oggetto attraversato resta intero: frecce, tratti a penna, testi, immagini e parti di altri programmi non si tagliano.");
+    expect(spoken()).toBe("Il Coltello non ha tagliato niente: una forma chiusa si divide quando il tratto la attraversa da parte a parte. 1 oggetto attraversato resta intero: frecce, linee a spessore variabile, tratti a penna, testi, immagini e parti di altri programmi non si tagliano.");
     expect(changes).toEqual([]);
   });
 
@@ -6929,6 +6975,240 @@ describe("le Forbici e il Coltello, dal livello Esperto", () => {
     key("Escape");
     expect(editor.engine.text).toBe(cut);
     expect(changes).toHaveLength(3);
+  });
+});
+
+describe("lo Spessore, dal livello Esperto", () => {
+  const L = "ol9l9l9l9";
+  const R = "or9r9r9r9";
+  const D = "od9d9d9d9";
+  const N = "on9n9n9n9";
+  const T = "ot9t9t9t9";
+  const LINE = `<line id="${L}" x1="0" y1="50" x2="100" y2="50" stroke="#000000" stroke-width="4"/>`;
+  const BOX = `<rect id="${R}" x="200" y="0" width="100" height="100" fill="#d55e00" stroke="#0072b2" stroke-width="2"/>`;
+  const DASHED = `<line id="${D}" x1="0" y1="200" x2="100" y2="200" stroke="#000000" stroke-width="2" stroke-dasharray="4 2"/>`;
+  const BARE = `<rect id="${N}" x="200" y="200" width="50" height="50" fill="#009e73"/>`;
+  const TEXT = `<text id="${T}" x="0" y="300"><tspan x="0" dy="0">Ciao</tspan></text>`;
+  const SHAPES = doc(`${LAYER}${LINE}${BOX}${DASHED}${BARE}${TEXT}</g>`);
+  /// La geometria della linea a spessore variabile `id`, com'è adesso.
+  const geom = (id: string): string | null => new RegExp(`<path id="${id}"[^>]* fub:geom="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
+  /// Un tocco, lontano nel tempo dal precedente: non fa un doppio tocco.
+  const tap = (x: number, y: number, init: Init = {}): void => {
+    clock += 1000;
+    drag([[x, y]], init);
+  };
+  const widthTool = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-tool[aria-label="Spessore"]')!;
+
+  /// Il disegno `source`, con lo Spessore e niente di scelto.
+  const widening = (source = SHAPES): void => {
+    mount(source, { level: "expert" });
+    editor.focus();
+    key("w");
+  };
+
+  it("c'è solo all'Esperto, col tasto W", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.focus();
+    expect(widthTool().hidden).toBe(true);
+    key("w");
+    expect(editor.tool).not.toBe("width");
+    editor.setLevel("expert");
+    expect(widthTool().hidden).toBe(false);
+    expect(widthTool().title).toBe("Spessore (W)");
+    key("w");
+    expect(editor.tool).toBe("width");
+    expect(surface().dataset.tool).toBe("width");
+    expect(spoken()).toBe("Strumento: Spessore.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    expect(changes).toEqual([]);
+  });
+
+  it("trascinato da un contorno lo allarga lì: la linea diventa a spessore variabile, col suo id, in un passo che si annulla", () => {
+    widening();
+    drag([[50, 52], [50, 54], [50, 56]]);
+    expect(geom(L)).toBe("butt miter 0 2 2 0.5 6 6 1 2 2 M0 50 L100 50");
+    // Il colore del contorno la riempie, e il contorno non c'è più.
+    expect(editor.engine.text).toMatch(new RegExp(`<path id="${L}" [^>]*fill="#000000"/>`));
+    expect(editor.engine.text).not.toMatch(new RegExp(`<path id="${L}" [^>]*stroke=`));
+    expect(spoken()).toBe("Largo 12 qui: 6 a sinistra, 6 a destra.");
+    expect(editor.selection).toEqual([]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Spessore.");
+    // Con Alt, soltanto il lato che si tira: sotto, a destra di chi va verso
+    // destra; sopra, a sinistra.
+    drag([[50, 52], [50, 56]], { altKey: true });
+    expect(geom(L)).toBe("butt miter 0 2 2 0.5 2 6 1 2 2 M0 50 L100 50");
+    expect(spoken()).toBe("Largo 8 qui: 2 a sinistra, 6 a destra.");
+    editor.undo();
+    drag([[50, 48], [50, 44]], { altKey: true });
+    expect(geom(L)).toBe("butt miter 0 2 2 0.5 6 2 1 2 2 M0 50 L100 50");
+  });
+
+  it("premuto sulla linea, tira la parte verso cui va; preso sul lato, verso la linea lo stringe", () => {
+    widening();
+    drag([[50, 50], [50, 46], [50, 44]], { altKey: true });
+    expect(geom(L)).toBe("butt miter 0 2 2 0.5 8 2 1 2 2 M0 50 L100 50");
+    editor.undo();
+    drag([[50, 50], [50, 54]]);
+    expect(geom(L)).toBe("butt miter 0 2 2 0.5 6 6 1 2 2 M0 50 L100 50");
+    editor.undo();
+    // Il lato di sopra preso e tirato verso il basso: la linea si assottiglia.
+    drag([[30, 48], [30, 52]]);
+    expect(geom(L)).toBe("butt miter 0 2 2 0.3 0 0 1 2 2 M0 50 L100 50");
+  });
+
+  it("un punto si allarga dai suoi lati, e preso al centro scorre lungo la linea; il centro di un capo è la linea", () => {
+    widening();
+    drag([[50, 52], [50, 56]]);
+    // Il lato di sotto del punto, a 6 dalla linea, tirato di 4: i due lati
+    // crescono insieme.
+    drag([[50, 56], [50, 60]]);
+    expect(geom(L)).toBe("butt miter 0 2 2 0.5 10 10 1 2 2 M0 50 L100 50");
+    drag([[50, 50], [60, 52], [70, 50]]);
+    expect(geom(L)).toBe("butt miter 0 2 2 0.7 10 10 1 2 2 M0 50 L100 50");
+    expect(spoken()).toBe("Punto spostato al 70% della linea.");
+    // Il capo non scorre: preso al centro e tirato in su, si allarga.
+    drag([[0, 50], [0, 46], [0, 44]]);
+    expect(geom(L)).toBe("butt miter 0 8 8 0.7 10 10 1 2 2 M0 50 L100 50");
+    expect(changes).toHaveLength(4);
+    for (let i = 0; i < 4; i++) editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+  });
+
+  it("un tocco sceglie un punto; Canc lo toglie, i capi restano, Esc lo lascia", () => {
+    widening();
+    drag([[50, 52], [50, 56]]);
+    tap(50, 50);
+    expect(spoken()).toBe("Punto 2 di 3 scelto: 6 a sinistra, 6 a destra. Canc lo toglie, Invio ne apre le misure.");
+    key("Delete");
+    expect(geom(L)).toBe("butt miter 0 2 2 1 2 2 M0 50 L100 50");
+    expect(spoken()).toBe("Punto dello spessore tolto.");
+    tap(0, 52);
+    expect(spoken()).toBe("Punto 1 di 2 scelto: 2 a sinistra, 2 a destra. Canc lo toglie, Invio ne apre le misure.");
+    key("Delete");
+    expect(spoken()).toBe("I punti ai capi della linea restano: stringili a zero per una punta.");
+    key("Escape");
+    expect(spoken()).toBe("Nessun punto dello spessore scelto.");
+    // Senza un punto scelto, Canc non toglie niente: nemmeno la linea.
+    key("Delete");
+    expect(geom(L)).toBe("butt miter 0 2 2 1 2 2 M0 50 L100 50");
+    // Un tocco sulla linea non aggiunge un punto: lo dice.
+    tap(30, 51);
+    expect(spoken()).toBe("Trascina per allargare o stringere qui: un tocco sceglie soltanto i punti dello spessore.");
+    expect(changes).toHaveLength(2);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Rimozione di un punto dello spessore.");
+  });
+
+  it("Invio o un doppio tocco aprono le misure del punto scelto", async () => {
+    widening();
+    drag([[50, 52], [50, 56]]);
+    key("Enter");
+    expect(dialog().textContent).toContain("Punto dello spessore");
+    expect([field("left").value, field("right").value, field("at").value]).toEqual(["6", "6", "50"]);
+    field("left").value = "3";
+    field("at").value = "25";
+    await submit();
+    expect(geom(L)).toBe("butt miter 0 2 2 0.25 3 6 1 2 2 M0 50 L100 50");
+    expect(spoken()).toBe("Largo 9 qui: 3 a sinistra, 6 a destra.");
+    // Due tocchi su un capo: niente posizione, e senza cambiare niente,
+    // niente da fare.
+    clock += 1000;
+    drag([[100, 52]]);
+    drag([[100, 52]]);
+    expect(field("at")).toBeNull();
+    expect([field("left").value, field("right").value]).toEqual(["2", "2"]);
+    await submit();
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(changes).toHaveLength(2);
+  });
+
+  it("una forma piena diventa un gruppo, col riempimento sotto e la linea del contorno sopra", () => {
+    widening();
+    // Dal bordo di sopra, verso l'interno: chi percorre il rettangolo dal suo
+    // angolo in alto a sinistra lo ha a destra.
+    drag([[250, 1], [250, 5]]);
+    expect(editor.engine.text).toMatch(
+      new RegExp(`<g id="${R}">\\s*<rect id="[^"]+" x="200" y="0" width="100" height="100" fill="#d55e00"/>\\s*<path id="[^"]+" fub:shape="width" fub:geom="butt miter 0 1 1 0.125 5 5 1 1 1 M200 0 L300 0 L300 100 L200 100 Z" d="[^"]+" fill="#0072b2"/>\\s*</g>`),
+    );
+    expect(spoken()).toBe("Largo 10 qui: 5 a sinistra, 5 a destra.");
+    // Il punto è sulla linea nel gruppo: un tocco lo sceglie.
+    tap(250, 0);
+    expect(spoken()).toBe("Punto 2 di 3 scelto: 5 a sinistra, 5 a destra. Canc lo toglie, Invio ne apre le misure.");
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+  });
+
+  it("dove non cambia spessore lo dice: fuori da un contorno, un tratteggio, una forma senza contorno, un testo", () => {
+    widening();
+    tap(150, 150);
+    expect(spoken()).toBe("Lo Spessore lavora sui contorni: trascina da una linea, o dal bordo di una forma col contorno.");
+    drag([[50, 201], [50, 210]]);
+    expect(spoken()).toBe("Un contorno tratteggiato non cambia spessore: prima rendilo continuo.");
+    tap(225, 225);
+    expect(spoken()).toBe("Questa forma non ha un contorno che si vede: prima dagliene uno.");
+    tap(10, 295);
+    expect(spoken()).toBe("Testi, immagini, frecce e tratti a penna non hanno un contorno che cambia spessore.");
+    expect(changes).toEqual([]);
+  });
+
+  it("il puntatore sopra un contorno mostra la linea, e il punto che un trascinamento aggiungerebbe", () => {
+    const layer = recording();
+    widening();
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 50, clientY: 51, timeStamp: (clock += 8) }));
+    layer.frame();
+    const drawn = layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo").map(([, x, y]) => `${Math.round(x as number)},${Math.round(y as number)}`);
+    expect(drawn).toEqual(expect.arrayContaining(["0,50", "100,50"]));
+    expect(layer.calls().some(([name, x, y]) => name === "arc" && Math.round(x as number) === 50 && Math.round(y as number) === 50)).toBe(true);
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: 150, clientY: 150, timeStamp: (clock += 8) }));
+    layer.frame();
+    expect(layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo")).toEqual([]);
+  });
+
+  it("mentre si trascina, il foglio mostra la linea nuova al posto del contorno", () => {
+    widening();
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 50, clientY: 52, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 50, clientY: 58, timeStamp: (clock += 8) }));
+    const line = host.querySelector<SVGElement>(`[data-scene-id="${L}"]`)!;
+    const stand = line.nextElementSibling as SVGElement;
+    expect([stand.localName, stand.getAttribute("d")?.slice(0, 1), stand.style.fill, line.style.stroke]).toEqual(["path", "M", "#000000", "none"]);
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 50, clientY: 58, timeStamp: (clock += 8) }));
+    expect(geom(L)).toBe("butt miter 0 2 2 0.5 8 8 1 2 2 M0 50 L100 50");
+  });
+
+  it("dalla tastiera: il cursore dice la larghezza, Spazio, le frecce e Spazio allargano", () => {
+    const K = "ok9k9k9k9";
+    const WIDE = doc(`${LAYER}<line id="${K}" x1="100" y1="150" x2="300" y2="150" stroke="#000000" stroke-width="4"/></g>`);
+    widening(WIDE);
+    size(400, 300);
+    key("ArrowRight", { shiftKey: true });
+    expect(spoken()).toBe("x 250, y 150: Contorno di Linea, Nero, largo 4 qui: Spazio, le frecce e Spazio lo allargano o lo stringono");
+    key(" ");
+    key("ArrowDown");
+    key(" ");
+    expect(geom(K)).toBe("butt miter 0 2 2 0.75 12 12 1 2 2 M100 150 L300 150");
+    expect(spoken()).toBe("Largo 24 qui: 12 a sinistra, 12 a destra.");
+    // Sul punto, il cursore lo dice.
+    key("ArrowUp");
+    expect(spoken()).toBe("x 250, y 150: Punto 2 di 3 dello spessore di Linea a spessore variabile, Nero: 12 a sinistra, 12 a destra");
+    // Esc a metà lascia il disegno com'era.
+    const wide = editor.engine.text;
+    key(" ");
+    key("ArrowUp", { shiftKey: true });
+    key("Escape");
+    expect(editor.engine.text).toBe(wide);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("i tasti dello Spessore stanno nell'elenco, dal livello Esperto", () => {
+    widening();
+    key("?", { shiftKey: true });
+    const table = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Spessore")!;
+    expect([...table.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["Space", "Alt", "Del", "Enter", "Esc"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
 });
 
@@ -8886,12 +9166,13 @@ describe("il livello Personalizzato", () => {
       "Tracciato · dal livello Esperto",
       "Costruttore di forme · dal livello Esperto",
       "Forbici · dal livello Esperto",
+      "Spessore · dal livello Esperto",
       "Bézier · dal livello Esperto",
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[14]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["B", "Bézier"]]);
+    expect(tables[14]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
