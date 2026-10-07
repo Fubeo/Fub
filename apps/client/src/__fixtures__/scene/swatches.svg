@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 600" width="800" height="600" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <title>Campioni</title>
+  <defs id="fub-defs">
+    <linearGradient id="r00000001" fub:role="swatch" fub:name="Blu mare" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0072b2"/>
+    </linearGradient>
+    <linearGradient id="r00000002" fub:role="swatch" fub:name="Vermiglio" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d55e00"/>
+    </linearGradient>
+    <linearGradient id="r00000003" fub:role="swatch" fub:name="Verde &amp; bosco" inkscape:swatch="solid">
+      <title>Il verde del bosco</title>
+      <stop offset="0" stop-color="green" stop-opacity="1"/>
+    </linearGradient>
+    <linearGradient id="r00000004" fub:role="swatch" fub:name="Due">
+      <stop offset="0" stop-color="#000000"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="r00000005" fub:role="swatch" fub:name="Coordinate" x2="1">
+      <stop stop-color="#009e73"/>
+    </linearGradient>
+    <linearGradient id="r00000006" fub:role="swatch" fub:name="Velo">
+      <stop stop-color="#56b4e9" stop-opacity="0.5"/>
+    </linearGradient>
+    <linearGradient id="r00000007" fub:role="swatch" fub:name=" ">
+      <stop stop-color="#e69f00"/>
+    </linearGradient>
+    <linearGradient id="r00000008" fub:role="swatch">
+      <stop stop-color="#f0e442"/>
+    </linearGradient>
+    <radialGradient id="r00000009" fub:role="swatch" fub:name="Tondo">
+      <stop stop-color="#cc79a7"/>
+    </radialGradient>
+    <linearGradient id="r0000000a" fub:role="swatch" fub:name="Senza colore">
+      <stop offset="0"/>
+    </linearGradient>
+    <pattern id="r0000000b" fub:role="shared" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="10" height="10" fill="url(#r00000001) #0072b2"/>
+    </pattern>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <rect id="o00000001" x="40" y="40" width="200" height="120" fill="url(#r00000001) #0072b2" stroke="url(#r00000003) #008000" stroke-width="4"/>
+    <line id="o00000002" x1="40" y1="220" x2="400" y2="220" stroke="url(#r00000001) #0072b2" stroke-width="6"/>
+    <text id="o00000003" x="40" y="320" fill="url(#r00000003) #008000" font-size="32">
+      <tspan x="40" dy="0">Bosco <tspan fill="#d55e00">rosso</tspan></tspan>
+    </text>
+    <rect id="o00000004" x="440" y="40" width="200" height="120" fill="url(#r0000000b) #0072b2"/>
+    <rect id="o00000005" x="440" y="200" width="200" height="120" fill="url(#r00000004) #808080"/>
+  </g>
+</svg>

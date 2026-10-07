@@ -54,7 +54,7 @@ pub use analysis::{
 pub use annotation::{read_annotations, Annotated, Annotations, Note, Page};
 pub use brush::{Brush, BrushError, PF1, PF1_KEYS};
 pub use classify::{
-    ElementItem, ForeignItem, Item, Layer, Lifecycle, Role, RootItem, Stroke, Tags, Tool,
+    ElementItem, ForeignItem, Item, Layer, Lifecycle, Role, RootItem, Stroke, Swatch, Tags, Tool,
 };
 pub use diagnostics::{Code, Diagnostic, Severity};
 pub use ink::{Ink, InkError, Sample, Scale};

@@ -1032,8 +1032,8 @@ export class SceneEngine {
   /// La raccolta, alla fine di ogni operazione applicata (§2): le risorse
   /// `private` e `shared` a cui l'operazione ha tolto l'ultimo riferimento se
   /// ne vanno, poi quelle rimaste sole per questo, e infine la `defs` di
-  /// FubDraw rimasta vuota. Restituisce i `remove` fatti, in ordine, e le
-  /// loro inverse.
+  /// FubDraw rimasta vuota. Un campione resta, come una risorsa senza ciclo
+  /// di vita. Restituisce i `remove` fatti, in ordine, e le loro inverse.
   private collect(): { removes: Op[]; restores: Op[] } {
     const removes: Op[] = [];
     const restores: Op[] = [];
@@ -1045,8 +1045,10 @@ export class SceneEngine {
     for (let lost = this.t.orphans(); lost.length > 0; lost = this.t.orphans()) {
       for (const id of lost) {
         const node = this.t.element(id);
-        // Una risorsa senza ciclo di vita resta anche sola.
-        if (node !== null && node.details?.lifecycle !== undefined) drop(node);
+        // Una risorsa senza ciclo di vita resta anche sola, e così un
+        // campione.
+        const lifecycle = node?.details?.lifecycle;
+        if (node !== null && (lifecycle === "private" || lifecycle === "shared")) drop(node);
       }
     }
     for (const defs of [...this.emptied]) {

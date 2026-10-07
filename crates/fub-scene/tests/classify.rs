@@ -1061,14 +1061,19 @@ fn coordinates_follow_their_units() {
         r#"<linearGradient id="r1" gradientUnits="userSpaceOnUse" x1="0" x2="10mm"/>"#,
         r#"<radialGradient id="r1" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="5"/>"#,
         r#"<filter id="r1" filterUnits="userSpaceOnUse" x="0" y="0" width="10" height="10"/>"#,
+        // Con uno `stop` o nessuno la sfumatura è un colore pieno, o niente:
+        // le coordinate non contano.
+        r##"<linearGradient id="r1" gradientUnits="userSpaceOnUse"><stop stop-color="#000"/></linearGradient>"##,
+        r#"<linearGradient id="r1" gradientUnits="userSpaceOnUse"/>"#,
+        r#"<radialGradient id="r1" gradientUnits="userSpaceOnUse"><stop/></radialGradient>"#,
     ];
     let foreign = [
         r#"<linearGradient id="r1" x1="10px"/>"#,
         r#"<linearGradient id="r1" gradientUnits="userSpaceOnUse" x1="0" x2="10%"/>"#,
         // Nello spazio d'uso, ciò che mancando sarebbe in percentuale del
-        // viewport va scritto.
-        r#"<linearGradient id="r1" gradientUnits="userSpaceOnUse"/>"#,
-        r#"<radialGradient id="r1" gradientUnits="userSpaceOnUse" cx="0" cy="0"/>"#,
+        // viewport va scritto, se c'è una sfumatura.
+        r#"<linearGradient id="r1" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="1"/></linearGradient>"#,
+        r#"<radialGradient id="r1" gradientUnits="userSpaceOnUse" cx="0" cy="0"><stop/><stop/></radialGradient>"#,
         r#"<filter id="r1" filterUnits="userSpaceOnUse" x="0" y="0" width="10"/>"#,
         // Raggi e dimensioni non negativi.
         r#"<radialGradient id="r1" r="-0.5"/>"#,

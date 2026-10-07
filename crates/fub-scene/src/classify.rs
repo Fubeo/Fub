@@ -97,13 +97,70 @@ impl Role {
 
 /// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
 /// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
-/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. Senza, la
-/// risorsa resta.
+/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. `swatch`
+/// è un campione del documento, un colore con un nome: resta anche senza
+/// riferimenti, e duplicare chi lo usa lo condivide. Senza, la risorsa resta.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Lifecycle {
     Private,
     Shared,
+    Swatch,
+}
+
+/// Un campione del documento (formato della scena, risorse): il suo nome,
+/// com'è scritto, e il colore, `#rrggbb` minuscolo.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Swatch {
+    pub name: String,
+    pub color: String,
+}
+
+/// Il campione che è `element`, una risorsa modificabile con
+/// `fub:role="swatch"`; `None` se non ha la sua forma, e allora è una risorsa
+/// senza ciclo di vita. Un campione è una `linearGradient` con un nome
+/// `fub:name` che non è vuoto, che di SVG ha soltanto `id` e `gradientUnits`,
+/// e un solo `stop`, con un `stop-color` che è un colore e senza
+/// trasparenza.
+fn swatch_of(doc: &Document<'_>, element: &Element<'_>) -> Option<Swatch> {
+    if !element.is_svg("linearGradient") {
+        return None;
+    }
+    let name = element.value(NS_FUB, "name")?;
+    if trim(name).is_empty() {
+        return None;
+    }
+    if element
+        .attrs
+        .iter()
+        .any(|attr| attr.ns == NS_NONE && attr.local != "id" && attr.local != "gradientUnits")
+    {
+        return None;
+    }
+    let mut color = None;
+    for &child in &element.children {
+        let Some(stop) = doc.element(child).filter(|e| e.is_svg("stop")) else {
+            continue;
+        };
+        if color.is_some() {
+            return None;
+        }
+        let Paint::Color([r, g, b]) = paint(stop.value(NS_NONE, "stop-color").unwrap_or(""))?
+        else {
+            return None;
+        };
+        if stop
+            .value(NS_NONE, "stop-opacity")
+            .is_some_and(|alpha| opacity(alpha) != Some(1.0))
+        {
+            return None;
+        }
+        color = Some(format!("#{r:02x}{g:02x}{b:02x}"));
+    }
+    Some(Swatch {
+        name: name.to_owned(),
+        color: color?,
+    })
 }
 
 /// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
@@ -254,6 +311,9 @@ pub struct ElementItem {
     /// Il ciclo di vita di una risorsa, se `fub:role` lo dice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<Lifecycle>,
+    /// Il nome e il colore di un campione del documento.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub swatch: Option<Swatch>,
     /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
     /// scena, tavole).
     #[serde(rename = "box", skip_serializing_if = "Option::is_none")]
@@ -858,7 +918,17 @@ fn resource_allowed(
     if !attributes {
         return false;
     }
+    // Una sfumatura con uno `stop` o nessuno è un colore pieno, o niente:
+    // le sue coordinate non contano, nemmeno quelle del viewport.
+    let plain = matches!(tag, Tag::LinearGradient | Tag::RadialGradient)
+        && element
+            .children
+            .iter()
+            .filter(|&&child| doc.element(child).is_some_and(|e| e.is_svg("stop")))
+            .count()
+            <= 1;
     if !in_box
+        && !plain
         && required(tag)
             .iter()
             .any(|name| element.value(NS_NONE, name).is_none())
@@ -1553,6 +1623,9 @@ impl Builder<'_, '_> {
         let text_path = (role == Role::Text)
             .then(|| text_path_of(doc, element))
             .flatten();
+        let swatch = (role == Role::Resource && element.value(NS_FUB, "role") == Some("swatch"))
+            .then(|| swatch_of(doc, element))
+            .flatten();
         let item = ElementItem {
             path,
             tag: tag.name(),
@@ -1596,9 +1669,11 @@ impl Builder<'_, '_> {
                 .then(|| match element.value(NS_FUB, "role") {
                     Some("private") => Some(Lifecycle::Private),
                     Some("shared") => Some(Lifecycle::Shared),
+                    Some("swatch") => swatch.as_ref().map(|_| Lifecycle::Swatch),
                     _ => None,
                 })
                 .flatten(),
+            swatch,
             board_box: (role == Role::Board).then(|| board_box(element)).flatten(),
             board: (role == Role::Paper)
                 .then(|| element.value(NS_FUB, "board").map(str::to_owned))
