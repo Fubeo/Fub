@@ -21,12 +21,16 @@
 //   e resta lei: il profilo segue la linea, alla stessa frazione della
 //   lunghezza, e il contorno si ricalcola. Spezzarla in più pezzi si
 //   rifiuta.
+// - **Un testo su tracciato ha i nodi del tracciato che segue**, la sua
+//   risorsa, nelle coordinate del testo: la modifica cambia quel tracciato,
+//   e il testo lo segue. Il tracciato resta lungo più di zero, o il testo
+//   non avrebbe dove scorrere.
 
 import { formatNumber } from "../number";
 import { parseBrush, type Pf1Brush } from "../ink/brush";
 import { decodeInk, encodeInk, INK_MAX_BYTES, inkLength, inkPoint, inkToQuantized, type Ink } from "../ink/codec";
 import { pf1 } from "../ink/pf1";
-import { parsePath, type Segment } from "../scene/geometry";
+import { parsePath, Track, type Segment } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import type { ElementPart } from "../scene/model";
 import { polygonalAttrs, type Polygonal } from "../scene/parametric";
@@ -52,7 +56,9 @@ export type Nodable =
   | { readonly kind: "polygonal"; readonly shape: Polygonal; readonly subs: readonly Subpath[] }
   | { readonly kind: "arrow"; readonly width: number; readonly subs: readonly Subpath[] }
   | { readonly kind: "stroke"; readonly ink: Ink; readonly brush: Pf1Brush; readonly spine: Spine; readonly subs: readonly Subpath[] }
-  | { readonly kind: "width"; readonly shape: WidthShape; readonly subs: readonly Subpath[] };
+  | { readonly kind: "width"; readonly shape: WidthShape; readonly subs: readonly Subpath[] }
+  /// Il tracciato che un testo segue: la risorsa `target`.
+  | { readonly kind: "track"; readonly target: string; readonly subs: readonly Subpath[] };
 
 /// Perché un oggetto non ha nodi da modificare: un testo, un'immagine, dati
 /// che non si leggono, una forma che non disegna niente, un tratto che non
@@ -68,6 +74,10 @@ export const inkSpine = (ink: Ink, tolerance: number): Spine =>
   fitSpine(Array.from({ length: inkLength(ink) }, (_, i) => inkPoint(ink, i)), tolerance);
 
 const freshSpine: SpineOf = (_text, ink, tolerance) => inkSpine(ink, tolerance);
+
+/// Il `d` del tracciato `id` che un testo segue; `null` se non c'è o non è
+/// un tracciato.
+export type TrackOf = (id: string) => string | null;
 
 /// La distanza fra i campioni che basta a un tratto di pennello `size`,
 /// quando la spina si allunga.
@@ -99,15 +109,21 @@ function pathSubs(d: string | undefined): Subpath[] | null {
 
 /// Ciò che lo strumento Nodi modifica in `node`, o perché niente. `spineOf`
 /// dà la spina di un tratto: chi modifica la ricorda, così i nodi restano
-/// quelli di prima dopo una modifica e dopo un annulla.
-export function nodableOf(node: ElementPart, spineOf: SpineOf = freshSpine): Nodable | NoNodes {
+/// quelli di prima dopo una modifica e dopo un annulla. `trackOf` dà il
+/// tracciato di un testo su tracciato: senza, un testo non ha nodi.
+export function nodableOf(node: ElementPart, spineOf: SpineOf = freshSpine, trackOf?: TrackOf): Nodable | NoNodes {
   const details = node.details;
   if (details === null) return "foreign";
   const attrs = plainAttributes(node);
   const nodable = (made: Nodable): Nodable | NoNodes => (made.subs.length === 0 ? "empty" : made);
   switch (details.role) {
-    case "text":
-      return "text";
+    case "text": {
+      const target = details.textPath;
+      if (target === undefined || trackOf === undefined) return "text";
+      const d = trackOf(target);
+      const subs = d === null ? null : pathSubs(d);
+      return subs === null ? "unreadable" : nodable({ kind: "track", target, subs });
+    }
     case "image":
       return "image";
     case "path": {
@@ -172,14 +188,17 @@ export type Rewrite =
   | { readonly kind: "set"; readonly attrs: Readonly<Record<string, string>>; readonly look?: string; readonly spine?: Spine }
   /// Diventa un `path` con questo `d`.
   | { readonly kind: "path"; readonly d: string }
+  /// Il tracciato che il testo segue diventa `d`.
+  | { readonly kind: "track"; readonly target: string; readonly d: string }
   /// Non disegna più niente.
   | { readonly kind: "remove" }
   /// Resta com'è: la modifica non arriva al centesimo.
   | { readonly kind: "same" }
   /// Non si fa: una freccia ha due capi e un'asta dritta, un tratto è un
-  /// tratto solo e aperto, una linea a spessore variabile è un pezzo solo, e
-  /// un inchiostro troppo lungo non si scrive.
-  | { readonly kind: "refused"; readonly reason: "arrow" | "stroke" | "width" | "long" };
+  /// tratto solo e aperto, una linea a spessore variabile è un pezzo solo,
+  /// un inchiostro troppo lungo non si scrive, e il tracciato di un testo
+  /// resta lungo più di zero.
+  | { readonly kind: "refused"; readonly reason: "arrow" | "stroke" | "width" | "long" | "track" };
 
 /// Vero se `a` e `b` hanno gli stessi nodi, gli stessi segmenti e le stesse
 /// maniglie, al centesimo.
@@ -296,6 +315,9 @@ function strokeFollowing(nodable: Extract<Nodable, { readonly kind: "stroke" }>,
 /// sono gli stessi.
 export function rewrite(nodable: Nodable, subs: readonly Subpath[], moved: ReadonlyMap<NodeKey, NodeKey> | null): Rewrite {
   const segments = writeNodes(subs);
+  if (nodable.kind === "track") {
+    return new Track(segments).length > 0 ? { kind: "track", target: nodable.target, d: pathData(segments) } : { kind: "refused", reason: "track" };
+  }
   if (segments.length === 0) return { kind: "remove" };
   const d = pathData(segments);
   switch (nodable.kind) {

@@ -21,13 +21,21 @@
 //   di scrittura, valgono per ciò che è scelto o, senza scelta, per ciò che
 //   si scriverà lì; il campo dice com'è adesso. Così il colore e il corpo
 //   che arrivano dalla barra mentre si scrive.
+// - **Un testo in area va a capo da sé** (formato della scena, testo): a
+//   ogni cambio il campo rifà gli a capo del riquadro con le misure del
+//   browser (`wrap.ts`), come il file li scriverà, e il cursore li segue.
+//   Cancellare all'inizio di una riga che continua una parola cancella il
+//   carattere prima. Un testo su tracciato ha una riga sola: Invio non va a
+//   capo, e ciò che si incolla sta sulla riga.
 
 import type { Lifetime } from "../../../ui/lifetime";
 import { length, letterSpacing, nonNegativeLength, trim } from "../scene/values";
 import { t, type DrawKey } from "../strings";
+import type { Measure } from "./measure";
 import { customColor } from "./palette";
 import {
   compareCarets,
+  JOIN,
   emphasisIn,
   emphasize,
   endOf,
@@ -50,6 +58,7 @@ import {
   type Span,
 } from "./rich";
 import { LINE_SPACING } from "./text";
+import { reflow } from "./wrap";
 
 /// Ciò che il campo chiede all'editor.
 export interface TextFieldOptions {
@@ -67,7 +76,21 @@ export interface FieldLayout {
   readonly height: number;
   /// Dalla cima del campo alla linea di base della prima riga.
   readonly baseline: number;
+  /// Dal bordo sinistro del campo a quello del riquadro di un testo in
+  /// area: lo spazio per il cursore, dalla parte dove le righe finiscono.
+  readonly inset: number;
 }
+
+/// Come va a capo il testo del campo: con Invio soltanto (`lines`); anche da
+/// sé, nel riquadro largo `width` unità del testo, misurando con `measure`
+/// (`area`); o mai, su una riga sola (`line`).
+export type FieldForm =
+  | { readonly kind: "lines" }
+  | { readonly kind: "area"; readonly width: number; readonly measure: Measure }
+  | { readonly kind: "line" };
+
+/// Il campo di un testo che va a capo solo con Invio.
+export const LINES_FORM: FieldForm = { kind: "lines" };
 
 /// La linea di base sotto la metà della riga, in volte il corpo, di un
 /// carattere scritto come `font-style`, `font-weight` e `font-family`.
@@ -77,6 +100,8 @@ export interface TextField {
   readonly element: HTMLElement;
   /// Il testo di adesso.
   readonly rich: Rich;
+  /// Come va a capo il testo che si apre dopo.
+  form(next: FieldForm): void;
   /// Apre il campo su `rich`, col cursore alla fine.
   open(rich: Rich): void;
   /// Svuota il campo.
@@ -136,6 +161,9 @@ const BASELINE_EM = 0.363;
 
 /// Il colore di un testo che non ne scrive uno che il campo sa mostrare.
 const INK = "#000000";
+
+/// Gli a capo di ciò che si scrive in un campo di una riga sola.
+const BREAKS = /\r\n|[\r\n\u2028\u2029]/g;
 
 const LINE_CLASS = "draw-text-line";
 const PIECE_CLASS = "draw-text-piece";
@@ -244,6 +272,15 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
   /// Dove è finita l'ultima battuta: la prossima lì continua lo stesso passo.
   let typed: Caret | null = null;
   let pending: Pending | null = null;
+  let shape: FieldForm = LINES_FORM;
+
+  /// `next`, con la scelta da `anchor` a `focus`, come lo mostra il campo:
+  /// un testo in area di nuovo a capo nel suo riquadro, la scelta con lui.
+  function flowed(next: Rich, anchor: Caret, focus: Caret): Snapshot {
+    if (shape.kind !== "area") return { rich: next, anchor, focus };
+    const made = reflow(next, shape.width, shape.measure);
+    return { rich: made.rich, anchor: made.caret(anchor), focus: made.caret(focus) };
+  }
 
   // --- Disegnare ----------------------------------------------------------------
 
@@ -333,12 +370,28 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
       longest = Math.max(longest, [...lineText(line)].length * CHAR_EM * tallest);
     });
     element.style.height = `${height}px`;
-    element.style.width = "";
-    const width = Math.ceil(element.offsetWidth || longest) + CARET_PX;
-    element.style.width = `${width}px`;
+    let inset = 0;
+    let width: number;
+    if (shape.kind === "area") {
+      // Il riquadro è largo quanto quello del testo; il cursore ha il suo
+      // spazio fuori, dalla parte dove le righe finiscono.
+      const box = shape.width * scale;
+      const anchor = trim(textSeen()["text-anchor"] ?? "start");
+      inset = anchor === "end" ? CARET_PX : anchor === "middle" ? CARET_PX / 2 : 0;
+      element.style.width = `${box}px`;
+      element.style.paddingLeft = `${inset}px`;
+      element.style.paddingRight = `${CARET_PX - inset}px`;
+      width = box + CARET_PX;
+    } else {
+      element.style.paddingLeft = "";
+      element.style.paddingRight = "";
+      element.style.width = "";
+      width = Math.ceil(element.offsetWidth || longest) + CARET_PX;
+      element.style.width = `${width}px`;
+    }
     element.scrollLeft = 0;
     element.scrollTop = 0;
-    return { width, height, baseline };
+    return { width, height, baseline, inset };
   }
 
   // --- Leggere il DOM -----------------------------------------------------------
@@ -455,12 +508,15 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     redos = [];
   };
 
-  /// Il testo diventa `next`, con la scelta da `anchor` a `focus`.
-  function show(next: Rich, anchor: Caret, focus: Caret = anchor): void {
-    rich = next;
+  /// Il testo diventa `next`, con la scelta da `anchor` a `focus`; torna
+  /// com'è e dov'è la scelta, dopo gli a capo di un testo in area.
+  function show(next: Rich, anchor: Caret, focus: Caret = anchor): Snapshot {
+    const shown = flowed(next, anchor, focus);
+    rich = shown.rich;
     render();
-    select(anchor, focus);
+    select(shown.anchor, shown.focus);
     options.onChange();
+    return shown;
   }
 
   /// Il cambio di un passo nuovo.
@@ -480,7 +536,8 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
 
   /// Scrive `text` fra `from` e `to`, con lo stile che vi si scriverebbe;
   /// `typing` se è una battuta, che continua il passo di quella prima.
-  function insert(text: string, from: Caret, to: Caret, typing: boolean): void {
+  function insert(raw: string, from: Caret, to: Caret, typing: boolean): void {
+    const text = shape.kind === "line" ? raw.replace(BREAKS, " ") : raw;
     const [start, end] = ordered(from, to);
     const collapsed = compareCarets(start, end) === 0;
     const waiting = collapsed ? pendingAt(start) : null;
@@ -494,9 +551,12 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     else redos = [];
     pending = null;
     // Dopo un a capo si continua con lo stile della fine della riga.
-    if (text.endsWith("\n")) pending = { at: made.caret, base: waiting !== null ? waiting.base : styleAt(rich, start), changes: waiting?.changes ?? [] };
-    typed = typing && !text.includes("\n") ? made.caret : null;
-    show(next, made.caret);
+    const after = text.endsWith("\n") ? { base: waiting !== null ? waiting.base : styleAt(rich, start), changes: waiting?.changes ?? [] } : null;
+    // Si continua dove il cursore è finito, anche su un'altra riga di un
+    // testo in area.
+    const shown = show(next, made.caret);
+    if (after !== null) pending = { at: shown.focus, ...after };
+    typed = typing && !text.includes("\n") ? shown.focus : null;
   }
 
   function remove(from: Caret, to: Caret): void {
@@ -512,6 +572,19 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     const text = lineText(rich.lines[from.line]!);
     const previousEnd = (): Caret => (from.line === 0 ? from : { line: from.line - 1, offset: lineText(rich.lines[from.line - 1]!).length });
     const nextStart = (): Caret => (from.line === rich.lines.length - 1 ? from : { line: from.line + 1, offset: 0 });
+    // Fra due righe che spezzano una parola non c'è niente da cancellare: si
+    // cancella il carattere, o la parola, di là.
+    const unit = type.includes("Word") ? "word" : "grapheme";
+    const backward = type === "deleteContentBackward" || type === "deleteWordBackward";
+    const forward = type === "deleteContentForward" || type === "deleteWordForward";
+    if (backward && from.offset === 0 && from.line > 0 && rich.lines[from.line]!.attrs[JOIN] === "word") {
+      const end = previousEnd();
+      return [{ line: end.line, offset: stepBack(lineText(rich.lines[end.line]!), end.offset, unit) }, end];
+    }
+    const next = rich.lines[from.line + 1];
+    if (forward && from.offset === text.length && next?.attrs[JOIN] === "word") {
+      return [nextStart(), { line: from.line + 1, offset: stepForward(lineText(next), 0, unit) }];
+    }
     switch (type) {
       case "deleteContentBackward":
       case "deleteWordBackward":
@@ -653,7 +726,7 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     }
     if (type === "insertParagraph" || type === "insertLineBreak") {
       event.preventDefault();
-      insert("\n", from, to, false);
+      if (shape.kind !== "line") insert("\n", from, to, false);
       return;
     }
     if (type.startsWith("insertFrom")) {
@@ -676,14 +749,14 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     const { anchor, focus } = selected();
     const next = readDom();
     if (!composing) remember();
-    rich = next;
     typed = null;
     pending = null;
-    if (!composing) {
-      render();
-      select(anchor, focus);
+    if (composing) {
+      rich = next;
+      options.onChange();
+      return;
     }
-    options.onChange();
+    show(next, anchor, focus);
   });
   life.listen(element, "compositionstart", () => {
     composing = true;
@@ -692,10 +765,7 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
   life.listen(element, "compositionend", () => {
     composing = false;
     const { anchor, focus } = selected();
-    rich = readDom();
-    render();
-    select(anchor, focus);
-    options.onChange();
+    show(readDom(), anchor, focus);
   });
   // Incollare incolla il testo: anche dove il `beforeinput` non lo porta.
   life.listen(element, "paste", (event) => {
@@ -730,6 +800,10 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     element,
     get rich() {
       return rich;
+    },
+    form(next) {
+      shape = next;
+      element.setAttribute("aria-multiline", String(next.kind !== "line"));
     },
     open(next) {
       rich = next;

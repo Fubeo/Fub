@@ -18,27 +18,30 @@
 //!   minuscole. Senza i caratteri la larghezza della riga non si sa, e
 //!   l'inizio sta sempre sul testo, qualunque sia `text-anchor`. Un pezzo
 //!   della riga con un colore, un corpo o un peso suoi si guarda nello stesso
-//!   punto, col suo aspetto;
+//!   punto, col suo aspetto. Un testo su tracciato è una riga sola, e si
+//!   guarda nel punto di `startOffset` sul tracciato, alzato allo stesso modo
+//!   dalla parte dove stanno i caratteri;
 //! - **un tratto a penna**, in sedici punti del contorno presi a distanze
 //!   uguali fra i suoi vertici. Conta il contrasto mediano, quello che il
 //!   tratto ha per gran parte della sua lunghezza: un tratto che attraversa
 //!   un riquadro scuro non si legge male per questo.
 
 use std::cell::OnceCell;
+use std::collections::HashMap;
 
 use crate::analysis::{
-    collapse, contrast, len, over, radii, text_content, Context, DEFAULT_FONT_SIZE,
+    collapse, contrast, followed, len, over, radii, text_content, Context, DEFAULT_FONT_SIZE,
     LARGE_BOLD_TEXT, LARGE_TEXT, MIN_CONTRAST, MIN_TEXT_CONTRAST, MIN_TEXT_SIZE,
 };
 use crate::classify::{Role, Stroke, Tool};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::{
-    ellipse_path, flatten, parse_path, points_path, rect_path, winding, Bounds, BoundsBuilder,
-    Matrix, Segment,
+    along, ellipse_path, flatten, parse_path, points_path, rect_path, winding, Bounds,
+    BoundsBuilder, Matrix, Segment,
 };
 use crate::text::Span;
-use crate::values::{points, trim, Rgb};
-use crate::xml::{Document, Element, Kind, NS_NONE};
+use crate::values::{points, start_offset, trim, Rgb};
+use crate::xml::{Document, Element, Kind, NodeId, NS_NONE};
 
 /// In quanti punti del contorno si misura un tratto a penna.
 const STROKE_PROBES: usize = 16;
@@ -121,7 +124,9 @@ pub(crate) struct Legibility {
 
 impl Legibility {
     /// Guarda un elemento modificabile visibile. `context` è quello
-    /// dell'elemento, con i suoi attributi già applicati.
+    /// dell'elemento, con i suoi attributi già applicati; `paths` è il `d`
+    /// dei tracciati delle risorse, per id (formato della scena, testo).
+    #[allow(clippy::too_many_arguments)]
     pub fn element(
         &mut self,
         doc: &Document<'_>,
@@ -130,6 +135,7 @@ impl Legibility {
         context: &Context,
         span: Span,
         stroke: Option<&Stroke>,
+        paths: &HashMap<String, String>,
     ) {
         let m = *context.matrix();
         let at = |name: &str| len(element, name).unwrap_or(0.0);
@@ -144,7 +150,7 @@ impl Legibility {
                 return;
             }
             Role::Text => {
-                self.text(doc, element, context, span);
+                self.text(doc, element, context, span, paths);
                 return;
             }
             Role::Image => {
@@ -207,28 +213,30 @@ impl Legibility {
     /// Le righe di un testo, con S013 se la più piccola sta sotto
     /// [`MIN_TEXT_SIZE`] a grandezza naturale. Le righe vuote o nascoste non
     /// si guardano.
-    fn text(&mut self, doc: &Document<'_>, element: &Element<'_>, context: &Context, span: Span) {
+    fn text(
+        &mut self,
+        doc: &Document<'_>,
+        element: &Element<'_>,
+        context: &Context,
+        span: Span,
+        paths: &HashMap<String, String>,
+    ) {
         let m = *context.matrix();
         // Quanto la matrice allunga il verticale: l'altezza dei caratteri.
         // Una radice quadrata e non `hypot`, che JavaScript può calcolare
         // diversamente nell'ultima cifra binaria.
         let [_, _, c, d, _, _] = m.0;
         let scale = (c * c + d * d).sqrt();
-        let x = len(element, "x").unwrap_or(0.0);
-        let mut y = len(element, "y").unwrap_or(0.0);
         let mut lines = Vec::new();
         let mut smallest: Option<f64> = None;
-        for &child in &element.children {
-            let Some(tspan) = doc.element(child).filter(|e| e.is_svg("tspan")) else {
-                continue;
-            };
-            y += len(tspan, "dy").unwrap_or(0.0);
+        for (child, base, up) in starts(doc, element, paths) {
+            let tspan = doc.element(child).expect("una riga è un elemento");
             let line = context.line(tspan);
             if line.hidden() {
                 continue;
             }
             let lift = LINE_PROBE * line.font_size().unwrap_or(DEFAULT_FONT_SIZE);
-            let at = m.apply([len(tspan, "x").unwrap_or(x), y - lift]);
+            let at = m.apply([base[0] + lift * up[0], base[1] + lift * up[1]]);
             // Il testo della riga e ogni pezzo, ciascuno col suo aspetto:
             // senza i caratteri non si sa dove cade un pezzo, e lo si guarda
             // dove comincia la riga.
@@ -346,6 +354,48 @@ impl Legibility {
 fn shown(value: f64) -> String {
     let shown = (value * 100.0).floor() / 100.0;
     format!("{shown:.2}")
+}
+
+/// Una riga di un testo: il nodo, il punto dove comincia e la direzione in
+/// alto dei caratteri, lunga 1.
+type Start = (NodeId, [f64; 2], [f64; 2]);
+
+/// Le righe di un testo: i `tspan`, coi loro `x` e `dy`, o il `textPath`, nel
+/// punto di `startOffset` sul tracciato. Un testo su un tracciato lungo zero
+/// non ha righe.
+fn starts(
+    doc: &Document<'_>,
+    element: &Element<'_>,
+    paths: &HashMap<String, String>,
+) -> Vec<Start> {
+    let mut out = Vec::new();
+    let x = len(element, "x").unwrap_or(0.0);
+    let mut y = len(element, "y").unwrap_or(0.0);
+    for &child in &element.children {
+        let Some(node) = doc.element(child) else {
+            continue;
+        };
+        if node.is_svg("textPath") {
+            let (distance, share) = node
+                .value(NS_NONE, "startOffset")
+                .and_then(start_offset)
+                .unwrap_or((0.0, false));
+            let found = followed(doc, element, paths)
+                .and_then(|d| along(&parse_path(d).unwrap_or_default(), distance, share));
+            // Sopra il tracciato, nel suo verso, stanno i caratteri.
+            if let Some(found) = found {
+                let [dx, dy] = found.direction;
+                out.push((child, found.at, [dy, -dx]));
+            }
+            return out;
+        }
+        if !node.is_svg("tspan") {
+            continue;
+        }
+        y += len(node, "dy").unwrap_or(0.0);
+        out.push((child, [len(node, "x").unwrap_or(x), y], [0.0, -1.0]));
+    }
+    out
 }
 
 /// I punti in cui si misura un tratto, nella radice: gli estremi dei segmenti

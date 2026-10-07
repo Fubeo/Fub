@@ -1,0 +1,478 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        1875
+      ],
+      "utf16": [
+        0,
+        1873
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            193
+          ],
+          "utf16": [
+            0,
+            193
+          ]
+        },
+        "close": {
+          "bytes": [
+            1869,
+            1875
+          ],
+          "utf16": [
+            1867,
+            1873
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        196,
+        216
+      ],
+      "utf16": [
+        196,
+        216
+      ],
+      "indent": "  ",
+      "text": "Testo"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        219,
+        520
+      ],
+      "utf16": [
+        219,
+        520
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            219,
+            239
+          ],
+          "utf16": [
+            219,
+            239
+          ]
+        },
+        "close": {
+          "bytes": [
+            513,
+            520
+          ],
+          "utf16": [
+            513,
+            520
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "path",
+      "role": "resource",
+      "id": "r00000001",
+      "bytes": [
+        244,
+        322
+      ],
+      "utf16": [
+        244,
+        322
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        1
+      ],
+      "tag": "path",
+      "role": "resource",
+      "id": "r00000002",
+      "bytes": [
+        327,
+        440
+      ],
+      "utf16": [
+        327,
+        440
+      ],
+      "indent": "    ",
+      "title": "Arco",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        1
+      ],
+      "bytes": [
+        445,
+        510
+      ],
+      "utf16": [
+        445,
+        510
+      ],
+      "elements": [
+        2,
+        3
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        523,
+        614
+      ],
+      "utf16": [
+        523,
+        614
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        617,
+        1868
+      ],
+      "utf16": [
+        617,
+        1866
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            617,
+            657
+          ],
+          "utf16": [
+            617,
+            657
+          ]
+        },
+        "close": {
+          "bytes": [
+            1864,
+            1868
+          ],
+          "utf16": [
+            1862,
+            1866
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000001",
+      "bytes": [
+        662,
+        1169
+      ],
+      "utf16": [
+        662,
+        1167
+      ],
+      "indent": "    ",
+      "lines": [
+        "L'acqua del mare sale",
+        "in cielo e torna giù:",
+        "precipitevolissimevol",
+        "mente.",
+        " ",
+        "Fine."
+      ],
+      "wrap": 240.0
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000002",
+      "bytes": [
+        1174,
+        1350
+      ],
+      "utf16": [
+        1172,
+        1348
+      ],
+      "indent": "    ",
+      "lines": [
+        "Due",
+        "righe"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000003",
+      "bytes": [
+        1355,
+        1553
+      ],
+      "utf16": [
+        1353,
+        1551
+      ],
+      "indent": "    ",
+      "lines": [
+        "Sopra la collina"
+      ],
+      "textPath": "r00000001"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000004",
+      "bytes": [
+        1558,
+        1687
+      ],
+      "utf16": [
+        1556,
+        1685
+      ],
+      "indent": "    ",
+      "lines": [
+        "Lungo l'arco"
+      ],
+      "textPath": "r00000002"
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        3
+      ],
+      "bytes": [
+        1692,
+        1861
+      ],
+      "utf16": [
+        1690,
+        1859
+      ],
+      "elements": [
+        4,
+        6
+      ],
+      "indent": "    "
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Testo",
+      "bytes": [
+        196,
+        216
+      ],
+      "utf16": [
+        196,
+        216
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "L'acqua del mare sale in cielo e torna giù: precipitevolissimevolmente.   Fine.",
+        "bytes": [
+          662,
+          1169
+        ],
+        "utf16": [
+          662,
+          1167
+        ]
+      },
+      {
+        "text": "Due righe",
+        "bytes": [
+          1174,
+          1350
+        ],
+        "utf16": [
+          1172,
+          1348
+        ]
+      },
+      {
+        "text": "Sopra la collina",
+        "bytes": [
+          1355,
+          1553
+        ],
+        "utf16": [
+          1353,
+          1551
+        ]
+      },
+      {
+        "text": "Lungo l'arco",
+        "bytes": [
+          1558,
+          1687
+        ],
+        "utf16": [
+          1556,
+          1685
+        ]
+      },
+      {
+        "text": "Con x e y",
+        "bytes": [
+          1692,
+          1783
+        ],
+        "utf16": [
+          1690,
+          1781
+        ]
+      },
+      {
+        "text": "Storto",
+        "bytes": [
+          1788,
+          1861
+        ],
+        "utf16": [
+          1786,
+          1859
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "counts": {
+      "strokes": 0,
+      "shapes": 0,
+      "texts": 4,
+      "images": 0,
+      "links": 0,
+      "foreign": 2
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 40.0,
+      "y": 60.0,
+      "width": 640.0,
+      "height": 340.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        445,
+        510
+      ],
+      "utf16": [
+        445,
+        510
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1692,
+        1861
+      ],
+      "utf16": [
+        1690,
+        1859
+      ]
+    }
+  ]
+}

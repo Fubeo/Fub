@@ -20,7 +20,9 @@
 //   minuscole. Senza i caratteri la larghezza della riga non si sa, e
 //   l'inizio sta sempre sul testo, qualunque sia `text-anchor`. Un pezzo
 //   della riga con un colore, un corpo o un peso suoi si guarda nello stesso
-//   punto, col suo aspetto;
+//   punto, col suo aspetto. Un testo su tracciato è una riga sola, e si
+//   guarda nel punto di `startOffset` sul tracciato, alzato allo stesso modo
+//   dalla parte dove stanno i caratteri;
 // - **un tratto a penna**, in sedici punti del contorno presi a distanze
 //   uguali fra i suoi vertici. Conta il contrasto mediano, quello che il
 //   tratto ha per gran parte della sua lunghezza: un tratto che attraversa
@@ -36,6 +38,7 @@ import {
   collapse,
   contrast,
   DEFAULT_FONT_SIZE,
+  followed,
   LARGE_BOLD_TEXT,
   LARGE_TEXT,
   len,
@@ -51,6 +54,7 @@ import {
 } from "./analysis";
 import { diagnostic, type Diagnostic } from "./diagnostics";
 import {
+  along,
   BoundsBuilder,
   ellipsePath,
   flatten,
@@ -63,8 +67,8 @@ import {
 } from "./geometry";
 import { apply, type Matrix, type Point } from "./matrix";
 import type { Span } from "./text";
-import { points, trim, type Rgb } from "./values";
-import { isSvg, NS_NONE, valueOf, type ElementNode, type XmlDocument } from "./xml";
+import { points, startOffset, trim, type Rgb } from "./values";
+import { isSvg, NS_NONE, valueOf, type ElementNode, type NodeId, type XmlDocument } from "./xml";
 
 /// In quanti punti del contorno si misura un tratto a penna.
 const STROKE_PROBES = 16;
@@ -170,6 +174,12 @@ export class Legibility {
   private readonly contrasts: Contrast[] = [];
   private readonly sizes: Smallness[] = [];
 
+  constructor(
+    /// Il `d` dei tracciati delle risorse, per id (formato della scena,
+    /// testo).
+    private readonly paths: ReadonlyMap<string, string> = new Map(),
+  ) {}
+
   /// Ciò che S009 e S013 hanno misurato; S009 dopo [`Legibility.finish`].
   get measures(): Measures {
     return { contrasts: this.contrasts, sizes: this.sizes };
@@ -259,19 +269,15 @@ export class Legibility {
     // nell'ultima cifra binaria.
     const [, , c, d] = m;
     const scale = Math.sqrt(c * c + d * d);
-    const x = len(element, "x") ?? 0;
-    let y = len(element, "y") ?? 0;
     const lines: Line[] = [];
     let smallest: number | null = null;
     let ownSize = false;
-    for (const child of element.children) {
-      const tspan = doc.element(child);
-      if (tspan === null || !isSvg(tspan, "tspan")) continue;
-      y += len(tspan, "dy") ?? 0;
+    for (const [child, base, up] of this.starts(doc, element)) {
+      const tspan = doc.element(child)!;
       const line = context.line(tspan);
       if (line.hidden) continue;
       const lift = LINE_PROBE * (line.fontSize ?? DEFAULT_FONT_SIZE);
-      const at = apply(m, [len(tspan, "x") ?? x, y - lift]);
+      const at = apply(m, [base[0] + lift * up[0], base[1] + lift * up[1]]);
       const lineFill = valueOf(tspan, NS_NONE, "fill") !== undefined;
       const lineSize = valueOf(tspan, NS_NONE, "font-size") !== undefined;
       // Il testo della riga e ogni pezzo, ciascuno col suo aspetto: senza i
@@ -312,6 +318,32 @@ export class Legibility {
       this.sizes.push({ span, scale, line: ownSize });
     }
     if (lines.length > 0) this.check(span, { kind: "text", lines });
+  }
+
+  /// Le righe di un testo, ognuna col punto dove comincia e la direzione in
+  /// alto dei caratteri, lunga 1: i `tspan`, coi loro `x` e `dy`, o il
+  /// `textPath`, nel punto di `startOffset` sul tracciato. Un testo su un
+  /// tracciato lungo zero non ha righe.
+  private starts(doc: XmlDocument, element: ElementNode): Array<[NodeId, Point, Point]> {
+    const out: Array<[NodeId, Point, Point]> = [];
+    const x = len(element, "x") ?? 0;
+    let y = len(element, "y") ?? 0;
+    for (const child of element.children) {
+      const node = doc.element(child);
+      if (node === null) continue;
+      if (isSvg(node, "textPath")) {
+        const d = followed(doc, element, this.paths);
+        const offset = startOffset(valueOf(node, NS_NONE, "startOffset") ?? "0") ?? { value: 0, share: false };
+        const found = d === null ? null : along(parsePath(d) ?? [], offset.value, offset.share);
+        // Sopra il tracciato, nel suo verso, stanno i caratteri.
+        if (found !== null) out.push([child, found.at, [found.direction[1], -found.direction[0]]]);
+        return out;
+      }
+      if (!isSvg(node, "tspan")) continue;
+      y += len(node, "dy") ?? 0;
+      out.push([child, [len(node, "x") ?? x, y], [0, -1]]);
+    }
+    return out;
   }
 
   /// Chiude i controlli: S009 per ogni oggetto che contrasta poco col suo

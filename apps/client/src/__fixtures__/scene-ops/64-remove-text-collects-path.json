@@ -1,0 +1,75 @@
+{
+  "name": "remove-text-collects-path",
+  "description": "togliere un testo su tracciato toglie anche il suo tracciato privato e la fub-defs rimasta vuota; l'inversa li rimette",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <defs id=\"fub-defs\">\n    <path id=\"r1a2b3c4d\" fub:role=\"private\" d=\"M100 400 C250 250 450 250 600 400\"/>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <text id=\"o5e6f7g8h\" fill=\"#000000\" font-size=\"32\" text-anchor=\"middle\">\n      <textPath startOffset=\"50%\" href=\"#r1a2b3c4d\">Il testo segue</textPath>\n    </text>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "remove",
+      "target": "o5e6f7g8h"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+    "forward": {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "remove",
+          "target": "o5e6f7g8h"
+        },
+        {
+          "op": "remove",
+          "target": "r1a2b3c4d"
+        },
+        {
+          "op": "remove",
+          "target": "fub-defs"
+        }
+      ]
+    },
+    "inverse": {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "add",
+          "slot": {
+            "parent": "#root",
+            "after": {
+              "path": [
+                0
+              ],
+              "tag": "title"
+            },
+            "skip": 0,
+            "lead": ""
+          },
+          "gap": "\n  ",
+          "raw": "<defs id=\"fub-defs\">\n  </defs>"
+        },
+        {
+          "op": "add",
+          "slot": {
+            "parent": "fub-defs",
+            "after": null,
+            "skip": 0,
+            "lead": ""
+          },
+          "gap": "\n    ",
+          "raw": "<path id=\"r1a2b3c4d\" fub:role=\"private\" d=\"M100 400 C250 250 450 250 600 400\"/>"
+        },
+        {
+          "op": "add",
+          "slot": {
+            "parent": "l3f8a0c2d",
+            "after": null,
+            "skip": 0,
+            "lead": ""
+          },
+          "gap": "\n    ",
+          "raw": "<text id=\"o5e6f7g8h\" fill=\"#000000\" font-size=\"32\" text-anchor=\"middle\">\n      <textPath startOffset=\"50%\" href=\"#r1a2b3c4d\">Il testo segue</textPath>\n    </text>"
+        }
+      ]
+    }
+  }
+}

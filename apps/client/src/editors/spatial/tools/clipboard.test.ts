@@ -403,6 +403,28 @@ describe("le risorse negli appunti", () => {
     expect(opened.engine.text).toContain(`</linearGradient>\n    <linearGradient id="${copied}"`);
   });
 
+  it("un testo su tracciato porta il suo tracciato; se è privato, la copia ha il suo", () => {
+    const opened = open(
+      doc(
+        '<defs id="fub-defs"><path id="rpppppppp" fub:role="private" d="M 0 50 L 100 50"/></defs>' +
+          `${LAYER}<text id="otttttttt"><textPath startOffset="10" href="#rpppppppp">Sul colle</textPath></text></g>`,
+      ),
+    );
+    const svg = copy(opened, ["otttttttt"]);
+    expect(svg).toContain('<path id="rpppppppp" fub:role="private" d="M 0 50 L 100 50"/>');
+    const out = paste(opened, svg);
+    const resources = elementChildren(node(opened, "fub-defs") as ContainerNode);
+    expect(resources).toHaveLength(2);
+    const copied = resources[1]!.facts.id!;
+    expect(rawOf(resources[1]!)).toBe(`<path id="${copied}" fub:role="private" d="M 0 50 L 100 50"/>`);
+    expect(rawOf(node(opened, out.keys[0]!))).toContain(`<textPath startOffset="10" href="#${copied}">Sul colle</textPath>`);
+    // In un altro disegno il tracciato entra con chi lo segue.
+    const target = open(doc(`<defs id="fub-defs"/>${LAYER}</g>`));
+    const there = paste(target, svg);
+    const [path] = elementChildren(node(target, "fub-defs") as ContainerNode);
+    expect(rawOf(node(target, there.keys[0]!))).toContain(`href="#${path!.facts.id!}"`);
+  });
+
   it("fra due disegni una risorsa diversa con lo stesso id entra con un id nuovo", () => {
     const svg = copy(open(SOURCE), ["oaaaaaaaa"]);
     const other = GRADIENT.replace("#ffffff", "#000000");

@@ -84,6 +84,18 @@ const BOLD_FROM = 600;
 /// Ciò che XML 1.0 non ammette, e le righe.
 const BREAK = /\r\n|[\r\n\u2028\u2029]/;
 
+/// L'attributo di una riga che continua il paragrafo della riga prima, in
+/// un testo in area (formato della scena, testo): `space` o `word`.
+export const JOIN = "fub:join";
+
+/// Gli attributi di `attrs` senza [`JOIN`].
+export function withoutJoin(attrs: Attrs): Attrs {
+  if (attrs[JOIN] === undefined) return attrs;
+  const out: Record<string, string> = { ...attrs };
+  delete out[JOIN];
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Leggere.
 // ---------------------------------------------------------------------------
@@ -116,9 +128,13 @@ export function richLine(attrs: Attrs, content: string | readonly Run[]): RichLi
 }
 
 /// Il testo `elem`, come lo scrive un'operazione, che eredita `inherited`:
-/// ogni `tspan` figlio è una riga.
+/// ogni `tspan` figlio è una riga, e il `textPath` di un testo su tracciato
+/// la riga sola, senza attributi.
 export function richOf(elem: Elem, inherited: Attrs): Rich {
-  const lines = (elem.children ?? []).filter((child) => child.tag === "tspan").map((child) => richLine(child.attrs, child.runs ?? child.text ?? ""));
+  const lines = (elem.children ?? []).flatMap((child) => {
+    if (child.tag === "tspan") return [richLine(child.attrs, child.runs ?? child.text ?? "")];
+    return child.tag === "textPath" ? [richLine({}, child.runs ?? child.text ?? "")] : [];
+  });
   return { attrs: elem.attrs, inherited, lines: lines.length === 0 ? [{ attrs: { dy: "0" }, spans: [] }] : lines };
 }
 
@@ -130,8 +146,14 @@ export function editableRich(rich: Rich): Rich {
 
 /// Il testo `old` con gli attributi e le righe di `rich`; gli altri figli,
 /// come un titolo, restano prima delle righe, come li mette l'operazione
-/// `text`.
+/// `text`. Un testo su tracciato ha la prima riga nel suo `textPath`.
 export function richElem(old: Elem, rich: Rich): Elem {
+  const along = old.children?.find((child) => child.tag === "textPath");
+  if (along !== undefined) {
+    const runs = lineRuns(rich.lines[0] ?? { attrs: {}, spans: [] });
+    const path: Elem = typeof runs === "string" ? { tag: "textPath", attrs: along.attrs, text: runs } : { tag: "textPath", attrs: along.attrs, runs };
+    return { tag: old.tag, attrs: rich.attrs, children: old.children!.map((child) => (child === along ? path : child)) };
+  }
   const others = (old.children ?? []).filter((child) => child.tag !== "tspan");
   const lines = rich.lines.map((line): Elem => {
     const runs = lineRuns(line);
@@ -278,10 +300,11 @@ export function newLeading(rich: Rich): string {
 const sizeOf = (value: string | undefined): number => (value === undefined ? null : nonNegativeLength(value)) ?? 16;
 
 /// Gli attributi di una riga nuova dopo `previous`: i suoi, senza `id`, e
-/// l'interlinea `leading`.
+/// l'interlinea `leading`. Una riga nuova comincia un paragrafo: non copia
+/// [`JOIN`].
 export function freshAttrs(previous: RichLine, leading: string): Attrs {
   const out: Record<string, string> = {};
-  for (const [name, value] of Object.entries(previous.attrs)) if (name !== "id" && name !== "dy") out[name] = value;
+  for (const [name, value] of Object.entries(previous.attrs)) if (name !== "id" && name !== "dy" && name !== JOIN) out[name] = value;
   out.dy = leading;
   return out;
 }
@@ -679,19 +702,26 @@ export function sameRich(a: Rich, b: Rich): boolean {
 
 /// Come scrivere `after` al posto di `before`, il testo che c'era: niente,
 /// le righe con l'operazione `text` se gli attributi del testo e delle
-/// righe restano quelli che lei darebbe, o il testo intero.
+/// righe restano quelli che lei darebbe, o il testo intero. Le righe di un
+/// testo in area dicono anche come continua ciascuna il suo paragrafo, se
+/// cambia: `joins`, il [`JOIN`] di ogni riga.
 export type RichChange =
   | { readonly kind: "none" }
-  | { readonly kind: "lines"; readonly lines: readonly TextLine[] }
+  | { readonly kind: "lines"; readonly lines: readonly TextLine[]; readonly joins?: readonly (string | null)[] }
   | { readonly kind: "elem"; readonly rich: Rich };
 
 export function richChange(before: Rich, after: Rich): RichChange {
   if (sameRich(before, after)) return { kind: "none" };
   if (!sameAttrs(before.attrs, after.attrs) || before.lines.length === 0) return { kind: "elem", rich: after };
   const leading = newLeading(before);
+  let joins = false;
   for (let i = 0; i < after.lines.length; i++) {
-    const expected = i < before.lines.length ? before.lines[i]!.attrs : freshAttrs(after.lines[i - 1]!, leading);
-    if (!sameAttrs(expected, after.lines[i]!.attrs)) return { kind: "elem", rich: after };
+    const own = after.lines[i]!.attrs;
+    const old = i < before.lines.length ? before.lines[i]!.attrs : null;
+    const expected = old !== null ? withoutJoin(old) : freshAttrs(after.lines[i - 1]!, leading);
+    if (!sameAttrs(expected, withoutJoin(own))) return { kind: "elem", rich: after };
+    if ((own[JOIN] ?? null) !== (old?.[JOIN] ?? null)) joins = true;
   }
-  return { kind: "lines", lines: after.lines.map(lineRuns) };
+  const lines = after.lines.map(lineRuns);
+  return joins ? { kind: "lines", lines, joins: after.lines.map((line) => line.attrs[JOIN] ?? null) } : { kind: "lines", lines };
 }

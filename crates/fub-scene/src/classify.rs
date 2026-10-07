@@ -16,7 +16,9 @@
 //! passi: prima l'indice delle risorse modificabili nelle `defs` della radice,
 //! poi la visita, in cui un riferimento vale se porta a una risorsa dell'indice
 //! del tipo giusto. Così chi usa una sfumatura scritta dopo di lui si legge
-//! come chi la usa prima.
+//! come chi la usa prima. Il tracciato di un testo su tracciato è anch'esso
+//! una risorsa, un `path` nelle `defs` della radice (formato della scena,
+//! testo).
 
 use std::collections::{HashMap, HashSet};
 
@@ -30,9 +32,10 @@ use crate::ink::{Ink, InkError};
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
-    angle, dasharray, fraction, href, is_wsp, keyword, length, letter_spacing, non_negative_length,
-    number, number_list, one_or_two, opacity, paint, paint_reference, points,
-    preserve_aspect_ratio, reference, text_decoration, transform, trim, view_box, Href, Paint,
+    angle, dasharray, fraction, href, href_id, is_wsp, keyword, length, letter_spacing,
+    non_negative_length, number, number_list, one_or_two, opacity, paint, paint_reference, points,
+    preserve_aspect_ratio, reference, start_offset, text_decoration, transform, trim, view_box,
+    wrap_width, Href, Paint,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -103,7 +106,8 @@ pub enum Lifecycle {
 
 /// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
 /// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
-/// `mask` e `filter` ritagli, maschere e filtri.
+/// `mask` e `filter` ritagli, maschere e filtri, un `textPath` un tracciato
+/// (formato della scena, testo).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ResourceKind {
     Gradient,
@@ -112,6 +116,7 @@ pub(crate) enum ResourceKind {
     Clip,
     Mask,
     Filter,
+    Path,
 }
 
 /// Il tipo della risorsa modificabile che porta un id, o `None` se nessuna
@@ -232,11 +237,18 @@ pub struct ElementItem {
     /// spazi com'erano: è ciò che l'operazione `meta` sostituisce.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    /// Le righe di un `text`, una per `tspan` coi suoi pezzi, coi riferimenti
-    /// risolti e gli spazi com'erano: è il testo che l'operazione `text`
-    /// sostituisce.
+    /// Le righe di un `text`, una per `tspan` coi suoi pezzi, o il testo del
+    /// suo tracciato, coi riferimenti risolti e gli spazi com'erano: è il
+    /// testo che l'operazione `text` sostituisce.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lines: Option<Vec<String>>,
+    /// La larghezza di un testo in area, `fub:wrap` letto (formato della
+    /// scena, testo).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wrap: Option<f64>,
+    /// L'id del tracciato che un testo segue (formato della scena, testo).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_path: Option<String>,
     /// Il ciclo di vita di una risorsa, se `fub:role` lo dice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<Lifecycle>,
@@ -285,6 +297,7 @@ enum Tag {
     Polygon,
     Text,
     Tspan,
+    TextPath,
     Image,
     Defs,
     LinearGradient,
@@ -315,6 +328,7 @@ impl Tag {
             "polygon" => Tag::Polygon,
             "text" => Tag::Text,
             "tspan" => Tag::Tspan,
+            "textPath" => Tag::TextPath,
             "image" => Tag::Image,
             "defs" => Tag::Defs,
             "linearGradient" => Tag::LinearGradient,
@@ -378,6 +392,7 @@ impl Tag {
             Tag::Polygon => "polygon",
             Tag::Text => "text",
             Tag::Tspan => "tspan",
+            Tag::TextPath => "textPath",
             Tag::Image => "image",
             Tag::Defs => "defs",
             Tag::LinearGradient => "linearGradient",
@@ -602,22 +617,91 @@ fn line_text(doc: &Document<'_>, id: NodeId) -> String {
         .collect()
 }
 
+/// Vero se `element` è il tracciato di un testo modificabile (formato della
+/// scena, testo): un `textPath` con `href` o `xlink:href`, uno solo, verso un
+/// tracciato delle risorse, `startOffset` facoltativo, e dentro dati di
+/// carattere e pezzi.
+fn allowed_text_path(doc: &Document<'_>, element: &Element<'_>, resolve: Resolve<'_>) -> bool {
+    let mut hrefs = 0;
+    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE | NS_XLINK if attr.local == "href" => {
+            hrefs += 1;
+            href_id(&attr.value).is_some_and(|id| resolve(&id) == Some(ResourceKind::Path))
+        }
+        NS_NONE => attr.local == "startOffset" && start_offset(&attr.value).is_some(),
+        NS_XLINK | NS_SVG => false,
+        _ => true,
+    });
+    attributes
+        && hrefs == 1
+        && element
+            .children
+            .iter()
+            .all(|&child| match doc.nodes[child].kind {
+                Kind::Text { .. } => true,
+                Kind::Element(_) => allowed_piece(doc, child, resolve),
+                _ => false,
+            })
+}
+
+/// Il `textPath` figlio di un `text`, se ne ha uno.
+fn text_path_of<'d>(
+    doc: &'d Document<'_>,
+    element: &Element<'_>,
+) -> Option<(NodeId, &'d Element<'d>)> {
+    element.children.iter().find_map(|&child| {
+        doc.element(child)
+            .filter(|e| e.is_svg("textPath"))
+            .map(|e| (child, e))
+    })
+}
+
+/// L'id del tracciato a cui rimanda un `textPath`: in SVG 2 `href` vince su
+/// `xlink:href`.
+fn text_path_target(element: &Element<'_>) -> Option<String> {
+    element
+        .value(NS_NONE, "href")
+        .or_else(|| element.value(NS_XLINK, "href"))
+        .and_then(href_id)
+}
+
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
-/// `text`, i `tspan`.
+/// `text`, i `tspan` o un `textPath`. Un testo ha le righe o il tracciato,
+/// non tutti e due, e col tracciato non ha `x` e `y`, che i lettori
+/// applicano lungo il tracciato in modi diversi.
 fn unit_children_allowed(
     doc: &Document<'_>,
     element: &Element<'_>,
     tag: Tag,
     resolve: Resolve<'_>,
 ) -> bool {
-    element
+    let (mut lines, mut paths) = (0, 0);
+    let children = element
         .children
         .iter()
         .all(|&child| match &doc.nodes[child].kind {
             Kind::Text { blank, .. } => *blank,
-            Kind::Element(_) => allowed_part(doc, child, tag == Tag::Text, resolve),
+            Kind::Element(inner) => match Tag::of(inner) {
+                Some(Tag::TextPath) if tag == Tag::Text => {
+                    paths += 1;
+                    allowed_text_path(doc, inner, resolve)
+                }
+                found => {
+                    if found == Some(Tag::Tspan) {
+                        lines += 1;
+                    }
+                    allowed_part(doc, child, tag == Tag::Text, resolve)
+                }
+            },
             _ => false,
-        })
+        });
+    if !children || paths == 0 {
+        return children;
+    }
+    paths == 1
+        && lines == 0
+        && element.value(NS_NONE, "x").is_none()
+        && element.value(NS_NONE, "y").is_none()
 }
 
 // ---------------------------------------------------------------------------
@@ -783,6 +867,27 @@ fn resource_allowed(
                 .all(|&child| content_allowed(doc, child, clip, &gradients, 1))
         }
     }
+}
+
+/// Vero se `element`, un `path` in una `defs` della radice, è il tracciato di
+/// un testo (formato della scena, testo): `id`, `d` e nessun altro attributo
+/// SVG, e per figli soltanto `title` e `desc`.
+fn path_resource_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
+    if element.value(NS_NONE, "id").is_none_or(str::is_empty)
+        || element.value(NS_NONE, "d").is_none()
+    {
+        return false;
+    }
+    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE => attr.local == "id" || (attr.local == "d" && parse_path(&attr.value).is_some()),
+        NS_XLINK | NS_SVG => false,
+        _ => true,
+    });
+    attributes
+        && element
+            .children
+            .iter()
+            .all(|&child| blank_or_meta(doc, child) == Some(true))
 }
 
 /// Vero se un nodo è spazio, `title` o `desc` ammessi: i figli che ogni
@@ -999,25 +1104,33 @@ fn primitives_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
 }
 
 /// L'indice delle risorse modificabili del documento: per ogni id, il tipo
-/// della risorsa (formato della scena, risorse). Prima le sfumature, che non
-/// rimandano a niente, poi le altre, che nel contenuto possono usare le
-/// sfumature. Di due risorse con lo stesso id vale la prima, in quest'ordine:
-/// il documento è comunque in sola lettura (S003).
-fn resource_index(doc: &Document<'_>) -> HashMap<String, ResourceKind> {
+/// della risorsa (formato della scena, risorse), e il `d` dei tracciati. Prima
+/// le sfumature e i tracciati, che non rimandano a niente, poi le altre, che
+/// nel contenuto possono usare le sfumature. Di due risorse con lo stesso id
+/// vale la prima, in quest'ordine: il documento è comunque in sola lettura
+/// (S003).
+fn resource_index(doc: &Document<'_>) -> (HashMap<String, ResourceKind>, HashMap<String, String>) {
     let mut found = HashMap::new();
+    let mut paths = HashMap::new();
     let mut others = Vec::new();
     let judge = |found: &mut HashMap<String, ResourceKind>,
                  element: &Element<'_>,
                  tag: Tag,
                  resolve: Resolve<'_>| {
         let Some(id) = element.value(NS_NONE, "id") else {
-            return;
+            return false;
         };
-        if found.contains_key(id) || !resource_allowed(doc, element, tag, resolve) {
-            return;
+        let allowed = if tag == Tag::Path {
+            path_resource_allowed(doc, element)
+        } else {
+            resource_allowed(doc, element, tag, resolve)
+        };
+        if found.contains_key(id) || !allowed {
+            return false;
         }
-        let kind = tag.resource_kind().expect("è una risorsa");
+        let kind = tag.resource_kind().unwrap_or(ResourceKind::Path);
         found.insert(id.to_owned(), kind);
+        true
     };
     for &child in doc.children(doc.root) {
         let Some(defs) = doc.element(child) else {
@@ -1030,22 +1143,34 @@ fn resource_index(doc: &Document<'_>) -> HashMap<String, ResourceKind> {
             let Some(element) = doc.element(inner) else {
                 continue;
             };
-            let Some(tag) = Tag::of(element).filter(|tag| tag.resource_kind().is_some()) else {
+            let Some(tag) =
+                Tag::of(element).filter(|&tag| tag == Tag::Path || tag.resource_kind().is_some())
+            else {
                 continue;
             };
-            if matches!(tag, Tag::LinearGradient | Tag::RadialGradient) {
-                judge(&mut found, element, tag, &no_resources);
-            } else {
-                others.push((element, tag));
+            match tag {
+                Tag::LinearGradient | Tag::RadialGradient => {
+                    judge(&mut found, element, tag, &no_resources);
+                }
+                Tag::Path => {
+                    if judge(&mut found, element, tag, &no_resources) {
+                        let d = element.value(NS_NONE, "d").unwrap_or_default();
+                        paths.insert(
+                            element.value(NS_NONE, "id").unwrap_or_default().to_owned(),
+                            d.to_owned(),
+                        );
+                    }
+                }
+                _ => others.push((element, tag)),
             }
         }
     }
-    let gradients = found.clone();
-    let resolve = |id: &str| gradients.get(id).copied();
+    let first = found.clone();
+    let resolve = |id: &str| first.get(id).copied();
     for (element, tag) in others {
         judge(&mut found, element, tag, &resolve);
     }
-    found
+    (found, paths)
 }
 
 /// Il ruolo di un figlio di un contenitore, o `None` se è estraneo. `place`
@@ -1066,6 +1191,11 @@ fn classify(
     if tag.resource_kind().is_some() {
         return (place == Place::Defs && resource_allowed(doc, element, tag, resolve))
             .then_some((tag, Role::Resource));
+    }
+    // Un `path` in una `defs` è il tracciato di un testo (formato della scena,
+    // testo).
+    if tag == Tag::Path && place == Place::Defs {
+        return path_resource_allowed(doc, element).then_some((tag, Role::Resource));
     }
     // In una `defs` stanno solo risorse, titolo e descrizione.
     if place == Place::Defs && !matches!(tag, Tag::Title | Tag::Desc) {
@@ -1089,7 +1219,7 @@ fn classify(
                 Role::Desc
             }
         }
-        Tag::Tspan => return None,
+        Tag::Tspan | Tag::TextPath => return None,
         _ => {
             if !unit_children_allowed(doc, element, tag, resolve) {
                 return None;
@@ -1335,6 +1465,9 @@ impl Builder<'_, '_> {
         if !self.keep {
             return;
         }
+        let text_path = (role == Role::Text)
+            .then(|| text_path_of(doc, element))
+            .flatten();
         let item = ElementItem {
             path,
             tag: tag.name(),
@@ -1361,14 +1494,19 @@ impl Builder<'_, '_> {
                 .flatten(),
             title: named.then(|| first_title(doc, element)).flatten(),
             text: matches!(role, Role::Title | Role::Desc).then(|| character_data(doc, id)),
-            lines: (role == Role::Text).then(|| {
-                element
+            lines: (role == Role::Text).then(|| match &text_path {
+                Some((path, _)) => vec![line_text(doc, *path)],
+                None => element
                     .children
                     .iter()
                     .filter(|&&child| doc.element(child).is_some_and(|e| e.is_svg("tspan")))
                     .map(|&child| line_text(doc, child))
-                    .collect()
+                    .collect(),
             }),
+            wrap: (role == Role::Text && text_path.is_none())
+                .then(|| element.value(NS_FUB, "wrap").and_then(wrap_width))
+                .flatten(),
+            text_path: text_path.and_then(|(_, path)| text_path_target(path)),
             lifecycle: (role == Role::Resource)
                 .then(|| match element.value(NS_FUB, "role") {
                     Some("private") => Some(Lifecycle::Private),
@@ -1460,7 +1598,7 @@ pub(crate) fn classify_document<'a>(
     map: &Utf16Map<'a>,
     keep: bool,
 ) -> Classified {
-    let resources = resource_index(doc);
+    let (resources, paths) = resource_index(doc);
     let resolve = |id: &str| resources.get(id).copied();
     let mut builder = Builder {
         doc,
@@ -1470,7 +1608,7 @@ pub(crate) fn classify_document<'a>(
         resolve: &resolve,
         items: Vec::new(),
         diagnostics: Vec::new(),
-        tally: Tally::default(),
+        tally: Tally::new(paths),
     };
     let mut pending = None;
     // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.

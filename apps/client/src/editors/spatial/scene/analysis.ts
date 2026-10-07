@@ -18,6 +18,7 @@ import { apply, compose, IDENTITY, type Matrix, type Point } from "./matrix";
 import type { Span } from "./text";
 import {
   href,
+  hrefId,
   isJavascript,
   keyword,
   length,
@@ -27,6 +28,7 @@ import {
   points,
   transform,
   trim,
+  wrapWidth,
   type Paint,
   type Rgb,
 } from "./values";
@@ -382,7 +384,15 @@ export class Tally {
   private paper: Rgb | null | undefined = undefined;
   /// I controlli su come il disegno si legge, da chiudere alla fine: la
   /// carta può venire dopo.
-  private readonly legibility = new Legibility();
+  private readonly legibility: Legibility;
+  /// Il `d` dei tracciati delle risorse, per id: il riquadro di un testo su
+  /// tracciato è quello del tracciato (formato della scena, testo).
+  private readonly paths: ReadonlyMap<string, string>;
+
+  constructor(paths: ReadonlyMap<string, string> = new Map()) {
+    this.paths = paths;
+    this.legibility = new Legibility(paths);
+  }
 
   /// Conta un blocco estraneo.
   foreign(): void {
@@ -446,7 +456,7 @@ export class Tally {
         break;
     }
     if (!context.hidden) {
-      bounds(doc, element, role, context.matrix, this.bounds);
+      bounds(doc, element, role, context.matrix, this.bounds, this.paths);
       this.legibility.element(doc, element, role, context, span, stroke);
     }
   }
@@ -516,9 +526,30 @@ export function radii(element: ElementNode): Point {
   return [0, 0];
 }
 
+/// Il `d` del tracciato che un testo segue, fra quelli di `paths`; `null` per
+/// un testo con le righe.
+export function followed(doc: XmlDocument, element: ElementNode, paths: ReadonlyMap<string, string>): string | null {
+  for (const child of element.children) {
+    const node = doc.element(child);
+    if (node === null || !isSvg(node, "textPath")) continue;
+    const attr = hrefAttr(node);
+    const id = attr === undefined ? null : hrefId(attr.value);
+    return id === null ? null : paths.get(id) ?? null;
+  }
+  return null;
+}
+
 /// Aggiunge a `out` la geometria di `element` trasformata da `m`: quella che
-/// `getBBox` misura, senza lo spessore del contorno.
-function bounds(doc: XmlDocument, element: ElementNode, role: Role, m: Matrix, out: BoundsBuilder): void {
+/// `getBBox` misura, senza lo spessore del contorno. `paths` sono i
+/// tracciati delle risorse.
+function bounds(
+  doc: XmlDocument,
+  element: ElementNode,
+  role: Role,
+  m: Matrix,
+  out: BoundsBuilder,
+  paths: ReadonlyMap<string, string>,
+): void {
   const at = (name: string): number => len(element, name) ?? 0;
   switch (role) {
     case "stroke":
@@ -560,7 +591,14 @@ function bounds(doc: XmlDocument, element: ElementNode, role: Role, m: Matrix, o
     }
     case "text": {
       // L'ingombro di un testo dipende dai caratteri, che qui non ci sono:
-      // contano i punti d'inizio delle righe, un `tspan` per riga.
+      // contano i punti d'inizio delle righe, un `tspan` per riga, o i punti
+      // estremi del tracciato che il testo segue.
+      const d = followed(doc, element, paths);
+      if (d !== null) {
+        const segments = parsePath(d);
+        if (segments !== null) out.path(segments, m);
+        break;
+      }
       const x = at("x");
       let y = at("y");
       out.include(apply(m, [x, y]));
@@ -623,10 +661,16 @@ export function collapse(text: string): string {
 
 /// Il paragrafo di un `text`: ogni figlio elemento è una riga, e i dati di
 /// carattere fra due figli ne sono un'altra. Le righe si uniscono con uno
-/// spazio.
+/// spazio, tranne in un testo in area quelle che continuano una parola dopo
+/// la prima, con `fub:join="word"`, che si uniscono senza (formato della
+/// scena, testo).
 function paragraph(doc: XmlDocument, id: NodeId): string {
-  const lines: string[] = [];
+  const wrap = valueOf(doc.element(id)!, NS_FUB, "wrap");
+  const area = wrap !== undefined && wrapWidth(wrap) !== null;
+  // Le righe, e se ognuna continua una parola.
+  const lines: Array<[string, boolean]> = [];
   let run: string[] = [];
+  let first = true;
   for (const child of doc.children(id)) {
     const node = doc.nodes[child]!;
     switch (node.kind) {
@@ -639,19 +683,25 @@ function paragraph(doc: XmlDocument, id: NodeId): string {
         break;
       case "element":
         if (!unrendered(node)) {
-          lines.push(collapse(run.join("")));
+          lines.push([collapse(run.join("")), false]);
           run = [];
           const line: string[] = [];
           textContent(doc, child, line);
-          lines.push(collapse(line.join("")));
+          const word = area && !first && isSvg(node, "tspan") && valueOf(node, NS_FUB, "join") === "word";
+          lines.push([collapse(line.join("")), word]);
+          first = false;
         }
         break;
       default:
         break;
     }
   }
-  lines.push(collapse(run.join("")));
-  return lines.filter((line) => line !== "").join(" ");
+  lines.push([collapse(run.join("")), false]);
+  let out = "";
+  for (const [line, word] of lines) {
+    if (line !== "") out += out === "" || word ? line : ` ${line}`;
+  }
+  return out;
 }
 
 /// L'`href` di un elemento: in SVG 2 `href` vince su `xlink:href`.

@@ -87,6 +87,11 @@ vale anche per un file troncato.
   minuscole: senza i caratteri la larghezza di una riga non si sa, e l'inizio
   sta sempre sul testo, qualunque sia `text-anchor`. Le righe vuote o nascoste
   non si guardano, e nemmeno quelle col `fill` `none` o ignoto.
+- **Un testo su tracciato** è una riga sola, e si guarda nel punto di
+  `startOffset` lungo il tracciato (una percentuale è una parte della sua
+  lunghezza), alzato allo stesso modo dalla parte dei caratteri, a sinistra
+  del verso del tracciato. Oltre un capo il punto si ferma al capo; un testo
+  su un tracciato lungo zero non si guarda. S013 lo misura come una riga.
 - **La soglia di un testo** è 4,5:1, e 3:1 per un testo grande: da 24 px a
   grandezza naturale, o da 14 punti (18,67 px) in grassetto, cioè `bold` o
   `font-weight` da 700 in su. Un testo di grandezza ignota conta come normale.

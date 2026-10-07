@@ -4,7 +4,7 @@
 // Un elemento per riga; gli attributi nell'ordine canonico; i figli nelle
 // righe seguenti, due spazi più dentro; gruppi e livelli vuoti in forma
 // aperta, ogni altro elemento senza figli chiuso con `/>`; il testo di `tspan`,
-// `title` e `desc` sulla riga del tag. I valori che l'operazione non tocca si
+// `textPath`, `title` e `desc` sulla riga del tag. I valori che l'operazione non tocca si
 // copiano come sono scritti nella sorgente, riferimenti compresi: un `set` di
 // `transform` non riscrive `d`. Solo i valori nuovi passano dall'escape.
 //
@@ -42,9 +42,10 @@ export interface Elem {
   /// Per `g`, `a` e `text`, per la `defs`, le risorse e il loro contenuto;
   /// `title` e `desc` sono figli ammessi di qualunque elemento.
   readonly children?: readonly Elem[];
-  /// Solo per `tspan`, `title` e `desc`.
+  /// Solo per `tspan`, `textPath`, `title` e `desc`.
   readonly text?: string | null;
-  /// Solo per una riga di `text`, al posto di `text`: il suo testo coi pezzi.
+  /// Solo per una riga di `text` o per il suo `textPath`, al posto di
+  /// `text`: il suo testo coi pezzi.
   readonly runs?: readonly Run[];
 }
 
@@ -80,10 +81,11 @@ const PRIMITIVES = [
   "feMerge",
 ];
 
-/// Gli elementi che stanno solo dentro certi altri: una riga nel suo testo,
-/// un punto nella sua sfumatura, una primitiva nel suo filtro.
+/// Gli elementi che stanno solo dentro certi altri: una riga o il tracciato
+/// nel suo testo, un punto nella sua sfumatura, una primitiva nel suo filtro.
 const OWNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["tspan", new Set(["text"])],
+  ["textPath", new Set(["text"])],
   ["stop", new Set(["linearGradient", "radialGradient"])],
   ["feMergeNode", new Set(["feMerge"])],
   ...PRIMITIVES.map((tag): [string, ReadonlySet<string>] => [tag, new Set(["filter"])]),
@@ -108,6 +110,7 @@ export const SCENE_TAGS: ReadonlySet<string> = new Set([
   "polygon",
   "text",
   "tspan",
+  "textPath",
   "image",
   "defs",
   "linearGradient",
@@ -123,7 +126,7 @@ export const SCENE_TAGS: ReadonlySet<string> = new Set([
 ]);
 
 /// I tag che portano testo.
-const TEXT_TAGS: ReadonlySet<string> = new Set(["title", "desc", "tspan"]);
+const TEXT_TAGS: ReadonlySet<string> = new Set(["title", "desc", "tspan", "textPath"]);
 
 /// I prefissi convenzionali delle operazioni.
 const CONVENTIONAL: ReadonlyMap<string, string> = new Map([
@@ -223,7 +226,7 @@ export function escapeText(value: string): string {
 // Ordine degli attributi.
 // ---------------------------------------------------------------------------
 
-const FUB_ORDER = ["layer", "role", "tool", "shape", "geom", "locked", "at", "brush"];
+const FUB_ORDER = ["layer", "role", "tool", "shape", "geom", "wrap", "join", "locked", "at", "brush"];
 const GEOMETRY_ORDER = [
   "x",
   "y",
@@ -244,6 +247,8 @@ const GEOMETRY_ORDER = [
   "y2",
   "points",
   "d",
+  // Dove comincia un testo su tracciato (formato della scena, testo).
+  "startOffset",
   // La geometria delle risorse.
   "offset",
   "refX",
@@ -374,8 +379,8 @@ export interface OutElement {
   readonly group: boolean;
   readonly attrs: readonly OutAttr[];
   readonly children: readonly OutElement[];
-  /// Il contenuto di `tspan`, `title` e `desc`, già con gli escape; `null`
-  /// per gli altri.
+  /// Il contenuto di `tspan`, `textPath`, `title` e `desc`, già con gli
+  /// escape; `null` per gli altri.
   readonly text: string | null;
 }
 
@@ -465,7 +470,7 @@ export function elemToOut(elem: Elem, scope: NamespaceScope, parentTag: string |
   }
   const runs = elem.runs;
   if (runs !== undefined) {
-    if (tag !== "tspan" || parentTag !== "text") throw new ElemError("i pezzi stanno solo in una riga di un text");
+    if ((tag !== "tspan" && tag !== "textPath") || parentTag !== "text") throw new ElemError("i pezzi stanno solo in una riga di un text o nel suo tracciato");
     if (text !== undefined && text !== null) throw new ElemError("una riga ha il testo o i pezzi, non tutti e due");
   }
   return {
@@ -625,11 +630,12 @@ export function scopeInside(scope: NamespaceScope, element: ElementNode): Namesp
 /// Un elemento letto, pronto da riscrivere: attributi e testo copiati come
 /// sono scritti, figli elemento ricopiati allo stesso modo, spazi fra i figli
 /// sostituiti dal rientro canonico. Serve a elementi modificabili, che hanno
-/// solo testo, `title`, `desc` e `tspan` dentro.
+/// solo testo, `title`, `desc`, `tspan` e `textPath` dentro.
 export function elementToOut(doc: XmlDocument, id: NodeId): OutElement {
   const element = doc.element(id)!;
-  // Il contenuto di una riga si copia com'è scritto, coi suoi pezzi.
-  const carriesText = isSvg(element, "title") || isSvg(element, "desc") || isSvg(element, "tspan");
+  // Il contenuto di una riga, o del tracciato di un testo, si copia com'è
+  // scritto, coi suoi pezzi.
+  const carriesText = isSvg(element, "title") || isSvg(element, "desc") || isSvg(element, "tspan") || isSvg(element, "textPath");
   const children: OutElement[] = [];
   for (const child of element.children) {
     if (!carriesText && doc.element(child) !== null) children.push(elementToOut(doc, child));

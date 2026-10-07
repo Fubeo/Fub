@@ -2415,6 +2415,248 @@ describe("il testo, dal livello Standard", () => {
   });
 });
 
+describe("il testo in area e su tracciato, dal livello Esperto", () => {
+  /// Un testo in area di corpo 20, largo 120: dieci grafemi per riga.
+  const A = "oa2a2a2a2";
+  const AREA = doc(
+    `<title>Prova</title>${LAYER}<text id="${A}" fub:wrap="120" x="10" y="40" font-size="20">` +
+      `<tspan x="10" dy="0">Il testo</tspan><tspan fub:join="space" x="10" dy="25">in area</tspan></text></g>`,
+  );
+  /// Un testo di corpo 20 sul tracciato orizzontale da (0, 100) a (200, 100).
+  const P = "op3p3p3p3";
+  const ALONG = doc(
+    `<title>Prova</title><defs id="fub-defs"><path id="r1" fub:role="private" d="M 0 100 L 200 100"/></defs>${LAYER}` +
+      `<text id="${P}" font-size="20"><textPath startOffset="20" href="#r1">Sul colle</textPath></text></g>`,
+  );
+  const EMPTY = doc(`<title>Prova</title>${LAYER}</g>`);
+
+  const input = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-input")!;
+  const shown = (): string => [...input().querySelectorAll<HTMLElement>(".draw-text-line")].map((row) => row.textContent).join("\n");
+  const tap = (x: number, y: number): void => drag([[x, y]]);
+  const type = (value: string): void => {
+    input().textContent = value;
+    input().dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  /// Le righe del testo `id`, ciascuna col suo `fub:join`.
+  const lines = (id: string): Array<[string, string | null]> => {
+    const text = new RegExp(`<text id="${id}"[^>]*>([\\s\\S]*?)</text>`).exec(editor.engine.text)?.[1] ?? "";
+    return [...text.matchAll(/<tspan([^>]*)>([^<]*)<\/tspan>/g)].map((match) => [match[2]!, /fub:join="([^"]*)"/.exec(match[1]!)?.[1] ?? null]);
+  };
+
+  it("trascinare col Testo apre un testo in area largo quanto il trascinamento, che va a capo da sé", () => {
+    mount(EMPTY, { level: "expert" });
+    editor.setTool("text");
+    drag([[20, 40], [70, 60], [120, 60]]);
+    expect(document.activeElement).toBe(input());
+    // Il riquadro è largo 100: col corpo 32 dello strumento, cinque grafemi.
+    expect(input().style.width).toBe("100px");
+    type("Il testo in area va a capo");
+    expect(shown()).toBe("Il\ntesto\nin\narea\nva a\ncapo");
+    key("Escape", {}, input());
+    expect(changes).toHaveLength(1);
+    const [id] = editor.selection;
+    expect(editor.engine.text).toMatch(new RegExp(`<text id="${id}" fub:wrap="100" x="20" `));
+    expect(lines(id!)).toEqual([
+      ["Il", null],
+      ["testo", "space"],
+      ["in", "space"],
+      ["area", "space"],
+      ["va a", "space"],
+      ["capo", "space"],
+    ]);
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).not.toContain("<text");
+  });
+
+  it("al livello Standard trascinare col Testo scrive dove comincia, senza riquadro", () => {
+    mount(EMPTY, { level: "standard" });
+    editor.setTool("text");
+    drag([[20, 40], [70, 60], [120, 60]]);
+    expect(input().style.width).not.toBe("100px");
+    type("Il testo in area");
+    key("Escape", {}, input());
+    expect(editor.engine.text).not.toContain("fub:wrap");
+  });
+
+  it("un testo in area si riapre nel suo riquadro, e scrivere rifà gli a capo con l'operazione text", () => {
+    mount(AREA, { level: "expert" });
+    editor.setTool("text");
+    tap(20, 35);
+    expect(shown()).toBe("Il testo\nin area");
+    expect(input().style.width).toBe("120px");
+    type("Il testo in area va a capo");
+    expect(shown()).toBe("Il testo\nin area va\na capo");
+    key("Tab", {}, input());
+    expect(lines(A)).toEqual([
+      ["Il testo", null],
+      ["in area va", "space"],
+      ["a capo", "space"],
+    ]);
+    expect(editor.engine.text).toContain('<tspan fub:join="space" x="10" dy="25">a capo</tspan>');
+    expect(spoken()).toBe("Testo modificato.");
+    // Un paragrafo nuovo non continua quello prima.
+    tap(20, 35);
+    type("Uno\nDue");
+    key("Tab", {}, input());
+    expect(lines(A)).toEqual([
+      ["Uno", null],
+      ["Due", null],
+    ]);
+    key("z", { ctrlKey: true });
+    key("z", { ctrlKey: true });
+    expect(lines(A)).toEqual([
+      ["Il testo", null],
+      ["in area", "space"],
+    ]);
+  });
+
+  it("un testo su tracciato si apre su una riga sola, dritto dove comincia, e si scrive nel suo textPath", () => {
+    mount(ALONG, { level: "expert" });
+    editor.setTool("text");
+    tap(40, 95);
+    expect(document.activeElement).toBe(input());
+    expect(shown()).toBe("Sul colle");
+    expect(input().getAttribute("aria-multiline")).toBe("false");
+    expect(input().style.transform).toMatch(/translate\(20px, 100px\) rotate\(0deg\)/);
+    type("Sul colle alto");
+    key("Escape", {}, input());
+    expect(editor.engine.text).toContain('<textPath startOffset="20" href="#r1">Sul colle alto</textPath>');
+    expect(editor.selection).toEqual([P]);
+  });
+});
+
+describe("la cornice di un testo in area", () => {
+  const T = "ot1t1t1t1";
+  // Corpo 10, a stima: dieci caratteri per riga. Il riquadro va da 20 a 80,
+  // e le righe da 32 a 55; la cornice sta quattro pixel fuori.
+  const AREA = doc(`${LAYER}<text id="${T}" fub:wrap="60" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan fub:join="space" x="20" dy="12.5">va a capo</tspan></text></g>`);
+  const press = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const move = (x: number, y: number, buttons = 1): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons, pressure: 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const release = (x: number, y: number): void => {
+    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+  };
+  const painted = (): Element => host.querySelector(`[data-scene-id="${T}"]`)!;
+
+  it("cambia la larghezza del riquadro e non il corpo: il testo va di nuovo a capo mentre la si tira", () => {
+    mount(AREA, { level: "expert" });
+    editor.setTool("select");
+    editor.select([T]);
+    // L'angolo in basso a destra tira in orizzontale.
+    move(84, 59, 0);
+    expect(surface().dataset.grip).toBe("ew");
+    press(84, 59);
+    move(104, 70);
+    move(124, 80);
+    // L'anteprima mostra le righe di dopo; il file non cambia ancora.
+    expect([...painted().nextElementSibling!.querySelectorAll("tspan")].map((line) => line.textContent)).toEqual(["Il testo va a", "capo"]);
+    expect(editor.engine.text).toBe(AREA);
+    release(124, 80);
+    expect(editor.engine.text).toContain('fub:wrap="100" x="20" y="40" font-size="10"');
+    expect(editor.engine.text).toMatch(/<tspan x="20" dy="0">Il testo va a<\/tspan>\s*<tspan fub:join="space" x="20" dy="12.5">capo<\/tspan>/);
+    expect(spoken()).toBe("Riquadro largo 100.");
+    expect(changes).toHaveLength(1);
+    expect(painted().nextElementSibling).toBeNull();
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Larghezza del riquadro.");
+    expect(editor.engine.text).toBe(AREA);
+  });
+
+  it("da sinistra resta fermo il bordo destro; in alto e in basso non ci sono maniglie", () => {
+    mount(AREA, { level: "expert" });
+    editor.setTool("select");
+    editor.select([T]);
+    move(50, 28, 0);
+    expect(surface().dataset.grip).toBeUndefined();
+    press(16, 59);
+    move(-24, 59);
+    release(-24, 59);
+    expect(editor.engine.text).toContain('fub:wrap="100" x="-20"');
+    expect(editor.engine.text).toContain('<tspan x="-20" dy="0">Il testo va a</tspan>');
+  });
+
+  it("sotto Esperto la cornice scala il testo come ogni oggetto", () => {
+    mount(AREA, { level: "standard" });
+    editor.setTool("select");
+    editor.select([T]);
+    move(50, 28, 0);
+    expect(surface().dataset.grip).toBe("ns");
+  });
+});
+
+describe("il testo su tracciato, dal menu", () => {
+  const T = "ot4t4t4t4";
+  const R = "or4r4r4r4";
+  const PAIR = doc(
+    `<title>Prova</title>${LAYER}<text id="${T}" x="20" y="40" font-size="10"><tspan x="20" dy="0">Sul colle</tspan></text>` +
+      `<rect id="${R}" x="0" y="50" width="200" height="40" fill="none" stroke="#000000"/></g>`,
+  );
+
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+  const button = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Testo su tracciato"]')!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  /// Le voci, col nome, se sono spente e che cosa dicono.
+  const entries = (): (string | boolean | null)[][] =>
+    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
+  const closeMenus = (): void => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  };
+  /// La voce `label` del menu, sugli oggetti `keys`.
+  const run = (keys: string[], label: string): void => {
+    editor.select(keys);
+    button().click();
+    menu().find((entry) => labelOf(entry) === label)!.click();
+    closeMenus();
+  };
+
+  afterEach(closeMenus);
+
+  it("c'è dall'Esperto con un testo scelto; le voci dicono perché sono spente", () => {
+    mount(PAIR, { level: "standard" });
+    editor.select([T, R]);
+    expect(button().hidden).toBe(true);
+    editor.setLevel("expert");
+    expect(button().hidden).toBe(false);
+    expect(button().getAttribute("aria-haspopup")).toBe("menu");
+    editor.select([R]);
+    expect(button().hidden).toBe(true);
+    editor.select([T]);
+    button().click();
+    expect(entries()).toEqual([
+      ["Metti sul tracciato", true, "Scegli un testo e la forma che deve seguire, e nient’altro."],
+      ["Togli dal tracciato", true, "Fra gli oggetti scelti non c’è un testo su tracciato."],
+      ["Rovescia sul tracciato", true, "Fra gli oggetti scelti non c’è un testo su tracciato."],
+    ]);
+  });
+
+  it("mette il testo sul rettangolo, lo rovescia e lo toglie, un passo di annulla ciascuno", () => {
+    mount(PAIR, { level: "expert" });
+    run([T, R], "Metti sul tracciato");
+    expect(spoken()).toBe("Il testo segue il tracciato.");
+    expect(editor.selection).toEqual([T]);
+    expect(editor.engine.text).not.toContain(R);
+    const href = /<textPath startOffset="20" href="#(r[a-z0-9]{8})">Sul colle<\/textPath>/.exec(editor.engine.text)![1]!;
+    expect(editor.engine.text).toContain(`<path id="${href}" fub:role="private" d="M0 50 L200 50 L200 90 L0 90 Z"/>`);
+    run([T], "Rovescia sul tracciato");
+    expect(spoken()).toBe("1 testo è passato dall’altra parte del tracciato.");
+    expect(editor.engine.text).toContain(`d="M0 50 L0 90 L200 90 L200 50 L0 50 Z"`);
+    run([T], "Togli dal tracciato");
+    expect(spoken()).toBe("1 testo è tornato una riga dritta.");
+    expect(editor.engine.text).toMatch(new RegExp(`<text id="${T}" x="[0-9.]+" y="[0-9.]+" font-size="10">`));
+    expect(editor.engine.text).not.toContain("<textPath");
+    expect(changes).toHaveLength(3);
+    for (let i = 0; i < 3; i++) editor.undo();
+    expect(editor.engine.text).toBe(PAIR);
+  });
+});
+
 describe("i poligoni e le stelle, dal livello Standard", () => {
   const A = "o1a2b3c4d";
   const H = "oh1h1h1h1";
@@ -3084,6 +3326,30 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
       "Annullato: Grassetto.",
     ]);
     expect(editor.engine.text).toBe(TEXT);
+  });
+
+  it("il testo in area: la larghezza del riquadro lo manda di nuovo a capo, e il tipo lo fa da punto", () => {
+    const T = "ot1t1t1t1";
+    // Corpo 10, a stima: dieci caratteri per riga.
+    const AREA = doc(`${LAYER}<text id="${T}" fub:wrap="60" x="20" y="40" font-size="10"><tspan x="20" dy="0">Il testo</tspan><tspan fub:join="space" x="20" dy="12.5">va a capo</tspan></text></g>`);
+    mount(AREA, { level: "expert" });
+    editor.select([T]);
+    key("Enter");
+    const segment = (label: string): HTMLButtonElement => property("textForm").querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+    expect(propertyInput("wrap").value).toBe("60");
+    expect(segment("In area").getAttribute("aria-pressed")).toBe("true");
+    enter(propertyInput("wrap"), "100");
+    expect(editor.engine.text).toContain('<tspan x="20" dy="0">Il testo va a</tspan>');
+    segment("Da punto").click();
+    expect(editor.engine.text).toMatch(/<text id="ot1t1t1t1" x="20" y="40" font-size="10">\s*<tspan x="20" dy="0">Il testo va a<\/tspan>\s*<tspan x="20" dy="12.5">capo<\/tspan>/);
+    // Da punto non ha riquadro.
+    expect(property("wrap").hidden).toBe(true);
+    const undone = [1, 2].map(() => {
+      editor.undo();
+      return spoken();
+    });
+    expect(undone).toEqual(["Annullato: Tipo di testo.", "Annullato: Larghezza del riquadro."]);
+    expect(editor.engine.text).toBe(AREA);
   });
 
   it("«Disponi» ha i comandi della barra, che dicono quando non servono", () => {
@@ -5928,6 +6194,57 @@ describe("i nodi, dal livello Esperto", () => {
     expect(editor.selection).toEqual([]);
     expect(spoken()).toBe("Nessun oggetto scelto.");
     expect(changes).toEqual([]);
+  });
+
+  it("su un testo su tracciato modifica il tracciato, e il testo lo segue", () => {
+    const T = "ot3t3t3t3";
+    const K = "rk3k3k3k3";
+    const ALONG = doc(
+      `<defs id="fub-defs"><path id="${K}" fub:role="private" d="M 0 100 L 200 100"/></defs>${LAYER}` +
+        `<text id="${T}" font-size="10"><textPath href="#${K}">Sul colle</textPath></text>${PATH}</g>`,
+    );
+    mount(ALONG, { level: "expert" });
+    editor.select([T]);
+    editor.focus();
+    key("n");
+    expect(spoken()).toMatch(/: 2 nodi da modificare\.$/);
+    expect(nodesBar().hidden).toBe(false);
+    // Mentre si trascina, il testo segue il tracciato che si vedrà.
+    const track = (): string | null => host.querySelector("defs path")!.getAttribute("d");
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 200, clientY: 100, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 200, clientY: 80, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 200, clientY: 60, timeStamp: (clock += 8) }));
+    expect(track()).toBe("M0 100 L200 60");
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 200, clientY: 60, timeStamp: (clock += 8) }));
+    expect(editor.engine.text).toContain(`<path id="${K}" fub:role="private" d="M0 100 L200 60"/>`);
+    expect(editor.engine.text).toContain(`<text id="${T}" font-size="10"><textPath href="#${K}">Sul colle</textPath></text>`);
+    expect(spoken()).toBe("Nodo spostato: x 200, y 60.");
+    expect(editor.selection).toEqual([T]);
+    expect(changes).toHaveLength(1);
+    // La pagina cresce col testo, che sta sul tracciato.
+    expect(editor.engine.text).toContain('viewBox="-256 0 612 356"');
+    // I comandi dei nodi: il segmento diventa una curva.
+    tap(100, 80);
+    expect(spoken()).toBe("2 nodi scelti.");
+    key("U", { shiftKey: true });
+    expect(editor.engine.text).toMatch(new RegExp(`<path id="${K}" fub:role="private" d="M0 100 C[^"]+"/>`));
+    expect(changes).toHaveLength(2);
+    // Il tracciato resta lungo più di zero, e resta suo.
+    tap(0, 100);
+    key("Delete");
+    expect(spoken()).toBe("Il testo ha bisogno di un tracciato lungo più di zero: per lasciarlo, «Togli dal tracciato».");
+    expect(changes).toHaveLength(2);
+    editor.select([T, P]);
+    editor.setTool("nodes");
+    tap(0, 100);
+    tap(10, 10, { shiftKey: true });
+    key("J", { shiftKey: true });
+    expect(spoken()).toBe("Il tracciato di un testo resta suo: non si unisce a un’altra forma.");
+    expect(changes).toHaveLength(2);
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(ALONG);
   });
 
   it("trascinare un nodo lo sposta, in un passo che si annulla", () => {

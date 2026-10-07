@@ -350,10 +350,10 @@ describe("come si vede un testo", () => {
 
   it("sa dove comincia la prima riga, il corpo, il passo e lo stile che eredita", () => {
     const { index } = open(TEXTS);
-    expect(index.get("t")?.look).toEqual({ x: 10, y: 40, size: 20, leading: 30, anchor: "start", family: "Inter, sans-serif", weight: null, color: "#0072b2" });
+    expect(index.get("t")?.look).toEqual({ x: 10, y: 40, size: 20, leading: 30, anchor: "start", family: "Inter, sans-serif", weight: null, color: "#0072b2", wrap: null, along: null });
     // Con una riga sola, il passo è quello che l'operazione `text` darà alla
     // seconda.
-    expect(index.get("n")?.look).toEqual({ x: 50, y: 80, size: 12, leading: 15, anchor: "middle", family: null, weight: "700", color: "#d55e00" });
+    expect(index.get("n")?.look).toEqual({ x: 50, y: 80, size: 12, leading: 15, anchor: "middle", family: null, weight: "700", color: "#d55e00", wrap: null, along: null });
     // Un gruppo si sceglie intero: il testo dentro non si cambia sul posto.
     expect(index.get("g")?.look).toBeNull();
   });
@@ -372,6 +372,54 @@ describe("come si vede un testo", () => {
     expect(expected[1]!.max[0]).toBeLessThanOrEqual(50 + 12 * 0.8 + 1e-9);
     const t = opened.index.get("t")!;
     expect(linesBounds(t.look!, [" ", ""], t.matrix)).toBeNull();
+  });
+});
+
+describe("il testo in area e su tracciato", () => {
+  const FORMS = doc(
+    '<defs id="fub-defs"><path id="r1" fub:role="private" d="M 0 100 L 200 100"/><path id="r2" fub:role="private" d="M 100 0 L 100 200"/></defs>'
+      + `${LAYER}<text id="a" fub:wrap="100" x="10" y="20" font-size="10"><tspan x="10" dy="0">Il testo</tspan><tspan x="10" dy="12.5" fub:join="space">in area</tspan></text>`
+      + '<text id="p" font-size="10" text-anchor="middle"><textPath href="#r1" startOffset="25%">abcdefghij</textPath></text>'
+      + "</g>",
+  );
+
+  it("un testo in area si tocca in tutto il suo riquadro, largo quanto va a capo", () => {
+    const { index } = open(FORMS);
+    const area = index.get("a")!;
+    // Dalla cima della prima riga al fondo della seconda, largo 100.
+    expect(area.bounds).toEqual({ min: [10, 12], max: [110, 35] });
+    expect(index.at([100, 30], 0)?.key).toBe("a");
+    expect(area.look).toMatchObject({ x: 10, y: 20, wrap: 100, along: null });
+    expect(linesBounds(area.look!, ["Il testo", "in area", "va"], area.matrix)).toEqual({ min: [10, 12], max: [110, 47.5] });
+  });
+
+  it("un testo su tracciato si tocca lungo il tracciato, dove ha le lettere", () => {
+    const opened = open(FORMS);
+    const path = opened.index.get("p")!;
+    // Dieci lettere di 6 centrate a 50 sul tracciato: da 20 a 80.
+    expect(path.bounds!.min[0]).toBeCloseTo(20, 6);
+    expect(path.bounds!.max[0]).toBeCloseTo(80, 6);
+    expect(path.bounds!.min[1]).toBeCloseTo(92, 6);
+    expect(path.bounds!.max[1]).toBeCloseTo(102.5, 6);
+    expect(opened.index.at([70, 98], 0)?.key).toBe("p");
+    expect(opened.index.at([150, 98], 0)).toBeNull();
+    expect(path.look).toMatchObject({ x: 50, y: 100, anchor: "middle", wrap: null, along: [1, 0] });
+    expect(linesBounds(path.look!, ["abc"], path.matrix)).toBeNull();
+    // Il tracciato che cambia porta il testo con sé.
+    expect(opened.engine.apply({ op: "text", id: "p", lines: ["ab"] }).outcome).toBe("applied");
+    expect(opened.engine.apply({ op: "set", id: "r1", attrs: { d: "M 100 0 L 100 200" } }).outcome).toBe("applied");
+    const moved = opened.reindex().get("p")!;
+    expect(moved.bounds!.min[1]).toBeCloseTo(44, 6);
+    expect(moved.bounds!.max[1]).toBeCloseTo(56, 6);
+    expect(moved.look?.along).toEqual([0, 1]);
+  });
+
+  it("le lettere che cadono fuori dal tracciato non si toccano", () => {
+    const { index } = open(FORMS.replace('startOffset="25%"', 'startOffset="195"'));
+    const path = index.get("p")!;
+    // Da 165 a 225: la lettera da 195 a 201 ha il centro sul tracciato, le
+    // altre dopo no.
+    expect(path.bounds!.max[0]).toBeCloseTo(201, 6);
   });
 });
 

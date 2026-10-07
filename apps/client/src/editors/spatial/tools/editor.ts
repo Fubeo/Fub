@@ -174,6 +174,7 @@ import {
   linkTarget,
   nodeOf,
   orderOps,
+  plainAttributes,
   Plan,
   relinkOps,
   ungroupOps,
@@ -202,7 +203,7 @@ import {
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
+import { framedText, initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
@@ -233,6 +234,7 @@ import {
   type FrameView,
   type Grip,
   type GripCursor,
+  type ResizeGrip,
 } from "./frame";
 import {
   anchorsOf,
@@ -424,9 +426,12 @@ import type { Traced } from "./trace";
 import { imageWindow, traceOps, tracedGroup, traceSource, weightOf, type TraceSource } from "./trace-ops";
 import { inlineTracer, workerTracer, type Tracer, type TracerFactory } from "./trace-runner";
 import { MAX_COLORS, MAX_SHAPES, MIN_COLORS, TRACE_PRESETS, type TracePreset, type TraceSettings } from "./trace-settings";
-import { editableRich, lineRuns, lineText as richLineText, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich } from "./rich";
-import { ensureTextFont, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
-import { createTextField } from "./text-field";
+import { browserMeasure, estimate, type Measure } from "./measure";
+import { editableRich, JOIN, lineRuns, lineText as richLineText, newLeading, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich, type RichChange } from "./rich";
+import { ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
+import { createTextField, LINES_FORM, type FieldForm } from "./text-field";
+import { flipOps, isAlongPath, pairOf, putOnPathOps, releaseOps, trackOf, type TextPathRefused } from "./text-path";
+import { unwrap, WRAP, wrapParagraphs, wrapValue, type Side } from "./wrap";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
 /// `EditorChange` (operazioni sulla scena, §6).
@@ -725,7 +730,7 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "trace"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "trace", "typeset"];
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -929,6 +934,7 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
   // Un'immagine coi suoi monti, e sotto il tracciato che se ne ricava.
   "draw-trace-image": ["M3 3h11v9H3z", "M3 10l3-3 3 3 2-2 3 3", "M6 21c3 0 4-5 7.5-5s4 3 6.5 3", "M19.5 17.5h3v3h-3z"],
+  "draw-text-path": ["M3 20C6 12 18 12 21 20", "M7 4h10", "M12 4v9"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
   "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
   // Due anelli in basso, e le lame che si incrociano verso l'alto.
@@ -1092,10 +1098,28 @@ interface SelectGesture extends GestureBase {
   grip: { readonly grip: Grip; readonly frame: Frame } | null;
   /// La maniglia degli angoli presa.
   corner: CornerDrag | null;
+  /// Il riquadro del testo in area di cui si tira la cornice.
+  area: AreaDrag | null;
   /// La trasformazione della scena che la cornice mostra, e i gradi della
   /// rotazione.
   matrix: Matrix | null;
   angle: number;
+}
+
+/// La cornice di un testo in area presa da un lato o da un angolo: cambia
+/// la larghezza del riquadro, non il corpo, e il bordo opposto resta fermo
+/// (livello Esperto).
+interface AreaDrag {
+  readonly unit: Unit;
+  readonly fixed: Side;
+  /// Il bordo tirato e la larghezza di partenza, nelle coordinate del testo.
+  readonly edge: number;
+  readonly width: number;
+  /// La larghezza di adesso, il testo che la mostra e la sua cornice nelle
+  /// coordinate del testo.
+  now: number;
+  elem: Elem | null;
+  box: Bounds | null;
 }
 
 /// La maniglia degli angoli presa: l'oggetto, la sua maniglia, dove la si è
@@ -1346,10 +1370,13 @@ interface EraseGesture extends GestureBase {
   readonly marked: Map<string, Unit>;
 }
 
-/// Un tocco dello strumento Testo: dove si alza il puntatore si scrive.
+/// Un tocco dello strumento Testo: dove si alza il puntatore si scrive. Un
+/// trascinamento disegna il riquadro di un testo in area.
 interface TextGesture extends GestureBase {
   readonly kind: "text";
   from: Point | null;
+  end: Point | null;
+  dragging: boolean;
 }
 
 /// Un testo che si sta scrivendo nel campo sopra il foglio.
@@ -1365,6 +1392,9 @@ interface Typing {
   /// Come si vede il testo che si cambia; `null` per uno nuovo, che ha il
   /// colore e la dimensione dello strumento.
   readonly look: TextLook | null;
+  /// La larghezza del riquadro di un testo in area nuovo, che ci va a capo;
+  /// `null` per gli altri.
+  readonly wrap: number | null;
   /// Il punto d'ancoraggio, nelle coordinate del testo.
   readonly at: Point;
   /// Dalle coordinate del testo a quelle della scena.
@@ -2372,7 +2402,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
   // pieni, regolati in una barra con l'anteprima.
   const traceButton = arrangeButton("draw.trace_image", "draw-trace-image", null, () => void openTracing());
-  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, outlineButton]) {
+  // Dal livello Esperto, con un testo scelto: metterlo su una forma,
+  // toglierlo dal suo tracciato e rovesciarlo, in un menu.
+  const textPathButton = arrangeButton("draw.text_path", "draw-text-path", null, () => openMenu(textPathButton, textPathItems()));
+  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, outlineButton, textPathButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -3225,13 +3258,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// I nodi della forma `leaf`, o perché non ne ha. Si ricordano per
   /// elemento: un elemento che cambia è un altro, e il riquadro e il
-  /// passaggio del puntatore li chiedono a ogni passo.
-  const nodables = new WeakMap<LeafNode, Nodable | NoNodes>();
+  /// passaggio del puntatore li chiedono a ogni passo. Quelli di un testo su
+  /// tracciato sono del tracciato, e si ricordano per tracciato: cambia
+  /// senza che cambi il testo.
+  const nodables = new WeakMap<object, Nodable | NoNodes>();
   const nodableAt = (leaf: LeafNode): Nodable | NoNodes => {
-    let found = nodables.get(leaf);
+    const track = engine.model === null ? null : trackOf(engine.model, leaf);
+    let found = nodables.get(track ?? leaf);
     if (found === undefined) {
-      found = nodableOf(leaf, spineOf);
-      nodables.set(leaf, found);
+      found = nodableOf(leaf, spineOf, () => (track === null ? null : plainAttributes(track).get("d") ?? null));
+      nodables.set(track ?? leaf, found);
     }
     return found;
   };
@@ -3246,12 +3282,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// disegno che si scrive. Di ogni oggetto scelto, le forme scelte con lo
   /// strumento, o se non ce n'è nessuna tutte quelle che hanno nodi. Ogni
   /// forma ne ha, anche un rettangolo, una freccia o un tratto a penna; un
-  /// testo e un'immagine no. Senza nessuna forma, una chiave dice perché;
-  /// `null`, che non c'è niente da dire.
+  /// testo su tracciato quelli del suo tracciato, una volta sola se lo
+  /// seguono più testi scelti; un altro testo e un'immagine no. Senza
+  /// nessuna forma, una chiave dice perché; `null`, che non c'è niente da
+  /// dire.
   const nodeTargets = (): readonly Editing[] | DrawKey | null => {
     if (!((tool === "nodes" && has("nodes")) || curveOn()) || !editable() || selection.length === 0) return null;
     const out: Editing[] = [];
     let first: NoNodes | "flat" | null = null;
+    const tracks = new Set<string>();
     for (const unit of selectedUnits()) {
       const found: Editing[] = [];
       const chosen: Editing[] = [];
@@ -3260,6 +3299,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (typeof nodable === "string") {
           first ??= nodable;
           continue;
+        }
+        if (nodable.kind === "track") {
+          if (tracks.has(nodable.target)) continue;
+          tracks.add(nodable.target);
         }
         const inverse = invert(shape.matrix);
         if (inverse === null) {
@@ -3477,10 +3520,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (tool !== "select" || !editable() || selection.length === 0) return null;
     const g = current?.kind === "select" ? current : null;
     if (g !== null && (g.mode === "move" || g.mode === "marquee")) return null;
-    if (g !== null && g.grip !== null) return frameView(g.matrix === null ? g.grip.frame : movedFrame(g.grip.frame, g.matrix), camera.scale);
+    if (g?.area?.box != null) return areaView(frameView({ matrix: g.area.unit.matrix, box: g.area.box, geometry: g.area.box }, camera.scale));
+    if (g !== null && g.grip !== null) return areaView(frameView(g.matrix === null ? g.grip.frame : movedFrame(g.grip.frame, g.matrix), camera.scale));
     const frame = frameOf(selectedUnits());
-    return frame === null ? null : frameView(frame, camera.scale);
+    return frame === null ? null : areaView(frameView(frame, camera.scale));
   };
+
+  /// Il testo in area scelto da solo, la cui cornice ne cambia il riquadro
+  /// (livello Esperto); `null` per ogni altra selezione.
+  const areaChosen = (): Unit | null => {
+    if (!has("typeset") || selection.length !== 1) return null;
+    const unit = selectedUnits()[0];
+    return unit !== undefined && unit.role === "text" && unit.look?.wrap != null ? unit : null;
+  };
+
+  /// La cornice `view` di un testo in area: senza le maniglie in alto e in
+  /// basso, perché l'altezza la fanno le righe.
+  const areaView = (view: FrameView | null): FrameView | null =>
+    view === null || areaChosen() === null ? view : { ...view, spots: view.spots.filter((spot) => spot.grip !== "n" && spot.grip !== "s") };
+
+  /// Il cursore della maniglia `grip` della cornice `frame`: su un testo in
+  /// area, ogni maniglia tranne quella della rotazione tira in orizzontale.
+  const frameCursor = (frame: Frame, grip: Grip): GripCursor =>
+    grip !== "rotate" && areaChosen() !== null ? gripCursor(frame, pull(grip, 0) < 0 ? "w" : "e", camera.angle) : gripCursor(frame, grip, camera.angle);
 
   /// Le misure e gli angoli come si leggono sulla cornice: le misure
   /// nell'unità del documento, con la sigla una volta in fondo.
@@ -3565,6 +3627,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const move = current?.kind === "select" && current.mode === "move" ? current : null;
     const delta = move === null ? null : moveDelta(move);
     const shaping = current?.kind === "select" && (current.mode === "resize" || current.mode === "rotate") ? current.matrix : null;
+    // Il testo in area di cui si tira la cornice ha il riquadro di adesso.
+    const area = current?.kind === "select" && current.mode === "resize" ? current.area : null;
     let band: Bounds | null = null;
     const edited = new Set(editedUnits());
     // Col Costruttore le forme si vedono nelle loro regioni; mentre si
@@ -3572,7 +3636,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const builder = current?.kind === "builder" && current.mode === "objects" ? null : builderNow();
     const built = new Set(builder === null ? [] : builder.shapes.filter((_, k) => !builder.cuts[k]).map((unit) => unit.key));
     for (const unit of selectedUnits()) {
-      const frame = unit.frame();
+      const frame = area !== null && area.unit.key === unit.key && area.box !== null ? area.box : unit.frame();
       if (frame === null) continue;
       let matrix = unit.matrix;
       if (delta !== null) {
@@ -3624,6 +3688,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       handles.push({ kind: "lasso", points: slanted === null ? [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] : [...slanted.corners] });
     }
     if (current?.kind === "lasso" && current.dragging) handles.push({ kind: "lasso", points: [...current.points] });
+    if (current?.kind === "text" && current.dragging && current.from !== null && current.end !== null) {
+      const [x1, y1] = current.from;
+      const [x2, y2] = current.end;
+      handles.push({ kind: "lasso", points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] });
+    }
     if (current?.kind === "builder" && current.mode === "regions" && current.dragging) handles.push({ kind: "trail", points: [...current.trail] });
     // Sopra una regione, il cursore dice che il tocco e il trascinamento
     // uniscono; con Alt, che tolgono, lo dice il tratteggio.
@@ -4253,7 +4322,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (fix.kind === "describe" || model === null || unit === null || !editable()) return;
     cancelGesture();
     const change: LookChange = fix.kind === "size" ? { size: fix.size } : fix.paint === "fill" ? { fill: fix.color } : { stroke: fix.color };
-    const restyled = lookOps(model, [unit], change, newIds());
+    const restyled = lookOps(model, [unit], change, measureText, newIds());
     if (restyled.ops.length === 0) return;
     const name = accessName(unit.key);
     if (commit(fix.kind === "size" ? "draw.action.font_size" : fix.paint === "fill" ? "draw.action.fill" : "draw.action.outline_color", asGesture(restyled.ops)) === null) return;
@@ -4805,8 +4874,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (model === null || units.length === 0) return null;
     const look = lookChange(id, value, docUnit());
     if (look !== null) {
-      const restyled = lookOps(model, units, look, newIds());
-      return changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
+      const restyled = lookOps(model, units, look, measureText, newIds());
+      const outcome = changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
+      if (outcome === null && restyled.overflow) announce(t("draw.text.overflow"));
+      return outcome;
     }
     const change = outlineChange(id, value);
     if (change === null) return null;
@@ -5175,6 +5246,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     booleanButton.hidden = !has("boolean");
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
+    textPathButton.hidden = !has("typeset") || !units.some((unit) => unit.role === "text");
     arrangeBar.hidden = units.length === 0 || arrangeButtons.every((control) => control.hidden);
     arrangeFocus.sync(null);
     syncNodesBar();
@@ -6502,6 +6574,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           hit: null,
           grip: null,
           corner: null,
+          area: null,
           matrix: null,
           angle: 0,
         };
@@ -6532,7 +6605,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return { ...base, kind: "width", from: null, end: null, spot: null, shape: null, index: -1, side: 0, dragging: false };
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
-        return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
+        return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null, end: null, dragging: false };
     }
   };
 
@@ -6696,6 +6769,49 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     applyFrame(units, frame, rotationMatrix(frameCenter(frame), degrees), degrees);
   };
 
+  /// La maniglia `grip` della cornice del testo in area scelto da solo:
+  /// tirarla ne cambierà il riquadro. `null` per ogni altra selezione.
+  const areaDrag = (grip: ResizeGrip): AreaDrag | null => {
+    const unit = areaChosen();
+    const look = unit?.look ?? null;
+    if (unit === null || look === null || look.wrap === null) return null;
+    const width = look.wrap;
+    const left = look.x - (look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0);
+    const fixed: Side = pull(grip, 0) < 0 ? "right" : "left";
+    return { unit, fixed, edge: fixed === "left" ? left + width : left, width, now: width, elem: null, box: null };
+  };
+
+  /// Il riquadro mentre la cornice di un testo in area si tira: il bordo
+  /// preso segue il puntatore nelle coordinate del testo, e con la griglia
+  /// si aggancia alla sua riga, non più vicino al bordo fermo del corpo del
+  /// testo. Il testo si vede già andato a capo.
+  const areaUpdate = (g: SelectGesture, drag: AreaDrag): void => {
+    const model = engine.model;
+    const inverse = invert(drag.unit.matrix);
+    if (model === null || inverse === null || g.from === null || g.end === null) return;
+    const from = apply(inverse, g.from);
+    const moved = drag.edge + apply(inverse, g.end)[0] - from[0];
+    const edge = apply(inverse, snapped(apply(drag.unit.matrix, [moved, from[1]])))[0];
+    const width = Math.max(drag.unit.look!.size, drag.fixed === "left" ? drag.width + edge - drag.edge : drag.width - edge + drag.edge);
+    if (drag.elem !== null && Math.abs(width - drag.now) < 1e-9) return;
+    drag.now = width;
+    const framed = framedText(model, drag.unit, width, drag.fixed, measureText);
+    drag.elem = framed?.elem ?? null;
+    drag.box = drag.elem === null ? null : elemBounds(drag.elem, IDENTITY);
+    const elem = drag.elem;
+    painter.setDraft(elem === null ? null : { replaced: new Map(drag.unit.paints.map((paint) => [paint, elem])) });
+  };
+
+  /// Scrive il riquadro della cornice tirata, in un passo, e lo dice.
+  const applyArea = (drag: AreaDrag): void => {
+    const model = engine.model;
+    if (model === null || wrapValue(drag.now) === wrapValue(drag.width)) return;
+    const restyled = lookOps(model, [drag.unit], { wrap: drag.now, fixed: drag.fixed }, measureText, newIds());
+    const extent = drag.elem === null ? null : elemBounds(drag.elem, drag.unit.matrix);
+    if (arrange("draw.action.text_frame", restyled, extent) === null) return;
+    announce(`${t("draw.text.framed", { width: lengthSpoken(drag.now) })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+  };
+
   /// Il primo punto di un gesto di selezione: una maniglia della cornice si
   /// potrà tirare; un oggetto sotto il puntatore si sceglie e si potrà
   /// trascinare; il vuoto comincia un riquadro.
@@ -6714,6 +6830,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (grip !== null) {
       g.grip = { grip, frame: view!.frame };
       g.units = selectedUnits();
+      g.area = grip === "rotate" ? null : areaDrag(grip);
       return;
     }
     // Con Ctrl o ⌘ si sceglie dentro i gruppi: l'oggetto più dentro sotto il
@@ -6817,10 +6934,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       g.mode = g.corner !== null ? "corner" : g.grip === null ? "move" : g.grip.grip === "rotate" ? "rotate" : "resize";
       g.release = null;
       if (g.corner !== null) showGrip(cornerCursor(g.corner.grip, g.corner.unit.matrix, camera.angle));
-      else if (g.grip !== null) showGrip(g.grip.grip === "rotate" ? "rotating" : gripCursor(g.grip.frame, g.grip.grip, camera.angle));
+      else if (g.grip !== null) showGrip(g.grip.grip === "rotate" ? "rotating" : frameCursor(g.grip.frame, g.grip.grip));
     }
     if (g.mode === "corner") {
       cornerUpdate(g.corner!, g.end);
+      showHandles();
+      return;
+    }
+    if (g.mode === "resize" && g.area !== null) {
+      areaUpdate(g, g.area);
       showHandles();
       return;
     }
@@ -6873,7 +6995,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const note = g.mode === "resize" ? snapNote() : "";
       current = null;
       showGrip(null);
-      if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null, note);
+      if (g.mode === "resize" && g.area !== null) applyArea(g.area);
+      else if (g.mode !== "pending" && g.matrix !== null) applyFrame(g.units, g.grip.frame, g.matrix, g.mode === "rotate" ? g.angle : null, note);
       showHandles();
       return;
     }
@@ -8008,12 +8131,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// freccia con la sua punta, il tratto col contorno del pennello.
   const showNodeDraft = (draft: ReadonlyMap<string, readonly Subpath[]>): void => {
     const paths = new Map<PaintNode, string>();
+    // Il tracciato di un testo cambia dove sta, e il testo lo segue.
+    const tracks = new Map<string, string>();
     for (const [key, subs] of draft) {
       const edit = editOf(key);
       const d = edit === undefined ? null : draftOf(edit.nodable, subs);
-      if (d !== null) for (const paint of edit!.paints) paths.set(paint, d);
+      if (d === null) continue;
+      if (edit!.nodable.kind === "track") tracks.set(edit!.nodable.target, d);
+      else for (const paint of edit!.paints) paths.set(paint, d);
     }
-    painter.setDraft(paths.size === 0 ? null : { paths });
+    painter.setDraft(paths.size === 0 && tracks.size === 0 ? null : { paths, tracks });
     showHandles();
   };
 
@@ -9205,7 +9332,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
     const grip = gripAt(view, point, camera.scale, pointer);
     const corner = cornerAt(point, pointer, view, grip);
-    showGrip(corner !== null ? cornerCursor(corner.grip, corner.unit.matrix, camera.angle) : grip === null ? null : gripCursor(view.frame, grip, camera.angle));
+    showGrip(corner !== null ? cornerCursor(corner.grip, corner.unit.matrix, camera.angle) : grip === null ? null : frameCursor(view.frame, grip));
   };
   /// La guida del documento sotto il puntatore che passa, con lo strumento
   /// Selezione: si accende, e il cursore dice dove si sposta. Sopra un
@@ -9479,9 +9606,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           for (const sample of samples) eraseAlong(g, toPoint(sample));
           showErased(g);
           break;
-        case "text":
+        case "text": {
           g.from ??= toPoint(samples[0]!);
+          g.end = toPoint(samples[samples.length - 1]!);
+          // Col testo in area, trascinare disegna il suo riquadro.
+          const far = Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale > DRAG_PX[g.pointer];
+          if (!g.dragging && far && has("typeset") && editable()) g.dragging = true;
+          if (g.dragging) showHandles();
           break;
+        }
         case "guide":
           guideUpdate(g, toPoint(samples[samples.length - 1]!));
           break;
@@ -9552,7 +9685,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           return;
         case "text":
           current = null;
-          if (g.from !== null) openText(g.from, g.pointer);
+          if (g.dragging && g.from !== null && g.end !== null) {
+            showHandles();
+            openArea(g.from, g.end);
+          } else if (g.from !== null) {
+            openText(g.from, g.pointer);
+          }
           return;
         case "guide":
           guideEnd(g, stroke.timeStamp);
@@ -9593,7 +9731,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Dove comincia il testo che si scrive: quello che c'è, o uno nuovo dal
   /// punto del tocco.
-  const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor"> => now.look ?? { x: now.at[0], y: now.at[1], anchor: "start" };
+  const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor" | "wrap" | "along"> =>
+    now.look ?? { x: now.at[0], y: now.at[1], anchor: "start", wrap: now.wrap, along: null };
+
+  /// Le larghezze del testo, coi caratteri del browser dove li sa misurare.
+  const measureText: Measure = browserMeasure() ?? estimate;
+
+  /// Come va a capo il campo del testo che si scrive: su una riga sola sul
+  /// tracciato, da sé in un riquadro, o con Invio.
+  const formOf = (now: Typing): FieldForm => {
+    const place = placeOf(now);
+    if (place.along !== null) return { kind: "line" };
+    return place.wrap === null ? LINES_FORM : { kind: "area", width: place.wrap, measure: measureText };
+  };
 
   /// Gli attributi di un testo nuovo: il colore e la dimensione dello
   /// strumento.
@@ -9630,10 +9780,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Un testo schiacciato su una linea non ha un campo da mostrare.
     style.visibility = k > 0 && Number.isFinite(k) ? "" : "hidden";
     if (style.visibility === "hidden") return;
-    const { width, baseline } = field.layout(k, baselineOf);
-    const left = look.x * k - (look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0);
+    const { width, baseline, inset } = field.layout(k, baselineOf);
+    const frame = `matrix(${m[0] / k}, ${m[1] / k}, ${m[2] / k}, ${m[3] / k}, ${m[4]}, ${m[5]})`;
+    const shift = look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0;
+    if (look.along !== null) {
+      // Il testo su tracciato si scrive dritto, dove comincia, girato come
+      // il tracciato lì.
+      const turn = (Math.atan2(look.along[1], look.along[0]) * 180) / Math.PI;
+      style.transform = `${frame} translate(${look.x * k}px, ${look.y * k}px) rotate(${turn}deg) translate(${-shift}px, ${-baseline}px)`;
+      return;
+    }
+    // Il riquadro di un testo in area comincia da `x`, ci sta in mezzo o ci
+    // finisce.
+    const box = look.wrap === null ? null : look.anchor === "middle" ? look.x - look.wrap / 2 : look.anchor === "end" ? look.x - look.wrap : look.x;
+    const left = box === null ? look.x * k - shift : box * k - inset;
     const top = look.y * k - baseline;
-    style.transform = `matrix(${m[0] / k}, ${m[1] / k}, ${m[2] / k}, ${m[3] / k}, ${m[4]}, ${m[5]}) translate(${left}px, ${top}px)`;
+    style.transform = `${frame} translate(${left}px, ${top}px)`;
   }
 
   /// Il testo che si cambia resta nascosto sotto il campo anche quando il
@@ -9651,6 +9813,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     finishText();
     cancelGesture();
     typing = next;
+    field.form(formOf(next));
     field.open(next.before);
     labelText();
     textLayer.hidden = false;
@@ -9672,7 +9835,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const inherited = textInherited(node);
     const file = elem === null ? null : richOf(elem, inherited);
     const plain: Rich = { attrs: {}, inherited, lines: (node.details?.lines ?? [""]).map((line) => richLine({}, line)) };
-    startTyping({ key: unit.key, before: editableRich(file ?? plain), file, look, at: [look.x, look.y], matrix: unit.matrix });
+    startTyping({ key: unit.key, before: editableRich(file ?? plain), file, look, wrap: null, at: [look.x, look.y], matrix: unit.matrix });
   };
 
   /// F2, o «Modifica il testo»: il testo scelto, se è solo.
@@ -9702,7 +9865,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const below = baselineOf("normal", "400", TEXT_FAMILY) * textStyle.width;
     const base = snapped(apply(to.matrix, [local[0], local[1] + below]));
     const before: Rich = { attrs: newTextAttrs(), inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
-    startTyping({ key: null, before, file: null, look: null, at: apply(to.inverse, base), matrix: to.matrix });
+    startTyping({ key: null, before, file: null, look: null, wrap: null, at: apply(to.inverse, base), matrix: to.matrix });
+  };
+
+  /// Lo strumento Testo trascinato da `from` a `end`: un testo in area
+  /// nuovo, largo quanto il trascinamento e almeno quanto il corpo, con la
+  /// prima riga in cima al riquadro. L'aggancio vale per i due angoli.
+  const openArea = (from: Point, end: Point): void => {
+    if (!editable() || !has("text")) return;
+    const to = target(newIds());
+    if (to === null) return;
+    const a = apply(to.inverse, snapped(from));
+    const b = apply(to.inverse, snapped(end));
+    const size = textStyle.width;
+    const width = Math.max(Math.abs(b[0] - a[0]), size);
+    // Dalla cima della riga alla sua linea di base, come la mette il campo.
+    const drop = size * (LINE_SPACING / 2 + baselineOf("normal", "400", TEXT_FAMILY));
+    const before: Rich = { attrs: { ...newTextAttrs(), [WRAP]: wrapValue(width) }, inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
+    startTyping({ key: null, before, file: null, look: null, wrap: width, at: [Math.min(a[0], b[0]), Math.min(a[1], b[1]) + drop], matrix: to.matrix });
   };
 
   /// Chiude il campo; con `write` scrive ciò che è cambiato, in un passo di
@@ -9720,7 +9900,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     field.close();
     painter.setDraft(null);
     const unit = now.key === null ? null : currentIndex().get(now.key);
-    const tidy = tidyRich(draft);
+    // Un testo in area va a capo come lo scrive il file: i paragrafi come li
+    // mostra SVG, nella larghezza del riquadro.
+    const place = placeOf(now);
+    const flowed = place.wrap === null ? null : wrapParagraphs(tidyRich(unwrap(draft)), place.wrap, measureText, newLeading(draft));
+    const tidy = flowed?.rich ?? tidyRich(draft);
     const lines = tidy.lines.map(lineRuns);
     if (!write || sameRich(draft, now.before) || !editable() || (now.key === null && lines.length === 0)) {
       if (unit !== null) select([unit.key]);
@@ -9750,7 +9934,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (page !== null) ops.push({ op: "page", viewBox: page });
       if (commit("draw.action.text", asGesture(ops)) === null) return;
       select([id]);
-      announce(`${t("draw.added.text")} ${objects()}`);
+      announce(`${t("draw.added.text")} ${objects()}${flowed?.overflow === true ? ` ${t("draw.text.overflow")}` : ""}`);
       return;
     }
     const model = engine.model;
@@ -9766,7 +9950,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const node = nodeOf(model, unit);
-    const change = now.file === null ? { kind: "lines" as const, lines } : richChange(now.file, tidy);
+    // Un testo che un'operazione non sa riscrivere intero cambia le righe;
+    // in area, anche come continuano i paragrafi.
+    const joins = flowed === null ? undefined : tidy.lines.map((line) => line.attrs[JOIN] ?? null);
+    const change: RichChange = now.file !== null ? richChange(now.file, tidy) : joins === undefined ? { kind: "lines", lines } : { kind: "lines", lines, joins };
     if (change.kind === "none") {
       select([unit.key]);
       return;
@@ -9774,7 +9961,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const plan = new Plan(model, newIds());
     const id = plan.idOf(node);
     const old = change.kind === "elem" ? elemOf(node) : null;
-    if (change.kind === "lines") plan.ops.push({ op: "text", id, lines: change.lines });
+    if (change.kind === "lines") plan.ops.push(change.joins === undefined ? { op: "text", id, lines: change.lines } : { op: "text", id, lines: change.lines, joins: change.joins });
     else if (old === null || !replaceElem(plan, node, richElem(old, change.rich))) {
       announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
       select([unit.key]);
@@ -9785,7 +9972,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.text_edit", asGesture(ops)) === null) return;
     select([id]);
-    announce(t("draw.text.edited"));
+    announce(flowed?.overflow === true ? `${t("draw.text.edited")} ${t("draw.text.overflow")}` : t("draw.text.edited"));
   }
 
   // Il fuoco che va altrove conclude il testo. Una finestra dell'editor, come
@@ -11748,13 +11935,83 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     });
   };
 
+  /// Perché un comando del testo su tracciato non si fa, a parole.
+  const textPathRefusal = (refused: TextPathRefused): string => t(`draw.text_path.${refused.reason}` as const);
+
+  /// «Metti sul tracciato», dal livello Esperto: la forma scelta col testo
+  /// diventa il suo tracciato, e il testo ci scorre sopra.
+  function putOnPath(): void {
+    const units = arranging("typeset");
+    if (units === null) return;
+    const done = putOnPathOps(engine.model!, units, measureText, newIds());
+    if ("reason" in done) {
+      announce(textPathRefusal(done));
+      return;
+    }
+    if (arrange("draw.text_path.put", done) !== null) announce(t("draw.text_path.put.done"));
+  }
+
+  /// «Togli dal tracciato», dal livello Esperto: i testi su tracciato scelti
+  /// tornano righe dritte.
+  function releaseFromPath(): void {
+    const units = arranging("typeset");
+    if (units === null) return;
+    const done = releaseOps(engine.model!, units, newIds());
+    if ("reason" in done) {
+      announce(textPathRefusal(done));
+      return;
+    }
+    const count = units.filter(isAlongPath).length;
+    if (arrange("draw.text_path.release", done) !== null) announce(plural(count, "draw.text_path.released.one", "draw.text_path.released.other"));
+  }
+
+  /// «Rovescia sul tracciato», dal livello Esperto: i testi su tracciato
+  /// scelti passano dall'altra parte, dove erano lungo il tracciato.
+  function flipOnPath(): void {
+    const units = arranging("typeset");
+    if (units === null) return;
+    const done = flipOps(engine.model!, units, measureText, newIds());
+    if ("reason" in done) {
+      announce(textPathRefusal(done));
+      return;
+    }
+    const count = units.filter(isAlongPath).length;
+    if (arrange("draw.text_path.flip", done) !== null) announce(plural(count, "draw.text_path.flipped.one", "draw.text_path.flipped.other"));
+  }
+
+  /// Le voci del menu Testo su tracciato: spente, e dicono perché, quando
+  /// gli oggetti scelti non servono.
+  const textPathItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const pair = pairOf(units);
+    const along = units.some(isAlongPath);
+    const none = t("draw.text_path.none");
+    return [
+      { label: t("draw.text_path.put"), ...("reason" in pair ? { disabled: true, description: textPathRefusal(pair) } : { disabled: false }), run: () => putOnPath() },
+      { label: t("draw.text_path.release"), ...(along ? { disabled: false } : { disabled: true, description: none }), run: () => releaseFromPath() },
+      { label: t("draw.text_path.flip"), ...(along ? { disabled: false } : { disabled: true, description: none }), run: () => flipOnPath() },
+    ];
+  };
+
   // --- I comandi dei nodi -----------------------------------------------------
+
+  /// Dove arriva, nella scena, il testo su tracciato di `edit` col tracciato
+  /// `d`: il tracciato, e il corpo del testo da ogni parte.
+  const trackExtent = (edit: Editing, d: string): Bounds | null => {
+    const local = elemBounds({ tag: "path", attrs: { d } }, IDENTITY);
+    if (local === null) return null;
+    const by = edit.unit.look?.size ?? 0;
+    const [x, y] = [local.min[0] - by, local.min[1] - by];
+    const [width, height] = [local.max[0] - local.min[0] + 2 * by, local.max[1] - local.min[1] + 2 * by];
+    return elemBounds({ tag: "rect", attrs: { x: String(x), y: String(y), width: String(width), height: String(height) } }, edit.matrix);
+  };
 
   /// Scrive i nodi nuovi di ogni forma di `changes` col nome `label`, in un
   /// passo di annulla solo, e la pagina cresce se una forma ne esce. Un
   /// tracciato scrive il suo `d`; una forma resta lei finché i nodi ne
   /// disegnano una come lei, altrimenti diventa un tracciato; una freccia
-  /// sposta i capi e un tratto a penna il suo inchiostro. Una forma rimasta
+  /// sposta i capi e un tratto a penna il suo inchiostro; un testo su
+  /// tracciato cambia il tracciato che segue, dove sta. Una forma rimasta
   /// senza nodi se ne va. Una forma che non accetta la modifica resta com'è,
   /// e ciò che si dice dopo aggiunge perché ([`afterEdit`]). Dopo sono scelti
   /// i nodi `selected` di ogni forma, coi tipi `kinds`; quelli di una forma
@@ -11785,7 +12042,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         accepted.push(change);
         continue;
       }
-      if (rewritten.kind === "remove") {
+      if (rewritten.kind === "track") {
+        plan.ops.push({ op: "set", id: rewritten.target, attrs: { d: rewritten.d } });
+        extent = union(extent, trackExtent(edit, rewritten.d));
+      } else if (rewritten.kind === "remove") {
         removed.push(edit.path);
       } else {
         const node = nodeOf(model, edit);
@@ -12032,7 +12292,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// penna restano soli.
   const joinTwo = (chosen: readonly Editing[]): NodeChange[] | DrawKey => {
     const [first, second] = [...chosen].sort((a, b) => comparePaths(a.path, b.path)) as [Editing, Editing];
-    for (const each of [first, second]) if (!cuttable(each.nodable)) return each.nodable.kind === "arrow" || each.nodable.kind === "width" ? NODES_REFUSED[each.nodable.kind] : "draw.nodes.stroke";
+    for (const each of [first, second]) {
+      if (each.nodable.kind === "track") return "draw.nodes.track_join";
+      if (!cuttable(each.nodable)) return each.nodable.kind === "arrow" || each.nodable.kind === "width" ? NODES_REFUSED[each.nodable.kind] : "draw.nodes.stroke";
+    }
     const [a] = pickedIn(first);
     const [b] = pickedIn(second);
     const joined = joinAcross(first.subs, a!, second.subs, b!, compose(first.inverse, second.matrix), joinReach(first));
@@ -13893,8 +14156,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.style.empty", { key: displayBinding(COPY_STYLE_BINDING) }));
       return;
     }
-    if (arrange("draw.action.paste_style", styleOps(engine.model!, units, copiedStyle, newIds())) !== null) {
-      announce(plural(units.length, "draw.restyled.one", "draw.restyled.other"));
+    const restyled = styleOps(engine.model!, units, copiedStyle, measureText, newIds());
+    if (arrange("draw.action.paste_style", restyled) !== null) {
+      announce(`${plural(units.length, "draw.restyled.one", "draw.restyled.other")}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
     }
   }
 
@@ -14509,11 +14773,12 @@ const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
 };
 
 /// Perché una modifica dei nodi non si fa, a parole.
-const NODES_REFUSED: Readonly<Record<"arrow" | "stroke" | "width" | "long", DrawKey>> = {
+const NODES_REFUSED: Readonly<Record<"arrow" | "stroke" | "width" | "long" | "track", DrawKey>> = {
   arrow: "draw.nodes.arrow",
   stroke: "draw.nodes.stroke",
   width: "draw.nodes.width",
   long: "draw.nodes.long",
+  track: "draw.nodes.track",
 };
 
 /// Quante spine di tratti a penna l'editor ricorda.

@@ -320,6 +320,35 @@ describe("la diagnostica (§12)", () => {
     expect(details(almost, "S009")).toEqual(["3.42"]);
   });
 
+  it("S009 e S013: un testo su tracciato si guarda dove comincia, dalla parte dei caratteri", () => {
+    // Il tracciato va da sinistra a destra a metà altezza, o al contrario; il
+    // rettangolo nero copre la metà di sopra.
+    const scene = (d: string, attributes: string, offset = "50%"): Scene =>
+      load(
+        titled(
+          `<defs><path id="r1" d="${d}"/></defs><rect id="fub-paper" fub:role="paper" width="100" height="100" fill="#ffffff"/>`
+            + `<g fub:layer="A"><rect width="100" height="50" fill="#000000"/>`
+            + `<text ${attributes}><textPath href="#r1" startOffset="${offset}">Onda</textPath></text></g>`,
+        ),
+      );
+    const right = "M0 50 L100 50";
+    const left = "M100 50 L0 50";
+    expect(details(scene(right, 'fill="#ffffff"'), "S009")).toEqual([]);
+    expect(details(scene(left, 'fill="#ffffff"'), "S009")).toEqual(["1.00"]);
+    expect(details(scene(left, 'fill="#000000"'), "S009")).toEqual([]);
+    expect(details(scene(right, 'fill="#000000"'), "S009")).toEqual(["1.00"]);
+    // Una curva: a metà va verso destra, e il punto sta sopra.
+    expect(details(scene("M0 60 Q50 40 100 60", 'fill="#ffffff"'), "S009")).toEqual([]);
+    // Oltre la fine si ferma all'estremo; un tracciato lungo zero non si
+    // guarda.
+    expect(details(scene("M0 50 L60 50", 'fill="#ffffff"', "500"), "S009")).toEqual([]);
+    expect(details(scene("M0 50 L60 50 L60 100", 'fill="#ffffff"', "500"), "S009")).toEqual(["1.00"]);
+    expect(details(scene("M50 50 L50 50", 'fill="#ffffff"'), "S009")).toEqual([]);
+    // Il corpo conta come per le righe.
+    expect(details(scene(right, 'fill="#ffffff" font-size="9"'), "S013")).toEqual(["9.00"]);
+    expect(details(scene(right, 'fill="#ffffff" font-size="12"'), "S013")).toEqual([]);
+  });
+
   it("S009: un tratto di penna si misura su ciò che ha sotto", () => {
     // Il bianco su un rettangolo nero si legge; a cavallo del bordo conta il
     // contrasto mediano, quello della parte più lunga.

@@ -30,6 +30,8 @@ const look = (parts: Partial<Look> = {}): Look => ({
   leading: NONE,
   spacing: NONE,
   anchor: NONE,
+  form: NONE,
+  wrap: NONE,
   samples: new Map(),
   ...parts,
 });
@@ -347,6 +349,24 @@ describe("il testo", () => {
     expect("leading" in one.fields).toBe(false);
     expect(number(one.fields.spacing).min).toBe(-80);
   });
+
+  it("il tipo di testo e la larghezza del riquadro, dal livello Esperto, nell'unità del documento", () => {
+    const parts = { form: { count: 2, value: null }, wrap: { count: 1, value: fromUnit(80, "mm") } };
+    const view = propertiesView(input({ level: "expert", unit: "mm", selection: selection({ look: look(parts) }) }));
+    expect(view.fields.textForm).toMatchObject({ kind: "segment", label: "Tipo di testo", value: null });
+    expect((options(view.fields.textForm) as SegmentState["options"]).map(({ value, label, icon }) => [value, label, icon])).toEqual([
+      ["point", "Da punto", "draw-text-point"],
+      ["area", "In area", "draw-text-area"],
+    ]);
+    expect(number(view.fields.wrap)).toMatchObject({ label: "Larghezza del riquadro", value: 80, unit: "mm", relative: true });
+    // Due riquadri diversi: misto.
+    const mixed = propertiesView(input({ level: "expert", selection: selection({ look: look({ ...parts, wrap: { count: 2, value: null } }) }) }));
+    expect(number(mixed.fields.wrap).value).toBeNull();
+    // Senza testi in area, niente riquadro; sotto Esperto, nessuno dei due.
+    expect("wrap" in propertiesView(input({ level: "expert", selection: selection({ look: look({ form: { count: 1, value: "point" } }) }) })).fields).toBe(false);
+    const standard = propertiesView(input({ selection: selection({ look: look(parts) }) }));
+    expect(["textForm", "wrap"].filter((id) => id in standard.fields)).toEqual([]);
+  });
 });
 
 describe("«Disponi»", () => {
@@ -412,6 +432,15 @@ describe("dal valore al cambio", () => {
     expect(lookAction("emphasis", "italic:true")).toBe("draw.text.italic");
     expect(lookAction("leading", 150)).toBe("draw.action.leading");
     expect(lookAction("emphasis", "overline:true")).toBeNull();
+  });
+
+  it("il tipo di testo e il riquadro, in unità della scena", () => {
+    expect(lookChange("textForm", "area", "px")).toEqual({ form: "area" });
+    expect(lookChange("textForm", "path", "px")).toBeNull();
+    expect(lookChange("wrap", 10, "mm")).toEqual({ wrap: fromUnit(10, "mm") });
+    expect(lookChange("wrap", 0, "px")).toBeNull();
+    expect(lookAction("textForm", "point")).toBe("draw.action.text_form");
+    expect(lookAction("wrap", 10)).toBe("draw.action.text_frame");
   });
 
   it("un valore che non è del campo, o un campo che non è dell'aspetto, non cambia niente", () => {

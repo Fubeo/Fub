@@ -3,7 +3,7 @@
 // trasformate.
 
 import { describe, expect, it } from "vitest";
-import { BoundsBuilder, ellipsePath, flatten, parsePath, rectPath, winding, type Bounds } from "./geometry";
+import { BoundsBuilder, ellipsePath, flatten, parsePath, rectPath, Track, winding, type Bounds } from "./geometry";
 import { IDENTITY, rotate, translate, type Matrix, type Point } from "./matrix";
 
 function polygons(d: string, m: Matrix): Point[][] {
@@ -123,5 +123,19 @@ describe("la geometria (geometry.rs)", () => {
     // Un cerchio di raggio 5 col centro in (5, 5), ruotato intorno all'origine.
     const center = Math.sqrt(50);
     close(r.finish()!, [-5, center - 5], [5, center + 5]);
+  });
+});
+
+describe("un tracciato da seguire", () => {
+  it("dà il punto a una distanza, e la distanza del punto più vicino", () => {
+    const track = new Track(parsePath("M 0 0 L 100 0 L 100 50")!);
+    expect(track.length).toBeCloseTo(150);
+    expect(track.at(120)).toEqual({ at: [100, 20], direction: [0, 1] });
+    expect(track.nearest([40, -30])).toBeCloseTo(40);
+    expect(track.nearest([130, 30])).toBeCloseTo(130);
+    // Prima dell'inizio, l'inizio; oltre la fine, la fine.
+    expect(track.nearest([-20, 5])).toBe(0);
+    expect(track.nearest([100, 90])).toBeCloseTo(150);
+    expect(new Track(parsePath("M 5 5")!).nearest([0, 0])).toBe(0);
   });
 });

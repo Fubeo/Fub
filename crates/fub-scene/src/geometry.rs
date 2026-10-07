@@ -638,6 +638,125 @@ pub(crate) fn flatten(segments: &[Segment], m: &Matrix) -> Vec<Vec<[f64; 2]>> {
     polygons
 }
 
+/// Le corde di un tracciato come lo segue un testo (formato della scena,
+/// testo): i sottotracciati uno dopo l'altro, con le curve e gli archi in
+/// [`CURVE_STEPS`] corde come in [`flatten`], e `Z` che torna all'inizio del
+/// sottotracciato. Gli spostamenti non sono corde.
+fn chords(segments: &[Segment]) -> Vec<([f64; 2], [f64; 2])> {
+    let mut out = Vec::new();
+    let mut current = [0.0, 0.0];
+    let mut start = [0.0, 0.0];
+    let mut to = |current: &mut [f64; 2], p: [f64; 2]| {
+        if p != *current {
+            out.push((*current, p));
+        }
+        *current = p;
+    };
+    let steps = (1..=CURVE_STEPS).map(|k| f64::from(k) / f64::from(CURVE_STEPS));
+    for segment in segments {
+        match *segment {
+            Segment::Move(p) => {
+                current = p;
+                start = p;
+            }
+            Segment::Line(p) => to(&mut current, p),
+            Segment::Quad(c, p) => {
+                let from = current;
+                for t in steps.clone() {
+                    let u = 1.0 - t;
+                    to(
+                        &mut current,
+                        [
+                            u * u * from[0] + 2.0 * u * t * c[0] + t * t * p[0],
+                            u * u * from[1] + 2.0 * u * t * c[1] + t * t * p[1],
+                        ],
+                    );
+                }
+            }
+            Segment::Cubic(c1, c2, p) => {
+                let from = current;
+                for t in steps.clone() {
+                    let u = 1.0 - t;
+                    let (a, b, c, d) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                    to(
+                        &mut current,
+                        [
+                            a * from[0] + b * c1[0] + c * c2[0] + d * p[0],
+                            a * from[1] + b * c1[1] + c * c2[1] + d * p[1],
+                        ],
+                    );
+                }
+            }
+            Segment::Arc {
+                radii,
+                rotation,
+                large,
+                sweep,
+                to: end,
+            } => {
+                // Un arco fra due punti uguali non si disegna.
+                if current == end {
+                    continue;
+                }
+                match CenterArc::new(current, radii, rotation, large, sweep, end) {
+                    Some(arc) => {
+                        for t in steps.clone() {
+                            to(&mut current, arc.point(arc.theta1 + arc.delta * t));
+                        }
+                    }
+                    None => to(&mut current, end),
+                }
+                // L'ultimo punto dell'arco è `to` a meno dell'arrotondamento.
+                current = end;
+            }
+            Segment::Close => to(&mut current, start),
+        }
+    }
+    out
+}
+
+/// Un punto lungo un tracciato e la direzione, lunga 1, in cui il tracciato
+/// va lì.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub(crate) struct Along {
+    pub at: [f64; 2],
+    pub direction: [f64; 2],
+}
+
+/// Il punto di un tracciato a `distance` dal suo inizio, misurata lungo le
+/// corde, e la sua direzione: dove un testo su tracciato tiene il punto di
+/// `startOffset` (formato della scena, testo). Con `share` la distanza è una
+/// frazione della lunghezza del tracciato; fuori dal tracciato si ferma al suo
+/// estremo. `None` per un tracciato lungo zero.
+pub(crate) fn along(segments: &[Segment], distance: f64, share: bool) -> Option<Along> {
+    let mut parts = Vec::new();
+    let mut total = 0.0;
+    for (a, b) in chords(segments) {
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let l = (dx * dx + dy * dy).sqrt();
+        if l > 0.0 {
+            parts.push((a, b, l));
+            total += l;
+        }
+    }
+    let last = parts.len().checked_sub(1)?;
+    // `Math.min(Math.max(…, 0), total)`.
+    let wanted = if share { distance * total } else { distance };
+    let mut left = wanted.max(0.0).min(total);
+    for (i, &(a, b, l)) in parts.iter().enumerate() {
+        if left > l && i < last {
+            left -= l;
+            continue;
+        }
+        let t = (left / l).min(1.0);
+        return Some(Along {
+            at: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+            direction: [(b[0] - a[0]) / l, (b[1] - a[1]) / l],
+        });
+    }
+    None
+}
+
 /// Il numero di avvolgimento di `p` intorno ai poligoni: diverso da zero se
 /// `p` sta dentro con la regola `nonzero`, quella di SVG quando `fill-rule`
 /// manca, e §4 non lo ammette. Un lato conta se attraversa l'orizzontale di

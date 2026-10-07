@@ -119,9 +119,10 @@ export function replaceWithPath(plan: Plan, node: ElementPart, d: string): boole
 }
 
 /// Mette `elem`, senza id, al posto di `node`: prende il suo id e il suo
-/// posto fra i fratelli. Falso, senza operazioni, se `elem` ha nomi che
-/// un'operazione non sa scrivere.
-export function replaceElem(plan: Plan, node: ElementPart, elem: Elem): boolean {
+/// posto fra i fratelli. `at` è il percorso di `node` quando le operazioni
+/// arrivano, se quelle prima lo cambiano. Falso, senza operazioni, se `elem`
+/// ha nomi che un'operazione non sa scrivere.
+export function replaceElem(plan: Plan, node: ElementPart, elem: Elem, at: readonly number[] = pathOf(node)): boolean {
   // Un id che nessuno ha ancora, finché il vecchio elemento c'è; poi
   // l'elemento nuovo prende il suo, al suo posto.
   const id = plan.idOf(node);
@@ -134,7 +135,6 @@ export function replaceElem(plan: Plan, node: ElementPart, elem: Elem): boolean 
   } catch {
     return false;
   }
-  const at = pathOf(node);
   plan.ops.push(
     { op: "add", parent: plan.parentOf(node), pos: { after: id }, elem: stand },
     { op: "remove", target: id },

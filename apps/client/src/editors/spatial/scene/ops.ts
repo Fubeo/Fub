@@ -112,6 +112,11 @@ export interface TextOp {
   readonly op: "text";
   readonly id: string;
   readonly lines: readonly TextLine[];
+  /// Il `fub:join` di ogni riga, `null` per nessuno: come continua il
+  /// paragrafo della riga prima in un testo in area (formato della scena,
+  /// testo). Senza, le righe che restano tengono il loro e le nuove non
+  /// l'hanno.
+  readonly joins?: readonly (string | null)[];
 }
 
 export interface MoveOp {

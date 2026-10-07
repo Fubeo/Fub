@@ -17,7 +17,8 @@
 // cui rimanda lo è. Per questo la lettura passa due volte: prima giudica le
 // risorse, le sfumature e poi le altre, che possono usare le sfumature nel loro
 // contenuto; poi classifica il documento chiedendo a quell'indice che cosa è
-// ogni id.
+// ogni id. Il tracciato di un testo su tracciato è anch'esso una risorsa, un
+// `path` nelle `defs` della radice (formato della scena, testo).
 
 import { BrushError, parseBrush } from "../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
@@ -48,11 +49,13 @@ import {
   points,
   preserveAspectRatio,
   reference,
+  startOffset,
   textDecoration,
   transform,
   trim,
   urlIds,
   viewBox,
+  wrapWidth,
 } from "./values";
 import { isSvg, NS_FUB, NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "./xml";
 
@@ -118,9 +121,14 @@ export interface ElementItem extends Span {
   /// Il testo di un `title` o di un `desc`, coi riferimenti risolti e gli
   /// spazi com'erano: è ciò che l'operazione `meta` sostituisce.
   readonly text?: string;
-  /// Le righe di un `text`, una per `tspan`, coi pezzi: è il testo che
-  /// l'operazione `text` sostituisce.
+  /// Le righe di un `text`, una per `tspan`, coi pezzi, o il testo del suo
+  /// tracciato: è il testo che l'operazione `text` sostituisce.
   readonly lines?: readonly string[];
+  /// La larghezza di un testo in area, `fub:wrap` letto (formato della
+  /// scena, testo).
+  readonly wrap?: number;
+  /// L'id del tracciato che un testo segue (formato della scena, testo).
+  readonly textPath?: string;
   /// Come vive una risorsa, da `fub:role` (formato della scena, risorse).
   readonly lifecycle?: Lifecycle;
 }
@@ -156,6 +164,7 @@ export type Tag =
   | "polygon"
   | "text"
   | "tspan"
+  | "textPath"
   | "image"
   | "defs"
   | ResourceTag;
@@ -173,14 +182,23 @@ const RESOURCE_TAGS: ReadonlySet<string> = new Set<ResourceTag>([
   "filter",
 ]);
 
+/// Vero se `tag` è il tag di una risorsa dovunque stia: un `path` lo è
+/// soltanto in una `defs` della radice.
+export function isResourceTag(tag: string): boolean {
+  return RESOURCE_TAGS.has(tag);
+}
+
 /// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
 /// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
-/// `mask` e `filter` ritagli, maschere e filtri.
-export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter";
+/// `mask` e `filter` ritagli, maschere e filtri, un `textPath` un tracciato
+/// (formato della scena, testo).
+export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter" | "path";
 
 /// Il tipo di una risorsa dal suo tag.
 export function resourceKind(tag: string): ResourceKind | null {
   switch (tag) {
+    case "path":
+      return "path";
     case "linearGradient":
     case "radialGradient":
       return "gradient";
@@ -230,6 +248,7 @@ const TAGS: ReadonlySet<string> = new Set<Tag>([
   "polygon",
   "text",
   "tspan",
+  "textPath",
   "image",
   "defs",
   ...(RESOURCE_TAGS as ReadonlySet<ResourceTag>),
@@ -477,15 +496,70 @@ export function lineText(doc: XmlDocument, id: NodeId): string {
   return text;
 }
 
+/// Vero se `id` è il tracciato di un testo modificabile (formato della
+/// scena, testo): un `textPath` con `href` o `xlink:href`, uno solo, verso un
+/// tracciato delle risorse, `startOffset` facoltativo, e dentro dati di
+/// carattere e pezzi.
+function allowedTextPath(doc: XmlDocument, id: NodeId, resolve: Resolve): boolean {
+  const element = doc.element(id)!;
+  let hrefs = 0;
+  const attributes = element.attrs.every((attr) => {
+    switch (attr.ns) {
+      case NS_NONE:
+      case NS_XLINK: {
+        if (attr.local === "href") {
+          hrefs++;
+          const target = hrefId(attr.value);
+          return target !== null && resolve(target) === "path";
+        }
+        return attr.ns === NS_NONE && attr.local === "startOffset" && startOffset(attr.value) !== null;
+      }
+      case NS_SVG:
+        return false;
+      default:
+        return true;
+    }
+  });
+  return attributes && hrefs === 1 && element.children.every((child) => doc.nodes[child]!.kind === "text" || allowedPiece(doc, child, resolve));
+}
+
+/// Il `textPath` figlio di un `text`, se ne ha uno.
+export function textPathOf(doc: XmlDocument, element: ElementNode): NodeId | null {
+  for (const child of element.children) {
+    const node = doc.element(child);
+    if (node !== null && isSvg(node, "textPath")) return child;
+  }
+  return null;
+}
+
+/// L'id del tracciato a cui rimanda un `textPath`: in SVG 2 `href` vince su
+/// `xlink:href`.
+export function textPathTarget(element: ElementNode): string | null {
+  const value = valueOf(element, NS_NONE, "href") ?? valueOf(element, NS_XLINK, "href");
+  return value === undefined ? null : hrefId(value);
+}
+
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
-/// `text`, i `tspan`.
+/// `text`, i `tspan` o un `textPath`. Un testo ha le righe o il tracciato,
+/// non tutti e due, e col tracciato non ha `x` e `y`, che i lettori
+/// applicano lungo il tracciato in modi diversi.
 function unitChildrenAllowed(doc: XmlDocument, element: ElementNode, tag: Tag, resolve: Resolve): boolean {
-  return element.children.every((child) => {
+  let lines = 0;
+  let paths = 0;
+  const children = element.children.every((child) => {
     const node = doc.nodes[child]!;
     if (node.kind === "text") return node.blank;
-    if (node.kind === "element") return allowedPart(doc, child, tag === "text", resolve);
-    return false;
+    if (node.kind !== "element") return false;
+    const inner = tagOf(node);
+    if (tag === "text" && inner === "textPath") {
+      paths++;
+      return allowedTextPath(doc, child, resolve);
+    }
+    if (inner === "tspan") lines++;
+    return allowedPart(doc, child, tag === "text", resolve);
   });
+  if (!children || paths === 0) return children;
+  return paths === 1 && lines === 0 && valueOf(element, NS_NONE, "x") === undefined && valueOf(element, NS_NONE, "y") === undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -645,6 +719,19 @@ function resourceAllowed(doc: XmlDocument, element: ElementNode, tag: ResourceTa
       return element.children.every((child) => contentAllowed(doc, child, clip, inner, 1));
     }
   }
+}
+
+/// Vero se `element`, un `path` in una `defs` della radice, è il tracciato di
+/// un testo (formato della scena, testo): `id`, `d` e nessun altro attributo
+/// SVG, e per figli soltanto `title` e `desc`.
+function pathResourceAllowed(doc: XmlDocument, element: ElementNode): boolean {
+  const id = valueOf(element, NS_NONE, "id");
+  if (id === undefined || id === "" || valueOf(element, NS_NONE, "d") === undefined) return false;
+  const attributes = element.attrs.every((attr) => {
+    if (attr.ns === NS_NONE) return attr.local === "id" || (attr.local === "d" && parsePath(attr.value) !== null);
+    return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
+  });
+  return attributes && element.children.every((child) => blankOrMeta(doc, child) === true);
 }
 
 /// Vero se un nodo è spazio, `title` o `desc` ammessi: i figli che ogni
@@ -846,17 +933,31 @@ export function referencesOf(element: ElementNode): string[] {
 }
 
 /// L'indice delle risorse modificabili del documento: per ogni id, il tipo
-/// della risorsa (formato della scena, risorse). Prima le sfumature, che non
-/// rimandano a niente, poi le altre, che nel contenuto possono usare le
-/// sfumature. Di due risorse con lo stesso id vale la prima, in quest'ordine:
-/// il documento è comunque in sola lettura (S003).
+/// della risorsa (formato della scena, risorse). Prima le sfumature e i
+/// tracciati, che non rimandano a niente, poi le altre, che nel contenuto
+/// possono usare le sfumature. Di due risorse con lo stesso id vale la prima,
+/// in quest'ordine: il documento è comunque in sola lettura (S003).
 export function resourceIndex(doc: XmlDocument): Map<string, ResourceKind> {
-  const found = new Map<string, ResourceKind>();
+  return indexResources(doc).kinds;
+}
+
+/// Le risorse modificabili di un documento: il tipo di ognuna, e il `d` dei
+/// tracciati.
+interface Resources {
+  readonly kinds: Map<string, ResourceKind>;
+  readonly paths: Map<string, string>;
+}
+
+function indexResources(doc: XmlDocument): Resources {
+  const kinds = new Map<string, ResourceKind>();
+  const paths = new Map<string, string>();
   const others: Array<[ElementNode, ResourceTag]> = [];
-  const judge = (element: ElementNode, tag: ResourceTag, resolve: Resolve): void => {
+  const judge = (element: ElementNode, tag: ResourceTag | "path", resolve: Resolve): void => {
     const id = valueOf(element, NS_NONE, "id");
-    if (id === undefined || found.has(id) || !resourceAllowed(doc, element, tag, resolve)) return;
-    found.set(id, resourceKind(tag)!);
+    if (id === undefined || kinds.has(id)) return;
+    if (tag === "path" ? !pathResourceAllowed(doc, element) : !resourceAllowed(doc, element, tag, resolve)) return;
+    kinds.set(id, resourceKind(tag)!);
+    if (tag === "path") paths.set(id, valueOf(element, NS_NONE, "d")!);
   };
   for (const child of doc.children(doc.root)) {
     const defs = doc.element(child);
@@ -864,14 +965,14 @@ export function resourceIndex(doc: XmlDocument): Map<string, ResourceKind> {
     for (const inner of defs.children) {
       const element = doc.element(inner);
       const tag = element === null ? null : tagOf(element);
-      if (element === null || tag === null || !RESOURCE_TAGS.has(tag)) continue;
-      if (tag === "linearGradient" || tag === "radialGradient") judge(element, tag, NO_RESOURCES);
+      if (element === null || tag === null || (tag !== "path" && !RESOURCE_TAGS.has(tag))) continue;
+      if (tag === "linearGradient" || tag === "radialGradient" || tag === "path") judge(element, tag, NO_RESOURCES);
       else others.push([element, tag as ResourceTag]);
     }
   }
-  const gradients: Resolve = (id) => found.get(id) ?? null;
-  for (const [element, tag] of others) judge(element, tag, gradients);
-  return found;
+  const first: Resolve = (id) => kinds.get(id) ?? null;
+  for (const [element, tag] of others) judge(element, tag, first);
+  return { kinds, paths };
 }
 
 /// Le sfumature modificabili fra i figli di `parent`, per un `add` di più
@@ -919,6 +1020,9 @@ function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve):
   if (RESOURCE_TAGS.has(tag)) {
     return place === "defs" && resourceAllowed(doc, element, tag as ResourceTag, resolve) ? [tag, "resource"] : null;
   }
+  // Un `path` in una `defs` è il tracciato di un testo (formato della scena,
+  // testo).
+  if (tag === "path" && place === "defs") return pathResourceAllowed(doc, element) ? [tag, "resource"] : null;
   // In una `defs` stanno solo risorse, titolo e descrizione.
   if (place === "defs" && tag !== "title" && tag !== "desc") return null;
   if (!attributesAllowed(element, tag, resolve)) return null;
@@ -932,6 +1036,7 @@ function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve):
     case "desc":
       return characterDataOnly(doc, element) ? [tag, tag] : null;
     case "tspan":
+    case "textPath":
       return null;
     default: {
       if (!unitChildrenAllowed(doc, element, tag, resolve)) return null;
@@ -998,6 +1103,8 @@ export interface Details {
   readonly title?: string;
   readonly text?: string;
   readonly lines?: readonly string[];
+  readonly wrap?: number;
+  readonly textPath?: string;
   readonly lifecycle?: Lifecycle;
 }
 
@@ -1099,12 +1206,21 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
   }
   if (role === "title" || role === "desc") details.text = characterData(doc, id);
   if (role === "text") {
-    details.lines = element.children
-      .filter((child) => {
-        const tspan = doc.element(child);
-        return tspan !== null && isSvg(tspan, "tspan");
-      })
-      .map((child) => lineText(doc, child));
+    const path = textPathOf(doc, element);
+    if (path !== null) {
+      details.lines = [lineText(doc, path)];
+      details.textPath = textPathTarget(doc.element(path)!)!;
+    } else {
+      details.lines = element.children
+        .filter((child) => {
+          const tspan = doc.element(child);
+          return tspan !== null && isSvg(tspan, "tspan");
+        })
+        .map((child) => lineText(doc, child));
+      const wrap = valueOf(element, NS_FUB, "wrap");
+      const width = wrap === undefined ? null : wrapWidth(wrap);
+      if (width !== null) details.wrap = width;
+    }
   }
   return { details, problems };
 }
@@ -1131,6 +1247,8 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.title !== undefined) item.title = details.title;
   if (details.text !== undefined) item.text = details.text;
   if (details.lines !== undefined) item.lines = details.lines;
+  if (details.wrap !== undefined) item.wrap = details.wrap;
+  if (details.textPath !== undefined) item.textPath = details.textPath;
   if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
   return item;
 }
@@ -1169,7 +1287,7 @@ function isXmlSpace(c: number): boolean {
 class Builder {
   readonly items: Item[] = [];
   readonly diagnostics: Diagnostic[] = [];
-  readonly tally = new Tally();
+  readonly tally: Tally;
 
   constructor(
     private readonly doc: XmlDocument,
@@ -1178,7 +1296,11 @@ class Builder {
     private readonly keep: boolean,
     /// Le risorse modificabili del documento.
     private readonly resolve: Resolve,
-  ) {}
+    /// Il `d` dei tracciati delle risorse, per id.
+    paths: ReadonlyMap<string, string>,
+  ) {
+    this.tally = new Tally(paths);
+  }
 
   /// Allunga il blocco in attesa fino a `id`; `element` è l'indice del nodo
   /// fra i figli elemento, se è un elemento. Un blocco comincia e finisce su
@@ -1284,8 +1406,8 @@ class Builder {
 /// conservano: un documento oltre il limite di elementi ne avrebbe troppe, e
 /// serve solo il suo riepilogo.
 export function classifyDocument(doc: XmlDocument, keep: boolean): Classified {
-  const resources = resourceIndex(doc);
-  const builder = new Builder(doc, keep, (id) => resources.get(id) ?? null);
+  const resources = indexResources(doc);
+  const builder = new Builder(doc, keep, (id) => resources.kinds.get(id) ?? null, resources.paths);
   let pending: Pending | null = null;
   // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.
   let next = 0;

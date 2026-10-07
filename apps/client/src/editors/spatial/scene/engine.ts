@@ -23,7 +23,7 @@ import { pf1 } from "../ink/pf1";
 import { InkError } from "../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer } from "./analysis";
-import { classifyChild, describe, NO_RESOURCES, resourceKind, type Details, type Item, type Place, type Resolve } from "./classify";
+import { classifyChild, describe, isResourceTag, NO_RESOURCES, resourceKind, type Details, type Item, type Place, type Resolve } from "./classify";
 import { sceneOperation } from "./diff";
 import { DEFS_ID, isNewId, type IdKind } from "./ids";
 import {
@@ -336,20 +336,27 @@ function chain(ops: readonly Op[]): BatchOp {
 
 const ID_NAMES: Readonly<Record<IdKind, string>> = { object: "un oggetto", layer: "un livello", resource: "una risorsa" };
 
+/// Vero se un elemento di tag `tag` è una risorsa: un `path` lo è come figlio
+/// di una `defs` (`inDefs`), il tracciato di un testo.
+function isResource(tag: string, inDefs: boolean): boolean {
+  return isResourceTag(tag) || (inDefs && tag === "path");
+}
+
 /// Controlla l'id di un elemento nuovo (§4): ogni elemento ne ha uno nella
-/// forma degli id nuovi, tranne `title`, `desc` e `tspan`. Una risorsa l'ha
-/// nella forma delle risorse e una `defs` è quella di FubDraw; ciò che sta
-/// dentro una risorsa può non averlo, e se l'ha è nella forma delle risorse.
-function checkNewId(tag: string, id: string | undefined, layer: boolean, inResource: boolean): void {
+/// forma degli id nuovi, tranne `title`, `desc`, `tspan` e `textPath`. Una
+/// risorsa l'ha nella forma delle risorse e una `defs` è quella di FubDraw;
+/// ciò che sta dentro una risorsa può non averlo, e se l'ha è nella forma
+/// delle risorse. `inDefs` dice se l'elemento è figlio di una `defs`.
+function checkNewId(tag: string, id: string | undefined, layer: boolean, inResource: boolean, inDefs: boolean): void {
   if (id === undefined) {
-    if (!inResource && tag !== "title" && tag !== "desc" && tag !== "tspan") reject("invalid-elem", `${tag} senza id`);
+    if (!inResource && tag !== "title" && tag !== "desc" && tag !== "tspan" && tag !== "textPath") reject("invalid-elem", `${tag} senza id`);
     return;
   }
   if (tag === "defs" && !inResource) {
     if (id !== DEFS_ID) reject("invalid-elem", `una defs nuova ha l'id ${DEFS_ID}: ${JSON.stringify(id)}`);
     return;
   }
-  const kind: IdKind = inResource || resourceKind(tag) !== null ? "resource" : layer ? "layer" : "object";
+  const kind: IdKind = inResource || isResource(tag, inDefs) ? "resource" : layer ? "layer" : "object";
   if (!isNewId(id, kind)) reject("invalid-elem", `id non valido per ${ID_NAMES[kind]}: ${JSON.stringify(id)}`);
 }
 
@@ -1211,9 +1218,10 @@ export class SceneEngine {
   /// Controlla `elem` e ne fa la forma da scrivere: id nuovi, valori nei
   /// limiti, inchiostro e pennello dei tratti, `d` dei tratti ricalcolato
   /// (§4). Il resto lo giudica la classificazione, sull'elemento scritto.
-  private prepare(elem: unknown, scope: NamespaceScope, underRoot: boolean): Elem {
+  private prepare(elem: unknown, scope: NamespaceScope, underRoot: boolean, underDefs: boolean): Elem {
     const ids = new Set<string>();
-    const visit = (value: unknown, top: boolean, inResource: boolean): Elem => {
+    /// `inDefs`: l'elemento è figlio di una `defs` della radice.
+    const visit = (value: unknown, top: boolean, inResource: boolean, inDefs: boolean): Elem => {
       if (!isRecord(value) || typeof value.tag !== "string" || !isRecord(value.attrs)) reject("invalid-elem", "elemento non valido");
       const tag = value.tag;
       const attrs: Record<string, string> = {};
@@ -1233,7 +1241,7 @@ export class SceneEngine {
       const layer = tag === "g" && get(FUB_NS, "layer") !== undefined;
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
       const id = get("", "id");
-      checkNewId(tag, id, layer, inResource);
+      checkNewId(tag, id, layer, inResource, inDefs);
       if (id !== undefined) {
         if (ids.has(id) || (!top && this.t.has(id))) reject("duplicate-id", `id già usato: ${id}`);
         ids.add(id);
@@ -1247,8 +1255,9 @@ export class SceneEngine {
       const out: { -readonly [K in keyof Elem]: Elem[K] } = { tag, attrs };
       if (value.children !== undefined) {
         if (!Array.isArray(value.children)) reject("invalid-elem", `figli non validi su ${tag}`);
-        const inside = inResource || resourceKind(tag) !== null;
-        out.children = value.children.map((child) => visit(child, false, inside));
+        const inside = inResource || isResource(tag, inDefs);
+        const defs = tag === "defs" && top && underRoot;
+        out.children = value.children.map((child) => visit(child, false, inside, defs));
       }
       if (value.text !== undefined) out.text = value.text as string | null;
       // I pezzi di una riga: la forma la controlla la scrittura, i valori la
@@ -1256,7 +1265,7 @@ export class SceneEngine {
       if (value.runs !== undefined) out.runs = value.runs as Run[];
       return out;
     };
-    return visit(elem, true, false);
+    return visit(elem, true, false, underDefs);
   }
 
   /// `d` di un tratto da inchiostro e pennello; `null` se l'inchiostro ha
@@ -1305,7 +1314,7 @@ export class SceneEngine {
     }
     const root = parent === this.t.model.root;
     const scope = scopeOf(parent);
-    const elem = this.prepare(op.elem, scope, root);
+    const elem = this.prepare(op.elem, scope, root, parent.details?.role === "defs");
     if (root && (elem.tag === "title" || elem.tag === "desc")) {
       reject("invalid-elem", "titolo e descrizione della radice cambiano con meta");
     }
@@ -1401,8 +1410,10 @@ export class SceneEngine {
   private checkSequence(sequence: Sequence, parts: readonly Part[], parent: ContainerNode): Array<[number, number, string]> {
     const { doc, offset } = sequence;
     const underRoot = parent === this.t.model.root;
+    const underDefs = parent.details?.role === "defs";
     const edits: Array<[number, number, string]> = [];
-    const check = (element: ElementNode, top: boolean, inResource: boolean): void => {
+    /// `inDefs`: l'elemento è figlio di una `defs` della radice.
+    const check = (element: ElementNode, top: boolean, inResource: boolean, inDefs: boolean): void => {
       const tag = element.local;
       for (const attr of element.attrs) {
         if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) continue;
@@ -1411,7 +1422,7 @@ export class SceneEngine {
       if (valueOf(element, NS_FUB, "role") === "paper") reject("invalid-elem", "la carta nasce solo col documento");
       const layer = tag === "g" && valueOf(element, NS_FUB, "layer") !== undefined;
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
-      checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource);
+      checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource, inDefs);
       const tool = valueOf(element, NS_FUB, "tool");
       if (tag !== "path" || (tool !== "pen" && tool !== "highlighter")) return;
       const d = this.stroke(valueOf(element, NS_FUB, "ink"), valueOf(element, NS_FUB, "brush"));
@@ -1425,14 +1436,14 @@ export class SceneEngine {
       }
     };
     /// Un elemento modificabile con quelli che contiene.
-    const visit = (id: NodeId, node: ElementPart, top: boolean): void => {
+    const visit = (id: NodeId, node: ElementPart, top: boolean, inDefs: boolean): void => {
       if (node.details === null) return;
       const element = doc.element(id)!;
-      check(element, top, false);
+      check(element, top, false, inDefs);
       const inner = element.children.filter((child) => doc.element(child) !== null);
       if (node.kind === "container") {
         const children = elementChildren(node);
-        inner.forEach((child, i) => visit(child, children[i]!, false));
+        inner.forEach((child, i) => visit(child, children[i]!, false, roleOf(node) === "defs"));
         return;
       }
       // Ciò che sta dentro una risorsa ha l'id facoltativo.
@@ -1440,7 +1451,7 @@ export class SceneEngine {
       const stack = inner.reverse();
       while (stack.length > 0) {
         const child = doc.element(stack.pop()!)!;
-        check(child, false, inResource);
+        check(child, false, inResource, false);
         for (let i = child.children.length - 1; i >= 0; i--) if (doc.element(child.children[i]!) !== null) stack.push(child.children[i]!);
       }
     };
@@ -1451,7 +1462,7 @@ export class SceneEngine {
       if (underRoot && element.ns === NS_SVG && (element.local === "title" || element.local === "desc")) {
         reject("invalid-elem", "titolo e descrizione della radice cambiano con meta");
       }
-      visit(child, nodes[i]!, true);
+      visit(child, nodes[i]!, true, underDefs);
     });
     return edits;
   }
@@ -1688,15 +1699,29 @@ export class SceneEngine {
       const runs = elemGuard(() => canonicalRuns(line));
       lines.push(runs.every((run) => typeof run === "string") ? runs.join("") : runs);
     }
+    // Come ogni riga continua il paragrafo, se l'operazione lo dice
+    // (formato della scena, testo).
+    let joins: Array<string | null> | null = null;
+    if (op.joins !== undefined) {
+      if (!Array.isArray(op.joins) || op.joins.length !== lines.length) reject("invalid-elem", "joins non ha una voce per riga");
+      joins = (op.joins as unknown[]).map((join) => {
+        if (join !== null && typeof join !== "string") reject("invalid-elem", "una voce di joins non è un testo");
+        if (join !== null) this.checkValue("tspan", FUB_NS, "join", join);
+        return join;
+      });
+    }
     const node = this.target(op.id);
     this.guard(node, true);
     if (roleOf(node) !== "text") reject("invalid-elem", `${op.id} non è un testo`);
     const before = this.reread(node);
+    if (node.details!.textPath !== undefined) return this.textAlong(node, lines, joins);
     const previous: TextLine[] = [];
+    const previousJoins: Array<string | null> = [];
     for (const child of before.element.children) {
       const tspan = before.fragment.doc.element(child);
       if (tspan === null || !isSvg(tspan, "tspan")) continue;
       previous.push(readRuns(before.fragment.doc, tspan) ?? node.details!.lines![previous.length]!);
+      previousJoins.push(valueOf(tspan, NS_FUB, "join") ?? null);
     }
     const built = this.rewriteLeaf(node, (out, { fragment, element, scope }) => {
       const doc = fragment.doc;
@@ -1708,9 +1733,10 @@ export class SceneEngine {
         if (isSvg(read, "tspan")) tspans.push(read);
         else others.push(elementToOut(doc, child));
       }
-      // Una riga nuova copia gli attributi della precedente, senza id, e va
-      // giù di un'interlinea: quella delle righe che ci sono già, oppure 1,25
-      // volte il corpo con cui si vede l'ultima riga.
+      // Una riga nuova copia gli attributi della precedente, senza id e senza
+      // `fub:join`, perché comincia un paragrafo, e va giù di un'interlinea:
+      // quella delle righe che ci sono già, oppure 1,25 volte il corpo con cui
+      // si vede l'ultima riga.
       let spacing: string | null = null;
       for (let k = tspans.length - 1; k >= 1 && spacing === null; k--) spacing = valueOf(tspans[k]!, NS_NONE, "dy") ?? null;
       if (spacing === null) {
@@ -1718,18 +1744,25 @@ export class SceneEngine {
         spacing = formatNumber(this.fontSize([...last, element], node.parent) * 1.25, 2);
       }
       const name = scope.svgName("tspan")!;
+      const isJoin = (a: OutAttr): boolean => a.uri === FUB_NS && a.local === "join";
       const written: OutElement[] = [];
       for (let i = 0; i < lines.length; i++) {
         let attrs: OutAttr[];
         if (i < tspans.length) {
-          attrs = canonicalOrder(attributesOf(doc, tspans[i]!));
+          attrs = attributesOf(doc, tspans[i]!);
         } else {
           const dy: OutAttr = { name: "dy", uri: "", local: "dy", text: escapeAttribute(i === 0 ? "0" : spacing) };
           const base = i > 0
-            ? written[i - 1]!.attrs.filter((a) => !(a.uri === "" && (a.local === "id" || a.local === "dy")))
+            ? written[i - 1]!.attrs.filter((a) => !(a.uri === "" && (a.local === "id" || a.local === "dy")) && !isJoin(a))
             : attributesOf(doc, element).filter((a) => a.uri === "" && a.local === "x");
-          attrs = canonicalOrder([...base, dy]);
+          attrs = [...base, dy];
         }
+        const join = joins?.[i];
+        if (join !== undefined) {
+          attrs = attrs.filter((a) => !isJoin(a));
+          if (join !== null) attrs.push({ ...elemGuard(() => attributeName("fub:join", scope)), text: escapeAttribute(join) });
+        }
+        attrs = canonicalOrder(attrs);
         const line = lines[i]!;
         const text = typeof line === "string" ? escapeText(line) : elemGuard(() => lineContent(line, scope));
         written.push({ name, group: false, attrs, children: [], text });
@@ -1741,7 +1774,40 @@ export class SceneEngine {
     const problem = this.problem(built);
     if (problem !== null) reject("invalid-elem", problem);
     this.touched.add(op.id);
-    return { op: "text", id: op.id, lines: previous };
+    // L'inversa rimette i `fub:join` di prima anche se l'operazione non ne
+    // aveva: una riga che se ne va riprende il suo quando torna.
+    const joined = joins !== null || previousJoins.some((join) => join !== null);
+    return joined ? { op: "text", id: op.id, lines: previous, joins: previousJoins } : { op: "text", id: op.id, lines: previous };
+  }
+
+  /// `text` di un testo su tracciato: la sua riga sola è il contenuto del
+  /// `textPath`, che tiene i suoi attributi (formato della scena, testo).
+  private textAlong(node: ElementPart, lines: readonly TextLine[], joins: readonly (string | null)[] | null): Op {
+    if (lines.length !== 1) reject("invalid-elem", "un testo su tracciato ha una riga sola");
+    if (joins !== null) reject("invalid-elem", "un testo su tracciato non va a capo");
+    const id = node.facts.id!;
+    const line = lines[0]!;
+    let previous: TextLine = node.details!.lines![0]!;
+    const built = this.rewriteLeaf(node, (out, { fragment, element, scope }) => {
+      const doc = fragment.doc;
+      const children: OutElement[] = [];
+      for (const child of element.children) {
+        const read = doc.element(child);
+        if (read === null) continue;
+        if (!isSvg(read, "textPath")) {
+          children.push(elementToOut(doc, child));
+          continue;
+        }
+        previous = readRuns(doc, read) ?? previous;
+        const text = typeof line === "string" ? escapeText(line) : elemGuard(() => lineContent(line, scope));
+        children.push({ name: read.name, group: false, attrs: canonicalOrder(attributesOf(doc, read)), children: [], text });
+      }
+      return { ...out, children };
+    });
+    const problem = this.problem(built);
+    if (problem !== null) reject("invalid-elem", problem);
+    this.touched.add(id);
+    return { op: "text", id, lines: [previous] };
   }
 
   /// Il corpo con cui si vede il primo di `elements`, dal più interno al

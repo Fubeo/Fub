@@ -52,6 +52,7 @@ export type NumberId =
   | "size"
   | "leading"
   | "spacing"
+  | "wrap"
   | TransformId
   | "pageWidth"
   | "pageHeight";
@@ -62,7 +63,7 @@ export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 export type PaintId = "fill" | "stroke";
 export type ChoiceId = "dash" | "cap" | "join" | "preset" | "family" | "weight" | "unit";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar";
-export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "desc";
+export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "desc";
 
 export type ActionId =
   | "align-left"
@@ -266,6 +267,8 @@ const SPECS: readonly Spec[] = [
   { id: "leading", kind: "number", section: "text", column: "1" },
   { id: "spacing", kind: "number", section: "text", column: "2" },
   { id: "anchor", kind: "segment", section: "text", column: "all" },
+  { id: "textForm", kind: "segment", section: "text", column: "all" },
+  { id: "wrap", kind: "number", section: "text", column: "1" },
   { id: "turn", kind: "number", section: "transform", column: "1" },
   { id: "scaleX", kind: "number", section: "transform", column: "1" },
   { id: "scaleY", kind: "number", section: "transform", column: "2" },
@@ -353,6 +356,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-anchor-start": ["M4 6h16", "M4 10h10", "M4 14h16", "M4 18h10"],
   "draw-anchor-middle": ["M4 6h16", "M7 10h10", "M4 14h16", "M7 18h10"],
   "draw-anchor-end": ["M4 6h16", "M10 10h10", "M4 14h16", "M10 18h10"],
+  "draw-text-point": ["M8 5h10", "M13 5v12", "M3 19h4", "M5 17v4"],
+  "draw-text-area": ["M4 4h16v16H4z", "M8 8h8", "M12 8v8"],
   "draw-text-bold": ["M7 5h6a3.5 3.5 0 0 1 0 7H7z", "M7 12h7a3.5 3.5 0 0 1 0 7H7z"],
   "draw-text-italic": ["M10 5h8", "M6 19h8", "M14 5l-4 14"],
   "draw-text-underline": ["M7 4v7a5 5 0 0 0 10 0V4", "M5 20h14"],

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode, type ElementPart } from "../scene/model";
+import type { Elem } from "../scene/serialize";
 import { doc, HEAD } from "../scene/test-support";
 import { IMAGE_PLACEHOLDER, PaintBuilder, resourcesFor, wholeDocumentLayer, type PaintScene, type PaintShape } from "./paint";
 import { createSvgPainter, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
@@ -547,6 +548,48 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  it("mostra un altro elemento al posto di un testo, con le sue righe e la sua trasformazione, e lo toglie", async () => {
+    const engine = SceneEngine.open(doc(`${LAYER}<text id="t" fub:wrap="60" x="1" y="9" transform="rotate(10)"><tspan x="1" dy="0">Uno due</tspan></text><circle id="c" r="2"/></g>`));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const text = host.querySelector(`[data-scene-id="t"]`) as SVGElement;
+    const [paint] = builder.paintsOf(engine.holder("t")!);
+    const lines: Elem[] = [
+      { tag: "tspan", attrs: { x: "1", dy: "0" }, text: "Uno" },
+      { tag: "tspan", attrs: { "fub:join": "space", x: "1", dy: "10" }, runs: [{ text: "due", attrs: { "font-weight": "bold" } }] },
+    ];
+    painter.setDraft({ replaced: new Map([[paint!, { tag: "text", attrs: { id: "t", "fub:wrap": "30", x: "1", y: "9" }, children: lines }]]) });
+    const stand = text.nextElementSibling as SVGElement;
+    expect(stand.localName).toBe("text");
+    expect(stand.getAttribute("transform")).toBe("rotate(10)");
+    expect(stand.innerHTML).toBe('<tspan x="1" dy="0">Uno</tspan><tspan x="1" dy="10"><tspan font-weight="bold">due</tspan></tspan>');
+    expect(["id", "fub:wrap"].some((name) => stand.hasAttribute(name))).toBe(false);
+    expect(text.style.visibility).toBe("hidden");
+    painter.setDraft(null);
+    expect(text.nextElementSibling?.localName).toBe("circle");
+    expect(text.style.visibility).toBe("");
+    painter.dispose();
+  });
+
+  it("mostra il tracciato di un testo con un altro d, e lo riporta", async () => {
+    const engine = SceneEngine.open(
+      doc(`<defs id="fub-defs"><path id="r" fub:role="private" d="M 0 50 L 200 50"/></defs>${LAYER}<text id="t" font-size="10"><textPath href="#r">Sul colle</textPath></text></g>`),
+    );
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, new PaintBuilder()));
+    await decoded();
+    const track = host.querySelector("defs path") as SVGElement;
+    const along = host.querySelector(`[data-scene-id="t"]`)!.firstElementChild!;
+    expect(along.getAttribute("href")).toBe(`#${track.id}`);
+    painter.setDraft({ tracks: new Map([["r", "M0 0 C50 -20 150 -20 200 0"], ["altro", "M0 0 L1 1"]]) });
+    expect(track.getAttribute("d")).toBe("M0 0 C50 -20 150 -20 200 0");
+    painter.setDraft(null);
+    expect(track.getAttribute("d")).toBe("M 0 50 L 200 50");
+    painter.dispose();
+  });
+
   it("mostra un contorno pieno sopra una forma che resta senza contorno, e lo toglie", async () => {
     const engine = SceneEngine.open(
       doc(`${LAYER}<rect id="r" x="1" y="2" width="4" height="4" fill="#ff0000" stroke="#0000ff" stroke-width="2" opacity="0.5"/><circle id="c" r="2"/></g>`),
@@ -934,6 +977,24 @@ describe("le risorse vive", () => {
     const fill = painterRoot().querySelector('[data-scene-id="a"]')!.getAttribute("fill")!;
     expect(fill).toMatch(/^url\(#fubdraw\d+-mare\.2e\.1\) #0072b2$/);
     expect(document.getElementById(/#([^)]+)\)/.exec(fill)![1]!)!.localName).toBe("linearGradient");
+  });
+
+  it("hanno il tracciato di un testo, a cui il textPath vivo rimanda", () => {
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(SceneEngine.open(doc(
+      '<defs id="fub-defs"><path id="r1" fub:role="private" d="M0 50 L100 50"/></defs>'
+        + `${LAYER}<text id="t" font-size="10"><textPath href="#r1" startOffset="50%">a <tspan font-weight="bold">b</tspan></textPath></text></g>`,
+    )), new PaintBuilder()));
+    const root = painterRoot();
+    const path = root.querySelector("defs > path")!;
+    expect(path.id).toMatch(/^fubdraw\d+-r1$/);
+    expect(path.getAttribute("d")).toBe("M0 50 L100 50");
+    const along = root.querySelector('[data-scene-id="t"] > textPath')!;
+    expect(along.getAttribute("href")).toBe(`#${path.id}`);
+    expect(along.getAttribute("startOffset")).toBe("50%");
+    expect(along.textContent).toBe("a b");
+    expect(along.querySelector("tspan")!.getAttribute("font-weight")).toBe("bold");
+    expect(document.getElementById(path.id)).toBe(path);
   });
 
   it("vanno nelle miniature, solo quelle che servono, con un prefisso loro", () => {

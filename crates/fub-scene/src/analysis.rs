@@ -10,6 +10,8 @@
 //! con [`Legibility`], i controlli su come il disegno si legge (S009, S012,
 //! S013), che riguardano la scena come la modifica FubDraw.
 
+use std::collections::HashMap;
+
 use serde::Serialize;
 
 use crate::accessibility::Legibility;
@@ -18,8 +20,8 @@ use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::{parse_path, rect_path, BoundsBuilder, Matrix};
 use crate::text::{Span, Utf16Map};
 use crate::values::{
-    href, is_javascript, keyword, length, non_negative_length, opacity, paint, points, transform,
-    trim, url_text, Href, Paint, Rgb,
+    href, href_id, is_javascript, keyword, length, non_negative_length, opacity, paint, points,
+    transform, trim, url_text, wrap_width, Href, Paint, Rgb,
 };
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XHTML, NS_XLINK};
 use crate::Status;
@@ -287,9 +289,20 @@ pub(crate) struct Tally {
     /// I controlli su come il disegno si legge, da chiudere alla fine: la
     /// carta può venire dopo.
     legibility: Legibility,
+    /// Il `d` dei tracciati delle risorse, per id: il riquadro di un testo su
+    /// tracciato è quello del tracciato (formato della scena, testo).
+    paths: HashMap<String, String>,
 }
 
 impl Tally {
+    /// Un conteggio coi tracciati delle risorse `paths`.
+    pub fn new(paths: HashMap<String, String>) -> Tally {
+        Tally {
+            paths,
+            ..Tally::default()
+        }
+    }
+
     /// Conta un blocco estraneo.
     pub fn foreign(&mut self) {
         self.counts.foreign += 1;
@@ -347,9 +360,16 @@ impl Tally {
             Role::Title | Role::Desc | Role::Group => {}
         }
         if !context.hidden {
-            bounds(doc, element, role, &context.matrix, &mut self.bounds);
+            bounds(
+                doc,
+                element,
+                role,
+                &context.matrix,
+                &mut self.bounds,
+                &self.paths,
+            );
             self.legibility
-                .element(doc, element, role, context, span, stroke);
+                .element(doc, element, role, context, span, stroke, &self.paths);
         }
     }
 
@@ -481,6 +501,7 @@ fn bounds(
     role: Role,
     m: &Matrix,
     out: &mut BoundsBuilder,
+    paths: &HashMap<String, String>,
 ) {
     let at = |name: &str| len(element, name).unwrap_or(0.0);
     match role {
@@ -517,7 +538,14 @@ fn bounds(
         }
         Role::Text => {
             // L'ingombro di un testo dipende dai caratteri, che qui non ci
-            // sono: contano i punti d'inizio delle righe, un `tspan` per riga.
+            // sono: contano i punti d'inizio delle righe, un `tspan` per riga,
+            // o i punti estremi del tracciato che il testo segue.
+            if let Some(d) = followed(doc, element, paths) {
+                if let Some(segments) = parse_path(d) {
+                    out.path(&segments, m);
+                }
+                return;
+            }
             let x = at("x");
             let mut y = at("y");
             out.include(m.apply([x, y]));
@@ -576,30 +604,68 @@ pub(crate) fn collapse(text: &str) -> String {
         .join(" ")
 }
 
+/// Il `d` del tracciato che un testo segue, fra quelli di `paths`; `None`
+/// per un testo con le righe.
+pub(crate) fn followed<'p>(
+    doc: &Document<'_>,
+    element: &Element<'_>,
+    paths: &'p HashMap<String, String>,
+) -> Option<&'p str> {
+    let text_path = element
+        .children
+        .iter()
+        .find_map(|&child| doc.element(child).filter(|e| e.is_svg("textPath")))?;
+    let id = href_attr(text_path).and_then(|attr| href_id(&attr.value))?;
+    paths.get(&id).map(String::as_str)
+}
+
 /// Il paragrafo di un `text`: ogni figlio elemento è una riga, come i
 /// `tspan` di FubDraw e di Inkscape, e i dati di carattere fra due figli ne
-/// sono un'altra. Le righe si uniscono con uno spazio.
+/// sono un'altra. Le righe si uniscono con uno spazio, tranne in un testo in
+/// area quelle che continuano una parola dopo la prima, con
+/// `fub:join="word"`, che si uniscono senza (formato della scena, testo).
 fn paragraph(doc: &Document<'_>, id: NodeId) -> String {
+    let area = doc
+        .element(id)
+        .and_then(|text| text.value(NS_FUB, "wrap"))
+        .and_then(wrap_width)
+        .is_some();
+    // Le righe, e se ognuna continua una parola.
     let mut lines = Vec::new();
     let mut run = String::new();
+    let mut first = true;
     for &child in doc.children(id) {
         match &doc.nodes[child].kind {
             Kind::Text { value, .. } => run.push_str(value),
             Kind::CData(value) => run.push_str(value),
             Kind::EntityRef(name) => run.push_str(doc.plain_entity(name).unwrap_or_default()),
             Kind::Element(element) if !unrendered(element) => {
-                lines.push(collapse(&run));
+                lines.push((collapse(&run), false));
                 run.clear();
                 let mut line = String::new();
                 text_content(doc, child, &mut line);
-                lines.push(collapse(&line));
+                let word = area
+                    && !first
+                    && element.is_svg("tspan")
+                    && element.value(NS_FUB, "join") == Some("word");
+                lines.push((collapse(&line), word));
+                first = false;
             }
             _ => {}
         }
     }
-    lines.push(collapse(&run));
-    lines.retain(|line| !line.is_empty());
-    lines.join(" ")
+    lines.push((collapse(&run), false));
+    let mut out = String::new();
+    for (line, word) in lines {
+        if line.is_empty() {
+            continue;
+        }
+        if !out.is_empty() && !word {
+            out.push(' ');
+        }
+        out.push_str(&line);
+    }
+    out
 }
 
 /// L'`href` di un elemento: in SVG 2 `href` vince su `xlink:href`.

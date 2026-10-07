@@ -631,6 +631,144 @@ export function flatten(segments: readonly Segment[], m: Matrix): Point[][] {
   return polygons;
 }
 
+/// Le corde di un tracciato come lo segue un testo (formato della scena,
+/// testo): i sottotracciati uno dopo l'altro, con le curve e gli archi in
+/// [`CURVE_STEPS`] corde come in [`flatten`], e `Z` che torna all'inizio del
+/// sottotracciato. Gli spostamenti non sono corde.
+function chords(segments: readonly Segment[]): Array<[Point, Point]> {
+  const out: Array<[Point, Point]> = [];
+  let current: Point = [0, 0];
+  let start: Point = [0, 0];
+  const to = (p: Point): void => {
+    if (p[0] !== current[0] || p[1] !== current[1]) out.push([current, p]);
+    current = p;
+  };
+  const steps: number[] = [];
+  for (let k = 1; k <= CURVE_STEPS; k++) steps.push(k / CURVE_STEPS);
+  for (const segment of segments) {
+    switch (segment.kind) {
+      case "move":
+        current = segment.to;
+        start = segment.to;
+        break;
+      case "line":
+        to(segment.to);
+        break;
+      case "quad": {
+        const [from, c, p] = [current, segment.control, segment.to];
+        for (const t of steps) {
+          const u = 1 - t;
+          to([u * u * from[0] + 2 * u * t * c[0] + t * t * p[0], u * u * from[1] + 2 * u * t * c[1] + t * t * p[1]]);
+        }
+        break;
+      }
+      case "cubic": {
+        const [from, { c1, c2, to: p }] = [current, segment];
+        for (const t of steps) {
+          const u = 1 - t;
+          const [a, b, c, d] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+          to([a * from[0] + b * c1[0] + c * c2[0] + d * p[0], a * from[1] + b * c1[1] + c * c2[1] + d * p[1]]);
+        }
+        break;
+      }
+      case "arc": {
+        // Un arco fra due punti uguali non si disegna.
+        if (current[0] === segment.to[0] && current[1] === segment.to[1]) break;
+        const arc = centerArc(current, segment.radii, segment.rotation, segment.large, segment.sweep, segment.to);
+        if (arc === null) to(segment.to);
+        else for (const t of steps) to(arcPoint(arc, arc.theta1 + arc.delta * t));
+        // L'ultimo punto dell'arco è `to` a meno dell'arrotondamento.
+        current = segment.to;
+        break;
+      }
+      case "close":
+        to(start);
+        break;
+    }
+  }
+  return out;
+}
+
+/// Un punto lungo un tracciato e la direzione, lunga 1, in cui il tracciato
+/// va lì.
+export interface Along {
+  readonly at: Point;
+  readonly direction: Point;
+}
+
+/// Il punto di un tracciato a `distance` dal suo inizio, misurata lungo le
+/// corde, e la sua direzione: dove un testo su tracciato tiene il punto di
+/// `startOffset` (formato della scena, testo). Con `share` la distanza è una
+/// frazione della lunghezza del tracciato; fuori dal tracciato si ferma al suo
+/// estremo. `null` per un tracciato lungo zero.
+export function along(segments: readonly Segment[], distance: number, share: boolean): Along | null {
+  const track = new Track(segments);
+  return track.at(share ? distance * track.length : distance);
+}
+
+/// Un tracciato misurato lungo le corde, come lo segue un testo: la sua
+/// lunghezza e il punto a ogni distanza dall'inizio.
+export class Track {
+  private readonly parts: Array<[Point, Point]> = [];
+  private readonly lengths: number[] = [];
+  readonly length: number = 0;
+
+  constructor(segments: readonly Segment[]) {
+    for (const [a, b] of chords(segments)) {
+      const [dx, dy] = [b[0] - a[0], b[1] - a[1]];
+      const l = Math.sqrt(dx * dx + dy * dy);
+      if (!(l > 0)) continue;
+      this.parts.push([a, b]);
+      this.lengths.push(l);
+      this.length += l;
+    }
+  }
+
+  /// Il punto a `distance` dall'inizio e la sua direzione; fuori dal
+  /// tracciato si ferma al suo estremo. `null` per un tracciato lungo zero.
+  at(distance: number): Along | null {
+    const parts = this.parts;
+    if (parts.length === 0) return null;
+    let left = Math.min(Math.max(distance, 0), this.length);
+    for (let i = 0; i < parts.length; i++) {
+      const l = this.lengths[i]!;
+      if (left > l && i < parts.length - 1) {
+        left -= l;
+        continue;
+      }
+      const [a, b] = parts[i]!;
+      const t = Math.min(left / l, 1);
+      return {
+        at: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t],
+        direction: [(b[0] - a[0]) / l, (b[1] - a[1]) / l],
+      };
+    }
+    return null;
+  }
+
+  /// La distanza dall'inizio del punto del tracciato più vicino a `p`: il
+  /// primo, se due sono vicini uguali. 0 per un tracciato lungo zero.
+  nearest(p: Point): number {
+    let best = Infinity;
+    let found = 0;
+    let before = 0;
+    for (let i = 0; i < this.parts.length; i++) {
+      const [a, b] = this.parts[i]!;
+      const l = this.lengths[i]!;
+      const t = Math.min(Math.max(((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (l * l), 0), 1);
+      const dx = a[0] + (b[0] - a[0]) * t - p[0];
+      const dy = a[1] + (b[1] - a[1]) * t - p[1];
+      const d = dx * dx + dy * dy;
+      if (d < best) {
+        best = d;
+        found = before + t * l;
+      }
+      before += l;
+    }
+    return found;
+  }
+}
+
 /// Il numero di avvolgimento di `p` intorno ai poligoni: diverso da zero se
 /// `p` sta dentro con la regola `nonzero`, quella di SVG quando `fill-rule`
 /// manca, e §4 non lo ammette. Un lato conta se attraversa l'orizzontale di

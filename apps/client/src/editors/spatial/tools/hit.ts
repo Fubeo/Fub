@@ -31,15 +31,15 @@
 // riquadro stimato delle sue righe: la misura vera dipende dai caratteri.
 
 import type { Role } from "../scene/analysis";
-import { BoundsBuilder, fmin, parsePath, rectPath, type Bounds, type Segment } from "../scene/geometry";
+import { BoundsBuilder, fmin, parsePath, rectPath, Track, type Bounds, type Segment } from "../scene/geometry";
 import { arcCenter, onEllipse } from "../scene/curves";
 import { apply, compose, IDENTITY, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, parseFragment, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Fragment, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, transform as parseTransform } from "../scene/values";
+import { length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, startOffset, transform as parseTransform } from "../scene/values";
 import { NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
-import type { PaintAttr, PaintBuilder, PaintNode, PaintShape, TextPiece, TextRun } from "../painter/paint";
+import type { PaintAttr, PaintBuilder, PaintNode, PaintResource, PaintShape, TextPiece, TextRun } from "../painter/paint";
 
 /// L'errore massimo dell'appiattimento, in unità della scena.
 export const FLATNESS = 0.05;
@@ -76,6 +76,12 @@ export interface TextLook {
   readonly family: string | null;
   readonly weight: string | null;
   readonly color: string | null;
+  /// La larghezza del riquadro di un testo in area, che ci va a capo
+  /// dentro; `null` per gli altri.
+  readonly wrap: number | null;
+  /// La direzione del tracciato, lunga 1, dove comincia un testo su
+  /// tracciato, che `x` e `y` sono quel punto; `null` per gli altri.
+  readonly along: Point | null;
 }
 
 /// Un pezzo di un oggetto che si disegna da solo: una forma.
@@ -428,6 +434,7 @@ export type Holder = (id: string) => ElementPart | null;
 /// forme che non cambiano fra una scena e l'altra.
 export class SceneIndexer {
   private cache = new WeakMap<PaintShape, ShapeCache>();
+  private tracks = new WeakMap<PaintResource, Track | null>();
   private readonly foreign: ForeignShapes;
 
   /// `holder` trova gli elementi a cui i blocchi estranei rimandano; senza,
@@ -637,7 +644,7 @@ export class SceneIndexer {
     }
     const id = node.facts.id;
     const tag = tagName(node);
-    const look = node.kind === "leaf" && node.details!.role === "text" ? textLook(this.builder.shape(node), inner) : null;
+    const look = node.kind === "leaf" && node.details!.role === "text" ? textLook(this.builder.shape(node), inner, node.details!.wrap ?? null, this.textTrack(node)) : null;
     return new Unit(
       id ?? `@${path.join(".")}`,
       id ?? { path, tag },
@@ -689,8 +696,9 @@ export class SceneIndexer {
     let cache = this.cache.get(shape) ?? null;
     let segments: readonly Segment[];
     if (shape.tag === "text") {
-      // Il riquadro di un testo dipende dallo stile ereditato: non si ricorda.
-      segments = textSegments(shape.attrs, shape.runs ?? [], style);
+      // Il riquadro di un testo dipende dallo stile ereditato, e dal suo
+      // tracciato: non si ricorda.
+      segments = textSegments(shape.attrs, shape.runs ?? [], style, leaf.details!.wrap ?? null, this.textTrack(leaf));
       cache = null;
     } else {
       if (cache === null) {
@@ -706,6 +714,32 @@ export class SceneIndexer {
     const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
     const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
     return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null };
+  }
+
+  /// Il tracciato misurato del testo su tracciato `leaf`: una risorsa del
+  /// suo documento. `null` per un testo che non ne segue uno.
+  private textTrack(leaf: LeafNode): Track | null {
+    const id = leaf.details?.textPath;
+    if (id === undefined) return null;
+    let root = leaf.parent;
+    while (root !== null && root.parent !== null) root = root.parent;
+    if (root === null) return null;
+    for (const defs of elementChildren(root)) {
+      if (defs.kind !== "container" || defs.details?.role !== "defs") continue;
+      for (const child of elementChildren(defs)) {
+        if (child.kind !== "leaf" || child.details?.role !== "resource" || child.facts.id !== id) continue;
+        const resource = this.builder.resource(child);
+        let track = this.tracks.get(resource);
+        if (track === undefined) {
+          const d = resource.attrs.find(([name]) => name === "d")?.[1];
+          const segments = d === undefined ? null : parsePath(d);
+          track = segments === null ? null : new Track(segments);
+          this.tracks.set(resource, track);
+        }
+        return track;
+      }
+    }
+    return null;
   }
 
   /// Le forme stimate del blocco estraneo `leaf`, figlio di un contenitore
@@ -1034,21 +1068,86 @@ function lineMeasure(parts: readonly (string | TextPiece)[], chars: number, size
 
 /// Le righe di un testo come rettangoli: l'altezza va da 0,8 em sopra la
 /// linea di base a 0,25 em sotto, la larghezza è 0,6 em per carattere più
-/// la spaziatura delle lettere.
-function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], style: Style): Segment[] {
+/// la spaziatura delle lettere. Un testo in area, largo `wrap`, ha anche il
+/// suo riquadro, dalla cima della prima riga al fondo dell'ultima; uno su
+/// tracciato ha le lettere lungo `track`.
+function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], style: Style, wrap: number | null = null, track: Track | null = null): Segment[] {
   const x = len(attrs, "x") ?? 0;
   let y = len(attrs, "y") ?? 0;
   const segments: Segment[] = [];
+  let top: number | null = null;
+  let bottom = 0;
   for (const run of runs) {
+    if (run.kind === "path") {
+      if (track !== null) segments.push(...pathSegments(run, track, style));
+      continue;
+    }
     if (run.kind !== "span") continue;
     const size = len(run.attrs, "font-size") ?? style.fontSize;
     y += len(run.attrs, "dy") ?? 0;
+    top ??= y - ASCENT_EM * size;
+    bottom = y + DESCENT_EM * size;
     const lineX = len(run.attrs, "x") ?? x;
     const chars = readable(run.text);
     if (chars === 0) continue;
     const line = lineMeasure(run.parts ?? [run.text], chars, size, spacingOf(run.attrs, style.spacing));
     const anchor = attr(run.attrs, "text-anchor")?.trim() ?? style.anchor;
     segments.push(...rectPath(lineStart(lineX, line.width, anchor), y - ASCENT_EM * line.size, line.width, (ASCENT_EM + DESCENT_EM) * line.size, 0, 0));
+  }
+  if (wrap !== null && top !== null) segments.push(...rectPath(lineStart(x, wrap, style.anchor), top, wrap, bottom - top, 0, 0));
+  return segments;
+}
+
+/// Dove comincia sul tracciato `track` il testo `run`: la distanza di
+/// `startOffset` dall'inizio del tracciato.
+function startOf(run: Extract<TextRun, { kind: "path" }>, track: Track): number {
+  const offset = startOffset(run.startOffset ?? "0") ?? { value: 0, share: false };
+  return offset.share ? offset.value * track.length : offset.value;
+}
+
+/// Le lettere di un testo su tracciato come quadrilateri lungo `track`, a
+/// stima come le righe: ognuna larga 0,6 em più la spaziatura, centrata sul
+/// suo punto del tracciato e girata come il tracciato lì. Una lettera il cui
+/// centro cade fuori dal tracciato non si vede, e non si tocca.
+function pathSegments(run: Extract<TextRun, { kind: "path" }>, track: Track, style: Style): Segment[] {
+  // I caratteri da leggere, con gli spazi in fila che ne valgono uno e
+  // nessuno ai bordi, ciascuno col corpo e la spaziatura del suo pezzo.
+  const glyphs: Array<{ readonly space: boolean; readonly size: number; readonly width: number }> = [];
+  for (const part of run.parts ?? [run.text]) {
+    const own = typeof part === "string" ? null : part.attrs;
+    const size = own === null ? style.fontSize : len(own, "font-size") ?? style.fontSize;
+    const width = CHAR_EM * size + (own === null ? style.spacing : spacingOf(own, style.spacing));
+    for (const char of typeof part === "string" ? part : part.text) {
+      const space = /\s/.test(char);
+      if (space && (glyphs.length === 0 || glyphs[glyphs.length - 1]!.space)) continue;
+      glyphs.push({ space, size, width });
+    }
+  }
+  while (glyphs.length > 0 && glyphs[glyphs.length - 1]!.space) glyphs.pop();
+  const total = glyphs.reduce((sum, glyph) => sum + glyph.width, 0);
+  let at = lineStart(startOf(run, track), total, style.anchor);
+  const segments: Segment[] = [];
+  for (const glyph of glyphs) {
+    const middle = at + glyph.width / 2;
+    at += glyph.width;
+    if (glyph.space || middle < 0 || middle > track.length) continue;
+    const here = track.at(middle);
+    if (here === null) continue;
+    const [dx, dy] = here.direction;
+    // Sopra la linea di base è a sinistra della direzione.
+    const [ux, uy] = [dy, -dx];
+    const half = glyph.width / 2;
+    const rise = ASCENT_EM * glyph.size;
+    const drop = DESCENT_EM * glyph.size;
+    const [px, py] = here.at;
+    const corner = (along: number, up: number): Point => [px + dx * along + ux * up, py + dy * along + uy * up];
+    segments.push(
+      { kind: "move", to: corner(-half, rise) },
+      { kind: "line", to: corner(half, rise) },
+      { kind: "line", to: corner(half, -drop) },
+      { kind: "line", to: corner(-half, -drop) },
+      { kind: "close" },
+    );
   }
   return segments;
 }
@@ -1057,8 +1156,26 @@ function textSegments(attrs: readonly PaintAttr[], runs: readonly TextRun[], sty
 /// attributi: la prima riga dà ancoraggio e corpo. Il passo è quello che
 /// l'operazione `text` dà a una riga nuova: il `dy` dell'ultima riga dopo la
 /// prima che lo scrive, oppure 1,25 volte il corpo dell'ultima riga.
-function textLook(shape: PaintShape | null, style: Style): TextLook {
+function textLook(shape: PaintShape | null, style: Style, wrap: number | null = null, track: Track | null = null): TextLook {
   const attrs = shape?.attrs ?? [];
+  const path = shape?.runs?.find((run) => run.kind === "path");
+  if (path !== undefined && path.kind === "path") {
+    // Il campo sta dove il testo comincia sul tracciato, girato come lui.
+    const start = track?.at(startOf(path, track)) ?? null;
+    const anchor = style.anchor.trim();
+    return {
+      x: start?.at[0] ?? 0,
+      y: start?.at[1] ?? 0,
+      size: style.fontSize,
+      leading: style.fontSize * 1.25,
+      anchor: anchor === "middle" || anchor === "end" ? anchor : "start",
+      family: style.family,
+      weight: style.weight,
+      color: style.color,
+      wrap: null,
+      along: start?.direction ?? [1, 0],
+    };
+  }
   const spans = (shape?.runs ?? []).filter((run) => run.kind === "span");
   const first = spans[0]?.attrs ?? [];
   const size = len(first, "font-size") ?? style.fontSize;
@@ -1075,6 +1192,8 @@ function textLook(shape: PaintShape | null, style: Style): TextLook {
     family: attr(first, "font-family")?.trim() ?? style.family,
     weight: attr(first, "font-weight")?.trim() ?? style.weight,
     color: attr(first, "fill")?.trim() ?? style.color,
+    wrap,
+    along: null,
   };
 }
 
@@ -1083,6 +1202,12 @@ function textLook(shape: PaintShape | null, style: Style): TextLook {
 /// con cui poi le si tocca. `null` se non c'è niente da leggere.
 export function linesBounds(look: TextLook, lines: readonly string[], matrix: Matrix): Bounds | null {
   const out = new BoundsBuilder();
+  // Un testo su tracciato sta lungo il suo tracciato, non in righe.
+  if (look.along !== null) return null;
+  if (look.wrap !== null && lines.length > 0) {
+    const top = look.y - ASCENT_EM * look.size;
+    out.path(rectPath(lineStart(look.x, look.wrap, look.anchor), top, look.wrap, (lines.length - 1) * look.leading + (ASCENT_EM + DESCENT_EM) * look.size, 0, 0), matrix);
+  }
   lines.forEach((line, i) => {
     const chars = readable(line);
     if (chars === 0) return;
@@ -1109,8 +1234,9 @@ function elemLine(child: Elem): TextRun {
 export function elemBounds(elem: Elem, matrix: Matrix): Bounds | null {
   const attrs: PaintAttr[] = Object.entries(elem.attrs);
   const style = styleOf(INITIAL, attrs);
+  const wrap = elem.attrs["fub:wrap"];
   const segments = elem.tag === "text"
-    ? textSegments(attrs, (elem.children ?? []).map(elemLine), style)
+    ? textSegments(attrs, (elem.children ?? []).map(elemLine), style, wrap === undefined ? null : length(wrap))
     : shapeSegments(elem.tag, attrs);
   const bounds = transformedBounds(segments, matrix);
   if (bounds === null) return null;

@@ -115,7 +115,8 @@ export type Feature =
   | "apply"
   | "path"
   | "boolean"
-  | "trace";
+  | "trace"
+  | "typeset";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -149,6 +150,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "path", level: "expert", label: "draw.feature.path" },
   { id: "boolean", level: "expert", label: "draw.feature.boolean" },
   { id: "trace", level: "expert", label: "draw.feature.trace" },
+  { id: "typeset", level: "expert", label: "draw.feature.typeset" },
 ];
 
 /// Tutte le parti, per livello, e in un livello prima gli strumenti

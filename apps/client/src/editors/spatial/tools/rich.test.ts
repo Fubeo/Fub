@@ -10,6 +10,8 @@ import {
   replaceRange,
   restyleWhole,
   richChange,
+  richElem,
+  richOf,
   seenValues,
   spacingsOf,
   richLine,
@@ -23,6 +25,7 @@ import {
   withSpacing,
   type Rich,
 } from "./rich";
+import type { Elem } from "../scene/serialize";
 
 const BOLD = { "font-weight": "bold" };
 const BLUE = { fill: "#0072b2" };
@@ -190,5 +193,42 @@ describe("il testo come lo scrive il file", () => {
     expect(richChange(italic, split).kind).toBe("elem");
     const under: Rich = { ...TWO, attrs: { ...TWO.attrs, "text-decoration": "underline" } };
     expect(richChange(under, toggleEmphasis(under, at(0, 0), at(0, 4), "underline")).kind).toBe("elem");
+  });
+
+  it("le righe di un testo in area dicono come continua il paragrafo, quando cambia", () => {
+    const area: Rich = {
+      ...TWO,
+      attrs: { ...TWO.attrs, "fub:wrap": "120" },
+      lines: [richLine({ x: "10", dy: "0" }, "Il testo"), richLine({ x: "10", dy: "25", "fub:join": "space" }, "in area")],
+    };
+    // Un a capo comincia un paragrafo: la riga nuova non copia il suo.
+    const typed = replaceRange(area, at(1, 7), at(1, 7), "\nva", null).rich;
+    expect(typed.lines[2]!.attrs).toEqual({ x: "10", dy: "25" });
+    expect(richChange(area, typed)).toEqual({ kind: "lines", lines: ["Il testo", "in area", "va"] });
+    // Gli a capo rifatti cambiano come continuano le righe.
+    const flowed: Rich = { ...area, lines: [richLine({ x: "10", dy: "0" }, "Il testo in"), richLine({ x: "10", dy: "25", "fub:join": "word" }, "area")] };
+    expect(richChange(area, flowed)).toEqual({ kind: "lines", lines: ["Il testo in", "area"], joins: [null, "word"] });
+    const more: Rich = { ...area, lines: [...area.lines, richLine({ x: "10", dy: "25", "fub:join": "space" }, "va")] };
+    expect(richChange(area, more)).toEqual({ kind: "lines", lines: ["Il testo", "in area", "va"], joins: [null, "space", "space"] });
+  });
+
+  it("un testo su tracciato ha la riga sola nel suo textPath", () => {
+    const old: Elem = {
+      tag: "text",
+      attrs: { id: "o1", "font-size": "20" },
+      children: [
+        { tag: "title", attrs: {}, text: "Arco" },
+        { tag: "textPath", attrs: { href: "#r1", startOffset: "50%" }, runs: ["Sul ", { text: "colle", attrs: BOLD }] },
+      ],
+    };
+    const rich = richOf(old, {});
+    expect(rich.lines).toEqual([richLine({}, ["Sul ", { text: "colle", attrs: BOLD }])]);
+    const typed = replaceRange(rich, at(0, 9), at(0, 9), "!", null).rich;
+    expect(richChange(rich, typed)).toEqual({ kind: "lines", lines: [["Sul ", { text: "colle", attrs: BOLD }, "!"]] });
+    expect(richElem(old, { ...typed, attrs: { ...old.attrs, fill: "#0072b2" } })).toEqual({
+      tag: "text",
+      attrs: { id: "o1", "font-size": "20", fill: "#0072b2" },
+      children: [old.children![0], { tag: "textPath", attrs: { href: "#r1", startOffset: "50%" }, runs: ["Sul ", { text: "colle", attrs: BOLD }, "!"] }],
+    });
   });
 });

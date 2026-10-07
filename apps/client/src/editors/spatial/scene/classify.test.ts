@@ -978,3 +978,134 @@ describe("le risorse", () => {
     expect(at(scene, [0, 2])!.role).toBe("resource");
   });
 });
+
+describe("il testo in area e su tracciato", () => {
+  const PATH = '<path id="r1" fub:role="private" d="M0 50 C30 0 70 0 100 50"/>';
+  /// Il ruolo del primo figlio della radice dopo una `defs` con il tracciato.
+  const onPath = (body: string, defs = PATH): Role | null => role(load(doc(`<defs>${defs}</defs>${body}`)), [1]);
+
+  it("un path in una defs della radice è il tracciato di un testo, con id e d soltanto", () => {
+    const scene = load(doc(`<defs>${PATH}<path id="r2" d="M0 0 L10 0"><title>Linea</title></path></defs>`));
+    expect(role(scene, [0, 0])).toBe("resource");
+    expect(at(scene, [0, 0])!.lifecycle).toBe("private");
+    expect(at(scene, [0, 1])!.title).toBe("Linea");
+    for (const defs of [
+      '<path d="M0 0 L10 0"/>',
+      '<path id="r1"/>',
+      '<path id="r1" d="M0 0 L"/>',
+      '<path id="r1" d="M0 0 L10 0" transform="scale(2)"/>',
+      '<path id="r1" d="M0 0 L10 0" fill="#000000"/>',
+      '<path id="r1" d="M0 0 L10 0" style="x"/>',
+      '<path id="r1" d="M0 0 L10 0"><rect/></path>',
+      '<path id="r1" d="M0 0 L10 0" xlink:title="x"/>',
+    ]) {
+      expect(role(load(doc(`<defs>${defs}</defs>`)), [0, 0]), defs).toBeNull();
+    }
+    // Gli attributi di altri namespace restano; fuori da una defs un path è
+    // una forma.
+    expect(role(load(doc('<defs><path id="r1" d="M0 0 L10 0" fub:nota="x"/></defs>')), [0, 0])).toBe("resource");
+    expect(first('<path id="r1" d="M0 0 L10 0"/>')).toBe("path");
+  });
+
+  it("un testo segue un tracciato delle risorse con un textPath", () => {
+    for (const body of [
+      '<text><textPath href="#r1">a</textPath></text>',
+      '<text><textPath xlink:href="#r1">a</textPath></text>',
+      '<text text-anchor="middle" font-size="20"><textPath href="#r1" startOffset="50%">a</textPath></text>',
+      '<text><textPath href="#r1" startOffset="-12.5">a</textPath></text>',
+      '<text><textPath href="#r1" startOffset="1cm">a</textPath></text>',
+      '<text>\n  <title>t</title>\n  <textPath href="#r1">a <tspan font-weight="bold" fill="#ff0000">b</tspan> c</textPath>\n</text>',
+      '<text><textPath href="#r1"></textPath></text>',
+      '<text><textPath href="#r1" fub:nota="x">a &#x2014; b</textPath></text>',
+      // La defs può venire dopo.
+    ]) {
+      expect(onPath(body), body).toBe("text");
+    }
+    expect(role(load(doc(`<text><textPath href="#r1">a</textPath></text><defs>${PATH}</defs>`)), [0])).toBe("text");
+    for (const body of [
+      // Due riferimenti, nessuno, uno che non è un tracciato o che non c'è.
+      '<text><textPath href="#r1" xlink:href="#r1">a</textPath></text>',
+      "<text><textPath>a</textPath></text>",
+      '<text><textPath href="#r2">a</textPath></text>',
+      '<text><textPath href="#g1">a</textPath></text>',
+      '<text><textPath href="r1">a</textPath></text>',
+      '<text><textPath href="url(#r1)">a</textPath></text>',
+      // Attributi fuori elenco.
+      '<text><textPath href="#r1" id="t1">a</textPath></text>',
+      '<text><textPath href="#r1" method="stretch">a</textPath></text>',
+      '<text><textPath href="#r1" spacing="auto">a</textPath></text>',
+      '<text><textPath href="#r1" side="right">a</textPath></text>',
+      '<text><textPath path="M0 0 L10 0">a</textPath></text>',
+      '<text><textPath href="#r1" fill="#000000">a</textPath></text>',
+      '<text><textPath href="#r1" startOffset="auto">a</textPath></text>',
+      '<text><textPath href="#r1" startOffset="1em">a</textPath></text>',
+      // Il contenuto: dati di carattere e pezzi.
+      '<text><textPath href="#r1">a<!-- b --></textPath></text>',
+      '<text><textPath href="#r1"><tspan x="0">a</tspan></textPath></text>',
+      '<text><textPath href="#r1"><tspan dy="1">a</tspan></textPath></text>',
+      '<text><textPath href="#r1"><tspan>a<tspan>b</tspan></tspan></textPath></text>',
+      '<text><textPath href="#r1"><title>t</title>a</textPath></text>',
+      // Le righe o il tracciato, non tutti e due; un tracciato solo; niente
+      // x e y.
+      '<text><tspan>a</tspan><textPath href="#r1">b</textPath></text>',
+      '<text><textPath href="#r1">a</textPath><textPath href="#r1">b</textPath></text>',
+      '<text><textPath href="#r1">a</textPath>b</text>',
+      '<text x="0"><textPath href="#r1">a</textPath></text>',
+      '<text y="0"><textPath href="#r1">a</textPath></text>',
+      // Un textPath fuori da un testo, o in una riga.
+      '<textPath href="#r1">a</textPath>',
+      '<text><tspan><textPath href="#r1">a</textPath></tspan></text>',
+    ]) {
+      expect(onPath(body), body).toBeNull();
+    }
+    expect(onPath('<text><textPath href="#g1">a</textPath></text>', '<linearGradient id="g1"/>')).toBeNull();
+  });
+
+  it("un testo su tracciato non sta nel contenuto di una risorsa", () => {
+    const scene = load(doc(`<defs>${PATH}<pattern id="r2" width="10" height="10" patternUnits="userSpaceOnUse"><text><textPath href="#r1">a</textPath></text></pattern></defs>`));
+    expect(role(scene, [0, 1])).toBeNull();
+  });
+
+  it("la scena dà la riga di un testo su tracciato e il suo tracciato", () => {
+    const scene = load(doc(`<defs>${PATH}</defs><text><textPath xlink:href="#r1"> a <tspan font-weight="bold">b</tspan>&amp;</textPath></text>`));
+    const item = at(scene, [1])!;
+    expect(item.lines).toEqual([" a b&"]);
+    expect(item.textPath).toBe("r1");
+    expect(item.wrap).toBeUndefined();
+    // Un testo su tracciato non va a capo.
+    expect(at(load(doc(`<defs>${PATH}</defs><text fub:wrap="100"><textPath href="#r1">a</textPath></text>`)), [1])!.wrap).toBeUndefined();
+  });
+
+  it("un testo in area dà la larghezza del suo riquadro", () => {
+    const area = (wrap: string): number | undefined =>
+      at(load(doc(`<text fub:wrap="${wrap}" x="10" y="20"><tspan x="10" dy="0">a</tspan><tspan fub:join="space" x="10" dy="24">b</tspan></text>`)), [0])!.wrap;
+    expect(area("320")).toBe(320);
+    expect(area(" 12.5 ")).toBe(12.5);
+    // Fuori grammatica è un testo da punto, sempre modificabile.
+    for (const wrap of ["0", "-5", "10px", "", "x"]) expect(area(wrap), wrap).toBeUndefined();
+    const scene = load(doc('<text fub:wrap="x"><tspan>a</tspan></text>'));
+    expect(role(scene, [0])).toBe("text");
+    expect(at(scene, [0])!.lines).toEqual(["a"]);
+  });
+
+  it("l'indice unisce senza spazio le righe che continuano una parola", () => {
+    const index = (body: string): string[] => load(doc(body)).index.texts.map((excerpt) => excerpt.text);
+    expect(
+      index(
+        '<text fub:wrap="100"><tspan>Una pa</tspan><tspan fub:join="word">rola</tspan><tspan fub:join="space">e un trat-</tspan>' +
+          '<tspan fub:join="word">tino</tspan><tspan>Nuovo</tspan></text>',
+      ),
+    ).toEqual(["Una parola e un trat-tino Nuovo"]);
+    // Fuori da un testo in area, o sulla prima riga, fub:join non vale.
+    expect(index('<text><tspan>pa</tspan><tspan fub:join="word">rola</tspan></text>')).toEqual(["pa rola"]);
+    expect(index('<text fub:wrap="100"><tspan fub:join="word">a</tspan><tspan>b</tspan></text>')).toEqual(["a b"]);
+    expect(index('<text fub:wrap="100"><tspan>a</tspan><tspan fub:join="parola">b</tspan></text>')).toEqual(["a b"]);
+    // Un testo su tracciato è una riga.
+    expect(index(`<defs>${PATH}</defs><text><textPath href="#r1">a <tspan>b</tspan></textPath></text>`)).toEqual(["a b"]);
+  });
+
+  it("il riquadro di un testo su tracciato è quello del suo tracciato", () => {
+    const scene = load(doc(`<defs><path id="r1" d="M10 20 L60 20 L60 70"/></defs><text transform="translate(5 5)"><textPath href="#r1">a</textPath></text>`));
+    expect(scene.summary.bbox).toEqual({ x: 15, y: 25, width: 50, height: 50 });
+  });
+});
