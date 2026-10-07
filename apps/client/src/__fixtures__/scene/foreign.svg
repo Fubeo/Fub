@@ -21,6 +21,11 @@
     <text x="10" y="110"><tspan x="10" dy="0">Parco</tspan></text>
     <a href="javascript:alert(1)"><text x="10" y="120">Clicca</text></a>
     <a xlink:href="quartiere/parco.md"><rect x="150" y="100" width="20" height="10"/></a>
+    <text x="10" y="114"><tspan x="10" dy="0">a<tspan>b<tspan>c</tspan></tspan></tspan></text>
+    <text x="10" y="116"><tspan x="10" dy="0">a<tspan x="20">b</tspan></tspan></text>
+    <g text-decoration="underline"><rect width="1" height="1"/></g>
+    <text x="10" y="118" font-style="slanted"><tspan x="10" dy="0">c</tspan></text>
+    <text x="10" y="119" letter-spacing="10%"><tspan x="10" dy="0">d</tspan></text>
   </g>
   <image x="150" y="10" width="40" height="30" href="https://example.org/foto.jpg"/>
   <image x="150" y="50" width="10" height="10" href="data:image/svg+xml,%3Csvg%2F%3E"/>

@@ -69,7 +69,8 @@ describe("la classificazione (§4)", () => {
       'id="o1" fill="#ff0000" fill-opacity="0.5" stroke="none" stroke-width="2" ' +
       'stroke-opacity="1" stroke-linecap="round" stroke-linejoin="bevel" ' +
       'stroke-dasharray="4 2" opacity="0" display="inline" transform="rotate(45)" ' +
-      'font-family="Inter, sans-serif" font-size="12" font-weight="bold" text-anchor="middle"';
+      'font-family="Inter, sans-serif" font-size="12" font-weight="bold" font-style="italic" ' +
+      'letter-spacing="-0.5" text-anchor="middle"';
     expect(first(`<rect ${presentation} x="0" y="0" width="1" height="1"/>`)).toBe("rect");
     expect(first(`<g ${presentation}></g>`)).toBe("group");
   });
@@ -279,6 +280,41 @@ describe("la classificazione (§4)", () => {
     }
   });
 
+  it("la tipografia prende i suoi valori", () => {
+    for (const attribute of [
+      'font-style="normal"',
+      'font-style="italic"',
+      'font-style="oblique"',
+      'letter-spacing="normal"',
+      'letter-spacing="0"',
+      'letter-spacing="-1.5"',
+      'letter-spacing="2px"',
+      'letter-spacing="0.1in"',
+    ]) {
+      expect(first(`<g ${attribute}></g>`), attribute).toBe("group");
+    }
+    for (const attribute of [
+      'font-style="Italic"',
+      'font-style="oblique 10deg"',
+      'font-style="inherit"',
+      'letter-spacing="10%"',
+      'letter-spacing="0.1em"',
+      'letter-spacing="wide"',
+      'letter-spacing=""',
+    ]) {
+      expect(first(`<g ${attribute}></g>`), attribute).toBeNull();
+    }
+    for (const value of ["none", "underline", "line-through underline", "underline overline line-through"]) {
+      expect(first(`<text text-decoration="${value}"><tspan text-decoration="${value}">a</tspan></text>`), value).toBe("text");
+    }
+    for (const value of ["", "underline underline", "none underline", "blink", "Underline", "underline red"]) {
+      expect(first(`<text text-decoration="${value}"></text>`), value).toBeNull();
+    }
+    // Non si eredita: su un gruppo o una forma non vuol dire niente.
+    expect(first('<g text-decoration="underline"></g>')).toBeNull();
+    expect(first('<rect text-decoration="none"/>')).toBeNull();
+  });
+
   it("font-family accetta qualunque valore", () => {
     expect(first(`<text font-family="'Comic Sans MS', cursive"></text>`)).toBe("text");
     expect(first('<text font-family=""></text>')).toBe("text");
@@ -398,6 +434,10 @@ describe("la classificazione (§4)", () => {
       "<text><title>t</title><tspan>a</tspan></text>",
       '<text><tspan id="r1" fill="red" font-weight="bold">a &#x2014; b</tspan></text>',
       "<text><tspan></tspan></text>",
+      "<text><tspan>a<tspan>b</tspan></tspan></text>",
+      '<text><tspan x="0" dy="0">a <tspan font-weight="bold" font-style="italic">b</tspan> c<tspan fill="#ff0000" letter-spacing="-0.5" text-decoration="underline line-through"></tspan></tspan></text>',
+      '<text><tspan><tspan font-size="20" xml:space="preserve"> b </tspan></tspan></text>',
+      '<text><tspan><tspan xmlns:x="https://example.org" x:y="1">b</tspan></tspan></text>',
     ]) {
       expect(first(body), body).toBe("text");
     }
@@ -405,7 +445,17 @@ describe("la classificazione (§4)", () => {
       "<text>senza tspan</text>",
       '<text><tspan y="3">a</tspan></text>',
       '<text><tspan dx="3">a</tspan></text>',
-      "<text><tspan>a<tspan>b</tspan></tspan></text>",
+      "<text><tspan>a<tspan>b<tspan>c</tspan></tspan></tspan></text>",
+      "<text><tspan>a<tspan>b<!-- c --></tspan></tspan></text>",
+      '<text><tspan><tspan id="p1">b</tspan></tspan></text>',
+      '<text><tspan><tspan x="0">b</tspan></tspan></text>',
+      '<text><tspan><tspan dy="1">b</tspan></tspan></text>',
+      '<text><tspan><tspan text-anchor="end">b</tspan></tspan></text>',
+      '<text><tspan><tspan display="none">b</tspan></tspan></text>',
+      '<text><tspan><tspan opacity="0.5">b</tspan></tspan></text>',
+      '<text><tspan><tspan transform="scale(2)">b</tspan></tspan></text>',
+      '<text><tspan><tspan class="x">b</tspan></tspan></text>',
+      "<text><tspan><title>t</title>b</tspan></text>",
       "<text><tspan>a<!-- c --></tspan></text>",
       "<text><tspan>a</tspan>b</text>",
       '<text><textPath href="#p">a</textPath></text>',
@@ -420,13 +470,16 @@ describe("la classificazione (§4)", () => {
     const source = doc(
       "<title>Gatti &amp; cani &#233;</title>" +
         "<desc>  spazi  </desc>" +
-        "<text><tspan>a &lt; b</tspan> <tspan>  due  </tspan></text>",
+        "<text><tspan>a &lt; b</tspan> <tspan>  due  </tspan></text>" +
+        '<text><tspan>a <tspan font-weight="bold">b</tspan><tspan> c</tspan>!</tspan></text>',
     );
     const scene = load(source);
     expect(at(scene, [0])!.text).toBe("Gatti & cani é");
     expect(at(scene, [1])!.text).toBe("  spazi  ");
     expect(at(scene, [2])!.lines).toEqual(["a < b", "  due  "]);
     expect(at(scene, [2])!.text).toBeUndefined();
+    // I pezzi di una riga sono la riga intera.
+    expect(at(scene, [3])!.lines).toEqual(["a b c!"]);
   });
 
   it("title e desc contengono soltanto dati di carattere", () => {

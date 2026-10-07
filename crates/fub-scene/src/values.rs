@@ -186,10 +186,41 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
         "font-weight" => &[
             "normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900",
         ],
+        "font-style" => &["normal", "italic", "oblique"],
         "text-anchor" => &["start", "middle", "end"],
         _ => &[],
     };
     allowed.contains(&value)
+}
+
+/// `letter-spacing`: `normal`, che vale 0, o una lunghezza, anche negativa.
+pub(crate) fn letter_spacing(value: &str) -> Option<f64> {
+    if trim(value) == "normal" {
+        Some(0.0)
+    } else {
+        length(value)
+    }
+}
+
+/// Le linee che `text-decoration` può tirare.
+pub(crate) const DECORATIONS: [&str; 3] = ["underline", "overline", "line-through"];
+
+/// `text-decoration`: `none`, che non ne tira, o le linee di [`DECORATIONS`],
+/// ognuna al più una volta, separate da spazi.
+pub(crate) fn text_decoration(value: &str) -> Option<Vec<&str>> {
+    let value = trim(value);
+    if value == "none" {
+        return Some(Vec::new());
+    }
+    let parts: Vec<&str> = value
+        .split(|c: char| c.is_ascii() && is_wsp(c as u8))
+        .filter(|part| !part.is_empty())
+        .collect();
+    let valid = !parts.is_empty()
+        && parts.iter().enumerate().all(|(i, part)| {
+            DECORATIONS.contains(part) && parts.iter().position(|p| p == part) == Some(i)
+        });
+    valid.then_some(parts)
 }
 
 /// `preserveAspectRatio`: un allineamento, `none` compreso, seguito

@@ -95,6 +95,8 @@ const INITIAL: Inherited = new Map([
   ["font-family", ""],
   ["font-size", "16"],
   ["font-weight", "normal"],
+  ["font-style", "normal"],
+  ["letter-spacing", "normal"],
   ["text-anchor", "start"],
 ]);
 

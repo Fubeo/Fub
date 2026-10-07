@@ -166,6 +166,17 @@ describe("i valori", () => {
     ["stroke-linecap", "Round", { problem: "keyword" }],
     ["font-family", "Literata, serif", "Literata, serif"],
     ["font-family", "Comic Sans MS", { problem: "family" }],
+    ["font-style", "italic", "italic"],
+    ["font-style", "Italic", { problem: "keyword" }],
+    ["letter-spacing", " normal ", "normal"],
+    ["letter-spacing", "-0.555", "-0.56"],
+    ["letter-spacing", "1pt", "1.33"],
+    ["letter-spacing", "10%", { problem: "spacing" }],
+    ["letter-spacing", "0.1em", { problem: "spacing" }],
+    ["text-decoration", "line-through   underline", "line-through underline"],
+    ["text-decoration", "none", "none"],
+    ["text-decoration", "underline underline", { problem: "decoration" }],
+    ["text-decoration", "blink", { problem: "decoration" }],
     ["transform", "translate(10 20)", "matrix(1 0 0 1 10 20)"],
     ["transform", "rotate(0)", null],
     ["transform", "skewQ(1)", { problem: "transform" }],
@@ -180,14 +191,14 @@ describe("i valori", () => {
   ];
 
   it.each(cases)("%s = %j", (key, input, out) => {
-    const tag = key === "points" ? "polygon" : key === "d" ? "path" : key === "preserveAspectRatio" ? "image" : "rect";
+    const tag = key === "points" ? "polygon" : key === "d" ? "path" : key === "preserveAspectRatio" ? "image" : key === "text-decoration" ? "text" : "rect";
     expect(canonicalValue(tag, key, input)).toEqual(out !== null && typeof out === "object" ? out : { value: out });
   });
 
   it("un attributo nuovo parte dal valore iniziale di SVG", () => {
     expect(
-      ["fill", "stroke", "stroke-width", "opacity", "display", "stroke-linecap", "stroke-linejoin", "font-weight", "text-anchor", "font-size", "rx", "transform"].map(initialValue),
-    ).toEqual(["#000000", "none", "1", "1", "inline", "butt", "miter", "normal", "start", "16", "0", ""]);
+      ["fill", "stroke", "stroke-width", "opacity", "display", "stroke-linecap", "stroke-linejoin", "font-weight", "font-style", "letter-spacing", "text-decoration", "text-anchor", "font-size", "rx", "transform"].map(initialValue),
+    ).toEqual(["#000000", "none", "1", "1", "inline", "butt", "miter", "normal", "normal", "normal", "none", "start", "16", "0", ""]);
   });
 });
 

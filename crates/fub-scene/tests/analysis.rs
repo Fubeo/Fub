@@ -66,7 +66,9 @@ fn every_text_is_a_paragraph_with_its_lines_joined() {
         // Un testo di FubDraw: una riga per `tspan`.
         r#"<g fub:layer="A"><text x="10" y="20">"#,
         r#"<tspan x="10" dy="0">Evaporazione</tspan>"#,
-        r#"<tspan x="10" dy="20">e  condensa</tspan></text></g>"#,
+        r#"<tspan x="10" dy="20">e  condensa</tspan>"#,
+        // I pezzi di una riga sono parte della parola.
+        r#"<tspan x="10" dy="20">e <tspan font-weight="bold">piog</tspan>gia</tspan></text></g>"#,
         // Un testo estraneo, col suo `title` che non si disegna.
         r#"<text style="fill:red"><title>suggerimento</title>Pioggia <tspan>fitta</tspan></text>"#,
         // Un testo vuoto non conta.
@@ -79,7 +81,7 @@ fn every_text_is_a_paragraph_with_its_lines_joined() {
     assert_eq!(
         texts(&source),
         [
-            "Evaporazione e condensa",
+            "Evaporazione e condensa e pioggia",
             "Pioggia fitta",
             "fuori",
             "vedi la nota"

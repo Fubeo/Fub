@@ -416,6 +416,17 @@ describe("un blocco estraneo dentro un oggetto", () => {
     expect(index.get("b")?.bounds).toEqual({ min: [0, 0], max: [25, 10] });
   });
 
+  it("allarga le righe con la spaziatura delle lettere e coi pezzi, ciascuno col suo corpo", () => {
+    const { index } = open(doc(
+      `${LAYER}<text id="p" x="0" y="20" font-size="10" letter-spacing="1">`
+        + '<tspan x="0" dy="0">ab<tspan font-size="20" letter-spacing="0">cd</tspan></tspan>'
+        + '<tspan x="0" dy="30" letter-spacing="-1">ef</tspan></text></g>',
+    ));
+    // «ab» 2 × (6 + 1), «cd» 2 × 12 e la riga alta quanto il pezzo più
+    // grande; «ef» 2 × (6 − 1).
+    expect(index.get("p")?.bounds).toEqual({ min: [0, 4], max: [38, 52.5] });
+  });
+
   it("segue un `use` fino al simbolo, anche in un altro blocco, e se ne accorge quando cambia", () => {
     const opened = open(doc(
       `${LAYER}<g id="u"><defs id="d"><symbol id="s" viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10"/></symbol></defs>`

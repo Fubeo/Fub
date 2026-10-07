@@ -8,6 +8,7 @@
     <text id="o9i0j1k2l" x="720" y="460" fill="#000000" font-family="Inter, sans-serif" font-size="32">
       <tspan x="720" dy="0">Evaporazione</tspan>
       <tspan x="720" dy="40">&amp; condensa</tspan>
+      <tspan x="720" dy="40" font-style="italic" letter-spacing="1.5">in <tspan fill="#0072b2" font-weight="bold" text-decoration="underline">pioggia</tspan></tspan>
     </text>
     <path id="o7k2m9x4q" fub:tool="pen" fub:at="2026-10-01T09:20:31.250Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0" d="M120.5 30.2 L123.01 29.83 L125.53 29.46 L128 29.09 L130.51 28.72 L133.03 28.35 L135.5 27.98 L138.01 27.61 L140.53 27.24 L143 26.87 L145.51 26.5 L148.03 26.13 Z" fill="#d55e00" fub:ink="1 s100 cxypt 12050,3020,100,0 251,-37,10,8 252,-37,10,8 247,-37,10,8 251,-37,10,8 252,-37,10,8 247,-37,10,8 251,-37,10,8 252,-37,10,8 247,-37,10,8 251,-37,10,8 252,-37,10,8"/>
     <path id="o00000001" fub:tool="highlighter" fub:at="2026-10-01T09:20:33.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=1" d="M300 455 L340 455 L380 455 L420 455 L460 455 Z" fill="#f0e442" fill-opacity="0.4" fub:ink="1 s10 cxyt 3000,4550,0 400,0,16 400,0,16 400,0,16 400,0,16"/>

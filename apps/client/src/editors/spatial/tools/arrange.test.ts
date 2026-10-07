@@ -94,6 +94,20 @@ describe("duplicare", () => {
     expect(opened.engine.text.match(/href="Nota.md"/g)).toHaveLength(2);
   });
 
+  it("copia una riga coi suoi pezzi", () => {
+    const opened = open(doc(
+      `${LAYER}<text id="otttttttt" x="0" y="20"><tspan x="0" dy="0">Uno <tspan font-weight="bold" font-style="italic">&amp;</tspan> due</tspan></text></g>`,
+    ));
+    const model = opened.engine.model!;
+    expect(elemOf(nodeOf(model, opened.index.get("otttttttt")!))).toEqual({
+      tag: "text",
+      attrs: { id: "otttttttt", x: "0", y: "20" },
+      children: [{ tag: "tspan", attrs: { x: "0", dy: "0" }, runs: ["Uno ", { text: "&", attrs: { "font-weight": "bold", "font-style": "italic" } }, " due"] }],
+    });
+    applied(opened, duplicateOps(model, opened.index.units, 0, 30, ids(opened))!);
+    expect(opened.engine.text.match(/<tspan x="0" dy="0">Uno <tspan font-weight="bold" font-style="italic">&amp;<\/tspan> due<\/tspan>/g)).toHaveLength(2);
+  });
+
   it("non copia un oggetto con parti estranee", () => {
     const opened = open(doc(`${LAYER}<g id="ogggggggg">${RECT("oaaaaaaaa", 0)}<use href="#oaaaaaaaa"/></g></g>`));
     expect(duplicateOps(opened.engine.model!, opened.index.units, 0, 10, ids(opened))).toBeNull();

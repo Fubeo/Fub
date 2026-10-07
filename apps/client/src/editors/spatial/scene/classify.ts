@@ -26,12 +26,14 @@ import {
   href,
   keyword,
   length,
+  letterSpacing,
   nonNegativeLength,
   numberList,
   opacity,
   paint,
   points,
   preserveAspectRatio,
+  textDecoration,
   transform,
   trim,
 } from "./values";
@@ -99,8 +101,8 @@ export interface ElementItem extends Span {
   /// Il testo di un `title` o di un `desc`, coi riferimenti risolti e gli
   /// spazi com'erano: è ciò che l'operazione `meta` sostituisce.
   readonly text?: string;
-  /// Le righe di un `text`, una per `tspan`: è ciò che l'operazione `text`
-  /// sostituisce.
+  /// Le righe di un `text`, una per `tspan`, coi pezzi: è il testo che
+  /// l'operazione `text` sostituisce.
   readonly lines?: readonly string[];
 }
 
@@ -208,8 +210,14 @@ export function svgAttribute(tag: Tag, name: string, value: string): boolean {
     case "stroke-linejoin":
     case "display":
     case "font-weight":
+    case "font-style":
     case "text-anchor":
       return keyword(name, value);
+    case "letter-spacing":
+      return letterSpacing(value) !== null;
+    case "text-decoration":
+      // Non si eredita: vale soltanto dove si scrive il testo.
+      return (tag === "text" || tag === "tspan") && textDecoration(value) !== null;
     case "stroke-dasharray":
       return dasharray(value);
     case "transform":
@@ -294,14 +302,42 @@ export function firstTitle(doc: XmlDocument, element: ElementNode): string | nul
   return null;
 }
 
-/// Vero se `id` è un `title`, `desc` o, dentro un `text`, un `tspan`
-/// modificabile: attributi ammessi e solo testo dentro.
+/// Gli attributi che un pezzo di riga non ha: un pezzo continua la riga,
+/// non la sposta, non la nasconde e non ha un nome suo. SVG non dà a un
+/// `tspan` né opacità né trasformazione.
+const NOT_IN_PIECE: ReadonlySet<string> = new Set(["id", "x", "dy", "text-anchor", "display", "opacity", "transform"]);
+
+/// Vero se `id` è un pezzo di riga modificabile: un `tspan` con attributi da
+/// pezzo e solo testo dentro.
+function allowedPiece(doc: XmlDocument, id: NodeId): boolean {
+  const element = doc.element(id);
+  if (element === null || tagOf(element) !== "tspan") return false;
+  if (element.attrs.some((attr) => attr.ns === NS_NONE && NOT_IN_PIECE.has(attr.local))) return false;
+  return attributesAllowed(element, "tspan") && characterDataOnly(doc, element);
+}
+
+/// Vero se `id` è un `title`, `desc` o, dentro un `text`, una riga
+/// modificabile: attributi ammessi e dentro solo testo, e per una riga anche
+/// pezzi.
 function allowedPart(doc: XmlDocument, id: NodeId, insideText: boolean): boolean {
   const element = doc.element(id);
   if (element === null) return false;
   const tag = tagOf(element);
   if (tag !== "title" && tag !== "desc" && !(tag === "tspan" && insideText)) return false;
-  return attributesAllowed(element, tag) && characterDataOnly(doc, element);
+  if (!attributesAllowed(element, tag)) return false;
+  if (tag !== "tspan") return characterDataOnly(doc, element);
+  return element.children.every((child) => doc.nodes[child]!.kind === "text" || allowedPiece(doc, child));
+}
+
+/// Il testo di una riga modificabile, coi suoi pezzi.
+export function lineText(doc: XmlDocument, id: NodeId): string {
+  let text = "";
+  for (const child of doc.children(id)) {
+    const node = doc.nodes[child]!;
+    if (node.kind === "text") text += node.value;
+    else if (node.kind === "element") text += characterData(doc, child);
+  }
+  return text;
 }
 
 /// Vero se ogni figlio di un'unità è ammesso: spazi, `title`, `desc` e, per
@@ -516,7 +552,7 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
         const tspan = doc.element(child);
         return tspan !== null && isSvg(tspan, "tspan");
       })
-      .map((child) => characterData(doc, child));
+      .map((child) => lineText(doc, child));
   }
   return { details, problems };
 }

@@ -44,7 +44,19 @@ export interface Elem {
   readonly children?: readonly Elem[];
   /// Solo per `tspan`, `title` e `desc`.
   readonly text?: string | null;
+  /// Solo per una riga di `text`, al posto di `text`: il suo testo coi pezzi.
+  readonly runs?: readonly Run[];
 }
+
+/// Un pezzo di riga: una parte del testo con uno stile suo, un `tspan`
+/// dentro la riga (§4).
+export interface Piece {
+  readonly text: string;
+  readonly attrs: Readonly<Record<string, string>>;
+}
+
+/// Una parte di una riga: testo della riga o un pezzo.
+export type Run = string | Piece;
 
 /// Un elemento che non si può scrivere: la forma dell'operazione è sbagliata,
 /// o un nome non ha namespace.
@@ -190,6 +202,9 @@ const PRESENTATION_ORDER = [
   "font-family",
   "font-size",
   "font-weight",
+  "font-style",
+  "letter-spacing",
+  "text-decoration",
   "text-anchor",
   "preserveAspectRatio",
 ];
@@ -339,13 +354,117 @@ export function elemToOut(elem: Elem, scope: NamespaceScope, parentTag: string |
     if (!TEXT_TAGS.has(tag)) throw new ElemError(`${tag} non ha testo`);
     if (!isXmlText(text)) throw new ElemError(`carattere non ammesso da XML nel testo di ${tag}`);
   }
+  const runs = elem.runs;
+  if (runs !== undefined) {
+    if (tag !== "tspan" || parentTag !== "text") throw new ElemError("i pezzi stanno solo in una riga di un text");
+    if (text !== undefined && text !== null) throw new ElemError("una riga ha il testo o i pezzi, non tutti e due");
+  }
   return {
     name,
     group: tag === "g",
     attrs: canonicalOrder(out),
     children: kids.map((child) => elemToOut(child, scope, tag)),
-    text: TEXT_TAGS.has(tag) ? escapeText(text ?? "") : null,
+    text: runs !== undefined ? lineContent(runs, scope) : TEXT_TAGS.has(tag) ? escapeText(text ?? "") : null,
   };
+}
+
+/// Vero se `run` è un pezzo: un oggetto con il suo testo e i suoi
+/// attributi.
+function isPiece(run: unknown): run is Piece {
+  return run !== null && typeof run === "object" && !Array.isArray(run);
+}
+
+/// Le parti di una riga nella forma canonica: senza testo vuoto, coi pezzi
+/// senza attributi fatti testo della riga, e le parti vicine uguali unite.
+/// Controlla la forma di un'operazione; i valori li giudica la
+/// classificazione.
+export function canonicalRuns(runs: unknown): Run[] {
+  if (!Array.isArray(runs)) throw new ElemError("pezzi non validi");
+  const out: Run[] = [];
+  for (const run of runs as unknown[]) {
+    let part: Run;
+    if (typeof run === "string") {
+      part = run;
+    } else if (isPiece(run)) {
+      const { text, attrs } = run as { text?: unknown; attrs?: unknown };
+      if (typeof text !== "string") throw new ElemError("un pezzo senza testo");
+      if (attrs === null || typeof attrs !== "object" || Array.isArray(attrs)) throw new ElemError("un pezzo senza attributi");
+      for (const value of Object.values(attrs)) if (typeof value !== "string") throw new ElemError("un valore di un pezzo non è una stringa");
+      part = Object.keys(attrs).length === 0 ? text : { text, attrs: attrs as Record<string, string> };
+    } else {
+      throw new ElemError("parte di riga non valida");
+    }
+    const value = typeof part === "string" ? part : part.text;
+    if (!isXmlText(value) || /[\r\n]/.test(value)) throw new ElemError("carattere non ammesso in una riga");
+    if (value === "") continue;
+    const last = out[out.length - 1];
+    if (typeof part === "string" && typeof last === "string") out[out.length - 1] = last + part;
+    else if (typeof part !== "string" && last !== undefined && typeof last !== "string" && sameAttrs(last.attrs, part.attrs)) {
+      out[out.length - 1] = { text: last.text + part.text, attrs: last.attrs };
+    } else out.push(part);
+  }
+  return out;
+}
+
+/// Vero se due pezzi hanno gli stessi attributi, con gli stessi valori.
+function sameAttrs(a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && a[key] === b[key]);
+}
+
+/// Il contenuto di una riga, già con gli escape: il testo della riga e i
+/// pezzi, ciascuno un `tspan` coi suoi attributi in ordine canonico, sulla
+/// stessa riga del file.
+export function lineContent(runs: readonly Run[], scope: NamespaceScope): string {
+  const name = scope.svgName("tspan");
+  if (name === null) throw new ElemError("il documento non lega un prefisso al namespace SVG");
+  let out = "";
+  for (const run of canonicalRuns(runs)) {
+    if (typeof run === "string") {
+      out += escapeText(run);
+      continue;
+    }
+    const attrs: OutAttr[] = [];
+    const seen = new Set<string>();
+    for (const [key, value] of Object.entries(run.attrs)) {
+      if (!isXmlText(value)) throw new ElemError(`carattere non ammesso da XML nel valore di ${key}`);
+      const resolved = attributeName(key, scope);
+      const expanded = `${resolved.uri} ${resolved.local}`;
+      if (seen.has(expanded)) throw new ElemError(`attributo ripetuto: ${key}`);
+      seen.add(expanded);
+      attrs.push({ ...resolved, text: escapeAttribute(value) });
+    }
+    out += `${openTag({ name, group: false, attrs: canonicalOrder(attrs), children: [], text: null })}>${escapeText(run.text)}</${name}>`;
+  }
+  return out;
+}
+
+/// Le parti di una riga letta, `line`: il testo della riga e i pezzi, coi
+/// loro attributi come li nomina un'operazione; `null` se la riga non ha
+/// pezzi, e allora è tutta testo.
+export function readRuns(doc: XmlDocument, line: ElementNode): Run[] | null {
+  const runs: Run[] = [];
+  let pieces = false;
+  for (const child of line.children) {
+    const node = doc.nodes[child]!;
+    if (node.kind === "text") {
+      runs.push(node.value);
+    } else if (node.kind === "element") {
+      pieces = true;
+      const attrs: Record<string, string> = {};
+      for (const attr of node.attrs) {
+        if (attr.name === "xmlns" || attr.name.startsWith("xmlns:")) continue;
+        attrs[attributeKey({ name: attr.name, uri: doc.namespaces[attr.ns]!, local: attr.local })] = attr.value;
+      }
+      let text = "";
+      for (const inner of node.children) {
+        const leaf = doc.nodes[inner]!;
+        if (leaf.kind === "text") text += leaf.value;
+      }
+      runs.push({ text, attrs });
+    }
+  }
+  return pieces ? runs : null;
 }
 
 /// Il testo a LF: chi scrive lavora a LF, e il motore riporta le righe sul
@@ -400,11 +519,12 @@ export function scopeInside(scope: NamespaceScope, element: ElementNode): Namesp
 /// solo testo, `title`, `desc` e `tspan` dentro.
 export function elementToOut(doc: XmlDocument, id: NodeId): OutElement {
   const element = doc.element(id)!;
+  // Il contenuto di una riga si copia com'è scritto, coi suoi pezzi.
+  const carriesText = isSvg(element, "title") || isSvg(element, "desc") || isSvg(element, "tspan");
   const children: OutElement[] = [];
   for (const child of element.children) {
-    if (doc.element(child) !== null) children.push(elementToOut(doc, child));
+    if (!carriesText && doc.element(child) !== null) children.push(elementToOut(doc, child));
   }
-  const carriesText = isSvg(element, "title") || isSvg(element, "desc") || isSvg(element, "tspan");
   let text: string | null = null;
   if (carriesText) text = element.closeStart === null ? "" : lf(doc.source.text.slice(element.openEnd, element.closeStart));
   return {

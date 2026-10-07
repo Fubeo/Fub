@@ -73,6 +73,27 @@ describe("gli strati vivi", () => {
     ]);
   });
 
+  it("tengono i pezzi di una riga, ciascuno coi suoi attributi dipinti", () => {
+    const scene = sceneOf(doc(
+      `${LAYER}<text id="t1" x="10" y="20" font-style="italic">`
+        + '<tspan x="10" dy="0" letter-spacing="1">a <tspan font-weight="bold" text-decoration="underline" fub:nota="n">b &amp; c</tspan>!</tspan>'
+        + '<tspan x="10" dy="14">d</tspan></text></g>',
+    ));
+    const text = (live(scene, 0).nodes[0] as PaintGroup).children[0] as PaintShape;
+    expect(text.attrs).toEqual([["x", "10"], ["y", "20"], ["font-style", "italic"]]);
+    expect(text.runs).toEqual([
+      {
+        kind: "span",
+        attrs: [["x", "10"], ["dy", "0"], ["letter-spacing", "1"]],
+        space: null,
+        text: "a b & c!",
+        parts: ["a ", { attrs: [["font-weight", "bold"], ["text-decoration", "underline"]], space: null, text: "b & c" }, "!"],
+      },
+      // Una riga senza pezzi resta testo.
+      { kind: "span", attrs: [["x", "10"], ["dy", "14"]], space: null, text: "d" },
+    ]);
+  });
+
   it("dicono da dove viene un'immagine, senza caricarla", () => {
     const scene = sceneOf(doc(
       `${LAYER}<image id="i1" href="${PNG}" width="4" height="4"/>`

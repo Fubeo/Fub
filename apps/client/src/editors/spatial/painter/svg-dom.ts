@@ -1016,7 +1016,18 @@ function shapeElement(
       const span = document.createElementNS(SVG, "tspan");
       setPainted(span, run.attrs, []);
       if (run.space !== null) span.setAttributeNS(XML, "xml:space", run.space);
-      span.textContent = run.text;
+      if (run.parts === undefined) span.textContent = run.text;
+      for (const part of run.parts ?? []) {
+        if (typeof part === "string") {
+          span.append(document.createTextNode(part));
+          continue;
+        }
+        const piece = document.createElementNS(SVG, "tspan");
+        setPainted(piece, part.attrs, []);
+        if (part.space !== null) piece.setAttributeNS(XML, "xml:space", part.space);
+        piece.textContent = part.text;
+        span.append(piece);
+      }
       el.append(span);
     }
   }

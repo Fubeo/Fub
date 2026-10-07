@@ -173,12 +173,31 @@ const KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ["stroke-linecap", ["butt", "round", "square"]],
   ["stroke-linejoin", ["miter", "round", "bevel"]],
   ["font-weight", ["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"]],
+  ["font-style", ["normal", "italic", "oblique"]],
   ["text-anchor", ["start", "middle", "end"]],
 ]);
 
 /// Una parola chiave fra quelle elencate per `name`.
 export function keyword(name: string, value: string): boolean {
   return KEYWORDS.get(name)?.includes(trim(value)) ?? false;
+}
+
+/// `letter-spacing`: `normal`, che vale 0, o una lunghezza, anche negativa.
+export function letterSpacing(value: string): number | null {
+  return trim(value) === "normal" ? 0 : length(value);
+}
+
+/// Le linee che `text-decoration` può tirare.
+export const DECORATIONS: readonly string[] = ["underline", "overline", "line-through"];
+
+/// `text-decoration`: `none`, che non ne tira, o le linee di [`DECORATIONS`],
+/// ognuna al più una volta, separate da spazi.
+export function textDecoration(value: string): readonly string[] | null {
+  const text = trim(value);
+  if (text === "none") return [];
+  const parts = splitWsp(text).filter((part) => part !== "");
+  if (parts.length === 0) return null;
+  return parts.every((part, i) => DECORATIONS.includes(part) && parts.indexOf(part) === i) ? parts : null;
 }
 
 /// Le parole chiave di `name`, nell'ordine di §4; vuote se `name` non ne ha.

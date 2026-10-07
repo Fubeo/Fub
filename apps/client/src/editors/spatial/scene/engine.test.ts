@@ -128,6 +128,7 @@ describe("i rifiuti lasciano la scena com'era", () => {
   const WITH_GROUP = lf(ROOT, PAPER, L1, '    <g id="o6f7g8h9i">', "    </g>", END_G, END);
   const WITH_GROUP_AND_L2 = lf(ROOT, PAPER, L1, '    <g id="o6f7g8h9i">', "    </g>", END_G, L2, END_G, END);
   const FOREIGN = lf('<svg xmlns="http://www.w3.org/2000/svg">', '  <rect x="1" y="1" width="2" height="2"/>', END);
+  const WITH_TEXT = lf(ROOT, PAPER, L1, '    <text id="o5e6f7g8h" x="10" y="20">', '      <tspan x="10" dy="0">a</tspan>', "    </text>", END_G, END);
 
   const cases: ReadonlyArray<[string, string, unknown, Reason]> = [
     ["operazione sconosciuta", BASE, { op: "drop" }, "invalid-elem"],
@@ -156,6 +157,14 @@ describe("i rifiuti lasciano la scena com'era", () => {
     ["carattere non XML", BASE, set("o2b3c4d5e", { fill: "\u0001" }), "invalid-elem"],
     ["valore troppo lungo", BASE, set("o2b3c4d5e", { "fub:note": "x".repeat(MAX_VALUE_BYTES + 1) }), "limit"],
     ["text su un rettangolo", BASE, { op: "text", id: "o2b3c4d5e", lines: ["X"] }, "invalid-elem"],
+    ["un a capo in un pezzo", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [["a", { text: "b\nc", attrs: { fill: "#000000" } }]] }, "invalid-elem"],
+    ["un pezzo senza attributi", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b" }]] }, "invalid-elem"],
+    ["un valore di un pezzo che non è una stringa", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b", attrs: { "font-size": 3 } }]] }, "invalid-elem"],
+    ["una parte di riga che non è testo né pezzo", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[3]] }, "invalid-elem"],
+    ["un pezzo con un valore fuori dal formato", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b", attrs: { "font-style": "slanted" } }]] }, "invalid-elem"],
+    ["un pezzo con un attributo della riga", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b", attrs: { dy: "4" } }]] }, "invalid-elem"],
+    ["pezzi e testo nella stessa riga di un add", BASE, add("l3f8a0c2d", { tag: "text", attrs: { id: "o0a1b2c3d" }, children: [{ tag: "tspan", attrs: {}, text: "a", runs: ["b"] }] }), "invalid-elem"],
+    ["pezzi fuori da una riga", BASE, add("l3f8a0c2d", { tag: "text", attrs: { id: "o0a1b2c3d" }, runs: ["b"] } as Elem), "invalid-elem"],
     ["un livello non va in un gruppo", WITH_GROUP_AND_L2, move("l9k8j7h6g", "o6f7g8h9i"), "invalid-elem"],
     ["un gruppo non diventa un livello", WITH_GROUP, set("o6f7g8h9i", { "fub:layer": "X" }), "invalid-elem"],
     ["viewBox con tre numeri", BASE, { op: "page", viewBox: "0 0 10" }, "invalid-elem"],

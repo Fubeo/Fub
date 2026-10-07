@@ -92,7 +92,9 @@ describe("l'indice e il riepilogo (§9)", () => {
       // Un testo di FubDraw: una riga per `tspan`.
       '<g fub:layer="A"><text x="10" y="20">' +
         '<tspan x="10" dy="0">Evaporazione</tspan>' +
-        '<tspan x="10" dy="20">e  condensa</tspan></text></g>' +
+        '<tspan x="10" dy="20">e  condensa</tspan>' +
+        // I pezzi di una riga sono parte della parola.
+        '<tspan x="10" dy="20">e <tspan font-weight="bold">piog</tspan>gia</tspan></text></g>' +
         // Un testo estraneo, col suo `title` che non si disegna.
         '<text style="fill:red"><title>suggerimento</title>Pioggia <tspan>fitta</tspan></text>' +
         // Un testo vuoto non conta.
@@ -102,7 +104,7 @@ describe("l'indice e il riepilogo (§9)", () => {
         // Un collegamento dentro un testo è parte del paragrafo.
         '<text>vedi <a href="nota.md">la nota</a></text>',
     );
-    expect(texts(source)).toEqual(["Evaporazione e condensa", "Pioggia fitta", "fuori", "vedi la nota"]);
+    expect(texts(source)).toEqual(["Evaporazione e condensa e pioggia", "Pioggia fitta", "fuori", "vedi la nota"]);
     const scene = load(source);
     expect(text(source, scene.index.texts[0]!).startsWith('<text x="10"')).toBe(true);
   });

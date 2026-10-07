@@ -1,0 +1,61 @@
+{
+  "name": "add-text-runs",
+  "description": "add di un testo con i pezzi nelle righe e la tipografia nuova, come lo scrive un duplicato",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Il ciclo dell'acqua</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "add",
+      "parent": "l3f8a0c2d",
+      "pos": {
+        "last": true
+      },
+      "elem": {
+        "tag": "text",
+        "attrs": {
+          "letter-spacing": "0.5",
+          "font-size": "24",
+          "id": "o5e6f7g8h",
+          "y": "700",
+          "x": "100",
+          "fill": "#000000"
+        },
+        "children": [
+          {
+            "tag": "tspan",
+            "attrs": {
+              "dy": "0",
+              "x": "100"
+            },
+            "runs": [
+              "Nota ",
+              {
+                "text": "bene",
+                "attrs": {
+                  "text-decoration": "underline line-through",
+                  "font-weight": "bold"
+                }
+              }
+            ]
+          },
+          {
+            "tag": "tspan",
+            "attrs": {
+              "x": "100",
+              "dy": "30",
+              "font-style": "italic"
+            },
+            "text": "a margine"
+          }
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Il ciclo dell'acqua</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n    <text id=\"o5e6f7g8h\" x=\"100\" y=\"700\" fill=\"#000000\" font-size=\"24\" letter-spacing=\"0.5\">\n      <tspan x=\"100\" dy=\"0\">Nota <tspan font-weight=\"bold\" text-decoration=\"underline line-through\">bene</tspan></tspan>\n      <tspan x=\"100\" dy=\"30\" font-style=\"italic\">a margine</tspan>\n    </text>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "remove",
+      "target": "o5e6f7g8h"
+    }
+  }
+}

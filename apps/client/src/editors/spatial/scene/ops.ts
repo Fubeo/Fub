@@ -13,7 +13,7 @@
 // Non arrivano mai dalla rete: `parseWireOp` le rifiuta.
 
 import { utf8Length } from "./text";
-import type { Elem } from "./serialize";
+import type { Elem, Run } from "./serialize";
 
 /// La radice come genitore: non è un id valido.
 export const ROOT = "#root";
@@ -105,10 +105,13 @@ export interface SetOp {
   readonly attrs: Readonly<Record<string, string | null>>;
 }
 
+/// Una riga di un'operazione `text`: tutta testo, o il testo coi pezzi.
+export type TextLine = string | readonly Run[];
+
 export interface TextOp {
   readonly op: "text";
   readonly id: string;
-  readonly lines: readonly string[];
+  readonly lines: readonly TextLine[];
 }
 
 export interface MoveOp {

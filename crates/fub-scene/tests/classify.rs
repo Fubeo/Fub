@@ -84,7 +84,8 @@ fn every_attribute_of_the_list_is_allowed() {
         r##"id="o1" fill="#ff0000" fill-opacity="0.5" stroke="none" stroke-width="2" "##,
         r#"stroke-opacity="1" stroke-linecap="round" stroke-linejoin="bevel" "#,
         r#"stroke-dasharray="4 2" opacity="0" display="inline" transform="rotate(45)" "#,
-        r#"font-family="Inter, sans-serif" font-size="12" font-weight="bold" text-anchor="middle""#
+        r#"font-family="Inter, sans-serif" font-size="12" font-weight="bold" font-style="italic" "#,
+        r#"letter-spacing="-0.5" text-anchor="middle""#
     );
     let body = format!(r#"<rect {presentation} x="0" y="0" width="1" height="1"/>"#);
     assert_eq!(first(&body), Some(Role::Rect));
@@ -356,6 +357,62 @@ fn keywords_take_their_listed_values() {
 }
 
 #[test]
+fn typography_takes_its_values() {
+    for attribute in [
+        r#"font-style="normal""#,
+        r#"font-style="italic""#,
+        r#"font-style="oblique""#,
+        r#"letter-spacing="normal""#,
+        r#"letter-spacing="0""#,
+        r#"letter-spacing="-1.5""#,
+        r#"letter-spacing="2px""#,
+        r#"letter-spacing="0.1in""#,
+    ] {
+        assert_eq!(
+            first(&format!("<g {attribute}></g>")),
+            Some(Role::Group),
+            "{attribute}"
+        );
+    }
+    for attribute in [
+        r#"font-style="Italic""#,
+        r#"font-style="oblique 10deg""#,
+        r#"font-style="inherit""#,
+        r#"letter-spacing="10%""#,
+        r#"letter-spacing="0.1em""#,
+        r#"letter-spacing="wide""#,
+        r#"letter-spacing="""#,
+    ] {
+        assert_eq!(first(&format!("<g {attribute}></g>")), None, "{attribute}");
+    }
+    for value in [
+        "none",
+        "underline",
+        "line-through underline",
+        "underline overline line-through",
+    ] {
+        let body = format!(
+            r#"<text text-decoration="{value}"><tspan text-decoration="{value}">a</tspan></text>"#
+        );
+        assert_eq!(first(&body), Some(Role::Text), "{value}");
+    }
+    for value in [
+        "",
+        "underline underline",
+        "none underline",
+        "blink",
+        "Underline",
+        "underline red",
+    ] {
+        let body = format!(r#"<text text-decoration="{value}"></text>"#);
+        assert_eq!(first(&body), None, "{value}");
+    }
+    // Non si eredita: su un gruppo o una forma non vuol dire niente.
+    assert_eq!(first(r#"<g text-decoration="underline"></g>"#), None);
+    assert_eq!(first(r#"<rect text-decoration="none"/>"#), None);
+}
+
+#[test]
 fn transforms_are_lists_of_svg_functions() {
     for value in [
         "",
@@ -549,6 +606,10 @@ fn a_text_is_editable_only_with_allowed_tspans() {
         r#"<text><title>t</title><tspan>a</tspan></text>"#,
         r#"<text><tspan id="r1" fill="red" font-weight="bold">a &#x2014; b</tspan></text>"#,
         "<text><tspan></tspan></text>",
+        r#"<text><tspan>a<tspan>b</tspan></tspan></text>"#,
+        r##"<text><tspan x="0" dy="0">a <tspan font-weight="bold" font-style="italic">b</tspan> c<tspan fill="#ff0000" letter-spacing="-0.5" text-decoration="underline line-through"></tspan></tspan></text>"##,
+        r#"<text><tspan><tspan font-size="20" xml:space="preserve"> b </tspan></tspan></text>"#,
+        r#"<text><tspan><tspan xmlns:x="https://example.org" x:y="1">b</tspan></tspan></text>"#,
     ] {
         assert_eq!(first(body), Some(Role::Text), "{body}");
     }
@@ -556,7 +617,17 @@ fn a_text_is_editable_only_with_allowed_tspans() {
         "<text>senza tspan</text>",
         r#"<text><tspan y="3">a</tspan></text>"#,
         r#"<text><tspan dx="3">a</tspan></text>"#,
-        r#"<text><tspan>a<tspan>b</tspan></tspan></text>"#,
+        r#"<text><tspan>a<tspan>b<tspan>c</tspan></tspan></tspan></text>"#,
+        r#"<text><tspan>a<tspan>b<!-- c --></tspan></tspan></text>"#,
+        r#"<text><tspan><tspan id="p1">b</tspan></tspan></text>"#,
+        r#"<text><tspan><tspan x="0">b</tspan></tspan></text>"#,
+        r#"<text><tspan><tspan dy="1">b</tspan></tspan></text>"#,
+        r#"<text><tspan><tspan text-anchor="end">b</tspan></tspan></text>"#,
+        r#"<text><tspan><tspan display="none">b</tspan></tspan></text>"#,
+        r#"<text><tspan><tspan opacity="0.5">b</tspan></tspan></text>"#,
+        r#"<text><tspan><tspan transform="scale(2)">b</tspan></tspan></text>"#,
+        r#"<text><tspan><tspan class="x">b</tspan></tspan></text>"#,
+        r#"<text><tspan><title>t</title>b</tspan></text>"#,
         r#"<text><tspan>a<!-- c --></tspan></text>"#,
         r#"<text><tspan>a</tspan>b</text>"#,
         r##"<text><textPath href="#p">a</textPath></text>"##,
@@ -573,6 +644,7 @@ fn text_lines_and_titles_carry_their_decoded_content() {
         "<title>Gatti &amp; cani &#233;</title>",
         "<desc>  spazi  </desc>",
         r#"<text><tspan>a &lt; b</tspan> <tspan>  due  </tspan></text>"#,
+        r#"<text><tspan>a <tspan font-weight="bold">b</tspan><tspan> c</tspan>!</tspan></text>"#,
     ));
     let scene = load(&source);
     assert_eq!(
@@ -583,6 +655,8 @@ fn text_lines_and_titles_carry_their_decoded_content() {
     let lines = at(&scene, &[2]).unwrap().lines.clone().unwrap();
     assert_eq!(lines, ["a < b", "  due  "]);
     assert_eq!(at(&scene, &[2]).unwrap().text, None);
+    // I pezzi di una riga sono la riga intera.
+    assert_eq!(at(&scene, &[3]).unwrap().lines.clone().unwrap(), ["a b c!"]);
 }
 
 #[test]

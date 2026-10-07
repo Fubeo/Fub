@@ -30,7 +30,7 @@ import type { IdKind } from "../scene/ids";
 import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
 import { declarationsOf, elementChildren, parseFragment, pathOf, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { ROOT, type Op, type Pos, type Target } from "../scene/ops";
-import { NamespaceScope, type Elem } from "../scene/serialize";
+import { NamespaceScope, type Elem, type Run } from "../scene/serialize";
 import { href as parseHref, opacity as parseOpacity, transform as parseTransform } from "../scene/values";
 import { FUB_NS, NS_SVG, SVG_NS, XLINK_NS, XML_URI, type ElementNode, type XmlDocument } from "../scene/xml";
 import { formatNumber } from "../number";
@@ -59,6 +59,8 @@ export const INHERITED: readonly string[] = [
   "font-family",
   "font-size",
   "font-weight",
+  "font-style",
+  "letter-spacing",
   "text-anchor",
 ];
 
@@ -226,6 +228,7 @@ function xmlElem(doc: XmlDocument, element: ElementNode, outer: NamespaceScope):
   const attrs = attributesOf(doc, element, scope);
   if (attrs === null) return null;
   const children: Elem[] = [];
+  const runs: Run[] = [];
   let text = "";
   for (const id of element.children) {
     const child = doc.nodes[id]!;
@@ -233,10 +236,14 @@ function xmlElem(doc: XmlDocument, element: ElementNode, outer: NamespaceScope):
       const elem = xmlElem(doc, child, scope);
       if (elem === null) return null;
       children.push(elem);
+      // Un pezzo di una riga: solo testo dentro.
+      runs.push({ text: elem.text ?? "", attrs: elem.attrs });
     } else if (child.kind === "text") {
       text += child.value;
+      runs.push(child.value);
     }
   }
+  if (element.local === "tspan" && children.length > 0) return { tag: element.local, attrs, runs };
   if (TEXT_TAGS.has(element.local)) return { tag: element.local, attrs, text };
   return children.length === 0 ? { tag: element.local, attrs } : { tag: element.local, attrs, children };
 }
@@ -270,9 +277,10 @@ function elemIn(node: ElementPart, scope: NamespaceScope): Elem | null {
 function renamed(elem: Elem, ids: NewIds): Elem {
   const attrs = { ...elem.attrs };
   if (attrs.id !== undefined || !TEXT_TAGS.has(elem.tag)) attrs.id = ids.next("object");
-  const out: { tag: string; attrs: Record<string, string>; children?: Elem[]; text?: string | null } = { tag: elem.tag, attrs };
+  const out: { tag: string; attrs: Record<string, string>; children?: Elem[]; text?: string | null; runs?: readonly Run[] } = { tag: elem.tag, attrs };
   if (elem.children !== undefined) out.children = elem.children.map((child) => renamed(child, ids));
   if (elem.text !== undefined) out.text = elem.text;
+  if (elem.runs !== undefined) out.runs = elem.runs;
   return out;
 }
 

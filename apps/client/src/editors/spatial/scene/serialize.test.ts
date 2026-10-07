@@ -292,6 +292,13 @@ describe("la copia di un elemento letto", () => {
     );
   });
 
+  it("una riga coi pezzi si copia com'è scritta", () => {
+    const doc = parse(`<svg xmlns="${SVG_NS}"><text><tspan dy="0">a <tspan font-weight='bold' fill="#000">b</tspan>&amp;c</tspan></text></svg>`);
+    expect(writeElement(elementToOut(doc, find(doc, "text")), "")).toBe(
+      "<text>\n  <tspan dy=\"0\">a <tspan font-weight='bold' fill=\"#000\">b</tspan>&amp;c</tspan>\n</text>",
+    );
+  });
+
   it("un a capo grezzo in un valore si porta a LF", () => {
     const doc = parse(`<svg xmlns="${SVG_NS}"><rect fill="a\r\nb\rc"/></svg>`);
     expect(writeElement(elementToOut(doc, find(doc, "rect")), "")).toBe('<rect fill="a\nb\nc"/>');
