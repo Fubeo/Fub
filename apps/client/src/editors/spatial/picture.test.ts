@@ -160,3 +160,42 @@ describe("la sezione di un disegno", () => {
     expect(section('<html xmlns="http://www.w3.org/1999/xhtml"><title>Storia</title></html>', "Storia")).toBeNull();
   });
 });
+
+describe("un disegno su un rettangolo", () => {
+  const HEAD = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1"';
+
+  it("mette la radice sul rettangolo, come la sezione di una tavola", async () => {
+    const { framed, section } = await import("./picture");
+    const svg = `${HEAD} viewBox="0 0 1300 400" width="1300" height="400"><view id="b00000001" fub:role="board" viewBox="700 0 600 400"><title>Copertina</title></view><rect width="9" height="9"/></svg>`;
+    expect(framed(svg, [700, 0, 600, 400])).toBe(section(svg, "Copertina"));
+    expect(framed(svg, [-12.5, 3, 80, 40.25])).toBe(svg.replace('viewBox="0 0 1300 400" width="1300" height="400"', 'viewBox="-12.5 3 80 40.25" width="80" height="40.25"'));
+  });
+
+  it("aggiunge gli attributi anche a una radice autochiusa, prima della barra", async () => {
+    const { framed } = await import("./picture");
+    expect(framed(`${HEAD}/>`, [0, 0, 210, 297])).toBe(`${HEAD} viewBox="0 0 210 297" width="210" height="297"/>`);
+    expect(framed(`${HEAD} width="5" />`, [1, 2, 3, 4])).toBe(`${HEAD} width="3"  viewBox="1 2 3 4" height="4"/>`);
+  });
+
+  it("un testo che non si legge non ha rettangolo", async () => {
+    const { framed } = await import("./picture");
+    expect(framed(`${HEAD}><g></svg>`, [0, 0, 1, 1])).toBeNull();
+  });
+});
+
+describe("le immagini del vault come data URI", () => {
+  it("legge ogni percorso una volta, nel tetto che resta, e lascia fuori quelle che non si leggono", async () => {
+    const { vaultSources } = await import("./picture");
+    const { imageRefs } = await import("./read-images");
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><image href="a.png"/><image href="b.png"/><image href="c.png"/><image href="a.png"/><image href="data:image/png;base64,AA=="/></svg>';
+    const limits: [string, number][] = [];
+    const read = async (path: string, limit: number): Promise<Blob | null> => {
+      limits.push([path, limit]);
+      if (path === "b.png") return null;
+      return new Blob([path === "a.png" ? "AAAA" : "CCCCCC"], { type: "image/png" });
+    };
+    const sources = await vaultSources(imageRefs(svg), read, 8);
+    expect(limits).toEqual([["a.png", 8], ["b.png", 4], ["c.png", 4]]);
+    expect([...sources]).toEqual([["a.png", "data:image/png;base64,QUFBQQ=="]]);
+  });
+});

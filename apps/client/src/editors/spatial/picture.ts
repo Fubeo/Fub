@@ -157,6 +157,20 @@ export async function selfContained(
   fonts: FontSheets = appFonts,
 ): Promise<string> {
   const refs = imageRefs(svg);
+  const sources = await vaultSources(refs, read, budget);
+  return picture(svg, fonts.now(svg) ?? (await fonts.load(svg)), refs, sources);
+}
+
+/// Le immagini del vault di `refs`, per percorso, coi loro byte come data
+/// URI: una alla volta finché stanno in `budget` byte. `read` legge
+/// un'immagine del vault per il suo `href`, senza leggerla se pesa più del
+/// tetto che riceve; una che non si legge resta fuori, e [`picture`] le dà
+/// il segnaposto.
+export async function vaultSources(
+  refs: readonly ImageRef[],
+  read: (path: string, limit: number) => Promise<Blob | null>,
+  budget: number,
+): Promise<Map<string, string>> {
   const sources = new Map<string, string>();
   let spent = 0;
   for (const path of new Set(refs.flatMap((ref) => (ref.path === null ? [] : [ref.path])))) {
@@ -168,7 +182,7 @@ export async function selfContained(
     sources.set(path, uri);
     spent += blob!.size;
   }
-  return picture(svg, fonts.now(svg) ?? (await fonts.load(svg)), refs, sources);
+  return sources;
 }
 
 /// La sezione `name` di `svg`, come la sceglie `![[disegno#name]]`: il
@@ -201,11 +215,27 @@ export function section(svg: string, name: string): string | null {
   return null;
 }
 
+/// `svg`, un disegno, con la radice sul rettangolo `box`, come una tavola
+/// nella sua sezione (vedi [`section`]): la presentazione mostra così ogni
+/// tavola, e un disegno senza tavole sulla sua pagina o su ciò che disegna.
+/// `null` se `svg` non si legge.
+export function framed(svg: string, box: readonly [number, number, number, number]): string | null {
+  let root: ElementNode;
+  try {
+    const { doc } = openSource(svg);
+    root = doc.element(doc.root)!;
+  } catch (error) {
+    if (error instanceof ReadError) return null;
+    throw error;
+  }
+  return onBox(svg, root, box);
+}
+
 /// `svg` con la radice `root` sul rettangolo `box`: il suo `viewBox`, e una
 /// larghezza e un'altezza uguali alle sue. Gli attributi che ci sono cambiano
 /// valore sul posto, quelli che mancano si aggiungono in fondo al tag
-/// d'apertura; una radice con una tavola ha dei figli, e il tag non è
-/// autochiuso.
+/// d'apertura, prima della barra di un tag autochiuso: una radice con una
+/// tavola ha dei figli, un disegno vuoto può non averne.
 function onBox(svg: string, root: ElementNode, box: readonly [number, number, number, number]): string {
   const edits: { start: number; end: number; text: string }[] = [];
   let added = "";
@@ -214,7 +244,8 @@ function onBox(svg: string, root: ElementNode, box: readonly [number, number, nu
     if (attr === undefined) added += ` ${local}="${value}"`;
     else edits.push({ start: attr.raw[0], end: attr.raw[1], text: value });
   }
-  if (added !== "") edits.push({ start: root.openEnd - 1, end: root.openEnd - 1, text: added });
+  const tail = root.openEnd - (root.closeStart === null ? 2 : 1);
+  if (added !== "") edits.push({ start: tail, end: tail, text: added });
   edits.sort((a, b) => a.start - b.start);
   let out = "";
   let at = 0;

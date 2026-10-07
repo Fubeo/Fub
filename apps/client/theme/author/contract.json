@@ -305,6 +305,13 @@
     "draw-board-number",
     "draw-board-size",
     "draw-board-rename",
+    "draw-present-board",
+    "draw-present-stage",
+    "draw-present-ink",
+    "draw-present-laser",
+    "draw-present-end",
+    "draw-present-end-title",
+    "draw-present-end-hint",
     "draw-access",
     "draw-access-header",
     "draw-access-title",
@@ -1329,6 +1336,22 @@
       ]
     },
     {
+      "name": "draw-presentation",
+      "hooks": [
+        "draw-present-board",
+        "draw-present-stage",
+        "draw-present-ink",
+        "draw-present-laser",
+        "draw-present-end",
+        "draw-present-end-title",
+        "draw-present-end-hint"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "vector-surface",
       "hooks": [
         "vector-notice",
@@ -2178,10 +2201,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 584,
+    "hooks": 591,
     "state_names": 7,
-    "assigned_states": 154,
-    "components": 48,
+    "assigned_states": 156,
+    "components": 49,
     "unassigned_hooks": 0
   }
 }

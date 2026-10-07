@@ -431,6 +431,8 @@ import {
   CUSTOM_DEFAULT,
   featuresFor,
   levelsAbove,
+  presentKeyGroups,
+  presentStartRows,
   startTool,
   toolAfter,
   toolForKey,
@@ -990,6 +992,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-access": ["M12 2.75a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5z", "M5 8.5l7 1.5 7-1.5", "M12 10v4.5", "M8.5 21l3.5-6.5 3.5 6.5"],
   // L'elenco delle tavole: due fogli affiancati, ognuno col suo nome sopra.
   "draw-boards": ["M3 8.5h8v11H3z", "M14 8.5h7v7h-7z", "M3 5h5", "M14 5h4"],
+  // Presenta: uno schermo sul suo piede, col triangolo del via.
+  "draw-present": ["M3 4.5h18v11H3z", "M12 15.5V20", "M8.5 20h7", "M10.5 7.5l4 2.5-4 2.5z"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -2327,6 +2331,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     onMove: (id, to) => orderBoard(id, to),
     onLeave: () => surface.focus({ preventScroll: true }),
+    onPresent: (id) => present(id),
+    canPresent: () => has("present"),
   });
   boardsPanel.element.hidden = true;
   relabels.push(() => {
@@ -2413,6 +2419,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const boardsButton = button(viewGroup, "draw-button", () => t("draw.boards"), "draw-boards", () => showBoards(boardsPanel.element.hidden));
   boardsButton.setAttribute("aria-expanded", "false");
   boardsButton.setAttribute("aria-controls", boardsPanel.element.id);
+  const presentButton = button(viewGroup, "draw-button", () => t("draw.present"), "draw-present", () => present(null));
+  presentButton.setAttribute("aria-keyshortcuts", "F5");
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
@@ -5645,6 +5653,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     boardsButton.hidden = !has("board");
     if (boardsButton.hidden && !boardsPanel.element.hidden) showBoards(false);
     syncBoards();
+    presentButton.hidden = !has("present");
     accessButton.hidden = !has("accessibility");
     if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
     syncAccess();
@@ -7751,6 +7760,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const goToBoard = (id: string): void => {
     const at = boardsNow().findIndex((board) => board.id === id);
     if (at >= 0) visitBoard(at, true);
+  };
+
+  /// Presenta il disegno dalla tavola `from`, o dalla prima, col modulo che
+  /// arriva solo adesso. All'uscita il fuoco torna al foglio, sulla tavola
+  /// dove si era arrivati, scelta e inquadrata.
+  const present = (from: string | null): void => {
+    const model = engine.model;
+    if (model === null) return;
+    const text = engine.text;
+    cancelGesture();
+    import("./present").then(
+      (module) => module.present({ text, model, page: scene.root.page, extent: indexer.extent(model), from, images: options.images, onExit: (id) => {
+        surface.focus({ preventScroll: true });
+        if (id !== null) goToBoard(id);
+      } }, life),
+      () => announce(t("draw.present.failed")),
+    );
   };
 
   /// Dall'elenco: porta la tavola `id` al posto `to`, contato da 0, fra le
@@ -14552,6 +14578,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ["-", t("draw.zoom_out")],
         ["0", t("draw.keys.actual")],
         ["Shift-1", t("draw.fit")],
+        ...presentStartRows(at, t),
         ...(at.has("gestures")
           ? ([["4", t("draw.turn.left")], ["6", t("draw.turn.right")], ["5", t("draw.turn.straighten")], ["Shift-F10", t("draw.keys.radial")]] as const)
           : []),
@@ -14572,6 +14599,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ],
     },
     ...boardListKeys(at),
+    ...presentKeyGroups(at, t),
     ...historyKeys(at),
     ...accessKeys(at),
   ];
@@ -15548,6 +15576,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         // Con lo Spessore, le misure del punto scelto.
         void widthDialog();
       } else void properties();
+    } else if (onSurface && event.key === "F5" && !mod && !event.altKey && has("present")) {
+      present(event.shiftKey ? currentBoard()?.id ?? null : null);
     } else if (event.key === "?") {
       void keys();
     } else if ((event.key === "Delete" || event.key === "Backspace") && builderKeysOn() && buildChosen(true)) {
