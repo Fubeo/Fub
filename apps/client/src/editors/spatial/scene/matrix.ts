@@ -5,6 +5,8 @@
 // stesso ordine: la stessa sequenza di moltiplicazioni e somme dà lo stesso
 // double in Rust e in JavaScript, e il riepilogo arriva uguale al centesimo.
 
+import { formatNumber } from "../number";
+
 /// Una matrice affine `[a, b, c, d, e, f]`.
 export type Matrix = readonly [number, number, number, number, number, number];
 
@@ -63,4 +65,33 @@ export function invert(m: Matrix): Matrix | null {
   const det = a * d - b * c;
   if (det === 0 || !Number.isFinite(det)) return null;
   return [d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det];
+}
+
+/// L'ellisse di raggi `rx` e `ry`, ruotata di `degrees`, dopo la parte
+/// lineare di `m`: i suoi raggi e la sua rotazione, dalla decomposizione ai
+/// valori singolari di L · R(φ) · diag(rx, ry). Non ha un corrispondente in
+/// `fub-scene`: serve agli strumenti che riscrivono le forme e ai calcoli
+/// delle aree.
+export function mappedEllipse(m: Matrix, rx: number, ry: number, degrees: number): { readonly radii: Point; readonly rotation: number } {
+  const angle = toRadians(degrees);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const [a, b, c, d] = m;
+  // La matrice per righe: [[p, q], [r, s]].
+  const p = (a * cos + c * sin) * rx;
+  const q = (c * cos - a * sin) * ry;
+  const r = (b * cos + d * sin) * rx;
+  const s = (d * cos - b * sin) * ry;
+  const e = (p + s) / 2;
+  const f = (p - s) / 2;
+  const g = (r + q) / 2;
+  const h = (r - q) / 2;
+  const outer = Math.hypot(e, h);
+  const inner = Math.hypot(f, g);
+  const radii: Point = [outer + inner, Math.abs(outer - inner)];
+  // Un cerchio non ha rotazione; un'ellisse la ha fra 0 e 180 gradi.
+  if (formatNumber(radii[0], 2) === formatNumber(radii[1], 2)) return { radii, rotation: 0 };
+  const turned = (((Math.atan2(g, f) + Math.atan2(h, e)) / 2) * 180) / Math.PI;
+  const rotation = ((turned % 180) + 180) % 180;
+  return { radii, rotation: formatNumber(rotation, 2) === "180" ? 0 : rotation };
 }

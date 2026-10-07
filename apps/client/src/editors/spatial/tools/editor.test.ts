@@ -5152,29 +5152,118 @@ describe("applicare la trasformazione, dal livello Esperto", () => {
   });
 });
 
-describe("l'oggetto in tracciato, dal livello Esperto", () => {
+describe("il menu Tracciato, dal livello Esperto", () => {
   const A = "oa2a2a2a2";
   const T = "ot2t2t2t2";
   const P = "op2p2p2p2";
+  const L = "ol2l2l2l2";
+  const G = "og2g2g2g2";
+  // Un poligono di 64 lati: un cerchio fatto di linee.
+  const ROUND = Array.from({ length: 64 }, (_, i) => {
+    const a = (2 * Math.PI * i) / 64;
+    return `${(300 + 80 * Math.cos(a)).toFixed(2)},${(300 + 80 * Math.sin(a)).toFixed(2)}`;
+  }).join(" ");
   const SHAPES = doc(
     `${LAYER}<rect id="${A}" x="0" y="0" width="20" height="10" fill="#000000"/>`
       + `<text id="${T}" x="0" y="40"><tspan x="0" dy="0">Ciao</tspan></text>`
-      + `<path id="${P}" d="M0 60 L10 70" fill="none" stroke="#000000" stroke-width="1"/></g>`,
+      + `<path id="${P}" d="M0 60 L10 70" fill="none" stroke="#000000" stroke-width="1"/>`
+      + `<line id="${L}" x1="100" y1="100" x2="200" y2="100" stroke="#0072b2" stroke-width="10"/>`
+      + `<polygon id="${G}" points="${ROUND}" fill="#d55e00"/></g>`,
   );
 
-  const pathButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Oggetto in tracciato"]')!;
+  const pathButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Tracciato"]')!;
+  /// Le voci del menu aperto per ultimo.
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
+  /// Le voci, col nome, se sono spente e che cosa dicono.
+  const entries = (): (string | boolean | null)[][] =>
+    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
+  const closeMenus = (): void => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  };
+  /// La voce `label` del menu sugli oggetti scelti.
+  const run = (label: string): void => {
+    pathButton().click();
+    item(label).click();
+    closeMenus();
+  };
+  /// La barra dello scostamento e della semplificazione, e le sue parti.
+  const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-paths")!;
+  const field = <E extends HTMLElement>(name: string): E =>
+    [...bar().querySelectorAll("label")].find((label) => label.querySelector("span")!.textContent === name)!.querySelector<E>("input, select")!;
+  const shown = (): string[] => [...bar().querySelectorAll("label")].filter((label) => !label.hidden).map((label) => label.querySelector("span")!.textContent ?? "");
+  const status = (): string => bar().querySelector("output")!.textContent ?? "";
+  const action = (name: string): HTMLButtonElement => [...bar().querySelectorAll("button")].find((control) => control.textContent === name)!;
+  /// Scrive `value` nel campo `control`, come chi lo cambia.
+  const write = (control: HTMLInputElement | HTMLSelectElement, value: string): void => {
+    control.value = value;
+    control.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  /// I punti delle linee dell'ultimo disegno sopra il foglio.
+  const drawnPoints = (layer: ReturnType<typeof recording>): string[] => {
+    layer.frame();
+    return layer.calls().filter(([name]) => name === "moveTo" || name === "lineTo").map(([, x, y]) => `${Math.round(x as number)},${Math.round(y as number)}`);
+  };
 
-  it("c'è solo all'Esperto, e fa degli oggetti tracciati in un passo che si annulla", () => {
+  afterEach(closeMenus);
+
+  it("c'è solo all'Esperto, e le voci che non servono dicono perché", () => {
     mount(SHAPES, { level: "standard" });
     editor.select([A]);
     expect(pathButton().hidden).toBe(true);
     // Sotto l'Esperto il comando non scrive, anche chiesto.
-    pathButton().click();
+    run("Oggetto in tracciato");
     expect(changes).toEqual([]);
     editor.setLevel("expert");
     expect(pathButton().hidden).toBe(false);
+    expect(pathButton().getAttribute("aria-haspopup")).toBe("menu");
     expect(pathButton().hasAttribute("aria-keyshortcuts")).toBe(false);
     pathButton().click();
+    expect(pathButton().getAttribute("aria-expanded")).toBe("true");
+    const noStroke = "Fra gli oggetti scelti non c’è una forma col contorno.";
+    const noInk = "Fra gli oggetti scelti non c’è un tratto a penna.";
+    expect(entries()).toEqual([
+      ["Oggetto in tracciato", false, null],
+      ["Contorno in tracciato", true, noStroke],
+      ["Inchiostro in tracciato", true, noInk],
+      ["Scostamento…", false, null],
+      ["Semplifica…", false, null],
+    ]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    closeMenus();
+    editor.select([T, L]);
+    pathButton().click();
+    expect(entries()).toEqual([
+      ["Oggetto in tracciato", false, null],
+      ["Contorno in tracciato", false, null],
+      ["Inchiostro in tracciato", true, noInk],
+      ["Scostamento…", false, null],
+      ["Semplifica…", false, null],
+    ]);
+    closeMenus();
+    editor.select([T]);
+    pathButton().click();
+    const noShape = "Fra gli oggetti scelti non c’è una forma.";
+    expect(entries()).toEqual([
+      ["Oggetto in tracciato", false, null],
+      ["Contorno in tracciato", true, noStroke],
+      ["Inchiostro in tracciato", true, noInk],
+      ["Scostamento…", true, noShape],
+      ["Semplifica…", true, noShape],
+    ]);
+    item("Scostamento…").click();
+    expect(bar().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("«Oggetto in tracciato» fa degli oggetti tracciati in un passo che si annulla", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    run("Oggetto in tracciato");
     expect(editor.engine.text).toContain(`<path id="${A}" d="M0 0 L20 0 L20 10 L0 10 Z" fill="#000000"/>`);
     expect(spoken()).toBe("1 oggetto è diventato un tracciato.");
     expect(editor.selection).toEqual([A]);
@@ -5187,16 +5276,148 @@ describe("l'oggetto in tracciato, dal livello Esperto", () => {
   it("dice quanti oggetti restano come sono, e quando non c'è niente da fare", () => {
     mount(SHAPES, { level: "expert" });
     editor.select([A, T]);
-    pathButton().click();
+    run("Oggetto in tracciato");
     expect(spoken()).toBe("1 oggetto è diventato un tracciato. 1 oggetto resta com’è: testi, immagini e forme vuote non diventano tracciati.");
     expect(editor.selection).toEqual([A, T]);
     editor.select([T]);
-    pathButton().click();
+    run("Oggetto in tracciato");
     expect(spoken()).toBe("È già così: niente da cambiare. 1 oggetto resta com’è: testi, immagini e forme vuote non diventano tracciati.");
     editor.select([P]);
-    pathButton().click();
+    run("Oggetto in tracciato");
     expect(spoken()).toBe("È già così: niente da cambiare.");
     expect(changes).toHaveLength(1);
+  });
+
+  it("«Contorno in tracciato» fa del contorno una forma piena del suo colore", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([L, A]);
+    run("Contorno in tracciato");
+    expect(new RegExp(`<path id="${L}"[^>]*>`).exec(editor.engine.text)?.[0]).toBe(`<path id="${L}" d="M100 105 L100 95 L200 95 L200 105 Z" fill="#0072b2"/>`);
+    expect(spoken()).toBe("1 contorno è diventato una forma piena. 1 oggetto resta com’è: non ha un contorno.");
+    expect(editor.selection).toEqual([A, L]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Contorno in tracciato.");
+  });
+
+  it("«Inchiostro in tracciato» fa di un tratto a penna la sua spina, col colore e lo spessore", () => {
+    mount(doc(`${LAYER}</g>`), { level: "expert" });
+    editor.setTool("pen");
+    drag([[20, 300], [40, 330], [60, 360], [80, 330], [100, 300]]);
+    const id = /<path id="(o[a-z0-9]{8})" fub:tool="pen"/.exec(editor.engine.text)![1]!;
+    const before = editor.engine.text;
+    editor.setTool("select");
+    editor.select([id]);
+    run("Inchiostro in tracciato");
+    expect(editor.engine.text).toMatch(new RegExp(`<path id="${id}" d="M20 300 [^"]+" fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`));
+    expect(editor.engine.text).not.toContain("fub:ink");
+    expect(spoken()).toBe("1 tratto a penna è diventato un tracciato.");
+    expect(editor.selection).toEqual([id]);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("«Scostamento…» apre una barra con l'anteprima; Invio scrive il tracciato nuovo, sotto la forma", () => {
+    const layer = recording();
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    editor.focus();
+    run("Scostamento…");
+    expect(bar().hidden).toBe(false);
+    expect(document.getElementById(bar().getAttribute("aria-labelledby")!)!.textContent).toBe("Scostamento");
+    expect(shown()).toEqual(["Distanza", "Angoli", "Limite"]);
+    const distance = field<HTMLInputElement>("Distanza");
+    expect(document.activeElement).toBe(distance);
+    expect(distance.value).toBe("4");
+    expect(field<HTMLSelectElement>("Angoli").value).toBe("miter");
+    expect(field<HTMLInputElement>("Limite").value).toBe("4");
+    expect(status()).toBe("1 tracciato nuovo.");
+    // L'anteprima: il rettangolo allargato di 4.
+    expect(drawnPoints(layer)).toEqual(expect.arrayContaining(["-4,-4", "24,-4", "24,14", "-4,14"]));
+    expect(changes).toEqual([]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Gli angoli arrotondati non hanno limite.
+    write(field<HTMLSelectElement>("Angoli"), "round");
+    expect(shown()).toEqual(["Distanza", "Angoli"]);
+    write(field<HTMLSelectElement>("Angoli"), "miter");
+    write(distance, "-6");
+    expect(status()).toBe("1 forma sparisce: è più stretta del doppio della distanza.");
+    write(distance, "");
+    expect(status()).toBe("Scrivi una distanza: in più allarga, in meno restringe.");
+    key("Enter", {}, distance);
+    expect(spoken()).toBe("Scrivi una distanza: in più allarga, in meno restringe.");
+    expect(bar().hidden).toBe(false);
+    write(distance, "2");
+    expect(drawnPoints(layer)).toEqual(expect.arrayContaining(["-2,-2", "22,-2", "22,12", "-2,12"]));
+    key("Enter", {}, distance);
+    expect(bar().hidden).toBe(true);
+    expect(document.activeElement).toBe(surface());
+    const added = editor.selection[0]!;
+    expect(added).not.toBe(A);
+    // Quattro nodi, come il rettangolo.
+    expect(editor.engine.text).toMatch(new RegExp(`<path id="${added}" d="M22 -2 L22 12 L-2 12 L-2 -2 Z" fill="#000000"/>\\s*<rect id="${A}"`));
+    expect(spoken()).toBe("1 tracciato nuovo, scostato di 2.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Scostamento.");
+    // La barra riapre con la distanza dell'ultima volta; Esc la chiude senza
+    // cambiare niente.
+    editor.select([A]);
+    run("Scostamento…");
+    expect(field<HTMLInputElement>("Distanza").value).toBe("2");
+    key("Escape", {}, field<HTMLInputElement>("Distanza"));
+    expect(bar().hidden).toBe(true);
+    expect(document.activeElement).toBe(surface());
+    expect(changes).toHaveLength(2);
+  });
+
+  it("l'anteprima segue la selezione, e la barra se ne va col livello", () => {
+    const layer = recording();
+    mount(SHAPES, { level: "expert" });
+    editor.select([A]);
+    run("Scostamento…");
+    editor.select([L]);
+    expect(status()).toBe("1 tracciato nuovo.");
+    expect(drawnPoints(layer)).toEqual(expect.arrayContaining(["96,96", "204,96", "204,104", "96,104"]));
+    editor.select([]);
+    expect(status()).toBe("Scegli le forme da cambiare.");
+    editor.select([A, T]);
+    expect(status()).toBe("1 tracciato nuovo. 1 oggetto resta com’è: non è una forma.");
+    editor.setLevel("standard");
+    expect(bar().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("«Semplifica…» dice i nodi prima e dopo, e lo scarto; «Applica» scrive in un passo", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select([G]);
+    run("Semplifica…");
+    expect(document.getElementById(bar().getAttribute("aria-labelledby")!)!.textContent).toBe("Semplifica");
+    expect(shown()).toEqual(["Semplificazione"]);
+    const amount = field<HTMLInputElement>("Semplificazione");
+    expect(document.activeElement).toBe(amount);
+    expect(amount.value).toBe("50");
+    expect(status()).toBe("Da 64 nodi a 8, scarto fino a 0,51.");
+    expect(amount.getAttribute("aria-valuetext")).toBe("scarto fino a 0,51");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    write(amount, "0");
+    expect(status()).toBe("64 nodi: niente da togliere entro 0,023.");
+    action("Applica").click();
+    expect(spoken()).toBe("64 nodi: niente da togliere entro 0,023.");
+    expect(changes).toEqual([]);
+    write(amount, "50");
+    const after = Number(/a (\d+),/.exec(status())![1]);
+    action("Applica").click();
+    expect(bar().hidden).toBe(true);
+    expect(editor.engine.text).toMatch(new RegExp(`<path id="${G}" d="M[^"]+C[^"]+" fill="#d55e00"/>`));
+    expect(spoken()).toBe(`1 forma semplificata: da 64 nodi a ${after}.`);
+    expect(editor.selection).toEqual([G]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHAPES);
+    expect(spoken()).toBe("Annullato: Semplifica.");
   });
 });
 

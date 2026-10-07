@@ -27,6 +27,7 @@ import { INK_MAX_SAMPLES, quantizeAzimuth, quantizeCoordinate } from "../ink/sam
 import { derivativeAt, pointAt, type Curve } from "../scene/curves";
 import { remEuclid } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
+import { AWAY_SAMPLES, REFINE_ROUNDS, away, closer, cumulative, endDirection, fitCubics, onLine, straight, unit, type Fitted } from "./fit";
 import { curveAt, parseKey, type Link, type NodeKey, type Subpath } from "./nodes";
 
 /// Un posto sulla spina: il segmento e il parametro. Su una spina di un nodo
@@ -52,25 +53,11 @@ export const spineTolerance = (size: number): number => Math.max(0.5, size / 2);
 /// perché la spina vi metta uno spigolo.
 const CORNER_RADIANS = (75 * Math.PI) / 180;
 
-/// Quanti campioni si guardano, al più, per sapere dove va il tratto.
-const AWAY_SAMPLES = 512;
-
-/// Le prove di Newton dei parametri, prima di dividere un pezzo.
-const REFINE_ROUNDS = 4;
-
-type Cubic = Extract<Curve, { readonly kind: "cubic" }>;
-
 const plus = (a: Point, b: Point): Point => [a[0] + b[0], a[1] + b[1]];
 const minus = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]];
-const times = (a: Point, k: number): Point => [a[0] * k, a[1] * k];
 const dot = (a: Point, b: Point): number => a[0] * b[0] + a[1] * b[1];
 const distance = (a: Point, b: Point): number => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const lerp = (a: Point, b: Point, f: number): Point => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
-
-function unit(a: Point): Point | null {
-  const l = Math.hypot(a[0], a[1]);
-  return l > 0 && Number.isFinite(l) ? [a[0] / l, a[1] / l] : null;
-}
 
 const rotate = (a: Point, radians: number): Point => {
   const cos = Math.cos(radians);
@@ -81,27 +68,6 @@ const rotate = (a: Point, radians: number): Point => {
 // ---------------------------------------------------------------------------
 // La spina dai campioni.
 // ---------------------------------------------------------------------------
-
-/// La lunghezza della spezzata `points` fino a ogni punto.
-function cumulative(points: readonly Point[]): number[] {
-  const out = [0];
-  for (let i = 1; i < points.length; i++) out.push(out[i - 1]! + distance(points[i - 1]!, points[i]!));
-  return out;
-}
-
-/// Il primo punto dopo `at` nel verso `step`, fino a `end`, lontano almeno
-/// `reach` da lui in linea d'aria: il tremolio della mano allunga il tratto
-/// senza portarlo da nessuna parte. Se il tratto finisce prima, `end`
-/// quando è lontano almeno metà; altrimenti, o dopo [`AWAY_SAMPLES`]
-/// campioni, `null`.
-function away(points: readonly Point[], at: number, step: 1 | -1, end: number, reach: number): number | null {
-  let m = at;
-  for (let count = 0; m !== end && count < AWAY_SAMPLES; count++) {
-    m += step;
-    if (distance(points[m]!, points[at]!) >= reach) return m;
-  }
-  return m === end && distance(points[end]!, points[at]!) >= reach / 2 ? end : null;
-}
 
 /// Gli indici dei punti dove il tratto fa uno spigolo: quanto gira fra il
 /// punto lontano `reach` prima e quello lontano `reach` dopo supera
@@ -132,144 +98,6 @@ function corners(points: readonly Point[], reach: number): number[] {
   return out;
 }
 
-/// Il verso in cui il tratto passa per il capo `from` del pezzo che va fino
-/// a `to`: verso il primo punto lontano almeno `reach`, o verso l'altro capo.
-function endDirection(points: readonly Point[], from: number, to: number, reach: number): Point {
-  const step = to > from ? 1 : -1;
-  const k = away(points, from, step, to, reach) ?? to;
-  const toward = unit(minus(points[k]!, points[from]!)) ?? unit(minus(points[to]!, points[from]!)) ?? [1, 0];
-  return step > 0 ? toward : times(toward, -1);
-}
-
-/// Il verso in cui il tratto passa per il punto `at`, dentro il pezzo da
-/// `first` a `last`: da un punto lontano `reach` prima a uno dopo.
-function throughDirection(points: readonly Point[], at: number, first: number, last: number, reach: number): Point {
-  const a = away(points, at, -1, first, reach) ?? first;
-  const b = away(points, at, 1, last, reach) ?? last;
-  return unit(minus(points[b]!, points[a]!)) ?? unit(minus(points[last]!, points[first]!)) ?? [1, 0];
-}
-
-const basis = (t: number): [number, number, number, number] => {
-  const s = 1 - t;
-  return [s * s * s, 3 * s * s * t, 3 * s * t * t, t * t * t];
-};
-
-/// La cubica da `points[first]` a `points[last]` che parte nel verso `t1` e
-/// arriva nel verso `t2`, con le maniglie lunghe quanto i minimi quadrati
-/// chiedono per i parametri `u`. Una maniglia che verrebbe nulla o rovescia
-/// diventa un terzo della corda, come in Schneider.
-function generate(points: readonly Point[], first: number, last: number, u: readonly number[], t1: Point, t2: Point): Cubic {
-  const from = points[first]!;
-  const to = points[last]!;
-  let c11 = 0;
-  let c12 = 0;
-  let c22 = 0;
-  let x1 = 0;
-  let x2 = 0;
-  for (let i = first; i <= last; i++) {
-    const b = basis(u[i - first]!);
-    const a1 = times(t1, b[1]);
-    const a2 = times(t2, -b[2]);
-    const r = minus(points[i]!, plus(times(from, b[0] + b[1]), times(to, b[2] + b[3])));
-    c11 += dot(a1, a1);
-    c12 += dot(a1, a2);
-    c22 += dot(a2, a2);
-    x1 += dot(a1, r);
-    x2 += dot(a2, r);
-  }
-  const chord = distance(from, to);
-  const det = c11 * c22 - c12 * c12;
-  let l1 = Math.abs(det) < 1e-12 ? 0 : (x1 * c22 - x2 * c12) / det;
-  let l2 = Math.abs(det) < 1e-12 ? 0 : (c11 * x2 - c12 * x1) / det;
-  const floor = chord * 1e-6;
-  if (!(l1 > floor) || !(l2 > floor)) l1 = l2 = chord / 3;
-  return { kind: "cubic", c1: plus(from, times(t1, l1)), c2: minus(to, times(t2, l2)), to };
-}
-
-/// Il parametro di `p` sulla cubica, un passo di Newton più vicino.
-function closer(from: Point, curve: Cubic, p: Point, t: number): number {
-  const diff = minus(pointAt(from, curve, t), p);
-  const d1 = derivativeAt(from, curve, t);
-  const a = plus(minus(curve.c2, times(curve.c1, 2)), from);
-  const b = plus(minus(curve.to, times(curve.c2, 2)), curve.c1);
-  const d2 = plus(times(a, 6 * (1 - t)), times(b, 6 * t));
-  const denominator = dot(d1, d1) + dot(diff, d2);
-  return denominator === 0 ? t : Math.min(1, Math.max(0, t - dot(diff, d1) / denominator));
-}
-
-/// Il punto più lontano dalla cubica fra quelli in mezzo, e quanto.
-function worst(points: readonly Point[], first: number, last: number, u: readonly number[], curve: Cubic): { readonly error: number; readonly at: number } {
-  let error = 0;
-  let at = Math.floor((first + last) / 2);
-  for (let i = first + 1; i < last; i++) {
-    const d = distance(pointAt(points[first]!, curve, u[i - first]!), points[i]!);
-    if (d > error) {
-      error = d;
-      at = i;
-    }
-  }
-  return { error, at };
-}
-
-/// Un pezzo della spina: la curva dal punto `first` al punto `last`, e il
-/// parametro di ciascuno dei punti fra loro.
-interface Piece {
-  readonly first: number;
-  readonly last: number;
-  readonly curve: Curve;
-  readonly u: readonly number[];
-}
-
-/// Le cubiche che passano entro `tolerance` dai punti da `first` a `last`,
-/// partendo nel verso `t1` e arrivando nel verso `t2`: una sola se basta,
-/// altrimenti divise al punto più lontano, lisce lì.
-function fit(points: readonly Point[], lengths: readonly number[], first: number, last: number, t1: Point, t2: Point, tolerance: number, out: Piece[]): void {
-  const span = lengths[last]! - lengths[first]!;
-  let u = points.slice(first, last + 1).map((_, i) => (span > 0 ? (lengths[first + i]! - lengths[first]!) / span : i / (last - first)));
-  let curve = generate(points, first, last, u, t1, t2);
-  let { error, at } = worst(points, first, last, u, curve);
-  if (error <= tolerance || last - first < 2) {
-    out.push({ first, last, curve, u });
-    return;
-  }
-  if (error <= tolerance * 4) {
-    for (let round = 0; round < REFINE_ROUNDS; round++) {
-      const now = curve;
-      // I capi restano ai capi.
-      u = u.map((t, i) => (i === 0 || i === last - first ? t : closer(points[first]!, now, points[first + i]!, t)));
-      curve = generate(points, first, last, u, t1, t2);
-      ({ error, at } = worst(points, first, last, u, curve));
-      if (error <= tolerance) {
-        out.push({ first, last, curve, u });
-        return;
-      }
-    }
-  }
-  const through = throughDirection(points, at, first, last, tolerance);
-  fit(points, lengths, first, at, t1, through, tolerance, out);
-  fit(points, lengths, at, last, through, t2, tolerance, out);
-}
-
-/// Vero se i punti da `first` a `last` stanno tutti entro `tolerance` dalla
-/// corda fra i due.
-function straight(points: readonly Point[], first: number, last: number, tolerance: number): boolean {
-  const a = points[first]!;
-  const along = unit(minus(points[last]!, a));
-  if (along === null) return false;
-  for (let i = first + 1; i < last; i++) {
-    const d = minus(points[i]!, a);
-    if (Math.abs(d[0] * along[1] - d[1] * along[0]) > tolerance) return false;
-  }
-  return true;
-}
-
-/// Il parametro di `p` sulla linea da `a` a `b`, fra 0 e 1.
-function onLine(a: Point, b: Point, p: Point): number {
-  const d = minus(b, a);
-  const l = dot(d, d);
-  return l === 0 ? 0 : Math.min(1, Math.max(0, dot(minus(p, a), d) / l));
-}
-
 const linkOf = (curve: Curve): Link =>
   curve.kind === "cubic" ? { kind: "cubic", c1: curve.c1, c2: curve.c2 } : { kind: "line" };
 
@@ -296,7 +124,7 @@ export function fitSpine(points: readonly Point[], tolerance: number): Spine {
   for (let i = 1; i < unique.length - 1; i++) if (distance(unique[i]!, unique[coarse[coarse.length - 1]!]!) >= tolerance / 4) coarse.push(i);
   coarse.push(unique.length - 1);
   const cuts = [0, ...corners(coarse.map((i) => unique[i]!), 3 * tolerance).map((i) => coarse[i]!), unique.length - 1];
-  const pieces: Piece[] = [];
+  const pieces: Fitted[] = [];
   for (let c = 0; c + 1 < cuts.length; c++) {
     const first = cuts[c]!;
     const last = cuts[c + 1]!;
@@ -306,7 +134,7 @@ export function fitSpine(points: readonly Point[], tolerance: number): Spine {
       pieces.push({ first, last, curve: { kind: "line", to: b }, u: unique.slice(first, last + 1).map((p) => onLine(a, b, p)) });
       continue;
     }
-    fit(unique, lengths, first, last, endDirection(unique, first, last, tolerance), endDirection(unique, last, first, tolerance), tolerance, pieces);
+    fitCubics(unique, lengths, first, last, endDirection(unique, first, last, tolerance), endDirection(unique, last, first, tolerance), tolerance, pieces);
   }
   const nodes: Point[] = [unique[0]!];
   const links: Link[] = [];

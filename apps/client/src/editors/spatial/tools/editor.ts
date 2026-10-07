@@ -120,7 +120,7 @@ import { formatNumber } from "../number";
 import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInputOptions, type StrokeStart } from "../pen/pen-input";
 import { isDefaultCurve, pressureCurve, sameCurve, validCurve, type PenCurve } from "../pen/pressure";
 import type { TouchPolicy } from "../pen/roles";
-import { BoundsBuilder, type Bounds } from "../scene/geometry";
+import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
@@ -243,6 +243,8 @@ import {
 } from "./guides";
 import { applyOps } from "./apply";
 import { pathOps } from "./topath";
+import type { Join } from "./offset";
+import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps } from "./paths";
 import type { BooleanKind } from "./boolean";
 import { combineOps, isShape, type Refused } from "./combine";
 import { builderOf, buildOps, type Builder, type BuildRefused } from "./builder";
@@ -268,6 +270,7 @@ import {
   parseKey,
   pullHandles,
   pullSide,
+  readNodes,
   realizeHandle,
   samePlace,
   setKind,
@@ -791,6 +794,29 @@ const CORNER_ROOM_PX = 32;
 
 /// La forma di un nodo, per tipo, come la disegna lo strato sopra.
 const NODE_SHAPES: Readonly<Record<NodeKind, NodeShape>> = { corner: "diamond", smooth: "square", symmetric: "circle" };
+
+/// Gli angoli dello scostamento, coi loro nomi, nell'ordine della barra.
+const JOIN_NAMES: ReadonlyMap<Join, DrawKey> = new Map([
+  ["miter", "draw.offset.join.miter"],
+  ["round", "draw.offset.join.round"],
+  ["bevel", "draw.offset.join.bevel"],
+]);
+
+/// La distanza dello scostamento la prima volta, in ogni unità: un passo
+/// che si vede, a numeri tondi.
+const OFFSET_START: Readonly<Record<LengthUnit, number>> = { px: 4, mm: 1, cm: 0.1, in: 0.05, pt: 3 };
+
+/// I passi del cursore di «Semplifica», e lo scarto ai due capi, in parti
+/// della diagonale delle forme scelte: da quasi niente a un ventesimo. Fra
+/// i capi lo scarto cresce in proporzione, e ogni passo semplifica in scala
+/// quanto il precedente.
+const SIMPLIFY_STEPS = 100;
+const SIMPLIFY_LEAST = 1e-4;
+const SIMPLIFY_MOST = 0.05;
+
+/// I nodi che l'anteprima di «Semplifica» mostra, al più: oltre, il solo
+/// contorno.
+const PREVIEW_NODES = 2_000;
 
 /// Dove sta la linea di base nella riga di un campo di testo, in volte il
 /// corpo, sotto la metà della riga: metà della differenza fra la parte sopra
@@ -2117,13 +2143,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   });
   // Dal livello Esperto: la trasformazione passa nella geometria.
   const applyButton = arrangeButton("draw.apply_transform", "draw-apply-transform", null, () => applySelection());
-  const pathButton = arrangeButton("draw.to_path", "draw-to-path", null, () => traceSelection());
+  // Dal livello Esperto, il menu Tracciato: gli oggetti e i contorni
+  // diventano tracciati, l'inchiostro i suoi nodi; lo scostamento e la
+  // semplificazione si regolano in una barra, con l'anteprima.
+  const pathButton = arrangeButton("draw.path", "draw-to-path", null, () => openMenu(pathButton, pathItems()));
   // Dal livello Esperto: unione, differenza, intersezione, esclusione e
   // divisione, in un menu.
   const booleanButton = arrangeButton("draw.boolean", "draw-boolean", null, () => openMenu(booleanButton, booleanItems()));
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
-  for (const control of [orderButton, intoButton, alignButton, booleanButton, outlineButton]) {
+  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, outlineButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -2292,12 +2321,95 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showDescription();
   });
 
+  // Lo scostamento e la semplificazione, dal menu Tracciato: in fondo al
+  // foglio, come la descrizione delle immagini. Non è una finestra: mentre
+  // si regola, il disegno si guarda da vicino e gli oggetti scelti
+  // cambiano, e l'anteprima li segue.
+  const pathsBar = document.createElement("div");
+  pathsBar.className = "draw-paths";
+  pathsBar.setAttribute("role", "group");
+  pathsBar.hidden = true;
+  const pathsTitle = document.createElement("span");
+  pathsTitle.className = "draw-paths-title";
+  pathsTitle.id = identifier("draw-paths");
+  pathsBar.setAttribute("aria-labelledby", pathsTitle.id);
+  /// Un campo della barra: il nome, e accanto `control`.
+  const pathsField = (control: HTMLInputElement | HTMLSelectElement): { readonly field: HTMLLabelElement; readonly name: HTMLSpanElement } => {
+    const field = document.createElement("label");
+    field.className = "draw-paths-field";
+    const name = document.createElement("span");
+    field.append(name, control);
+    return { field, name };
+  };
+  const offsetInput = document.createElement("input");
+  offsetInput.type = "number";
+  offsetInput.inputMode = "decimal";
+  offsetInput.step = "any";
+  offsetInput.autocomplete = "off";
+  const offsetField = pathsField(offsetInput);
+  const joinSelect = document.createElement("select");
+  const joinOptions = new Map<Join, HTMLOptionElement>();
+  for (const join of JOIN_NAMES.keys()) {
+    const option = document.createElement("option");
+    option.value = join;
+    joinOptions.set(join, option);
+    joinSelect.append(option);
+  }
+  const joinField = pathsField(joinSelect);
+  const limitInput = document.createElement("input");
+  limitInput.type = "number";
+  limitInput.inputMode = "decimal";
+  limitInput.step = "any";
+  limitInput.min = "1";
+  limitInput.autocomplete = "off";
+  const limitField = pathsField(limitInput);
+  const amountInput = document.createElement("input");
+  amountInput.type = "range";
+  amountInput.min = "0";
+  amountInput.max = String(SIMPLIFY_STEPS);
+  amountInput.step = "1";
+  const amountField = pathsField(amountInput);
+  const pathsStatus = document.createElement("output");
+  pathsStatus.className = "draw-paths-status";
+  pathsStatus.setAttribute("aria-live", "polite");
+  const pathsAction = (): HTMLButtonElement => {
+    const control = document.createElement("button");
+    control.type = "button";
+    control.className = "draw-button draw-paths-action";
+    return control;
+  };
+  const pathsApply = pathsAction();
+  const pathsCancel = pathsAction();
+  pathsBar.append(pathsTitle, offsetField.field, joinField.field, limitField.field, amountField.field, pathsApply, pathsCancel, pathsStatus);
+  /// Il comando della barra aperta; `null` se è chiusa.
+  let pathsMode: "offset" | "simplify" | null = null;
+  /// L'anteprima di adesso, con la selezione e l'indice per cui vale: le
+  /// regole della barra che cambiano la tolgono.
+  let pathsShown: { readonly selection: readonly string[]; readonly index: SceneIndex; readonly handles: readonly OverlayHandle[] } | null = null;
+  /// L'unità in cui è scritta la distanza.
+  let offsetUnit: LengthUnit = "px";
+  /// L'ultima distanza dello scostamento, in unità della scena, gli ultimi
+  /// angoli e l'ultima semplificazione: la barra riapre con quelli.
+  let offsetLast: number | null = null;
+  let joinLast: Join = "miter";
+  let limitLast = 4;
+  let amountLast = SIMPLIFY_STEPS / 2;
+  relabels.push(() => {
+    joinField.name.textContent = t("draw.offset.join");
+    for (const [join, label] of JOIN_NAMES) joinOptions.get(join)!.textContent = t(label);
+    limitField.name.textContent = t("draw.offset.limit");
+    amountField.name.textContent = t("draw.simplify.amount");
+    pathsApply.textContent = t("draw.paths.apply");
+    pathsCancel.textContent = t("draw.paths.cancel");
+    showPaths();
+  });
+
   // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
   // oggetti, le proprietà, gli attributi e, in fondo, la cronologia e
   // l'accessibilità.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar, pathsBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
@@ -3179,6 +3291,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...frameHandles());
     handles.push(...hoverHandles());
     handles.push(...regionHandles());
+    handles.push(...pathsHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
     const lasso = current?.kind === "select" && current.mode === "marquee"
@@ -4823,6 +4936,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
     syncAccess();
     syncDescriptions();
+    syncPaths();
     syncInspector();
     syncProperties();
     titleInput.disabled = !canEdit;
@@ -9509,6 +9623,301 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (arrange("draw.action.to_path", traced) !== null) announce(`${plural(traced.changed, "draw.traced.one", "draw.traced.other")}${refused}`);
   }
 
+  /// Le voci del menu Tracciato: spente, e dicono perché, quando fra gli
+  /// oggetti scelti non c'è niente su cui lavorano.
+  const pathItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const index = currentIndex();
+    const shapes = holdsShape(index, units);
+    const when = (usable: boolean, reason: DrawKey): Pick<MenuItem, "disabled" | "description"> =>
+      usable ? { disabled: false } : { disabled: true, description: t(units.length === 0 ? "draw.selected.none" : reason) };
+    return [
+      { label: t("draw.to_path"), ...when(units.length > 0, "draw.selected.none"), run: () => traceSelection() },
+      { label: t("draw.outline_stroke"), ...when(holdsStroke(index, units), "draw.outline_stroke.none"), run: () => strokeToPath() },
+      { label: t("draw.ink_path"), ...when(units.some(holdsPenStroke), "draw.ink_path.none"), run: () => inkPathSelection() },
+      { label: t("draw.offset"), separator: true, ...when(shapes, "draw.paths.no_shape"), run: () => openPaths("offset") },
+      { label: t("draw.simplify"), ...when(shapes, "draw.paths.no_shape"), run: () => openPaths("simplify") },
+    ];
+  };
+
+  /// «Contorno in tracciato», dal livello Esperto: il contorno di ogni forma
+  /// scelta diventa una forma piena del suo colore, coi trattini, gli
+  /// estremi e gli angoli. Una forma che ha anche un riempimento diventa un
+  /// gruppo col suo id: il riempimento sotto, il contorno sopra.
+  function strokeToPath(): void {
+    const units = arranging("path");
+    if (units === null) return;
+    const done = outlineStrokeOps(engine.model!, currentIndex(), units, newIds());
+    const notes = [
+      done.refused === 0 ? "" : ` ${plural(done.refused, "draw.stroked.refused.one", "draw.stroked.refused.other")}`,
+      done.skipped === 0 ? "" : ` ${plural(done.skipped, "draw.stroked.skipped.one", "draw.stroked.skipped.other")}`,
+    ].join("");
+    if (done.ops.length === 0) {
+      announce(`${t("draw.unchanged")}${notes}`);
+      return;
+    }
+    if (arrange("draw.action.outline_stroke", done) !== null) announce(`${plural(done.changed, "draw.stroked.one", "draw.stroked.other")}${notes}`);
+  }
+
+  /// «Inchiostro in tracciato», dal livello Esperto: ogni tratto a penna
+  /// scelto diventa la sua spina, un tracciato coi nodi che lo strumento
+  /// Nodi mostra, col colore dell'inchiostro e lo spessore del pennello.
+  function inkPathSelection(): void {
+    const units = arranging("path");
+    if (units === null) return;
+    const done = inkPathOps(engine.model!, currentIndex(), units, newIds());
+    const refused = done.refused === 0 ? "" : ` ${plural(done.refused, "draw.inked.refused.one", "draw.inked.refused.other")}`;
+    if (done.ops.length === 0) {
+      announce(`${t("draw.unchanged")}${refused}`);
+      return;
+    }
+    if (arrange("draw.action.ink_path", done) !== null) announce(`${plural(done.changed, "draw.inked.one", "draw.inked.other")}${refused}`);
+  }
+
+  /// Apre la barra di `mode` sugli oggetti scelti, coi valori dell'ultima
+  /// volta, e porta il fuoco al suo campo.
+  function openPaths(mode: "offset" | "simplify"): void {
+    if (arranging("path") === null) return;
+    closeDescriptions();
+    pathsMode = mode;
+    pathsShown = null;
+    const unit = docUnit();
+    offsetUnit = unit;
+    offsetInput.value = fieldText(offsetLast ?? fromUnit(OFFSET_START[unit], unit), unit);
+    joinSelect.value = joinLast;
+    limitInput.value = formatNumber(limitLast, 2);
+    amountInput.value = String(amountLast);
+    showPaths();
+    showHandles();
+    if (mode === "offset") {
+      offsetInput.focus({ preventScroll: true });
+      offsetInput.select();
+    } else {
+      amountInput.focus({ preventScroll: true });
+    }
+  }
+
+  /// Chiude la barra e toglie l'anteprima; il fuoco, se era nella barra,
+  /// torna al foglio.
+  function closePaths(): void {
+    if (pathsMode === null) return;
+    const focused = pathsBar.contains(document.activeElement);
+    pathsMode = null;
+    pathsShown = null;
+    pathsBar.hidden = true;
+    showHandles();
+    if (focused) surface.focus({ preventScroll: true });
+  }
+
+  /// La barra com'è adesso: il titolo, i campi del suo comando, e il limite
+  /// solo con gli angoli vivi. Se il documento ha cambiato unità, la
+  /// distanza scritta passa alla nuova.
+  function showPaths(): void {
+    const unit = docUnit();
+    if (unit !== offsetUnit) {
+      const value = Number(offsetInput.value);
+      if (offsetInput.value !== "" && Number.isFinite(value)) offsetInput.value = fieldText(fromUnit(value, offsetUnit), unit);
+      offsetUnit = unit;
+    }
+    offsetField.name.textContent = unitSuffix(t("draw.offset.distance"), unit);
+    pathsBar.hidden = pathsMode === null;
+    if (pathsMode === null) return;
+    const offset = pathsMode === "offset";
+    pathsTitle.textContent = t(offset ? "draw.offset.title" : "draw.simplify.title");
+    offsetField.field.hidden = !offset;
+    joinField.field.hidden = !offset;
+    limitField.field.hidden = !offset || joinNow() !== "miter";
+    amountField.field.hidden = offset;
+  }
+
+  /// Dopo ogni cambio: la barra si chiude se il livello o il documento non
+  /// la vogliono più.
+  function syncPaths(): void {
+    if (pathsMode === null) return;
+    if (!has("path") || !editable()) closePaths();
+    else showPaths();
+  }
+
+  /// La distanza scritta, in unità della scena; 0 se non si legge.
+  function offsetNow(): number {
+    return fieldValue(offsetInput.value);
+  }
+
+  function joinNow(): Join {
+    const value = joinSelect.value as Join;
+    return JOIN_NAMES.has(value) ? value : "miter";
+  }
+
+  /// Il limite degli angoli vivi scritto: quello di SVG se non si legge.
+  function limitNow(): number {
+    const value = Number(limitInput.value);
+    return limitInput.value !== "" && Number.isFinite(value) && value >= 1 ? value : 4;
+  }
+
+  /// Lo scarto di «Semplifica» per `units`, in unità della scena: la parte
+  /// della diagonale delle loro forme che il cursore dice. `null` senza
+  /// geometria.
+  function toleranceFor(units: readonly Unit[]): number | null {
+    const bounds = geometryOf(units);
+    if (bounds === null) return null;
+    const diagonal = Math.hypot(bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1]);
+    const step = Math.min(SIMPLIFY_STEPS, Math.max(0, Number(amountInput.value) || 0));
+    const tolerance = diagonal * SIMPLIFY_LEAST * (SIMPLIFY_MOST / SIMPLIFY_LEAST) ** (step / SIMPLIFY_STEPS);
+    return tolerance > 0 && Number.isFinite(tolerance) ? tolerance : null;
+  }
+
+  /// Uno scarto, piccolo, nell'unità del documento: due cifre significative,
+  /// in pixel il numero solo.
+  function deviationText(value: number): string {
+    const unit = docUnit();
+    const number = new Intl.NumberFormat(resolvedLanguage(), { maximumSignificantDigits: 2 }).format(toUnit(value, unit));
+    return unit === "px" ? number : `${number} ${unit}`;
+  }
+
+  /// Ciò che la barra farebbe agli oggetti `units`: le operazioni, le forme
+  /// di dopo nella scena, la frase che lo dice nella barra e quella da dire
+  /// dopo averlo fatto. Una frase sola se non c'è niente da fare.
+  function pathsPlan(units: readonly Unit[]): {
+    readonly arranged: Arranged;
+    readonly label: DrawKey;
+    readonly preview: readonly (readonly Segment[])[];
+    readonly nodes: boolean;
+    readonly extent: Bounds | null;
+    readonly status: string;
+    readonly done: string;
+  } | string {
+    const model = engine.model;
+    const index = currentIndex();
+    if (model === null || units.length === 0) return t("draw.paths.none");
+    if (!holdsShape(index, units)) return t("draw.paths.no_shape");
+    const note = (count: number, one: DrawKey, other: DrawKey): string[] => (count === 0 ? [] : [plural(count, one, other)]);
+    if (pathsMode === "offset") {
+      const distance = offsetNow();
+      if (distance === 0) return t("draw.offset.zero");
+      const done = offsetOps(model, index, units, distance, { join: joinNow(), miterLimit: limitNow() }, newIds());
+      const notes = [
+        ...note(done.vanished, "draw.offset.vanished.one", "draw.offset.vanished.other"),
+        ...note(done.refused, "draw.paths.refused.one", "draw.paths.refused.other"),
+        ...note(done.skipped, "draw.paths.skipped.one", "draw.paths.skipped.other"),
+      ];
+      const extent = new BoundsBuilder();
+      for (const segments of done.preview) extent.path(segments, IDENTITY);
+      return {
+        arranged: done,
+        label: "draw.action.offset",
+        preview: done.preview,
+        nodes: false,
+        extent: extent.finish(),
+        status: [...(done.changed === 0 ? [] : [plural(done.changed, "draw.offset.new.one", "draw.offset.new.other")]), ...notes].join(" ") || t("draw.unchanged"),
+        done: [plural(done.changed, "draw.offset.done.one", "draw.offset.done.other", { distance: lengthSpoken(distance) }), ...notes].join(" "),
+      };
+    }
+    const tolerance = toleranceFor(units);
+    if (tolerance === null) return t("draw.paths.no_shape");
+    const done = simplifyOps(model, index, units, tolerance, newIds());
+    const length = deviationText(tolerance);
+    const notes = [
+      ...note(done.refused, "draw.paths.refused.one", "draw.paths.refused.other"),
+      ...(units.some(holdsPenStroke) ? [t("draw.simplify.ink")] : []),
+    ];
+    const counts = done.after < done.before
+      ? t("draw.simplify.nodes", { before: done.before, after: done.after, length })
+      : plural(done.before, "draw.simplify.same.one", "draw.simplify.same.other", { length });
+    return {
+      arranged: done,
+      label: "draw.action.simplify",
+      preview: done.preview,
+      nodes: done.after <= PREVIEW_NODES,
+      extent: null,
+      status: [counts, ...notes].join(" "),
+      done: [plural(done.changed, "draw.simplified.one", "draw.simplified.other", { before: done.before, after: done.after }), ...notes].join(" "),
+    };
+  }
+
+  /// L'anteprima per la selezione e l'indice di adesso: si rifà solo se
+  /// sono cambiati, o se le regole della barra l'hanno tolta. Scrive anche
+  /// nella barra che cosa succederà.
+  function pathsNow(): NonNullable<typeof pathsShown> {
+    const index = currentIndex();
+    if (pathsShown !== null && pathsShown.selection === selection && pathsShown.index === index) return pathsShown;
+    const units = editable() ? selectedUnits() : [];
+    const plan = pathsPlan(units);
+    const handles: OverlayHandle[] = [];
+    if (typeof plan !== "string") {
+      for (const segments of plan.preview) handles.push({ kind: "outline", segments, matrix: IDENTITY });
+      if (plan.nodes) {
+        for (const segments of plan.preview) {
+          for (const sub of readNodes(segments)) {
+            sub.nodes.forEach(([x, y], at) => {
+              handles.push({ kind: "node", x, y, shape: NODE_SHAPES[innerNode(sub, at) ? kindOf(sub, at) : "corner"], selected: false, hint: true });
+            });
+          }
+        }
+      }
+    }
+    pathsStatus.textContent = typeof plan === "string" ? plan : plan.status;
+    if (pathsMode === "simplify") {
+      const tolerance = toleranceFor(units);
+      if (tolerance === null) amountInput.removeAttribute("aria-valuetext");
+      else amountInput.setAttribute("aria-valuetext", t("draw.simplify.tolerance", { length: deviationText(tolerance) }));
+    }
+    pathsShown = { selection, index, handles };
+    return pathsShown;
+  }
+
+  /// L'anteprima della barra aperta: le forme di dopo, e con «Semplifica»
+  /// i loro nodi.
+  function pathsHandles(): readonly OverlayHandle[] {
+    return pathsMode === null ? [] : pathsNow().handles;
+  }
+
+  /// «Applica» e Invio: lo scostamento o la semplificazione si scrive, in un
+  /// passo di annulla, e la barra si chiude. Senza niente da fare resta
+  /// aperta, e dice perché.
+  function applyPaths(): void {
+    if (pathsMode === null) return;
+    const units = arranging("path");
+    if (units === null) return;
+    const plan = pathsPlan(units);
+    if (typeof plan === "string" || plan.arranged.ops.length === 0) {
+      announce(typeof plan === "string" ? plan : plan.status);
+      return;
+    }
+    if (pathsMode === "offset") {
+      offsetLast = offsetNow();
+      joinLast = joinNow();
+      limitLast = limitNow();
+    } else {
+      amountLast = Number(amountInput.value);
+    }
+    closePaths();
+    surface.focus({ preventScroll: true });
+    if (arrange(plan.label, plan.arranged, plan.extent) !== null) announce(plan.done);
+  }
+
+  for (const control of [offsetInput, joinSelect, limitInput, amountInput]) {
+    life.listen(control, "input", () => {
+      pathsShown = null;
+      showPaths();
+      showHandles();
+    });
+  }
+  life.listen(pathsApply, "click", () => applyPaths());
+  life.listen(pathsCancel, "click", () => closePaths());
+  // Invio in un campo applica; Esc chiude la barra senza cambiare niente.
+  life.listen(pathsBar, "keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closePaths();
+      surface.focus({ preventScroll: true });
+      return;
+    }
+    if (event.key !== "Enter" || event.isComposing || !(event.target instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    applyPaths();
+  });
+
   /// Vero se `unit` è un tratto a penna, o ne contiene uno che non è
   /// bloccato.
   function holdsPenStroke(unit: Unit): boolean {
@@ -11704,7 +12113,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const treeField =
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
       (tree.element.contains(event.target) || historyPanel.element.contains(event.target));
-    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target));
+    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target));
     if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;

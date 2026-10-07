@@ -1731,6 +1731,54 @@ html, body, #app {
   flex: none;
   min-height: 44px;
 }
+/* Lo scostamento e la semplificazione: in fondo al foglio come la
+   descrizione delle immagini. Il titolo sopra, i campi in fila coi
+   pulsanti a destra, e sotto ciò che succederà. */
+.draw-paths {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: min(40rem, calc(100% - 16px));
+  transform: translateX(-50%);
+}
+.draw-isolation:not([hidden]) ~ .draw-paths {
+  bottom: 72px;
+}
+.draw-paths-title,
+.draw-paths-status {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.draw-paths-field {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+.draw-paths-field input[type="number"] {
+  box-sizing: border-box;
+  width: 6rem;
+  min-height: 44px;
+}
+.draw-paths-field select {
+  min-height: 44px;
+}
+.draw-paths-field input[type="range"] {
+  width: min(14rem, 50vw);
+  min-height: 44px;
+}
+.draw-paths-action {
+  flex: none;
+  min-height: 44px;
+}
+.draw-paths-field + .draw-paths-action {
+  margin-left: auto;
+}
 .draw-stage[data-rulers] > .draw-text-layer,
 .draw-stage[data-rulers] > .draw-link-layer {
   clip-path: inset(24px 0 0 24px);
