@@ -4,10 +4,11 @@
 
 import { describe, expect, it } from "vitest";
 import type { LengthUnit } from "../scene/rulers";
-import { lookAction, lookChange, outlineChange, propertiesView, shapeChange, type FieldsInput, type SelectionFacts } from "./fields";
+import { lookAction, lookChange, outlineChange, propertiesView, shapeChange, sheetChange, type BoardFacts, type FieldsInput, type SelectionFacts } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
+import { NAME_MAX } from "./naming";
 import type { ChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
 import { featuresFor, type Level } from "./registry";
 import type { ShapeFacts } from "./reshape";
@@ -65,11 +66,12 @@ const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): F
     unit: "px",
     editable: true,
     selection: null,
-    document: { page: { width: 400, height: 300 }, desc: "" },
+    document: { page: { width: 400, height: 300 }, boards: false, desc: "" },
     grid: DEFAULT_GRID,
     bar: true,
     attributes: false,
     tool: null,
+    board: null,
     ...rest,
   };
 };
@@ -79,13 +81,15 @@ const options = (state: unknown): ChoiceState["options"] | SegmentState["options
 
 describe("senza selezione, il disegno", () => {
   it("ha la pagina nell'unità del documento, l'unità, la descrizione e la vista", () => {
-    const view = propertiesView(input({ unit: "mm", document: { page: { width: fromUnit(210, "mm"), height: fromUnit(297, "mm") }, desc: "Una prova" } }));
+    const view = propertiesView(input({ unit: "mm", document: { page: { width: fromUnit(210, "mm"), height: fromUnit(297, "mm") }, boards: false, desc: "Una prova" } }));
     expect(view.subject).toBe("Il disegno");
     expect(view.key).toBe("document\nmm");
     expect(view.attributes).toBe(false);
     const width = number(view.fields.pageWidth);
     expect([width.label, width.value, width.unit, width.places, width.relative, width.min]).toEqual(["Larghezza della pagina", expect.closeTo(210, 9), "mm", 3, true, fieldMin(1, "mm")]);
     expect(number(view.fields.pageHeight).value).toBeCloseTo(297, 9);
+    expect(view.fields.pagePreset).toMatchObject({ kind: "choice", label: "Formato della pagina", value: "a4" });
+    expect(view.fields.pageOrientation).toMatchObject({ kind: "segment", label: "Orientamento della pagina", value: "portrait" });
     expect(view.fields.unit).toMatchObject({ kind: "choice", value: "mm" });
     expect(options(view.fields.unit).map((option) => option.value)).toEqual(["px", "mm", "cm", "in", "pt"]);
     expect(view.fields.desc).toMatchObject({ kind: "text", value: "Una prova" });
@@ -101,10 +105,18 @@ describe("senza selezione, il disegno", () => {
   });
 
   it("senza pagina non ha i suoi lati, e la vista ha solo ciò che il livello offre", () => {
-    const view = propertiesView(input({ level: "essential", bar: false, document: { page: null, desc: "" } }));
+    const view = propertiesView(input({ level: "essential", bar: false, document: { page: null, boards: false, desc: "" } }));
     expect(view.fields.pageWidth).toBeUndefined();
+    expect(view.fields.pagePreset).toBeUndefined();
     expect(view.fields.unit).toBeDefined();
     expect(["grid", "snap", "guides", "rulers", "rulerGuides", "bar"].filter((id) => id in view.fields)).toEqual([]);
+  });
+
+  it("con le tavole la pagina è la tela: ha i lati, non la misura pronta né il verso", () => {
+    const view = propertiesView(input({ document: { page: { width: 2560, height: 1024 }, boards: true, desc: "" } }));
+    expect(number(view.fields.pageWidth).value).toBe(2560);
+    expect(view.fields.pagePreset).toBeUndefined();
+    expect(view.fields.pageOrientation).toBeUndefined();
   });
 
   it("gli interruttori dicono la vista di adesso", () => {
@@ -112,6 +124,92 @@ describe("senza selezione, il disegno", () => {
     expect(view.fields.grid).toMatchObject({ on: true });
     expect(view.fields.snap).toMatchObject({ on: false });
     expect(view.fields.bar).toMatchObject({ on: false });
+  });
+});
+
+describe("la tavola dello strumento Tavola", () => {
+  /// Una tavola A4 coricata, la seconda di tre.
+  const board = (parts: Partial<BoardFacts> = {}): BoardFacts => ({ id: "b1a2b3c4d", name: "Copertina", rect: [10, 20, 1122.52, 793.7], index: 2, count: 3, ...parts });
+
+  it("ha il nome, la misura pronta, il verso, il posto e le misure, prima del documento", () => {
+    const view = propertiesView(input({ board: board(), document: { page: { width: 2560, height: 1024 }, boards: true, desc: "" } }));
+    expect(view.subject).toBe("Tavola 2 di 3");
+    expect(view.key).toBe("board\npx\nb1a2b3c4d");
+    expect(view.fields.boardName).toEqual({ kind: "line", label: "Nome", value: "Copertina", max: NAME_MAX });
+    expect(view.fields.boardPreset).toMatchObject({ kind: "choice", label: "Formato", value: "a4" });
+    expect(view.fields.boardOrientation).toMatchObject({ kind: "segment", label: "Orientamento", value: "landscape" });
+    expect((view.fields.boardOrientation as SegmentState).disabled).toBeUndefined();
+    expect(options(view.fields.boardOrientation).map((option) => [option.value, option.label])).toEqual([
+      ["portrait", "Verticale"],
+      ["landscape", "Orizzontale"],
+    ]);
+    expect([number(view.fields.boardX).label, number(view.fields.boardX).value, number(view.fields.boardY).value]).toEqual(["X", 10, 20]);
+    const width = number(view.fields.boardWidth);
+    expect([width.label, width.value, width.relative, width.min]).toEqual(["Larghezza", 1122.52, true, fieldMin(1, "px")]);
+    expect(number(view.fields.boardHeight).value).toBe(793.7);
+    // Il documento e la vista restano, sotto.
+    expect(view.fields.unit).toBeDefined();
+    expect(view.fields.grid).toBeDefined();
+  });
+
+  it("dice ogni misura pronta coi numeri che darebbe, nel verso di adesso e nella sua unità", () => {
+    const labels = options(propertiesView(input({ board: board() })).fields.boardPreset).map((option) => option.label);
+    expect(labels).toEqual([
+      "A3 (420 × 297 mm)",
+      "A4 (297 × 210 mm)",
+      "A5 (210 × 148 mm)",
+      "Lettera (11 × 8,5 in)",
+      "Legale (14 × 8,5 in)",
+      "Tabloid (17 × 11 in)",
+      "HD 16:9 (1280 × 720 px)",
+      "Full HD 16:9 (1920 × 1080 px)",
+      "Schermo 4:3 (1024 × 768 px)",
+      "Telefono (844 × 390 px)",
+      "Quadrato (1080 × 1080 px)",
+      "Disegno nuovo (1600 × 1000 px)",
+    ]);
+    // In piedi, ogni misura si dice in piedi.
+    const standing = options(propertiesView(input({ board: board({ rect: [0, 0, 100, 300] }) })).fields.boardPreset);
+    expect(standing[1]!.label).toBe("A4 (210 × 297 mm)");
+    expect(standing[9]!.label).toBe("Telefono (390 × 844 px)");
+  });
+
+  it("una tavola di nessuna misura pronta è su misura, e una quadrata non ha verso", () => {
+    const view = propertiesView(input({ board: board({ rect: [0, 0, 500, 500] }) }));
+    expect(view.fields.boardPreset).toMatchObject({ value: "custom" });
+    expect(options(view.fields.boardPreset).slice(-1)).toEqual([{ value: "custom", label: "Su misura" }]);
+    expect(view.fields.boardOrientation).toMatchObject({ value: null, disabled: true });
+    expect(options(propertiesView(input({ board: board() })).fields.boardPreset).some((option) => option.value === "custom")).toBe(false);
+  });
+
+  it("le lunghezze sono nell'unità del documento", () => {
+    const view = propertiesView(input({ unit: "mm", board: board() }));
+    expect(number(view.fields.boardWidth).value).toBeCloseTo(297, 2);
+    expect(number(view.fields.boardX).unit).toBe("mm");
+    expect(number(view.fields.boardHeight).min).toBe(fieldMin(1, "mm"));
+  });
+
+  it("con una selezione non c'è", () => {
+    const view = propertiesView(input({ board: board(), selection: selection() }));
+    expect(["boardName", "boardPreset", "boardOrientation", "boardX", "boardY", "boardWidth", "boardHeight"].filter((id) => id in view.fields)).toEqual([]);
+    expect(view.subject).toBe("Rettangolo");
+  });
+
+  it("dal valore al rettangolo: l'angolo in alto a sinistra resta", () => {
+    const rect = [10, 20, 1122.52, 793.7] as const;
+    expect(sheetChange("boardPreset", "hd", rect, "px")).toEqual([10, 20, 1280, 720]);
+    expect(sheetChange("pagePreset", "phone", rect, "px")).toEqual([10, 20, 844, 390]);
+    expect(sheetChange("boardPreset", "custom", rect, "px")).toBeNull();
+    expect(sheetChange("boardOrientation", "portrait", rect, "px")).toEqual([10, 20, 793.7, 1122.52]);
+    expect(sheetChange("pageOrientation", "landscape", rect, "px")).toEqual(rect);
+    expect(sheetChange("boardOrientation", "square", rect, "px")).toBeNull();
+    expect(sheetChange("boardX", 1, rect, "in")).toEqual([96, 20, 1122.52, 793.7]);
+    expect(sheetChange("boardY", -5, rect, "px")).toEqual([10, -5, 1122.52, 793.7]);
+    expect(sheetChange("boardWidth", 100, rect, "mm")).toEqual([10, 20, 377.95, 793.7]);
+    expect(sheetChange("boardHeight", 0, rect, "px")).toEqual([10, 20, 1122.52, 1]);
+    expect(sheetChange("boardWidth", Number.NaN, rect, "px")).toBeNull();
+    expect(sheetChange("boardWidth", "100", rect, "px")).toBeNull();
+    expect(sheetChange("width", 100, rect, "px")).toBeNull();
   });
 });
 

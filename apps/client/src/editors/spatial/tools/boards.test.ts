@@ -36,6 +36,7 @@ import {
 } from "./boards";
 import { gesture, NewIds } from "./edit";
 import { NAME_MAX } from "./naming";
+import { toUnit } from "./rulers";
 import { open, type Opened } from "./test-support";
 
 const ids = (opened: Opened): NewIds => new NewIds((id) => opened.engine.holder(id) !== null);
@@ -609,7 +610,20 @@ describe("le misure pronte", () => {
     expect(presetOf([10, 10, 1122.52, 793.7])?.id).toBe("a4");
     expect(presetOf([0, 0, 1920, 1080])?.id).toBe("full-hd");
     expect(presetOf([0, 0, 1080, 1920])?.id).toBe("full-hd");
+    expect(presetOf([0, 0, 1024, 768])?.id).toBe("xga");
+    expect(presetOf([0, 0, 390, 844])?.id).toBe("phone");
     expect(presetOf([0, 0, 1000, 1000])).toBeNull();
+  });
+
+  it("hanno numeri tondi nell'unità in cui si dicono", () => {
+    for (const preset of PRESETS) {
+      for (const side of [preset.width, preset.height]) {
+        // Mezzo pollice al più: 8,5 × 11 pollici.
+        const halves = toUnit(side, preset.unit) * 2;
+        expect(Math.abs(halves - Math.round(halves))).toBeLessThan(1e-9);
+      }
+    }
+    expect(new Set(PRESETS.map((preset) => preset.id)).size).toBe(PRESETS.length);
   });
 
   it("tengono il verso e l'angolo in alto a sinistra", () => {

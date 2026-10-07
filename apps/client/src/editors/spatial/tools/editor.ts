@@ -223,6 +223,7 @@ import {
   propertiesView,
   SHAPE_ACTIONS,
   shapeChange,
+  sheetChange,
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
@@ -1875,8 +1876,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let disposed = false;
   /// La scrittura tolta da chi monta l'editor.
   let locked = false;
-  /// La selezione dell'ultima notifica, per non ripeterla.
+  /// La selezione dell'ultima notifica, per non ripeterla, e la tavola
+  /// scelta dallo strumento Tavola che il pannello e l'elenco hanno seguito.
   let noticed = "";
+  let noticedBoard: string | null = null;
   /// Il cursore del foglio, nella scena: dove disegna la tastiera. `null`
   /// finché nessuno l'ha mosso.
   let cursor: Point | null = null;
@@ -2376,6 +2379,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly ratio: unknown;
     readonly kept: unknown;
     readonly polygon: PolygonTool | null;
+    readonly board: Board | null;
   } | null = null;
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
@@ -3931,6 +3935,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       syncProperties();
       options.onSelectionChange?.();
     }
+    // La tavola scelta è la selezione dello strumento Tavola.
+    const board = tool === "board" ? boardChosen : null;
+    if (board !== noticedBoard) {
+      noticedBoard = board;
+      syncProperties();
+      syncBoards();
+    }
   };
 
   // --- I segni dei collegamenti ---------------------------------------------
@@ -4969,8 +4980,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const keys = selection.join("\n");
     const unit = docUnit();
     const canEdit = editable();
-    // La forma dello strumento Poligono, quando è lui lo strumento.
+    // La forma dello strumento Poligono, quando è lui lo strumento, e la
+    // tavola scelta dallo strumento Tavola.
     const polygonNow = tool === "polygon" ? polygonTool : null;
+    const boardNow = tool === "board" ? (chosenSheet()?.board ?? null) : null;
     const last = panelShown;
     if (
       last !== null &&
@@ -4982,11 +4995,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last.features === features &&
       last.ratio === ratioLock &&
       last.kept === kept &&
-      last.polygon === polygonNow
+      last.polygon === polygonNow &&
+      last.board === boardNow
     ) {
       return;
     }
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow };
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow };
+    const list = boardsNow();
     const units = selection.length === 0 || engine.model === null ? [] : selectedUnits();
     panel.update(
       propertiesView({
@@ -4994,11 +5009,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         unit,
         editable: canEdit,
         selection: units.length === 0 ? null : selectionFacts(units),
-        document: { page: scene.root.page, desc: rootText("desc") },
+        document: { page: scene.root.page, boards: list.length > 0, desc: rootText("desc") },
         grid,
         bar: BAR_FEATURES.some(has),
         attributes: nestedNow() && units.length === 1,
         tool: polygonNow === null ? null : toolFacts(polygonNow),
+        board:
+          boardNow === null
+            ? null
+            : { id: boardNow.id, name: boardNow.name, rect: boardNow.rect, index: list.indexOf(boardNow) + 1, count: list.length },
       }),
     );
   }
@@ -5161,6 +5180,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return changeFromPanel("draw.action.page_size", [{ op: "page", viewBox: next }], null);
   };
 
+  /// Un campo della tavola scelta o della pagina: la misura pronta, il
+  /// verso, il posto e le misure. Una tavola si sposta con ciò che porta,
+  /// come con le frecce; le misure tengono l'angolo in alto a sinistra.
+  const sheetFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    const model = engine.model;
+    const page = scene.root.page;
+    const board = id.startsWith("board") ? (chosenSheet()?.board ?? null) : null;
+    const rect = board?.rect ?? (id.startsWith("page") && page !== null ? pageRect(page) : null);
+    if (model === null || rect === null) return null;
+    const next = sheetChange(id, value, rect, docUnit());
+    if (next === null || rectText(next) === rectText(rect)) return null;
+    if (board === null) return changeFromPanel("draw.action.page_size", [{ op: "page", viewBox: rectText(next) }], null);
+    if (id === "boardX" || id === "boardY") {
+      const carried = onBoard(board.box, indexer.movable(model));
+      const moved = moveBoardOps(model, board, roundDelta(next[0] - rect[0]), roundDelta(next[1] - rect[1]), carried, newIds(), page);
+      return changeFromPanel("draw.action.board_move", moved.ops, null);
+    }
+    return changeFromPanel("draw.action.board_resize", resizeBoardOps(model, board, next, newIds(), page).ops, null);
+  };
+
+  /// Il nome della tavola scelta, dal pannello: vuoto non cambia niente,
+  /// come nell'elenco.
+  const boardNameFromPanel = (value: string): string | null => {
+    const board = chosenSheet()?.board ?? null;
+    const model = engine.model;
+    const name = cleanName(value);
+    if (board === null || model === null || name === "" || name === board.name) return null;
+    const renamed = renameBoardOps(model, board, name, newIds());
+    return renamed === "foreign" ? t("draw.board.foreign") : changeFromPanel("draw.action.board_rename", renamed.ops, null);
+  };
+
   const descFromPanel = (value: string): string | null => {
     const next = value.trim();
     if (next === rootText("desc").trim()) return null;
@@ -5214,6 +5264,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "pageWidth":
       case "pageHeight":
         if (Number.isFinite(number)) outcome = pageFromPanel(id, number);
+        break;
+      case "boardName":
+        outcome = boardNameFromPanel(String(value));
+        break;
+      case "boardPreset":
+      case "boardOrientation":
+      case "boardX":
+      case "boardY":
+      case "boardWidth":
+      case "boardHeight":
+      case "pagePreset":
+      case "pageOrientation":
+        outcome = sheetFromPanel(id, value);
         break;
       case "x":
       case "y":

@@ -23,13 +23,21 @@
 //   angoli, nella scena come la larghezza (`reshape.ts`).
 // - **Senza selezione, il disegno**: la pagina, l'unità, la descrizione, e
 //   come si vede il foglio. Il titolo resta nella barra. Con lo strumento
-//   Poligono, prima, la forma che disegna.
+//   Poligono, prima, la forma che disegna; con lo strumento Tavola, la tavola
+//   che ha scelto: il nome, la misura pronta, il verso, il posto e le misure.
+// - **Le misure pronte** (`boards.ts`) si dicono col nome e coi numeri che
+//   darebbero, nel verso di adesso e nell'unità in cui sono nate: «A4 (297 ×
+//   210 mm)» per una tavola coricata. Le ha anche la pagina di un disegno
+//   senza tavole; con le tavole la pagina è la tela che le contiene, e non
+//   ne ha.
 
+import { resolvedLanguage } from "../../../i18n/strings";
 import { apply } from "../scene/matrix";
 import { MAX_COUNT, MIN_COUNT, type PolygonalShape } from "../scene/parametric";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { t, type DrawKey } from "../strings";
 import type { Axis, Edge, Order } from "./arrange";
+import { MIN_BOARD_SIDE, orientationOf, orientedRect, presetOf, presetRect, PRESETS, roundRect, type PresetId, type Rect } from "./boards";
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
 import type { Grid } from "./grid";
 import { ANCHORS, TEXT_FORMS, type Anchor, type Look, type LookChange, type TextForm } from "./look";
@@ -39,12 +47,15 @@ import {
   type ActionId,
   type ActionState,
   type ChoiceOption,
+  type ChoiceState,
   type FieldId,
   type FieldState,
   type NumberState,
   type PropertiesView,
+  type SegmentState,
 } from "./properties";
 import { ANGLE_UNITS, lengthUnits, PERCENT_UNITS } from "./quantity";
+import { NAME_MAX } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
 import type { ShapeChange, ShapeFacts } from "./reshape";
@@ -225,7 +236,77 @@ export interface SelectionFacts {
 export interface DocumentFacts {
   /// La pagina, in unità della scena; `null` se il disegno non ne ha.
   readonly page: { readonly width: number; readonly height: number } | null;
+  /// Vero se il disegno ha tavole: la pagina è la tela che le contiene.
+  readonly boards: boolean;
   readonly desc: string;
+}
+
+/// La tavola che lo strumento Tavola ha scelto.
+export interface BoardFacts {
+  readonly id: string;
+  readonly name: string;
+  /// Il rettangolo, in unità della scena.
+  readonly rect: Rect;
+  /// Il suo posto fra le tavole, da 1, e quante sono.
+  readonly index: number;
+  readonly count: number;
+}
+
+/// I nomi delle misure pronte.
+export const PRESET_NAMES: Readonly<Record<PresetId, DrawKey>> = {
+  a3: "draw.board.preset.a3",
+  a4: "draw.board.preset.a4",
+  a5: "draw.board.preset.a5",
+  letter: "draw.board.preset.letter",
+  legal: "draw.board.preset.legal",
+  tabloid: "draw.board.preset.tabloid",
+  hd: "draw.board.preset.hd",
+  "full-hd": "draw.board.preset.full_hd",
+  xga: "draw.board.preset.xga",
+  phone: "draw.board.preset.phone",
+  square: "draw.board.preset.square",
+  drawing: "draw.board.preset.drawing",
+};
+
+/// I versi di una tavola o della pagina, coi nomi e le icone.
+const ORIENTATIONS: ReadonlyArray<{ readonly value: "portrait" | "landscape"; readonly label: DrawKey; readonly icon: string }> = [
+  { value: "portrait", label: "draw.board.portrait", icon: "draw-portrait" },
+  { value: "landscape", label: "draw.board.landscape", icon: "draw-landscape" },
+];
+
+/// Il formato delle misure delle misure pronte, nella lingua di adesso: fino
+/// a due decimali, come gli 8,5 pollici della Letter.
+let sizeFormat: { readonly language: string; readonly numbers: Intl.NumberFormat } | null = null;
+function sizeText(value: number): string {
+  const language = resolvedLanguage();
+  if (sizeFormat?.language !== language) sizeFormat = { language, numbers: new Intl.NumberFormat(language, { maximumFractionDigits: 2, useGrouping: false }) };
+  return sizeFormat.numbers.format(value);
+}
+
+/// La scelta della misura pronta di `rect`: ogni voce col nome e le misure
+/// che gli darebbe, nell'unità della misura; «Su misura» se `rect` non è di
+/// nessuna.
+function presetField(label: string, rect: Rect): ChoiceState {
+  const options: ChoiceOption[] = PRESETS.map((preset) => {
+    const [, , width, height] = presetRect(rect, preset);
+    const size = { width: sizeText(toUnit(width, preset.unit)), height: sizeText(toUnit(height, preset.unit)), unit: preset.unit };
+    return { value: preset.id, label: t("draw.board.preset", { name: t(PRESET_NAMES[preset.id]), ...size }) };
+  });
+  const preset = presetOf(rect);
+  if (preset === null) options.push({ value: "custom", label: t("draw.properties.preset.custom") });
+  return { kind: "choice", label, value: preset?.id ?? "custom", options };
+}
+
+/// Il verso di `rect`: un quadrato non ne ha, e non lo cambia.
+function orientationField(label: string, rect: Rect): SegmentState {
+  const orientation = orientationOf(rect);
+  return {
+    kind: "segment",
+    label,
+    value: orientation === "square" ? null : orientation,
+    options: ORIENTATIONS.map((each) => ({ value: each.value, label: t(each.label), icon: each.icon })),
+    ...(orientation === "square" ? { disabled: true } : {}),
+  };
 }
 
 export interface FieldsInput {
@@ -245,6 +326,9 @@ export interface FieldsInput {
   /// La forma che disegna lo strumento Poligono, se è lo strumento di
   /// adesso: senza selezione il pannello la mostra.
   readonly tool: ShapeFacts | null;
+  /// La tavola scelta dallo strumento Tavola, se è lo strumento di adesso:
+  /// senza selezione il pannello la mostra.
+  readonly board: BoardFacts | null;
 }
 
 /// Un campo di una lunghezza, `value` in unità della scena, mostrata in
@@ -519,9 +603,28 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     // --- Forma, dello strumento ---
     if (input.tool !== null) shapeFields(fields, input.tool, unit, t("draw.properties.shape_tool"));
 
+    // --- Tavola, dello strumento ---
+    const board = input.board;
+    if (board !== null) {
+      const [x, y, width, height] = board.rect;
+      const min = fieldMin(MIN_BOARD_SIDE, unit);
+      fields.boardName = { kind: "line", label: t("draw.properties.board_name"), value: board.name, max: NAME_MAX };
+      fields.boardPreset = presetField(t("draw.properties.board_preset"), board.rect);
+      fields.boardOrientation = orientationField(t("draw.properties.orientation"), board.rect);
+      fields.boardX = lengthField("X", x, unit, false);
+      fields.boardY = lengthField("Y", y, unit, false);
+      fields.boardWidth = lengthField(t("draw.field.width"), width, unit, true, { min });
+      fields.boardHeight = lengthField(t("draw.field.height"), height, unit, true, { min });
+    }
+
     // --- Documento ---
     const { page, desc } = input.document;
     if (page !== null) {
+      if (!input.document.boards) {
+        const rect: Rect = [0, 0, page.width, page.height];
+        fields.pagePreset = presetField(t("draw.properties.page_preset"), rect);
+        fields.pageOrientation = orientationField(t("draw.properties.page_orientation"), rect);
+      }
       const min = fieldMin(1, unit);
       fields.pageWidth = lengthField(t("draw.field.page_width"), page.width, unit, true, { min });
       fields.pageHeight = lengthField(t("draw.field.page_height"), page.height, unit, true, { min });
@@ -543,11 +646,18 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     if (input.bar) fields.bar = { kind: "switch", label: t("draw.bar.beside"), on: grid.bar };
   }
 
+  const board = selection === null ? input.board : null;
   return {
     // Un'unità nuova lascia cadere i valori scritti a metà, come una
-    // selezione nuova.
-    key: selection === null ? `document\n${unit}${input.tool === null ? "" : `\n${input.tool.shape.value}`}` : `selection\n${unit}\n${selection.keys}`,
-    subject: selection === null ? t("draw.properties.drawing") : selection.subject,
+    // selezione nuova o un'altra tavola.
+    key:
+      selection !== null
+        ? `selection\n${unit}\n${selection.keys}`
+        : board !== null
+          ? `board\n${unit}\n${board.id}`
+          : `document\n${unit}${input.tool === null ? "" : `\n${input.tool.shape.value}`}`,
+    subject:
+      selection !== null ? selection.subject : board !== null ? t("draw.properties.board_subject", { index: board.index, count: board.count }) : t("draw.properties.drawing"),
     editable: input.editable,
     fields,
     actions,
@@ -617,6 +727,35 @@ export function shapeChange(id: FieldId, value: number | string | boolean, unit:
       return typeof value === "number" ? { ratio: value / 100 } : null;
     case "corner":
       return typeof value === "number" ? { corner: fromUnit(value, unit) } : null;
+    default:
+      return null;
+  }
+}
+
+/// Il rettangolo che il campo `id` della tavola, o della pagina, scritto
+/// col valore `value` dà a `rect`, con le lunghezze in `unit`: la misura
+/// pronta, il verso e le misure tengono l'angolo in alto a sinistra. `null`
+/// se il campo non è della tavola o della pagina, o il valore non è suo.
+export function sheetChange(id: FieldId, value: number | string | boolean, rect: Rect, unit: LengthUnit): Rect | null {
+  const [x, y, width, height] = rect;
+  const length = typeof value === "number" && Number.isFinite(value) ? fromUnit(value, unit) : null;
+  switch (id) {
+    case "boardPreset":
+    case "pagePreset": {
+      const preset = PRESETS.find((each) => each.id === value);
+      return preset === undefined ? null : presetRect(rect, preset);
+    }
+    case "boardOrientation":
+    case "pageOrientation":
+      return value === "portrait" || value === "landscape" ? orientedRect(rect, value) : null;
+    case "boardX":
+      return length === null ? null : roundRect([length, y, width, height]);
+    case "boardY":
+      return length === null ? null : roundRect([x, length, width, height]);
+    case "boardWidth":
+      return length === null ? null : roundRect([x, y, Math.max(MIN_BOARD_SIDE, length), height]);
+    case "boardHeight":
+      return length === null ? null : roundRect([x, y, width, Math.max(MIN_BOARD_SIDE, length)]);
     default:
       return null;
   }

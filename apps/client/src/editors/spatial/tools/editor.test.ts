@@ -10957,6 +10957,97 @@ describe("le tavole, dal livello Standard", () => {
     expect(editor.engine.text).toBe(loose);
   });
 
+  /// Il pannello delle proprietà, aperto, e i suoi campi.
+  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
+  const propertySection = (id: string): HTMLElement => properties().querySelector<HTMLElement>(`.draw-properties-section[data-section="${id}"]`)!;
+  const subject = (): string | null => properties().querySelector(".draw-properties-subject")!.textContent;
+  const preset = (id: string): HTMLSelectElement => property(id).querySelector("select")!;
+  const choosePreset = (id: string, value: string): void => {
+    preset(id).value = value;
+    preset(id).dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const orientations = (id: string): Array<string | null> => [...property(id).querySelectorAll("button")].map((button) => button.getAttribute("aria-pressed"));
+  /// Vero se il pannello mostra il campo `id`: un campo entra nel pannello
+  /// la prima volta che ha di che mostrarsi.
+  const showing = (id: string): boolean => {
+    const field = properties().querySelector<HTMLElement>(`.draw-properties-field[data-field="${id}"]`);
+    return field !== null && !field.hidden;
+  };
+  /// Scrive `text` nel campo `id` del pannello e lo fa partire con Invio.
+  const writeProperty = (id: string, text: string): void => {
+    const input = propertyInput(id);
+    input.focus();
+    input.value = text;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  };
+
+  it("il pannello delle proprietà mostra la tavola scelta, e la segue", () => {
+    boarding();
+    openProperties();
+    expect(subject()).toBe("Tavola 1 di 2");
+    expect(propertySection("board").hidden).toBe(false);
+    expect(propertyInput("boardName").value).toBe("Copertina");
+    expect(preset("boardPreset").value).toBe("custom");
+    expect(orientations("boardOrientation")).toEqual(["false", "true"]);
+    expect(["boardX", "boardY", "boardWidth", "boardHeight"].map((id) => propertyInput(id).value)).toEqual(["0", "0", "400", "200"]);
+    // Con le tavole la pagina è la tela: non ha un formato.
+    expect(showing("pagePreset")).toBe(false);
+    expect(showing("pageWidth")).toBe(true);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    key("Tab");
+    expect(subject()).toBe("Tavola 2 di 2");
+    expect(propertyInput("boardName").value).toBe("Evaporazione");
+    expect(propertyInput("boardX").value).toBe("480");
+    // Con un altro strumento il pannello torna al disegno.
+    key("v");
+    expect(subject()).toBe("Il disegno");
+    expect(propertySection("board").hidden).toBe(true);
+  });
+
+  it("dal pannello la tavola prende una misura pronta, il verso, il posto con ciò che porta, le misure e il nome", () => {
+    boarding();
+    openProperties();
+    key("Tab");
+    choosePreset("boardPreset", "hd");
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 1280 720">');
+    expect(preset("boardPreset").value).toBe("hd");
+    property("boardOrientation").querySelector<HTMLButtonElement>('button[aria-label="Verticale"]')!.click();
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 720 1280">');
+    expect(orientations("boardOrientation")).toEqual(["true", "false"]);
+    writeProperty("boardX", "500");
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="500 0 720 1280">');
+    expect(editor.engine.text).toContain(`<rect id="${SQUARE}" x="600" y="50" width="20" height="20" fill="#000000" transform="matrix(1 0 0 1 20 0)"/>`);
+    writeProperty("boardWidth", "800");
+    expect(editor.engine.text).toContain('<view id="b9i0j1k2l" fub:role="board" viewBox="500 0 800 1280">');
+    expect(preset("boardPreset").value).toBe("custom");
+    writeProperty("boardName", "Retro");
+    expect(editor.engine.text).toContain("<title>Retro</title>");
+    expect(names()).toEqual([["Copertina", false], ["Retro", true]]);
+    // Un nome vuoto non cambia niente, come nell'elenco.
+    writeProperty("boardName", "  ");
+    expect(propertyInput("boardName").value).toBe("Retro");
+    for (let step = 0; step < 5; step += 1) editor.undo();
+    expect(editor.engine.text).toBe(BOARDS);
+  });
+
+  it("senza tavole, il pannello dà alla pagina una misura pronta e un verso", () => {
+    mount(SOURCE, { level: "standard" });
+    openProperties();
+    expect(subject()).toBe("Il disegno");
+    expect(preset("pagePreset").value).toBe("custom");
+    expect(property("pageOrientation").querySelector("button")!.getAttribute("aria-disabled")).toBe("true");
+    choosePreset("pagePreset", "a4");
+    expect(editor.engine.text).toContain('viewBox="0 0 793.7 1122.52"');
+    property("pageOrientation").querySelector<HTMLButtonElement>('button[aria-label="Orizzontale"]')!.click();
+    expect(editor.engine.text).toContain('viewBox="0 0 1122.52 793.7"');
+    expect(preset("pagePreset").value).toBe("a4");
+    expect(orientations("pageOrientation")).toEqual(["false", "true"]);
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(SOURCE);
+  });
+
   it("all'Essenziale le tavole si vedono, ma lo strumento, i suoi tasti e l'elenco non ci sono", () => {
     mount(BOARDS);
     size(1000, 500);

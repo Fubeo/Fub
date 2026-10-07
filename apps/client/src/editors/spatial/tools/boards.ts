@@ -43,6 +43,7 @@ import type { Point } from "../scene/matrix";
 import { elementChildren, pathOf, scopeOf, type DocumentModel, type ElementPart } from "../scene/model";
 import { ROOT, type Op, type Pos } from "../scene/ops";
 import { MAX_BOARDS } from "../scene/read";
+import type { LengthUnit } from "../scene/rulers";
 import { elemToOut, type Elem } from "../scene/serialize";
 import { duplicateOps, elemOf, Plan, type Arranged } from "./arrange";
 import { moveOps, pageFor, roundDelta, type NewIds } from "./edit";
@@ -635,33 +636,38 @@ export function reorderBoardOps(model: DocumentModel, board: Board, to: number):
 // ---------------------------------------------------------------------------
 
 /// Le misure pronte di una tavola o della pagina.
-export type PresetId = "a3" | "a4" | "a5" | "letter" | "legal" | "tabloid" | "hd" | "full-hd" | "square" | "drawing";
+export type PresetId = "a3" | "a4" | "a5" | "letter" | "legal" | "tabloid" | "hd" | "full-hd" | "xga" | "phone" | "square" | "drawing";
 
 /// Una misura pronta, in unità della scena, nel verso in cui si usa di più:
-/// in piedi la carta, coricato lo schermo.
+/// in piedi la carta e il telefono, coricati gli schermi.
 export interface Preset {
   readonly id: PresetId;
   readonly width: number;
   readonly height: number;
+  /// L'unità in cui la misura è nata, e in cui la si dice: i millimetri
+  /// dei fogli ISO, i pollici di quelli americani, i pixel degli schermi.
+  readonly unit: LengthUnit;
 }
 
 /// Un millimetro e un pollice in unità della scena, che sono pixel CSS.
 const MM = 96 / 25.4;
 const INCH = 96;
 
-/// Le misure pronte: i fogli ISO e americani, gli schermi, e la misura di un
-/// disegno nuovo.
+/// Le misure pronte: i fogli ISO e americani, gli schermi 16:9 e 4:3, un
+/// telefono, il quadrato dei post, e la misura di un disegno nuovo.
 export const PRESETS: readonly Preset[] = [
-  { id: "a3", width: 297 * MM, height: 420 * MM },
-  { id: "a4", width: 210 * MM, height: 297 * MM },
-  { id: "a5", width: 148 * MM, height: 210 * MM },
-  { id: "letter", width: 8.5 * INCH, height: 11 * INCH },
-  { id: "legal", width: 8.5 * INCH, height: 14 * INCH },
-  { id: "tabloid", width: 11 * INCH, height: 17 * INCH },
-  { id: "hd", width: 1280, height: 720 },
-  { id: "full-hd", width: 1920, height: 1080 },
-  { id: "square", width: 1080, height: 1080 },
-  { id: "drawing", width: 1600, height: 1000 },
+  { id: "a3", width: 297 * MM, height: 420 * MM, unit: "mm" },
+  { id: "a4", width: 210 * MM, height: 297 * MM, unit: "mm" },
+  { id: "a5", width: 148 * MM, height: 210 * MM, unit: "mm" },
+  { id: "letter", width: 8.5 * INCH, height: 11 * INCH, unit: "in" },
+  { id: "legal", width: 8.5 * INCH, height: 14 * INCH, unit: "in" },
+  { id: "tabloid", width: 11 * INCH, height: 17 * INCH, unit: "in" },
+  { id: "hd", width: 1280, height: 720, unit: "px" },
+  { id: "full-hd", width: 1920, height: 1080, unit: "px" },
+  { id: "xga", width: 1024, height: 768, unit: "px" },
+  { id: "phone", width: 390, height: 844, unit: "px" },
+  { id: "square", width: 1080, height: 1080, unit: "px" },
+  { id: "drawing", width: 1600, height: 1000, unit: "px" },
 ];
 
 /// Il verso di un rettangolo.
