@@ -11048,6 +11048,28 @@ describe("le tavole, dal livello Standard", () => {
     expect(editor.engine.text).toBe(SOURCE);
   });
 
+  it("dall'indice una tavola si sceglie e si inquadra, e la selezione resta", () => {
+    mount(BOARDS, { level: "standard" });
+    size(1000, 500);
+    editor.select([SQUARE]);
+    const before = sheets();
+    expect(editor.reveal(BOARDS.indexOf('<view id="b9i0j1k2l"'))).toBe(true);
+    expect(spoken()).toBe("Evaporazione, tavola 2 di 2, 400 × 200.");
+    expect(sheets()).not.toEqual(before);
+    expect(editor.selection).toEqual([SQUARE]);
+    // Un oggetto si sceglie come sempre.
+    editor.select([]);
+    expect(editor.reveal(BOARDS.indexOf(`<rect id="${SQUARE}"`))).toBe(true);
+    expect(editor.selection).toEqual([SQUARE]);
+    // Il nome è dentro la tavola, e porta a lei; lo strumento Tavola la
+    // trova scelta.
+    expect(editor.reveal(BOARDS.indexOf("<title>Copertina"))).toBe(true);
+    expect(spoken()).toBe("Copertina, tavola 1 di 2, 400 × 200.");
+    key("f");
+    expect(spoken()).toBe("Strumento: Tavola. Copertina, tavola 1 di 2, 400 × 200.");
+    expect(names()).toEqual([["Copertina", true], ["Evaporazione", false]]);
+  });
+
   it("all'Essenziale le tavole si vedono, ma lo strumento, i suoi tasti e l'elenco non ci sono", () => {
     mount(BOARDS);
     size(1000, 500);

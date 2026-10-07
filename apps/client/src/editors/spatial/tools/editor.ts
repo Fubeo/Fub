@@ -562,7 +562,8 @@ export interface DrawEditor {
   /// e i gesti non scrivono, ma il disegno si guarda.
   setReadOnly(readOnly: boolean): void;
   /// Sceglie l'oggetto il cui testo contiene il byte `offset` del file, e lo
-  /// porta in vista. `false` se nessun oggetto lo contiene.
+  /// porta in vista; una tavola, sezione del disegno, la inquadra. `false`
+  /// se nessun oggetto e nessuna tavola lo contiene.
   reveal(offset: number): boolean;
   /// «Modifica» su un SVG estraneo: l'operazione `adopt`, un passo
   /// di annulla. `false` se il documento non è estraneo o la scrittura è
@@ -6042,12 +6043,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function reveal(offset: number): boolean {
     if (engine.model === null) return false;
     const index = currentIndex();
+    const list = boardsNow();
     // L'oggetto è il più esterno fra quelli che contengono il byte e che si
     // scelgono interi: un livello non lo è, un figlio di un gruppo nemmeno.
-    // La scena è in ordine di documento: chi contiene viene prima.
+    // La scena è in ordine di documento: chi contiene viene prima. Una
+    // tavola è una sezione del disegno, come un titolo di una nota: la si
+    // sceglie e la si inquadra, e la selezione resta.
     let found: Unit | null = null;
     for (const item of engine.scene()) {
       if (item.kind !== "element" || offset < item.bytes[0] || offset >= item.bytes[1]) continue;
+      const at = item.id === null ? -1 : list.findIndex((board) => board.id === item.id);
+      if (at >= 0) {
+        finishText();
+        return visitBoard(at, true);
+      }
       found = index.get(item.id ?? `@${item.path.join(".")}`) ?? null;
       if (found !== null) break;
     }
