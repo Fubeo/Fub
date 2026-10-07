@@ -137,7 +137,7 @@ import { pathData, type Elem } from "../scene/serialize";
 import { href as parseHref } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
-import { PaintBuilder, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
+import { PaintBuilder, resourcesFor, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
 import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
   addOp,
@@ -3840,10 +3840,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// La miniatura di una voce dell'albero: ciò che il disegno dipinge per
-  /// lei, dentro gli stili di chi la contiene; un oggetto inquadrato sul suo
-  /// riquadro, un livello sul foglio. La chiave cambia quando cambia ciò che
-  /// si vede: la voce, il testo dei tag di chi la contiene, che resta anche
-  /// quando il contenitore si rifà, la radice e il foglio.
+  /// lei, dentro gli stili di chi la contiene e con le risorse che usa; un
+  /// oggetto inquadrato sul suo riquadro, un livello sul foglio. La chiave
+  /// cambia quando cambia ciò che si vede: la voce, il testo dei tag di chi
+  /// la contiene, che resta anche quando il contenitore si rifà, la radice,
+  /// le risorse e il foglio.
   const thumbnailOf = (item: ElementItem): TreeThumbnail | null => {
     const model = engine.model;
     if (model === null) return null;
@@ -3857,8 +3858,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const box = layer ? sheetOf(model) : null;
     if (layer && box === null) return null;
     const frame = box === null ? "" : `|${box.x} ${box.y} ${box.width} ${box.height}`;
+    const chain = [root.attrs, ...heads.map((head) => head.attrs)];
+    const used = resourcesFor(paints, chain, scene.resources);
+    const serials = (list: readonly object[]): string => list.map((paint) => builder.serialOf(paint)).join(" ");
     return {
-      key: `${builder.serialOf(root)}|${heads.map((head) => head.head + (head.tail ?? "")).join("")}|${paints.map((paint) => builder.serialOf(paint)).join(" ")}${frame}`,
+      key: `${builder.serialOf(root)}|${heads.map((head) => head.head + (head.tail ?? "")).join("")}|${serials(paints)}|${serials(used)}${frame}`,
       draw: (owner) => {
         const count = shapeCount(paints, THUMB_PICTURE_SHAPES);
         if (count > THUMB_PICTURE_SHAPES) return null;
@@ -3866,7 +3870,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (framed === null) return null;
         const live = count <= THUMB_LIVE_SHAPES;
         const resolve = live && images !== undefined ? (href: string, life: Lifetime) => images.url(href, life) : undefined;
-        const svg = paintMiniature(paints, [root.attrs, ...heads.map((head) => head.attrs)], framed, owner, resolve);
+        const svg = paintMiniature(paints, chain, framed, owner, resolve, used);
         return live ? svg : miniaturePicture(svg, owner);
       },
     };

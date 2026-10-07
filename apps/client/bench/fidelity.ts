@@ -7,7 +7,8 @@
 // banco dimostri di vederla: `colore` cambia un colore nella Lettura,
 // `carattere` toglie i caratteri dell'app alla Lettura, `corsivo` le toglie
 // i soli corsivi, che il browser fa allora inclinando il tondo, `tratteggio`
-// toglie i tratteggi all'export.
+// toglie i tratteggi all'export, `ripiego` toglie le risorse alla Lettura,
+// che mostra allora i colori di ripiego.
 
 // Gli strati del foglio stanno uno sopra l'altro con le regole del tema, come
 // nell'app.
@@ -54,7 +55,11 @@ async function main(): Promise<void> {
   painter.setView({ scale: 1, angle: 0, tx: 0, ty: 0 });
   painter.update(new PaintBuilder().build(SceneEngine.open(found.text)));
 
-  const read = variant === "colore" ? found.text.replace("#2b6cb0", "#4a90d9") : found.text;
+  const read = variant === "colore"
+    ? found.text.replace("#2b6cb0", "#4a90d9")
+    : variant === "ripiego"
+      ? found.text.replace(/<defs id="fub-defs">[\s\S]*?<\/defs>/, "")
+      : found.text;
   const shown = await selfContained(read, async () => null, 0, variant === "carattere" ? NO_FONTS : variant === "corsivo" ? UPRIGHT : appFonts);
   await picture("read", new Blob([shown], { type: "image/svg+xml" }));
 

@@ -1092,6 +1092,12 @@ html, body, #app {
   direction: ltr;
   writing-mode: initial;
 }
+/* Le risorse vive stanno in un svg senza misura, non nascosto: in un svg con
+   `display: none` i browser non disegnano sfumature, motivi e filtri. */
+.spatial-defs {
+  width: 0;
+  height: 0;
+}
 .spatial-image {
   position: absolute;
   top: 0;

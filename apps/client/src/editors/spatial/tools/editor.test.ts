@@ -4384,6 +4384,38 @@ describe("spostare dall'albero, dal livello Standard", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
+  it("una miniatura porta le risorse che la riga usa, e si rifà quando una di loro cambia", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const frame = (): void => {
+      for (let round = 0; round < 50 && frames.length > 0; round++) for (const callback of frames.splice(0)) callback(0);
+    };
+    const source = doc(
+      '<defs id="fub-defs"><linearGradient id="r1a1a1a1a" x2="1"><stop offset="0" stop-color="#0072b2"/></linearGradient>'
+        + '<filter id="r2b2b2b2b"><feDropShadow dx="1" dy="1" stdDeviation="1" flood-color="#000000"/></filter></defs>'
+        + `${LAYER}<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="url(#r1a1a1a1a) #0072b2"/>`
+        + '<rect id="oc3c3c3c3" x="70" y="10" width="20" height="20" fill="#000000"/></g>',
+    );
+    mount(source, { level: "standard" });
+    openAt("oa1a1a1a1");
+    frame();
+    const thumb = (id: string): Element | null => host.querySelector(`.draw-object[data-key="${id}"] .draw-object-thumb > svg`);
+    const shown = thumb("oa1a1a1a1")!;
+    // Solo la sfumatura che usa, sotto un id della miniatura.
+    const gradient = shown.querySelector("defs > linearGradient")!;
+    expect(gradient.id).toMatch(/^fubthumb\d+-r1a1a1a1a$/);
+    expect(shown.querySelectorAll("defs > *")).toHaveLength(1);
+    expect(shown.querySelector("rect")!.getAttribute("fill")).toBe(`url(#${gradient.id}) #0072b2`);
+    expect(thumb("oc3c3c3c3")!.querySelector("defs")).toBeNull();
+    // Le risorse non sono righe dell'albero.
+    expect(keys()).toEqual(["l1", "oc3c3c3c3", "oa1a1a1a1"]);
+    editor.setEngine(SceneEngine.open(source.replace('stop-color="#0072b2"', 'stop-color="#d55e00"')));
+    frame();
+    expect(thumb("oa1a1a1a1")).not.toBe(shown);
+    expect(thumb("oa1a1a1a1")!.querySelector("stop")!.getAttribute("stop-color")).toBe("#d55e00");
+  });
+
   it("all'Essenziale l'albero non sposta e non ha miniature", () => {
     mount(STACKED);
     openAt("oc3c3c3c3");
