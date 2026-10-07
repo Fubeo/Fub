@@ -106,13 +106,16 @@ export function textElem(id: string, at: Point, lines: readonly TextLine[], styl
   };
 }
 
-/// I file dei caratteri che l'app porta per l'interfaccia, coi nomi che il
-/// file del disegno scrive, e i caratteri che coprono: quelli di
-/// `theme/serie/fonts.css`.
-export const FONT_FILES: ReadonlyArray<readonly [family: string, url: string, weight: string]> = [
-  ["Inter", "/fonts/inter-latin-wght-normal.woff2", "100 900"],
-  ["Literata", "/fonts/literata-latin-wght-normal.woff2", "200 900"],
-  ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-normal.woff2", "100 800"],
+/// I file dei caratteri che l'app porta, coi nomi che il file del disegno
+/// scrive, i pesi e lo stile che coprono: quelli di `theme/serie/fonts.css`,
+/// e il corsivo vero di ciascuno, che un testo del disegno può chiedere.
+export const FONT_FILES: ReadonlyArray<readonly [family: string, url: string, weight: string, style: "normal" | "italic"]> = [
+  ["Inter", "/fonts/inter-latin-wght-normal.woff2", "100 900", "normal"],
+  ["Inter", "/fonts/inter-latin-wght-italic.woff2", "100 900", "italic"],
+  ["Literata", "/fonts/literata-latin-wght-normal.woff2", "200 900", "normal"],
+  ["Literata", "/fonts/literata-latin-wght-italic.woff2", "200 900", "italic"],
+  ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-normal.woff2", "100 800", "normal"],
+  ["JetBrains Mono", "/fonts/jetbrains-mono-latin-wght-italic.woff2", "100 800", "italic"],
 ];
 export const FONT_RANGE =
   "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD";
@@ -125,9 +128,9 @@ let registered = false;
 export function ensureTextFont(): void {
   if (registered || typeof FontFace === "undefined" || typeof document === "undefined" || document.fonts === undefined) return;
   registered = true;
-  for (const [family, url, weight] of FONT_FILES) {
+  for (const [family, url, weight, style] of FONT_FILES) {
     try {
-      document.fonts.add(new FontFace(family, `url("${url}") format("woff2")`, { style: "normal", weight, display: "swap", unicodeRange: FONT_RANGE }));
+      document.fonts.add(new FontFace(family, `url("${url}") format("woff2")`, { style, weight, display: "swap", unicodeRange: FONT_RANGE }));
     } catch {
       // Un carattere che non si registra lascia il ripiego.
     }

@@ -1,6 +1,6 @@
 // Il corpus del banco di fedeltà: scene piccole che insieme toccano ogni
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
-// dell'app, un'immagine, e gli estranei tipici di Inkscape, Illustrator e
+// dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, e gli estranei tipici di Inkscape, Illustrator e
 // Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa.
 
 /// La misura di ogni scena, in pixel CSS.
@@ -43,6 +43,14 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<text id="t2" x="12" y="66" font-family="Inter" font-size="18" font-weight="700" fill="#2b6cb0">Grassetto 0123</text>'
       + '<text id="t3" x="12" y="100" font-family="Literata" font-size="22" fill="#1a202c">Literata àèìòù</text>'
       + '<text id="t4" x="120" y="140" font-family="JetBrains Mono" font-size="16" text-anchor="middle" fill="#c53030">{ mono: 42 }</text></g>'),
+  },
+  {
+    id: "tipografia",
+    text: scene(`${LAYER}<text id="t5" x="12" y="30" fill="#1a202c" font-family="Inter, sans-serif" font-size="20">`
+      + '<tspan x="12" dy="0">Evap<tspan fill="#2b6cb0" font-weight="bold">orazione</tspan></tspan>'
+      + '<tspan x="12" dy="26" font-style="italic" letter-spacing="1.5">in <tspan font-weight="600" text-decoration="underline">pioggia</tspan></tspan></text>'
+      + '<text id="t6" x="12" y="100" fill="#c53030" font-family="Literata, serif" font-size="22" font-style="italic" text-decoration="line-through">Literata corsiva</text>'
+      + '<text id="t7" x="228" y="140" fill="#2f855a" font-family="JetBrains Mono, monospace" font-size="16" font-weight="300" font-style="italic" letter-spacing="-0.5" text-anchor="end">{ corsivo: 1 }</text></g>'),
   },
   {
     id: "gruppi",

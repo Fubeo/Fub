@@ -2,7 +2,8 @@
 // o da un file, il browser non carica niente da fuori: né i caratteri
 // dell'app, né le immagini del vault. Qui i caratteri entrano nella copia del
 // documento che va nell'immagine, in un foglio di stile coi loro file come
-// data URI, solo quelli che un testo nomina: la Lettura, gli strati immagine
+// data URI, solo quelli che un testo nomina, e il corsivo soltanto se un
+// testo è in corsivo: la Lettura, gli strati immagine
 // del foglio, gli embed delle note e il PNG copiato scrivono così con gli
 // stessi caratteri del foglio. Il file non cambia.
 //
@@ -17,9 +18,9 @@ import { SourceText } from "./scene/text";
 import { isSvg, parseXml } from "./scene/xml";
 import { FONT_FILES, FONT_RANGE } from "./tools/text";
 
-/// Il foglio dei caratteri più grande, coi tre caratteri dell'app: misurato
-/// sui loro file, 189 KB, con un margine.
-export const MAX_FONT_SHEET_BYTES = 192 * 1024;
+/// Il foglio dei caratteri più grande, coi tre caratteri dell'app in tondo e
+/// in corsivo: misurato sui loro file, 379 KB, con un margine.
+export const MAX_FONT_SHEET_BYTES = 384 * 1024;
 
 /// Chi dà i caratteri a un'immagine: subito, se sono già letti, o quando
 /// arrivano.
@@ -37,15 +38,17 @@ const fontUris = new Map<string, Promise<string | null>>();
 /// I file dei caratteri già letti, per indirizzo.
 const fontData = new Map<string, string>();
 
-/// I caratteri dell'app che `svg` nomina in un `font-family`.
+/// I caratteri dell'app che `svg` nomina in un `font-family`; i corsivi, se
+/// un `font-style` chiede il corsivo o l'obliquo.
 function namedFonts(svg: string): typeof FONT_FILES {
   if (!/font-family/i.test(svg)) return [];
-  return FONT_FILES.filter(([family]) =>
-    new RegExp(`font-family\\s*[:=]\\s*(?:"[^"]*|'[^']*|[^;"'>]*)${family.replace(/ /g, "\\s+")}`, "i").test(svg));
+  const slanted = /font-style\s*[:=]\s*["']?\s*(?:italic|oblique)/i.test(svg);
+  return FONT_FILES.filter(([family, , , style]) =>
+    (style === "normal" || slanted) && new RegExp(`font-family\\s*[:=]\\s*(?:"[^"]*|'[^']*|[^;"'>]*)${family.replace(/ /g, "\\s+")}`, "i").test(svg));
 }
 
-const fontRule = (family: string, data: string, weight: string): string =>
-  `@font-face{font-family:"${family}";src:url(${data}) format("woff2");font-weight:${weight};unicode-range:${FONT_RANGE}}`;
+const fontRule = (family: string, data: string, weight: string, style: string): string =>
+  `@font-face{font-family:"${family}";src:url(${data}) format("woff2");font-weight:${weight};${style === "normal" ? "" : `font-style:${style};`}unicode-range:${FONT_RANGE}}`;
 
 /// Il data URI dei byte `blob`, col tipo `type`.
 function blobUri(blob: Blob, type: string): Promise<string | null> {
@@ -71,7 +74,7 @@ export const appFile = (url: string): Promise<Blob | null> =>
 /// legge un file dell'app.
 export async function fontFaces(svg: string, read: (url: string) => Promise<Blob | null> = appFile): Promise<string> {
   const rules: string[] = [];
-  for (const [family, url, weight] of namedFonts(svg)) {
+  for (const [family, url, weight, style] of namedFonts(svg)) {
     let uri = fontUris.get(url);
     if (uri === undefined) {
       uri = read(url).then((blob) => (blob === null ? null : blobUri(blob, "font/woff2")), () => null);
@@ -84,7 +87,7 @@ export async function fontFaces(svg: string, read: (url: string) => Promise<Blob
       continue;
     }
     fontData.set(url, data);
-    rules.push(fontRule(family, data, weight));
+    rules.push(fontRule(family, data, weight, style));
   }
   return rules.join("\n");
 }
@@ -93,10 +96,10 @@ export async function fontFaces(svg: string, read: (url: string) => Promise<Blob
 /// letti; `null` se qualcuno manca.
 export function fontFacesNow(svg: string): string | null {
   const rules: string[] = [];
-  for (const [family, url, weight] of namedFonts(svg)) {
+  for (const [family, url, weight, style] of namedFonts(svg)) {
     const data = fontData.get(url);
     if (data === undefined) return null;
-    rules.push(fontRule(family, data, weight));
+    rules.push(fontRule(family, data, weight, style));
   }
   return rules.join("\n");
 }
