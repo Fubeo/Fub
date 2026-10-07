@@ -82,8 +82,9 @@ tolte, così una tavola nuova parte scelta.
   soltanto a Fub: gli attributi del namespace `fub`, i commenti, le risorse
   che nessuno usa, i numeri con più cifre del necessario. Le immagini del
   vault ci entrano coi loro byte, perché fuori dal vault il loro percorso non
-  porta a niente. Si apre in ogni programma di grafica, e si vede come il
-  disegno.
+  porta a niente, finché l'export resta entro 32 MiB: quelle di troppo
+  tengono il percorso, e il log lo dice. Si apre in ogni programma di
+  grafica, e si vede come il disegno.
 - **PDF:** vettoriale, le forme e i tratti restano curve, nitide a ogni
   ingrandimento, e il testo resta testo, che si seleziona. Il disegno e la
   selezione sono una pagina; le tavole una pagina per tavola, nell'ordine

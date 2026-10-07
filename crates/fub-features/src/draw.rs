@@ -86,7 +86,7 @@ use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{FolderScope, IndexQuery, IndexResult, ReadApi};
 use fub_abi::transfer::{
     ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget,
-    TransferNote,
+    TransferNote, PLUGIN_EXPORT_LIMIT,
 };
 use fub_format_svg::FORMAT_ID;
 use fub_scene::export::{
@@ -441,6 +441,9 @@ fn export_drawings(
     }
     let mut first_failure: Option<(DocId, String)> = None;
     let mut exported = 0usize;
+    // Ciò che l'export tiene ancora, per le immagini che l'SVG pulito porta
+    // dentro: passa da un disegno all'altro.
+    let mut room = PLUGIN_EXPORT_LIMIT;
     for (doc, path) in drawings.iter().zip(artifact_names(
         &drawings,
         format.extension(),
@@ -467,7 +470,7 @@ fn export_drawings(
                 continue;
             }
         };
-        let mut drawing = Drawing::new(host, doc);
+        let mut drawing = Drawing::new(host, doc, room);
         let mut done = 0usize;
         for file in &files {
             match write(&mut drawing, file, out, &mut report)? {
@@ -475,6 +478,7 @@ fn export_drawings(
                 Outcome::Failed(reason) => failed(format!("{}{reason}", file.about()), &mut report),
             }
         }
+        room = drawing.room;
         if done > 0 {
             drawing.notes(&mut report);
         }
@@ -670,16 +674,22 @@ struct Drawing<'h> {
     refused: Refused,
     /// I caratteri che i caratteri di Fub non hanno.
     missing: BTreeSet<char>,
+    /// I byte che l'export tiene ancora, entro [`PLUGIN_EXPORT_LIMIT`]: l'SVG
+    /// pulito ci misura le immagini che porta dentro, così un file che non
+    /// ci starebbe tiene il percorso di quelle di troppo invece di fallire.
+    /// La stessa regola vale con ogni host, e i file restano gli stessi.
+    room: usize,
 }
 
 impl<'h> Drawing<'h> {
-    fn new(host: &'h dyn ReadApi, doc: &DocId) -> Self {
+    fn new(host: &'h dyn ReadApi, doc: &DocId, room: usize) -> Self {
         Drawing {
             doc: doc.clone(),
             title: title(host, doc),
             images: VaultImages::new(host, doc),
             refused: Refused::default(),
             missing: BTreeSet::new(),
+            room,
         }
     }
 
@@ -697,11 +707,20 @@ impl<'h> Drawing<'h> {
     /// L'URI `data:` dell'immagine del vault che `href` nomina, letta come
     /// per gli altri formati: nell'SVG pulito un percorso del vault, fuori dal
     /// vault, non porterebbe a niente. `None` per ciò che non è un percorso,
-    /// che resta com'è, e per un'immagine che resta fuori, che il log dice.
-    fn embed(&mut self, href: &str) -> Option<String> {
+    /// che resta com'è, e per un'immagine che resta fuori, che il log dice;
+    /// anche per una che non sta più in `room`, i byte che il file ha ancora.
+    fn embed(&mut self, href: &str, room: &mut usize) -> Option<String> {
         let path = vault_path(href)?;
-        match self.images.image(&path) {
-            Ok(kind) => data_uri(&kind),
+        let found = self.images.image(&path).and_then(|kind| {
+            data_uri(&kind)
+                .filter(|uri| uri.len() <= *room)
+                .ok_or(LeftOut::OverExport)
+        });
+        match found {
+            Ok(uri) => {
+                *room -= uri.len();
+                Some(uri)
+            }
             Err(why) => {
                 let shown: String = href.chars().take(HREF_SHOWN).collect();
                 self.refused.vault.entry(why).or_default().insert(shown);
@@ -799,6 +818,13 @@ fn vault_note(why: LeftOut, images: &BTreeSet<String>) -> Option<String> {
                 "vault images did not fit in the {VAULT_IMAGES_MIB} MiB of images of a drawing and were not exported"
             ),
         ),
+        LeftOut::OverExport => {
+            let limit = PLUGIN_EXPORT_LIMIT / (1024 * 1024);
+            (
+                format!("vault image would take the export past {limit} MiB and keeps its path"),
+                format!("vault images would take the export past {limit} MiB and keep their path"),
+            )
+        }
     };
     listed(images, &one, &many)
 }
@@ -1003,6 +1029,9 @@ enum LeftOut {
     Unreadable,
     /// Il file non ci stava più nel tetto del disegno.
     OverBudget,
+    /// Nell'SVG pulito, i suoi byte avrebbero portato l'export oltre
+    /// [`PLUGIN_EXPORT_LIMIT`]: resta il percorso.
+    OverExport,
 }
 
 /// Le immagini del vault di un disegno. Un percorso ([`vault_path`]) si risolve
@@ -1428,7 +1457,9 @@ fn write_svg(
         Ok(cleaned) => cleaned,
         Err(error) => return Ok(Outcome::Failed(unreadable(&error))),
     };
-    let cleaned = match embed_images(&cleaned, |href| drawing.embed(href)) {
+    // Il testo c'è comunque; le immagini, finché il file ci sta.
+    let mut room = drawing.room.saturating_sub(cleaned.len());
+    let cleaned = match embed_images(&cleaned, |href| drawing.embed(href, &mut room)) {
         Ok(embedded) => embedded,
         Err(error) => return Ok(Outcome::Failed(unreadable(&error))),
     };
@@ -1437,6 +1468,7 @@ fn write_svg(
         out.write_artifact(handle, piece)?;
     }
     report.artifacts.push(out.close_artifact(handle)?);
+    drawing.room = drawing.room.saturating_sub(cleaned.len());
     Ok(Outcome::Done)
 }
 

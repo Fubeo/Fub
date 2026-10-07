@@ -155,8 +155,11 @@ del vault resta l'originale.
   in più sulla punta di uno spigolo vivo o di un marker.
 - **Le immagini del vault** entrano coi loro byte, come URI `data:`, con le
   regole degli altri formati (§5): fuori dal vault il loro percorso non
-  porterebbe a niente. Quelle che restano fuori tengono il percorso, e il log
-  le nomina; un indirizzo del web resta un indirizzo.
+  porterebbe a niente. Entrano finché i file dell'export, nell'ordine,
+  restano entro i 32 MiB che l'host consegna: un file che non ci starebbe
+  non fallisce, e le immagini di troppo tengono il percorso. Quelle che
+  restano fuori, per l'una o l'altra regola, tengono il percorso, e il log le
+  nomina; un indirizzo del web resta un indirizzo.
 
 ## 4. La misura
 

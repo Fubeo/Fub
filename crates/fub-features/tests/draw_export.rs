@@ -1924,6 +1924,64 @@ fn the_svg_carries_the_vault_images_it_can_read() {
     assert_eq!(only_artifact(&report).0, "disegni/acqua (esportato).svg");
 }
 
+#[test]
+fn the_svg_keeps_the_path_of_the_images_the_export_cannot_hold() {
+    use base64::Engine as _;
+    use fub_abi::transfer::PLUGIN_EXPORT_LIMIT;
+    // Due immagini da 13 MiB: in base64 una passa i 17, e due insieme non
+    // stanno nei 32 MiB che l'host consegna. Sono PNG veri con byte in coda.
+    let red = red_png();
+    let mut large = red.clone();
+    large.resize(13 * 1024 * 1024, 0);
+    let host = host()
+        .with_document(
+            "uno.svg",
+            &with_images(&[("a.png", 0, 60), ("b.png", 60, 60), ("rosso.png", 120, 40)]),
+        )
+        .with_document(
+            "due.svg",
+            &with_images(&[("a.png", 0, 80), ("rosso.png", 80, 80)]),
+        )
+        .with_binary_document("a.png", &large)
+        .with_binary_document("b.png", &large)
+        .with_binary_document("rosso.png", &red);
+    let request = ExportRequest::new(
+        DRAW_SVG,
+        ExportSelection::Documents(vec![DocId::new("uno.svg"), DocId::new("due.svg")]),
+    );
+    // Il sink dell'host, col suo tetto: l'export non fallisce.
+    let mut sink = MemorySink::bounded(PLUGIN_EXPORT_LIMIT);
+    let report = SvgExport.export(&request, &host, &mut sink).unwrap();
+    let texts: Vec<(String, String)> = report
+        .artifacts
+        .iter()
+        .map(|a| {
+            let text = String::from_utf8(a.as_bytes().expect("in memoria").to_vec());
+            (a.path.clone(), text.expect("UTF-8"))
+        })
+        .collect();
+    let paths: Vec<&str> = texts.iter().map(|(path, _)| path.as_str()).collect();
+    // L'ordine è quello dei path.
+    assert_eq!(paths, ["due (exported).svg", "uno (exported).svg"]);
+    let (due, uno) = (&texts[0].1, &texts[1].1);
+    let red_uri = format!(
+        "href=\"data:image/png;base64,{}\"",
+        base64::engine::general_purpose::STANDARD.encode(&red)
+    );
+    // Il primo file prende l'immagine grande e la piccola; il secondo, con
+    // ciò che resta, soltanto la piccola, e le grandi tengono il percorso.
+    assert!(due.len() > 17 * 1024 * 1024, "{}", due.len());
+    assert!(due.contains(&red_uri) && !due.contains("href=\"a.png\""));
+    assert!(uno.contains(&red_uri), "{uno}");
+    assert!(uno.contains("href=\"a.png\"") && uno.contains("href=\"b.png\""));
+    assert!(due.len() + uno.len() <= PLUGIN_EXPORT_LIMIT);
+    assert_eq!(
+        messages(&report),
+        ["2 vault images would take the export past 32 MiB and keep their path: a.png, b.png"]
+    );
+    assert_eq!(report.log[0].entry.as_deref(), Some("uno.svg"));
+}
+
 /// I pixel moltiplicati per la loro opacità, e l'opacità: ciò che si vede.
 /// Il colore di un pixel quasi trasparente, diviso per un'opacità di 1 su 255,
 /// può cambiare di tutto senza che si veda niente.
