@@ -2,11 +2,12 @@
 //
 // Un oggetto ha `o` seguito da 8 caratteri base36 casuali, un livello `l`
 // seguito da 8, una risorsa `r` seguita da 8, una tavola `b` e la carta di
-// una tavola `c`; la carta è `fub-paper`, la `defs` di FubDraw `fub-defs`.
-// Il caso viene da `crypto.getRandomValues` e ogni carattere è uniforme: un
-// byte vale solo sotto 252, il più grande multiplo di 36 che sta in un byte,
-// così nessuna cifra esce più spesso delle altre. Un id già usato nel
-// documento si scarta e se ne genera un altro.
+// una tavola `c`; la carta è `fub-paper`, la `defs` di FubDraw `fub-defs`, il
+// gruppo di una pagina annotata `p` e il suo numero. Il caso viene da
+// `crypto.getRandomValues` e ogni carattere è uniforme: un byte vale solo
+// sotto 252, il più grande multiplo di 36 che sta in un byte, così nessuna
+// cifra esce più spesso delle altre. Un id già usato nel documento si scarta
+// e se ne genera un altro.
 //
 // FubDraw non cambia un id da sé: questi id sono per gli elementi nuovi, e
 // per quelli che ricevono un id con l'operazione `ident`. Un id esistente lo
@@ -18,6 +19,13 @@ export const PAPER_ID = "fub-paper";
 /// L'id della `defs` in cui FubDraw mette le risorse nuove (formato della
 /// scena, risorse).
 export const DEFS_ID = "fub-defs";
+
+/// L'id del gruppo di una pagina annotata: `p` e il numero su almeno quattro
+/// cifre, `p0003` (`annotation-format.md`, §3). Non è casuale, perché una
+/// pagina ha un gruppo solo.
+export function pageId(page: number): string {
+  return `p${String(page).padStart(4, "0")}`;
+}
 
 /// Che cosa riceve l'id: un oggetto qualunque, un livello, una risorsa e
 /// ciò che contiene, una tavola o la carta di una tavola.

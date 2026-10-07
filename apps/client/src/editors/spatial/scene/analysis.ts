@@ -755,7 +755,7 @@ export function collapse(text: string): string {
 /// spazio, tranne in un testo in area quelle che continuano una parola dopo
 /// la prima, con `fub:join="word"`, che si uniscono senza (formato della
 /// scena, testo).
-function paragraph(doc: XmlDocument, id: NodeId): string {
+export function paragraph(doc: XmlDocument, id: NodeId): string {
   const wrap = valueOf(doc.element(id)!, NS_FUB, "wrap");
   const area = wrap !== undefined && wrapWidth(wrap) !== null;
   // Le righe, e se ognuna continua una parola.

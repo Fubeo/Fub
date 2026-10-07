@@ -8,7 +8,7 @@
 // cablaggio è quello di `surface-modes.e2e.test.ts` — `main.ts` sulla scocca
 // vera, contro l'host finto — con il registro vero e nessuna famiglia finta.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SettingEntry } from "./host/contract";
+import type { CommandSpec, SettingEntry } from "./host/contract";
 import type { FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
@@ -132,6 +132,18 @@ async function loaded(): Promise<void> {
 
 const MODE_COMMANDS = ["shell.mode.reading", "shell.mode.live", "shell.mode.source"];
 const SOURCE_COMMANDS = ["shell.doc.source.open", "shell.doc.source.side", "shell.doc.source.close"];
+const EXPORT_COMMANDS = ["shell.doc.export"];
+
+/// La spec di `export.run` come la dichiarano i trasferimenti del kernel.
+const EXPORT_RUN: CommandSpec = {
+  id: "export.run",
+  title: "Export documents",
+  description: "",
+  keybinding: null,
+  params: [{ name: "request_json", title: "ExportRequest JSON", description: "", kind: { kind: "text" }, required: true }] as never,
+  scope: { writes: false, reach: "session", reversible: true },
+  surfaces: [],
+};
 
 async function offered(ids: readonly string[]): Promise<string[]> {
   const { allCommands } = await import("./ui/commands");
@@ -649,5 +661,76 @@ describe("le immagini del vault nel disegno", () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe("«Esporta…» su un disegno", () => {
+  const withExport = () => createFakeHost({ file: VAULT, draw: true, commands: [EXPORT_RUN] });
+  const choices = () => [...document.querySelectorAll<HTMLElement>(".shell-dialog [role=option]")];
+  const requests = (host: FakeHost) => host.atGate("invokeCommand")
+    .filter((call) => call.args[0] === "export.run")
+    .map((call) => JSON.parse(String((call.args[1] as { request_json: string }).request_json)) as unknown);
+
+  it("c'è sui disegni, anche su quelli che si guardano soltanto, e altrove no", async () => {
+    await start(withExport());
+    await open("casa.svg");
+    expect(await offered(EXPORT_COMMANDS)).toEqual(EXPORT_COMMANDS);
+    await open("logo.svg");
+    expect(await offered(EXPORT_COMMANDS), "un SVG estraneo").toEqual(EXPORT_COMMANDS);
+    for (const doc of ["Benvenuto.md", "lavagna.canvas", "conti.fubsheet", "foto.png"]) {
+      await open(doc);
+      expect(await offered(EXPORT_COMMANDS), doc).toEqual([]);
+    }
+  });
+
+  it("senza `export.run` nel kernel non c'è", async () => {
+    await start();
+    await open("casa.svg");
+    expect(await offered(EXPORT_COMMANDS)).toEqual([]);
+  });
+
+  it("chiede il formato, salva prima l'ultimo gesto e apre il centro attività", async () => {
+    const host = await start(withExport());
+    await open("casa.svg");
+    drawRect();
+    // Il salvataggio aspetta il suo debounce: l'export non lo aspetta, lo fa
+    // partire.
+    expect(written(host, "casa.svg")).toEqual([]);
+    expect(document.getElementById("activity-panel")!.hidden).toBe(true);
+    await run("shell.doc.export");
+    await waitFor("si sceglie il formato", () => choices().length === 2);
+    expect(choices().map((choice) => choice.querySelector(".palette-title")!.textContent)).toEqual(["PNG", "PDF"]);
+    choices()[1]!.click();
+    await waitFor("l'export è chiesto", () => requests(host).length === 1);
+    expect(requests(host)).toEqual([
+      { target: "draw.pdf", selection: { kind: "documents", value: ["casa.svg"] }, options: {} },
+    ]);
+    const saved = host.calls.findIndex((call) => call.gate === "writeDocument" && call.args[0] === "casa.svg");
+    const asked = host.calls.findIndex((call) => call.gate === "invokeCommand");
+    expect(saved).toBeGreaterThanOrEqual(0);
+    expect(asked).toBeGreaterThan(saved);
+    expect(written(host, "casa.svg")[0]!.match(/<rect /g)).toHaveLength(2);
+    await waitFor("il centro attività si apre", () => !document.getElementById("activity-panel")!.hidden);
+    // Il fuoco resta sul disegno.
+    expect(focusedPane().contains(document.activeElement)).toBe(true);
+  });
+
+  it("dal menu del riquadro ogni formato è una voce", async () => {
+    const host = await start(withExport());
+    const { t } = await import("./i18n/strings");
+    await open("casa.svg");
+    focusedPane().querySelector<HTMLButtonElement>("[data-pane-menu]")!.click();
+    await settle();
+    const entries = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
+    const labels = entries.map((button) => button.querySelector(".menu-label")?.textContent ?? "");
+    expect(labels.filter((label) => label.startsWith(t("pane.export", { what: "" })))).toEqual([
+      t("pane.export", { what: "PNG" }),
+      t("pane.export", { what: "PDF" }),
+    ]);
+    entries[labels.indexOf(t("pane.export", { what: "PNG" }))]!.click();
+    await waitFor("l'export è chiesto", () => requests(host).length === 1);
+    expect(requests(host)).toEqual([
+      { target: "draw.png", selection: { kind: "documents", value: ["casa.svg"] }, options: {} },
+    ]);
   });
 });

@@ -89,6 +89,12 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.doc.source.open", None),
     ("shell.doc.source.side", None),
     ("shell.doc.source.close", None),
+    // Esporta la linguetta attiva in uno dei formati che la sua superficie
+    // offre: un disegno in PNG o in PDF, le annotazioni di un PDF nel PDF
+    // annotato o in quello redatto. **Senza accordo**: si fa alla fine di un
+    // lavoro e non mentre si lavora, e il comando c'è soltanto dove la
+    // superficie dichiara un export.
+    ("shell.doc.export", None),
     ("shell.pane.split.right", Some("Mod-\\")),
     // **Senza accordo**: `Mod-Shift-\` dentro l'editor è
     // `cursorMatchingBracket`, e lo split non partiva mai mentre si scriveva.
@@ -192,6 +198,11 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
 /// l'esito dell'export si riconosce dagli `artifacts` di un
 /// [`ExportReport`](fub_abi::transfer::ExportReport).
 pub const ARTIFACT_JOB: &str = fub_importers::transfer_commands::TRANSFER_JOB;
+
+/// Il comando che accoda un export registrato: la shell lo chiede per gli
+/// export che una superficie offre, e l'esito torna come quello di
+/// [`ARTIFACT_JOB`].
+pub const EXPORT_COMMAND: &str = fub_importers::transfer_commands::EXPORT_RUN;
 
 /// Le impostazioni `keys.shell.*`, una per comando di shell (§16.3).
 ///

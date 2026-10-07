@@ -279,6 +279,10 @@ pub(crate) fn mount_with_formats(
     // allegato, e la shell lo apre come testo col profilo `svg`.
     #[cfg(feature = "draw")]
     builtin.push(fub_format_svg::SvgProvider::boxed());
+    // Le annotazioni dei PDF, scene accanto al PDF che annotano. Senza la
+    // feature un `.fubann` è un file di specie sconosciuta.
+    #[cfg(feature = "draw")]
+    builtin.push(fub_format_svg::FubannProvider::boxed());
     for provider in builtin {
         if let Err(error) = formats.register(provider) {
             return Err(mount_error_with_resource_disposal(
@@ -581,6 +585,13 @@ fn register_feature(
         for renderer in build() {
             if let Err(error) = registrar.register_custom_renderer(renderer) {
                 failures.push(format!("renderer not registered: {error}"));
+            }
+        }
+    }
+    if let Some(build) = feature.exports {
+        for provider in build() {
+            if let Err(error) = registrar.register_export_provider(provider) {
+                failures.push(format!("export provider not registered: {error}"));
             }
         }
     }

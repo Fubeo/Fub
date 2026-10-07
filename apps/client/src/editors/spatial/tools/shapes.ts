@@ -1,6 +1,7 @@
 // Le forme: rettangolo, ellisse, linea e freccia dell'Essenziale, da due
 // punti di un trascinamento, e poligono e stella dello Standard, dal centro
-// e da un vertice (formato della scena, §4 e §6).
+// e da un vertice (formato della scena, §4 e §6); e la copertura delle
+// annotazioni di un PDF, un rettangolo opaco senza contorno.
 //
 // Gli elementi sono quelli che l'operazione `add` scrive: geometria con al
 // più due decimali, contorno del colore scelto, nessun riempimento. La
@@ -13,7 +14,7 @@ import type { Point } from "../scene/matrix";
 import { MAX_COUNT, MIN_COUNT, polygonalAttrs, STAR_RATIO, type Polygonal, type PolygonalShape } from "../scene/parametric";
 import { pathData, type Elem } from "../scene/serialize";
 
-export type ShapeTool = "rect" | "ellipse" | "line" | "arrow" | "polygon";
+export type ShapeTool = "rect" | "ellipse" | "line" | "arrow" | "polygon" | "cover";
 
 /// Come disegna lo strumento Poligono: la forma, i lati del poligono e le
 /// punte della stella, ciascuno il suo, il rapporto interno della stella e
@@ -77,13 +78,14 @@ function text(value: number): string {
 }
 
 /// La fine del trascinamento con Maiusc: un quadrato o un cerchio per
-/// rettangolo ed ellisse, un angolo multiplo di 15° per linea e freccia. Un
+/// rettangolo, ellisse e copertura, un angolo multiplo di 15° per linea e
+/// freccia. Un
 /// poligono la lascia dov'è: Maiusc ne tiene diritta la rotazione.
 export function constrainEnd(tool: ShapeTool, from: Point, to: Point): Point {
   if (tool === "polygon") return to;
   const dx = to[0] - from[0];
   const dy = to[1] - from[1];
-  if (tool === "rect" || tool === "ellipse") {
+  if (tool === "rect" || tool === "ellipse" || tool === "cover") {
     const side = Math.max(Math.abs(dx), Math.abs(dy));
     return [from[0] + (dx < 0 ? -side : side), from[1] + (dy < 0 ? -side : side)];
   }
@@ -143,7 +145,9 @@ export function polygonDrag(center: Point, to: Point, tool: PolygonTool, straigh
 /// livello che la riceve: per il poligono e la stella `from` è il centro, e
 /// `polygon` dice come disegnarli. `null` se è più piccola di `minimum` (un
 /// tocco, non un trascinamento) o se, arrotondata, non si disegnerebbe: SVG
-/// non disegna un rettangolo o un'ellisse con un lato nullo.
+/// non disegna un rettangolo o un'ellisse con un lato nullo. La copertura è
+/// riempita del colore e opaca: nasconde alla vista, e non toglie niente dal
+/// PDF.
 export function shapeElem(
   tool: ShapeTool,
   id: string,
@@ -161,16 +165,19 @@ export function shapeElem(
     if (written === null) return null;
     return { tag: "path", attrs: { id, ...written, fill: "none", ...stroke } };
   }
-  if (tool === "rect" || tool === "ellipse") {
+  if (tool === "rect" || tool === "ellipse" || tool === "cover") {
     const x1 = round(Math.min(from[0], to[0]));
     const y1 = round(Math.min(from[1], to[1]));
     const x2 = round(Math.max(from[0], to[0]));
     const y2 = round(Math.max(from[1], to[1]));
     if (Math.max(x2 - x1, y2 - y1) < minimum) return null;
-    if (tool === "rect") {
+    if (tool === "rect" || tool === "cover") {
       const width = round(x2 - x1);
       const height = round(y2 - y1);
       if (width <= 0 || height <= 0) return null;
+      if (tool === "cover") {
+        return { tag: "rect", attrs: { id, x: text(x1), y: text(y1), width: text(width), height: text(height), fill: style.color } };
+      }
       return {
         tag: "rect",
         attrs: { id, x: text(x1), y: text(y1), width: text(width), height: text(height), fill: "none", ...stroke },

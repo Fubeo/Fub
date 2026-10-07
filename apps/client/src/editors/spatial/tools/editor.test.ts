@@ -3747,6 +3747,7 @@ describe("da tastiera", () => {
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
       "Poligono · dal livello Standard",
+      "Evidenziatore · dal livello Standard",
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
@@ -3788,10 +3789,11 @@ describe("da tastiera", () => {
       ["Shift+F10", "Apre il menu della selezione"],
     ]);
     expect(tables[4]!.rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
-    expect(tables[5]!.rows).toEqual([["Shift", "Tenuto, la forma dal tratto resta regolare"]]);
+    expect(tables[5]!.rows).toEqual([["Shift", "Tenuto premuto mentre si traccia, il tratto è dritto"]]);
+    expect(tables[6]!.rows).toEqual([["Shift", "Tenuto, la forma dal tratto resta regolare"]]);
     // Le tavole, tutte dallo Standard: i passi fra loro valgono con ogni
     // strumento, il resto con lo strumento Tavola.
-    expect(tables[7]!.rows).toEqual([
+    expect(tables[8]!.rows).toEqual([
       ["Alt+PgUp o Alt+PgDn", "Va alla tavola prima o dopo, e la inquadra"],
       ["Tab o Shift+Tab", "Con lo strumento Tavola, la tavola dopo o prima"],
       ["Home o End", "Con lo strumento Tavola, la prima o l’ultima tavola"],
@@ -3804,25 +3806,25 @@ describe("da tastiera", () => {
       ["Shift", "Tenuto all’inizio del trascinamento: disegna una tavola anche dentro un’altra"],
       ["Alt", "Tenuto mentre si sposta una tavola: ne lascia una copia dove la si posa, con ciò che ci sta sopra"],
     ]);
-    expect(tables[8]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[9]!.rows).toEqual([
+    expect(tables[9]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[10]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
     // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
-    expect(tables[12]!.rows).toEqual([
+    expect(tables[13]!.rows).toEqual([
       ["4", "Ruota la vista a sinistra"],
       ["6", "Ruota la vista a destra"],
       ["5", "Raddrizza la vista"],
       ["Shift+F10", "Apre il menu radiale: strumenti, colori, annulla"],
     ]);
     // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[13]!.rows).toEqual([
+    expect(tables[14]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
     // L'elenco delle tavole e la cronologia, tutti dallo Standard.
-    expect(tables[14]!.rows).toEqual([
+    expect(tables[15]!.rows).toEqual([
       ["↑ o ↓ o Home o End", "Nell’elenco delle tavole, la tavola prima o dopo, la prima o l’ultima"],
       ["Enter o Space", "Nell’elenco delle tavole, porta alla tavola"],
       ["F2", "Nell’elenco delle tavole, cambia il nome della tavola"],
@@ -3832,7 +3834,7 @@ describe("da tastiera", () => {
       ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
       ["Esc", "Dall’elenco delle tavole torna al foglio"],
     ]);
-    expect(tables[15]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
+    expect(tables[16]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -9643,6 +9645,7 @@ describe("il livello Personalizzato", () => {
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
       "Poligono · dal livello Standard",
+      "Evidenziatore · dal livello Standard",
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
@@ -9665,7 +9668,7 @@ describe("il livello Personalizzato", () => {
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[16]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
+    expect(tables[17]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

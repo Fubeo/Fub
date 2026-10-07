@@ -7,7 +7,9 @@
 //! che una rinomina riscrive byte per byte. Un `.svgz` resta di specie
 //! sconosciuta, e un SVG rotto non ferma gli altri. Il Markdown accanto non
 //! cambia. Il formato è nel [formato della
-//! scena](../../../docs/reference/scene-format.md), §9.
+//! scena](../../../docs/reference/scene-format.md), §9. Con la stessa feature
+//! un disegno si esporta in PNG e in PDF (`fub.draw`), col titolo che il
+//! formato gli dà.
 //!
 //! In fondo c'è il micro-bench che confronta l'indicizzazione di 500 disegni
 //! con quella di 500 note della stessa dimensione: si esegue a mano, in
@@ -26,6 +28,7 @@ use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
     EntryKind, Excerpts, IndexQuery, IndexResult, LinkDirection, Page, PropertySelect,
 };
+use fub_abi::transfer::{ExportRequest, ExportSelection, NoteLevel};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
 
 /// Un disegno di FubDraw: titolo, descrizione, due testi, un collegamento
@@ -79,6 +82,8 @@ const QUADERNO: &str = include_str!("../../fub-format-svg/tests/fixtures/boards.
 
 /// L'intestazione di un PNG: un allegato.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
+/// Un PNG intero, 2 × 1 pixel blu: la foto del disegno, che l'export disegna.
+const FOTO: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x02\0\0\0\x01\x08\x02\0\0\0\x7b\x40\xe8\xdd\0\0\0\rIDAT\x78\xda\x63\x60\x28\xda\x04\x44\0\x06\x9f\x02\x49\x2c\x3a\xd5\x76\0\0\0\0IEND\xae\x42\x60\x82";
 /// L'intestazione di gzip: un `.svgz` non è testo.
 const GZIP: &[u8] = &[0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0];
 
@@ -108,7 +113,7 @@ fn vault() -> (tempfile::TempDir, Utf8PathBuf) {
         "# Indice\n\n![[acqua.svg]]\n\nVedi [[acqua]] e [la mappa](../mappe/quartiere.svg), poi [[Pioggia]].\n",
     );
     write(&root, "disegni/acqua.svg", ACQUA);
-    write(&root, "disegni/foto/mare.png", PNG);
+    write(&root, "disegni/foto/mare.png", FOTO);
     write(&root, "mappe/quartiere.svg", QUARTIERE);
     write(
         &root,
@@ -688,6 +693,63 @@ fn markdown_does_not_notice_the_drawings() {
     let b = kinds(&without.workspace);
     for (path, kind) in &b {
         assert_eq!(a.get(path), Some(kind), "{path}");
+    }
+}
+
+/// L'export dei disegni sul montaggio di produzione: i due formati ci sono,
+/// il disegno esce accanto a sé col titolo del suo `<title>`, la nota della
+/// selezione si salta e l'immagine del vault entra, risolta dal disegno e
+/// letta dall'host.
+#[test]
+fn a_drawing_exports_to_png_and_pdf_with_its_title() {
+    let (_dir, root) = vault();
+    let (mounted, _) = mount(&root);
+    let ws = &mounted.workspace;
+    let targets: Vec<String> = ws.export_targets().into_iter().map(|t| t.id).collect();
+    for target in ["draw.png", "draw.pdf"] {
+        assert!(targets.iter().any(|t| t == target), "{targets:?}");
+    }
+
+    for (target, path, magic) in [
+        ("draw.png", "disegni/acqua.png", &b"\x89PNG\r\n\x1a\n"[..]),
+        ("draw.pdf", "disegni/acqua.pdf", b"%PDF-1.7\n"),
+    ] {
+        let request = ExportRequest::new(
+            target,
+            ExportSelection::Documents(vec![id("note/Pioggia.md"), id("disegni/acqua.svg")]),
+        );
+        let report = ws.export(&request).unwrap();
+        assert_eq!(report.artifacts.len(), 1, "{:?}", report.log);
+        assert_eq!(report.artifacts[0].path, path);
+        let bytes = report.artifacts[0].as_bytes().unwrap();
+        assert!(bytes.starts_with(magic), "{target}");
+        // Il titolo viene dal modello del formato `svg`: nel PNG come testo
+        // `iTXt`, nel PDF come stringa letterale.
+        let title: &[u8] = if target == "draw.png" {
+            b"Title\0\0\0\0\0Ciclo dell'acqua"
+        } else {
+            b"/Title (Ciclo dell'acqua)"
+        };
+        assert!(bytes.windows(title.len()).any(|w| w == title), "{target}");
+        if target == "draw.pdf" {
+            let image: &[u8] = b"/Subtype /Image";
+            assert!(bytes.windows(image.len()).any(|w| w == image));
+        }
+
+        let log: Vec<_> = report
+            .log
+            .iter()
+            .map(|note| (note.level, note.message.as_str(), note.entry.as_deref()))
+            .collect();
+        assert_eq!(
+            log,
+            [(
+                NoteLevel::Info,
+                "1 selected document is not a drawing and was skipped",
+                None
+            )],
+            "{target}"
+        );
     }
 }
 

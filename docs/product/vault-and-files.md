@@ -126,6 +126,28 @@ diventa `Report v1.2.md`. Se nessun formato installato serve l'estensione
 scelta, i comandi che creano note rispondono con un errore e non scrivono un
 file che il vault non saprebbe aprire.
 
+«Nuovo disegno» (`drawing.create`, con la feature `draw`) fa nascere un disegno
+vuoto e lo apre. Senza nome si chiama «Disegno», o «Disegno 1», «Disegno 2», …
+nella lingua di chi lo crea, con le cifre della convenzione dei nomi liberi. Un
+nome senza estensione riceve `.svg`, e uno con l'estensione di un altro formato
+non è un disegno. Un nome semplice nasce nella cartella `folder`, se è data,
+altrimenti nella radice; un path esplicito conserva la propria cartella. Un nome
+occupato è un errore e mai una sovrascrittura, e prima di scrivere il nome passa
+la regola dei nomi nuovi. Il file lo scrive il provider dei disegni, con il nome
+per titolo e «Livello 1». La prova a vuoto fa gli stessi controlli e non scrive;
+l'annullamento manda il disegno nel cestino.
+
+«Annota il PDF» (`pdf.annotate`, con la feature `draw`) apre le annotazioni di
+un PDF del vault: il file `X.pdf.fubann` accanto a `X.pdf`, con il nome intero
+del PDF più `.fubann`, perché è il nome a legarle al PDF. Se il file c'è, il
+comando lo apre e basta, senza scrivere e senza annullamento. Se non c'è, lo
+scrive il provider delle annotazioni (radice, titolo e `fub:annotates`) e lo
+apre; l'annullamento lo manda nel cestino. Il nome passa la regola dei nomi
+nuovi prima di scrivere, un nome preso da un altro file è un errore, e un nome
+che non finisce con `.pdf` o un PDF che non c'è non si annotano. Il PDF non si
+scrive mai. Impronta e numero di pagine li scrive l'editor col primo gesto,
+come racconta [Annotazioni dei PDF](pdf-annotations.md).
+
 ## Albero dei file
 
 L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene

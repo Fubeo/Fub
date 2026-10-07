@@ -11,8 +11,9 @@
 //   senza pannelli.
 // - **Ogni segno il suo inchiostro.** La penna e le forme condividono colore
 //   e spessore; l'evidenziatore ha i suoi, giallo e largo, e li ritrova quando
-//   lo si riprende. Dal livello Standard un colore si sceglie anche a piacere,
-//   e resta come campione in più accanto alla tavolozza.
+//   lo si riprende, e con Maiusc tira un tratto dritto. La copertura di un PDF
+//   ha il suo colore, il nero. Dal livello Standard un colore si sceglie anche
+//   a piacere, e resta come campione in più accanto alla tavolozza.
 // - **Un gesto, un'operazione.** Ogni strumento lavora sull'anteprima finché
 //   il puntatore è giù e scrive una volta sola quando si alza: il tratto
 //   sullo strato sopra, la forma su un livello di anteprima con gli stessi
@@ -98,6 +99,16 @@
 // La superficie che lo monta nella shell gli passa il motore del
 // documento e riceve ogni modifica con `onChange`; una sincronizzazione da
 // un'altra superficie arriva con `setEngine`, e annulla e ripeti restano.
+//
+// Le annotazioni di un PDF montano lo stesso editor col profilo `pdf` e un
+// **foglio** (`DrawSheet`): una pagina alla volta, col PDF sotto, e solo i
+// gruppi di quella pagina si disegnano e si toccano. Il foglio dice dove
+// nasce un oggetto — nel gruppo della pagina, che nasce col primo — e che
+// cosa ogni gesto aggiunge in coda: il legame col PDF. La pagina non si
+// allarga. Il profilo ha i suoi strumenti, la nota e la copertura comprese, e
+// nessuno dei comandi dei livelli; Invio aggiunge al cursore ciò che lo
+// strumento disegna, o cambia la nota scelta, e PagSu e PagGiù cambiano
+// pagina.
 
 import { onLanguage, resolvedLanguage } from "../../../i18n/strings";
 import { clipboardSupports, readClipboard, writeClipboardData, type ClipboardEntry } from "../../../platform/clipboard";
@@ -137,7 +148,7 @@ import { pathData, type Elem } from "../scene/serialize";
 import { href as parseHref } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
-import { PaintBuilder, resourcesFor, type HeadInfo, type PaintNode, type PaintScene } from "../painter/paint";
+import { PaintBuilder, resourcesFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
 import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
   addOp,
@@ -412,8 +423,10 @@ import {
 import { createInspector } from "./inspector";
 import { cleanName, decorative, decorativeOps, NAME_MAX, nameable, nameOps } from "./naming";
 import { createObjectTree, type TreeDrop, type TreeEntry, type TreeKind, type TreeThumbnail } from "./objects";
+import { NOTE_SIZE, noteElem, noteLabel, promptNote, readNote, type NoteText } from "./note";
 import { placeOps, type Place } from "./place";
 import {
+  COVER_COLOR,
   customColor,
   DEFAULT_COLOR,
   DEFAULT_WIDTH,
@@ -440,6 +453,7 @@ import {
   type Feature,
   type Level,
   type ToolId,
+  type ToolProfile,
   type ToolSpec,
 } from "./registry";
 import { cornerAttrs, cornerCursor, cornerDrag, cornerGrip, cornerSpot, shapeFacts, shapeOps, toolFacts, toolWith, type CornerGrip } from "./reshape";
@@ -508,6 +522,33 @@ export interface DrawPlace {
   refer(doc: string): string;
 }
 
+/// Il foglio di un profilo che annota una pagina alla volta su un fondo che
+/// non è del documento: la pagina di un PDF.
+export interface DrawSheet {
+  /// La pagina di adesso, nelle coordinate della scena.
+  page(): Page;
+  /// I gruppi della pagina di adesso: si disegnano e si toccano solo loro.
+  scope(model: DocumentModel): readonly ContainerNode[];
+  /// Dove nasce un oggetto, con ciò che va fatto prima nello stesso `batch`;
+  /// `null` se non si può scrivere. `index` ha per livelli i gruppi della
+  /// pagina; `taken` dice se un id è già nel documento.
+  destination(model: DocumentModel, index: SceneIndex, ids: NewIds, taken: (id: string) => boolean): Destination | null;
+  /// La vista è cambiata: la camera e la misura del foglio, in pixel CSS.
+  view?(camera: View, width: number, height: number): void;
+  /// Le operazioni che ogni gesto che scrive porta in coda, nello stesso
+  /// `batch`: il legame col PDF, la prima volta.
+  extra(model: DocumentModel): readonly Op[];
+  /// Cambia pagina di `delta`, con PagSu e PagGiù.
+  turn(delta: number): void;
+  /// Il nome del foglio per chi non lo vede: la pagina e il documento.
+  label(): string;
+  /// Il fondo, dentro la carta: occupa tutta la pagina.
+  readonly background: HTMLElement;
+  /// I controlli del profilo, nella testata dopo gli strumenti: i tasti
+  /// scritti nei loro campi non sono comandi dell'editor.
+  readonly controls: HTMLElement | null;
+}
+
 export interface DrawEditorOptions {
   /// Il livello degli strumenti (default `essential`); cambia con
   /// `setLevel`.
@@ -515,6 +556,10 @@ export interface DrawEditorOptions {
   /// Le parti del livello Personalizzato, per nome (default quelle
   /// dell'Essenziale): un nome che l'editor non conosce non conta.
   readonly custom?: readonly string[];
+  /// Il profilo, che sceglie gli strumenti (default `vector`).
+  readonly profile?: ToolProfile;
+  /// Il foglio delle annotazioni; senza, il documento è un disegno.
+  readonly sheet?: DrawSheet;
   readonly images?: DrawImages;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
@@ -590,6 +635,13 @@ export interface DrawEditor {
   redo(): void;
   /// Inquadra la pagina e tutto ciò che ne esce.
   fit(): void;
+  /// Il foglio ha cambiato pagina, o la sua misura: la scelta si azzera e
+  /// la pagina si inquadra.
+  showSheet(): void;
+  /// Applica `op` come un gesto, un passo di annulla col nome `label`: i
+  /// comandi di chi monta l'editor, come la conferma della versione del PDF.
+  /// `false` se non si è potuto.
+  perform(label: DrawKey, op: Op): boolean;
   focus(): void;
   dispose(): void;
 }
@@ -920,6 +972,10 @@ const PREVIEW_NODES = 2_000;
 /// quella di Inter.
 const BASELINE_EM = 0.363;
 
+/// Ciò che Invio aggiunge sul foglio delle annotazioni, in unità della
+/// scena: un tratto o una linea larghi così, una forma alta la metà.
+const KEYBOARD_SIZE = 96;
+
 /// Le icone della barra, col costrutto di `ui/icons.ts`.
 const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-select": ["M6 3v15.5l4.2-4.1 2.9 6.6 2.6-1.1-2.9-6.5H19z"],
@@ -932,6 +988,10 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-polygon": ["M7.5 4.2h9l4.5 7.8-4.5 7.8h-9L3 12z"],
   "draw-star": ["M12 3l2.1 6.6H21l-5.5 4 2.1 6.6-5.6-4.1-5.6 4.1 2.1-6.6L3 9.6h6.9z"],
   "draw-highlighter": ["M13.5 3.5l7 7-7 7-7-7z", "M6.5 10.5L3 18l3 3 7.5-3.5", "M15 21h6"],
+  // Un foglietto con l'angolo piegato, e due righe.
+  "draw-note": ["M5 4h14v10l-5 6H5z", "M14 20v-6h5", "M8 8.5h8", "M8 11.5h4"],
+  // Un rettangolo pieno, a tratteggio.
+  "draw-cover": ["M4 6h16v12H4z", "M4 11l5-5", "M4 17l11-11", "M10 18l10-10", "M16 18l4-4"],
   "draw-color-more": ["M3 12a9 9 0 1 0 18 0a9 9 0 1 0-18 0", "M12 8v8", "M8 12h8"],
   "draw-undo": ["M9 14L4 9l5-5", "M4 9h10.5a5.5 5.5 0 0 1 0 11H11"],
   "draw-redo": ["M15 14l5-5-5-5", "M20 9H9.5a5.5 5.5 0 0 0 0 11H13"],
@@ -1022,6 +1082,21 @@ function holdsPath(outer: readonly number[], inner: readonly number[]): boolean 
   return inner.length > outer.length && outer.every((step, at) => inner[at] === step);
 }
 
+/// Un tratto dritto dal primo all'ultimo campione: un campione ogni unità e
+/// mezza, con la pressione e il tempo distribuiti in mezzo.
+function straight(samples: readonly InkSample[]): InkSample[] {
+  const first = samples[0];
+  const last = samples[samples.length - 1];
+  if (first === undefined || last === undefined || first === last) return [...samples];
+  const steps = Math.min(INK_MAX_SAMPLES - 1, Math.max(1, Math.ceil(Math.hypot(last.x - first.x, last.y - first.y) / 1.5)));
+  const out: InkSample[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const k = i / steps;
+    out.push({ ...first, x: first.x + (last.x - first.x) * k, y: first.y + (last.y - first.y) * k, t: first.t + (last.t - first.t) * k });
+  }
+  return out;
+}
+
 /// Come un comando che sposta gli elementi senza cambiarli tiene lo stile
 /// che si vede (vedi `styled.ts`).
 interface Styled {
@@ -1057,6 +1132,7 @@ type Gesture =
   | TextGesture
   | GuideGesture
   | BoardGesture
+  | NoteGesture
   | RefusedGesture;
 
 interface GestureBase {
@@ -1482,6 +1558,12 @@ interface NodeChange {
   readonly changed?: number;
 }
 
+/// Un tocco con lo strumento Nota: dove, nella scena.
+interface NoteGesture extends GestureBase {
+  readonly kind: "note";
+  at: Point | null;
+}
+
 /// Un gesto che non scrive: il documento non si modifica, o nessun livello
 /// lo riceve.
 interface RefusedGesture extends GestureBase {
@@ -1810,23 +1892,28 @@ function sign(value: number): 1 | -1 {
 export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner: Lifetime, options: DrawEditorOptions = {}): DrawEditor {
   ensureIcons();
   const life = openLifetime();
+  /// Il profilo sceglie gli strumenti; il foglio, se c'è, è quello delle
+  /// annotazioni di un PDF.
+  const profile = options.profile ?? "vector";
+  const folio = options.sheet;
   let level: Level = options.level ?? "essential";
   /// Le parti scelte per il Personalizzato, anche mentre il livello è un
   /// altro: tornando al Personalizzato valgono di nuovo.
   let picked: readonly string[] = options.custom ?? CUSTOM_DEFAULT;
-  let features = featuresFor(level, picked);
+  let features = featuresFor(level, picked, profile);
   let tools = toolsOf(features);
   /// Vero se il livello di adesso offre `feature`.
   const has = (feature: Feature): boolean => features.has(feature);
   const relabels: Array<() => void> = [];
 
   let engine = initial;
-  let tool: ToolId = startTool(tools);
-  /// Il colore e lo spessore di chi scrive: la penna e le forme li
-  /// condividono, l'evidenziatore ha i suoi.
-  const styles: Record<Tool, { color: string; width: number }> = {
+  let tool: ToolId = startTool(tools, profile);
+  /// Il colore e lo spessore di chi scrive: la penna, le forme e le note li
+  /// condividono, l'evidenziatore e la copertura hanno i loro.
+  const styles: Record<Tool | "cover", { color: string; width: number }> = {
     pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH },
     highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH },
+    cover: { color: COVER_COLOR, width: DEFAULT_WIDTH },
   };
   /// Il testo ha il colore della penna e il corpo suo, che la barra mostra
   /// al posto dello spessore.
@@ -1839,7 +1926,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     width: TEXT_SIZE,
   };
-  const style = (): { color: string; width: number } => (tool === "text" ? textStyle : styles[tool === "highlighter" ? "highlighter" : "pen"]);
+  const style = (): { color: string; width: number } =>
+    tool === "text" ? textStyle : styles[tool === "highlighter" || tool === "cover" ? tool : "pen"];
   /// Come disegna lo strumento Poligono: poligono o stella, i lati, le punte,
   /// il rapporto interno e il raggio degli angoli. Vale finché l'editor vive,
   /// come il colore; lo cambiano i tasti mentre si disegna e il pannello
@@ -2047,13 +2135,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   surfaceHint.id = identifier("draw-surface-hint");
   surface.setAttribute("aria-describedby", surfaceHint.id);
   /// Il suggerimento del foglio dice anche come si arriva ai comandi della
-  /// selezione, quando il livello ne ha.
+  /// selezione, quando il livello ne ha; sul foglio delle annotazioni, i
+  /// tasti che solo lui ha.
   const showSurfaceHint = (): void => {
-    surfaceHint.textContent = t(BAR_FEATURES.some(has) ? "draw.surface.hint.arrange" : "draw.surface.hint");
+    surfaceHint.textContent = t(folio !== undefined ? "draw.sheet.keys" : BAR_FEATURES.some(has) ? "draw.surface.hint.arrange" : "draw.surface.hint");
   };
+  /// Il nome del foglio; quello delle annotazioni dice la pagina e il
+  /// documento.
+  const labelSurface = (): void => surface.setAttribute("aria-label", folio === undefined ? t("draw.surface") : folio.label());
   relabels.push(() => {
     toolbar.setAttribute("aria-label", t("draw.toolbar"));
-    surface.setAttribute("aria-label", t("draw.surface"));
+    labelSurface();
     showSurfaceHint();
   });
 
@@ -2092,7 +2184,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Le parole dei pulsanti che cambiano col modo dello strumento: il
   /// Poligono con la stella, la penna di Bézier con la Curvatura.
   const relabelTool = new Map<ToolId, () => void>();
-  for (const spec of TOOLS) {
+  // Gli strumenti del profilo: quelli di un altro non ci sono mai.
+  for (const spec of TOOLS.filter((each) => each.levels[profile] !== undefined)) {
     const shortcut = spec.shortcut.toUpperCase();
     const control = button(toolGroup, "draw-button draw-tool", () => `${t(toolLabel(spec.id))} (${shortcut})`, spec.icon, () => pickTool(spec.id));
     control.setAttribute("role", "radio");
@@ -2445,8 +2538,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   titleInput.spellcheck = true;
   titleField.append(titleText, titleInput);
   relabels.push(() => {
-    titleText.textContent = t("draw.title");
-    titleInput.placeholder = t("draw.title.placeholder");
+    titleText.textContent = t(folio === undefined ? "draw.title" : "draw.sheet.title");
+    titleInput.placeholder = t(folio === undefined ? "draw.title.placeholder" : "draw.sheet.title.placeholder");
   });
 
   // I comandi della selezione, dal livello Standard: una barra che galleggia
@@ -2873,7 +2966,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, dock);
-  header.append(toolbar, titleField);
+  header.append(toolbar);
+  if (folio?.controls) header.append(folio.controls);
+  header.append(titleField);
   root.append(header, body, surfaceHint, live);
   host.append(root);
 
@@ -2890,6 +2985,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   sheetLayer.className = "draw-sheets";
   sheetLayer.setAttribute("aria-hidden", "true");
   surface.append(paper, sheetLayer);
+  // Sul foglio delle annotazioni la carta porta la pagina del PDF.
+  if (folio !== undefined) paper.append(folio.background);
   // Le righe sottili e, una ogni cinque, quelle marcate.
   const gridMark = document.createElementNS(SVG_NS, "svg");
   gridMark.setAttribute("class", "draw-grid");
@@ -2940,14 +3037,40 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const rulers = createRulers(surface, tickText, (unit) => unit);
 
   const builder = new PaintBuilder();
-  const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
-  let scene: PaintScene = builder.build(engine);
+  // Col foglio si sceglie e si cerca solo nei gruppi della pagina.
+  const indexer = new SceneIndexer(builder, (id) => engine.holder(id), folio === undefined ? null : (model) => folio.scope(model));
+  /// Col foglio il painter disegna una vista del documento: la stessa
+  /// radice coi soli gruppi della pagina. È sempre lo stesso oggetto per lo
+  /// stesso motore, così il painter riusa ciò che ha già disegnato.
+  let folioView: {
+    readonly of: DocumentModel;
+    readonly root: ContainerNode;
+    readonly model: { bom: string; parts: DocumentModel["parts"]; root: ContainerNode };
+  } | null = null;
+  const paintSource = (): PaintSource => {
+    const model = engine.model;
+    if (folio === undefined || model === null) return engine;
+    if (folioView === null || folioView.of !== model) {
+      const root: ContainerNode = { ...model.root };
+      folioView = { of: model, root, model: { bom: model.bom, parts: [], root } };
+    }
+    const shown = new Set<ContainerNode>(folio.scope(model));
+    Object.assign(folioView.root, model.root, {
+      parts: model.root.parts.filter((part) => typeof part === "string" || (part.kind === "container" && shown.has(part))),
+    });
+    const real = model.root;
+    const root = folioView.root;
+    folioView.model.parts = model.parts.map((part) => (part === real ? root : part));
+    return { model: folioView.model, holder: (id) => engine.holder(id) };
+  };
+  let scene: PaintScene = builder.build(paintSource());
   let index: SceneIndex | null = null;
   const EMPTY = new SceneIndex([], []);
 
-  /// Le tavole del disegno di adesso, cercate una volta per scena.
+  /// Le tavole del disegno di adesso, cercate una volta per scena. Il foglio
+  /// delle annotazioni non ne ha.
   let boards: readonly Board[] | null = null;
-  const boardsNow = (): readonly Board[] => (boards ??= engine.model === null ? [] : boardsOf(engine.model));
+  const boardsNow = (): readonly Board[] => (boards ??= engine.model === null || folio !== undefined ? [] : boardsOf(engine.model));
   /// Ciò che lo strumento Tavola ha scelto: l'id di una tavola, [`PAGE_SHEET`]
   /// per la pagina di un disegno senza tavole, `null` per niente. Resta
   /// quando si cambia strumento, e lo si ritrova tornando.
@@ -3021,6 +3144,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return index;
   };
 
+  /// La pagina: quella del foglio, o quella della radice.
+  const currentPage = (): Page | null => (folio === undefined ? scene.root.page : folio.page());
+
+  /// Il `viewBox` della pagina allargata per tenere `bounds`; `null` se
+  /// basta com'è. La pagina del foglio non si allarga.
+  const grownPage = (bounds: Bounds | null): string | null => (folio === undefined ? pageFor(scene.root.page, bounds) : null);
+
   const newIds = (): NewIds => new NewIds((id) => engine.holder(id) !== null);
 
   // --- Annunci ------------------------------------------------------------
@@ -3033,7 +3163,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     live.textContent = echo ? text : `${text} `;
   };
 
-  const objects = (): string => plural(currentIndex().units.length, "draw.objects.one", "draw.objects.other");
+  const objects = (): string =>
+    folio === undefined
+      ? plural(currentIndex().units.length, "draw.objects.one", "draw.objects.other")
+      : plural(currentIndex().units.length, "draw.page.objects.one", "draw.page.objects.other");
 
   const announceSelection = (): void => {
     announce(selection.length === 0 ? t("draw.selected.none") : plural(selection.length, "draw.selected.one", "draw.selected.other"));
@@ -3091,7 +3224,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// La pagina sullo schermo, o le tavole, ognuna con la sua carta e il suo
   /// nome; senza pagina né tavole la carta è tutto il foglio.
   const showPage = (): void => {
-    const page = scene.root.page;
+    const page = currentPage();
     const list = boardsNow();
     surface.toggleAttribute("data-unbounded", page === null && list.length === 0);
     paper.hidden = page === null || list.length > 0;
@@ -3165,6 +3298,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Le cornici hanno un margine e le maniglie una misura sullo schermo; i
     // righelli seguono la cornice.
     showHandles();
+    // Il fondo del foglio rende la parte della pagina che si vede.
+    folio?.view?.(next, surface.clientWidth, surface.clientHeight);
   };
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.
   let coordinates: Intl.NumberFormat | null = null;
@@ -3394,7 +3529,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   function fit(): void {
-    const page = scene.root.page;
+    const page = currentPage();
     const list = boardsNow();
     // Con le tavole si inquadrano loro e il disegno: la pagina può essere
     // cresciuta oltre.
@@ -3416,6 +3551,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   if (typeof ResizeObserver !== "undefined") {
     const sizeObserver = new ResizeObserver(() => {
       if (!placed) fit();
+      else folio?.view?.(camera, surface.clientWidth, surface.clientHeight);
       showGrid();
       showGuideLines();
       showRulers();
@@ -5052,7 +5188,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (ops.length === 0) return null;
     cancelGesture();
     const all: Op[] = [...ops];
-    const page = pageFor(scene.root.page, extent);
+    const page = grownPage(extent);
     if (page !== null) all.push({ op: "page", viewBox: page });
     const before = selection;
     const lock = ratioLock !== null && ratioLock.keys === before.join("\n") ? ratioLock.on : null;
@@ -5600,13 +5736,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     moreButton.disabled = !canEdit;
     const widths = widthsNow();
     const sizes = tool === "text";
+    // La nota ha il suo corpo e la copertura è piena: lo spessore non vale.
+    const unsized = tool === "note" || tool === "cover";
     widthButtons.forEach(({ control, bar, glyph }, at) => {
       const value = widths[at]!.value;
       bar.hidden = sizes;
       glyph.hidden = !sizes;
       if (!sizes) bar.style.setProperty("--draw-width", `${value}px`);
       control.setAttribute("aria-checked", String(value === now.width));
-      control.disabled = !canEdit;
+      control.disabled = !canEdit || unsized;
     });
     showWidthLabels();
     undoButton.disabled = !canEdit || !undoable();
@@ -5662,7 +5800,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Porta la superficie alla scena del motore.
   const refresh = (): void => {
-    scene = builder.build(engine);
+    scene = builder.build(paintSource());
     painter.setDraft(null);
     painter.update(scene);
     // Il gruppo isolato si ritrova nel disegno nuovo; se non c'è più, o lì
@@ -5701,11 +5839,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     options.onChange?.({ text: applied.text, operation: applied.operation, origin });
   };
 
+  /// Il gesto `op` con ciò che il foglio porta in coda.
+  const withSheet = (op: Op): Op => {
+    const extra = folio === undefined || engine.model === null ? [] : folio.extra(engine.model);
+    if (extra.length === 0) return op;
+    return op.op === "batch" ? { ...op, ops: [...op.ops, ...extra] } : { op: "batch", ops: [op, ...extra] };
+  };
+
   /// Applica il gesto `op` come `commit`, in silenzio: un rifiuto rende la
   /// sua ragione, a parole.
   const attempt = (label: DrawKey, op: Op | null): Applied | string | null => {
     if (op === null || !editable()) return null;
-    const outcome = engine.apply(op);
+    const outcome = engine.apply(withSheet(op));
     if (outcome.outcome === "rejected") {
       clearPreviews();
       return t(REASONS[outcome.reason]);
@@ -5872,7 +6017,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const moved = moveOps(units, dx, dy, newIds());
     let bounds: Bounds | null = null;
     for (const unit of units) bounds = union(bounds, translated(unit.bounds, dx, dy));
-    const page = pageFor(scene.root.page, bounds);
+    const page = grownPage(bounds);
     const ops: Op[] = [...moved.ops];
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.move", asGesture(ops)) === null) return;
@@ -6100,7 +6245,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function setLevel(next: Level, custom: readonly string[] = picked): void {
     picked = custom;
-    const offered = featuresFor(next, picked);
+    const offered = featuresFor(next, picked, profile);
     if (next === level && offered.size === features.size && [...offered].every((feature) => features.has(feature))) return;
     finishText();
     // Il tracciato della penna di Bézier si conclude prima che la penna se
@@ -6117,13 +6262,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     tools = toolsOf(features);
     if (!tools.some((spec) => spec.id === tool)) {
       cancelGesture();
-      tool = toolAfter(tools, tool);
+      tool = toolAfter(tools, tool, profile);
     }
     // Senza i colori a piacere la barra non ha un campione per uno di loro:
     // chi lo usava riparte dai colori di partenza, che la barra mostra.
     if (!has("colors")) {
       if (swatchOf(styles.pen.color) === null) styles.pen.color = DEFAULT_COLOR;
       if (swatchOf(styles.highlighter.color) === null) styles.highlighter.color = HIGHLIGHTER_COLOR;
+      if (swatchOf(styles.cover.color) === null) styles.cover.color = COVER_COLOR;
     }
     showSurfaceHint();
     showGrid();
@@ -6276,9 +6422,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // --- La pipeline della penna ------------------------------------------------
 
   /// Il livello che riceve: quello corrente, quando l'interfaccia offre i
-  /// livelli; senza, il più alto che si vede e non è bloccato. Se non c'è o
-  /// non riceve, lo si dice, e il gesto non scrive.
+  /// livelli; senza, il più alto che si vede e non è bloccato; sul foglio
+  /// delle annotazioni, il gruppo della pagina. Se non c'è o non riceve, lo
+  /// si dice, e il gesto non scrive.
   const target = (ids: NewIds): Destination | null => {
+    if (folio !== undefined) {
+      const model = engine.model;
+      const to = model === null ? null : folio.destination(model, currentIndex(), ids, (id) => engine.holder(id) !== null);
+      if (to === null) announce(t("draw.no_page"));
+      return to;
+    }
     // Con un gruppo isolato, ciò che si disegna entra lì, in cima.
     const group = isolatedUnit();
     if (group !== null) {
@@ -6330,7 +6483,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// La pagina nella scena, se c'è.
   const pageBox = (): Bounds | null => {
-    const page = scene.root.page;
+    const page = currentPage();
     return page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
   };
 
@@ -6924,6 +7077,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "ellipse":
       case "line":
       case "arrow":
+      case "cover":
       case "polygon": {
         const ids = newIds();
         const to = target(ids);
@@ -6940,6 +7094,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       case "eraser":
         return { ...base, kind: "erase", last: null, marked: new Map() };
+      case "note":
+        return { ...base, kind: "note", at: null };
       case "select":
         return {
           ...base,
@@ -6991,8 +7147,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
   };
 
+  /// L'evidenziatore con Maiusc traccia dritto, dal primo punto all'ultimo.
+  const straightened = (g: InkGesture): boolean => g.tool === "highlighter" && shift;
+
   const drawInk = (g: InkGesture): void => {
-    const samples = g.local.length + g.predicted.length <= INK_MAX_SAMPLES ? [...g.local, ...g.predicted] : g.local;
+    const samples = straightened(g)
+      ? straight(g.local)
+      : g.local.length + g.predicted.length <= INK_MAX_SAMPLES
+        ? [...g.local, ...g.predicted]
+        : g.local;
     let outline: ReturnType<typeof pf1Outline> = [];
     if (samples.length > 0) {
       try {
@@ -7415,6 +7578,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return;
       }
       const unit = near && tap.key !== "" ? currentIndex().get(tap.key) : null;
+      if (unit !== null && folio !== undefined && noteOf(unit) !== null && editable()) {
+        lastTap = null;
+        void editNote(unit);
+        return;
+      }
       if (unit !== null && unit.look !== null && has("text") && editable()) {
         lastTap = null;
         editText(unit);
@@ -9537,7 +9705,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     let ink;
     let outline;
     try {
-      ink = quantizeInk(local);
+      ink = quantizeInk(straightened(g) ? straight(local) : local);
       outline = pf1Outline(ink, brush);
     } catch {
       announce(t("draw.ink_failed"));
@@ -9549,13 +9717,183 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const id = g.ids.next("object");
     const at = new Date(performance.timeOrigin + g.began).toISOString();
     const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, g.color, brush, ink, at, g.tool))];
-    const page = pageFor(scene.root.page, bounds.finish());
+    const page = grownPage(bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });
     return commit(g.tool === "highlighter" ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) === null ? null : { id, to };
   };
 
   const finishInk = (g: InkGesture, stroke: FinishedStroke): void => {
     if (writeInk(g, stroke.split) !== null) announce(`${t(g.tool === "highlighter" ? "draw.added.highlight" : "draw.added.stroke")} ${objects()}`);
+  };
+
+  // --- Le note e Invio sul foglio -----------------------------------------------
+  //
+  // Sul foglio delle annotazioni una nota è un testo col suo corpo: lo
+  // strumento Nota ne scrive una dove si tocca, o cambia quella toccata. Invio,
+  // senza niente di scelto, aggiunge nel punto della tastiera ciò che lo
+  // strumento disegna.
+
+  /// Il corpo e il testo disegnato di una nota; `null` se l'oggetto non lo è.
+  const noteOf = (unit: Unit): NoteText | null => {
+    if (unit.tag !== "text") return null;
+    const model = engine.model;
+    const node = unit.id !== null ? engine.holder(unit.id) : model === null ? null : nodeAtPath(model, unit.path);
+    return node === null || node.kind !== "leaf" ? null : readNote(node);
+  };
+
+  /// Aggiunge `elem` dove dice `to`, e lo dice con `added`; con `keep`
+  /// l'oggetto nuovo resta scelto, così le frecce lo spostano.
+  const placeNew = (to: Destination, elem: Elem, label: DrawKey, added: DrawKey, keep: boolean): void => {
+    if (commit(label, asGesture([...to.prelude, addOp(to, elem)])) === null) return;
+    const id = elem.attrs.id;
+    if (keep && id !== undefined) select([id]);
+    announce(`${t(added)} ${objects()}`);
+  };
+
+  /// Chiede il corpo e l'etichetta di una nota, `note` se la si cambia:
+  /// `null` se si annulla, o se intanto il documento è cambiato del tutto.
+  const askNote = async (note?: NoteText): Promise<NoteText | null> => {
+    if (asking) return null;
+    const loaded = loads;
+    asking = true;
+    cancelGesture();
+    try {
+      const next = await promptNote(note === undefined ? {} : { note });
+      return disposed || loads !== loaded || !editable() ? null : next;
+    } finally {
+      asking = false;
+    }
+  };
+
+  /// Una nota nuova: la sua riga comincia in `at`, nella scena, e scende.
+  /// Ha il colore della penna.
+  const addNote = async (at: Point, keep: boolean): Promise<void> => {
+    const note = await askNote();
+    if (note === null) return;
+    const ids = newIds();
+    const to = target(ids);
+    if (to === null) return;
+    const [x, y] = apply(to.inverse, at);
+    placeNew(to, noteElem(ids.next("object"), [x, y + NOTE_SIZE], styles.pen.color, note), toolLabel("note"), "draw.added.note", keep);
+  };
+
+  /// Cambia il corpo e l'etichetta di una nota. L'etichetta che segue il
+  /// corpo si presenta vuota, e continua a seguirlo.
+  const editNote = async (unit: Unit): Promise<void> => {
+    const note = noteOf(unit);
+    if (note === null || !editable()) return;
+    const following = note.label === noteLabel(note.body, "");
+    const next = await askNote(following ? { body: note.body, label: "" } : note);
+    if (next === null || (next.body === note.body && next.label === note.label)) return;
+    // Il documento può essere cambiato mentre il dialogo era aperto.
+    const fresh = currentIndex().get(unit.key);
+    if (fresh === null || noteOf(fresh) === null) {
+      announce(t("draw.rejected", { reason: t("draw.reason.missing_target") }));
+      return;
+    }
+    const ops: Op[] = [];
+    let id = fresh.id;
+    if (id === null) {
+      id = newIds().next("object");
+      ops.push({ op: "ident", path: fresh.path, tag: "text", id });
+    }
+    ops.push({ op: "set", id, attrs: { "fub:note": next.body } }, { op: "text", id, lines: [next.label] });
+    if (commit("draw.action.note", asGesture(ops)) === null) return;
+    select([id]);
+    announce(t("draw.note.changed"));
+  };
+
+  /// Un tocco con lo strumento Nota: su una nota la cambia, altrove ne
+  /// scrive una.
+  const noteAt = (at: Point | null, pointer: InkPointerType): void => {
+    if (at === null || !editable()) return;
+    const hit = currentIndex().at(at, HIT_PX[pointer] / camera.scale);
+    if (hit !== null && noteOf(hit) !== null) void editNote(hit);
+    else void addNote(at, false);
+  };
+
+  /// F2 o Invio sul foglio: la nota scelta, se è una sola, si cambia. Vero
+  /// se c'era.
+  const editSelectedNote = (): boolean => {
+    const units = selectedUnits();
+    if (units.length !== 1 || noteOf(units[0]!) === null || !editable()) return false;
+    void editNote(units[0]!);
+    return true;
+  };
+
+  /// Dove aggiunge la tastiera: al cursore, se qualcuno l'ha mosso, o al
+  /// centro di ciò che si vede; abbastanza dentro la pagina perché un
+  /// oggetto aggiunto da lì ci stia intero.
+  const addSpot = (): Point => {
+    const [x, y] = cursor ?? toScene(camera, viewCenter());
+    const page = currentPage();
+    if (page === null) return [x, y];
+    const clamp = (value: number, min: number, size: number): number => {
+      const margin = Math.min(KEYBOARD_SIZE / 2, size / 2);
+      return Math.min(Math.max(value, min + margin), min + size - margin);
+    };
+    return [clamp(x, page.x, page.width), clamp(y, page.y, page.height)];
+  };
+
+  /// Invio sul foglio, senza niente di scelto: lo strumento aggiunge ciò che
+  /// disegna nel punto della tastiera, e l'oggetto nuovo resta scelto. Un
+  /// tratto è una riga dritta e una forma è larga [`KEYBOARD_SIZE`], attorno
+  /// al punto; una nota comincia lì.
+  const keyboardAdd = (): void => {
+    if (folio === undefined || !editable() || asking) return;
+    const [cx, cy] = addSpot();
+    const half = KEYBOARD_SIZE / 2;
+    const { color, width } = style();
+    switch (tool) {
+      case "note":
+        void addNote([cx, cy], true);
+        return;
+      case "pen":
+      case "highlighter": {
+        const ids = newIds();
+        const to = target(ids);
+        if (to === null) return;
+        const [x1, y1] = apply(to.inverse, [cx - half, cy]);
+        const [x2, y2] = apply(to.inverse, [cx + half, cy]);
+        // I pennelli di un tratto del puntatore senza pressione.
+        const brush =
+          tool === "highlighter"
+            ? { ...PF1_DEFAULTS, size: width, thinning: 0, capStart: false, capEnd: false, sim: false }
+            : { ...PF1_DEFAULTS, size: width, sim: true };
+        let ink;
+        try {
+          ink = quantizeInk(straight([{ x: x1, y: y1, t: 0 }, { x: x2, y: y2, t: 250 }]));
+          if (pf1Outline(ink, brush).length === 0) return;
+        } catch {
+          announce(t("draw.ink_failed"));
+          return;
+        }
+        const highlight = tool === "highlighter";
+        const elem = strokeElem(ids.next("object"), color, brush, ink, new Date().toISOString(), tool);
+        placeNew(to, elem, highlight ? "draw.action.highlight" : "draw.action.stroke", highlight ? "draw.added.highlight" : "draw.added.stroke", true);
+        return;
+      }
+      case "rect":
+      case "ellipse":
+      case "line":
+      case "arrow":
+      case "cover": {
+        const ids = newIds();
+        const to = target(ids);
+        if (to === null) return;
+        const flat = tool === "line" || tool === "arrow";
+        const from = apply(to.inverse, [cx - half, flat ? cy : cy - half / 2]);
+        const end = apply(to.inverse, [cx + half, flat ? cy : cy + half / 2]);
+        const elem = shapeElem(tool, ids.next("object"), from, end, { color, width }, 0);
+        if (elem !== null) placeNew(to, elem, toolLabel(tool), ADDED[tool], true);
+        return;
+      }
+      case "select":
+        announce(t("draw.selected.none"));
+        return;
+      default:
+        return;
+    }
   };
 
   // --- Le forme dal tratto ---------------------------------------------------
@@ -9690,7 +10028,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const ops: Op[] = [...shaped.ops];
-    const page = pageFor(scene.root.page, shaped.extent);
+    const page = grownPage(shaped.extent);
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.to_shape", asGesture(ops)) !== null) announce(`${t("draw.shaped.held", { kind: shapeSaid(shape!) })} ${objects()}`);
   };
@@ -9706,7 +10044,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const elem = shapeOf(g, g.ids.next("object"), to);
     if (elem === null) return;
     const ops: Op[] = [...to.prelude, addOp(to, elem)];
-    const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
+    const page = grownPage(elemBounds(elem, to.matrix));
     if (page !== null) ops.push({ op: "page", viewBox: page });
     // Il poligono si dice col suo nome, la stella con le sue punte.
     const added =
@@ -10262,7 +10600,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const ops: Op[] = [...to.prelude, addOp(to, elem)];
-    const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
+    const page = grownPage(elemBounds(elem, to.matrix));
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.bezier", asGesture(ops)) !== null) announce(`${t(closed ? "draw.added.path.closed" : "draw.added.path")} ${objects()}`);
   }
@@ -10620,6 +10958,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "guide":
           guideUpdate(g, toPoint(samples[samples.length - 1]!));
           break;
+        case "note":
+          g.at ??= toPoint(samples[0]!);
+          break;
         case "refused":
           break;
       }
@@ -10699,6 +11040,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           return;
         case "guide":
           guideEnd(g, stroke.timeStamp);
+          return;
+        case "note":
+          current = null;
+          noteAt(g.at, g.pointer);
           return;
         case "refused":
           current = null;
@@ -10937,7 +11282,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       };
       const elem = richElem({ tag: "text", attrs: {} }, placed);
       const ops: Op[] = [...to.prelude, addOp(to, elem)];
-      const page = pageFor(scene.root.page, elemBounds(elem, to.matrix));
+      const page = grownPage(elemBounds(elem, to.matrix));
       if (page !== null) ops.push({ op: "page", viewBox: page });
       if (commit("draw.action.text", asGesture(ops)) === null) return;
       select([id]);
@@ -10975,7 +11320,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const ops: Op[] = [...plan.finish([id]).ops];
-    const page = pageFor(scene.root.page, linesBounds(unit.look ?? now.look!, tidy.lines.map(richLineText), unit.matrix));
+    const page = grownPage(linesBounds(unit.look ?? now.look!, tidy.lines.map(richLineText), unit.matrix));
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.text_edit", asGesture(ops)) === null) return;
     select([id]);
@@ -11509,7 +11854,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const transformSelection = (units: readonly Unit[], m: Matrix, extent: Bounds): boolean => {
     const moved = transformOps(units, m, newIds());
     const ops: Op[] = [...moved.ops];
-    const page = pageFor(scene.root.page, extent);
+    const page = grownPage(extent);
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.resize", asGesture(ops)) === null) return false;
     selection = inOrder(moved.keys);
@@ -11645,7 +11990,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       kept = looked.kept;
     }
     const ops: Op[] = [...arranged.ops];
-    const page = pageFor(scene.root.page, extent);
+    const page = grownPage(extent);
     if (page !== null) ops.push({ op: "page", viewBox: page });
     // La selezione è già quella di dopo quando l'editor si rinfresca: la
     // barra non sparisce per un istante, e il fuoco che ci sta resta.
@@ -11807,7 +12152,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// solo in un disegno senza pagina.
   const alignReference = (units: readonly Unit[]): Bounds | null => {
     if (units.length > 1) return boundsOf(units);
-    const page = scene.root.page;
+    const page = currentPage();
     return page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
   };
 
@@ -13368,7 +13713,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const nodesReference = (): Bounds | null => {
     const count = chosenCount();
     if (count > 1) return nodesBox(chosenEdits());
-    const page = scene.root.page;
+    const page = currentPage();
     return count === 0 || page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
   };
 
@@ -14493,6 +14838,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       : [];
 
   /// L'elenco dei tasti delle parti `at`, nei gruppi in cui si usano.
+  /// I tasti dell'evidenziatore, se le parti `at` lo offrono.
+  const highlighterKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("highlighter") ? [{ title: t("draw.tool.highlighter"), rows: [["Shift", t("draw.keys.highlighter.straight")]] }] : [];
+
+  /// I tasti del foglio delle annotazioni.
+  const sheetKeys = (): KeyGroup[] =>
+    folio === undefined
+      ? []
+      : [
+          {
+            title: t("draw.keys.sheet"),
+            rows: [
+              ["PageUp PageDown", t("draw.keys.sheet.turn")],
+              ["Enter", t("draw.keys.sheet.add")],
+              ["F2", t("draw.keys.sheet.note")],
+            ],
+          },
+        ];
+
   const keyGroups = (at: ReadonlySet<Feature>): KeyGroup[] => [
     { title: t("draw.keys.tools"), rows: toolsOf(at).map((spec) => [spec.shortcut, t(spec.label)] as const) },
     {
@@ -14521,6 +14885,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           : []),
       ],
     },
+    ...sheetKeys(),
     ...arrangeKeys(at),
     ...selectionKeys(at),
     ...pathKeys(at),
@@ -14529,6 +14894,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...scissorsKeys(at),
     ...widthKeys(at),
     ...polygonKeys(at),
+    ...highlighterKeys(at),
     ...recognizeKeys(at),
     ...bezierKeys(at),
     ...textKeys(at),
@@ -14600,7 +14966,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     asking = true;
     cancelGesture();
     try {
-      await showKeys(t("draw.keys"), keyGroups(features), moreKeys());
+      // Sul foglio i livelli non si cambiano: niente tasti degli altri.
+      await showKeys(t("draw.keys"), keyGroups(features), folio === undefined ? moreKeys() : undefined);
     } finally {
       asking = false;
     }
@@ -14779,7 +15146,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         bounds.include(extent.max);
       }
     });
-    const page = pageFor(scene.root.page, bounds.finish());
+    const page = grownPage(bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });
     // Il documento è cambiato mentre si decideva: deve restare modificabile.
     if (utf8Length(engine.text) + hrefBytes > MAX_EDIT_BYTES) {
@@ -15114,7 +15481,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         await pause(true);
       }
       if (gone()) return quit();
-      const page = pageFor(scene.root.page, bounds);
+      const page = grownPage(bounds);
       if (page !== null) ops.push({ op: "page", viewBox: page });
       if (commit("draw.action.paste", asGesture(ops)) === null) return;
       series = lone === null ? null : { text: lone, at: base, count: first };
@@ -15311,6 +15678,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else return;
     if (current?.kind === "shape") drawShape(current);
     else if (current?.kind === "ink" && current.held !== null && event.key === "Shift") drawHeld(current);
+    else if (current?.kind === "ink" && current.tool === "highlighter" && event.key === "Shift") drawInk(current);
     else if (current?.kind === "select" && (current.mode === "move" || current.mode === "resize" || current.mode === "rotate")) selectUpdate(current);
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);
@@ -15324,6 +15692,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
     if (event.defaultPrevented || event.target === titleInput || event.target === textInput) return;
+    // I campi del foglio, come il numero della pagina, tengono i loro tasti.
+    if (event.target instanceof HTMLInputElement && folio?.controls?.contains(event.target) === true) return;
     // Esc ferma l'incolla in corso, da ogni parte dell'editor.
     if (event.key === "Escape" && pasting !== null) {
       pasting.stopped = true;
@@ -15499,6 +15869,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     if (onSurface && event.key === "Tab") {
       if (!walk(event.shiftKey ? -1 : 1)) return;
+    } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && folio !== undefined) {
+      if (pressed !== null || current !== null) return;
+      folio.turn(event.key === "PageDown" ? 1 : -1);
     } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && arranges("arrange")) {
       if (pressed !== null) return;
       if (event.key === "PageUp") orderSelection(event.shiftKey ? "front" : "forward");
@@ -15519,6 +15892,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       else if (builderKeysOn()) pickRegion();
       else if (pressed === null) press(event.timeStamp);
       else release();
+    } else if (onSurface && event.key === "F2" && folio !== undefined) {
+      if (pressed !== null || !editSelectedNote()) return;
     } else if (onSurface && event.key === "F2" && tool === "board") {
       if (pressed !== null) return;
       void renameBoard();
@@ -15540,7 +15915,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (widthKeysOn()) {
         // Con lo Spessore, le misure del punto scelto.
         void widthDialog();
-      } else void properties();
+      } else if (folio === undefined) {
+        void properties();
+      } else if (selection.length > 0) {
+        // Sul foglio una nota scelta si cambia, e il resto mostra le sue
+        // proprietà; senza niente di scelto, Invio aggiunge: il foglio non
+        // ha le proprietà di un disegno.
+        if (!editSelectedNote()) void properties();
+      } else if (current === null) {
+        keyboardAdd();
+      }
     } else if (event.key === "?") {
       void keys();
     } else if ((event.key === "Delete" || event.key === "Backspace") && builderKeysOn() && buildChosen(true)) {
@@ -15727,6 +16111,25 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     undo,
     redo,
     fit,
+    showSheet() {
+      if (disposed) return;
+      // L'altra pagina ha le sue coordinate: la selezione, il gruppo isolato
+      // e il cursore erano di quella di prima.
+      cancelGesture();
+      selection = [];
+      isolation = null;
+      cursor = null;
+      cursorMark.hidden = true;
+      refresh();
+      labelSurface();
+      placed = false;
+      fit();
+    },
+    perform(label, op) {
+      if (disposed || !editable()) return false;
+      cancelGesture();
+      return commit(label, op) !== null;
+    },
     focus() {
       surface.focus({ preventScroll: true });
     },
@@ -15915,4 +16318,5 @@ const ADDED: Readonly<Record<Exclude<ShapeTool, "polygon">, DrawKey>> = {
   ellipse: "draw.added.ellipse",
   line: "draw.added.line",
   arrow: "draw.added.arrow",
+  cover: "draw.added.cover",
 };

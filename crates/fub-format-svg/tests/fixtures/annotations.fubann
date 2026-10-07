@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="Bando%20di%20gara.pdf" fub:digest="sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" fub:pages="12">
+  <title>Revisione del bando</title>
+  <desc>Le correzioni chieste dall'ufficio gare &amp; contratti</desc>
+  <g id="p0001" fub:page="1" fub:page-size="595.28 841.89">
+    <path id="o7k2m9x4q" fub:tool="highlighter" fub:at="2026-10-01T09:20:31.250Z" fub:brush="pf1 size=16 thinning=0 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=0 capEnd=0 sim=1" d="M72 140 L320 140 L320 156 L72 156 Z" fill="#f0e442" fill-opacity="0.4" fub:ink="1 s100 cxypt 7200,14800,128,0 24800,0,0,120"/>
+    <text id="o5p6q7r8s" x="330" y="150" fill="#000000" font-family="Inter, sans-serif" font-size="12" fub:note="L'importo a base d'asta è cambiato.&#10;&#10;Chiedere conferma all'ufficio &lt;gare&gt;.">
+      <tspan x="330" dy="0">Importo</tspan>
+      <tspan x="330" dy="14">da rivedere</tspan>
+    </text>
+  </g>
+  <g id="p0003" fub:page="3" fub:page-size="595.28 841.89">
+    <rect id="o1a2b3c4d" x="72" y="300" width="200" height="40" fill="#000000"/>
+    <a id="o2b3c4d5e" href="../Verbali/Verbale%2012.md">
+      <text id="o3c4d5e6f" x="72" y="360" fill="#0072b2" font-family="Inter, sans-serif" font-size="12">
+        <tspan x="72" dy="0">Vedi il verbale</tspan>
+      </text>
+    </a>
+    <text id="o4d5e6f7g" x="300" y="400" fill="#000000" font-family="Inter, sans-serif" font-size="12" fub:note="Manca la firma del RUP: vedi l'allegato B."/>
+  </g>
+  <text x="20" y="20" fill="#000000" font-family="Inter, sans-serif" font-size="12">Fuori dalle pagine</text>
+</svg>

@@ -41,6 +41,7 @@ flowchart LR
 - [Disegni, proprietà](product/drawing-properties.md)
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, appunti](product/drawing-clipboard.md)
+- [Disegni, esportare](product/drawing-export.md)
 - [Disegni, poligoni e stelle](product/drawing-shapes.md)
 - [Disegni, forme dal tratto](product/drawing-ink-shapes.md)
 - [Disegni, vista ruotata, gesti e menu radiale](product/drawing-view.md)
@@ -54,6 +55,7 @@ flowchart LR
 - [Disegni, tipografia](product/drawing-typography.md)
 - [Disegni, risorse](product/drawing-resources.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
+- [Annotazioni dei PDF](product/pdf-annotations.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
 - [Budget prestazionale](product/performance-budget.md)
@@ -93,6 +95,7 @@ flowchart LR
 - [Formato della scena, risorse](reference/scene-format-resources.md)
 - [Formato della scena, tavole](reference/scene-format-boards.md)
 - [Operazioni sulla scena](reference/scene-operations.md)
+- [Formato delle annotazioni PDF](reference/annotation-format.md)
 
 ## Vedere stato e direzione
 

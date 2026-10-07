@@ -1,0 +1,68 @@
+{
+  "notes": [
+    {
+      "text": "Firma 🖋️ da verificare",
+      "body": "Prima riga\nseconda\nterza",
+      "bytes": [
+        244,
+        445
+      ],
+      "utf16": [
+        240,
+        434
+      ],
+      "content": {
+        "bytes": [
+          328,
+          438
+        ],
+        "utf16": [
+          324,
+          427
+        ]
+      },
+      "value": {
+        "bytes": [
+          289,
+          326
+        ],
+        "utf16": [
+          285,
+          322
+        ]
+      }
+    }
+  ],
+  "annotates": {
+    "path": "/Archivio/Atto%20%F0%9F%93%9C.pdf#page=2",
+    "value": {
+      "bytes": [
+        121,
+        161
+      ],
+      "utf16": [
+        119,
+        159
+      ]
+    }
+  },
+  "digest": null,
+  "pageCount": 3,
+  "pages": [
+    {
+      "number": 2,
+      "size": [
+        841.89,
+        595.28
+      ],
+      "bytes": [
+        181,
+        453
+      ],
+      "utf16": [
+        178,
+        441
+      ]
+    }
+  ]
+}

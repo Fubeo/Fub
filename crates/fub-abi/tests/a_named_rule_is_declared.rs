@@ -1374,7 +1374,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoAscii: la scena SVG (grammatiche XML, URL e CSS) -------------
         (
-            "crates/fub-scene/src/lib.rs::read",
+            "crates/fub-scene/src/lib.rs::read_then",
             (
                 Family::AsciiCase,
                 "confronta la codifica della dichiarazione XML con `utf-8`: per XML 1.0 \
@@ -1452,6 +1452,30 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  in XML `ONCLICK` non è `onclick`, ma lo stesso SVG incollato in una pagina HTML \
                  passa dal tokenizer, che abbassa in ASCII i nomi di attributo. L'avviso sbaglia \
                  dal lato largo apposta, perché il file non resta sempre dove è nato.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/annotation.rs::digest",
+            (
+                Family::AsciiCase,
+                "porta in minuscolo le cifre esadecimali di `fub:digest` dopo aver verificato che \
+                 siano 64 e ASCII, con il prefisso `sha256:` lasciato esatto: una cifra \
+                 esadecimale non ha caso, e due impronte uguali devono essere la stessa stringa \
+                 per chi le confronta con il PDF. Diverge da `data_uri` perché qui non classifica \
+                 un riferimento: dà l'identità di un valore che il lettore non verifica.",
+            ),
+        ),
+        // -- CasoAscii: le annotazioni dei PDF ---------------------------------
+        (
+            "crates/fub-format-svg/src/serialize.rs::annotated_of",
+            (
+                Family::AsciiCase,
+                "riconosce `.fubann` e `.pdf` in fondo al nome di un documento senza badare al \
+                 caso ASCII, come il vault confronta le estensioni (`rules::media`): \
+                 `Bando.PDF.FubAnn` annota `Bando.PDF`. Diverge da `kind_of` perché qui non dà la \
+                 specie di un file ma ne deduce un altro, il PDF che un documento nuovo nomina in \
+                 `fub:annotates` e che l'export cerca quando `fub:annotates` manca, e il resto del \
+                 nome resta com'è.",
             ),
         ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------

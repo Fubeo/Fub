@@ -2687,6 +2687,88 @@ textarea.draw-properties-input {
 .vector-about-link {
   min-height: 44px;
 }
+/* Le annotazioni di un PDF: l'avviso, poi il foglio e, in Lettura, l'elenco
+   delle annotazioni accanto; su uno schermo stretto l'elenco va sotto. La
+   pagina del PDF sta nella carta, sotto il disegno, in canvas posati in
+   percentuali della pagina: lo zoom li porta con sé. In Lettura la barra
+   tiene solo la vista e le pagine, e il titolo non c'è. */
+.pdf-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.pdf-notice-messages {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.pdf-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.pdf-list {
+  flex: 0 1 24rem;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.pdf-list-page {
+  min-height: 44px;
+}
+.pdf-list-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pdf-surface[data-mode="read"] .draw-group:not([data-group="view"]),
+.pdf-surface[data-mode="read"] .draw-title {
+  display: none;
+}
+.pdf-background {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.pdf-canvas {
+  position: absolute;
+  display: block;
+}
+.pdf-pages {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.pdf-page-previous > svg {
+  transform: scaleX(-1);
+}
+.pdf-page-input {
+  width: 4.5rem;
+  min-height: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pdf-page-count {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 40rem) {
+  .pdf-body {
+    flex-direction: column;
+  }
+  .pdf-list {
+    flex: 0 1 45%;
+  }
+}
+/* «Annota» nel visore del PDF: un bersaglio da 44 px, come quelli del
+   foglio dove porta. */
+.media-pdf-annotate {
+  min-height: 44px;
+}
 @media (forced-colors: active) {
   .draw-width-bar,
   .draw-swatch-frame {
