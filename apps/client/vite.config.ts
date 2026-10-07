@@ -107,10 +107,10 @@ export default defineConfig({
           // documento: disporre, il contorno, l'aspetto, i tracciati, le
           // trasformazioni, le booleane, i tagli, lo spessore variabile, i
           // livelli, il gruppo di un ricalco, il testo a pezzi del campo in
-          // cui si scrive, i suoi a capo con la misura dei caratteri e il
-          // testo su tracciato. Dipendono dal formato e dalla geometria, e
-          // l'editor li chiama.
-          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops|rich|wrap|measure|text-path)\.ts$/.test(id)) {
+          // cui si scrive, i suoi a capo con la misura dei caratteri, il
+          // testo su tracciato e le tavole. Dipendono dal formato e dalla
+          // geometria, e l'editor li chiama.
+          if (/\/src\/editors\/spatial\/tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|naming|trace-ops|rich|wrap|measure|text-path|boards)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
