@@ -1,0 +1,254 @@
+[
+  {
+    "name": "drawing-fubdraw",
+    "description": "un disegno di FubDraw intero: se ne vanno gli attributi fub e la loro dichiarazione, i view delle tavole restano",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\"><title>Copertina</title></view>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <path id=\"o1\" fub:tool=\"pen\" fub:ink=\"q1;0,0;10,10\" d=\"M10 10L20 20\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\"/>\n    <text id=\"o2\" x=\"100\" y=\"200\" font-size=\"32\" fill=\"#000000\">\n      <tspan x=\"100\" dy=\"0\">Evaporazione</tspan>\n    </text>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 600\" width=\"800\" height=\"600\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <view id=\"b1\" viewBox=\"0 0 400 300\"><title>Copertina</title></view>\n  <g id=\"l1\">\n    <path id=\"o1\" d=\"M10 10L20 20\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\"/>\n    <text id=\"o2\" x=\"100\" y=\"200\" font-size=\"32\" fill=\"#000000\">\n      <tspan x=\"100\" dy=\"0\">Evaporazione</tspan>\n    </text>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "board-views-go",
+    "description": "l'ambito di una tavola toglie i view delle tavole, e lo spazio che li precede",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\"><title>Copertina</title></view>\n  <view id=\"b2\" fub:role=\"board\" viewBox=\"400 0 400 300\"/>\n  <view id=\"v\" viewBox=\"0 0 10 10\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\"/>\n</svg>\n",
+    "scope": {
+      "kind": "board",
+      "id": "b1"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 300\" width=\"400\" height=\"300\">\n  <rect id=\"fub-paper\" x=\"0\" y=\"0\" width=\"800\" height=\"600\" fill=\"#ffffff\"/>\n  <view id=\"v\" viewBox=\"0 0 10 10\"/>\n  <g id=\"l1\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "selection-views-go",
+    "description": "anche la selezione toglie i view delle tavole",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"10 10 100 50\" width=\"100\" height=\"50\">\n  <view id=\"b1\" fub:role=\"board\" viewBox=\"0 0 400 300\"/>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "selection",
+      "ids": [
+        "o1"
+      ],
+      "box": [
+        10,
+        10,
+        100,
+        50
+      ]
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"10 10 100 50\" width=\"100\" height=\"50\">\n  <g id=\"l1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"100\" height=\"50\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "prolog-and-epilog",
+    "description": "BOM, dichiarazione XML, commenti e istruzioni prima e dopo la radice: resta la radice e un a capo",
+    "input": "\ufeff<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- prima -->\n<?xml-stylesheet href=\"a.css\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">\n  <!-- dentro -->\n  <?fub nota?>\n  <rect width=\"10\" height=\"10\"/><!-- attaccato -->\n</svg>\n<!-- dopo -->\n\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">\n  <rect width=\"10\" height=\"10\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "no-final-newline",
+    "description": "senza a capo finale: il file pulito ne ha uno",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><rect width=\"10\" height=\"10\"/></svg>",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\"><rect width=\"10\" height=\"10\"/></svg>\n"
+    }
+  },
+  {
+    "name": "doctype-entities",
+    "description": "le entità del DOCTYPE si espandono prima che il DOCTYPE se ne vada",
+    "input": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\" [\n\t<!ENTITY ns_ai \"http://ns.adobe.com/AdobeIllustrator/10.0/\">\n\t<!ENTITY ns_svg \"http://www.w3.org/2000/svg\">\n\t<!ENTITY ns_xlink \"http://www.w3.org/1999/xlink\">\n\t<!ENTITY nome \"Ciclo &amp; acqua\">\n\t<!ENTITY punto \"<circle cx='5' cy='5' r='1'/>\">\n]>\n<svg version=\"1.1\" xmlns:i=\"&ns_ai;\" xmlns=\"&ns_svg;\" xmlns:xlink=\"&ns_xlink;\" viewBox=\"0 0 10 10\">\n<title>&nome;</title>\n<g i:extraneous=\"self\">&punto;</g>\n<i:pgf id=\"adobe_illustrator_pgf\"><![CDATA[eJzLSM3JyVcozy]]></i:pgf>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 10 10\">\n<title>Ciclo &amp; acqua</title>\n<g><circle cx='5' cy='5' r='1'/></g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "editor-namespaces",
+    "description": "gli elementi e gli attributi di Inkscape e i metadata se ne vanno, con le dichiarazioni che nessuno usa più",
+    "input": "<svg\n   width=\"210mm\"\n   height=\"297mm\"\n   viewBox=\"0 0 210 297\"\n   inkscape:version=\"1.3.2\"\n   xmlns:inkscape=\"http://www.inkscape.org/namespaces/inkscape\"\n   xmlns:sodipodi=\"http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd\"\n   xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n   xmlns=\"http://www.w3.org/2000/svg\"\n   xmlns:svg=\"http://www.w3.org/2000/svg\"\n   xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\"\n   xml:space=\"preserve\">\n  <sodipodi:namedview id=\"namedview1\" inkscape:zoom=\"0.71\"/>\n  <metadata><rdf:RDF><rdf:Description/></rdf:RDF></metadata>\n  <g inkscape:label=\"Livello 1\" inkscape:groupmode=\"layer\" id=\"layer1\">\n    <rect id=\"rect1\" width=\"170\" height=\"100\" x=\"20\" y=\"20\" sodipodi:nodetypes=\"cccc\" data-nota=\"resta\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg\n   width=\"210mm\"\n   height=\"297mm\"\n   viewBox=\"0 0 210 297\"\n   xmlns:xlink=\"http://www.w3.org/1999/xlink\"\n   xmlns=\"http://www.w3.org/2000/svg\"\n   xml:space=\"preserve\">\n  <g id=\"layer1\">\n    <rect id=\"rect1\" width=\"170\" height=\"100\" x=\"20\" y=\"20\" data-nota=\"resta\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "foreign-object",
+    "description": "dentro un foreignObject resta tutto, anche gli elementi di un altro namespace; fuori no",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:x=\"urn:esempio\" viewBox=\"0 0 100 100\">\n  <foreignObject x=\"0\" y=\"0\" width=\"100\" height=\"50\">\n    <div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"color:red\"><p>Testo <x:nota>a margine</x:nota></p></div>\n  </foreignObject>\n  <x:nota>fuori</x:nota>\n  <rect x:segno=\"1\" width=\"10\" height=\"10\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:x=\"urn:esempio\" viewBox=\"0 0 100 100\">\n  <foreignObject x=\"0\" y=\"0\" width=\"100\" height=\"50\">\n    <div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"color:red\"><p>Testo <x:nota>a margine</x:nota></p></div>\n  </foreignObject>\n  <rect width=\"10\" height=\"10\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "hidden-unreferenced",
+    "description": "un elemento nascosto fuori da defs se ne va, da display o da style",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <g id=\"a\" display=\"none\"><rect width=\"10\" height=\"10\"/></g>\n  <g id=\"b\" style=\"fill:red;display:none\"><rect width=\"10\" height=\"10\"/></g>\n  <g id=\"c\" display=\"none\" style=\"display:inline\"><rect width=\"10\" height=\"10\"/></g>\n  <rect id=\"d\" width=\"10\" height=\"10\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <g id=\"c\" display=\"none\" style=\"display:inline\"><rect width=\"10\" height=\"10\"/></g>\n  <rect id=\"d\" width=\"10\" height=\"10\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "hidden-referenced",
+    "description": "un elemento nascosto resta se un id al suo interno è riferito",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 100 100\">\n  <g display=\"none\">\n    <path id=\"forma\" d=\"M0 0H10V10Z\"/>\n  </g>\n  <use xlink:href=\"#forma\" x=\"20\" y=\"20\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 100 100\">\n  <g display=\"none\">\n    <path id=\"forma\" d=\"M0 0H10V10Z\"/>\n  </g>\n  <use xlink:href=\"#forma\" x=\"20\" y=\"20\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "hidden-with-stylesheet",
+    "description": "con un foglio di stile che parla di display gli elementi nascosti restano",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <style>.mostra { display: inline }</style>\n  <g class=\"mostra\" display=\"none\"><rect width=\"10\" height=\"10\"/></g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <style>.mostra { display: inline }</style>\n  <g class=\"mostra\" display=\"none\"><rect width=\"10\" height=\"10\"/></g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "defs-unreferenced",
+    "description": "dentro defs se ne va ciò che nessuno riferisce, tranne style; poi la defs vuota",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <defs>\n    <linearGradient id=\"usata\"><stop offset=\"0\"/></linearGradient>\n    <linearGradient id=\"orfana\"><stop offset=\"0\"/></linearGradient>\n    <style>rect { stroke: url(#dal-foglio) }</style>\n  </defs>\n  <defs>\n    <radialGradient id=\"dal-foglio\"/>\n    <clipPath id=\"ritaglio\"><rect width=\"5\" height=\"5\"/></clipPath>\n  </defs>\n  <defs>\n    <!-- vuota dopo -->\n    <filter id=\"ombra\"/>\n  </defs>\n  <rect fill=\"url(#usata)\" width=\"10\" height=\"10\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <defs>\n    <linearGradient id=\"usata\"><stop offset=\"0\"/></linearGradient>\n    <style>rect { stroke: url(#dal-foglio) }</style>\n  </defs>\n  <defs>\n    <radialGradient id=\"dal-foglio\"/>\n  </defs>\n  <rect fill=\"url(#usata)\" width=\"10\" height=\"10\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "resource-chain",
+    "description": "una risorsa usata soltanto da ciò che se ne va se ne va con lui, anche a catena",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 100 100\">\n  <defs>\n    <linearGradient id=\"base\"><stop offset=\"1\"/></linearGradient>\n    <linearGradient id=\"derivata\" xlink:href=\"#base\"/>\n    <linearGradient id=\"tenuta\" href=\"#base2\"/>\n    <linearGradient id=\"base2\"><stop offset=\"1\"/></linearGradient>\n  </defs>\n  <g display=\"none\"><rect style=\"fill:url(#derivata)\" width=\"10\" height=\"10\"/></g>\n  <circle fill=\"url('#tenuta')\" r=\"5\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" viewBox=\"0 0 100 100\">\n  <defs>\n    <linearGradient id=\"tenuta\" href=\"#base2\"/>\n    <linearGradient id=\"base2\"><stop offset=\"1\"/></linearGradient>\n  </defs>\n  <circle fill=\"url('#tenuta')\" r=\"5\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "numbers-two-decimals",
+    "description": "lunghezze e coordinate a 2 decimali, i valori con un'unità come sono, la radice com'è",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100.125 100\" width=\"100.125\" height=\"100\">\n  <rect x=\"0.125\" y=\"-0.004\" width=\"10.0\" height=\"1e1\" rx=\"+2.5\" ry=\".75\" stroke-width=\"0.3333\"/>\n  <circle cx=\"1.005\" cy=\"1.006\" r=\"2mm\"/>\n  <ellipse cx=\"50%\" cy=\"3.14159\" rx=\"1.999\" ry=\"0.001\"/>\n  <line x1=\"0.1\" y1=\"0.25\" x2=\"10.555\" y2=\"-3.3333\" stroke-dasharray=\"1.111, 2.222 3.3\"/>\n  <text x=\"10.123\" y=\"20.456\" font-size=\"12.345\" dx=\"1.23456\"><tspan x=\"10.123\" dy=\"14.8148\">Riga</tspan></text>\n  <image x=\"0.5\" y=\"0.5\" width=\"20.004\" height=\"20.006\" href=\"data:,\"/>\n  <use x=\"1.111\" y=\"2.222\" href=\"#a\"/>\n  <g stroke-width=\"1.23456\" font-size=\"large\" stroke-dasharray=\"none\" opacity=\"0.123456\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100.125 100\" width=\"100.125\" height=\"100\">\n  <rect x=\"0.13\" y=\"0\" width=\"10\" height=\"10\" rx=\"2.5\" ry=\"0.75\" stroke-width=\"0.33\"/>\n  <circle cx=\"1\" cy=\"1.01\" r=\"2mm\"/>\n  <ellipse cx=\"50%\" cy=\"3.14\" rx=\"2\" ry=\"0\"/>\n  <line x1=\"0.1\" y1=\"0.25\" x2=\"10.56\" y2=\"-3.33\" stroke-dasharray=\"1.11, 2.22 3.3\"/>\n  <text x=\"10.12\" y=\"20.46\" font-size=\"12.35\" dx=\"1.23456\"><tspan x=\"10.12\" dy=\"14.81\">Riga</tspan></text>\n  <image x=\"0.5\" y=\"0.5\" width=\"20\" height=\"20.01\" href=\"data:,\"/>\n  <use x=\"1.11\" y=\"2.22\" href=\"#a\"/>\n  <g stroke-width=\"1.23\" font-size=\"large\" stroke-dasharray=\"none\" opacity=\"0.123456\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "numbers-magnified",
+    "description": "più decimali dove i transform sopra l'elemento e il suo ingrandiscono",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <g transform=\"scale(10)\">\n    <rect x=\"0.12345678\" y=\"0.12345678\" width=\"1\" height=\"1\"/>\n    <g transform=\"scale(10)\">\n      <rect x=\"0.12345678\" y=\"0.12345678\" width=\"1\" height=\"1\"/>\n      <rect transform=\"scale(1000)\" x=\"0.12345678\" y=\"0.12345678\" width=\"1\" height=\"1\"/>\n    </g>\n  </g>\n  <rect transform=\"rotate(30) scale(0.01)\" x=\"0.12345678\" y=\"0.12345678\" width=\"1\" height=\"1\"/>\n  <rect transform=\"matrix(1 0 25 1 0 0)\" x=\"0.12345678\" y=\"0.12345678\" width=\"1\" height=\"1\"/>\n  <rect transform=\"non si legge\" x=\"0.12345678\" y=\"0.12345678\" width=\"1\" height=\"1\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <g transform=\"scale(10)\">\n    <rect x=\"0.123\" y=\"0.123\" width=\"1\" height=\"1\"/>\n    <g transform=\"scale(10)\">\n      <rect x=\"0.1235\" y=\"0.1235\" width=\"1\" height=\"1\"/>\n      <rect transform=\"scale(1000)\" x=\"0.123457\" y=\"0.123457\" width=\"1\" height=\"1\"/>\n    </g>\n  </g>\n  <rect transform=\"rotate(30) scale(0.01)\" x=\"0.12\" y=\"0.12\" width=\"1\" height=\"1\"/>\n  <rect transform=\"matrix(1 0 25 1 0 0)\" x=\"0.123\" y=\"0.123\" width=\"1\" height=\"1\"/>\n  <rect transform=\"non si legge\" x=\"0.12\" y=\"0.12\" width=\"1\" height=\"1\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "numbers-elsewhere",
+    "description": "dentro defs, symbol, clipPath e ciò che un use richiama i numeri prendono 6 decimali",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <defs>\n    <clipPath id=\"c\" clipPathUnits=\"objectBoundingBox\"><rect x=\"0.1234567\" y=\"0\" width=\"0.5\" height=\"0.3333333\"/></clipPath>\n    <linearGradient id=\"g\" x1=\"0.1234567\" x2=\"1\"/>\n  </defs>\n  <symbol id=\"s\" viewBox=\"0 0 1 1\"><circle cx=\"0.1234567\" cy=\"0.5\" r=\"0.25\"/></symbol>\n  <path id=\"p\" d=\"M0.1234567 0.1234567h1\"/>\n  <use href=\"#s\" width=\"10.123\" height=\"10.123\"/>\n  <use href=\"#p\" transform=\"scale(100)\"/>\n  <rect clip-path=\"url(#c)\" fill=\"url(#g)\" x=\"0.1234567\" width=\"10\" height=\"10\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <defs>\n    <clipPath id=\"c\" clipPathUnits=\"objectBoundingBox\"><rect x=\"0.123457\" y=\"0\" width=\"0.5\" height=\"0.333333\"/></clipPath>\n    <linearGradient id=\"g\" x1=\"0.1234567\" x2=\"1\"/>\n  </defs>\n  <symbol id=\"s\" viewBox=\"0 0 1 1\"><circle cx=\"0.123457\" cy=\"0.5\" r=\"0.25\"/></symbol>\n  <path id=\"p\" d=\"M0.123457 0.123457h1\"/>\n  <use href=\"#s\" width=\"10.12\" height=\"10.12\"/>\n  <use href=\"#p\" transform=\"scale(100)\"/>\n  <rect clip-path=\"url(#c)\" fill=\"url(#g)\" x=\"0.12\" width=\"10\" height=\"10\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "path-data",
+    "description": "in d i comandi, i separatori e le bandierine restano, e fra due numeri che si toccavano c'è uno spazio",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <path d=\"M10.123,20.456L30.789-40.001H5.5551V.004z\"/>\n  <path d=\"M 0 0 A 10.5 10.5 0 01 10.555.5 a5 5 0 1120 20\"/>\n  <path d=\"M1e1 2E-1 C 1.111 2.222 3.333 4.444 5.555 6.666 S7.777 8.888 9.999 0 Q1 1 2 2 T3.333 3.333\"/>\n  <path d=\"m 0.004,0.004 0.004,0.004 0.004,0.004 l 0.004,0.004 h 0.004 v 0.004 z m 1.006 1.006 z\"/>\n  <path d=\"M0 0 L 10\"/>\n  <path d=\"\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <path d=\"M10.12,20.46L30.79 -40H5.56V0z\"/>\n  <path d=\"M 0 0 A 10.5 10.5 0 01 10.56 0.5 a5 5 0 1120 20\"/>\n  <path d=\"M10 0.2 C 1.11 2.22 3.33 4.44 5.56 6.67 S7.78 8.89 10 0 Q1 1 2 2 T3.33 3.33\"/>\n  <path d=\"m 0,0 0.01,0.01 0,0 l 0.01,0.01 h 0 v 0 z m 1.01 1.01 z\"/>\n  <path d=\"M0 0 L 10\"/>\n  <path d=\"\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "points",
+    "description": "i punti di polyline e polygon, coi loro separatori",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <polyline points=\"0.001,0.005 10.125,20.875 30-40.5.5\"/>\n  <polygon points=\" 40,110 60,70 80,110 \"/>\n  <polygon points=\"1 2 3\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <polyline points=\"0,0.01 10.13,20.88 30 -40.5 0.5\"/>\n  <polygon points=\" 40,110 60,70 80,110 \"/>\n  <polygon points=\"1 2 3\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "references-in-values",
+    "description": "un riferimento grezzo in un valore lo lascia com'è, e i numeri fuori da §4 non si toccano",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <rect x=\"1&#46;23456\" y=\"1.23456\" width=\"10\" height=\"10\" opacity=\"0.123456\" stroke-miterlimit=\"10.123\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <rect x=\"1&#46;23456\" y=\"1.23\" width=\"10\" height=\"10\" opacity=\"0.123456\" stroke-miterlimit=\"10.123\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "cleaned-stays",
+    "description": "un testo già pulito non cambia",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\" width=\"100\" height=\"100\">\n  <title>Prova</title>\n  <rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"#0072b2\"/>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\" width=\"100\" height=\"100\">\n  <title>Prova</title>\n  <rect x=\"10\" y=\"10\" width=\"80\" height=\"80\" fill=\"#0072b2\"/>\n</svg>\n"
+    }
+  },
+  {
+    "name": "not-svg",
+    "description": "una radice che non è svg",
+    "input": "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body/></html>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "error": "not-svg"
+    }
+  },
+  {
+    "name": "malformed",
+    "description": "un testo che non è XML ben formato",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\"><g></svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "error": "malformed"
+    }
+  }
+]
