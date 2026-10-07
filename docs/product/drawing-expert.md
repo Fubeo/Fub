@@ -186,9 +186,10 @@ programma che tratta male le trasformazioni. Le regole stanno in
 
 ## Oggetto in tracciato
 
-«Oggetto in tracciato», nella barra della selezione, fa degli oggetti scelti
-dei tracciati (`path`), che si leggono e si cambiano punto per punto. Le
-regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
+«Oggetto in tracciato», prima voce del menu «Tracciato» nella barra della
+selezione, fa degli oggetti scelti dei tracciati (`path`), che si leggono e si
+cambiano punto per punto; le altre voci sono in [Disegni, tracciati](drawing-paths.md).
+Le regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
 
 - **Ciò che si vede resta.** Rettangoli, ellissi, cerchi, linee, spezzate e
   poligoni diventano il tracciato con cui SVG 2 li definisce, dallo stesso
@@ -204,9 +205,8 @@ regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
   estraneo dentro un gruppo resta com'è, come ovunque.
 - **Testi e immagini non hanno un tracciato**, e nemmeno una forma vuota, come
   un rettangolo largo zero: restano come sono, e il comando lo dice. Resta
-  com'è anche un oggetto con l'attributo di un altro programma il cui
-  prefisso è dichiarato sull'oggetto stesso, perché un'operazione non sa
-  dichiararlo di nuovo.
+  com'è anche un oggetto con l'attributo di un altro programma il cui prefisso
+  è dichiarato sull'oggetto stesso: un'operazione non sa dichiararlo di nuovo.
 - **È un passo solo**, «Oggetto in tracciato», e la selezione resta quella.
 
 ## Operazioni booleane
