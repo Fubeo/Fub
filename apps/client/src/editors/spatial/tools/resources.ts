@@ -172,10 +172,17 @@ export class ResourceCopies {
   }
 
   /// `elem`, con le sue parti, rivolto alle copie delle risorse private che
-  /// usa. `null` se una di loro non si sa scrivere.
+  /// usa: per riferimento `url(#…)`, o col tracciato di un `textPath`. `null`
+  /// se una di loro non si sa scrivere.
   adopt(elem: Elem): Elem | null {
     const attrs: Record<string, string> = {};
     for (const [name, value] of Object.entries(elem.attrs)) {
+      const along = elem.tag === "textPath" && (name === "href" || name.endsWith(":href")) ? /^#(.+)$/.exec(value) : null;
+      if (along !== null) {
+        if (!this.copy(along[1]!)) return null;
+        attrs[name] = `#${this.renamed.get(along[1]!) ?? along[1]!}`;
+        continue;
+      }
       if (!/url\(/i.test(value)) {
         attrs[name] = value;
         continue;

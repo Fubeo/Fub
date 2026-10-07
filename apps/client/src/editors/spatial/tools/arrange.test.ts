@@ -143,6 +143,26 @@ describe("duplicare con le risorse", () => {
     expect(group).toContain(`fill="url(#${gradient})"`);
   });
 
+  it("copia il tracciato privato di un testo su tracciato, e il textPath lo segue", () => {
+    const opened = open(
+      doc(
+        '<defs id="fub-defs"><path id="rpppppppp" fub:role="private" d="M 0 50 L 100 50"/><path id="rqqqqqqqq" d="M 0 80 L 100 80"/></defs>' +
+          `${LAYER}<text id="otttttttt"><textPath startOffset="10" href="#rpppppppp">Sul colle</textPath></text>` +
+          '<text id="ouuuuuuuu"><textPath xlink:href="#rqqqqqqqq">Al mare</textPath></text></g>',
+      ),
+    );
+    const arranged = duplicateOps(opened.engine.model!, opened.index.units, 0, 30, ids(opened))!;
+    applied(opened, arranged);
+    const resources = elementChildren(opened.engine.holder("fub-defs") as ContainerNode);
+    expect(resources).toHaveLength(3);
+    const copy = resources[2]!.facts.id!;
+    expect(rawOf(resources[2]!)).toBe(`<path id="${copy}" fub:role="private" d="M 0 50 L 100 50"/>`);
+    const [first, second] = arranged.keys.map((key) => rawOf(opened.engine.holder(key)!));
+    expect(first).toContain(`<textPath startOffset="10" href="#${copy}">Sul colle</textPath>`);
+    // Un tracciato che non è privato resta lo stesso.
+    expect(second).toContain('<textPath xlink:href="#rqqqqqqqq">Al mare</textPath>');
+  });
+
   it("crea la defs di FubDraw se il disegno non ha una defs con un id", () => {
     const opened = open(doc(`<defs><linearGradient id="rgggggggg" fub:role="private">${STOP}</linearGradient></defs>${LAYER}${RECT("oaaaaaaaa", 0, 0, ' fill="url(#rgggggggg)"')}</g>`));
     const arranged = duplicateOps(opened.engine.model!, opened.index.units, 0, 30, ids(opened))!;
