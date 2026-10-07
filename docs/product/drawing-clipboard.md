@@ -107,7 +107,10 @@ Dal [livello Standard](drawing.md#il-livello-standard), **«Copia lo stile»**
 lo stile»** (`Ctrl+Alt+V` o `⌘⌥V`) lo dà agli oggetti scelti, in un passo; i
 comandi sono anche nel menu della selezione. Lo stile è il riempimento, il
 contorno con spessore, tratteggio, estremi e angoli, l'opacità e, per un
-testo, il carattere: famiglia, peso e corpo. Ogni parte prende ciò che ha: una
+testo, il carattere del suo primo carattere che si vede: famiglia, corpo,
+peso, corsivo, spaziatura e decorazioni, e l'interlinea di un testo di più
+righe, che tutto il testo prende ([Disegni,
+tipografia](drawing-typography.md)). Ogni parte prende ciò che ha: una
 linea non riceve un riempimento. Un testo e un tratto a penna hanno un colore
 solo, e prendono quello che si vede dell'oggetto copiato; una freccia ridisegna
 la sua punta col contorno nuovo. Gli oggetti bloccati dentro un gruppo restano
