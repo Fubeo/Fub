@@ -2415,6 +2415,116 @@ describe("il testo, dal livello Standard", () => {
   });
 });
 
+describe("il testo in area e su tracciato, dal livello Esperto", () => {
+  /// Un testo in area di corpo 20, largo 120: dieci grafemi per riga.
+  const A = "oa2a2a2a2";
+  const AREA = doc(
+    `<title>Prova</title>${LAYER}<text id="${A}" fub:wrap="120" x="10" y="40" font-size="20">` +
+      `<tspan x="10" dy="0">Il testo</tspan><tspan fub:join="space" x="10" dy="25">in area</tspan></text></g>`,
+  );
+  /// Un testo di corpo 20 sul tracciato orizzontale da (0, 100) a (200, 100).
+  const P = "op3p3p3p3";
+  const ALONG = doc(
+    `<title>Prova</title><defs id="fub-defs"><path id="r1" fub:role="private" d="M 0 100 L 200 100"/></defs>${LAYER}` +
+      `<text id="${P}" font-size="20"><textPath startOffset="20" href="#r1">Sul colle</textPath></text></g>`,
+  );
+  const EMPTY = doc(`<title>Prova</title>${LAYER}</g>`);
+
+  const input = (): HTMLElement => host.querySelector<HTMLElement>(".draw-text-input")!;
+  const shown = (): string => [...input().querySelectorAll<HTMLElement>(".draw-text-line")].map((row) => row.textContent).join("\n");
+  const tap = (x: number, y: number): void => drag([[x, y]]);
+  const type = (value: string): void => {
+    input().textContent = value;
+    input().dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  /// Le righe del testo `id`, ciascuna col suo `fub:join`.
+  const lines = (id: string): Array<[string, string | null]> => {
+    const text = new RegExp(`<text id="${id}"[^>]*>([\\s\\S]*?)</text>`).exec(editor.engine.text)?.[1] ?? "";
+    return [...text.matchAll(/<tspan([^>]*)>([^<]*)<\/tspan>/g)].map((match) => [match[2]!, /fub:join="([^"]*)"/.exec(match[1]!)?.[1] ?? null]);
+  };
+
+  it("trascinare col Testo apre un testo in area largo quanto il trascinamento, che va a capo da sé", () => {
+    mount(EMPTY, { level: "expert" });
+    editor.setTool("text");
+    drag([[20, 40], [70, 60], [120, 60]]);
+    expect(document.activeElement).toBe(input());
+    // Il riquadro è largo 100: col corpo 32 dello strumento, cinque grafemi.
+    expect(input().style.width).toBe("100px");
+    type("Il testo in area va a capo");
+    expect(shown()).toBe("Il\ntesto\nin\narea\nva a\ncapo");
+    key("Escape", {}, input());
+    expect(changes).toHaveLength(1);
+    const [id] = editor.selection;
+    expect(editor.engine.text).toMatch(new RegExp(`<text id="${id}" fub:wrap="100" x="20" `));
+    expect(lines(id!)).toEqual([
+      ["Il", null],
+      ["testo", "space"],
+      ["in", "space"],
+      ["area", "space"],
+      ["va a", "space"],
+      ["capo", "space"],
+    ]);
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).not.toContain("<text");
+  });
+
+  it("al livello Standard trascinare col Testo scrive dove comincia, senza riquadro", () => {
+    mount(EMPTY, { level: "standard" });
+    editor.setTool("text");
+    drag([[20, 40], [70, 60], [120, 60]]);
+    expect(input().style.width).not.toBe("100px");
+    type("Il testo in area");
+    key("Escape", {}, input());
+    expect(editor.engine.text).not.toContain("fub:wrap");
+  });
+
+  it("un testo in area si riapre nel suo riquadro, e scrivere rifà gli a capo con l'operazione text", () => {
+    mount(AREA, { level: "expert" });
+    editor.setTool("text");
+    tap(20, 35);
+    expect(shown()).toBe("Il testo\nin area");
+    expect(input().style.width).toBe("120px");
+    type("Il testo in area va a capo");
+    expect(shown()).toBe("Il testo\nin area va\na capo");
+    key("Tab", {}, input());
+    expect(lines(A)).toEqual([
+      ["Il testo", null],
+      ["in area va", "space"],
+      ["a capo", "space"],
+    ]);
+    expect(editor.engine.text).toContain('<tspan fub:join="space" x="10" dy="25">a capo</tspan>');
+    expect(spoken()).toBe("Testo modificato.");
+    // Un paragrafo nuovo non continua quello prima.
+    tap(20, 35);
+    type("Uno\nDue");
+    key("Tab", {}, input());
+    expect(lines(A)).toEqual([
+      ["Uno", null],
+      ["Due", null],
+    ]);
+    key("z", { ctrlKey: true });
+    key("z", { ctrlKey: true });
+    expect(lines(A)).toEqual([
+      ["Il testo", null],
+      ["in area", "space"],
+    ]);
+  });
+
+  it("un testo su tracciato si apre su una riga sola, dritto dove comincia, e si scrive nel suo textPath", () => {
+    mount(ALONG, { level: "expert" });
+    editor.setTool("text");
+    tap(40, 95);
+    expect(document.activeElement).toBe(input());
+    expect(shown()).toBe("Sul colle");
+    expect(input().getAttribute("aria-multiline")).toBe("false");
+    expect(input().style.transform).toMatch(/translate\(20px, 100px\) rotate\(0deg\)/);
+    type("Sul colle alto");
+    key("Escape", {}, input());
+    expect(editor.engine.text).toContain('<textPath startOffset="20" href="#r1">Sul colle alto</textPath>');
+    expect(editor.selection).toEqual([P]);
+  });
+});
+
 describe("i poligoni e le stelle, dal livello Standard", () => {
   const A = "o1a2b3c4d";
   const H = "oh1h1h1h1";

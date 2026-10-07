@@ -83,7 +83,7 @@ describe("il registro degli strumenti", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
       "lasso", "highlighter", "polygon", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility",
-      "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean", "trace",
+      "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean", "trace", "typeset",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
     // Ogni strumento è una parte, tranne la Selezione, che c'è sempre.

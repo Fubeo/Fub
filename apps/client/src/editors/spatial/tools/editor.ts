@@ -424,9 +424,11 @@ import type { Traced } from "./trace";
 import { imageWindow, traceOps, tracedGroup, traceSource, weightOf, type TraceSource } from "./trace-ops";
 import { inlineTracer, workerTracer, type Tracer, type TracerFactory } from "./trace-runner";
 import { MAX_COLORS, MAX_SHAPES, MIN_COLORS, TRACE_PRESETS, type TracePreset, type TraceSettings } from "./trace-settings";
-import { editableRich, lineRuns, lineText as richLineText, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich } from "./rich";
-import { ensureTextFont, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
-import { createTextField } from "./text-field";
+import { browserMeasure, estimate, type Measure } from "./measure";
+import { editableRich, JOIN, lineRuns, lineText as richLineText, newLeading, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich, type RichChange } from "./rich";
+import { ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
+import { createTextField, LINES_FORM, type FieldForm } from "./text-field";
+import { unwrap, WRAP, wrapParagraphs, wrapValue } from "./wrap";
 
 /// Una modifica del testo fatta da questa superficie, nella forma di
 /// `EditorChange` (operazioni sulla scena, §6).
@@ -1346,10 +1348,13 @@ interface EraseGesture extends GestureBase {
   readonly marked: Map<string, Unit>;
 }
 
-/// Un tocco dello strumento Testo: dove si alza il puntatore si scrive.
+/// Un tocco dello strumento Testo: dove si alza il puntatore si scrive. Un
+/// trascinamento disegna il riquadro di un testo in area.
 interface TextGesture extends GestureBase {
   readonly kind: "text";
   from: Point | null;
+  end: Point | null;
+  dragging: boolean;
 }
 
 /// Un testo che si sta scrivendo nel campo sopra il foglio.
@@ -1365,6 +1370,9 @@ interface Typing {
   /// Come si vede il testo che si cambia; `null` per uno nuovo, che ha il
   /// colore e la dimensione dello strumento.
   readonly look: TextLook | null;
+  /// La larghezza del riquadro di un testo in area nuovo, che ci va a capo;
+  /// `null` per gli altri.
+  readonly wrap: number | null;
   /// Il punto d'ancoraggio, nelle coordinate del testo.
   readonly at: Point;
   /// Dalle coordinate del testo a quelle della scena.
@@ -3624,6 +3632,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       handles.push({ kind: "lasso", points: slanted === null ? [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] : [...slanted.corners] });
     }
     if (current?.kind === "lasso" && current.dragging) handles.push({ kind: "lasso", points: [...current.points] });
+    if (current?.kind === "text" && current.dragging && current.from !== null && current.end !== null) {
+      const [x1, y1] = current.from;
+      const [x2, y2] = current.end;
+      handles.push({ kind: "lasso", points: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]] });
+    }
     if (current?.kind === "builder" && current.mode === "regions" && current.dragging) handles.push({ kind: "trail", points: [...current.trail] });
     // Sopra una regione, il cursore dice che il tocco e il trascinamento
     // uniscono; con Alt, che tolgono, lo dice il tratteggio.
@@ -6532,7 +6545,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return { ...base, kind: "width", from: null, end: null, spot: null, shape: null, index: -1, side: 0, dragging: false };
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
-        return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
+        return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null, end: null, dragging: false };
     }
   };
 
@@ -9479,9 +9492,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           for (const sample of samples) eraseAlong(g, toPoint(sample));
           showErased(g);
           break;
-        case "text":
+        case "text": {
           g.from ??= toPoint(samples[0]!);
+          g.end = toPoint(samples[samples.length - 1]!);
+          // Col testo in area, trascinare disegna il suo riquadro.
+          const far = Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale > DRAG_PX[g.pointer];
+          if (!g.dragging && far && has("typeset") && editable()) g.dragging = true;
+          if (g.dragging) showHandles();
           break;
+        }
         case "guide":
           guideUpdate(g, toPoint(samples[samples.length - 1]!));
           break;
@@ -9552,7 +9571,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           return;
         case "text":
           current = null;
-          if (g.from !== null) openText(g.from, g.pointer);
+          if (g.dragging && g.from !== null && g.end !== null) {
+            showHandles();
+            openArea(g.from, g.end);
+          } else if (g.from !== null) {
+            openText(g.from, g.pointer);
+          }
           return;
         case "guide":
           guideEnd(g, stroke.timeStamp);
@@ -9593,7 +9617,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Dove comincia il testo che si scrive: quello che c'è, o uno nuovo dal
   /// punto del tocco.
-  const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor"> => now.look ?? { x: now.at[0], y: now.at[1], anchor: "start" };
+  const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor" | "wrap" | "along"> =>
+    now.look ?? { x: now.at[0], y: now.at[1], anchor: "start", wrap: now.wrap, along: null };
+
+  /// Le larghezze del testo, coi caratteri del browser dove li sa misurare.
+  const measureText: Measure = browserMeasure() ?? estimate;
+
+  /// Come va a capo il campo del testo che si scrive: su una riga sola sul
+  /// tracciato, da sé in un riquadro, o con Invio.
+  const formOf = (now: Typing): FieldForm => {
+    const place = placeOf(now);
+    if (place.along !== null) return { kind: "line" };
+    return place.wrap === null ? LINES_FORM : { kind: "area", width: place.wrap, measure: measureText };
+  };
 
   /// Gli attributi di un testo nuovo: il colore e la dimensione dello
   /// strumento.
@@ -9630,10 +9666,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Un testo schiacciato su una linea non ha un campo da mostrare.
     style.visibility = k > 0 && Number.isFinite(k) ? "" : "hidden";
     if (style.visibility === "hidden") return;
-    const { width, baseline } = field.layout(k, baselineOf);
-    const left = look.x * k - (look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0);
+    const { width, baseline, inset } = field.layout(k, baselineOf);
+    const frame = `matrix(${m[0] / k}, ${m[1] / k}, ${m[2] / k}, ${m[3] / k}, ${m[4]}, ${m[5]})`;
+    const shift = look.anchor === "middle" ? width / 2 : look.anchor === "end" ? width : 0;
+    if (look.along !== null) {
+      // Il testo su tracciato si scrive dritto, dove comincia, girato come
+      // il tracciato lì.
+      const turn = (Math.atan2(look.along[1], look.along[0]) * 180) / Math.PI;
+      style.transform = `${frame} translate(${look.x * k}px, ${look.y * k}px) rotate(${turn}deg) translate(${-shift}px, ${-baseline}px)`;
+      return;
+    }
+    // Il riquadro di un testo in area comincia da `x`, ci sta in mezzo o ci
+    // finisce.
+    const box = look.wrap === null ? null : look.anchor === "middle" ? look.x - look.wrap / 2 : look.anchor === "end" ? look.x - look.wrap : look.x;
+    const left = box === null ? look.x * k - shift : box * k - inset;
     const top = look.y * k - baseline;
-    style.transform = `matrix(${m[0] / k}, ${m[1] / k}, ${m[2] / k}, ${m[3] / k}, ${m[4]}, ${m[5]}) translate(${left}px, ${top}px)`;
+    style.transform = `${frame} translate(${left}px, ${top}px)`;
   }
 
   /// Il testo che si cambia resta nascosto sotto il campo anche quando il
@@ -9651,6 +9699,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     finishText();
     cancelGesture();
     typing = next;
+    field.form(formOf(next));
     field.open(next.before);
     labelText();
     textLayer.hidden = false;
@@ -9672,7 +9721,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const inherited = textInherited(node);
     const file = elem === null ? null : richOf(elem, inherited);
     const plain: Rich = { attrs: {}, inherited, lines: (node.details?.lines ?? [""]).map((line) => richLine({}, line)) };
-    startTyping({ key: unit.key, before: editableRich(file ?? plain), file, look, at: [look.x, look.y], matrix: unit.matrix });
+    startTyping({ key: unit.key, before: editableRich(file ?? plain), file, look, wrap: null, at: [look.x, look.y], matrix: unit.matrix });
   };
 
   /// F2, o «Modifica il testo»: il testo scelto, se è solo.
@@ -9702,7 +9751,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const below = baselineOf("normal", "400", TEXT_FAMILY) * textStyle.width;
     const base = snapped(apply(to.matrix, [local[0], local[1] + below]));
     const before: Rich = { attrs: newTextAttrs(), inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
-    startTyping({ key: null, before, file: null, look: null, at: apply(to.inverse, base), matrix: to.matrix });
+    startTyping({ key: null, before, file: null, look: null, wrap: null, at: apply(to.inverse, base), matrix: to.matrix });
+  };
+
+  /// Lo strumento Testo trascinato da `from` a `end`: un testo in area
+  /// nuovo, largo quanto il trascinamento e almeno quanto il corpo, con la
+  /// prima riga in cima al riquadro. L'aggancio vale per i due angoli.
+  const openArea = (from: Point, end: Point): void => {
+    if (!editable() || !has("text")) return;
+    const to = target(newIds());
+    if (to === null) return;
+    const a = apply(to.inverse, snapped(from));
+    const b = apply(to.inverse, snapped(end));
+    const size = textStyle.width;
+    const width = Math.max(Math.abs(b[0] - a[0]), size);
+    // Dalla cima della riga alla sua linea di base, come la mette il campo.
+    const drop = size * (LINE_SPACING / 2 + baselineOf("normal", "400", TEXT_FAMILY));
+    const before: Rich = { attrs: { ...newTextAttrs(), [WRAP]: wrapValue(width) }, inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
+    startTyping({ key: null, before, file: null, look: null, wrap: width, at: [Math.min(a[0], b[0]), Math.min(a[1], b[1]) + drop], matrix: to.matrix });
   };
 
   /// Chiude il campo; con `write` scrive ciò che è cambiato, in un passo di
@@ -9720,7 +9786,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     field.close();
     painter.setDraft(null);
     const unit = now.key === null ? null : currentIndex().get(now.key);
-    const tidy = tidyRich(draft);
+    // Un testo in area va a capo come lo scrive il file: i paragrafi come li
+    // mostra SVG, nella larghezza del riquadro.
+    const place = placeOf(now);
+    const flowed = place.wrap === null ? null : wrapParagraphs(tidyRich(unwrap(draft)), place.wrap, measureText, newLeading(draft));
+    const tidy = flowed?.rich ?? tidyRich(draft);
     const lines = tidy.lines.map(lineRuns);
     if (!write || sameRich(draft, now.before) || !editable() || (now.key === null && lines.length === 0)) {
       if (unit !== null) select([unit.key]);
@@ -9750,7 +9820,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (page !== null) ops.push({ op: "page", viewBox: page });
       if (commit("draw.action.text", asGesture(ops)) === null) return;
       select([id]);
-      announce(`${t("draw.added.text")} ${objects()}`);
+      announce(`${t("draw.added.text")} ${objects()}${flowed?.overflow === true ? ` ${t("draw.text.overflow")}` : ""}`);
       return;
     }
     const model = engine.model;
@@ -9766,7 +9836,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const node = nodeOf(model, unit);
-    const change = now.file === null ? { kind: "lines" as const, lines } : richChange(now.file, tidy);
+    // Un testo che un'operazione non sa riscrivere intero cambia le righe;
+    // in area, anche come continuano i paragrafi.
+    const joins = flowed === null ? undefined : tidy.lines.map((line) => line.attrs[JOIN] ?? null);
+    const change: RichChange = now.file !== null ? richChange(now.file, tidy) : joins === undefined ? { kind: "lines", lines } : { kind: "lines", lines, joins };
     if (change.kind === "none") {
       select([unit.key]);
       return;
@@ -9774,7 +9847,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const plan = new Plan(model, newIds());
     const id = plan.idOf(node);
     const old = change.kind === "elem" ? elemOf(node) : null;
-    if (change.kind === "lines") plan.ops.push({ op: "text", id, lines: change.lines });
+    if (change.kind === "lines") plan.ops.push(change.joins === undefined ? { op: "text", id, lines: change.lines } : { op: "text", id, lines: change.lines, joins: change.joins });
     else if (old === null || !replaceElem(plan, node, richElem(old, change.rich))) {
       announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
       select([unit.key]);
@@ -9785,7 +9858,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.text_edit", asGesture(ops)) === null) return;
     select([id]);
-    announce(t("draw.text.edited"));
+    announce(flowed?.overflow === true ? `${t("draw.text.edited")} ${t("draw.text.overflow")}` : t("draw.text.edited"));
   }
 
   // Il fuoco che va altrove conclude il testo. Una finestra dell'editor, come

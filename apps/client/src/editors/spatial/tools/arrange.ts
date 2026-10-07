@@ -67,7 +67,7 @@ export const INHERITED: readonly string[] = [
 ];
 
 /// I tag che hanno testo e non figli.
-const TEXT_TAGS: ReadonlySet<string> = new Set(["title", "desc", "tspan"]);
+const TEXT_TAGS: ReadonlySet<string> = new Set(["title", "desc", "tspan", "textPath"]);
 
 /// I decimali dell'opacità che separare un gruppo moltiplica.
 const OPACITY_PLACES = 4;
@@ -238,14 +238,14 @@ function xmlElem(doc: XmlDocument, element: ElementNode, outer: NamespaceScope):
       const elem = xmlElem(doc, child, scope);
       if (elem === null) return null;
       children.push(elem);
-      // Un pezzo di una riga: solo testo dentro.
+      // Un pezzo di una riga o del tracciato: solo testo dentro.
       runs.push({ text: elem.text ?? "", attrs: elem.attrs });
     } else if (child.kind === "text") {
       text += child.value;
       runs.push(child.value);
     }
   }
-  if (element.local === "tspan" && children.length > 0) return { tag: element.local, attrs, runs };
+  if ((element.local === "tspan" || element.local === "textPath") && children.length > 0) return { tag: element.local, attrs, runs };
   if (TEXT_TAGS.has(element.local)) return { tag: element.local, attrs, text };
   return children.length === 0 ? { tag: element.local, attrs } : { tag: element.local, attrs, children };
 }
