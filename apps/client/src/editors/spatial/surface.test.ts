@@ -913,7 +913,7 @@ describe("la finestra «Esporta»", () => {
     const chosen = (await first)!;
     expect(chosen.target).toBe("draw.svg");
     expect(chosen.label()).toBe("SVG");
-    expect(chosen.options!()).toEqual({ background: "paper", scope: "drawing" });
+    expect(chosen.options!()).toEqual({ background: "paper", scope: "drawing", suffix: "esportato" });
     await settle();
 
     const second = surface.exportWindow!.open();

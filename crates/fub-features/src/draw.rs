@@ -76,6 +76,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, BufWriter, Write};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
 use fub_abi::error::PluginError;
 use fub_abi::model::{Block, DocId, Inline, LinkTarget};
 use fub_abi::rules::media::mime_of;
@@ -88,7 +90,7 @@ use fub_abi::transfer::{
 };
 use fub_format_svg::FORMAT_ID;
 use fub_scene::export::{
-    clean, measure, Board, DeriveError, Scope, Size, Source, AREA_MAX, SIDE_MAX,
+    clean, embed_images, measure, Board, DeriveError, Scope, Size, Source, AREA_MAX, SIDE_MAX,
 };
 use fub_scene::ReadError;
 use image::codecs::jpeg::{JpegEncoder, PixelDensity};
@@ -105,7 +107,10 @@ pub use annotate::PDF_ANNOTATE;
 pub use annotated::{AnnotatedPdfExport, RedactedPdfExport, DRAW_ANNOTATED_PDF, DRAW_REDACTED_PDF};
 pub use create::{DrawCommands, DRAWING_CREATE};
 
-use choice::{board_label, raster_size, Choice, Names, Part, E_BOARD, E_OBJECT, E_ONE_DRAWING};
+use choice::{
+    board_label, raster_size, Choice, Names, Part, EXPORTED_SUFFIX, E_BOARD, E_OBJECT,
+    E_ONE_DRAWING,
+};
 
 /// Id del componente.
 pub const DRAW_ID: &str = "fub.draw";
@@ -408,6 +413,13 @@ fn export_drawings(
     choice: &Choice,
     write: &mut Writer<'_>,
 ) -> Result<ExportReport, PluginError> {
+    // Il disegno è già un `.svg`: l'SVG del disegno intero, con il suo nome,
+    // salvato accanto lo sovrascriverebbe. Ha la parola fra parentesi, come
+    // il PDF annotato.
+    let label = match (format, &choice.part) {
+        (Format::Svg, Part::Drawing) => Some(annotated::suffix(&request.options, EXPORTED_SUFFIX)?),
+        _ => None,
+    };
     let selected = request.selection.resolve(host)?;
     let (drawings, others): (Vec<DocId>, Vec<DocId>) =
         selected.into_iter().partition(|doc| is_drawing(host, doc));
@@ -429,10 +441,11 @@ fn export_drawings(
     }
     let mut first_failure: Option<(DocId, String)> = None;
     let mut exported = 0usize;
-    for (doc, path) in drawings
-        .iter()
-        .zip(artifact_names(&drawings, format.extension()))
-    {
+    for (doc, path) in drawings.iter().zip(artifact_names(
+        &drawings,
+        format.extension(),
+        label.as_deref(),
+    )) {
         let mut failed = |reason: String, report: &mut ExportReport| {
             report
                 .log
@@ -491,20 +504,27 @@ fn is_drawing(host: &dyn ReadApi, doc: &DocId) -> bool {
 }
 
 /// Il nome dell'artefatto di ciascun disegno: il path del documento con
-/// l'estensione del formato, così l'esito ripete le cartelle del vault. Ciò che
+/// l'estensione del formato, così l'esito ripete le cartelle del vault, e con
+/// `label` fra parentesi se c'è (`acqua (exported).svg`). Ciò che
 /// collide (`Mare.svg` e `mare.svg`, che in una cartella che non distingue le
-/// maiuscole sono un file solo) prende il numero della convenzione D3
-/// (`<nome> 1`), con la stessa chiave con cui il sink rifiuterebbe il
+/// maiuscole sono un file solo) prende il numero della convenzione D3 dopo il
+/// nome del disegno (`<nome> 1`, `<nome> 1 (exported)`), con la stessa chiave con cui il sink rifiuterebbe il
 /// secondo ([`Names`]). I nomi si danno prima di leggere, quindi non
 /// dipendono da quali disegni si lasciano leggere.
-fn artifact_names(docs: &[DocId], extension: &str) -> Vec<String> {
+fn artifact_names(docs: &[DocId], extension: &str, label: Option<&str>) -> Vec<String> {
     let mut names = Names::default();
     docs.iter()
         .map(|doc| {
             let base = strip_ext(doc.as_str());
-            names.take(|n| match n {
-                0 => format!("{base}.{extension}"),
-                n => format!("{base} {n}.{extension}"),
+            names.take(|n| {
+                let name = match n {
+                    0 => base.clone(),
+                    n => format!("{base} {n}"),
+                };
+                match label {
+                    None => format!("{name}.{extension}"),
+                    Some(label) => format!("{name} ({label}).{extension}"),
+                }
             })
         })
         .collect()
@@ -650,8 +670,6 @@ struct Drawing<'h> {
     refused: Refused,
     /// I caratteri che i caratteri di Fub non hanno.
     missing: BTreeSet<char>,
-    /// Le immagini del vault che l'SVG pulito nomina per percorso.
-    by_path: BTreeSet<String>,
 }
 
 impl<'h> Drawing<'h> {
@@ -662,7 +680,6 @@ impl<'h> Drawing<'h> {
             images: VaultImages::new(host, doc),
             refused: Refused::default(),
             missing: BTreeSet::new(),
-            by_path: BTreeSet::new(),
         }
     }
 
@@ -677,24 +694,24 @@ impl<'h> Drawing<'h> {
         Ok(tree)
     }
 
-    /// Annota le immagini del vault che `text`, un SVG pulito, nomina per
-    /// percorso: fuori dal vault non portano a niente. Le trova `usvg`, senza
-    /// leggerle, come le trova per gli altri formati.
-    fn references(&mut self, text: &str) {
-        let refused = Arc::new(Mutex::new(Refused::default()));
-        if Tree::from_data(text.as_bytes(), &options(&refused, None)).is_ok() {
-            let refused = std::mem::take(&mut *lock(&refused));
-            self.by_path.extend(
-                refused
-                    .external
-                    .into_iter()
-                    .filter(|href| vault_path(href).is_some()),
-            );
+    /// L'URI `data:` dell'immagine del vault che `href` nomina, letta come
+    /// per gli altri formati: nell'SVG pulito un percorso del vault, fuori dal
+    /// vault, non porterebbe a niente. `None` per ciò che non è un percorso,
+    /// che resta com'è, e per un'immagine che resta fuori, che il log dice.
+    fn embed(&mut self, href: &str) -> Option<String> {
+        let path = vault_path(href)?;
+        match self.images.image(&path) {
+            Ok(kind) => data_uri(&kind),
+            Err(why) => {
+                let shown: String = href.chars().take(HREF_SHOWN).collect();
+                self.refused.vault.entry(why).or_default().insert(shown);
+                None
+            }
         }
     }
 
-    /// Le note di un disegno esportato: ciò che è rimasto fuori, i caratteri
-    /// che i caratteri di Fub non hanno e, nell'SVG, le immagini del vault.
+    /// Le note di un disegno esportato: ciò che è rimasto fuori e i caratteri
+    /// che i caratteri di Fub non hanno.
     fn notes(&self, report: &mut ExportReport) {
         let refused = &self.refused;
         let embedded = (refused.embedded > 0).then(|| {
@@ -709,11 +726,6 @@ impl<'h> Drawing<'h> {
                 if count == 1 { "was" } else { "were" },
             )
         });
-        let by_path = listed(
-            &self.by_path,
-            "image is a vault file named by its path, and the SVG shows it only where that path leads to it",
-            "images are vault files named by their path, and the SVG shows them only where those paths lead to them",
-        );
         let notes = std::iter::once(external_note(&refused.external, "the vault"))
             .chain(
                 refused
@@ -721,7 +733,7 @@ impl<'h> Drawing<'h> {
                     .iter()
                     .map(|(why, images)| vault_note(*why, images)),
             )
-            .chain([embedded, glyphs_note(&self.missing), by_path]);
+            .chain([embedded, glyphs_note(&self.missing)]);
         for message in notes.flatten() {
             report
                 .log
@@ -906,6 +918,21 @@ fn options<'a>(
         fontdb: Arc::clone(fonts()),
         ..usvg::Options::default()
     }
+}
+
+/// L'URI `data:` di un'immagine raster, col tipo che dicono i suoi byte.
+fn data_uri(kind: &ImageKind) -> Option<String> {
+    let (media_type, bytes) = match kind {
+        ImageKind::PNG(bytes) => ("image/png", bytes),
+        ImageKind::JPEG(bytes) => ("image/jpeg", bytes),
+        ImageKind::GIF(bytes) => ("image/gif", bytes),
+        ImageKind::WEBP(bytes) => ("image/webp", bytes),
+        ImageKind::SVG(_) => return None,
+    };
+    Some(format!(
+        "data:{media_type};base64,{}",
+        BASE64.encode(bytes.as_slice())
+    ))
 }
 
 /// Un'immagine, se è di un formato raster che `usvg` sa misurare. Il formato
@@ -1401,7 +1428,10 @@ fn write_svg(
         Ok(cleaned) => cleaned,
         Err(error) => return Ok(Outcome::Failed(unreadable(&error))),
     };
-    drawing.references(&cleaned);
+    let cleaned = match embed_images(&cleaned, |href| drawing.embed(href)) {
+        Ok(embedded) => embedded,
+        Err(error) => return Ok(Outcome::Failed(unreadable(&error))),
+    };
     let handle = out.open_artifact(&file.path, "image/svg+xml")?;
     for piece in cleaned.as_bytes().chunks(CHUNK) {
         out.write_artifact(handle, piece)?;

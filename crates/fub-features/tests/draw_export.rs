@@ -833,6 +833,24 @@ fn only_drawings_are_exported_and_names_never_collide() {
     );
     assert_eq!(report.log[0].level, NoteLevel::Info);
 
+    // In SVG il numero resta del nome del disegno, prima della parola.
+    let report = export(
+        &SvgExport,
+        &host,
+        DRAW_SVG,
+        &["disegni/mare.svg", "disegni/Mare.svg"],
+        serde_json::Value::Null,
+    )
+    .unwrap();
+    let paths: Vec<&str> = report.artifacts.iter().map(|a| a.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "disegni/Mare (exported).svg",
+            "disegni/mare 1 (exported).svg"
+        ]
+    );
+
     let outcome = export(
         &PdfExport,
         &host,
@@ -1849,14 +1867,18 @@ fn the_new_formats_give_the_same_bytes_every_time() {
 }
 
 #[test]
-fn the_svg_names_the_vault_images_it_keeps_by_path() {
+fn the_svg_carries_the_vault_images_it_can_read() {
+    use base64::Engine as _;
     let svg = with_images(&[
-        ("foto/rosso.png", 0, 80),
-        ("https://example.org/a.png", 80, 80),
+        ("foto/rosso.png", 0, 60),
+        ("foto/manca.png", 60, 40),
+        ("https://example.org/a.png", 100, 30),
+        ("foto/rosso.png", 130, 30),
     ]);
+    let red = red_png();
     let host = host()
         .with_document("disegni/acqua.svg", &svg)
-        .with_binary_document("disegni/foto/rosso.png", &red_png());
+        .with_binary_document("disegni/foto/rosso.png", &red);
     let report = export(
         &SvgExport,
         &host,
@@ -1865,13 +1887,41 @@ fn the_svg_names_the_vault_images_it_keeps_by_path() {
         serde_json::Value::Null,
     )
     .unwrap();
+    let (path, bytes) = only_artifact(&report);
+    // Il disegno è già `acqua.svg`: l'export ha la parola fra parentesi.
+    assert_eq!(path, "disegni/acqua (exported).svg");
+    let text = String::from_utf8(bytes).expect("UTF-8");
+    // Fuori dal vault un percorso non porta a niente: l'immagine entra coi
+    // suoi byte, letti una volta anche se il disegno la usa due volte.
+    let uri = format!(
+        "href=\"data:image/png;base64,{}\"",
+        base64::engine::general_purpose::STANDARD.encode(&red)
+    );
+    assert_eq!(text.matches(&uri).count(), 2, "{text}");
+    assert_eq!(host.reads_on("disegni/foto/rosso.png"), (1, red.len()));
+    // Ciò che non c'è resta com'è, e il log lo dice; un indirizzo del web
+    // resta un indirizzo.
+    assert!(text.contains("href=\"foto/manca.png\""), "{text}");
+    assert!(
+        text.contains("href=\"https://example.org/a.png\""),
+        "{text}"
+    );
     assert_eq!(
         messages(&report),
-        ["1 image is a vault file named by its path, and the SVG shows it only where that path leads to it: foto/rosso.png"]
+        ["1 image is not in the vault and was not exported: foto/manca.png"]
     );
     assert_eq!(report.log[0].entry.as_deref(), Some("disegni/acqua.svg"));
-    // Non si legge: l'SVG la nomina soltanto.
-    assert_eq!(host.reads_on("disegni/foto/rosso.png"), (0, 0));
+
+    // La parola la sceglie chi esporta, nella sua lingua.
+    let report = export(
+        &SvgExport,
+        &host,
+        DRAW_SVG,
+        &["disegni/acqua.svg"],
+        serde_json::json!({"suffix": "esportato"}),
+    )
+    .unwrap();
+    assert_eq!(only_artifact(&report).0, "disegni/acqua (esportato).svg");
 }
 
 /// I pixel moltiplicati per la loro opacità, e l'opacità: ciò che si vede.

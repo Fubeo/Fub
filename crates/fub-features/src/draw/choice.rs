@@ -9,8 +9,9 @@
 //! - `selection`: `{"ids": [...], "box": [x, y, w, h]}`, con
 //!   `scope: selection`;
 //! - `background`: `paper` (di serie) o `none`;
-//! - `suffix`: la parola fra parentesi nel nome del file della selezione, con
-//!   le regole del PDF annotato, di serie `selection`;
+//! - `suffix`: la parola fra parentesi nel nome del file della selezione, di
+//!   serie `selection`, e in quello dell'SVG del disegno intero, di serie
+//!   `exported`, con le regole del PDF annotato;
 //! - `scale` (di serie 2) o `width`, per le immagini raster.
 //!
 //! Un valore sbagliato è un errore che lo nomina, prima di ogni file.
@@ -40,6 +41,9 @@ const WIDTH: &str = "width";
 const SCALE_DEFAULT: f32 = 2.0;
 /// La parola di serie nel nome del file della selezione.
 const SELECTION_SUFFIX: &str = "selection";
+/// La parola di serie nel nome dell'SVG del disegno intero, che senza si
+/// chiamerebbe come il disegno.
+pub(super) const EXPORTED_SUFFIX: &str = "exported";
 /// Quanti caratteri del nome di una tavola entrano nel nome di un file.
 const BOARD_NAME_MAX: usize = 40;
 /// Quanto di un valore sbagliato l'errore ripete.

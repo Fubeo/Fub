@@ -432,7 +432,7 @@ export function exportDialog(options: ExportDialogOptions): Promise<ExportChoice
         return;
       }
       if (!ready(state, scene)) return;
-      const request = exportRequest(state, scene, t("draw.export.suffix"));
+      const request = exportRequest(state, scene, { selection: t("draw.export.suffix"), exported: t("draw.export.suffix.exported") });
       settle({ ...request, label: labelOf(state, scene), memory: memoryOf(state) });
     });
     frame.box.append(form);

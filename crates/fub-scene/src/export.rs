@@ -29,7 +29,7 @@ use crate::ReadError;
 mod clean;
 mod measure;
 
-pub use clean::clean;
+pub use clean::{clean, embed_images};
 pub use measure::{measure, Measure, Size, AREA_MAX, SCALE_MAX, SIDE_MAX};
 
 /// Un rettangolo sulla tela: angolo in alto a sinistra, larghezza e altezza.

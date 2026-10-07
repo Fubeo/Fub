@@ -34,6 +34,8 @@ const SELECTED: ExportScene = {
   boards: [],
 };
 
+const WORDS = { selection: "selezione", exported: "esportato" };
+
 const memory = (patch: Partial<ExportMemory> = {}): ExportMemory => ({
   what: "drawing",
   off: [],
@@ -122,25 +124,27 @@ describe("ciò che esce", () => {
   });
 
   it("la richiesta del PNG delle tavole porta gli id e la scala", () => {
-    expect(exportRequest(state({ what: "boards", off: new Set(["b2"]), size: { scale: 3 } }), BOARDS, "selezione")).toEqual({
+    expect(exportRequest(state({ what: "boards", off: new Set(["b2"]), size: { scale: 3 } }), BOARDS, WORDS)).toEqual({
       target: "draw.png",
       options: { background: "paper", scope: "boards", boards: ["b1", "b3"], scale: 3 },
     });
   });
 
   it("la richiesta della selezione porta gli id, il riquadro e la parola del nome del file", () => {
-    expect(exportRequest(state({ what: "selection", format: "jpeg", size: { pixels: 1600 }, background: "none" }), SELECTED, "selection")).toEqual({
+    expect(exportRequest(state({ what: "selection", format: "jpeg", size: { pixels: 1600 }, background: "none" }), SELECTED, WORDS)).toEqual({
       target: "draw.jpeg",
-      options: { background: "paper", scope: "selection", selection: { ids: ["o2", "o3"], box: [258, 168, 84, 64] }, suffix: "selection", width: 1600 },
+      options: { background: "paper", scope: "selection", selection: { ids: ["o2", "o3"], box: [258, 168, 84, 64] }, suffix: "selezione", width: 1600 },
     });
   });
 
-  it("SVG e PDF non hanno misura in pixel", () => {
-    expect(exportRequest(state({ format: "svg", size: { pixels: 900 }, background: "none" }), BOARDS, "selezione")).toEqual({
+  it("SVG e PDF non hanno misura in pixel; l'SVG del disegno ha la sua parola, per non chiamarsi come il disegno", () => {
+    expect(exportRequest(state({ format: "svg", size: { pixels: 900 }, background: "none" }), BOARDS, WORDS)).toEqual({
       target: "draw.svg",
-      options: { background: "none", scope: "drawing" },
+      options: { background: "none", scope: "drawing", suffix: "esportato" },
     });
-    expect(exportRequest(state({ what: "boards", format: "pdf" }), BOARDS, "selezione").options).toEqual({
+    expect(exportRequest(state({ what: "boards", format: "svg" }), BOARDS, WORDS).options).not.toHaveProperty("suffix");
+    expect(exportRequest(state({ format: "png" }), BOARDS, WORDS).options).not.toHaveProperty("suffix");
+    expect(exportRequest(state({ what: "boards", format: "pdf" }), BOARDS, WORDS).options).toEqual({
       background: "paper",
       scope: "boards",
       boards: ["b1", "b2", "b3"],

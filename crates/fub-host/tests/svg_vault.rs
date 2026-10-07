@@ -895,24 +895,24 @@ fn a_drawing_exports_its_boards_and_its_selection_in_four_formats() {
         assert!(!svg.contains(gone), "{gone}: {svg}");
     }
 
-    // Il disegno intero in SVG: l'immagine del vault resta un path, e il log
-    // lo dice.
+    // Il disegno intero in SVG: si chiama come il disegno con la parola fra
+    // parentesi, per non prenderne il posto accanto a lui, e l'immagine del
+    // vault entra coi suoi byte, perché fuori dal vault il percorso non porta
+    // a niente.
     let (files, log) = run(
         "draw.svg",
         "disegni/acqua.svg",
-        serde_json::json!({"background": "none"}),
+        serde_json::json!({"background": "none", "suffix": "esportato"}),
     );
     let [(path, svg)] = &files[..] else {
         panic!("{files:?}");
     };
-    assert_eq!(path, "disegni/acqua.svg");
+    assert_eq!(path, "disegni/acqua (esportato).svg");
     let svg = std::str::from_utf8(svg).unwrap();
-    assert!(svg.contains(r#"href="foto/mare.png""#), "{svg}");
+    assert!(svg.contains(r#"href="data:image/png;base64,"#), "{svg}");
+    assert!(!svg.contains("foto/mare.png"), "{svg}");
     assert!(!svg.contains("fub-paper"), "{svg}");
-    assert_eq!(
-        log,
-        ["1 image is a vault file named by its path, and the SVG shows it only where that path leads to it: foto/mare.png"]
-    );
+    assert!(log.is_empty(), "{log:?}");
 }
 
 fn walk(root: &Utf8Path) -> Vec<String> {

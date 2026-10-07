@@ -64,6 +64,40 @@ pub fn clean(derived: &str, scope: &Scope) -> Result<String, ReadError> {
     Ok(clean_document(&doc, whole))
 }
 
+/// `svg` con il riferimento di ogni `image` che `embed` sa sostituire.
+/// `embed` riceve il valore letto di `href` o di `xlink:href`, con le entità
+/// risolte, e dà ciò che va al suo posto, di solito un URI `data:`; con `None`
+/// il riferimento resta. Ogni altro byte resta uguale. `Err` se `svg` non è
+/// un SVG.
+pub fn embed_images(
+    svg: &str,
+    mut embed: impl FnMut(&str) -> Option<String>,
+) -> Result<String, ReadError> {
+    let doc = read_whole(svg)?;
+    let mut edits = Vec::new();
+    for node in 0..doc.nodes.len() {
+        let Some(element) = doc.element(node) else {
+            continue;
+        };
+        if !element.is_svg("image") {
+            continue;
+        }
+        for attr in &element.attrs {
+            if !(matches!(attr.ns, NS_NONE | NS_XLINK) && attr.local == "href") {
+                continue;
+            }
+            if let Some(value) = embed(&attr.value) {
+                edits.push(Edit {
+                    start: attr.raw.0,
+                    end: attr.raw.1,
+                    text: escape_attribute(&value),
+                });
+            }
+        }
+    }
+    Ok(super::apply(doc.source, edits))
+}
+
 // ---------------------------------------------------------------------------
 // Le entità
 // ---------------------------------------------------------------------------
@@ -1070,5 +1104,42 @@ mod tests {
             cleaned(text),
             "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:x=\"urn:x\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><foreignObject><x:p/></foreignObject></svg>\n"
         );
+    }
+
+    #[test]
+    fn embedding_replaces_only_the_references_of_images() {
+        let text = concat!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">",
+            "<image href=\"foto/a&amp;b.png\" width=\"4\"/>",
+            "<image xlink:href='foto/c.png'/>",
+            "<image href=\"https://example.org/d.png\"/>",
+            "<use href=\"foto/a&amp;b.png\"/><a href=\"foto/c.png\"/></svg>"
+        );
+        let mut asked = Vec::new();
+        let out = embed_images(text, |href| {
+            asked.push(href.to_owned());
+            (!href.starts_with("https:"))
+                .then(|| format!("data:image/png;base64,{}\"&", href.len()))
+        })
+        .unwrap();
+        // Il valore letto, con l'entità risolta, e soltanto quello delle
+        // immagini; ciò che si scrive al suo posto è un valore d'attributo.
+        assert_eq!(
+            asked,
+            ["foto/a&b.png", "foto/c.png", "https://example.org/d.png"]
+        );
+        assert_eq!(
+            out,
+            concat!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">",
+                "<image href=\"data:image/png;base64,12&quot;&amp;\" width=\"4\"/>",
+                "<image xlink:href='data:image/png;base64,10&quot;&amp;'/>",
+                "<image href=\"https://example.org/d.png\"/>",
+                "<use href=\"foto/a&amp;b.png\"/><a href=\"foto/c.png\"/></svg>"
+            )
+        );
+        // Senza niente da sostituire, il testo è quello di prima.
+        assert_eq!(embed_images(text, |_| None).unwrap(), text);
+        assert!(embed_images("<html/>", |_| None).is_err());
     }
 }

@@ -89,6 +89,7 @@ draw = [
     "dep:png",
     "dep:image",
     "dep:imagesize",
+    "dep:base64",
     "dep:lopdf",
     "dep:hayro",
     "dep:flate2",
@@ -138,6 +139,10 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "we
 # crate: un'immagine che `usvg` non sa misurare la scarta senza dirlo, e il
 # risolutore la lascia fuori prima, così il log la nomina.
 imagesize = { version = "0.13.0", optional = true }
+# Dietro `draw`: le immagini del vault entrano nell'SVG pulito come URI
+# `data:`, perché fuori dal vault il loro percorso non porta a niente. È la
+# stessa crate del workspace che l'host usa già.
+base64 = { workspace = true, optional = true }
 # Dietro `draw`, per l'export delle annotazioni dei PDF. Le annotazioni le legge
 # il lettore del formato, lo stesso del provider `fubann`.
 fub-scene = { workspace = true, optional = true }

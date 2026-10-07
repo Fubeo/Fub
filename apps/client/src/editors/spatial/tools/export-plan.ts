@@ -143,22 +143,30 @@ export function exportPieces(state: ExportState, scene: ExportScene): readonly E
   return [{ scope: { kind: "drawing" }, board: null }];
 }
 
+/// Le parole fra parentesi nei nomi dei file, nella lingua di chi esporta:
+/// quella della selezione, e quella dell'SVG del disegno intero, che senza si
+/// chiamerebbe come il disegno.
+export interface ExportWords {
+  readonly selection: string;
+  readonly exported: string;
+}
+
 /// La richiesta per l'host: il bersaglio del bundle `fub.draw` e le sue
-/// opzioni. `suffix` è la parola fra parentesi nel nome del file della
-/// selezione, nella lingua di chi esporta.
-export function exportRequest(state: ExportState, scene: ExportScene, suffix: string): { readonly target: string; readonly options: Record<string, unknown> } {
+/// opzioni.
+export function exportRequest(state: ExportState, scene: ExportScene, words: ExportWords): { readonly target: string; readonly options: Record<string, unknown> } {
   const options: Record<string, unknown> = { background: backgroundOf(state) };
   const pieces = exportPieces(state, scene);
   const first = pieces[0]!.scope;
   if (first.kind === "selection") {
     options.scope = "selection";
     options.selection = { ids: [...first.ids], box: [...first.box] };
-    options.suffix = suffix;
+    options.suffix = words.selection;
   } else if (first.kind === "board") {
     options.scope = "boards";
     options.boards = pieces.map((piece) => (piece.scope as { readonly id: string }).id);
   } else {
     options.scope = "drawing";
+    if (state.format === "svg") options.suffix = words.exported;
   }
   if (isRaster(state.format)) {
     if ("pixels" in state.size) options.width = state.size.pixels;

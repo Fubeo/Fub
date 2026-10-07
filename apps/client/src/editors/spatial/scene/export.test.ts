@@ -1,5 +1,7 @@
 // I vettori dell'export (`__fixtures__/scene-export/`), condivisi con
-// `fub-scene`: oracoli scritti a mano e controllati uno per uno. Due file:
+// `fub-scene`: oracoli scritti a mano e controllati uno per uno. Il client
+// ne legge due (il terzo, `clean.json`, è dell'SVG pulito, che fa soltanto
+// l'host):
 //
 // - `derive.json`: per ogni caso `name`, `description`, il testo `input`,
 //   l'ambito `scope` (`{kind: "drawing"}`, `{kind: "board", id}` o
