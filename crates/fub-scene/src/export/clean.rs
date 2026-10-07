@@ -190,17 +190,16 @@ fn uses_entity(raw: &str) -> bool {
     })
 }
 
-/// Un valore normalizzato scritto di nuovo fra virgolette: i caratteri che
-/// la normalizzazione cambierebbe o che chiuderebbero il valore si scrivono
-/// come riferimenti.
+/// Un valore normalizzato scritto di nuovo fra virgolette. I caratteri che
+/// chiuderebbero il valore o che sarebbero markup li scrive la tabella di
+/// `quick-xml`, la libreria con cui il lettore legge il disegno; gli spazi
+/// che la normalizzazione degli attributi cambierebbe in uno spazio si
+/// scrivono come riferimenti.
 fn escape_attribute(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for c in value.chars() {
+    let escaped = quick_xml::escape::escape(value);
+    let mut out = String::with_capacity(escaped.len());
+    for c in escaped.chars() {
         match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&apos;"),
             '\t' => out.push_str("&#9;"),
             '\n' => out.push_str("&#10;"),
             '\r' => out.push_str("&#13;"),

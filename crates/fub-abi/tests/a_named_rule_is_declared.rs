@@ -1455,6 +1455,39 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-scene/src/export/clean.rs::hidden",
+            (
+                Family::AsciiCase,
+                "riconosce la proprietà `display` dentro un attributo `style` senza badare al \
+                 caso: i nomi di proprietà CSS sono ASCII e senza caso, e un browser non disegna \
+                 un elemento con `DISPLAY: none`. È un'identità, non una paura: decide che \
+                 l'elemento nascosto lascia l'SVG pulito. Il valore `none` invece si confronta \
+                 com'è scritto, e un valore in un altro caso lascia l'elemento dov'è.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::hiding_is_final",
+            (
+                Family::AsciiCase,
+                "cerca `display` in qualunque caso nel testo di un foglio di stile. Come \
+                 `classify.rs::has_url` non stabilisce un'identità ma una paura: un foglio che \
+                 nomina `display` potrebbe mostrare ciò che un attributo nasconde, e allora \
+                 nessun elemento nascosto lascia l'SVG pulito. Diverge da `hidden` perché sbaglia \
+                 dal lato largo apposta, anche su un selettore o su un commento.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::path_data",
+            (
+                Family::AsciiCase,
+                "porta in maiuscolo la lettera di un comando di `d` per sapere quanti numeri \
+                 vuole e quali sono coordinate, dopo averne letto il caso, che dice se il comando \
+                 è relativo. Diverge da `geometry.rs::parse_path` perché non legge il tracciato \
+                 per disegnarlo: lo riscrive con le stesse lettere e gli stessi separatori, e il \
+                 caso decide da dove si arrotonda una coordinata.",
+            ),
+        ),
+        (
             "crates/fub-scene/src/annotation.rs::digest",
             (
                 Family::AsciiCase,
