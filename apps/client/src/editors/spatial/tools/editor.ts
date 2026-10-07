@@ -186,6 +186,24 @@ import {
   type Order,
 } from "./arrange";
 import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
+import {
+  addBoardOps,
+  boardAt,
+  boardsOf,
+  boundsRect,
+  carriedBy as onBoard,
+  MIN_BOARD_SIDE,
+  moveBoardOps,
+  pageRect,
+  rectBounds,
+  rectText,
+  removeBoardOps,
+  renameBoardOps,
+  resizeBoardOps,
+  roundRect,
+  type Board,
+  type Rect,
+} from "./boards";
 import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf, type OutlineChange } from "./outline";
 import { boundsAfter, MAX_SCALE_PERCENT, MAX_SKEW, numericMatrix, numericOps } from "./transform";
 import { barSpot, type ScreenBox } from "./bar";
@@ -209,6 +227,7 @@ import { createProperties, type ActionId, type FieldId, type SectionId, type Tra
 import {
   angleOf,
   directionCursor,
+  edgeView,
   FRAME_PX,
   frameCenter,
   frameGuides,
@@ -919,6 +938,9 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
   "draw-into-layer": ["M12 11l9 5-9 5-9-5z", "M12 2v7", "M9 6l3 3 3-3"],
   "draw-page-grid": ["M3 3h18v18H3z", "M9 3v18", "M15 3v18", "M3 9h18", "M3 15h18"],
+  // Un foglio coi suoi segni di taglio: i bordi che continuano oltre gli
+  // angoli.
+  "draw-board": ["M2 6h20", "M2 18h20", "M6 2v20", "M18 2v20"],
   "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
   "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
@@ -1024,6 +1046,7 @@ type Gesture =
   | EraseGesture
   | TextGesture
   | GuideGesture
+  | BoardGesture
   | RefusedGesture;
 
 interface GestureBase {
@@ -1480,6 +1503,49 @@ interface GuideGesture extends GestureBase {
   moved: boolean;
 }
 
+/// Ciò che lo strumento Tavola sceglie: una tavola, o la pagina di un
+/// disegno che non ne ha (`board` è `null`), col suo rettangolo.
+interface Sheet {
+  readonly board: Board | null;
+  readonly rect: Rect;
+}
+
+/// La scelta dello strumento Tavola quando è la pagina: non è l'id di una
+/// tavola, perché un id XML non comincia con «#».
+const PAGE_SHEET = "#page";
+
+/// Sotto questa larghezza sullo schermo, in pixel, una tavola non mostra il
+/// suo nome: non ci starebbe una lettera.
+const BOARD_NAME_PX = 24;
+
+/// Un gesto dello strumento Tavola. Il primo punto decide che cosa fa il
+/// trascinamento: su una maniglia della tavola scelta, o della pagina, ne
+/// cambia la misura; dentro una tavola la sposta, con ciò che ci sta sopra;
+/// altrove, o con Maiusc, disegna una tavola nuova. Un tocco sceglie la
+/// tavola sotto, o la pagina di un disegno che non ne ha, e fuori lascia.
+interface BoardGesture extends GestureBase {
+  readonly kind: "board";
+  /// Dov'è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// `pending` finché il tocco non diventa trascinamento; poi ciò che
+  /// `plan` aveva deciso.
+  mode: "pending" | "move" | "resize" | "draw";
+  plan: "move" | "resize" | "draw";
+  /// La tavola, o la pagina, sotto il primo punto.
+  sheet: Sheet | null;
+  /// La maniglia presa.
+  grip: ResizeGrip | null;
+  /// Gli oggetti che la tavola presa porta con sé.
+  carried: readonly Unit[];
+  /// L'angolo della tavola presa che la griglia aggancia: il più vicino al
+  /// punto preso.
+  source: Point | null;
+  /// Il rettangolo di adesso: della tavola spostata o tirata, o di quella
+  /// che si disegna.
+  rect: Rect | null;
+}
+
 function scaleOf(m: Matrix): number {
   return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 }
@@ -1494,6 +1560,11 @@ function union(a: Bounds | null, b: Bounds | null): Bounds | null {
 
 function translated(bounds: Bounds | null, dx: number, dy: number): Bounds | null {
   return bounds === null ? null : { min: [bounds.min[0] + dx, bounds.min[1] + dy], max: [bounds.max[0] + dx, bounds.max[1] + dy] };
+}
+
+/// Vero se i riquadri `a` e `b` non si toccano.
+function disjoint(a: Bounds, b: Bounds): boolean {
+  return a.max[0] < b.min[0] || a.min[0] > b.max[0] || a.max[1] < b.min[1] || a.min[1] > b.max[1];
 }
 
 function toLocal(sample: InkSample, inverse: Matrix): InkSample {
@@ -2768,7 +2839,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const paper = document.createElement("div");
   paper.className = "draw-page";
   paper.setAttribute("aria-hidden", "true");
-  surface.append(paper);
+  // Con le tavole, ognuna ha la sua carta, e fra l'una e l'altra c'è il
+  // tavolo, come in Illustrator.
+  const sheetLayer = document.createElement("div");
+  sheetLayer.className = "draw-sheets";
+  sheetLayer.setAttribute("aria-hidden", "true");
+  surface.append(paper, sheetLayer);
   // Le righe sottili e, una ogni cinque, quelle marcate.
   const gridMark = document.createElementNS(SVG_NS, "svg");
   gridMark.setAttribute("class", "draw-grid");
@@ -2791,6 +2867,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   previewCamera.append(previewLayer);
   preview.append(previewCamera);
   surface.append(preview);
+  // I nomi delle tavole, sopra il disegno, che non li copre.
+  const nameLayer = document.createElement("div");
+  nameLayer.className = "draw-sheets";
+  nameLayer.setAttribute("aria-hidden", "true");
+  surface.append(nameLayer);
   // Le guide del documento: sopra il disegno, sotto le maniglie.
   const guideLines = createGuideLines(surface);
   const overlay = createOverlay(surface, life);
@@ -2818,6 +2899,38 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let scene: PaintScene = builder.build(engine);
   let index: SceneIndex | null = null;
   const EMPTY = new SceneIndex([], []);
+
+  /// Le tavole del disegno di adesso, cercate una volta per scena.
+  let boards: readonly Board[] | null = null;
+  const boardsNow = (): readonly Board[] => (boards ??= engine.model === null ? [] : boardsOf(engine.model));
+  /// Ciò che lo strumento Tavola ha scelto: l'id di una tavola, [`PAGE_SHEET`]
+  /// per la pagina di un disegno senza tavole, `null` per niente. Resta
+  /// quando si cambia strumento, e lo si ritrova tornando.
+  let boardChosen: string | null = null;
+
+  /// La tavola scelta, o la pagina; `null` se non c'è più.
+  const chosenSheet = (): Sheet | null => {
+    if (boardChosen === null) return null;
+    const list = boardsNow();
+    if (boardChosen === PAGE_SHEET) {
+      const page = scene.root.page;
+      return page === null || list.length > 0 ? null : { board: null, rect: pageRect(page) };
+    }
+    const board = list.find((each) => each.id === boardChosen);
+    return board === undefined ? null : { board, rect: board.rect };
+  };
+
+  /// La tavola sotto `p`, la più piccola se più d'una, o la pagina di un
+  /// disegno senza tavole, se `p` ci sta dentro; `null` fuori.
+  const sheetAt = (p: Point): Sheet | null => {
+    const list = boardsNow();
+    const board = boardAt(list, p);
+    if (board !== null) return { board, rect: board.rect };
+    const page = scene.root.page;
+    if (list.length > 0 || page === null) return null;
+    const rect = pageRect(page);
+    return p[0] >= rect[0] && p[0] <= rect[0] + rect[2] && p[1] >= rect[1] && p[1] <= rect[1] + rect[3] ? { board: null, rect } : null;
+  };
 
   const editable = (): boolean => !locked && engine.status === "fubdraw" && engine.model !== null;
 
@@ -2892,19 +3005,72 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     zoomLevel.title = label;
   };
 
-  /// La pagina sullo schermo; senza pagina la carta è tutto il foglio.
+  /// Mette la carta `element` sul rettangolo `rect` della scena. Sul foglio
+  /// girato la carta gira attorno al suo angolo, l'origine della
+  /// trasformazione.
+  const placeSheet = (element: HTMLElement, [x, y, width, height]: Rect): void => {
+    const [left, top] = toScreen(camera, [x, y]);
+    element.style.transform = camera.angle === 0 ? `translate(${left}px, ${top}px)` : `translate(${left}px, ${top}px) rotate(${camera.angle}deg)`;
+    element.style.width = `${camera.scale * width}px`;
+    element.style.height = `${camera.scale * height}px`;
+  };
+
+  /// Il nome `element` della tavola `board`, sopra l'angolo in alto a
+  /// sinistra del rettangolo `rect`, largo al più quanto lei, e girato col
+  /// foglio. Una tavola troppo stretta sullo schermo non lo mostra.
+  const placeName = (element: HTMLElement, board: Board, [x, y, width]: Rect, chosen: boolean): void => {
+    const wide = camera.scale * width;
+    element.hidden = wide < BOARD_NAME_PX;
+    if (element.hidden) return;
+    if (element.textContent !== board.name) element.textContent = board.name;
+    const [left, top] = toScreen(camera, [x, y]);
+    element.style.maxWidth = `${wide}px`;
+    element.style.transform = `translate(${left}px, ${top}px) rotate(${camera.angle}deg) translateY(-100%)`;
+    element.toggleAttribute("data-chosen", chosen);
+  };
+
+  /// Il rettangolo che il gesto dello strumento Tavola dà adesso alla
+  /// tavola `board`, o alla pagina con `null`, mentre la sposta o ne tira una
+  /// maniglia; `null` se il gesto non la tocca.
+  const sheetRect = (board: Board | null): Rect | null => {
+    const g = current?.kind === "board" ? current : null;
+    if (g === null || g.sheet === null || g.rect === null || (g.mode !== "move" && g.mode !== "resize")) return null;
+    return (g.sheet.board?.id ?? null) === (board?.id ?? null) ? g.rect : null;
+  };
+
+  /// Le carte e i nomi delle tavole, una coppia per tavola, riusati da una
+  /// volta all'altra.
+  const boardSheets: HTMLElement[] = [];
+  const boardNames: HTMLElement[] = [];
+
+  /// La pagina sullo schermo, o le tavole, ognuna con la sua carta e il suo
+  /// nome; senza pagina né tavole la carta è tutto il foglio.
   const showPage = (): void => {
     const page = scene.root.page;
-    surface.toggleAttribute("data-unbounded", page === null);
-    paper.hidden = page === null;
-    if (page === null) return;
-    const { scale } = camera;
-    const [x, y] = toScreen(camera, [page.x, page.y]);
-    // Sul foglio girato la carta gira attorno al suo angolo, l'origine della
-    // trasformazione.
-    paper.style.transform = camera.angle === 0 ? `translate(${x}px, ${y}px)` : `translate(${x}px, ${y}px) rotate(${camera.angle}deg)`;
-    paper.style.width = `${scale * page.width}px`;
-    paper.style.height = `${scale * page.height}px`;
+    const list = boardsNow();
+    surface.toggleAttribute("data-unbounded", page === null && list.length === 0);
+    paper.hidden = page === null || list.length > 0;
+    if (!paper.hidden) placeSheet(paper, sheetRect(null) ?? pageRect(page!));
+    while (boardSheets.length < list.length) {
+      const sheet = document.createElement("div");
+      sheet.className = "draw-page";
+      const name = document.createElement("div");
+      name.className = "draw-sheet-name";
+      sheetLayer.append(sheet);
+      nameLayer.append(name);
+      boardSheets.push(sheet);
+      boardNames.push(name);
+    }
+    while (boardSheets.length > list.length) {
+      boardSheets.pop()!.remove();
+      boardNames.pop()!.remove();
+    }
+    const chosen = tool === "board" ? boardChosen : null;
+    list.forEach((board, at) => {
+      const rect = sheetRect(board) ?? board.rect;
+      placeSheet(boardSheets[at]!, rect);
+      placeName(boardNames[at]!, board, rect, board.id === chosen);
+    });
   };
 
   /// La griglia sullo schermo, se il livello la offre e la si vuole vedere.
@@ -3107,7 +3273,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       width: surface.clientWidth,
       height: surface.clientHeight,
       unit: docUnit(),
-      page: pageBox(),
+      page: rulerPage(),
       selection: selectionBand,
       pointer: pointerAt?.at ?? null,
     });
@@ -3183,7 +3349,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function fit(): void {
     const page = scene.root.page;
-    let bounds: Bounds | null = page === null ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
+    const list = boardsNow();
+    // Con le tavole si inquadrano loro e il disegno: la pagina può essere
+    // cresciuta oltre.
+    let bounds: Bounds | null = page === null || list.length > 0 ? null : { min: [page.x, page.y], max: [page.x + page.width, page.y + page.height] };
+    for (const board of list) bounds = union(bounds, board.box);
     // Con un gruppo isolato si inquadra lo stesso tutto il disegno.
     for (const unit of isolation === null ? currentIndex().units : seenUnits()) bounds = union(bounds, unit.bounds);
     const area = viewArea();
@@ -3613,8 +3783,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return corner;
   };
 
-  /// Il cursore del foglio sopra una maniglia, o durante il suo gesto.
-  const showGrip = (cursor: GripCursor | "rotating" | null): void => {
+  /// Il cursore del foglio sopra una maniglia, o durante il suo gesto; sopra
+  /// una tavola, con lo strumento Tavola, quello che sposta.
+  const showGrip = (cursor: GripCursor | "rotating" | "move" | null): void => {
     if (cursor === null) delete surface.dataset.grip;
     else surface.dataset.grip = cursor;
   };
@@ -3669,6 +3840,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       });
     }
     handles.push(...frameHandles());
+    handles.push(...boardHandles());
     handles.push(...hoverHandles());
     handles.push(...regionHandles());
     handles.push(...cutHandles());
@@ -5353,6 +5525,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (isolation !== null && isolatedNode() === null) isolation = null;
     painter.setFocus(isolationChain());
     showIsolation();
+    // Le tavole si rileggono; quella scelta che non c'è più si lascia.
+    boards = null;
+    if (chosenSheet() === null) boardChosen = null;
     showPage();
     // L'unità può essere cambiata, e con lei il passo della griglia.
     showGrid();
@@ -5409,7 +5584,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// toccato e che c'è ancora, e così il livello corrente.
   const landed = (ids: readonly string[]): void => {
     refresh();
-    const touched = inOrder(ids);
+    // Con lo strumento Tavola si sceglie la tavola toccata, non gli oggetti.
+    const board = tool === "board" ? boardsNow().find((each) => ids.includes(each.id)) : undefined;
+    if (board !== undefined) {
+      boardChosen = board.id;
+      showPage();
+    }
+    const touched = tool === "board" ? [] : inOrder(ids);
     if (touched.length > 0) selection = touched;
     const layer = has("layers") ? currentIndex().layers.find((other) => other.id !== null && ids.includes(other.id)) : undefined;
     if (layer !== undefined) choose(layer);
@@ -5819,14 +6000,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       widthHover = null;
     }
     tool = id;
+    // Lo strumento Tavola sceglie le tavole, non gli oggetti: la selezione si
+    // lascia, e senza una tavola scelta si sceglie quella che si guarda.
+    if (id === "board") {
+      selection = [];
+      if (chosenSheet() === null) boardChosen = sheetInView();
+    }
     syncControls();
-    // La cornice è dello strumento Selezione.
+    // La cornice è dello strumento Selezione, il nome della tavola scelta
+    // si fa più scuro con lo strumento Tavola.
+    showPage();
     showHandles();
     showGrip(null);
     const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi; col
-    // Costruttore, su quante regioni lavora.
-    const target = id === "nodes" ? targetText() : id === "builder" ? builderText() : "";
+    // Costruttore, su quante regioni lavora; con lo strumento Tavola, quale
+    // tavola è scelta.
+    const sheet = id === "board" ? chosenSheet() : null;
+    const target = id === "nodes" ? targetText() : id === "builder" ? builderText() : sheet !== null ? sheetText(sheet) : "";
     announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
@@ -6027,37 +6218,54 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return isolatedUnitFor.unit;
   };
 
+  /// Gli oggetti che si vedono nella vista `view`, o tutti senza, come
+  /// bersagli delle guide: tranne quelli di chiave in `skipped`, e coi
+  /// gruppi `open` aperti.
+  const seenTargets = (skipped: ReadonlySet<string>, open: readonly ContainerNode[], view: Bounds | null): GuideTarget[] => {
+    const out: GuideTarget[] = [];
+    for (const unit of seenUnits(open)) {
+      const box = unit.geometry ?? unit.bounds;
+      if (box === null || skipped.has(unit.key) || (view !== null && disjoint(box, view))) continue;
+      out.push({ kind: "object", box, key: unit.key });
+    }
+    return out;
+  };
+
+  /// Le guide del documento come bersagli, se agganciano, tranne la guida
+  /// `skip`.
+  const rulerTargets = (skip: number | null): GuideTarget[] => {
+    if (!rulerGuidesOn()) return [];
+    const out: GuideTarget[] = [];
+    (scene.root.guides ?? []).forEach((guide, i) => {
+      if (i === skip) return;
+      out.push({ kind: "guide", box: { min: [guide.at, guide.at], max: [guide.at, guide.at] }, key: String(i), axis: guide.axis === "x" ? 0 : 1 });
+    });
+    return out;
+  };
+
   /// I bersagli di `owner`, un gesto o i nodi della penna di Bézier, presi la
   /// prima volta che servono e tenuti finché la scena e la vista restano
   /// quelle: con le guide intelligenti gli oggetti che si vedono nella
-  /// vista, tranne quelli di chiave `skip`, la pagina, e i punti `points`;
-  /// con le guide del documento, quelle, tranne la guida `skipGuide`. Ci si
-  /// allinea a ciò che si guarda; un foglio non ancora disposto, senza
-  /// misure, vede tutto.
+  /// vista, tranne quelli di chiave `skip`, la pagina, o le tavole che si
+  /// vedono, e i punti `points`; con le guide del documento, quelle, tranne
+  /// la guida `skipGuide`. Ci si allinea a ciò che si guarda; un foglio non
+  /// ancora disposto, senza misure, vede tutto.
   let guideCache: { readonly owner: object; readonly index: SceneIndex; readonly view: View; readonly guides: GuideIndex } | null = null;
   const guidesFor = (owner: object, skip: readonly string[], points: () => readonly Point[] = () => [], skipGuide: number | null = null): GuideIndex => {
     const index = currentIndex();
     if (guideCache !== null && guideCache.owner === owner && guideCache.index === index && guideCache.view === camera) return guideCache.guides;
     const targets: GuideTarget[] = [];
     if (smartOn()) {
-      const skipped = new Set(skip);
       const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
-      for (const unit of seenUnits(openedBy(skip))) {
-        const box = unit.geometry ?? unit.bounds;
-        if (box === null || skipped.has(unit.key)) continue;
-        if (view !== null && (box.max[0] < view.min[0] || box.min[0] > view.max[0] || box.max[1] < view.min[1] || box.min[1] > view.max[1])) continue;
-        targets.push({ kind: "object", box, key: unit.key });
-      }
-      const page = pageBox();
+      targets.push(...seenTargets(new Set(skip), openedBy(skip), view));
+      // Con le tavole, ognuna fa da pagina.
+      const list = boardsNow();
+      for (const board of list) if (view === null || !disjoint(board.box, view)) targets.push({ kind: "page", box: board.box, key: board.id });
+      const page = list.length === 0 ? pageBox() : null;
       if (page !== null) targets.push({ kind: "page", box: page, key: "" });
       for (const p of points()) targets.push({ kind: "node", box: { min: p, max: p }, key: "" });
     }
-    if (rulerGuidesOn()) {
-      (scene.root.guides ?? []).forEach((guide, i) => {
-        if (i === skipGuide) return;
-        targets.push({ kind: "guide", box: { min: [guide.at, guide.at], max: [guide.at, guide.at] }, key: String(i), axis: guide.axis === "x" ? 0 : 1 });
-      });
-    }
+    targets.push(...rulerTargets(skipGuide));
     const guides = new GuideIndex(targets);
     guideCache = { owner, index, view: camera, guides };
     return guides;
@@ -6118,12 +6326,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const box: Bounds = { min: p, max: p };
       return { lines: [...index.lines(0, box, [{ value: p[0], edge: "point" }]), ...index.lines(1, box, [{ value: p[1], edge: "point" }])], spacings: [] };
     };
-    const g = current;
-    if (g?.kind === "select" && g.mode === "move") {
-      const box = geometryOf(g.units);
-      if (box === null) return null;
-      const moved = translated(box, ...moveDelta(g))!;
-      const index = guidesFor(g, g.units.map((unit) => unit.key));
+    // Le linee di ciò che si è spostato in `moved`, e le distanze uguali.
+    const movedView = (index: GuideIndex, moved: Bounds): GuideView => {
       const lines: GuideLine[] = [];
       const spacings: Spacing[] = [];
       for (const axis of [0, 1] as const) {
@@ -6132,6 +6336,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (spacing !== null) spacings.push(spacing);
       }
       return { lines, spacings };
+    };
+    const g = current;
+    if (g?.kind === "select" && g.mode === "move") {
+      const box = geometryOf(g.units);
+      if (box === null) return null;
+      return movedView(guidesFor(g, g.units.map((unit) => unit.key)), translated(box, ...moveDelta(g))!);
+    }
+    if (g?.kind === "board" && g.mode === "move" && g.sheet !== null) return movedView(boardGuides(g), translated(rectBounds(g.sheet.rect), ...boardDelta(g))!);
+    if (g?.kind === "board" && g.mode === "resize" && g.rect !== null && g.grip !== null) {
+      // I bordi tirati.
+      const box = rectBounds(g.rect);
+      const index = boardGuides(g);
+      const lines: GuideLine[] = [];
+      for (const axis of [0, 1] as const) {
+        const direction = pull(g.grip, axis);
+        if (direction !== 0) lines.push(...index.lines(axis, box, [{ value: direction > 0 ? box.max[axis] : box.min[axis], edge: direction > 0 ? "max" : "min" }]));
+      }
+      return { lines, spacings: [] };
+    }
+    if (g?.kind === "board" && g.mode === "draw") {
+      const end = drawnEnd(g);
+      return end === null ? null : point(boardGuides(g), end);
     }
     if (g?.kind === "select" && g.mode === "resize" && g.grip !== null && g.matrix !== null) {
       const { grip, frame } = g.grip;
@@ -6220,16 +6446,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Una linea a parole: quale bordo o centro di ciò che si è mosso sta in
-  /// linea con quale dell'oggetto, della pagina o del nodo.
+  /// linea con quale dell'oggetto, della tavola, della pagina o del nodo.
   const lineText = ({ axis, source, target, edge }: GuideLine): string => {
     const names = EDGE_NAMES[axis];
     const from = t(names[source]);
     if (target.kind === "node") return t("draw.guides.node", { source: from });
     if (target.kind === "guide") return t("draw.guides.line", { source: from });
     const same = source === edge;
-    if (target.kind === "page") return same ? t("draw.guides.page.same", { source: from }) : t("draw.guides.page", { source: from, edge: t(names[edge]) });
+    if (target.kind === "page" && target.key === "") return same ? t("draw.guides.page.same", { source: from }) : t("draw.guides.page", { source: from, edge: t(names[edge]) });
+    // Una tavola si dice come un oggetto, col suo nome.
     const unit = seenUnits().find((each) => each.key === target.key);
-    const name = unit === undefined ? target.key : labelOf(unit);
+    const name = unit !== undefined ? labelOf(unit) : (boardById(target.key)?.name ?? target.key);
     return same ? t("draw.guides.object.same", { source: from, name }) : t("draw.guides.object", { source: from, edge: t(names[edge]), name });
   };
 
@@ -6262,9 +6489,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let pointerAt: { readonly at: Point; readonly pointer: InkPointerType } | null = null;
 
   /// Con Alt e una selezione, le distanze fra la sua geometria e quella
-  /// dell'oggetto sotto il puntatore, bloccati compresi, o della pagina, se
-  /// il puntatore ci sta sopra fuori dagli oggetti. Il riquadro misurato si
-  /// vede tratteggiato.
+  /// dell'oggetto sotto il puntatore, bloccati compresi, o della tavola o
+  /// della pagina, se il puntatore ci sta sopra fuori dagli oggetti. Il
+  /// riquadro misurato si vede tratteggiato.
   const measureHandles = (): OverlayHandle[] => {
     if (!alt || current !== null || pressed !== null || pointerAt === null || tool !== "select" || !has("guides") || selection.length === 0) return [];
     const a = geometryOf(selectedUnits());
@@ -6278,8 +6505,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const unit = units[i]!;
       if (!chosen.has(unit.key) && unit.hits(p, tolerance)) b = unit.geometry ?? unit.bounds;
     }
-    const page = pageBox();
-    if (b === null && page !== null && p[0] >= page.min[0] && p[0] <= page.max[0] && p[1] >= page.min[1] && p[1] <= page.max[1]) b = page;
+    const sheet = b === null ? sheetAt(p) : null;
+    if (sheet !== null) b = rectBounds(sheet.rect);
     if (b === null) return [];
     const { measures, extensions } = measureBetween(a, b);
     const corners: Point[] = [b.min, [b.max[0], b.min[1]], b.max, [b.min[0], b.max[1]]];
@@ -6580,6 +6807,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         };
       case "lasso":
         return { ...base, kind: "lasso", points: [], base: [...selection], mode: shift ? "add" : alt ? "remove" : "replace", dragging: false };
+      case "board":
+        return { ...base, kind: "board", from: null, end: null, mode: "pending", plan: "draw", sheet: null, grip: null, carried: [], source: null, rect: null };
       case "nodes":
         resolveNodes();
         return {
@@ -6676,21 +6905,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return count !== 0 || ratio !== 0;
   };
 
-  /// Lo spostamento del gesto `g`. Con la griglia l'angolo preso va
-  /// sull'incrocio; con le guide, lungo ciascun asse, un bordo o il centro
-  /// della geometria scelta va sul bersaglio più vicino, o dove le distanze
+  /// Lo spostamento di (`dx`, `dy`) di ciò che ha la geometria `box`, preso
+  /// nel punto `source`, coi bersagli di `guides`. Con la griglia il punto
+  /// preso va sull'incrocio; con le guide, lungo ciascun asse, un bordo o il
+  /// centro della geometria va sul bersaglio più vicino, o dove le distanze
   /// sono uguali; fra la griglia e le guide vince il più vicino. Ctrl o ⌘ lo
   /// lascia libero.
-  const moveDelta = (g: SelectGesture): [number, number] => {
-    if (g.from === null || g.end === null) return [0, 0];
-    const dx = g.end[0] - g.from[0];
-    const dy = g.end[1] - g.from[1];
+  const snappedDelta = (dx: number, dy: number, source: Point | null, box: Bounds | null, guides: () => GuideIndex, pointer: InkPointerType): [number, number] => {
     if (free) return [roundDelta(dx), roundDelta(dy)];
-    const line = gridOn() && g.source !== null ? snapDelta(g.source, dx, dy, stepNow()) : null;
-    const box = guidesOn() ? geometryOf(g.units) : null;
-    if (box === null) return line ?? [roundDelta(dx), roundDelta(dy)];
-    const index = guidesFor(g, g.units.map((unit) => unit.key));
-    const reach = guideReach(g.pointer);
+    const line = gridOn() && source !== null ? snapDelta(source, dx, dy, stepNow()) : null;
+    if (box === null || !guidesOn()) return line ?? [roundDelta(dx), roundDelta(dy)];
+    const index = guides();
+    const reach = guideReach(pointer);
     const moved = translated(box, dx, dy)!;
     const raw = [dx, dy] as const;
     const along = (axis: FrameAxis): number => {
@@ -6702,6 +6928,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return line !== null && value === line[axis] ? value : roundDelta(value);
     };
     return [along(0), along(1)];
+  };
+
+  /// Lo spostamento del gesto `g`, che porta la geometria scelta (vedi
+  /// [`snappedDelta`]).
+  const moveDelta = (g: SelectGesture): [number, number] => {
+    if (g.from === null || g.end === null) return [0, 0];
+    const box = guidesOn() && !free ? geometryOf(g.units) : null;
+    return snappedDelta(g.end[0] - g.from[0], g.end[1] - g.from[1], g.source, box, () => guidesFor(g, g.units.map((unit) => unit.key)), g.pointer);
   };
 
   /// La trasformazione della scena del ridimensionamento in corso. Gli
@@ -7040,6 +7274,488 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     showHandles();
     announceSelection();
+  };
+
+  // --- Le tavole -----------------------------------------------------------------
+
+  /// La tavola di id `id` nel disegno di adesso, se c'è.
+  const boardById = (id: string): Board | null => boardsNow().find((each) => each.id === id) ?? null;
+
+  /// La cornice dritta del rettangolo `rect`, come quella di una tavola: dà
+  /// il cursore alle sue maniglie.
+  const sheetFrame = (rect: Rect): Frame => {
+    const box = rectBounds(rect);
+    return { matrix: IDENTITY, box, geometry: box };
+  };
+
+  /// La tavola scelta, o la pagina, con le sue maniglie dove le mette il
+  /// gesto di adesso: se lo strumento Tavola la può cambiare.
+  const sheetView = (): { readonly sheet: Sheet; readonly view: FrameView } | null => {
+    const sheet = tool === "board" && editable() ? chosenSheet() : null;
+    const view = sheet === null ? null : edgeView(rectBounds(sheetRect(sheet.board) ?? sheet.rect), camera.scale);
+    return view === null ? null : { sheet: sheet!, view };
+  };
+
+  /// La carta della pagina di un disegno senza tavole: quella che non è di
+  /// una tavola.
+  const pagePaper = (): ElementPart | null => {
+    const model = engine.model;
+    if (model === null) return null;
+    return elementChildren(model.root).find((child) => child.details?.role === "paper" && child.details.board === undefined) ?? null;
+  };
+
+  /// La tavola o la pagina, a parole: il nome, il posto fra le tavole e le
+  /// misure.
+  const sheetText = (sheet: Sheet): string => {
+    const [, , width, height] = sheet.rect;
+    const size = { width: lengthSpoken(width), height: lengthSpoken(height) };
+    if (sheet.board === null) return t("draw.board.page.chosen", size);
+    const list = boardsNow();
+    const id = sheet.board.id;
+    return t("draw.board.chosen", { ...size, name: sheet.board.name, index: list.findIndex((board) => board.id === id) + 1, count: list.length });
+  };
+
+  /// La tavola che si guarda, da scegliere quando lo strumento Tavola non ne
+  /// ha una: quella al centro della vista, o la prima che si vede, o la
+  /// prima; in un disegno senza tavole, la pagina.
+  const sheetInView = (): string | null => {
+    const list = boardsNow();
+    if (list.length === 0) return scene.root.page === null ? null : PAGE_SHEET;
+    const here = boardAt(list, toScene(camera, viewCenter()));
+    if (here !== null) return here.id;
+    const view = viewBounds();
+    return (list.find((board) => !disjoint(board.box, view)) ?? list[0]!).id;
+  };
+
+  /// I bersagli delle guide per il gesto `g` dello strumento Tavola, presi
+  /// la prima volta e tenuti finché la scena e la vista restano quelle: con
+  /// le guide intelligenti gli oggetti che si vedono, tranne quelli che la
+  /// tavola porta, le altre tavole, e la pagina di un disegno senza tavole,
+  /// se non è lei che si tira; con le guide del documento, quelle.
+  let boardGuideCache: { readonly owner: BoardGesture; readonly index: SceneIndex; readonly view: View; readonly guides: GuideIndex } | null = null;
+  const boardGuides = (g: BoardGesture): GuideIndex => {
+    const index = currentIndex();
+    if (boardGuideCache !== null && boardGuideCache.owner === g && boardGuideCache.index === index && boardGuideCache.view === camera) return boardGuideCache.guides;
+    const targets: GuideTarget[] = [];
+    if (smartOn()) {
+      const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
+      targets.push(...seenTargets(new Set(g.carried.map((unit) => unit.key)), [], view));
+      // Una tavola si allinea alle altre, e si distribuisce fra loro.
+      const moving = g.plan === "draw" ? null : (g.sheet?.board?.id ?? null);
+      for (const board of boardsNow()) {
+        if (board.id !== moving && (view === null || !disjoint(board.box, view))) targets.push({ kind: "object", box: board.box, key: board.id });
+      }
+      const page = boardsNow().length === 0 && !(g.plan === "resize" && g.sheet?.board === null) ? pageBox() : null;
+      if (page !== null) targets.push({ kind: "page", box: page, key: "" });
+    }
+    targets.push(...rulerTargets(null));
+    const guides = new GuideIndex(targets);
+    boardGuideCache = { owner: g, index, view: camera, guides };
+    return guides;
+  };
+
+  /// Il primo punto di un gesto dello strumento Tavola: su una maniglia
+  /// della tavola scelta, o della pagina, la si tirerà; dentro una tavola,
+  /// senza Maiusc, la si sposterà con ciò che porta; altrove, o con Maiusc,
+  /// si disegnerà una tavola nuova.
+  const boardStart = (g: BoardGesture, p: Point): void => {
+    g.from = p;
+    g.end = p;
+    const shown = sheetView();
+    const grip = shown === null ? null : gripAt(shown.view, p, camera.scale, g.pointer);
+    if (shown !== null && grip !== null && grip !== "rotate") {
+      g.plan = "resize";
+      g.sheet = shown.sheet;
+      g.grip = grip;
+      return;
+    }
+    const board = boardAt(boardsNow(), p);
+    if (board === null || shift) return;
+    g.plan = "move";
+    g.sheet = { board, rect: board.rect };
+    g.carried = onBoard(board.box, indexer.movable(engine.model!));
+    g.source = nearestCorner(board.box, p);
+  };
+
+  /// Lo spostamento della tavola che il gesto `g` porta, con la griglia e
+  /// con le guide (vedi [`snappedDelta`]).
+  const boardDelta = (g: BoardGesture): [number, number] => {
+    if (g.from === null || g.end === null || g.sheet === null) return [0, 0];
+    return snappedDelta(g.end[0] - g.from[0], g.end[1] - g.from[1], g.source, rectBounds(g.sheet.rect), () => boardGuides(g), g.pointer);
+  };
+
+  /// Il rettangolo della tavola, o della pagina, di cui il gesto `g` tira
+  /// una maniglia. Un angolo con Maiusc tiene le proporzioni, Alt tiene
+  /// fermo il centro; con la griglia o con le guide il bordo tirato si ferma
+  /// sulla riga o sul bersaglio più vicino, se Ctrl o ⌘ non lo lascia libero.
+  const boardResized = (g: BoardGesture): Rect | null => {
+    if (g.sheet === null || g.grip === null || g.from === null || g.end === null) return null;
+    const delta: Point = [roundDelta(g.end[0] - g.from[0]), roundDelta(g.end[1] - g.from[1])];
+    const snap = gridOn() && !free ? gridSnap(IDENTITY, stepNow()) : null;
+    const guides = guidesOn() && !free ? frameGuides(boardGuides(g), IDENTITY, GUIDE_PX[g.pointer], camera.scale) : null;
+    const box = resized(rectBounds(g.sheet.rect), g.grip, delta, { ratio: isCorner(g.grip) && shift, fromCenter: alt, minimum: [MIN_BOARD_SIDE, MIN_BOARD_SIDE], snap, guides });
+    return roundRect(boundsRect(box));
+  };
+
+  /// Il punto di adesso del gesto `g` che disegna una tavola, con la griglia
+  /// e con le guide.
+  const drawnEnd = (g: BoardGesture): Point | null => (g.end === null ? null : guided(g.end, () => boardGuides(g), g.pointer));
+
+  /// La tavola che il gesto `g` disegna, dal primo punto a quello di
+  /// adesso, con la griglia e con le guide. `null` finché è troppo piccola
+  /// sullo schermo: allora il gesto è un tocco.
+  const drawnRect = (g: BoardGesture): Rect | null => {
+    const end = drawnEnd(g);
+    if (g.from === null || end === null) return null;
+    const from = guided(g.from, () => boardGuides(g), g.pointer);
+    const width = Math.abs(end[0] - from[0]);
+    const height = Math.abs(end[1] - from[1]);
+    if (width * camera.scale < MIN_SHAPE_PX || height * camera.scale < MIN_SHAPE_PX) return null;
+    const [x, y, w, h] = roundRect([Math.min(from[0], end[0]), Math.min(from[1], end[1]), width, height]);
+    return [x, y, Math.max(w, MIN_BOARD_SIDE), Math.max(h, MIN_BOARD_SIDE)];
+  };
+
+  /// Il gesto `g` sul foglio prima di scriverlo: la carta della tavola, o
+  /// della pagina, al rettangolo di adesso, e gli oggetti che la tavola
+  /// spostata porta con sé.
+  const boardPreview = (g: BoardGesture): void => {
+    const sheet = g.sheet;
+    if (sheet === null || g.rect === null || (g.mode !== "move" && g.mode !== "resize")) {
+      painter.setDraft(null);
+      return;
+    }
+    const transforms = new Map<PaintNode, string | null>();
+    const carried = new Map<object, Matrix>();
+    const paper = sheet.board === null ? pagePaper() : sheet.board.paper;
+    const value = transformValue(boxMatrix(rectBounds(sheet.rect), rectBounds(g.rect)));
+    for (const paint of paper === null ? [] : builder.paintsOf(paper)) transforms.set(paint, value);
+    if (g.mode === "move") {
+      const dx = g.rect[0] - sheet.rect[0];
+      const dy = g.rect[1] - sheet.rect[1];
+      for (const unit of g.carried) {
+        const moved = movedMatrix(unit, dx, dy);
+        if (moved === null) continue;
+        const next = transformValue(moved);
+        for (const paint of unit.paints) transforms.set(paint, next);
+        followImages(carried, unit, moved);
+      }
+    }
+    painter.setDraft({ transforms, carried });
+  };
+
+  const boardUpdate = (g: BoardGesture): void => {
+    if (g.from === null || g.end === null) return;
+    if (g.mode === "pending") {
+      const distance = Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale;
+      if (distance <= DRAG_PX[g.pointer]) return;
+      g.mode = g.plan;
+      if (g.plan === "move") {
+        // La tavola che si sposta è quella scelta.
+        boardChosen = g.sheet!.board!.id;
+        showGrip("move");
+      } else if (g.plan === "resize") {
+        showGrip(gripCursor(sheetFrame(g.sheet!.rect), g.grip!, camera.angle));
+      }
+    }
+    if (g.mode === "move") {
+      const [dx, dy] = boardDelta(g);
+      const [x, y, width, height] = g.sheet!.rect;
+      g.rect = [x + dx, y + dy, width, height];
+    } else {
+      g.rect = g.mode === "resize" ? boardResized(g) : drawnRect(g);
+    }
+    boardPreview(g);
+    showPage();
+    showHandles();
+  };
+
+  const boardEnd = (g: BoardGesture): void => {
+    // Le guide si leggono finché il gesto c'è.
+    const note = g.mode === "pending" ? "" : snapNote();
+    const delta = g.mode === "move" ? boardDelta(g) : null;
+    painter.setDraft(null);
+    current = null;
+    showGrip(null);
+    const board = g.sheet?.board ?? null;
+    if (delta !== null && board !== null) moveBoard(board, delta[0], delta[1], g.carried, note);
+    else if (g.mode === "resize" && g.sheet !== null && g.rect !== null) resizeSheet(g.sheet, g.rect, note);
+    else if (g.mode === "draw" && g.rect !== null) addBoard(g.rect, note);
+    // Un tocco su una maniglia non cambia niente.
+    else if (g.plan !== "resize" && g.from !== null) tapBoard(g.from);
+    showPage();
+    showHandles();
+  };
+
+  /// Un tocco dello strumento Tavola in `p`: sceglie la tavola sotto, o la
+  /// pagina di un disegno che non ne ha, e lo dice; fuori lascia la scelta.
+  const tapBoard = (p: Point): void => {
+    const sheet = sheetAt(p);
+    if (sheet === null && boardChosen === null) return;
+    boardChosen = sheet === null ? null : (sheet.board?.id ?? PAGE_SHEET);
+    announce(sheet === null ? t("draw.board.unchosen") : sheetText(sheet));
+  };
+
+  /// Scrive `arranged`, un comando delle tavole, in un passo col nome
+  /// `label`, e sceglie la tavola della sua prima chiave. Falso se non c'era
+  /// niente da scrivere, o se il motore l'ha rifiutato.
+  const writeBoard = (label: DrawKey, arranged: Arranged): boolean => {
+    const before = boardChosen;
+    boardChosen = arranged.keys[0] ?? boardChosen;
+    if (commit(label, asGesture(arranged.ops)) !== null) return true;
+    boardChosen = before;
+    return false;
+  };
+
+  /// Sposta la tavola `board` di (`dx`, `dy`) con gli oggetti di `carried`,
+  /// in un passo, e lo dice: dove sta adesso e `note`, a che cosa si è
+  /// agganciata.
+  const moveBoard = (board: Board, dx: number, dy: number, carried: readonly Unit[], note = ""): void => {
+    const model = engine.model;
+    if (model === null || !editable()) return;
+    if (!writeBoard("draw.action.board_move", moveBoardOps(model, board, dx, dy, carried, newIds(), scene.root.page))) return;
+    const [x, y] = boardById(board.id)?.rect ?? board.rect;
+    const args = { name: board.name, x: coordText(x), y: coordText(y) };
+    announce(noted(carried.length === 0 ? t("draw.board.moved", args) : plural(carried.length, "draw.board.moved.one", "draw.board.moved.other", args), note));
+  };
+
+  /// Aggiunge una tavola col rettangolo `rect`, in un passo, la sceglie e lo
+  /// dice, con `note`; in un disegno senza tavole la pagina diventa prima la
+  /// tavola 1. La carta somiglia a quella della tavola scelta.
+  const addBoard = (rect: Rect, note = ""): void => {
+    const model = engine.model;
+    if (model === null || !editable()) return;
+    const before = boardsNow().length;
+    const added = addBoardOps(model, rect, (n) => t("draw.board.name", { n }), newIds(), scene.root.page, chosenSheet()?.board ?? null);
+    if (added === "limit") announce(t("draw.board.limit", { count: before }));
+    else if (added === "paper") announce(t("draw.board.paper"));
+    if (typeof added === "string" || !writeBoard("draw.action.board_add", added)) return;
+    const list = boardsNow();
+    const board = boardById(added.keys[0]!);
+    if (board === null) return;
+    const said = { name: board.name, width: lengthSpoken(board.rect[2]), height: lengthSpoken(board.rect[3]) };
+    announce(noted(before === 0 && list.length > 1 ? t("draw.board.added.page", { ...said, first: list[0]!.name }) : t("draw.board.added", said), note));
+  };
+
+  /// Dà alla tavola, o alla pagina, di `sheet` il rettangolo `rect`, in un
+  /// passo, e lo dice, con `note`.
+  const resizeSheet = (sheet: Sheet, rect: Rect, note = ""): void => {
+    const model = engine.model;
+    if (model === null || !editable()) return;
+    const said = { width: lengthSpoken(rect[2]), height: lengthSpoken(rect[3]) };
+    if (sheet.board === null) {
+      if (rectText(rect) === rectText(sheet.rect)) return;
+      if (commit("draw.action.page_size", { op: "page", viewBox: rectText(rect) }) === null) return;
+      announce(noted(t("draw.board.page.resized", said), note));
+      return;
+    }
+    if (!writeBoard("draw.action.board_resize", resizeBoardOps(model, sheet.board, rect, newIds(), scene.root.page))) return;
+    announce(noted(t("draw.board.resized", { ...said, name: sheet.board.name }), note));
+  };
+
+  /// Toglie la tavola scelta, in un passo, e lo dice: il disegno resta, e si
+  /// sceglie la tavola che prende il suo posto. Tolta l'ultima, la sua carta
+  /// torna della pagina, che resta scelta. La pagina non si toglie.
+  const removeBoard = (): void => {
+    const sheet = chosenSheet();
+    const model = engine.model;
+    if (sheet === null || model === null || !editable()) return;
+    const board = sheet.board;
+    if (board === null) {
+      announce(t("draw.board.page.kept"));
+      return;
+    }
+    const at = boardsNow().findIndex((each) => each.id === board.id);
+    if (!writeBoard("draw.action.board_remove", removeBoardOps(model, board, indexer.extent(model), newIds()))) return;
+    const list = boardsNow();
+    if (list.length === 0) {
+      boardChosen = scene.root.page === null ? null : PAGE_SHEET;
+      announce(t("draw.board.removed.last", { name: board.name }));
+    } else {
+      const next = list[Math.min(at, list.length - 1)]!;
+      boardChosen = next.id;
+      announce(`${t("draw.board.removed", { name: board.name })} ${sheetText({ board: next, rect: next.rect })}`);
+    }
+    showPage();
+    showHandles();
+  };
+
+  /// Dà alla tavola di id `id` il nome `text`, ripulito, in un passo, e lo
+  /// dice. Falso se non è cambiato niente.
+  const writeBoardName = (id: string, text: string): boolean => {
+    const board = boardById(id);
+    const model = engine.model;
+    if (board === null || model === null || !editable()) return false;
+    const name = cleanName(text);
+    const renamed = renameBoardOps(model, board, name, newIds());
+    if (renamed === "foreign") {
+      announce(t("draw.board.foreign"));
+      return false;
+    }
+    if (!writeBoard("draw.action.board_rename", renamed)) return false;
+    announce(t("draw.board.renamed", { name }));
+    return true;
+  };
+
+  /// F2 con lo strumento Tavola: una finestra chiede il nome nuovo della
+  /// tavola scelta.
+  async function renameBoard(): Promise<void> {
+    const board = chosenSheet()?.board ?? null;
+    if (asking || board === null || !editable()) return;
+    asking = true;
+    cancelGesture();
+    try {
+      const answer = await promptForm({
+        title: t("draw.board.rename.dialog"),
+        fields: [{ id: "name", label: t("draw.board.rename.field"), value: board.name, kind: "text", required: true, maxLength: NAME_MAX }],
+      });
+      if (answer === null || disposed) return;
+      writeBoardName(board.id, answer.name ?? "");
+    } finally {
+      asking = false;
+    }
+  }
+
+  /// Le frecce con lo strumento Tavola: spostano la tavola scelta di 1, o di
+  /// 10 con Maiusc, con ciò che porta; con Ctrl o ⌘ allargano o stringono
+  /// il suo lato destro o quello in basso, o quello della pagina. Con
+  /// l'aggancio vanno di riga in riga della griglia, cinque con Maiusc.
+  /// `x` e `y` dicono l'asse del disegno, `grow` se allargare. Falso se non
+  /// c'è niente da muovere: allora le frecce muovono il cursore.
+  const nudgeBoard = (x: number, y: number, grow: number, fine: boolean, big: boolean): boolean => {
+    const sheet = chosenSheet();
+    const model = engine.model;
+    if (sheet === null || model === null) return false;
+    const [left, top, width, height] = sheet.rect;
+    const step = big ? NUDGE_SHIFT : NUDGE;
+    const lines = big ? GRID_MAJOR : 1;
+    if (fine) {
+      // Il lato non passa la prima riga dopo quello opposto, né la misura
+      // più piccola di una tavola.
+      const edge = (min: number, size: number, direction: number): number => {
+        if (direction === 0) return min + size;
+        if (gridOn()) return Math.max(lineBeyond(min + size, stepNow(), sign(direction), lines), lineBeyond(min, stepNow(), 1, 1));
+        return Math.max(min + size + direction * step, min + MIN_BOARD_SIDE);
+      };
+      const right = edge(left, width, x === 0 ? 0 : grow);
+      const bottom = edge(top, height, y === 0 ? 0 : grow);
+      resizeSheet(sheet, roundRect([left, top, right - left, bottom - top]));
+      return true;
+    }
+    if (sheet.board === null) return false;
+    const dx = x === 0 ? 0 : gridOn() ? lineBeyond(left, stepNow(), sign(x), lines) - left : x * step;
+    const dy = y === 0 ? 0 : gridOn() ? lineBeyond(top, stepNow(), sign(y), lines) - top : y * step;
+    moveBoard(sheet.board, roundDelta(dx), roundDelta(dy), onBoard(sheet.board.box, indexer.movable(model)));
+    return true;
+  };
+
+  /// Sceglie la tavola `at`, la porta in vista, o con `fit` la inquadra, e la
+  /// dice. Falso se non c'è.
+  const visitBoard = (at: number, fit = false): boolean => {
+    const board = boardsNow()[at];
+    if (board === undefined) return false;
+    cancelGesture();
+    boardChosen = board.id;
+    const area = viewArea();
+    if (!fit) frameBounds(board.box);
+    else if (area.w > 0 && area.h > 0) {
+      placed = true;
+      setCamera(fitted(board.box, area));
+    }
+    showPage();
+    showHandles();
+    announce(sheetText({ board, rect: board.rect }));
+    return true;
+  };
+
+  /// Tab con lo strumento Tavola: la tavola dopo quella scelta, o con Maiusc
+  /// quella prima; senza una tavola scelta, la prima o l'ultima. Oltre le
+  /// estremità il Tab esce dal foglio.
+  const walkBoards = (step: 1 | -1): boolean => {
+    const list = boardsNow();
+    const at = list.findIndex((board) => board.id === boardChosen);
+    return visitBoard(at < 0 ? (step > 0 ? 0 : list.length - 1) : at + step);
+  };
+
+  /// Alt+Pag↓ e Alt+Pag↑, con ogni strumento: la tavola dopo o prima di
+  /// quella scelta, o di quella al centro della vista, scelta e inquadrata.
+  /// Oltre le estremità lo si dice.
+  const stepBoard = (step: 1 | -1): void => {
+    const list = boardsNow();
+    if (list.length === 0) {
+      announce(t("draw.board.none"));
+      return;
+    }
+    let at = list.findIndex((board) => board.id === boardChosen);
+    if (at < 0) {
+      const here = boardAt(list, toScene(camera, viewCenter()));
+      at = here === null ? -1 : list.indexOf(here);
+    }
+    const next = at < 0 ? (step > 0 ? 0 : list.length - 1) : at + step;
+    if (next >= 0 && next < list.length) visitBoard(next, true);
+    else announce(t(step > 0 ? "draw.board.last" : "draw.board.first", { name: list[at]!.name }));
+  };
+
+  /// Esc con lo strumento Tavola: la tavola scelta si lascia. Falso se non
+  /// ce n'era una.
+  const leaveBoard = (): boolean => {
+    if (boardChosen === null) return false;
+    boardChosen = null;
+    showPage();
+    showHandles();
+    announce(t("draw.board.unchosen"));
+    return true;
+  };
+
+  /// Le maniglie dello strumento Tavola: la cornice della tavola scelta, o
+  /// della pagina, al rettangolo di adesso, con le maniglie e, mentre la si
+  /// tira, le misure; mentre se ne disegna una, il suo riquadro e le misure.
+  const boardHandles = (): OverlayHandle[] => {
+    if (tool !== "board" || !editable()) return [];
+    const g = current?.kind === "board" ? current : null;
+    const sizeLabel = ([x, y, width, height]: Rect): OverlayHandle => ({ kind: "label", x: x + width / 2, y: y + height, text: measuresText([width, height]) });
+    if (g !== null && g.mode === "draw") {
+      if (g.rect === null) return [];
+      const [x, y, width, height] = g.rect;
+      return [{ kind: "box", x, y, width, height, matrix: IDENTITY }, sizeLabel(g.rect)];
+    }
+    const shown = sheetView();
+    if (shown === null) return [];
+    const rect = sheetRect(shown.sheet.board) ?? shown.sheet.rect;
+    const [x, y, width, height] = rect;
+    const out: OverlayHandle[] = [{ kind: "box", x, y, width, height, matrix: IDENTITY }];
+    // Mentre la tavola si sposta, le maniglie non servono.
+    if (g?.mode !== "move") {
+      for (const { grip, at } of shown.view.spots) if (grip !== "rotate") out.push({ kind: "grip", x: at[0], y: at[1] });
+    }
+    if (g?.mode === "resize") out.push(sizeLabel(rect));
+    return out;
+  };
+
+  /// Con lo strumento Tavola, il cursore sopra una maniglia della tavola
+  /// scelta, o della pagina, dice dove tira; sopra una tavola, senza Maiusc,
+  /// che la si sposta.
+  const hoverBoard = (event: PointerEvent): void => {
+    if (event.buttons !== 0 || !editable()) {
+      showGrip(null);
+      return;
+    }
+    const point = sceneAt(event.clientX, event.clientY);
+    const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
+    const shown = sheetView();
+    const grip = shown === null ? null : gripAt(shown.view, point, camera.scale, pointer);
+    if (shown !== null && grip !== null && grip !== "rotate") showGrip(gripCursor(shown.view.frame, grip, camera.angle));
+    else showGrip(!shift && boardAt(boardsNow(), point) !== null ? "move" : null);
+  };
+
+  /// La pagina che i righelli segnano: senza tavole la pagina, anche mentre
+  /// la si tira; con le tavole, quella scelta.
+  const rulerPage = (): Bounds | null => {
+    if (boardsNow().length === 0) {
+      const rect = sheetRect(null);
+      return rect === null ? pageBox() : rectBounds(rect);
+    }
+    const sheet = chosenSheet();
+    return sheet === null ? null : rectBounds(sheetRect(sheet.board) ?? sheet.rect);
   };
 
   // --- Il Lazo -----------------------------------------------------------------
@@ -9323,6 +10039,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
   /// La maniglia sotto il puntatore che passa senza premere, nel cursore.
   const hoverGrip = (event: PointerEvent): void => {
+    if (tool === "board") {
+      hoverBoard(event);
+      return;
+    }
     const view = event.buttons === 0 ? frameNow() : null;
     if (view === null) {
       showGrip(null);
@@ -9579,6 +10299,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           for (const sample of samples) lassoAdd(g, toPoint(sample));
           lassoUpdate(g);
           break;
+        case "board":
+          if (g.from === null) boardStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          boardUpdate(g);
+          break;
         case "nodes":
           if (g.from === null) nodesStart(g, toPoint(samples[0]!));
           g.end = toPoint(samples[samples.length - 1]!);
@@ -9664,6 +10389,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "lasso":
           lassoEnd(g);
           return;
+        case "board":
+          boardEnd(g);
+          return;
         case "nodes":
           nodesEnd(g, stroke.timeStamp);
           return;
@@ -9706,7 +10434,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       current = null;
       if (g.kind === "ink") clearTimeout(holdTimer);
       if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso" || (g.kind === "builder" && g.mode === "objects")) select(g.base);
-      if (g.kind === "select" || g.kind === "guide") showGrip(null);
+      if (g.kind === "select" || g.kind === "guide" || g.kind === "board") showGrip(null);
       // I nodi tornano com'erano, e le forme e gli oggetti con loro.
       if (g.kind === "nodes") {
         focused = g.shapes;
@@ -9714,8 +10442,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         setNodes(g.nodes);
       }
       clearPreviews();
-      // Il tracciato della penna resta com'era prima del gesto.
+      // Il tracciato della penna resta com'era prima del gesto, e le tavole
+      // come prima del loro.
       if (g.kind === "bezier") showBezier();
+      if (g.kind === "board") showPage();
     },
     ...(options.touch === undefined ? {} : { touch: options.touch }),
   };
@@ -12757,12 +13487,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   ];
 
   /// «Adatta la pagina al disegno»: la pagina va attorno a tutto il disegno,
-  /// livelli bloccati e nascosti compresi, con un margine. È un passo di
+  /// livelli bloccati e nascosti compresi, e alle tavole, con un margine. È un passo di
   /// annulla, e gli oggetti restano dove sono.
   function fitPage(): void {
     if (!has("grid") || !editable()) return;
     cancelGesture();
-    const extent = indexer.extent(engine.model!);
+    // La pagina copre anche le tavole.
+    let extent = indexer.extent(engine.model!);
+    for (const board of boardsNow()) extent = union(extent, board.box);
     const viewBox = fittedPage(scene.root.page, extent);
     if (viewBox === null) {
       announce(t(extent === null ? "draw.page.fit.empty" : "draw.page.fit.already"));
@@ -12924,6 +13656,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       nudgeNodes(x, y, fine, event.shiftKey);
       return true;
     }
+    if (tool === "board" && pressed === null && selection.length === 0 && editable() && nudgeBoard(x, y, grow, fine, event.shiftKey)) return true;
     if (tool !== "nodes" && tool !== "bezier" && pressed === null && selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       const [gx, gy] = [x === 0 ? 0 : grow, y === 0 ? 0 : grow];
@@ -13006,8 +13739,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Tab con una selezione: l'oggetto dopo l'ultimo scelto, o con Maiusc
   /// quello prima del primo. Oltre le estremità il Tab esce dal foglio. Con
   /// lo strumento Nodi passa prima di nodo in nodo, e oltre l'ultimo
-  /// all'oggetto dopo; col Costruttore, di regione in regione.
+  /// all'oggetto dopo; col Costruttore, di regione in regione; con lo
+  /// strumento Tavola, di tavola in tavola.
   const walk = (step: 1 | -1): boolean => {
+    if (tool === "board" && pressed === null) return walkBoards(step);
     if (builderKeysOn()) return walkRegions(step);
     if (nodeKeysOn() && walkNodes(step)) return true;
     if (selection.length === 0 || pressed !== null) return false;
@@ -13417,6 +14152,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti delle tavole, se le parti `at` hanno lo strumento Tavola:
+  /// Alt+Pag con ogni strumento, gli altri con lo strumento Tavola.
+  const boardKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("board")
+      ? [
+          {
+            title: t("draw.keys.boards"),
+            rows: [
+              ["Alt-PageUp Alt-PageDown", t("draw.keys.board.step")],
+              ["Tab Shift-Tab", t("draw.keys.board.walk")],
+              ["Home End", t("draw.keys.board.ends")],
+              [ARROW_KEYS, t(gridOn(at) ? "draw.keys.board.nudge.grid" : "draw.keys.board.nudge")],
+              [`Mod-${ARROW_KEYS}`, t(gridOn(at) ? "draw.keys.board.resize.grid" : "draw.keys.board.resize")],
+              ["Delete", t("draw.keys.board.delete")],
+              ["F2", t("draw.keys.board.rename")],
+              ["Escape", t("draw.keys.board.deselect")],
+              ["Shift", t("draw.keys.board.over")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti della selezione avanzata.
   const selectionKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("selection")
@@ -13475,6 +14232,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...recognizeKeys(at),
     ...bezierKeys(at),
     ...textKeys(at),
+    ...boardKeys(at),
     ...gridKeys(at),
     ...guidesKeys(at),
     ...rulersKeys(at),
@@ -14406,6 +15164,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (onSurface && event.key === "Enter" && !event.shiftKey && options.links !== undefined) {
         if (pressed !== null) return;
         if (!openSelectedLink()) announce(t("draw.link.open.none"));
+      } else if (onSurface && (event.key === "PageUp" || event.key === "PageDown") && !event.shiftKey && has("board")) {
+        if (pressed !== null || current !== null) return;
+        stepBoard(event.key === "PageDown" ? 1 : -1);
       } else if (event.key !== "F10" || event.shiftKey || !focusArrange()) {
         return;
       }
@@ -14442,6 +15203,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       visitNode(event.key === "Home" ? 0 : nodeList().length - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End") && builderKeysOn()) {
       visitRegion(event.key === "Home" ? 0 : builderNow()!.regions.regions.length - 1);
+    } else if (onSurface && (event.key === "Home" || event.key === "End") && tool === "board") {
+      if (pressed !== null || !visitBoard(event.key === "Home" ? 0 : boardsNow().length - 1)) return;
     } else if (onSurface && (event.key === "Home" || event.key === "End")) {
       const units = walkList(selection.length === 0 ? null : currentIndex().get(selection[0]!));
       if (pressed !== null || !visit(units, event.key === "Home" ? 0 : units.length - 1)) return;
@@ -14452,6 +15215,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       else if (builderKeysOn()) pickRegion();
       else if (pressed === null) press(event.timeStamp);
       else release();
+    } else if (onSurface && event.key === "F2" && tool === "board") {
+      if (pressed !== null) return;
+      void renameBoard();
     } else if (onSurface && event.key === "F2" && (has("text") || has("layers"))) {
       if (pressed !== null) return;
       // Un testo si scrive; un altro oggetto, coi livelli, si rinomina.
@@ -14489,6 +15255,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Con la penna di Bézier, l'ultimo nodo del tracciato.
       if (current !== null) return;
       deleteBezierNode(drawing()!);
+    } else if ((event.key === "Delete" || event.key === "Backspace") && tool === "board" && selection.length === 0) {
+      // Con lo strumento Tavola, la tavola scelta; il disegno resta.
+      if (pressed !== null || current !== null) return;
+      removeBoard();
     } else if (event.key === "Delete" || event.key === "Backspace") {
       if (selection.length === 0) return;
       deleteSelection();
@@ -14519,6 +15289,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         regionActive = -1;
         showHandles();
         announce(t("draw.builder.cleared"));
+      } else if (tool === "board" && selection.length === 0 && leaveBoard()) {
+        // Con lo strumento Tavola, la tavola scelta si lascia.
       } else if (leaveIsolation(false)) {
         // Fuori di un gruppo, scelto quello da cui si è usciti.
       } else if (selection.length > 0) {
@@ -14612,7 +15384,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Chi sposta o cancella guarda oggetti che il testo nuovo può non
       // avere più: il gesto si annulla. Tratto e forma si scrivono alla fine,
       // sul livello che c'è allora.
-      if (current !== null && (current.kind === "select" || current.kind === "nodes" || current.kind === "erase")) cancelGesture();
+      if (current !== null && (current.kind === "select" || current.kind === "nodes" || current.kind === "erase" || current.kind === "board")) cancelGesture();
       engine = next;
       refresh();
     },
@@ -14631,6 +15403,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       history.clear();
       selection = [];
       chosen = null;
+      boardChosen = null;
       isolation = null;
       cursor = null;
       cursorMark.hidden = true;

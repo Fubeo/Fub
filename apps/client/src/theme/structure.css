@@ -1301,6 +1301,10 @@ html, body, #app {
 .draw-surface[data-grip="rotating"] {
   cursor: grabbing;
 }
+/* Con lo strumento Tavola, sopra una tavola che si sposta. */
+.draw-surface[data-grip="move"] {
+  cursor: move;
+}
 /* Sopra un righello il cursore è la freccia, anche sopra una maniglia che
    il righello copre; l'angolo fra i due apre un menu. */
 .draw-surface[data-ruler] {
@@ -1316,6 +1320,26 @@ html, body, #app {
   pointer-events: none;
   transform-origin: 0 0;
   forced-color-adjust: none;
+}
+/* Le carte delle tavole sotto il disegno, e i loro nomi sopra. */
+.draw-sheets {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Il nome sta sopra l'angolo della tavola, largo al più quanto lei, e gira
+   col foglio attorno all'angolo. */
+.draw-sheet-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform-origin: 0 0;
 }
 .draw-preview {
   position: absolute;

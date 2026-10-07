@@ -109,6 +109,17 @@
     0 0 0 1px var(--border),
     var(--shadow-sm);
 }
+/* Il nome di una tavola, sul tavolo sopra di lei: quello della tavola
+   scelta più scuro. */
+.draw-sheet-name {
+  padding-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-sheet-name[data-chosen] {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
 
 /* La griglia: righe grigie e trasparenti, che si vedono sulla carta bianca e
    sul tavolo di ogni tema. Una ogni cinque è più marcata, per contare. */

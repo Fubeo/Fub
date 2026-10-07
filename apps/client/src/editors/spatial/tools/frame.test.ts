@@ -6,6 +6,7 @@ import type { Bounds } from "../scene/geometry";
 import { apply, compose, IDENTITY, rotate, translate, type Matrix, type Point } from "../scene/matrix";
 import {
   angleOf,
+  edgeView,
   frameCenter,
   frameGuides,
   frameSize,
@@ -108,6 +109,34 @@ describe("la maniglia sotto il puntatore", () => {
     // Fra il lato in alto e la maniglia che ruota, 24 pixel più su.
     expect(gripAt(view, [150, 86], 1, "touch")).toBe("n");
     expect(gripAt(view, [150, 82], 1, "touch")).toBe("rotate");
+  });
+});
+
+describe("la cornice di una tavola", () => {
+  const sheet = box(0, 0, 400, 200);
+
+  it("ha le maniglie sui bordi, senza margine e senza quella che ruota", () => {
+    const view = edgeView(sheet, 1)!;
+    expect(view.padded).toEqual(sheet);
+    expect(grips(view)).toEqual(["nw", "n", "ne", "e", "se", "s", "sw", "w"]);
+    expect(at(view, "nw")).toEqual([0, 0]);
+    expect(at(view, "e")).toEqual([400, 100]);
+    expect(at(view, "s")).toEqual([200, 200]);
+  });
+
+  it("su un lato corto sullo schermo ha soltanto gli angoli", () => {
+    // A un decimo, 40 per 20 pixel: i lati verticali sono corti.
+    expect(grips(edgeView(sheet, 0.1)!)).toEqual(["nw", "n", "ne", "se", "s", "sw"]);
+  });
+
+  it("si prende dal bordo, e dentro solo da vicino", () => {
+    const view = edgeView(sheet, 1)!;
+    expect(gripAt(view, [404, 204], 1, "mouse")).toBe("se");
+    expect(gripAt(view, [390, 190], 1, "mouse")).toBeNull();
+  });
+
+  it("non c'è a una scala che non è positiva", () => {
+    expect(edgeView(sheet, 0)).toBeNull();
   });
 });
 
