@@ -8,8 +8,8 @@
 //! sconosciuta, e un SVG rotto non ferma gli altri. Il Markdown accanto non
 //! cambia. Il formato è nel [formato della
 //! scena](../../../docs/reference/scene-format.md), §9. Con la stessa feature
-//! un disegno si esporta in PNG e in PDF (`fub.draw`), col titolo che il
-//! formato gli dà.
+//! un disegno si esporta in PNG, JPEG, SVG e PDF (`fub.draw`), col titolo che
+//! il formato gli dà, intero, per tavole o per selezione.
 //!
 //! In fondo c'è il micro-bench che confronta l'indicizzazione di 500 disegni
 //! con quella di 500 note della stessa dimensione: si esegue a mano, in
@@ -751,6 +751,168 @@ fn a_drawing_exports_to_png_and_pdf_with_its_title() {
             "{target}"
         );
     }
+}
+
+/// La misura di un PNG, dall'intestazione `IHDR`.
+fn png_size(bytes: &[u8]) -> (u32, u32) {
+    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"));
+    let word = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap());
+    (word(16), word(20))
+}
+
+/// La misura di un JPEG, dal suo `SOF0`.
+fn jpeg_size(bytes: &[u8]) -> (u32, u32) {
+    assert!(bytes.starts_with(&[0xFF, 0xD8, 0xFF, 0xE0]), "SOI e JFIF");
+    let at = bytes
+        .windows(2)
+        .position(|w| w == [0xFF, 0xC0])
+        .expect("un SOF0");
+    let half = |at: usize| u32::from(u16::from_be_bytes([bytes[at], bytes[at + 1]]));
+    (half(at + 7), half(at + 5))
+}
+
+fn contains(bytes: &[u8], what: &str) -> bool {
+    bytes.windows(what.len()).any(|w| w == what.as_bytes())
+}
+
+/// Le opzioni della finestra «Esporta» sul montaggio di produzione: le
+/// tavole, la selezione e lo sfondo, nei quattro formati, da un vault vero.
+/// Ogni export si fa due volte, e dà gli stessi byte.
+#[test]
+fn a_drawing_exports_its_boards_and_its_selection_in_four_formats() {
+    let (_dir, root) = vault();
+    write(&root, "disegni/quaderno.svg", QUADERNO);
+    let (mounted, _) = mount(&root);
+    let ws = &mounted.workspace;
+    let targets: Vec<String> = ws.export_targets().into_iter().map(|t| t.id).collect();
+    for target in ["draw.png", "draw.jpeg", "draw.svg", "draw.pdf"] {
+        assert!(targets.iter().any(|t| t == target), "{targets:?}");
+    }
+    type Files = Vec<(String, Vec<u8>)>;
+    let run = |target: &str, doc: &str, options: serde_json::Value| -> (Files, Vec<String>) {
+        let request = ExportRequest::new(target, ExportSelection::Documents(vec![id(doc)]))
+            .with_options(options.clone());
+        let once = |request: &ExportRequest| {
+            let report = ws.export(request).unwrap();
+            let files: Files = report
+                .artifacts
+                .iter()
+                .map(|a| (a.path.clone(), a.as_bytes().unwrap().to_vec()))
+                .collect();
+            let log = report.log.iter().map(|n| n.message.clone()).collect();
+            (files, log)
+        };
+        let first = once(&request);
+        assert_eq!(once(&request), first, "{target} {options}");
+        first
+    };
+
+    // Due tavole in PNG: un file ciascuna, nell'ordine del disegno.
+    let (files, log) = run(
+        "draw.png",
+        "disegni/quaderno.svg",
+        serde_json::json!({"scope": "boards", "boards": ["b00000004", "b00000002"], "scale": 1}),
+    );
+    assert!(log.is_empty(), "{log:?}");
+    let paths: Vec<&str> = files.iter().map(|(path, _)| path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "disegni/quaderno (Mappa del porto).png",
+            "disegni/quaderno (Copertina).png"
+        ]
+    );
+    for (_, bytes) in &files {
+        assert_eq!(png_size(bytes), (600, 400));
+        assert!(contains(bytes, "Quaderno di viaggio"));
+    }
+
+    // Tutte le tavole in PDF: un file, una pagina e un segnalibro ciascuna.
+    let all = serde_json::json!({
+        "scope": "boards",
+        "boards": ["b00000001", "b00000002", "b00000003", "b00000004"],
+    });
+    let (files, log) = run("draw.pdf", "disegni/quaderno.svg", all);
+    assert!(log.is_empty(), "{log:?}");
+    let [(path, pdf)] = &files[..] else {
+        panic!("{files:?}");
+    };
+    assert_eq!(path, "disegni/quaderno.pdf");
+    assert!(contains(pdf, "/Count 4"));
+    assert!(contains(pdf, "/PageMode /UseOutlines"));
+    assert_eq!(
+        String::from_utf8_lossy(pdf)
+            .matches("/MediaBox [0 0 450 300]")
+            .count(),
+        4
+    );
+    for title in [
+        "Copertina",
+        "Mappa del porto",
+        "b00000003",
+        "Quaderno di viaggio",
+    ] {
+        assert!(contains(pdf, &format!("/Title ({title})")), "{title}");
+    }
+
+    // Il JPEG senza la carta: il bianco sotto, e la misura della scala.
+    let (files, log) = run(
+        "draw.jpeg",
+        "disegni/acqua.svg",
+        serde_json::json!({"background": "none", "scale": 0.5}),
+    );
+    assert!(log.is_empty(), "{log:?}");
+    let [(path, jpeg)] = &files[..] else {
+        panic!("{files:?}");
+    };
+    assert_eq!(path, "disegni/acqua.jpg");
+    assert_eq!(jpeg_size(jpeg), (800, 500));
+
+    // L'ellisse col collegamento in SVG: il suo riquadro, il collegamento
+    // che resta, niente del resto e niente di FubDraw.
+    let (files, log) = run(
+        "draw.svg",
+        "disegni/acqua.svg",
+        serde_json::json!({
+            "scope": "selection",
+            "selection": {"ids": ["o4d5e6f7g"], "box": [178, 138, 244, 124]},
+            "suffix": "nuvola",
+        }),
+    );
+    assert!(log.is_empty(), "{log:?}");
+    let [(path, svg)] = &files[..] else {
+        panic!("{files:?}");
+    };
+    assert_eq!(path, "disegni/acqua (nuvola).svg");
+    let svg = std::str::from_utf8(svg).unwrap();
+    assert!(
+        svg.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="178 138 244 124" width="244" height="124">"#),
+        "{svg}"
+    );
+    assert!(svg.contains(r#"href="../note/Nuvole.md#Cumuli""#), "{svg}");
+    assert!(svg.contains(r#"id="fub-paper""#), "{svg}");
+    for gone in ["Precipitazione", "mare.png", "fub:", "xmlns:fub"] {
+        assert!(!svg.contains(gone), "{gone}: {svg}");
+    }
+
+    // Il disegno intero in SVG: l'immagine del vault resta un path, e il log
+    // lo dice.
+    let (files, log) = run(
+        "draw.svg",
+        "disegni/acqua.svg",
+        serde_json::json!({"background": "none"}),
+    );
+    let [(path, svg)] = &files[..] else {
+        panic!("{files:?}");
+    };
+    assert_eq!(path, "disegni/acqua.svg");
+    let svg = std::str::from_utf8(svg).unwrap();
+    assert!(svg.contains(r#"href="foto/mare.png""#), "{svg}");
+    assert!(!svg.contains("fub-paper"), "{svg}");
+    assert_eq!(
+        log,
+        ["1 image is a vault file named by its path, and the SVG shows it only where that path leads to it: foto/mare.png"]
+    );
 }
 
 fn walk(root: &Utf8Path) -> Vec<String> {
