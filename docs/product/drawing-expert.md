@@ -203,9 +203,9 @@ Le regole stanno in `apps/client/src/editors/spatial/tools/topath.ts`.
 - **Un gruppo o un collegamento** passano il comando alle parti. Un blocco
   estraneo dentro un gruppo resta com'è, come ovunque.
 - **Testi e immagini non hanno un tracciato**, e nemmeno una forma vuota, come
-  un rettangolo largo zero: restano come sono, e il comando lo dice. Resta
-  com'è anche un oggetto con l'attributo di un altro programma il cui prefisso
-  è dichiarato sull'oggetto stesso: un'operazione non sa dichiararlo di nuovo.
+  un rettangolo largo zero: restano come sono, e il comando lo dice; un'immagine
+  si [ricalca](drawing-trace.md). Resta com'è anche un oggetto con l'attributo di
+  un altro programma il cui prefisso è dichiarato sull'oggetto stesso: un'operazione non sa dichiararlo di nuovo.
 - **È un passo solo**, «Oggetto in tracciato», e la selezione resta quella.
 
 ## Operazioni booleane

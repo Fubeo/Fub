@@ -65,6 +65,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Applica trasformazione | Esperto | «Applica trasformazione» |
 | Tracciato: oggetti, contorni e inchiostro in tracciato, scostamento, semplifica, unisci | Esperto | il menu «Tracciato»: «Oggetto in tracciato», «Contorno in tracciato», «Inchiostro in tracciato», «Scostamento…», «Semplifica…» e «Unisci» (`Ctrl+J`) |
 | Operazioni booleane | Esperto | «Operazioni booleane» |
+| Ricalca immagine | Esperto | «Ricalca immagine…», con un'immagine scelta da sola |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
 bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la

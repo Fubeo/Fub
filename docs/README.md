@@ -50,6 +50,7 @@ flowchart LR
 - [Disegni, tracciati](product/drawing-paths.md)
 - [Disegni, curve e tagli](product/drawing-curves.md)
 - [Disegni, spessore variabile](product/drawing-width.md)
+- [Disegni, ricalco delle immagini](product/drawing-trace.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)

@@ -72,3 +72,10 @@ barra in fondo al foglio ne scrive la descrizione, ciò che uno screen reader
 dice al posto dei pixel, oppure la dichiara decorativa, da saltare. Si può
 anche lasciarla senza, e ritrovarla poi fra i problemi della verifica:
 [Disegni, accessibilità](drawing-accessibility.md#la-descrizione-allinserimento).
+
+## Ricalcare
+
+Dal [livello Esperto](drawing-expert.md), «Ricalca immagine…» fa di
+un'immagine incollata o del vault un gruppo di tracciati pieni, da
+modificare come le altre forme, e la lascia nascosta sotto il gruppo:
+[Disegni, ricalco delle immagini](drawing-trace.md).
