@@ -1,11 +1,13 @@
 //! Lettura delle scene FubDraw: SVG testuali con pochi attributi `fub:*`.
 //!
 //! Il contratto è il [formato della scena](../../../docs/reference/scene-format.md),
-//! e i `§` dei commenti sono le sue sezioni. Questo crate lo legge e non scrive
-//! niente: le operazioni le applica la shell
+//! e i `§` dei commenti sono le sue sezioni. Questo crate lo legge e non lo
+//! modifica: le operazioni le applica la shell
 //! ([ADR 0203](../../../docs/decisions/0203-superfici-spaziali.md)), e qui si
 //! decide soltanto che cosa della sorgente è modificabile, che cosa è estraneo
-//! e dove sta, byte per byte.
+//! e dove sta, byte per byte. L'unico testo che scrive è quello di un export
+//! ([`export`]): il disegno ritagliato su una tavola o sulla selezione, e
+//! l'SVG pulito per il web.
 //!
 //! [`read`] restituisce una [`Scene`]: lo stato del documento, le voci in
 //! ordine di documento con i loro span, ciò che ne legge l'indice (§9) e la
@@ -35,6 +37,7 @@ mod annotation;
 mod brush;
 mod classify;
 mod diagnostics;
+pub mod export;
 mod geometry;
 pub mod ink;
 pub mod parametric;

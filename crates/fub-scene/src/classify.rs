@@ -1288,6 +1288,38 @@ fn board_allowed(doc: &Document<'_>, element: &Element<'_>, resolve: Resolve<'_>
             })
 }
 
+/// Le tavole del documento, in ordine di documento: i `view` della radice che
+/// la scena legge come tavole, col loro rettangolo. Di due con lo stesso id
+/// vale la prima.
+pub(crate) fn boards(doc: &Document<'_>) -> Vec<(NodeId, [f64; 4])> {
+    let (kinds, _) = resource_index(doc);
+    let resolve = |id: &str| kinds.get(id).copied();
+    let mut seen = HashSet::new();
+    let mut found = Vec::new();
+    for &child in doc.children(doc.root) {
+        let Some(element) = doc.element(child) else {
+            continue;
+        };
+        if !element.is_svg("view") {
+            continue;
+        }
+        let Some(id) = element.value(NS_NONE, "id") else {
+            continue;
+        };
+        if seen.contains(id) {
+            continue;
+        }
+        if classify(doc, child, Place::Root, &resolve).is_some_and(|(_, role)| role == Role::Board)
+        {
+            if let Some(rect) = board_box(element) {
+                seen.insert(id);
+                found.push((child, rect));
+            }
+        }
+    }
+    found
+}
+
 /// Il rettangolo di una tavola, dal suo `viewBox`, se è largo e alto più di
 /// zero.
 pub(crate) fn board_box(element: &Element<'_>) -> Option<[f64; 4]> {
