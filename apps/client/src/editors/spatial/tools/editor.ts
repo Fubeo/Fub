@@ -120,6 +120,7 @@ import { formatNumber } from "../number";
 import { attachPenInput, type FinishedStroke, type InkPointerType, type PenInputOptions, type StrokeStart } from "../pen/pen-input";
 import { isDefaultCurve, pressureCurve, sameCurve, validCurve, type PenCurve } from "../pen/pressure";
 import type { TouchPolicy } from "../pen/roles";
+import { pointAt } from "../scene/curves";
 import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
@@ -247,10 +248,13 @@ import type { Join } from "./offset";
 import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps } from "./paths";
 import type { BooleanKind } from "./boolean";
 import { combineOps, isShape, type Refused } from "./combine";
+import { crossings, cutAt, joinAcross, joinEnds, mapSubs, nodeSpot, type Spot } from "./cut";
+import { cuttable, dsOf, holdsOpenPath, joinOps, knifePieces, piecesOf, writePieces, type JoinRefused } from "./scissors";
 import { builderOf, buildOps, type Builder, type BuildRefused } from "./builder";
 import {
   bend,
   breakNodes,
+  curveAt,
   deleteNodes,
   handleAt,
   handleNode,
@@ -279,11 +283,13 @@ import {
   type Edited,
   type HandleRef,
   type KindOf,
+  type Link,
   type NodeKey,
   type NodeKind,
   type Subpath,
 } from "./nodes";
 import { collapsed, penKind, penNode, penPath, type PenNode } from "./bezier";
+import { curved, recurve, type CurveKind, type DraftNode } from "./curvature";
 import { draftOf, inkSpine, nodableOf, rewrite, rewriteOps, type Nodable, type NoNodes } from "./nodable";
 import type { Spine } from "./spine";
 import {
@@ -606,7 +612,7 @@ const RECENT_MAX = 6;
 
 /// Gli strumenti che il menu radiale offre quando chi disegna ne ha usati
 /// meno di tre: prima quelli che si alternano di più alla penna.
-const FILL_TOOLS: readonly ToolId[] = ["pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "nodes", "builder"];
+const FILL_TOOLS: readonly ToolId[] = ["pen", "eraser", "select", "highlighter", "lasso", "text", "rect", "ellipse", "line", "arrow", "polygon", "bezier", "nodes", "builder", "scissors"];
 
 /// La lettera dei pulsanti delle dimensioni del testo, in pixel.
 const SIZE_GLYPH_PX: readonly number[] = [12, 16, 22];
@@ -774,6 +780,11 @@ const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse:
 /// dito. Fra due vicini vince il più vicino.
 const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
 
+/// Quanto lontani due capi possono stare sullo schermo, in pixel, e con
+/// «Unisci» diventare un nodo solo: così si vedono toccarsi. Più lontani, li
+/// unisce una linea.
+const JOIN_PX = 2;
+
 /// Quanto lontano dal suo nodo si mostra una maniglia ritirata, in pixel:
 /// abbastanza da prenderla senza prendere il nodo.
 const FOLDED_PX = 20;
@@ -872,7 +883,11 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-boolean": ["M3 10a7 7 0 1 0 14 0a7 7 0 1 0-14 0", "M7 14a7 7 0 1 0 14 0a7 7 0 1 0-14 0"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
   "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
+  // Due anelli in basso, e le lame che si incrociano verso l'alto.
+  "draw-scissors": ["M3.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M15.5 18a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0", "M7.8 16.2L17 3", "M16.2 16.2L7 3"],
   "draw-bezier": ["M12 21L7 12l3-8h4l3 8z", "M12 21v-7.5", "M10.5 12a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
+  // Tre punti, e la curva che vi passa.
+  "draw-curvature": ["M4 18C4 11 7.5 7 12 7s8 4 8 11", "M2.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M10.5 7a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0", "M18.5 18a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-node-add": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M12 3v6", "M9 6h6"],
   "draw-node-delete": ["M3 19c4-6 14-6 18 0", "M10.5 13h3v3h-3z", "M9 6h6"],
   "draw-node-corner": ["M3 20l9-13 9 13", "M12 4l3 3-3 3-3-3z"],
@@ -940,7 +955,7 @@ interface LinkMark {
 }
 
 /// Un gesto in corso, dalla pipeline della penna.
-type Gesture = InkGesture | ShapeGesture | SelectGesture | LassoGesture | NodesGesture | BuilderGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
+type Gesture = InkGesture | ShapeGesture | SelectGesture | LassoGesture | NodesGesture | BuilderGesture | CutGesture | BezierGesture | EraseGesture | TextGesture | GuideGesture | RefusedGesture;
 
 interface GestureBase {
   /// Il tratto della pipeline: cambia quando un gesto lungo continua in un
@@ -1064,6 +1079,33 @@ interface BuilderGesture extends GestureBase {
   dragging: boolean;
 }
 
+/// Un gesto delle Forbici: un tocco taglia il contorno sotto, un
+/// trascinamento è il Coltello, che taglia lungo la sua scia, o con Alt
+/// dritto dal primo punto all'ultimo.
+interface CutGesture extends GestureBase {
+  readonly kind: "cut";
+  /// Dove è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// La scia del Coltello, nella scena.
+  readonly trail: Point[];
+  /// Oltre la soglia del trascinamento: prima, è un tocco.
+  dragging: boolean;
+}
+
+/// Dove tagliano le Forbici: la forma, il punto del suo tracciato, il nodo
+/// se ci cade, e dove si vede nella scena.
+interface CutSpot {
+  readonly unit: Unit;
+  readonly leaf: LeafNode;
+  readonly nodable: Nodable;
+  /// Dalle coordinate della forma a quelle della scena.
+  readonly matrix: Matrix;
+  readonly spot: Spot;
+  readonly node: NodeKey | null;
+  readonly at: Point;
+}
+
 /// I nodi scelti, per forma: la chiave è il percorso della forma nel
 /// modello, coi numeri separati da un punto.
 type NodePick = ReadonlyMap<string, ReadonlySet<NodeKey>>;
@@ -1140,13 +1182,41 @@ interface Reshaped {
   readonly moved: ReadonlyMap<NodeKey, NodeKey> | null;
 }
 
+/// Ciò che la Curvatura prende di un tracciato scelto: un nodo, o il punto
+/// di un segmento dove ne posa uno nuovo, e dove sta nella scena.
+interface CurveGrab {
+  readonly edit: Editing;
+  readonly node: NodeKey | null;
+  readonly segment: { readonly sub: number; readonly link: number; readonly t: number } | null;
+  readonly origin: Point;
+}
+
+/// Un tracciato come lo lascia un trascinamento della Curvatura: i nodi, il
+/// nodo spostato, i tipi, e dove sono finiti i nodi se se n'è posato uno.
+interface CurveDraft {
+  readonly subs: readonly Subpath[];
+  readonly key: NodeKey;
+  readonly kinds: ReadonlyMap<NodeKey, NodeKind>;
+  readonly moved: ReadonlyMap<NodeKey, NodeKey> | null;
+}
+
 /// Un gesto della penna di Bézier: aggiunge un nodo, chiude il tracciato sul
 /// primo nodo, o prende l'ultimo, che un tocco conclude e un trascinamento
-/// ne cambia la maniglia d'uscita.
+/// ne cambia la maniglia d'uscita. Con la Curvatura il trascinamento sposta
+/// il punto che prende, anche uno in mezzo (`point`), che un tocco fa
+/// passare da liscio a spigolo e ritorno.
 interface BezierGesture extends GestureBase {
   readonly kind: "bezier";
   readonly to: Destination;
-  mode: "add" | "close" | "last" | null;
+  /// La Curvatura, quando il gesto è cominciato.
+  readonly curve: boolean;
+  /// `path`: la Curvatura su un tracciato che c'è già ([`CurveGrab`]).
+  mode: "add" | "close" | "last" | "point" | "path" | null;
+  path: CurveGrab | null;
+  /// Il tracciato preso come lo lascia il trascinamento.
+  reshaped: CurveDraft | null;
+  /// Il nodo del tracciato che il gesto prende; -1 per uno nuovo.
+  index: number;
   /// Dove è sceso il puntatore e dov'è adesso, nella scena.
   from: Point | null;
   end: Point | null;
@@ -1186,14 +1256,14 @@ interface Typing {
 /// Un passo della penna di Bézier: i nodi di prima, o di dopo per un passo
 /// annullato, e che cosa ha fatto a quale nodo, per dirlo.
 interface DraftStep {
-  readonly nodes: readonly PenNode[];
+  readonly nodes: readonly DraftNode[];
   readonly label: DrawKey;
   readonly index: number;
 }
 
 /// Il tracciato della penna di Bézier, finché non si conclude.
 interface Drafting {
-  nodes: readonly PenNode[];
+  nodes: readonly DraftNode[];
   readonly done: DraftStep[];
   readonly undone: DraftStep[];
   /// Il livello dell'ultimo gesto, per l'anteprima fra un gesto e l'altro.
@@ -1548,8 +1618,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let polygonTool: PolygonTool = POLYGON_TOOL;
   /// Il nome dello strumento `id`: il Poligono, quando disegna stelle, si
   /// chiama Stella.
-  const toolLabel = (id: ToolId): DrawKey => (id === "polygon" && polygonTool.shape === "star" ? "draw.tool.star" : toolSpec(id).label);
-  const toolHint = (id: ToolId): DrawKey => (id === "polygon" && polygonTool.shape === "star" ? "draw.tool.star.hint" : toolSpec(id).description);
+  /// La penna di Bézier, con la Curvatura, si chiama Curvatura.
+  const toolLabel = (id: ToolId): DrawKey =>
+    id === "polygon" && polygonTool.shape === "star" ? "draw.tool.star" : id === "bezier" && curvature ? "draw.tool.curvature" : toolSpec(id).label;
+  const toolHint = (id: ToolId): DrawKey =>
+    id === "polygon" && polygonTool.shape === "star" ? "draw.tool.star.hint" : id === "bezier" && curvature ? "draw.tool.curvature.hint" : toolSpec(id).description;
   /// Gli spessori, o le dimensioni del testo, che la barra offre allo
   /// strumento di adesso.
   const widthsNow = (): readonly Width[] => (tool === "highlighter" ? HIGHLIGHTER_WIDTHS : tool === "text" ? TEXT_SIZES : WIDTHS);
@@ -1645,6 +1718,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly index: SceneIndex;
     readonly keys: string;
     readonly tool: ToolId;
+    readonly curve: boolean;
     readonly features: ReadonlySet<Feature>;
     readonly editable: boolean;
     readonly focused: readonly (readonly number[])[];
@@ -1659,6 +1733,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly subs: readonly Subpath[] | null;
     readonly matrix: Matrix;
   } | null = null;
+  /// Dove le Forbici taglierebbero sotto il puntatore che passa, o sotto il
+  /// cursore della tastiera: il contorno della forma e il punto si vedono
+  /// prima di tagliare. Vale per la scena in cui lo si è trovato.
+  let cutHover: { readonly index: SceneIndex; readonly spot: CutSpot } | null = null;
   /// Il Costruttore di forme sugli oggetti scelti, per la scena e la
   /// selezione in cui lo si è fatto; dalla scena alle coordinate delle sue
   /// regioni. `builder` è `null` se non c'è niente di scelto o se il calcolo
@@ -1683,6 +1761,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// id e il livello dell'anteprima. Si scrive quando si conclude, sul
   /// livello di allora.
   let drafting: Drafting | null = null;
+  /// Come posa i nodi la penna di Bézier: coi punti e le maniglie, o con la
+  /// Curvatura, dove si posano solo i punti e la curva vi passa morbida.
+  /// Vale finché l'editor vive, come il Poligono che fa le stelle.
+  let curvature = false;
+  /// L'ultimo punto che la Curvatura ha posato con un tocco: toccato di
+  /// nuovo subito, nello stesso posto, diventa uno spigolo.
+  let curveTap: { readonly index: number; readonly at: Point; readonly time: number } | null = null;
+  /// L'ultimo nodo di un tracciato scelto che la Curvatura ha toccato: due
+  /// tocchi lo fanno passare da liscio a spigolo e ritorno.
+  let curveNodeTap: { readonly shape: string; readonly key: NodeKey; readonly at: Point; readonly time: number } | null = null;
   /// Il puntatore sopra il foglio, senza premere, o il cursore mentre la
   /// penna di Bézier disegna: lì va il segmento che verrebbe.
   let hover: { readonly at: Point; readonly pointer: InkPointerType } | null = null;
@@ -1760,8 +1848,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // restano nascosti finché il livello non sale.
   const toolButtons = new Map<ToolId, HTMLButtonElement>();
   const toolGroup = group("draw.tools", true);
-  /// Le parole del pulsante del Poligono, che cambiano con la stella.
-  let relabelPolygon = (): void => {};
+  /// Le parole dei pulsanti che cambiano col modo dello strumento: il
+  /// Poligono con la stella, la penna di Bézier con la Curvatura.
+  const relabelTool = new Map<ToolId, () => void>();
   for (const spec of TOOLS) {
     const shortcut = spec.shortcut.toUpperCase();
     const control = button(toolGroup, "draw-button draw-tool", () => `${t(toolLabel(spec.id))} (${shortcut})`, spec.icon, () => pickTool(spec.id));
@@ -1779,19 +1868,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       hint.textContent = t(toolHint(spec.id));
     };
     relabels.push(label);
-    if (spec.id === "polygon") relabelPolygon = label;
+    relabelTool.set(spec.id, label);
     control.append(hint);
     toolButtons.set(spec.id, control);
   }
 
-  /// Il pulsante del Poligono come disegna adesso: l'icona e le parole della
-  /// stella o del poligono.
-  const showPolygonTool = (): void => {
-    const control = toolButtons.get("polygon");
+  /// Il pulsante dello strumento `id` come disegna adesso: l'icona e le
+  /// parole della stella o del poligono, della Curvatura o della penna.
+  const showToolMode = (id: ToolId): void => {
+    const control = toolButtons.get(id);
     const now = control?.querySelector("svg");
-    const glyph = iconEl(polygonTool.shape === "star" ? "draw-star" : "draw-polygon");
+    const glyph = iconEl(toolIcon(id));
     if (now != null && glyph !== null) now.replaceWith(glyph);
-    relabelPolygon();
+    relabelTool.get(id)?.();
   };
 
   // Le immagini del vault, dal livello Standard e se chi monta l'editor le
@@ -2929,14 +3018,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return found;
   };
 
+  /// La Curvatura su un tracciato che c'è già: con la penna di Bézier nel
+  /// modo Curvatura e nessun tracciato in corso, i nodi delle forme scelte
+  /// si spostano, si aggiungono e si tolgono come li disegna la Curvatura.
+  const curveOn = (): boolean => tool === "bezier" && curvature && drafting === null && has("bezier");
+
   /// Le forme di cui lo strumento Nodi modifica i nodi: con lo strumento
-  /// Nodi, se il livello lo offre, col disegno che si scrive. Di ogni oggetto
-  /// scelto, le forme scelte con lo strumento, o se non ce n'è nessuna tutte
-  /// quelle che hanno nodi. Ogni forma ne ha, anche un rettangolo, una
-  /// freccia o un tratto a penna; un testo e un'immagine no. Senza nessuna
-  /// forma, una chiave dice perché; `null`, che non c'è niente da dire.
+  /// Nodi, se il livello lo offre, o con la Curvatura ([`curveOn`]), col
+  /// disegno che si scrive. Di ogni oggetto scelto, le forme scelte con lo
+  /// strumento, o se non ce n'è nessuna tutte quelle che hanno nodi. Ogni
+  /// forma ne ha, anche un rettangolo, una freccia o un tratto a penna; un
+  /// testo e un'immagine no. Senza nessuna forma, una chiave dice perché;
+  /// `null`, che non c'è niente da dire.
   const nodeTargets = (): readonly Editing[] | DrawKey | null => {
-    if (tool !== "nodes" || !has("nodes") || !editable() || selection.length === 0) return null;
+    if (!((tool === "nodes" && has("nodes")) || curveOn()) || !editable() || selection.length === 0) return null;
     const out: Editing[] = [];
     let first: NoNodes | "flat" | null = null;
     for (const unit of selectedUnits()) {
@@ -2984,7 +3079,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const canEdit = editable();
     const last = resolvedFor;
     if (
-      last !== null && last.index === index && last.keys === keys && last.tool === tool && last.features === features &&
+      last !== null && last.index === index && last.keys === keys && last.tool === tool && last.curve === curveOn() && last.features === features &&
       last.editable === canEdit && last.focused === focused
     ) return false;
     const before = new Map(edits.map((edit) => [edit.key, edit]));
@@ -2995,7 +3090,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // più scelto o lo strumento è un altro, non lo è più.
     const still = focused.filter((path) => edits.some((edit) => samePath(edit.path, path)));
     if (still.length !== focused.length) focused = still;
-    resolvedFor = { index, keys, tool, features, editable: canEdit, focused };
+    resolvedFor = { index, keys, tool, curve: curveOn(), features, editable: canEdit, focused };
     const same = new Set(edits.flatMap((edit) => {
       const was = before.get(edit.key);
       return was !== undefined && sameNodes(was.subs, edit.subs) ? [edit.key] : [];
@@ -3065,6 +3160,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// La forma `edit` come la lascia il trascinamento in corso: i nodi, e i
   /// nodi scelti e i tipi dati, che una maniglia tirata fuori può cambiare.
   const draftOfEdit = (edit: Editing): { readonly subs: readonly Subpath[]; readonly chosen: ReadonlySet<NodeKey>; readonly kinds: KindOf } => {
+    const curve = current?.kind === "bezier" && current.path?.edit.key === edit.key ? current.reshaped : null;
+    if (curve !== null) return { subs: curve.subs, chosen: new Set([curve.key]), kinds: kindsOf(edit, curve.subs, curve.kinds) };
     const g = current?.kind === "nodes" ? current : null;
     const subs = g?.draft?.get(edit.key) ?? edit.subs;
     const reshaped = g?.reshaped?.shape === edit.key && g.draft?.has(edit.key) === true ? g.reshaped : null;
@@ -3078,7 +3175,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const { subs, chosen, kinds } = draftOfEdit(edit);
     const m = edit.matrix;
     const out: OverlayHandle[] = [{ kind: "outline", segments: writeNodes(subs), matrix: m }];
-    for (const { handle, point, folded } of shownHandles(edit, subs, chosen)) {
+    // La Curvatura non mostra maniglie: vengono dai punti.
+    for (const { handle, point, folded } of curveOn() ? [] : shownHandles(edit, subs, chosen)) {
       const [x, y] = apply(m, point);
       const sub = subs[handle.sub]!;
       // Il punto di una quadratica è dei suoi due nodi: una linea per
@@ -3291,6 +3389,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...frameHandles());
     handles.push(...hoverHandles());
     handles.push(...regionHandles());
+    handles.push(...cutHandles());
     handles.push(...pathsHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
@@ -4819,7 +4918,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const syncArrange = (): void => {
     resolveNodes();
     const focused = arrangeBar.contains(document.activeElement) || nodesBar.contains(document.activeElement);
-    const noding = typing === null && edits.length > 0;
+    const noding = typing === null && tool === "nodes" && edits.length > 0;
     const units = !noding && typing === null && BAR_FEATURES.some(has) && editable() && selection.length > 0 ? selectedUnits() : [];
     nodesBar.hidden = !noding;
     // Canc, coi nodi, elimina i nodi: il pulsante dell'oggetto non lo dice.
@@ -5478,9 +5577,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   /// Lo strumento `id` scelto dalla barra o dal suo tasto. Il Poligono scelto
-  /// di nuovo passa dal poligono alla stella, e ritorno.
+  /// di nuovo passa dal poligono alla stella, e ritorno; la penna di Bézier
+  /// alla Curvatura, e ritorno.
   function pickTool(id: ToolId): void {
     if (id === "polygon" && tool === "polygon") togglePolygon();
+    else if (id === "bezier" && tool === "bezier") toggleCurvature();
     else setTool(id);
   }
 
@@ -5489,7 +5590,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function setPolygonTool(next: PolygonTool): void {
     const turned = next.shape !== polygonTool.shape;
     polygonTool = next;
-    if (turned) showPolygonTool();
+    if (turned) showToolMode("polygon");
     if (current?.kind === "shape" && current.tool === "polygon") drawShape(current);
     syncProperties();
   }
@@ -5498,6 +5599,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function togglePolygon(): void {
     setPolygonTool({ ...polygonTool, shape: polygonTool.shape === "star" ? "polygon" : "star" });
     announce(t("draw.announce.tool", { tool: t(toolLabel("polygon")) }));
+  }
+
+  /// Dalla penna alla Curvatura, e ritorno. Il tracciato in corso resta: i
+  /// nodi che ha tengono il loro modo, i prossimi prendono l'altro. Il gesto
+  /// in corso finisce come era cominciato.
+  function toggleCurvature(): void {
+    curvature = !curvature;
+    curveTap = null;
+    showToolMode("bezier");
+    if (drafting !== null) showBezier();
+    else showHandles();
+    announce(t("draw.announce.tool", { tool: t(toolLabel("bezier")) }));
   }
 
   function cancelGesture(): void {
@@ -5736,6 +5849,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const grab = g.grab;
       if (grab?.kind !== "node" && grab?.kind !== "handle") return null;
       return point(guidesFor(g, editedUnits(), () => fixedNodes(grab.kind === "node" && !grab.pull)), nodeDragTo(g, grab));
+    }
+    if (g?.kind === "bezier" && g.mode === "path") {
+      if (g.reshaped === null) return null;
+      const [s, at] = parseKey(g.reshaped.key);
+      return point(guidesFor(g, editedUnits()), apply(g.path!.edit.matrix, g.reshaped.subs[s]!.nodes[at]!));
+    }
+    if (g?.kind === "bezier" && g.mode !== null && g.curve) {
+      // La Curvatura sposta punti, non maniglie.
+      if (g.dragging) return point(g.mode === "add" ? bezierGuides() : curveGuides(g), curveMoved(g));
+      return g.mode === "add" ? point(bezierGuides(), g.at!) : null;
     }
     if (g?.kind === "bezier" && g.mode !== null) {
       const p = g.dragging ? bezierHandle(g) : g.mode === "add" ? g.at : null;
@@ -6122,7 +6245,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         // il nodo non entra.
         const to = target(newIds());
         if (to === null) return { ...base, kind: "refused" };
-        return { ...base, kind: "bezier", to, mode: null, from: null, end: null, at: null, dragging: false };
+        return { ...base, kind: "bezier", to, curve: curvature, mode: null, path: null, reshaped: null, index: -1, from: null, end: null, at: null, dragging: false };
       }
       case "eraser":
         return { ...base, kind: "erase", last: null, marked: new Map() };
@@ -6164,6 +6287,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         };
       case "builder":
         return { ...base, kind: "builder", from: null, end: null, mode: null, additive: false, crossed: [], trail: [], base: [...selection], dragging: false };
+      case "scissors":
+        return { ...base, kind: "cut", from: null, end: null, trail: [], dragging: false };
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
         return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null };
@@ -6850,6 +6975,225 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (chosen.length === 0) return false;
     build(chosen, erase);
     return true;
+  };
+
+  // --- Le Forbici e il Coltello ------------------------------------------------
+
+  /// Perché la forma `nodable` non si taglia, a parole.
+  const uncutText = (nodable: Nodable | NoNodes): DrawKey =>
+    typeof nodable === "string" ? NO_NODES[nodable] : nodable.kind === "arrow" ? "draw.scissors.arrow" : "draw.nodes.stroke";
+
+  /// Dove le Forbici tagliano vicino a `p`, un punto della scena: sul
+  /// contorno della forma più in alto che vi passa, nel nodo se ci cade.
+  /// Altrimenti perché no: la forma sotto non si taglia, o lì non passa un
+  /// contorno.
+  const cutSpotAt = (p: Point, pointer: InkPointerType): CutSpot | DrawKey => {
+    const index = currentIndex();
+    const near = NODE_PX[pointer] / camera.scale;
+    const reach = HIT_PX[pointer] / camera.scale;
+    const around = Math.max(near, reach);
+    let refusal: DrawKey | null = null;
+    for (let i = index.units.length - 1; i >= 0; i--) {
+      const unit = index.units[i]!;
+      if (!unit.hits(p, around)) continue;
+      const shapes = unit.shapes();
+      for (let k = shapes.length - 1; k >= 0; k--) {
+        const { leaf, matrix } = shapes[k]!;
+        const nodable = nodableAt(leaf);
+        if (typeof nodable === "string" || !cuttable(nodable)) {
+          if (unit.shapeAt(p, around) === leaf) refusal ??= uncutText(nodable);
+          continue;
+        }
+        const node = nodeAt(nodable.subs, matrix, p, near);
+        if (node !== null) {
+          const [s, at] = parseKey(node);
+          return { unit, leaf, nodable, matrix, spot: nodeSpot(nodable.subs, s, at), node, at: apply(matrix, nodable.subs[s]!.nodes[at]!) };
+        }
+        const spot = linkAt(nodable.subs, matrix, p, reach);
+        if (spot !== null) {
+          const { from, curve } = curveAt(nodable.subs[spot.sub]!, spot.link);
+          return { unit, leaf, nodable, matrix, spot, node: null, at: apply(matrix, pointAt(from, curve, spot.t)) };
+        }
+      }
+    }
+    return refusal ?? "draw.scissors.miss";
+  };
+
+  /// Dove tagliano le Forbici, a parole: il nodo o il contorno, e di quale
+  /// oggetto.
+  const cutSpotText = (found: CutSpot): string => {
+    const name = labelOf(found.unit);
+    if (found.node === null) return t("draw.scissors.cursor.edge", { name });
+    const [s, at] = parseKey(found.node);
+    const before = found.nodable.subs.slice(0, s).reduce((sum, sub) => sum + sub.nodes.length, 0);
+    return t("draw.scissors.cursor.node", { index: before + at + 1, name });
+  };
+
+  /// Il puntatore, o il cursore della tastiera, passa sopra `p` senza
+  /// premere: con le Forbici si vede dove taglierebbero. Il dito non passa:
+  /// tocca.
+  const hoverCut = (p: Point | null, pointer: InkPointerType): void => {
+    let next: typeof cutHover = null;
+    if (p !== null && pointer !== "touch" && tool === "scissors" && has("scissors") && editable()) {
+      const found = cutSpotAt(p, pointer);
+      if (typeof found !== "string") next = { index: currentIndex(), spot: found };
+    }
+    if (next === null && cutHover === null) return;
+    cutHover = next;
+    showHandles();
+  };
+
+  /// Le Forbici sopra un contorno: il contorno e i nodi della forma, più
+  /// tenui, e la croce dove tagliano. Il Coltello: la sua scia, o con Alt la
+  /// linea dritta dal primo punto.
+  const cutHandles = (): OverlayHandle[] => {
+    const g = current?.kind === "cut" ? current : null;
+    if (g !== null) {
+      if (!g.dragging || g.from === null || g.end === null) return [];
+      return [{ kind: "trail", points: alt ? [g.from, g.end] : [...g.trail, g.end] }];
+    }
+    const hovered = cutHover;
+    if (hovered === null || tool !== "scissors" || hovered.index !== currentIndex()) return [];
+    const { nodable, matrix, at } = hovered.spot;
+    const out: OverlayHandle[] = [{ kind: "outline", segments: writeNodes(nodable.subs), matrix, hint: true }];
+    for (const sub of nodable.subs) {
+      sub.nodes.forEach((node, k) => {
+        const [x, y] = apply(matrix, node);
+        out.push({ kind: "node", x, y, shape: NODE_SHAPES[innerNode(sub, k) ? kindOf(sub, k) : "corner"], selected: false, hint: true });
+      });
+    }
+    out.push({ kind: "cross", x: at[0], y: at[1] });
+    return out;
+  };
+
+  /// Il punto `p` del gesto delle Forbici: oltre la soglia del trascinamento
+  /// è il Coltello, e la scia lo segue.
+  const cutAdd = (g: CutGesture, p: Point): void => {
+    if (g.from === null) {
+      g.from = p;
+      g.end = p;
+      g.trail.push(p);
+      return;
+    }
+    g.end = p;
+    if (!g.dragging && Math.hypot(p[0] - g.from[0], p[1] - g.from[1]) * camera.scale > DRAG_PX[g.pointer]) g.dragging = true;
+    const tail = g.trail[g.trail.length - 1]!;
+    if (Math.hypot(p[0] - tail[0], p[1] - tail[1]) * camera.scale < LASSO_STEP_PX) return;
+    g.trail.push(p);
+    if (g.trail.length > LASSO_MAX_POINTS) {
+      const kept = g.trail.filter((_, at) => at % 2 === 0 || at === g.trail.length - 1);
+      g.trail.splice(0, g.trail.length, ...kept);
+    }
+  };
+
+  /// Il gesto delle Forbici finisce: un tocco taglia dove tocca, un
+  /// trascinamento è il Coltello.
+  const cutEnd = (g: CutGesture): void => {
+    current = null;
+    if (g.from === null || g.end === null) {
+      showHandles();
+      return;
+    }
+    if (g.dragging) {
+      const tail = g.trail[g.trail.length - 1]!;
+      const points = alt ? [g.from, g.end] : tail[0] === g.end[0] && tail[1] === g.end[1] ? [...g.trail] : [...g.trail, g.end];
+      showHandles();
+      knife(points);
+      return;
+    }
+    const found = cutSpotAt(g.from, g.pointer);
+    showHandles();
+    if (typeof found === "string") announce(t(found));
+    else snip(found);
+  };
+
+  /// Le Forbici tagliano in `found`, in un passo di annulla: ogni pezzo
+  /// diventa un oggetto, e i pezzi sono la selezione. Di una forma in un
+  /// gruppo, il gruppo.
+  const snip = (found: CutSpot): void => {
+    const model = engine.model;
+    if (model === null) return;
+    const cut = cutAt(found.nodable.subs, [found.spot]);
+    if (cut === null) {
+      announce(t("draw.scissors.end"));
+      return;
+    }
+    const written = dsOf(piecesOf(cut));
+    if (written === null) {
+      announce(t("draw.unchanged"));
+      return;
+    }
+    const plan = new Plan(model, newIds());
+    const node = nodeOf(model, { path: pathOf(found.leaf) });
+    const keys = writePieces(plan, node, written);
+    if (keys === null) {
+      announce(t("draw.nodes.unwritable"));
+      return;
+    }
+    const picked = found.unit.node === found.leaf ? keys : [plan.keyOf(found.unit.node, found.unit.key)];
+    if (arrange("draw.action.scissors", plan.finish(picked)) === null) return;
+    announce(written.length === 1 ? t("draw.scissors.opened") : t("draw.scissors.split", { count: written.length }));
+  };
+
+  /// Il Coltello lungo `points`, una spezzata della scena, in un passo di
+  /// annulla: divide le forme chiuse che attraversa da parte a parte e
+  /// taglia i tracciati aperti dove li incrocia. Taglia gli oggetti scelti,
+  /// o senza selezione quelli che attraversa; i pezzi sono la selezione
+  /// dopo, e di una forma in un gruppo il gruppo.
+  const knife = (points: readonly Point[]): void => {
+    const model = engine.model;
+    if (model === null || points.length < 2) return;
+    const blade: Subpath[] = [{ nodes: [...points], links: points.slice(1).map((): Link => ({ kind: "line" })), closed: false }];
+    const reach = new BoundsBuilder();
+    for (const p of points) reach.include(p);
+    const box = reach.finish()!;
+    const units = selection.length > 0
+      ? selectedUnits()
+      : currentIndex().units.filter(({ bounds }) => bounds !== null && bounds.max[0] >= box.min[0] && bounds.min[0] <= box.max[0] && bounds.max[1] >= box.min[1] && bounds.min[1] <= box.max[1]);
+    const plan = new Plan(model, newIds());
+    const picked: string[] = [];
+    let objects = 0;
+    let pieces = 0;
+    let skipped = 0;
+    for (const unit of units) {
+      let inside = false;
+      for (const { leaf, matrix } of unit.shapes()) {
+        const inverse = invert(matrix);
+        if (inverse === null) continue;
+        const local = mapSubs(blade, inverse);
+        const nodable = nodableAt(leaf);
+        if (typeof nodable === "string") {
+          if (unit.node === leaf && points.some((p, k) => k > 0 && unit.touches(points[k - 1]!, p, 0))) skipped++;
+          continue;
+        }
+        if (!cuttable(nodable)) {
+          if (crossings(nodable.subs, local).length > 0) skipped++;
+          continue;
+        }
+        const written = knifePieces(nodable.subs, local);
+        if (written === null) continue;
+        const node = nodeOf(model, { path: pathOf(leaf) });
+        // Una forma che non si riscrive si prova prima a parte: le sue
+        // operazioni a metà non entrano nel passo delle altre.
+        if (writePieces(new Plan(model, newIds()), node, written) === null) {
+          skipped++;
+          continue;
+        }
+        const keys = writePieces(plan, node, written)!;
+        objects++;
+        pieces += written.length;
+        if (unit.node === leaf) picked.push(...keys);
+        else inside = true;
+      }
+      if (inside) picked.push(plan.keyOf(unit.node, unit.key));
+    }
+    const rest = skipped === 0 ? "" : ` ${plural(skipped, "draw.knife.skipped.one", "draw.knife.skipped.other")}`;
+    if (objects === 0) {
+      announce(`${t("draw.knife.none")}${rest}`);
+      return;
+    }
+    if (arrange("draw.action.knife", plan.finish(picked)) === null) return;
+    announce(`${plural(objects, "draw.knife.cut.one", "draw.knife.cut.other", { pieces })}${rest}`);
   };
 
   // --- I gesti dei nodi --------------------------------------------------------
@@ -7598,6 +7942,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // sul primo nodo chiude il tracciato, uno sull'ultimo lo conclude. Si
   // scrive quando si conclude, in un passo solo; fino ad allora Annulla e
   // Ripeti percorrono i suoi passi.
+  //
+  // Con la Curvatura un tocco posa un punto liscio, e la curva passa morbida
+  // per tutti; con Alt, o col doppio tocco, uno spigolo. Un trascinamento
+  // sposta il punto che prende, un tocco su un punto in mezzo lo fa passare
+  // da liscio a spigolo e ritorno. Le maniglie non si vedono: vengono dai
+  // punti (`curvature.ts`).
 
   /// Il tracciato della penna, se ha almeno un nodo.
   const drawing = (): Drafting | null => (drafting !== null && drafting.nodes.length > 0 ? drafting : null);
@@ -7609,8 +7959,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Che cosa prende un tocco in `p`: il primo nodo, che chiude il
   /// tracciato, l'ultimo, o il vuoto, dove va un nodo nuovo. Fra il primo e
   /// l'ultimo, vicini, vince il più vicino; a pari distanza l'ultimo, così
-  /// un nodo solo, che è l'uno e l'altro, non si chiude.
-  const bezierTarget = (p: Point, pointer: InkPointerType): "add" | "close" | "last" => {
+  /// un nodo solo, che è l'uno e l'altro, non si chiude. Con la Curvatura,
+  /// `curve`, anche un punto in mezzo ([`middlePoint`]).
+  const bezierTarget = (p: Point, pointer: InkPointerType, curve = curvature): "add" | "close" | "last" | "point" => {
     const nodes = drafting?.nodes ?? [];
     const last = nodes[nodes.length - 1];
     if (last === undefined) return "add";
@@ -7618,7 +7969,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const closes = onNode(p, first.at, pointer);
     const ends = onNode(p, last.at, pointer);
     if (closes && ends) return Math.hypot(p[0] - first.at[0], p[1] - first.at[1]) < Math.hypot(p[0] - last.at[0], p[1] - last.at[1]) ? "close" : "last";
-    return closes ? "close" : ends ? "last" : "add";
+    if (closes || ends) return closes ? "close" : "last";
+    return curve && middlePoint(p, pointer) >= 0 ? "point" : "add";
+  };
+
+  /// Il nodo in mezzo al tracciato della penna, né il primo né l'ultimo,
+  /// che il puntatore `pointer` prende in `p`: il più vicino; -1 se nessuno.
+  const middlePoint = (p: Point, pointer: InkPointerType): number => {
+    const nodes = drafting?.nodes ?? [];
+    let best = -1;
+    let near = Infinity;
+    for (let i = 1; i < nodes.length - 1; i++) {
+      const at = nodes[i]!.at;
+      const apart = Math.hypot(p[0] - at[0], p[1] - at[1]);
+      if (apart < near && onNode(p, at, pointer)) {
+        best = i;
+        near = apart;
+      }
+    }
+    return best;
+  };
+
+  /// Il nodo che un gesto della penna prende col bersaglio `mode` in `p`.
+  const targetIndex = (mode: "add" | "close" | "last" | "point", p: Point, pointer: InkPointerType): number => {
+    const nodes = drafting?.nodes ?? [];
+    return mode === "close" ? 0 : mode === "last" ? nodes.length - 1 : mode === "point" ? middlePoint(p, pointer) : -1;
   };
 
   /// Dove va un nodo nuovo puntato in `p` col puntatore `pointer`:
@@ -7633,17 +8008,47 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// La maniglia che il trascinamento di `g` tira dal suo nodo: sulla
   /// griglia o in linea con gli oggetti e coi nodi, e con Maiusc a passi di
-  /// 15°. `null` per un tocco, o se torna sul nodo.
+  /// 15°. `null` per un tocco, o se torna sul nodo, e con la Curvatura, che
+  /// non tira maniglie.
   const bezierHandle = (g: BezierGesture): Point | null => {
-    if (!g.dragging || g.at === null || g.end === null) return null;
+    if (g.curve || !g.dragging || g.at === null || g.end === null) return null;
     const point = guided(g.end, bezierGuides, g.pointer);
     const handle = shift ? constrainEnd("line", g.at, point) : point;
     return Math.hypot(handle[0] - g.at[0], handle[1] - g.at[1]) * camera.scale <= DRAG_PX[g.pointer] ? null : handle;
   };
 
+  /// I bersagli della Curvatura mentre `g` sposta un punto: gli oggetti e
+  /// gli altri punti.
+  const curveGuides = (g: BezierGesture): GuideIndex => {
+    const nodes = drafting?.nodes ?? noNodes;
+    return guidesFor(g, [], () => nodes.filter((_, i) => i !== g.index).map((node) => node.at));
+  };
+
+  /// Dove il trascinamento della Curvatura `g` porta il punto che prende:
+  /// quello nuovo dove va il puntatore, come un tocco; uno che c'è già di
+  /// quanto si è mosso il puntatore, sulla griglia o in linea con gli
+  /// oggetti e con gli altri punti.
+  const curveMoved = (g: BezierGesture): Point => {
+    if (g.mode === "add") return bezierPoint(g.end!, g.pointer);
+    const p: Point = [g.at![0] + g.end![0] - g.from![0], g.at![1] + g.end![1] - g.from![1]];
+    return guided(p, () => curveGuides(g), g.pointer);
+  };
+
+  /// Il gesto della penna che cambia il suo tracciato: non uno della
+  /// Curvatura su una forma scelta.
+  const penGesture = (): BezierGesture | null => (current?.kind === "bezier" && current.mode !== null && current.mode !== "path" ? current : null);
+
   /// I nodi come li lascia il gesto `g`, e se il tracciato si chiude.
-  const bezierAfter = (g: BezierGesture): { readonly nodes: readonly PenNode[]; readonly closed: boolean } => {
+  const bezierAfter = (g: BezierGesture): { readonly nodes: readonly DraftNode[]; readonly closed: boolean } => {
     const nodes = (drafting?.nodes ?? []).slice();
+    if (g.curve) {
+      // La Curvatura posa un punto, liscio o con Alt uno spigolo, o sposta
+      // quello che prende; un tocco sul primo chiude.
+      const moved = g.dragging ? curveMoved(g) : null;
+      if (g.mode === "add") nodes.push({ at: moved ?? g.at!, in: null, out: null, curve: alt ? "corner" : "smooth" });
+      else if (moved !== null) nodes[g.index] = movedNode(nodes[g.index]!, moved);
+      return { nodes, closed: g.mode === "close" && !g.dragging };
+    }
     const handle = bezierHandle(g);
     if (g.mode === "add") nodes.push(penNode(g.at!, handle));
     // Trascinato, il primo nodo diventa simmetrico: il tracciato vi passa
@@ -7653,11 +8058,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return { nodes, closed: g.mode === "close" };
   };
 
-  /// Il tracciato dei nodi `nodes` come lo scrive la penna, nelle coordinate
-  /// del livello `to`, col colore e lo spessore di adesso. `null` se si
-  /// scriverebbe in un punto.
-  const bezierElem = (id: string, nodes: readonly PenNode[], closed: boolean, to: Destination): Elem | null => {
-    const sub = penPath(nodes, closed, to.inverse);
+  /// Il tracciato dei nodi `nodes` come lo scrive la penna, coi punti della
+  /// Curvatura risolti in maniglie, nelle coordinate del livello `to`, col
+  /// colore e lo spessore di adesso. `null` se si scriverebbe in un punto.
+  const bezierElem = (id: string, nodes: readonly DraftNode[], closed: boolean, to: Destination): Elem | null => {
+    const sub = penPath(curved(nodes, closed), closed, to.inverse);
     if (collapsed(sub)) return null;
     const { color, width } = style();
     return {
@@ -7677,31 +8082,40 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Sopra il tracciato della penna: il segmento che verrebbe dove punta il
   /// puntatore, le maniglie del nodo che il gesto tiene o dell'ultimo, e i
-  /// nodi, pieno quello che il gesto tiene o che un tocco prenderebbe.
+  /// nodi, pieno quello che il gesto tiene o che un tocco prenderebbe. Con
+  /// la Curvatura, al posto del segmento, i due che il punto nuovo farebbe,
+  /// o i tre attorno alla chiusura, e niente maniglie.
   const bezierHandles = (): OverlayHandle[] => {
-    const g = current?.kind === "bezier" && current.mode !== null ? current : null;
+    const g = penGesture();
     const nodes = g === null ? drafting?.nodes ?? [] : bezierAfter(g).nodes;
     const last = nodes[nodes.length - 1];
     if (last === undefined) return [];
+    const curve = g?.curve ?? curvature;
     const out: OverlayHandle[] = [];
     const aim = g === null && hover !== null ? bezierTarget(hover.at, hover.pointer) : null;
-    if (aim === "add" || aim === "close") {
+    const identity: Matrix = [1, 0, 0, 1, 0, 0];
+    if ((aim === "add" || aim === "close") && curve) {
+      const next = aim === "close" ? nodes : [...nodes, { at: bezierPoint(hover!.at, hover!.pointer), in: null, out: null, curve: alt ? "corner" : "smooth" } satisfies DraftNode];
+      const all = curved(next, aim === "close");
+      const n = all.length;
+      const part = aim === "add" ? all.slice(-3) : n <= 3 ? [...all, all[0]!] : [all[n - 2]!, all[n - 1]!, all[0]!, all[1]!];
+      out.push({ kind: "outline", segments: writeNodes([penPath(part, false, identity)]), matrix: identity });
+    } else if (aim === "add" || aim === "close") {
       const next = aim === "close" ? nodes[0]! : penNode(bezierPoint(hover!.at, hover!.pointer), null);
-      const identity: Matrix = [1, 0, 0, 1, 0, 0];
       out.push({ kind: "outline", segments: writeNodes([penPath([last, next], false, identity)]), matrix: identity });
     }
-    const held = g?.mode === "close" ? 0 : nodes.length - 1;
+    const held = g !== null ? (g.mode === "add" ? nodes.length - 1 : g.index) : nodes.length - 1;
     const node = nodes[held]!;
-    for (const handle of [node.in, node.out]) if (handle !== null) out.push({ kind: "control", x: handle[0], y: handle[1], node: node.at });
-    const hot = g !== null ? held : aim === "close" ? 0 : aim === "last" ? nodes.length - 1 : -1;
-    nodes.forEach((each, i) => out.push({ kind: "node", x: each.at[0], y: each.at[1], shape: NODE_SHAPES[penKind(each)], selected: i === hot }));
+    if (!curve) for (const handle of [node.in, node.out]) if (handle !== null) out.push({ kind: "control", x: handle[0], y: handle[1], node: node.at });
+    const hot = g !== null ? held : aim === null || aim === "add" ? -1 : targetIndex(aim, hover!.at, hover!.pointer);
+    nodes.forEach((each, i) => out.push({ kind: "node", x: each.at[0], y: each.at[1], shape: NODE_SHAPES[draftKind(each)], selected: i === hot }));
     return out;
   };
 
   /// Il tracciato della penna come si scriverà, col gesto che lo cambia, e
   /// sopra i suoi nodi.
   function showBezier(): void {
-    const g = current?.kind === "bezier" && current.mode !== null ? current : null;
+    const g = penGesture();
     const to = g?.to ?? drafting?.to ?? null;
     const { nodes, closed } = g === null ? { nodes: drafting?.nodes ?? [], closed: false } : bezierAfter(g);
     const elem = to === null ? null : bezierElem("preview", nodes, closed, to);
@@ -7711,24 +8125,33 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Il nodo `at` del tracciato della penna a parole: quale, di che tipo e
   /// dove.
-  const bezierNodeText = (nodes: readonly PenNode[], at: number): string => {
+  const bezierNodeText = (nodes: readonly DraftNode[], at: number): string => {
     const node = nodes[at]!;
-    return t("draw.bezier.node", { index: at + 1, kind: t(KIND_NAMES[penKind(node)]), x: coordText(node.at[0]), y: coordText(node.at[1]) });
+    return t("draw.bezier.node", { index: at + 1, kind: t(KIND_NAMES[draftKind(node)]), x: coordText(node.at[0]), y: coordText(node.at[1]) });
   };
 
   /// Il primo punto di un gesto della penna: che cosa prende, e il nodo.
   const bezierStart = (g: BezierGesture, p: Point): void => {
     g.from = p;
-    g.mode = bezierTarget(p, g.pointer);
-    const nodes = drafting?.nodes ?? [];
-    g.at = g.mode === "add" ? bezierPoint(p, g.pointer) : g.mode === "close" ? nodes[0]!.at : nodes[nodes.length - 1]!.at;
+    hover = null;
+    // La Curvatura, senza un tracciato in corso, prende prima le forme
+    // scelte.
+    g.path = g.curve && drafting === null ? curveGrab(p, g.pointer) : null;
+    if (g.path !== null) {
+      g.mode = "path";
+      return;
+    }
+    g.mode = bezierTarget(p, g.pointer, g.curve);
+    g.index = targetIndex(g.mode, p, g.pointer);
+    g.at = g.mode === "add" ? bezierPoint(p, g.pointer) : (drafting?.nodes ?? [])[g.index]!.at;
     hover = null;
   };
 
   const bezierUpdate = (g: BezierGesture): void => {
     if (g.from === null || g.end === null) return;
     if (!g.dragging && Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale > DRAG_PX[g.pointer]) g.dragging = true;
-    showBezier();
+    if (g.mode === "path") curvePathUpdate(g);
+    else showBezier();
   };
 
   /// Un passo del tracciato della penna: i nodi diventano `nodes`, e
@@ -7739,12 +8162,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     draft.nodes = nodes;
   };
 
-  /// La fine di un gesto della penna: il nodo entra nel tracciato, o il
-  /// tracciato si chiude o si conclude.
-  const bezierEnd = (g: BezierGesture): void => {
+  /// La fine di un gesto della penna, alzato al tempo `time`: il nodo entra
+  /// nel tracciato, o il tracciato si chiude o si conclude.
+  const bezierEnd = (g: BezierGesture, time: number): void => {
     const note = snapNote();
     current = null;
     if (g.mode === null) return;
+    if (g.mode === "path") {
+      curvePathEnd(g, time, note);
+      return;
+    }
+    if (g.curve) {
+      curveEnd(g, time, note);
+      return;
+    }
     if (g.mode === "last" && !g.dragging) {
       finishBezier(false);
       return;
@@ -7762,6 +8193,252 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showBezier();
     syncControls();
     announce(noted(bezierNodeText(nodes, nodes.length - 1), note));
+  };
+
+  /// La fine di un gesto della Curvatura, con la nota `note` di ciò a cui si
+  /// è agganciato: il punto entra nel tracciato o si sposta; un tocco
+  /// sull'ultimo conclude il tracciato, e sul primo lo chiude, ma subito
+  /// dopo averlo posato, nello stesso posto, ne fa uno spigolo; un tocco su
+  /// un punto in mezzo lo fa passare da liscio a spigolo e ritorno.
+  const curveEnd = (g: BezierGesture, time: number, note: string): void => {
+    const tap = curveTap;
+    curveTap = null;
+    if (!g.dragging && g.mode === "last") {
+      const draft = drawing()!;
+      const twice = tap !== null && tap.index === g.index && time - tap.time <= DOUBLE_TAP_MS &&
+        Math.hypot(tap.at[0] - g.from![0], tap.at[1] - g.from![1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer];
+      if (!twice) {
+        finishBezier(false);
+        return;
+      }
+      // Il doppio tocco posa uno spigolo in un passo solo: Annulla toglie il
+      // punto, non solo il suo tipo.
+      draft.nodes = withKind(draft.nodes, g.index, draftKind(draft.nodes[g.index]!) === "corner" ? "smooth" : "corner");
+      showBezier();
+      announce(bezierNodeText(draft.nodes, g.index));
+      return;
+    }
+    if (!g.dragging && g.mode === "point") {
+      const draft = drawing()!;
+      setDraftKind(draft, g.index, draftKind(draft.nodes[g.index]!) === "corner" ? "smooth" : "corner");
+      return;
+    }
+    const { nodes, closed } = bezierAfter(g);
+    if (closed) {
+      drafting!.nodes = nodes;
+      finishBezier(true);
+      return;
+    }
+    const draft = drafting ?? { nodes: [], done: [], undone: [], to: g.to };
+    const index = g.mode === "add" ? nodes.length - 1 : g.index;
+    bezierStep(draft, nodes, g.mode === "add" ? "draw.bezier.step.node" : "draw.bezier.step.move", index + 1);
+    draft.to = g.to;
+    drafting = draft;
+    if (g.mode === "add" && !g.dragging) curveTap = { index, at: g.from!, time };
+    showBezier();
+    syncControls();
+    announce(noted(bezierNodeText(nodes, index), note));
+  };
+
+  /// Il nodo `index` del tracciato della penna diventa un punto della
+  /// Curvatura di tipo `kind`, in un passo che si annulla.
+  const setDraftKind = (draft: Drafting, index: number, kind: CurveKind): void => {
+    bezierStep(draft, withKind(draft.nodes, index, kind), "draw.bezier.step.kind", index + 1);
+    showBezier();
+    syncControls();
+    announce(bezierNodeText(draft.nodes, index));
+  };
+
+  /// Maiusc+C e Maiusc+S con la Curvatura: il punto sotto il cursore, o
+  /// l'ultimo, diventa uno spigolo o liscio.
+  const curveKindKey = (kind: CurveKind): void => {
+    const draft = drawing();
+    if (draft === null) return;
+    const p = cursorPoint();
+    const aim = bezierTarget(p, "mouse", true);
+    const index = aim === "add" ? draft.nodes.length - 1 : targetIndex(aim, p, "mouse");
+    curveTap = null;
+    if (draft.nodes[index]!.curve === kind) announce(`${t("draw.unchanged")} ${bezierNodeText(draft.nodes, index)}`);
+    else setDraftKind(draft, index, kind);
+  };
+
+  // --- La Curvatura sui tracciati che ci sono già ------------------------------
+  //
+  // Senza un tracciato in corso, la Curvatura modifica le forme scelte come
+  // le disegnerebbe: un nodo trascinato si sposta e i segmenti attorno si
+  // rifanno; trascinato da un segmento, vi posa un nodo e lo sposta. Un
+  // tocco su un segmento vi posa un nodo senza cambiare niente, uno su un
+  // nodo lo sceglie, per Canc, e due lo fanno liscio o spigolo. Le forme si
+  // mostrano coi nodi, senza maniglie, come con lo strumento Nodi.
+
+  /// Ciò che la Curvatura prende in `p` delle forme scelte: il nodo più
+  /// vicino entro il raggio del puntatore, a pari distanza della forma più
+  /// in alto; se no il segmento sotto il puntatore. L'asta di una freccia
+  /// non si piega. `null` se niente.
+  const curveGrab = (p: Point, pointer: InkPointerType): CurveGrab | null => {
+    if (!curveOn()) return null;
+    refreshNodes();
+    const tolerance = NODE_PX[pointer] / camera.scale;
+    let best: CurveGrab | null = null;
+    let nearest = Infinity;
+    for (let i = edits.length - 1; i >= 0; i--) {
+      const edit = edits[i]!;
+      const node = nodeAt(edit.subs, edit.matrix, p, tolerance);
+      if (node === null) continue;
+      const origin = nodePoint(edit, node);
+      const apart = Math.hypot(origin[0] - p[0], origin[1] - p[1]);
+      if (apart < nearest) {
+        best = { edit, node, segment: null, origin };
+        nearest = apart;
+      }
+    }
+    if (best !== null) return best;
+    const reach = HIT_PX[pointer] / camera.scale;
+    for (let i = edits.length - 1; i >= 0; i--) {
+      const edit = edits[i]!;
+      if (edit.nodable.kind === "arrow") continue;
+      const segment = linkAt(edit.subs, edit.matrix, p, reach);
+      if (segment !== null) return { edit, node: null, segment, origin: p };
+    }
+    return null;
+  };
+
+  /// Il tracciato preso da `g` come lo lascia il trascinamento: il nodo
+  /// preso, o quello posato sul segmento, dove porta il puntatore, sulla
+  /// griglia o in linea con gli oggetti e con gli altri nodi, e i segmenti
+  /// attorno rifatti come li disegna la Curvatura ([`recurve`]).
+  const curveReshape = (g: BezierGesture): CurveDraft => {
+    const { edit, node, segment } = g.path!;
+    const given = nodeKinds.get(edit.key) ?? NO_KINDS;
+    const inserted = segment === null ? null : insertNode(edit.subs, segment.sub, segment.link, segment.t);
+    const subs = inserted?.subs ?? edit.subs;
+    const key = inserted?.selected[0] ?? node!;
+    const kinds = inserted === null ? given : remapped(given, inserted.moved);
+    const kind = kindsOf(edit, subs, kinds);
+    const [s, at] = parseKey(key);
+    const origin = apply(edit.matrix, subs[s]!.nodes[at]!);
+    const moved = moveNodes(subs, new Set([key]), localDelta(edit, origin, curvePathTo(g, origin)), kind);
+    return { subs: recurve(moved, new Set([key]), kind), key, kinds, moved: inserted?.moved ?? null };
+  };
+
+  /// Dove il trascinamento di `g` porta il nodo che sta in `origin`, nella
+  /// scena: di quanto si è mosso il puntatore, sulla griglia o in linea con
+  /// gli altri oggetti e con gli altri nodi delle forme scelte.
+  const curvePathTo = (g: BezierGesture, origin: Point): Point => {
+    const { edit, node } = g.path!;
+    const p: Point = [origin[0] + g.end![0] - g.from![0], origin[1] + g.end![1] - g.from![1]];
+    const others = (): Point[] =>
+      edits.flatMap((each) => each.subs.flatMap((sub, s) => sub.nodes.flatMap((at, i) => (each === edit && nodeKey(s, i) === node ? [] : [apply(each.matrix, at)]))));
+    return guided(p, () => guidesFor(g, editedUnits(), others), g.pointer);
+  };
+
+  /// Il trascinamento della Curvatura su un tracciato scelto, sul foglio e
+  /// nei nodi.
+  const curvePathUpdate = (g: BezierGesture): void => {
+    if (!g.dragging) return;
+    g.reshaped = curveReshape(g);
+    showNodeDraft(new Map([[g.path!.edit.key, g.reshaped.subs]]));
+  };
+
+  /// La fine di un gesto della Curvatura su un tracciato scelto, alzato al
+  /// tempo `time`, con la nota `note` di ciò a cui si è agganciato.
+  const curvePathEnd = (g: BezierGesture, time: number, note: string): void => {
+    const { edit, node, segment } = g.path!;
+    const tap = curveNodeTap;
+    curveNodeTap = null;
+    if (g.dragging) {
+      const draft = g.reshaped ?? curveReshape(g);
+      painter.setDraft(null);
+      const change: NodeChange = { edit, subs: draft.subs, selected: [draft.key], kinds: draft.kinds, ...(draft.moved === null ? {} : { moved: draft.moved }) };
+      if (writeEdits(segment === null ? "draw.action.nodes_move" : "draw.action.nodes_insert", [change])?.written === true) announceMoved(note);
+      return;
+    }
+    if (segment !== null) {
+      // Il nodo posato non cambia il tracciato: lo divide dov'è.
+      const done = writeEdits("draw.action.nodes_insert", [changeOf(edit, insertNode(edit.subs, segment.sub, segment.link, segment.t))]);
+      if (done?.written === true) announce(afterEdit(plural(done.count, "draw.nodes.inserted.one", "draw.nodes.inserted.other")));
+      return;
+    }
+    const twice = tap !== null && tap.shape === edit.key && tap.key === node && time - tap.time <= DOUBLE_TAP_MS &&
+      Math.hypot(tap.at[0] - g.from![0], tap.at[1] - g.from![1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer];
+    if (!twice) {
+      curveNodeTap = { shape: edit.key, key: node!, at: g.from!, time };
+      setNodes(pickOf(edit, [node!]));
+      announceNodes();
+      return;
+    }
+    const [s, at] = parseKey(node!);
+    curveKindAt(edit, node!, kindsOf(edit)(s, at) === "corner" ? "smooth" : "corner");
+  };
+
+  /// Il nodo `key` della forma `edit` diventa `kind`, e i segmenti attorno si
+  /// rifanno come li disegna la Curvatura: fra due spigoli, una linea. Un
+  /// capo di un tracciato aperto non ha tipo.
+  const curveKindAt = (edit: Editing, key: NodeKey, kind: CurveKind): void => {
+    const [s, at] = parseKey(key);
+    if (!innerNode(edit.subs[s]!, at)) {
+      announce(t("draw.nodes.kind.none"));
+      return;
+    }
+    const given = new Map(nodeKinds.get(edit.key) ?? NO_KINDS);
+    given.set(key, kind);
+    const subs = recurve(edit.subs, new Set([key]), kindsOf(edit, edit.subs, given), new Set([key]));
+    const [one, other] = MADE[kind];
+    if (writeEdits("draw.action.nodes_kind", [{ edit, subs, selected: [key], kinds: given, changed: 1 }])?.written === true) announce(afterEdit(plural(1, one, other)));
+  };
+
+  /// Canc con la Curvatura: i nodi scelti se ne vanno, e i segmenti attorno
+  /// si rifanno come li disegna la Curvatura: dove un nodo tolto stava fra
+  /// due spigoli, una linea.
+  const curveDelete = (): void => {
+    const chosen = noding();
+    if (chosen.length === 0) return;
+    const changes = chosen.map((edit): NodeChange => {
+      const picked = pickedIn(edit);
+      const edited = deleteNodes(edit.subs, picked);
+      const given = remapped(nodeKinds.get(edit.key) ?? NO_KINDS, edited.moved);
+      // I nodi che restano accanto a quelli tolti, e il primo di ogni
+      // segmento che adesso passa dove erano.
+      const around = new Set<NodeKey>();
+      const bridges = new Set<NodeKey>();
+      edit.subs.forEach((sub, s) => {
+        const n = sub.nodes.length;
+        const gone = (at: number): boolean => picked.has(nodeKey(s, at));
+        const kept = (at: number, by: 1 | -1): number | null => {
+          let i = at;
+          for (let step = 0; step < n; step++) {
+            i = sub.closed ? (i + by + n) % n : i + by;
+            if (i < 0 || i >= n) return null;
+            if (!gone(i)) return i;
+          }
+          return null;
+        };
+        for (let at = 0; at < n; at++) {
+          if (!gone(at)) continue;
+          const before = kept(at, -1);
+          const after = kept(at, 1);
+          const a = before === null ? undefined : edited.moved.get(nodeKey(s, before));
+          const b = after === null ? undefined : edited.moved.get(nodeKey(s, after));
+          if (a !== undefined) around.add(a);
+          if (b !== undefined) around.add(b);
+          if (a !== undefined && b !== undefined && a !== b) bridges.add(a);
+        }
+      });
+      const kinds = kindsOf(edit, edited.subs, given);
+      const subs = edited.subs.map((sub, s): Subpath => {
+        const links = sub.links.map((link, at) => {
+          const straight = bridges.has(nodeKey(s, at)) && kinds(s, at) === "corner" && kinds(s, (at + 1) % sub.nodes.length) === "corner";
+          return straight ? ({ kind: "line" } as const) : link;
+        });
+        return { ...sub, links };
+      });
+      return { edit, subs: recurve(subs, around, kinds), selected: [], kinds: given, moved: edited.moved, changed: edited.changed };
+    });
+    const done = writeEdits("draw.action.nodes_delete", changes);
+    if (done?.written !== true) return;
+    const gone = changes.filter((change) => change.subs.every((sub) => sub.nodes.length < 2)).length;
+    if (gone === changes.length) announce(`${plural(gone, "draw.nodes.deleted.all.one", "draw.nodes.deleted.all.other")} ${objects()}`);
+    else announce(afterEdit(plural(done.count, "draw.nodes.deleted.one", "draw.nodes.deleted.other")));
   };
 
   /// Il tracciato della penna non c'è più, né la sua anteprima. `false` se
@@ -7929,12 +8606,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       // Sopra una maniglia della cornice o una guida, il cursore dice che
       // cosa fa; con lo strumento Nodi, la forma sotto mostra i suoi nodi,
-      // e col Costruttore la regione sotto si accende.
+      // col Costruttore la regione sotto si accende, e con le Forbici si
+      // vede dove tagliano.
       if (current === null && pressed === null) {
         hoverGrip(event);
         hoverGuide(event);
         hoverNodes(event.buttons === 0 ? point : null, pointer);
         hoverRegion(event.buttons === 0 ? point : null, pointer);
+        hoverCut(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -8039,6 +8718,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (rulersShown()) showRulers();
     hoverNodes(null, "mouse");
     hoverRegion(null, "mouse");
+    hoverCut(null, "mouse");
     if (hover !== null) {
       hover = null;
       showBezier();
@@ -8116,6 +8796,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           for (const sample of samples) builderAdd(g, toPoint(sample));
           builderUpdate(g);
           break;
+        case "cut":
+          for (const sample of samples) cutAdd(g, toPoint(sample));
+          showHandles();
+          break;
         case "bezier":
           if (g.from === null) bezierStart(g, toPoint(samples[0]!));
           g.end = toPoint(samples[samples.length - 1]!);
@@ -8183,8 +8867,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "builder":
           builderEnd(g);
           return;
+        case "cut":
+          cutEnd(g);
+          return;
         case "bezier":
-          bezierEnd(g);
+          bezierEnd(g, stroke.timeStamp);
           return;
         case "erase":
           current = null;
@@ -8494,14 +9181,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Dove è il cursore, e che cosa c'è sotto: con la penna di Bézier, il
-  /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato.
+  /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato;
+  /// con la Curvatura anche un punto in mezzo, che un tocco cambia.
   const announceCursor = (): void => {
     const p = cursorPoint();
     const at = t("draw.cursor.at", { x: coordText(p[0]), y: coordText(p[1]) });
     const aim = pressed === null && drawing() !== null ? bezierTarget(p, "mouse") : "add";
+    if (aim === "point") {
+      announce(`${at}: ${bezierNodeText(drawing()!.nodes, middlePoint(p, "mouse"))} ${t("draw.bezier.cursor.point")}`);
+      return;
+    }
     if (aim !== "add") {
       announce(`${at}: ${t(aim === "close" ? "draw.bezier.cursor.close" : "draw.bezier.cursor.last")}`);
       return;
+    }
+    if (pressed === null && tool === "scissors" && has("scissors")) {
+      const found = cutSpotAt(p, "mouse");
+      if (typeof found !== "string") {
+        announce(`${at}: ${cutSpotText(found)}`);
+        return;
+      }
     }
     const hit = pressed === null ? currentIndex().at(p, HIT_PX.mouse / camera.scale) : null;
     announce(hit === null ? at : `${at}: ${labelOf(hit)}`);
@@ -8536,6 +9235,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       hover = { at: next, pointer: "mouse" };
       showBezier();
     }
+    if (pressed === null) hoverCut(next, "mouse");
     announceCursor();
   };
 
@@ -8730,7 +9430,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return t(isLight(code) ? "draw.color.custom.light" : "draw.color.custom", { code });
   };
 
-  const toolIcon = (id: ToolId): string => (id === "polygon" && polygonTool.shape === "star" ? "draw-star" : toolSpec(id).icon);
+  const toolIcon = (id: ToolId): string =>
+    id === "polygon" && polygonTool.shape === "star" ? "draw-star" : id === "bezier" && curvature ? "draw-curvature" : toolSpec(id).icon;
 
   /// Le otto voci, dall'alto in senso orario: in alto annulla e in basso
   /// ripete; a destra gli strumenti di prima, il più recente in orizzontale;
@@ -9637,7 +10338,44 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       { label: t("draw.ink_path"), ...when(units.some(holdsPenStroke), "draw.ink_path.none"), run: () => inkPathSelection() },
       { label: t("draw.offset"), separator: true, ...when(shapes, "draw.paths.no_shape"), run: () => openPaths("offset") },
       { label: t("draw.simplify"), ...when(shapes, "draw.paths.no_shape"), run: () => openPaths("simplify") },
+      { label: t("draw.join"), separator: true, hint: displayBinding("Mod-j"), ...when(holdsOpenPath(engine.model!, units), "draw.join.none"), run: () => joinSelection() },
     ];
+  };
+
+  /// «Unisci» (Ctrl+J), dal livello Esperto: i capi più vicini dei tracciati
+  /// aperti scelti si uniscono, nel più in basso, finché sono uno solo; un
+  /// tracciato solo si chiude. Due capi che sullo schermo si toccano
+  /// diventano un nodo solo; altrimenti li unisce una linea.
+  function joinSelection(): void {
+    const units = arranging("path");
+    if (units === null) return;
+    const done = joinOps(engine.model!, units, JOIN_PX / camera.scale, newIds());
+    if ("reason" in done) {
+      announce(joinRefusal(done));
+      return;
+    }
+    if (arrange("draw.action.join_paths", done) === null) return;
+    const { closed, lines } = done.joined;
+    const what = units.length === 1 && closed ? "draw.join.closed" : closed ? "draw.join.joined_closed" : "draw.join.joined";
+    announce(`${t(what)}${lines === 0 ? "" : ` ${plural(lines, "draw.join.lines.one", "draw.join.lines.other")}`}`);
+  }
+
+  /// Perché «Unisci» non si fa, a parole.
+  const joinRefusal = (refused: JoinRefused): string => {
+    switch (refused.reason) {
+      case "none":
+        return t("draw.selected.none");
+      case "not_paths":
+        return plural(refused.count, "draw.join.not_paths.one", "draw.join.not_paths.other");
+      case "closed":
+        return t("draw.join.closed_path");
+      case "line":
+        return t("draw.join.line");
+      case "foreign":
+        return t("draw.nodes.unwritable");
+      case "failed":
+        return t("draw.join.failed");
+    }
   };
 
   /// «Contorno in tracciato», dal livello Esperto: il contorno di ogni forma
@@ -10218,18 +10956,30 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     announce(afterEdit(plural(done.count, "draw.nodes.broken.one", "draw.nodes.broken.other")));
   }
 
-  /// Maiusc+J: unisce i due capi scelti di ogni forma. I capi di due forme
-  /// diverse non si uniscono, e lo si dice.
+  /// Quanto lontani due capi della forma `edit` possono stare, nelle sue
+  /// coordinate, e diventare un nodo solo: [`JOIN_PX`] sullo schermo.
+  const joinReach = (edit: Editing): number => (JOIN_PX / camera.scale) * scaleOf(edit.inverse);
+
+  /// Maiusc+J o Ctrl+J: unisce i due capi scelti di ogni forma; o, con un
+  /// capo scelto in ognuna di due forme, le fa una: quella più in basso
+  /// prende il sottotracciato dell'altra, come «Unisci». Due capi che sullo
+  /// schermo si toccano diventano un nodo solo; altrimenti li unisce una
+  /// linea.
   function joinSelectedNodes(): void {
     const chosen = noding();
     if (chosen.length === 0) return;
     const changes = chosen.flatMap((each) => {
-      const edited = joinNodes(each.subs, pickedIn(each));
+      const [a, b, ...more] = pickedIn(each);
+      const edited = a === undefined || b === undefined || more.length > 0 ? null : joinEnds(each.subs, a, b, joinReach(each));
       return edited === null ? [] : [changeOf(each, edited)];
     });
     if (changes.length === 0) {
-      const apart = chosen.length === 2 && chosen.every((each) => pickedIn(each).size === 1);
-      announce(t(apart ? "draw.nodes.join.apart" : "draw.nodes.join.none"));
+      const across = chosen.length === 2 && chosen.every((each) => pickedIn(each).size === 1) ? joinTwo(chosen) : "draw.nodes.join.none";
+      if (typeof across === "string") {
+        announce(t(across));
+        return;
+      }
+      if (writeEdits("draw.action.nodes_join", across) !== null) announce(afterEdit(t("draw.nodes.joined_across")));
       return;
     }
     const closed = changes.length === 1 && changes[0]!.subs.length === changes[0]!.edit.subs.length;
@@ -10239,6 +10989,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ? plural(changes.length, "draw.nodes.joined_in.one", "draw.nodes.joined_in.other")
       : t(closed ? "draw.nodes.closed" : "draw.nodes.joined")));
   }
+
+  /// I capi scelti di due forme, uno per forma, uniti nella più in basso,
+  /// che prende il sottotracciato dell'altra; l'altra lo perde, e se era il
+  /// solo se ne va. Perché no, se non si uniscono: una freccia e un tratto a
+  /// penna restano soli.
+  const joinTwo = (chosen: readonly Editing[]): NodeChange[] | DrawKey => {
+    const [first, second] = [...chosen].sort((a, b) => comparePaths(a.path, b.path)) as [Editing, Editing];
+    for (const each of [first, second]) if (!cuttable(each.nodable)) return each.nodable.kind === "arrow" ? "draw.nodes.arrow" : "draw.nodes.stroke";
+    const [a] = pickedIn(first);
+    const [b] = pickedIn(second);
+    const joined = joinAcross(first.subs, a!, second.subs, b!, compose(first.inverse, second.matrix), joinReach(first));
+    if (joined === null) return "draw.nodes.join.none";
+    const { rest } = joined;
+    return [
+      changeOf(first, joined.kept),
+      { edit: second, subs: rest.subs, selected: [], kinds: remapped(nodeKinds.get(second.key) ?? NO_KINDS, rest.moved), moved: rest.moved },
+    ];
+  };
 
   /// Un comando dei nodi di Maiusc e una lettera.
   const runNodeCommand = (command: NodeCommand): void => {
@@ -10329,16 +11097,62 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
   }
 
+  /// «Distribuisci» coi nodi scelti, almeno tre: il primo e l'ultimo lungo
+  /// l'asse restano dove sono, gli altri vanno fra loro a passi uguali, ognuno
+  /// con le sue maniglie. Le forme toccate si scrivono in un passo solo.
+  function distributeNodes(axis: Axis): void {
+    const chosen = noding();
+    if (chosen.length === 0) return;
+    const a = axis === "x" ? 0 : 1;
+    const spots = chosen.flatMap((each) => [...pickedIn(each)].map((key) => ({ each, key, at: nodePoint(each, key) })));
+    if (spots.length < 3) {
+      announce(t("draw.nodes.distribute.few"));
+      return;
+    }
+    const sorted = [...spots].sort((p, q) => p.at[a] - q.at[a]);
+    const start = sorted[0]!.at[a];
+    const step = (sorted[sorted.length - 1]!.at[a] - start) / (sorted.length - 1);
+    const target = new Map(sorted.map((spot, i) => [spot, start + step * i]));
+    const changes = chosen.flatMap((each): NodeChange[] => {
+      const kinds = kindsOf(each);
+      let subs = each.subs;
+      for (const spot of spots) {
+        const value = target.get(spot)!;
+        if (spot.each !== each || Math.abs(spot.at[a] - value) < 1e-9) continue;
+        const to: Point = a === 0 ? [value, spot.at[1]] : [spot.at[0], value];
+        subs = moveNodes(subs, new Set([spot.key]), localDelta(each, spot.at, to), kinds);
+      }
+      return subs === each.subs ? [] : [{ edit: each, subs, selected: pickedIn(each), kinds: nodeKinds.get(each.key) ?? NO_KINDS }];
+    });
+    if (changes.length === 0) {
+      announce(t("draw.unchanged"));
+      return;
+    }
+    if (writeEdits("draw.action.nodes_distribute", changes)?.written === true) announce(afterEdit(t("draw.nodes.distributed", { count: spots.length })));
+  }
+
   /// Le voci di «Allinea» coi nodi scelti: per un nodo solo il riferimento
-  /// è la pagina, e il nome lo dice.
+  /// è la pagina, e il nome lo dice. Poi quelle di «Distribuisci», che
+  /// chiedono almeno tre nodi, e la voce spenta dice perché.
   const nodeAlignItems = (): MenuItem[] => {
-    const single = chosenCount() === 1;
+    const count = chosenCount();
     const usable = nodesReference() !== null;
-    return EDGES.map(({ edge, label }) => ({
-      label: single ? t("draw.align.to_page", { action: t(label) }) : t(label),
+    const items: MenuItem[] = EDGES.map(({ edge, label }) => ({
+      label: count === 1 ? t("draw.align.to_page", { action: t(label) }) : t(label),
       disabled: !usable,
       run: () => alignNodes(edge),
     }));
+    const few = count < 3;
+    for (const { axis, label } of AXES) {
+      items.push({
+        label: t(label),
+        separator: axis === "x",
+        disabled: few,
+        ...(few ? { description: t("draw.nodes.distribute.few") } : {}),
+        run: () => distributeNodes(axis),
+      });
+    }
+    return items;
   };
 
   /// Porta gli oggetti scelti in cima a `layer`, dove si vedevano.
@@ -11158,7 +11972,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ["Shift-l", t("draw.nodes.line")],
               ["Shift-u", t("draw.nodes.curve")],
               ["Shift-b", t("draw.nodes.break")],
-              ["Shift-j", t("draw.nodes.join")],
+              ["Shift-j Mod-j", t("draw.nodes.join")],
               ["Alt", t("draw.keys.nodes.alt")],
               ["Escape", t("draw.keys.nodes.deselect")],
               ["Alt-F10", t("draw.keys.nodes.bar")],
@@ -11187,6 +12001,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti delle Forbici, se le parti `at` le offrono.
+  const scissorsKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("scissors")
+      ? [
+          {
+            title: t("draw.tool.scissors"),
+            rows: [
+              ["Space", t("draw.keys.scissors.cut")],
+              ["Alt", t("draw.keys.scissors.alt")],
+            ],
+          },
+        ]
+      : [];
+
+  /// I tasti del menu Tracciato, se le parti `at` lo offrono.
+  const pathKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("path") ? [{ title: t("draw.path"), rows: [["Mod-j", t("draw.keys.join")]] }] : [];
+
   /// I tasti della penna di Bézier, se le parti `at` la offrono.
   const bezierKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("bezier")
@@ -11198,6 +12030,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ["Shift", t("draw.keys.bezier.angle")],
               ["Enter Escape", t("draw.keys.bezier.finish")],
               ["Delete", t("draw.keys.bezier.delete")],
+            ],
+          },
+          {
+            title: t("draw.tool.curvature"),
+            rows: [
+              ["b", t("draw.keys.curvature.switch")],
+              ["Space", t("draw.keys.curvature.point")],
+              ["Shift-c", t("draw.keys.curvature.corner")],
+              ["Shift-s", t("draw.keys.curvature.smooth")],
+              ["Alt", t("draw.keys.curvature.alt")],
             ],
           },
         ]
@@ -11304,8 +12146,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     ...arrangeKeys(at),
     ...selectionKeys(at),
+    ...pathKeys(at),
     ...nodeToolKeys(at),
     ...builderKeys(at),
+    ...scissorsKeys(at),
     ...polygonKeys(at),
     ...recognizeKeys(at),
     ...bezierKeys(at),
@@ -12210,6 +13054,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (!focusTransform()) void transformDialog();
       } else if (key === "d" && !event.shiftKey && arranges("arrange")) {
         duplicateSelection();
+      } else if (key === "j" && !event.shiftKey && tool === "nodes" && nodeKeysOn() && chosenCount() > 0) {
+        joinSelectedNodes();
+      } else if (key === "j" && !event.shiftKey && arranges("path")) {
+        joinSelection();
       } else if (key === "g" && has("arrange") && editable()) {
         if (event.shiftKey) ungroupSelection();
         else groupSelection();
@@ -12305,6 +13153,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     } else if ((event.key === "Delete" || event.key === "Backspace") && nodeKeysOn()) {
       // Con lo strumento Nodi Canc elimina i nodi, mai l'oggetto.
       deleteSelectedNodes();
+    } else if ((event.key === "Delete" || event.key === "Backspace") && curveOn() && pressed === null && current === null && chosenCount() > 0) {
+      // Con la Curvatura, i nodi scelti, e la curva si rifà.
+      curveDelete();
     } else if ((event.key === "Delete" || event.key === "Backspace") && drawing() !== null) {
       // Con la penna di Bézier, l'ultimo nodo del tracciato.
       if (current !== null) return;
@@ -12314,6 +13165,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       deleteSelection();
     } else if (event.key === "Insert" && !event.shiftKey && nodeKeysOn() && (onSurface || inNodesBar)) {
       insertSelectedNodes();
+    } else if (event.shiftKey && onSurface && (event.key.toLowerCase() === "c" || event.key.toLowerCase() === "s") && tool === "bezier" && curvature && drawing() !== null) {
+      // Con la Curvatura, il punto sotto il cursore, o l'ultimo, a spigolo
+      // o liscio: le lettere dello strumento Nodi.
+      if (current !== null || pressed !== null) return;
+      curveKindKey(event.key.toLowerCase() === "c" ? "corner" : "smooth");
     } else if (event.shiftKey && NODE_COMMANDS[event.key.toLowerCase()] !== undefined && nodeKeysOn() && (onSurface || inNodesBar)) {
       runNodeCommand(NODE_COMMANDS[event.key.toLowerCase()]!);
     } else if (event.key === "Escape") {
@@ -12322,7 +13178,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         // Esc conclude il tracciato della penna, come conclude un testo: ciò
         // che si è disegnato non si perde, e Annulla lo toglie in un passo.
         finishBezier(false);
-      } else if (tool === "nodes" && chosenCount() > 0) {
+      } else if ((tool === "nodes" || curveOn()) && chosenCount() > 0) {
         setNodes(new Map());
         announceNodes();
       } else if (builderNow() !== null && (regionsChosen.length > 0 || regionActive >= 0)) {
@@ -12585,6 +13441,27 @@ const NODE_COMMANDS: Readonly<Record<string, NodeCommand>> = {
   b: "break",
   j: "join",
 };
+
+/// Il tipo di un nodo della penna: quello che gli si è dato con la
+/// Curvatura, o quello che dicono le sue maniglie.
+function draftKind(node: DraftNode): NodeKind {
+  return node.curve ?? penKind(node);
+}
+
+/// I nodi `nodes` col nodo `index` punto della Curvatura di tipo `kind`.
+function withKind(nodes: readonly DraftNode[], index: number, kind: CurveKind): DraftNode[] {
+  const next = nodes.slice();
+  next[index] = { at: nodes[index]!.at, in: null, out: null, curve: kind };
+  return next;
+}
+
+/// Il nodo `node` portato in `at`, con le sue maniglie.
+function movedNode(node: DraftNode, at: Point): DraftNode {
+  const dx = at[0] - node.at[0];
+  const dy = at[1] - node.at[1];
+  const by = (handle: Point | null): Point | null => (handle === null ? null : [handle[0] + dx, handle[1] + dy]);
+  return { ...node, at, in: by(node.in), out: by(node.out) };
+}
 
 /// Il tipo di un nodo a parole; un capo di un tracciato aperto non ne ha.
 const KIND_NAMES: Readonly<Record<NodeKind | "end", DrawKey>> = {
