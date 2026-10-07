@@ -14,7 +14,8 @@
 /// L'id della carta (§2).
 export const PAPER_ID = "fub-paper";
 
-/// L'id della `defs` in cui FubDraw mette le risorse nuove (§15).
+/// L'id della `defs` in cui FubDraw mette le risorse nuove (formato della
+/// scena, risorse).
 export const DEFS_ID = "fub-defs";
 
 /// Che cosa riceve l'id: un oggetto qualunque, un livello o una risorsa e

@@ -21,10 +21,10 @@
 //!   base di Unicode e un commento su più righe: gli span UTF-16 si allontanano
 //!   dai byte;
 //! - `doctype`: un disegno con `DOCTYPE` ed entità interne, in sola lettura;
-//! - `resources`: un disegno con la sua `defs` (§15), ogni tipo di risorsa,
-//!   private e condivise, e gli oggetti che le usano coi riempimenti, i
-//!   marcatori, i ritagli, le maschere e i filtri; una risorsa estranea, un
-//!   riferimento del tipo sbagliato e uno a un id che manca.
+//! - `resources`: un disegno con la sua `defs` (formato della scena, risorse),
+//!   ogni tipo di risorsa, private e condivise, e gli oggetti che le usano coi
+//!   riempimenti, i marcatori, i ritagli, le maschere e i filtri; una risorsa
+//!   estranea, un riferimento del tipo sbagliato e uno a un id che manca.
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -785,7 +785,11 @@ fn resources() -> String {
                 .a("spreadMethod", "reflect")
                 .child(El::new("title").text("Sole"))
                 .child(El::new("stop").a("offset", 0).a("stop-color", "#e69f00"))
-                .child(El::new("stop").a("offset", "100%").a("stop-color", "#d55e00")),
+                .child(
+                    El::new("stop")
+                        .a("offset", "100%")
+                        .a("stop-color", "#d55e00"),
+                ),
         )
         .child(
             El::new("pattern")
@@ -815,14 +819,23 @@ fn resources() -> String {
                 .a("markerHeight", 10)
                 .a("orient", "auto-start-reverse")
                 .a("viewBox", "0 0 10 10")
-                .child(El::new("path").a("d", "M0 0 L10 5 L0 10 Z").a("fill", "#000000")),
+                .child(
+                    El::new("path")
+                        .a("d", "M0 0 L10 5 L0 10 Z")
+                        .a("fill", "#000000"),
+                ),
         )
         .child(
             El::new("clipPath")
                 .a("id", "r00000005")
                 .a("fub:role", "private")
                 .a("clipPathUnits", "objectBoundingBox")
-                .child(El::new("circle").a("cx", "0.5").a("cy", "0.5").a("r", "0.5")),
+                .child(
+                    El::new("circle")
+                        .a("cx", "0.5")
+                        .a("cy", "0.5")
+                        .a("r", "0.5"),
+                ),
         )
         .child(
             El::new("mask")
@@ -866,14 +879,17 @@ fn resources() -> String {
                 ),
         )
         .child(
-            El::new("filter").a("id", "r00000008").a("fub:role", "shared").child(
-                El::new("feDropShadow")
-                    .a("dx", 0)
-                    .a("dy", 2)
-                    .a("stdDeviation", 2)
-                    .a("flood-color", "#000000")
-                    .a("flood-opacity", "0.3"),
-            ),
+            El::new("filter")
+                .a("id", "r00000008")
+                .a("fub:role", "shared")
+                .child(
+                    El::new("feDropShadow")
+                        .a("dx", 0)
+                        .a("dy", 2)
+                        .a("stdDeviation", 2)
+                        .a("flood-color", "#000000")
+                        .a("flood-opacity", "0.3"),
+                ),
         )
         // Una sfumatura che ne eredita un'altra, come le scrive Inkscape:
         // estranea.
@@ -1069,7 +1085,11 @@ fn resources_are_read_with_their_users() {
     assert_eq!(element(&[1]).map(|e| e.role), Some(Role::Defs));
     // Le otto risorse modificabili, la nona estranea.
     for at in 0..8 {
-        assert_eq!(element(&[1, at]).map(|e| e.role), Some(Role::Resource), "{at}");
+        assert_eq!(
+            element(&[1, at]).map(|e| e.role),
+            Some(Role::Resource),
+            "{at}"
+        );
     }
     assert!(element(&[1, 8]).is_none());
     assert_eq!(

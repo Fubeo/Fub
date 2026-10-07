@@ -12,12 +12,12 @@
 // La visita usa una pila esplicita, non la ricorsione: un SVG con centomila
 // gruppi annidati è un file valido, e non deve esaurire lo stack.
 //
-// Le risorse (§15) stanno nelle `defs` della radice, e un oggetto le usa per
-// riferimento: un oggetto è modificabile solo se ciò a cui rimanda lo è.
-// Per questo la lettura passa due volte: prima giudica le risorse, le
-// sfumature e poi le altre, che possono usare le sfumature nel loro
-// contenuto; poi classifica il documento chiedendo a quell'indice che cosa
-// è ogni id.
+// Le risorse stanno nelle `defs` della radice (formato della scena, risorse), e
+// un oggetto le usa per riferimento: un oggetto è modificabile solo se ciò a
+// cui rimanda lo è. Per questo la lettura passa due volte: prima giudica le
+// risorse, le sfumature e poi le altre, che possono usare le sfumature nel loro
+// contenuto; poi classifica il documento chiedendo a quell'indice che cosa è
+// ogni id.
 
 import { BrushError, parseBrush } from "../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
@@ -121,7 +121,7 @@ export interface ElementItem extends Span {
   /// Le righe di un `text`, una per `tspan`, coi pezzi: è il testo che
   /// l'operazione `text` sostituisce.
   readonly lines?: readonly string[];
-  /// Come vive una risorsa, da `fub:role` (§15).
+  /// Come vive una risorsa, da `fub:role` (formato della scena, risorse).
   readonly lifecycle?: Lifecycle;
 }
 
@@ -160,7 +160,7 @@ export type Tag =
   | "defs"
   | ResourceTag;
 
-/// I tag delle risorse (§15).
+/// I tag delle risorse (formato della scena, risorse).
 export type ResourceTag = "linearGradient" | "radialGradient" | "pattern" | "marker" | "clipPath" | "mask" | "filter";
 
 const RESOURCE_TAGS: ReadonlySet<string> = new Set<ResourceTag>([
@@ -173,9 +173,9 @@ const RESOURCE_TAGS: ReadonlySet<string> = new Set<ResourceTag>([
   "filter",
 ]);
 
-/// Che cosa è una risorsa per chi la usa (§15): `fill` e `stroke` usano
-/// sfumature e motivi, `marker-*` i marcatori, `clip-path`, `mask` e
-/// `filter` ritagli, maschere e filtri.
+/// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
+/// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
+/// `mask` e `filter` ritagli, maschere e filtri.
 export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter";
 
 /// Il tipo di una risorsa dal suo tag.
@@ -199,9 +199,10 @@ export function resourceKind(tag: string): ResourceKind | null {
   }
 }
 
-/// Come vive una risorsa, da `fub:role` (§15): `private` è di un oggetto e
-/// duplicarlo la copia, `shared` è di chi usa la stessa cosa; tutte e due se
-/// ne vanno col loro ultimo riferimento. Senza, la risorsa resta.
+/// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
+/// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
+/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. Senza, la
+/// risorsa resta.
 export type Lifecycle = "private" | "shared";
 
 /// Il tipo della risorsa modificabile che porta `id`, o `null` se nessuna
@@ -244,7 +245,8 @@ function hasUrl(value: string): boolean {
   return /[uU][rR][lL]\(/.test(value);
 }
 
-/// Gli attributi che possono rimandare a una risorsa con `url(` (§15).
+/// Gli attributi che possono rimandare a una risorsa con `url(` (formato della
+/// scena, risorse).
 const REFERENCES: ReadonlySet<string> = new Set([
   "fill",
   "stroke",
@@ -310,9 +312,9 @@ function resourceOrNone(value: string, kind: ResourceKind, resolve: Resolve): bo
 }
 
 /// Il giudizio su un attributo SVG senza namespace, coi riferimenti alle
-/// risorse risolti da `resolve` (§15). Il painter lo usa per gli attributi
-/// della radice, che non si classifica: ne porta sugli strati vivi solo
-/// quelli che varrebbero su un `g`.
+/// risorse risolti da `resolve` (formato della scena, risorse). Il painter lo
+/// usa per gli attributi della radice, che non si classifica: ne porta sugli
+/// strati vivi solo quelli che varrebbero su un `g`.
 export function svgAttribute(tag: Tag, name: string, value: string, resolve: Resolve = NO_RESOURCES): boolean {
   switch (name) {
     case "id":
@@ -487,13 +489,14 @@ function unitChildrenAllowed(doc: XmlDocument, element: ElementNode, tag: Tag, r
 }
 
 // ---------------------------------------------------------------------------
-// Le risorse (§15).
+// Le risorse del disegno (formato della scena, risorse).
 // ---------------------------------------------------------------------------
 
-/// Quanti punti ha al più una sfumatura (§11).
+/// Quanti punti ha al più una sfumatura (formato della scena, risorse).
 export const MAX_STOPS = 256;
 
-/// Quante primitive ha al più un filtro, coi `feMergeNode` (§11).
+/// Quante primitive ha al più un filtro, coi `feMergeNode` (formato della
+/// scena, risorse).
 export const MAX_PRIMITIVES = 64;
 
 /// Quanti `g` si annidano al più nel contenuto di una risorsa.
@@ -502,8 +505,9 @@ export const MAX_CONTENT_DEPTH = 32;
 /// Le forme di §4, che possono stare nel contenuto di ogni risorsa.
 const SHAPES: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
 
-/// Le primitive dei filtri (§15): un elenco chiuso, quelle di SVG 1.1 che
-/// ogni lettore disegna allo stesso modo e l'ombra di Filter Effects.
+/// Le primitive dei filtri (formato della scena, risorse): un elenco chiuso,
+/// quelle di SVG 1.1 che ogni lettore disegna allo stesso modo e l'ombra di
+/// Filter Effects.
 const PRIMITIVES: ReadonlySet<string> = new Set([
   "feGaussianBlur",
   "feOffset",
@@ -842,10 +846,10 @@ export function referencesOf(element: ElementNode): string[] {
 }
 
 /// L'indice delle risorse modificabili del documento: per ogni id, il tipo
-/// della risorsa (§15). Prima le sfumature, che non rimandano a niente, poi
-/// le altre, che nel contenuto possono usare le sfumature. Di due risorse
-/// con lo stesso id vale la prima, in quest'ordine: il documento è comunque
-/// in sola lettura (S003).
+/// della risorsa (formato della scena, risorse). Prima le sfumature, che non
+/// rimandano a niente, poi le altre, che nel contenuto possono usare le
+/// sfumature. Di due risorse con lo stesso id vale la prima, in quest'ordine:
+/// il documento è comunque in sola lettura (S003).
 export function resourceIndex(doc: XmlDocument): Map<string, ResourceKind> {
   const found = new Map<string, ResourceKind>();
   const others: Array<[ElementNode, ResourceTag]> = [];

@@ -165,12 +165,12 @@ pub(crate) struct Context {
     /// Il `font-weight` in vigore è da grassetto: `bold` o da 700 in su.
     bold: bool,
     /// Un antenato, o l'elemento, ha un ritaglio, una maschera o un filtro
-    /// (§15): i colori che si vedono non si sanno.
+    /// (formato della scena, risorse): i colori che si vedono non si sanno.
     effect: bool,
 }
 
 /// Gli attributi che cambiano ciò che si vede di un elemento oltre il suo
-/// colore (§15).
+/// colore (formato della scena, risorse).
 const EFFECTS: [&str; 3] = ["clip-path", "mask", "filter"];
 
 impl Context {
@@ -308,7 +308,7 @@ impl Tally {
     ) {
         match role {
             // Le risorse non si disegnano da sole: contano gli oggetti che le
-            // usano (§15).
+            // usano (formato della scena, risorse).
             Role::Defs | Role::Resource => return,
             Role::Layer => self.layers.push(
                 element

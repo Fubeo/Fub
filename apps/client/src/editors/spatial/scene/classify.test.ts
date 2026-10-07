@@ -733,7 +733,7 @@ describe("la classificazione (§4)", () => {
   });
 });
 
-describe("le risorse (§15)", () => {
+describe("le risorse", () => {
   /// Il ruolo del primo figlio della `defs` di `doc(<defs>body</defs>)`.
   const resource = (body: string): Role | null => role(load(doc(`<defs>${body}</defs>`)), [0, 0]);
   /// Il ruolo del primo figlio della radice, dopo una `defs` con `defs`.

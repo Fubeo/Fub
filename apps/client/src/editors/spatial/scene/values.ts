@@ -175,7 +175,7 @@ const KEYWORDS: ReadonlyMap<string, readonly string[]> = new Map([
   ["font-weight", ["normal", "bold", "100", "200", "300", "400", "500", "600", "700", "800", "900"]],
   ["font-style", ["normal", "italic", "oblique"]],
   ["text-anchor", ["start", "middle", "end"]],
-  // Le risorse (§15).
+  // Le risorse del disegno (formato della scena, risorse).
   ["spreadMethod", ["pad", "reflect", "repeat"]],
   ["gradientUnits", ["userSpaceOnUse", "objectBoundingBox"]],
   ["patternUnits", ["userSpaceOnUse", "objectBoundingBox"]],
@@ -354,7 +354,7 @@ export function transform(value: string): Matrix | null {
 }
 
 // ---------------------------------------------------------------------------
-// Le risorse (§15).
+// Le risorse del disegno (formato della scena, risorse).
 // ---------------------------------------------------------------------------
 
 /// Un carattere che l'id dentro `url(` non può avere: spazi, virgolette,

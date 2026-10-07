@@ -1,4 +1,4 @@
-// Le risorse del disegno viste dall'editor (formato della scena, §15): le
+// Le risorse del disegno viste dall'editor (formato della scena, risorse): le
 // sfumature, i motivi, i marcatori, i ritagli, le maschere e i filtri che
 // stanno nelle `defs` della radice e che gli oggetti usano per riferimento.
 //

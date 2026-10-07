@@ -188,10 +188,15 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
         ],
         "font-style" => &["normal", "italic", "oblique"],
         "text-anchor" => &["start", "middle", "end"],
-        // Le risorse (§15).
+        // Le risorse del disegno (formato della scena, risorse).
         "spreadMethod" => &["pad", "reflect", "repeat"],
-        "gradientUnits" | "patternUnits" | "patternContentUnits" | "clipPathUnits" | "maskUnits"
-        | "maskContentUnits" | "filterUnits" => &["userSpaceOnUse", "objectBoundingBox"],
+        "gradientUnits"
+        | "patternUnits"
+        | "patternContentUnits"
+        | "clipPathUnits"
+        | "maskUnits"
+        | "maskContentUnits"
+        | "filterUnits" => &["userSpaceOnUse", "objectBoundingBox"],
         "markerUnits" => &["strokeWidth", "userSpaceOnUse"],
         "primitiveUnits" => &["userSpaceOnUse"],
         "color-interpolation-filters" => &["auto", "sRGB", "linearRGB"],

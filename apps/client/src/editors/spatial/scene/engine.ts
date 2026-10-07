@@ -506,7 +506,7 @@ export class SceneEngine {
 
   /// Che cosa è la risorsa modificabile che porta `id` nella scena corrente:
   /// ogni elemento scritto si legge con le risorse che ci sono (formato della
-  /// scena, §15).
+  /// scena, risorse).
   private readonly resolve: Resolve = (id) => {
     const node = this.tree === null ? null : this.tree.element(id);
     return node !== null && roleOf(node) === "resource" ? resourceKind(node.facts.local) : null;
@@ -849,7 +849,7 @@ export class SceneEngine {
   }
 
   // -------------------------------------------------------------------------
-  // Risorse (formato della scena, §15).
+  // Le risorse del disegno (formato della scena, risorse).
   // -------------------------------------------------------------------------
 
   /// Gli id delle risorse modificabili che `node` è o contiene: una risorsa,

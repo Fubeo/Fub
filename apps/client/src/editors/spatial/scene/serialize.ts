@@ -67,7 +67,7 @@ export class ElemError extends Error {
   }
 }
 
-/// Le primitive dei filtri (formato della scena, §15).
+/// Le primitive dei filtri (formato della scena, risorse).
 const PRIMITIVES = [
   "feGaussianBlur",
   "feOffset",
@@ -93,7 +93,7 @@ const OWNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 /// stanno solo dentro un altro: dove vanno lo giudica la classificazione.
 const OPEN_PARENTS: ReadonlySet<string> = new Set(["g", "a", "defs", "pattern", "marker", "clipPath", "mask"]);
 
-/// I tag di §4 e delle risorse (§15).
+/// I tag di §4 e delle risorse (formato della scena, risorse).
 export const SCENE_TAGS: ReadonlySet<string> = new Set([
   "title",
   "desc",

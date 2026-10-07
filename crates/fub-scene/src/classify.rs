@@ -12,10 +12,11 @@
 //! La visita usa una pila esplicita, non la ricorsione: un SVG con centomila
 //! gruppi annidati è un file valido, e non deve esaurire lo stack.
 //!
-//! Le risorse (§15) si leggono in due passi: prima l'indice delle risorse
-//! modificabili nelle `defs` della radice, poi la visita, in cui un
-//! riferimento vale se porta a una risorsa dell'indice del tipo giusto. Così
-//! chi usa una sfumatura scritta dopo di lui si legge come chi la usa prima.
+//! Le risorse del disegno (formato della scena, risorse) si leggono in due
+//! passi: prima l'indice delle risorse modificabili nelle `defs` della radice,
+//! poi la visita, in cui un riferimento vale se porta a una risorsa dell'indice
+//! del tipo giusto. Così chi usa una sfumatura scritta dopo di lui si legge
+//! come chi la usa prima.
 
 use std::collections::{HashMap, HashSet};
 
@@ -29,10 +30,9 @@ use crate::ink::{Ink, InkError};
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
-    angle, dasharray, fraction, href, is_wsp, keyword, length, letter_spacing,
-    non_negative_length, number, number_list, one_or_two, opacity, paint, paint_reference,
-    points, preserve_aspect_ratio, reference, text_decoration, transform, trim, view_box, Href,
-    Paint,
+    angle, dasharray, fraction, href, is_wsp, keyword, length, letter_spacing, non_negative_length,
+    number, number_list, one_or_two, opacity, paint, paint_reference, points,
+    preserve_aspect_ratio, reference, text_decoration, transform, trim, view_box, Href, Paint,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -78,7 +78,8 @@ pub enum Role {
     Image,
     /// Una `defs` della radice: tiene le risorse.
     Defs,
-    /// Una risorsa modificabile in una `defs` della radice (§15).
+    /// Una risorsa modificabile in una `defs` della radice (formato della
+    /// scena, risorse).
     Resource,
 }
 
@@ -89,9 +90,10 @@ impl Role {
     }
 }
 
-/// Come vive una risorsa, da `fub:role` (§15): `private` è di un oggetto e
-/// duplicarlo la copia, `shared` è di chi usa la stessa cosa; tutte e due se
-/// ne vanno col loro ultimo riferimento. Senza, la risorsa resta.
+/// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
+/// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
+/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. Senza, la
+/// risorsa resta.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Lifecycle {
@@ -99,9 +101,9 @@ pub enum Lifecycle {
     Shared,
 }
 
-/// Che cosa è una risorsa per chi la usa (§15): `fill` e `stroke` usano
-/// sfumature e motivi, `marker-*` i marcatori, `clip-path`, `mask` e
-/// `filter` ritagli, maschere e filtri.
+/// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
+/// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
+/// `mask` e `filter` ritagli, maschere e filtri.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ResourceKind {
     Gradient,
@@ -389,7 +391,8 @@ impl Tag {
     }
 }
 
-/// Gli attributi che possono rimandare a una risorsa con `url(` (§15).
+/// Gli attributi che possono rimandare a una risorsa con `url(` (formato della
+/// scena, risorse).
 const REFERENCES: [&str; 8] = [
     "fill",
     "stroke",
@@ -442,7 +445,7 @@ fn resource_or_none(value: &str, kind: ResourceKind, resolve: Resolve<'_>) -> bo
 }
 
 /// Il giudizio su un attributo SVG senza namespace, coi riferimenti alle
-/// risorse risolti da `resolve` (§15).
+/// risorse risolti da `resolve` (formato della scena, risorse).
 fn svg_attribute(tag: Tag, name: &str, value: &str, resolve: Resolve<'_>) -> bool {
     match name {
         "id" => !value.is_empty(),
@@ -618,20 +621,22 @@ fn unit_children_allowed(
 }
 
 // ---------------------------------------------------------------------------
-// Le risorse (§15).
+// Le risorse del disegno (formato della scena, risorse).
 // ---------------------------------------------------------------------------
 
-/// Quanti punti ha al più una sfumatura (§11).
+/// Quanti punti ha al più una sfumatura (formato della scena, risorse).
 pub(crate) const MAX_STOPS: usize = 256;
 
-/// Quante primitive ha al più un filtro, coi `feMergeNode` (§11).
+/// Quante primitive ha al più un filtro, coi `feMergeNode` (formato della
+/// scena, risorse).
 pub(crate) const MAX_PRIMITIVES: usize = 64;
 
 /// Quanti `g` si annidano al più nel contenuto di una risorsa.
 pub(crate) const MAX_CONTENT_DEPTH: usize = 32;
 
-/// Le primitive dei filtri (§15): un elenco chiuso, quelle di SVG 1.1 che
-/// ogni lettore disegna allo stesso modo e l'ombra di Filter Effects.
+/// Le primitive dei filtri (formato della scena, risorse): un elenco chiuso,
+/// quelle di SVG 1.1 che ogni lettore disegna allo stesso modo e l'ombra di
+/// Filter Effects.
 const PRIMITIVES: [&str; 9] = [
     "feGaussianBlur",
     "feOffset",
@@ -658,7 +663,11 @@ fn defs_allowed(element: &Element<'_>) -> bool {
 /// nel riquadro (`in_box`) un numero o una percentuale, altrimenti una
 /// lunghezza.
 fn coordinate(value: &str, in_box: bool, non_negative: bool) -> bool {
-    let n = if in_box { fraction(value) } else { length(value) };
+    let n = if in_box {
+        fraction(value)
+    } else {
+        length(value)
+    };
     n.is_some_and(|n| !non_negative || n >= 0.0)
 }
 
@@ -744,7 +753,9 @@ fn resource_allowed(
         .and_then(|name| element.value(NS_NONE, name))
         .is_none_or(|units| trim(units) != "userSpaceOnUse");
     let attributes = element.attrs.iter().all(|attr| match attr.ns {
-        NS_NONE => !has_url(&attr.value) && resource_attribute(tag, attr.local, &attr.value, in_box),
+        NS_NONE => {
+            !has_url(&attr.value) && resource_attribute(tag, attr.local, &attr.value, in_box)
+        }
         NS_XLINK | NS_SVG => false,
         _ => true,
     });
@@ -901,7 +912,10 @@ fn primitive_attribute(local: &str, name: &str, value: &str, input: &dyn Fn(&str
         "k1" | "k2" | "k3" | "k4" => local == "feComposite" && number(value).is_some(),
         "mode" => {
             local == "feBlend"
-                && matches!(value, "normal" | "multiply" | "screen" | "darken" | "lighten")
+                && matches!(
+                    value,
+                    "normal" | "multiply" | "screen" | "darken" | "lighten"
+                )
         }
         "radius" => local == "feMorphology" && one_or_two(value).is_some(),
         _ => false,
@@ -944,7 +958,9 @@ fn primitive_allowed(doc: &Document<'_>, element: &Element<'_>, results: &HashSe
             Kind::Text { blank, .. } => *blank,
             Kind::Element(_) => {
                 let node = doc.element(child).expect("un nodo elemento è un elemento");
-                local == "feMerge" && node.is_svg("feMergeNode") && primitive_allowed(doc, node, results)
+                local == "feMerge"
+                    && node.is_svg("feMergeNode")
+                    && primitive_allowed(doc, node, results)
             }
             _ => false,
         })
@@ -983,10 +999,10 @@ fn primitives_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
 }
 
 /// L'indice delle risorse modificabili del documento: per ogni id, il tipo
-/// della risorsa (§15). Prima le sfumature, che non rimandano a niente, poi
-/// le altre, che nel contenuto possono usare le sfumature. Di due risorse
-/// con lo stesso id vale la prima, in quest'ordine: il documento è comunque
-/// in sola lettura (S003).
+/// della risorsa (formato della scena, risorse). Prima le sfumature, che non
+/// rimandano a niente, poi le altre, che nel contenuto possono usare le
+/// sfumature. Di due risorse con lo stesso id vale la prima, in quest'ordine:
+/// il documento è comunque in sola lettura (S003).
 fn resource_index(doc: &Document<'_>) -> HashMap<String, ResourceKind> {
     let mut found = HashMap::new();
     let mut others = Vec::new();

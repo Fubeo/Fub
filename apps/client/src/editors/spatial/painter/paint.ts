@@ -30,7 +30,7 @@
 //   per `use`) porta quell'elemento nei `defs` dell'immagine, e così i fogli
 //   di stile. Al più [`MAX_DEFS_CHARS`] caratteri per strato.
 //
-// Le risorse modificabili (formato della scena, §15) non sono strati: la
+// Le risorse modificabili (formato della scena, risorse) non sono strati: la
 // scena le porta a parte, in ordine di documento, ciascuna coi soli elementi
 // e attributi che il formato ammette, e il painter le mette nella `defs` viva
 // della superficie, dove gli oggetti vivi le trovano. Dentro un'immagine
@@ -220,7 +220,7 @@ export interface PaintDef {
   readonly children: readonly (PaintDef | string)[];
 }
 
-/// Una risorsa modificabile (formato della scena, §15): una sfumatura, un
+/// Una risorsa modificabile (formato della scena, risorse): una sfumatura, un
 /// motivo, un marcatore, un ritaglio, una maschera o un filtro, che gli
 /// oggetti vivi usano per riferimento.
 export interface PaintResource extends PaintDef {
@@ -316,8 +316,8 @@ export const PAINTED_ATTRIBUTES: ReadonlySet<string> = new Set([
   "filter",
 ]);
 
-/// Gli attributi che rimandano a una risorsa con `url(#id)` (§15): il
-/// painter li riscrive sugli id vivi della sua superficie.
+/// Gli attributi che rimandano a una risorsa con `url(#id)` (formato della
+/// scena, risorse): il painter li riscrive sugli id vivi della sua superficie.
 export const REFERENCE_ATTRIBUTES: ReadonlySet<string> = new Set([
   "fill",
   "stroke",
@@ -340,11 +340,11 @@ const CONTENT_ATTRIBUTES: ReadonlySet<string> = new Set([
 /// Gli attributi di ogni primitiva di un filtro.
 const PRIMITIVE = ["result", "color-interpolation-filters", "x", "y", "width", "height"];
 
-/// Gli elementi delle risorse vive, ciascuno coi suoi attributi senza
-/// namespace (§15). È la grammatica del formato, ripetuta come
-/// [`PAINTED_ATTRIBUTES`]: ciò che non è scritto qui non entra nel DOM.
-/// `id` manca: quello di una risorsa il painter lo riscrive, quelli dei suoi
-/// figli non servono.
+/// Gli elementi delle risorse vive, ciascuno coi suoi attributi senza namespace
+/// (formato della scena, risorse). È la grammatica del formato, ripetuta come
+/// [`PAINTED_ATTRIBUTES`]: ciò che non è scritto qui non entra nel DOM. `id`
+/// manca: quello di una risorsa il painter lo riscrive, quelli dei suoi figli
+/// non servono.
 export const DEF_ATTRIBUTES: ReadonlyMap<string, ReadonlySet<string>> = new Map<string, ReadonlySet<string>>([
   ["linearGradient", new Set(["x1", "y1", "x2", "y2", "gradientUnits", "gradientTransform", "spreadMethod"])],
   ["radialGradient", new Set(["cx", "cy", "r", "fx", "fy", "gradientUnits", "gradientTransform", "spreadMethod"])],

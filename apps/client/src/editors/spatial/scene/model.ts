@@ -79,7 +79,7 @@ export interface ElementFacts {
   /// L'attributo `id`; `null` se manca o è vuoto.
   readonly id: string | null;
   /// Gli id a cui rimandano gli attributi dell'elemento, senza ripetizioni
-  /// (formato della scena, §15).
+  /// (formato della scena, risorse).
   readonly refs: readonly string[];
 }
 

@@ -336,9 +336,16 @@ fn dangling_references(doc: &xml::Document<'_>, map: &Utf16Map<'_>, out: &mut Ve
             }
             let named: Vec<String> = if attr.local == "href" {
                 let anchor = element.ns != NS_SVG || element.local == "a";
-                (!anchor).then(|| href_id(&attr.value)).flatten().into_iter().collect()
+                (!anchor)
+                    .then(|| href_id(&attr.value))
+                    .flatten()
+                    .into_iter()
+                    .collect()
             } else {
-                url_ids(&attr.value).into_iter().map(str::to_owned).collect()
+                url_ids(&attr.value)
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect()
             };
             let mut reported = std::collections::HashSet::new();
             for id in named {

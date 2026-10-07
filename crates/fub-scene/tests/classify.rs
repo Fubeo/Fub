@@ -984,7 +984,7 @@ fn a_document_beyond_the_element_limit_has_no_items() {
     assert!(scene.items.is_empty());
 }
 
-// Le risorse (§15).
+// Le risorse del disegno (formato della scena, risorse).
 
 /// Il ruolo del primo figlio della `defs` di `doc(<defs>body</defs>)`.
 fn resource(body: &str) -> Option<Role> {
@@ -1099,7 +1099,8 @@ fn coordinates_follow_their_units() {
 #[test]
 fn gradients_hold_only_stops_with_their_attributes_up_to_256() {
     let gradient = |stops: &str| format!(r#"<linearGradient id="r1">{stops}</linearGradient>"#);
-    let body = gradient("\n  <title>Cielo</title>\n  <stop offset=\"50%\" stop-color=\"#ff0000\"/>\n");
+    let body =
+        gradient("\n  <title>Cielo</title>\n  <stop offset=\"50%\" stop-color=\"#ff0000\"/>\n");
     assert_eq!(resource(&body), Some(Role::Resource));
     for stop in [
         r#"<stop offset="0" stop-color="none"/>"#,
@@ -1120,7 +1121,8 @@ fn gradients_hold_only_stops_with_their_attributes_up_to_256() {
 
 #[test]
 fn contents_are_shapes_texts_and_groups_without_groups_in_clips() {
-    let body = r##"<pattern id="r1"><g fill="#ff0000"><g><rect width="1" height="1"/></g></g></pattern>"##;
+    let body =
+        r##"<pattern id="r1"><g fill="#ff0000"><g><rect width="1" height="1"/></g></g></pattern>"##;
     assert_eq!(resource(body), Some(Role::Resource));
     let body = r#"<clipPath id="r1"><g><rect width="1" height="1"/></g></clipPath>"#;
     assert_eq!(resource(body), None);
@@ -1151,7 +1153,9 @@ fn contents_are_shapes_texts_and_groups_without_groups_in_clips() {
 fn contents_refer_only_to_gradients() {
     let defs = format!(r#"{GRADIENT}<pattern id="r2" width="1" height="1"/><filter id="r3"/>"#);
     let scene = |inner: &str| {
-        let source = doc(&format!(r#"<defs>{defs}<pattern id="r4">{inner}</pattern></defs>"#));
+        let source = doc(&format!(
+            r#"<defs>{defs}<pattern id="r4">{inner}</pattern></defs>"#
+        ));
         role(&load(&source), &[0, 3])
     };
     assert_eq!(scene(r##"<rect fill="url(#r1)"/>"##), Some(Role::Resource));
@@ -1273,8 +1277,9 @@ fn markers_go_on_paths_and_clips_masks_and_filters_on_what_is_drawn() {
         r#"{GRADIENT}<marker id="r2"/><clipPath id="r3"/><mask id="r4"/><filter id="r5"/>"#
     );
     for tag in ["path", "line", "polyline", "polygon"] {
-        let body =
-            format!(r##"<{tag} marker-start="url(#r2)" marker-mid="none" marker-end="url(#r2)"/>"##);
+        let body = format!(
+            r##"<{tag} marker-start="url(#r2)" marker-mid="none" marker-end="url(#r2)"/>"##
+        );
         assert!(user(&defs, &body).is_some(), "{tag}");
     }
     assert_eq!(user(&defs, r##"<rect marker-end="url(#r2)"/>"##), None);
@@ -1293,7 +1298,10 @@ fn markers_go_on_paths_and_clips_masks_and_filters_on_what_is_drawn() {
     assert_eq!(user(&defs, r##"<rect clip-path="url(#r4)"/>"##), None);
     assert_eq!(user(&defs, r##"<rect filter="url(#r3)"/>"##), None);
     assert_eq!(user(&defs, r#"<rect clip-path="inset(10%)"/>"#), None);
-    assert_eq!(user(&defs, r##"<rect filter="url(#r5) blur(1px)"/>"##), None);
+    assert_eq!(
+        user(&defs, r##"<rect filter="url(#r5) blur(1px)"/>"##),
+        None
+    );
     // `clip-rule` vale soltanto dentro un ritaglio.
     assert_eq!(user(&defs, r#"<rect clip-rule="evenodd"/>"#), None);
 }
@@ -1301,7 +1309,9 @@ fn markers_go_on_paths_and_clips_masks_and_filters_on_what_is_drawn() {
 #[test]
 fn a_reference_holds_toward_an_editable_resource_in_a_root_defs_wherever_it_is() {
     // La defs può venire dopo chi la usa.
-    let scene = load(&doc(&format!(r##"<rect fill="url(#r1)"/><defs>{GRADIENT}</defs>"##)));
+    let scene = load(&doc(&format!(
+        r##"<rect fill="url(#r1)"/><defs>{GRADIENT}</defs>"##
+    )));
     assert_eq!(role(&scene, &[0]), Some(Role::Rect));
     // Una risorsa estranea, o in una defs estranea, non vale.
     let scene = load(&doc(
@@ -1339,7 +1349,10 @@ fn a_resource_tells_its_lifecycle_and_its_name() {
     let gradient = at(&scene, &[0, 0]).unwrap();
     assert_eq!(gradient.lifecycle, Some(Lifecycle::Private));
     assert_eq!(gradient.title.as_deref(), Some("Tramonto"));
-    assert_eq!(at(&scene, &[0, 1]).unwrap().lifecycle, Some(Lifecycle::Shared));
+    assert_eq!(
+        at(&scene, &[0, 1]).unwrap().lifecycle,
+        Some(Lifecycle::Shared)
+    );
     let mask = at(&scene, &[0, 2]).unwrap();
     assert_eq!(mask.lifecycle, None);
     assert_eq!(mask.role, Role::Resource);

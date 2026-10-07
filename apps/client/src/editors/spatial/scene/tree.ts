@@ -58,7 +58,7 @@ export class Tree {
   /// contiene se l'id è di un elemento dentro un'unità.
   private readonly ids = new Map<string, ElementPart>();
   /// Per ogni id, quanti elementi vi rimandano: un contenitore col suo tag,
-  /// un'unità con tutto ciò che contiene (formato della scena, §15).
+  /// un'unità con tutto ciò che contiene (formato della scena, risorse).
   private readonly refs = new Map<string, number>();
   /// Gli id che hanno perso il loro ultimo riferimento dall'ultimo
   /// [`Tree.orphans`]: la raccolta delle risorse comincia da qui.
@@ -91,7 +91,8 @@ export class Tree {
     return this.ids.has(id);
   }
 
-  /// Quante risorse modificabili ha il documento (formato della scena, §15).
+  /// Quante risorse modificabili ha il documento (formato della scena,
+  /// risorse).
   get resources(): number {
     return this.resourceCount;
   }

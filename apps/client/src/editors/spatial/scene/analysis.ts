@@ -93,9 +93,11 @@ export type Role =
   | "polygon"
   | "text"
   | "image"
-  /// La `defs` della radice, coi figli giudicati uno per uno (§15).
+  /// La `defs` della radice, coi figli giudicati uno per uno (formato della
+  /// scena, risorse).
   | "defs"
-  /// Una risorsa modificabile di una `defs` della radice (§15).
+  /// Una risorsa modificabile di una `defs` della radice (formato della scena,
+  /// risorse).
   | "resource";
 
 /// Vero per i ruoli i cui figli si classificano uno per uno.
@@ -205,7 +207,7 @@ export interface Summary {
 const I64_MAX = 2 ** 63;
 
 /// Gli attributi che cambiano ciò che si vede di un elemento oltre il suo
-/// colore (§15).
+/// colore (formato della scena, risorse).
 const EFFECTS = ["clip-path", "mask", "filter"] as const;
 
 /// Quello che un contenitore modificabile trasmette ai figli.
@@ -227,7 +229,7 @@ export class Context {
     /// Il `font-weight` in vigore è da grassetto: `bold` o da 700 in su.
     readonly bold: boolean,
     /// Un antenato, o l'elemento, ha un ritaglio, una maschera o un filtro
-    /// (§15): i colori che si vedono non si sanno.
+    /// (formato della scena, risorse): i colori che si vedono non si sanno.
     private readonly effect: boolean,
   ) {}
 
@@ -399,7 +401,7 @@ export class Tally {
   ): void {
     switch (role) {
       // Le risorse non si disegnano da sole: contano gli oggetti che le
-      // usano (§15).
+      // usano (formato della scena, risorse).
       case "defs":
       case "resource":
         return;
