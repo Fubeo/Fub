@@ -121,8 +121,8 @@ describe("ordine degli attributi (§7, punto 2)", () => {
   });
 
   it("ogni gruppo nell'ordine della specifica", () => {
-    const fub = ["layer", "role", "tool", "shape", "geom", "locked", "at", "brush"].map((n) => `fub:${n}`);
-    const geometry = ["x", "y", "dx", "dy", "cx", "cy", "r", "fx", "fy", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d"];
+    const fub = ["layer", "role", "tool", "shape", "geom", "wrap", "join", "locked", "at", "brush"].map((n) => `fub:${n}`);
+    const geometry = ["x", "y", "dx", "dy", "cx", "cy", "r", "fx", "fy", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d", "startOffset"];
     const resource = ["offset", "refX", "refY", "markerWidth", "markerHeight", "orient", "viewBox"];
     const units = [
       "gradientUnits",

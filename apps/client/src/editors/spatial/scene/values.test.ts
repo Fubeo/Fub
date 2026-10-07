@@ -25,9 +25,11 @@ import {
   points,
   preserveAspectRatio,
   reference,
+  startOffset,
   transform,
   urlIds,
   viewBox,
+  wrapWidth,
 } from "./values";
 
 describe("i valori degli attributi (values.rs)", () => {
@@ -189,6 +191,14 @@ describe("i valori degli attributi (values.rs)", () => {
     expect(fraction("0.25")).toBe(0.25);
     expect(fraction("25%")).toBe(0.25);
     expect(fraction("25px")).toBeNull();
+    expect(wrapWidth("320")).toBe(320);
+    expect(wrapWidth(" 0.5 ")).toBe(0.5);
+    for (const value of ["0", "-1", "320px", "", "1e40"]) expect(wrapWidth(value), value).toBeNull();
+    expect(startOffset("12")).toEqual({ value: 12, share: false });
+    expect(startOffset("1in")).toEqual({ value: 96, share: false });
+    expect(startOffset("-5")).toEqual({ value: -5, share: false });
+    expect(startOffset("50%")).toEqual({ value: 0.5, share: true });
+    for (const value of ["", "%", "50 %", "1em", "auto"]) expect(startOffset(value), value).toBeNull();
     expect(angle("90")).toBe(90);
     expect(angle("90deg")).toBe(90);
     expect(angle("100grad")).toBe(90);

@@ -24,7 +24,12 @@
 //! - `resources`: un disegno con la sua `defs` (formato della scena, risorse),
 //!   ogni tipo di risorsa, private e condivise, e gli oggetti che le usano coi
 //!   riempimenti, i marcatori, i ritagli, le maschere e i filtri; una risorsa
-//!   estranea, un riferimento del tipo sbagliato e uno a un id che manca.
+//!   estranea, un riferimento del tipo sbagliato e uno a un id che manca;
+//! - `text`: un disegno col testo in area e su tracciato (formato della scena,
+//!   testo): due paragrafi in una cornice, con le righe che vanno a capo fra
+//!   le parole e dentro una parola, una larghezza che non si legge, due testi
+//!   su tracciato con `href` e `xlink:href`, e due estranei, un testo su
+//!   tracciato con `x` e uno che segue un tracciato con una trasformazione.
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -993,6 +998,118 @@ fn resources() -> String {
     document(&root, "\n")
 }
 
+fn text() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(
+            El::new("path")
+                .a("id", "r00000001")
+                .a("fub:role", "private")
+                .a("d", "M40 400 C160 300 280 300 400 400"),
+        )
+        .child(
+            El::new("path")
+                .a("id", "r00000002")
+                .a("fub:role", "shared")
+                .a("d", "M440 400 A120 120 0 0 1 680 400")
+                .child(El::new("title").text("Arco")),
+        )
+        // Un tracciato con una trasformazione: estraneo.
+        .raw(r#"<path id="r00000003" d="M40 540 L400 540" transform="rotate(5)"/>"#);
+    let area = El::new("text")
+        .a("id", "o00000001")
+        .a("fub:wrap", 240)
+        .a("x", 40)
+        .a("y", 60)
+        .a("fill", "#000000")
+        .a("font-family", "Inter, sans-serif")
+        .a("font-size", 20)
+        .child(
+            El::new("tspan")
+                .a("x", 40)
+                .a("dy", 0)
+                .text("L'acqua del mare sale"),
+        )
+        .child(
+            El::new("tspan")
+                .a("fub:join", "space")
+                .a("x", 40)
+                .a("dy", 24)
+                .markup(r#"in cielo e <tspan font-style="italic">torna</tspan> giù:"#),
+        )
+        .child(
+            El::new("tspan")
+                .a("fub:join", "space")
+                .a("x", 40)
+                .a("dy", 24)
+                .text("precipitevolissimevol"),
+        )
+        .child(
+            El::new("tspan")
+                .a("fub:join", "word")
+                .a("x", 40)
+                .a("dy", 24)
+                .text("mente."),
+        )
+        .child(El::new("tspan").a("x", 40).a("dy", 24).text("\u{a0}"))
+        .child(El::new("tspan").a("x", 40).a("dy", 24).text("Fine."));
+    // Una larghezza che non si legge: il testo resta modificabile, ma le sue
+    // righe sono righe.
+    let unread = El::new("text")
+        .a("id", "o00000002")
+        .a("fub:wrap", "-5")
+        .a("x", 400)
+        .a("y", 60)
+        .a("font-size", 20)
+        .child(El::new("tspan").a("x", 400).a("dy", 0).text("Due"))
+        .child(
+            El::new("tspan")
+                .a("fub:join", "word")
+                .a("x", 400)
+                .a("dy", 24)
+                .text("righe"),
+        );
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("Testo"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(area)
+                .child(unread)
+                .child(
+                    El::new("text")
+                        .a("id", "o00000003")
+                        .a("fill", "#0072b2")
+                        .a("font-size", 24)
+                        .a("text-anchor", "middle")
+                        .child(
+                            El::new("textPath")
+                                .a("startOffset", "50%")
+                                .a("href", "#r00000001")
+                                .markup(r#"Sopra <tspan font-weight="bold">la</tspan> collina"#),
+                        ),
+                )
+                .child(
+                    El::new("text")
+                        .a("id", "o00000004")
+                        .a("font-size", 18)
+                        .child(
+                            El::new("textPath")
+                                .a("startOffset", 12)
+                                .a("xlink:href", "#r00000002")
+                                .text("Lungo l'arco"),
+                        ),
+                )
+                // Estranei: un testo su tracciato con `x` e `y`, uno che
+                // segue il tracciato con la trasformazione.
+                .raw(r##"<text id="o00000005" x="40" y="500"><textPath href="#r00000001">Con x e y</textPath></text>"##)
+                .raw(r##"<text id="o00000006"><textPath href="#r00000003">Storto</textPath></text>"##),
+        );
+    document(&root, "\n")
+}
+
 #[test]
 fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
@@ -1127,6 +1244,55 @@ fn resources_are_read_with_their_users() {
     assert_eq!(codes, [S002, S002, S014]);
     let broken = scene.diagnostics.iter().find(|d| d.code == S014).unwrap();
     assert_eq!(broken.detail.as_deref(), Some("fill #r0000000z"));
+}
+
+#[test]
+fn text_is_read_in_a_frame_and_along_a_path() {
+    let scene = fixture("text", &text());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    // Le due risorse `path` e il titolo dell'arco; il terzo tracciato è
+    // estraneo.
+    assert_eq!(element(&[1, 0]).map(|e| e.role), Some(Role::Resource));
+    assert_eq!(element(&[1, 1]).map(|e| e.role), Some(Role::Resource));
+    assert!(element(&[1, 2]).is_none());
+    let area = element(&[3, 0]).unwrap();
+    assert_eq!(area.wrap, Some(240.0));
+    assert_eq!(area.lines.as_ref().map(Vec::len), Some(6));
+    let unread = element(&[3, 1]).unwrap();
+    assert_eq!(unread.wrap, None);
+    let along = element(&[3, 2]).unwrap();
+    assert_eq!(along.text_path.as_deref(), Some("r00000001"));
+    assert_eq!(
+        along.lines.as_deref(),
+        Some(["Sopra la collina".to_owned()].as_slice())
+    );
+    assert_eq!(
+        element(&[3, 3]).and_then(|e| e.text_path.as_deref()),
+        Some("r00000002")
+    );
+    assert!(element(&[3, 4]).is_none());
+    assert!(element(&[3, 5]).is_none());
+    assert_eq!(scene.summary.counts.texts, 4);
+    // L'indice unisce senza spazio le righe spezzate dentro una parola, solo
+    // in una cornice che si legge.
+    let texts: Vec<_> = scene.index.texts.iter().map(|p| p.text.as_str()).collect();
+    assert!(texts.contains(
+        &"L'acqua del mare sale in cielo e torna giù: precipitevolissimevolmente. \u{a0} Fine."
+    ));
+    assert!(texts.contains(&"Due righe"));
+    assert!(texts.contains(&"Sopra la collina"));
+    // L'indice legge anche gli estranei.
+    assert!(texts.contains(&"Storto"));
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    // Il tracciato estraneo nella `defs` e i due testi estranei.
+    assert_eq!(codes, [S002, S002]);
 }
 
 #[test]
@@ -1586,11 +1752,18 @@ fn the_folder_holds_only_what_this_test_writes() {
         .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
         .collect();
     found.sort();
-    let mut expected: Vec<String> = ["sparse", "foreign", "crlf-bom", "doctype", "resources"]
-        .iter()
-        .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])
-        .chain(["generated.json".to_owned()])
-        .collect();
+    let mut expected: Vec<String> = [
+        "sparse",
+        "foreign",
+        "crlf-bom",
+        "doctype",
+        "resources",
+        "text",
+    ]
+    .iter()
+    .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])
+    .chain(["generated.json".to_owned()])
+    .collect();
     expected.sort();
     assert_eq!(found, expected, "file in più o in meno: {REGENERATE}");
 }

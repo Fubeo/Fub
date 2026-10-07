@@ -223,7 +223,7 @@ export function escapeText(value: string): string {
 // Ordine degli attributi.
 // ---------------------------------------------------------------------------
 
-const FUB_ORDER = ["layer", "role", "tool", "shape", "geom", "locked", "at", "brush"];
+const FUB_ORDER = ["layer", "role", "tool", "shape", "geom", "wrap", "join", "locked", "at", "brush"];
 const GEOMETRY_ORDER = [
   "x",
   "y",
@@ -244,6 +244,8 @@ const GEOMETRY_ORDER = [
   "y2",
   "points",
   "d",
+  // Dove comincia un testo su tracciato (formato della scena, testo).
+  "startOffset",
   // La geometria delle risorse.
   "offset",
   "refX",

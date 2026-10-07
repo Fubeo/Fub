@@ -414,6 +414,45 @@ fn s009_a_text_that_fades_into_what_lies_under_it() {
 }
 
 #[test]
+fn s009_and_s013_a_text_on_a_path_is_seen_where_it_starts_on_the_side_of_the_glyphs() {
+    // Il tracciato va da sinistra a destra a metà altezza, o al contrario; il
+    // rettangolo nero copre la metà di sopra.
+    let scene = |d: &str, attributes: &str, offset: &str| {
+        load(&titled(&format!(
+            concat!(
+                r##"<defs><path id="r1" d="{}"/></defs><rect id="fub-paper" fub:role="paper" width="100" height="100" fill="#ffffff"/>"##,
+                r##"<g fub:layer="A"><rect width="100" height="50" fill="#000000"/>"##,
+                r##"<text {}><textPath href="#r1" startOffset="{}">Onda</textPath></text></g>"##,
+            ),
+            d, attributes, offset
+        )))
+    };
+    let right = "M0 50 L100 50";
+    let left = "M100 50 L0 50";
+    let white = r##"fill="#ffffff""##;
+    let black = r##"fill="#000000""##;
+    assert!(details(&scene(right, white, "50%"), Code::S009).is_empty());
+    assert_eq!(details(&scene(left, white, "50%"), Code::S009), ["1.00"]);
+    assert!(details(&scene(left, black, "50%"), Code::S009).is_empty());
+    assert_eq!(details(&scene(right, black, "50%"), Code::S009), ["1.00"]);
+    // Una curva: a metà va verso destra, e il punto sta sopra.
+    assert!(details(&scene("M0 60 Q50 40 100 60", white, "50%"), Code::S009).is_empty());
+    // Oltre la fine si ferma all'estremo; un tracciato lungo zero non si
+    // guarda.
+    assert!(details(&scene("M0 50 L60 50", white, "500"), Code::S009).is_empty());
+    assert_eq!(
+        details(&scene("M0 50 L60 50 L60 100", white, "500"), Code::S009),
+        ["1.00"]
+    );
+    assert!(details(&scene("M50 50 L50 50", white, "50%"), Code::S009).is_empty());
+    // Il corpo conta come per le righe.
+    let small = r##"fill="#ffffff" font-size="9""##;
+    assert_eq!(details(&scene(right, small, "50%"), Code::S013), ["9.00"]);
+    let enough = r##"fill="#ffffff" font-size="12""##;
+    assert!(details(&scene(right, enough, "50%"), Code::S013).is_empty());
+}
+
+#[test]
 fn s009_a_pen_stroke_is_measured_on_what_lies_under_it() {
     // Il bianco su un rettangolo nero si legge; a cavallo del bordo conta il
     // contrasto mediano, quello della parte più lunga.

@@ -447,6 +447,28 @@ export function fraction(value: string): number | null {
   return number(value) ?? percentage(value);
 }
 
+/// La larghezza di un testo in area, `fub:wrap` (formato della scena,
+/// testo): un numero SVG maggiore di 0, senza unità.
+export function wrapWidth(value: string): number | null {
+  const n = number(value);
+  return n !== null && n > 0 ? n : null;
+}
+
+/// Dove comincia un testo sul suo tracciato, `startOffset`: una lunghezza in
+/// unità utente o, con `share`, una frazione della lunghezza del tracciato.
+export interface StartOffset {
+  readonly value: number;
+  readonly share: boolean;
+}
+
+/// `startOffset` di un `textPath`: una lunghezza o una percentuale.
+export function startOffset(value: string): StartOffset | null {
+  const at = length(value);
+  if (at !== null) return { value: at, share: false };
+  const share = percentage(value);
+  return share === null ? null : { value: share, share: true };
+}
+
 /// L'angolo di `orient`, in gradi: un numero SVG seguito facoltativamente
 /// da `deg`, `grad` o `rad`.
 export function angle(value: string): number | null {

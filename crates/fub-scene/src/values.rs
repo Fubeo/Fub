@@ -479,6 +479,21 @@ pub(crate) fn fraction(value: &str) -> Option<f64> {
     number(value).or_else(|| percentage(value))
 }
 
+/// La larghezza di un testo in area, `fub:wrap` (formato della scena,
+/// testo): un numero SVG maggiore di 0, senza unità.
+pub(crate) fn wrap_width(value: &str) -> Option<f64> {
+    number(value).filter(|n| *n > 0.0)
+}
+
+/// `startOffset` di un `textPath`: una lunghezza in unità utente, o con
+/// `true` una frazione della lunghezza del tracciato.
+pub(crate) fn start_offset(value: &str) -> Option<(f64, bool)> {
+    match length(value) {
+        Some(at) => Some((at, false)),
+        None => percentage(value).map(|share| (share, true)),
+    }
+}
+
 /// L'angolo di `orient`, in gradi: un numero SVG seguito facoltativamente
 /// da `deg`, `grad` o `rad`.
 pub(crate) fn angle(value: &str) -> Option<f64> {
@@ -987,6 +1002,18 @@ mod tests {
         assert_eq!(fraction("0.25"), Some(0.25));
         assert_eq!(fraction("25%"), Some(0.25));
         assert_eq!(fraction("25px"), None);
+        assert_eq!(wrap_width("320"), Some(320.0));
+        assert_eq!(wrap_width(" 0.5 "), Some(0.5));
+        for value in ["0", "-1", "320px", "", "1e40"] {
+            assert_eq!(wrap_width(value), None, "{value}");
+        }
+        assert_eq!(start_offset("12"), Some((12.0, false)));
+        assert_eq!(start_offset("1in"), Some((96.0, false)));
+        assert_eq!(start_offset("-5"), Some((-5.0, false)));
+        assert_eq!(start_offset("50%"), Some((0.5, true)));
+        for value in ["", "%", "50 %", "1em", "auto"] {
+            assert_eq!(start_offset(value), None, "{value}");
+        }
         assert_eq!(angle("90"), Some(90.0));
         assert_eq!(angle("90deg"), Some(90.0));
         assert_eq!(angle("100grad"), Some(90.0));
