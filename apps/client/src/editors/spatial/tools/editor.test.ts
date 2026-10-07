@@ -774,6 +774,24 @@ describe("disporre, dal livello Standard", () => {
     expect(editor.engine.text).not.toContain("og1g1g1g1");
   });
 
+  it("un gruppo con un ritaglio resta intero, e si dice perché", () => {
+    const source = doc(
+      '<defs id="fub-defs"><clipPath id="rcccccccc"><circle cx="5" cy="5" r="5"/></clipPath></defs>' +
+        `${LAYER}<g id="og1g1g1g1" clip-path="url(#rcccccccc)"><rect id="${A}" x="0" y="0" width="5" height="5"/></g>` +
+        `<g id="og2g2g2g2"><rect id="${B}" x="10" y="0" width="5" height="5"/></g></g>`,
+    );
+    mount(source, { level: "standard" });
+    editor.select(["og1g1g1g1"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(editor.engine.text).toBe(source);
+    expect(spoken()).toBe("Non separato: un ritaglio, una maschera o un filtro valgono per tutto il gruppo.");
+    editor.select(["og1g1g1g1", "og2g2g2g2"]);
+    key("g", { ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("1 gruppo separato. I gruppi con un ritaglio, una maschera o un filtro restano interi.");
+    expect(editor.engine.text).toContain('<g id="og1g1g1g1" clip-path="url(#rcccccccc)">');
+    expect(editor.engine.text).not.toContain("og2g2g2g2");
+  });
+
   it("«?» elenca anche i tasti per disporre", () => {
     mount(ROW, { level: "standard" });
     key("?", { shiftKey: true });

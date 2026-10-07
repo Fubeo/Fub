@@ -48,6 +48,27 @@ describe("i colori", () => {
     expect(paintText("none")).toBe("none");
     expect(paintText("currentColor")).toBe("currentColor");
   });
+
+  it("mostrano una risorsa col suo id, qualunque sia il ripiego, e col suo campione", () => {
+    expect(paintText("url(#rgggggggg) #ff0000")).toBe("url(#rgggggggg)");
+    expect(paintText(" url( #rgggggggg ) none")).toBe("url(#rgggggggg)");
+    const opened = open(
+      doc(
+        '<defs id="fub-defs"><linearGradient id="rgggggggg"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient>' +
+          '<pattern id="rpppppppp" width="0.5" height="0.5"><rect x="0" y="0" width="0.25" height="0.25" fill="#000000"/></pattern></defs>' +
+          `${LAYER}${RECT("oaaaaaaaa", ' fill="url(#rgggggggg) #ff0000" stroke="url(#rpppppppp)"')}${RECT("obbbbbbbb", ' fill="url(#rgggggggg)" stroke="url(#rpppppppp)"')}</g>`,
+      ),
+    );
+    const seen = look(opened);
+    expect(seen.fill).toEqual({ count: 2, value: "url(#rgggggggg)" });
+    expect(seen.stroke).toEqual({ count: 2, value: "url(#rpppppppp)" });
+    expect(seen.samples).toEqual(
+      new Map([
+        ["url(#rgggggggg)", { kind: "gradient", image: "linear-gradient(to right, rgb(255 255 255 / 1) 0%, rgb(0 0 0 / 1) 100%)" }],
+        ["url(#rpppppppp)", { kind: "pattern", image: null }],
+      ]),
+    );
+  });
 });
 
 describe("l'aspetto della selezione", () => {

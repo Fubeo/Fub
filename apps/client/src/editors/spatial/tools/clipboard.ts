@@ -7,15 +7,20 @@
 //   disegno. Ogni elemento porta il suo testo; chi stava in un contenitore
 //   trasformato, o che gli dava uno stile, prende su di sé la trasformazione
 //   e lo stile che ereditava, come quando esce da un contenitore
-//   (`place.ts`). Ciò a cui rimanda e che resta fuori, un gradiente o la
-//   forma di un `use`, va in un `defs`, e così i fogli di stile del disegno
-//   se un blocco estraneo può usarli.
+//   (`place.ts`). Ciò a cui rimanda e che resta fuori, una sfumatura o la
+//   forma di un `use`, anche per un colore ereditato, va in un `defs`, e
+//   così i fogli di stile del disegno se un blocco estraneo può usarli.
 // - **Incollare** è un `batch` solo, un passo di annulla. Un SVG di FubDraw
 //   rientra com'era, elemento per elemento, nel livello che riceve; un
 //   livello diventa un gruppo, col suo nome per titolo. Un SVG di un altro
 //   programma entra in un gruppo nuovo, alla sua misura: ciò che il formato
 //   ammette resta modificabile, il resto entra in blocchi estranei, che non
 //   eseguono niente. Fra disegni con unità diverse la misura vera resta.
+// - **Le risorse** dei `defs` della radice che ciò che entra usa vanno nella
+//   `defs` del disegno, prima di chi le usa (`resources.ts`): una privata
+//   come copia, una condivisa o che non è di FubDraw resta quella del
+//   disegno se è la stessa, con lo stesso id. Ciò che nessuno usa resta
+//   fuori. Con un foglio di stile, che può rimandarvi, restano dove sono.
 // - **Id nuovi.** Ogni id cambia, e i riferimenti interni lo seguono:
 //   `url(#…)`, `href`, gli attributi ARIA, l'inizio e la fine delle
 //   animazioni, i selettori dei fogli di stile. Un foglio di un altro
@@ -30,13 +35,13 @@
 import { formatNumber, formatShortest } from "../number";
 import { NON_RENDERING } from "../painter/paint";
 import { isContainer, type Role } from "../scene/analysis";
-import { classifyChild, firstTitle, svgAttribute, type Place, type Tag } from "../scene/classify";
+import { classifyChild, firstTitle, resourceIndex, resourceKind, svgAttribute, type Place, type Resolve, type ResourceKind, type Tag } from "../scene/classify";
 import { reindent } from "../scene/engine";
 import type { Bounds } from "../scene/geometry";
 import { compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
 import { declarationsOf, elementChildren, indentOf, parseFragment, placeOf, scopeOf, type ContainerNode, type DocumentModel } from "../scene/model";
 import { MAX_OP_BYTES, type Op } from "../scene/ops";
-import { MAX_EDIT_BYTES } from "../scene/read";
+import { MAX_EDIT_BYTES, MAX_RESOURCES } from "../scene/read";
 import {
   attributesOf,
   canonicalOrder,
@@ -49,7 +54,7 @@ import {
   type OutAttr,
 } from "../scene/serialize";
 import { SourceText, utf8Length } from "../scene/text";
-import { href as hrefKind, length, numberList, scanNumber, transform as parseTransform, trim, viewBoxMatrix } from "../scene/values";
+import { href as hrefKind, length, numberList, scanNumber, transform as parseTransform, trim, urlIds, viewBoxMatrix } from "../scene/values";
 import {
   FUB_NS,
   isSvg,
@@ -71,6 +76,7 @@ import {
 import { INHERITED, plainAttributes } from "./arrange";
 import { mappedBounds, transformValue, type Destination, type NewIds } from "./edit";
 import { inheritedBy, INITIAL } from "./place";
+import { homeOf, resourceHome, resourcesOf } from "./resources";
 import { renameUrls, restyle } from "./stylesheet";
 
 /// Il tipo di un SVG negli appunti.
@@ -310,9 +316,9 @@ function inheritedOf(element: ElementNode, found: readonly [Tag, Role] | null): 
 /// Il ruolo di `id` come figlio di un contenitore al posto `place`, a
 /// profondità `depth`, e gli elementi modificabili che hanno
 /// bisogno di un id: tutti tranne titoli e descrizioni, sotto di lui e, con
-/// `top`, lui stesso.
-function rolesUnder(doc: XmlDocument, id: NodeId, place: Place, depth: number, top: boolean, missing: NodeId[]): [Tag, Role] | null {
-  const found = classifyChild(doc, id, place, depth);
+/// `top`, lui stesso. `resolve` dice quali id saranno risorse del disegno.
+function rolesUnder(doc: XmlDocument, id: NodeId, place: Place, depth: number, top: boolean, missing: NodeId[], resolve: Resolve): [Tag, Role] | null {
+  const found = classifyChild(doc, id, place, depth, resolve);
   if (found === null) return null;
   if (top && found[0] !== "title" && found[0] !== "desc" && !hasId(doc.element(id)!)) missing.push(id);
   const stack: Array<readonly [NodeId, Role, number]> = [[id, found[1], depth]];
@@ -322,7 +328,7 @@ function rolesUnder(doc: XmlDocument, id: NodeId, place: Place, depth: number, t
     for (const child of doc.children(at)) {
       const element = doc.element(child);
       if (element === null) continue;
-      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1);
+      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1, resolve);
       if (inner === null) continue;
       if (inner[0] !== "title" && inner[0] !== "desc" && !hasId(element)) missing.push(child);
       stack.push([child, inner[1], level + 1]);
@@ -333,8 +339,8 @@ function rolesUnder(doc: XmlDocument, id: NodeId, place: Place, depth: number, t
 
 /// Vero se dentro `id`, giudicato come in [`rolesUnder`], c'è un blocco
 /// estraneo, o lo è lui.
-function holdsForeign(doc: XmlDocument, id: NodeId, place: Place, depth: number): boolean {
-  const found = classifyChild(doc, id, place, depth);
+function holdsForeign(doc: XmlDocument, id: NodeId, place: Place, depth: number, resolve: Resolve): boolean {
+  const found = classifyChild(doc, id, place, depth, resolve);
   if (found === null) return true;
   const stack: Array<readonly [NodeId, Role, number]> = [[id, found[1], depth]];
   while (stack.length > 0) {
@@ -342,7 +348,7 @@ function holdsForeign(doc: XmlDocument, id: NodeId, place: Place, depth: number)
     if (!isContainer(role)) continue;
     for (const child of doc.children(at)) {
       if (doc.element(child) === null) continue;
-      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1);
+      const inner = classifyChild(doc, child, role === "defs" ? "defs" : "inside", level + 1, resolve);
       if (inner === null) return true;
       stack.push([child, inner[1], level + 1]);
     }
@@ -467,6 +473,10 @@ interface Rules {
   /// Il nuovo `href` di un'immagine o di un collegamento del vault; `null`
   /// lo lascia.
   readonly href: (value: string) => string | null;
+  /// Quali id saranno risorse del disegno: con gli id del testo letto, e con
+  /// quelli del testo riscritto.
+  readonly resolve: Resolve;
+  readonly written: Resolve;
 }
 
 /// Il tag d'apertura di un elemento che va in un altro posto.
@@ -505,7 +515,7 @@ class Rewriter {
 
   constructor(
     readonly doc: XmlDocument,
-    private readonly rules: Rules,
+    readonly rules: Rules,
   ) {
     this.text = doc.source.text;
   }
@@ -718,10 +728,14 @@ export function copySvg(input: CopyInput): string | null {
   const known = rootScope.attributePrefix(FUB_NS);
   const fub = known ?? freePrefix(rootScope, "fub");
   const scope = known === null ? rootScope.declare([[fub, FUB_NS]]) : rootScope;
-  const rewriter = new Rewriter(doc, { rename: () => null, ids: new Map(), sheets: undefined, href: () => null });
+  const index = resourceIndex(doc);
+  const resolve: Resolve = (id) => index.get(id) ?? null;
+  const rewriter = new Rewriter(doc, { rename: () => null, ids: new Map(), sheets: undefined, href: () => null, resolve, written: resolve });
 
   try {
     const pieces: string[] = [];
+    // Le risorse a cui rimanda ciò che un elemento eredita e prende su di sé.
+    const inherited: string[] = [];
     let foreign = false;
     for (const id of tops) {
       const element = doc.element(id)!;
@@ -729,8 +743,8 @@ export function copySvg(input: CopyInput): string | null {
       let matrix = IDENTITY;
       for (let i = chain.length - 2; i >= 0; i--) matrix = compose(matrix, parseTransform(valueOf(chain[i]!, NS_NONE, "transform") ?? "") ?? IDENTITY);
       const place = element.parent === doc.root ? "root" : "inside";
-      const found = classifyChild(doc, id, place, chain.length);
-      foreign ||= holdsForeign(doc, id, place, chain.length);
+      const found = classifyChild(doc, id, place, chain.length, resolve);
+      foreign ||= holdsForeign(doc, id, place, chain.length, resolve);
       const set = new Map<string, string | null>();
       let before: string | null = null;
       if (!isIdentity(matrix)) {
@@ -741,17 +755,19 @@ export function copySvg(input: CopyInput): string | null {
       for (const name of inheritedOf(element, found)) {
         if (valueOf(element, NS_NONE, name) !== undefined) continue;
         const value = chain.map((at) => valueOf(at, NS_NONE, name)).find((v) => v !== undefined);
-        if (value !== undefined) set.set(name, value);
+        if (value === undefined) continue;
+        set.set(name, value);
+        inherited.push(...urlIds(value));
       }
       rewriter.used.clear();
       rewriter.body(id, true);
       const declarations = needed(scopeOfChain(chain), scope, rewriter.used, element);
       const indent = doc.source.indent(element.start);
       rewriter.head(id, { set, before, canonical: found !== null && set.size > 0, unlayer: false, declarations, id: null, child: null }, indent);
-      pieces.push(reindent(rewriter.slice(element.start, element.end), scope, "root", 1, indent, "  "));
+      pieces.push(reindent(rewriter.slice(element.start, element.end), scope, "root", 1, indent, "  ", resolve));
     }
 
-    const holders = holdersOf(doc, tops, foreign);
+    const holders = holdersOf(doc, tops, foreign, inherited);
     const prefix = root.name.includes(":") ? root.name.slice(0, root.name.indexOf(":") + 1) : "";
     if (holders.length > 0) {
       let defs = `<${prefix}defs>`;
@@ -762,7 +778,7 @@ export function copySvg(input: CopyInput): string | null {
         const declarations = needed(scopeOfChain(ancestors(doc, id)), scope, rewriter.used, element);
         const indent = doc.source.indent(element.start);
         rewriter.head(id, { set: new Map(), before: null, canonical: false, unlayer: false, declarations, id: null, child: null }, indent);
-        defs += `\n    ${reindent(rewriter.slice(element.start, element.end), scope, "defs", 2, indent, "    ")}`;
+        defs += `\n    ${reindent(rewriter.slice(element.start, element.end), scope, "defs", 2, indent, "    ", resolve)}`;
       }
       pieces.unshift(`${defs}\n  </${prefix}defs>`);
     }
@@ -783,16 +799,16 @@ export function copySvg(input: CopyInput): string | null {
   }
 }
 
-/// Ciò a cui rimandano gli elementi copiati e che resta fuori, a cascata, e
-/// con `styles` i fogli di stile del documento: nell'ordine del documento,
-/// senza chi sta dentro un altro di loro. Non la radice né un antenato di
-/// ciò che si copia, che lo ripeterebbero.
-function holdersOf(doc: XmlDocument, tops: readonly NodeId[], styles: boolean): NodeId[] {
+/// Ciò a cui rimandano gli elementi copiati, o gli id `extra`, e che resta
+/// fuori, a cascata, e con `styles` i fogli di stile del documento:
+/// nell'ordine del documento, senza chi sta dentro un altro di loro. Non la
+/// radice né un antenato di ciò che si copia, che lo ripeterebbero.
+function holdersOf(doc: XmlDocument, tops: readonly NodeId[], styles: boolean, extra: readonly string[]): NodeId[] {
   const copied = new Set(tops);
   const around = new Set<NodeId>();
   for (const top of tops) for (let at = doc.nodes[top]!.parent; at !== null; at = doc.nodes[at]!.parent) around.add(at);
   const taken = new Set<NodeId>();
-  const pending: string[] = [];
+  const pending: string[] = [...extra];
   const scan = (id: NodeId): void => {
     for (const at of subtree(doc, id)) pending.push(...referencesOf(doc, doc.element(at)!));
   };
@@ -980,6 +996,140 @@ function jsonBytes(text: string): number {
   return utf8Length(JSON.stringify(text));
 }
 
+/// Le risorse che un incolla porta nella `defs` del disegno che riceve: dalle
+/// `defs` della radice dell'SVG, ciò che usa quello che entra.
+interface Lift {
+  /// Le `defs` della radice dell'SVG: non entrano al loro posto.
+  readonly defs: ReadonlySet<NodeId>;
+  /// I loro figli da scrivere nella `defs` del disegno, ognuno dopo ciò che
+  /// usa.
+  readonly moved: readonly NodeId[];
+  /// Le `defs` e tutto ciò che hanno dentro: i loro id li decide il
+  /// trasloco.
+  readonly decided: ReadonlySet<NodeId>;
+  /// Quali id saranno risorse del disegno, con gli id dell'SVG e con quelli
+  /// riscritti.
+  readonly resolve: Resolve;
+  readonly written: Resolve;
+}
+
+/// Il testo di un elemento senza gli spazi fra i tag, per riconoscere una
+/// risorsa uguale.
+function compact(text: string): string {
+  return lf(text).replace(/>\s+</g, "><").trim();
+}
+
+/// Il trasloco delle risorse di `doc` nel disegno `model`, per i figli della
+/// radice `tops`; i nomi nuovi vanno in `names` e `renamed`. Una risorsa
+/// privata ha sempre una copia, con id nuovi; una condivisa, o che non è di
+/// FubDraw, resta quella del disegno se ha lo stesso id, lo stesso testo e
+/// usa le stesse. Ciò che nessuno usa resta fuori. Niente trasloco se l'SVG
+/// ha fogli di stile, che possono rimandare alle risorse, o se il disegno
+/// supererebbe il limite delle risorse, o senza `allowed`: allora resta
+/// tutto com'era.
+function liftOf(
+  doc: XmlDocument,
+  tops: readonly NodeId[],
+  allowed: boolean,
+  model: DocumentModel,
+  ids: NewIds,
+  names: Map<string, string>,
+  renamed: Map<NodeId, string>,
+): Lift {
+  const resources = resourcesOf(model);
+  const byId = holdersById(doc);
+  // Un riferimento a un id che l'SVG non ha va alla risorsa del disegno che
+  // lo porta, se c'è.
+  const outside: Resolve = (id) => {
+    const node = byId.has(id) ? undefined : resources.get(id);
+    return node === undefined ? null : resourceKind(node.facts.local);
+  };
+  const none: Lift = { defs: new Set(), moved: [], decided: new Set(), resolve: outside, written: outside };
+  const defs = new Set(tops.filter((top) => classifyChild(doc, top, "root", 1)?.[1] === "defs"));
+  if (!allowed || defs.size === 0 || doc.nodes.some((node) => node.kind === "element" && isSvg(node, "style"))) return none;
+  const index = resourceIndex(doc);
+  const decided = new Set<NodeId>();
+  for (const top of defs) for (const at of subtree(doc, top)) decided.add(at);
+  const refsIn = (id: NodeId): string[] => [...subtree(doc, id)].flatMap((at) => referencesOf(doc, doc.element(at)!));
+  // Il figlio di una `defs` che porta l'elemento `holder`.
+  const movedOf = (holder: NodeId): NodeId | null => {
+    for (let at = holder; ; ) {
+      const parent = doc.nodes[at]!.parent;
+      if (parent === null) return null;
+      if (defs.has(parent)) return at;
+      at = parent;
+    }
+  };
+  const moved: NodeId[] = [];
+  const seen = new Set<NodeId>();
+  // In profondità e senza ricorsione: una catena di rimandi può essere
+  // lunga quanto il file.
+  const visit = (refs: readonly string[]): void => {
+    const stack: Array<{ readonly refs: readonly string[]; at: number; readonly child: NodeId | null }> = [{ refs, at: 0, child: null }];
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1]!;
+      if (frame.at === frame.refs.length) {
+        stack.pop();
+        if (frame.child !== null) moved.push(frame.child);
+        continue;
+      }
+      const holder = byId.get(frame.refs[frame.at++]!);
+      const child = holder === undefined ? null : movedOf(holder);
+      if (child === null || seen.has(child)) continue;
+      seen.add(child);
+      stack.push({ refs: refsIn(child), at: 0, child });
+    }
+  };
+  for (const top of tops) if (!defs.has(top)) visit(refsIn(top));
+
+  // Gli id, prima ciò che si usa e poi chi lo usa.
+  const local = new Map<string, string>();
+  const fresh = new Map<NodeId, string>();
+  const kinds = new Map<string, ResourceKind>();
+  const out: NodeId[] = [];
+  let copies = 0;
+  for (const child of moved) {
+    const element = doc.element(child)!;
+    const id = valueOf(element, NS_NONE, "id") ?? "";
+    const kind = byId.get(id) === child ? index.get(id) : undefined;
+    if (kind !== undefined) {
+      kinds.set(id, kind);
+      const there = resources.get(id);
+      const same =
+        there !== undefined &&
+        valueOf(element, NS_FUB, "role") !== "private" &&
+        there.facts.local === element.local &&
+        compact(there.raw) === compact(doc.source.text.slice(element.start, element.end)) &&
+        refsIn(child).every((ref) => local.get(ref) === ref || movedOf(byId.get(ref) ?? child) === child);
+      if (same) {
+        local.set(id, id);
+        continue;
+      }
+      copies++;
+    }
+    out.push(child);
+    for (const at of subtree(doc, child)) {
+      const value = valueOf(doc.element(at)!, NS_NONE, "id") ?? "";
+      if (value === "") continue;
+      const next = ids.next("resource");
+      fresh.set(at, next);
+      if (!local.has(value)) local.set(value, next);
+    }
+  }
+  if (resources.size + copies > MAX_RESOURCES) return none;
+  for (const [from, to] of local) if (!names.has(from)) names.set(from, to);
+  for (const [at, to] of fresh) renamed.set(at, to);
+  const written = new Map<string, ResourceKind>();
+  for (const [id, kind] of kinds) written.set(names.get(id)!, kind);
+  return {
+    defs,
+    moved: out,
+    decided,
+    resolve: (id) => kinds.get(id) ?? outside(id),
+    written: (id) => written.get(id) ?? outside(id),
+  };
+}
+
 /// Gli `add` di un incolla: testi fratelli uniti in sequenze, finché il loro
 /// JSON sta in [`CHUNK_BYTES`].
 class Adds {
@@ -1064,8 +1214,12 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   const names = new Map<string, string>();
   const rootId = valueOf(root, NS_NONE, "id") ?? "";
   if (wrap && rootId !== "") names.set(rootId, sheetScope!);
+  // Dentro un gruppo che resta estraneo non si cercano modificabili, e
+  // allora nemmeno risorse.
+  const lift = liftOf(doc, tops, inner.length === 0, model, ids, names, renamed);
   for (const top of tops) {
     for (const at of subtree(doc, top)) {
+      if (lift.decided.has(at)) continue;
       const value = valueOf(doc.element(at)!, NS_NONE, "id") ?? "";
       if (value === "") continue;
       const id = ids.next("object");
@@ -1073,18 +1227,51 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
       if (!names.has(value)) names.set(value, id);
     }
   }
-  const rewriter = new Rewriter(doc, { rename: (id) => names.get(id) ?? null, ids: renamed, sheets: wrap ? sheetScope : null, href: target.href });
+  const rewriter = new Rewriter(doc, {
+    rename: (id) => names.get(id) ?? null,
+    ids: renamed,
+    sheets: wrap ? sheetScope : null,
+    href: target.href,
+    resolve: lift.resolve,
+    written: lift.written,
+  });
   const sourceScope = scopeInside(NamespaceScope.EMPTY, root);
   const ops: Op[] = [...target.to.prelude];
   const adds = new Adds(ops);
+
+  // Le risorse prima di chi le usa, in fondo alla `defs` del disegno.
+  if (lift.moved.length > 0) {
+    const home = homeOf(model);
+    for (const op of home.prelude) adds.then(op);
+    const there = resourceHome(model);
+    const homeScope = scopeOf(there ?? model.root);
+    const children = there === null ? [] : elementChildren(there);
+    const first = elementChildren(model.root)[0];
+    const outer = there !== null ? indentOf(model, there) : first !== undefined ? indentOf(model, first) : "";
+    const homeIndent = children.length > 0 ? indentOf(model, children[children.length - 1]!) : `${outer}  `;
+    for (const child of lift.moved) {
+      const element = doc.element(child)!;
+      const from = doc.source.indent(element.start);
+      rewriter.used.clear();
+      rewriter.body(child, true);
+      const declarations = needed(scopeOfChain(ancestors(doc, child)), homeScope, rewriter.used, element);
+      rewriter.head(child, { set: new Map(), before: null, canonical: false, unlayer: false, declarations, id: null, child: null }, from);
+      const text = reindent(rewriter.slice(element.start, element.end), homeScope, "defs", 2, from, homeIndent, lift.written);
+      adds.push(home.parent, `\n${homeIndent}`, text, jsonBytes(text));
+      const step = progress(element.end);
+      if (step !== null) yield step;
+    }
+    adds.flush();
+  }
 
   if (!wrap) {
     const keys: string[] = [];
     const tag = sourceScope.svgName("title") ?? "title";
     for (const piece of source.pieces) {
+      if (lift.defs.has(piece)) continue;
       const element = doc.element(piece)!;
       const missing: NodeId[] = [];
-      const found = rolesUnder(doc, piece, "inside", depth, false, missing);
+      const found = rolesUnder(doc, piece, "inside", depth, false, missing, lift.resolve);
       for (const at of missing) rewriter.fresh.set(at, ids.next("object"));
       const layer = found !== null && isSvg(element, "g") && valueOf(element, NS_FUB, "layer") !== undefined;
       const set = new Map<string, string | null>();
@@ -1138,7 +1325,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   let blank = -1;
   for (const child of root.children) {
     const node = doc.nodes[child]!;
-    if (source.dropped.has(child)) {
+    if (source.dropped.has(child) || lift.defs.has(child)) {
       if (blank >= 0) parts.splice(blank, 1);
       blank = -1;
       continue;
@@ -1150,7 +1337,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     }
     blank = -1;
     if (node.kind === "element") {
-      const found = inner.length === 0 ? rolesUnder(doc, child, "inside", depth + 1, true, missing) : null;
+      const found = inner.length === 0 ? rolesUnder(doc, child, "inside", depth + 1, true, missing, lift.resolve) : null;
       for (const at of missing) rewriter.fresh.set(at, ids.next("object"));
       missing.length = 0;
       const layer = source.fubdraw && found !== null && isSvg(node, "g") && valueOf(node, NS_FUB, "layer") !== undefined;
@@ -1205,7 +1392,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   } else {
     whole += `${body}</${g}>`;
   }
-  const text = reindent(whole, scope, place, depth, "", indent);
+  const text = reindent(whole, scope, place, depth, "", indent, lift.written);
   const bytes = jsonBytes(text);
   if (bytes <= CHUNK_BYTES || inner.length > 0) {
     adds.push(target.to.parent, `\n${indent}`, text, bytes);
@@ -1273,9 +1460,9 @@ function emit(
 ): void {
   const doc = rewriter.doc;
   const element = doc.element(id)!;
-  const text = reindent(rewriter.slice(element.start, element.end), scope, place, depth, from, indent);
+  const text = reindent(rewriter.slice(element.start, element.end), scope, place, depth, from, indent, rewriter.rules.written);
   const bytes = jsonBytes(text);
-  const found = bytes > CHUNK_BYTES ? classifyChild(doc, id, place, depth) : null;
+  const found = bytes > CHUNK_BYTES ? classifyChild(doc, id, place, depth, rewriter.rules.resolve) : null;
   if (key === null || found === null || !isContainer(found[1]) || element.closeStart === null) {
     adds.push(parent, `\n${indent}`, text, bytes);
     return;

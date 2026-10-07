@@ -30,6 +30,7 @@ const look = (parts: Partial<Look> = {}): Look => ({
   leading: NONE,
   spacing: NONE,
   anchor: NONE,
+  samples: new Map(),
   ...parts,
 });
 

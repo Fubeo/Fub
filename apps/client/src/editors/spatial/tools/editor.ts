@@ -178,6 +178,7 @@ import {
   relinkOps,
   ungroupOps,
   unlinkOps,
+  unwrappable,
   type Arranged,
   type Axis,
   type Edge,
@@ -10505,13 +10506,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function ungroupSelection(): void {
     const units = arranging("arrange");
     if (units === null) return;
-    const groups = units.filter(isGroup).length;
-    if (groups === 0) {
+    const all = units.filter(isGroup);
+    if (all.length === 0) {
       announce(t("draw.ungroup.none"));
       return;
     }
+    const groups = all.filter((unit) => unwrappable(engine.model!, unit)).length;
+    if (groups === 0) {
+      announce(t("draw.ungroup.effect"));
+      return;
+    }
     const kept = arrange("draw.action.ungroup", ungroupOps(engine.model!, units, newIds()), null, { key: "draw.ungroup.styled" });
-    if (kept !== null) announce(`${plural(groups, "draw.ungrouped.one", "draw.ungrouped.other")}${kept}`);
+    const whole = groups < all.length ? ` ${t("draw.ungroup.effect_some")}` : "";
+    if (kept !== null) announce(`${plural(groups, "draw.ungrouped.one", "draw.ungrouped.other")}${whole}${kept}`);
   }
 
   /// Il collegamento scelto da solo, se c'è.
@@ -10571,13 +10578,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function unlinkSelection(): void {
     const units = arranging("links");
     if (units === null) return;
-    const count = units.filter(isLink).length;
-    if (count === 0) {
+    const all = units.filter(isLink);
+    if (all.length === 0) {
       announce(t("draw.unlink.none"));
       return;
     }
+    const count = all.filter((unit) => unwrappable(engine.model!, unit)).length;
+    if (count === 0) {
+      announce(t("draw.unlink.effect"));
+      return;
+    }
     const kept = arrange("draw.action.unlink", unlinkOps(engine.model!, units, newIds()), null, { key: "draw.unlink.styled" });
-    if (kept !== null) announce(`${plural(count, "draw.unlinked.one", "draw.unlinked.other")}${kept}`);
+    const whole = count < all.length ? ` ${t("draw.unlink.effect_some")}` : "";
+    if (kept !== null) announce(`${plural(count, "draw.unlinked.one", "draw.unlinked.other")}${whole}${kept}`);
   }
 
   /// Alt+Invio, o «Apri»: la nota del collegamento scelto da solo, a ogni

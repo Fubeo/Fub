@@ -97,11 +97,12 @@ export function inheritedBy(local: string, container: boolean): readonly string[
   return INHERITED.filter((name) => !name.startsWith("font-") && name !== "letter-spacing" && name !== "text-anchor");
 }
 
-/// Vero se `node` sta fra i figli di `parent` prima di ciò che va «per
-/// primo»: titolo e descrizione, e la carta sotto la radice.
+/// Vero se `node` può stare fra i figli di `parent` prima di ciò che va
+/// «per primo»: titolo e descrizione, e sotto la radice la carta e la
+/// `defs` delle risorse.
 function heading(parent: ContainerNode, node: ElementPart): boolean {
   if (node.facts.uri === SVG_NS && (node.facts.local === "title" || node.facts.local === "desc")) return true;
-  return parent.parent === null && node.details?.role === "paper";
+  return parent.parent === null && (node.details?.role === "paper" || node.details?.role === "defs");
 }
 
 /// Il genere di id di `node`: un livello ha il suo.
@@ -154,7 +155,9 @@ export function placeOps(model: DocumentModel, moving: readonly ElementPart[], p
   } else {
     let i = siblings.indexOf(at.after);
     if (i < 0) return null;
-    while (i >= 0 && (chosen.has(siblings[i]!) || siblings[i]!.details === null)) i--;
+    // Né un blocco estraneo né la `defs` delle risorse fanno da riferimento:
+    // il primo non ha un id, e la seconda non ne riceve uno qualunque.
+    while (i >= 0 && (chosen.has(siblings[i]!) || siblings[i]!.details === null || siblings[i]!.details!.role === "defs")) i--;
     anchor = i < 0 || heading(parent, siblings[i]!) ? "first" : siblings[i]!;
   }
 
@@ -163,9 +166,7 @@ export function placeOps(model: DocumentModel, moving: readonly ElementPart[], p
   let index = rest.length;
   if (anchor === "first") {
     index = 0;
-    rest.forEach((node, i) => {
-      if (heading(parent, node)) index = i + 1;
-    });
+    while (index < rest.length && heading(parent, rest[index]!)) index++;
   } else if (anchor !== "last") {
     index = rest.indexOf(anchor) + 1;
   }

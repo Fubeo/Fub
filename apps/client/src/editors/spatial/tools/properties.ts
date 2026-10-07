@@ -33,6 +33,7 @@ import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import { t, type DrawKey } from "../strings";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
+import type { PaintSample } from "./resources";
 
 /// Le sezioni, nell'ordine in cui si vedono.
 export type SectionId = "place" | "shape" | "look" | "text" | "arrange" | "transform" | "attributes" | "document" | "view";
@@ -108,6 +109,8 @@ export interface NumberState extends FieldBase {
 export interface PaintState extends FieldBase {
   readonly kind: "paint";
   readonly value: string | null;
+  /// Come si mostra `value` se è una sfumatura o un motivo del disegno.
+  readonly sample?: PaintSample;
 }
 
 export interface ChoiceOption {
@@ -427,15 +430,18 @@ function paintOf(text: string): string | null {
   return customColor(text);
 }
 
-/// Un colore come lo mostra il campo.
-function paintShown(value: string | null): string {
+/// Un colore come lo mostra il campo: una sfumatura o un motivo col loro
+/// nome.
+function paintShown(value: string | null, sample?: PaintSample): string {
   if (value === null) return "";
+  if (sample !== undefined) return t(`draw.properties.${sample.kind}`);
   return value === "none" ? t("draw.properties.none") : value;
 }
 
 /// La forma del campione di un colore: quella della tavolozza, l'anello di
-/// un colore a piacere, il nessuno e il misto.
-function chipShape(value: string | null): string {
+/// un colore a piacere, il nessuno, il misto, la sfumatura e il motivo.
+function chipShape(value: string | null, sample?: PaintSample): string {
+  if (sample !== undefined) return sample.kind;
   if (value === null) return "mixed";
   if (value === "none") return "none";
   const code = customColor(value);
@@ -841,12 +847,15 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     else control.removeAttribute("aria-disabled");
   };
 
-  function showChip(line: Line, value: string | null): void {
+  function showChip(line: Line, value: string | null, sample?: PaintSample): void {
     if (line.chipFrame === null || line.chipColor === null) return;
-    line.chipFrame.dataset.shape = chipShape(value);
+    line.chipFrame.dataset.shape = chipShape(value, sample);
     const code = value === null ? null : customColor(value);
     if (code === null) line.chipColor.style.removeProperty("--swatch");
     else line.chipColor.style.setProperty("--swatch", code);
+    const image = sample?.image ?? null;
+    if (image === null) line.chipColor.style.removeProperty("--swatch-image");
+    else line.chipColor.style.setProperty("--swatch-image", image);
   }
 
   /// Vero se il campo di testo di `line` ha un valore scritto a metà da
@@ -899,8 +908,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const input = line.control as HTMLInputElement;
     line.name.textContent = state.label;
     input.placeholder = state.value === null ? t("draw.properties.mixed") : "";
-    showText(line, paintShown(state.value), fresh);
-    showChip(line, keeps(line, false) ? paintOf(input.value) ?? state.value : state.value);
+    showText(line, paintShown(state.value, state.sample), fresh);
+    const written = keeps(line, false) ? paintOf(input.value) ?? state.value : state.value;
+    showChip(line, written, written === state.value ? state.sample : undefined);
     nameButtons(line, state.label);
     line.picker!.value = (state.value === null ? null : customColor(state.value)) ?? "#000000";
     const off = !view.editable || state.disabled === true;
@@ -1142,7 +1152,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (text === line.shown) {
       input.value = line.shown;
       showError(line, null);
-      showChip(line, state.value);
+      showChip(line, state.value, state.sample);
       return true;
     }
     const value = paintOf(text);
@@ -1150,7 +1160,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (value === state.value) {
       input.value = line.shown;
       showError(line, null);
-      showChip(line, state.value);
+      showChip(line, state.value, state.sample);
       return true;
     }
     input.value = text;
@@ -1288,7 +1298,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       if (control !== null && control.value !== line!.shown) {
         control.value = line!.shown;
         showError(line!, null);
-        if (line!.spec.kind === "paint") showChip(line!, (line!.state as PaintState).value);
+        if (line!.spec.kind === "paint") showChip(line!, (line!.state as PaintState).value, (line!.state as PaintState).sample);
       } else {
         options.onLeave();
       }
@@ -1320,7 +1330,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const line = lineOf(event.target);
     if (line !== null && line.spec.kind === "paint") {
       const value = paintOf((line.control as HTMLInputElement).value);
-      showChip(line, value ?? (line.state as PaintState).value);
+      const state = line.state as PaintState;
+      if (value === null) showChip(line, state.value, state.sample);
+      else showChip(line, value);
     }
   });
 

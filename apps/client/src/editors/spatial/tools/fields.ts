@@ -46,6 +46,7 @@ import {
 } from "./properties";
 import { ANGLE_UNITS, lengthUnits, PERCENT_UNITS } from "./quantity";
 import type { Feature } from "./registry";
+import type { PaintSample } from "./resources";
 import type { ShapeChange, ShapeFacts } from "./reshape";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
 import { MIN_RATIO } from "./shapes";
@@ -341,8 +342,12 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     // --- Aspetto ---
     const { look, outline } = selection;
     const thin = lookUnit(unit);
-    if (has("colors") && look.fill.count > 0) fields.fill = { kind: "paint", label: t("draw.properties.fill"), value: look.fill.value };
-    if (has("colors") && look.stroke.count > 0) fields.stroke = { kind: "paint", label: t("draw.properties.stroke"), value: look.stroke.value };
+    const sampled = (value: string | null): { sample?: PaintSample } => {
+      const sample = value === null ? undefined : look.samples.get(value);
+      return sample === undefined ? {} : { sample };
+    };
+    if (has("colors") && look.fill.count > 0) fields.fill = { kind: "paint", label: t("draw.properties.fill"), value: look.fill.value, ...sampled(look.fill.value) };
+    if (has("colors") && look.stroke.count > 0) fields.stroke = { kind: "paint", label: t("draw.properties.stroke"), value: look.stroke.value, ...sampled(look.stroke.value) };
     if (look.width.count > 0) {
       fields.strokeWidth = {
         kind: "number",

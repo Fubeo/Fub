@@ -587,6 +587,8 @@ export class SceneIndexer {
         return;
       }
       const role = child.details!.role;
+      // Le risorse si vedono soltanto in chi le usa.
+      if (role === "defs") return;
       if (role !== "layer") {
         visit(child, [index], null, IDENTITY, rootStyle);
         return;
@@ -843,11 +845,14 @@ class Lookup implements Nested {
 }
 
 /// Vero se `node` è un oggetto, nel posto dove sta: non la carta, il titolo,
-/// la descrizione, un livello o un blocco estraneo.
+/// la descrizione, un livello, le risorse con la loro `defs` o un blocco
+/// estraneo.
 function pickable(node: ElementPart): boolean {
   const role = node.details?.role;
-  return role !== undefined && role !== "paper" && role !== "title" && role !== "desc" && role !== "layer";
+  return role !== undefined && !NOT_PICKABLE.has(role);
 }
+
+const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "title", "desc", "layer", "defs", "resource"]);
 
 /// Vero se `node` sta dentro `container`, a qualunque profondità.
 function within(node: ElementPart, container: ContainerNode): boolean {

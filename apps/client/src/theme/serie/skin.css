@@ -2907,6 +2907,18 @@ button.draw-isolation-crumb:hover {
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
   background-image: linear-gradient(45deg, var(--text) 25%, var(--bg-elev) 25%, var(--bg-elev) 50%, var(--text) 50%, var(--text) 75%, var(--bg-elev) 75%);
 }
+/* Una sfumatura del disegno: i suoi punti, da sinistra a destra o dal
+   centro, come li scrive il pannello. */
+.draw-swatch-frame[data-shape="gradient"] > .draw-swatch {
+  background-image: var(--swatch-image);
+}
+/* Un motivo: una scacchiera del colore del testo. */
+.draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
+  background-color: var(--bg-elev);
+  background-image:
+    linear-gradient(45deg, var(--text) 25%, transparent 25%, transparent 75%, var(--text) 75%),
+    linear-gradient(45deg, var(--text) 25%, transparent 25%, transparent 75%, var(--text) 75%);
+}
 .draw-inspector[data-nested] {
   padding: 0;
 }

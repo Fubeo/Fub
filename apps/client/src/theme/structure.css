@@ -2464,6 +2464,19 @@ textarea.draw-properties-input {
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
   background-size: 6px 6px;
 }
+/* Una sfumatura e un motivo del disegno: un quadrato dagli angoli tondi,
+   che non è una forma della tavolozza. I punti della sfumatura e la
+   scacchiera del motivo li dipinge la pelle. */
+.draw-swatch-frame[data-shape="gradient"],
+.draw-swatch-frame[data-shape="gradient"] > .draw-swatch,
+.draw-swatch-frame[data-shape="pattern"],
+.draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
+  clip-path: inset(6% round 4px);
+}
+.draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
 /* Gli attributi, come sezione delle proprietà, scorrono con loro e non
    hanno un titolo loro. */
 .draw-inspector[data-nested] {
