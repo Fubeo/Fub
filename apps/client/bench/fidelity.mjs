@@ -9,8 +9,8 @@
 // stessa pagina e nello stesso browser, e una differenza fra le strade è
 // sempre un errore, qualunque sia il sistema. Prima del corpus il banco
 // prova sé stesso: una differenza messa apposta in una strada sola, un
-// colore, un carattere, un corsivo, un tratteggio, deve farlo diventare
-// rosso.
+// colore, un carattere, un corsivo, un tratteggio, le risorse che mancano,
+// deve farlo diventare rosso.
 //
 // # La soglia
 //
@@ -38,6 +38,7 @@ const PLANTED = [
   ["testi", "carattere"],
   ["tipografia", "corsivo"],
   ["tratteggi", "tratteggio"],
+  ["risorse", "ripiego"],
 ];
 const ROADS = ["read", "export"];
 const out = join(OUTPUT, "fidelity");

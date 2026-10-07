@@ -8,6 +8,16 @@
 //   un collegamento è un `g`. Fra un aggiornamento e l'altro si
 //   riconciliano per identità: una forma che la scena ripete è lo stesso
 //   nodo DOM.
+// - **Risorse vive:** le sfumature, i motivi, i marcatori, i ritagli, le
+//   maschere e i filtri modificabili stanno in una `defs` dentro un `svg`
+//   senza misura, prima degli strati, finché la scena ne ha. Si creano come
+//   le forme, elemento per elemento, coi soli elementi e attributi del
+//   formato. Il loro id è quello del disegno dopo il prefisso del painter
+//   ([`liveId`]), e così ogni `url(#…)` degli oggetti vivi e del contenuto
+//   delle risorse: due superfici nella stessa pagina non si rubano le
+//   risorse, e un riferimento non trova mai un elemento della shell. Una
+//   risorsa che la scena ripete è lo stesso nodo; una che cambia si rifà, e
+//   il browser ridisegna chi la usa.
 // - **Strati immagine:** un `<img>` da blob, disegnato per il rettangolo della
 //   vista più un margine. Mentre la camera si muove l'immagine segue con una
 //   trasformazione CSS; quando si ferma si ridisegna alla nuova scala e al
@@ -34,8 +44,8 @@
 //
 // - **Miniature:** `paintMiniature` disegna alcuni nodi della scena in un
 //   `svg` a sé, con gli stessi elementi e gli stessi attributi, dentro gli
-//   stili di chi li contiene: l'albero degli oggetti le mostra accanto ai
-//   nomi.
+//   stili di chi li contiene, e con le risorse che usano, sotto un prefisso
+//   suo: l'albero degli oggetti le mostra accanto ai nomi.
 //
 // Tutto ciò che il painter apre (timer, osservatori, lease) appartiene alla
 // sua vita, e la vita di chi lo monta la chiude.
@@ -45,22 +55,64 @@ import { compose, invert, type Matrix } from "../scene/matrix";
 import type { Elem } from "../scene/serialize";
 import { toScene, viewMatrix, viewTransform, type View } from "../view";
 import type { FontSheets } from "../picture";
+import { paintReference, reference, trim } from "../scene/values";
 import {
+  DEF_ATTRIBUTES,
+  DEF_CHILDREN,
   IMAGE_PLACEHOLDER,
   imageDocument,
   PAINTED_ATTRIBUTES,
+  REFERENCE_ATTRIBUTES,
+  RESOURCE_TAGS,
   type ImageFrame,
   type ImageLayer,
   type LiveLayer,
   type PaintAttr,
+  type PaintDef,
   type PaintGroup,
   type PaintNode,
+  type PaintResource,
   type PaintScene,
   type PaintShape,
 } from "./paint";
 
 const SVG = "http://www.w3.org/2000/svg";
 const XML = "http://www.w3.org/XML/1998/namespace";
+
+/// Quante superfici e quante miniature si sono disegnate: ognuna ha il suo
+/// prefisso per gli id delle risorse.
+let surfaces = 0;
+let miniatures = 0;
+
+/// L'id vivo della risorsa `id` sotto `prefix`: ogni carattere fuori da
+/// `[A-Za-z0-9_-]` si scrive `.` + il suo codice esadecimale + `.`. Due id
+/// diversi restano diversi, e `url(#…)` lo legge senza virgolette né
+/// escape, in ogni browser.
+export function liveId(prefix: string, id: string): string {
+  let out = prefix;
+  for (const char of id) out += /^[A-Za-z0-9_-]$/.test(char) ? char : `.${char.codePointAt(0)!.toString(16)}.`;
+  return out;
+}
+
+/// Il valore di un attributo dipinto per il DOM di `prefix`: i riferimenti
+/// alle risorse (`url(#id)`, col ripiego di `fill` e `stroke`) puntano agli
+/// id vivi. `null` se il valore ha un `url(` che non si legge o che non sta
+/// in un riferimento: allora l'attributo non entra, perché un `url(#…)` non
+/// riscritto troverebbe un elemento della shell, o di un'altra superficie.
+function liveValue(prefix: string, name: string, value: string): string | null {
+  if (!/url\(/i.test(value)) return value;
+  if (!REFERENCE_ATTRIBUTES.has(name)) return null;
+  if (name === "fill" || name === "stroke") {
+    const used = paintReference(value);
+    if (used === null) return null;
+    // L'id non ha parentesi: la prima chiude il riferimento, e dopo viene
+    // il ripiego, com'è scritto.
+    const text = trim(value);
+    return `url(#${liveId(prefix, used.id)})${text.slice(text.indexOf(")") + 1)}`;
+  }
+  const id = reference(value);
+  return id === null ? null : `url(#${liveId(prefix, id)})`;
+}
 
 /// La camera come la legge il painter: la vista del disegno (`../view`), in
 /// pixel CSS dall'angolo dell'elemento.
@@ -227,10 +279,23 @@ interface ImageRecord {
 
 type LayerRecord = LiveRecord | ImageRecord;
 
+/// Le risorse vive: un `svg` senza misura con la `defs`, che porta gli
+/// attributi della radice perché il contenuto delle risorse li erediti come
+/// nel file.
+interface DefsRecord {
+  readonly el: SVGSVGElement;
+  readonly defs: SVGDefsElement;
+  resources: readonly PaintResource[];
+  /// L'elemento di ogni risorsa che la `defs` mostra.
+  nodes: Map<PaintResource, SVGElement>;
+  rootAttrs: readonly PaintAttr[];
+}
+
 /// Monta un painter dentro `host`.
 export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: PainterOptions = {}): ScenePainter {
   const life = openLifetime();
   const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
+  const prefix = `fubdraw${++surfaces}-`;
   const root = document.createElement("div");
   root.className = "spatial-painter";
   // La scena si legge dalla sua struttura accessibile, non dal disegno.
@@ -241,6 +306,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   let width = host.clientWidth;
   let height = host.clientHeight;
   let layers: LayerRecord[] = [];
+  let defs: DefsRecord | null = null;
   let disposed = false;
 
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -253,13 +319,13 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   // --- forme ------------------------------------------------------------------
 
   const createShape = (shape: PaintShape): NodeRecord => {
-    const { el, life: imageLife } = shapeElement(shape, shape.id, options.images, null);
+    const { el, life: imageLife } = shapeElement(shape, shape.id, prefix, options.images, null);
     return { paint: shape, el, life: imageLife, children: [] };
   };
 
   const createGroup = (group: PaintGroup): NodeRecord => {
     const el = document.createElementNS(SVG, "g");
-    setPainted(el, group.attrs, []);
+    setPainted(el, group.attrs, [], prefix);
     setCommon(el, group.id, group.space);
     const record: NodeRecord = { paint: group, el, life: null, children: [] };
     record.children = reconcile(el, [], group.children);
@@ -268,7 +334,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const updateGroup = (record: NodeRecord, group: PaintGroup): NodeRecord => {
     const previous = record.paint as PaintGroup;
-    setPainted(record.el, group.attrs, previous.attrs);
+    setPainted(record.el, group.attrs, previous.attrs, prefix);
     if (group.id !== previous.id || group.space !== previous.space) setCommon(record.el, group.id, group.space);
     const children = reconcile(record.el, record.children, group.children);
     return { paint: group, el: record.el, life: null, children };
@@ -600,7 +666,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     el.setAttribute("class", "spatial-layer");
     const camera = document.createElementNS(SVG, "g");
     camera.setAttribute("transform", cameraTransform());
-    setPainted(camera, rootAttrs, []);
+    setPainted(camera, rootAttrs, [], prefix);
     el.append(camera);
     const record: LiveRecord = { kind: "live", layer, el, camera, rootAttrs, children: [] };
     record.children = reconcile(camera, [], layer.nodes);
@@ -610,7 +676,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   const updateLive = (record: LiveRecord, layer: LiveLayer, rootAttrs: readonly PaintAttr[]): void => {
     if (rootAttrs !== record.rootAttrs) {
       // Il trasforma della camera non è fra gli attributi della radice.
-      setPainted(record.camera, rootAttrs, record.rootAttrs);
+      setPainted(record.camera, rootAttrs, record.rootAttrs, prefix);
       record.rootAttrs = rootAttrs;
     }
     if (layer === record.layer) return;
@@ -620,6 +686,42 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const disposeLive = (record: LiveRecord): void => {
     for (const child of record.children) disposeNode(child);
+  };
+
+  // --- risorse ---------------------------------------------------------------
+
+  /// Porta la `defs` viva a `resources`: una risorsa che resta è lo stesso
+  /// nodo, una nuova o cambiata si crea. Senza risorse la `defs` esce.
+  const updateDefs = (resources: readonly PaintResource[], rootAttrs: readonly PaintAttr[]): void => {
+    if (resources.length === 0) {
+      defs?.el.remove();
+      defs = null;
+      return;
+    }
+    if (defs === null) {
+      const el = document.createElementNS(SVG, "svg");
+      el.setAttribute("class", "spatial-layer spatial-defs");
+      const element = document.createElementNS(SVG, "defs");
+      el.append(element);
+      defs = { el, defs: element, resources: [], nodes: new Map(), rootAttrs: [] };
+    }
+    if (rootAttrs !== defs.rootAttrs) {
+      setPainted(defs.defs, rootAttrs, defs.rootAttrs, prefix);
+      defs.rootAttrs = rootAttrs;
+    }
+    if (resources === defs.resources) return;
+    const kept = new Set(resources);
+    // Prima escono le risorse che non ci sono più: l'id di una che cambia
+    // passa alla nuova, e non deve trovare la vecchia.
+    for (const [resource, el] of defs.nodes) if (!kept.has(resource)) el.remove();
+    const nodes = new Map<PaintResource, SVGElement>();
+    for (const resource of resources) {
+      const el = defs.nodes.get(resource) ?? nodes.get(resource) ?? resourceElement(resource, prefix);
+      if (el !== null) nodes.set(resource, el);
+    }
+    place(defs.defs, [...nodes.values()]);
+    defs.nodes = nodes;
+    defs.resources = resources;
   };
 
   // --- strati immagine ----------------------------------------------------------
@@ -838,6 +940,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     const generations = new Map<ImageRecord, number>();
     for (const record of frozen) generations.set(record, record.generation);
     const rootAttrs = scene.root.attrs;
+    updateDefs(scene.resources, rootAttrs);
     const lives = layers.filter((r): r is LiveRecord => r.kind === "live");
     const images = layers.filter((r): r is ImageRecord => r.kind === "image");
     const used = new Set<LayerRecord>();
@@ -882,7 +985,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     }
     for (const record of layers) if (!used.has(record)) disposeLayer(record);
     layers = out as LayerRecord[];
-    place(root, layers.map((record) => record.el));
+    // Le risorse prima degli strati, come nel file.
+    place(root, [...(defs === null ? [] : [defs.el]), ...layers.map((record) => record.el)]);
     applyFocus();
     applyDraft();
     // Uno strato che la scena ridisegna tiene spostata l'immagine vecchia
@@ -940,6 +1044,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     byPaint = null;
     for (const record of layers) disposeLayer(record);
     layers = [];
+    defs = null;
     root.remove();
     life.close();
   };
@@ -958,15 +1063,19 @@ function inside(containers: readonly object[], chain: readonly object[]): boolea
 /// percentuale, fra 0 e 1; 1 se manca o non si legge.
 // --- forme -------------------------------------------------------------------
 
-function setPainted(el: SVGElement, attrs: readonly PaintAttr[], previous: readonly PaintAttr[]): void {
+/// Gli attributi dipinti `attrs` su `el`, al posto di `previous`, coi
+/// riferimenti alle risorse sugli id vivi di `prefix`.
+function setPainted(el: SVGElement, attrs: readonly PaintAttr[], previous: readonly PaintAttr[], prefix: string): void {
   if (attrs === previous) return;
   const next = new Set<string>();
   for (const [name, value] of attrs) {
     // La scena porta solo nomi dipinti; il controllo resta qui perché è il
     // DOM a non doverne ricevere altri.
     if (!PAINTED_ATTRIBUTES.has(name)) continue;
+    const live = liveValue(prefix, name, value);
+    if (live === null) continue;
     next.add(name);
-    if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+    if (el.getAttribute(name) !== live) el.setAttribute(name, live);
   }
   for (const [name] of previous) if (!next.has(name)) el.removeAttribute(name);
 }
@@ -995,16 +1104,18 @@ function showVaultImage(el: SVGElement, path: string, resolve: PainterOptions["i
 }
 
 /// L'elemento di `shape`, con `id` in `data-scene-id`: le righe di un testo,
-/// l'URL di un'immagine. Un'immagine del vault lo chiede a `resolve` nella
-/// vita `life`, o in una sua se è `null`; la vita che torna è quella.
+/// l'URL di un'immagine, i riferimenti alle risorse sotto `prefix`.
+/// Un'immagine del vault lo chiede a `resolve` nella vita `life`, o in una
+/// sua se è `null`; la vita che torna è quella.
 function shapeElement(
   shape: PaintShape,
   id: string | null,
+  prefix: string,
   resolve: PainterOptions["images"],
   life: Lifetime | null,
 ): { readonly el: SVGElement; readonly life: Lifetime | null } {
   const el = document.createElementNS(SVG, shape.tag);
-  setPainted(el, shape.attrs, []);
+  setPainted(el, shape.attrs, [], prefix);
   setCommon(el, id, shape.space);
   let imageLife: Lifetime | null = null;
   if (shape.runs !== undefined) {
@@ -1014,7 +1125,7 @@ function shapeElement(
         continue;
       }
       const span = document.createElementNS(SVG, "tspan");
-      setPainted(span, run.attrs, []);
+      setPainted(span, run.attrs, [], prefix);
       if (run.space !== null) span.setAttributeNS(XML, "xml:space", run.space);
       if (run.parts === undefined) span.textContent = run.text;
       for (const part of run.parts ?? []) {
@@ -1023,7 +1134,7 @@ function shapeElement(
           continue;
         }
         const piece = document.createElementNS(SVG, "tspan");
-        setPainted(piece, part.attrs, []);
+        setPainted(piece, part.attrs, [], prefix);
         if (part.space !== null) piece.setAttributeNS(XML, "xml:space", part.space);
         piece.textContent = part.text;
         span.append(piece);
@@ -1043,6 +1154,42 @@ function shapeElement(
     }
   }
   return { el, life: imageLife };
+}
+
+// --- risorse -------------------------------------------------------------------
+
+/// L'elemento vivo di `def`, figlio di un elemento `parent` (`null` per una
+/// risorsa nella `defs`), coi soli elementi e attributi del formato
+/// ([`DEF_ATTRIBUTES`], [`DEF_CHILDREN`]) e i riferimenti sotto `prefix`.
+/// `null` se `def` lì non può stare. Gli id dei figli non entrano.
+function defElement(def: PaintDef, parent: string | null, prefix: string): SVGElement | null {
+  const allowed = parent === null ? RESOURCE_TAGS : DEF_CHILDREN.get(parent);
+  const names = DEF_ATTRIBUTES.get(def.tag);
+  if (allowed?.has(def.tag) !== true || names === undefined) return null;
+  const el = document.createElementNS(SVG, def.tag);
+  for (const [name, value] of def.attrs) {
+    if (!names.has(name)) continue;
+    const live = liveValue(prefix, name, value);
+    if (live !== null) el.setAttribute(name, live);
+  }
+  if (def.space !== null) el.setAttributeNS(XML, "xml:space", def.space);
+  const text = def.tag === "text" || def.tag === "tspan";
+  for (const child of def.children) {
+    if (typeof child === "string") {
+      if (text) el.append(document.createTextNode(child));
+      continue;
+    }
+    const node = defElement(child, def.tag, prefix);
+    if (node !== null) el.append(node);
+  }
+  return el;
+}
+
+/// L'elemento vivo di `resource`, con l'id vivo sotto `prefix`.
+function resourceElement(resource: PaintResource, prefix: string): SVGElement | null {
+  const el = defElement(resource, null, prefix);
+  el?.setAttribute("id", liveId(prefix, resource.id));
+  return el;
 }
 
 // --- miniature ----------------------------------------------------------------
@@ -1068,34 +1215,47 @@ const MINIATURE_MARGIN = 0.06;
 /// attributi dipinti. Né i nodi né chi li contiene sono nascosti; ciò che è
 /// nascosto dentro di loro sì. Nessun `data-scene-id`: la miniatura non è
 /// la scena. Le immagini del vault le chiede a `resolve` nella vita `life`.
+/// Le risorse `resources`, quelle che i nodi usano ([`resourcesFor`]),
+/// stanno in una `defs` dentro il primo `g`, che porta gli attributi della
+/// radice, con un prefisso della miniatura.
 export function paintMiniature(
   nodes: readonly PaintNode[],
   chain: readonly (readonly PaintAttr[])[],
   box: MiniatureBox,
   life: Lifetime,
   resolve?: PainterOptions["images"],
+  resources: readonly PaintResource[] = [],
 ): SVGSVGElement {
   const visible = (attrs: readonly PaintAttr[]): readonly PaintAttr[] => attrs.filter(([name]) => !HIDING.has(name));
+  const prefix = `fubthumb${++miniatures}-`;
   const svg = document.createElementNS(SVG, "svg");
   const pad = Math.max(box.width, box.height) * MINIATURE_MARGIN || 1;
   svg.setAttribute("viewBox", `${box.x - pad} ${box.y - pad} ${box.width + 2 * pad} ${box.height + 2 * pad}`);
   svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
   svg.setAttribute("focusable", "false");
   let parent: SVGElement = svg;
+  const defs = resources.length === 0 ? null : document.createElementNS(SVG, "defs");
+  for (const resource of resources) {
+    const el = resourceElement(resource, prefix);
+    if (el !== null) defs!.append(el);
+  }
   for (const attrs of chain) {
     const g = document.createElementNS(SVG, "g");
-    setPainted(g, visible(attrs), []);
+    setPainted(g, visible(attrs), [], prefix);
     parent.append(g);
+    // Il contenuto delle risorse eredita dalla radice, non da chi le usa.
+    if (parent === svg && defs !== null) g.append(defs);
     parent = g;
   }
+  if (parent === svg && defs !== null) svg.append(defs);
   const copy = (node: PaintNode, top: boolean): SVGElement => {
     if (node.kind === "shape") {
-      const { el } = shapeElement(node, null, resolve, life);
+      const { el } = shapeElement(node, null, prefix, resolve, life);
       if (top) for (const name of HIDING) el.removeAttribute(name);
       return el;
     }
     const el = document.createElementNS(SVG, "g");
-    setPainted(el, top ? visible(node.attrs) : node.attrs, []);
+    setPainted(el, top ? visible(node.attrs) : node.attrs, [], prefix);
     setCommon(el, null, node.space);
     for (const child of node.children) el.append(copy(child, false));
     return el;

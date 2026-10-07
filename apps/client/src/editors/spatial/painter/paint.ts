@@ -29,6 +29,16 @@
 //   verso un elemento che sta altrove (un gradiente in un `defs`, una forma
 //   per `use`) porta quell'elemento nei `defs` dell'immagine, e così i fogli
 //   di stile. Al più [`MAX_DEFS_CHARS`] caratteri per strato.
+//
+// Le risorse modificabili (formato della scena, §15) non sono strati: la
+// scena le porta a parte, in ordine di documento, ciascuna coi soli elementi
+// e attributi che il formato ammette, e il painter le mette nella `defs` viva
+// della superficie, dove gli oggetti vivi le trovano. Dentro un'immagine
+// valgono come ogni altro elemento a cui l'immagine rimanda: il loro testo
+// entra nei `defs` dell'immagine, con le sfumature che il loro contenuto
+// usa. Ci entrano anche per gli elementi vivi che un'immagine unisce e per
+// i contenitori che la racchiudono, che possono avere un ritaglio, una
+// maschera o un filtro.
 
 import type { Role } from "../scene/analysis";
 import { svgAttribute } from "../scene/classify";
@@ -46,7 +56,7 @@ import {
 import { parseGuides, parseUnits, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { escapeAttribute, NamespaceScope } from "../scene/serialize";
 import { SourceText } from "../scene/text";
-import { href as hrefKind, length, numberList } from "../scene/values";
+import { href as hrefKind, length, numberList, urlIds } from "../scene/values";
 import { viewMatrix } from "../view";
 import {
   NS_FUB,
@@ -198,10 +208,33 @@ export interface PaintRoot {
   readonly guides: readonly RulerGuide[] | null;
 }
 
+/// Un elemento di una risorsa viva: la risorsa, un punto di una sfumatura,
+/// una primitiva di un filtro o un elemento del contenuto, coi soli
+/// attributi che la superficie dipinge.
+export interface PaintDef {
+  readonly tag: string;
+  readonly attrs: readonly PaintAttr[];
+  /// `xml:space`, se l'elemento lo scrive.
+  readonly space: string | null;
+  /// I figli in ordine; il testo soltanto dentro `text` e `tspan`.
+  readonly children: readonly (PaintDef | string)[];
+}
+
+/// Una risorsa modificabile (formato della scena, §15): una sfumatura, un
+/// motivo, un marcatore, un ritaglio, una maschera o un filtro, che gli
+/// oggetti vivi usano per riferimento.
+export interface PaintResource extends PaintDef {
+  /// L'id del disegno, che il painter riscrive nel suo.
+  readonly id: string;
+}
+
 /// Una scena da disegnare.
 export interface PaintScene {
   readonly root: PaintRoot;
   readonly layers: readonly PaintLayer[];
+  /// Le risorse modificabili, in ordine di documento: lo stesso oggetto
+  /// finché nessuna cambia.
+  readonly resources: readonly PaintResource[];
 }
 
 /// Il documento da cui si disegna: il motore delle operazioni lo è.
@@ -275,7 +308,87 @@ export const PAINTED_ATTRIBUTES: ReadonlySet<string> = new Set([
   "points",
   "d",
   "preserveAspectRatio",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+  "clip-path",
+  "mask",
+  "filter",
 ]);
+
+/// Gli attributi che rimandano a una risorsa con `url(#id)` (§15): il
+/// painter li riscrive sugli id vivi della sua superficie.
+export const REFERENCE_ATTRIBUTES: ReadonlySet<string> = new Set([
+  "fill",
+  "stroke",
+  "marker-start",
+  "marker-mid",
+  "marker-end",
+  "clip-path",
+  "mask",
+  "filter",
+]);
+
+/// Gli attributi del contenuto di una risorsa: quelli degli oggetti, senza
+/// i rimandi a marcatori, ritagli, maschere e filtri, e con `clip-rule`, che
+/// vale dentro un ritaglio. Il contenuto rimanda soltanto alle sfumature.
+const CONTENT_ATTRIBUTES: ReadonlySet<string> = new Set([
+  ...[...PAINTED_ATTRIBUTES].filter((name) => name === "fill" || name === "stroke" || !REFERENCE_ATTRIBUTES.has(name)),
+  "clip-rule",
+]);
+
+/// Gli attributi di ogni primitiva di un filtro.
+const PRIMITIVE = ["result", "color-interpolation-filters", "x", "y", "width", "height"];
+
+/// Gli elementi delle risorse vive, ciascuno coi suoi attributi senza
+/// namespace (§15). È la grammatica del formato, ripetuta come
+/// [`PAINTED_ATTRIBUTES`]: ciò che non è scritto qui non entra nel DOM.
+/// `id` manca: quello di una risorsa il painter lo riscrive, quelli dei suoi
+/// figli non servono.
+export const DEF_ATTRIBUTES: ReadonlyMap<string, ReadonlySet<string>> = new Map<string, ReadonlySet<string>>([
+  ["linearGradient", new Set(["x1", "y1", "x2", "y2", "gradientUnits", "gradientTransform", "spreadMethod"])],
+  ["radialGradient", new Set(["cx", "cy", "r", "fx", "fy", "gradientUnits", "gradientTransform", "spreadMethod"])],
+  ["stop", new Set(["offset", "stop-color", "stop-opacity"])],
+  ["pattern", new Set(["x", "y", "width", "height", "patternUnits", "patternContentUnits", "patternTransform", "viewBox", "preserveAspectRatio"])],
+  ["marker", new Set(["refX", "refY", "markerWidth", "markerHeight", "markerUnits", "orient", "viewBox", "preserveAspectRatio"])],
+  ["clipPath", new Set(["clipPathUnits", "transform", "clip-rule"])],
+  ["mask", new Set(["x", "y", "width", "height", "maskUnits", "maskContentUnits"])],
+  ["filter", new Set(["x", "y", "width", "height", "filterUnits", "primitiveUnits", "color-interpolation-filters"])],
+  ["feGaussianBlur", new Set([...PRIMITIVE, "in", "stdDeviation"])],
+  ["feOffset", new Set([...PRIMITIVE, "in", "dx", "dy"])],
+  ["feFlood", new Set([...PRIMITIVE, "flood-color", "flood-opacity"])],
+  ["feDropShadow", new Set([...PRIMITIVE, "in", "dx", "dy", "stdDeviation", "flood-color", "flood-opacity"])],
+  ["feColorMatrix", new Set([...PRIMITIVE, "in", "type", "values"])],
+  ["feComposite", new Set([...PRIMITIVE, "in", "in2", "operator", "k1", "k2", "k3", "k4"])],
+  ["feBlend", new Set([...PRIMITIVE, "in", "in2", "mode"])],
+  ["feMorphology", new Set([...PRIMITIVE, "in", "operator", "radius"])],
+  ["feMerge", new Set(PRIMITIVE)],
+  ["feMergeNode", new Set(["in"])],
+  ...["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "text", "tspan", "g"].map((tag) => [tag, CONTENT_ATTRIBUTES] as const),
+]);
+
+/// Le forme e i testi del contenuto di una risorsa.
+const SHAPES_AND_TEXTS = ["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "text"];
+
+/// I figli che ogni elemento di una risorsa può avere; chi non c'è non ne
+/// ha. Il testo sta soltanto dentro `text` e `tspan`.
+export const DEF_CHILDREN: ReadonlyMap<string, ReadonlySet<string>> = new Map<string, ReadonlySet<string>>([
+  ["linearGradient", new Set(["stop"])],
+  ["radialGradient", new Set(["stop"])],
+  ["pattern", new Set([...SHAPES_AND_TEXTS, "g"])],
+  ["marker", new Set([...SHAPES_AND_TEXTS, "g"])],
+  ["mask", new Set([...SHAPES_AND_TEXTS, "g"])],
+  ["g", new Set([...SHAPES_AND_TEXTS, "g"])],
+  // Un ritaglio non ha gruppi.
+  ["clipPath", new Set(SHAPES_AND_TEXTS)],
+  ["filter", new Set(["feGaussianBlur", "feOffset", "feFlood", "feDropShadow", "feColorMatrix", "feComposite", "feBlend", "feMorphology", "feMerge"])],
+  ["feMerge", new Set(["feMergeNode"])],
+  ["text", new Set(["tspan"])],
+  ["tspan", new Set(["tspan"])],
+]);
+
+/// I tag delle risorse, che stanno nella `defs` viva.
+export const RESOURCE_TAGS: ReadonlySet<string> = new Set(["linearGradient", "radialGradient", "pattern", "marker", "clipPath", "mask", "filter"]);
 
 /// Gli attributi della radice che passano agli strati vivi, se il loro
 /// valore varrebbe su un `g`: quelli che i figli ereditano, e l'opacità.
@@ -422,6 +535,76 @@ function shapeOf(leaf: LeafNode, scope: NamespaceScope): PaintShape | null {
   return shape;
 }
 
+/// L'elemento `element` di una risorsa, coi soli attributi e figli di
+/// [`DEF_ATTRIBUTES`] e [`DEF_CHILDREN`]: titoli, descrizioni, id dei figli,
+/// attributi di altri namespace e spazi fuori dai testi restano fuori. La
+/// classificazione ha già giudicato i valori.
+function defOf(doc: XmlDocument, element: ElementNode): PaintDef {
+  const names = DEF_ATTRIBUTES.get(element.local);
+  const attrs: PaintAttr[] = [];
+  let space: string | null = null;
+  for (const attr of element.attrs) {
+    if (attr.ns === NS_NONE && names?.has(attr.local) === true) attrs.push([attr.local, attr.value]);
+    else if (attr.ns === NS_XML && attr.local === "space") space = attr.value;
+  }
+  const allowed = DEF_CHILDREN.get(element.local);
+  const text = element.local === "text" || element.local === "tspan";
+  const children: (PaintDef | string)[] = [];
+  for (const child of element.children) {
+    const node = doc.nodes[child]!;
+    if (node.kind === "text") {
+      if (text) children.push(node.value);
+    } else if (node.kind === "element" && node.ns === NS_SVG && allowed?.has(node.local) === true) {
+      children.push(defOf(doc, node));
+    }
+  }
+  return { tag: element.local, attrs, space, children };
+}
+
+/// La risorsa viva di un elemento modificabile di ruolo `resource`.
+function resourceOf(leaf: LeafNode, scope: NamespaceScope): PaintResource {
+  const read = readElement(leaf.raw, scope);
+  // Come per le forme: l'elemento è stato letto e classificato in questo
+  // scope.
+  if (read === null || leaf.details!.id === null) throw new Error(`risorsa modificabile illeggibile: ${leaf.facts.name}`);
+  return { ...defOf(read.doc, read.element), id: leaf.details!.id };
+}
+
+/// Le risorse di `resources` che servono a disegnare `nodes` dentro i
+/// contenitori `chain`, con gli attributi dipinti di ciascuno: quelle a cui
+/// rimandano, e a cascata le sfumature che il loro contenuto usa.
+/// Nell'ordine di `resources`.
+export function resourcesFor(
+  nodes: readonly PaintNode[],
+  chain: readonly (readonly PaintAttr[])[],
+  resources: readonly PaintResource[],
+): PaintResource[] {
+  if (resources.length === 0) return [];
+  const pending: string[] = [];
+  const scan = (attrs: readonly PaintAttr[]): void => {
+    for (const [name, value] of attrs) if (REFERENCE_ATTRIBUTES.has(name)) pending.push(...urlIds(value));
+  };
+  const visit = (node: PaintNode | PaintDef | string): void => {
+    if (typeof node === "string") return;
+    scan(node.attrs);
+    if ("kind" in node && node.kind === "shape") return;
+    for (const child of node.children) visit(child);
+  };
+  for (const attrs of chain) scan(attrs);
+  for (const node of nodes) visit(node);
+  if (pending.length === 0) return [];
+  const byId = new Map<string, PaintResource>();
+  for (const resource of resources) if (!byId.has(resource.id)) byId.set(resource.id, resource);
+  const used = new Set<PaintResource>();
+  while (pending.length > 0) {
+    const resource = byId.get(pending.pop()!);
+    if (resource === undefined || used.has(resource)) continue;
+    used.add(resource);
+    visit(resource);
+  }
+  return resources.filter((resource) => used.has(resource));
+}
+
 /// Il tag di un contenitore, letto: attributi dipinti, `xml:space`,
 /// `display="none"`.
 export interface HeadInfo {
@@ -446,12 +629,13 @@ function headInfoOf(container: ContainerNode, scope: NamespaceScope): HeadInfo {
   };
 }
 
-/// I riferimenti per frammento di un testo: `url(#id)` e `href="#id"`, con
-/// qualunque prefisso. Un riferimento scritto con entità non si riconosce, e
-/// l'immagine resta senza quella risorsa.
+/// I riferimenti per frammento di un testo: `url(#id)`, in qualunque
+/// combinazione di maiuscole, e `href="#id"`, con qualunque prefisso. Un
+/// riferimento scritto con entità non si riconosce, e l'immagine resta senza
+/// quella risorsa.
 function referencesIn(raw: string): string[] {
   const out: string[] = [];
-  for (const match of raw.matchAll(/url\(\s*["']?#([^"')\s]+)/g)) out.push(match[1]!);
+  for (const match of raw.matchAll(/url\(\s*["']?#([^"')\s]+)/gi)) out.push(match[1]!);
   for (const match of raw.matchAll(/href\s*=\s*["']#([^"']+)["']/g)) out.push(match[1]!);
   return out;
 }
@@ -498,6 +682,15 @@ function renders(node: SceneNode): boolean {
 /// Vero se `part` è un elemento modificabile.
 function editable(part: SceneNode): part is ContainerNode | LeafNode {
   return part.kind === "container" || (part.kind === "leaf" && part.details !== null);
+}
+
+/// L'elemento di `index` con lo scope `signature` e il testo `raw`, tolto
+/// dall'indice.
+function take<T>(index: Map<string, Map<string, T>> | null, signature: string, raw: string): T | undefined {
+  const bucket = index?.get(signature);
+  const item = bucket?.get(raw);
+  if (item !== undefined) bucket!.delete(raw);
+  return item;
 }
 
 function shallowEqual<T>(a: readonly T[], b: readonly T[]): boolean {
@@ -592,15 +785,18 @@ interface ScopeInfo {
 /// non è cambiato.
 export class PaintBuilder {
   private shapes = new WeakMap<LeafNode, PaintShape | null>();
-  /// Lo scope e il testo da cui viene ogni forma.
-  private shapeText = new WeakMap<PaintShape, { readonly signature: string; readonly raw: string }>();
-  /// Le forme della scena precedente per scope e testo, mentre si disegna un
-  /// modello nuovo: un motore riaperto sullo stesso testo ha nodi nuovi, e
-  /// le forme restano le stesse.
+  private resourceOf = new WeakMap<LeafNode, PaintResource>();
+  /// Lo scope e il testo da cui viene ogni forma e ogni risorsa.
+  private shapeText = new WeakMap<PaintShape | PaintResource, { readonly signature: string; readonly raw: string }>();
+  /// Le forme e le risorse della scena precedente per scope e testo, mentre
+  /// si disegna un modello nuovo: un motore riaperto sullo stesso testo ha
+  /// nodi nuovi, e le forme e le risorse restano le stesse.
   private byText: Map<string, Map<string, PaintShape>> | null = null;
+  private resourcesByText: Map<string, Map<string, PaintResource>> | null = null;
   private lastModel: DocumentModel | null = null;
   private lastScene: PaintScene | null = null;
   private heads = new WeakMap<ContainerNode, HeadInfo>();
+  private headRefs = new WeakMap<HeadInfo, readonly string[]>();
   private scopes = new WeakMap<ContainerNode, ScopeInfo>();
   private refs = new WeakMap<SceneNode, readonly string[]>();
   private placeholders = new WeakMap<SceneNode, string>();
@@ -617,7 +813,10 @@ export class PaintBuilder {
   build(source: PaintSource): PaintScene {
     const model = source.model;
     if (model === null) throw new Error("documento in sola lettura: si disegna intero, con wholeDocumentLayer");
-    if (model !== this.lastModel) this.byText = this.textIndex();
+    if (model !== this.lastModel) {
+      this.byText = this.textIndex();
+      this.resourcesByText = this.resourceIndex();
+    }
     const root = this.rootOf(model);
     const plan = this.plan(model);
     const run = new BuildRun(this, source, model, plan, root.image, root.prologText);
@@ -627,8 +826,11 @@ export class PaintBuilder {
     this.lives = run.nextLives;
     this.images = run.nextImages;
     this.byText = null;
+    this.resourcesByText = null;
     this.lastModel = model;
-    const scene = { root: root.root, layers };
+    const previous = this.lastScene?.resources;
+    const resources = previous !== undefined && shallowEqual(previous, run.resources) ? previous : run.resources;
+    const scene = { root: root.root, layers, resources };
     this.lastScene = scene;
     return scene;
   }
@@ -642,14 +844,27 @@ export class PaintBuilder {
         for (const child of node.children) add(child);
         return;
       }
-      const origin = this.shapeText.get(node);
-      if (origin === undefined) return;
-      let bucket = index.get(origin.signature);
-      if (bucket === undefined) index.set(origin.signature, (bucket = new Map()));
-      bucket.set(origin.raw, node);
+      this.index(index, node);
     };
     for (const layer of this.lastScene.layers) if (layer.kind === "live") for (const node of layer.nodes) add(node);
     return index;
+  }
+
+  /// Le risorse della scena precedente per scope e testo.
+  private resourceIndex(): Map<string, Map<string, PaintResource>> | null {
+    if (this.lastScene === null || this.lastScene.resources.length === 0) return null;
+    const index = new Map<string, Map<string, PaintResource>>();
+    for (const resource of this.lastScene.resources) this.index(index, resource);
+    return index;
+  }
+
+  /// Mette `item` in `index`, sotto il suo scope e il suo testo.
+  private index<T extends PaintShape | PaintResource>(index: Map<string, Map<string, T>>, item: T): void {
+    const origin = this.shapeText.get(item);
+    if (origin === undefined) return;
+    let bucket = index.get(origin.signature);
+    if (bucket === undefined) index.set(origin.signature, (bucket = new Map()));
+    bucket.set(origin.raw, item);
   }
 
   // --- memorie ---------------------------------------------------------------
@@ -706,10 +921,26 @@ export class PaintBuilder {
   /// prendono la stessa forma, così ogni forma della scena è di un elemento
   /// solo, e gli strumenti la ritrovano con `paintsOf`.
   private takeByText(signature: string, raw: string): PaintShape | undefined {
-    const bucket = this.byText?.get(signature);
-    const shape = bucket?.get(raw);
-    if (shape !== undefined) bucket!.delete(raw);
-    return shape;
+    return take(this.byText, signature, raw);
+  }
+
+  /// La risorsa viva di un elemento modificabile di ruolo `resource`.
+  resource(leaf: LeafNode): PaintResource {
+    let resource = this.resourceOf.get(leaf);
+    if (resource === undefined) {
+      const scope = this.scopeInfo(leaf.parent!);
+      resource = take(this.resourcesByText, scope.signature, leaf.raw) ?? resourceOf(leaf, scope.scope);
+      if (!this.shapeText.has(resource)) this.shapeText.set(resource, { signature: scope.signature, raw: leaf.raw });
+      this.resourceOf.set(leaf, resource);
+    }
+    return resource;
+  }
+
+  /// Vero se ciò che `container` contiene non si vede: un contenitore
+  /// nascosto, o una `defs`, che non disegna i suoi figli. Un blocco estraneo
+  /// lì dentro non diventa uno strato.
+  conceals(container: ContainerNode): boolean {
+    return container.details?.role === "defs" || this.headInfo(container).hidden;
   }
 
   /// Ciò che l'ultima scena disegna per `node`: la sua forma, o i gruppi di
@@ -763,6 +994,19 @@ export class PaintBuilder {
 
   image(key: string, make: () => ImageLayer): ImageLayer {
     return this.images.get(key) ?? make();
+  }
+
+  /// I riferimenti del tag d'apertura di un contenitore, memorizzati col
+  /// tag: un livello o un gruppo con un ritaglio, una maschera o un filtro
+  /// li dà agli strati immagine che racchiude.
+  headReferences(container: ContainerNode): readonly string[] {
+    const info = this.headInfo(container);
+    let refs = this.headRefs.get(info);
+    if (refs === undefined) {
+      refs = referencesIn(container.head);
+      this.headRefs.set(info, refs);
+    }
+    return refs;
   }
 
   /// I riferimenti di un nodo, memorizzati.
@@ -899,15 +1143,17 @@ class Survey implements Visitor {
   constructor(private readonly builder: PaintBuilder) {}
 
   open(node: ContainerNode): void {
-    if (this.builder.headInfo(node).hidden) this.hidden++;
+    if (this.builder.conceals(node)) this.hidden++;
   }
 
   close(node: ContainerNode): void {
-    if (this.builder.headInfo(node).hidden) this.hidden--;
+    if (this.builder.conceals(node)) this.hidden--;
   }
 
-  element(): void {
-    this.count++;
+  element(node: LeafNode): void {
+    // Una risorsa non è una forma viva: un'immagine che la unisce non toglie
+    // niente agli strati vivi.
+    if (node.details!.role !== "resource") this.count++;
   }
 
   run(owner: ContainerNode, from: number, to: number): void {
@@ -928,8 +1174,10 @@ interface Position {
 interface ImageDraft {
   readonly pieces: string[];
   readonly keys: number[];
-  /// Le unità estranee che porta: i loro riferimenti vanno nei `defs`.
-  readonly foreign: SceneNode[];
+  /// I riferimenti di ciò che porta, che vanno nei `defs`: delle unità
+  /// estranee, degli elementi vivi che unisce e dei tag dei contenitori,
+  /// anche di quelli che la racchiudono.
+  readonly refs: Array<readonly string[]>;
   /// Il primo e l'ultimo nodo che porta, nell'ordine del documento.
   readonly start: Position;
   end: Position;
@@ -942,6 +1190,8 @@ class BuildRun implements Visitor {
   readonly nextGroups = new WeakMap<ContainerNode, PaintGroup[]>();
   readonly nextLives: LiveLayer[] = [];
   readonly nextImages = new Map<string, ImageLayer>();
+  /// Le risorse modificabili, in ordine di documento.
+  readonly resources: PaintResource[] = [];
   private readonly layers: Array<PaintLayer | null> = [];
   private readonly chain: ContainerNode[] = [];
   private hidden = 0;
@@ -968,19 +1218,19 @@ class BuildRun implements Visitor {
 
   open(node: ContainerNode, index: number): void {
     const info = this.builder.headInfo(node);
-    if (info.hidden) this.hidden++;
+    if (this.builder.conceals(node)) this.hidden++;
     this.chain.push(node);
     const image = this.image;
     if (image !== null) {
       image.pieces.push(node.head);
       image.keys.push(this.builder.serialOf(info));
+      image.refs.push(this.builder.headReferences(node));
       image.end = { owner: node.parent!, index };
     }
   }
 
   close(node: ContainerNode): void {
-    const info = this.builder.headInfo(node);
-    if (info.hidden) this.hidden--;
+    if (this.builder.conceals(node)) this.hidden--;
     this.chain.pop();
     if (this.liveChain.length > this.chain.length) this.liveChain.length = this.chain.length;
     const image = this.image;
@@ -990,13 +1240,19 @@ class BuildRun implements Visitor {
   }
 
   element(node: LeafNode, index: number): void {
+    // Una risorsa è viva anche dentro un'immagine che la unisce, e non è
+    // mai una forma.
+    const resource = node.details!.role === "resource";
+    if (resource) this.resources.push(this.builder.resource(node));
     const image = this.image;
     if (image !== null) {
       image.pieces.push(this.builder.imageRaw(node));
       image.keys.push(this.builder.serialOf(node));
+      image.refs.push(this.builder.referencesOf(node));
       image.end = { owner: node.parent!, index };
       return;
     }
+    if (resource) return;
     const shape = this.builder.shape(node);
     if (shape === null) return;
     this.liveParent().push(shape);
@@ -1015,7 +1271,7 @@ class BuildRun implements Visitor {
       image = this.image = {
         pieces: this.chain.map((c) => c.head),
         keys: this.chain.map((c) => this.builder.serialOf(this.builder.headInfo(c))),
-        foreign: [],
+        refs: this.chain.map((c) => this.builder.headReferences(c)),
         start: { owner, index: from },
         end: { owner, index: from },
         depth: this.chain.length,
@@ -1031,7 +1287,7 @@ class BuildRun implements Visitor {
       const unit = part as LeafNode | OtherNode;
       image.pieces.push(this.builder.imageRaw(unit));
       image.keys.push(this.builder.serialOf(unit));
-      image.foreign.push(unit);
+      image.refs.push(this.builder.referencesOf(unit));
     }
     image.end = { owner, index: to - 1 };
     if (!visible) return;
@@ -1119,7 +1375,7 @@ class BuildRun implements Visitor {
   /// la ripeterebbe.
   private defsFor(image: ImageDraft): ElementPart[] {
     const pending: string[] = [];
-    for (const node of image.foreign) for (const ref of this.builder.referencesOf(node)) pending.push(ref);
+    for (const refs of image.refs) for (const ref of refs) pending.push(ref);
     if (pending.length === 0 && this.styles.length === 0) return [];
     let range: { start: number[]; end: number[] } | null = null;
     const out: ElementPart[] = [];

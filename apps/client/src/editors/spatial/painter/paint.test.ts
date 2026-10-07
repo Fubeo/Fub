@@ -2,18 +2,22 @@
 // che cosa resta lo stesso oggetto fra una modifica e l'altra.
 
 import { describe, expect, it } from "vitest";
+import { FIDELITY } from "../../../../bench/fidelity-corpus";
+import RESOURCES from "../../../__fixtures__/scene/resources.svg?raw";
 import { SceneEngine } from "../scene/engine";
 import { doc, HEAD } from "../scene/test-support";
 import { SourceText } from "../scene/text";
-import { NS_SVG, parseXml } from "../scene/xml";
+import { NS_NONE, NS_SVG, parseXml, type NodeId } from "../scene/xml";
 import {
   IMAGE_PLACEHOLDER,
   imageDocument,
   MAX_IMAGE_LAYERS,
   PaintBuilder,
+  resourcesFor,
   wholeDocumentLayer,
   type ImageLayer,
   type LiveLayer,
+  type PaintDef,
   type PaintGroup,
   type PaintScene,
   type PaintShape,
@@ -344,6 +348,136 @@ describe("una scena dopo l'altra", () => {
     const after = shapes(second);
     expect(after).toHaveLength(before.length);
     for (const [i, shape] of after.entries()) expect(shape).toBe(before[i]);
+  });
+});
+
+/// Una risorsa per tipo, con dentro ciò che il painter non porta: titoli, id
+/// dei figli, attributi di FubDraw, e una sfumatura estranea accanto.
+const DEFS = '<defs id="fub-defs">'
+  + '<linearGradient id="g1" fub:role="private" x1="0" y1="0" x2="1" y2="0"><title>Mare</title>'
+  + '<stop id="s0" offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#56b4e9" stop-opacity="0.5"/></linearGradient>'
+  + '<pattern id="p1" fub:role="shared" width="20" height="20" patternUnits="userSpaceOnUse">'
+  + '<rect id="dentro" width="10" height="10" fill="url(#g1) #0072b2" fub:nota="n"/>'
+  + '<text x="1" y="9" font-size="8" xml:space="preserve"><tspan x="1" dy="0">a</tspan></text></pattern>'
+  + '<filter id="f1" x="-0.2" y="-0.2" width="1.4" height="1.4"><feDropShadow id="ombra" dx="0" dy="2" stdDeviation="2" flood-color="#000000"/></filter>'
+  + '<linearGradient id="ink" href="#g1"/>'
+  + '</defs>';
+
+const ids = (list: readonly { readonly id: string }[]): string[] => list.map((item) => item.id);
+
+describe("le risorse", () => {
+  it("stanno nella scena coi soli elementi e attributi del formato, e non sono strati", () => {
+    const scene = sceneOf(doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000" filter="url(#f1)"/></g>`));
+    // La sfumatura estranea della defs non disegna: nessuno strato immagine.
+    expect(kinds(scene)).toEqual(["live"]);
+    expect(live(scene, 0).nodes.map((node) => node.id)).toEqual(["l1"]);
+    expect(ids(scene.resources)).toEqual(["g1", "p1", "f1"]);
+    const [gradient, pattern, filter] = scene.resources;
+    expect(gradient).toEqual({
+      id: "g1",
+      tag: "linearGradient",
+      attrs: [["x1", "0"], ["y1", "0"], ["x2", "1"], ["y2", "0"]],
+      space: null,
+      children: [
+        { tag: "stop", attrs: [["offset", "0"], ["stop-color", "#0072b2"]], space: null, children: [] },
+        { tag: "stop", attrs: [["offset", "1"], ["stop-color", "#56b4e9"], ["stop-opacity", "0.5"]], space: null, children: [] },
+      ],
+    });
+    expect(pattern!.attrs).toEqual([["width", "20"], ["height", "20"], ["patternUnits", "userSpaceOnUse"]]);
+    expect(pattern!.children).toEqual([
+      { tag: "rect", attrs: [["width", "10"], ["height", "10"], ["fill", "url(#g1) #0072b2"]], space: null, children: [] },
+      {
+        tag: "text",
+        attrs: [["x", "1"], ["y", "9"], ["font-size", "8"]],
+        space: "preserve",
+        children: [{ tag: "tspan", attrs: [["x", "1"], ["dy", "0"]], space: null, children: ["a"] }],
+      },
+    ]);
+    expect(filter!.children).toEqual([
+      { tag: "feDropShadow", attrs: [["dx", "0"], ["dy", "2"], ["stdDeviation", "2"], ["flood-color", "#000000"]], space: null, children: [] },
+    ]);
+  });
+
+  it("del file di prova portano ogni attributo del formato, e niente di più", () => {
+    const scene = sceneOf(RESOURCES);
+    expect(ids(scene.resources)).toEqual(["r00000001", "r00000002", "r00000003", "r00000004", "r00000005", "r00000006", "r00000007", "r00000008"]);
+    const parsed = parseXml(new SourceText(RESOURCES), false);
+    const same = (def: PaintDef, at: NodeId): void => {
+      const element = parsed.element(at)!;
+      expect(def.tag).toBe(element.local);
+      expect(def.attrs).toEqual(element.attrs.filter((attr) => attr.ns === NS_NONE && attr.local !== "id").map((attr) => [attr.local, attr.value]));
+      const children = element.children.filter((child) => {
+        const node = parsed.element(child);
+        return node !== null && node.ns === NS_SVG && node.local !== "title" && node.local !== "desc";
+      });
+      const defs = def.children.filter((child): child is PaintDef => typeof child !== "string");
+      expect(defs).toHaveLength(children.length);
+      defs.forEach((child, i) => same(child, children[i]!));
+    };
+    for (const resource of scene.resources) {
+      const at = parsed.nodes.findIndex((node) => node.kind === "element" && node.attrs.some((attr) => attr.ns === NS_NONE && attr.local === "id" && attr.value === resource.id));
+      same(resource, at);
+    }
+  });
+
+  it("della scena del banco di fedeltà sono tutte vive, come gli oggetti che le usano", () => {
+    const scene = sceneOf(FIDELITY.find((each) => each.id === "risorse")!.text);
+    expect(kinds(scene)).toEqual(["live"]);
+    expect(ids(scene.resources)).toEqual(["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"]);
+    expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o1", "o2", "o3", "o4", "o5", "o6"]);
+  });
+
+  it("restano gli stessi oggetti finché non cambiano, anche in un motore riaperto", () => {
+    const source = doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000"/><rect id="b" width="1" height="1"/></g>`);
+    const engine = SceneEngine.open(source);
+    const builder = new PaintBuilder();
+    const first = builder.build(engine);
+    expect(builder.build(engine).resources).toBe(first.resources);
+    expect(engine.apply({ op: "set", id: "b", attrs: { fill: "#00ff00" } }).outcome).toBe("applied");
+    expect(builder.build(engine).resources).toBe(first.resources);
+    expect(engine.apply({ op: "set", id: "g1", attrs: { x2: "0.5" } }).outcome).toBe("applied");
+    const changed = builder.build(engine).resources;
+    expect(changed).not.toBe(first.resources);
+    expect(changed[0]).not.toBe(first.resources[0]);
+    expect(changed[0]!.attrs).toContainEqual(["x2", "0.5"]);
+    expect(changed[1]).toBe(first.resources[1]);
+    expect(changed[2]).toBe(first.resources[2]);
+    const again = new PaintBuilder();
+    const before = sceneOf(source, again).resources;
+    const after = sceneOf(source, again).resources;
+    for (const [i, resource] of after.entries()) expect(resource).toBe(before[i]);
+  });
+
+  it("si trovano da chi le usa e da chi lo contiene, a cascata, nell'ordine della defs", () => {
+    const scene = sceneOf(doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000"/><rect id="b" width="1" height="1"/></g>`));
+    const layer = live(scene, 0).nodes[0] as PaintGroup;
+    const [a, b] = layer.children as [PaintShape, PaintShape];
+    expect(ids(resourcesFor([a], [], scene.resources))).toEqual(["g1", "p1"]);
+    expect(ids(resourcesFor([layer], [], scene.resources))).toEqual(["g1", "p1"]);
+    expect(resourcesFor([b], [], scene.resources)).toEqual([]);
+    expect(ids(resourcesFor([b], [[], [["filter", "url(#f1)"]]], scene.resources))).toEqual(["f1"]);
+    expect(resourcesFor([a], [], [])).toEqual([]);
+  });
+
+  it("vanno nei defs delle immagini che le usano, coi motivi e le loro sfumature", () => {
+    const scene = sceneOf(doc(`${DEFS}${LAYER}<rect id="a" width="1" height="1"/><use href="#a" fill="url(#p1) #000000"/></g>`));
+    expect(kinds(scene)).toEqual(["live", "image"]);
+    const body = image(scene, 1).body;
+    const defs = body.slice(0, body.indexOf("</defs>"));
+    expect(defs).toContain('<pattern id="p1"');
+    expect(defs).toContain('<linearGradient id="g1"');
+    expect(defs).not.toContain('<filter id="f1"');
+  });
+
+  it("vanno nei defs delle immagini anche dal livello che le racchiude e dagli oggetti che uniscono", () => {
+    const framed = sceneOf(doc(`${DEFS}<g id="l1" fub:layer="Ombra" filter="url(#f1)"><rect id="a" width="1" height="1"/><use href="#a"/></g>`));
+    expect(kinds(framed)).toEqual(["live", "image"]);
+    expect(image(framed, 1).body).toContain('<filter id="f1"');
+    let body = `${DEFS}${LAYER}`;
+    for (let i = 0; i < MAX_IMAGE_LAYERS + 2; i++) body += `<rect id="r${i}" width="1" height="1" fill="url(#g1) #000000"/><use href="#x"/>`;
+    const merged = sceneOf(doc(`${body}</g>`)).layers.filter((layer): layer is ImageLayer => layer.kind === "image" && layer.body.includes('<rect id="r'));
+    expect(merged.length).toBeGreaterThan(0);
+    for (const layer of merged) expect(layer.body.slice(0, layer.body.indexOf("</defs>"))).toContain('<linearGradient id="g1"');
   });
 });
 
