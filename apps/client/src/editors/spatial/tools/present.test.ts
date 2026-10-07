@@ -611,4 +611,16 @@ describe("uscire", () => {
     owner = openLifetime();
     expect(start()).not.toBe(first);
   });
+
+  it("con l'editor già andato non resta niente, e la prossima si apre", () => {
+    owner.close();
+    start();
+    expect(document.querySelector(".draw-present")).toBeNull();
+    expect(exits).toEqual([]);
+    vi.advanceTimersByTime(START_MS);
+    owner = openLifetime();
+    const next = start();
+    expect(document.querySelectorAll(".draw-present")).toHaveLength(1);
+    expect(next.element.isConnected).toBe(true);
+  });
 });

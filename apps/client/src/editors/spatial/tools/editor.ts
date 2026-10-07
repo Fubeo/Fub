@@ -7771,10 +7771,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const text = engine.text;
     cancelGesture();
     import("./present").then(
-      (module) => module.present({ text, model, page: scene.root.page, extent: indexer.extent(model), from, images: options.images, onExit: (id) => {
-        surface.focus({ preventScroll: true });
-        if (id !== null) goToBoard(id);
-      } }, life),
+      (module) => {
+        // L'editor se n'è andato mentre il modulo arrivava.
+        if (disposed) return;
+        module.present({ text, model, page: scene.root.page, extent: indexer.extent(model), from, images: options.images, onExit: (id) => {
+          surface.focus({ preventScroll: true });
+          if (id !== null) goToBoard(id);
+        } }, life);
+      },
       () => announce(t("draw.present.failed")),
     );
   };

@@ -805,9 +805,7 @@ export function present(options: PresentOptions, owner: Lifetime): Presentation 
     if (tell) options.onExit(board);
   };
   const close = (): void => finish(true);
-  // L'editor che se ne va porta via la presentazione, senza riceverne la fine.
   let stopOwner: (() => void) | null = () => finish(false);
-  owner.add(() => stopOwner?.());
 
   document.body.append(root);
   life.add(trapFocus(root, close));
@@ -825,5 +823,8 @@ export function present(options: PresentOptions, owner: Lifetime): Presentation 
 
   const presentation: Presentation = { element: root, close };
   current = presentation;
+  // L'editor che se ne va porta via la presentazione, senza riceverne la
+  // fine; uno che se n'è già andato la chiude subito.
+  owner.add(() => stopOwner?.());
   return presentation;
 }
