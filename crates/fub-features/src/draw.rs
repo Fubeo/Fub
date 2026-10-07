@@ -774,26 +774,34 @@ const SERIF: &str = "Literata";
 const SANS: &str = "Inter";
 const MONO: &str = "JetBrains Mono";
 
-/// I caratteri di Fub, nei due pesi che un disegno usa: 400 e 700.
+/// I caratteri di Fub, nei due pesi che un disegno usa, 400 e 700, in tondo
+/// e in corsivo.
 ///
 /// Sono gli stessi tre che l'app distribuisce (Inter, Literata e JetBrains
-/// Mono, i file variabili latin di `@fontsource-variable` 5.3.0) fissati in
-/// istanze statiche: `usvg` 0.45 non sa scegliere un punto dell'asse `wght`
-/// di un carattere variabile, e con il file variabile ogni peso uscirebbe
-/// come il peso di serie del file. Le istanze sono riproducibili: fontTools
-/// 4.66.1, `instancer.instantiateVariableFont(font, {"wght": 400 | 700},
-/// updateFontNames=True)` sul file caricato con `recalcTimestamp=False`, salvato
-/// come TrueType. La licenza è la SIL Open Font License 1.1 di tutti e tre i
+/// Mono, i file variabili latin di `@fontsource-variable` 5.3.0, il tondo
+/// `*-latin-wght-normal.woff2` e il corsivo `*-latin-wght-italic.woff2`)
+/// fissati in istanze statiche: `usvg` 0.45 non sa scegliere un punto
+/// dell'asse `wght` di un carattere variabile, e con il file variabile ogni
+/// peso uscirebbe come il peso di serie del file. Le istanze sono
+/// riproducibili: fontTools 4.66.1, `font =
+/// instancer.instantiateVariableFont(font, {"wght": 400 | 700},
+/// updateFontNames=True)` sul file caricato con `recalcTimestamp=False`, che
+/// restituisce un carattere nuovo e non cambia quello che riceve, salvato come
+/// TrueType. La licenza è la SIL Open Font License 1.1 di tutti e tre i
 /// caratteri, in `fonts/OFL.txt` accanto ai file.
-const FACES: [&[u8]; 8] = [
+const FACES: [&[u8]; 12] = [
     include_bytes!("../fonts/inter-400.ttf"),
     include_bytes!("../fonts/inter-700.ttf"),
+    include_bytes!("../fonts/inter-italic-400.ttf"),
+    include_bytes!("../fonts/inter-italic-700.ttf"),
     include_bytes!("../fonts/literata-400.ttf"),
     include_bytes!("../fonts/literata-700.ttf"),
     include_bytes!("../fonts/literata-italic-400.ttf"),
     include_bytes!("../fonts/literata-italic-700.ttf"),
     include_bytes!("../fonts/jetbrains-mono-400.ttf"),
     include_bytes!("../fonts/jetbrains-mono-700.ttf"),
+    include_bytes!("../fonts/jetbrains-mono-italic-400.ttf"),
+    include_bytes!("../fonts/jetbrains-mono-italic-700.ttf"),
 ];
 
 /// Il database dei caratteri, costruito una volta per processo e soltanto dai
@@ -1637,14 +1645,13 @@ mod tests {
             assert_eq!(db.family_name(&generic), family);
         }
 
-        // Ogni famiglia ha i suoi due pesi, e Literata anche il corsivo.
-        let styles = [
-            (SANS, fontdb::Style::Normal),
-            (SERIF, fontdb::Style::Normal),
-            (SERIF, fontdb::Style::Italic),
-            (MONO, fontdb::Style::Normal),
-        ];
-        for (family, style) in styles {
+        // Ogni famiglia ha i suoi due pesi, in tondo e in corsivo.
+        let families = [SANS, SERIF, MONO];
+        let styles = [fontdb::Style::Normal, fontdb::Style::Italic];
+        for (family, style) in families
+            .into_iter()
+            .flat_map(|family| styles.map(|style| (family, style)))
+        {
             for weight in [400, 700] {
                 let id = db
                     .query(&fontdb::Query {
