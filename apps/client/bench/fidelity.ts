@@ -11,8 +11,10 @@
 // che mostra allora i colori di ripiego.
 //
 // `?wrap=check` prova invece gli a capo dei testi in area contro il browser
-// (`wrap-check.ts`), e ne mette gli esiti in `data-wrap`; con
-// `&variant=stima` gli a capo li misura la stima, e la prova deve vederlo.
+// (`wrap-check.ts`), e ne mette gli esiti in `data-wrap`; `?wrap=zwnj` li
+// prova con la spaziatura che la misura mette da sé, come dove il canvas non
+// la sa mettere; con `&variant=stima` gli a capo li misura la stima, e la
+// prova deve vederlo.
 
 // Gli strati del foglio stanno uno sopra l'altro con le regole del tema, come
 // nell'app.
@@ -22,7 +24,7 @@ import { createSvgPainter } from "../src/editors/spatial/painter/svg-dom";
 import { appFonts, selfContained, type FontSheets } from "../src/editors/spatial/picture";
 import { SceneEngine } from "../src/editors/spatial/scene/engine";
 import { rasterize } from "../src/editors/spatial/tools/png";
-import { estimate } from "../src/editors/spatial/tools/measure";
+import { browserMeasure, estimate } from "../src/editors/spatial/tools/measure";
 import { ensureTextFont, FONT_FILES } from "../src/editors/spatial/tools/text";
 import { openLifetime } from "../src/ui/lifetime";
 import { FIDELITY } from "./fidelity-corpus";
@@ -51,12 +53,13 @@ async function picture(id: string, blob: Blob): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const wrap = params.get("wrap") === "check";
+  const wrap = params.get("wrap") === "check" || params.get("wrap") === "zwnj";
   if (found === undefined && !wrap) return;
   ensureTextFont();
   await Promise.all(FONT_FILES.map(([family, , , style]) => document.fonts.load(`${style} 16px "${family}"`)));
   if (wrap) {
-    document.documentElement.dataset.wrap = JSON.stringify(variant === "stima" ? wrapCases(estimate) : wrapCases());
+    const measure = variant === "stima" ? estimate : browserMeasure(params.get("wrap") === "check");
+    document.documentElement.dataset.wrap = JSON.stringify(wrapCases(measure));
     return;
   }
   if (found === undefined) return;

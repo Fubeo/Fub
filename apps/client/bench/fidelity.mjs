@@ -28,7 +28,9 @@
 // FubDraw scrive in un testo in area, in italiano e in inglese, sono quelli
 // che il browser farebbe con le larghezze che disegna. Anche lei prova prima
 // sé stessa: con gli a capo della stima, che non conosce i caratteri, deve
-// diventare rossa.
+// diventare rossa. Poi prova le due strade della spaziatura delle lettere:
+// quella del canvas e quella dello ZWNJ, che vale dove il canvas non la sa
+// mettere.
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -102,27 +104,29 @@ try {
     }
   }
 
-  const wrapCases = async (variant) => {
-    await page.goto(`${base}/bench/fidelity.html?wrap=check${variant ? `&variant=${variant}` : ""}`);
+  const wrapCases = async (road, variant) => {
+    await page.goto(`${base}/bench/fidelity.html?wrap=${road}${variant ? `&variant=${variant}` : ""}`);
     await page.waitForFunction(() => document.documentElement.dataset.fidelity !== undefined, null, { timeout: 60_000 });
     const [state, error, wrap] = await page.evaluate(() => [document.documentElement.dataset.fidelity, document.documentElement.dataset.error, document.documentElement.dataset.wrap]);
     if (state !== "ready") throw new Error(`a capo: ${error}`);
     return JSON.parse(wrap);
   };
-  const planted = (await wrapCases("stima")).filter((item) => !item.ok).length;
+  const planted = (await wrapCases("check", "stima")).filter((item) => !item.ok).length;
   console.log(`${planted > 0 ? "ok  " : "NO  "} a capo con la stima: ${planted} paragrafi diversi`);
   if (planted === 0) failed = true;
-  const cases = await wrapCases(null);
   const units = (value) => value.toFixed(2);
-  for (const item of cases) {
-    if (item.ok) continue;
-    failed = true;
-    console.log(`NO   a capo, ${item.name}: fuori di ${units(item.over)}, dentro di ${units(item.under)}, scarto ${units(item.drift)} in «${item.worst}»`);
+  for (const [road, label] of [["check", ""], ["zwnj", ", spaziatura con lo ZWNJ"]]) {
+    const cases = await wrapCases(road, null);
+    for (const item of cases) {
+      if (item.ok) continue;
+      failed = true;
+      console.log(`NO   a capo${label}, ${item.name}: fuori di ${units(item.over)}, dentro di ${units(item.under)}, scarto ${units(item.drift)} in «${item.worst}»`);
+    }
+    const lines = cases.reduce((sum, item) => sum + item.lines, 0);
+    const worst = (key) => units(Math.max(...cases.map((item) => item[key])));
+    const good = cases.every((item) => item.ok);
+    console.log(`${good ? "ok  " : "NO  "} a capo IT/EN${label}: ${cases.length} paragrafi, ${lines} righe; fuori al più di ${worst("over")}, scarto al più ${worst("drift")}`);
   }
-  const lines = cases.reduce((sum, item) => sum + item.lines, 0);
-  const worst = (key) => units(Math.max(...cases.map((item) => item[key])));
-  const good = cases.every((item) => item.ok);
-  console.log(`${good ? "ok  " : "NO  "} a capo IT/EN: ${cases.length} paragrafi, ${lines} righe; fuori al più di ${worst("over")}, scarto al più ${worst("drift")}`);
 } finally {
   await close();
 }

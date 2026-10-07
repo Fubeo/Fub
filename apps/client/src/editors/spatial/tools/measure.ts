@@ -7,9 +7,11 @@
 //   non c'è, o che non è ancora arrivato, si misura col suo ripiego, come lo
 //   disegnerebbe il browser in quel momento.
 // - **La spaziatura delle lettere** si aggiunge dopo ogni carattere, un
-//   grafema alla volta, come la applica SVG. Dove il canvas la sa mettere,
-//   la mette lui: come SVG, con la spaziatura spegne le legature, e la «Th»
-//   di Literata torna due lettere.
+//   grafema alla volta, come la applica SVG. Con la spaziatura SVG spegne le
+//   legature, e la «Th» di Literata torna due lettere: dove il canvas sa
+//   mettere la spaziatura la mette lui, e le spegne allo stesso modo; dove
+//   non la sa mettere, come in WebKit, misura il testo con uno ZWNJ fra due
+//   grafemi, che spegne le legature e lascia la crenatura.
 // - **Dove il browser non misura**, come nelle prove, ogni carattere è largo
 //   0,6 volte il corpo: la stima del campo e del colpo.
 
@@ -66,9 +68,14 @@ const PROBE_SIZE = 100;
 /// Quante larghezze la cache tiene per carattere prima di ricominciare.
 const CACHE = 4096;
 
+/// Il non-congiuntore di larghezza zero: fra due lettere, le tiene separate.
+const ZWNJ = "\u200c";
+
 /// La misura del browser, `null` dove non c'è un canvas: allora vale
-/// [`estimate`].
-export function browserMeasure(): Measure | null {
+/// [`estimate`]. Con `canvasSpacing` falso la spaziatura non la mette mai il
+/// canvas, come dove non la sa mettere: il banco prova così anche l'altra
+/// strada.
+export function browserMeasure(canvasSpacing = true): Measure | null {
   if (typeof OffscreenCanvas === "undefined") return null;
   let context: OffscreenCanvasRenderingContext2D | null = null;
   try {
@@ -78,7 +85,7 @@ export function browserMeasure(): Measure | null {
   }
   if (context === null) return null;
   const ctx = context;
-  const spaces = "letterSpacing" in ctx;
+  const spaces = canvasSpacing && "letterSpacing" in ctx;
   const caches = new Map<string, Map<string, number>>();
   /// La spaziatura che il canvas mette a [`PROBE_SIZE`] pixel: zero dove non
   /// la sa mettere.
@@ -94,7 +101,9 @@ export function browserMeasure(): Measure | null {
       cache = new Map();
       caches.set(key, cache);
     }
-    const known = cache.get(text);
+    // Senza la spaziatura del canvas, le legature le spegne lo ZWNJ.
+    const probed = spaced === 0 && font.spacing !== 0 ? graphemes(text).join(ZWNJ) : text;
+    const known = cache.get(probed);
     if (known !== undefined) return known;
     // Un valore che CSS non legge lascia quello di prima: si parte da uno
     // di un altro corpo, che nessun valore buono lascia.
@@ -103,13 +112,13 @@ export function browserMeasure(): Measure | null {
     ctx.font = css;
     if (ctx.font === before) return null;
     if (spaced !== 0) ctx.letterSpacing = `${spaced}px`;
-    const width = ctx.measureText(text).width;
+    const width = ctx.measureText(probed).width;
     if (spaced !== 0) ctx.letterSpacing = "0px";
     // Un carattere che sta ancora arrivando si misura col ripiego, e la
     // misura non si ricorda: quella dopo sarà col carattere vero.
     if (!arrived(css)) return width;
     if (cache.size >= CACHE) cache.clear();
-    cache.set(text, width);
+    cache.set(probed, width);
     return width;
   };
   return (text, font) => {

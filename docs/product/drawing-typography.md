@@ -253,7 +253,10 @@ Lettura e il PNG anche su righe con pezzi, corsivi, spaziatura e
 decorazioni, su testi in area e su tracciato, e prova di vedere un corsivo
 che manca. Prova anche gli a capo, in italiano e in inglese, in ogni
 carattere dell'app, con pezzi e spaziatura: ogni riga che FubDraw scrive sta
-nel riquadro come la disegna il browser, ed è la più lunga che ci sta.
+nel riquadro come la disegna il browser, ed è la più lunga che ci sta. Con la
+spaziatura il browser non fa le legature, e la misura nemmeno: il banco
+prova anche la strada di dove il canvas non sa mettere la spaziatura, come
+in WebKit, in cui la misura separa le lettere con uno ZWNJ.
 
 ## Il file
 

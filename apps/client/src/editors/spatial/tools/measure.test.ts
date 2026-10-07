@@ -30,7 +30,8 @@ describe("la misura del browser", () => {
     vi.unstubAllGlobals();
   });
 
-  /// Un canvas che misura 50 pixel per carattere a 100 pixel, e che non
+  /// Un canvas che misura 50 pixel per carattere a 100 pixel, con la
+  /// legatura «fi» larga quanto una lettera e lo ZWNJ largo zero, e che non
   /// legge un carattere col nome `Rotto`.
   function fakeCanvas(): { calls: string[] } {
     const calls: string[] = [];
@@ -44,7 +45,7 @@ describe("la misura del browser", () => {
       }
       measureText(text: string): { width: number } {
         calls.push(`${this.value}|${text}`);
-        return { width: text.length * 50 };
+        return { width: text.replace("fi", "f").replace(/\u200c/g, "").length * 50 };
       }
     }
     vi.stubGlobal(
@@ -70,6 +71,14 @@ describe("la misura del browser", () => {
     expect(measure("abcd", { ...INTER, size: 30, spacing: 2 })).toBeCloseTo(68);
     expect(measure("", INTER)).toBe(0);
     expect(measure("abc", { ...INTER, size: 0 })).toBe(0);
+  });
+
+  it("dove il canvas non mette la spaziatura, uno ZWNJ fra due grafemi spegne le legature", () => {
+    const { calls } = fakeCanvas();
+    const measure = browserMeasure()!;
+    expect(measure("fine", INTER)).toBeCloseTo(15);
+    expect(measure("fine", { ...INTER, spacing: 2 })).toBeCloseTo(28);
+    expect(calls).toEqual(["normal normal 100px Inter, sans-serif|fine", "normal normal 100px Inter, sans-serif|f\u200ci\u200cn\u200ce"]);
   });
 
   it("ricorda le larghezze per carattere e per testo", () => {
@@ -102,8 +111,9 @@ describe("la misura del browser", () => {
       measureText(text: string): { width: number } {
         calls.push(`${this.letterSpacing}|${text}`);
         // «fi» è una legatura larga quanto una lettera, senza spaziatura.
-        const letters = this.letterSpacing === "0px" ? text.replace("fi", "f").length : text.length;
-        return { width: letters * 50 + text.length * parseFloat(this.letterSpacing) };
+        const plain = text.replace(/\u200c/g, "");
+        const letters = this.letterSpacing === "0px" ? text.replace("fi", "f").replace(/\u200c/g, "").length : plain.length;
+        return { width: letters * 50 + plain.length * parseFloat(this.letterSpacing) };
       }
     }
     vi.stubGlobal("OffscreenCanvas", class {
@@ -118,6 +128,9 @@ describe("la misura del browser", () => {
     expect(measure("fine", { ...INTER, spacing: 2 })).toBeCloseTo(28);
     expect(measure("fine", { ...INTER, spacing: 2 })).toBeCloseTo(28);
     expect(calls).toEqual(["0px|fine", "20px|fine"]);
+    // Senza la spaziatura del canvas, quella dello ZWNJ dà lo stesso.
+    expect(browserMeasure(false)!("fine", { ...INTER, spacing: 2 })).toBeCloseTo(28);
+    expect(calls[2]).toBe("0px|f\u200ci\u200cn\u200ce");
   });
 
   it("un carattere che il browser non legge si stima", () => {
