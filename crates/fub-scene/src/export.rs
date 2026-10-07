@@ -49,6 +49,26 @@ pub enum Scope {
     },
 }
 
+impl Scope {
+    /// Ciò che dell'ambito si dice senza il disegno: una selezione ha un
+    /// riquadro di quattro numeri finiti, largo e alto più di 0 a 2 decimali,
+    /// e almeno un id. La derivazione lo controlla per prima cosa; chi la
+    /// chiede può farlo prima di leggere un file.
+    pub fn check(&self) -> Result<(), DeriveError> {
+        let Scope::Selection { ids, rect } = self else {
+            return Ok(());
+        };
+        let empty = |side: f64| round_half_up(side, POWERS_OF_TEN[RECT_PLACES]) <= 0.0;
+        if !rect.iter().all(|n| n.is_finite()) || empty(rect[2]) || empty(rect[3]) {
+            return Err(DeriveError::BadBox);
+        }
+        if ids.is_empty() {
+            return Err(DeriveError::EmptySelection);
+        }
+        Ok(())
+    }
+}
+
 /// Lo sfondo: le carte del disegno, o niente.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Background {
@@ -267,10 +287,7 @@ impl<'a> Source<'a> {
             Scope::Drawing => {}
             Scope::Board(id) => edits.extend(on_rect(doc, root, self.board_rect(id)?)),
             Scope::Selection { ids, rect } => {
-                let empty = |side: f64| round_half_up(side, POWERS_OF_TEN[RECT_PLACES]) <= 0.0;
-                if !rect.iter().all(|n| n.is_finite()) || empty(rect[2]) || empty(rect[3]) {
-                    return Err(DeriveError::BadBox);
-                }
+                scope.check()?;
                 edits.extend(self.selection_edits(ids)?);
                 edits.extend(on_rect(doc, root, *rect));
             }
@@ -331,9 +348,6 @@ impl<'a> Source<'a> {
     /// ciò che li contiene e le carte.
     fn selection_edits(&self, ids: &[String]) -> Result<Vec<Edit>, DeriveError> {
         let doc = &self.doc;
-        if ids.is_empty() {
-            return Err(DeriveError::EmptySelection);
-        }
         let known = self.graphic_ids();
         let mut chosen = HashSet::new();
         for id in ids {

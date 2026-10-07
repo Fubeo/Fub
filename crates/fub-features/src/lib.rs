@@ -46,9 +46,11 @@
 //! - `draw` — i disegni: il comando «Nuovo disegno», che ne scrive uno vuoto
 //!   con il provider del formato e lo apre, il comando «Annota il PDF», che
 //!   apre (e se serve crea) le annotazioni `.pdf.fubann` accanto a un PDF, e
-//!   l'export in PNG e in PDF come due
+//!   l'export in PNG, JPEG, SVG e PDF come quattro
 //!   [`ExportProvider`](fub_abi::transfer::ExportProvider), con `resvg` e
-//!   `svg2pdf`: nessuna risorsa oltre al documento, i soli caratteri di Fub.
+//!   `svg2pdf`: del disegno intero, di alcune tavole o degli oggetti scelti,
+//!   nessuna risorsa oltre al documento e alle sue immagini, i soli caratteri
+//!   di Fub.
 //!   Fuori dal `default`, dietro la cargo feature `draw`.
 //! - [`inventory`] — l'elenco delle feature qui sopra, e non una descrizione di
 //!   esso: è da qui che `fub_host::mount` le monta, quindi una feature fuori
@@ -122,8 +124,9 @@ pub use commands::{
 pub use dashboard::{DashboardView, DASHBOARD_ID, DASHBOARD_VIEW};
 #[cfg(feature = "draw")]
 pub use draw::{
-    AnnotatedPdfExport, DrawCommands, PdfExport, PngExport, RedactedPdfExport, DRAWING_CREATE,
-    DRAW_ANNOTATED_PDF, DRAW_ID, DRAW_PDF, DRAW_PNG, DRAW_REDACTED_PDF, PDF_ANNOTATE,
+    AnnotatedPdfExport, DrawCommands, JpegExport, PdfExport, PngExport, RedactedPdfExport,
+    SvgExport, DRAWING_CREATE, DRAW_ANNOTATED_PDF, DRAW_ID, DRAW_JPEG, DRAW_PDF, DRAW_PNG,
+    DRAW_REDACTED_PDF, DRAW_SVG, PDF_ANNOTATE,
 };
 #[cfg(feature = "formatting")]
 pub use formatting::{FormattingCommands, FORMATTING_ID};

@@ -1,6 +1,6 @@
 //! L'export dei disegni (`fub.draw`): che cosa esce, e che cosa non si tocca.
 //!
-//! Quattro domande, e un gruppo di prove per ciascuna.
+//! Cinque domande, e un gruppo di prove per ciascuna.
 //!
 //! - **Che cosa esce.** Il PNG e il PDF di una scena si confrontano con le
 //!   baseline in `tests/baselines/draw/`. Si rigenerano soltanto con
@@ -25,6 +25,11 @@
 //!   aperta nessuna.
 //! - **Lo stesso disegno, gli stessi byte.** Due export dello stesso disegno
 //!   sono identici, anche con più caratteri nello stesso PDF.
+//! - **Le opzioni.** Le tavole escono un file ciascuna, o una pagina ciascuna
+//!   con il suo segnalibro nel PDF; la selezione esce nel suo riquadro; senza
+//!   la carta il PNG è trasparente e il JPEG bianco; un'opzione sbagliata ferma
+//!   l'export prima di aprire un file. L'SVG pulito si disegna come il
+//!   derivato, a meno dei numeri arrotondati, e ripulirlo non lo cambia.
 
 #![cfg(feature = "draw")]
 
@@ -39,7 +44,9 @@ use fub_abi::transfer::{
     ExportProvider, ExportReport, ExportRequest, ExportSelection, MemorySink, NoteLevel,
 };
 use fub_abi::PluginError;
-use fub_features::{PdfExport, PngExport, DRAW_PDF, DRAW_PNG};
+use fub_features::{
+    JpegExport, PdfExport, PngExport, SvgExport, DRAW_JPEG, DRAW_PDF, DRAW_PNG, DRAW_SVG,
+};
 use fub_sdk::testing::MemoryHost;
 
 // ---------------------------------------------------------------------------
@@ -97,6 +104,16 @@ fn png_of(host: &MemoryHost, doc: &str) -> Vec<u8> {
 fn pdf_of(host: &MemoryHost, doc: &str) -> Vec<u8> {
     let report = export(&PdfExport, host, DRAW_PDF, &[doc], serde_json::Value::Null).unwrap();
     only_artifact(&report).1
+}
+
+fn jpeg_of(host: &MemoryHost, doc: &str, options: serde_json::Value) -> Vec<u8> {
+    let report = export(&JpegExport, host, DRAW_JPEG, &[doc], options).unwrap();
+    only_artifact(&report).1
+}
+
+fn svg_of(host: &MemoryHost, doc: &str, options: serde_json::Value) -> String {
+    let report = export(&SvgExport, host, DRAW_SVG, &[doc], options).unwrap();
+    String::from_utf8(only_artifact(&report).1).expect("UTF-8")
 }
 
 fn messages(report: &ExportReport) -> Vec<String> {
@@ -1030,6 +1047,10 @@ fn a_hostile_drawing_opens_nothing_and_exports_like_its_clean_twin() {
 
     let png = png_of(&host, "disegno.svg");
     let pdf = pdf_of(&host, "disegno.svg");
+    let jpeg = jpeg_of(&host, "disegno.svg", serde_json::Value::Null);
+    // L'SVG ripete i riferimenti, che sono il testo del disegno, ma non li
+    // segue.
+    svg_of(&host, "disegno.svg", serde_json::Value::Null);
 
     // Niente rete: nessuna connessione aspetta nel backlog del server.
     match hostile.listener.accept() {
@@ -1038,12 +1059,12 @@ fn a_hostile_drawing_opens_nothing_and_exports_like_its_clean_twin() {
     }
     assert!(host.network_requests().is_empty());
     // Niente vault oltre al disegno: le due immagini rosse non sono state
-    // lette, e le sole letture sono le due del disegno, una per formato.
+    // lette, e le sole letture sono quelle del disegno, una per formato.
     assert_eq!(host.reads_on("rosso.png"), (0, 0));
     assert_eq!(host.reads_on("Allegati/rosso.svg"), (0, 0));
     let drawing = hostile.svg.len();
-    assert_eq!(host.reads_on("disegno.svg"), (2, 2 * drawing));
-    assert_eq!(host.read_totals(), (2, 2 * drawing));
+    assert_eq!(host.reads_on("disegno.svg"), (4, 4 * drawing));
+    assert_eq!(host.read_totals(), (4, 4 * drawing));
 
     // Niente file locali, niente SVG incorporati, niente carattere di sistema:
     // non c'è un pixel rosso, e i due file sono quelli del gemello pulito.
@@ -1062,6 +1083,10 @@ fn a_hostile_drawing_opens_nothing_and_exports_like_its_clean_twin() {
             out.display()
         );
     }
+    assert!(
+        jpeg == jpeg_of(&twin, "disegno.svg", serde_json::Value::Null),
+        "the JPEG differs from its twin"
+    );
     // E due export dello stesso disegno ostile sono identici.
     assert!(png == png_of(&host, "disegno.svg"));
     assert!(pdf == pdf_of(&host, "disegno.svg"));
@@ -1166,6 +1191,8 @@ fn a_hostile_drawing_does_not_even_open_local_files() {
         for doc in ["riferimenti.svg", "entita.svg"] {
             for (provider, target) in [
                 (&PngExport as &dyn ExportProvider, DRAW_PNG),
+                (&JpegExport, DRAW_JPEG),
+                (&SvgExport, DRAW_SVG),
                 (&PdfExport, DRAW_PDF),
             ] {
                 let _ = export(provider, &host, target, &[doc], serde_json::Value::Null);
@@ -1219,4 +1246,780 @@ fn an_external_entity_is_not_read() {
             Err(other) => panic!("{other:?}"),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Le opzioni: che cosa, con che sfondo, a che misura
+// ---------------------------------------------------------------------------
+
+/// Il quaderno con quattro tavole di `fub-format-svg`: «Copertina», «Mappa
+/// del porto», una senza titolo che si chiama col suo id, e un'altra
+/// «Copertina».
+fn quaderno() -> String {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../fub-format-svg/tests/fixtures/boards.svg");
+    fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+}
+
+/// Gli artefatti di un export, per path, con i loro byte.
+fn artifacts(report: &ExportReport) -> Vec<(String, Vec<u8>)> {
+    report
+        .artifacts
+        .iter()
+        .map(|a| (a.path.clone(), a.as_bytes().expect("in memoria").to_vec()))
+        .collect()
+}
+
+fn paths(report: &ExportReport) -> Vec<&str> {
+    report.artifacts.iter().map(|a| a.path.as_str()).collect()
+}
+
+/// Il JPEG decodificato: misura e pixel RGB.
+fn decode_jpeg(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+    let image = image::load_from_memory_with_format(bytes, image::ImageFormat::Jpeg)
+        .expect("un JPEG valido")
+        .to_rgb8();
+    (image.width(), image.height(), image.into_raw())
+}
+
+/// I segmenti di un JPEG fino ai dati dell'immagine: marcatore e contenuto.
+fn jpeg_segments(bytes: &[u8]) -> Vec<(u8, Vec<u8>)> {
+    assert!(bytes.starts_with(&[0xFF, 0xD8]), "SOI");
+    let mut segments = Vec::new();
+    let mut at = 2;
+    loop {
+        assert_eq!(bytes[at], 0xFF, "a marker at {at}");
+        let marker = bytes[at + 1];
+        let length = usize::from(u16::from_be_bytes([bytes[at + 2], bytes[at + 3]]));
+        segments.push((marker, bytes[at + 4..at + 2 + length].to_vec()));
+        if marker == 0xDA {
+            return segments;
+        }
+        at += 2 + length;
+    }
+}
+
+/// Un sink che ricorda ciò che si apre: un errore delle opzioni arriva prima
+/// di ogni file.
+#[derive(Default)]
+struct Watched {
+    inner: MemorySink,
+    opened: Vec<String>,
+}
+
+impl fub_abi::transfer::ArtifactSink for Watched {
+    fn open_artifact(
+        &mut self,
+        path: &str,
+        media_type: &str,
+    ) -> Result<fub_abi::transfer::ArtifactHandle, PluginError> {
+        self.opened.push(path.to_string());
+        self.inner.open_artifact(path, media_type)
+    }
+
+    fn write_artifact(
+        &mut self,
+        handle: fub_abi::transfer::ArtifactHandle,
+        bytes: &[u8],
+    ) -> Result<(), PluginError> {
+        self.inner.write_artifact(handle, bytes)
+    }
+
+    fn close_artifact(
+        &mut self,
+        handle: fub_abi::transfer::ArtifactHandle,
+    ) -> Result<fub_abi::transfer::ExportArtifact, PluginError> {
+        self.inner.close_artifact(handle)
+    }
+}
+
+/// La chiave e gli argomenti dell'errore di un export.
+fn refusal(outcome: Result<ExportReport, PluginError>) -> (String, Vec<String>) {
+    let Err(PluginError::BadArgs(text)) = outcome else {
+        panic!("{outcome:?}");
+    };
+    let message = text.as_message().expect("un messaggio del catalogo");
+    (
+        message.key.clone(),
+        message
+            .args
+            .iter()
+            .map(|arg| arg.value.to_string())
+            .collect(),
+    )
+}
+
+#[test]
+fn boards_come_out_one_file_each_in_the_order_of_the_drawing() {
+    let host = host().with_document("Scienze/quaderno.svg", &quaderno());
+    // L'ordine della richiesta non conta, una ripetizione nemmeno.
+    let options = serde_json::json!({
+        "scope": "boards",
+        "boards": ["b00000004", "b00000001", "b00000003", "b00000001"],
+        "scale": 0.5,
+    });
+    let report = export(
+        &PngExport,
+        &host,
+        DRAW_PNG,
+        &["Scienze/quaderno.svg"],
+        options.clone(),
+    )
+    .unwrap();
+    assert!(report.log.is_empty(), "{:?}", report.log);
+    // Il nome della tavola fra parentesi; la seconda «Copertina» prende un
+    // numero, e la tavola senza titolo si chiama col suo id.
+    assert_eq!(
+        paths(&report),
+        [
+            "Scienze/quaderno (Copertina).png",
+            "Scienze/quaderno (b00000003).png",
+            "Scienze/quaderno (Copertina 1).png",
+        ]
+    );
+    for (_, bytes) in artifacts(&report) {
+        let image = decode(&bytes);
+        // 600 × 400 unità a scala 0,5.
+        assert_eq!((image.width, image.height), (300, 200));
+        assert_eq!(image.per_meter, Some(1890));
+    }
+    // La prima tavola ha la scritta «Partenza», la terza è solo carta.
+    let first = decode(&artifacts(&report)[0].1);
+    let dark = |image: &Image| {
+        image
+            .rgba
+            .chunks(4)
+            .filter(|px| px[0] < 100 && px[3] == 255)
+            .count()
+    };
+    assert!(dark(&first) > 50);
+    assert_eq!(dark(&decode(&artifacts(&report)[1].1)), 0);
+
+    let report = export(
+        &JpegExport,
+        &host,
+        DRAW_JPEG,
+        &["Scienze/quaderno.svg"],
+        options.clone(),
+    )
+    .unwrap();
+    assert_eq!(
+        paths(&report),
+        [
+            "Scienze/quaderno (Copertina).jpg",
+            "Scienze/quaderno (b00000003).jpg",
+            "Scienze/quaderno (Copertina 1).jpg",
+        ]
+    );
+    assert!(report
+        .artifacts
+        .iter()
+        .all(|a| a.media_type == "image/jpeg"));
+
+    let report = export(
+        &SvgExport,
+        &host,
+        DRAW_SVG,
+        &["Scienze/quaderno.svg"],
+        options,
+    )
+    .unwrap();
+    assert_eq!(
+        paths(&report),
+        [
+            "Scienze/quaderno (Copertina).svg",
+            "Scienze/quaderno (b00000003).svg",
+            "Scienze/quaderno (Copertina 1).svg",
+        ]
+    );
+    // L'SVG di una tavola è la sua derivazione, ripulita: la tela è la
+    // tavola, e dei `view` non resta niente.
+    let source = quaderno();
+    let scope = fub_scene::export::Scope::Board("b00000003".to_string());
+    let derived =
+        fub_scene::export::derive(&source, &scope, fub_scene::export::Background::Paper).unwrap();
+    let expected = fub_scene::export::clean(&derived, &scope).unwrap();
+    assert_eq!(
+        String::from_utf8(artifacts(&report)[1].1.clone()).unwrap(),
+        expected
+    );
+    assert!(expected.contains(r#"viewBox="0 500 600 400" width="600" height="400""#));
+    assert!(!expected.contains("<view"));
+    assert!(report
+        .artifacts
+        .iter()
+        .all(|a| a.media_type == "image/svg+xml"));
+}
+
+#[test]
+fn the_pdf_of_boards_has_a_page_and_a_bookmark_for_each() {
+    let host = host().with_document("Scienze/quaderno.svg", &quaderno());
+    let options = serde_json::json!({
+        "scope": "boards",
+        "boards": ["b00000002", "b00000004", "b00000001"],
+    });
+    let pdf_of_boards = || {
+        let report = export(
+            &PdfExport,
+            &host,
+            DRAW_PDF,
+            &["Scienze/quaderno.svg"],
+            options.clone(),
+        )
+        .unwrap();
+        assert!(report.log.is_empty(), "{:?}", report.log);
+        only_artifact(&report)
+    };
+    let (path, bytes) = pdf_of_boards();
+    // Un file solo, col nome del disegno.
+    assert_eq!(path, "Scienze/quaderno.pdf");
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    // Tre pagine nell'ordine del documento, 600 × 400 unità ciascuna.
+    assert!(
+        text.contains("/Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3"),
+        "{text}"
+    );
+    assert_eq!(text.matches("/MediaBox [0 0 450 300]").count(), 3);
+    // I segnalibri: la radice, poi uno per pagina, col nome della tavola.
+    assert!(
+        text.contains("/Outlines 10 0 R /PageMode /UseOutlines"),
+        "{text}"
+    );
+    assert!(text.contains("10 0 obj\n<</Type /Outlines /First 11 0 R /Last 13 0 R /Count 3>>"));
+    assert!(text.contains(
+        "11 0 obj\n<</Title (Copertina) /Parent 10 0 R /Next 12 0 R /Dest [3 0 R /Fit]>>"
+    ));
+    assert!(text.contains(
+        "12 0 obj\n<</Title (Mappa del porto) /Parent 10 0 R /Prev 11 0 R /Next 13 0 R /Dest [5 0 R /Fit]>>"
+    ));
+    assert!(text.contains(
+        "13 0 obj\n<</Title (Copertina) /Parent 10 0 R /Prev 12 0 R /Dest [7 0 R /Fit]>>"
+    ));
+    assert!(text.contains("/Info 9 0 R /Root 1 0 R"));
+    // Le tre tavole sono lo stesso disegno: il carattere si scrive una volta.
+    assert_eq!(text.matches("/FontFile2").count(), 1, "{text}");
+    // E lo stesso export dà gli stessi byte, anche con più pagine.
+    for _ in 0..4 {
+        assert_eq!(pdf_of_boards().1, bytes);
+    }
+
+    // Una tavola sola: il suo nome nel file.
+    let report = export(
+        &PdfExport,
+        &host,
+        DRAW_PDF,
+        &["Scienze/quaderno.svg"],
+        serde_json::json!({"scope": "boards", "boards": ["b00000002"]}),
+    )
+    .unwrap();
+    let (path, bytes) = only_artifact(&report);
+    assert_eq!(path, "Scienze/quaderno (Mappa del porto).pdf");
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("/Count 1"));
+    assert!(text.contains("/Title (Mappa del porto) /Parent 6 0 R /Dest [3 0 R /Fit]"));
+}
+
+#[test]
+fn the_selection_is_cut_to_its_box_and_named_with_the_suffix() {
+    let host = host().with_document("disegni/scena.svg", &fixture("scena.svg"));
+    // L'ellisse col suo contorno: 50 × 25 di raggio intorno a (80, 60), più 2.
+    let selection = serde_json::json!({"ids": ["o1a2b3c4d"], "box": [28, 33, 104, 54]});
+    let report = export(
+        &PngExport,
+        &host,
+        DRAW_PNG,
+        &["disegni/scena.svg"],
+        serde_json::json!({
+            "scope": "selection",
+            "selection": selection,
+            "suffix": "selezione",
+            "scale": 1,
+        }),
+    )
+    .unwrap();
+    let (path, bytes) = only_artifact(&report);
+    assert_eq!(path, "disegni/scena (selezione).png");
+    let image = decode(&bytes);
+    assert_eq!((image.width, image.height), (104, 54));
+    let at = |x: u32, y: u32| {
+        let i = ((y * image.width + x) * 4) as usize;
+        image.rgba[i..i + 4].to_vec()
+    };
+    // Nel mezzo dell'ellisse, senza riempimento, c'era il cielo: con la
+    // selezione resta la carta.
+    assert_eq!(at(52, 27), [255, 255, 255, 255]);
+    // Il contorno dell'ellisse c'è: il blu a sinistra, sul suo asse.
+    let edge = at(2, 27);
+    assert!(edge[2] > 150 && edge[0] < 60, "{edge:?}");
+
+    // Senza `suffix`, la parola di serie.
+    let report = export(
+        &PdfExport,
+        &host,
+        DRAW_PDF,
+        &["disegni/scena.svg"],
+        serde_json::json!({"scope": "selection", "selection": selection}),
+    )
+    .unwrap();
+    let (path, bytes) = only_artifact(&report);
+    assert_eq!(path, "disegni/scena (selection).pdf");
+    let text = String::from_utf8_lossy(&bytes);
+    // 104 × 54 unità sono 78 × 40,5 punti; nessun segnalibro.
+    assert!(text.contains("/MediaBox [0 0 78 40.5]"), "{text}");
+    assert!(!text.contains("/Outlines"));
+}
+
+#[test]
+fn without_the_paper_the_png_is_transparent_and_the_jpeg_white() {
+    let host = host().with_document("scena.svg", &fixture("scena.svg"));
+    let none = serde_json::json!({"background": "none", "scale": 1});
+    let report = export(&PngExport, &host, DRAW_PNG, &["scena.svg"], none.clone()).unwrap();
+    let (path, bytes) = only_artifact(&report);
+    // Il disegno intero: il nome di sempre.
+    assert_eq!(path, "scena.png");
+    let image = decode(&bytes);
+    let corner = ((245 * image.width + 395) * 4) as usize;
+    assert_eq!(image.rgba[corner + 3], 0);
+    let with_paper = decode(&png_of(&host, "scena.svg"));
+    let corner_2x = ((490 * with_paper.width + 790) * 4) as usize;
+    assert_eq!(
+        with_paper.rgba[corner_2x..corner_2x + 4],
+        [255, 255, 255, 255]
+    );
+
+    // Sotto il JPEG resta il bianco.
+    let (width, _, rgb) = decode_jpeg(&jpeg_of(&host, "scena.svg", none));
+    let corner = ((245 * width + 395) * 3) as usize;
+    assert!(
+        rgb[corner..corner + 3].iter().all(|&c| c >= 250),
+        "{:?}",
+        &rgb[corner..corner + 3]
+    );
+
+    // E l'SVG non ha più la carta.
+    let svg = svg_of(
+        &host,
+        "scena.svg",
+        serde_json::json!({"background": "none"}),
+    );
+    assert!(!svg.contains("fub-paper"));
+    assert!(svg_of(&host, "scena.svg", serde_json::Value::Null).contains(r#"id="fub-paper""#));
+}
+
+#[test]
+fn a_jpeg_is_the_png_on_white_with_its_density_and_nothing_else() {
+    let host = host().with_document("scena.svg", &fixture("scena.svg"));
+    let bytes = jpeg_of(&host, "scena.svg", serde_json::Value::Null);
+    let segments = jpeg_segments(&bytes);
+    let markers: Vec<u8> = segments.iter().map(|(marker, _)| *marker).collect();
+    // Il JFIF e nient'altro di facoltativo: niente EXIF, profili o commenti.
+    assert_eq!(markers[0], 0xE0);
+    assert!(
+        markers[1..]
+            .iter()
+            .all(|m| matches!(m, 0xDB | 0xC0 | 0xC4 | 0xDA)),
+        "{markers:X?}"
+    );
+    // La densità in punti per pollice: 96 per la scala 2.
+    let jfif = &segments[0].1;
+    assert!(jfif.starts_with(b"JFIF\0"));
+    assert_eq!(jfif[7], 1, "units: dots per inch");
+    assert_eq!(&jfif[8..12], &[0, 192, 0, 192]);
+    // Il colore senza sottocampionare: ogni componente 1 × 1.
+    let frame = &segments.iter().find(|(m, _)| *m == 0xC0).unwrap().1;
+    assert_eq!(frame[5], 3);
+    for component in frame[6..].chunks(3) {
+        assert_eq!(component[1], 0x11, "{frame:?}");
+    }
+
+    // I pixel sono quelli del PNG posato sul bianco, a meno del JPEG.
+    let png = decode(&png_of(&host, "scena.svg"));
+    let (width, height, rgb) = decode_jpeg(&bytes);
+    assert_eq!((width, height), (png.width, png.height));
+    let mut total = 0u64;
+    for (px, jp) in png.rgba.chunks(4).zip(rgb.chunks(3)) {
+        let alpha = u32::from(px[3]);
+        for channel in 0..3 {
+            let on_white = (u32::from(px[channel]) * alpha + 255 * (255 - alpha) + 127) / 255;
+            total += u64::from((on_white as u8).abs_diff(jp[channel]));
+        }
+    }
+    let mean = total as f64 / f64::from(width * height * 3);
+    assert!(mean < 1.5, "mean difference {mean}");
+
+    // Lo stesso disegno, gli stessi byte.
+    assert_eq!(jpeg_of(&host, "scena.svg", serde_json::Value::Null), bytes);
+}
+
+#[test]
+fn a_width_gives_exactly_those_pixels() {
+    let host = host().with_document("scena.svg", &fixture("scena.svg"));
+    let report = export(
+        &PngExport,
+        &host,
+        DRAW_PNG,
+        &["scena.svg"],
+        serde_json::json!({"width": 1000}),
+    )
+    .unwrap();
+    let image = decode(&only_artifact(&report).1);
+    // 400 × 250 unità a 1000 pixel di larghezza: scala 2,5.
+    assert_eq!((image.width, image.height), (1000, 625));
+    assert_eq!(image.per_meter, Some(9449));
+    let bytes = jpeg_of(&host, "scena.svg", serde_json::json!({"width": 1000}));
+    assert_eq!(decode_jpeg(&bytes).0, 1000);
+    assert_eq!(&jpeg_segments(&bytes)[0].1[8..12], &[0, 240, 0, 240]);
+
+    // Una larghezza che farebbe l'immagine troppo alta esce ridotta, e il
+    // log lo dice.
+    let tall = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="4000"><rect width="100" height="4000" fill="#0072b2"/></svg>"##;
+    let host = host.with_document("torre.svg", tall);
+    let report = export(
+        &PngExport,
+        &host,
+        DRAW_PNG,
+        &["torre.svg"],
+        serde_json::json!({"width": 1000}),
+    )
+    .unwrap();
+    let image = decode(&only_artifact(&report).1);
+    assert_eq!((image.width, image.height), (410, 16_384));
+    assert_eq!(
+        messages(&report),
+        ["exported 410 pixels wide instead of 1000: at the requested width the image would exceed 16384 pixels per side or 32 million pixels"]
+    );
+}
+
+#[test]
+fn a_wrong_option_stops_the_export_before_any_file() {
+    let host = host()
+        .with_document("Scienze/quaderno.svg", &quaderno())
+        .with_document("scena.svg", &fixture("scena.svg"));
+    let selection = |ids: serde_json::Value| {
+        let selection = serde_json::json!({"ids": ids, "box": [0, 0, 10, 10]});
+        serde_json::json!({"scope": "selection", "selection": selection})
+    };
+    // Il provider, la sua destinazione, i documenti, le opzioni e l'errore.
+    type Case<'a> = (
+        &'a dyn ExportProvider,
+        &'a str,
+        Vec<&'a str>,
+        serde_json::Value,
+        &'a str,
+    );
+    let cases: Vec<Case> = vec![
+        (
+            &PngExport,
+            DRAW_PNG,
+            vec!["scena.svg"],
+            serde_json::json!({"scope": "pages"}),
+            "e_scope",
+        ),
+        (
+            &PdfExport,
+            DRAW_PDF,
+            vec!["scena.svg"],
+            serde_json::json!({"scope": "boards"}),
+            "e_boards",
+        ),
+        (
+            &SvgExport,
+            DRAW_SVG,
+            vec!["scena.svg"],
+            serde_json::json!({"scope": "selection"}),
+            "e_selection",
+        ),
+        (
+            &JpegExport,
+            DRAW_JPEG,
+            vec!["scena.svg"],
+            serde_json::json!({"background": "white"}),
+            "e_background",
+        ),
+        (
+            &JpegExport,
+            DRAW_JPEG,
+            vec!["scena.svg"],
+            serde_json::json!({"scale": 2, "width": 800}),
+            "e_scale_and_width",
+        ),
+        (
+            &PngExport,
+            DRAW_PNG,
+            vec!["scena.svg"],
+            serde_json::json!({"width": 0}),
+            "e_width",
+        ),
+        (
+            &PngExport,
+            DRAW_PNG,
+            vec!["scena.svg"],
+            serde_json::json!({"scope": "selection", "selection": {"ids": ["o1a2b3c4d"], "box": [0, 0, 0, 10]}}),
+            "e_box",
+        ),
+        // Con le tavole e la selezione, un disegno solo.
+        (
+            &PdfExport,
+            DRAW_PDF,
+            vec!["scena.svg", "Scienze/quaderno.svg"],
+            serde_json::json!({"scope": "boards", "boards": ["b00000001"]}),
+            "e_one_drawing",
+        ),
+        // Ciò che il disegno non ha: anche dopo una tavola che c'è.
+        (
+            &PngExport,
+            DRAW_PNG,
+            vec!["Scienze/quaderno.svg"],
+            serde_json::json!({"scope": "boards", "boards": ["b00000001", "b9"]}),
+            "e_board",
+        ),
+        // Un id che non è un oggetto: la carta, un `tspan`, una risorsa.
+        (
+            &SvgExport,
+            DRAW_SVG,
+            vec!["scena.svg"],
+            selection(serde_json::json!(["o1a2b3c4d", "fub-paper"])),
+            "e_object",
+        ),
+        (
+            &PdfExport,
+            DRAW_PDF,
+            vec!["scena.svg"],
+            selection(serde_json::json!(["cielo"])),
+            "e_object",
+        ),
+    ];
+    for (provider, target, docs, options, key) in cases {
+        let request = ExportRequest::new(
+            target,
+            ExportSelection::Documents(docs.iter().map(|doc| DocId::new(*doc)).collect()),
+        )
+        .with_options(options.clone());
+        let mut sink = Watched::default();
+        let outcome = provider.export(&request, &host, &mut sink);
+        let (got, args) = refusal(outcome);
+        assert_eq!(got, key, "{options}");
+        assert!(sink.opened.is_empty(), "{options}: {:?}", sink.opened);
+        match key {
+            "e_board" => assert_eq!(args, ["Scienze/quaderno.svg", "b9"]),
+            "e_object" => assert_eq!(args[0], "scena.svg"),
+            "e_one_drawing" => assert_eq!(args, ["2"]),
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn the_new_formats_give_the_same_bytes_every_time() {
+    let host = host()
+        .with_document("scena.svg", &fixture("scena.svg"))
+        .with_document("Scienze/quaderno.svg", &quaderno());
+    let svg = svg_of(&host, "scena.svg", serde_json::Value::Null);
+    assert_eq!(svg_of(&host, "scena.svg", serde_json::Value::Null), svg);
+    // L'SVG pulito di un disegno pulito non cambia.
+    assert_eq!(
+        fub_scene::export::clean(&svg, &fub_scene::export::Scope::Drawing).unwrap(),
+        svg
+    );
+    let boards = serde_json::json!({"scope": "boards", "boards": ["b00000001", "b00000002"], "background": "none"});
+    for (provider, target) in [
+        (&PngExport as &dyn ExportProvider, DRAW_PNG),
+        (&JpegExport, DRAW_JPEG),
+        (&SvgExport, DRAW_SVG),
+        (&PdfExport, DRAW_PDF),
+    ] {
+        let once = export(
+            provider,
+            &host,
+            target,
+            &["Scienze/quaderno.svg"],
+            boards.clone(),
+        )
+        .unwrap();
+        let again = export(
+            provider,
+            &host,
+            target,
+            &["Scienze/quaderno.svg"],
+            boards.clone(),
+        )
+        .unwrap();
+        assert_eq!(artifacts(&once), artifacts(&again), "{target}");
+    }
+}
+
+#[test]
+fn the_svg_names_the_vault_images_it_keeps_by_path() {
+    let svg = with_images(&[
+        ("foto/rosso.png", 0, 80),
+        ("https://example.org/a.png", 80, 80),
+    ]);
+    let host = host()
+        .with_document("disegni/acqua.svg", &svg)
+        .with_binary_document("disegni/foto/rosso.png", &red_png());
+    let report = export(
+        &SvgExport,
+        &host,
+        DRAW_SVG,
+        &["disegni/acqua.svg"],
+        serde_json::Value::Null,
+    )
+    .unwrap();
+    assert_eq!(
+        messages(&report),
+        ["1 image is a vault file named by its path, and the SVG shows it only where that path leads to it: foto/rosso.png"]
+    );
+    assert_eq!(report.log[0].entry.as_deref(), Some("disegni/acqua.svg"));
+    // Non si legge: l'SVG la nomina soltanto.
+    assert_eq!(host.reads_on("disegni/foto/rosso.png"), (0, 0));
+}
+
+/// I pixel moltiplicati per la loro opacità, e l'opacità: ciò che si vede.
+/// Il colore di un pixel quasi trasparente, diviso per un'opacità di 1 su 255,
+/// può cambiare di tutto senza che si veda niente.
+fn premultiplied(image: &Image) -> Vec<u8> {
+    image
+        .rgba
+        .chunks(4)
+        .flat_map(|px| {
+            let alpha = u16::from(px[3]);
+            let times = |c: u8| ((u16::from(c) * alpha + 127) / 255) as u8;
+            [times(px[0]), times(px[1]), times(px[2]), px[3]]
+        })
+        .collect()
+}
+
+/// Il PNG a scala 1 di un testo SVG, come disegno di un vault da solo.
+fn png_of_text(text: &str) -> Option<Image> {
+    let host = host().with_document("prova.svg", text);
+    let report = export(
+        &PngExport,
+        &host,
+        DRAW_PNG,
+        &["prova.svg"],
+        serde_json::json!({"scale": 1}),
+    )
+    .ok()?;
+    Some(decode(&only_artifact(&report).1))
+}
+
+/// Quanto possono differire il disegno derivato e quello pulito, che scrive i
+/// numeri con 2 decimali: un punto si sposta al più di mezzo centesimo, e la
+/// copertura di un pixel di bordo cambia di un livello o due. Dove il punto è
+/// la punta di uno spigolo vivo o dà la direzione a un marker lo spostamento si
+/// amplifica, e qualche pixel cambia di più: mai più di un quarto, mai più di
+/// un valore su mille, e in media meno di un centesimo di livello.
+const CLEAN_TOLERANCE: u8 = 4;
+const CLEAN_WORST: u8 = 64;
+
+#[test]
+fn the_clean_svg_draws_the_pixels_of_the_derived_one() {
+    let scene_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../fub-scene/tests/corpus");
+    let vectors = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/__fixtures__/scene-export");
+    let read_json = |name: &str| -> Vec<serde_json::Value> {
+        let text = fs::read_to_string(vectors.join(name)).unwrap();
+        serde_json::from_str(&text).unwrap()
+    };
+    let scope_of = |vector: &serde_json::Value| -> fub_scene::export::Scope {
+        let scope = &vector["scope"];
+        match scope["kind"].as_str().unwrap() {
+            "drawing" => fub_scene::export::Scope::Drawing,
+            "board" => fub_scene::export::Scope::Board(scope["id"].as_str().unwrap().to_string()),
+            "selection" => fub_scene::export::Scope::Selection {
+                ids: scope["ids"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|id| id.as_str().unwrap().to_string())
+                    .collect(),
+                rect: <[f64; 4]>::try_from(
+                    scope["box"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|n| n.as_f64().unwrap())
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap(),
+            },
+            other => panic!("{other}"),
+        }
+    };
+    // Il corpus di `fub-scene` derivato intero; i testi derivati dei casi
+    // della derivazione; i testi di partenza di quelli dell'SVG pulito.
+    let mut cases: Vec<(String, String, fub_scene::export::Scope)> = Vec::new();
+    let mut corpus: Vec<PathBuf> = fs::read_dir(&scene_dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "svg"))
+        .collect();
+    corpus.sort();
+    for path in corpus {
+        let scope = fub_scene::export::Scope::Drawing;
+        let source = fs::read_to_string(&path).unwrap();
+        let derived =
+            fub_scene::export::derive(&source, &scope, fub_scene::export::Background::Paper)
+                .unwrap();
+        cases.push((path.display().to_string(), derived, scope));
+    }
+    for vector in read_json("derive.json") {
+        if let Some(text) = vector["expect"]["text"].as_str() {
+            cases.push((
+                format!("derive: {}", vector["name"]),
+                text.to_string(),
+                scope_of(&vector),
+            ));
+        }
+    }
+    for vector in read_json("clean.json") {
+        if vector["expect"]["text"].is_string() {
+            let input = vector["input"].as_str().unwrap().to_string();
+            cases.push((
+                format!("clean: {}", vector["name"]),
+                input,
+                scope_of(&vector),
+            ));
+        }
+    }
+    let mut drawn = 0;
+    for (name, derived, scope) in cases {
+        let cleaned =
+            fub_scene::export::clean(&derived, &scope).unwrap_or_else(|e| panic!("{name}: {e}"));
+        // Ripulire non cambia niente.
+        assert_eq!(
+            fub_scene::export::clean(&cleaned, &scope).unwrap(),
+            cleaned,
+            "{name}"
+        );
+        // Un disegno che non si disegna, come una tela vuota, non si
+        // disegna nemmeno pulito.
+        let (before, after) = match (png_of_text(&derived), png_of_text(&cleaned)) {
+            (Some(before), Some(after)) => (before, after),
+            (None, None) => continue,
+            _ => panic!("{name}: one draws and the other does not"),
+        };
+        drawn += 1;
+        assert_eq!(
+            (before.width, before.height),
+            (after.width, after.height),
+            "{name}"
+        );
+        let (pa, pb) = (premultiplied(&before), premultiplied(&after));
+        let mut worst = 0u8;
+        let mut beyond = 0usize;
+        let mut total = 0u64;
+        for (a, b) in pa.iter().zip(&pb) {
+            let d = a.abs_diff(*b);
+            worst = worst.max(d);
+            beyond += usize::from(d > CLEAN_TOLERANCE);
+            total += u64::from(d);
+        }
+        let mean = total as f64 / pa.len() as f64;
+        assert!(
+            worst <= CLEAN_WORST && beyond * 1000 <= pa.len() && mean < 0.01,
+            "{name}: worst {worst}, {beyond} values beyond {CLEAN_TOLERANCE}, mean {mean}"
+        );
+    }
+    assert!(drawn >= 40, "{drawn}");
 }

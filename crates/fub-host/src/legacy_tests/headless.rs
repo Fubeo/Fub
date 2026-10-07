@@ -140,7 +140,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "fub.trash",
         "fub.versioning",
     ];
-    // Con la feature `draw` c'è anche l'export dei disegni in PNG e PDF.
+    // Con la feature `draw` c'è anche l'export dei disegni in PNG, JPEG, SVG e PDF.
     #[cfg(feature = "draw")]
     expected.push("fub.draw");
     expected.sort();
