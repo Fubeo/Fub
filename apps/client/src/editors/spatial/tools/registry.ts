@@ -113,6 +113,7 @@ export type Feature =
   | "style"
   | "history"
   | "accessibility"
+  | "present"
   | "attributes"
   | "outline"
   | "transform"
@@ -147,6 +148,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "style", level: "standard", label: "draw.feature.style" },
   { id: "history", level: "standard", label: "draw.feature.history" },
   { id: "accessibility", level: "standard", label: "draw.feature.accessibility" },
+  { id: "present", level: "standard", label: "draw.feature.present" },
   { id: "attributes", level: "expert", label: "draw.feature.attributes" },
   { id: "outline", level: "expert", label: "draw.feature.outline" },
   { id: "transform", level: "expert", label: "draw.feature.transform" },
@@ -237,3 +239,40 @@ export function toolForKey(tools: readonly ToolSpec[], key: string): ToolSpec | 
   const lower = key.toLowerCase();
   return tools.find((tool) => tool.shortcut === lower) ?? null;
 }
+
+/// Una riga dell'elenco dei tasti: i tasti, nella forma delle scorciatoie
+/// della shell, e che cosa fanno.
+export type KeyRow = readonly [keys: string, label: DrawKey];
+
+/// I tasti che presentano, col fuoco sul foglio.
+const PRESENT_START_KEYS: readonly KeyRow[] = [
+  ["F5", "draw.keys.present.start"],
+  ["Shift-F5", "draw.keys.present.here"],
+];
+
+/// I tasti della presentazione, che sta in un modulo suo e arriva solo
+/// quando si presenta: l'elenco dei tasti dell'editor li legge da qui.
+const PRESENT_KEYS: readonly KeyRow[] = [
+  ["ArrowRight ArrowDown Space PageDown Enter n", "draw.keys.present.forward"],
+  ["ArrowLeft ArrowUp PageUp Backspace p", "draw.keys.present.back"],
+  ["Home End", "draw.keys.present.ends"],
+  ["0…9", "draw.keys.present.number"],
+  ["b .", "draw.keys.present.black"],
+  ["w ,", "draw.keys.present.white"],
+  ["l", "draw.keys.present.laser"],
+  ["e", "draw.keys.present.erase"],
+  ["Escape", "draw.keys.present.exit"],
+];
+
+/// Le parole dei tasti: `t` di `strings.ts`, che l'editor passa.
+type Say = (key: DrawKey) => string;
+
+/// Le righe dei tasti che presentano, per il gruppo della vista dell'elenco
+/// dei tasti, se fra le parti `at` c'è «Presentare».
+export const presentStartRows = (at: ReadonlySet<Feature>, say: Say): (readonly [string, string])[] =>
+  at.has("present") ? PRESENT_START_KEYS.map(([keys, label]) => [keys, say(label)] as const) : [];
+
+/// Il gruppo dei tasti della presentazione, per l'elenco dei tasti, se fra le
+/// parti `at` c'è «Presentare».
+export const presentKeyGroups = (at: ReadonlySet<Feature>, say: Say): { title: string; rows: (readonly [string, string])[] }[] =>
+  at.has("present") ? [{ title: say("draw.keys.present"), rows: PRESENT_KEYS.map(([keys, label]) => [keys, say(label)] as const) }] : [];

@@ -651,3 +651,41 @@ describe("le immagini del vault nel disegno", () => {
     }
   });
 });
+
+describe("presentare un disegno con le tavole", () => {
+  const DECK =
+    `${HEAD.replace('viewBox="0 0 400 300"', 'viewBox="0 0 880 200"')}\n  <title>Ciclo</title>\n`
+    + '  <view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><title>Copertina</title></view>\n'
+    + '  <view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title></view>\n'
+    + '  <view id="bmnopqrst" fub:role="board" viewBox="960 0 400 200"><title>Pioggia</title></view>\n'
+    + '  <g id="l1" fub:layer="Livello 1">\n    <rect id="o1a2b3c4d" x="600" y="50" width="20" height="20" fill="#000000"/>\n  </g>\n</svg>\n';
+
+  it("dallo Standard, F5 presenta dalla prima tavola, due passi avanti, ed Esc torna al foglio sulla tavola dov'era arrivata", async () => {
+    const host = await start(createFakeHost({ file: { ...VAULT, "ciclo.svg": DECK }, draw: true, settings: [drawLevel("standard")] }));
+    await open("ciclo.svg");
+    await waitFor("il livello Standard", () => tools().includes("highlighter"));
+    const sheet = focusedPane().querySelector<HTMLElement>(".draw-surface")!;
+    sheet.focus();
+    press("F5");
+
+    await waitFor("la presentazione", () => document.querySelector(".draw-present") !== null);
+    const shown = document.querySelector<HTMLElement>(".draw-present")!;
+    const told = (): string => (shown.querySelector('[role="status"]')?.textContent ?? "").trim();
+    await waitFor("il primo annuncio", () => told() !== "");
+    expect(told()).toBe("Presentazione: Copertina, tavola 1 di 3. Esc per uscire.");
+    expect(document.activeElement).toBe(shown.querySelector(".draw-present-stage"));
+    expect(formatIssues(checkAccessibility(shown))).toBe("");
+    press("ArrowRight");
+    press(" ");
+    expect(told()).toBe("Pioggia, tavola 3 di 3.");
+    press("Escape");
+
+    await waitFor("il foglio", () => document.querySelector(".draw-present") === null && document.activeElement === sheet);
+    const spoken = focusedPane().querySelector('.draw-editor > .sr-only[role="status"]')!.textContent!.trim();
+    expect(spoken).toBe("Pioggia, tavola 3 di 3, 400 × 200.");
+    // Presentare non scrive niente.
+    await settle();
+    expect(written(host, "ciclo.svg")).toEqual([]);
+    expect(host.files()["ciclo.svg"]).toBe(DECK);
+  });
+});

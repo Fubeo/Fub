@@ -86,7 +86,7 @@ describe("il registro degli strumenti", () => {
   it("elenca le parti per livello, prima gli strumenti nell'ordine della barra, ciascuna una volta", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
-      "lasso", "board", "highlighter", "polygon", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility",
+      "lasso", "board", "highlighter", "polygon", "text", "colors", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "gestures", "links", "images", "properties", "style", "history", "accessibility", "present",
       "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean", "trace", "typeset",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);

@@ -3777,6 +3777,7 @@ describe("da tastiera", () => {
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
       "Elenco delle tavole · dal livello Standard",
+      "Presentazione · dal livello Standard",
       "Cronologia · dal livello Standard",
       "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
@@ -3829,8 +3830,11 @@ describe("da tastiera", () => {
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
-    // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
+    // Lo zoom c'è già; presentare, la vista girata e il menu radiale, dallo
+    // Standard.
     expect(tables[12]!.rows).toEqual([
+      ["F5", "Presenta dalla prima tavola"],
+      ["Shift+F5", "Presenta dalla tavola di adesso: quella scelta, o quella al centro della vista"],
       ["4", "Ruota la vista a sinistra"],
       ["6", "Ruota la vista a destra"],
       ["5", "Raddrizza la vista"],
@@ -3852,7 +3856,19 @@ describe("da tastiera", () => {
       ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
       ["Esc", "Dall’elenco delle tavole torna al foglio"],
     ]);
-    expect(tables[15]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
+    // Dentro la presentazione, i suoi tasti.
+    expect(tables[15]!.rows).toEqual([
+      ["→ o ↓ o Space o PgDn o Enter o N", "La tavola dopo, come un clic o il dito che scorre verso sinistra; dopo l’ultima, lo schermo di fine, e da lì esce"],
+      ["← o ↑ o PgUp o ⌫ o P", "La tavola prima, come il dito che scorre verso destra"],
+      ["Home o End", "La prima o l’ultima tavola"],
+      ["0…9", "Un numero e poi Invio: la tavola con quel numero"],
+      ["B o .", "Mette e toglie lo schermo nero"],
+      ["W o ,", "Mette e toglie lo schermo bianco"],
+      ["L", "Accende e spegne il laser"],
+      ["E", "Cancella l’inchiostro"],
+      ["Esc", "Esce dalla presentazione"],
+    ]);
+    expect(tables[16]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -9672,6 +9688,7 @@ describe("il livello Personalizzato", () => {
       "Vista · dal livello Standard",
       "Modifica · dal livello Standard",
       "Elenco delle tavole · dal livello Standard",
+      "Presentazione · dal livello Standard",
       "Cronologia · dal livello Standard",
       "Accessibilità · dal livello Standard",
       "Strumenti · dal livello Esperto",
@@ -9685,7 +9702,7 @@ describe("il livello Personalizzato", () => {
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[16]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
+    expect(tables[17]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
@@ -11099,5 +11116,162 @@ describe("le tavole, dal livello Standard", () => {
     expect(spoken()).toBe("");
     expect(names()).toEqual([["Copertina", false], ["Evaporazione", false]]);
     expect(boardsButton()?.hidden ?? true).toBe(true);
+  });
+});
+
+describe("presentare, dal livello Standard", () => {
+  /// Tre tavole 400 × 200 in fila, con un quadrato sulla seconda.
+  const DECK = doc(
+    "<title>Ciclo</title>" +
+      '<view id="b1a2b3c4d" fub:role="board" viewBox="0 0 400 200"><title>Copertina</title></view>' +
+      '<view id="b9i0j1k2l" fub:role="board" viewBox="480 0 400 200"><title>Evaporazione</title><desc>Il sole scalda il mare.</desc></view>' +
+      '<view id="bmnopqrst" fub:role="board" viewBox="960 0 400 200"><title>Pioggia</title></view>' +
+      `${LAYER}<rect id="oa1a1a1a1" x="600" y="50" width="20" height="20" fill="#000000"/></g>`,
+  ).replace('viewBox="0 0 100 100"', 'viewBox="0 0 1360 200"');
+
+  const presentButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Presenta"]')!;
+  const presentation = (): HTMLElement | null => document.querySelector<HTMLElement>(".draw-present");
+  /// Ciò che la presentazione ha detto per ultimo.
+  const told = (): string => (presentation()?.querySelector('[role="status"]')?.textContent ?? "").trim();
+  /// Un tasto nella presentazione, dove sta il fuoco.
+  const inside = (name: string): KeyboardEvent => key(name, {}, document.activeElement as HTMLElement);
+
+  /// Aspetta che la presentazione si apra, e il suo primo annuncio.
+  async function opened(): Promise<HTMLElement> {
+    await vi.waitFor(() => expect(presentation()).not.toBeNull());
+    await vi.waitFor(() => expect(told()).not.toBe(""));
+    return presentation()!;
+  }
+
+  afterEach(() => {
+    presentation()?.remove();
+  });
+
+  it("il pulsante e F5 ci sono dallo Standard, non nell'Essenziale", async () => {
+    mount(DECK);
+    expect(presentButton().hidden).toBe(true);
+    expect(key("F5").defaultPrevented).toBe(false);
+    editor.setLevel("standard");
+    expect(presentButton().hidden).toBe(false);
+    expect(presentButton().getAttribute("aria-keyshortcuts")).toBe("F5");
+    // Accanto a «Tavole».
+    expect(presentButton().previousElementSibling?.getAttribute("aria-label")).toBe("Tavole");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    presentButton().click();
+    await opened();
+    expect(told()).toBe("Presentazione: Copertina, tavola 1 di 3. Esc per uscire.");
+  });
+
+  it("nel Personalizzato è una parte, «Presentare»", () => {
+    mount(DECK, { level: "custom", custom: ["present"] });
+    expect(editor.features.has("present")).toBe(true);
+    expect(presentButton().hidden).toBe(false);
+    editor.setLevel("custom", ["pen"]);
+    expect(presentButton().hidden).toBe(true);
+    expect(key("F5").defaultPrevented).toBe(false);
+  });
+
+  it("F5 presenta dalla prima tavola, anche in sola lettura, e all'uscita il foglio sceglie e inquadra la tavola dov'era arrivata", async () => {
+    mount(DECK, { level: "standard" });
+    size(1000, 500);
+    editor.setReadOnly(true);
+    expect(key("F5").defaultPrevented).toBe(true);
+    // Con Ctrl, F5 resta del browser.
+    expect(key("F5", { ctrlKey: true }).defaultPrevented).toBe(false);
+    const shown = await opened();
+    expect(told()).toBe("Presentazione: Copertina, tavola 1 di 3. Esc per uscire.");
+    expect(formatIssues(checkAccessibility(shown))).toBe("");
+    expect([...shown.querySelectorAll("img")].map((img) => img.alt)).toContain("Copertina");
+    inside("ArrowRight");
+    expect(told()).toBe("Evaporazione, tavola 2 di 3.");
+    inside("Escape");
+    expect(presentation()).toBeNull();
+    expect(document.activeElement).toBe(surface());
+    expect(spoken()).toBe("Evaporazione, tavola 2 di 3, 400 × 200.");
+    // La tavola scelta è quella di adesso anche per l'elenco.
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Tavole"]')!.click();
+    expect([...host.querySelectorAll<HTMLElement>('.draw-boards [aria-current="true"] .draw-board-name')].map((name) => name.textContent)).toEqual(["Evaporazione"]);
+    expect(changes).toEqual([]);
+    expect(editor.engine.text).toBe(DECK);
+  });
+
+  it("Maiusc+F5 presenta dalla tavola di adesso", async () => {
+    mount(DECK, { level: "standard" });
+    size(1000, 500);
+    key("PageDown", { altKey: true });
+    key("PageDown", { altKey: true });
+    key("PageDown", { altKey: true });
+    expect(spoken()).toBe("Pioggia, tavola 3 di 3, 400 × 200.");
+    expect(key("F5", { shiftKey: true }).defaultPrevented).toBe(true);
+    await opened();
+    expect(told()).toBe("Presentazione: Pioggia, tavola 3 di 3. Esc per uscire.");
+    inside("ArrowLeft");
+    inside("Escape");
+    expect(spoken()).toBe("Evaporazione, tavola 2 di 3, 400 × 200.");
+  });
+
+  it("«Presenta da qui» nel menu di una tavola dell'elenco", async () => {
+    mount(DECK, { level: "standard" });
+    size(1000, 500);
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Tavole"]')!.click();
+    const row = host.querySelector<HTMLElement>('.draw-boards [role="option"][data-index="1"]')!;
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 40 }));
+    const items = [...document.querySelectorAll<HTMLButtonElement>('.context-menu [role="menuitem"]')];
+    const here = items.find((item) => item.querySelector(".menu-label")!.textContent === "Presenta da qui")!;
+    expect(here).toBeDefined();
+    here.click();
+    closeContextMenu();
+    await opened();
+    expect(told()).toBe("Presentazione: Evaporazione, tavola 2 di 3. Esc per uscire.");
+  });
+
+  it("l'inchiostro, gli schermi vuoti e il resto non toccano il disegno", async () => {
+    mount(DECK, { level: "standard" });
+    size(1000, 500);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1000);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(500);
+    key("F5");
+    const shown = await opened();
+    const stage = shown.querySelector<HTMLElement>(".draw-present-stage")!;
+    const at = (type: string, x: number, y: number, buttons: number): void =>
+      void stage.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons, pressure: buttons === 0 ? 0 : 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+    at("pointerdown", 100, 100, 1);
+    at("pointermove", 200, 150, 1);
+    at("pointermove", 300, 200, 1);
+    at("pointerup", 300, 200, 0);
+    expect(shown.querySelectorAll(".draw-present-ink path")).toHaveLength(1);
+    for (const name of ["b", "b", "w", "l", "e", "w", "End", "ArrowRight"]) inside(name);
+    expect(presentation()).not.toBeNull();
+    inside("ArrowRight");
+    expect(presentation()).toBeNull();
+    expect(changes).toEqual([]);
+    expect(editor.canUndo).toBe(false);
+    expect(editor.engine.text).toBe(DECK);
+    expect(spoken()).toBe("Pioggia, tavola 3 di 3, 400 × 200.");
+  });
+
+  it("«?» elenca F5 e Maiusc+F5 nella vista, e i tasti della presentazione nel loro gruppo", () => {
+    mount(DECK, { level: "standard" });
+    key("?", { shiftKey: true });
+    const tables = [...dialog().querySelectorAll(".keys-list > table")].map((table) => ({
+      caption: table.querySelector("caption")!.textContent,
+      rows: [...table.querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]),
+    }));
+    const view = tables.find((table) => table.caption === "Vista")!;
+    expect(view.rows).toContainEqual(["F5", "Presenta dalla prima tavola"]);
+    expect(view.rows).toContainEqual(["Shift+F5", "Presenta dalla tavola di adesso: quella scelta, o quella al centro della vista"]);
+    const inner = tables.find((table) => table.caption === "Presentazione")!;
+    expect(inner.rows.map(([keys]) => keys)).toEqual(["→ o ↓ o Space o PgDn o Enter o N", "← o ↑ o PgUp o ⌫ o P", "Home o End", "0…9", "B o .", "W o ,", "L", "E", "Esc"]);
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+
+  it("un editor che se ne va porta via la presentazione", async () => {
+    mount(DECK, { level: "standard" });
+    key("F5");
+    await opened();
+    owner.close();
+    expect(presentation()).toBeNull();
+    owner = openLifetime();
   });
 });

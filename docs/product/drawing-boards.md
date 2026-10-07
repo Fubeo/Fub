@@ -15,7 +15,8 @@ tavola porta con sé quando la si sposta. Un disegno senza tavole è una pagina
 sola, come sempre. Come il file le scrive sta in [formato della scena,
 tavole](../reference/scene-format-boards.md); i comandi sono in
 `apps/client/src/editors/spatial/tools/boards.ts`, l'elenco in
-`boards-panel.ts` accanto.
+`boards-panel.ts` accanto. Le tavole si mostrano anche a schermo intero, una
+alla volta: [Disegni, presentare](drawing-present.md).
 
 ## Dalla pagina alle tavole
 
@@ -140,9 +141,9 @@ di nuovo, lo chiude. In cima ci sono quante sono, «5 tavole», e il pulsante
   «Condensazione ora è la tavola 2 di 3.»; `Canc` la elimina. `Esc` torna al
   foglio.
 - **Il menu della tavola** si apre col clic destro, con una pressione lunga,
-  con `Maiusc+F10` o col tasto del menu: «Vai», «Rinomina…», «Duplica»,
-  «Sposta su», «Sposta giù» ed «Elimina». Una voce spenta dice perché: «È già
-  la prima tavola.».
+  con `Maiusc+F10` o col tasto del menu: «Vai», «Presenta da qui»,
+  «Rinomina…», «Duplica», «Sposta su», «Sposta giù» ed «Elimina». Una voce
+  spenta dice perché: «È già la prima tavola.».
 - **«Nuova tavola»** aggiunge una tavola con la misura e la carta di quella
   corrente, o dell'ultima, alla destra di tutte, la porta in vista e ne apre
   il nome.
@@ -268,8 +269,8 @@ tavola», «Misure di una tavola», «Tavola eliminata», «Nome di una tavola»
 annullare e ripetere scelgono la tavola che il passo ha toccato, se c'è.
 
 In un documento in sola lettura le tavole si guardano e ci si va, con
-`Alt+PagSu`, `Alt+PagGiù` e con l'elenco, ma non cambiano; nell'elenco gli
-altri tasti dicono perché non fanno niente.
+`Alt+PagSu`, `Alt+PagGiù` e con l'elenco, e si presentano, ma non cambiano;
+nell'elenco gli altri tasti dicono perché non fanno niente.
 
 ## Livelli e parti
 
@@ -278,7 +279,8 @@ collegamento a una tavola la inquadra anche lì; non ci sono lo strumento,
 l'elenco, `Alt+PagSu` e `Alt+PagGiù`. Sono la parte «Tavola» del
 [Personalizzato](drawing-custom.md). Tornati all'Essenziale, o tolta la
 parte, chi aveva in mano la Tavola riprende la Selezione, l'elenco si chiude
-e il suo pulsante sparisce; il disegno non cambia.
+e il suo pulsante sparisce; il disegno non cambia. «Presenta da qui» c'è
+quando c'è anche la parte «Presentare».
 
 ## Il file
 

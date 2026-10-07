@@ -2241,6 +2241,81 @@ html, body, #app {
   min-height: 32px;
 }
 
+/* La presentazione copre tutto: lo schermo intero o, dove non c'è, la
+   finestra, sul piano delle superfici che intrappolano il fuoco. Il fondo è
+   nero e gli schermi vuoti sono nero e bianco, e basta: non sono un aspetto,
+   sono ciò che uno schermo vuoto fa in una sala, spegnersi o fare luce, e
+   stanno qui come il moto ridotto, dove un tema non li cambia e i colori
+   forzati non li toccano. La tavola sta dove la mette la presentazione, al
+   centro e il più grande possibile; la sua immagine e l'inchiostro la
+   riempiono e lasciano il puntatore allo stage, dove lo legge la pipeline
+   della penna. Il laser prende il posto del cursore, e col puntatore fermo
+   il cursore sparisce. */
+.draw-present {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  overflow: hidden;
+  background: #000000;
+  forced-color-adjust: none;
+}
+.draw-present[data-laser],
+.draw-present[data-still] {
+  cursor: none;
+}
+.draw-present-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.draw-present-frame {
+  position: absolute;
+}
+.draw-present-board,
+.draw-present-ink {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+.draw-present-end,
+.draw-present-blank {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.draw-present-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.draw-present-blank[data-blank="black"] {
+  background: #000000;
+}
+.draw-present-blank[data-blank="white"] {
+  background: #ffffff;
+}
+.draw-present-laser {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
 /* La verifica dell'accessibilità scorre tutta insieme, con l'intestazione
    ferma in cima: due sezioni che si chiudono, i problemi e l'ordine di
    lettura. Un problema è una riga: il segno della gravità, il titolo col

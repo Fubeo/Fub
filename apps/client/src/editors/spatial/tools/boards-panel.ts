@@ -95,6 +95,10 @@ export interface BoardsPanelOptions {
   onMove(id: string, to: number): void;
   /// Esc: il fuoco torna al foglio.
   onLeave(): void;
+  /// «Presenta da qui»: presenta dalla tavola `id`. Il menu la offre se
+  /// `canPresent` dice di sì quando si apre.
+  onPresent?(id: string): void;
+  canPresent?(): boolean;
 }
 
 export interface BoardsPanel {
@@ -503,9 +507,11 @@ export function createBoardsPanel(life: Lifetime, options: BoardsPanelOptions): 
     const first = index === 0;
     const last = index === rows.length - 1;
     // Una voce spenta al bordo dice perché, come nel menu del foglio. In sola
-    // lettura sono spente tutte, tranne «Vai».
+    // lettura sono spente tutte, tranne «Vai» e «Presenta da qui», che non
+    // cambiano il disegno.
     const items: MenuItem[] = [
       { label: t("draw.boards.menu.go"), hint: displayBinding("Enter"), run: () => go(key) },
+      ...(options.canPresent?.() ? [{ label: t("draw.boards.menu.present"), run: () => options.onPresent?.(key) }] : []),
       { label: t("draw.boards.menu.rename"), hint: displayBinding("F2"), disabled: !canEdit, run: () => void startRename(key) },
       {
         label: t("draw.boards.menu.duplicate"),

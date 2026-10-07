@@ -86,6 +86,8 @@ Lo Standard aggiunge:
   simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
 - la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del
   disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
+- **«Presenta»** (`F5`), dopo «Tavole»: le tavole a schermo intero, una alla
+  volta, col laser e l'inchiostro ([Disegni, presentare](drawing-present.md));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
@@ -312,20 +314,18 @@ Dal livello Standard, nella barra «Disponi»:
 Ognuno è un passo di annulla. L'`href` è relativo alla cartella del disegno e
 si scrive come lo scrive Fub quando un documento cambia nome: le lettere
 accentate restano, gli spazi e gli altri caratteri che un URL non ammette
-diventano codici `%`, per esempio `../Note/Perché%20piove.md`, e un nome il
-cui primo segmento sembra uno schema (`nota:1.md`) prende `./` davanti.
-Quando il documento cambia nome o cartella, Fub riscrive il collegamento del
-disegno come quelli delle note
-([formato della scena](../reference/scene-format.md), §9).
+diventano codici `%`, per esempio `../Note/Perché%20piove.md`, e un nome il cui
+primo segmento sembra uno schema (`nota:1.md`) prende `./` davanti. Quando il
+documento cambia nome o cartella, Fub riscrive il collegamento del disegno come
+quelli delle note ([formato della scena](../reference/scene-format.md), §9).
 
 A ogni livello, ogni collegamento che si vede ha un segno sopra l'angolo in
 alto a destra, anche dentro un gruppo o in un livello bloccato. Con la
 Selezione, o in un disegno che non si modifica, un tocco sul segno apre il
-documento; con gli altri strumenti il segno si vede soltanto, e il foglio
-resta di chi disegna. `Alt+Invio` apre il documento del collegamento scelto
-da solo, e nella barra «Disponi» lo fa «Apri», col suo nome. L'albero degli
-oggetti dice dove porta un collegamento: «Collegamento a «Ciclo dell'acqua»,
-2 oggetti».
+documento; con gli altri strumenti il segno si vede soltanto, e il foglio resta
+di chi disegna. `Alt+Invio` apre il documento del collegamento scelto da solo,
+e nella barra «Disponi» lo fa «Apri», col suo nome. L'albero degli oggetti dice
+dove porta un collegamento: «Collegamento a «Ciclo dell'acqua», 2 oggetti».
 
 In Lettura l'immagine non si tocca: sotto la descrizione la riga «Collegamenti» ha
 un pulsante per ogni documento a cui il disegno porta, col suo nome. Un indirizzo
