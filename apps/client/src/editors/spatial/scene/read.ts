@@ -231,7 +231,7 @@ export interface Audit {
   readonly measures: Measures;
 }
 
-/// Legge una scena come [`readScene`], con ciò che S009 e S013 hanno
+/// Legge una scena come [`readScene`], con ciò che S009, S013 e S017 hanno
 /// misurato: l'editor ci propone le correzioni. Il lato Rust non ne ha
 /// bisogno, e la scena è la stessa.
 export function auditScene(source: string): Audit {
@@ -242,7 +242,7 @@ export function auditScene(source: string): Audit {
   // riepilogo e la diagnostica; di un file troncato c'è solo la testa.
   let items: readonly Item[] = [];
   let summary: Summary;
-  let measures: Measures = { contrasts: [], sizes: [] };
+  let measures: Measures = { contrasts: [], sizes: [], confusions: [] };
   let boards: readonly Excerpt[] = [];
   if (truncated) {
     summary = truncatedSummary(status === "foreign", version);

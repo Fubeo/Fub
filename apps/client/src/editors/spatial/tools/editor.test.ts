@@ -13593,6 +13593,124 @@ describe("«Maschera», dal livello Esperto", () => {
   });
 });
 
+describe("la verifica propone le campiture", () => {
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Accessibilità"]')!;
+  const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-access")!;
+  const rows = (): HTMLElement[] => [...panel().querySelectorAll<HTMLElement>(".draw-access-problem")];
+  /// I colori confusi di ogni riga, dall'alto: il suo e quello accanto.
+  const confused = (): string[] => rows().map((row) => [...row.querySelectorAll<HTMLElement>(".draw-access-swatch")].map((chip) => chip.style.background).join(" "));
+  const fixes = (): HTMLButtonElement[] => rows().map((row) => row.querySelector<HTMLButtonElement>('[data-action="fix"]')!);
+
+  const rect = (id: string, x: number, fill: string): string => `<rect id="${id}" x="${x}" y="0" width="20" height="20" fill="${fill}"/>`;
+  const BLUE = "#a6cee3";
+  const GREEN = "#b2df8a";
+  const YELLOW = "#f0e442";
+  /// Due coppie di quadrati, azzurro e verde chiaro, ciascun colore su due
+  /// aree: si distinguono soltanto per la tinta.
+  const CODE = doc(
+    `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("oc3c3c3c3", 60, BLUE)}${rect("od4d4d4d4", 90, GREEN)}</g>`,
+  );
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it("«Dai una campitura» dà una campitura a tutte le aree del colore, in un passo; le righe se ne vanno e un annulla riporta il file", () => {
+    mount(CODE, { level: "standard" });
+    button().click();
+    expect(rows().map((row) => row.querySelector(".draw-access-what")!.textContent)).toEqual([
+      "Nota: Due colori si distinguono solo per la tinta",
+      "Nota: Due colori si distinguono solo per la tinta",
+    ]);
+    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`]);
+    expect(rows()[0]!.querySelector(".draw-access-detail")!.textContent).toContain("hanno un contrasto di 1,1:1, ne servono almeno 3:1");
+    expect(fixes().map((fix) => [fix.textContent, fix.getAttribute("aria-label")])).toEqual([
+      ["Dai una campitura", `Dai una campitura alle 2 aree di colore ${BLUE}`],
+      ["Dai una campitura", `Dai una campitura alle 2 aree di colore ${GREEN}`],
+    ]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    fixes()[0]!.click();
+    // Un passo solo, con il suo nome.
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("Campitura diagonale su 2 aree.");
+    const text = editor.engine.text;
+    // Le due aree azzurre hanno una campitura sul loro colore, righe nere;
+    // le verdi no.
+    expect(text.match(/<pattern [^>]*fub:pattern="lines -45 [\d.]+ [\d.]+ #000000 #a6cee3"/g)).toHaveLength(2);
+    expect([...text.matchAll(/<rect id="(o[^"]+)"[^>]* fill="([^"]+)"\/>/g)].map((found) => [found[1], found[2]!.startsWith("url(#r") ? "campitura" : found[2]])).toEqual([
+      ["oa1a1a1a1", "campitura"],
+      ["ob2b2b2b2", GREEN],
+      ["oc3c3c3c3", "campitura"],
+      ["od4d4d4d4", GREEN],
+    ]);
+    // L'azzurro non è più un colore di codice: il verde non ha più chi lo
+    // confonda, e le due righe se ne vanno insieme.
+    expect(rows()).toHaveLength(0);
+    expect(panel().querySelector(".draw-access-count")!.textContent).toBe("nessun problema");
+
+    key("z", { ctrlKey: true });
+    expect(spoken()).toBe("Annullato: Dai una campitura.");
+    expect(editor.engine.text).toBe(CODE);
+    vi.advanceTimersByTime(250);
+    expect(rows()).toHaveLength(2);
+  });
+
+  it("un colore dopo l'altro: ogni campitura è diversa dalle già date", () => {
+    const CODES = doc(
+      `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("oc3c3c3c3", 60, YELLOW)}` +
+        `${rect("od4d4d4d4", 90, BLUE)}${rect("oe5e5e5e5", 120, GREEN)}${rect("of6f6f6f6", 150, YELLOW)}</g>`,
+    );
+    mount(CODES, { level: "standard" });
+    button().click();
+    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`, `${YELLOW} ${GREEN}`]);
+    fixes()[0]!.click();
+    expect(spoken()).toBe("Campitura diagonale su 2 aree.");
+    // Il verde e il giallo restano confusi fra loro.
+    expect(confused()).toEqual([`${GREEN} ${YELLOW}`, `${YELLOW} ${GREEN}`]);
+    fixes()[0]!.click();
+    expect(spoken()).toBe("Campitura puntinata su 2 aree.");
+    expect(rows()).toHaveLength(0);
+    expect(changes).toHaveLength(2);
+    key("z", { ctrlKey: true });
+    expect(spoken()).toBe("Annullato: Dai una campitura.");
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(CODES);
+  });
+
+  it("un'area che non si sceglie resta com'è: la campitura va alle altre", () => {
+    const LOCKED = doc(
+      `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("od4d4d4d4", 90, GREEN)}</g>` +
+        `<g id="l2" fub:layer="Bloccato" fub:locked="true">${rect("oc3c3c3c3", 60, BLUE)}</g>`,
+    );
+    mount(LOCKED, { level: "standard" });
+    button().click();
+    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`]);
+    fixes()[0]!.click();
+    expect(spoken()).toBe("Campitura diagonale su un’area.");
+    expect(editor.engine.text).toContain(`<rect id="oc3c3c3c3" x="60" y="0" width="20" height="20" fill="${BLUE}"/>`);
+    expect(editor.engine.text).not.toContain(`<rect id="oa1a1a1a1" x="0" y="0" width="20" height="20" fill="${BLUE}"/>`);
+    // Un solo azzurro resta fra le aree: non fa più un codice.
+    expect(rows()).toHaveLength(0);
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(LOCKED);
+  });
+
+  it("in sola lettura la campitura non si propone", () => {
+    mount(CODE, { level: "standard" });
+    button().click();
+    editor.setReadOnly(true);
+    expect(rows()).toHaveLength(2);
+    expect(rows().map((row) => row.querySelector('[data-action="fix"]'))).toEqual([null, null]);
+    expect(changes).toEqual([]);
+  });
+});
+
 describe("gli effetti, dal livello Esperto", () => {
   /// `source` su una pagina larga, che contiene tutto: la pagina che cresce
   /// per ciò che esce non è l'argomento.

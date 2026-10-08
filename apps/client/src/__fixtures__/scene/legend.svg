@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 400" width="800" height="400">
+  <title>Legenda</title>
+  <defs id="fub-defs">
+    <linearGradient id="r00000001" fub:role="swatch" fub:name="Verde chiaro" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#b2df8a"/>
+    </linearGradient>
+    <linearGradient id="r00000002" fub:role="private" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fb9a99"/>
+      <stop offset="1" stop-color="#fdbf6f"/>
+    </linearGradient>
+    <clipPath id="r00000003" fub:role="private" clipPathUnits="objectBoundingBox">
+      <circle cx="0.5" cy="0.5" r="0.5"/>
+    </clipPath>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="400" fill="#f0f0f0"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <rect id="o00000001" x="40" y="40" width="60" height="40" fill="url(#r00000001) #000000"/>
+    <rect id="o00000002" x="120" y="40" width="60" height="40" fill="#a6cee3"/>
+    <rect id="o00000003" x="200" y="40" width="60" height="40" fill="#b2df8a"/>
+    <rect id="o00000004" x="280" y="40" width="60" height="40" fill="#a6cee3"/>
+    <g id="o00000005" opacity="0.5">
+      <rect id="o00000006" x="40" y="120" width="60" height="40" fill="#1f78b4"/>
+      <rect id="o00000007" x="120" y="120" width="60" height="40" fill="#1f78b4"/>
+    </g>
+    <rect id="o00000008" x="40" y="200" width="60" height="40" fill="#1f1f1f"/>
+    <rect id="o00000009" x="120" y="200" width="60" height="40" fill="#1f1f1f"/>
+    <rect id="o0000000a" x="200" y="200" width="60" height="40" fill="url(#r00000002) #fb9a99"/>
+    <rect id="o0000000b" x="280" y="200" width="60" height="40" fill="url(#r00000002) #fb9a99"/>
+    <rect id="o0000000c" x="360" y="200" width="60" height="40" fill="#fdbf6f" clip-path="url(#r00000003)"/>
+    <rect id="o0000000d" x="440" y="200" width="60" height="40" fill="#fdbf6f" clip-path="url(#r00000003)"/>
+    <rect id="o0000000e" x="520" y="200" width="60" height="0" fill="#cab2d6"/>
+    <rect id="o0000000f" x="600" y="200" width="60" height="0" fill="#cab2d6"/>
+    <path id="o00000010" fub:tool="pen" fub:at="2026-10-01T09:21:00.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1" d="M400 340 L420 340 L440 340 Z" fill="#6a3d9a" fub:ink="1 s10 cxyt 4000,3400,0 200,0,8 200,0,8"/>
+    <path id="o00000011" fub:tool="pen" fub:at="2026-10-01T09:21:01.000Z" fub:brush="pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1" d="M400 340 L420 340 L440 340 Z" fill="#6a3d9a" fub:ink="1 s10 cxyt 4000,3400,0 200,0,8 200,0,8"/>
+  </g>
+</svg>

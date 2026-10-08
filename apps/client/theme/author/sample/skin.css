@@ -2783,6 +2783,9 @@ button.draw-isolation-crumb:hover {
   border: 1px solid var(--text);
   border-radius: var(--radius-xs);
 }
+.draw-access-detail > .draw-access-swatch {
+  margin-inline-end: var(--space-1);
+}
 .draw-access-describe {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);

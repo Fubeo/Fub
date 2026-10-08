@@ -339,6 +339,7 @@ import { applyOps } from "./apply";
 import { pathOps, replaceElem } from "./topath";
 import type { Join } from "./offset";
 import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps, strokeFill } from "./paths";
+import { distinguishOps, type HatchPreset } from "./patterns";
 import { movedPoint, presetOf, PRESETS, profileWidth, rightOf, SpineMeasure, widthOutline, withoutPoint, withPoint, withWidths, type Preset, type WidthShape } from "./profile";
 import { holdsWidth, profileOps, widthsOf, widthTarget, writeWidth, type NoWidth, type ProfileChange, type WidthTarget } from "./width";
 import type { BooleanKind } from "./boolean";
@@ -903,6 +904,15 @@ const PANEL_ROOM_REM = 36;
 /// Quanto aspetta la verifica dell'accessibilità, dopo l'ultimo cambio del
 /// disegno, prima di rileggerlo: rileggerlo costa quanto aprirlo.
 const AUDIT_MS = 250;
+
+/// Come si dice, nell'annuncio della verifica, ogni campitura pronta.
+const HATCH_NAMES: Readonly<Record<HatchPreset, DrawKey>> = {
+  diagonal: "draw.access.preset.diagonal",
+  cross: "draw.access.preset.cross",
+  horizontal: "draw.access.preset.horizontal",
+  dots: "draw.access.preset.dots",
+  grid: "draw.access.preset.grid",
+};
 
 /// Il tasto che mostra e nasconde gli attributi, dal livello Esperto: lo
 /// stesso dell'editor XML di Inkscape.
@@ -5218,6 +5228,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (now !== key && selection.includes(key)) select(selection.map((each) => (each === key ? now : each)));
   };
 
+  /// Dà una campitura che le distingue alle aree `keys` di un colore, in un
+  /// passo; quelle che non si scelgono, o che hanno già una campitura, una
+  /// sfumatura o un motivo, restano.
+  function hatchAreas(keys: readonly string[]): void {
+    const model = engine.model;
+    const index = currentIndex();
+    const units = keys.flatMap((key) => {
+      const unit = index.get(key);
+      return unit === null ? [] : [unit];
+    });
+    if (model === null || units.length === 0) return;
+    cancelGesture();
+    const hatched = distinguishOps(model, units, measureText, newIds());
+    if (hatched.ops.length === 0 || hatched.preset === null) return;
+    if (commit("draw.access.action.hatch", asGesture(hatched.ops)) === null) return;
+    // Le aree che ricevono un id cambiano chiave: la selezione le segue.
+    const now = new Map(units.map((unit, at) => [unit.key, hatched.keys[at] ?? unit.key]));
+    if (selection.some((key) => (now.get(key) ?? key) !== key)) select(selection.map((key) => now.get(key) ?? key));
+    syncAccess(true);
+    announce(plural(hatched.reached, "draw.access.fixed.hatch.one", "draw.access.fixed.hatch.other", { preset: t(HATCH_NAMES[hatched.preset]) }));
+  }
+
   /// Corregge `stale`, com'è nel disegno di adesso, in un passo.
   function fixProblem(stale: Problem): void {
     const problem = problemNow(stale.code, stale.key);
@@ -5231,6 +5263,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (fix.kind === "describe" || !editable()) return;
     const rekey = settleCrop();
     const model = engine.model;
+    if (fix.kind === "hatch") {
+      hatchAreas(fix.keys.map(rekey));
+      return;
+    }
     const unit = problem.key === null ? null : currentIndex().get(rekey(problem.key));
     if (model === null || unit === null) return;
     cancelGesture();

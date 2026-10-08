@@ -6,7 +6,8 @@
     "items": 42458,
     "diagnostics": {
       "S002": 3105,
-      "S009": 998
+      "S009": 998,
+      "S017": 7
     },
     "summary": {
       "version": 1,

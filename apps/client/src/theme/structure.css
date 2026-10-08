@@ -2360,6 +2360,9 @@ html, body, #app {
   width: 1em;
   height: 1em;
 }
+.draw-access-detail > .draw-access-swatch {
+  vertical-align: middle;
+}
 .draw-access-describe {
   box-sizing: border-box;
   flex: 1 1 12rem;

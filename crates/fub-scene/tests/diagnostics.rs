@@ -3,8 +3,8 @@
 
 mod common;
 
-use common::{doc, load, text};
-use fub_scene::{read, Code, Diagnostic, Scene, Severity, MAX_IMAGE_BYTES};
+use common::{doc, elements, load, text};
+use fub_scene::{read, Code, Diagnostic, Role, Scene, Severity, MAX_IMAGE_BYTES};
 
 /// Le diagnostiche di `scene` con il codice `code`.
 fn of(scene: &Scene, code: Code) -> Vec<&Diagnostic> {
@@ -681,6 +681,318 @@ fn s014_a_local_reference_to_a_missing_id() {
     }
 }
 
+/// Le risorse dei casi di S017: una sfumatura, un motivo, un ritaglio, un
+/// filtro, una maschera e un campione verde.
+const KEY_RESOURCES: &str = concat!(
+    r#"<defs id="fub-defs">"#,
+    r##"<linearGradient id="r00000001" fub:role="private"><stop offset="0" stop-color="#a6cee3"/><stop offset="1" stop-color="#b2df8a"/></linearGradient>"##,
+    r##"<pattern id="r00000002" fub:role="shared" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="8" height="4" fill="#000000"/></pattern>"##,
+    r##"<clipPath id="r00000003" fub:role="private" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath>"##,
+    r##"<filter id="r00000004" fub:role="shared"><feDropShadow dx="0" dy="2" stdDeviation="2"/></filter>"##,
+    r##"<linearGradient id="r00000005" fub:role="swatch" fub:name="Verde" gradientUnits="userSpaceOnUse"><stop stop-color="#b2df8a"/></linearGradient>"##,
+    r##"<mask id="r00000006" fub:role="private" maskContentUnits="objectBoundingBox"><rect x="0" y="0" width="1" height="1" fill="#ffffff"/></mask>"##,
+    r#"</defs>"#,
+);
+
+/// Un disegno con la carta di colore `paper`, le risorse di S017 e `body`
+/// nel livello.
+fn key(paper: &str, body: &str) -> String {
+    titled(&format!(
+        r#"{KEY_RESOURCES}<rect id="fub-paper" fub:role="paper" width="100" height="100" fill="{paper}"/><g fub:layer="A">{body}</g>"#
+    ))
+}
+
+/// Un riquadro pieno, con gli attributi dati.
+fn tile(x: u32, attributes: &str) -> String {
+    format!(r#"<rect x="{x}" y="0" width="10" height="10" {attributes}/>"#)
+}
+
+/// Un riquadro pieno del colore `color`.
+fn tint(x: u32, color: &str) -> String {
+    tile(x, &format!(r#"fill="{color}""#))
+}
+
+/// Riquadri pieni dei colori dati, uno ogni 20 unità.
+fn tints(colors: &[&str]) -> String {
+    colors
+        .iter()
+        .enumerate()
+        .map(|(at, color)| tint(at as u32 * 20, color))
+        .collect()
+}
+
+/// Quanti rettangoli modificabili ha `scene`: i casi che non devono contare
+/// come aree lo sono lo stesso, e non mancano per un riferimento rotto.
+fn rects(scene: &Scene) -> usize {
+    elements(scene)
+        .iter()
+        .filter(|element| element.role == Role::Rect)
+        .count()
+}
+
+/// I dettagli di S017 su `body` sulla carta bianca.
+fn confusions(body: &str) -> Vec<String> {
+    let scene = load(&key("#ffffff", body));
+    details(&scene, Code::S017)
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn s017_two_code_colors_told_apart_only_by_hue() {
+    // Il blu e il verde chiari, usati due volte l'uno: due S017, ciascuna
+    // sulla prima area del suo colore, col compagno e il contrasto fra loro.
+    let (blue, green) = ("#a6cee3", "#b2df8a");
+    let source = key(
+        "#ffffff",
+        &[
+            tint(0, blue),
+            tint(20, green),
+            tint(40, blue),
+            tint(60, green),
+        ]
+        .concat(),
+    );
+    let scene = load(&source);
+    let found = of(&scene, Code::S017);
+    assert_eq!(found.len(), 2);
+    assert!(found.iter().all(|d| d.severity == Severity::Info));
+    assert_eq!(
+        details(&scene, Code::S017),
+        ["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]
+    );
+    assert_eq!(text(&source, &found[0].span.unwrap()), tint(0, blue));
+    assert_eq!(text(&source, &found[1].span.unwrap()), tint(20, green));
+    // Un colore usato una volta sola è un ornamento: niente.
+    assert!(confusions(&tints(&[blue, green, green])).is_empty());
+    assert!(confusions(&tints(&[blue, green])).is_empty());
+    // Il blu scuro e il giallo chiaro, due volte l'uno, hanno 3,92:1: si
+    // distinguono anche in grigio.
+    assert!(confusions(&tints(&["#0072b2", "#f0e442", "#0072b2", "#f0e442"])).is_empty());
+    // Il giallo sul bianco ha 1,14:1 col verde chiaro, e il blu scuro ne ha
+    // 3,41: la S017 del giallo nomina il verde, e il blu non c'entra.
+    assert_eq!(
+        confusions(&tints(&[
+            "#f0e442", "#b2df8a", "#0072b2", "#f0e442", "#b2df8a", "#0072b2"
+        ])),
+        ["#f0e442 #b2df8a 1.14", "#b2df8a #f0e442 1.14"]
+    );
+}
+
+#[test]
+fn s017_names_the_partner_with_the_lowest_ratio() {
+    // Tre colori di codice, ciascuno due volte. Il verde acqua ha 2,25:1 col
+    // verde chiaro e 2,04:1 col blu chiaro, che viene dopo nel documento: il
+    // compagno è quello col contrasto più basso, non il primo.
+    let found = confusions(&tints(&[
+        "#009e73", "#b2df8a", "#a6cee3", "#009e73", "#b2df8a", "#a6cee3",
+    ]));
+    assert_eq!(
+        found,
+        [
+            "#009e73 #a6cee3 2.04",
+            "#b2df8a #a6cee3 1.10",
+            "#a6cee3 #b2df8a 1.10"
+        ]
+    );
+}
+
+#[test]
+fn s017_composes_the_color_with_its_opacity_over_the_paper_only() {
+    // Il blu al 50% sulla carta #f0f0f0 è #88b4d2, lo stesso colore di un
+    // riquadro opaco di quel colore e di un gruppo al 50%: tre aree, un
+    // codice. Il contrasto col blu chiaro, usato due volte, è 1,32.
+    let (translucent, opaque) = (
+        tile(0, r##"fill="#1f78b4" fill-opacity="0.5""##),
+        tint(20, "#88b4d2"),
+    );
+    let group = format!(
+        r##"<g opacity="0.5">{}</g>"##,
+        tint(40, "#1f78b4") // dentro il gruppo
+    );
+    let light = [tint(60, "#a6cee3"), tint(80, "#a6cee3")].concat();
+    let body = [translucent.clone(), opaque.clone(), group, light.clone()].concat();
+    let scene = load(&key("#f0f0f0", &body));
+    assert_eq!(
+        details(&scene, Code::S017),
+        ["#88b4d2 #a6cee3 1.32", "#a6cee3 #88b4d2 1.32"]
+    );
+    assert_eq!(
+        text(
+            &key("#f0f0f0", &body),
+            &of(&scene, Code::S017)[0].span.unwrap()
+        ),
+        translucent
+    );
+    // Sul bianco la stessa opacità dà #8fbcda: non è più il colore del
+    // riquadro opaco, e ogni colore è usato meno di due volte.
+    let white = [
+        translucent,
+        opaque,
+        tint(60, "#a6cee3"),
+        tint(80, "#b2df8a"),
+    ]
+    .concat();
+    assert!(confusions(&white).is_empty());
+    // Il colore si compone sulla carta soltanto, non sulle figure che ha
+    // sotto: due riquadri chiari sopra uno scuro restano chiari.
+    let covered = format!(
+        r##"<rect x="0" y="0" width="200" height="20" fill="#000000"/>{}"##,
+        tints(&["#a6cee3", "#b2df8a", "#a6cee3", "#b2df8a"])
+    );
+    assert_eq!(
+        confusions(&covered),
+        ["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]
+    );
+    // Le opacità si moltiplicano: 0.5 del gruppo per 0.5 del riquadro dà
+    // il 25% di #1f78b4 sul bianco, #c7ddec, il colore del riquadro opaco.
+    let nested = format!(
+        r##"<g opacity="0.5">{}</g>{}{}{}"##,
+        tile(0, r##"fill="#1f78b4" fill-opacity="0.5""##),
+        tint(20, "#c7ddec"),
+        tint(40, "#a6cee3"),
+        tint(60, "#a6cee3"),
+    );
+    assert_eq!(
+        confusions(&nested),
+        ["#c7ddec #a6cee3 1.19", "#a6cee3 #c7ddec 1.19"]
+    );
+    // Una carta che non si sa non dà il colore di un'area non opaca, ma un'area
+    // opaca ha il suo.
+    let unknown = titled(&format!(
+        r##"{KEY_RESOURCES}<rect id="fub-paper" fub:role="paper" width="100" height="100" fill="#f0f0f0" filter="url(#r00000004)"/><g fub:layer="A">{}{}</g>"##,
+        tints(&["#a6cee3", "#b2df8a", "#a6cee3", "#b2df8a"]),
+        tile(100, r##"fill="#1f78b4" fill-opacity="0.5""##)
+            + &tile(120, r##"fill="#1f78b4" fill-opacity="0.5""##),
+    ));
+    assert_eq!(
+        details(&load(&unknown), Code::S017),
+        ["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]
+    );
+    // Senza carta il disegno sta sul bianco.
+    let bare = titled(&tints(&["#a6cee3", "#b2df8a", "#a6cee3", "#b2df8a"]));
+    assert_eq!(
+        details(&load(&bare), Code::S017),
+        ["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]
+    );
+}
+
+#[test]
+fn s017_counts_only_filled_shapes_whose_color_is_known() {
+    let (blue, green) = ("#a6cee3", "#b2df8a");
+    let pair = tints(&[green, blue, green]);
+    // Con due riquadri blu, che mancano, si avrebbero due S017: il blu è
+    // usato una volta sola nei casi che seguono.
+    let both = |blues: String| format!("{pair}{blues}");
+    // Una campitura, una sfumatura, un colore che decide una risorsa: il
+    // colore non si sa, e ripiegare sul colore scritto accanto sarebbe
+    // sbagliato.
+    let unknown = [
+        tile(100, r##"fill="url(#r00000002) #a6cee3""##),
+        tile(120, r##"fill="url(#r00000001) #a6cee3""##),
+    ]
+    .concat();
+    let scene = load(&key("#ffffff", &both(unknown)));
+    assert_eq!(rects(&scene), 5);
+    assert!(of(&scene, Code::S017).is_empty());
+    // Un campione del documento ha il colore del campione, quale che sia il
+    // ripiego accanto: due aree verdi chiare come le altre due.
+    let swatches = [
+        tile(100, r##"fill="url(#r00000005) #000000""##),
+        tile(120, r##"fill="url(#r00000005) #ff0000""##),
+    ]
+    .concat();
+    assert_eq!(
+        confusions(&[tint(0, blue), tint(20, blue), swatches].concat()),
+        ["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]
+    );
+    // Sotto un ritaglio, una maschera o un filtro, dell'elemento o di un
+    // contenitore, i colori che si vedono non si sanno.
+    let effects = [
+        tile(100, r##"fill="#a6cee3" clip-path="url(#r00000003)""##),
+        format!(
+            r##"<g clip-path="url(#r00000003)">{}</g>"##,
+            tint(120, blue)
+        ),
+        format!(
+            r##"<g mask="url(#r00000006)"><g>{}</g></g>"##,
+            tint(140, blue)
+        ),
+        tile(160, r##"fill="#a6cee3" filter="url(#r00000004)""##),
+    ]
+    .concat();
+    let scene = load(&key("#ffffff", &both(effects)));
+    assert_eq!(rects(&scene), 7);
+    assert!(of(&scene, Code::S017).is_empty());
+    // Una figura il cui riquadro non ha larghezza o non ha altezza non è
+    // un'area, e nemmeno un tracciato lungo una linea.
+    let flat = [
+        r##"<rect x="100" y="0" width="10" height="0" fill="#a6cee3"/>"##.to_owned(),
+        r##"<rect x="120" y="0" width="0" height="10" fill="#a6cee3"/>"##.to_owned(),
+        r##"<path d="M140 0 L200 0" fill="#a6cee3"/>"##.to_owned(),
+        r##"<ellipse cx="220" cy="5" rx="10" ry="0" fill="#a6cee3"/>"##.to_owned(),
+    ]
+    .concat();
+    let scene = load(&key("#ffffff", &both(flat)));
+    assert_eq!(rects(&scene), 5);
+    assert!(of(&scene, Code::S017).is_empty());
+    // Un'area vera della stessa dimensione, invece, conta.
+    assert_eq!(
+        confusions(&both(tint(100, blue) + &tint(120, blue))),
+        ["#b2df8a #a6cee3 1.10", "#a6cee3 #b2df8a 1.10"]
+    );
+    // I tratti a penna e l'evidenziatore sono sottili: non sono aree. I
+    // testi e le immagini nemmeno, e una forma senza riempimento o del tutto
+    // trasparente neanche.
+    let others = [
+        stroke("pen", r##"fill="#a6cee3""##),
+        stroke("pen", r##"fill="#a6cee3""##),
+        stroke("highlighter", r##"fill="#a6cee3" fill-opacity="0.4""##),
+        label(r##"fill="#a6cee3""##, "Uno"),
+        label(r##"fill="#a6cee3""##, "Due"),
+        r##"<image x="0" y="0" width="5" height="5" href="a.png" fill="#a6cee3"/>"##.to_owned(),
+        tile(100, r##"fill="none""##),
+        tile(120, r##"fill="none""##),
+        tile(140, r##"fill="#a6cee3" fill-opacity="0""##),
+        tile(160, r##"fill="#a6cee3" opacity="0""##),
+    ]
+    .concat();
+    assert!(confusions(&both(others)).is_empty());
+    // Una figura nascosta, o dentro un contenitore nascosto, non si guarda.
+    let hidden = [
+        tile(100, r##"fill="#a6cee3" display="none""##),
+        format!(r##"<g display="none">{}</g>"##, tint(120, blue)),
+    ]
+    .concat();
+    let scene = load(&key("#ffffff", &both(hidden)));
+    assert_eq!(rects(&scene), 5);
+    assert!(of(&scene, Code::S017).is_empty());
+}
+
+#[test]
+fn s017_stays_silent_past_twelve_code_colors() {
+    // Tredici rosati vicini, due riquadri ciascuno: un'illustrazione, non
+    // un codice. Con dodici, S017 parla.
+    let colors: Vec<String> = (0..13)
+        .map(|k| format!("#{:02x}c8c8", 0xc8 + k * 3))
+        .collect();
+    let twice = |count: usize| -> String {
+        let doubled: Vec<&str> = colors[..count]
+            .iter()
+            .chain(&colors[..count])
+            .map(String::as_str)
+            .collect();
+        tints(&doubled)
+    };
+    assert_eq!(confusions(&twice(12)).len(), 12);
+    assert!(confusions(&twice(13)).is_empty());
+    // Un colore usato una volta non fa numero: dodici di codice e un
+    // tredicesimo, ornamento, e S017 parla ancora.
+    let ornament = format!("{}{}", twice(12), tint(1000, &colors[12]));
+    assert_eq!(confusions(&ornament).len(), 12);
+}
+
 #[test]
 fn every_code_has_its_severity_and_a_message() {
     use Code::*;
@@ -699,6 +1011,7 @@ fn every_code_has_its_severity_and_a_message() {
         (S012, Severity::Warning),
         (S013, Severity::Info),
         (S014, Severity::Warning),
+        (S017, Severity::Info),
     ] {
         assert_eq!(code.severity(), severity);
         assert!(!code.message().is_empty());

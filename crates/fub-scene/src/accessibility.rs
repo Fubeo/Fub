@@ -1,6 +1,7 @@
 //! I controlli di §12 su come il disegno si legge: S009, il contrasto fra un
 //! tratto a penna o un testo e ciò che ha sotto; S012, un'immagine senza
-//! descrizione; S013, un testo troppo piccolo a grandezza naturale.
+//! descrizione; S013, un testo troppo piccolo a grandezza naturale; S017, due
+//! colori usati come codice che si distinguono soltanto per la tinta.
 //!
 //! [`Legibility`] segue la classificazione insieme al riepilogo, in ordine di
 //! documento, che in SVG è l'ordine in cui si dipinge: ciò che sta sotto un
@@ -25,6 +26,43 @@
 //!   uguali fra i suoi vertici. Conta il contrasto mediano, quello che il
 //!   tratto ha per gran parte della sua lunghezza: un tratto che attraversa
 //!   un riquadro scuro non si legge male per questo.
+//!
+//! S017 guarda le stesse figure dipinte, quelle che coprono la carta, e dice
+//! dove un disegno affida un significato al colore soltanto (WCAG 1.4.1, uso
+//! del colore): due colori con meno di 3:1 fra loro (WCAG 1.4.11) non si
+//! distinguono più per chi non vede la tinta, e non si capisce quale area va
+//! con quale voce della legenda.
+//!
+//! - **le aree** sono le forme piene modificabili di cui il colore si sa,
+//!   un colore semplice o un campione del documento, con un'opacità totale
+//!   sopra 0. Non contano i tratti a penna e l'evidenziatore, che sono
+//!   sottili, né i testi, le immagini, la carta, le tavole, i livelli e i
+//!   gruppi in sé. Una sfumatura, un motivo (e quindi una campitura), un
+//!   colore che decide una risorsa e ogni colore sotto `clip-path`, `mask` o
+//!   `filter`, dell'elemento o di un contenitore, non si sanno, come per
+//!   S009. Una figura il cui riquadro nella radice non ha larghezza o non ha
+//!   altezza non è un'area, e una nascosta (`display="none"`, anche di un
+//!   contenitore) non si guarda affatto;
+//! - **il colore di un'area** è il suo colore con la sua opacità totale (il
+//!   `fill-opacity` e le `opacity` dei gruppi, composte come per S009)
+//!   composto sulla carta, o sul bianco senza carta, in sRGB e coi canali
+//!   arrotondati a interi. Sulla carta soltanto, e non sulle figure sotto:
+//!   il codice è il colore che l'autore ha scelto, non quello di ciò che
+//!   per caso copre. Se la carta non si sa, un'area non opaca non ha colore
+//!   che si sappia, come un fondo ignoto per S009;
+//! - **i colori di codice** sono i colori composti che hanno almeno due
+//!   aree: una fetta e la sua voce di legenda, due riquadri della stessa
+//!   categoria. Un colore usato una volta è un ornamento, non un codice. Con
+//!   più di 12 colori di codice S017 tace: è un'illustrazione o
+//!   un'immagine ricalcata, non un codice;
+//! - **una coppia confusa** è fatta di due colori di codice con un contrasto
+//!   di WCAG sotto [`MIN_CONTRAST`] (3:1, la stessa soglia di S009 per un
+//!   tratto);
+//! - **una S017 per ogni colore di codice** che ha almeno un compagno
+//!   confuso, sulla prima area del documento con quel colore. Il dettaglio è
+//!   `#rrggbb #rrggbb r.rr`: il colore, il compagno col contrasto più basso
+//!   (a parità, quello la cui prima area viene prima nel documento) e quel
+//!   contrasto, troncato ai centesimi come per S009.
 
 use std::cell::OnceCell;
 use std::collections::HashMap;
@@ -50,6 +88,10 @@ const STROKE_PROBES: usize = 16;
 /// caratteri.
 const LINE_PROBE: f64 = 0.35;
 
+/// Con più colori di codice di così S017 tace: è un'illustrazione, non un
+/// codice.
+const MAX_CODES: usize = 12;
+
 /// Una figura dipinta: dove sta e di che colore.
 struct Painted {
     /// I segmenti nelle coordinate della figura, e la matrice verso la radice.
@@ -63,6 +105,8 @@ struct Painted {
     /// Il colore con la sua opacità totale; `None` se non si sa, come per
     /// un'immagine.
     paint: Option<(Rgb, f64)>,
+    /// L'elemento che ha dipinto la figura.
+    span: Span,
 }
 
 impl Painted {
@@ -79,6 +123,15 @@ impl Painted {
                 p,
             ) != 0
     }
+}
+
+/// Un colore composto sulla carta che hanno delle aree (S017).
+struct Tint {
+    color: Rgb,
+    /// L'elemento della prima area con questo colore, in ordine di documento.
+    first: Span,
+    /// Quante aree hanno questo colore.
+    areas: usize,
 }
 
 /// Una riga di testo da misurare.
@@ -159,7 +212,7 @@ impl Legibility {
                         .push(Diagnostic::new(Code::S012, Some(span), None));
                 }
                 let r = rect_path(at("x"), at("y"), at("width"), at("height"), 0.0, 0.0);
-                self.paint(r, m, None);
+                self.paint(r, m, None, span);
                 return;
             }
             Role::Rect => {
@@ -182,8 +235,10 @@ impl Legibility {
         };
         match context.fill_paint() {
             // Un riempimento ignoto copre come un'immagine.
-            None => self.paint(shape, m, None),
-            Some(Some((rgb, alpha))) if alpha > 0.0 => self.paint(shape, m, Some((rgb, alpha))),
+            None => self.paint(shape, m, None, span),
+            Some(Some((rgb, alpha))) if alpha > 0.0 => {
+                self.paint(shape, m, Some((rgb, alpha)), span)
+            }
             Some(_) => {}
         }
     }
@@ -196,7 +251,13 @@ impl Legibility {
         });
     }
 
-    fn paint(&mut self, segments: Vec<Segment>, matrix: Matrix, paint: Option<(Rgb, f64)>) {
+    fn paint(
+        &mut self,
+        segments: Vec<Segment>,
+        matrix: Matrix,
+        paint: Option<(Rgb, f64)>,
+        span: Span,
+    ) {
         let mut bounds = BoundsBuilder::default();
         bounds.path(&segments, &matrix);
         if let Some(bounds) = bounds.finish() {
@@ -206,6 +267,7 @@ impl Legibility {
                 bounds,
                 polygons: OnceCell::new(),
                 paint,
+                span,
             });
         }
     }
@@ -287,8 +349,8 @@ impl Legibility {
     }
 
     /// Chiude i controlli: S009 per ogni oggetto che contrasta poco col suo
-    /// fondo, poi S012 e S013. `paper` è il colore della carta, `None` se non
-    /// si sa.
+    /// fondo, S017 per ogni colore di codice confuso con un altro, poi S012 e
+    /// S013. `paper` è il colore della carta, `None` se non si sa.
     pub fn finish(self, paper: Option<Rgb>, diagnostics: &mut Vec<Diagnostic>) {
         for check in &self.checks {
             let backdrop = |p: [f64; 2]| self.backdrop(paper, check.under, p);
@@ -327,7 +389,73 @@ impl Legibility {
                 ));
             }
         }
+        self.confused(paper, diagnostics);
         diagnostics.extend(self.found);
+    }
+
+    /// S017: i colori di codice che si distinguono da un altro soltanto per
+    /// la tinta. Le aree si guardano in ordine di documento, come sono
+    /// dipinte.
+    fn confused(&self, paper: Option<Rgb>, diagnostics: &mut Vec<Diagnostic>) {
+        // I colori composti delle aree, in ordine di prima comparsa, con
+        // la prima area e quante sono.
+        let mut tints: Vec<Tint> = Vec::new();
+        let mut seen: HashMap<Rgb, usize> = HashMap::new();
+        for painted in &self.painted {
+            let Some((rgb, alpha)) = painted.paint else {
+                continue;
+            };
+            let Bounds { min, max } = painted.bounds;
+            if max[0] <= min[0] || max[1] <= min[1] {
+                continue;
+            }
+            // Una figura opaca ha il suo colore anche su una carta ignota.
+            let color = if alpha >= 1.0 {
+                rgb
+            } else if let Some(under) = paper {
+                over(rgb, alpha, under)
+            } else {
+                continue;
+            };
+            let at = *seen.entry(color).or_insert_with(|| {
+                tints.push(Tint {
+                    color,
+                    first: painted.span,
+                    areas: 0,
+                });
+                tints.len() - 1
+            });
+            tints[at].areas += 1;
+        }
+        let codes: Vec<&Tint> = tints.iter().filter(|tint| tint.areas >= 2).collect();
+        if codes.len() > MAX_CODES {
+            return;
+        }
+        for tint in &codes {
+            // Il compagno col contrasto più basso, e a parità il primo.
+            let mut worst: Option<(&Tint, f64)> = None;
+            for other in &codes {
+                if other.color == tint.color {
+                    continue;
+                }
+                let ratio = contrast(tint.color, other.color);
+                if ratio < MIN_CONTRAST && worst.is_none_or(|(_, lowest)| ratio < lowest) {
+                    worst = Some((other, ratio));
+                }
+            }
+            if let Some((other, ratio)) = worst {
+                diagnostics.push(Diagnostic::new(
+                    Code::S017,
+                    Some(tint.first),
+                    Some(format!(
+                        "{} {} {}",
+                        hex(tint.color),
+                        hex(other.color),
+                        shown(ratio)
+                    )),
+                ));
+            }
+        }
     }
 
     /// Il colore sotto il punto `p` della radice, con le prime `under` figure
@@ -347,6 +475,11 @@ impl Legibility {
         }
         color
     }
+}
+
+/// Un colore come lo scrive il file: `#rrggbb`, in minuscolo.
+fn hex(rgb: Rgb) -> String {
+    format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2])
 }
 
 /// Un numero del dettaglio, troncato ai centesimi e non arrotondato: un
