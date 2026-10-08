@@ -5,7 +5,14 @@
 // scrive FubDraw, i motivi, le tavole con le loro carte, e gli estranei tipici di Inkscape, Illustrator e
 // Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa; quella
 // che mostra una tavola sola è più grande, e la sua tavola è grande quanto la
-// resa.
+// resa. Le forme delle raccolte (basi, diagrammi di flusso, fumetti, frecce
+// e fogli di scuola) sono scritte da chi le inserisce nel disegno, non a mano.
+
+import type { Bounds } from "../src/editors/spatial/scene/geometry";
+import { SceneEngine } from "../src/editors/spatial/scene/engine";
+import { NewIds } from "../src/editors/spatial/tools/edit";
+import { libraryElem } from "../src/editors/spatial/tools/library-insert";
+import { LIBRARY, libraryShape, type LibraryGroup } from "../src/editors/spatial/tools/shape-library";
 
 /// La misura di ogni scena, in pixel CSS.
 export const FIDELITY_SIZE = { width: 240, height: 160 } as const;
@@ -39,6 +46,91 @@ export interface FidelityScene {
   /// `![[disegno#nome]]`. Senza, la scena mostra il disegno intero.
   readonly board?: string;
 }
+
+/// Gli id delle forme delle raccolte, in fila: la scena è la stessa a ogni
+/// corsa.
+class SequentialIds extends NewIds {
+  private count = 0;
+
+  constructor() {
+    super(() => false);
+  }
+
+  override next(): string {
+    this.count += 1;
+    return `o${String(this.count).padStart(8, "0")}`;
+  }
+}
+
+/// Un riquadro della scena: l'angolo in alto a sinistra, la larghezza e l'altezza.
+type Cell = readonly [x: number, y: number, width: number, height: number];
+
+/// Il margine di ogni forma dentro il suo riquadro, in pixel.
+const MARGIN = 6;
+
+/// Il riquadro più grande che sta in `cell` col rapporto fra i lati della
+/// forma `id`, centrato, a mezzi pixel.
+function fitted(id: string, [x, y, width, height]: Cell): Cell {
+  const [w, h] = libraryShape(id)!.size;
+  const scale = Math.min((width - 2 * MARGIN) / w, (height - 2 * MARGIN) / h);
+  const half = (value: number): number => Math.round(value * 2) / 2;
+  return [half(x + (width - w * scale) / 2), half(y + (height - h * scale) / 2), half(w * scale), half(h * scale)];
+}
+
+/// La scena con le forme di `placed`, ciascuna nel suo riquadro, scritte
+/// come le scrive chi le inserisce: col `<title>` col nome della forma, e lo
+/// stesso colore e lo spessore 2.
+function shelf(placed: ReadonlyArray<readonly [string, Cell]>, color: string): string {
+  const ids = new SequentialIds();
+  const engine = SceneEngine.open(scene(`${LAYER}</g>`));
+  for (const [id, [x, y, width, height]] of placed) {
+    const box: Bounds = { min: [x, y], max: [x + width, y + height] };
+    const elem = libraryElem(libraryShape(id)!, box, { color, width: 2 }, id, ids);
+    const outcome = engine.apply({ op: "add", parent: "l1", pos: { last: true }, elem });
+    if (outcome.outcome !== "applied") throw new Error(`la forma ${id} non entra nella scena`);
+  }
+  return engine.text;
+}
+
+/// Le forme `ids` in una griglia di `columns` colonne che riempie la scena.
+function gridOf(ids: readonly string[], columns: number, color: string): string {
+  const rows = Math.ceil(ids.length / columns);
+  const width = (FIDELITY_SIZE.width - 16) / columns;
+  const height = (FIDELITY_SIZE.height - 16) / rows;
+  return shelf(
+    ids.map((id, i): [string, Cell] => [id, fitted(id, [8 + (i % columns) * width, 8 + Math.floor(i / columns) * height, width, height])]),
+    color,
+  );
+}
+
+/// Gli id delle forme di una raccolta, nell'ordine del pannello.
+const idsOf = (group: LibraryGroup): string[] => LIBRARY.filter((shape) => shape.group === group).map((shape) => shape.id);
+
+const FLOWCHART = idsOf("flowchart");
+
+/// Le raccolte come le inserisce il pannello «Forme»: una scena per raccolta,
+/// o due dove le forme sono tante, alla misura piccola ma leggibile con cui
+/// stanno in una griglia di 240 × 160; le forme di scuola, coi loro numeri e
+/// le loro lettere, a una misura che li lascia leggere.
+const FROM_LIBRARY: readonly FidelityScene[] = [
+  { id: "raccolta-base", text: gridOf(idsOf("basic"), 5, "#2b6cb0") },
+  { id: "raccolta-flusso-1", text: gridOf(FLOWCHART.slice(0, 8), 4, "#2f855a") },
+  { id: "raccolta-flusso-2", text: gridOf(FLOWCHART.slice(8), 4, "#744210") },
+  { id: "raccolta-fumetti", text: gridOf(idsOf("callouts"), 3, "#c53030") },
+  { id: "raccolta-frecce", text: gridOf(idsOf("arrows"), 5, "#553c9a") },
+  {
+    // Gli assi, la carta a quadretti e quella a righe: i testi sono le lettere
+    // degli assi, e le righe e i quadretti sono d'un azzurro fisso.
+    id: "raccolta-scuola",
+    text: shelf([["school-axes", [12, 20, 120, 120]], ["school-squared", [140, 12, 92, 64]], ["school-lined", [140, 86, 88, 66]]], "#1a202c"),
+  },
+  {
+    // La retta dei numeri a tre misure: i numeri si rimpiccioliscono con
+    // l'altezza, e restano sulle tacche.
+    id: "raccolta-retta",
+    text: shelf([["school-number-line", [12, 24, 216, 23]], ["school-number-line", [12, 66, 216, 46]], ["school-number-line", [12, 124, 108, 30]]], "#1a202c"),
+  },
+];
 
 export const FIDELITY: readonly FidelityScene[] = [
   {
@@ -367,4 +459,5 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<g id="o00000007"><path id="p1" d="M178 82 L234 116 L178 150 L122 116 Z" fill="#fed7e2" stroke="#c53030" stroke-width="2"/>'
       + `<text id="o00000008" fub:inside="p1" fub:wrap="49.79" ${LABEL} font-size="12" text-anchor="middle" transform="matrix(1 0 0 1 178 119.3)"><tspan x="0" dy="0">Esito?</tspan></text></g></g>`),
   },
+  ...FROM_LIBRARY,
 ];

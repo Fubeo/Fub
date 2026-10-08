@@ -459,6 +459,9 @@ import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type ForeignBlock, t
 import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
 import { createBoardsPanel, type BoardRow } from "./boards-panel";
+import { createLibraryPanel } from "./library-panel";
+import { boxAround as shapeBox, boxIn, forPreview, libraryElem } from "./library-insert";
+import { libraryShape, type LibraryShape } from "./shape-library";
 import { createAccessPanel } from "./accessibility-panel";
 import { exportBox, type ExportScene } from "./export-plan";
 import { overlaps, problemsOf, readingOrder, type AuditCode, type Problem } from "./audit";
@@ -1271,6 +1274,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-access": ["M12 2.75a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5z", "M5 8.5l7 1.5 7-1.5", "M12 10v4.5", "M8.5 21l3.5-6.5 3.5 6.5"],
   // L'elenco delle tavole: due fogli affiancati, ognuno col suo nome sopra.
   "draw-boards": ["M3 8.5h8v11H3z", "M14 8.5h7v7h-7z", "M3 5h5", "M14 5h4"],
+  // Le forme: un quadrato, un cerchio e un triangolo.
+  "draw-library": ["M3 3h8v8H3z", "M13 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M12 14l5 7H7z"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -1435,6 +1440,17 @@ interface ShapeGesture extends GestureBase {
   readonly ids: NewIds;
   from: Point | null;
   end: Point | null;
+}
+
+/// Una forma delle raccolte tirata dal pannello al foglio: il puntatore che
+/// la porta, se è sul foglio, e dove andrebbe, nella scena; `box` è `null`
+/// fuori dal foglio, o dove il livello non riceve.
+interface ShapeDrag {
+  readonly shape: LibraryShape;
+  readonly pointerId: number;
+  readonly pointer: InkPointerType;
+  over: boolean;
+  box: Bounds | null;
 }
 
 /// L'oggetto a cui si aggancerebbe un capo del Connettore: l'oggetto, il
@@ -2917,6 +2933,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncBoards();
   });
 
+  // Le forme delle raccolte, dal livello Standard: chiuse finché qualcuno non
+  // le apre. Inserire, e trascinare, sono dell'editor.
+  let shapeDrag: ShapeDrag | null = null;
+  const libraryPanel = createLibraryPanel(life, {
+    onInsert: (id) => insertShape(id),
+    onDrag: (id, event) => startShapeDrag(id, event),
+    onLeave: () => surface.focus({ preventScroll: true }),
+    slop: DRAG_PX,
+  });
+  libraryPanel.element.hidden = true;
+  relabels.push(() => libraryPanel.relabel());
+
   // Gli attributi dell'oggetto scelto, dal livello Esperto: chiusi finché
   // qualcuno non li apre, sotto l'albero se è aperto anche quello.
   const inspector = createInspector(life, {
@@ -3066,6 +3094,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const boardsButton = button(viewGroup, "draw-button", () => t("draw.boards"), "draw-boards", () => showBoards(boardsPanel.element.hidden));
   boardsButton.setAttribute("aria-expanded", "false");
   boardsButton.setAttribute("aria-controls", boardsPanel.element.id);
+  // Le forme, dal livello Standard.
+  const libraryButton = button(viewGroup, "draw-button", () => t("draw.library"), "draw-library", () => showLibrary(libraryPanel.element.hidden));
+  libraryButton.setAttribute("aria-expanded", "false");
+  libraryButton.setAttribute("aria-controls", libraryPanel.element.id);
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
@@ -3620,7 +3652,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(boardsPanel.element, tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
+  dock.append(boardsPanel.element, libraryPanel.element, tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, dock);
@@ -4872,6 +4904,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // I nomi con un prefisso sono dati di FubDraw: non si disegnano.
       for (const [name, value] of Object.entries(each.attrs)) if (!name.includes(":")) shape.setAttribute(name, value);
       for (const child of each.children ?? []) shape.append(build(child));
+      // Il testo di una riga, come in un `tspan`.
+      if (each.text !== undefined && each.text !== null) shape.textContent = each.text;
       return shape;
     };
     if (defs.length > 0) {
@@ -5330,6 +5364,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     boardsPanel.update({ boards: rows, current, editable: canEdit, canAdd: rows.length < MAX_BOARDS, paged });
   }
 
+  /// Apre o chiude le forme; aperte, il fuoco va al campo di ricerca. Un
+  /// trascinamento in corso finisce.
+  function showLibrary(open: boolean): void {
+    if (open && !has("library")) return;
+    if (!open && libraryPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    if (!open) cancelShapeDrag();
+    libraryPanel.element.hidden = !open;
+    libraryButton.setAttribute("aria-expanded", String(open));
+    syncDock();
+    if (open) {
+      libraryPanel.update({ editable: editable() });
+      libraryPanel.focus();
+    }
+  }
+
   /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
   /// Chiusa, dimentica ciò che ha letto.
   function showAccess(open: boolean): void {
@@ -5782,7 +5831,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function syncDock(): void {
     const nested = nestedNow();
     dock.hidden =
-      boardsPanel.element.hidden && tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
+      boardsPanel.element.hidden && libraryPanel.element.hidden && tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
     dock.toggleAttribute("data-wide", nested ? !panel.element.hidden : !inspector.element.hidden);
     // Il dock occupa un lato del foglio: con lui che cambia, cambia la sua misura.
     rereadSize();
@@ -7134,6 +7183,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     boardsButton.hidden = !has("board");
     if (boardsButton.hidden && !boardsPanel.element.hidden) showBoards(false);
     syncBoards();
+    libraryButton.hidden = !has("library");
+    if (libraryButton.hidden && !libraryPanel.element.hidden) showLibrary(false);
+    libraryPanel.update({ editable: canEdit });
     accessButton.hidden = !has("accessibility");
     if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
     syncAccess();
@@ -8164,6 +8216,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       return { lines, spacings };
     };
+    // Una forma tirata dal pannello mostra a che cosa si è agganciata.
+    if (shapeDrag?.box != null) return movedView(guidesFor(shapeDrag, []), shapeDrag.box);
     const g = current;
     if (g?.kind === "select" && g.mode === "move") {
       const box = geometryOf(g.units);
@@ -12714,6 +12768,161 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return;
     }
   };
+
+  // --- Le forme delle raccolte ------------------------------------------------
+  //
+  // Una forma del pannello entra nel disegno in un passo solo, che porta il
+  // nome della forma: con un clic, o con Invio, al centro di ciò che si
+  // vede; trascinata fuori dal pannello, dove la si lascia. Mentre la si
+  // tira il foglio la mostra com'è, alla sua misura e al zoom di adesso, col
+  // centro sotto il puntatore e agganciata come un oggetto spostato (la
+  // griglia e le guide, e Ctrl o ⌘ la lascia libera). Rilasciata fuori dal
+  // foglio, o con Esc, non lascia traccia. Il puntatore lo tiene il riquadro
+  // del pannello: i suoi eventi arrivano al documento, e il trascinamento
+  // del browser, che nell'app prende i file, non c'entra.
+
+  /// Il punto dello schermo è sul foglio, e non sotto un pannello.
+  const onSheet = (clientX: number, clientY: number): boolean => {
+    const rect = surface.getBoundingClientRect();
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return false;
+    const top = surface.ownerDocument.elementFromPoint?.(clientX, clientY) ?? null;
+    return top === null || !dock.contains(top);
+  };
+
+  /// Scrive la forma `shape` nel riquadro `box` della scena, di `to`, in un
+  /// passo: scelta, e detta. Lo stile è quello delle forme che si
+  /// disegnano. Falso se il documento non l'ha accettata.
+  const placeShape = (shape: LibraryShape, to: Destination, ids: NewIds, box: Bounds): boolean => {
+    const pen = styles.pen;
+    const elem = libraryElem(shape, boxIn(box, to.inverse), { color: drawnPaint(pen.color, pen), width: pen.width }, t(shape.name), ids);
+    const ops: Op[] = [...to.prelude, addOp(to, elem)];
+    const half = pen.width / 2;
+    const page = grownPage({ min: [box.min[0] - half, box.min[1] - half], max: [box.max[0] + half, box.max[1] + half] });
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    if (commit(shape.name, asGesture(ops)) === null) return false;
+    // Una forma nuova si sceglie e si muove: con lo strumento Selezione.
+    if (tool !== "select") setTool("select");
+    select([elem.attrs.id!]);
+    announce(`${t("draw.shapes.inserted", { name: t(shape.name) })} ${objects()}`);
+    return true;
+  };
+
+  /// Inserisce la forma `id` al centro di ciò che si vede; con la griglia, il
+  /// suo angolo in alto a sinistra va sull'incrocio più vicino.
+  function insertShape(id: string): void {
+    const shape = libraryShape(id);
+    if (shape === null || !editable()) return;
+    settleCrop();
+    const ids = newIds();
+    const to = target(ids);
+    if (to === null) return;
+    const [x, y] = snapped(shapeBox(shape, toScene(camera, viewCenter())).min);
+    placeShape(shape, to, ids, { min: [x, y], max: [x + shape.size[0], y + shape.size[1]] });
+  }
+
+  /// La forma tirata, e dove andrebbe con il puntatore dove l'evento dice: il
+  /// riquadro nella scena e il livello che la riceve; `null` fuori dal
+  /// foglio, o dove niente la riceve.
+  const dragPlace = (drag: ShapeDrag, event: PointerEvent): { readonly box: Bounds; readonly to: Destination } | null => {
+    drag.over = onSheet(event.clientX, event.clientY);
+    if (!drag.over) return null;
+    const to = destinationNow();
+    if (to === null) return null;
+    const raw = shapeBox(drag.shape, sceneAt(event.clientX, event.clientY));
+    const [dx, dy] = snappedDelta(0, 0, raw.min, raw, () => guidesFor(drag, []), drag.pointer);
+    return { box: translated(raw, dx, dy)!, to };
+  };
+
+  /// Mostra la forma tirata dove andrebbe, e il cursore che dice se si può
+  /// lasciare.
+  const showShapeDrag = (drag: ShapeDrag, event: PointerEvent): void => {
+    readModifiers(event);
+    const place = dragPlace(drag, event);
+    drag.box = place === null ? null : place.box;
+    root.dataset.libraryDrop = place === null ? "none" : "copy";
+    if (place === null) {
+      showShape(null, IDENTITY);
+    } else {
+      const pen = styles.pen;
+      const elem = libraryElem(drag.shape, boxIn(place.box, place.to.inverse), { color: drawnPaint(pen.color, pen), width: pen.width }, "", new NewIds(() => false));
+      showShape(forPreview(elem), place.to.matrix);
+    }
+    // Le guide seguono la forma.
+    if (guidesOn() || guiding) showHandles();
+  };
+
+  /// Finisce il trascinamento, senza scrivere: toglie la forma mostrata e il
+  /// cursore.
+  const endShapeDrag = (): void => {
+    if (shapeDrag === null) return;
+    shapeDrag = null;
+    delete root.dataset.libraryDrop;
+    previewLayer.removeAttribute("opacity");
+    showShape(null, IDENTITY);
+    showHandles();
+  };
+
+  /// Esc, un puntatore annullato, o il pannello che si chiude: la forma tirata
+  /// non entra; con `said`, lo si dice.
+  function cancelShapeDrag(said = false): void {
+    if (shapeDrag === null) return;
+    endShapeDrag();
+    if (said) announce(t("draw.shapes.cancelled"));
+  }
+
+  /// Comincia a tirare la forma `id` dal pannello: `event` è il movimento che
+  /// ha superato la soglia.
+  function startShapeDrag(id: string, event: PointerEvent): void {
+    const shape = libraryShape(id);
+    if (shape === null || !editable() || shapeDrag !== null) return;
+    cancelGesture();
+    settleCrop();
+    shapeDrag = { shape, pointerId: event.pointerId, pointer: event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse", over: false, box: null };
+    previewLayer.setAttribute("opacity", "0.75");
+    showShapeDrag(shapeDrag, event);
+  }
+
+  /// Rilascia la forma tirata: sul foglio entra dove sta; fuori no, e lo si
+  /// dice. Dove il livello non riceve, si dice perché.
+  const dropShape = (drag: ShapeDrag, event: PointerEvent): void => {
+    showShapeDrag(drag, event);
+    const { shape, box, over } = drag;
+    endShapeDrag();
+    if (box === null) {
+      if (over) target(newIds());
+      else announce(t("draw.shapes.cancelled"));
+      return;
+    }
+    if (!editable()) return;
+    settleCrop();
+    const ids = newIds();
+    const to = target(ids);
+    // Chi ha lasciato la forma sul foglio continua lì, non nel pannello.
+    if (to !== null && placeShape(shape, to, ids, box)) surface.focus({ preventScroll: true });
+  };
+
+  life.listen(surface.ownerDocument, "pointermove", (event) => {
+    if (shapeDrag !== null && event.pointerId === shapeDrag.pointerId) showShapeDrag(shapeDrag, event);
+  });
+  life.listen(surface.ownerDocument, "pointerup", (event) => {
+    if (shapeDrag !== null && event.pointerId === shapeDrag.pointerId) dropShape(shapeDrag, event);
+  });
+  life.listen(surface.ownerDocument, "pointercancel", (event) => {
+    if (shapeDrag !== null && event.pointerId === shapeDrag.pointerId) cancelShapeDrag(true);
+  });
+  // Esc ferma il trascinamento prima di chiunque altro.
+  life.listen(
+    surface.ownerDocument,
+    "keydown",
+    (event) => {
+      if (shapeDrag === null || event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancelShapeDrag(true);
+    },
+    { capture: true },
+  );
+  life.add(() => cancelShapeDrag());
 
   // --- Le forme dal tratto ---------------------------------------------------
   //
@@ -19797,7 +20006,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
       (tree.element.contains(event.target) || historyPanel.element.contains(event.target) || boardsPanel.element.contains(event.target));
     const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target) || traceBar.contains(event.target) || cropBar.contains(event.target));
-    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField || inAccess)) {
+    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || libraryPanel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
       const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;

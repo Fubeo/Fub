@@ -1914,6 +1914,7 @@ html, body, #app {
 .draw-inspector,
 .draw-history,
 .draw-boards,
+.draw-library,
 .draw-access {
   display: flex;
   flex-direction: column;
@@ -2277,6 +2278,88 @@ html, body, #app {
   flex: 1;
   min-width: 0;
   min-height: 32px;
+}
+
+/* Le forme: il titolo col conteggio, il campo di ricerca e sotto le raccolte,
+   che scorrono. Ogni raccolta ha il suo titolo e una griglia di riquadri che
+   va a capo: un riquadro è un bersaglio da 44 px con l'anteprima della forma
+   al centro, e si preme, o si tira sul foglio, col dito senza fermare lo
+   scorrimento verticale dell'elenco. Mentre una forma si tira, il cursore dice
+   se si può lasciare: la copia sul foglio, il divieto fuori. */
+.draw-library-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.draw-library-title {
+  margin: 0;
+}
+.draw-library-count {
+  margin-inline-start: auto;
+}
+.draw-library-find {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.draw-library-search {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-library-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-library-heading,
+.draw-library-empty {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+}
+.draw-library-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: default;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.draw-library-tile[hidden],
+.draw-library-group[hidden] {
+  display: none;
+}
+.draw-library-preview {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+.draw-editor[data-library-drop="copy"],
+.draw-editor[data-library-drop="copy"] * {
+  cursor: copy !important;
+}
+.draw-editor[data-library-drop="none"],
+.draw-editor[data-library-drop="none"] * {
+  cursor: not-allowed !important;
 }
 
 /* La verifica dell'accessibilità scorre tutta insieme, con l'intestazione
@@ -3171,6 +3254,12 @@ textarea.draw-properties-input {
   }
   .draw-objects-ghost {
     border: 1px solid CanvasText;
+  }
+  /* Il riquadro sollevato dal dito: il fondo e l'ombra si forzano, e
+     l'anello dell'evidenza dice che è in mano. */
+  .draw-library-tile[data-lifted] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
   /* Il tratto e il riempimento dell'SVG non si forzano da soli: le guide
      prendono il colore dei collegamenti, distinto da quello della

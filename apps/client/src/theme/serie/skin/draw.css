@@ -413,6 +413,7 @@ button.draw-isolation-crumb:hover {
 .draw-inspector,
 .draw-history,
 .draw-boards,
+.draw-library,
 .draw-access {
   gap: var(--space-2);
   padding: var(--space-2) 0;
@@ -682,6 +683,78 @@ button.draw-isolation-crumb:hover {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
+}
+
+/* Le forme. Il riquadro di una forma ha un filo e, sotto il puntatore, il
+   fondo del passaggio; quello da cui si parte con le frecce ha l'anello del
+   fuoco quando c'è. L'anteprima è nel colore del testo, a contorno come la
+   forma che entra. In sola lettura i riquadri sbiadiscono e restano
+   raggiungibili: il clic dice perché non entrano. */
+.draw-library-header,
+.draw-library-find,
+.draw-library-heading,
+.draw-library-empty {
+  padding: 0 var(--space-4);
+}
+.draw-library-header {
+  gap: var(--space-1) var(--space-3);
+}
+.draw-library-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-library-count,
+.draw-library-empty {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-library-search {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.draw-library-group {
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+}
+.draw-library-heading {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-library-grid {
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+}
+.draw-library-tile {
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  transition:
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+.draw-library-tile:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-hover);
+}
+/* Il riquadro sollevato dal dito tenuto fermo: più grande di poco, con
+   l'ombra e il bordo della scelta, sopra i vicini. */
+.draw-library-tile[data-lifted] {
+  position: relative;
+  z-index: 1;
+  border-color: var(--accent);
+  background: var(--overlay-hover);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.1);
+}
+.draw-library-tile[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.draw-library-preview {
+  color: var(--text);
 }
 
 /* La verifica dell'accessibilità: la gravità è un segno e una parola, mai
