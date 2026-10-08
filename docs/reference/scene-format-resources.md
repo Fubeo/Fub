@@ -300,6 +300,88 @@ contenuto ([Disegni, punte delle linee](../product/drawing-tips.md)).
   e `marker-end` verso il marcatore del colore nuovo, e prima gli `add` di
   quelli che mancano (§9).
 
+### I ritagli e le maschere
+
+Un ritaglio d'immagine che FubDraw scrive è un `clipPath` privato con un
+`rect` solo, in `userSpaceOnUse` e senza `transform`, nelle coordinate
+dell'immagine: quelle di `x y width height`, dopo il suo `transform`
+([Disegni, ritagli e maschere](../product/drawing-masks.md)).
+
+- **Il rettangolo** sta dentro il riquadro dell'immagine, a due decimali
+  come la geometria, e dopo l'arrotondamento si riporta dentro: il file non
+  mostra mai un margine vuoto fuori dall'immagine. Spostare l'immagine sotto
+  il ritaglio cambia soltanto `x` e `y`. Un ritaglio senza margini non c'è:
+  `clip-path` si toglie, e con lui il `clipPath` privato.
+- **Riconoscerlo:** è un ritaglio d'immagine un `clipPath` che ha tutte
+  queste condizioni, e basta una a mancare perché non lo sia:
+  - nessun `transform` sul `clipPath`, e `clipPathUnits` assente o
+    `userSpaceOnUse`;
+  - un solo figlio che disegna, un `rect` (un titolo e una descrizione non
+    contano), senza `rx`, `ry`, `transform` e `display`;
+  - `x` e `y` che si leggono, o assenti e allora 0, e `width` e `height`
+    scritti, che si leggono e sono positivi;
+  - un rettangolo che tocca il riquadro dell'immagine con un'area: quello
+    che si legge è la parte comune.
+
+  Un ritaglio così si cambia come un ritaglio: sul posto se è privato e
+  soltanto dell'immagine; altrimenti l'immagine ne riceve uno suo, e l'altro
+  resta com'è. Ogni altro ritaglio di un'immagine si toglie soltanto.
+- **Le maschere:** una maschera di ritaglio è un `clipPath` privato con la
+  forma che ritaglia; una maschera d'opacità è una `mask` privata con la
+  forma o il gruppo che la fa, in `maskUnits="userSpaceOnUse"`. Le usa il
+  gruppo nuovo che contiene gli oggetti mascherati, con `clip-path` o
+  `mask`, e il contenuto sta nelle sue coordinate, con la trasformazione che
+  lo lascia dov'era.
+- **La regione** di una `mask` è per eccesso: `maskUnits="userSpaceOnUse"`
+  ritaglia, e fuori da dove il contenuto disegna la luminanza è nulla,
+  dunque una regione più larga non costa niente e una più stretta taglierebbe
+  il contenuto. Contiene il riquadro di ogni forma, con la sua trasformazione
+  e quelle dei gruppi, allargato del contorno: metà spessore, per il limite
+  delle punte di una giunzione a spigolo (`stroke-miterlimit`, 4 se non è
+  scritto; per un rettangolo, che ha angoli retti, √2) o per √2 se i capi sono
+  squadrati. Un testo vale un corpo di larghezza per carattere, più la
+  spaziatura, un corpo sopra la linea di base e 0,35 sotto, a partire
+  dall'ancora; il contorno si somma. La regione si arrotonda in fuori ai
+  centesimi.
+- **Il contenuto** non ha id, e scrive lo stile che ereditava, perché una
+  risorsa non eredita niente da chi la usa. In un `clipPath` scrive anche
+  `fill="#000000"` quando non aveva riempimento; i motivi diventano il loro
+  ripiego e i marcatori se ne vanno. In una `mask` non entrano motivi,
+  marcatori, ritagli, maschere e filtri.
+- **I contenitori da cui la forma esce:** l'opacità di quelli fra la forma
+  e il gruppo nuovo passa al contenuto di una `mask`, moltiplicata, come
+  `opacity` della radice del contenuto a quattro decimali: la forma si vede
+  con la stessa forza. Un ritaglio guarda solo la geometria e non la porta.
+  Se uno di quei contenitori ha un ritaglio, una maschera o un filtro la
+  maschera non si crea, perché la forma fuori da lì si vedrebbe diversa. Gli
+  altri oggetti entrano nel gruppo come con «Raggruppa»: si compensa la
+  trasformazione, e un contenitore che resta vuoto resta.
+- **Con un foglio di stile o un `style`** il contenuto si confronta con la
+  forma, con la cascata di CSS: ciò che una regola dava alla forma e dentro
+  la risorsa non arriverebbe, come il riempimento, il contorno o l'opacità,
+  si scrive sul contenuto come attributo. Se una regola vale anche dentro la
+  risorsa e cambierebbe il contenuto, o se la trasformazione la dà una
+  regola, la maschera non si crea. Il comando passa poi dal controllo che
+  tutto si veda com'era, come ogni comando che sposta elementi: gli
+  attributi `clip-path` e `mask` che scrive da sé sul gruppo nuovo, o che
+  toglie al gruppo che si scioglie, non contano come un effetto del foglio,
+  salvo che una regola dia proprio quella proprietà al gruppo, e allora
+  l'attributo non vincerebbe e il comando non si fa.
+- **Rilasciare** fa di ogni pezzo del contenuto un oggetto con id nuovi,
+  subito sopra chi lo usava, con la trasformazione di chi lo usava,
+  quella della risorsa e quella delle sue unità. Un pezzo di ritaglio senza
+  riempimento riceve `fill="none"`, e `clip-rule` se ne va. Il pezzo si vede
+  com'era dentro la risorsa: se i contenitori di chi lo usava gli darebbero
+  per eredità un altro stile, o una regola del foglio un'altra proprietà, si
+  scrive quello che aveva; se non si sa (la famiglia dei caratteri, o una
+  regola che un attributo non batte) il rilascio non si fa.
+- **Il riquadro** di una risorsa in `objectBoundingBox` è quello di chi la
+  usava, e vale soltanto se è esatto: lo è per le forme, le immagini e i
+  gruppi che le contengono, con le trasformazioni dei figli, senza il titolo,
+  la descrizione e ciò che è nascosto. Per un testo, che ha un ingombro che
+  si può solo stimare, o per parti di un altro programma, il rilascio non si
+  fa: i pezzi finirebbero fuori posto. Il rilascio è tutto o niente.
+
 ## 9. Le operazioni
 
 Le regole che tengono veri i riferimenti

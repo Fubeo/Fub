@@ -223,6 +223,32 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<path id="o8" d="M 136 144 L 204 124 L 204 124" fill="none" stroke="#1a202c" stroke-width="2" marker-end="url(#p14)"/></g>'),
   },
   {
+    // I ritagli e le maschere come li scrive FubDraw: un'immagine
+    // ritagliata, e una ruotata, il cui ritaglio gira con lei; una maschera
+    // di ritaglio, un cerchio, su un gruppo con un'immagine e una forma; un
+    // testo che ritaglia una sfumatura; una maschera d'opacità che sfuma un
+    // gruppo da sinistra a destra; e un livello col suo ritaglio, che taglia
+    // ciò che contiene.
+    id: "ritagli",
+    text: scene('<defs id="fub-defs">'
+      + '<clipPath id="c1" fub:role="private"><rect x="20" y="20" width="40" height="36"/></clipPath>'
+      + '<clipPath id="c2" fub:role="private"><rect x="90" y="16" width="36" height="24"/></clipPath>'
+      + '<clipPath id="c3" fub:role="private"><circle cx="196" cy="38" r="28"/></clipPath>'
+      + '<linearGradient id="g1" fub:role="private" x1="12" y1="0" x2="116" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#d55e00"/></linearGradient>'
+      + '<clipPath id="c4" fub:role="private"><text x="14" y="114" font-family="Inter" font-size="40" font-weight="700"><tspan x="14" dy="0">Clip</tspan></text></clipPath>'
+      + '<linearGradient id="g2" fub:role="private" x1="132" y1="0" x2="228" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient>'
+      + '<mask id="m1" fub:role="private" x="132" y="78" width="96" height="40" maskUnits="userSpaceOnUse"><rect x="132" y="78" width="96" height="40" fill="url(#g2) #808080"/></mask>'
+      + '<clipPath id="c5" fub:role="private"><rect x="12" y="126" width="216" height="26" rx="13"/></clipPath>'
+      + `</defs>${LAYER}`
+      + `<image id="o1" x="12" y="12" width="64" height="64" clip-path="url(#c1)" href="${CHECKER}"/>`
+      + `<image id="o2" x="84" y="8" width="48" height="40" clip-path="url(#c2)" transform="rotate(-15 108 28)" href="${CHECKER}"/>`
+      + `<g id="g3" clip-path="url(#c3)"><image id="o3" x="160" y="4" width="48" height="48" href="${CHECKER}"/><rect id="o4" x="184" y="30" width="48" height="40" fill="#009e73" stroke="#1a202c" stroke-width="3"/></g>`
+      + '<rect id="o5" x="12" y="80" width="104" height="42" fill="url(#g1) #6b6859" clip-path="url(#c4)"/>'
+      + '<g id="g4" mask="url(#m1)"><rect id="o6" x="132" y="82" width="96" height="32" rx="6" fill="#0072b2"/><circle id="o7" cx="180" cy="98" r="14" fill="#e69f00" stroke="#1a202c" stroke-width="2"/></g></g>'
+      + '<g id="l2" fub:layer="Ritagliato" clip-path="url(#c5)"><rect id="o8" x="0" y="120" width="120" height="40" fill="#cc79a7"/>'
+      + '<ellipse id="o9" cx="180" cy="139" rx="60" ry="22" fill="#56b4e9" stroke="#1a202c" stroke-width="4"/></g>'),
+  },
+  {
     // Tre tavole: due con la carta, bianca e azzurra, una senza, che mostra
     // il fondo. Le forme stanno sulle tavole, il testo su quella senza carta,
     // e un rettangolo passa sopra lo spazio fra le prime due.

@@ -148,6 +148,7 @@ export type Feature =
   | "gestures"
   | "links"
   | "images"
+  | "crop"
   | "properties"
   | "style"
   | "history"
@@ -160,6 +161,7 @@ export type Feature =
   | "path"
   | "boolean"
   | "trace"
+  | "masks"
   | "typeset";
 
 export interface FeatureSpec {
@@ -189,6 +191,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "gestures", level: "standard", label: "draw.feature.gestures" },
   { id: "links", level: "standard", label: "draw.feature.links" },
   { id: "images", level: "standard", label: "draw.feature.images" },
+  { id: "crop", level: "standard", label: "draw.feature.crop" },
   { id: "properties", level: "standard", label: "draw.feature.properties" },
   { id: "style", level: "standard", label: "draw.feature.style" },
   { id: "history", level: "standard", label: "draw.feature.history" },
@@ -201,6 +204,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "path", level: "expert", label: "draw.feature.path" },
   { id: "boolean", level: "expert", label: "draw.feature.boolean" },
   { id: "trace", level: "expert", label: "draw.feature.trace" },
+  { id: "masks", level: "expert", label: "draw.feature.masks" },
   { id: "typeset", level: "expert", label: "draw.feature.typeset" },
 ];
 

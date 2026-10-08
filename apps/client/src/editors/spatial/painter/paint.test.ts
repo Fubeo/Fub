@@ -441,6 +441,16 @@ describe("le risorse", () => {
     expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o1", "o2", "o3", "o4", "o5", "o6", "g2", "o8"]);
   });
 
+  it("della scena dei ritagli sono tutte vive, come gli oggetti e il livello che le usano", () => {
+    const scene = sceneOf(FIDELITY.find((each) => each.id === "ritagli")!.text);
+    expect(kinds(scene)).toEqual(["live"]);
+    expect(ids(scene.resources)).toEqual(["c1", "c2", "c3", "g1", "c4", "g2", "m1", "c5"]);
+    const [first, second] = live(scene, 0).nodes as [PaintGroup, PaintGroup];
+    expect(first.children.map((node) => node.id)).toEqual(["o1", "o2", "g3", "o5", "g4"]);
+    expect(second.attrs).toContainEqual(["clip-path", "url(#c5)"]);
+    expect(second.children.map((node) => node.id)).toEqual(["o8", "o9"]);
+  });
+
   it("restano gli stessi oggetti finché non cambiano, anche in un motore riaperto", () => {
     const source = doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000"/><rect id="b" width="1" height="1"/></g>`);
     const engine = SceneEngine.open(source);

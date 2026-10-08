@@ -38,6 +38,11 @@
 //   un motivo, un marcatore, una sfumatura ereditata da chi lo contiene o
 //   che ne usa un'altra vivono nelle coordinate di chi li usa, e nella
 //   geometria nuova si vedrebbero altrove.
+// - **Un ritaglio va con l'immagine.** Un'immagine ritagliata da un
+//   ritaglio suo (privato, di lei soltanto, un rettangolo) prende la
+//   trasformazione come quella senza ritaglio, e il rettangolo passa nelle
+//   coordinate nuove con la stessa scala. Ogni altro ritaglio vive nelle
+//   coordinate di chi lo usa, e l'immagine tiene la sua trasformazione.
 // - **Niente che il file non sappia scrivere.** Un oggetto la cui geometria
 //   nuova non si rileggerebbe, o il cui resto non si scrive in `matrix()`
 //   (come in «Trasforma»), resta com'è. Un percorso con una forma o uno
@@ -56,9 +61,10 @@ import type { Op } from "../scene/ops";
 import { polygonalAttrs } from "../scene/parametric";
 import { spineOf } from "../scene/varwidth";
 import { pathData, type Elem } from "../scene/serialize";
-import { length, nonNegativeLength, paintReference, points as parsePoints, transform as parseTransform, trim, urlIds } from "../scene/values";
+import { length, nonNegativeLength, paintReference, points as parsePoints, reference, transform as parseTransform, trim, urlIds } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
 import { fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
+import { cropState, rectChanges, writeRect, type Crop } from "./crop";
 import { transformValue, type NewIds } from "./edit";
 import { movedCopy, movedPlace, paintFollows, placeChanges } from "./gradients";
 import type { Unit } from "./hit";
@@ -429,6 +435,9 @@ function radiiAfter(own: ReadonlyMap<string, string>, taken: Matrix): Point {
 interface Change {
   readonly node: ElementPart;
   readonly attrs: Record<string, string | null>;
+  /// Il figlio di `node` che cambia, per una risorsa: il suo posto fra i
+  /// figli elemento.
+  readonly part?: number;
 }
 
 /// Ciò che diventa un oggetto: i cambi, le sfumature nuove che usano, e se
@@ -471,6 +480,14 @@ class Resources {
     this.users ??= usersOf(this.model);
     return this.users.get(id) === 1;
   }
+
+  /// Il ritaglio di `node`, un'immagine, se lo porta con sé: un ritaglio
+  /// che FubDraw cambia, privato e soltanto suo.
+  crop(node: ElementPart): { readonly clip: LeafNode; readonly crop: Crop } | null {
+    const state = node.details?.role === "image" ? cropState(this.model, node) : null;
+    const clip = state?.kind === "crop" ? this.byId.get(state.clip) : undefined;
+    return state?.kind === "crop" && clip !== undefined && clip.details?.lifecycle === "private" && this.alone(state.clip) ? { clip, crop: state.crop } : null;
+  }
 }
 
 /// Le sfumature che `node`, coi suoi attributi `own`, mostra come colore e
@@ -481,15 +498,18 @@ class Resources {
 /// eredita da chi lo contiene, e che vale anche per gli altri.
 function paintsOf(node: ElementPart, own: ReadonlyMap<string, string>, from: Inherited, resources: Resources): Map<string, boolean> | null {
   const used = new Set<string>();
+  // Il ritaglio di un'immagine che passa con lei non conta fra i rimandi.
+  const cropped = resources.crop(node)?.clip.facts.id ?? null;
   for (const [name, value] of own) {
     if (urlIds(value).length === 0) continue;
+    if (name === "clip-path" && cropped !== null && reference(value) === cropped) continue;
     const paint = name === "fill" || name === "stroke" ? paintReference(value) : null;
     if (paint === null) return null;
     used.add(paint.id);
   }
   // Un rimando che non viene dai colori: da una parte, da un `href`, da un
   // attributo con un prefisso.
-  if ((node.kind === "leaf" ? node.refs : node.facts.refs).some((id) => !used.has(id))) return null;
+  if ((node.kind === "leaf" ? node.refs : node.facts.refs).some((id) => !used.has(id) && id !== cropped)) return null;
   const out = new Map<string, boolean>();
   for (const id of used) {
     const resource = resources.byId.get(id);
@@ -547,6 +567,22 @@ function carry(node: ElementPart, own: ReadonlyMap<string, string>, paints: Read
   return carried;
 }
 
+/// Il rettangolo del ritaglio `clip`, la parte `crop` di un'immagine, per
+/// la geometria `m` che l'immagine prende e il riquadro che `attrs` le dà:
+/// ciò che cambia nel rettangolo, scritto dentro il nuovo riquadro. `null`
+/// se non si scrive.
+function movedCrop(clip: LeafNode, crop: Crop, m: Matrix, attrs: Readonly<Record<string, string | null>>): (Change & { readonly attrs: Record<string, string>; readonly part: number }) | null {
+  const [x0, y0] = apply(m, crop.rect.min);
+  const [x1, y1] = apply(m, crop.rect.max);
+  const [x, y, width, height] = (["x", "y", "width", "height"] as const).map((name) => Number(attrs[name]));
+  const written = writeRect(
+    { min: [x!, y!], max: [x! + width!, y! + height!] },
+    { min: [Math.min(x0, x1), Math.min(y0, y1)], max: [Math.max(x0, x1), Math.max(y0, y1)] },
+  );
+  const changes = written === null ? null : rectChanges(clip, written.rect);
+  return changes === null ? null : { node: clip, attrs: changes.attrs, part: changes.part };
+}
+
 // ---------------------------------------------------------------------------
 // Gli oggetti.
 // ---------------------------------------------------------------------------
@@ -598,6 +634,14 @@ function bake(node: ElementPart, pushed: Matrix | null, from: Inherited, resourc
   // I colori rivolti alle copie valgono quanto quelli di prima.
   const carried = carry(node, own, paints, reshaped.geometry, resources);
   if (carried === null) return kept();
+  // Il ritaglio dell'immagine passa nelle coordinate nuove con la stessa
+  // scala: un rettangolo resta un rettangolo.
+  const cropped = role === "image" ? resources.crop(node) : null;
+  if (cropped !== null) {
+    const moved = movedCrop(cropped.clip, cropped.crop, reshaped.geometry, attrs);
+    if (moved === null) return kept();
+    if (Object.keys(moved.attrs).length > 0) carried.changes.push(moved);
+  }
   Object.assign(attrs, carried.attrs);
   // Ciò che resta uguale non si scrive, e uno zero assente resta assente.
   const fub = Object.keys(attrs).some((name) => name.startsWith("fub:")) ? fubAttributes(node) : null;
@@ -688,7 +732,9 @@ export function applyOps(model: DocumentModel, units: readonly Unit[], ids: NewI
     // Un oggetto scelto non ha un gruppo che gli passi qualcosa: `bake` lo
     // fa sempre.
     const baked = bake(node, null, inheritedOf(node), resources)!;
-    for (const change of baked.changes) sets.push({ op: "set", id: plan.idOf(change.node), attrs: change.attrs });
+    for (const change of baked.changes) {
+      sets.push({ op: "set", id: plan.idOf(change.node), ...(change.part === undefined ? {} : { part: [change.part] }), attrs: change.attrs });
+    }
     copies.push(...baked.copies);
     if (baked.changes.length > 0) changed++;
     if (baked.kept) kept++;

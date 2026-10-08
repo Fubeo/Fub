@@ -75,6 +75,14 @@ dice al posto dei pixel, oppure la dichiara decorativa, da saltare. Si può
 anche lasciarla senza, e ritrovarla poi fra i problemi della verifica:
 [Disegni, accessibilità](drawing-accessibility.md#la-descrizione-allinserimento).
 
+## Ritagliare
+
+Dal [livello Standard](drawing.md#il-livello-standard) «Ritaglia…», o due
+tocchi sull'immagine, ne sceglie la parte da mostrare: l'immagine resta
+intera nel file, e il ritaglio si cambia o si toglie quando si vuole.
+All'Esperto le maschere ritagliano o sfumano anche le immagini con una
+forma: [Disegni, ritagli e maschere](drawing-masks.md).
+
 ## Ricalcare
 
 Dal [livello Esperto](drawing-expert.md), «Ricalca immagine…» fa di

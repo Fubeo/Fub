@@ -573,6 +573,73 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  it("mostra un ritaglio che si regola: l'immagine intera attenuata e sopra la parte che resta, senza il ritaglio che ha", async () => {
+    const engine = SceneEngine.open(
+      doc(
+        `<defs id="fub-defs"><clipPath id="k" fub:role="private"><rect x="10" y="10" width="20" height="20"/></clipPath></defs>${LAYER}` +
+          `<image id="i" x="0" y="0" width="80" height="40" transform="rotate(30)" clip-path="url(#k)" href="data:image/png;base64,iVBORw0KGgo="/><circle id="c" r="2"/></g>`,
+      ),
+    );
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const image = host.querySelector(`[data-scene-id="i"]`) as SVGElement;
+    const [paint] = builder.paintsOf(engine.holder("i")!);
+    painter.setCrops(new Map([[paint!, { box: { min: [5, 0], max: [85, 40] }, rect: { min: [20, 5], max: [60, 35] } }]]));
+    expect(image.style.visibility).toBe("hidden");
+    const whole = image.nextElementSibling as SVGElement;
+    expect(whole.localName).toBe("g");
+    expect(whole.style.opacity).toBe("0.3");
+    const ghost = whole.firstElementChild as SVGElement;
+    const kept = whole.nextElementSibling as SVGElement;
+    for (const copy of [ghost, kept]) {
+      expect(copy.localName).toBe("image");
+      expect([copy.getAttribute("x"), copy.getAttribute("y"), copy.getAttribute("width"), copy.getAttribute("height")]).toEqual(["5", "0", "80", "40"]);
+      expect(copy.getAttribute("transform")).toBe("rotate(30)");
+      expect(copy.getAttribute("href")).toBe("data:image/png;base64,iVBORw0KGgo=");
+      expect(copy.hasAttribute("data-scene-id")).toBe(false);
+      expect(copy.style.visibility).toBe("");
+    }
+    expect(ghost.hasAttribute("clip-path")).toBe(false);
+    const id = /^url\(#(.+)\)$/.exec(kept.getAttribute("clip-path") ?? "")?.[1];
+    const clip = id === undefined ? null : document.getElementById(id);
+    expect(clip?.localName).toBe("clipPath");
+    expect(clip?.innerHTML).toBe('<rect x="20" y="5" width="40" height="30"></rect>');
+    painter.setCrops(null);
+    expect(image.nextElementSibling?.localName).toBe("circle");
+    expect(image.style.visibility).toBe("");
+    expect(id === undefined ? null : document.getElementById(id)).toBeNull();
+    painter.dispose();
+  });
+
+  it("tiene le copie del ritaglio sull'URL dell'immagine, anche se arriva dopo che il ritaglio è aperto", async () => {
+    let arrive: (url: string) => void = () => {};
+    const engine = SceneEngine.open(doc(`${LAYER}<image id="i" x="0" y="0" width="80" height="40" href="foto.png"/></g>`));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner, {
+      images: () => new Promise<string | null>((resolve) => (arrive = resolve)),
+    });
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const image = host.querySelector(`[data-scene-id="i"]`) as SVGElement;
+    const [paint] = builder.paintsOf(engine.holder("i")!);
+    const crop = { box: { min: [0, 0], max: [80, 40] }, rect: { min: [10, 5], max: [60, 35] } } as const;
+    painter.setCrops(new Map([[paint!, crop]]));
+    const whole = image.nextElementSibling as SVGElement;
+    const copies = (): Array<string | null> => [whole.firstElementChild!.getAttribute("href"), whole.nextElementSibling!.getAttribute("href")];
+    expect(copies()).toEqual([null, null]);
+    arrive("fub-asset://lease/7");
+    await decoded();
+    expect(image.getAttribute("href")).toBe("fub-asset://lease/7");
+    expect(copies()).toEqual(["fub-asset://lease/7", "fub-asset://lease/7"]);
+    // Rifatte dal ritaglio che cambia, le copie partono dall'URL che c'è.
+    painter.setCrops(new Map([[paint!, { ...crop, rect: { min: [20, 5], max: [60, 35] } }]]));
+    expect(image.nextElementSibling!.firstElementChild!.getAttribute("href")).toBe("fub-asset://lease/7");
+    painter.setCrops(null);
+    painter.dispose();
+  });
+
   it("mostra il tracciato di un testo con un altro d, e lo riporta", async () => {
     const engine = SceneEngine.open(
       doc(`<defs id="fub-defs"><path id="r" fub:role="private" d="M 0 50 L 200 50"/></defs>${LAYER}<text id="t" font-size="10"><textPath href="#r">Sul colle</textPath></text></g>`),
@@ -843,6 +910,49 @@ describe("lo strato sopra la scena", () => {
     overlay.setHandles([{ kind: "measure", from: [390, 298], to: [395, 298], text: "5" }]);
     overlay.flush();
     expect(texts()).toEqual([["fillText", "5", 790, 590.5]]);
+  });
+
+  it("disegna il ritaglio col bordo, i segni agli angoli e a metà dei lati, mai più lunghi di un quarto del lato, e i terzi solo se li chiede", () => {
+    const calls: Array<readonly [string, ...unknown[]]> = [];
+    const context = new Proxy({} as Record<string | symbol, unknown>, {
+      get: (target, name) => {
+        if (name in target) return target[name];
+        return (...args: unknown[]) => void calls.push([String(name), ...args]);
+      },
+      set: (target, name, value) => {
+        target[name] = value;
+        return true;
+      },
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as never);
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 1);
+    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation(() => undefined);
+    const overlay = createOverlay(host, owner);
+    overlay.setView({ scale: 1, angle: 0, tx: 0, ty: 0 });
+    const crop = { kind: "crop", x: 0, y: 0, width: 100, height: 40, matrix: [1, 0, 0, 1, 0, 0], thirds: false } as const;
+    overlay.setHandles([crop]);
+    overlay.flush();
+    const paths = (): unknown[][] => {
+      const out: unknown[][] = [];
+      for (const [name, ...args] of calls) {
+        if (name === "beginPath") out.push([]);
+        else if (name === "moveTo" || name === "lineTo") out[out.length - 1]!.push([name[0], ...args.map((n) => Math.round((n as number) * 1000) / 1000)]);
+      }
+      return out;
+    };
+    const [border, marks] = paths();
+    expect(border).toEqual([["m", 0, 0], ["l", 100, 0], ["l", 100, 40], ["l", 0, 40]]);
+    // In alto a sinistra il braccio corto sul lato di 40 e quello lungo su
+    // quello di 100, poi il segno a metà del lato in alto.
+    expect(marks!.slice(0, 5)).toEqual([["m", 0, 10], ["l", 0, 0], ["l", 16, 0], ["m", 42, 0], ["l", 58, 0]]);
+    expect(marks).toHaveLength(20);
+    calls.length = 0;
+    overlay.setHandles([{ ...crop, thirds: true }]);
+    overlay.flush();
+    expect(paths()[1]).toEqual([
+      ["m", 33.333, 0], ["l", 33.333, 40], ["m", 0, 13.333], ["l", 100, 13.333],
+      ["m", 66.667, 0], ["l", 66.667, 40], ["m", 0, 26.667], ["l", 100, 26.667],
+    ]);
   });
 });
 

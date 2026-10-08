@@ -10,8 +10,9 @@
 // sempre un errore, qualunque sia il sistema. Prima del corpus il banco
 // prova sé stesso: una differenza messa apposta in una strada sola, un
 // colore, un carattere, un corsivo, un tratteggio, le risorse, i campioni,
-// le sfumature e le punte che mancano, le carte delle tavole che mancano,
-// una tavola mostrata senza ritaglio, deve farlo diventare rosso.
+// le sfumature, le punte, i ritagli e le maschere che mancano, le carte
+// delle tavole che mancano, una tavola mostrata senza ritaglio, deve farlo
+// diventare rosso.
 //
 // # La soglia
 //
@@ -53,6 +54,7 @@ const PLANTED = [
   ["campioni", "ripiego"],
   ["sfumature", "ripiego"],
   ["punte", "ripiego"],
+  ["ritagli", "ripiego"],
   ["tavole", "carta"],
   ["tavola-sola", "ritaglio"],
 ];

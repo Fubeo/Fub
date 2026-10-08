@@ -8,10 +8,11 @@ import { describe, expect, it } from "vitest";
 import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import { doc } from "../scene/test-support";
 import type { Op } from "../scene/ops";
-import { groupOps, linkOps, orderOps, ungroupOps, unlinkOps, type Arranged } from "./arrange";
+import { groupOps, linkOps, orderOps, ungroupOps, unlinkOps, unwrapOps, type Arranged } from "./arrange";
 import { gesture, NewIds } from "./edit";
 import { intoLayerOps } from "./layers";
-import { keepLook, refused, type Keeping, type Kept, type Refusal } from "./styled";
+import { clipMaskOps, opacityMaskOps, releaseOps } from "./masks";
+import { keepCarried, keepLook, refused, type Keeping, type Kept, type Refusal } from "./styled";
 import { appearance, LAYER, open, type Opened } from "./test-support";
 
 const ids = (opened: Opened): NewIds => new NewIds((id) => opened.engine.holder(id) !== null);
@@ -236,5 +237,112 @@ describe("senza fogli", () => {
   it("i fogli che non sono CSS non contano", () => {
     const [opened, ops] = ungrouping(doc(`<style type="text/x-other">#m rect{fill:red}</style>${LAYER}<g id="m"><rect id="oaaaaaaaa" width="1" height="1"/><rect id="obbbbbbbb" width="1" height="1"/></g></g>`));
     expect(kept(opened, ops)[1].written).toBe(0);
+  });
+});
+
+describe("le maschere in un disegno con un foglio di stile", () => {
+  const EFFECTS = ["clip-path", "mask"] as const;
+  const IMAGE = '<image id="i" x="0" y="0" width="100" height="100" href="data:image/png;base64,AA=="/>';
+  const SHAPE = '<rect id="m" x="10" y="10" width="50" height="50" fill="#ffffff"/>';
+  const MASK = '<mask id="k1" fub:role="private"><rect x="0" y="0" width="40" height="40"/></mask>';
+  const DEFS = (inner: string): string => `<defs id="fub-defs">${inner}</defs>`;
+  const sheet = (css: string): string => `<style>${css}</style>`;
+
+  /// Le operazioni di `make` su immagine e forma, in un disegno con il foglio `css`.
+  function creating(css: string, make: typeof clipMaskOps): [Opened, readonly Op[]] {
+    const opened = open(doc(`${sheet(css)}${LAYER}${IMAGE}${SHAPE}</g>`));
+    const units = ["i", "m"].map((key) => opened.index.get(key)!);
+    return [opened, opsOf(make(opened.engine.model!, units, ids(opened)) as Arranged)];
+  }
+
+  /// Le operazioni di rilascio dell'immagine mascherata, in un disegno con il foglio `css`.
+  function releasing(css: string, group = false): [Opened, readonly Op[]] {
+    const body = group ? `<g id="gg" mask="url(#k1)">${IMAGE}</g>` : `<image id="i" x="0" y="0" width="100" height="100" href="data:image/png;base64,AA==" mask="url(#k1)"/>`;
+    const opened = open(doc(`${sheet(css)}${DEFS(MASK)}${LAYER}${body}</g>`));
+    const units = [opened.index.get(group ? "gg" : "i")!];
+    return [opened, opsOf(releaseOps(opened.engine.model!, units, ids(opened)))];
+  }
+
+  /// `ops` dopo `keepLook` con gli effetti `effects` del comando, applicate e disfatte; il testo di dopo.
+  function accepted(opened: Opened, ops: readonly Op[], effects: readonly string[] | undefined): string {
+    const before = opened.engine.text;
+    const result = keepLook(before, opened.engine.model!, ops, { ...keeping(opened), ...(effects === undefined ? {} : { effects }) });
+    if (refused(result)) throw new Error(`rifiutato: ${JSON.stringify(result)}`);
+    const outcome = opened.engine.apply(gesture(result.ops)!);
+    if (outcome.outcome !== "applied") throw new Error(`il motore rifiuta: ${outcome.detail}`);
+    const after = opened.engine.text;
+    expect(opened.engine.undo(outcome.undo).outcome).toBe("applied");
+    expect(opened.engine.text).toBe(before);
+    return after;
+  }
+
+  const refusing = (opened: Opened, ops: readonly Op[], effects: readonly string[] | undefined): Refusal => {
+    const result = keepLook(opened.engine.text, opened.engine.model!, ops, { ...keeping(opened), ...(effects === undefined ? {} : { effects }) });
+    if (!refused(result)) throw new Error("accettato");
+    return result;
+  };
+
+  it("un foglio che non tocca niente: creare un ritaglio si accetta con gli effetti del comando, e senza no", () => {
+    const [opened, ops] = creating(".zzz { fill: red }", clipMaskOps);
+    expect(refusing(opened, ops, undefined)).toEqual({ kind: "new", property: "clip-path" });
+    expect(accepted(opened, ops, EFFECTS)).toContain('clip-path="url(#');
+  });
+
+  it("e una maschera d'opacità lo stesso", () => {
+    const [opened, ops] = creating(".zzz { fill: red }", opacityMaskOps);
+    expect(refusing(opened, ops, undefined)).toEqual({ kind: "new", property: "mask" });
+    expect(accepted(opened, ops, EFFECTS)).toContain('mask="url(#');
+  });
+
+  it("rilasciare una maschera si accetta con gli effetti del comando; senza, il gruppo che perde la maschera la perde per il foglio", () => {
+    const [opened, ops] = releasing(".zzz { fill: red }", true);
+    expect(refusing(opened, ops, undefined)).toEqual({ kind: "lost", property: "mask" });
+    expect(accepted(opened, ops, EFFECTS)).not.toContain('id="gg"');
+    const [single, singleOps] = releasing(".zzz { fill: red }");
+    expect(accepted(single, singleOps, EFFECTS)).not.toContain('mask="url(#k1)"');
+  });
+
+  it("una regola che dà l'effetto al contenitore nuovo lo vince sull'attributo: si rifiuta", () => {
+    const [group, groupOps_] = creating("g { mask: none }", opacityMaskOps);
+    expect(refusing(group, groupOps_, EFFECTS)).toEqual({ kind: "new", property: "mask" });
+    const [none, noneOps] = creating("g{clip-path:none}", clipMaskOps);
+    expect(refusing(none, noneOps, EFFECTS)).toEqual({ kind: "new", property: "clip-path" });
+    const [groups, groupsOps] = creating("g { clip-path: inset(0) }", clipMaskOps);
+    expect(refusing(groups, groupsOps, EFFECTS)).toEqual({ kind: "new", property: "clip-path" });
+    // Dato a tutto, anche alla forma che passa nel contenuto: si rifiuta lo stesso.
+    const [all, allOps] = creating("* { clip-path: inset(0) }", clipMaskOps);
+    expect(refusing(all, allOps, EFFECTS).kind).toMatch(/^(new|lost)$/);
+    // Un effetto che il comando non scrive non si salta: la regola per il filtro lo trova.
+    const [filtered, filteredOps] = creating("g { filter: blur(1px) }", clipMaskOps);
+    expect(refusing(filtered, filteredOps, EFFECTS)).toEqual({ kind: "new", property: "filter" });
+  });
+
+  it("una regola che dà la maschera al contenitore che se ne va: il rilascio non la toglie, e si rifiuta", () => {
+    const [opened, ops] = releasing("#gg { mask: url(#k1) }", true);
+    expect(refusing(opened, ops, EFFECTS)).toEqual({ kind: "lost", property: "mask" });
+  });
+
+  it("separare un gruppo con una maschera si rifiuta ancora: «Separa» non dichiara gli effetti", () => {
+    const opened = open(doc(`${sheet(".zzz { fill: red }")}${DEFS(MASK)}${LAYER}<g id="gg" mask="url(#k1)">${IMAGE}${SHAPE}</g></g>`));
+    // «Separa» non propone un gruppo con una maschera: qui si forza, come farebbe un comando che lo scioglie.
+    const ops = opsOf(unwrapOps(opened.engine.model!, [opened.index.get("gg")!], ids(opened), () => true));
+    expect(refusing(opened, ops, undefined)).toEqual({ kind: "lost", property: "mask" });
+  });
+
+  it("senza fogli le operazioni passano come sono, con o senza gli effetti", () => {
+    const opened = open(doc(`${LAYER}${IMAGE}${SHAPE}</g>`));
+    const ops = opsOf(opacityMaskOps(opened.engine.model!, ["i", "m"].map((key) => opened.index.get(key)!), ids(opened)) as Arranged);
+    for (const effects of [undefined, EFFECTS]) {
+      const result = keepLook(opened.engine.text, opened.engine.model!, ops, { ...keeping(opened), ...(effects === undefined ? {} : { effects }) });
+      expect(refused(result)).toBe(false);
+      if (!refused(result)) expect(result.ops).toEqual(ops);
+    }
+  });
+
+  it("le copie del contenuto con lo stile che avevano: `keepCarried` non scrive dove non serve", () => {
+    const opened = open(doc(`${LAYER}${IMAGE}${SHAPE}</g>`));
+    expect(keepCarried(opened.engine.model!, [], [])).toEqual({ ops: [], written: 0 });
+    const styled = open(doc(`${sheet(".zzz { fill: red }")}${LAYER}${IMAGE}${SHAPE}</g>`));
+    expect(keepCarried(styled.engine.model!, [], [])).toEqual({ ops: [], written: 0 });
   });
 });

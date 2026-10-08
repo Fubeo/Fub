@@ -11,6 +11,7 @@ import { parsePath, type Bounds } from "../scene/geometry";
 import { apply, toRadians, type Matrix } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import { applyOps, type Applied } from "./apply";
+import { cropState } from "./crop";
 import { gesture, NewIds } from "./edit";
 import { paintedParts, type GradientPlace, type PaintChannel } from "./gradients";
 import type { SceneIndex } from "./hit";
@@ -533,6 +534,119 @@ describe("«Applica trasformazione» con le risorse", () => {
     const opened = open(doc(`${DEFS}${LAYER}<g id="g" clip-path="url(#rcccccccc)" transform="translate(5 0)"><rect id="r" x="0" y="0" width="10" height="10" transform="translate(0 5)"/></g></g>`));
     const text = written(opened, applied(opened));
     expect(text).toContain('<g id="g" clip-path="url(#rcccccccc)" transform="translate(5 0)"><rect id="r" x="0" y="5" width="10" height="10"/></g>');
+  });
+});
+
+describe("«Applica trasformazione» con un'immagine ritagliata", () => {
+  const HREF = "data:image/png;base64,AA==";
+  const DEFS = (clip: string): string => `<defs id="fub-defs">${clip}</defs>`;
+  const CLIP = (rect: string, attrs = ' fub:role="private"'): string => `<clipPath id="c1"${attrs}>${rect}</clipPath>`;
+  const RECT = '<rect x="20" y="30" width="60" height="40"/>';
+  const IMAGE = (id: string, transform: string, extra = ""): string =>
+    `<image id="${id}" x="10" y="20" width="100" height="80" preserveAspectRatio="none" href="${HREF}"${extra} clip-path="url(#c1)" transform="${transform}"/>`;
+
+  /// Gli attributi dell'elemento di id `id` nel testo.
+  function attrsOf(text: string, id: string): Record<string, string> {
+    const tag = new RegExp(`<[a-zA-Z]+ id="${id}"[^>]*>`).exec(text);
+    if (tag === null) throw new Error(`nessun elemento ${id}`);
+    return Object.fromEntries([...tag[0].matchAll(/([a-zA-Z:-]+)="([^"]*)"/g)].map((found) => [found[1]!, found[2]!]));
+  }
+
+  it("porta con l'immagine il ritaglio che è solo suo: il rettangolo scala come lei, nello stesso passo", () => {
+    const opened = open(doc(`${DEFS(CLIP(RECT))}${LAYER}${IMAGE("i", "translate(5 5) scale(2 3)")}</g>`));
+    const change = applied(opened);
+    expect(change).toMatchObject({ changed: 1, kept: 0 });
+    // Un passo solo: il rettangolo cambia con part, l'immagine con la sua posizione.
+    expect(change.ops).toEqual([
+      { op: "set", id: "i", attrs: { x: "25", y: "65", width: "200", height: "240", transform: null } },
+      { op: "set", id: "c1", part: [0], attrs: { x: "45", y: "95", width: "120", height: "120" } },
+    ]);
+    const text = written(opened, change);
+    expect(attrsOf(text, "i")).toEqual({ id: "i", x: "25", y: "65", width: "200", height: "240", preserveAspectRatio: "none", href: HREF, "clip-path": "url(#c1)" });
+    expect(text).toContain('<clipPath id="c1" fub:role="private">');
+    expect(text).toMatch(/<rect x="45" y="95" width="120" height="120"\/>/);
+    // Il ritaglio è dove era: dentro l'immagine, con gli stessi margini scalati.
+    const state = cropState(opened.engine.model!, opened.engine.holder("i")!);
+    expect(state).toEqual({ kind: "crop", clip: "c1", crop: { box: { min: [25, 65], max: [225, 305] }, rect: { min: [45, 95], max: [165, 215] } } });
+  });
+
+  it("il ritaglio scala lungo gli assi anche se l'immagine tiene il resto della trasformazione", () => {
+    const opened = open(doc(`${DEFS(CLIP('<rect x="3" y="4" width="5" height="2"/>'))}${LAYER}<image id="i" x="1" y="1" width="10" height="10" href="${HREF}" clip-path="url(#c1)" transform="scale(2 3)"/></g>`));
+    const change = applied(opened);
+    const text = written(opened, change);
+    const image = attrsOf(text, "i");
+    expect(image).toMatchObject({ x: "2.45", y: "2.45", width: "24.49", height: "24.49", transform: "matrix(0.8165 0 0 1.2247 0 0)" });
+    const rect = attrsOf(text, "c1") && /<rect x="([^"]*)" y="([^"]*)" width="([^"]*)" height="([^"]*)"\/>/.exec(text)!;
+    const [x, y, w, h] = rect.slice(1).map(Number) as [number, number, number, number];
+    // Il rettangolo, nelle coordinate dell'immagine ora, con la sua trasformazione, copre ciò che copriva:
+    // da (6, 12) a (16, 18) nel disegno.
+    const residual: Matrix = [0.8165, 0, 0, 1.2247, 0, 0];
+    const corners = [apply(residual, [x, y]), apply(residual, [x + w, y + h])];
+    expect(corners[0]![0]).toBeCloseTo(6, 1);
+    expect(corners[0]![1]).toBeCloseTo(12, 1);
+    expect(corners[1]![0]).toBeCloseTo(16, 1);
+    expect(corners[1]![1]).toBeCloseTo(18, 1);
+    // E sta dentro l'immagine scritta.
+    const [ix, iy, iw, ih] = [Number(image.x), Number(image.y), Number(image.width), Number(image.height)];
+    expect(x).toBeGreaterThanOrEqual(ix);
+    expect(y).toBeGreaterThanOrEqual(iy);
+    expect(x + w).toBeLessThanOrEqual(ix + iw);
+    expect(y + h).toBeLessThanOrEqual(iy + ih);
+  });
+
+  it("un ribaltamento resta nell'immagine, e il ritaglio scala col suo valore assoluto, nello stesso riferimento", () => {
+    const opened = open(doc(`${DEFS(CLIP(RECT))}${LAYER}${IMAGE("i", "scale(-2 1)")}</g>`));
+    const change = applied(opened);
+    const text = written(opened, change);
+    expect(attrsOf(text, "i")).toMatchObject({ x: "20", y: "20", width: "200", height: "80", transform: "matrix(-1 0 0 1 0 0)" });
+    expect(text).toMatch(/<rect x="40" y="30" width="120" height="40"\/>/);
+  });
+
+  it("una rotazione resta nell'immagine, e il ritaglio scala con la scala che l'immagine assorbe", () => {
+    const opened = open(doc(`${DEFS(CLIP(RECT))}${LAYER}${IMAGE("i", "rotate(30) scale(2)")}</g>`));
+    const text = written(opened, applied(opened));
+    expect(attrsOf(text, "i")).toMatchObject({ x: "20", y: "40", width: "200", height: "160", transform: "matrix(0.866 0.5 -0.5 0.866 0 0)" });
+    expect(text).toMatch(/<rect x="40" y="60" width="120" height="80"\/>/);
+  });
+
+  it("tiene la trasformazione di un'immagine il cui ritaglio è condiviso con altri", () => {
+    const opened = open(doc(`${DEFS(CLIP(RECT))}${LAYER}${IMAGE("i", "scale(2)")}${IMAGE("j", "scale(3)")}</g>`));
+    const change = applied(opened);
+    expect(change).toMatchObject({ ops: [], changed: 0, kept: 2 });
+    const text = opened.engine.text;
+    expect(attrsOf(text, "i").transform).toBe("scale(2)");
+    expect(attrsOf(text, "j").transform).toBe("scale(3)");
+  });
+
+  it("tiene la trasformazione di un'immagine il cui ritaglio non è di FubDraw, o non è un ritaglio semplice", () => {
+    for (const [clip, label] of [
+      [CLIP(RECT, ""), "di un altro"],
+      [CLIP(RECT, ' fub:role="shared"'), "condiviso"],
+      [CLIP('<rect x="20" y="30" width="60" height="40" rx="5"/>'), "con gli angoli arrotondati"],
+      [CLIP('<circle cx="50" cy="50" r="20"/>'), "di un cerchio"],
+    ] as const) {
+      const opened = open(doc(`${DEFS(clip)}${LAYER}${IMAGE("i", "scale(2)")}</g>`));
+      const change = applied(opened);
+      expect(change, label).toMatchObject({ ops: [], changed: 0, kept: 1 });
+      expect(attrsOf(opened.engine.text, "i").transform, label).toBe("scale(2)");
+    }
+  });
+
+  it("una trasformazione senza scala non tocca il ritaglio", () => {
+    const opened = open(doc(`${DEFS(CLIP(RECT))}${LAYER}${IMAGE("i", "rotate(30)")}</g>`));
+    const change = applied(opened);
+    expect(change.ops.map((op) => (op.op === "set" ? op.id : op.op))).toEqual(["i"]);
+    expect(attrsOf(written(opened, change), "i").transform).toBe("matrix(0.866 0.5 -0.5 0.866 0 0)");
+    expect(opened.engine.text).toMatch(/<rect x="20" y="30" width="60" height="40"\/>/);
+  });
+
+  it("un gruppo che passa la sua trasformazione a un'immagine ritagliata solo sua, la passa col ritaglio", () => {
+    const opened = open(doc(`${DEFS(CLIP(RECT))}${LAYER}<g id="g" transform="translate(7 3)">${IMAGE("i", "scale(2)")}</g></g>`));
+    const change = applied(opened);
+    const text = written(opened, change);
+    expect(change.kept).toBe(0);
+    expect(attrsOf(text, "i")).toMatchObject({ x: "27", y: "43", width: "200", height: "160" });
+    expect(text).toMatch(/<rect x="47" y="63" width="120" height="80"\/>/);
   });
 });
 

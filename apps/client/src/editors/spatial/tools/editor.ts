@@ -270,6 +270,8 @@ import {
 } from "./gradients";
 import type { GradientPanelView } from "./gradient-panel";
 import { rasterize } from "./png";
+import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
+import { resourceHome } from "./resources";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
   documentColors,
@@ -511,6 +513,8 @@ import { constrainEnd, polygonCount, POLYGON_TOOL, shapeElem, stepRatio, withCou
 import { centerOf, heldShape, mapped, regular, shapeOfRecognized, similar, starOf, type Recognized } from "./recognize";
 import { heldShapeOps, inkShapeOps, isPenStroke } from "./inkshape";
 import { keepLook, refused, type Refusal as Unkept } from "./styled";
+import { cropOps, croppedImages, cropState, dragCrop, marginsOf, MIN_CROP, slideImage, uncropOps, withMargins, type Crop, type CropHandle, type Margins } from "./crop";
+import { clipMaskOps, opacityMaskOps, releasable, releaseOps as releaseMaskOps, releaseRefusal, type MaskRefusal } from "./masks";
 import type { Traced } from "./trace";
 import { imageWindow, traceOps, tracedGroup, traceSource, weightOf, type TraceSource } from "./trace-ops";
 import { inlineTracer, workerTracer, type Tracer, type TracerFactory } from "./trace-runner";
@@ -885,7 +889,7 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "trace", "typeset"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "typeset"];
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -907,6 +911,11 @@ const TRANSFORM_BINDING = "Mod-Shift-m";
 /// «Immagine dal vault…», dal livello Standard: il tasto con cui Inkscape
 /// importa.
 const IMAGE_BINDING = "Mod-i";
+
+/// «Crea maschera di ritaglio» e «Rilascia maschera», dal livello Esperto:
+/// i tasti di Illustrator, con il 7 per posizione.
+const CLIP_MASK_BINDING = "Mod-7";
+const RELEASE_MASK_BINDING = "Mod-Alt-7";
 
 /// Lo scarto di una copia dal suo originale, e fra due immagini incollate
 /// insieme, in pixel dello schermo: si vedono tutte, a ogni zoom.
@@ -992,6 +1001,12 @@ const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse:
 /// pixel: un bersaglio largo almeno 24 pixel (WCAG 2.5.8), di più per il
 /// dito. Fra due vicini vince il più vicino.
 const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
+
+/// Il lato più corto di un ritaglio mentre lo si tira, in pixel.
+const CROP_MIN_PX = 4;
+
+/// L'asse di ogni margine del ritaglio: 0 orizzontale, 1 verticale.
+const CROP_AXES: Readonly<Record<keyof Margins, 0 | 1>> = { top: 1, right: 0, bottom: 1, left: 0 };
 
 /// Quanto lontani due capi possono stare sullo schermo, in pixel, e con
 /// «Unisci» diventare un nodo solo: così si vedono toccarsi. Più lontani, li
@@ -1166,6 +1181,12 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   // Un'immagine coi suoi monti, e sotto il tracciato che se ne ricava.
   "draw-trace-image": ["M3 3h11v9H3z", "M3 10l3-3 3 3 2-2 3 3", "M6 21c3 0 4-5 7.5-5s4 3 6.5 3", "M19.5 17.5h3v3h-3z"],
   "draw-text-path": ["M3 20C6 12 18 12 21 20", "M7 4h10", "M12 4v9"],
+  // Le due squadre della taglierina, che si incrociano.
+  "draw-crop": ["M6 2v16h16", "M2 6h16v16"],
+  // Le stesse, barrate.
+  "draw-uncrop": ["M6 2v16h16", "M2 6h16v16", "M3 3l18 18"],
+  // Un cerchio pieno in un quadrato a tratti: fuori dalla forma non si vede.
+  "draw-mask": ["M3 6V3h3", "M10 3h4", "M18 3h3v3", "M21 10v4", "M21 18v3h-3", "M14 21h-4", "M6 21H3v-3", "M3 14v-4", "M6 12a6 6 0 1 0 12 0a6 6 0 1 0-12 0"],
   "draw-nodes": ["M4 3v12l3.2-3.1 2.3 5.1 2-.9-2.3-5H15z", "M16 16h5v5h-5z"],
   "draw-builder": ["M3 9a6 6 0 1 0 12 0a6 6 0 1 0-12 0", "M9 9h11v11H9z", "M5 17v5", "M2.5 19.5h5"],
   // Due anelli in basso, e le lame che si incrociano verso l'alto.
@@ -1261,7 +1282,13 @@ interface Styled {
   /// `take` se chi cambia contenitore ne prende l'opacità e la visibilità;
   /// se no tutto resta come si vedeva.
   readonly containers?: "keep" | "take";
+  /// Gli effetti che il comando dà o toglie di proposito ai contenitori che
+  /// aggiunge o toglie: `clip-path` e `mask` per le maschere.
+  readonly effects?: readonly string[];
 }
+
+/// Gli effetti che creare o rilasciare una maschera scrive da sé.
+const MASK_EFFECTS: readonly string[] = ["clip-path", "mask"];
 
 /// Un collegamento che si vede, col suo segno sul foglio.
 interface LinkMark {
@@ -1288,6 +1315,7 @@ type Gesture =
   | BoardGesture
   | DropperGesture
   | GradientGesture
+  | CropGesture
   | NoteGesture
   | RefusedGesture;
 
@@ -1883,6 +1911,22 @@ interface GradientGesture extends GestureBase {
   snapped: Point | null;
 }
 
+/// Un gesto sul ritaglio di un'immagine: un segno o un lato lo tira,
+/// dentro l'immagine la si sposta sotto, fuori un tocco lo applica.
+interface CropGesture extends GestureBase {
+  readonly kind: "crop";
+  /// Dov'è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// Ciò che il primo punto ha preso, e il ritaglio di allora.
+  grab: CropHandle | "slide" | "outside" | null;
+  start: Crop | null;
+  /// Dal puntatore al segno preso, nelle coordinate dell'immagine.
+  offset: Point;
+  /// Oltre la soglia del trascinamento.
+  dragging: boolean;
+}
+
 /// Un'immagine che il contagocce legge, del disegno aperto per `loaded`:
 /// aperta (`decoded`), o perché non si legge (`reason`); `ready` finisce
 /// quando si sa. Una chiusa non serve più.
@@ -1896,6 +1940,25 @@ interface DropperImage {
 
 function scaleOf(m: Matrix): number {
   return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+}
+
+/// Vero se `a` e `b` sono lo stesso riquadro.
+function sameBounds(a: Bounds, b: Bounds): boolean {
+  return a.min[0] === b.min[0] && a.min[1] === b.min[1] && a.max[0] === b.max[0] && a.max[1] === b.max[1];
+}
+
+/// Vero se `p` sta in `bounds`, bordi compresi.
+function insideBounds(bounds: Bounds, p: Point): boolean {
+  return p[0] >= bounds.min[0] && p[0] <= bounds.max[0] && p[1] >= bounds.min[1] && p[1] <= bounds.max[1];
+}
+
+/// La distanza di `p` dal segmento da `a` a `b`.
+function segmentDistance(p: Point, a: Point, b: Point): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const length = dx * dx + dy * dy;
+  const t = length === 0 ? 0 : Math.min(1, Math.max(0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
 }
 
 function union(a: Bounds | null, b: Bounds | null): Bounds | null {
@@ -2617,22 +2680,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     onSelect(keys) {
       cancelGesture();
       select(keys);
-      const unit = keys.length === 1 ? currentIndex().get(keys[0]!) : null;
+      // Le chiavi di prima, se il ritaglio le ha cambiate, non valgono più.
+      const unit = keys.length === 1 && selection.length === 1 ? currentIndex().get(selection[0]!) : null;
       if (unit !== null) frameBounds(unit.bounds);
     },
     onActivate: () => void properties(),
     onDelete: () => deleteSelection(),
     onLeave: () => surface.focus({ preventScroll: true }),
-    onToggle: (key, what) => toggleRow(key, what === "lock" ? "locked" : "hidden"),
+    onToggle: (key, what) => toggleRow(settleCrop()(key), what === "lock" ? "locked" : "hidden"),
     canRename: (key) => canRename(key),
-    onRename: (key, name) => renameRow(key, name),
+    onRename: (key, name) => renameRow(settleCrop()(key), name),
     canMove: (keys, drop) => {
       const plan = placing(keys, drop);
       return plan !== null && typeof plan !== "string";
     },
-    onMove: (keys, drop) => moveRows(keys, drop),
+    onMove: (keys, drop) => {
+      const rekey = settleCrop();
+      return moveRows(keys.map(rekey), { ...drop, key: rekey(drop.key) });
+    },
     onEdge: (key, front) => announce(t(outlineNow().byKey.get(key)?.item.role === "layer" ? (front ? "draw.layer.edge.top" : "draw.layer.edge.bottom") : front ? "draw.move.edge.front" : "draw.move.edge.back")),
-    onEyedropper: (key, colorOnly) => dropFromRow(key, colorOnly),
+    onEyedropper: (key, colorOnly) => dropFromRow(settleCrop()(key), colorOnly),
   });
   tree.element.hidden = true;
   relabels.push(() => tree.relabel());
@@ -2673,7 +2740,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     onFix: (problem) => fixProblem(problem),
     onDescribe: (key, text) => describeImage(key, text),
     onDecorative: (key) => decorateImage(key),
-    onMove: (key, later, confirmed) => moveInReading(key, later, confirmed),
+    onMove: (key, later, confirmed) => moveInReading(settleCrop()(key), later, confirmed),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
   accessPanel.element.hidden = true;
@@ -2691,17 +2758,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let boardRows: { readonly list: readonly Board[]; readonly rows: readonly BoardRow[] } | null = null;
   const boardsPanel = createBoardsPanel(life, {
     onGo: (id) => goToBoard(id),
-    onAdd: () => newBoard(),
-    onRename: (id, name) => void writeBoardName(id, name),
+    onAdd: () => {
+      settleCrop();
+      newBoard();
+    },
+    onRename: (id, name) => {
+      settleCrop();
+      void writeBoardName(id, name);
+    },
     onDuplicate: (id) => {
+      settleCrop();
       const board = boardById(id);
       if (board !== null) duplicateBoard(board);
     },
     onDelete: (id) => {
+      settleCrop();
       const board = boardById(id);
       if (board !== null) removeBoard(board);
     },
-    onMove: (id, to) => orderBoard(id, to),
+    onMove: (id, to) => {
+      settleCrop();
+      orderBoard(id, to);
+    },
     onLeave: () => surface.focus({ preventScroll: true }),
   });
   boardsPanel.element.hidden = true;
@@ -2716,10 +2794,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // qualcuno non li apre, sotto l'albero se è aperto anche quello.
   const inspector = createInspector(life, {
     onSet: (subject, key, value) => {
-      const change = attributeOps(subject, key, value, newIds());
+      const change = attributeOps(settledSubject(subject), key, value, newIds());
       return changeObject("draw.action.attribute", change.ops, change.id);
     },
-    onRename: (subject, next) => changeObject("draw.action.rename", renameOps(subject, next), next),
+    onRename: (subject, next) => changeObject("draw.action.rename", renameOps(settledSubject(subject), next), next),
     taken: (id) => engine.holder(id) !== null,
     cited: (id) => cited(id),
     announce: (text) => announce(text),
@@ -2923,6 +3001,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Standard: i tratti a penna scelti diventano le forme a cui
   // somigliano. C'è solo quando ce n'è uno.
   const shapeButton = arrangeButton("draw.to_shape", "draw-to-shape", null, () => shapeSelectedInk());
+  // Dal livello Standard: un'immagine scelta da sola si ritaglia sul
+  // foglio, coi segni e coi margini in una barra; le immagini ritagliate
+  // tornano intere.
+  const cropButton = arrangeButton("draw.crop", "draw-crop", null, () => openCrop(true));
+  const uncropButton = arrangeButton("draw.uncrop", "draw-uncrop", null, () => uncropSelection());
   // Dal livello Esperto: ruotare, scalare e inclinare di quanto si scrive.
   // Col pannello delle proprietà, porta ai campi di «Trasforma».
   const transformButton = arrangeButton("draw.transform", "draw-transform", TRANSFORM_BINDING, () => {
@@ -2937,6 +3020,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto: unione, differenza, intersezione, esclusione e
   // divisione, in un menu.
   const booleanButton = arrangeButton("draw.boolean", "draw-boolean", null, () => openMenu(booleanButton, booleanItems()));
+  // Dal livello Esperto: l'oggetto più in alto ritaglia gli altri, o ne fa
+  // la trasparenza, e una maschera si toglie; in un menu.
+  const maskButton = arrangeButton("draw.mask", "draw-mask", null, () => openMenu(maskButton, maskItems()));
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
   // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
@@ -2945,7 +3031,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto, con un testo scelto: metterlo su una forma,
   // toglierlo dal suo tracciato e rovesciarlo, in un menu.
   const textPathButton = arrangeButton("draw.text_path", "draw-text-path", null, () => openMenu(textPathButton, textPathItems()));
-  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, outlineButton, textPathButton]) {
+  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, maskButton, outlineButton, textPathButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -3284,12 +3370,51 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showTracing();
   });
 
+  // «Ritaglia», dal livello Standard: come lo scostamento, in fondo al
+  // foglio. Quanto si toglie da ogni lato dell'immagine, nell'unità del
+  // documento, e quanto se ne vedrà; sul foglio, i segni da tirare.
+  /// L'immagine che si ritaglia, per chiave, del disegno aperto per
+  /// `loaded`: il suo ritaglio quando si è aperto e quello di adesso, nelle
+  /// sue coordinate. Si scrive quando si applica.
+  let cropping: { readonly key: string; readonly loaded: number; readonly start: Crop; crop: Crop } | null = null;
+  /// L'ultimo tocco dentro l'immagine che si ritaglia, per il doppio tocco
+  /// che applica.
+  let cropTap: { readonly time: number; readonly at: Point } | null = null;
+  const cropBar = document.createElement("div");
+  cropBar.className = "draw-paths";
+  cropBar.setAttribute("role", "group");
+  cropBar.hidden = true;
+  const cropTitle = document.createElement("span");
+  cropTitle.className = "draw-paths-title";
+  cropTitle.id = identifier("draw-crop");
+  cropBar.setAttribute("aria-labelledby", cropTitle.id);
+  const cropSides = (["top", "right", "bottom", "left"] as const).map((side) => {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.inputMode = "decimal";
+    input.step = "any";
+    input.min = "0";
+    input.autocomplete = "off";
+    return { side, input, ...pathsField(input) };
+  });
+  const cropStatus = document.createElement("output");
+  cropStatus.className = "draw-paths-status";
+  const cropApply = pathsAction();
+  const cropCancel = pathsAction();
+  cropBar.append(cropTitle, ...cropSides.map((each) => each.field), cropApply, cropCancel, cropStatus);
+  relabels.push(() => {
+    cropTitle.textContent = t("draw.crop.title");
+    cropApply.textContent = t("draw.paths.apply");
+    cropCancel.textContent = t("draw.paths.cancel");
+    showCropBar();
+  });
+
   // Il foglio con la sua barra e, accanto, i pannelli: l'albero degli
   // oggetti, le proprietà, gli attributi e, in fondo, la cronologia e
   // l'accessibilità.
   const stage = document.createElement("div");
   stage.className = "draw-stage";
-  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar, pathsBar, traceBar);
+  stage.append(surface, linkLayer, textLayer, arrangeBar, nodesBar, isolationBar, progressBar, describeBar, pathsBar, traceBar, cropBar);
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
@@ -4201,9 +4326,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// La cornice che si vede adesso: con lo strumento Selezione, se il
   /// disegno si scrive. Durante un gesto della cornice, com'è diventata;
-  /// mentre si sposta o si sceglie col riquadro, nessuna.
+  /// mentre si sposta o si sceglie col riquadro, nessuna, e nemmeno mentre
+  /// si ritaglia, che ha i suoi segni.
   const frameNow = (): FrameView | null => {
-    if (tool !== "select" || !editable() || selection.length === 0) return null;
+    if (tool !== "select" || !editable() || selection.length === 0 || cropping !== null) return null;
     const g = current?.kind === "select" ? current : null;
     if (g !== null && (g.mode === "move" || g.mode === "marquee")) return null;
     if (g?.area?.box != null) return areaView(frameView({ matrix: g.area.unit.matrix, box: g.area.box, geometry: g.area.box }, camera.scale));
@@ -4324,7 +4450,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const builder = current?.kind === "builder" && current.mode === "objects" ? null : builderNow();
     const built = new Set(builder === null ? [] : builder.shapes.filter((_, k) => !builder.cuts[k]).map((unit) => unit.key));
     for (const unit of selectedUnits()) {
-      const frame = area !== null && area.unit.key === unit.key && area.box !== null ? area.box : unit.frame();
+      const cropped = cropping?.key === unit.key ? cropping.crop.rect : null;
+      const frame = cropped ?? (area !== null && area.unit.key === unit.key && area.box !== null ? area.box : unit.frame());
       if (frame === null) continue;
       let matrix = unit.matrix;
       if (delta !== null) {
@@ -4339,8 +4466,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         band = union(band, { min: [x, y], max: [x, y] });
       }
       // Un oggetto di cui si modificano i nodi mostra i nodi, non la
-      // cornice.
-      if (edited.has(unit.key) || built.has(unit.key)) continue;
+      // cornice, e un'immagine che si ritaglia i segni del ritaglio.
+      if (edited.has(unit.key) || built.has(unit.key) || cropped !== null) continue;
       // Il margine è lo stesso sullo schermo lungo i due assi, anche per un
       // oggetto scalato più in un verso che nell'altro.
       const sx = Math.hypot(matrix[0], matrix[1]) * camera.scale;
@@ -4365,6 +4492,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...dropperHandles());
     handles.push(...gradientOverlay());
     handles.push(...pathsHandles());
+    handles.push(...cropHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
     const lasso = current?.kind === "select" && current.mode === "marquee"
@@ -5051,9 +5179,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       titleInput.select();
       return;
     }
+    if (fix.kind === "describe" || !editable()) return;
+    const rekey = settleCrop();
     const model = engine.model;
-    const unit = problem.key === null ? null : currentIndex().get(problem.key);
-    if (fix.kind === "describe" || model === null || unit === null || !editable()) return;
+    const unit = problem.key === null ? null : currentIndex().get(rekey(problem.key));
+    if (model === null || unit === null) return;
     cancelGesture();
     const change: LookChange = fix.kind === "size" ? { size: fix.size } : fix.paint === "fill" ? { fill: fix.color } : { stroke: fix.color };
     const restyled = lookOps(model, [unit], change, measureText, newIds());
@@ -5104,13 +5234,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Dalla verifica: descrive l'immagine `key`, se le serve ancora.
   function describeImage(key: string, text: string): void {
-    if (problemNow("S012", key) !== null && writeDescription(key, text)) syncAccess(true);
+    if (problemNow("S012", key) === null) return;
+    if (writeDescription(settleCrop()(key), text)) syncAccess(true);
   }
 
   /// Dalla verifica: dichiara decorativa l'immagine `key`, se le serve
   /// ancora una descrizione.
   function decorateImage(key: string): void {
-    if (problemNow("S012", key) !== null && writeDecorative(key)) syncAccess(true);
+    if (problemNow("S012", key) === null) return;
+    if (writeDecorative(settleCrop()(key))) syncAccess(true);
   }
 
   // --- La descrizione delle immagini appena entrate -------------------------------
@@ -5304,6 +5436,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (last !== null && last.subject === subject && last.unit === (unit?.key ?? null) && last.key === key && last.label === label && last.count === units.length && last.editable === canEdit) return;
     inspectorShown = { subject, unit: unit?.key ?? null, key, label, count: units.length, editable: canEdit };
     inspector.update({ subject, key, label, count: units.length, editable: canEdit });
+  }
+
+  /// L'oggetto di cui il pannello cambia un attributo, com'è dopo che un
+  /// ritaglio aperto si è scritto: il suo percorso può essere cambiato.
+  /// L'oggetto del pannello è quello scelto, e col ritaglio aperto è
+  /// l'immagine.
+  function settledSubject(subject: Subject): Subject {
+    if (cropping === null) return subject;
+    settleCrop();
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length !== 1) return subject;
+    return subjectOf(nodeOf(model, units[0]!)) ?? subject;
   }
 
   /// Apre o chiude gli attributi; aperti, il fuoco ci va. Chiusi, un valore
@@ -5662,6 +5807,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// L'aspetto o il contorno degli oggetti scelti, da un campo del pannello.
   const styleFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    settleCrop();
     const model = engine.model;
     const units = selectedUnits();
     if (model === null || units.length === 0) return null;
@@ -5720,6 +5866,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il campione nuovo `name` del colore `color`; con `link`, chi usa
   /// `color` scritto passa a lui.
   function createSwatch(name: string, color: string, link: boolean): string | null {
+    settleCrop();
     const model = engine.model;
     if (model === null) return null;
     const made = newSwatchOps(model, color, name, link, selectedUnits(), newIds());
@@ -5732,6 +5879,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Chi usa scritto il colore del campione `id` passa a lui.
   function linkSwatch(id: string): string | null {
+    settleCrop();
     const model = engine.model;
     const swatch = swatchNamed(id);
     if (model === null || swatch === null) return null;
@@ -5744,6 +5892,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   function renameSwatch(id: string, name: string): string | null {
+    settleCrop();
     const model = engine.model;
     if (model === null) return null;
     const renamed = renameSwatchOps(model, id, name, selectedUnits(), newIds());
@@ -5755,6 +5904,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il colore nuovo `color` del campione `id`, per chi lo usa e, se viene
   /// da lui, per ciò che si disegna.
   function recolorSwatch(id: string, color: string): string | null {
+    settleCrop();
     const model = engine.model;
     const swatch = swatchNamed(id);
     if (model === null || swatch === null) return null;
@@ -5767,6 +5917,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Toglie il campione `id`: chi lo usa torna al suo colore, scritto.
   function deleteSwatch(id: string): string | null {
+    settleCrop();
     const model = engine.model;
     const swatch = swatchNamed(id);
     if (model === null || swatch === null) return null;
@@ -5799,6 +5950,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// La sfumatura `change` per il bersaglio `target` degli oggetti scelti,
   /// dalla sezione «Sfumatura», col nome `label` nella cronologia.
   function changeGradient(target: PaintChannel, change: GradientChange, label: DrawKey): string | null {
+    settleCrop();
     const model = engine.model;
     const units = selectedUnits();
     if (model === null || units.length === 0) return null;
@@ -5921,10 +6073,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return outcome;
   };
 
+  /// I campi del pannello che non scrivono nel disegno.
+  const SHEET_FIELDS: ReadonlySet<FieldId> = new Set<FieldId>(["grid", "snap", "guides", "rulers", "rulerGuides", "bar", "ratio"]);
+
   /// Scrive il valore di un campo del pannello: `null` se il disegno l'ha
   /// accettato, altrimenti la ragione per cui no. Dopo, il pannello mostra
   /// com'è il disegno, anche quando il valore scritto non cambiava niente.
   function changeField(id: FieldId, value: number | string | boolean): string | null {
+    // Ciò che scrive nel disegno applica prima il ritaglio aperto; la griglia
+    // e il lucchetto delle proporzioni sono del foglio, e lo lasciano.
+    if (!SHEET_FIELDS.has(id)) settleCrop();
     const on = value === true;
     const number = typeof value === "number" ? value : Number.NaN;
     let outcome: string | null = null;
@@ -6256,8 +6414,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else transformButton.setAttribute("aria-haspopup", "dialog");
     applyButton.hidden = !has("apply");
     shapeButton.hidden = !has("recognize") || !units.some(holdsPenStroke);
+    // Un ritaglio che l'editor non sa cambiare lascia il pulsante, che dice
+    // come toglierlo.
+    const image = units.length === 1 && units[0]!.role === "image" ? units[0]! : null;
+    cropButton.hidden = !has("crop") || image === null || cropState(engine.model!, image.node) === null;
+    uncropButton.hidden = !has("crop") || croppedImages(engine.model!, units).length === 0;
     pathButton.hidden = !has("path");
     booleanButton.hidden = !has("boolean");
+    maskButton.hidden = !has("masks");
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
     textPathButton.hidden = !has("typeset") || !units.some((unit) => unit.role === "text");
@@ -6353,6 +6517,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncDescriptions();
     syncPaths();
     syncTracing();
+    syncCrop();
     syncInspector();
     syncProperties();
     titleInput.disabled = !canEdit;
@@ -6512,6 +6677,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// come cambiando strumento. `mark` è il segno da cui ci si va, per dirlo.
   function goToPoint(at: number, mark: Mark | null): void {
     if (!editable()) return;
+    // Un salto che sposta il disegno lascia il ritaglio aperto, come annulla.
+    if (at !== history.position) cancelCrop();
     finishText();
     cancelGesture();
     finishBezier(false, true);
@@ -6560,6 +6727,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function undo(): void {
     if (!editable()) return;
+    // Mentre si ritaglia, annulla è il ritaglio che si lascia, come con Esc;
+    // il disegno resta com'è.
+    if (cropping !== null) {
+      cancelCrop();
+      return;
+    }
     finishText();
     cancelGesture();
     if (drafting !== null && drafting.done.length > 0) {
@@ -6575,6 +6748,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   function redo(): void {
     if (!editable()) return;
+    // Il ritaglio aperto si lascia, e poi si ripete come sempre.
+    cancelCrop();
     finishText();
     cancelGesture();
     if (drafting !== null && drafting.undone.length > 0) {
@@ -6587,8 +6762,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   function deleteSelection(): void {
+    if (!editable()) return;
+    settleCrop();
     const units = selectedUnits();
-    if (units.length === 0 || !editable()) return;
+    if (units.length === 0) return;
     cancelGesture();
     if (commit("draw.action.delete", asGesture(removeOps(units))) === null) return;
     selection = [];
@@ -6619,6 +6796,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   function select(keys: readonly string[]): void {
+    // Scegliere altro applica il ritaglio, come un tocco fuori; le chiavi per
+    // percorso che si avevano in mano seguono ciò che il ritaglio ha scritto.
+    if (cropping !== null && !(keys.length === 1 && keys[0] === cropping.key)) keys = keys.map(settleCrop());
     selection = inOrder(keys);
     syncControls();
     showHandles();
@@ -6718,6 +6898,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Esce dal gruppo isolato: verso il gruppo che lo contiene, se ce n'è
   /// uno, o con `all` del tutto. Resta scelto il gruppo da cui si esce.
   function leaveIsolation(all: boolean): boolean {
+    if (isolatedNode() === null) return false;
+    settleCrop();
     const node = isolatedNode();
     if (node === null) return false;
     const parent = node.parent;
@@ -6735,6 +6917,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// `depth`, o con -1 esce del tutto. Resta scelto il gruppo da cui si
   /// esce, il primo del percorso dentro quello a cui si torna.
   function isolateAt(depth: number): void {
+    if (isolationChain() === null) return;
+    settleCrop();
     const chain = isolationChain();
     if (chain === null) return;
     const node = depth < 0 ? null : chain[depth];
@@ -6886,6 +7070,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       cancelGesture();
       const before = live.textContent;
       finishBezier(false, true);
+      // E applica il ritaglio, come in Illustrator.
+      applyCrop();
       if (live.textContent !== before) finished = (live.textContent ?? "").trim();
       recentTools = [tool, ...recentTools.filter((each) => each !== tool && each !== id)].slice(0, RECENT_MAX);
       forgetBuilder();
@@ -7483,6 +7669,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Scrive le guide `next` in un passo di annulla `label`, e dice `text`.
   const commitGuides = (label: DrawKey, next: readonly RulerGuide[], text: string): boolean => {
+    settleCrop();
     if (commit(label, { op: "set", id: ROOT, attrs: { "fub:guides": writeGuides(next) } }) === null) return false;
     announce(text);
     return true;
@@ -7513,7 +7700,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const axis = ruler === "top" ? (level ? "y" : "x") : level ? "x" : "y";
       return { ...base, kind: "guide", axis, index: null, from: down, offset: 0, at: axis === "x" ? p[0] : p[1], away: true, moved: false };
     }
-    if (tool !== "select" || !editable() || !guidesShown()) return null;
+    if (tool !== "select" || !editable() || !guidesShown() || cropping !== null) return null;
     const guides = scene.root.guides;
     if (guides === null) return null;
     const view = frameNow();
@@ -7681,6 +7868,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const guide = start.id >= 0 ? guideStart(base) : null;
     if (guide !== null) return guide;
     if (!editable()) return { ...base, kind: "refused" };
+    // Mentre si ritaglia, il gesto è del ritaglio.
+    if (cropping !== null && tool === "select") return { ...base, kind: "crop", from: null, end: null, grab: null, start: null, offset: [0, 0], dragging: false };
     switch (tool) {
       case "pen":
       case "highlighter": {
@@ -7974,6 +8163,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// `[` e `]`: la selezione ruota di `degrees` gradi, in senso orario se
   /// positivi, attorno al centro della sua cornice.
   const rotateSelection = (degrees: number): void => {
+    settleCrop();
     const units = selectedUnits();
     const frame = frameOf(units);
     if (frame === null) return;
@@ -8247,6 +8437,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (unit !== null && unit.look !== null && has("text") && editable()) {
         lastTap = null;
         editText(unit);
+        return;
+      }
+      // Due tocchi su un'immagine la ritagliano, come in Illustrator.
+      if (unit !== null && unit.role === "image" && has("crop") && editable() && selection.length === 1 && selection[0] === unit.key) {
+        lastTap = null;
+        openCrop(false);
         return;
       }
       if (unit !== null && (unit.role === "group" || unit.role === "link") && isolate(unit, tap.at, g.pointer)) {
@@ -12559,10 +12755,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     free = event.ctrlKey || event.metaKey;
     alt = event.altKey;
   };
+  // Il ritaglio finisce con i modificatori dell'evento che lo lascia: la
+  // pipeline ascolta `pointerup` sul documento, in cattura, e questo ascolto
+  // la precede.
+  life.listen(
+    surface.ownerDocument,
+    "pointerup",
+    (event) => {
+      if (current?.kind === "crop") readModifiers(event);
+    },
+    { capture: true },
+  );
   /// La maniglia sotto il puntatore che passa senza premere, nel cursore.
   const hoverGrip = (event: PointerEvent): void => {
     if (tool === "board") {
       hoverBoard(event);
+      return;
+    }
+    // Mentre si ritaglia: un segno tira, l'immagine si sposta.
+    if (cropping !== null) {
+      const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
+      showGrip(event.buttons === 0 ? cropCursor(sceneAt(event.clientX, event.clientY), pointer) : null);
       return;
     }
     const view = event.buttons === 0 ? frameNow() : null;
@@ -12588,7 +12801,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else surface.dataset.ruler = ruler;
     const guides = scene.root.guides;
     let hot: number | null = null;
-    if (ruler === null && event.buttons === 0 && tool === "select" && editable() && guidesShown() && guides !== null && surface.dataset.grip === undefined) {
+    if (ruler === null && event.buttons === 0 && tool === "select" && editable() && guidesShown() && guides !== null && surface.dataset.grip === undefined && cropping === null) {
       const pointer: InkPointerType = event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse";
       hot = guideAt(guides, camera, p, GUIDE_HIT_PX[pointer], true);
     }
@@ -12880,6 +13093,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           g.end = toPoint(samples[samples.length - 1]!);
           gradientUpdate(g);
           break;
+        case "crop":
+          if (g.from === null) cropStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          cropUpdate(g);
+          break;
         case "refused":
           break;
       }
@@ -12977,6 +13195,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "gradient":
           gradientEnd(g, stroke.timeStamp);
           return;
+        case "crop":
+          cropEnd(g, stroke.timeStamp);
+          return;
         case "refused":
           current = null;
           return;
@@ -13000,6 +13221,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // come prima del loro.
       if (g.kind === "bezier") showBezier();
       if (g.kind === "board") showPage();
+      // Il ritaglio torna com'era prima del gesto.
+      if (g.kind === "crop") {
+        if (cropping !== null && g.start !== null) cropping.crop = g.start;
+        showGrip(null);
+        showCropBar(true);
+        showCrop();
+      }
     },
     ...(options.touch === undefined ? {} : { touch: options.touch }),
   };
@@ -13760,6 +13988,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(titleInput, "change", () => {
     const value = titleInput.value.trim();
     if (value === currentTitle()) return;
+    settleCrop();
     commit("draw.action.title", { op: "meta", title: value === "" ? null : value });
   });
   life.listen(titleInput, "keydown", (event) => {
@@ -13868,9 +14097,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Gli oggetti su cui lavora un comando della selezione, della parte
   /// `feature`: quelli scelti, se il livello offre la parte e il disegno si
-  /// scrive. `null`, e lo si dice, se non c'è niente di scelto.
-  const arranging = (feature: Feature): Unit[] | null => {
+  /// scrive. `null`, e lo si dice, se non c'è niente di scelto. Un ritaglio
+  /// aperto si applica prima, e il comando lavora sull'immagine ritagliata:
+  /// salvo con `settle` falso, per chi il ritaglio lo apre.
+  const arranging = (feature: Feature, settle = true): Unit[] | null => {
     if (!has(feature) || !editable()) return null;
+    if (settle) settleCrop();
     const units = selectedUnits();
     if (units.length === 0) {
       announce(t("draw.selected.none"));
@@ -13909,7 +14141,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const keptLook = (arranged: Arranged, styled: Styled): (Arranged & { readonly kept: string }) | null => {
     const model = engine.model;
     if (arranged.ops.length === 0 || model === null) return { ...arranged, kept: "" };
-    const result = keepLook(engine.text, model, arranged.ops, { containers: styled.containers ?? "keep", taken: (id) => engine.holder(id) !== null });
+    const result = keepLook(engine.text, model, arranged.ops, {
+      containers: styled.containers ?? "keep",
+      taken: (id) => engine.holder(id) !== null,
+      ...(styled.effects === undefined ? {} : { effects: styled.effects }),
+    });
     if (refused(result)) {
       announce(t(styled.key, { ...styled.vars, reason: unkeptText(result) }));
       return null;
@@ -14007,7 +14243,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const groups = all.filter((unit) => unwrappable(engine.model!, unit)).length;
     if (groups === 0) {
-      announce(t("draw.ungroup.effect"));
+      // Un gruppo che non si separa per la sua maschera si rilascia.
+      const masked = has("masks") && all.some((unit) => releasable(engine.model!, unit));
+      announce(masked ? `${t("draw.ungroup.effect")} ${t("draw.ungroup.release")}` : t("draw.ungroup.effect"));
       return;
     }
     const kept = arrange("draw.action.ungroup", ungroupOps(engine.model!, units, newIds()), null, { key: "draw.ungroup.styled" });
@@ -14246,8 +14484,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// si vedono e si cambiano, nel gruppo isolato o in tutto il disegno; poi
   /// sono loro la selezione, quelli che si scelgono.
   const unflagAll = (flag: Flag): void => {
+    if (!has("selection") || !editable()) return;
+    settleCrop();
     const model = engine.model;
-    if (!has("selection") || !editable() || model === null) return;
+    if (model === null) return;
     const nodes = flagged(model, isolatedNode(), flag);
     if (nodes.length === 0) {
       announce(t(flag === "locked" ? "draw.unlocked.none" : "draw.shown.none"));
@@ -15181,6 +15421,446 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     tracing = null;
   });
 
+  // --- Ritaglia immagine --------------------------------------------------------
+
+  /// L'immagine che si ritaglia, nell'indice di adesso.
+  const cropUnit = (): Unit | null => (cropping === null ? null : currentIndex().get(cropping.key));
+
+  /// Quanto un'unità dell'immagine è lunga nella scena, lungo i suoi due
+  /// assi: i margini si scrivono come si vedono.
+  const cropScale = (unit: Unit | null): Point => {
+    const m = unit?.matrix ?? IDENTITY;
+    return [Math.hypot(m[0], m[1]) || 1, Math.hypot(m[2], m[3]) || 1];
+  };
+
+  /// Le misure di `bounds`, un riquadro dell'immagine `unit`, come si
+  /// vedono nella scena: da leggere, o da dire con `spoken`.
+  const cropMeasures = (bounds: Bounds, unit: Unit | null, spoken: boolean): string => {
+    const [sx, sy] = cropScale(unit);
+    const width = (bounds.max[0] - bounds.min[0]) * sx;
+    const height = (bounds.max[1] - bounds.min[1]) * sy;
+    return spoken ? `${lengthSpoken(width)} × ${lengthSpoken(height)}` : measuresText([width, height]);
+  };
+
+  /// Quanto dell'immagine si vede col ritaglio `crop`, a parole: da
+  /// leggere nella barra, o da dire con `spoken`.
+  const cropSize = (crop: Crop, unit: Unit | null, spoken = false): string =>
+    sameBounds(crop.rect, crop.box)
+      ? t("draw.crop.whole")
+      : t("draw.crop.size", { size: cropMeasures(crop.rect, unit, spoken), whole: cropMeasures(crop.box, unit, spoken) });
+
+  /// I margini del ritaglio `crop`, a parole.
+  const cropMargins = (crop: Crop, unit: Unit | null): string => {
+    const [sx, sy] = cropScale(unit);
+    const margins = marginsOf(crop);
+    return t("draw.crop.margins", {
+      top: lengthSpoken(margins.top * sy),
+      right: lengthSpoken(margins.right * sx),
+      bottom: lengthSpoken(margins.bottom * sy),
+      left: lengthSpoken(margins.left * sx),
+    });
+  };
+
+  /// «Ritaglia», e il doppio tocco su un'immagine: l'immagine scelta da
+  /// sola mostra i segni del ritaglio, e la barra in fondo i margini. Dalla
+  /// barra il fuoco va al primo margine; dal foglio resta lì.
+  function openCrop(focus: boolean): void {
+    const units = arranging("crop", false);
+    if (units === null) return;
+    const unit = units.length === 1 && units[0]!.role === "image" ? units[0]! : null;
+    const state = unit === null ? null : cropState(engine.model!, unit.node);
+    if (unit === null || state === null) {
+      announce(t("draw.crop.none"));
+      return;
+    }
+    // Di nuovo sulla stessa immagine: il ritaglio resta com'è.
+    if (cropping?.key === unit.key) {
+      if (focus) cropSides[0]!.input.focus({ preventScroll: true });
+      return;
+    }
+    if (state.kind === "other") {
+      announce(t("draw.crop.other"));
+      return;
+    }
+    closeDescriptions();
+    closePaths();
+    closeTracing();
+    // I segni si tirano con la Selezione: lo strumento Selezione li mostra.
+    if (tool !== "select") setTool("select");
+    cropping = { key: unit.key, loaded: loads, start: state.crop, crop: state.crop };
+    cropTap = null;
+    showCropBar(true);
+    showCrop();
+    if (focus) {
+      const first = cropSides[0]!.input;
+      first.focus({ preventScroll: true });
+      first.select();
+    }
+    announce(t("draw.crop.hint"));
+  }
+
+  /// Chiude il ritaglio senza scriverlo: l'immagine si vede com'è, e il
+  /// fuoco, se era nella barra, torna al foglio.
+  function closeCrop(): void {
+    if (cropping === null) return;
+    const focused = cropBar.contains(document.activeElement);
+    if (current?.kind === "crop") cancelGesture();
+    cropping = null;
+    cropTap = null;
+    cropBar.hidden = true;
+    painter.setCrops(null);
+    showGrip(null);
+    showHandles();
+    if (focused) surface.focus({ preventScroll: true });
+  }
+
+  /// Esc e «Annulla»: il ritaglio si chiude com'era, e lo si dice.
+  function cancelCrop(): void {
+    if (cropping === null) return;
+    closeCrop();
+    announce(t("draw.crop.cancelled"));
+  }
+
+  /// Invio, «Applica», un tocco fuori dall'immagine o due dentro: il
+  /// ritaglio si scrive in un passo di annulla, e si chiude. Con `quiet`,
+  /// un ritaglio che non cambia niente si chiude senza dirlo.
+  function applyCrop(quiet = false): void {
+    const now = cropping;
+    if (now === null) return;
+    const model = engine.model;
+    const unit = cropUnit();
+    if (model === null || unit === null || !editable()) {
+      closeCrop();
+      return;
+    }
+    const ops = cropOps(model, unit.node, now.crop, newIds());
+    closeCrop();
+    if (ops.length === 0) {
+      if (!quiet) announce(t("draw.unchanged"));
+      return;
+    }
+    // Un ritaglio che, scritto, lascia l'immagine intera la toglie.
+    const whole = ops.some((op) => op.op === "set" && op.attrs["clip-path"] === null);
+    // Un'immagine senza id ne riceve uno, che diventa la sua chiave.
+    const named = ops.find((op) => op.op === "ident" && op.id !== null && op.path.join(".") === unit.path.join("."));
+    const key = named?.op === "ident" && named.id !== null ? named.id : unit.key;
+    if (arrange("draw.action.crop", { ops, keys: [key] }) === null) return;
+    announce(whole ? t("draw.crop.removed") : t("draw.cropped", { size: cropMeasures(now.crop.rect, unit, true) }));
+  }
+
+  /// Prima di un comando che cambia il disegno o la selezione: il ritaglio
+  /// aperto si applica, come scegliendo altro, così il comando vede
+  /// l'immagine ritagliata e i passi di annulla sono due, «Ritaglio» e il
+  /// suo. Mai dentro `refresh`, che non scrive. Scrivere il ritaglio può
+  /// cambiare le chiavi per percorso, perché `fub-defs` nasce per prima fra i
+  /// figli della radice, e l'immagine senza id ne riceve uno: chi ha già in
+  /// mano delle chiavi, da un pannello, le fa passare per ciò che rende.
+  function settleCrop(): (key: string) => string {
+    const now = cropping;
+    if (now === null) return (key) => key;
+    const homed = engine.model !== null && resourceHome(engine.model) !== null;
+    applyCrop(true);
+    const model = engine.model;
+    const shifted = !homed && model !== null && resourceHome(model) !== null;
+    const image = selection.length === 1 ? selection[0]! : now.key;
+    return (key) => {
+      if (key === now.key) return image;
+      const path = shifted ? /^@(\d+)(.*)$/.exec(key) : null;
+      return path === null ? key : `@${Number(path[1]) + 1}${path[2]}`;
+    };
+  }
+
+  /// Dopo ogni cambio: il ritaglio si chiude se il livello, il documento o
+  /// lo strumento non lo vogliono più, se l'immagine non è più scelta da
+  /// sola, o se il suo ritaglio è cambiato da un'altra parte. Una
+  /// trasformazione no: i segni la seguono.
+  function syncCrop(): void {
+    const now = cropping;
+    if (now === null) return;
+    const unit = cropUnit();
+    const state = unit === null || engine.model === null ? null : cropState(engine.model, unit.node);
+    const same = state !== null && state.kind !== "other" && sameBounds(state.crop.box, now.start.box) && sameBounds(state.crop.rect, now.start.rect);
+    if (!has("crop") || !editable() || tool !== "select" || loads !== now.loaded || selection.length !== 1 || selection[0] !== now.key || !same) {
+      closeCrop();
+      return;
+    }
+    showCropBar();
+    showCrop();
+  }
+
+  /// L'anteprima del ritaglio di adesso: il painter mostra l'immagine
+  /// intera attenuata e sopra la parte che resta, lo strato sopra i segni.
+  function showCrop(): void {
+    const now = cropping;
+    const unit = cropUnit();
+    painter.setCrops(now === null || unit === null ? null : new Map(unit.paints.map((paint) => [paint, now.crop])));
+    if (now !== null) cropStatus.textContent = cropSize(now.crop, unit);
+    showHandles();
+  }
+
+  /// La barra com'è adesso: i nomi dei margini con l'unità del documento,
+  /// e i margini del ritaglio. Quello che si sta scrivendo resta com'è,
+  /// tranne con `all`, dopo un trascinamento o un tasto sul foglio.
+  function showCropBar(all = false): void {
+    const now = cropping;
+    cropBar.hidden = now === null;
+    const unit = docUnit();
+    for (const { side, name } of cropSides) name.textContent = unitSuffix(t(`draw.crop.${side}`), unit);
+    if (now === null) return;
+    const scale = cropScale(cropUnit());
+    const margins = marginsOf(now.crop);
+    for (const { side, input } of cropSides) {
+      if (!all && input === document.activeElement) continue;
+      input.value = fieldText(margins[side] * scale[CROP_AXES[side]], unit);
+    }
+    cropStatus.textContent = cropSize(now.crop, cropUnit());
+  }
+
+  /// Le parole di ciò che non va in un margine scritto, come nei campi del
+  /// pannello delle proprietà.
+  const MARGIN_PROBLEMS: Readonly<Record<QuantityProblem, DrawKey>> = {
+    empty: "draw.properties.problem.empty",
+    syntax: "draw.properties.problem.syntax",
+    unit: "draw.properties.problem.unit",
+    relative: "draw.properties.problem.relative",
+    finite: "draw.properties.problem.finite",
+  };
+
+  /// Un margine scritto nella barra: gli altri restano come sono, e il
+  /// ritaglio cambia se il margine lascia abbastanza dell'immagine. Un campo
+  /// vuoto o illeggibile non cambia niente: la barra lo dice, e lasciato il
+  /// campo il margine si riscrive com'è. Si legge come i campi di
+  /// «Trasforma»: la virgola o il punto, le operazioni, le unità.
+  function cropFromField(side: keyof Margins, input: HTMLInputElement): void {
+    const now = cropping;
+    if (now === null) return;
+    const unit = docUnit();
+    const scale = cropScale(cropUnit())[CROP_AXES[side]];
+    const written = evaluate(input.value, { units: lengthUnits(unit), current: toUnit(marginsOf(now.crop)[side] * scale, unit), relative: true });
+    if ("problem" in written) {
+      cropStatus.textContent = t(MARGIN_PROBLEMS[written.problem], { units: Object.keys(lengthUnits(unit)).join(", ") });
+      return;
+    }
+    // Un margine non è mai sotto lo zero, e lo zero non ha segno.
+    const value = Math.round(fromUnit(Math.max(0, written.value), unit) * 100) / 100 / scale;
+    const next = Number.isFinite(value) ? withMargins(now.crop, { ...marginsOf(now.crop), [side]: value }) : null;
+    if (next === null) {
+      cropStatus.textContent = t("draw.crop.invalid");
+      return;
+    }
+    now.crop = next;
+    showCrop();
+  }
+
+  for (const { side, input } of cropSides) {
+    life.listen(input, "input", () => cropFromField(side, input));
+    // Lasciato il campo, i margini si riscrivono come valgono.
+    life.listen(input, "change", () => showCropBar(true));
+  }
+  life.listen(cropApply, "click", () => applyCrop());
+  life.listen(cropCancel, "click", () => cancelCrop());
+  // Come nella barra dei tracciati: Invio in un campo applica, Esc annulla.
+  life.listen(cropBar, "keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelCrop();
+      surface.focus({ preventScroll: true });
+      return;
+    }
+    if (event.key !== "Enter" || event.isComposing || !(event.target instanceof HTMLInputElement)) return;
+    event.preventDefault();
+    applyCrop();
+    surface.focus({ preventScroll: true });
+  });
+
+  /// I segni del ritaglio, con le linee dei terzi mentre lo si tira.
+  const cropHandles = (): OverlayHandle[] => {
+    const now = cropping;
+    const unit = cropUnit();
+    if (now === null || unit === null) return [];
+    const { min, max } = now.crop.rect;
+    const thirds = current?.kind === "crop" && current.dragging && current.grab !== "outside";
+    return [{ kind: "crop", x: min[0], y: min[1], width: max[0] - min[0], height: max[1] - min[1], matrix: unit.matrix, thirds }];
+  };
+
+  /// Il segno del ritaglio sotto `p`, nella scena, col puntatore `pointer`:
+  /// un angolo vicino, se no un lato; `null` se nessuno. Dentro il ritaglio
+  /// i segni arrivano al più a un quarto del lato più corto, come quelli
+  /// disegnati: il resto sposta l'immagine, anche in un ritaglio piccolo.
+  const cropHandleAt = (crop: Crop, matrix: Matrix, p: Point, pointer: InkPointerType): CropHandle | null => {
+    const at = toScreen(camera, p);
+    const { min, max } = crop.rect;
+    const spot = (local: Point): Point => toScreen(camera, apply(matrix, local));
+    const [ax, ay] = spot(min);
+    const [bx, by] = spot([max[0], min[1]]);
+    const [cx, cy] = spot([min[0], max[1]]);
+    const inverse = invert(matrix);
+    const within = inverse !== null && insideBounds(crop.rect, apply(inverse, p));
+    const reach = within ? Math.min(NODE_PX[pointer], Math.min(Math.hypot(bx - ax, by - ay), Math.hypot(cx - ax, cy - ay)) / 4) : NODE_PX[pointer];
+    let best: CropHandle | null = null;
+    let nearest = reach;
+    for (const [handle, local] of [["nw", min], ["ne", [max[0], min[1]]], ["se", max], ["sw", [min[0], max[1]]]] as const) {
+      const [x, y] = spot(local as Point);
+      const away = Math.hypot(x - at[0], y - at[1]);
+      if (away <= nearest) {
+        nearest = away;
+        best = handle;
+      }
+    }
+    if (best !== null) return best;
+    for (const [handle, from, to] of [["n", min, [max[0], min[1]]], ["e", [max[0], min[1]], max], ["s", [min[0], max[1]], max], ["w", min, [min[0], max[1]]]] as const) {
+      const away = segmentDistance(at, spot(from as Point), spot(to as Point));
+      if (away <= nearest) {
+        nearest = away;
+        best = handle;
+      }
+    }
+    return best;
+  };
+
+  /// Il punto del segno `handle` sul rettangolo `rect`.
+  const cropSpot = (rect: Bounds, handle: CropHandle): Point => {
+    const x = handle.includes("w") ? rect.min[0] : handle.includes("e") ? rect.max[0] : (rect.min[0] + rect.max[0]) / 2;
+    const y = handle.includes("n") ? rect.min[1] : handle.includes("s") ? rect.max[1] : (rect.min[1] + rect.max[1]) / 2;
+    return [x, y];
+  };
+
+  /// Il cursore sopra il punto `p` della scena mentre si ritaglia: un
+  /// segno tira, l'immagine si sposta.
+  const cropCursor = (p: Point, pointer: InkPointerType): GripCursor | "move" | null => {
+    const now = cropping;
+    const unit = cropUnit();
+    if (now === null || unit === null) return null;
+    const handle = cropHandleAt(now.crop, unit.matrix, p, pointer);
+    if (handle !== null) return gripCursor({ matrix: unit.matrix, box: now.crop.rect, geometry: now.crop.rect }, handle, camera.angle);
+    const inverse = invert(unit.matrix);
+    return inverse !== null && insideBounds(now.crop.box, apply(inverse, p)) ? "move" : null;
+  };
+
+  /// Il primo punto di un gesto sul ritaglio: un segno lo tira, l'immagine
+  /// si sposta sotto, e fuori un tocco lo applica.
+  const cropStart = (g: CropGesture, p: Point): void => {
+    g.from = p;
+    const now = cropping;
+    const unit = cropUnit();
+    const inverse = unit === null ? null : invert(unit.matrix);
+    if (now === null || unit === null || inverse === null) return;
+    g.start = now.crop;
+    const handle = cropHandleAt(now.crop, unit.matrix, p, g.pointer);
+    if (handle !== null) {
+      const local = apply(inverse, p);
+      const spot = cropSpot(now.crop.rect, handle);
+      g.grab = handle;
+      g.offset = [spot[0] - local[0], spot[1] - local[1]];
+    } else {
+      g.grab = insideBounds(now.crop.box, apply(inverse, p)) ? "slide" : "outside";
+    }
+    if (g.grab !== "outside") showGrip(cropCursor(p, g.pointer));
+  };
+
+  /// Il gesto `g` col puntatore in `end`: oltre la soglia del
+  /// trascinamento, il segno preso tira il ritaglio, con Maiusc nelle sue
+  /// proporzioni e con Alt attorno al centro, o l'immagine si sposta sotto.
+  const cropUpdate = (g: CropGesture): void => {
+    if (g.from === null || g.end === null) return;
+    if (!g.dragging) {
+      const [ax, ay] = toScreen(camera, g.from);
+      const [bx, by] = toScreen(camera, g.end);
+      if (Math.hypot(bx - ax, by - ay) <= DRAG_PX[g.pointer]) return;
+      g.dragging = true;
+      cropTap = null;
+    }
+    const now = cropping;
+    const unit = cropUnit();
+    if (now === null || unit === null || g.start === null || g.grab === null || g.grab === "outside") return;
+    const inverse = invert(unit.matrix);
+    if (inverse === null) return;
+    const to = apply(inverse, g.end);
+    if (g.grab === "slide") {
+      const from = apply(inverse, g.from);
+      now.crop = slideImage(g.start, [to[0] - from[0], to[1] - from[1]]);
+    } else {
+      const k = scaleOf(unit.matrix) * camera.scale;
+      const min = Math.max(MIN_CROP, k > 0 ? CROP_MIN_PX / k : MIN_CROP);
+      now.crop = dragCrop(g.start, g.grab, [to[0] + g.offset[0], to[1] + g.offset[1]], { ratio: shift, centered: alt, min });
+    }
+    showCropBar(true);
+    showCrop();
+  };
+
+  /// Il gesto `g` finito: un tocco fuori applica e sceglie ciò che tocca,
+  /// due dentro applicano; un trascinamento dice quanto si vede, e fuori
+  /// non fa niente.
+  const cropEnd = (g: CropGesture, time: number): void => {
+    // Il ritaglio è quello dei modificatori di quando il puntatore si alza.
+    if (g.dragging) cropUpdate(g);
+    current = null;
+    showGrip(null);
+    const now = cropping;
+    if (now === null || g.from === null) return;
+    if (g.dragging) {
+      showHandles();
+      if (g.grab !== "outside") announce(g.grab === "slide" ? cropMargins(now.crop, cropUnit()) : cropSize(now.crop, cropUnit(), true));
+      return;
+    }
+    if (g.grab === "outside") {
+      // Come chiudere il ritaglio e toccare: ciò che si tocca si sceglie, con
+      // Maiusc si aggiunge a ciò che era scelto, con Ctrl o ⌘ si sceglie
+      // dentro i gruppi.
+      applyCrop();
+      const index = currentIndex();
+      const reach = HIT_PX[g.pointer] / camera.scale;
+      const hit = free && has("selection") ? index.deepAt(g.from, reach) : index.at(g.from, reach);
+      if (hit === null) {
+        if (!shift) select([]);
+      } else if (shift && has("selection")) {
+        // Aggiunto un oggetto, il gruppo scelto che lo contiene lo lascia; uno
+        // già scelto si toglie.
+        select(selection.includes(hit.key)
+          ? selection.filter((key) => key !== hit.key)
+          : [...selectedUnits().filter((unit) => !holdsPath(unit.path, hit.path)).map((unit) => unit.key), hit.key]);
+      } else {
+        select([hit.key]);
+      }
+      return;
+    }
+    const previous = cropTap;
+    cropTap = { time, at: g.from };
+    if (previous !== null && time - previous.time <= DOUBLE_TAP_MS && Math.hypot(g.from[0] - previous.at[0], g.from[1] - previous.at[1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer]) {
+      applyCrop();
+    }
+  };
+
+  /// Le frecce mentre si ritaglia: l'immagine si sposta sotto il ritaglio
+  /// di `x`, `y` nella scena.
+  const slideCrop = (x: number, y: number): void => {
+    const now = cropping;
+    const unit = cropUnit();
+    const inverse = unit === null ? null : invert(unit.matrix);
+    if (now === null || unit === null || inverse === null) return;
+    const [a, b, c, d] = inverse;
+    const next = slideImage(now.crop, [a * x + c * y, b * x + d * y]);
+    if (sameBounds(next.box, now.crop.box)) return;
+    now.crop = next;
+    showCropBar(true);
+    showCrop();
+    announce(cropMargins(next, unit));
+  };
+
+  /// «Togli il ritaglio»: le immagini scelte tornano intere, qualunque
+  /// ritaglio abbiano, in un passo di annulla.
+  function uncropSelection(): void {
+    const units = arranging("crop");
+    if (units === null) return;
+    const count = croppedImages(engine.model!, units).length;
+    if (count === 0) {
+      announce(t("draw.uncrop.none"));
+      return;
+    }
+    if (arrange("draw.action.uncrop", uncropOps(engine.model!, units, newIds())) !== null) announce(plural(count, "draw.uncropped.one", "draw.uncropped.other"));
+  }
+
   /// Vero se `unit` è un tratto a penna, o ne contiene uno che non è
   /// bloccato.
   function holdsPenStroke(unit: Unit): boolean {
@@ -15235,6 +15915,89 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         : units.length < (kind === "union" ? 1 : 2) ? refusal({ reason: "few" }) : null;
       return { label: t(label), disabled: reason !== null, ...(reason === null ? {} : { description: reason }), run: () => combineSelection(kind) };
     });
+  };
+
+  // --- Le maschere ---------------------------------------------------------------
+
+  /// Perché una maschera non si crea, a parole: chi ritaglia e chi fa da
+  /// maschera non sono gli stessi oggetti.
+  const maskRefusal = (refusal: MaskRefusal, kind: "clip" | "opacity"): string => {
+    switch (refusal) {
+      case "few":
+        return t("draw.mask.few");
+      case "top":
+        return t(`draw.mask.top.${kind}`);
+      case "line":
+        return t("draw.mask.line");
+      case "content":
+        return t(`draw.mask.content.${kind}`);
+      case "plane":
+        return t("draw.mask.plane");
+      // Le altre ragioni non dipendono dal tipo di maschera: ciascuna ha la
+      // sua frase, `draw.mask.` e il suo nome.
+      default:
+        return t(`draw.mask.${refusal}`);
+    }
+  };
+
+  /// «Crea maschera di ritaglio» (Ctrl+7) e «Crea maschera d'opacità», dal
+  /// livello Esperto: l'oggetto più in alto fra quelli scelti ritaglia gli
+  /// altri, o ne fa la trasparenza, raccolti in un gruppo nuovo che resta
+  /// scelto.
+  function maskSelection(kind: "clip" | "opacity"): void {
+    const units = arranging("masks");
+    if (units === null) return;
+    const made = (kind === "clip" ? clipMaskOps : opacityMaskOps)(engine.model!, units, newIds());
+    if (typeof made === "string") {
+      announce(maskRefusal(made, kind));
+      return;
+    }
+    const kept = arrange(kind === "clip" ? "draw.action.clip_mask" : "draw.action.opacity_mask", made, null, { key: "draw.mask.styled", effects: MASK_EFFECTS });
+    if (kept !== null) announce(`${plural(units.length - 1, `draw.masked.${kind}.one`, `draw.masked.${kind}.other`)}${kept}`);
+  }
+
+  /// «Rilascia maschera» (Ctrl+Alt+7): i ritagli e le maschere degli
+  /// oggetti scelti tornano oggetti, sopra di loro, e un gruppo che non
+  /// aveva altro si separa.
+  function releaseMasks(): void {
+    const units = arranging("masks");
+    if (units === null) return;
+    const model = engine.model!;
+    const count = units.filter((unit) => releasable(model, unit)).length;
+    const released = count === 0 ? null : releaseMaskOps(model, units, newIds());
+    if (released === null) {
+      const refused = count === 0 ? null : releaseRefusal(model, units, newIds());
+      announce(refused === null ? t("draw.release.none") : t(`draw.release.${refused}`));
+      return;
+    }
+    const kept = arrange("draw.action.release_mask", released, null, { key: "draw.release.styled", effects: MASK_EFFECTS });
+    if (kept !== null) announce(`${plural(count, "draw.released.one", "draw.released.other")}${kept}`);
+  }
+
+  /// Il menu «Maschera»: crearne una vuole almeno due oggetti, e un oggetto
+  /// in cima che il comando sappia usare, rilasciarla un oggetto che ne ha
+  /// una. Una voce che il comando rifiuterebbe è spenta, e dice perché con le
+  /// parole che il comando direbbe.
+  const maskItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const model = engine.model;
+    const when = (reason: string | null): Pick<MenuItem, "disabled" | "description"> =>
+      reason === null ? { disabled: false } : { disabled: true, description: units.length === 0 ? t("draw.selected.none") : reason };
+    const creation = (kind: "clip" | "opacity"): string | null => {
+      if (model === null || units.length === 0) return t("draw.mask.few");
+      const made = (kind === "clip" ? clipMaskOps : opacityMaskOps)(model, units, newIds());
+      return typeof made === "string" ? maskRefusal(made, kind) : null;
+    };
+    const releaseReason = (): string | null => {
+      if (model === null || !units.some((unit) => releasable(model, unit))) return t("draw.release.none");
+      const refused = releaseRefusal(model, units, newIds());
+      return refused === null ? null : t(`draw.release.${refused}`);
+    };
+    return [
+      { label: t("draw.mask.clip"), hint: displayBinding(CLIP_MASK_BINDING), ...when(creation("clip")), run: () => maskSelection("clip") },
+      { label: t("draw.mask.opacity"), ...when(creation("opacity")), run: () => maskSelection("opacity") },
+      { label: t("draw.mask.release"), hint: displayBinding(RELEASE_MASK_BINDING), separator: true, ...when(releaseReason()), run: () => releaseMasks() },
+    ];
   };
 
   /// Perché un comando del testo su tracciato non si fa, a parole.
@@ -15807,6 +16570,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const layering = (): LayerInfo | null => {
     if (!has("layers") || !editable()) return null;
     cancelGesture();
+    settleCrop();
     return currentLayer();
   };
 
@@ -15842,6 +16606,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function addLayer(): void {
     if (!has("layers") || !editable()) return;
     cancelGesture();
+    settleCrop();
     const name = freshLayerName(currentIndex().layers, (n) => t("draw.layer.default", { n }));
     const arranged = addLayerOps(engine.model!, currentLayer(), name, newIds());
     if (writeLayers("draw.action.layer_add", arranged, arranged.keys[0] ?? null)) announce(t("draw.layer.added", { name }));
@@ -15997,6 +16762,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// resta com'è. I pixel non si scrivono, perché sono l'unità di serie.
   const setUnits = (unit: LengthUnit): void => {
     if (unit === docUnit() || !editable()) return;
+    settleCrop();
     if (commit("draw.action.units", { op: "set", id: ROOT, attrs: { "fub:units": unit === "px" ? null : unit } }) === null) return;
     announce(t(UNITS_NOW[unit]));
   };
@@ -16073,6 +16839,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function fitPage(): void {
     if (!has("grid") || !editable()) return;
     cancelGesture();
+    settleCrop();
     const extent = fitExtent();
     const viewBox = fittedPage(scene.root.page, extent);
     if (viewBox === null) {
@@ -16232,6 +16999,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const grow = direction[0] + direction[1];
     const fine = event.ctrlKey || event.metaKey;
     const lines = event.shiftKey ? GRID_MAJOR : 1;
+    // Mentre si ritaglia, le frecce spostano l'immagine sotto il ritaglio.
+    if (cropping !== null) {
+      if (pressed === null && current === null) slideCrop(x * (event.shiftKey ? NUDGE_SHIFT : NUDGE), y * (event.shiftKey ? NUDGE_SHIFT : NUDGE));
+      return true;
+    }
     if (nodeKeysOn() && chosenCount() > 0) {
       nudgeNodes(x, y, fine, event.shiftKey);
       return true;
@@ -16371,6 +17143,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const PLACES = 2;
 
   const placeDialog = async (): Promise<void> => {
+    settleCrop();
     const before = boundsOf(selectedUnits());
     if (before === null) return;
     const w = before.max[0] - before.min[0];
@@ -16692,6 +17465,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti del ritaglio, se le parti `at` lo offrono.
+  const cropKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("crop")
+      ? [
+          {
+            title: t("draw.crop.title"),
+            rows: [
+              [ARROW_KEYS, t("draw.keys.crop.slide")],
+              ["Shift", t("draw.keys.crop.ratio")],
+              ["Alt", t("draw.keys.crop.center")],
+              ["Enter", t("draw.keys.crop.apply")],
+              ["Escape", t("draw.keys.crop.cancel")],
+            ],
+          },
+        ]
+      : [];
+
+  /// I tasti del menu Maschera, se le parti `at` lo offrono.
+  const maskKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("masks")
+      ? [
+          {
+            title: t("draw.mask"),
+            rows: [
+              [CLIP_MASK_BINDING, t("draw.mask.clip")],
+              [RELEASE_MASK_BINDING, t("draw.mask.release")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti del menu Tracciato, se le parti `at` lo offrono.
   const pathKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("path") ? [{ title: t("draw.path"), rows: [["Mod-j", t("draw.keys.join")]] }] : [];
@@ -16888,7 +17692,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...sheetKeys(),
     ...arrangeKeys(at),
     ...selectionKeys(at),
+    ...cropKeys(at),
     ...pathKeys(at),
+    ...maskKeys(at),
     ...nodeToolKeys(at),
     ...builderKeys(at),
     ...scissorsKeys(at),
@@ -17114,6 +17920,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Le immagini nel livello che riceve, una sopra l'altra con uno scarto.
   const placeImages = (pictures: readonly Placed[], at: Point | null): void => {
+    // Il ritaglio aperto si scrive prima: il posto delle immagini nuove si
+    // conta sul disegno com'è dopo.
+    settleCrop();
     const ids = newIds();
     const to = target(ids);
     if (to === null) return;
@@ -17279,6 +18088,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const data = event.clipboardData;
     if (data === null) return;
+    // Tagliare un'immagine che si sta ritagliando porta via quella ritagliata.
+    if (kind === "cut" && editable()) settleCrop();
     const units = selectedUnits();
     if (units.length === 0) {
       announce(t("draw.selected.none"));
@@ -17391,6 +18202,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (asking || disposed || texts.length === 0 || !editable()) return;
     finishText();
     cancelGesture();
+    // Il ritaglio aperto si scrive prima di leggere com'è il disegno: un
+    // disegno che cambia a metà incolla ferma l'incolla.
+    settleCrop();
     asking = true;
     const run = { stopped: false };
     pasting = run;
@@ -17682,6 +18496,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (current?.kind === "ink" && current.held !== null && event.key === "Shift") drawHeld(current);
     else if (current?.kind === "ink" && current.tool === "highlighter" && event.key === "Shift") drawInk(current);
     else if (current?.kind === "select" && (current.mode === "move" || current.mode === "resize" || current.mode === "rotate")) selectUpdate(current);
+    // Maiusc o Alt a metà di un segno tirato: il ritaglio si rifà subito,
+    // dall'ultimo punto del puntatore.
+    else if (current?.kind === "crop" && current.dragging) cropUpdate(current);
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);
     else if (current?.kind === "board" && current.mode !== "pending") boardUpdate(current);
@@ -17714,7 +18531,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const treeField =
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
       (tree.element.contains(event.target) || historyPanel.element.contains(event.target) || boardsPanel.element.contains(event.target));
-    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target) || traceBar.contains(event.target));
+    const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target) || traceBar.contains(event.target) || cropBar.contains(event.target));
     if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
@@ -17778,6 +18595,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (event.altKey && !event.shiftKey && (letter === "c" || letter === "v") && has("style")) {
         if (letter === "c") copyStyle();
         else pasteStyle();
+        event.preventDefault();
+        return;
+      }
+      // Ctrl+7 crea la maschera di ritaglio, Ctrl+Alt+7 la rilascia, come
+      // in Illustrator: il 7 per posizione, e non con AltGr, che lì scrive
+      // una graffa.
+      if (event.code === "Digit7" && !event.shiftKey && !altGraph && arranges("masks")) {
+        if (event.altKey) releaseMasks();
+        else maskSelection("clip");
         event.preventDefault();
         return;
       }
@@ -17916,7 +18742,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       else editSelectedText();
     } else if (onSurface && event.key === "Enter") {
       if (pressed !== null) release();
-      else if (drawing() !== null) {
+      else if (cropping !== null) {
+        // A metà gesto il ritaglio aspetta che il gesto finisca.
+        if (current === null) applyCrop();
+      } else if (drawing() !== null) {
         // A metà gesto il tracciato aspetta che il gesto finisca, come per
         // Canc.
         if (current === null) finishBezier(false);
@@ -17981,6 +18810,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       runNodeCommand(NODE_COMMANDS[event.key.toLowerCase()]!);
     } else if (event.key === "Escape") {
       if (current !== null) cancelGesture();
+      else if (cropping !== null) cancelCrop();
       else if (drawing() !== null) {
         // Esc conclude il tracciato della penna, come conclude un testo: ciò
         // che si è disegnato non si perde, e Annulla lo toglie in un passo.
@@ -18115,6 +18945,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       loads++;
       closeDescriptions();
       closeTracing();
+      closeCrop();
       history.clear();
       selection = [];
       chosen = null;

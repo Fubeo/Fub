@@ -32,18 +32,48 @@
 // I marcatori di un tracciato, come le punte delle linee, si disegnano sopra
 // la forma che li usa: si toccano come il suo contorno e stanno nei riquadri
 // col contorno, ma non nella geometria che la griglia aggancia.
+//
+// Di un oggetto ritagliato o mascherato conta ciò che si vede: le forme
+// disegnate, tagliate dai ritagli e dalle maschere che le riguardano, cioè
+// quelli dell'oggetto e di ciò che contiene, quelli del gruppo in cui lo si
+// sceglie e quelli del suo livello. Riquadri, cornice, geometria, contatto,
+// gomma e lazo li usano tutti così: un'immagine ritagliata si sceglie, si
+// aggancia e si inquadra dove si vede, e le parti nascoste non prendono i
+// clic. Il contenuto di un ritaglio conta dove riempie, quello di una
+// maschera dove dipinge, qualunque colore abbia: la luminanza non si legge
+// (`clips.ts`). Un oggetto che non si vede più non ha riquadro, ma si trova
+// ancora dall'albero.
 
 import type { Role } from "../scene/analysis";
 import { BoundsBuilder, fmin, parsePath, rectPath, Track, type Bounds, type Segment } from "../scene/geometry";
 import { arcCenter, onEllipse } from "../scene/curves";
 import { markerFit, markerMatrix, placed, vertices, type MarkerFit, type MarkerPlace, type Vertex } from "../scene/markers";
-import { apply, compose, IDENTITY, translate, type Matrix, type Point } from "../scene/matrix";
+import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, parseFragment, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Fragment, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, reference, startOffset, transform as parseTransform } from "../scene/values";
+import { fraction, length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, reference, startOffset, transform as parseTransform } from "../scene/values";
 import { NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
 import type { PaintAttr, PaintBuilder, PaintDef, PaintNode, PaintResource, PaintShape, TextPiece, TextRun } from "../painter/paint";
+import {
+  Clip,
+  clipSegment,
+  cut,
+  inflate,
+  needsBox,
+  Region,
+  sameMatrix,
+  scaleOf,
+  transformedBounds,
+  type ClipLook,
+  type ClipShape,
+  type ClipWindow,
+  type Flat,
+  type Run,
+  type SceneCache,
+  type Solid,
+  type Space,
+} from "./clips";
 
 /// L'errore massimo dell'appiattimento, in unità della scena.
 export const FLATNESS = 0.05;
@@ -88,24 +118,22 @@ export interface TextLook {
   readonly along: Point | null;
 }
 
-/// Un pezzo di un oggetto che si disegna da solo: una forma.
-interface Part {
+/// Un pezzo di un oggetto che si disegna da solo: una forma. Ha la
+/// geometria e il modo di dipingersi di [`Solid`]: `matrix` porta le sue
+/// coordinate nella scena, `radius` è metà del contorno nelle sue unità.
+interface Part extends Solid {
   /// L'elemento che la disegna.
   readonly leaf: LeafNode;
-  readonly segments: readonly Segment[];
-  /// Dalle coordinate della forma a quelle della scena.
-  readonly matrix: Matrix;
   /// Dalle coordinate della forma a quelle dell'oggetto.
   readonly frameMatrix: Matrix;
-  readonly fill: boolean;
-  /// Metà dello spessore del contorno, in unità della forma; 0 senza contorno.
-  readonly radius: number;
   readonly cache: ShapeCache | null;
-  flat: Flat | null;
   /// Per un marcatore, come la punta di una linea, la forma che lo usa;
   /// `null` per una forma. Un marcatore si tocca e sta nei riquadri col
   /// contorno, ma non è geometria della forma: si vede come il suo contorno.
   readonly host: Part | null;
+  /// I ritagli e le maschere che la tagliano, quelli di chi la contiene
+  /// compresi; `null` se nessuno, e allora si vede tutta.
+  readonly regions: readonly Region[] | null;
 }
 
 /// Ciò che si vede di un oggetto in un punto: la forma, la sua geometria e
@@ -118,23 +146,10 @@ export interface Sampled {
   readonly on: "fill" | "stroke";
 }
 
-/// Un sottotracciato appiattito, in coordinate della scena: `x, y` a coppie.
-interface Run {
-  readonly points: Float64Array;
-  readonly closed: boolean;
-}
-
-interface Flat {
-  readonly runs: readonly Run[];
-  /// Metà dello spessore del contorno nella scena.
-  readonly radius: number;
-}
-
 /// Ciò che di una forma non cambia finché non cambia la forma: i segmenti, e
 /// il riquadro nella scena dell'ultima matrice.
-interface ShapeCache {
+interface ShapeCache extends SceneCache {
   segments: readonly Segment[] | null;
-  scene: { readonly matrix: Matrix; readonly bounds: Bounds | null } | null;
   local: Bounds | null | undefined;
   /// I vertici, dove vanno i marcatori.
   vertices?: readonly Vertex[];
@@ -177,11 +192,11 @@ export class Unit {
     readonly transform: Matrix,
     /// Ciò che il painter disegna per lui.
     readonly paints: readonly PaintNode[],
-    /// Il riquadro nella scena, contorno compreso; `null` se non disegna
-    /// niente.
+    /// Il riquadro nella scena di ciò che si vede, contorno compreso; `null`
+    /// se non disegna niente, o se ritagli e maschere lo nascondono tutto.
     readonly bounds: Bounds | null,
-    /// Il riquadro della geometria nella scena, senza contorno: quello che
-    /// la griglia aggancia.
+    /// Il riquadro nella scena della geometria che si vede, senza contorno:
+    /// quello che la griglia aggancia.
     readonly geometry: Bounds | null,
     private readonly parts: readonly Part[],
     /// L'elemento.
@@ -197,46 +212,57 @@ export class Unit {
     return compose(this.parent, this.transform);
   }
 
-  /// Il riquadro nelle coordinate dell'oggetto, contorno compreso: con
-  /// `matrix` dà la cornice della selezione, che ruota con l'oggetto.
+  /// Il riquadro di ciò che si vede nelle coordinate dell'oggetto, contorno
+  /// compreso: con `matrix` dà la cornice della selezione, che ruota con
+  /// l'oggetto. Un'immagine ritagliata ha la cornice sul ritaglio, ruotato
+  /// con lei.
   frame(): Bounds | null {
     if (this.frameBounds === undefined) {
       const out = new BoundsBuilder();
       for (const part of this.parts) {
         const local = part.frameMatrix === IDENTITY && part.cache !== null ? localBounds(part) : transformedBounds(part.segments, part.frameMatrix);
-        if (local !== null) includeInflated(out, local, part.radius * scaleOf(part.frameMatrix));
+        if (local !== null) includeSeen(out, part, local, part.radius * scaleOf(part.frameMatrix), "frame");
       }
       this.frameBounds = out.finish();
     }
     return this.frameBounds;
   }
 
-  /// Il riquadro della geometria nelle coordinate dell'oggetto, senza
-  /// contorno: quello che la griglia aggancia quando la cornice non ruota, e
-  /// che dice se un asse dell'oggetto misura zero.
+  /// Il riquadro della geometria che si vede nelle coordinate dell'oggetto,
+  /// senza contorno: quello che la griglia aggancia quando la cornice non
+  /// ruota, e che dice se un asse dell'oggetto misura zero.
   shapeFrame(): Bounds | null {
     if (this.shapeBounds === undefined) {
       const out = new BoundsBuilder();
       for (const part of this.parts) {
         if (part.host !== null) continue;
         const local = part.frameMatrix === IDENTITY && part.cache !== null ? localBounds(part) : transformedBounds(part.segments, part.frameMatrix);
-        if (local !== null) includeInflated(out, local, 0);
+        if (local !== null) includeSeen(out, part, local, 0, "frame");
       }
       this.shapeBounds = out.finish();
     }
     return this.shapeBounds;
   }
 
-  /// Il riquadro nella scena dopo `m`, una trasformazione della scena,
-  /// contorno compreso: dove finisce l'oggetto, anche ruotato.
+  /// Il riquadro di ciò che si vede nella scena dopo `m`, una
+  /// trasformazione della scena, contorno compreso: dove finisce l'oggetto,
+  /// anche ruotato. I ritagli e le maschere dell'oggetto e di ciò che
+  /// contiene si muovono con lui; quelli di chi lo contiene restano dove
+  /// sono.
   boundsAfter(m: Matrix): Bounds | null {
     const out = new BoundsBuilder();
     for (const part of this.parts) {
       const matrix = compose(m, part.matrix);
       const bounds = transformedBounds(part.segments, matrix);
-      if (bounds !== null) includeInflated(out, bounds, part.radius * scaleOf(matrix));
+      if (bounds !== null) includeSeen(out, part, bounds, part.radius * scaleOf(matrix), m);
     }
     return out.finish();
+  }
+
+  /// Vero se un ritaglio o una maschera taglia una delle sue forme: allora
+  /// si vede, e si tocca, meno di quanto disegna.
+  get clipped(): boolean {
+    return this.parts.some((part) => part.regions !== null);
   }
 
   /// Vero se una delle forme che lo disegnano si riempie.
@@ -252,7 +278,8 @@ export class Unit {
   }
 
   /// Vero se il punto `p` della scena tocca l'oggetto, con una tolleranza
-  /// `tolerance` in unità della scena.
+  /// `tolerance` in unità della scena: se cade su una forma, in un punto che
+  /// ritagli e maschere lasciano vedere.
   hits(p: Point, tolerance: number): boolean {
     if (!near(this.bounds, p, p, tolerance)) return false;
     return this.parts.some((part) => partHits(part, p, tolerance));
@@ -290,14 +317,17 @@ export class Unit {
   }
 
   /// Vero se il segmento da `a` a `b` tocca l'oggetto: il passaggio della
-  /// gomma fra due campioni.
+  /// gomma fra due campioni. Sulla parte che un ritaglio nasconde la gomma
+  /// passa senza toccare.
   touches(a: Point, b: Point, tolerance: number): boolean {
     if (!near(this.bounds, a, b, tolerance)) return false;
     return this.parts.some((part) => partTouches(part, a, b, tolerance));
   }
 
-  /// Vero se l'oggetto sta tutto dentro il lazo `lasso`, contorno compreso:
-  /// nessun contorno arriva a un lato del lazo, e ogni forma comincia dentro.
+  /// Vero se ciò che si vede dell'oggetto sta tutto dentro il lazo `lasso`,
+  /// contorno compreso: nessun contorno arriva a un lato del lazo, e ogni
+  /// forma comincia dentro. Di una forma tagliata basta che stia dentro lei,
+  /// o ciò che la taglia: ciò che si vede sta in tutti e due.
   inside(lasso: Lasso): boolean {
     const bounds = this.bounds;
     if (bounds === null || !holds(lasso.bounds, bounds)) return false;
@@ -305,17 +335,7 @@ export class Unit {
     // Un riquadro che nessun lato attraversa sta tutto da una parte.
     if (edges.length === 0) return lasso.contains(bounds.min);
     for (const part of this.parts) {
-      const flat = flatten(part);
-      const first = flat.runs[0];
-      if (first === undefined) continue;
-      const reach = flat.radius;
-      const crosses = forEachEdge(flat, part.fill, (ax, ay, bx, by) => {
-        for (let i = 0; i < edges.length; i += 4) {
-          if (segmentDistance(ax, ay, bx, by, edges[i]!, edges[i + 1]!, edges[i + 2]!, edges[i + 3]!) <= reach) return true;
-        }
-        return false;
-      });
-      if (crosses || !lasso.contains([first.points[0]!, first.points[1]!])) return false;
+      if (part.regions === null ? !solidInside(part, lasso, edges) : !visibleInside(part, lasso)) return false;
     }
     return true;
   }
@@ -480,12 +500,14 @@ interface Style {
 }
 
 /// Chi riceve gli oggetti di un documento: il nodo, il suo percorso, il
-/// livello, la matrice e lo stile del genitore.
-type Visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style) => void;
+/// livello, la matrice e lo stile del genitore, e i ritagli e le maschere di
+/// chi lo contiene.
+type Visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null) => void;
 
 /// Chi riceve i blocchi estranei fuori dagli oggetti: il blocco, la matrice
-/// e lo stile del genitore, e il suo percorso.
-type ForeignVisit = (leaf: LeafNode, parent: Matrix, style: Style, path: readonly number[]) => void;
+/// e lo stile del genitore, il suo percorso, e i ritagli e le maschere del
+/// genitore.
+type ForeignVisit = (leaf: LeafNode, parent: Matrix, style: Style, path: readonly number[], clips: readonly Clip[] | null) => void;
 
 const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, spacing: 0, anchor: "start", family: null, weight: null, color: null };
 
@@ -499,6 +521,7 @@ export class SceneIndexer {
   private cache = new WeakMap<PaintShape, ShapeCache>();
   private tracks = new WeakMap<PaintResource, Track | null>();
   private markers = new WeakMap<PaintResource, MarkerLook | null>();
+  private looks = new WeakMap<PaintResource, ClipLook | null>();
   private readonly foreign: ForeignShapes;
 
   /// `holder` trova gli elementi a cui i blocchi estranei rimandano; senza,
@@ -521,11 +544,19 @@ export class SceneIndexer {
   index(model: DocumentModel, scope: ContainerNode | null = null): SceneIndex {
     const units: Unit[] = [];
     const layers: LayerInfo[] = [];
-    const nested = new Lookup(model, scope, this.rootStyle(model), (node) => this.attrsOf(node), (node, path, layer, parent, style) => this.unit(node, path, layer, parent, style), this.pagesOf(model));
+    const nested = new Lookup(
+      model,
+      scope,
+      this.rootStyle(model),
+      (node) => this.attrsOf(node),
+      (node, path, layer, parent, style, clips) => this.unit(node, path, layer, parent, style, clips),
+      (node, attrs, matrix, style, outer) => this.clipsOf(node, attrs, matrix, style, outer),
+      this.pagesOf(model),
+    );
     if (scope === null) {
-      this.walk(model, (layer) => !layer.locked && !layer.hidden, layers, (node, path, layer, parent, style) => {
+      this.walk(model, (layer) => !layer.locked && !layer.hidden, layers, (node, path, layer, parent, style, clips) => {
         if (node.details!.locked === true) return;
-        push(units, this.unit(node, path, layer, parent, style));
+        push(units, this.unit(node, path, layer, parent, style, clips));
       });
     } else {
       this.walk(model, () => false, layers, () => {});
@@ -542,7 +573,7 @@ export class SceneIndexer {
     const attrs: PaintAttr[] = Object.entries(elem.attrs);
     if (bounds === null || !MARKED.has(elem.tag) || MARKER_PROPERTIES.every(([, name]) => attr(attrs, name) === undefined)) return bounds;
     const style = styleOf(INITIAL, attrs);
-    const host: Part = { leaf, segments: elemSegments(elem, attrs, style), matrix, frameMatrix: matrix, fill: false, radius: 0, cache: null, flat: null, host: null };
+    const host: Part = { leaf, segments: elemSegments(elem, attrs, style), matrix, frameMatrix: matrix, fill: false, radius: 0, cache: null, flat: null, host: null, regions: null };
     const tips: Part[] = [];
     this.tips(host, attrs, style, tips);
     const out = new BoundsBuilder();
@@ -560,7 +591,7 @@ export class SceneIndexer {
   opens(model: DocumentModel, container: ContainerNode): boolean {
     const role = container.details?.role;
     if (role !== "group" && role !== "link") return false;
-    return new Lookup(model, null, this.rootStyle(model), (node) => this.attrsOf(node), () => null, this.pagesOf(model)).contextOf(container) !== null;
+    return new Lookup(model, null, this.rootStyle(model), (node) => this.attrsOf(node), () => null, (_node, _attrs, _matrix, _style, outer) => outer, this.pagesOf(model)).contextOf(container) !== null;
   }
 
   /// I collegamenti di `model` che si vedono, a ogni profondità: anche
@@ -569,10 +600,10 @@ export class SceneIndexer {
   /// un gruppo non è una chiave della selezione.
   links(model: DocumentModel): Unit[] {
     const units: Unit[] = [];
-    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style): void => {
+    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null): void => {
       if (node.details === null) return;
       if (node.details.role === "link") {
-        push(units, this.unit(node, path, layer, parent, style));
+        push(units, this.unit(node, path, layer, parent, style, clips));
         return;
       }
       if (node.kind !== "container") return;
@@ -580,7 +611,8 @@ export class SceneIndexer {
       if (attrs === null || hidden(attrs)) return;
       const matrix = compose(parent, transformOf(attrs));
       const inner = styleOf(style, attrs);
-      childLoop(node, (child, index) => visit(child, [...path, index], layer, matrix, inner));
+      const below = this.clipsOf(node, attrs, matrix, inner, clips);
+      childLoop(node, (child, index) => visit(child, [...path, index], layer, matrix, inner, below));
     };
     this.walk(model, (layer) => !layer.hidden, [], visit);
     return units;
@@ -592,17 +624,18 @@ export class SceneIndexer {
   /// oggetto, i figli uno per uno al posto del tutto.
   seen(model: DocumentModel, open: ReadonlySet<ContainerNode> = new Set()): Unit[] {
     const units: Unit[] = [];
-    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style): void => {
+    const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null): void => {
       if (node.kind !== "container" || !open.has(node)) {
-        push(units, this.unit(node, path, layer, parent, style));
+        push(units, this.unit(node, path, layer, parent, style, clips));
         return;
       }
       const attrs = this.attrsOf(node);
       if (attrs === null || hidden(attrs)) return;
       const matrix = compose(parent, transformOf(attrs));
       const inner = styleOf(style, attrs);
+      const below = this.clipsOf(node, attrs, matrix, inner, clips);
       childLoop(node, (child, index) => {
-        if (pickable(child)) visit(child, [...path, index], layer, matrix, inner);
+        if (pickable(child)) visit(child, [...path, index], layer, matrix, inner, below);
       });
     };
     this.walk(model, (layer) => !layer.hidden, [], visit);
@@ -616,8 +649,8 @@ export class SceneIndexer {
   /// che avrebbe se si vedesse.
   movable(model: DocumentModel): Unit[] {
     const units: Unit[] = [];
-    this.walk(model, (layer) => !layer.locked, [], (node, path, layer, parent, style) => {
-      if (node.details!.locked !== true) push(units, this.unit(node, path, layer, parent, style, true));
+    this.walk(model, (layer) => !layer.locked, [], (node, path, layer, parent, style, clips) => {
+      if (node.details!.locked !== true) push(units, this.unit(node, path, layer, parent, style, clips, true));
     });
     return units;
   }
@@ -632,8 +665,8 @@ export class SceneIndexer {
       model,
       () => true,
       [],
-      (node, path, layer, parent, style) => push(units, this.unit(node, path, layer, parent, style)),
-      (leaf, parent, style) => this.estimate(leaf, parent, IDENTITY, style, parts),
+      (node, path, layer, parent, style, clips) => push(units, this.unit(node, path, layer, parent, style, clips)),
+      (leaf, parent, style, _path, clips) => this.estimate(leaf, parent, IDENTITY, style, fixed(clips), parts),
     );
     const out = new BoundsBuilder();
     for (const unit of units) {
@@ -643,7 +676,7 @@ export class SceneIndexer {
     }
     for (const part of parts) {
       const bounds = this.sceneBounds(part);
-      if (bounds !== null) includeInflated(out, bounds, part.radius * scaleOf(part.matrix));
+      if (bounds !== null) includeSeen(out, part, bounds, part.radius * scaleOf(part.matrix), "scene");
     }
     return out.finish();
   }
@@ -653,9 +686,9 @@ export class SceneIndexer {
   /// scelgono.
   foreignBlocks(model: DocumentModel): ForeignBlock[] {
     const out: ForeignBlock[] = [];
-    this.walk(model, (layer) => !layer.hidden, [], () => {}, (leaf, parent, style, path) => {
+    this.walk(model, (layer) => !layer.hidden, [], () => {}, (leaf, parent, style, path, clips) => {
       const parts: Part[] = [];
-      this.estimate(leaf, parent, IDENTITY, style, parts);
+      this.estimate(leaf, parent, IDENTITY, style, fixed(clips), parts);
       if (parts.length > 0) out.push(new ForeignBlock(path, parts));
     });
     return out;
@@ -663,7 +696,8 @@ export class SceneIndexer {
 
   /// Il riquadro nella scena di `node`, un elemento di `model`, contorno
   /// compreso, come se né lui né chi lo contiene fosse nascosto: ciò che la
-  /// sua miniatura inquadra. Ciò che è nascosto dentro di lui non conta.
+  /// sua miniatura inquadra, e la miniatura mostra ciò che ritagli e
+  /// maschere lasciano vedere. Ciò che è nascosto dentro di lui non conta.
   /// `null` se non disegna niente, o se non è del disegno.
   frameOf(model: DocumentModel, node: ElementPart): Bounds | null {
     if (node.kind === "leaf" && node.details === null) return null;
@@ -671,19 +705,23 @@ export class SceneIndexer {
     for (let at = node.parent; at !== null && at !== model.root; at = at.parent) chain.unshift(at);
     let matrix = IDENTITY;
     let style = this.rootStyle(model);
+    let clips: readonly Clip[] | null = null;
     for (const container of chain) {
       const attrs = this.builder.headInfo(container).attrs;
       matrix = compose(matrix, transformOf(attrs));
       style = styleOf(style, attrs);
+      clips = this.clipsOf(container, attrs, matrix, style, clips);
     }
     const attrs = this.attrsOf(node);
     if (attrs === null) return null;
+    const own = compose(matrix, transformOf(attrs));
+    const inner = styleOf(style, attrs);
     const parts: Part[] = [];
-    this.collect(node, compose(matrix, transformOf(attrs)), IDENTITY, styleOf(style, attrs), parts);
+    this.collect(node, own, IDENTITY, inner, this.regionsOf(node, attrs, own, inner, clips), parts);
     const scene = new BoundsBuilder();
     for (const part of parts) {
       const bounds = this.sceneBounds(part);
-      if (bounds !== null) includeInflated(scene, bounds, part.radius * scaleOf(part.matrix));
+      if (bounds !== null) includeSeen(scene, part, bounds, part.radius * scaleOf(part.matrix), "scene");
     }
     return scene.finish();
   }
@@ -708,19 +746,19 @@ export class SceneIndexer {
       }
       if (child.kind === "leaf") {
         if (child.details === null) {
-          foreign?.(child, IDENTITY, rootStyle, [index]);
+          foreign?.(child, IDENTITY, rootStyle, [index], null);
           return;
         }
         const role = child.details.role;
         if (role === "paper" || role === "board" || role === "title" || role === "desc") return;
-        visit(child, [index], null, IDENTITY, rootStyle);
+        visit(child, [index], null, IDENTITY, rootStyle, null);
         return;
       }
       const role = child.details!.role;
       // Le risorse si vedono soltanto in chi le usa.
       if (role === "defs") return;
       if (role !== "layer") {
-        visit(child, [index], null, IDENTITY, rootStyle);
+        visit(child, [index], null, IDENTITY, rootStyle, null);
         return;
       }
       const layer = child.details!.layer!;
@@ -729,7 +767,8 @@ export class SceneIndexer {
   }
 
   /// Un livello, o un gruppo di una pagina che ne fa le veci: in `layers`, e
-  /// i suoi figli a `visit` se `enters` lo accetta.
+  /// i suoi figli a `visit` se `enters` lo accetta, col ritaglio e la
+  /// maschera del livello.
   private walkLayer(
     child: ContainerNode,
     path: number[],
@@ -748,15 +787,16 @@ export class SceneIndexer {
     layers.push(info);
     if (!enters(info)) return;
     const style = styleOf(rootStyle, head.attrs);
+    const clips = this.clipsOf(child, head.attrs, matrix, style, null);
     childLoop(child, (grandchild, inner) => {
       if (grandchild.kind === "leaf") {
         if (grandchild.details === null) {
-          foreign?.(grandchild, matrix, style, [...path, inner]);
+          foreign?.(grandchild, matrix, style, [...path, inner], clips);
           return;
         }
         if (grandchild.details.role === "title" || grandchild.details.role === "desc") return;
       }
-      visit(grandchild, [...path, inner], info.id, matrix, style);
+      visit(grandchild, [...path, inner], info.id, matrix, style, clips);
     });
   }
 
@@ -770,22 +810,23 @@ export class SceneIndexer {
     return styleOf(INITIAL, this.builder.headInfo(model.root).attrs);
   }
 
-  /// L'oggetto `node`, se si vede, o anche nascosto con `shown`.
-  private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, shown = false): Unit | null {
+  /// L'oggetto `node`, se si vede, o anche nascosto con `shown`. `clips` sono
+  /// i ritagli e le maschere di chi lo contiene.
+  private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null, shown = false): Unit | null {
     const attrs = this.attrsOf(node);
     if (attrs === null || (!shown && hidden(attrs))) return null;
     const own = transformOf(attrs);
     const matrix = compose(parent, own);
     const inner = styleOf(style, attrs);
     const parts: Part[] = [];
-    this.collect(node, matrix, IDENTITY, inner, parts);
+    this.collect(node, matrix, IDENTITY, inner, this.regionsOf(node, attrs, matrix, inner, clips), parts);
     const scene = new BoundsBuilder();
     const geometry = new BoundsBuilder();
     for (const part of parts) {
       const bounds = this.sceneBounds(part);
       if (bounds === null) continue;
-      includeInflated(scene, bounds, part.radius * scaleOf(part.matrix));
-      if (part.host === null) includeInflated(geometry, bounds, 0);
+      includeSeen(scene, part, bounds, part.radius * scaleOf(part.matrix), "scene");
+      if (part.host === null) includeSeen(geometry, part, bounds, 0, "scene");
     }
     const id = node.facts.id;
     const tag = tagName(node);
@@ -818,28 +859,124 @@ export class SceneIndexer {
   }
 
   /// Le forme di `node` e dei suoi discendenti visibili. `matrix` porta le
-  /// coordinate di `node` nella scena, `frame` in quelle dell'oggetto.
-  private collect(node: ElementPart, matrix: Matrix, frame: Matrix, style: Style, out: Part[]): void {
+  /// coordinate di `node` nella scena, `frame` in quelle dell'oggetto;
+  /// `regions` sono i ritagli e le maschere che lo tagliano, i suoi compresi.
+  private collect(node: ElementPart, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[]): void {
     if (node.kind === "leaf") {
       const shape = this.builder.shape(node)!;
-      const part = this.part(node, shape, matrix, frame, style);
+      const part = this.part(node, shape, matrix, frame, style, regions);
       out.push(part);
       if (MARKED.has(shape.tag)) this.tips(part, shape.attrs, style, out);
       return;
     }
     childLoop(node, (child) => {
       if (child.kind === "leaf" && child.details === null) {
-        this.estimate(child, matrix, frame, style, out);
+        this.estimate(child, matrix, frame, style, regions, out);
         return;
       }
       const childAttrs = this.attrsOf(child);
       if (childAttrs === null || hidden(childAttrs)) return;
       const own = transformOf(childAttrs);
-      this.collect(child, compose(matrix, own), compose(frame, own), styleOf(style, childAttrs), out);
+      const childMatrix = compose(matrix, own);
+      const childFrame = compose(frame, own);
+      const inner = styleOf(style, childAttrs);
+      this.collect(child, childMatrix, childFrame, inner, this.regionsBelow(child, childAttrs, childMatrix, childFrame, inner, regions), out);
     });
   }
 
-  private part(leaf: LeafNode, shape: PaintShape, matrix: Matrix, frame: Matrix, style: Style): Part {
+  /// I ritagli e le maschere di `node`, un elemento con gli attributi dipinti
+  /// `attrs`, dopo quelli di chi lo contiene, `outer`. `matrix` porta le
+  /// coordinate di `node` nella scena e `style` è lo stile che trasmette ai
+  /// figli, che serve a misurare il riquadro della sua geometria. Senza
+  /// ritagli né maschere, `outer` com'è.
+  private clipsOf(node: ElementPart, attrs: readonly PaintAttr[], matrix: Matrix, style: Style, outer: readonly Clip[] | null): readonly Clip[] | null {
+    let clipId: string | null = null;
+    let maskId: string | null = null;
+    for (const [name, value] of attrs) {
+      if (name === "clip-path") clipId = reference(value);
+      else if (name === "mask") maskId = reference(value);
+    }
+    if (clipId === null && maskId === null) return outer;
+    const found: Clip[] = [];
+    let box: Bounds | null | undefined;
+    for (const [id, tag] of [[clipId, "clipPath"], [maskId, "mask"]] as const) {
+      const look = id === null ? null : this.clipLook(node, id, tag);
+      if (look === null) continue;
+      if (needsBox(look) && box === undefined) box = this.objectBox(node, style);
+      found.push(new Clip(look, matrix, box ?? null));
+    }
+    if (found.length === 0) return outer;
+    return outer === null ? found : [...outer, ...found];
+  }
+
+  /// Le regioni di un oggetto `node`, la cui matrice nella scena è `matrix`:
+  /// i ritagli e le maschere di chi lo contiene, `outer`, che restano dove
+  /// sono quando l'oggetto si sposta, e i suoi, che vanno con lui.
+  private regionsOf(node: ElementPart, attrs: readonly PaintAttr[], matrix: Matrix, style: Style, outer: readonly Clip[] | null): readonly Region[] | null {
+    const clips = this.clipsOf(node, attrs, matrix, style, outer);
+    if (clips === null) return null;
+    const back = outer === null ? null : invert(matrix);
+    const fixed = outer === null ? 0 : outer.length;
+    return clips.map((clip, at) => (at < fixed ? new Region(clip, back === null ? null : compose(back, clip.user), false) : new Region(clip, IDENTITY, true)));
+  }
+
+  /// Le regioni di una forma sotto `node`, un discendente dell'oggetto con
+  /// `frame` dalle sue coordinate a quelle dell'oggetto: quelle di prima,
+  /// `outer`, e le sue, che vanno con l'oggetto.
+  private regionsBelow(
+    node: ElementPart,
+    attrs: readonly PaintAttr[],
+    matrix: Matrix,
+    frame: Matrix,
+    style: Style,
+    outer: readonly Region[] | null,
+  ): readonly Region[] | null {
+    const clips = this.clipsOf(node, attrs, matrix, style, null);
+    if (clips === null) return outer;
+    const added = clips.map((clip) => new Region(clip, frame, true));
+    return outer === null ? added : [...outer, ...added];
+  }
+
+  /// Il riquadro della geometria di `node` nelle sue coordinate, senza
+  /// contorno, punte, ritagli né maschere: `objectBoundingBox`. `style` è
+  /// quello che trasmette ai figli. `null` se non disegna niente.
+  private objectBox(node: ElementPart, style: Style): Bounds | null {
+    const out = new BoundsBuilder();
+    this.addGeometry(node, IDENTITY, style, out);
+    return out.finish();
+  }
+
+  private addGeometry(node: ElementPart, matrix: Matrix, style: Style, out: BoundsBuilder): void {
+    if (node.kind === "leaf") {
+      out.path(this.part(node, this.builder.shape(node)!, matrix, matrix, style, null).segments, matrix);
+      return;
+    }
+    childLoop(node, (child) => {
+      if (child.kind === "leaf" && child.details === null) {
+        for (const shape of this.foreign.shapes(child, style)) out.path(shape.segments, compose(matrix, shape.matrix));
+        return;
+      }
+      const attrs = this.attrsOf(child);
+      if (attrs === null || hidden(attrs)) return;
+      this.addGeometry(child, compose(matrix, transformOf(attrs)), styleOf(style, attrs), out);
+    });
+  }
+
+  /// Il ritaglio o la maschera, secondo `tag`, di id `id` nel documento di
+  /// `from`, letti e ricordati per risorsa; `null` se non c'è, se è un'altra
+  /// risorsa o se non disegna niente.
+  private clipLook(from: ElementPart, id: string, tag: "clipPath" | "mask"): ClipLook | null {
+    const resource = this.liveResource(from, id);
+    if (resource === null || resource.tag !== tag) return null;
+    let look = this.looks.get(resource);
+    if (look === undefined) {
+      look = clipLook(resource);
+      this.looks.set(resource, look);
+    }
+    return look;
+  }
+
+  private part(leaf: LeafNode, shape: PaintShape, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null): Part {
     let cache = this.cache.get(shape) ?? null;
     let segments: readonly Segment[];
     if (shape.tag === "text") {
@@ -860,7 +997,7 @@ export class SceneIndexer {
     // riquadro.
     const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
     const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
-    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null, host: null };
+    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null, host: null, regions };
   }
 
   /// I marcatori di `host`, una forma con gli attributi `attrs` e lo stile
@@ -888,19 +1025,25 @@ export class SceneIndexer {
             cache: null,
             flat: null,
             host,
+            regions: host.regions,
           });
         }
       }
     }
   }
 
+  /// La risorsa viva di id `id` nel documento di `from`; `null` se non c'è.
+  private liveResource(from: ElementPart, id: string): PaintResource | null {
+    const node = this.holder === null ? this.resourceNode(from, id) : this.holder(id);
+    if (node === null || node.kind !== "leaf" || node.details?.role !== "resource") return null;
+    return this.builder.resource(node);
+  }
+
   /// Il marcatore vivo di id `id` nel documento di `leaf`, letto e ricordato
   /// per risorsa; `null` se non c'è o non disegna niente.
   private marker(leaf: LeafNode, id: string): MarkerLook | null {
-    const node = this.holder === null ? this.resourceNode(leaf, id) : this.holder(id);
-    if (node === null || node.kind !== "leaf" || node.details?.role !== "resource") return null;
-    const resource = this.builder.resource(node);
-    if (resource.tag !== "marker") return null;
+    const resource = this.liveResource(leaf, id);
+    if (resource === null || resource.tag !== "marker") return null;
     let look = this.markers.get(resource);
     if (look === undefined) {
       look = markerLook(resource);
@@ -928,9 +1071,9 @@ export class SceneIndexer {
   }
 
   /// La risorsa di id `id` nelle `defs` della radice del documento di
-  /// `leaf`; `null` se non c'è.
-  private resourceNode(leaf: LeafNode, id: string): LeafNode | null {
-    let root = leaf.parent;
+  /// `from`; `null` se non c'è.
+  private resourceNode(from: ElementPart, id: string): LeafNode | null {
+    let root = from.parent;
     while (root !== null && root.parent !== null) root = root.parent;
     if (root === null) return null;
     for (const defs of elementChildren(root)) {
@@ -943,8 +1086,10 @@ export class SceneIndexer {
   }
 
   /// Le forme stimate del blocco estraneo `leaf`, figlio di un contenitore
-  /// che `matrix` porta nella scena e `frame` nelle coordinate dell'oggetto.
-  private estimate(leaf: LeafNode, matrix: Matrix, frame: Matrix, style: Style, out: Part[]): void {
+  /// che `matrix` porta nella scena e `frame` nelle coordinate dell'oggetto,
+  /// tagliate dalle regioni del contenitore. Il ritaglio e la maschera che il
+  /// blocco scrive per sé non si leggono: è una stima.
+  private estimate(leaf: LeafNode, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[]): void {
     for (const shape of this.foreign.shapes(leaf, style)) {
       out.push({
         leaf,
@@ -956,6 +1101,7 @@ export class SceneIndexer {
         cache: shape.cache,
         flat: null,
         host: null,
+        regions,
       });
     }
   }
@@ -971,16 +1117,22 @@ export class SceneIndexer {
 }
 
 /// Dove stanno i figli di un contenitore: il suo percorso, il livello, la
-/// matrice dalle sue coordinate a quelle della scena e lo stile che
-/// trasmette.
+/// matrice dalle sue coordinate a quelle della scena, lo stile che trasmette
+/// e i ritagli e le maschere suoi e di chi lo contiene.
 interface Context {
   readonly path: readonly number[];
   readonly layer: string | null;
   readonly matrix: Matrix;
   readonly style: Style;
+  readonly clips: readonly Clip[] | null;
 }
 
-type MakeUnit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style) => Unit | null;
+type MakeUnit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null) => Unit | null;
+
+/// Aggiunge a `outer` i ritagli e le maschere di un contenitore: il nodo, i
+/// suoi attributi dipinti, la matrice dalle sue coordinate a quelle della
+/// scena e lo stile che trasmette.
+type AddClips = (node: ElementPart, attrs: readonly PaintAttr[], matrix: Matrix, style: Style, outer: readonly Clip[] | null) => readonly Clip[] | null;
 
 /// Trova gli oggetti dentro i gruppi di un documento, per un indice: con
 /// `scope` solo quelli dentro il gruppo isolato.
@@ -994,6 +1146,7 @@ class Lookup implements Nested {
     private readonly rootStyle: Style,
     private readonly attrsOf: (node: ElementPart) => readonly PaintAttr[] | null,
     private readonly make: MakeUnit,
+    private readonly addClips: AddClips,
     /// Le pagine che si annotano: gli altri figli della radice non ci sono.
     private readonly pages: readonly ContainerNode[] | null = null,
   ) {}
@@ -1009,7 +1162,7 @@ class Lookup implements Nested {
     if (context === null) return null;
     const index = elementChildren(parent).indexOf(node);
     if (index < 0) return null;
-    const unit = this.make(node, [...context.path, index], context.layer, context.matrix, context.style);
+    const unit = this.make(node, [...context.path, index], context.layer, context.matrix, context.style, context.clips);
     return unit !== null && unit.key === key ? unit : null;
   }
 
@@ -1021,7 +1174,7 @@ class Lookup implements Nested {
     if (context === null) return [];
     const out: Unit[] = [];
     childLoop(container, (child, index) => {
-      if (pickable(child) && child.details!.locked !== true) push(out, this.make(child, [...context.path, index], context.layer, context.matrix, context.style));
+      if (pickable(child) && child.details!.locked !== true) push(out, this.make(child, [...context.path, index], context.layer, context.matrix, context.style, context.clips));
     });
     return out;
   }
@@ -1039,7 +1192,7 @@ class Lookup implements Nested {
   }
 
   private compute(container: ContainerNode): Context | null {
-    if (container === this.model.root) return { path: [], layer: null, matrix: IDENTITY, style: this.rootStyle };
+    if (container === this.model.root) return { path: [], layer: null, matrix: IDENTITY, style: this.rootStyle, clips: null };
     const parent = container.parent;
     const details = container.details;
     if (parent === null || details === null || details.locked === true) return null;
@@ -1053,11 +1206,14 @@ class Lookup implements Nested {
     const outer = index < 0 ? null : this.contextOf(parent);
     const attrs = this.attrsOf(container);
     if (outer === null || attrs === null || hidden(attrs)) return null;
+    const matrix = compose(outer.matrix, transformOf(attrs));
+    const style = styleOf(outer.style, attrs);
     return {
       path: [...outer.path, index],
       layer: isLayer ? container.facts.id : outer.layer,
-      matrix: compose(outer.matrix, transformOf(attrs)),
-      style: styleOf(outer.style, attrs),
+      matrix,
+      style,
+      clips: this.addClips(container, attrs, matrix, style, outer.clips),
     };
   }
 
@@ -1540,6 +1696,101 @@ function clipShape(out: MarkerShape[], shape: MarkerShape, clip: Bounds): void {
 }
 
 // ---------------------------------------------------------------------------
+// Ritagli e maschere.
+// ---------------------------------------------------------------------------
+
+/// Il ritaglio o la maschera `resource`; `null` se non è né l'uno né l'altra.
+/// Il contenuto non eredita niente da chi lo usa: parte dallo stile iniziale.
+function clipLook(resource: PaintResource): ClipLook | null {
+  const units = (name: string): string | undefined => attr(resource.attrs, name)?.trim();
+  const shapes: ClipShape[] = [];
+  if (resource.tag === "mask") {
+    maskShapes(resource.children, IDENTITY, INITIAL, shapes);
+    return { mask: true, boxContent: units("maskContentUnits") === "objectBoundingBox", transform: IDENTITY, window: windowOf(resource.attrs, units("maskUnits") !== "userSpaceOnUse"), shapes };
+  }
+  if (resource.tag !== "clipPath") return null;
+  clipShapes(resource.children, IDENTITY, units("clip-rule") === "evenodd", shapes);
+  return { mask: false, boxContent: units("clipPathUnits") === "objectBoundingBox", transform: transformOf(resource.attrs), window: null, shapes };
+}
+
+/// La finestra di una maschera: di `attrs`, in frazioni del riquadro con
+/// `box`, dove -10% -10% 120% 120% sono i valori che mancano. In unità
+/// utente, se manca un lato la finestra non limita.
+function windowOf(attrs: readonly PaintAttr[], box: boolean): ClipWindow | null {
+  const read = (name: string, fallback: number | null): number | null => {
+    const value = attr(attrs, name);
+    if (value === undefined) return fallback;
+    return box ? fraction(value) : length(value);
+  };
+  const x = read("x", box ? -0.1 : null);
+  const y = read("y", box ? -0.1 : null);
+  const width = read("width", box ? 1.2 : null);
+  const height = read("height", box ? 1.2 : null);
+  return x === null || y === null || width === null || height === null ? null : { box, x, y, width, height };
+}
+
+/// Le forme di `children`, il contenuto di una maschera o di un suo gruppo,
+/// con `matrix` dalle loro coordinate a quelle del contenuto: quelle che
+/// dipingono, col riempimento o col contorno. Un testo conta nel riquadro
+/// stimato delle sue righe.
+function maskShapes(children: readonly (PaintDef | string)[], matrix: Matrix, style: Style, out: ClipShape[]): void {
+  for (const child of children) {
+    if (typeof child === "string" || hidden(child.attrs)) continue;
+    const m = compose(matrix, transformOf(child.attrs));
+    const inner = styleOf(style, child.attrs);
+    if (child.tag === "g") {
+      maskShapes(child.children, m, inner, out);
+      continue;
+    }
+    const text = child.tag === "text";
+    const segments = text ? textSegments(child.attrs, defRuns(child), inner) : shapeSegments(child.tag, child.attrs);
+    const fill = text || (child.tag !== "line" && inner.fill);
+    const radius = !text && inner.stroke ? inner.strokeWidth / 2 : 0;
+    if (segments.length > 0 && (fill || radius > 0)) out.push({ segments, matrix: m, fill, radius, evenodd: false });
+  }
+}
+
+/// Le forme di `children`, il contenuto di un ritaglio, che non ha gruppi:
+/// quelle che riempiono, qualunque sia il loro riempimento e il loro
+/// contorno, ciascuna con la `clip-rule` che scrive o quella `evenodd` del
+/// ritaglio. Una linea non ha area e non conta.
+function clipShapes(children: readonly (PaintDef | string)[], matrix: Matrix, evenodd: boolean, out: ClipShape[]): void {
+  for (const child of children) {
+    if (typeof child === "string" || hidden(child.attrs) || child.tag === "line" || child.tag === "g") continue;
+    const rule = attr(child.attrs, "clip-rule")?.trim();
+    const segments = child.tag === "text" ? textSegments(child.attrs, defRuns(child), styleOf(INITIAL, child.attrs)) : shapeSegments(child.tag, child.attrs);
+    if (segments.length > 0) out.push({ segments, matrix: compose(matrix, transformOf(child.attrs)), fill: true, radius: 0, evenodd: rule === undefined ? evenodd : rule === "evenodd" });
+  }
+}
+
+/// Le righe di un `text` del contenuto di una risorsa, come le legge
+/// `textSegments`.
+function defRuns(text: PaintDef): TextRun[] {
+  const runs: TextRun[] = [];
+  for (const line of text.children) {
+    if (typeof line === "string" || line.tag !== "tspan") continue;
+    const parts: Array<string | TextPiece> = [];
+    let pieces = false;
+    for (const part of line.children) {
+      if (typeof part === "string") {
+        parts.push(part);
+        continue;
+      }
+      pieces = true;
+      parts.push({ attrs: part.attrs, space: part.space, text: defText(part) });
+    }
+    const content = parts.map((part) => (typeof part === "string" ? part : part.text)).join("");
+    runs.push(pieces ? { kind: "span", attrs: line.attrs, space: line.space, text: content, parts } : { kind: "span", attrs: line.attrs, space: line.space, text: content });
+  }
+  return runs;
+}
+
+/// Il testo di `def` e di tutto ciò che contiene.
+function defText(def: PaintDef): string {
+  return def.children.map((child) => (typeof child === "string" ? child : defText(child))).join("");
+}
+
+// ---------------------------------------------------------------------------
 // Blocchi estranei.
 // ---------------------------------------------------------------------------
 
@@ -1870,22 +2121,6 @@ function boxEstimate(out: BoundsBuilder): Estimate[] {
 // Riquadri.
 // ---------------------------------------------------------------------------
 
-function sameMatrix(a: Matrix, b: Matrix): boolean {
-  return a === b || (a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3] && a[4] === b[4] && a[5] === b[5]);
-}
-
-/// Il fattore medio con cui `m` cambia le lunghezze: esatto per una
-/// similitudine, una stima per una scala diversa sui due assi.
-function scaleOf(m: Matrix): number {
-  return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
-}
-
-function transformedBounds(segments: readonly Segment[], m: Matrix): Bounds | null {
-  const out = new BoundsBuilder();
-  out.path(segments, m);
-  return out.finish();
-}
-
 function localBounds(part: Part): Bounds | null {
   const cache = part.cache!;
   if (cache.local === undefined) cache.local = transformedBounds(part.segments, IDENTITY);
@@ -1902,6 +2137,25 @@ function includeInflated(out: BoundsBuilder, bounds: Bounds, by: number): void {
   out.include([bounds.max[0] + by, bounds.max[1] + by]);
 }
 
+/// Aggiunge a `out` ciò che si vede della forma `part` il cui riquadro senza
+/// contorno è `bounds`: allargato di `by` e tagliato da ogni regione di
+/// `part`, misurate in `space`. Una forma tagliata via non aggiunge niente.
+function includeSeen(out: BoundsBuilder, part: Part, bounds: Bounds, by: number, space: Space): void {
+  if (part.regions === null) {
+    includeInflated(out, bounds, by);
+    return;
+  }
+  const seen = cut(inflate(bounds, by), part.regions, space);
+  if (seen !== null) includeInflated(out, seen, 0);
+}
+
+/// Le regioni di ritagli e maschere che non fanno parte di un oggetto, come
+/// quelle di un livello su un blocco estraneo: non hanno coordinate
+/// dell'oggetto e non si spostano con nessuno.
+function fixed(clips: readonly Clip[] | null): readonly Region[] | null {
+  return clips === null ? null : clips.map((clip) => new Region(clip, null, false));
+}
+
 /// Vero se il segmento da `a` a `b`, allargato di `tolerance`, incontra
 /// `bounds`.
 function near(bounds: Bounds | null, a: Point, b: Point, tolerance: number): boolean {
@@ -1914,7 +2168,7 @@ function near(bounds: Bounds | null, a: Point, b: Point, tolerance: number): boo
 // Appiattimento.
 // ---------------------------------------------------------------------------
 
-function flatten(part: Part): Flat {
+function flatten(part: Solid): Flat {
   if (part.flat !== null) return part.flat;
   const m = part.matrix;
   const runs: Run[] = [];
@@ -2088,31 +2342,60 @@ function segmentDistance(ax: number, ay: number, bx: number, by: number, cx: num
   );
 }
 
-function partBounds(part: Part): Bounds | null {
+function partBounds(part: Solid): Bounds | null {
   const cache = part.cache;
   if (cache !== null && cache.scene !== null && sameMatrix(cache.scene.matrix, part.matrix)) return cache.scene.bounds;
   return transformedBounds(part.segments, part.matrix);
 }
 
-function partHits(part: Part, p: Point, tolerance: number): boolean {
-  const radius = part.radius * scaleOf(part.matrix);
-  if (!near(partBounds(part), p, p, tolerance + radius)) return false;
-  const flat = flatten(part);
-  if (part.fill && winding(flat, p) !== 0) return true;
+/// Vero se `p` sta dentro il riempimento di `solid`, appiattito in `flat`,
+/// con la sua regola.
+function covers(solid: Solid, flat: Flat, p: Point): boolean {
+  const turns = winding(flat, p);
+  return solid.evenodd === true ? (turns & 1) !== 0 : turns !== 0;
+}
+
+/// Vero se il punto `p` tocca la forma `solid`, ignorando ritagli e maschere:
+/// dentro il riempimento, o a meno della tolleranza dal suo contorno.
+function solidHits(solid: Solid, p: Point, tolerance: number): boolean {
+  const radius = solid.radius * scaleOf(solid.matrix);
+  if (!near(partBounds(solid), p, p, tolerance + radius)) return false;
+  const flat = flatten(solid);
+  if (solid.fill && covers(solid, flat, p)) return true;
   const reach = flat.radius + tolerance;
-  return forEachEdge(flat, part.fill, (ax, ay, bx, by) => pointSegmentDistance(p[0], p[1], ax, ay, bx, by) <= reach);
+  return forEachEdge(flat, solid.fill, (ax, ay, bx, by) => pointSegmentDistance(p[0], p[1], ax, ay, bx, by) <= reach);
+}
+
+/// Vero se `p` sta dentro ogni ritaglio e ogni maschera di `regions`, con la
+/// stessa tolleranza di una forma: dentro la finestra di una maschera e
+/// dentro, o vicino, a una forma del contenuto.
+function regionsHit(regions: readonly Region[], p: Point, tolerance: number): boolean {
+  for (const { clip } of regions) {
+    const window = clip.windowSolid();
+    if (window !== null && !solidHits(window, p, tolerance)) return false;
+    if (!clip.solids().some((solid) => solidHits(solid, p, tolerance))) return false;
+  }
+  return true;
+}
+
+/// Vero se `p` tocca la parte che si vede di `part`: la forma, dove i
+/// ritagli e le maschere che la tagliano la lasciano.
+function partHits(part: Part, p: Point, tolerance: number): boolean {
+  return solidHits(part, p, tolerance) && (part.regions === null || regionsHit(part.regions, p, tolerance));
 }
 
 /// Che cosa colora `part` nel punto `p`: il contorno, che sta sopra, il
 /// riempimento, o niente. Il contorno di un sottotracciato aperto non ha il
-/// lato che il riempimento chiude.
+/// lato che il riempimento chiude. Dove un ritaglio o una maschera nasconde
+/// la forma non colora niente.
 function partSample(part: Part, p: Point, tolerance: number): Sampled["on"] | null {
   const radius = part.radius * scaleOf(part.matrix);
   if (!near(partBounds(part), p, p, tolerance + radius)) return null;
+  if (part.regions !== null && !regionsHit(part.regions, p, tolerance)) return null;
   const flat = flatten(part);
   const away = edgeDistance(flat, false, p);
   if (flat.radius > 0 && away <= flat.radius) return "stroke";
-  if (part.fill && winding(flat, p) !== 0) return "fill";
+  if (part.fill && covers(part, flat, p)) return "fill";
   if (tolerance <= 0) return null;
   if (flat.radius > 0) return away <= flat.radius + tolerance ? "stroke" : null;
   return part.fill && edgeDistance(flat, true, p) <= tolerance ? "fill" : null;
@@ -2129,11 +2412,92 @@ function edgeDistance(flat: Flat, fill: boolean, p: Point): number {
   return best;
 }
 
-function partTouches(part: Part, a: Point, b: Point, tolerance: number): boolean {
-  const radius = part.radius * scaleOf(part.matrix);
-  if (!near(partBounds(part), a, b, tolerance + radius)) return false;
-  const flat = flatten(part);
-  if (part.fill && (winding(flat, a) !== 0 || winding(flat, b) !== 0)) return true;
+function solidTouches(solid: Solid, a: Point, b: Point, tolerance: number): boolean {
+  const radius = solid.radius * scaleOf(solid.matrix);
+  if (!near(partBounds(solid), a, b, tolerance + radius)) return false;
+  const flat = flatten(solid);
+  if (solid.fill && (covers(solid, flat, a) || covers(solid, flat, b))) return true;
   const reach = flat.radius + tolerance;
-  return forEachEdge(flat, part.fill, (cx, cy, dx, dy) => segmentDistance(a[0], a[1], b[0], b[1], cx, cy, dx, dy) <= reach);
+  return forEachEdge(flat, solid.fill, (cx, cy, dx, dy) => segmentDistance(a[0], a[1], b[0], b[1], cx, cy, dx, dy) <= reach);
+}
+
+/// Vero se il segmento da `a` a `b` tocca la parte che si vede di `part`.
+/// Si toglie prima ciò che sta fuori dai riquadri dei ritagli e delle
+/// maschere, poi si guarda se ciò che resta tocca anche loro e la forma.
+function partTouches(part: Part, a: Point, b: Point, tolerance: number): boolean {
+  const regions = part.regions;
+  if (regions === null) return solidTouches(part, a, b, tolerance);
+  let from = a;
+  let to = b;
+  for (const region of regions) {
+    const box = region.clip.sceneBox();
+    const kept = box === null ? null : clipSegment(from, to, box, tolerance);
+    if (kept === null) return false;
+    [from, to] = kept;
+  }
+  for (const { clip } of regions) {
+    const window = clip.windowSolid();
+    if (window !== null && !solidTouches(window, from, to, tolerance)) return false;
+    if (!clip.solids().some((solid) => solidTouches(solid, from, to, tolerance))) return false;
+  }
+  return solidTouches(part, from, to, tolerance);
+}
+
+/// Vero se `solid` sta tutta dentro il lazo, contorno compreso: nessun lato
+/// di `edges`, quelli del lazo che le stanno vicino, arriva al suo contorno,
+/// e comincia dentro.
+function solidInside(solid: Solid, lasso: Lasso, edges: readonly number[]): boolean {
+  const flat = flatten(solid);
+  const first = flat.runs[0];
+  if (first === undefined) return true;
+  const reach = flat.radius;
+  const crosses = forEachEdge(flat, solid.fill, (ax, ay, bx, by) => {
+    for (let i = 0; i < edges.length; i += 4) {
+      if (segmentDistance(ax, ay, bx, by, edges[i]!, edges[i + 1]!, edges[i + 2]!, edges[i + 3]!) <= reach) return true;
+    }
+    return false;
+  });
+  return !crosses && lasso.contains([first.points[0]!, first.points[1]!]);
+}
+
+/// Vero se tutte le `solids` stanno dentro il lazo, e `box` le contiene.
+function allInside(solids: readonly Solid[], box: Bounds, lasso: Lasso): boolean {
+  if (!holds(lasso.bounds, box)) return false;
+  const edges = lasso.edgesNear(box);
+  if (edges.length === 0) return lasso.contains(box.min);
+  return solids.every((solid) => solidInside(solid, lasso, edges));
+}
+
+/// Il riquadro che contiene le `solids`, contorno compreso.
+function solidsBox(solids: readonly Solid[]): Bounds | null {
+  const out = new BoundsBuilder();
+  for (const solid of solids) {
+    const bounds = partBounds(solid);
+    if (bounds !== null) includeInflated(out, bounds, solid.radius * scaleOf(solid.matrix));
+  }
+  return out.finish();
+}
+
+/// Vero se ciò che si vede di `part`, tagliata da ritagli o maschere, sta
+/// tutto dentro il lazo. Ciò che si vede sta dentro la forma e dentro ogni
+/// regione, e anche dentro il riquadro dove le regioni e la forma si
+/// incontrano: basta che il lazo contenga uno di loro.
+function visibleInside(part: Part, lasso: Lasso): boolean {
+  const regions = part.regions!;
+  const bounds = partBounds(part);
+  if (bounds === null) return true;
+  const own = inflate(bounds, part.radius * scaleOf(part.matrix));
+  const seen = cut(own, regions, "scene");
+  if (seen === null) return true;
+  if (allInside([part], own, lasso)) return true;
+  for (const { clip } of regions) {
+    for (const group of clip.covers()) {
+      const box = solidsBox(group);
+      if (box !== null && allInside(group, box, lasso)) return true;
+    }
+  }
+  const [x0, y0] = seen.min;
+  const [x1, y1] = seen.max;
+  const box: Solid = { segments: rectPath(x0, y0, x1 - x0, y1 - y0, 0, 0), matrix: IDENTITY, fill: true, radius: 0, cache: null, flat: null };
+  return allInside([box], seen, lasso);
 }
