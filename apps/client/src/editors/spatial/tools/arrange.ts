@@ -276,7 +276,7 @@ function elemIn(node: ElementPart, scope: NamespaceScope): Elem | null {
 
 /// `elem` con id nuovi, che il motore chiede a ogni elemento aggiunto: solo
 /// titoli, descrizioni e righe di testo possono restare senza.
-function renamed(elem: Elem, ids: NewIds): Elem {
+export function renamed(elem: Elem, ids: NewIds): Elem {
   const attrs = { ...elem.attrs };
   if (attrs.id !== undefined || !TEXT_TAGS.has(elem.tag)) attrs.id = ids.next("object");
   const out: { tag: string; attrs: Record<string, string>; children?: Elem[]; text?: string | null; runs?: readonly Run[] } = { tag: elem.tag, attrs };
@@ -401,29 +401,38 @@ export function orderOps(model: DocumentModel, index: SceneIndex, units: readonl
 // Gruppi.
 // ---------------------------------------------------------------------------
 
-/// Un contenitore nuovo `elem` con `units`, al posto del più alto e nel suo
-/// livello, con gli oggetti nell'ordine di prima. Un oggetto di un altro
-/// livello vi entra con la trasformazione che lo lascia dov'era. `null` se il
+/// Un contenitore nuovo `tag` con `units`, nel piano `plan`: al posto del
+/// più alto e nel suo livello, con gli oggetti nell'ordine di prima. Un
+/// oggetto di un altro livello vi entra con la trasformazione che lo lascia
+/// dov'era. Torna l'id del contenitore; `null`, e il piano com'era, se il
 /// livello del più alto schiaccia il piano.
-function wrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, tag: "g" | "a", attrs: Readonly<Record<string, string>>): Arranged | null {
+export function wrapIn(plan: Plan, units: readonly Unit[], tag: "g" | "a", attrs: Readonly<Record<string, string>>): string | null {
   const top = units[units.length - 1];
   if (top === undefined) return null;
   const inverse = invert(top.parent);
   if (inverse === null) return null;
-  const plan = new Plan(model, ids);
-  const topNode = nodeOf(model, top);
+  const topNode = nodeOf(plan.model, top);
   const parent = plan.parentOf(topNode);
   const after = plan.idOf(topNode);
-  const wrapper = ids.next("object");
+  const wrapper = plan.ids.next("object");
   plan.ops.push({ op: "add", parent, pos: { after }, elem: { tag, attrs: { id: wrapper, ...attrs }, children: [] } });
   for (const unit of units) {
-    const id = plan.idOf(nodeOf(model, unit));
+    const id = plan.idOf(nodeOf(plan.model, unit));
     if (!sameMatrix(unit.parent, top.parent)) {
       plan.ops.push({ op: "set", id, attrs: { transform: transformValue(compose(inverse, unit.matrix)) } });
     }
     plan.ops.push({ op: "move", target: id, parent: wrapper, pos: { last: true } });
   }
-  return plan.finish([wrapper]);
+  return wrapper;
+}
+
+/// Un contenitore nuovo `elem` con `units`, al posto del più alto e nel suo
+/// livello, con gli oggetti nell'ordine di prima: vedi [`wrapIn`]. `null` se
+/// il livello del più alto schiaccia il piano.
+function wrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, tag: "g" | "a", attrs: Readonly<Record<string, string>>): Arranged | null {
+  const plan = new Plan(model, ids);
+  const wrapper = wrapIn(plan, units, tag, attrs);
+  return wrapper === null ? null : plan.finish([wrapper]);
 }
 
 /// Un gruppo nuovo con `units`, al posto del più alto e nel suo livello: vedi
@@ -450,14 +459,14 @@ export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: Ne
   return unwrapOps(model, units, ids, (unit) => isGroup(unit) && unwrappable(model, unit));
 }
 
-/// Toglie i contenitori fra `units` che `unwraps` sceglie: i figli prendono
-/// il posto del contenitore, in ordine, con la sua trasformazione e lo stile
-/// che ne ereditavano; titolo e descrizione del contenitore se ne vanno con
-/// lui. Le parti estranee si spostano come sono: ciò che portano lo
-/// aggiunge `styled.ts`. La selezione dopo sono i figli e gli altri oggetti
-/// scelti.
-function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, unwraps: (unit: Unit) => boolean): Arranged {
-  const plan = new Plan(model, ids);
+/// Toglie i contenitori fra `units` che `unwraps` sceglie, nel piano `plan`:
+/// i figli prendono il posto del contenitore, in ordine, con la sua
+/// trasformazione e lo stile che ne ereditavano; titolo e descrizione del
+/// contenitore se ne vanno con lui. Le parti estranee si spostano come sono:
+/// ciò che portano lo aggiunge `styled.ts`. Torna gli oggetti di `units`
+/// rimasti, e gli id dei figli portati fuori.
+export function unwrapIn(plan: Plan, units: readonly Unit[], unwraps: (unit: Unit) => boolean): { readonly kept: Unit[]; readonly freed: string[] } {
+  const { model } = plan;
   const kept: Unit[] = [];
   const freed: string[] = [];
   // Dall'ultimo contenitore al primo, e in ognuno dall'ultimo figlio al
@@ -500,6 +509,14 @@ function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, un
     }
     plan.ops.push({ op: "remove", target: container });
   }
+  return { kept, freed };
+}
+
+/// Toglie i contenitori fra `units` che `unwraps` sceglie: vedi
+/// [`unwrapIn`]. La selezione dopo sono i figli e gli altri oggetti scelti.
+export function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, unwraps: (unit: Unit) => boolean): Arranged {
+  const plan = new Plan(model, ids);
+  const { kept, freed } = unwrapIn(plan, units, unwraps);
   if (plan.ops.length === 0) return { ops: [], keys: units.map((unit) => unit.key) };
   // Un oggetto rimasto scelto riceve un id: i figli portati fuori cambiano il
   // suo percorso.

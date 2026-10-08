@@ -29,6 +29,18 @@
 //   che se ne va, come un filtro; uno stile che dipende da dove si guarda il
 //   disegno; un selettore che non si legge; un valore che un oggetto del
 //   formato non ammette. Il comando non si fa, e si dice perché.
+// - **Gli effetti che il comando scrive da sé:** chi crea una maschera
+//   aggiunge un gruppo con `clip-path` o `mask`, e chi la rilascia ne toglie
+//   uno. Con `Keeping.effects` quegli attributi non contano come un effetto
+//   che il foglio dà o toglie al contenitore, a meno che una regola o uno
+//   `style` non dia quella proprietà al contenitore: allora l'attributo
+//   perderebbe, e il comando non si fa.
+// - **Le copie di un elemento:** una maschera trasforma una forma nel
+//   contenuto di una risorsa, e il rilascio il contenuto in oggetti. Con un
+//   foglio di stile la copia può vedersi diversa dall'originale, perché le
+//   regole scelgono per posizione e per id: `keepCarried` confronta con la
+//   cascata la copia e l'originale, e scrive sulla copia ciò che manca o
+//   rifiuta.
 // - **Alla fine si ricontrolla:** lo stile di dopo, con tutto ciò che si è
 //   scritto, si ricalcola da capo e si confronta con quello di prima.
 // - **Un disegno tutto nel formato non chiede niente:** senza parti estranee
@@ -39,9 +51,9 @@
 import { svgAttribute, type Tag } from "../scene/classify";
 import { createId, type IdKind } from "../scene/ids";
 import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
-import { buildFragment, elementChildren, indentOf, parseFragment, scopeOf, tagName, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { buildFragment, elementChildren, indentOf, materialize, parseFragment, scopeOf, tagName, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { ROOT, type Op, type Pos, type Target } from "../scene/ops";
-import { escapeAttribute, formatTransform, type Elem } from "../scene/serialize";
+import { escapeAttribute, formatTransform, type Elem, type Run } from "../scene/serialize";
 import { SourceText } from "../scene/text";
 import { length as svgLength, NAMED_COLORS, paint } from "../scene/values";
 import { FUB_NS, isSpace, parseXml, SVG_NS, XLINK_NS, XML_URI, type Attr, type ElementNode, type XmlDocument } from "../scene/xml";
@@ -104,6 +116,45 @@ export interface Keeping {
   readonly containers: "keep" | "take";
   /// Vero se un id è già nel documento.
   readonly taken: (id: string) => boolean;
+  /// Gli effetti che il comando scrive da sé, di proposito, sui contenitori
+  /// che aggiunge o che toglie: `clip-path` e `mask` per chi crea o rilascia
+  /// una maschera, il cui gruppo nuovo li porta e il cui gruppo che si scioglie
+  /// li perde. Su un contenitore così non sono un effetto che il foglio gli
+  /// darebbe o che gli toglierebbe, a meno che una regola del foglio o uno
+  /// `style` non dia proprio quella proprietà al contenitore: allora
+  /// l'attributo del comando non vincerebbe, e il comando non si fa.
+  readonly effects?: readonly string[];
+}
+
+/// Un elemento che un comando riscrive in un altro posto come copia di uno
+/// di prima: il contenuto di una risorsa che era un oggetto (una maschera
+/// che nasce), o un oggetto che era il contenuto di una risorsa (una maschera
+/// che si rilascia). Il comando ha scritto la copia leggendo gli attributi;
+/// con un foglio di stile o un attributo `style` nel disegno la copia può
+/// vedersi diversa, perché le regole scelgono per posizione o per id, e ciò
+/// che eredita non è più ciò che ereditava. [`keepCarried`] confronta, con la
+/// cascata, la copia con l'originale e scrive sulla copia ciò che le manca, o
+/// rifiuta.
+export interface Carried {
+  /// L'oggetto o la risorsa di prima, nel disegno com'è.
+  readonly from: ElementPart;
+  /// I figli da seguire dentro `from`, per indice fra gli elementi figli,
+  /// fino all'elemento che si copia; vuoto se è `from`.
+  readonly down: readonly number[];
+  /// L'operazione `add` che scrive la copia, o l'elemento che la contiene.
+  readonly into: Op;
+  /// I figli da seguire dentro l'elemento dell'operazione fino alla copia;
+  /// vuoto se è lui.
+  readonly inside: readonly number[];
+  /// Dove va la copia: nel contenuto di un ritaglio (`clip`) o di una
+  /// maschera (`mask`), o fra gli oggetti, lasciando il contenuto di un
+  /// ritaglio (`from-clip`) o di una maschera (`from-mask`). Un ritaglio
+  /// ignora il colore e non ha punte: i motivi e le punte dell'originale non
+  /// ci sono. Un pezzo di ritaglio senza riempimento si rilascia senza.
+  readonly mode: "clip" | "mask" | "from-clip" | "from-mask";
+  /// I contenitori di prima fra l'originale e il posto della copia, che la
+  /// copia non ha più: la loro opacità la porta lei (solo in una maschera).
+  readonly fades?: readonly ElementPart[];
 }
 
 /// I servizi di caratteri: i fogli che si importano da loro dichiarano solo
@@ -126,6 +177,13 @@ const ACCUMULATED: ReadonlySet<string> = new Set(["transform", "transform-origin
 
 /// I decimali di un'opacità o di una trasformazione scritte.
 const PLACES = 4;
+
+/// Le proprietà che un ritaglio non guarda: il colore, il contorno e le
+/// punte.
+const PAINTED: ReadonlySet<string> = new Set([
+  "color", "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin",
+  "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset", "paint-order", "vector-effect", "marker-start", "marker-mid", "marker-end",
+]);
 
 let serials = 0;
 
@@ -304,6 +362,8 @@ class Follower {
   readonly touched = new Set<Node>();
   readonly added = new Set<Node>();
   readonly removed = new Set<Node>();
+  /// L'elemento che ha fatto ogni operazione `add` con `elem`.
+  readonly built = new Map<Op, Node>();
   /// Per un elemento, l'ultima operazione di primo livello che lo sposta.
   readonly moves = new Map<Node, number>();
   /// Gli elementi che cambiano posto o attributi.
@@ -337,6 +397,7 @@ class Follower {
         const parent = this.parentOf(op.parent);
         const node = nodeOf(op.elem, parent);
         this.insert(node, parent, op.pos);
+        this.built.set(op, node);
         for (const made of walk(node)) {
           this.added.add(made);
           const id = made.id();
@@ -533,6 +594,20 @@ export function keepLook(text: string, model: DocumentModel, ops: readonly Op[],
   }
 }
 
+/// Le copie `carried` nelle operazioni `ops` di un comando, confrontate col
+/// loro originale nel disegno `model`: vedi [`Carried`]. Le operazioni con
+/// ciò che serve scritto sulle copie, o il rifiuto. Un disegno tutto nel
+/// formato non ha niente da confrontare.
+export function keepCarried(model: DocumentModel, ops: readonly Op[], carried: readonly Carried[]): Kept | Refusal {
+  if (plain(model)) return { ops, written: 0 };
+  try {
+    return new Keeper(materialize(model), model, ops, { containers: "keep", taken: () => false }, carried).run();
+  } catch (error) {
+    if (error instanceof Refused) return error.refusal;
+    throw error;
+  }
+}
+
 /// Vero se il disegno è tutto nel formato: senza parti estranee, e quindi
 /// senza fogli di stile, attributi `style` e copie collegate. Le operazioni
 /// dei comandi portano già da sé la trasformazione, l'opacità e gli
@@ -573,11 +648,16 @@ class Keeper {
   private readonly needed = new Map<string, Map<Node, boolean>>();
   private readonly identity = (node: CascadeNode): string => String(this.original.get(node as Node)?.serial ?? (node as Node).serial);
 
+  /// Gli attributi scritti sugli elementi nuovi per le copie portate.
+  private readonly patched = new Map<Node, Record<string, string>>();
+
   constructor(
     private readonly text: string,
     private readonly model: DocumentModel,
     private readonly ops: readonly Op[],
     private readonly keeping: Keeping,
+    /// Le copie da confrontare, se il compito è solo questo.
+    private readonly carried: readonly Carried[] | null = null,
   ) {}
 
   run(): Kept {
@@ -616,6 +696,7 @@ class Keeper {
     this.tracked = this.trackedOf(sheet, order);
     this.was = new Cascade(sheet, this.before, this.identity, this.inline);
     this.work = new Cascade(this.sheetAfter, this.after, this.identity, this.inline);
+    if (this.carried !== null) return this.carry(this.carried, sheet.rules.length > 0 || this.inline.size > 0);
 
     // Dove guardare: dove le operazioni cambiano i fratelli, se un foglio
     // sceglie per posizione, o solo ciò che si sposta; tutto, se il foglio
@@ -649,21 +730,35 @@ class Keeper {
   }
 
   /// I contenitori che se ne vanno e quelli che arrivano: un effetto che
-  /// vale per tutto ciò che contengono non si può portare sui figli.
+  /// vale per tutto ciò che contengono non si può portare sui figli. Un
+  /// effetto che il comando scrive da sé (`Keeping.effects`) non conta, se il
+  /// foglio non glielo dà: se glielo dà, l'attributo non vincerebbe. Un
+  /// elemento nuovo che porta con sé tutto ciò che contiene, come il
+  /// contenuto di una risorsa o un oggetto che si rilascia, non è un
+  /// contenitore che prende altri elementi: ciò che si vede lo guarda
+  /// [`keepCarried`].
   private containers(): void {
+    const mine = this.keeping.effects ?? [];
     for (const gone of this.follower.removed) {
       if (gone.parent !== null) continue;
       const was = this.original.get(gone)!;
       if (silent(was)) continue;
       for (const effect of EFFECTS) {
+        if (mine.includes(effect) && was.attr(effect) !== null && !this.was.styled(was, effect)) continue;
         const value = this.was.value(was, effect);
         if (!effective(effect, value)) continue;
         refuse(value.doubt !== null ? doubted(value.doubt) : { kind: "lost", property: effect });
       }
     }
     for (const made of this.follower.added) {
-      if (silent(made)) continue;
+      if (silent(made) || !this.takes(made)) continue;
       for (const effect of [...EFFECTS, "opacity"]) {
+        if (mine.includes(effect) && made.attr(effect) !== null) {
+          // L'attributo del comando vince solo se nessuna regola dà
+          // quella proprietà al contenitore.
+          if (this.work.styled(made, effect)) refuse({ kind: "new", property: effect });
+          continue;
+        }
         const value = this.work.value(made, effect);
         if (!effective(effect, value)) continue;
         refuse(value.doubt !== null ? doubted(value.doubt) : { kind: "new", property: effect });
@@ -671,6 +766,12 @@ class Keeper {
       const own = this.work.own(made);
       if (own.m === null || !same(own.m, IDENTITY)) refuse({ kind: "new", property: "transform" });
     }
+  }
+
+  /// Vero se `made`, un elemento nuovo, contiene qualcosa che c'era già: un
+  /// contenitore nuovo in cui il comando porta altri elementi.
+  private takes(made: Node): boolean {
+    return walk(made).some((inner) => !this.follower.added.has(inner));
   }
 
   /// Confronta gli elementi da guardare con com'erano, dall'alto: con `fix`
@@ -1142,6 +1243,177 @@ class Keeper {
     this.needed.clear();
     this.pass(false, this.work);
     this.copiesPass(false);
+  }
+
+  // -------------------------------------------------------------------------
+  // Le copie portate.
+  // -------------------------------------------------------------------------
+
+  /// Ogni copia portata si confronta col suo originale: se si vede diversa si
+  /// scrive su di lei ciò che le manca, o si rifiuta.
+  private carry(carried: readonly Carried[], hasStyles: boolean): Kept {
+    // Senza fogli né `style` l'aspetto lo dicono gli attributi, che chi ha
+    // scritto la copia ha già portato.
+    if (!hasStyles) return { ops: this.ops, written: 0 };
+    const nodes = new Map<ElementPart, Node>();
+    for (const node of walk(this.before)) if (node.part !== null) nodes.set(node.part, node);
+    for (const item of carried) this.carryOne(item, nodes, true);
+    // Alla fine si ricalcola da capo, con ciò che si è scritto.
+    this.work = new Cascade(this.sheetAfter, this.after, this.identity, this.inline);
+    this.needed.clear();
+    for (const item of carried) this.carryOne(item, nodes, false);
+    return { ops: this.carriedOps(), written: this.patched.size };
+  }
+
+  /// La copia `item` e il suo originale, elemento per elemento, dall'alto;
+  /// con `fix` scrive sulla copia ciò che serve, senza rifiuta alla prima
+  /// differenza.
+  private carryOne(item: Carried, nodes: ReadonlyMap<ElementPart, Node>, fix: boolean): void {
+    const follow = (start: Node | undefined, path: readonly number[]): Node => {
+      let at = start ?? refuse({ kind: "unknown" });
+      for (const index of path) at = at.children[index] ?? refuse({ kind: "unknown" });
+      return at;
+    };
+    const original = follow(nodes.get(item.from), item.down);
+    const copy = follow(this.follower.built.get(item.into), item.inside);
+    const fades = (item.fades ?? []).map((part) => nodes.get(part) ?? refuse({ kind: "unknown" }));
+    // I contenitori che la copia non ha più: ciò che facevano a tutto
+    // quello che contenevano, alla copia non lo fanno.
+    for (const container of fades) {
+      for (const effect of EFFECTS) {
+        const value = this.was.value(container, effect);
+        if (effective(effect, value)) refuse(value.doubt !== null ? doubted(value.doubt) : { kind: "lost", property: effect });
+      }
+    }
+    // Le matrici del comando valgono solo se nessuna regola dà una
+    // trasformazione a chi le porta.
+    for (const [side, start] of [[this.was, original.parent], [this.work, copy.parent]] as const) {
+      for (let at = start; at !== null; at = at.parent) {
+        const own = side.own(at);
+        if (own.m === null || own.css) refuse({ kind: "object", property: "transform" });
+      }
+    }
+    const pairs: Array<[Node, Node]> = [];
+    const stack: Array<[Node, Node]> = [[original, copy]];
+    while (stack.length > 0) {
+      const [o, c] = stack.pop()!;
+      if (o.uri !== c.uri || o.local !== c.local || o.children.length !== c.children.length) refuse({ kind: "unknown" });
+      pairs.push([o, c]);
+      for (let k = o.children.length - 1; k >= 0; k--) stack.push([o.children[k]!, c.children[k]!]);
+    }
+    pairs.forEach(([o, c], at) => this.carryPair(o, c, item.mode, at === 0 ? fades : [], fix));
+  }
+
+  /// L'elemento `c` di una copia, confrontato con `o`, il suo originale;
+  /// `fades` sono i contenitori che la copia non ha più e di cui porta
+  /// l'opacità.
+  private carryPair(o: Node, c: Node, mode: Carried["mode"], fades: readonly Node[], fix: boolean): void {
+    if (silent(c)) return;
+    const clip = mode === "clip" || mode === "from-clip";
+    const was = this.was.own(o);
+    const now = this.work.own(c);
+    if (was.m === null || was.css || now.m === null || now.css) refuse({ kind: "object", property: "transform" });
+    if (!clip) {
+      // L'opacità propria, con quella dei contenitori che si sono persi: una
+      // maschera guarda quanto il contenuto copre.
+      let want = this.was.opacity(o);
+      for (const container of fades) {
+        const fade = this.was.opacity(container);
+        want = want === null || fade === null ? null : want * fade;
+      }
+      const have = this.work.opacity(c);
+      if (want === null || have === null) refuse({ kind: "object", property: "opacity" });
+      const close = (a: number): boolean => Math.abs(a - want) <= 1e-3;
+      if (!close(have)) {
+        if (!fix) refuse({ kind: "object", property: "opacity" });
+        const done = this.patch(c, "opacity", formatNumber(want, PLACES), () => {
+          const after = this.work.opacity(c);
+          return after !== null && close(after);
+        });
+        if (!done) refuse({ kind: "object", property: "opacity" });
+      }
+    }
+    for (const p of this.tracked) {
+      // Un ritaglio non guarda il colore, il contorno e le punte.
+      if (clip && PAINTED.has(p) && !(mode === "from-clip" && (p === "fill" || p === "stroke"))) continue;
+      if (mode === "from-clip" && p === "clip-rule") continue;
+      if (!this.needs(c, p, this.work)) continue;
+      let want = this.was.value(o, p);
+      // Un pezzo di ritaglio senza colore si rilascia senza.
+      if (mode === "from-clip" && !this.declared(o, p) && (p === "fill" || p === "stroke")) want = { key: "none", text: "none", attr: true, own: true, doubt: null, number: null };
+      const have = this.work.value(c, p);
+      if (want.key === have.key || this.linked(o, c, p, want, have)) continue;
+      if (!fix) refuse(want.doubt !== null ? doubted(want.doubt) : have.doubt !== null ? doubted(have.doubt) : { kind: "object", property: p });
+      if (want.doubt !== null) refuse(doubted(want.doubt));
+      if (want.text !== null && want.attr && this.patch(c, p, want.text, () => this.work.value(c, p).key === want.key)) continue;
+      // Un contenitore che non lo prende lo lascia ai figli, che lo ereditano.
+      if (inherits(p) && !renders(c, p)) continue;
+      refuse(have.doubt !== null ? doubted(have.doubt) : { kind: "object", property: p });
+    }
+  }
+
+  /// Vero se `o` dichiara `p` da sé, con un attributo, un foglio o `style`.
+  private declared(o: Node, p: string): boolean {
+    return o.attr(p) !== null || this.was.styled(o, p);
+  }
+
+  /// Vero se `want` e `have` sono due rimandi a una risorsa scritti da chi ha
+  /// fatto la copia, che ne ha rifatto l'id: non vengono da un foglio, e si
+  /// vedono uguali.
+  private linked(o: Node, c: Node, p: string, want: Value, have: Value): boolean {
+    if (p !== "fill" && p !== "stroke") return false;
+    return want.own && have.own && /url\(/i.test(want.text ?? "") && /url\(/i.test(have.text ?? "") && !this.was.styled(o, p) && !this.work.styled(c, p);
+  }
+
+  /// Scrive l'attributo `p` di `node`, un elemento nuovo, se il formato lo
+  /// ammette con quel valore e `check` dice che ora si vede com'era.
+  private patch(node: Node, p: string, text: string, check: () => boolean): boolean {
+    const value = editableText(node.local, p, text);
+    if (value === null) return false;
+    const saved = [...node.attrs];
+    node.setAttr(p, value);
+    this.work.forget(node);
+    this.forgetNeeds(node);
+    if (!check()) {
+      node.attrs = saved;
+      this.work.forget(node);
+      this.forgetNeeds(node);
+      return false;
+    }
+    const written = this.patched.get(node) ?? {};
+    written[p] = value;
+    this.patched.set(node, written);
+    return true;
+  }
+
+  /// Le operazioni del comando, con gli attributi scritti sulle copie.
+  private carriedOps(): Op[] {
+    const rewrite = (op: Op): Op => {
+      if (op.op === "batch") {
+        const inner = op.ops.map(rewrite);
+        return inner.every((each, at) => each === op.ops[at]) ? op : { ...op, ops: inner };
+      }
+      if (op.op !== "add" || !("elem" in op)) return op;
+      const built = this.follower.built.get(op);
+      if (built === undefined || !walk(built).some((node) => this.patched.has(node))) return op;
+      return { ...op, elem: this.written(op.elem, built) };
+    };
+    return this.ops.map(rewrite);
+  }
+
+  /// `elem`, l'elemento di un'operazione, con gli attributi scritti su
+  /// `node`, che è il suo elemento nell'albero.
+  private written(elem: Elem, node: Node): Elem {
+    const own = this.patched.get(node);
+    const attrs = own === undefined ? elem.attrs : { ...elem.attrs, ...own };
+    const children = elem.children?.map((child, at) => this.written(child, node.children[at]!));
+    let piece = elem.children?.length ?? 0;
+    const runs = elem.runs?.map((run): Run => {
+      if (typeof run === "string") return run;
+      const inner = this.patched.get(node.children[piece++]!);
+      return inner === undefined ? run : { text: run.text, attrs: { ...run.attrs, ...inner } };
+    });
+    return { ...elem, attrs, ...(children === undefined ? {} : { children }), ...(runs === undefined ? {} : { runs }) };
   }
 }
 
