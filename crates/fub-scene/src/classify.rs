@@ -98,8 +98,9 @@ impl Role {
 /// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
 /// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
 /// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. `swatch`
-/// è un campione del documento, un colore con un nome: resta anche senza
-/// riferimenti, e duplicare chi lo usa lo condivide. Senza, la risorsa resta.
+/// è un campione del documento, un colore o un motivo con un nome: resta
+/// anche senza riferimenti, e duplicare chi lo usa lo condivide. Senza, la
+/// risorsa resta.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Lifecycle {
@@ -114,6 +115,26 @@ pub enum Lifecycle {
 pub struct Swatch {
     pub name: String,
     pub color: String,
+}
+
+/// Un motivo del documento (formato della scena, risorse): il suo nome,
+/// com'è scritto.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Motif {
+    pub name: String,
+}
+
+/// Il motivo del documento che è `element`, una risorsa modificabile con
+/// `fub:role="swatch"`: un `pattern` con un nome `fub:name` che non è vuoto.
+/// `None` se non lo è, e allora è una risorsa senza ciclo di vita.
+fn motif_of(element: &Element<'_>) -> Option<Motif> {
+    if !element.is_svg("pattern") {
+        return None;
+    }
+    let name = element.value(NS_FUB, "name")?;
+    (!trim(name).is_empty()).then(|| Motif {
+        name: name.to_owned(),
+    })
 }
 
 /// Il campione che è `element`, una risorsa modificabile con
@@ -314,6 +335,9 @@ pub struct ElementItem {
     /// Il nome e il colore di un campione del documento.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub swatch: Option<Swatch>,
+    /// Il nome di un motivo del documento.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub motif: Option<Motif>,
     /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
     /// scena, tavole).
     #[serde(rename = "box", skip_serializing_if = "Option::is_none")]
@@ -1651,6 +1675,9 @@ impl Builder<'_, '_> {
         let swatch = (role == Role::Resource && element.value(NS_FUB, "role") == Some("swatch"))
             .then(|| swatch_of(doc, element))
             .flatten();
+        let motif = (role == Role::Resource && element.value(NS_FUB, "role") == Some("swatch"))
+            .then(|| motif_of(element))
+            .flatten();
         let item = ElementItem {
             path,
             tag: tag.name(),
@@ -1694,11 +1721,14 @@ impl Builder<'_, '_> {
                 .then(|| match element.value(NS_FUB, "role") {
                     Some("private") => Some(Lifecycle::Private),
                     Some("shared") => Some(Lifecycle::Shared),
-                    Some("swatch") => swatch.as_ref().map(|_| Lifecycle::Swatch),
+                    Some("swatch") => {
+                        (swatch.is_some() || motif.is_some()).then_some(Lifecycle::Swatch)
+                    }
                     _ => None,
                 })
                 .flatten(),
             swatch,
+            motif,
             board_box: (role == Role::Board).then(|| board_box(element)).flatten(),
             board: (role == Role::Paper)
                 .then(|| element.value(NS_FUB, "board").map(str::to_owned))

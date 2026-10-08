@@ -58,7 +58,8 @@ use std::path::PathBuf;
 use common::check_lossless;
 use fub_scene::ink::INK_MAX_SAMPLES;
 use fub_scene::{
-    read, Ink, Item, Lifecycle, Role, Sample, Scale, Scene, Swatch, FUB_NS, MAX_ELEMENTS, SVG_NS,
+    read, Ink, Item, Lifecycle, Motif, Role, Sample, Scale, Scene, Swatch, FUB_NS, MAX_ELEMENTS,
+    SVG_NS,
 };
 use serde_json::json;
 
@@ -1117,7 +1118,44 @@ fn swatches() -> String {
                 ),
         )
         // Un campione chiaro, per il contrasto (S009).
-        .child(swatch("r0000000c", "Giallo", "#f0e442"));
+        .child(swatch("r0000000c", "Giallo", "#f0e442"))
+        // Un motivo del documento, un `pattern` col suo nome: un campione
+        // anche lui.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000d")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Pois")
+                .a("patternUnits", "userSpaceOnUse")
+                .a("x", 0)
+                .a("y", 0)
+                .a("width", 12)
+                .a("height", 12)
+                .child(
+                    El::new("circle")
+                        .a("cx", 6)
+                        .a("cy", 6)
+                        .a("r", 3)
+                        .a("fill", "#cc79a7"),
+                ),
+        )
+        // Motivi che si dicono campioni senza un nome: risorse senza ciclo
+        // di vita.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000e")
+                .a("fub:role", "swatch")
+                .a("fub:name", " ")
+                .a("width", 10)
+                .a("height", 10),
+        )
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000f")
+                .a("fub:role", "swatch")
+                .a("width", 10)
+                .a("height", 10),
+        );
     let root = svg(800, 600)
         .a(
             "xmlns:inkscape",
@@ -1203,6 +1241,16 @@ fn swatches() -> String {
                         .a("fill", "url(#r0000000c) #000000")
                         .a("font-size", 16)
                         .child(El::new("tspan").a("x", 440).a("dy", 0).text("Giallo")),
+                )
+                // Chi usa il motivo, col suo colore di ripiego.
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000008")
+                        .a("x", 600)
+                        .a("y", 440)
+                        .a("width", 120)
+                        .a("height", 80)
+                        .a("fill", "url(#r0000000d) #e3b4cf"),
                 ),
         );
     document(&root, "\n")
@@ -1561,6 +1609,22 @@ fn swatches_are_read_with_their_names_and_colors() {
         element(&[1, 10]).and_then(|e| e.lifecycle),
         Some(Lifecycle::Shared)
     );
+    // Un motivo col suo nome è un campione; senza nome non ha ciclo di vita.
+    let motif = element(&[1, 12]).unwrap();
+    assert_eq!(
+        (motif.lifecycle, motif.swatch.clone(), motif.motif.clone()),
+        (
+            Some(Lifecycle::Swatch),
+            None,
+            Some(Motif {
+                name: "Pois".to_owned()
+            })
+        )
+    );
+    for at in 13..15 {
+        let item = element(&[1, at]).unwrap();
+        assert_eq!((item.lifecycle, item.motif.clone()), (None, None), "{at}");
+    }
     // Chi usa un campione è modificabile, anche la linea senza altezza.
     for at in 0..5 {
         assert!(element(&[3, at]).is_some(), "{at}");

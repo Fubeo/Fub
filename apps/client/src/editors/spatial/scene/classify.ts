@@ -135,6 +135,8 @@ export interface ElementItem extends Span {
   readonly lifecycle?: Lifecycle;
   /// Il nome e il colore di un campione del documento.
   readonly swatch?: SwatchFacts;
+  /// Il nome di un motivo del documento.
+  readonly motif?: MotifFacts;
   /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
   /// scena, tavole).
   readonly box?: readonly [number, number, number, number];
@@ -230,8 +232,9 @@ export function resourceKind(tag: string): ResourceKind | null {
 /// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
 /// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
 /// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. `swatch`
-/// è un campione del documento, un colore con un nome: resta anche senza
-/// riferimenti, e duplicare chi lo usa lo condivide. Senza, la risorsa resta.
+/// è un campione del documento, un colore o un motivo con un nome: resta
+/// anche senza riferimenti, e duplicare chi lo usa lo condivide. Senza, la
+/// risorsa resta.
 export type Lifecycle = "private" | "shared" | "swatch";
 
 /// Un campione del documento (formato della scena, risorse): il suo nome,
@@ -239,6 +242,21 @@ export type Lifecycle = "private" | "shared" | "swatch";
 export interface SwatchFacts {
   readonly name: string;
   readonly color: string;
+}
+
+/// Un motivo del documento (formato della scena, risorse): il suo nome,
+/// com'è scritto.
+export interface MotifFacts {
+  readonly name: string;
+}
+
+/// Il motivo del documento che è `element`, una risorsa modificabile con
+/// `fub:role="swatch"`: un `pattern` con un nome `fub:name` che non è vuoto.
+/// `null` se non lo è, e allora è una risorsa senza ciclo di vita.
+export function motifOf(element: ElementNode): MotifFacts | null {
+  if (!isSvg(element, "pattern")) return null;
+  const name = valueOf(element, NS_FUB, "name");
+  return name === undefined || trim(name) === "" ? null : { name };
 }
 
 /// Il campione che è `element`, una risorsa modificabile con
@@ -1201,6 +1219,7 @@ export interface Details {
   readonly textPath?: string;
   readonly lifecycle?: Lifecycle;
   readonly swatch?: SwatchFacts;
+  readonly motif?: MotifFacts;
   readonly box?: readonly [number, number, number, number];
   readonly board?: string;
 }
@@ -1277,9 +1296,13 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     if (lifecycle === "private" || lifecycle === "shared") details.lifecycle = lifecycle;
     if (lifecycle === "swatch") {
       const swatch = swatchOf(doc, element);
+      const motif = motifOf(element);
       if (swatch !== null) {
         details.lifecycle = "swatch";
         details.swatch = swatch;
+      } else if (motif !== null) {
+        details.lifecycle = "swatch";
+        details.motif = motif;
       }
     }
     const title = firstTitle(doc, element);
@@ -1364,6 +1387,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.textPath !== undefined) item.textPath = details.textPath;
   if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
   if (details.swatch !== undefined) item.swatch = details.swatch;
+  if (details.motif !== undefined) item.motif = details.motif;
   if (details.box !== undefined) item.box = details.box;
   if (details.board !== undefined) item.board = details.board;
   return item;

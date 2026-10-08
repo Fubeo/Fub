@@ -39,6 +39,11 @@
     <linearGradient id="r0000000c" fub:role="swatch" fub:name="Giallo" gradientUnits="userSpaceOnUse">
       <stop stop-color="#f0e442"/>
     </linearGradient>
+    <pattern id="r0000000d" fub:role="swatch" fub:name="Pois" patternUnits="userSpaceOnUse" x="0" y="0" width="12" height="12">
+      <circle cx="6" cy="6" r="3" fill="#cc79a7"/>
+    </pattern>
+    <pattern id="r0000000e" fub:role="swatch" fub:name=" " width="10" height="10"/>
+    <pattern id="r0000000f" fub:role="swatch" width="10" height="10"/>
   </defs>
   <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
   <g id="l00000001" fub:layer="Livello 1">
@@ -55,5 +60,6 @@
     <text id="o00000007" x="440" y="400" fill="url(#r0000000c) #000000" font-size="16">
       <tspan x="440" dy="0">Giallo</tspan>
     </text>
+    <rect id="o00000008" x="600" y="440" width="120" height="80" fill="url(#r0000000d) #e3b4cf"/>
   </g>
 </svg>

@@ -2689,11 +2689,14 @@ textarea.draw-properties-input {
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
   background-size: 6px 6px;
 }
-/* Una sfumatura e un motivo del disegno: un quadrato dagli angoli tondi,
-   che non è una forma della tavolozza. I punti della sfumatura e la
-   scacchiera del motivo li dipinge la pelle. */
+/* Una sfumatura, una campitura e un motivo del disegno: un quadrato dagli
+   angoli tondi, che non è una forma della tavolozza. I punti della
+   sfumatura, le righe della campitura e la scacchiera del motivo li dipinge
+   la pelle. */
 .draw-swatch-frame[data-shape="gradient"],
 .draw-swatch-frame[data-shape="gradient"] > .draw-swatch,
+.draw-swatch-frame[data-shape="hatch"],
+.draw-swatch-frame[data-shape="hatch"] > .draw-swatch,
 .draw-swatch-frame[data-shape="pattern"],
 .draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
   clip-path: inset(6% round 4px);

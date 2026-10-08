@@ -3230,8 +3230,10 @@ button.draw-isolation-crumb:hover {
   background-image: linear-gradient(45deg, var(--text) 25%, var(--bg-elev) 25%, var(--bg-elev) 50%, var(--text) 50%, var(--text) 75%, var(--bg-elev) 75%);
 }
 /* Una sfumatura del disegno: i suoi punti, da sinistra a destra o dal
-   centro, come li scrive il pannello. */
-.draw-swatch-frame[data-shape="gradient"] > .draw-swatch {
+   centro, come li scrive il pannello; una campitura: le sue righe o i suoi
+   puntini, sul suo fondo. */
+.draw-swatch-frame[data-shape="gradient"] > .draw-swatch,
+.draw-swatch-frame[data-shape="hatch"] > .draw-swatch {
   background-image: var(--swatch-image);
 }
 /* Un motivo: una scacchiera del colore del testo. */

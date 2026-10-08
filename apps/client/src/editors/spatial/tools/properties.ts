@@ -636,11 +636,12 @@ function samePaint(a: string | null, b: string | null): boolean {
   return used !== null || referenceOf(b) !== null ? used === referenceOf(b) : a === b;
 }
 
-/// Un colore come lo mostra il campo: un campione col suo nome, una
-/// sfumatura o un motivo con quello del tipo.
+/// Un colore come lo mostra il campo: un campione o un motivo del documento
+/// col suo nome, una sfumatura, una campitura o un altro motivo con quello
+/// del tipo.
 function paintShown(value: string | null, sample?: PaintSample): string {
   if (value === null) return "";
-  if (sample?.kind === "swatch") return cleanName(sample.name);
+  if (sample?.kind === "swatch" || sample?.kind === "motif") return cleanName(sample.name);
   if (sample !== undefined) return t(`draw.properties.${sample.kind}`);
   return value === "none" ? t("draw.properties.none") : value;
 }
@@ -653,10 +654,10 @@ function seenColor(value: string | null, sample?: PaintSample): string | null {
 }
 
 /// La forma del campione di un colore: quella della tavolozza, l'anello di
-/// un colore a piacere, il nessuno, il misto, la sfumatura e il motivo. Un
-/// campione del documento ha la forma del suo colore.
+/// un colore a piacere, il nessuno, il misto, la sfumatura, la campitura e
+/// il motivo. Un campione del documento ha la forma del suo colore.
 function chipShape(value: string | null, sample?: PaintSample): string {
-  if (sample !== undefined && sample.kind !== "swatch") return sample.kind;
+  if (sample !== undefined && sample.kind !== "swatch") return sample.kind === "motif" ? "pattern" : sample.kind;
   if (value === null) return "mixed";
   if (value === "none") return "none";
   const code = seenColor(value, sample);

@@ -314,7 +314,7 @@ export function filterElem(id: string, effects: readonly Effect[], region: Regio
 
 /// Vero se `a` e `b` sono lo stesso elemento: stesso tag, stessi attributi
 /// in qualunque ordine, stessi figli.
-function sameElem(a: Elem, b: Elem): boolean {
+export function sameElem(a: Elem, b: Elem): boolean {
   if (a.tag !== b.tag || (a.text ?? null) !== (b.text ?? null)) return false;
   const names = Object.keys(a.attrs);
   if (names.length !== Object.keys(b.attrs).length || names.some((name) => a.attrs[name] !== b.attrs[name])) return false;
@@ -327,7 +327,7 @@ function sameElem(a: Elem, b: Elem): boolean {
 /// forma (stessi tag, stessi figli, alla stessa profondità): per ogni parte
 /// che cambia, il suo percorso fra i figli e gli attributi nuovi. `null` se
 /// la forma è diversa.
-function changes(from: Elem, to: Elem, at: readonly number[] = []): Array<{ readonly part: readonly number[]; readonly attrs: Record<string, string | null> }> | null {
+export function elemChanges(from: Elem, to: Elem, at: readonly number[] = []): Array<{ readonly part: readonly number[]; readonly attrs: Record<string, string | null> }> | null {
   if (from.tag !== to.tag) return null;
   const inside = from.children ?? [];
   const other = to.children ?? [];
@@ -337,7 +337,7 @@ function changes(from: Elem, to: Elem, at: readonly number[] = []): Array<{ read
   for (const name of Object.keys(from.attrs)) if (to.attrs[name] === undefined) attrs[name] = null;
   const out = Object.keys(attrs).length > 0 ? [{ part: at, attrs }] : [];
   for (let i = 0; i < inside.length; i++) {
-    const below = changes(inside[i]!, other[i]!, [...at, i]);
+    const below = elemChanges(inside[i]!, other[i]!, [...at, i]);
     if (below === null) return null;
     out.push(...below);
   }
@@ -771,7 +771,7 @@ export function effectsAttrs(plan: Plan, node: ElementPart, state: EffectsState,
     const filter = state.kind === "effects" && state.filter !== null ? resourcesOf(model).get(state.filter)! : null;
     const before = filter === null ? null : elemOf(filter);
     const after = filter === null ? null : filterElem(state.kind === "effects" ? state.filter! : "", effects, region);
-    const parts = before === null || after === null ? null : changes(before, after);
+    const parts = before === null || after === null ? null : elemChanges(before, after);
     if (parts !== null && filter !== null) {
       // Sul posto: soltanto ciò che cambia.
       for (const { part, attrs: changed } of parts) plan.ops.push(part.length === 0 ? { op: "set", id: filter.facts.id!, attrs: changed } : { op: "set", id: filter.facts.id!, part, attrs: changed });

@@ -124,7 +124,7 @@ function attrsIn(elem: Elem): Array<Readonly<Record<string, string>>> {
 /// c'è: "top" se contiene un'immagine, un collegamento, un testo su
 /// tracciato o altro che una maschera non ha; "content" se porta punte,
 /// motivi, ritagli, maschere o filtri, o annida troppi gruppi. `null` se va.
-function maskProblem(elem: Elem, resources: ReadonlyMap<string, LeafNode>): MaskRefusal | null {
+export function maskProblem(elem: Elem, resources: ReadonlyMap<string, LeafNode>): MaskRefusal | null {
   let problem: MaskRefusal | null = null;
   const note = (found: MaskRefusal): void => {
     if (problem !== "top") problem = found;
@@ -152,7 +152,7 @@ function maskProblem(elem: Elem, resources: ReadonlyMap<string, LeafNode>): Mask
 }
 
 /// Vero se `elem` ha un testo su tracciato.
-function onPath(elem: Elem): boolean {
+export function onPath(elem: Elem): boolean {
   let found = false;
   everywhere(elem, (each) => {
     if (each.tag === "textPath") found = true;
@@ -163,7 +163,7 @@ function onPath(elem: Elem): boolean {
 /// Lo stile che `node` eredita dai suoi contenitori, fino alla radice: per
 /// ogni attributo di [`INHERITED`], il valore del contenitore più vicino che
 /// lo scrive.
-function inheritedStyle(node: ElementPart): Map<string, string> {
+export function inheritedStyle(node: ElementPart): Map<string, string> {
   const out = new Map<string, string>();
   for (let at = node.parent; at !== null; at = at.parent) {
     const own = plainAttributes(at);
@@ -193,7 +193,7 @@ function cleanAttrs(attrs: Readonly<Record<string, string>>, clip: boolean, reso
 
 /// `elem` come contenuto di una risorsa: senza id da cima a fondo, e per un
 /// ritaglio pulito come [`cleanAttrs`].
-function contentOf(elem: Elem, clip: boolean, resources: ReadonlyMap<string, LeafNode>): Elem {
+export function contentOf(elem: Elem, clip: boolean, resources: ReadonlyMap<string, LeafNode>): Elem {
   const out: { tag: string; attrs: Record<string, string>; children?: Elem[]; text?: string | null; runs?: readonly Run[] } = { tag: elem.tag, attrs: cleanAttrs(elem.attrs, clip, resources) };
   if (elem.children !== undefined) out.children = elem.children.map((child) => contentOf(child, clip, resources));
   if (elem.text !== undefined) out.text = elem.text;
