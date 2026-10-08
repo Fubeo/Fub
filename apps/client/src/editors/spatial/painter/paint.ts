@@ -323,6 +323,7 @@ export const PAINTED_ATTRIBUTES: ReadonlySet<string> = new Set([
   "clip-path",
   "mask",
   "filter",
+  "style",
 ]);
 
 /// Gli attributi che rimandano a una risorsa con `url(#id)` (formato della

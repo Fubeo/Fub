@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { IDENTITY } from "./matrix";
 import {
   angle,
+  blendStyle,
   dasharray,
   fraction,
   href,
@@ -80,6 +81,35 @@ describe("i valori degli attributi (values.rs)", () => {
       expect(rgb >= 0 && rgb <= 0xffffff, name).toBe(true);
     }
     expect(NAMED_COLORS.has("transparent") || NAMED_COLORS.has("currentcolor")).toBe(false);
+  });
+
+  it("lo style del formato dice soltanto la fusione e l'isolamento", () => {
+    const multiply = { blend: "multiply", isolate: null };
+    expect(blendStyle("mix-blend-mode: multiply", false)).toEqual(multiply);
+    expect(blendStyle(" mix-blend-mode:multiply ; ", false)).toEqual(multiply);
+    expect(blendStyle("isolation: isolate; mix-blend-mode: screen", true)).toEqual({
+      blend: "screen",
+      isolate: true,
+    });
+    expect(blendStyle("isolation: auto", true)).toEqual({ blend: null, isolate: false });
+    // Soltanto un contenitore isola.
+    expect(blendStyle("isolation: isolate", false)).toBeNull();
+    for (const wrong of [
+      "",
+      ";",
+      "mix-blend-mode",
+      "mix-blend-mode: Multiply",
+      "MIX-BLEND-MODE: multiply",
+      "mix-blend-mode: plus-lighter",
+      "mix-blend-mode: multiply !important",
+      "mix-blend-mode: multiply; mix-blend-mode: screen",
+      "mix-blend-mode: multiply;; isolation: isolate",
+      "mix-blend-mode: /* x */ multiply",
+      "fill: red",
+      "mix-blend-mode: multiply; fill: red",
+    ]) {
+      expect(blendStyle(wrong, true), wrong).toBeNull();
+    }
   });
 
   it("parole chiave e liste", () => {

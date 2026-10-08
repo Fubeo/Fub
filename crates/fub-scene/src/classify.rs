@@ -32,10 +32,10 @@ use crate::ink::{Ink, InkError};
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
-    angle, dasharray, fraction, href, href_id, is_wsp, keyword, length, letter_spacing,
-    non_negative_length, number, number_list, one_or_two, opacity, paint, paint_reference, points,
-    preserve_aspect_ratio, reference, start_offset, text_decoration, transform, trim, view_box,
-    wrap_width, Href, Paint,
+    angle, blend_style, dasharray, fraction, href, href_id, is_wsp, keyword, length,
+    letter_spacing, non_negative_length, number, number_list, one_or_two, opacity, paint,
+    paint_reference, points, preserve_aspect_ratio, reference, start_offset, text_decoration,
+    transform, trim, view_box, wrap_width, Href, Paint,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -551,6 +551,8 @@ fn svg_attribute(tag: Tag, name: &str, value: &str, resolve: Resolve<'_>) -> boo
         "clip-path" => tag.is_drawn() && resource_or_none(value, ResourceKind::Clip, resolve),
         "mask" => tag.is_drawn() && resource_or_none(value, ResourceKind::Mask, resolve),
         "filter" => tag.is_drawn() && resource_or_none(value, ResourceKind::Filter, resolve),
+        // La fusione, e l'isolamento di un contenitore.
+        "style" => tag.is_drawn() && blend_style(value, matches!(tag, Tag::G | Tag::A)).is_some(),
         "fill-opacity" | "stroke-opacity" | "opacity" => opacity(value).is_some(),
         "stroke-width" | "font-size" => non_negative_length(value).is_some(),
         "stroke-linecap" | "stroke-linejoin" | "display" | "font-weight" | "font-style"

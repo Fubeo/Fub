@@ -117,6 +117,32 @@ fn an_attribute_outside_the_list_makes_the_element_foreign() {
 }
 
 #[test]
+fn style_says_only_the_blend_and_on_a_container_the_isolation() {
+    for body in [
+        r#"<rect width="1" height="1" style="mix-blend-mode: multiply"/>"#,
+        r#"<text style="mix-blend-mode: screen"><tspan>a</tspan></text>"#,
+        r#"<image href="a.png" style="mix-blend-mode: luminosity"/>"#,
+        r#"<g style="isolation: isolate"></g>"#,
+        r#"<g style="mix-blend-mode: difference; isolation: isolate"></g>"#,
+        r#"<a href="Note.md" style="isolation: auto"></a>"#,
+    ] {
+        assert!(first(body).is_some(), "{body}");
+    }
+    for body in [
+        // L'isolamento vale soltanto su un contenitore.
+        r#"<rect width="1" height="1" style="isolation: isolate"/>"#,
+        // I browser ignorano gli attributi di presentazione omonimi.
+        r#"<rect width="1" height="1" mix-blend-mode="multiply"/>"#,
+        r#"<g isolation="isolate"></g>"#,
+        r#"<rect width="1" height="1" style="mix-blend-mode: plus-lighter"/>"#,
+        r#"<rect width="1" height="1" style="mix-blend-mode: multiply; opacity: 0.5"/>"#,
+        r#"<text><tspan style="mix-blend-mode: multiply">a</tspan></text>"#,
+    ] {
+        assert_eq!(first(body), None, "{body}");
+    }
+}
+
+#[test]
 fn geometry_attributes_belong_to_their_tag() {
     assert_eq!(first(r#"<circle r="1"/>"#), Some(Role::Circle));
     assert_eq!(first(r#"<ellipse r="1"/>"#), None);
