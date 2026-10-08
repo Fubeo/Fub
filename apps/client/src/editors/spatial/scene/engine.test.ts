@@ -11,7 +11,7 @@ import { tryApplyOperation } from "../../core/text-operation";
 import { parseBrush } from "../ink/brush";
 import { decodeInk, inkToQuantized } from "../ink/codec";
 import { pf1 } from "../ink/pf1";
-import { mergeUndo, SceneEngine, type Applied, type Outcome } from "./engine";
+import { FOLLOW_ROUNDS, mergeUndo, SceneEngine, type Applied, type Outcome } from "./engine";
 import { MAX_BATCH, MAX_NESTING, MAX_OP_BYTES, MAX_VALUE_BYTES, parseWireOp, type Op, type Reason } from "./ops";
 import { MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, readScene } from "./read";
 import type { Elem } from "./serialize";
@@ -1245,19 +1245,21 @@ describe("ciò che segue", () => {
     expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3, END_G, END));
     expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
     expect([...out.touched].sort()).toEqual(["o1a2b3c4d", "o2b3c4d5e"]);
-    expect(calls).toEqual([new Set(["o1a2b3c4d"])]);
+    // Il secondo giro vede ciò che ha toccato il primo, e non dice niente.
+    expect(calls).toEqual([new Set(["o1a2b3c4d"]), new Set(["o2b3c4d5e"])]);
     expect(applied(engine.undo(out.undo)).text).toBe(BASE);
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
   });
 
   it("annullato dall'inversa, non si chiede di nuovo: l'inversa porta già la sua", () => {
     const { engine, calls } = following(BASE, () => fill("o2b3c4d5e", "#000000"));
     const out = apply(engine, stroke);
-    apply(engine, fill("o3c4d5e6f", "#111111"));
     expect(calls).toHaveLength(2);
+    apply(engine, fill("o3c4d5e6f", "#111111"));
+    expect(calls).toHaveLength(3);
     const undone = applied(engine.undo(out.undo));
     expect(undone.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3.replace("#009e73", "#111111"), END_G, END));
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
   });
 
   it("null lascia l'operazione com'è", () => {
@@ -1324,6 +1326,114 @@ describe("ciò che segue", () => {
     const out = apply(engine, stroke);
     expect(out.forward).toEqual(stroke);
     expect(out.text).toBe(lf(ROOT, TITLE, DEFS, ...GRADIENT, END_DEFS, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+
+  describe("a giri", () => {
+    const R3_BLACK = R3.replace("#009e73", "#000000");
+
+    /// Un motore su `BASE` che, a ogni giro, dà `rounds[giro]` finché ce ne
+    /// sono, e registra ciò che gli si chiede.
+    const rounding = (
+      rounds: readonly (Op | null)[],
+    ): { engine: SceneEngine; calls: { touched: ReadonlySet<string>; op: Op }[] } => {
+      const engine = SceneEngine.open(BASE);
+      const calls: { touched: ReadonlySet<string>; op: Op }[] = [];
+      engine.follow = (_model, touched, op) => {
+        calls.push({ touched: new Set(touched), op });
+        return rounds[calls.length - 1] ?? null;
+      };
+      return { engine, calls };
+    };
+
+    it("un secondo giro vede soltanto ciò che ha toccato il primo, e la stessa operazione chiesta", () => {
+      const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), fill("o3c4d5e6f", "#000000"), null]);
+      const out = apply(engine, stroke);
+      expect(calls.map((call) => call.touched)).toEqual([new Set(["o1a2b3c4d"]), new Set(["o2b3c4d5e"]), new Set(["o3c4d5e6f"])]);
+      // Ogni giro riceve l'operazione chiesta, la stessa oggetto per oggetto.
+      for (const call of calls) expect(call.op).toBe(stroke);
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3_BLACK, END_G, END));
+      // Le operazioni dei giri vanno in ordine, in un `batch` solo.
+      expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000"), fill("o3c4d5e6f", "#000000")] });
+      expect(out.inverse).toEqual({
+        op: "batch",
+        ops: [fill("o3c4d5e6f", "#009e73"), fill("o2b3c4d5e", "#e69f00"), { op: "set", id: "o1a2b3c4d", attrs: { stroke: "#0072b2" } }],
+      });
+      expect([...out.touched]).toEqual(["o1a2b3c4d", "o2b3c4d5e", "o3c4d5e6f"]);
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("un giro che non tocca niente di nuovo ferma il seguito", () => {
+      // Il secondo giro rifà il colore del primo: niente id nuovi, e il terzo non si chiede.
+      const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), fill("o2b3c4d5e", "#111111"), fill("o3c4d5e6f", "#000000")]);
+      const out = apply(engine, stroke);
+      expect(calls.map((call) => call.touched)).toEqual([new Set(["o1a2b3c4d"]), new Set(["o2b3c4d5e"])]);
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2.replace("#e69f00", "#111111"), R3, END_G, END));
+      expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000"), fill("o2b3c4d5e", "#111111")] });
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("dopo tre giri ci si ferma, anche se il seguito ha ancora altro", () => {
+      let next = 0;
+      const engine = SceneEngine.open(BASE);
+      let calls = 0;
+      engine.follow = () => {
+        calls++;
+        // Ogni giro aggiunge un rettangolo nuovo, e quindi ha sempre qualcosa di nuovo da seguire.
+        const id = `o000000${++next}a`;
+        return { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "rect", attrs: { id, x: "0", y: "0", width: "10", height: "10" } } };
+      };
+      const out = apply(engine, stroke);
+      expect(FOLLOW_ROUNDS).toBe(3);
+      expect(calls).toBe(FOLLOW_ROUNDS);
+      expect(out.forward).toMatchObject({ op: "batch" });
+      expect((out.forward as { ops: readonly Op[] }).ops).toHaveLength(1 + FOLLOW_ROUNDS);
+      expect([...out.touched]).toEqual(["o1a2b3c4d", "o0000001a", "o0000002a", "o0000003a"]);
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("un giro rifiutato non c'è: i giri prima restano, in un passo solo, e l'undo li toglie tutti", () => {
+      for (const bad of [MISSING, { op: "batch", ops: [fill("o3c4d5e6f", "#000000"), MISSING] } as Op]) {
+        const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), bad, fill("o3c4d5e6f", "#222222")]);
+        const out = apply(engine, stroke);
+        // Il giro dopo il rifiuto non si chiede: ci si ferma.
+        expect(calls).toHaveLength(2);
+        expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3, END_G, END));
+        expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+        expect([...out.touched]).toEqual(["o1a2b3c4d", "o2b3c4d5e"]);
+        expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+      }
+    });
+
+    it("un giro che non si sa calcolare ferma il seguito e lascia i giri prima", () => {
+      const engine = SceneEngine.open(BASE);
+      let calls = 0;
+      engine.follow = () => {
+        if (++calls === 2) throw new Error("guasto");
+        return fill("o2b3c4d5e", "#000000");
+      };
+      const out = apply(engine, stroke);
+      expect(calls).toBe(2);
+      expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3, END_G, END));
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("l'inversa non ha seguito: nemmeno a giri", () => {
+      const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), fill("o3c4d5e6f", "#000000"), null]);
+      const out = apply(engine, stroke);
+      expect(calls).toHaveLength(3);
+      // Un'altra modifica sposta la scena: l'undo non è più esatto e passa dall'inversa.
+      engine.follow = null;
+      apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { "stroke-width": "6" } });
+      let asked = 0;
+      engine.follow = () => {
+        asked++;
+        return fill("o2b3c4d5e", "#333333");
+      };
+      const undone = applied(engine.undo(out.undo));
+      expect(asked).toBe(0);
+      expect(undone.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1.replace('stroke-width="4"', 'stroke-width="6"'), R2, R3, END_G, END));
+    });
   });
 });
 

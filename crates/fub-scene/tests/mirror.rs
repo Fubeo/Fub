@@ -42,7 +42,12 @@
 //!   colorata, riquadri dello stesso colore che si distinguono soltanto per la
 //!   tinta, scritti in chiaro, con un campione e con un'opacità di gruppo, e
 //!   riquadri dello stesso colore che non contano, perché il loro colore non
-//!   si sa, non hanno area o sono tratti a penna.
+//!   si sa, non hanno area o sono tratti a penna;
+//! - `connectors`: un disegno coi connettori (formato della scena,
+//!   connettori): tre rettangoli uniti da un gomito agganciato ai due capi,
+//!   da una curva e da una linea dritta con un capo libero, una punta
+//!   come marcatore, l'etichetta di un connettore, e tre scritture fuori
+//!   grammatica: un `fub:geom`, un capo e un'etichetta;
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -61,6 +66,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use common::check_lossless;
+use fub_scene::connectors::{Anchor, ConnectorEnd, ConnectorKind};
 use fub_scene::ink::INK_MAX_SAMPLES;
 use fub_scene::{
     read, Ink, Item, Lifecycle, Motif, Role, Sample, Scale, Scene, Swatch, FUB_NS, MAX_ELEMENTS,
@@ -1573,6 +1579,146 @@ fn legend() -> String {
     document(&root, "\n")
 }
 
+/// Un rettangolo di `connectors`.
+fn box_of(id: &str, x: u32, y: u32, width: u32, height: u32, fill: &str) -> El {
+    El::new("rect")
+        .a("id", id)
+        .a("x", x)
+        .a("y", y)
+        .a("width", width)
+        .a("height", height)
+        .a("rx", 8)
+        .a("fill", fill)
+}
+
+/// Un connettore come lo scrive FubDraw: `fub:shape`, `fub:geom`, `fub:from`
+/// e `fub:to` fra gli attributi noti, `d` ricalcolato dalla geometria.
+fn connector(id: &str, geom: &str, from: Option<&str>, to: Option<&str>, d: &str) -> El {
+    let mut element = El::new("path")
+        .a("id", id)
+        .a("fub:shape", "connector")
+        .a("fub:geom", geom);
+    if let Some(from) = from {
+        element = element.a("fub:from", from);
+    }
+    if let Some(to) = to {
+        element = element.a("fub:to", to);
+    }
+    element
+        .a("d", d)
+        .a("fill", "none")
+        .a("stroke", "#000000")
+        .a("stroke-width", 2)
+        .a("stroke-linecap", "round")
+        .a("stroke-linejoin", "round")
+}
+
+/// `connectors`: tre rettangoli e le linee che li uniscono.
+fn connectors() -> String {
+    let defs = El::new("defs").a("id", "fub-defs").child(
+        El::new("marker")
+            .a("id", "r00000001")
+            .a("fub:role", "shared")
+            .a("refX", 5)
+            .a("refY", 5)
+            .a("markerWidth", 5)
+            .a("markerHeight", 5)
+            .a("orient", "auto-start-reverse")
+            .a("viewBox", "0 0 10 10")
+            .child(
+                El::new("path")
+                    .a("d", "M0 0 L10 5 L0 10 Z")
+                    .a("fill", "#000000"),
+            ),
+    );
+    // Un gomito dal lato alto del primo rettangolo, sopra e giù fino a metà
+    // del lato alto del secondo.
+    let elbow = connector(
+        "o00000004",
+        "elbow 140 60 140 30 440 30 440 300",
+        Some("o00000001 top"),
+        Some("o00000002 auto"),
+        "M140 60 L140 30 L440 30 L440 300",
+    )
+    .a("marker-end", "url(#r00000001)");
+    // Una curva dal lato basso del primo al lato sinistro del secondo.
+    let curve = connector(
+        "o00000005",
+        "curved 140 140 140 240 260 340 360 340",
+        Some("o00000001 bottom"),
+        Some("o00000002 left"),
+        "M140 140 C140 240 260 340 360 340",
+    );
+    // Una linea dritta dal terzo rettangolo, con il capo finale libero.
+    let free = connector(
+        "o00000006",
+        "straight 670 140 670 250",
+        Some("o00000003 bottom"),
+        None,
+        "M670 140 L670 250",
+    )
+    .a("marker-end", "url(#r00000001)");
+    // Un aggancio fuori grammatica: il connettore resta un connettore, con
+    // quel capo libero.
+    let loose = connector(
+        "o00000007",
+        "straight 520 340 600 100",
+        Some("o00000002 middle"),
+        Some("o00000003 left"),
+        "M520 340 L600 100",
+    );
+    let label = El::new("text")
+        .a("id", "o00000008")
+        .a("fub:along", "o00000004 0.5 6")
+        .a("x", 410)
+        .a("y", 24)
+        .a("fill", "#000000")
+        .a("font-size", 16)
+        .a("text-anchor", "middle")
+        .child(El::new("tspan").a("x", 410).a("dy", 0).text("Invio"));
+    let root = svg(800, 600)
+        .child(El::new("title").text("Connettori"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(box_of("o00000001", 60, 60, 160, 80, "#e69f00"))
+                .child(box_of("o00000002", 360, 300, 160, 80, "#56b4e9"))
+                .child(box_of("o00000003", 600, 60, 140, 80, "#cc79a7"))
+                .child(elbow)
+                .child(curve)
+                .child(free)
+                .child(loose)
+                .child(label)
+                // Un `fub:geom` fuori grammatica (un valore dispari) lascia un
+                // tracciato che si legge da `d`, e i suoi agganci restano.
+                .child(
+                    El::new("path")
+                        .a("id", "o00000009")
+                        .a("fub:shape", "connector")
+                        .a("fub:geom", "elbow 520 360 580 360 580")
+                        .a("fub:from", "o00000002 right")
+                        .a("d", "M520 360 L580 360 L580 480")
+                        .a("fill", "none")
+                        .a("stroke", "#000000")
+                        .a("stroke-width", 2),
+                )
+                // Un'etichetta fuori grammatica (`t` oltre 1) è un testo e
+                // basta.
+                .child(
+                    El::new("text")
+                        .a("id", "o0000000a")
+                        .a("fub:along", "o00000004 1.5 6")
+                        .a("x", 600)
+                        .a("y", 520)
+                        .a("fill", "#000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 600).a("dy", 0).text("Fuori")),
+                ),
+        );
+    document(&root, "\n")
+}
+
 #[test]
 fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
@@ -1920,6 +2066,67 @@ fn legend_finds_the_colors_told_apart_only_by_hue() {
             (S017, Some("#88b4d2 #a6cee3 1.32")),
         ]
     );
+}
+
+#[test]
+fn connectors_are_read_with_their_ends() {
+    let scene = fixture("connectors", &connectors());
+    assert!(scene.editable());
+    let element = |id: &str| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.id.as_deref() == Some(id) => Some(element),
+            _ => None,
+        })
+    };
+    let end = |id: &str, anchor| {
+        Some(ConnectorEnd {
+            id: id.to_owned(),
+            anchor,
+        })
+    };
+    let elbow = element("o00000004").unwrap();
+    assert_eq!(elbow.role, Role::Connector);
+    let facts = elbow.connector.as_ref().unwrap();
+    assert_eq!(facts.geom.kind, ConnectorKind::Elbow);
+    assert_eq!(facts.geom.points.len(), 4);
+    assert_eq!(facts.from, end("o00000001", Anchor::Top));
+    assert_eq!(facts.to, end("o00000002", Anchor::Auto));
+    let curve = element("o00000005").unwrap().connector.as_ref().unwrap();
+    assert_eq!(curve.geom.kind, ConnectorKind::Curved);
+    assert_eq!(curve.to, end("o00000002", Anchor::Left));
+    // Un capo senza `fub:to` è libero.
+    let free = element("o00000006").unwrap().connector.as_ref().unwrap();
+    assert_eq!(free.geom.kind, ConnectorKind::Straight);
+    assert_eq!(free.from, end("o00000003", Anchor::Bottom));
+    assert_eq!(free.to, None);
+    // Un aggancio che non si legge lascia il capo libero, e l'altro resta.
+    let loose = element("o00000007").unwrap();
+    assert_eq!(loose.role, Role::Connector);
+    let loose = loose.connector.as_ref().unwrap();
+    assert_eq!(loose.from, None);
+    assert_eq!(loose.to, end("o00000003", Anchor::Left));
+    // Un `fub:geom` fuori grammatica lascia un tracciato.
+    let path = element("o00000009").unwrap();
+    assert_eq!((path.role, path.connector.is_none()), (Role::Path, true));
+    // L'etichetta dice dove sta; una che non si legge non dice niente.
+    let place = element("o00000008").unwrap().along.as_ref().unwrap();
+    assert_eq!(place.id, "o00000004");
+    assert_eq!((place.t, place.offset), (0.5, 6.0));
+    let outside = element("o0000000a").unwrap();
+    assert_eq!((outside.role, outside.along.is_none()), (Role::Text, true));
+    // Quattro connettori e un tracciato, tre rettangoli: otto forme.
+    assert_eq!(scene.summary.counts.shapes, 8);
+    assert_eq!(scene.summary.counts.texts, 2);
+    // Nessuna diagnostica: gli agganci non sono riferimenti di cui il formato
+    // controlli l'id, e il marcatore c'è.
+    use fub_scene::Code::S001;
+    let codes: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| d.code)
+        .filter(|code| *code != S001)
+        .collect();
+    assert_eq!(codes, []);
 }
 
 #[test]
@@ -2389,6 +2596,7 @@ fn the_folder_holds_only_what_this_test_writes() {
         "text",
         "boards",
         "legend",
+        "connectors",
     ]
     .iter()
     .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 600" width="800" height="600">
+  <title>Connettori</title>
+  <defs id="fub-defs">
+    <marker id="r00000001" fub:role="shared" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse" viewBox="0 0 10 10">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#000000"/>
+    </marker>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <rect id="o00000001" x="60" y="60" width="160" height="80" rx="8" fill="#e69f00"/>
+    <rect id="o00000002" x="360" y="300" width="160" height="80" rx="8" fill="#56b4e9"/>
+    <rect id="o00000003" x="600" y="60" width="140" height="80" rx="8" fill="#cc79a7"/>
+    <path id="o00000004" fub:shape="connector" fub:geom="elbow 140 60 140 30 440 30 440 300" fub:from="o00000001 top" fub:to="o00000002 auto" d="M140 60 L140 30 L440 30 L440 300" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#r00000001)"/>
+    <path id="o00000005" fub:shape="connector" fub:geom="curved 140 140 140 240 260 340 360 340" fub:from="o00000001 bottom" fub:to="o00000002 left" d="M140 140 C140 240 260 340 360 340" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path id="o00000006" fub:shape="connector" fub:geom="straight 670 140 670 250" fub:from="o00000003 bottom" d="M670 140 L670 250" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#r00000001)"/>
+    <path id="o00000007" fub:shape="connector" fub:geom="straight 520 340 600 100" fub:from="o00000002 middle" fub:to="o00000003 left" d="M520 340 L600 100" fill="none" stroke="#000000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text id="o00000008" fub:along="o00000004 0.5 6" x="410" y="24" fill="#000000" font-size="16" text-anchor="middle">
+      <tspan x="410" dy="0">Invio</tspan>
+    </text>
+    <path id="o00000009" fub:shape="connector" fub:geom="elbow 520 360 580 360 580" fub:from="o00000002 right" d="M520 360 L580 360 L580 480" fill="none" stroke="#000000" stroke-width="2"/>
+    <text id="o0000000a" fub:along="o00000004 1.5 6" x="600" y="520" fill="#000000" font-size="16">
+      <tspan x="600" dy="0">Fuori</tspan>
+    </text>
+  </g>
+</svg>

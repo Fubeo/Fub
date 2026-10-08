@@ -1,0 +1,558 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        2449
+      ],
+      "utf16": [
+        0,
+        2449
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            150
+          ],
+          "utf16": [
+            0,
+            150
+          ]
+        },
+        "close": {
+          "bytes": [
+            2443,
+            2449
+          ],
+          "utf16": [
+            2443,
+            2449
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        153,
+        178
+      ],
+      "utf16": [
+        153,
+        178
+      ],
+      "indent": "  ",
+      "text": "Connettori"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        181,
+        422
+      ],
+      "utf16": [
+        181,
+        422
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            181,
+            201
+          ],
+          "utf16": [
+            181,
+            201
+          ]
+        },
+        "close": {
+          "bytes": [
+            415,
+            422
+          ],
+          "utf16": [
+            415,
+            422
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "marker",
+      "role": "resource",
+      "id": "r00000001",
+      "bytes": [
+        206,
+        412
+      ],
+      "utf16": [
+        206,
+        412
+      ],
+      "indent": "    ",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        425,
+        516
+      ],
+      "utf16": [
+        425,
+        516
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        519,
+        2442
+      ],
+      "utf16": [
+        519,
+        2442
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            519,
+            559
+          ],
+          "utf16": [
+            519,
+            559
+          ]
+        },
+        "close": {
+          "bytes": [
+            2438,
+            2442
+          ],
+          "utf16": [
+            2438,
+            2442
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000001",
+      "bytes": [
+        564,
+        646
+      ],
+      "utf16": [
+        564,
+        646
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000002",
+      "bytes": [
+        651,
+        735
+      ],
+      "utf16": [
+        651,
+        735
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000003",
+      "bytes": [
+        740,
+        823
+      ],
+      "utf16": [
+        740,
+        823
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "path",
+      "role": "connector",
+      "id": "o00000004",
+      "bytes": [
+        828,
+        1126
+      ],
+      "utf16": [
+        828,
+        1126
+      ],
+      "indent": "    ",
+      "connector": {
+        "geom": {
+          "kind": "elbow",
+          "points": [
+            [
+              140.0,
+              60.0
+            ],
+            [
+              140.0,
+              30.0
+            ],
+            [
+              440.0,
+              30.0
+            ],
+            [
+              440.0,
+              300.0
+            ]
+          ]
+        },
+        "from": {
+          "id": "o00000001",
+          "anchor": "top"
+        },
+        "to": {
+          "id": "o00000002",
+          "anchor": "auto"
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "path",
+      "role": "connector",
+      "id": "o00000005",
+      "bytes": [
+        1131,
+        1408
+      ],
+      "utf16": [
+        1131,
+        1408
+      ],
+      "indent": "    ",
+      "connector": {
+        "geom": {
+          "kind": "curved",
+          "points": [
+            [
+              140.0,
+              140.0
+            ],
+            [
+              140.0,
+              240.0
+            ],
+            [
+              260.0,
+              340.0
+            ],
+            [
+              360.0,
+              340.0
+            ]
+          ]
+        },
+        "from": {
+          "id": "o00000001",
+          "anchor": "bottom"
+        },
+        "to": {
+          "id": "o00000002",
+          "anchor": "left"
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "path",
+      "role": "connector",
+      "id": "o00000006",
+      "bytes": [
+        1413,
+        1665
+      ],
+      "utf16": [
+        1413,
+        1665
+      ],
+      "indent": "    ",
+      "connector": {
+        "geom": {
+          "kind": "straight",
+          "points": [
+            [
+              670.0,
+              140.0
+            ],
+            [
+              670.0,
+              250.0
+            ]
+          ]
+        },
+        "from": {
+          "id": "o00000003",
+          "anchor": "bottom"
+        },
+        "to": null
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6
+      ],
+      "tag": "path",
+      "role": "connector",
+      "id": "o00000007",
+      "bytes": [
+        1670,
+        1917
+      ],
+      "utf16": [
+        1670,
+        1917
+      ],
+      "indent": "    ",
+      "connector": {
+        "geom": {
+          "kind": "straight",
+          "points": [
+            [
+              520.0,
+              340.0
+            ],
+            [
+              600.0,
+              100.0
+            ]
+          ]
+        },
+        "from": null,
+        "to": {
+          "id": "o00000003",
+          "anchor": "left"
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        7
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000008",
+      "bytes": [
+        1922,
+        2091
+      ],
+      "utf16": [
+        1922,
+        2091
+      ],
+      "indent": "    ",
+      "lines": [
+        "Invio"
+      ],
+      "along": {
+        "id": "o00000004",
+        "t": 0.5,
+        "offset": 6.0
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        8
+      ],
+      "tag": "path",
+      "role": "path",
+      "id": "o00000009",
+      "bytes": [
+        2096,
+        2281
+      ],
+      "utf16": [
+        2096,
+        2281
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        9
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o0000000a",
+      "bytes": [
+        2286,
+        2435
+      ],
+      "utf16": [
+        2286,
+        2435
+      ],
+      "indent": "    ",
+      "lines": [
+        "Fuori"
+      ]
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Connettori",
+      "bytes": [
+        153,
+        178
+      ],
+      "utf16": [
+        153,
+        178
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Invio",
+        "bytes": [
+          1922,
+          2091
+        ],
+        "utf16": [
+          1922,
+          2091
+        ]
+      },
+      {
+        "text": "Fuori",
+        "bytes": [
+          2286,
+          2435
+        ],
+        "utf16": [
+          2286,
+          2435
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": [],
+    "boards": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "boards": [],
+    "counts": {
+      "strokes": 0,
+      "shapes": 8,
+      "texts": 2,
+      "images": 0,
+      "links": 0,
+      "foreign": 0
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 60.0,
+      "y": 24.0,
+      "width": 680.0,
+      "height": 496.0
+    }
+  },
+  "diagnostics": []
+}

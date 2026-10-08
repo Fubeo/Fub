@@ -144,7 +144,20 @@ export interface Applied {
 /// e gli id che ha toccato, come le punte di una linea che tengono il suo
 /// colore. `null` se non c'è niente da aggiungere. Il passo resta col nome
 /// dell'operazione chiesta: quello di un `batch` che segue non conta.
-export type Follow = (model: DocumentModel, touched: ReadonlySet<string>) => Op | null;
+///
+/// Il motore lo chiede a giri, fino a [`FOLLOW_ROUNDS`]. Al primo `touched`
+/// è tutto ciò che l'operazione ha toccato; a ogni giro dopo, soltanto ciò
+/// che il giro prima ha toccato in più. `op` è l'operazione chiesta a
+/// `apply`, la stessa a ogni giro: dice che cosa ha fatto chi ha chiamato,
+/// per esempio quali oggetti ha spostato, anche quando `touched` ormai ne
+/// elenca altri. Un seguito che non guarda `op` può non dichiararlo.
+export type Follow = (model: DocumentModel, touched: ReadonlySet<string>, op: Op) => Op | null;
+
+/// Quanti giri di seguito il motore chiede al più: ciò che un giro tocca si
+/// segue a sua volta, come la regione del filtro di un connettore che il
+/// primo giro ha ricalcolato. Oltre, il seguito si ferma anche se avrebbe
+/// altro da dire.
+export const FOLLOW_ROUNDS = 3;
 
 /// Un'operazione rifiutata: la scena resta com'era.
 export interface Rejected {
@@ -576,8 +589,9 @@ export class SceneEngine {
   /// alla fine.
   private quiet = false;
   /// Ciò che segue ogni operazione applicata, nello stesso passo e nello
-  /// stesso undo; `null` per niente. Un'inversa non ha seguito: porta già
-  /// l'inversa di ciò che aveva seguito l'operazione.
+  /// stesso undo, a giri (vedi [`Follow`] e [`FOLLOW_ROUNDS`]); `null` per
+  /// niente. Un'inversa non ha seguito: porta già l'inversa di ciò che aveva
+  /// seguito l'operazione.
   follow: Follow | null = null;
 
   /// Che cosa è la risorsa modificabile che porta `id` nella scena corrente:
@@ -666,10 +680,10 @@ export class SceneEngine {
     let inverse: Op;
     try {
       inverse = this.run(op);
-      const followed = this.inverse ? null : this.followed(tree);
+      const followed = this.inverse ? null : this.followed(tree, op);
       if (followed !== null) {
-        forward = chain([op, followed.op]);
-        inverse = chain([followed.inverse, inverse]);
+        forward = chain([op, ...followed.ops]);
+        inverse = chain([...followed.inverses.reverse(), inverse]);
       }
       const { removes, restores } = this.collect();
       if (!this.inverse) this.checkBoards(boards);
@@ -688,33 +702,64 @@ export class SceneEngine {
     return this.commit(tree.take(mark), forward, inverse, [...this.touched], this.duplicate, null);
   }
 
-  /// Ciò che segue l'operazione appena applicata, applicato anche lui, con
-  /// la sua inversa; `null` se non c'è niente. Un seguito che il motore
-  /// rifiuta, o che non si sa calcolare, non c'è: l'operazione chiesta resta
-  /// com'era prima che qualcosa la seguisse, con ciò che ha toccato.
-  private followed(tree: Tree): { readonly op: Op; readonly inverse: Op } | null {
-    const follow = this.follow;
-    if (follow === null) return null;
+  /// Ciò che segue l'operazione `requested` appena applicata, applicato
+  /// anche lui, a giri: le operazioni dei giri in ordine, e le loro inverse
+  /// nell'ordine in cui si sono applicate; `null` se non c'è niente. Il
+  /// primo giro vede tutto ciò che l'operazione ha toccato, ogni giro dopo
+  /// soltanto ciò che il giro prima ha toccato in più, e ci si ferma al
+  /// giro in cui non c'è niente di nuovo, o a [`FOLLOW_ROUNDS`] giri. Un giro
+  /// che il motore rifiuta, o che non si sa calcolare, non c'è: si tengono i
+  /// giri prima e ci si ferma, con ciò che hanno toccato.
+  private followed(
+    tree: Tree,
+    requested: Op,
+  ): { readonly ops: Op[]; readonly inverses: Op[] } | null {
+    if (this.follow === null) return null;
+    const ops: Op[] = [];
+    const inverses: Op[] = [];
+    let fresh: ReadonlySet<string> = new Set(this.touched);
+    for (let round = 0; round < FOLLOW_ROUNDS && (round === 0 || fresh.size > 0); round++) {
+      const next = this.followRound(tree, requested, fresh);
+      if (next === null) break;
+      ops.push(next.op);
+      inverses.push(next.inverse);
+      fresh = next.touched;
+    }
+    return ops.length === 0 ? null : { ops, inverses };
+  }
+
+  /// Un giro del seguito: ciò che `follow` dice dopo aver visto `touched`,
+  /// applicato con la sua inversa, e gli id che ha toccato in più; `null` se
+  /// non dice niente, se non si sa calcolare o se il motore lo rifiuta, e
+  /// allora il giro non lascia niente nella scena.
+  private followRound(
+    tree: Tree,
+    requested: Op,
+    touched: ReadonlySet<string>,
+  ): { readonly op: Op; readonly inverse: Op; readonly touched: ReadonlySet<string> } | null {
     let op: Op | null;
     try {
-      op = follow(tree.model, this.touched);
+      op = this.follow!(tree.model, touched, requested);
     } catch {
       return null;
     }
     if (op === null) return null;
     if (op.op === "batch" && op.label !== undefined) op = { op: "batch", ops: op.ops };
     const mark = tree.mark();
-    const { touched, duplicate, emptied, boards, papers } = this;
-    this.touched = new Set(touched);
+    const { touched: before, duplicate, emptied, boards, papers } = this;
+    this.touched = new Set(before);
     this.emptied = new Set(emptied);
     this.boards = new Set(boards);
     this.papers = new Set(papers);
     try {
-      return { op, inverse: this.run(op) };
+      const inverse = this.run(op);
+      const added = new Set<string>();
+      for (const id of this.touched) if (!before.has(id)) added.add(id);
+      return { op, inverse, touched: added };
     } catch (error) {
       tree.rollback(mark);
       if (!(error instanceof Rejection)) throw error;
-      this.touched = touched;
+      this.touched = before;
       this.duplicate = duplicate;
       this.emptied = emptied;
       this.boards = boards;
