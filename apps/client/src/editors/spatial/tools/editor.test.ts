@@ -15,6 +15,7 @@ import { SceneEngine } from "../scene/engine";
 import type { Op } from "../scene/ops";
 import { readScene } from "../scene/read";
 import { doc } from "../scene/test-support";
+import { filterElem, writeEffects, type Shadow } from "./effects";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages, type DrawPlace } from "./editor";
 import { MERGE_MS } from "./history";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
@@ -22,7 +23,7 @@ import { rasterize } from "./png";
 import { arrowPath } from "./shapes";
 import { inlineTracer } from "./trace-runner";
 import { appearance, LAYER } from "./test-support";
-import { DEFS, MARKER, markersIn, tipOf } from "./tip-support";
+import { DEFS, MARKER, markersIn, tipOf, written } from "./tip-support";
 import { DEFAULT_CURVE } from "../pen/pressure";
 import { closeRadial } from "./radial";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
@@ -786,10 +787,10 @@ describe("disporre, dal livello Standard", () => {
     editor.select(["og1g1g1g1"]);
     key("g", { ctrlKey: true, shiftKey: true });
     expect(editor.engine.text).toBe(source);
-    expect(spoken()).toBe("Non separato: un ritaglio, una maschera o un filtro valgono per tutto il gruppo.");
+    expect(spoken()).toBe("Non separato: un ritaglio, una maschera, degli effetti o un filtro valgono per tutto il gruppo.");
     editor.select(["og1g1g1g1", "og2g2g2g2"]);
     key("g", { ctrlKey: true, shiftKey: true });
-    expect(spoken()).toBe("1 gruppo separato. I gruppi con un ritaglio, una maschera o un filtro restano interi.");
+    expect(spoken()).toBe("1 gruppo separato. I gruppi con un ritaglio, una maschera, degli effetti o un filtro restano interi.");
     expect(editor.engine.text).toContain('<g id="og1g1g1g1" clip-path="url(#rcccccccc)">');
     expect(editor.engine.text).not.toContain("og2g2g2g2");
   });
@@ -13005,6 +13006,390 @@ describe("«Ritaglia immagine», dal livello Standard", () => {
   });
 });
 
+describe("la fusione e l'opacità", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob1b1b1b1";
+  const G = "og1g1g1g1";
+  const SHEET = doc(
+    `${LAYER}<rect id="${A}" x="0" y="0" width="40" height="40" fill="#0072b2" opacity="0.5"/>`
+      + `<rect id="${B}" x="50" y="0" width="40" height="40" fill="#d55e00"/>`
+      + `<g id="${G}"><rect id="oc1c1c1c1" x="100" y="0" width="40" height="40" fill="#009e73"/></g></g>`,
+  );
+
+  const arrangeBar = (): HTMLElement => host.querySelector<HTMLElement>('.draw-arrange[aria-label="Disponi"]')!;
+  const opacity = (): HTMLInputElement => arrangeBar().querySelector<HTMLInputElement>(".draw-arrange-input")!;
+  const opacityLabel = (): HTMLElement => arrangeBar().querySelector<HTMLElement>(".draw-arrange-field")!;
+  /// L'opacità scritta nell'elemento `id`, o `null` se non la scrive.
+  const opacityOf = (id: string): string | null => new RegExp(`<(?:rect|g) id="${id}"[^>]*? opacity="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
+  const style = (id: string): string | null => new RegExp(`<(?:rect|g) id="${id}"[^>]*? style="([^"]*)"`).exec(editor.engine.text)?.[1] ?? null;
+  /// Un tasto dentro il campo dell'opacità.
+  const press = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, opacity());
+
+  it("c'è dallo Standard, nella barra «Disponi», col nome, il valore e i limiti; sotto lo Standard e senza selezione no", () => {
+    mount(SHEET, { level: "standard" });
+    expect(arrangeBar().hidden).toBe(true);
+    editor.select([A]);
+    expect(arrangeBar().hidden).toBe(false);
+    expect(opacityLabel().hidden).toBe(false);
+    expect(opacity().value).toBe("50");
+    expect(opacity().getAttribute("role")).toBe("spinbutton");
+    expect(opacity().getAttribute("aria-label")).toBe("Opacità");
+    expect(opacityLabel().title).toBe("Opacità");
+    expect([opacity().getAttribute("aria-valuemin"), opacity().getAttribute("aria-valuemax"), opacity().getAttribute("aria-valuenow"), opacity().getAttribute("aria-valuetext")]).toEqual(["0", "100", "50", "50%"]);
+    expect(arrangeBar().querySelector(".draw-arrange-suffix")!.getAttribute("aria-hidden")).toBe("true");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Un oggetto che non scrive l'opacità la ha piena.
+    editor.select([B]);
+    expect(opacity().value).toBe("100");
+    // Di oggetti diversi il campo è vuoto, e lo dice.
+    editor.select([A, B]);
+    expect(opacity().value).toBe("");
+    expect(opacity().placeholder).toBe("Misto");
+    expect(opacity().getAttribute("aria-valuetext")).toBe("Misto");
+    expect(opacity().hasAttribute("aria-valuenow")).toBe(false);
+    editor.select([]);
+    expect(arrangeBar().hidden).toBe(true);
+    editor.setLevel("essential");
+    editor.select([A]);
+    expect(opacityLabel().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("un valore scritto e Invio cambiano l'opacità in un passo, «Opacità», che si annulla e si ripete", () => {
+    mount(SHEET, { level: "standard" });
+    editor.select([A]);
+    typeIn(opacity(), "30");
+    expect(press("Enter").defaultPrevented).toBe(true);
+    expect(opacityOf(A)).toBe("0.3");
+    expect(changes).toHaveLength(1);
+    expect(opacity().value).toBe("30");
+    expect(opacity().getAttribute("aria-valuenow")).toBe("30");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Opacità.");
+    expect(editor.engine.text).toBe(SHEET);
+    expect(opacity().value).toBe("50");
+    editor.redo();
+    expect(opacityOf(A)).toBe("0.3");
+    // Anche con il segno e un calcolo, come nel pannello.
+    typeIn(opacity(), "20+5%");
+    press("Enter");
+    expect(opacityOf(A)).toBe("0.25");
+  });
+
+  it("lasciare il campo scrive il numero; lo stesso numero non scrive niente", () => {
+    mount(SHEET, { level: "standard" });
+    editor.select([A]);
+    typeIn(opacity(), "50");
+    opacity().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    expect(changes).toEqual([]);
+    typeIn(opacity(), "80");
+    opacity().blur();
+    opacity().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
+    expect(opacityOf(A)).toBe("0.8");
+    expect(changes).toHaveLength(1);
+  });
+
+  it("le frecce, Pagina, Inizio e Fine la cambiano subito, fra 0 e 100, e i colpi di fila sono un passo", () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(SHEET, { level: "standard" });
+    editor.select([A]);
+    opacity().focus();
+    press("ArrowUp");
+    press("ArrowUp");
+    expect(opacityOf(A)).toBe("0.52");
+    press("ArrowDown", { shiftKey: true });
+    expect(opacityOf(A)).toBe("0.42");
+    press("PageUp");
+    expect(opacityOf(A)).toBe("0.52");
+    press("PageDown");
+    press("PageDown");
+    expect(opacityOf(A)).toBe("0.32");
+    expect(opacity().value).toBe("32");
+    // Un passo solo: annulla riporta al principio.
+    editor.undo();
+    expect(editor.engine.text).toBe(SHEET);
+    editor.redo();
+    press("End");
+    expect(opacity().value).toBe("100");
+    expect(opacityOf(A)).toBeNull();
+    const count = changes.length;
+    press("ArrowUp");
+    press("PageUp");
+    press("End");
+    expect(opacity().value).toBe("100");
+    expect(changes).toHaveLength(count);
+    press("Home");
+    expect(opacityOf(A)).toBe("0");
+    const zero = changes.length;
+    press("ArrowDown");
+    press("PageDown", { shiftKey: true });
+    press("Home");
+    expect(opacityOf(A)).toBe("0");
+    expect(opacity().value).toBe("0");
+    expect(changes).toHaveLength(zero);
+    // Il tasto è del campo: non arriva al foglio, e la selezione non si sposta.
+    expect(editor.engine.text).not.toContain("transform=");
+  });
+
+  it("un valore che non si legge lo dice e il campo torna com'era; Esc toglie il numero, e poi torna al foglio", () => {
+    mount(SHEET, { level: "standard" });
+    editor.select([A]);
+    opacity().focus();
+    typeIn(opacity(), "abc");
+    press("Enter");
+    expect(spoken()).toBe("Scrivi un numero o un calcolo, come 120+15.");
+    expect(opacity().value).toBe("50");
+    typeIn(opacity(), "5 px");
+    press("Enter");
+    expect(spoken()).toMatch(/^Qui valgono queste unità:/);
+    expect(opacity().value).toBe("50");
+    typeIn(opacity(), "");
+    press("Enter");
+    expect(opacity().value).toBe("50");
+    expect(changes).toEqual([]);
+    // Fuori da 0–100 il valore si ferma al limite.
+    typeIn(opacity(), "250");
+    press("Enter");
+    expect(opacityOf(A)).toBeNull();
+    // Esc, con un numero scritto, lo toglie e resta nel campo.
+    typeIn(opacity(), "70");
+    const first = press("Escape");
+    expect(first.defaultPrevented).toBe(true);
+    expect(opacity().value).toBe("100");
+    expect(document.activeElement).toBe(opacity());
+    // Poi torna al foglio, come ogni barra.
+    press("Escape");
+    expect(document.activeElement).toBe(surface());
+  });
+
+  it("con opacità diverse le frecce dicono che sono diverse, e un numero le porta tutte allo stesso valore", () => {
+    mount(SHEET, { level: "standard" });
+    editor.select([A, B]);
+    opacity().focus();
+    press("ArrowUp");
+    expect(spoken()).toBe("I valori sono diversi: scrivi quello da dare a tutti.");
+    expect(changes).toEqual([]);
+    typeIn(opacity(), "60");
+    press("Enter");
+    expect(opacityOf(A)).toBe("0.6");
+    expect(opacityOf(B)).toBe("0.6");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHEET);
+  });
+
+  it("un gruppo prende l'opacità sul gruppo, e il campo segue la selezione senza perdere il fuoco", () => {
+    mount(SHEET, { level: "standard" });
+    editor.select([G]);
+    opacity().focus();
+    press("PageDown");
+    expect(opacityOf(G)).toBe("0.9");
+    expect(document.activeElement).toBe(opacity());
+    // Cambiare la selezione ridice il valore; un numero a metà della stessa selezione resta.
+    typeIn(opacity(), "4");
+    editor.select([G]);
+    expect(opacity().value).toBe("4");
+    editor.select([A]);
+    expect(opacity().value).toBe("50");
+  });
+
+  it("si raggiunge con le frecce dai pulsanti vicini, ha il suo Tab, e dentro le frecce sono sue", () => {
+    mount(SHEET, { level: "standard" });
+    editor.select([A]);
+    const buttons = [...arrangeBar().querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.hidden);
+    // I pulsanti hanno un Tab solo fra loro; il campo ha il suo.
+    expect(buttons.filter((control) => control.tabIndex === 0)).toHaveLength(1);
+    expect(opacity().tabIndex).toBe(0);
+    const last = buttons[buttons.length - 1]!;
+    last.focus();
+    key("ArrowRight", {}, last);
+    expect(document.activeElement).toBe(opacity());
+    // Dentro, le frecce sinistra e destra e Inizio e Fine non vanno ai pulsanti.
+    key("ArrowLeft", {}, opacity());
+    expect(document.activeElement).toBe(opacity());
+    // Dall'altra parte, la freccia a sinistra dal primo pulsante arriva al campo.
+    buttons[0]!.focus();
+    key("ArrowLeft", {}, buttons[0]!);
+    expect(document.activeElement).toBe(opacity());
+    key("End", {}, last);
+  });
+
+  it("in un disegno che non si modifica non c'è", () => {
+    mount(SHEET.replace(' fub:version="1"', ""), { level: "standard" });
+    editor.select([A]);
+    expect(arrangeBar().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  // --- La fusione nel pannello ----------------------------------------------
+
+  const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
+  const choose = (id: string, value: string): void => {
+    const select = property(id).querySelector("select")!;
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const flip = (id: string): void => property(id).querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+
+  it("«Fusione» è dell'Esperto, e il modo scelto va nello style del formato, in un passo che si annulla col suo nome", () => {
+    mount(SHEET, { level: "standard" });
+    editor.select([A]);
+    panelButton().click();
+    expect(host.querySelector('.draw-properties-field[data-field="blend"]')).toBeNull();
+    expect(host.querySelector('.draw-properties-field[data-field="isolate"]')).toBeNull();
+    editor.setLevel("expert");
+    expect(propertyLabel("blend")).toBe("Fusione");
+    const select = property("blend").querySelector("select")!;
+    expect(select.value).toBe("normal");
+    expect(select.querySelectorAll("option")).toHaveLength(16);
+    expect(select.querySelectorAll("hr")).toHaveLength(5);
+    // Un oggetto che non è un gruppo non ha l'isolamento.
+    expect(host.querySelector('.draw-properties-field[data-field="isolate"]')).toBeNull();
+    choose("blend", "multiply");
+    expect(style(A)).toBe("mix-blend-mode: multiply");
+    expect(opacityOf(A)).toBe("0.5");
+    expect(changes).toHaveLength(1);
+    expect(property("blend").querySelector("select")!.value).toBe("multiply");
+    choose("blend", "color-dodge");
+    expect(style(A)).toBe("mix-blend-mode: color-dodge");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Fusione.");
+    expect(editor.engine.text).toBe(SHEET);
+    expect(property("blend").querySelector("select")!.value).toBe("normal");
+    editor.redo();
+    expect(style(A)).toBe("mix-blend-mode: color-dodge");
+    choose("blend", "normal");
+    expect(style(A)).toBeNull();
+    expect(editor.engine.text).toBe(SHEET);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("con oggetti di fusioni diverse il campo è misto, e una scelta le porta tutte allo stesso modo", () => {
+    mount(SHEET.replace(`<rect id="${B}" `, `<rect id="${B}" style="mix-blend-mode: screen" `), { level: "expert" });
+    editor.select([A, B]);
+    panelButton().click();
+    const select = property("blend").querySelector("select")!;
+    expect(select.value).toBe("");
+    expect(select.querySelector("option")!.textContent).toBe("Misto");
+    expect(select.querySelectorAll("option")).toHaveLength(17);
+    choose("blend", "overlay");
+    expect(style(A)).toBe("mix-blend-mode: overlay");
+    expect(style(B)).toBe("mix-blend-mode: overlay");
+    expect(changes).toHaveLength(1);
+  });
+
+  it("«Isola la fusione» è dei gruppi: si accende e si spegne, e tiene la fusione che c'è", () => {
+    mount(SHEET, { level: "expert" });
+    editor.select([G]);
+    panelButton().click();
+    expect(propertyLabel("isolate")).toBe("Isola la fusione");
+    choose("blend", "multiply");
+    flip("isolate");
+    expect(style(G)).toBe("mix-blend-mode: multiply; isolation: isolate");
+    expect(property("isolate").querySelector<HTMLInputElement>("input")!.checked).toBe(true);
+    flip("isolate");
+    expect(style(G)).toBe("mix-blend-mode: multiply");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Non isolare la fusione.");
+    expect(style(G)).toBe("mix-blend-mode: multiply; isolation: isolate");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Isola la fusione.");
+    editor.undo();
+    expect(editor.engine.text).toBe(SHEET);
+    // Con un oggetto che non è un gruppo fra gli scelti, l'isolamento non c'è.
+    editor.select([G, A]);
+    expect(property("isolate").hidden).toBe(true);
+  });
+
+  // --- Gli effetti: lo stile copiato, il contagocce, il riquadro -------------
+
+  const SHADOW: Shadow = { kind: "shadow", dx: 0, dy: 4, blur: 8, color: "#000000", opacity: 0.25, hidden: false };
+  /// Il filtro dell'ombra per un quadrato di 20 × 20 in (10, 10), e per uno di 40 × 40 in (230, 130).
+  const filterFor = (id: string, x: number, y: number, side: number): string =>
+    DEFS(written(filterElem(id, [SHADOW], { x: String(x - 14), y: String(y - 10), width: String(side + 28), height: String(side + 28) })));
+  const FX = `filter="url(#rf1f1f1f1)" fub:effect="${writeEffects([SHADOW])}"`;
+  /// A senza niente; B con un'ombra e una fusione, più in là.
+  const LOOKS = doc(
+    `${filterFor("rf1f1f1f1", 230, 130, 40)}${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2"/>`
+      + `<rect id="${B}" x="230" y="130" width="40" height="40" fill="#e69f00" ${FX} style="mix-blend-mode: multiply"/></g>`,
+  );
+
+  it("lo stile copiato porta la fusione e gli effetti, dallo Standard, e incollarli è un passo solo", () => {
+    mount(LOOKS, { level: "standard" });
+    editor.select([B]);
+    key("c", { ctrlKey: true, altKey: true });
+    expect(spoken()).toBe("Stile copiato.");
+    editor.select([A]);
+    key("v", { ctrlKey: true, altKey: true });
+    expect(spoken()).toBe("Stile incollato su 1 oggetto.");
+    expect(style(A)).toBe("mix-blend-mode: multiply");
+    expect(new RegExp(`<rect id="${A}"[^>]* fub:effect="shadow 0 4 8 #000000 0\\.25"`).test(editor.engine.text)).toBe(true);
+    expect(editor.engine.text.match(/<filter /g)).toHaveLength(2);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(LOOKS);
+    // E lo stile di un oggetto liscio toglie ombra e fusione a chi le ha.
+    editor.select([A]);
+    key("c", { ctrlKey: true, altKey: true });
+    editor.select([B]);
+    key("v", { ctrlKey: true, altKey: true });
+    expect(style(B)).toBeNull();
+    expect(editor.engine.text).not.toContain("fub:effect");
+    expect(editor.engine.text).not.toContain("<filter");
+    editor.undo();
+    expect(editor.engine.text).toBe(LOOKS);
+  });
+
+  it("il contagocce dà anche la fusione e gli effetti della forma sotto il puntatore", () => {
+    mount(LOOKS, { level: "standard" });
+    size(400, 300);
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    drag([[250, 150], [250, 150]]);
+    expect(style(A)).toBe("mix-blend-mode: multiply");
+    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${A}"[^>]* fub:effect="shadow 0 4 8 #000000 0\\.25"`));
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(LOOKS);
+  });
+
+  /// Un rettangolo con l'ombra, e un gruppo spostato di 100 con un altro dentro.
+  const SHADOWED = doc(
+    `${filterFor("rf1f1f1f1", 10, 10, 20)}${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2" ${FX}/>`
+      + `<g id="${G}" transform="translate(100 0)"><rect id="oc1c1c1c1" x="10" y="10" width="20" height="20" fill="#009e73" ${FX}/></g></g>`,
+  );
+
+  it("l'export della selezione conta l'ombra: quella di un oggetto, e quella di ciò che un gruppo porta, spostata come lui", () => {
+    mount(SHADOWED, { level: "standard" });
+    editor.select([A]);
+    // L'ombra arriva 12 a sinistra e a destra, 8 sopra e 16 sotto.
+    expect(editor.exportScene().scene.selection!.box).toEqual([-2, 2, 44, 44]);
+    editor.select([G]);
+    expect(editor.exportScene().scene.selection!.box).toEqual([98, 2, 44, 44]);
+    editor.select([A, G]);
+    expect(editor.exportScene().scene.selection!.box).toEqual([-2, 2, 144, 44]);
+    // Senza effetti, il riquadro è quello della forma.
+    editor.dispose();
+    mount(doc(`${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="#0072b2"/></g>`), { level: "standard" });
+    editor.select([A]);
+    expect(editor.exportScene().scene.selection!.box).toEqual([10, 10, 20, 20]);
+  });
+
+  it("«Adatta la pagina al disegno» comprende l'ombra, con il suo margine, in un passo che si annulla", () => {
+    mount(SHADOWED, { level: "standard" });
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Pagina e griglia"]')!.click();
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")].find((one) => one.querySelector(".menu-label")!.textContent === "Adatta la pagina al disegno")!.click();
+    // Da -2 a 142 e da 2 a 46, con 20 di margine.
+    expect(editor.engine.text).toContain('viewBox="-22 -18 184 84"');
+    expect(spoken()).toBe("Pagina adattata: 184 × 84.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHADOWED);
+    for (const menu of document.querySelectorAll(".context-menu")) menu.remove();
+  });
+});
+
 describe("«Maschera», dal livello Esperto", () => {
   const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
   const SHAPES = doc(
@@ -13094,7 +13479,7 @@ describe("«Maschera», dal livello Esperto", () => {
     expect(editor.selection).toEqual([group![1]]);
     // «Separa» non separa un gruppo ritagliato, e dice da dove si rilascia.
     key("G", { ctrlKey: true, shiftKey: true });
-    expect(spoken()).toBe("Non separato: un ritaglio, una maschera o un filtro valgono per tutto il gruppo. Una maschera si rilascia dal menu «Maschera».");
+    expect(spoken()).toBe("Non separato: un ritaglio, una maschera, degli effetti o un filtro valgono per tutto il gruppo. Una maschera si rilascia dal menu «Maschera».");
     expect(changes).toHaveLength(1);
     expect(releaseKey().defaultPrevented).toBe(true);
     expect(changes).toHaveLength(2);
@@ -13205,5 +13590,548 @@ describe("«Maschera», dal livello Esperto", () => {
     releaseKey();
     expect(spoken()).toBe("Fra gli oggetti scelti non c’è una maschera da rilasciare.");
     expect(changes).toEqual([]);
+  });
+});
+
+describe("gli effetti, dal livello Esperto", () => {
+  /// `source` su una pagina larga, che contiene tutto: la pagina che cresce
+  /// per ciò che esce non è l'argomento.
+  const wide = (source: string): string => source.replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 400"');
+  const SHAPES = wide(
+    doc(
+      `${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>`
+        + `<rect id="s" x="100" y="20" width="40" height="30" fill="#d55e00"/>`
+        + `<ellipse id="e" cx="200" cy="40" rx="20" ry="10" fill="#009e73"/>`
+        + `<rect id="t" x="20" y="100" width="40" height="30" fill="#ffffff" stroke="#000000" stroke-width="2"/></g>`,
+    ),
+  );
+  const SHADOW = "shadow 0 4 8 #000000 0.25";
+
+  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
+  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="effects"]')!;
+  const addButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>(".draw-effects-add")!;
+  const rows = (): HTMLElement[] => [...section().querySelectorAll<HTMLElement>(".draw-effect")];
+  const nameButton = (at: number): HTMLButtonElement => rows()[at]!.querySelector<HTMLButtonElement>(".draw-effect-name")!;
+  const eye = (at: number): HTMLButtonElement => rows()[at]!.querySelector<HTMLButtonElement>(".draw-effect-show")!;
+  const takeOff = (at: number): HTMLButtonElement => rows()[at]!.querySelector<HTMLButtonElement>(".draw-effect-remove")!;
+  const opened = (): number[] => rows().flatMap((_, at) => (nameButton(at).getAttribute("aria-expanded") === "true" ? [at] : []));
+  /// Il campo `label` della riga `at`, o `null` se non c'è.
+  const effectField = (at: number, label: string): HTMLInputElement =>
+    [...rows()[at]!.querySelectorAll<HTMLInputElement>('input[type="text"]')].find(
+      (each) => host.querySelector(`label[for="${each.id}"]`)!.firstElementChild!.textContent === label,
+    )!;
+  const buttons = (): HTMLButtonElement[] => [...section().querySelectorAll<HTMLButtonElement>(".draw-effects-actions > button")];
+  const note = (): string => section().querySelector(".draw-effects > .draw-properties-note")!.textContent ?? "";
+  const headline = (): string => section().querySelector<HTMLElement>(".draw-effects-state")!.textContent ?? "";
+  /// Il menu aperto per ultimo, e le sue voci.
+  const menuItems = (): HTMLButtonElement[] => {
+    const menus = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...menus[menus.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  /// Sceglie dal menu «Aggiungi effetto» la voce `label`.
+  function addEffect(label: string): void {
+    addButton().click();
+    menuItems().find((entry) => labelOf(entry) === label)!.click();
+  }
+  /// Il filtro (`<filter …>`) che il testo ha, e quanti.
+  const filters = (text = editor.engine.text): string[] => text.match(/<filter [\s\S]*?<\/filter>/g) ?? [];
+  const effectOf = (id: string, text = editor.engine.text): string | null => new RegExp(`<[a-z]+ id="${id}"[^>]*? fub:effect="([^"]*)"`).exec(text)?.[1] ?? null;
+  const filterOf = (id: string, text = editor.engine.text): string | null => new RegExp(`<[a-z]+ id="${id}"[^>]*? filter="url\\(#([^)]+)\\)"`).exec(text)?.[1] ?? null;
+  afterEach(() => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("all'Essenziale e allo Standard la sezione non c'è; all'Esperto sì", () => {
+    mount(SHAPES, { level: "standard" });
+    openProperties();
+    editor.select(["r"]);
+    expect(section().hidden).toBe(true);
+    editor.setLevel("expert");
+    expect(section().hidden).toBe(false);
+    expect(section().querySelector("h3")!.textContent).toBe("Effetti");
+    expect(addButton().getAttribute("aria-label")).toBe("Aggiungi effetto");
+    expect(note()).toBe("Nessun effetto: aggiungi un’ombra, un bagliore o una sfocatura.");
+    editor.setLevel("standard");
+    expect(section().hidden).toBe(true);
+    expect(changes).toEqual([]);
+  });
+
+  it("c'è dopo «Sfumatura» e prima di «Colori del documento»", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    const order = [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+    expect(order.indexOf("effects")).toBe(order.indexOf("gradient") + 1);
+    expect(order.indexOf("colors")).toBe(order.indexOf("effects") + 1);
+  });
+
+  it("dal menu si aggiunge un'ombra: fub:effect e il filtro privato in un solo passo, e annulla li disfa al byte", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    const before = editor.engine.text;
+    addButton().click();
+    expect(addButton().getAttribute("aria-expanded")).toBe("true");
+    expect(menuItems().map(labelOf)).toEqual(["Ombra esterna", "Ombra interna", "Bagliore esterno", "Bagliore interno", "Sfocatura"]);
+    expect(menuItems().map((entry) => entry.getAttribute("aria-disabled"))).toEqual([null, null, null, null, null]);
+    menuItems()[0]!.click();
+    expect(changes).toHaveLength(1);
+    const after = editor.engine.text;
+    expect(effectOf("r")).toBe(SHADOW);
+    const id = filterOf("r")!;
+    expect(id).toMatch(/^r[0-9a-z]{8}$/);
+    expect(filters()).toHaveLength(1);
+    expect(filters()[0]).toContain(`<filter id="${id}" fub:role="private"`);
+    expect(filters()[0]).toContain('filterUnits="userSpaceOnUse"');
+    // Il filtro è della regione dell'oggetto, con il margine dell'ombra.
+    expect(filters()[0]).toMatch(/x="(1\d|\d)(\.\d+)?" y="/);
+    expect(editor.selection).toEqual(["r"]);
+    expect(spoken()).toContain("Aggiunto: Ombra esterna.");
+    // La riga nuova è aperta, coi suoi campi.
+    expect(rows()).toHaveLength(1);
+    expect(opened()).toEqual([0]);
+    expect(effectField(0, "Y").value).toBe("4");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Un solo passo, col suo nome, e al byte.
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(spoken()).toBe("Annullato: Aggiungi ombra esterna.");
+    expect(rows()).toEqual([]);
+    expect(editor.selection).toEqual(["r"]);
+    editor.redo();
+    expect(editor.engine.text).toBe(after);
+    expect(rows()).toHaveLength(1);
+  });
+
+  it("ogni genere si aggiunge col suo nome e il suo testo", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    const before = editor.engine.text;
+    const wanted: Array<[string, string, string]> = [
+      ["Ombra interna", "inner-shadow 0 2 4 #000000 0.25", "Annullato: Aggiungi ombra interna."],
+      ["Bagliore esterno", "glow 8 #ffd400 0.75", "Annullato: Aggiungi bagliore esterno."],
+      ["Bagliore interno", "inner-glow 6 #ffffff 0.75", "Annullato: Aggiungi bagliore interno."],
+      ["Sfocatura", "blur 4", "Annullato: Aggiungi sfocatura."],
+    ];
+    for (const [label, text, undone] of wanted) {
+      addEffect(label);
+      expect(effectOf("r")).toBe(text);
+      editor.undo();
+      expect(spoken()).toBe(undone);
+      expect(editor.engine.text).toBe(before);
+    }
+  });
+
+  it("nasconde e mostra un effetto, col suo nome, e il filtro se ne va e torna", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    addEffect("Ombra esterna");
+    const shown = editor.engine.text;
+    eye(0).click();
+    expect(effectOf("r")).toBe(`${SHADOW} hidden`);
+    expect(filterOf("r")).toBeNull();
+    expect(filters()).toEqual([]);
+    expect(eye(0).getAttribute("aria-pressed")).toBe("false");
+    expect(eye(0).getAttribute("aria-label")).toBe("Mostra Ombra esterna");
+    expect(spoken()).toContain("Nascosto: Ombra esterna.");
+    const hidden = editor.engine.text;
+    eye(0).click();
+    expect(effectOf("r")).toBe(SHADOW);
+    expect(filters()).toHaveLength(1);
+    expect(eye(0).getAttribute("aria-pressed")).toBe("true");
+    expect(spoken()).toContain("Mostrato: Ombra esterna.");
+    editor.undo();
+    expect(editor.engine.text).toBe(hidden);
+    expect(spoken()).toBe("Annullato: Mostra ombra esterna.");
+    editor.undo();
+    expect(editor.engine.text).toBe(shown);
+    expect(spoken()).toBe("Annullato: Nascondi ombra esterna.");
+  });
+
+  it("un campo cambiato è un passo, e due colpi di freccia di seguito se ne fanno uno", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    addEffect("Ombra esterna");
+    const added = editor.engine.text;
+    now.mockReturnValue(MERGE_MS + 1);
+    enter(effectField(0, "X"), "6");
+    expect(effectOf("r")).toBe("shadow 6 4 8 #000000 0.25");
+    expect(effectField(0, "X").value).toBe("6");
+    const typed = editor.engine.text;
+    now.mockReturnValue(2 * MERGE_MS + 2);
+    effectField(0, "Y").focus();
+    key("ArrowUp", {}, effectField(0, "Y"));
+    key("ArrowUp", {}, effectField(0, "Y"));
+    expect(effectOf("r")).toBe("shadow 6 6 8 #000000 0.25");
+    expect(effectField(0, "Y").value).toBe("6");
+    expect(document.activeElement).toBe(effectField(0, "Y"));
+    // I due colpi si annullano insieme; il campo scritto, a parte.
+    editor.undo();
+    expect(editor.engine.text).toBe(typed);
+    expect(spoken()).toBe("Annullato: Ombra esterna.");
+    editor.undo();
+    expect(editor.engine.text).toBe(added);
+    expect(spoken()).toBe("Annullato: Ombra esterna.");
+    editor.undo();
+    expect(effectOf("r")).toBeNull();
+  });
+
+  it("il filtro segue i valori dei campi: più sfocatura, regione più larga", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    addEffect("Ombra esterna");
+    const width = (): number => Number(/<filter [^>]*? width="([^"]*)"/.exec(filters()[0]!)![1]);
+    const narrow = width();
+    enter(effectField(0, "Sfocatura"), "40");
+    expect(width()).toBeGreaterThan(narrow);
+    expect(filters()).toHaveLength(1);
+    enter(effectField(0, "Colore"), "red");
+    expect(effectOf("r")).toBe("shadow 0 4 40 #ff0000 0.25");
+    enter(effectField(0, "Opacità"), "50%");
+    expect(effectOf("r")).toBe("shadow 0 4 40 #ff0000 0.5");
+    enter(effectField(0, "Colore"), "grigio");
+    expect(effectField(0, "Colore").getAttribute("aria-invalid")).toBe("true");
+    expect(effectOf("r")).toBe("shadow 0 4 40 #ff0000 0.5");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("toglie un effetto: il fuoco va al seguente, e annulla lo rimette", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    addEffect("Ombra esterna");
+    addEffect("Bagliore esterno");
+    addEffect("Sfocatura");
+    expect(effectOf("r")).toBe(`${SHADOW}; glow 8 #ffd400 0.75; blur 4`);
+    expect(rows()).toHaveLength(3);
+    // Il fuoco sul pulsante della riga di mezzo, e si toglie con la tastiera.
+    takeOff(1).focus();
+    takeOff(1).click();
+    expect(effectOf("r")).toBe(`${SHADOW}; blur 4`);
+    expect(spoken()).toContain("Tolto: Bagliore esterno.");
+    expect(document.activeElement).toBe(nameButton(1));
+    const two = editor.engine.text;
+    takeOff(1).focus();
+    takeOff(1).click();
+    expect(document.activeElement).toBe(nameButton(0));
+    takeOff(0).focus();
+    takeOff(0).click();
+    expect(effectOf("r")).toBeNull();
+    expect(filters()).toEqual([]);
+    expect(document.activeElement).toBe(addButton());
+    expect(editor.engine.text).not.toContain("fub:effect");
+    editor.undo();
+    expect(effectOf("r")).toBe(SHADOW);
+    expect(spoken()).toBe("Annullato: Togli ombra esterna.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Togli sfocatura.");
+    expect(effectOf("r")).toBe(`${SHADOW}; blur 4`);
+    expect(editor.engine.text).toBe(two);
+  });
+
+  it("l'unica sfocatura: con una già c'è, spenta, e dice perché", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    addEffect("Sfocatura");
+    addButton().click();
+    const blur = menuItems().find((entry) => labelOf(entry) === "Sfocatura")!;
+    expect(blur.getAttribute("aria-disabled")).toBe("true");
+    expect(blur.querySelector(".menu-description")!.textContent).toBe("Un oggetto ha già una sfocatura: ne prende una sola.");
+    const count = changes.length;
+    blur.click();
+    expect(changes).toHaveLength(count);
+  });
+
+  it("a otto effetti il menu è tutto spento, e dice perché", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    for (let n = 0; n < 8; n += 1) addEffect("Bagliore esterno");
+    expect(rows()).toHaveLength(8);
+    addButton().click();
+    expect(menuItems().map((entry) => entry.getAttribute("aria-disabled"))).toEqual(["true", "true", "true", "true", "true"]);
+    expect(menuItems()[0]!.querySelector(".menu-description")!.textContent).toBe("Un oggetto ha già 8 effetti: è il massimo.");
+    expect(editor.engine.text.match(/glow 8 #ffd400 0.75/g)).toHaveLength(8);
+  });
+
+  it("due oggetti con gli stessi effetti li mostrano e li cambiano insieme, in un solo passo", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r", "s"]);
+    const before = editor.engine.text;
+    addEffect("Ombra esterna");
+    expect(effectOf("r")).toBe(SHADOW);
+    expect(effectOf("s")).toBe(SHADOW);
+    expect(filters()).toHaveLength(2);
+    expect(filterOf("r")).not.toBe(filterOf("s"));
+    expect(headline()).toBe("");
+    expect(rows()).toHaveLength(1);
+    const added = editor.engine.text;
+    enter(effectField(0, "Y"), "9");
+    expect(effectOf("r")).toBe("shadow 0 9 8 #000000 0.25");
+    expect(effectOf("s")).toBe("shadow 0 9 8 #000000 0.25");
+    expect(filters()).toHaveLength(2);
+    editor.undo();
+    expect(editor.engine.text).toBe(added);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(editor.selection).toEqual(["r", "s"]);
+  });
+
+  it("con effetti diversi lo dice, e li dà tutti uguali, quelli del primo che ne ha", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["s"]);
+    addEffect("Sfocatura");
+    editor.select(["r"]);
+    addEffect("Ombra esterna");
+    editor.select(["r", "s", "e"]);
+    expect(headline()).toBe("Effetti diversi");
+    expect(note()).toBe("Il primo oggetto che ne ha: Ombra esterna.");
+    expect(rows()).toEqual([]);
+    expect(buttons().map((button) => button.textContent)).toEqual(["Usa questi effetti per tutti", "Togli gli effetti"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    const before = editor.engine.text;
+    buttons()[0]!.click();
+    expect([effectOf("r"), effectOf("s"), effectOf("e")]).toEqual([SHADOW, SHADOW, SHADOW]);
+    expect(filters()).toHaveLength(3);
+    expect(headline()).toBe("");
+    expect(rows()).toHaveLength(1);
+    expect(spoken()).toContain("Gli stessi effetti per 3 oggetti.");
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(spoken()).toBe("Annullato: Effetti per tutti.");
+    // «Togli gli effetti» li toglie a tutti. Un annulla sceglie ciò che ha
+    // rimesso a posto: la selezione si rifà come prima.
+    editor.select(["r", "s", "e"]);
+    expect(headline()).toBe("Effetti diversi");
+    buttons()[1]!.click();
+    expect(editor.engine.text).not.toContain("fub:effect");
+    expect(filters()).toEqual([]);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(spoken()).toBe("Annullato: Togli gli effetti.");
+  });
+
+  it("aggiungere a oggetti con elenchi diversi aggiunge a ciascuno, in fondo", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["s"]);
+    addEffect("Sfocatura");
+    editor.select(["r", "s"]);
+    expect(headline()).toBe("Effetti diversi");
+    expect(note()).toBe("Il primo oggetto che ne ha: Sfocatura.");
+    addEffect("Ombra esterna");
+    expect(effectOf("r")).toBe(SHADOW);
+    expect(effectOf("s")).toBe(`blur 4; ${SHADOW}`);
+    // Il menu ricorda che uno di loro ha già la sfocatura.
+    addButton().click();
+    expect(menuItems().find((entry) => labelOf(entry) === "Sfocatura")!.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("un filtro di un altro programma si vede, si toglie, e un effetto nuovo lo sostituisce", () => {
+    const source = wide(doc(
+      `${DEFS('<filter id="ext" x="0" y="0" width="400" height="400" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="2"/></filter>')}${LAYER}`
+        + `<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2" filter="url(#ext)"/>`
+        + `<rect id="s" x="100" y="20" width="40" height="30" fill="#d55e00" filter="url(#ext)"/>`
+        + `<ellipse id="e" cx="200" cy="40" rx="20" ry="10" fill="#009e73"/></g>`,
+    ));
+    mount(source, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    expect(headline()).toBe("Un filtro di un altro programma");
+    expect(note()).toBe("FubDraw lo lascia com’è. Un effetto nuovo lo sostituisce.");
+    expect(buttons().map((button) => [button.textContent, button.hidden])).toEqual([["Usa questi effetti per tutti", true], ["Togli il filtro", false]]);
+    expect(rows()).toEqual([]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Un effetto nuovo lo sostituisce: il filtro dell'altro resta a chi lo usa.
+    addEffect("Ombra esterna");
+    expect(filterOf("r")).not.toBe("ext");
+    expect(effectOf("r")).toBe(SHADOW);
+    expect(filterOf("s")).toBe("ext");
+    expect(editor.engine.text).toContain('<filter id="ext"');
+    expect(headline()).toBe("");
+    editor.undo();
+    expect(filterOf("r")).toBe("ext");
+    expect(spoken()).toBe("Annullato: Aggiungi ombra esterna.");
+    // Togliere il filtro toglie il riferimento, e lascia il filtro dov'è.
+    buttons()[1]!.click();
+    expect(filterOf("r")).toBeNull();
+    expect(filterOf("s")).toBe("ext");
+    expect(editor.engine.text).toContain('<filter id="ext"');
+    expect(spoken()).toContain("Filtro tolto.");
+    editor.undo();
+    expect(filterOf("r")).toBe("ext");
+    expect(spoken()).toBe("Annullato: Togli il filtro.");
+    // Con un altro oggetto senza filtro, gli effetti sono diversi.
+    editor.select(["r", "e"]);
+    expect(headline()).toBe("Effetti diversi");
+  });
+
+  it("un'immagine ritagliata non prende effetti, e la sezione lo dice", () => {
+    const PNG = "data:image/png;base64,iVBORw0KGgo=";
+    const clip = '<clipPath id="c" fub:role="private"><rect x="0" y="0" width="10" height="10"/></clipPath>';
+    mount(doc(`${DEFS(clip)}${LAYER}<image id="i" x="0" y="0" width="20" height="20" href="${PNG}" clip-path="url(#c)"/><rect id="r" x="40" y="0" width="20" height="20" fill="#000000"/></g>`), { level: "expert" });
+    openProperties();
+    const before = editor.engine.text;
+    editor.select(["i"]);
+    expect(section().hidden).toBe(false);
+    expect(note()).toContain("Un oggetto scelto è ritagliato o mascherato, e non prende effetti");
+    expect(note()).not.toContain("Nessun effetto");
+    expect(addButton().getAttribute("aria-disabled")).toBe("true");
+    addButton().click();
+    expect(menuItems().every((entry) => entry.getAttribute("aria-disabled") === "true")).toBe(true);
+    expect(menuItems()[0]!.querySelector(".menu-description")!.textContent).toContain("ritagliato o mascherato");
+    menuItems()[0]!.click();
+    expect(editor.engine.text).toBe(before);
+    expect(changes).toEqual([]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Anche con un oggetto che li prende accanto: il ritaglio taglierebbe gli effetti.
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+    editor.select(["r", "i"]);
+    expect(addButton().getAttribute("aria-disabled")).toBe("true");
+    editor.select(["r"]);
+    expect(addButton().getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("con molti oggetti il rifiuto arriva col cambio, e a voce", () => {
+    const clip = '<clipPath id="c" fub:role="private"><rect x="0" y="0" width="10" height="10"/></clipPath>';
+    const crowd = Array.from({ length: 70 }, (_, at) => `<rect id="q${at}" x="${at * 30}" y="0" width="20" height="20" fill="#000000"/>`).join("");
+    mount(doc(`${DEFS(clip)}${LAYER}${crowd}<rect id="k" x="0" y="40" width="20" height="20" clip-path="url(#c)"/></g>`), { level: "expert" });
+    openProperties();
+    const before = editor.engine.text;
+    editor.select([...Array.from({ length: 70 }, (_, at) => `q${at}`), "k"]);
+    expect(addButton().getAttribute("aria-disabled")).toBeNull();
+    addEffect("Ombra esterna");
+    expect(editor.engine.text).toBe(before);
+    expect(changes).toEqual([]);
+    expect(spoken()).toContain("ritagliato o mascherato");
+    // Togliere gli effetti si può comunque.
+    editor.select(["q1"]);
+    addEffect("Ombra esterna");
+    expect(effectOf("q1")).toBe(SHADOW);
+  });
+
+  it("spostare, ridimensionare o ingrossare il contorno di un oggetto con un'ombra ne segue la regione, in un passo solo", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["t"]);
+    addEffect("Ombra esterna");
+    const region = (): string => /<filter [^>]*? (x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*")/.exec(filters()[0]!)![1]!;
+    const id = filterOf("t");
+    const before = editor.engine.text;
+    const first = region();
+    // Spostato, l'oggetto porta con sé la sua regione: sta nel suo spazio.
+    now.mockReturnValue(MERGE_MS + 1);
+    key("ArrowRight", { shiftKey: true });
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 10 0)"');
+    expect(region()).toBe(first);
+    expect(filterOf("t")).toBe(id);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    // Ridimensionato dal pannello, lo stesso: la scala è nell'oggetto.
+    now.mockReturnValue(2 * MERGE_MS + 2);
+    enter(propertyInput("width"), "100");
+    expect(editor.engine.text).toMatch(/<rect id="t"[^>]* transform="matrix\(2\.\d+ 0 0 1 /);
+    expect(filters()).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    // Un contorno più spesso allarga ciò che l'oggetto copre: la regione
+    // lo segue, nello stesso passo del contorno.
+    now.mockReturnValue(3 * MERGE_MS + 3);
+    enter(propertyInput("strokeWidth"), "20");
+    expect(editor.engine.text).toContain('stroke-width="20"');
+    const grown = region();
+    expect(grown).not.toBe(first);
+    const box = (text: string): number[] => /x="([^"]*)" y="([^"]*)" width="([^"]*)" height="([^"]*)"/.exec(text)!.slice(1).map(Number);
+    expect(box(grown)[2]!).toBeGreaterThan(box(first)[2]!);
+    expect(box(grown)[3]!).toBeGreaterThan(box(first)[3]!);
+    expect(filters()).toHaveLength(1);
+    expect(filterOf("t")).toBe(id);
+    expect(effectOf("t")).toBe(SHADOW);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(region()).toBe(first);
+    editor.redo();
+    expect(region()).toBe(grown);
+  });
+
+  it("l'ombra di un gruppo segue ciò che il gruppo contiene, nello stesso passo", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(
+      wide(doc(`${LAYER}<g id="g"><rect id="a" x="20" y="20" width="40" height="30" fill="#0072b2"/><rect id="b" x="80" y="20" width="40" height="30" fill="#d55e00"/></g></g>`)),
+      { level: "expert" },
+    );
+    openProperties();
+    editor.select(["g"]);
+    addEffect("Ombra esterna");
+    const region = (): string => /<filter [^>]*? (x="[^"]*" y="[^"]*" width="[^"]*" height="[^"]*")/.exec(filters()[0]!)![1]!;
+    const before = editor.engine.text;
+    const first = region();
+    now.mockReturnValue(MERGE_MS + 1);
+    editor.select(["b"]);
+    key("ArrowRight", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    expect(editor.engine.text).toContain('transform="matrix(1 0 0 1 20 0)"');
+    expect(region()).not.toBe(first);
+    expect(filters()).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(region()).toBe(first);
+  });
+
+  it("un oggetto senza id lo riceve col primo effetto, e la riga resta aperta e col fuoco", () => {
+    mount(doc(`${LAYER}<rect x="0" y="0" width="20" height="20" fill="#000000"/></g>`), { level: "expert" });
+    openProperties();
+    editor.select(["@0.0"]);
+    const before = editor.engine.text;
+    addButton().focus();
+    key("ArrowDown", {}, addButton());
+    menuItems()[0]!.click();
+    const id = /<rect id="(o[a-z0-9]{8})"/.exec(editor.engine.text)![1]!;
+    expect(editor.selection).toEqual([id]);
+    expect(effectOf(id)).toBe(SHADOW);
+    expect(rows()).toHaveLength(1);
+    expect(opened()).toEqual([0]);
+    // Dalla tastiera, il fuoco è sul nome dell'effetto nuovo.
+    expect(document.activeElement).toBe(nameButton(0));
+    enter(effectField(0, "X"), "3");
+    expect(effectOf(id)).toBe("shadow 3 4 8 #000000 0.25");
+    expect(opened()).toEqual([0]);
+    expect(document.activeElement).toBe(effectField(0, "X"));
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("in sola lettura gli effetti si guardano e basta", () => {
+    mount(SHAPES, { level: "expert" });
+    openProperties();
+    editor.select(["r"]);
+    addEffect("Ombra esterna");
+    const shaded = editor.engine.text;
+    const count = changes.length;
+    editor.setReadOnly(true);
+    expect(rows()).toHaveLength(1);
+    expect(eye(0).getAttribute("aria-disabled")).toBe("true");
+    expect(takeOff(0).getAttribute("aria-disabled")).toBe("true");
+    expect(addButton().getAttribute("aria-disabled")).toBe("true");
+    expect(effectField(0, "X").readOnly).toBe(true);
+    eye(0).click();
+    expect(spoken()).toContain("sola lettura");
+    takeOff(0).click();
+    addButton().click();
+    expect(menuItems().every((entry) => entry.getAttribute("aria-disabled") === "true")).toBe(true);
+    expect(editor.engine.text).toBe(shaded);
+    expect(changes).toHaveLength(count);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 });

@@ -18,6 +18,12 @@
 // - **L'opacità è dell'oggetto scelto**, gruppo compreso: non si eredita, si
 //   moltiplica, e scritta sulle parti si vedrebbe diversa dove si
 //   sovrappongono.
+// - **La fusione è dell'oggetto scelto**, come l'opacità (livello Esperto):
+//   sta nello `style` del formato, `mix-blend-mode: multiply`, e di un gruppo
+//   o di un collegamento anche `isolation: isolate`, scritti sempre allo
+//   stesso modo. «Normale» e l'isolamento spento tolgono la dichiarazione, e
+//   senza dichiarazioni lo `style` se ne va. Un elemento con altro nello
+//   `style` è estraneo, e non si tocca.
 // - **Il file resta corto**, come in `outline.ts`: un valore uguale a quello
 //   che la parte prenderebbe comunque, dal gruppo che la contiene o da SVG,
 //   si toglie invece di scriversi.
@@ -45,12 +51,20 @@
 //   testo in area torna da punto con le righe che mostrava: nessuno dei due
 //   si muove.
 // - **Lo stile si copia e si incolla** (livello Standard): il riempimento,
-//   il contorno col suo spessore, tratteggio, estremi e angoli, l'opacità e
-//   il carattere di un oggetto vanno sugli oggetti scelti in un passo, a
-//   ciascuna parte ciò che ha. Si copia ciò che si vede, anche se viene dal
-//   gruppo che lo contiene. Il contagocce prende lo stesso, dalla forma
-//   sotto il puntatore o dall'oggetto di una riga dell'albero, anche
-//   bloccato o nascosto: leggerlo non lo cambia.
+//   il contorno col suo spessore, tratteggio, estremi e angoli, l'opacità, la
+//   fusione, gli effetti e il carattere di un oggetto vanno sugli oggetti
+//   scelti in un passo, a ciascuna parte ciò che ha. Si copia ciò che si
+//   vede, anche se viene dal gruppo che lo contiene. Il contagocce prende lo
+//   stesso, dalla forma sotto il puntatore o dall'oggetto di una riga
+//   dell'albero, anche bloccato o nascosto: leggerlo non lo cambia.
+// - **Gli effetti vanno con lo stile** come l'opacità: chi riceve ha gli
+//   stessi, col suo filtro e la sua regione, e una copia senza effetti toglie
+//   i suoi. Chi non può averli (un ritaglio, una maschera, una misura che non
+//   si sa) tiene i suoi, e il resto dello stile si applica. Il filtro di un
+//   altro programma si sostituisce con un effetto nuovo, ma una copia senza
+//   effetti non lo toglie; un oggetto copiato con un filtro d'un altro
+//   programma non dà effetti. L'isolamento è della struttura, non dello
+//   stile, e non si copia.
 // - **Le punte vanno con lo stile.** Di una linea, una spezzata o un
 //   tracciato aperto si copia la punta di ogni capo, forma e misura, o
 //   l'assenza; si dà a ogni parte che può averne, dentro i gruppi, e `none`
@@ -77,20 +91,22 @@ import type { Role } from "../scene/analysis";
 import type { SwatchFacts } from "../scene/classify";
 import type { Bounds } from "../scene/geometry";
 import type { Matrix } from "../scene/matrix";
-import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
-import type { Op } from "../scene/ops";
+import { DEFS_ID } from "../scene/ids";
+import { elementChildren, pathOf, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { ROOT, type Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
-import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim, type PaintReference } from "../scene/values";
+import { BLEND_MODES, blendStyle, keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim, type BlendStyle, type PaintReference } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
+import { effectsAttrs, effectsRefusal, effectsState, effectsStates, type Effect } from "./effects";
 import { geometryBox, type Unit } from "./hit";
 import type { Measure } from "./measure";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
 import { nameKey } from "./naming";
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
-import { paintCode, paintSample, privateResources, ResourceCopies, resourcesOf, type PaintSample } from "./resources";
+import { homeOf, paintCode, paintSample, privateResources, ResourceCopies, resourcesOf, type Home, type PaintSample } from "./resources";
 import { arrowPath } from "./shapes";
 import {
   anchorsOf,
@@ -149,6 +165,12 @@ export interface Look {
   readonly width: Shared<number>;
   /// L'opacità degli oggetti scelti, da 0 a 1.
   readonly opacity: Shared<number>;
+  /// Il modo di fusione degli oggetti scelti, come lo scrive il file:
+  /// `normal` dove nessuno lo dice.
+  readonly blend: Shared<string>;
+  /// Se i gruppi e i collegamenti scelti isolano la fusione di ciò che
+  /// contengono; gli altri oggetti non contano.
+  readonly isolate: Shared<boolean>;
   /// Il carattere dei testi come lo scrivono; `""` dove nessuno lo scrive.
   readonly family: Shared<string>;
   /// Il corpo dei testi, nelle loro coordinate.
@@ -411,6 +433,31 @@ function lineOf(part: Part, which: Emphasis): boolean | null {
   return lines.includes(which === "underline" ? "underline" : "line-through");
 }
 
+/// L'opacità di un oggetto dai suoi attributi: piena se non la scrive,
+/// `null` se non si legge.
+const opacityIn = (own: ReadonlyMap<string, string>): number | null => {
+  const written = own.get("opacity");
+  return written === undefined ? 1 : parseOpacity(written);
+};
+
+/// Lo `style` di `part` come lo dice il formato; `null` se ha altro, e
+/// allora l'elemento non si tocca. Senza `style`, niente fusione e niente
+/// isolamento.
+function blendOf(part: Part): BlendStyle | null {
+  const written = part.own.get("style");
+  return written === undefined ? { blend: null, isolate: null } : blendStyle(written, isContainer(part.node));
+}
+
+/// Vero se `node` è un gruppo o un collegamento: l'isolamento è suo.
+const isContainer = (node: ElementPart): boolean => node.facts.local === "g" || node.facts.local === "a";
+
+/// L'opacità degli oggetti di `units`, da sola: la legge ogni volta che la
+/// selezione cambia chi la mostra senza il pannello, e mille oggetti si
+/// leggono entro un fotogramma. Come `lookOf(...).opacity`.
+export function opacityOf(model: DocumentModel, units: readonly Unit[]): Shared<number> {
+  return shared(nodesOf(model, units).flatMap((node) => (node.details?.role === undefined ? [] : [opacityIn(ownOf(node))])));
+}
+
 /// L'aspetto di `units`.
 export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
   const parts = partsOf(model, units);
@@ -434,9 +481,14 @@ export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
     stroke,
     samples,
     width: shared([...parts.outlines.map(({ outline }) => outline.width), ...parts.widths.map(widthOf)]),
-    opacity: shared(parts.chosen.map((part) => {
-      const written = part.own.get("opacity");
-      return written === undefined ? 1 : parseOpacity(written);
+    opacity: shared(parts.chosen.map((part) => opacityIn(part.own))),
+    blend: shared(parts.chosen.flatMap((part) => {
+      const style = blendOf(part);
+      return style === null ? [] : [style.blend ?? "normal"];
+    })),
+    isolate: shared(parts.chosen.flatMap((part) => {
+      const style = isContainer(part.node) ? blendOf(part) : null;
+      return style === null ? [] : [style.isolate === true];
     })),
     family: shared(parts.texts.map((part) => textOne(part, "font-family", trim))),
     size: shared(parts.texts.map((part) => textOne(part, "font-size", lengthIn))),
@@ -477,6 +529,11 @@ export type LookChange =
   | { readonly stroke: string }
   | { readonly width: number }
   | { readonly opacity: number }
+  /// Un modo di fusione di `BLEND_MODES`; `normal` toglie la dichiarazione.
+  | { readonly blend: string }
+  /// L'isolamento della fusione di ciò che contengono i gruppi e i
+  /// collegamenti scelti.
+  | { readonly isolate: boolean }
   | { readonly family: string }
   | { readonly size: number }
   | { readonly weight: number }
@@ -505,6 +562,15 @@ export interface Restyled extends Arranged {
 
 /// Un numero come lo scrive il file.
 const place = (value: number): string => formatNumber(value, 2);
+
+/// Lo `style` che dice `style`, com'è nel formato: la fusione, poi
+/// l'isolamento, separati da `; `. `null` se non dice niente.
+function blendText(style: BlendStyle): string | null {
+  const declarations: string[] = [];
+  if (style.blend !== null && style.blend !== "normal") declarations.push(`mix-blend-mode: ${style.blend}`);
+  if (style.isolate === true) declarations.push("isolation: isolate");
+  return declarations.length === 0 ? null : declarations.join("; ");
+}
 
 /// Due valori scritti che si vedono uguali.
 type Same = (a: string, b: string) => boolean;
@@ -548,6 +614,8 @@ class Changes {
   private copies: ResourceCopies | null = null;
   private tipper: Tipper | null = null;
   private resources: Map<string, LeafNode> | null = null;
+  /// Gli effetti da dare agli oggetti scelti, che si scrivono alla fine.
+  private given: { readonly parts: readonly Part[]; readonly effects: readonly Effect[] } | null = null;
 
   constructor(
     private readonly plan: Plan,
@@ -645,6 +713,41 @@ class Changes {
     }
   }
 
+  /// Il modo di fusione `mode` sull'oggetto scelto `part`, e l'isolamento
+  /// com'era; `normal` lo toglie. Uno `style` che ha altro è di un altro
+  /// programma, e non si scrive; né un modo che il formato non ha.
+  blend(part: Part, mode: string): void {
+    if (!BLEND_MODES.includes(mode)) return;
+    const now = this.styled(part);
+    if (now !== null) this.style(part, now, { blend: mode === "normal" ? null : mode, isolate: now.isolate });
+  }
+
+  /// L'isolamento `on` sul gruppo o sul collegamento scelto `part`, e la
+  /// fusione com'era.
+  isolate(part: Part, on: boolean): void {
+    const now = isContainer(part.node) ? this.styled(part) : null;
+    if (now !== null) this.style(part, now, { blend: now.blend, isolate: on ? true : null });
+  }
+
+  /// Lo `style` di `part` com'è adesso, anche se questo comando l'ha già
+  /// cambiato; `null` se è di un altro programma.
+  private styled(part: Part): BlendStyle | null {
+    const pending = this.attrs.get(part.node)?.style;
+    if (pending === undefined) return blendOf(part);
+    return pending === null ? { blend: null, isolate: null } : blendStyle(pending, isContainer(part.node));
+  }
+
+  /// Lo `style` di `part` che dice `next`, scritto sempre allo stesso modo;
+  /// se si vede come adesso non lo tocca, e se non dice niente lo toglie.
+  private style(part: Part, now: BlendStyle, next: BlendStyle): void {
+    if ((now.blend ?? "normal") === (next.blend ?? "normal") && (now.isolate === true) === (next.isolate === true)) return;
+    const text = blendText(next);
+    const own = part.own.get("style");
+    const attrs = this.of(part);
+    if (text === (own ?? null)) delete attrs.style;
+    else attrs.style = text;
+  }
+
   /// La linea a spessore variabile `part` spessa `width` nel punto più largo:
   /// tutto il profilo si allarga o si stringe nella stessa proporzione, e
   /// con lui gli estremi e gli angoli che chiede `outline`, se li dice.
@@ -735,12 +838,48 @@ class Changes {
         if (value === null) delete merged[name];
         else merged[name] = value;
       }
-      // Le righe si riscrivono con l'elemento: il resto passa da lui.
-      if (replaceElem(this.plan, part.node, richElem(old, { ...now, attrs: merged }))) {
+      // Le righe si riscrivono con l'elemento: il resto passa da lui. Se la
+      // `defs` nasce prima, in testa alla radice, il testo arriva un posto più in là.
+      const path = pathOf(part.node);
+      const at = this.makesDefs() ? [path[0]! + 1, ...path.slice(1)] : path;
+      if (replaceElem(this.plan, part.node, richElem(old, { ...now, attrs: merged }), at)) {
         this.attrs.delete(part.node);
         this.replaced++;
       }
     }
+  }
+
+  /// Vero se fra le operazioni nasce la `defs` della radice.
+  private makesDefs(): boolean {
+    return this.plan.ops.some(isDefsAdd);
+  }
+
+  /// Dà gli effetti `effects` agli oggetti scelti `parts` che possono
+  /// averli; gli altri tengono i loro. Una lista vuota toglie quelli di
+  /// FubDraw, ma non il filtro d'un altro programma.
+  giveEffects(parts: readonly Part[], effects: readonly Effect[]): void {
+    this.given = { parts, effects };
+  }
+
+  /// I filtri degli effetti dati, dopo le copie delle risorse e le punte,
+  /// con la loro `defs` se nessuno l'ha già fatta nascere, e gli attributi
+  /// degli oggetti con gli altri cambi: un testo riscritto intero li porta.
+  private finishEffects(): void {
+    if (this.given === null) return;
+    const { parts, effects } = this.given;
+    const states = effectsStates(this.model, parts.map((part) => part.node));
+    let made: Home | null = null;
+    const home = (): Home => {
+      if (made !== null) return { parent: made.parent, prelude: [] };
+      made = homeOf(this.model);
+      return this.makesDefs() ? { parent: made.parent, prelude: [] } : made;
+    };
+    parts.forEach((part, at) => {
+      const state = states[at]!;
+      if (effects.length === 0 ? state.kind !== "effects" : effectsRefusal(this.model, part.node, this.measure) !== null) return;
+      const attrs = effectsAttrs(this.plan, part.node, state, effects, this.measure, home);
+      if (attrs !== null && Object.keys(attrs).length > 0) Object.assign(this.of(part), attrs);
+    });
   }
 
   /// Il testo in area `now`, che era `before`, col riquadro dov'era e di
@@ -758,6 +897,7 @@ class Changes {
     const copies = this.copies === null ? [] : this.copies.ops();
     this.plan.ops.push(...copies);
     if (this.tipper !== null) this.plan.ops.push(...this.tipper.ops(copies.length === 0));
+    this.finishEffects();
     this.finishTexts();
     for (const [node, attrs] of this.attrs) {
       if (Object.keys(attrs).length === 0) continue;
@@ -816,6 +956,10 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
     }
   } else if ("opacity" in change) {
     for (const part of parts.chosen) changes.opacity(part, change.opacity);
+  } else if ("blend" in change) {
+    for (const part of parts.chosen) changes.blend(part, change.blend);
+  } else if ("isolate" in change) {
+    for (const part of parts.chosen) changes.isolate(part, change.isolate);
   } else if ("family" in change) {
     for (const part of parts.texts) changes.textWrite(part, "font-family", change.family);
   } else if ("anchor" in change) {
@@ -960,6 +1104,13 @@ export interface Style {
   readonly outline: StyleOutline | null;
   /// L'opacità dell'oggetto scelto, da 0 a 1.
   readonly opacity: number;
+  /// Il modo di fusione dell'oggetto scelto; `null` per `normal`, che
+  /// incollando toglie quello di chi riceve.
+  readonly blend: string | null;
+  /// Gli effetti dell'oggetto scelto, anche nascosti; `[]` se non ne ha, e
+  /// incollando toglie quelli di chi riceve. `null` se ha un filtro d'un altro
+  /// programma: chi riceve tiene i suoi.
+  readonly effects: readonly Effect[] | null;
   readonly font: StyleFont | null;
   /// Il riquadro della geometria della parte copiata, nelle sue coordinate:
   /// una sfumatura nelle coordinate di chi la usa passa da lui a quello di
@@ -1011,13 +1162,15 @@ export function nodeStyle(model: DocumentModel, node: ElementPart): Style | null
   return styleFrom(model, node, node);
 }
 
-/// Lo stile della prima parte di `from`, con l'opacità di `node`, l'oggetto
-/// che la contiene.
+/// Lo stile della prima parte di `from`, con l'opacità, la fusione e gli
+/// effetti di `node`, l'oggetto che la contiene.
 function styleFrom(model: DocumentModel, node: ElementPart, from: ElementPart): Style | null {
   const part = firstPart(from);
   if (part === null) return null;
-  const written = ownOf(node).get("opacity");
-  const opacity = written === undefined ? 1 : (parseOpacity(written) ?? 1);
+  const opacity = opacityIn(ownOf(node)) ?? 1;
+  const written = ownOf(node).get("style");
+  const blend = (written === undefined ? null : blendStyle(written, isContainer(node)))?.blend ?? null;
+  const state = effectsState(model, node);
   const size = part.role === "text" ? sizeOf(part) : null;
   const fill = FILLED.has(part.role) ? seen(part, "fill") : null;
   const stroke = OUTLINED.has(part.role) ? seen(part, "stroke") : INKED.has(part.role) ? seen(part, "fill") : null;
@@ -1032,6 +1185,8 @@ function styleFrom(model: DocumentModel, node: ElementPart, from: ElementPart): 
         ? { width: place(profileWidth(part.node.details.varwidth.profile)), dashes: "none", cap: part.node.details.varwidth.cap, join: part.node.details.varwidth.join }
         : null,
     opacity,
+    blend: blend === "normal" ? null : blend,
+    effects: state.kind === "none" ? [] : state.kind === "effects" ? state.effects : null,
     font: part.role === "text" && size !== null ? fontOf(part, size) : null,
     box: elem === null ? null : geometryBox(elem),
     resources: privateResources(model, paints, elemOf),
@@ -1077,15 +1232,21 @@ function fontOf(part: Part, size: number): StyleFont {
 /// Il primo colore di `values` che si vede: non `none`, non `null`.
 const shown = (...values: Array<string | null>): string | null => values.find((value) => value !== null && trim(value) !== "none") ?? null;
 
-/// Le operazioni che danno `style` a `units`, in un passo: l'opacità
-/// all'oggetto scelto, il resto alle parti, e a ciascuna ciò che ha. Il
+/// Le operazioni che danno `style` a `units`, in un passo: l'opacità, la
+/// fusione e gli effetti all'oggetto scelto, il resto alle parti, e a
+/// ciascuna ciò che ha. Gli effetti vanno a chi li può avere; gli altri
+/// tengono i loro. Il
 /// colore di un testo e di un tratto a penna è uno solo: prende quello che
 /// si vede dello stile, il riempimento per il testo, il contorno per il
 /// tratto. La selezione resta la stessa.
 export function styleOps(model: DocumentModel, units: readonly Unit[], style: Style, measure: Measure, ids: NewIds): Restyled {
   const changes = new Changes(new Plan(model, ids), model, measure, style.resources, style.swatches);
   const parts = partsOf(model, units);
-  for (const part of parts.chosen) changes.opacity(part, style.opacity);
+  for (const part of parts.chosen) {
+    changes.opacity(part, style.opacity);
+    changes.blend(part, style.blend ?? "normal");
+  }
+  if (style.effects !== null) changes.giveEffects(parts.chosen, style.effects);
   for (const part of parts.fills) {
     const value = part.role === "text" ? shown(style.fill, style.stroke) : style.fill;
     if (value !== null) changes.paint(part, "fill", value, style.box);
@@ -1127,3 +1288,6 @@ export function styleOps(model: DocumentModel, units: readonly Unit[], style: St
   }
   return changes.finish(units);
 }
+
+/// Vero se `op` crea la `defs` della radice, quella di FubDraw, in testa.
+const isDefsAdd = (op: Op): boolean => op.op === "add" && "elem" in op && op.parent === ROOT && op.elem.tag === "defs" && op.elem.attrs.id === DEFS_ID;

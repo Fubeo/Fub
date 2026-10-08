@@ -446,11 +446,18 @@ export function isGroup(unit: Unit): boolean {
   return unit.tag === "g" && unit.role === "group";
 }
 
+/// Vero se `node` ha un ritaglio, una maschera, un filtro o degli effetti,
+/// anche nascosti: valgono per lui intero, nelle sue coordinate.
+export function holdsEffects(node: ElementPart): boolean {
+  return holdsEffect(plainAttributes(node)) || fubAttributes(node).has("effect");
+}
+
 /// Vero se il contenitore `unit` si toglie senza cambiare ciò che si vede:
-/// non ha un ritaglio, una maschera o un filtro, che valgono per lui intero
-/// e che i figli, da soli, non disegnerebbero allo stesso modo.
+/// non ha un ritaglio, una maschera, un filtro o degli effetti, che valgono
+/// per lui intero e che i figli, da soli, non disegnerebbero allo stesso
+/// modo.
 export function unwrappable(model: DocumentModel, unit: Unit): boolean {
-  return !holdsEffect(plainAttributes(nodeOf(model, unit)));
+  return !holdsEffects(nodeOf(model, unit));
 }
 
 /// Separa i gruppi fra `units` che si separano: vedi [`unwrapOps`] e

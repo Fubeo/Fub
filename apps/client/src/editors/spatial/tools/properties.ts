@@ -4,8 +4,8 @@
 // lui scrive ogni cambio; qui c'è come si legge, si scrive e si raggiunge.
 //
 // - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto,
-//   Sfumatura (`gradient-panel.ts`), Colori del documento
-//   (`swatches-panel.ts`), Testo, Disponi, e all'Esperto Trasforma e
+//   Sfumatura (`gradient-panel.ts`), Effetti (`effects-panel.ts`), Colori
+//   del documento (`swatches-panel.ts`), Testo, Disponi, e all'Esperto Trasforma e
 //   Attributi; senza selezione i Colori del documento, Documento
 //   e Vista, Forma se lo strumento è il Poligono, e Tavola se è lo strumento
 //   Tavola con una tavola scelta. L'intestazione di una sezione è il
@@ -49,6 +49,7 @@ import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
+import { createEffectsPanel, type EffectsPanelOptions, type EffectsPanelView } from "./effects-panel";
 import { createGradientPanel, type GradientPanelOptions, type GradientPanelView } from "./gradient-panel";
 import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPanelOptions } from "./swatches-panel";
 
@@ -58,6 +59,7 @@ export type SectionId =
   | "shape"
   | "look"
   | "gradient"
+  | "effects"
   | "colors"
   | "text"
   | "arrange"
@@ -94,10 +96,10 @@ export type NumberId =
 export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 
 export type PaintId = "fill" | "stroke";
-export type ChoiceId = "dash" | "cap" | "join" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
+export type ChoiceId = "dash" | "cap" | "join" | "blend" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
 /// I campi a menu: le punte delle linee, all'inizio e alla fine.
 export type MenuId = "tipStart" | "tipEnd";
-export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar";
+export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar" | "isolate";
 export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
 
 export type ActionId =
@@ -176,6 +178,8 @@ export interface FieldSwatch {
 export interface ChoiceOption {
   readonly value: string;
   readonly label: string;
+  /// Una riga di separazione prima della voce, fra gruppi di voci.
+  readonly separator?: boolean;
 }
 
 /// Una scelta fra voci.
@@ -301,6 +305,8 @@ export interface PropertiesView {
   readonly colors?: ColorsView;
   /// La sezione «Sfumatura»; senza, non c'è.
   readonly gradient?: GradientPanelView;
+  /// La sezione «Effetti»; senza, non c'è.
+  readonly effects?: EffectsPanelView;
 }
 
 export interface PropertiesOptions {
@@ -318,6 +324,8 @@ export interface PropertiesOptions {
   readonly colors: Omit<SwatchesPanelOptions, "announce" | "onTarget">;
   /// I gesti della sezione «Sfumatura» (`gradient-panel.ts`).
   readonly gradient: Omit<GradientPanelOptions, "announce" | "onTarget">;
+  /// I gesti della sezione «Effetti» (`effects-panel.ts`).
+  readonly effects: Omit<EffectsPanelOptions, "announce" | "reveal">;
   /// «Applica a» cambia, in una delle due sezioni che lo hanno.
   onTarget(target: PaintTarget): void;
   /// Dice `text` a chi usa uno screen reader.
@@ -377,6 +385,8 @@ const SPECS: readonly Spec[] = [
   { id: "stroke", kind: "paint", section: "look", column: "all" },
   { id: "strokeWidth", kind: "number", section: "look", column: "1" },
   { id: "opacity", kind: "number", section: "look", column: "2" },
+  { id: "blend", kind: "choice", section: "look", column: "all" },
+  { id: "isolate", kind: "switch", section: "look", column: "all" },
   { id: "dash", kind: "choice", section: "look", column: "all" },
   { id: "cap", kind: "choice", section: "look", column: "1" },
   { id: "join", kind: "choice", section: "look", column: "2" },
@@ -423,6 +433,7 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "shape", label: "draw.properties.shape" },
   { id: "look", label: "draw.properties.look" },
   { id: "gradient", label: "draw.properties.gradient" },
+  { id: "effects", label: "draw.properties.effects" },
   { id: "colors", label: "draw.properties.colors" },
   { id: "text", label: "draw.properties.text" },
   { id: "arrange", label: "draw.properties.arrange" },
@@ -782,6 +793,18 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     announce: (text) => options.announce(text),
   });
   sections.get("gradient")!.body.append(gradient.element);
+
+  // --- Gli effetti ----------------------------------------------------------------
+
+  // «Aggiungi effetto» sta nell'intestazione, accanto al titolo, anche con la
+  // sezione chiusa; aggiungere la apre.
+  const effects = createEffectsPanel(life, {
+    ...options.effects,
+    reveal: () => setOpen(sections.get("effects")!, true),
+    announce: (text) => options.announce(text),
+  });
+  sections.get("effects")!.body.append(effects.element);
+  sections.get("effects")!.toggle.after(effects.add);
 
   // --- Le barre di pulsanti ---------------------------------------------------
 
@@ -1253,13 +1276,13 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   const paintChoice = (line: Line, state: ChoiceState): void => {
     const select = line.control as HTMLSelectElement;
     line.name.textContent = state.label;
-    const signature = [state.value === null ? t("draw.properties.mixed") : "", ...state.options.map((option) => `${option.value}\u0000${option.label}`)].join("\u0002");
+    const signature = [state.value === null ? t("draw.properties.mixed") : "", ...state.options.map((option) => `${option.separator === true ? "-" : ""}${option.value}\u0000${option.label}`)].join("\u0002");
     if (signature !== line.options) {
-      const entries = state.options.map((option) => {
+      const entries: HTMLElement[] = state.options.flatMap((option) => {
         const entry = document.createElement("option");
         entry.value = option.value;
         entry.textContent = option.label;
-        return entry;
+        return option.separator === true ? [document.createElement("hr"), entry] : [entry];
       });
       // Il misto è una voce che si vede e non si sceglie.
       if (state.value === null) {
@@ -1822,6 +1845,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     applyButton.textContent = t("draw.properties.apply");
     colors.relabel();
     gradient.relabel();
+    effects.relabel();
   };
 
   const update = (next: PropertiesView): void => {
@@ -1867,6 +1891,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       if (next.gradient !== undefined) {
         shown.add("gradient");
         gradient.update(next.gradient, next.editable);
+      }
+      if (next.effects !== undefined) {
+        shown.add("effects");
+        effects.update(next.effects, next.editable);
       }
       for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
     } finally {

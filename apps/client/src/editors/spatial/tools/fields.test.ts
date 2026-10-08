@@ -3,13 +3,14 @@
 // valore scritto al cambio dell'aspetto o del contorno.
 
 import { describe, expect, it } from "vitest";
+import { BLEND_MODES } from "../scene/values";
 import type { LengthUnit } from "../scene/rulers";
-import { lookAction, lookChange, outlineChange, propertiesView, shapeChange, sheetChange, tipChange, type BoardFacts, type FieldsInput, type SelectionFacts } from "./fields";
+import { BLEND_GROUPS, BLEND_LABELS, lookAction, lookChange, outlineChange, propertiesView, shapeChange, sheetChange, tipChange, typedOpacity, type BoardFacts, type FieldsInput, type SelectionFacts } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
 import { NAME_MAX } from "./naming";
-import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
+import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, SwitchState, TogglesState } from "./properties";
 import { featuresFor, type Level } from "./registry";
 import type { ShapeFacts } from "./reshape";
 import { fieldMin, fromUnit } from "./rulers";
@@ -23,6 +24,8 @@ const look = (parts: Partial<Look> = {}): Look => ({
   stroke: NONE,
   width: NONE,
   opacity: NONE,
+  blend: NONE,
+  isolate: NONE,
   family: NONE,
   size: NONE,
   weight: NONE,
@@ -373,6 +376,69 @@ describe("l'aspetto", () => {
   });
 });
 
+describe("la fusione", () => {
+  const blended = (parts: Partial<Look> = {}): Look =>
+    look({ fill: { count: 2, value: "#0072b2" }, opacity: { count: 2, value: 1 }, blend: { count: 2, value: "multiply" }, ...parts });
+
+  it("c'è dall'Esperto, per chi ha una fusione da dire; lo Standard non la offre", () => {
+    const expert = propertiesView(input({ level: "expert", selection: selection({ look: blended() }) }));
+    expect(expert.fields.blend).toMatchObject({ kind: "choice", label: "Fusione", value: "multiply" });
+    for (const level of ["essential", "standard"] as const) {
+      const view = propertiesView(input({ level, selection: selection({ look: blended() }) }));
+      expect(view.fields.blend).toBeUndefined();
+      expect(view.fields.isolate).toBeUndefined();
+      // L'opacità, invece, c'è sempre.
+      expect(view.fields.opacity).toBeDefined();
+    }
+    const nobody = propertiesView(input({ level: "expert", selection: selection({ look: blended({ blend: NONE }) }) }));
+    expect(nobody.fields.blend).toBeUndefined();
+    expect(nobody.fields.isolate).toBeUndefined();
+  });
+
+  it("ha tutti e sedici i modi, ciascuno una volta sola, a gruppi separati, col nome della tabella", () => {
+    const view = propertiesView(input({ level: "expert", selection: selection({ look: blended() }) }));
+    const choice = view.fields.blend as ChoiceState;
+    expect(choice.options.map((option) => option.value)).toEqual(BLEND_GROUPS.flat());
+    expect([...choice.options.map((option) => option.value)].sort()).toEqual([...BLEND_MODES].sort());
+    expect(choice.options).toHaveLength(16);
+    // Un filetto prima di ogni gruppo tranne il primo.
+    expect(choice.options.filter((option) => option.separator === true).map((option) => option.value)).toEqual(["darken", "lighten", "overlay", "difference", "hue"]);
+    expect(choice.options[0]).toEqual({ value: "normal", label: "Normale" });
+    expect(choice.options.find((option) => option.value === "multiply")!.label).toBe("Moltiplica");
+    expect(choice.options.find((option) => option.value === "color-dodge")!.label).toBe("Scherma colore");
+    expect(Object.keys(BLEND_LABELS).sort()).toEqual([...BLEND_MODES].sort());
+    expect(new Set(choice.options.map((option) => option.label)).size).toBe(16);
+  });
+
+  it("una fusione mista non ne dice nessuna, e normale è quella di chi non la scrive", () => {
+    const mixed = propertiesView(input({ level: "expert", selection: selection({ look: blended({ blend: { count: 2, value: null } }) }) }));
+    expect(mixed.fields.blend).toMatchObject({ kind: "choice", value: null });
+    const normal = propertiesView(input({ level: "expert", selection: selection({ look: blended({ blend: { count: 2, value: "normal" } }) }) }));
+    expect(normal.fields.blend).toMatchObject({ value: "normal" });
+  });
+
+  it("«Isola la fusione» c'è soltanto se tutti gli scelti sono gruppi o collegamenti, e dice se è accesa", () => {
+    const groups = (isolate: Look["isolate"]): Look => blended({ blend: { count: 2, value: "multiply" }, isolate });
+    const on = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 2, value: true }) }) }));
+    expect(on.fields.isolate).toEqual({ kind: "switch", label: "Isola la fusione", on: true });
+    const off = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 2, value: false }) }) }));
+    expect((off.fields.isolate as SwitchState).on).toBe(false);
+    // Misti: spento, e un clic li accende tutti.
+    const mixed = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 2, value: null }) }) }));
+    expect((mixed.fields.isolate as SwitchState).on).toBe(false);
+    // Un oggetto che non è un gruppo fra i due: niente isolamento.
+    const some = propertiesView(input({ level: "expert", selection: selection({ look: groups({ count: 1, value: true }) }) }));
+    expect(some.fields.isolate).toBeUndefined();
+    const none = propertiesView(input({ level: "expert", selection: selection({ look: groups(NONE) }) }));
+    expect(none.fields.isolate).toBeUndefined();
+  });
+
+  it("in un disegno che non si modifica l'isolamento si vede e non si cambia", () => {
+    const view = propertiesView(input({ level: "expert", editable: false, selection: selection({ look: blended({ isolate: { count: 2, value: true } }) }) }));
+    expect(view.fields.isolate).toMatchObject({ on: true, disabled: true });
+  });
+});
+
 describe("i colori del documento", () => {
   const DOCUMENT = {
     swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", stop: [0], uses: 3 }],
@@ -707,6 +773,34 @@ describe("dal valore al cambio", () => {
     expect(lookChange("fill", "#e69f00", "px")).toEqual({ fill: "#e69f00" });
     expect(lookChange("stroke", "none", "px")).toEqual({ stroke: "none" });
     expect(lookChange("anchor", "end", "px")).toEqual({ anchor: "end" });
+  });
+
+  it("la fusione e l'isolamento: solo un modo del formato, solo un sì o un no", () => {
+    for (const mode of BLEND_MODES) expect(lookChange("blend", mode, "px")).toEqual({ blend: mode });
+    expect(lookChange("blend", "plus-lighter", "px")).toBeNull();
+    expect(lookChange("blend", "inherit", "px")).toBeNull();
+    expect(lookChange("blend", "", "px")).toBeNull();
+    expect(lookChange("blend", 3, "px")).toBeNull();
+    expect(lookChange("isolate", true, "px")).toEqual({ isolate: true });
+    expect(lookChange("isolate", false, "px")).toEqual({ isolate: false });
+    expect(lookChange("isolate", "true", "px")).toBeNull();
+    // Il passo di annulla ha il suo nome, e l'interruttore dice il verso.
+    expect(lookAction("blend", "multiply")).toBe("draw.action.blend");
+    expect(lookAction("isolate", true)).toBe("draw.action.isolate");
+    expect(lookAction("isolate", false)).toBe("draw.action.unisolate");
+  });
+
+  it("l'opacità scritta nella barra: intera, fra 0 e 100, letta come quella del pannello", () => {
+    expect(typedOpacity("50", 100)).toBe(50);
+    expect(typedOpacity("50%", 100)).toBe(50);
+    expect(typedOpacity(" 40+10 ", null)).toBe(50);
+    expect(typedOpacity("33.6", null)).toBe(34);
+    expect(typedOpacity("250", 100)).toBe(100);
+    expect(typedOpacity("-20", 100)).toBe(0);
+    expect(typedOpacity("0", 100)).toBe(0);
+    // Ciò che non si legge dice perché, e non è un numero.
+    for (const wrong of ["", "abc", "5 px", "1/0"]) expect(typeof typedOpacity(wrong, 100)).toBe("string");
+    expect(typedOpacity("", 100)).not.toBe(typedOpacity("abc", 100));
   });
 
   it("il testo: lo stile, il peso, gli interruttori dell'enfasi, e l'interlinea e la spaziatura in volte il corpo", () => {

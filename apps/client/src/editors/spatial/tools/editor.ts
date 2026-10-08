@@ -145,7 +145,7 @@ import type { ElementItem, Item } from "../scene/classify";
 import { MAX_VALUE_BYTES, ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
-import { paintReference, href as parseHref } from "../scene/values";
+import { paintReference, href as parseHref, transform as parseTransform } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone, type SamplePaint } from "../painter/overlay";
 import { PaintBuilder, resourcesFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
@@ -230,16 +230,18 @@ import {
   JOIN_LABELS,
   lookAction,
   lookChange,
+  lookUnit,
   outlineChange,
   propertiesView,
   SHAPE_ACTIONS,
   shapeChange,
   sheetChange,
   tipChange,
+  typedOpacity,
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
+import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, opacityOf, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import {
   constrained,
   drawnPlace,
@@ -272,7 +274,7 @@ import type { GradientPanelView } from "./gradient-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
 import { resourceHome } from "./resources";
-import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
+import { createProperties, type ActionId, type FieldId, type PropertiesView, type SectionId, type TransformId } from "./properties";
 import {
   documentColors,
   documentSwatches,
@@ -288,6 +290,8 @@ import {
   type SwatchChange,
 } from "./swatches";
 import { followTips, tipOps, tipsLookOf, type TipChange } from "./tips";
+import { effectsOps, effectsState, effectsStates, followEffects, holdsFilters, MAX_EFFECTS, visibleBox, type EffectsChange } from "./effects";
+import { effectsView } from "./effects-panel";
 import {
   angleOf,
   directionCursor,
@@ -2232,12 +2236,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const has = (feature: Feature): boolean => features.has(feature);
   const relabels: Array<() => void> = [];
 
-  /// `next`, con le punte delle linee che tengono il colore del contorno:
-  /// il motore le segue a ogni operazione, nello stesso passo d'annulla, e
-  /// trova ciò che ha toccato col suo indice invece di scorrere il disegno.
+  /// Le larghezze del testo, coi caratteri del browser dove li sa misurare.
+  const measureText: Measure = browserMeasure() ?? estimate;
+
+  /// `next`, con le punte delle linee che tengono il colore del contorno e
+  /// i filtri degli effetti la regione dell'oggetto: il motore li segue a
+  /// ogni operazione, nello stesso passo d'annulla, e trova ciò che ha
+  /// toccato col suo indice invece di scorrere il disegno.
   const following = (next: SceneEngine): SceneEngine => {
     const find = (id: string): ElementPart | null => next.holder(id);
-    next.follow = (model, touched) => followTips(model, touched, new NewIds((id) => find(id) !== null), find);
+    next.follow = (model, touched) => {
+      const tips = followTips(model, touched, new NewIds((id) => find(id) !== null), find);
+      const regions = followEffects(model, touched, find, measureText);
+      if (tips === null || regions === null) return tips ?? regions;
+      return { op: "batch", ops: [tips, regions] };
+    };
     return next;
   };
   let engine = following(initial);
@@ -2832,6 +2845,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       onPreview: (target, change) => previewGradient(target, change),
       onStop: (index) => chooseGradientStop(index),
     },
+    effects: {
+      onChange: (change, label) => changeEffects(change, label),
+    },
     // Lo strumento Sfumatura mostra le sfumature dell'altro colore.
     onTarget: () => {
       panelShown = null;
@@ -2998,6 +3014,39 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const orderButton = arrangeButton("draw.order", "draw-order", null, () => openMenu(orderButton, orderItems()));
   const intoButton = arrangeButton("draw.into_layer", "draw-into-layer", null, () => openMenu(intoButton, intoItems()));
   const alignButton = arrangeButton("draw.align", "draw-align", null, () => openMenu(alignButton, alignItems()));
+  // Dal livello Standard: l'opacità degli oggetti scelti, sempre sotto mano
+  // come nel pannello. Un numero in percentuale col «%» accanto: le frecce, i
+  // tasti di pagina, Inizio e Fine la cambiano subito, e un valore scritto
+  // parte con Invio o lasciando il campo.
+  const opacityField = document.createElement("label");
+  opacityField.className = "draw-arrange-field";
+  opacityField.hidden = true;
+  const opacityInput = document.createElement("input");
+  opacityInput.type = "text";
+  opacityInput.className = "draw-arrange-input";
+  opacityInput.setAttribute("role", "spinbutton");
+  opacityInput.setAttribute("inputmode", "decimal");
+  opacityInput.setAttribute("autocomplete", "off");
+  opacityInput.spellcheck = false;
+  opacityInput.setAttribute("aria-valuemin", "0");
+  opacityInput.setAttribute("aria-valuemax", "100");
+  const opacitySuffix = document.createElement("span");
+  opacitySuffix.className = "draw-arrange-suffix";
+  opacitySuffix.setAttribute("aria-hidden", "true");
+  opacitySuffix.textContent = "%";
+  opacityField.append(opacityInput, opacitySuffix);
+  arrangeBar.append(opacityField);
+  /// Ciò che il campo dice: l'opacità degli oggetti scelti in percentuale
+  /// (`null` se hanno valori diversi), il testo con cui la mostra, e di
+  /// quale selezione. Un numero scritto a metà per la stessa selezione resta
+  /// dov'è.
+  let opacityShown: { readonly percent: number | null; readonly text: string; readonly keys: string } | null = null;
+  relabels.push(() => {
+    const name = t("draw.opacity.field");
+    opacityInput.setAttribute("aria-label", name);
+    opacityField.title = name;
+    opacityShown = null;
+  });
   // Dal livello Standard: i tratti a penna scelti diventano le forme a cui
   // somigliano. C'è solo quando ce n'è uno.
   const shapeButton = arrangeButton("draw.to_shape", "draw-to-shape", null, () => shapeSelectedInk());
@@ -5630,8 +5679,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const model = engine.model;
     const units = selection.length === 0 || model === null ? [] : selectedUnits();
     const swatches = model === null ? [] : documentSwatches(model);
+    // Gli effetti, letti tutti insieme per gli oggetti scelti; la sezione
+    // dice ciò che gli oggetti hanno, non il pannello dei campi.
+    const effects =
+      model === null || units.length === 0 || !has("effects")
+        ? null
+        : effectsView({ model, nodes: units.map((each) => nodeOf(model, each)), measure: measureText, key: keys, unit: lookUnit(unit), swatches });
     panel.update(
-      propertiesView({
+      withEffects(propertiesView({
         features,
         unit,
         editable: canEdit,
@@ -5658,8 +5713,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
                 swatch: style().swatch,
               },
         gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches),
-      }),
+      }), effects),
     );
+  }
+
+  /// `shown`, con la sezione «Effetti» `effects` se c'è.
+  function withEffects(shown: PropertiesView, effects: ReturnType<typeof effectsView>): PropertiesView {
+    return effects === null ? shown : { ...shown, effects };
   }
 
   /// La sezione «Sfumatura» per gli oggetti scelti `units`, di chiavi
@@ -5965,6 +6025,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return failure;
   }
 
+  // --- Gli effetti -----------------------------------------------------------
+
+  /// Il cambio `change` degli effetti degli oggetti scelti, dalla sezione
+  /// «Effetti», col nome `label` nella cronologia. `null` se è fatto,
+  /// altrimenti perché no.
+  function changeEffects(change: EffectsChange, label: DrawKey): string | null {
+    settleCrop();
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    const changed = effectsOps(model, units, change, measureText, newIds());
+    if (typeof changed === "string") {
+      if (changed !== "full") return t(`draw.effects.refused.${changed}`);
+      // Otto effetti, o una seconda sfocatura: lo dice il caso.
+      const blurred =
+        change.kind === "add" &&
+        change.effect.kind === "blur" &&
+        effectsStates(model, units.map((each) => nodeOf(model, each))).some((state) => state.kind === "effects" && state.effects.some((effect) => effect.kind === "blur"));
+      return blurred ? t("draw.effects.full.blur") : t("draw.effects.full", { max: String(MAX_EFFECTS) });
+    }
+    return changeFromPanel(label, changed.ops, changed.keys);
+  }
+
   /// Mostra sul disegno la sfumatura `change` del bersaglio `target` degli
   /// oggetti scelti, o delle sole parti `only`, senza scriverla; `null` toglie
   /// ciò che mostrava.
@@ -6226,7 +6309,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       arrangeBar.style.removeProperty("transform");
       return;
     }
-    const signature = arrangeButtons.map((control) => (control.hidden ? "0" : "1")).join("");
+    const signature = [...arrangeButtons, opacityField].map((control) => (control.hidden ? "0" : "1")).join("");
     if (barSize === null || barSize.signature !== signature || barSize.w === 0) {
       barSize = { signature, w: arrangeBar.offsetWidth, h: arrangeBar.offsetHeight };
     }
@@ -6376,6 +6459,113 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     nodesFocus.sync(null);
   };
 
+  // --- Il campo dell'opacità della barra --------------------------------------
+
+  /// Mostra nel campo l'opacità `opacity` degli oggetti scelti.
+  const showOpacity = (opacity: { readonly value: number | null }): void => {
+    const percent = opacity.value === null ? null : Math.round(opacity.value * 100);
+    const text = percent === null ? "" : String(percent);
+    const keys = selection.join("\n");
+    const focused = document.activeElement === opacityInput;
+    const draft = focused && opacityShown !== null && opacityShown.keys === keys && opacityInput.value !== opacityShown.text;
+    opacityShown = { percent, text, keys };
+    opacityInput.placeholder = percent === null ? t("draw.properties.mixed") : "";
+    if (percent === null) opacityInput.removeAttribute("aria-valuenow");
+    else opacityInput.setAttribute("aria-valuenow", String(percent));
+    opacityInput.setAttribute("aria-valuetext", percent === null ? t("draw.properties.mixed") : t("draw.opacity.value", { value: percent }));
+    if (draft) return;
+    opacityInput.value = text;
+    if (focused) opacityInput.select();
+  };
+
+  /// Riporta il campo a ciò che mostra il disegno.
+  const revertOpacity = (): void => {
+    if (opacityShown === null) return;
+    opacityInput.value = opacityShown.text;
+    if (document.activeElement === opacityInput) opacityInput.select();
+  };
+
+  /// Dà `percent` all'opacità degli oggetti scelti, come il campo del
+  /// pannello: un passo di annulla, «Opacità», che si unisce a quelli di
+  /// seguito.
+  const giveOpacity = (percent: number): void => {
+    const failure = changeField("opacity", percent);
+    if (failure !== null) announce(failure);
+    revertOpacity();
+  };
+
+  /// L'opacità da cui parte un passo: il numero scritto nel campo, se c'è,
+  /// o quella degli oggetti scelti. Un testo dice perché ciò che è scritto
+  /// non si legge; `null` se gli oggetti hanno valori diversi e niente è
+  /// scritto.
+  const opacityBase = (): number | string | null => {
+    const shown = opacityShown;
+    if (shown === null) return null;
+    if (opacityInput.value !== shown.text && opacityInput.value.trim() !== "") return typedOpacity(opacityInput.value, shown.percent);
+    return shown.percent;
+  };
+
+  /// Cambia l'opacità di `delta` punti, fra 0 e 100.
+  const stepOpacity = (delta: number): void => {
+    const shown = opacityShown;
+    const base = opacityBase();
+    if (shown === null) return;
+    if (typeof base === "string") {
+      announce(base);
+      revertOpacity();
+      return;
+    }
+    if (base === null) {
+      announce(t("draw.properties.problem.mixed"));
+      return;
+    }
+    const value = Math.min(100, Math.max(0, base + delta));
+    if (value === shown.percent) revertOpacity();
+    else giveOpacity(value);
+  };
+
+  /// Scrive il numero che c'è nel campo, se è cambiato; se non si legge lo
+  /// dice, e il campo torna a ciò che mostra il disegno.
+  const commitOpacity = (): void => {
+    const shown = opacityShown;
+    if (shown === null || opacityField.hidden || arrangeBar.hidden || opacityInput.value === shown.text) return;
+    const typed = typedOpacity(opacityInput.value, shown.percent);
+    if (typeof typed === "string") {
+      announce(typed);
+      revertOpacity();
+    } else if (typed === shown.percent) {
+      revertOpacity();
+    } else {
+      giveOpacity(typed);
+    }
+  };
+
+  const OPACITY_STEPS: ReadonlyMap<string, number> = new Map([["ArrowUp", 1], ["ArrowDown", -1], ["PageUp", 10], ["PageDown", -10]]);
+  life.listen(opacityInput, "keydown", (event) => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.isComposing || opacityShown === null) return;
+    const step = OPACITY_STEPS.get(event.key);
+    if (event.key === "Enter") {
+      commitOpacity();
+    } else if (event.key === "Escape") {
+      // Con un numero scritto, Esc lo toglie; poi torna al foglio, come in
+      // ogni barra.
+      if (opacityInput.value === opacityShown.text) return;
+      revertOpacity();
+    } else if (event.key === "Home" || event.key === "End") {
+      const to = event.key === "Home" ? 0 : 100;
+      if (to === opacityShown.percent) revertOpacity();
+      else giveOpacity(to);
+    } else if (step !== undefined) {
+      stepOpacity(event.shiftKey && event.key.startsWith("Arrow") ? step * 10 : step);
+    } else {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  life.listen(opacityInput, "focus", () => opacityInput.select());
+  life.listen(opacityInput, "focusout", () => commitOpacity());
+
   /// La barra della selezione: c'è con qualcosa di scelto e il disegno che
   /// si scrive, e non mentre si scrive un testo, se il livello ha un suo
   /// pulsante. Ha i pulsanti delle parti che il livello offre. Con lo
@@ -6425,7 +6615,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
     textPathButton.hidden = !has("typeset") || !units.some((unit) => unit.role === "text");
-    arrangeBar.hidden = units.length === 0 || arrangeButtons.every((control) => control.hidden);
+    // L'opacità si scrive agli oggetti che la possono avere, e si legge
+    // senza il resto dell'aspetto.
+    const opacity = units.length === 0 || !has("arrange") ? null : opacityOf(engine.model!, units);
+    opacityField.hidden = opacity === null || opacity.count === 0;
+    if (opacity !== null && !opacityField.hidden) showOpacity(opacity);
+    arrangeBar.hidden = units.length === 0 || (opacityField.hidden && arrangeButtons.every((control) => control.hidden));
     arrangeFocus.sync(null);
     syncNodesBar();
     placeBar();
@@ -6434,6 +6629,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     for (const bar of [arrangeBar, nodesBar]) {
       if (!bar.hidden && active instanceof HTMLButtonElement && bar.contains(active) && !active.disabled && !active.hidden) return;
     }
+    if (!arrangeBar.hidden && !opacityField.hidden && active === opacityInput) return;
     const next = !arrangeBar.hidden ? arrangeFocus.current() : !nodesBar.hidden ? nodesFocus.current() : null;
     if (next !== null) next.focus();
     else surface.focus({ preventScroll: true });
@@ -13246,9 +13442,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor" | "wrap" | "along"> =>
     now.look ?? { x: now.at[0], y: now.at[1], anchor: "start", wrap: now.wrap, along: null };
 
-  /// Le larghezze del testo, coi caratteri del browser dove li sa misurare.
-  const measureText: Measure = browserMeasure() ?? estimate;
-
   /// Come va a capo il campo del testo che si scrive: su una riga sola sul
   /// tracciato, da sé in un riquadro, o con Invio.
   const formOf = (now: Typing): FieldForm => {
@@ -13949,10 +14142,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// fuoco, che resta al foglio con le scorciatoie. Dà la funzione che porta
   /// il Tab su `target`, o lo tiene dov'è se c'è ancora; e il pulsante che lo
   /// tiene.
+  ///
+  /// Un campo di numeri della barra (`.draw-arrange-input`) si raggiunge con
+  /// le frecce dai pulsanti vicini e ha il suo Tab, ma non entra nel
+  /// roving: dentro il campo le frecce, Inizio e Fine sono suoi, per il
+  /// cursore, e ne esce Tab o Esc.
   const rove = (bar: HTMLElement): { readonly sync: (target: HTMLButtonElement | null) => void; readonly current: () => HTMLButtonElement | null } => {
     let current: HTMLButtonElement | null = null;
     const focusable = (): HTMLButtonElement[] =>
       [...bar.querySelectorAll<HTMLButtonElement>("button")].filter((control) => !control.disabled && !control.hidden);
+    /// I pulsanti e i campi di numeri che le frecce raggiungono.
+    const reachable = (): HTMLElement[] =>
+      [...bar.querySelectorAll<HTMLElement>("button, input.draw-arrange-input")].filter(
+        (control) => !(control as HTMLButtonElement | HTMLInputElement).disabled && !control.hidden && control.closest("[hidden]") === null,
+      );
     const sync = (target: HTMLButtonElement | null): void => {
       const controls = focusable();
       const keep = target ?? current;
@@ -13960,8 +14163,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       for (const control of bar.querySelectorAll<HTMLButtonElement>("button")) control.tabIndex = control === current ? 0 : -1;
     };
     life.listen(bar, "keydown", (event) => {
-      const controls = focusable();
-      const at = controls.indexOf(document.activeElement as HTMLButtonElement);
+      if (document.activeElement instanceof HTMLInputElement) return;
+      const controls = reachable();
+      const at = controls.indexOf(document.activeElement as HTMLElement);
       if (at < 0) return;
       let next: number | null = null;
       if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (at + 1) % controls.length;
@@ -13970,8 +14174,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       else if (event.key === "End") next = controls.length - 1;
       if (next === null) return;
       event.preventDefault();
-      sync(controls[next]!);
-      controls[next]!.focus();
+      const target = controls[next]!;
+      if (target instanceof HTMLButtonElement) sync(target);
+      target.focus();
     });
     life.listen(bar, "focusin", (event) => {
       if (event.target instanceof HTMLButtonElement) sync(event.target);
@@ -14019,6 +14224,56 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     let bounds: Bounds | null = null;
     for (const unit of units) bounds = union(bounds, unit.geometry ?? unit.bounds);
     return bounds;
+  };
+
+  /// Il riquadro del nodo `node`, con la matrice `matrix` che porta le sue
+  /// coordinate nella scena, come lo disegnano i suoi effetti e quelli di ciò
+  /// che contiene: le ombre e i bagliori escono dalla geometria. `null` se
+  /// non ha filtri, non disegna niente o non si sa.
+  const effectsBox = (model: DocumentModel, node: ElementPart, matrix: Matrix): Bounds | null => {
+    if (!holdsFilters(node)) return null;
+    const box = visibleBox(model, node, measureText);
+    if (box === null) return null;
+    const out = new BoundsBuilder();
+    for (const corner of [box.min, [box.max[0], box.min[1]], box.max, [box.min[0], box.max[1]]] as const) out.include(apply(matrix, corner));
+    return out.finish();
+  };
+
+  /// Il riquadro di `units` come si vede: quello di `boundsOf` e, dove gli
+  /// effetti escono dalla geometria, quello degli effetti. Soltanto per
+  /// l'esportazione e per la pagina: la selezione, la cornice e
+  /// l'aggancio restano sulla geometria.
+  const visibleBoundsOf = (units: readonly Unit[]): Bounds | null => {
+    const model = engine.model;
+    let bounds = boundsOf(units);
+    if (model === null) return bounds;
+    for (const unit of units) bounds = union(bounds, effectsBox(model, unit.node, unit.matrix));
+    return bounds;
+  };
+
+  /// Il riquadro degli effetti di tutti gli oggetti di `model`, anche dei
+  /// livelli bloccati o nascosti, come il riquadro del disegno di
+  /// `SceneIndexer.extent`; `null` se nessuno ha effetti. Le matrici sono
+  /// quelle della scena: il livello, poi l'oggetto.
+  const effectsExtent = (model: DocumentModel): Bounds | null => {
+    let extent: Bounds | null = null;
+    const matrixOf = (node: ElementPart, outer: Matrix): Matrix => {
+      const written = plainAttributes(node).get("transform");
+      const own = written === undefined ? IDENTITY : parseTransform(written);
+      return own === null || own === IDENTITY ? outer : compose(outer, own);
+    };
+    const visit = (node: ElementPart, outer: Matrix): void => {
+      const role = node.details?.role;
+      if (role === undefined || role === "paper" || role === "board" || role === "title" || role === "desc" || role === "defs" || role === "resource") return;
+      if (role === "layer" && node.kind === "container") {
+        const inner = matrixOf(node, outer);
+        for (const child of elementChildren(node)) visit(child, inner);
+        return;
+      }
+      extent = union(extent, effectsBox(model, node, matrixOf(node, outer)));
+    };
+    for (const child of elementChildren(model.root)) visit(child, IDENTITY);
+    return extent;
   };
 
   /// Porta il riquadro `from` della selezione in `to`, e la tiene scelta: la
@@ -15482,6 +15737,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.crop.other"));
       return;
     }
+    // Il ritaglio viene dopo gli effetti, e li taglierebbe.
+    if (state.kind === "free" && effectsState(engine.model!, unit.node).kind !== "none") {
+      announce(t("draw.crop.effects"));
+      return;
+    }
     closeDescriptions();
     closePaths();
     closeTracing();
@@ -16829,7 +17089,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// pagina copre anche quando sono vuote.
   const fitExtent = (): Bounds | null => {
     if (engine.model === null) return null;
-    let extent = indexer.extent(engine.model);
+    let extent = union(indexer.extent(engine.model), effectsExtent(engine.model));
     for (const board of boardsNow()) extent = union(extent, board.box);
     return extent;
   };
@@ -18513,7 +18773,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   life.listen(root, "keyup", onModifiers);
   life.listen(root, "keydown", (event) => {
     onModifiers(event);
-    if (event.defaultPrevented || event.target === titleInput || event.target === textInput) return;
+    if (event.defaultPrevented || event.target === titleInput || event.target === textInput || event.target === opacityInput) return;
     // I campi del foglio, come il numero della pagina, tengono i loro tasti.
     if (event.target instanceof HTMLInputElement && folio?.controls?.contains(event.target) === true) return;
     // Esc ferma l'incolla in corso, da ogni parte dell'editor.
@@ -18992,7 +19252,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     exportScene() {
       const units = engine.model === null ? [] : selectedUnits();
-      const bounds = boundsOf(units);
+      const bounds = visibleBoundsOf(units);
       // La richiesta trova gli oggetti per id: chi non ne ha uno lo riceve,
       // se il disegno si può scrivere.
       const fresh = editable() ? newIds() : null;

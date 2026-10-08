@@ -63,14 +63,14 @@ import { spineOf } from "../scene/varwidth";
 import { pathData, type Elem } from "../scene/serialize";
 import { length, nonNegativeLength, paintReference, points as parsePoints, reference, transform as parseTransform, trim, urlIds } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
-import { fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
+import { fubAttributes, holdsEffects, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { cropState, rectChanges, writeRect, type Crop } from "./crop";
 import { transformValue, type NewIds } from "./edit";
 import { movedCopy, movedPlace, paintFollows, placeChanges } from "./gradients";
 import type { Unit } from "./hit";
 import { inheritedBy, passed, type Inherited } from "./outline";
 import { scaledProfile, swappedProfile, widthAttrs } from "./profile";
-import { holdsEffect, homeOf, resourcesOf, usersOf } from "./resources";
+import { homeOf, resourcesOf, usersOf } from "./resources";
 import { arrowPath } from "./shapes";
 import { renameUrls } from "./stylesheet";
 import { writable } from "./transform";
@@ -497,6 +497,8 @@ class Resources {
 /// un motivo, un marcatore, una sfumatura che ne usa un'altra, o una che
 /// eredita da chi lo contiene, e che vale anche per gli altri.
 function paintsOf(node: ElementPart, own: ReadonlyMap<string, string>, from: Inherited, resources: Resources): Map<string, boolean> | null {
+  // Gli effetti, anche nascosti, sono nelle sue coordinate.
+  if (fubAttributes(node).has("effect")) return null;
   const used = new Set<string>();
   // Il ritaglio di un'immagine che passa con lei non conta fra i rimandi.
   const cropped = resources.crop(node)?.clip.facts.id ?? null;
@@ -661,10 +663,11 @@ function bakeContainer(node: ContainerNode, pushed: Matrix | null, from: Inherit
   const before = parseTransform(own.get("transform") ?? "") ?? IDENTITY;
   const m = pushed === null ? before : compose(pushed, before);
   const inner = handed(node, from);
-  // Titolo e descrizione non si disegnano. Un ritaglio, una maschera o un
-  // filtro valgono nelle coordinate del gruppo: lui tiene la sua.
+  // Titolo e descrizione non si disegnano. Un ritaglio, una maschera, un
+  // filtro o degli effetti valgono nelle coordinate del gruppo: lui tiene la
+  // sua.
   const children = elementChildren(node).filter((child) => !(child.facts.uri === SVG_NS && (child.facts.local === "title" || child.facts.local === "desc")));
-  if (transformValue(m) !== null && !holdsEffect(own) && children.every((child) => child.details !== null)) {
+  if (transformValue(m) !== null && !holdsEffects(node) && children.every((child) => child.details !== null)) {
     const baked = children.map((child) => bake(child, m, inner, resources));
     if (baked.every((one) => one !== null)) {
       const changes: Change[] = own.has("transform") ? [{ node, attrs: { transform: null } }] : [];

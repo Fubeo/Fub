@@ -162,7 +162,9 @@ export type Feature =
   | "boolean"
   | "trace"
   | "masks"
-  | "typeset";
+  | "typeset"
+  | "effects"
+  | "blend";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -206,6 +208,10 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "trace", level: "expert", label: "draw.feature.trace" },
   { id: "masks", level: "expert", label: "draw.feature.masks" },
   { id: "typeset", level: "expert", label: "draw.feature.typeset" },
+  // Gli effetti e la fusione sono sezioni e campi del pannello delle
+  // proprietà: nel Personalizzato si vedono con lui.
+  { id: "effects", level: "expert", label: "draw.feature.effects" },
+  { id: "blend", level: "expert", label: "draw.feature.blend" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli

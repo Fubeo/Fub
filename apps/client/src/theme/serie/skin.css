@@ -2243,6 +2243,19 @@ progress::-moz-progress-bar {
   box-shadow: var(--shadow-md);
 }
 
+/* Il campo dell'opacità nella barra della selezione: un numero stretto, di
+   cui si vedono tutte le cifre, e il «%» accanto, in grigio. */
+.draw-arrange-input {
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.draw-arrange-suffix {
+  padding-inline: var(--space-2) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
 /* La barra del gruppo isolato, come quella della selezione. Il percorso è
    testo: i gruppi che si toccano si sottolineano col puntatore sopra, quello
    dove si è va in grassetto, i separatori in grigio. */
@@ -3130,6 +3143,87 @@ button.draw-isolation-crumb:hover {
   color: var(--text);
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
+}
+/* Gli effetti: ogni riga ha il suo filo; l'occhio è nel colore del testo
+   quando l'effetto si vede, in grigio e sbarrato quando no, e l'effetto
+   nascosto sbiadisce e ha il nome barrato, così lo stato non sta nel solo
+   colore. Il nome è in grassetto e, chiuso, dice i valori in breve in grigio;
+   il campione ha il colore dell'effetto. I campi della riga aperta stanno
+   sotto, rientrati. */
+.draw-effects {
+  gap: var(--space-3);
+}
+/* Il pulsante che aggiunge, in testa alla sezione: accanto al titolo, col
+   respiro di un campo dal bordo. */
+.draw-effects-add {
+  margin-inline-end: var(--space-2);
+}
+.draw-effects-state {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-effects-list {
+  gap: var(--space-1);
+}
+.draw-effect {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.draw-effect[data-open] {
+  background: var(--bg-active);
+}
+.draw-effect-head {
+  gap: var(--space-1);
+}
+.draw-effect-show,
+.draw-effect-remove {
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.draw-effect-show[aria-pressed="true"] {
+  color: var(--text);
+}
+.draw-effect-name {
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-effect-chip {
+  border: 1px solid var(--muted);
+  border-radius: var(--radius-xs);
+  background: var(--effect-color, transparent);
+}
+.draw-effect-title {
+  font-weight: var(--weight-bold);
+}
+.draw-effect-summary {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.draw-effect-name > svg {
+  color: var(--muted);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.draw-effect[data-hidden] .draw-effect-title {
+  text-decoration: line-through;
+}
+.draw-effect[data-hidden] .draw-effect-title,
+.draw-effect[data-hidden] .draw-effect-summary,
+.draw-effect[data-hidden] .draw-effect-chip {
+  opacity: 0.55;
+}
+.draw-effect-fields {
+  gap: var(--space-3) var(--space-2);
+  padding: var(--space-1) var(--space-3) var(--space-3);
+}
+.draw-effects-actions {
+  gap: var(--space-2);
+}
+.draw-effects-actions .draw-button {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
 }
 /* Un colore misto: righe del colore del testo, che non sono un colore. */
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
