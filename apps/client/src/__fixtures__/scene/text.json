@@ -248,7 +248,15 @@
         " ",
         "Fine."
       ],
-      "wrap": 240.0
+      "wrap": 240.0,
+      "glued": [
+        false,
+        false,
+        false,
+        true,
+        false,
+        false
+      ]
     },
     {
       "kind": "element",

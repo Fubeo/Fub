@@ -33,6 +33,7 @@ use crate::connectors::{
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::parse_path;
 use crate::ink::{Ink, InkError};
+use crate::labels::read_inside;
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
@@ -346,6 +347,11 @@ pub struct ElementItem {
     /// scena, testo).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wrap: Option<f64>,
+    /// Per ogni riga di un testo in area, se continua una parola della riga
+    /// prima: `fub:join="word"`, dopo la prima riga. C'è soltanto se una riga
+    /// la continua; il paragrafo unisce le altre con uno spazio.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glued: Option<Vec<bool>>,
     /// L'id del tracciato che un testo segue (formato della scena, testo).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text_path: Option<String>,
@@ -353,6 +359,11 @@ pub struct ElementItem {
     /// letto (formato della scena, connettori).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub along: Option<LabelPlace>,
+    /// La forma di cui un testo è l'etichetta: `fub:inside` letto, l'id
+    /// (formato della scena, etichette). Se la forma va bene lo dice chi
+    /// conosce il resto del documento.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inside: Option<String>,
     /// Il ciclo di vita di una risorsa, se `fub:role` lo dice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<Lifecycle>,
@@ -737,6 +748,21 @@ fn line_text(doc: &Document<'_>, id: NodeId) -> String {
             _ => String::new(),
         })
         .collect()
+}
+
+/// Per ogni riga di un testo in area, se continua una parola della riga
+/// prima (`fub:join="word"`, dopo la prima); `None` se nessuna lo fa, o se il
+/// testo non è in area.
+fn glued_lines(doc: &Document<'_>, element: &Element<'_>) -> Option<Vec<bool>> {
+    element.value(NS_FUB, "wrap").and_then(wrap_width)?;
+    let glued: Vec<bool> = element
+        .children
+        .iter()
+        .filter_map(|&child| doc.element(child).filter(|e| e.is_svg("tspan")))
+        .enumerate()
+        .map(|(at, tspan)| at > 0 && tspan.value(NS_FUB, "join") == Some("word"))
+        .collect();
+    glued.contains(&true).then_some(glued)
 }
 
 /// Vero se `element` è il tracciato di un testo modificabile (formato della
@@ -1760,9 +1786,15 @@ impl Builder<'_, '_> {
             wrap: (role == Role::Text && text_path.is_none())
                 .then(|| element.value(NS_FUB, "wrap").and_then(wrap_width))
                 .flatten(),
+            glued: (role == Role::Text && text_path.is_none())
+                .then(|| glued_lines(doc, element))
+                .flatten(),
             text_path: text_path.and_then(|(_, path)| text_path_target(path)),
             along: (role == Role::Text)
                 .then(|| element.value(NS_FUB, "along").and_then(read_label_place))
+                .flatten(),
+            inside: (role == Role::Text)
+                .then(|| element.value(NS_FUB, "inside").and_then(read_inside))
                 .flatten(),
             lifecycle: (role == Role::Resource)
                 .then(|| match element.value(NS_FUB, "role") {

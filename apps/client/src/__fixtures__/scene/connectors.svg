@@ -21,5 +21,15 @@
     <text id="o0000000a" fub:along="o00000004 1.5 6" x="600" y="520" fill="#000000" font-size="16">
       <tspan x="600" dy="0">Fuori</tspan>
     </text>
+    <g id="o0000000b">
+      <ellipse id="o0000000c" cx="200" cy="480" rx="90" ry="45" fill="#f0e442"/>
+      <text id="o0000000d" fub:inside="o0000000c" fub:wrap="115.28" x="0" y="0" fill="#000000" font-size="16" text-anchor="middle" transform="matrix(1 0 0 1 200 474.4)">
+        <tspan x="0" dy="0">Controllo</tspan>
+        <tspan fub:join="space" x="0" dy="19.2">finito</tspan>
+      </text>
+      <text id="o0000000e" fub:inside="o0000000c sopra" x="200" y="420" fill="#000000" font-size="16" text-anchor="middle">
+        <tspan x="200" dy="0">Sopra</tspan>
+      </text>
+    </g>
   </g>
 </svg>

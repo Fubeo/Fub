@@ -1,0 +1,17 @@
+{
+  "inside": [
+    { "text": "o00000001", "read": "o00000001" },
+    { "text": "  o1 ", "read": "o1" },
+    { "text": "\t\n\rforma\r\n\t", "read": "forma" },
+    { "text": "é-forma.1_a", "read": "é-forma.1_a" },
+    { "text": "\u00a0o1", "read": "\u00a0o1" },
+    { "text": "o1\u2003", "read": "o1\u2003" },
+    { "text": "", "read": null },
+    { "text": "   ", "read": null },
+    { "text": "\t\n", "read": null },
+    { "text": "o1 o2", "read": null },
+    { "text": "o1 middle", "read": null },
+    { "text": "o1\to2", "read": null },
+    { "text": "o1\no2", "read": null }
+  ]
+}

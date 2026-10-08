@@ -47,7 +47,9 @@
 //!   connettori): tre rettangoli uniti da un gomito agganciato ai due capi,
 //!   da una curva e da una linea dritta con un capo libero, una punta
 //!   come marcatore, l'etichetta di un connettore, e tre scritture fuori
-//!   grammatica: un `fub:geom`, un capo e un'etichetta;
+//!   grammatica: un `fub:geom`, un capo e un'etichetta; un'ellisse con la
+//!   sua etichetta in un gruppo (formato della scena, etichette) e una
+//!   `fub:inside` fuori grammatica;
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -1714,6 +1716,52 @@ fn connectors() -> String {
                         .a("fill", "#000000")
                         .a("font-size", 16)
                         .child(El::new("tspan").a("x", 600).a("dy", 0).text("Fuori")),
+                )
+                // Un'ellisse con la sua etichetta in un gruppo, su due righe;
+                // e un secondo testo con un `fub:inside` fuori grammatica.
+                .child(
+                    El::new("g")
+                        .a("id", "o0000000b")
+                        .child(
+                            El::new("ellipse")
+                                .a("id", "o0000000c")
+                                .a("cx", 200)
+                                .a("cy", 480)
+                                .a("rx", 90)
+                                .a("ry", 45)
+                                .a("fill", "#f0e442"),
+                        )
+                        .child(
+                            El::new("text")
+                                .a("id", "o0000000d")
+                                .a("fub:inside", "o0000000c")
+                                .a("fub:wrap", 115.28)
+                                .a("x", 0)
+                                .a("y", 0)
+                                .a("fill", "#000000")
+                                .a("font-size", 16)
+                                .a("text-anchor", "middle")
+                                .a("transform", "matrix(1 0 0 1 200 474.4)")
+                                .child(El::new("tspan").a("x", 0).a("dy", 0).text("Controllo"))
+                                .child(
+                                    El::new("tspan")
+                                        .a("fub:join", "space")
+                                        .a("x", 0)
+                                        .a("dy", 19.2)
+                                        .text("finito"),
+                                ),
+                        )
+                        .child(
+                            El::new("text")
+                                .a("id", "o0000000e")
+                                .a("fub:inside", "o0000000c sopra")
+                                .a("x", 200)
+                                .a("y", 420)
+                                .a("fill", "#000000")
+                                .a("font-size", 16)
+                                .a("text-anchor", "middle")
+                                .child(El::new("tspan").a("x", 200).a("dy", 0).text("Sopra")),
+                        ),
                 ),
         );
     document(&root, "\n")
@@ -2114,9 +2162,16 @@ fn connectors_are_read_with_their_ends() {
     assert_eq!((place.t, place.offset), (0.5, 6.0));
     let outside = element("o0000000a").unwrap();
     assert_eq!((outside.role, outside.along.is_none()), (Role::Text, true));
-    // Quattro connettori e un tracciato, tre rettangoli: otto forme.
-    assert_eq!(scene.summary.counts.shapes, 8);
-    assert_eq!(scene.summary.counts.texts, 2);
+    // L'etichetta di una forma porta l'id; una che non si legge no.
+    let label = element("o0000000d").unwrap();
+    assert_eq!(label.inside.as_deref(), Some("o0000000c"));
+    assert_eq!(label.wrap, Some(115.28));
+    let outside = element("o0000000e").unwrap();
+    assert_eq!((outside.role, outside.inside.is_none()), (Role::Text, true));
+    // Quattro connettori e un tracciato, tre rettangoli e un'ellisse: nove
+    // forme.
+    assert_eq!(scene.summary.counts.shapes, 9);
+    assert_eq!(scene.summary.counts.texts, 4);
     // Nessuna diagnostica: gli agganci non sono riferimenti di cui il formato
     // controlli l'id, e il marcatore c'è.
     use fub_scene::Code::S001;
