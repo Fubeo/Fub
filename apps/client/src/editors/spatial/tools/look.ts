@@ -48,13 +48,21 @@
 //   il contorno col suo spessore, tratteggio, estremi e angoli, l'opacità e
 //   il carattere di un oggetto vanno sugli oggetti scelti in un passo, a
 //   ciascuna parte ciò che ha. Si copia ciò che si vede, anche se viene dal
-//   gruppo che lo contiene.
+//   gruppo che lo contiene. Il contagocce prende lo stesso, dalla forma
+//   sotto il puntatore.
+// - **Una risorsa privata resta di un oggetto solo** (formato della scena,
+//   risorse): un colore che ne usa una, preso da un altro oggetto, ne porta
+//   una copia, com'era quando lo stile si è copiato; e una sfumatura nelle
+//   coordinate di chi la usa si adatta al riquadro di chi la riceve, come
+//   stava in quello dell'altro.
 // - **Mille oggetti scelti** si leggono entro un fotogramma: gli attributi di
 //   un nodo e ciò che un contenitore passa ai figli si leggono una volta
 //   sola, finché un'operazione non li cambia.
 
 import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
+import type { Bounds } from "../scene/geometry";
+import type { Matrix } from "../scene/matrix";
 import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
@@ -62,12 +70,12 @@ import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from 
 import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
-import type { Unit } from "./hit";
+import { geometryBox, type Unit } from "./hit";
 import type { Measure } from "./measure";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
-import { paintSample, resourcesOf, type PaintSample } from "./resources";
+import { paintSample, privateResources, ResourceCopies, resourcesOf, type PaintSample } from "./resources";
 import { arrowPath } from "./shapes";
 import {
   anchorsOf,
@@ -521,11 +529,14 @@ class Changes {
   private readonly texts = new Map<ElementPart, { readonly part: Part; readonly before: Rich; now: Rich }>();
   private replaced = 0;
   private overflow = false;
+  private copies: ResourceCopies | null = null;
 
   constructor(
     private readonly plan: Plan,
     private readonly model: DocumentModel,
     private readonly measure: Measure,
+    /// Le risorse private di uno stile copiato, com'erano.
+    private readonly kept: ReadonlyMap<string, Elem> = new Map(),
   ) {}
 
   of(part: Part): Record<string, string | null> {
@@ -551,6 +562,30 @@ class Changes {
     } else if (own === undefined || !same(own, value)) {
       this.of(part)[name] = value;
     }
+  }
+
+  /// Il colore `value` in `name`, `fill` o `stroke`, su `part`: di un testo
+  /// intero. Una risorsa privata di un altro oggetto, il cui riquadro è
+  /// `box`, diventa una copia di `part`: una sfumatura nelle coordinate di
+  /// chi la usa passa dall'uno all'altro.
+  paint(part: Part, name: string, value: string, box: Bounds | null): void {
+    // Ciò che la parte vede già resta suo.
+    const written = samePaint(value, seen(part, name)) ? value : this.copied(part, value, box);
+    if (written === null) return;
+    if (part.role === "text" && name === "fill") this.textWrite(part, name, written);
+    else this.write(part, name, written, samePaint);
+  }
+
+  /// `value` per `part`, con le copie delle risorse private che usa; `null`
+  /// se una copia non si sa scrivere.
+  private copied(part: Part, value: string, box: Bounds | null): string | null {
+    if (paintReference(value) === null) return value;
+    this.copies ??= new ResourceCopies(this.model, this.plan.ids, elemOf, this.kept);
+    return this.copies.paint(value, part.node, () => {
+      const elem = box === null ? null : elemOf(part.node);
+      const target = elem === null ? null : geometryBox(elem);
+      return target === null ? null : boxFit(box!, target);
+    });
   }
 
   /// L'opacità `value` sull'oggetto scelto `part`: senza attributo se è
@@ -665,6 +700,8 @@ class Changes {
 
   /// Le operazioni, con le chiavi di `units` dopo.
   finish(units: readonly Unit[]): Restyled {
+    // Le copie delle risorse prima di chi le usa.
+    if (this.copies !== null) this.plan.ops.push(...this.copies.ops());
     this.finishTexts();
     for (const [node, attrs] of this.attrs) {
       if (Object.keys(attrs).length === 0) continue;
@@ -675,6 +712,15 @@ class Changes {
     const changed = [...this.attrs.values()].filter((attrs) => Object.keys(attrs).length > 0).length + this.replaced;
     return { ...this.plan.finish(keys), changed, overflow: this.overflow };
   }
+}
+
+/// La trasformazione che porta il riquadro `from` su `to`: un lato nullo
+/// dell'uno o dell'altro non si scala.
+function boxFit(from: Bounds, to: Bounds): Matrix {
+  const scale = (a: number, b: number): number => (a > 0 && b > 0 ? b / a : 1);
+  const sx = scale(from.max[0] - from.min[0], to.max[0] - to.min[0]);
+  const sy = scale(from.max[1] - from.min[1], to.max[1] - to.min[1]);
+  return [sx, 0, 0, sy, to.min[0] - sx * from.min[0], to.min[1] - sy * from.min[1]];
 }
 
 /// Il testo `rich` di `part` col valore di `name` scritto corto: senza, se il
@@ -698,12 +744,9 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
   const parts = partsOf(model, units);
 
   if ("fill" in change) {
-    for (const part of parts.fills) {
-      if (part.role === "text") changes.textWrite(part, "fill", change.fill);
-      else changes.write(part, "fill", change.fill, samePaint);
-    }
+    for (const part of parts.fills) changes.paint(part, "fill", change.fill, null);
   } else if ("stroke" in change) {
-    for (const part of parts.strokes) changes.write(part, INKED.has(part.role) ? "fill" : "stroke", change.stroke, samePaint);
+    for (const part of parts.strokes) changes.paint(part, INKED.has(part.role) ? "fill" : "stroke", change.stroke, null);
   } else if ("width" in change) {
     const width = place(change.width);
     for (const part of parts.widths) changes.widthTo(part, change.width);
@@ -810,6 +853,12 @@ export interface Style {
   /// L'opacità dell'oggetto scelto, da 0 a 1.
   readonly opacity: number;
   readonly font: StyleFont | null;
+  /// Il riquadro della geometria della parte copiata, nelle sue coordinate:
+  /// una sfumatura nelle coordinate di chi la usa passa da lui a quello di
+  /// chi la riceve. `null` senza colori, o se non si misura.
+  readonly box: Bounds | null;
+  /// Le risorse private che usano i colori, com'erano, per id.
+  readonly resources: ReadonlyMap<string, Elem>;
 }
 
 /// La prima parte di `units` che ha un aspetto suo, nell'ordine del
@@ -832,18 +881,31 @@ function firstPart(model: DocumentModel, unit: Unit): Part | null {
   return found;
 }
 
-/// Lo stile di `unit`: quello della sua prima parte, con l'opacità
-/// dell'oggetto stesso. `null` se non ha parti che si possano copiare.
-export function styleOf(model: DocumentModel, unit: Unit): Style | null {
-  const part = firstPart(model, unit);
+/// La parte `leaf` di un oggetto, se ha un aspetto suo: una forma, un
+/// tratto a penna, un testo o un'immagine.
+function leafPart(leaf: LeafNode): Part | null {
+  const role = leaf.details?.role;
+  if (role === undefined || !(FILLED.has(role) || OUTLINED.has(role) || INKED.has(role) || role === "image")) return null;
+  return { node: leaf, role, own: ownOf(leaf), inherited: passedBy(leaf.parent) };
+}
+
+/// Lo stile di `unit`: quello di `leaf`, una sua forma, o della sua prima
+/// parte, con l'opacità dell'oggetto stesso. `null` se non ha parti che si
+/// possano copiare.
+export function styleOf(model: DocumentModel, unit: Unit, leaf: LeafNode | null = null): Style | null {
+  const part = leaf === null ? firstPart(model, unit) : leafPart(leaf);
   if (part === null) return null;
   const [node] = nodesOf(model, [unit]);
   const written = ownOf(node!).get("opacity");
   const opacity = written === undefined ? 1 : (parseOpacity(written) ?? 1);
   const size = part.role === "text" ? sizeOf(part) : null;
+  const fill = FILLED.has(part.role) ? seen(part, "fill") : null;
+  const stroke = OUTLINED.has(part.role) ? seen(part, "stroke") : INKED.has(part.role) ? seen(part, "fill") : null;
+  const paints = [fill, stroke].filter((value): value is string => value !== null);
+  const elem = paints.some((value) => paintReference(value) !== null) ? elemOf(part.node) : null;
   return {
-    fill: FILLED.has(part.role) ? seen(part, "fill") : null,
-    stroke: OUTLINED.has(part.role) ? seen(part, "stroke") : INKED.has(part.role) ? seen(part, "fill") : null,
+    fill,
+    stroke,
     outline: OUTLINED.has(part.role)
       ? { width: seen(part, "stroke-width"), dashes: seen(part, "stroke-dasharray"), cap: seen(part, "stroke-linecap"), join: seen(part, "stroke-linejoin") }
       : part.role === "width" && part.node.details?.varwidth !== undefined
@@ -851,6 +913,8 @@ export function styleOf(model: DocumentModel, unit: Unit): Style | null {
         : null,
     opacity,
     font: part.role === "text" && size !== null ? fontOf(part, size) : null,
+    box: elem === null ? null : geometryBox(elem),
+    resources: privateResources(model, paints, elemOf),
   };
 }
 
@@ -884,24 +948,24 @@ const shown = (...values: Array<string | null>): string | null => values.find((v
 /// si vede dello stile, il riempimento per il testo, il contorno per il
 /// tratto. La selezione resta la stessa.
 export function styleOps(model: DocumentModel, units: readonly Unit[], style: Style, measure: Measure, ids: NewIds): Restyled {
-  const changes = new Changes(new Plan(model, ids), model, measure);
+  const changes = new Changes(new Plan(model, ids), model, measure, style.resources);
   const parts = partsOf(model, units);
   for (const part of parts.chosen) changes.opacity(part, style.opacity);
   for (const part of parts.fills) {
     const value = part.role === "text" ? shown(style.fill, style.stroke) : style.fill;
-    if (value !== null) changes.write(part, "fill", value, samePaint);
+    if (value !== null) changes.paint(part, "fill", value, style.box);
   }
   for (const part of parts.strokes) {
     if (INKED.has(part.role)) {
       const value = shown(style.stroke, style.fill);
-      if (value !== null) changes.write(part, "fill", value, samePaint);
+      if (value !== null) changes.paint(part, "fill", value, style.box);
       // Una linea a spessore variabile prende lo spessore, gli estremi e gli
       // angoli, e il suo profilo resta.
       const width = style.outline === null ? null : nonNegativeLength(style.outline.width);
       if (part.role === "width" && parts.widths.includes(part) && width !== null && width > 0) changes.widthTo(part, width, style.outline!);
       continue;
     }
-    if (style.stroke !== null) changes.write(part, "stroke", style.stroke, samePaint);
+    if (style.stroke !== null) changes.paint(part, "stroke", style.stroke, style.box);
     const outline = style.outline;
     if (outline === null) continue;
     changes.write(part, "stroke-width", outline.width, sameLength);

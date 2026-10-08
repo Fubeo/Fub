@@ -323,18 +323,22 @@ describe("lo stile copiato e incollato", () => {
       outline: { width: "4", dashes: "8 6", cap: "round", join: "miter" },
       opacity: 0.5,
       font: null,
+      box: null,
+      resources: new Map(),
     });
   });
 
   it("copia il colore di un tratto a penna come contorno, e di un testo il carattere", () => {
     const opened = open(doc(`${LAYER}${PEN("oaaaaaaaa")}${TEXT("obbbbbbbb", ["Uno"], ' font-family="Literata, serif" font-size="24" font-weight="bold"')}</g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null, box: null, resources: new Map() });
     expect(copied(opened, "obbbbbbbb")).toEqual({
       fill: "#000000",
       stroke: null,
       outline: null,
       opacity: 1,
       font: { family: "Literata, serif", size: 24, weight: "bold", style: "normal", spacing: 0, underline: false, strike: false, leading: null },
+      box: null,
+      resources: new Map(),
     });
   });
 
@@ -355,7 +359,7 @@ describe("lo stile copiato e incollato", () => {
 
   it("di un'immagine copia soltanto l'opacità", () => {
     const opened = open(doc(`${LAYER}<image id="oaaaaaaaa" x="0" y="0" width="10" height="10" href="foto.png" opacity="0.25"/></g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null, box: null, resources: new Map() });
   });
 
   it("incolla tutto in un passo, e toglie ciò che la parte eredita già", () => {
@@ -391,6 +395,61 @@ describe("lo stile copiato e incollato", () => {
     expect(arrow).toContain(`d="${arrowPath(0, 0, 100, 0, 4)}"`);
     // Gli estremi e gli angoli tornano quelli di SVG.
     expect(arrow).toContain('fill="none" stroke="#000000" stroke-width="4"/>');
+  });
+
+  describe("con una risorsa privata", () => {
+    const GRADIENT =
+      '<defs id="fub-defs"><linearGradient id="rgggggggg" fub:role="private" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="10" y2="0">' +
+      '<stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient></defs>';
+    const SOURCE = '<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="url(#rgggggggg) #0072b2"/>';
+    const TARGETS = '<rect id="obbbbbbbb" x="100" y="0" width="20" height="10"/><rect id="occcccccc" x="0" y="50" width="10" height="40"/>';
+    /// Gli id delle sfumature di `text`, nell'ordine del file.
+    const gradients = (text: string): string[] => [...text.matchAll(/<linearGradient id="(\w+)"/g)].map((match) => match[1]!);
+
+    it("ne dà a ciascuno una copia sua, adattata al suo riquadro, e chi la usa già la tiene", () => {
+      const opened = open(doc(`${GRADIENT}${LAYER}${SOURCE}${TARGETS}</g>`));
+      const style = copied(opened, "oaaaaaaaa")!;
+      expect(style.box).toEqual({ min: [0, 0], max: [10, 10] });
+      expect([...style.resources.keys()]).toEqual(["rgggggggg"]);
+      const after = applied(opened, pasted(opened, ["oaaaaaaaa", "obbbbbbbb", "occcccccc"], style));
+      const [own, b, c] = gradients(after);
+      expect(own).toBe("rgggggggg");
+      expect(after).toContain('<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="url(#rgggggggg) #0072b2"/>');
+      expect(after).toContain(`<rect id="obbbbbbbb" x="100" y="0" width="20" height="10" fill="url(#${b}) #0072b2"/>`);
+      expect(after).toContain(`<rect id="occcccccc" x="0" y="50" width="10" height="40" fill="url(#${c}) #0072b2"/>`);
+      expect(after).toContain(`<linearGradient id="${b}" fub:role="private" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(2 0 0 1 100 0)">`);
+      expect(after).toContain(`<linearGradient id="${c}" fub:role="private" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1 0 0 4 0 50)">`);
+    });
+
+    it("la porta com'era anche se l'oggetto copiato non c'è più", () => {
+      const opened = open(doc(`${GRADIENT}${LAYER}${SOURCE}${TARGETS}</g>`));
+      const style = copied(opened, "oaaaaaaaa")!;
+      expect(opened.engine.apply(gesture([{ op: "remove", target: opened.index.get("oaaaaaaaa")!.target }])!).outcome).toBe("applied");
+      // Senza chi la usava, la sfumatura privata se n'è andata.
+      expect(gradients(opened.engine.text)).toEqual([]);
+      const index = opened.reindex();
+      const restyled = styleOps(opened.engine.model!, [index.get("obbbbbbbb")!], style, estimate, ids(opened));
+      const after = applied(opened, restyled);
+      const [copy] = gradients(after);
+      expect(after).toContain(`fill="url(#${copy}) #0072b2"`);
+      expect(after).toContain('gradientTransform="matrix(2 0 0 1 100 0)"');
+    });
+
+    it("un colore dato a tutti la copia per ciascuno", () => {
+      const opened = open(doc(`${GRADIENT}${LAYER}${SOURCE}${TARGETS}</g>`));
+      const after = applied(opened, lookOps(opened.engine.model!, [opened.index.get("obbbbbbbb")!, opened.index.get("occcccccc")!], { fill: "url(#rgggggggg) #0072b2" }, estimate, ids(opened)));
+      const [, b, c] = gradients(after);
+      expect(new Set([b, c, "rgggggggg"]).size).toBe(3);
+      // Senza il riquadro di chi la dava, la copia resta com'era.
+      expect(after).not.toContain("gradientTransform");
+    });
+  });
+
+  it("dà a un testo a pezzi il colore intero", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#009e73"')}<text id="obbbbbbbb" x="10" y="40"><tspan x="10" dy="0">Uno <tspan fill="#d55e00">due</tspan></tspan></text></g>`));
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], copied(opened, "oaaaaaaaa")!));
+    expect(after).toContain('fill="#009e73"');
+    expect(after).not.toContain("#d55e00");
   });
 
   it("dà l'opacità all'oggetto scelto, e lascia com'è ciò che è bloccato dentro di lui", () => {

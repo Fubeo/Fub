@@ -100,6 +100,16 @@ interface Part {
   flat: Flat | null;
 }
 
+/// Ciò che si vede di un oggetto in un punto: la forma, la sua geometria e
+/// la matrice dalle sue coordinate a quelle della scena, e se lì si vede il
+/// suo contorno o il suo riempimento.
+export interface Sampled {
+  readonly leaf: LeafNode;
+  readonly segments: readonly Segment[];
+  readonly matrix: Matrix;
+  readonly on: "fill" | "stroke";
+}
+
 /// Un sottotracciato appiattito, in coordinate della scena: `x, y` a coppie.
 interface Run {
   readonly points: Float64Array;
@@ -118,6 +128,20 @@ interface ShapeCache {
   segments: readonly Segment[] | null;
   scene: { readonly matrix: Matrix; readonly bounds: Bounds | null } | null;
   local: Bounds | null | undefined;
+}
+
+/// Un blocco estraneo fuori dagli oggetti, con le forme che se ne stimano.
+export class ForeignBlock {
+  constructor(
+    /// Il percorso nel documento.
+    readonly path: readonly number[],
+    private readonly parts: readonly Part[],
+  ) {}
+
+  /// Vero se il blocco si vede nel punto `p` della scena, entro `tolerance`.
+  covers(p: Point, tolerance: number): boolean {
+    return this.parts.some((part) => partSample(part, p, tolerance) !== null);
+  }
 }
 
 /// Un oggetto della scena.
@@ -227,6 +251,21 @@ export class Unit {
   shapeAt(p: Point, tolerance: number): LeafNode | null {
     if (!near(this.bounds, p, p, tolerance)) return null;
     for (let i = this.parts.length - 1; i >= 0; i--) if (partHits(this.parts[i]!, p, tolerance)) return this.parts[i]!.leaf;
+    return null;
+  }
+
+  /// La forma più in alto dell'oggetto che si vede nel punto `p` della
+  /// scena, e che cosa la colora lì: il contorno, che sta sopra, o il
+  /// riempimento. Con `tolerance` un punto vicino a un bordo prende il
+  /// contorno della forma, o il riempimento se non ne ha. `null` se nessuna
+  /// forma lo copre.
+  sampleAt(p: Point, tolerance: number): Sampled | null {
+    if (!near(this.bounds, p, p, tolerance)) return null;
+    for (let i = this.parts.length - 1; i >= 0; i--) {
+      const part = this.parts[i]!;
+      const on = partSample(part, p, tolerance);
+      if (on !== null) return { leaf: part.leaf, segments: part.segments, matrix: part.matrix, on };
+    }
     return null;
   }
 
@@ -424,6 +463,10 @@ interface Style {
 /// livello, la matrice e lo stile del genitore.
 type Visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style) => void;
 
+/// Chi riceve i blocchi estranei fuori dagli oggetti: il blocco, la matrice
+/// e lo stile del genitore, e il suo percorso.
+type ForeignVisit = (leaf: LeafNode, parent: Matrix, style: Style, path: readonly number[]) => void;
+
 const INITIAL: Style = { fill: true, stroke: false, strokeWidth: 1, fontSize: 16, spacing: 0, anchor: "start", family: null, weight: null, color: null };
 
 /// L'elemento che porta un id nel documento indicizzato, o il blocco
@@ -564,6 +607,19 @@ export class SceneIndexer {
     return out.finish();
   }
 
+  /// I blocchi estranei di `model` che si vedono fuori dagli oggetti, in
+  /// ordine di documento: si vedono come uno strato immagine, ma non si
+  /// scelgono.
+  foreignBlocks(model: DocumentModel): ForeignBlock[] {
+    const out: ForeignBlock[] = [];
+    this.walk(model, (layer) => !layer.hidden, [], () => {}, (leaf, parent, style, path) => {
+      const parts: Part[] = [];
+      this.estimate(leaf, parent, IDENTITY, style, parts);
+      if (parts.length > 0) out.push(new ForeignBlock(path, parts));
+    });
+    return out;
+  }
+
   /// Il riquadro nella scena di `node`, un elemento di `model`, contorno
   /// compreso, come se né lui né chi lo contiene fosse nascosto: ciò che la
   /// sua miniatura inquadra. Ciò che è nascosto dentro di lui non conta.
@@ -599,7 +655,7 @@ export class SceneIndexer {
     enters: (layer: LayerInfo) => boolean,
     layers: LayerInfo[],
     visit: Visit,
-    foreign: ((leaf: LeafNode, parent: Matrix, style: Style) => void) | null = null,
+    foreign: ForeignVisit | null = null,
   ): void {
     const root = model.root;
     const rootStyle = this.rootStyle(model);
@@ -611,7 +667,7 @@ export class SceneIndexer {
       }
       if (child.kind === "leaf") {
         if (child.details === null) {
-          foreign?.(child, IDENTITY, rootStyle);
+          foreign?.(child, IDENTITY, rootStyle, [index]);
           return;
         }
         const role = child.details.role;
@@ -643,7 +699,7 @@ export class SceneIndexer {
     enters: (layer: LayerInfo) => boolean,
     layers: LayerInfo[],
     visit: Visit,
-    foreign: ((leaf: LeafNode, parent: Matrix, style: Style) => void) | null,
+    foreign: ForeignVisit | null,
   ): void {
     const head = this.builder.headInfo(child);
     const matrix = compose(IDENTITY, transformOf(head.attrs));
@@ -654,7 +710,7 @@ export class SceneIndexer {
     childLoop(child, (grandchild, inner) => {
       if (grandchild.kind === "leaf") {
         if (grandchild.details === null) {
-          foreign?.(grandchild, matrix, style);
+          foreign?.(grandchild, matrix, style, [...path, inner]);
           return;
         }
         if (grandchild.details.role === "title" || grandchild.details.role === "desc") return;
@@ -1290,15 +1346,25 @@ function elemLine(child: Elem): TextRun {
 export function elemBounds(elem: Elem, matrix: Matrix): Bounds | null {
   const attrs: PaintAttr[] = Object.entries(elem.attrs);
   const style = styleOf(INITIAL, attrs);
-  const wrap = elem.attrs["fub:wrap"];
-  const segments = elem.tag === "text"
-    ? textSegments(attrs, (elem.children ?? []).map(elemLine), style, wrap === undefined ? null : length(wrap))
-    : shapeSegments(elem.tag, attrs);
-  const bounds = transformedBounds(segments, matrix);
+  const bounds = transformedBounds(elemSegments(elem, attrs, style), matrix);
   if (bounds === null) return null;
   const out = new BoundsBuilder();
   includeInflated(out, bounds, style.stroke ? (style.strokeWidth / 2) * scaleOf(matrix) : 0);
   return out.finish();
+}
+
+/// Il riquadro della geometria di `elem` nelle sue coordinate, senza il
+/// contorno: quello su cui si misura una sfumatura.
+export function geometryBox(elem: Elem): Bounds | null {
+  const attrs: PaintAttr[] = Object.entries(elem.attrs);
+  return transformedBounds(elemSegments(elem, attrs, styleOf(INITIAL, attrs)), IDENTITY);
+}
+
+function elemSegments(elem: Elem, attrs: readonly PaintAttr[], style: Style): readonly Segment[] {
+  const wrap = elem.attrs["fub:wrap"];
+  return elem.tag === "text"
+    ? textSegments(attrs, (elem.children ?? []).map(elemLine), style, wrap === undefined ? null : length(wrap))
+    : shapeSegments(elem.tag, attrs);
 }
 
 // ---------------------------------------------------------------------------
@@ -1863,6 +1929,32 @@ function partHits(part: Part, p: Point, tolerance: number): boolean {
   if (part.fill && winding(flat, p) !== 0) return true;
   const reach = flat.radius + tolerance;
   return forEachEdge(flat, part.fill, (ax, ay, bx, by) => pointSegmentDistance(p[0], p[1], ax, ay, bx, by) <= reach);
+}
+
+/// Che cosa colora `part` nel punto `p`: il contorno, che sta sopra, il
+/// riempimento, o niente. Il contorno di un sottotracciato aperto non ha il
+/// lato che il riempimento chiude.
+function partSample(part: Part, p: Point, tolerance: number): Sampled["on"] | null {
+  const radius = part.radius * scaleOf(part.matrix);
+  if (!near(partBounds(part), p, p, tolerance + radius)) return null;
+  const flat = flatten(part);
+  const away = edgeDistance(flat, false, p);
+  if (flat.radius > 0 && away <= flat.radius) return "stroke";
+  if (part.fill && winding(flat, p) !== 0) return "fill";
+  if (tolerance <= 0) return null;
+  if (flat.radius > 0) return away <= flat.radius + tolerance ? "stroke" : null;
+  return part.fill && edgeDistance(flat, true, p) <= tolerance ? "fill" : null;
+}
+
+/// La distanza di `p` dal lato più vicino di `flat`; con `fill` anche dai
+/// lati che chiudono i sottotracciati aperti.
+function edgeDistance(flat: Flat, fill: boolean, p: Point): number {
+  let best = Infinity;
+  forEachEdge(flat, fill, (ax, ay, bx, by) => {
+    best = Math.min(best, pointSegmentDistance(p[0], p[1], ax, ay, bx, by));
+    return false;
+  });
+  return best;
 }
 
 function partTouches(part: Part, a: Point, b: Point, tolerance: number): boolean {

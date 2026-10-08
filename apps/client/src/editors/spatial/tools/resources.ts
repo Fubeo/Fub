@@ -16,12 +16,14 @@
 //   filtro non si separa.
 
 import { formatNumber } from "../number";
+import type { Bounds } from "../scene/geometry";
 import { DEFS_ID } from "../scene/ids";
+import { apply, compose, invert, IDENTITY, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, parseFragment, scopeOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { ROOT, type Op } from "../scene/ops";
-import type { Elem } from "../scene/serialize";
-import { fraction, opacity, paint, paintReference, reference, urlIds } from "../scene/values";
-import { NS_NONE, NS_SVG, valueOf } from "../scene/xml";
+import { formatTransform, type Elem } from "../scene/serialize";
+import { fraction, length, opacity, paint, paintReference, reference, transform as parseTransform, trim, urlIds, type Paint, type Rgb } from "../scene/values";
+import { NS_NONE, NS_SVG, valueOf, type ElementNode, type XmlDocument } from "../scene/xml";
 import type { NewIds } from "./edit";
 import type { Inherited } from "./outline";
 import { renameUrls } from "./stylesheet";
@@ -125,27 +127,183 @@ export function paintSample(model: DocumentModel, value: string, resources: Read
   }
 }
 
-/// I punti della sfumatura `node` come immagine CSS, dopo `head`: ogni
-/// punto fra 0 e 1, mai prima del precedente, come li porta SVG.
+/// I punti della sfumatura `node` come immagine CSS, dopo `head`.
 function gradientImage(node: LeafNode, head: string): string | null {
-  const fragment = parseFragment(node.raw, scopeOf(node.parent!));
-  if (fragment === null) return null;
-  const { doc } = fragment;
-  const stops: Array<[string, number]> = [];
-  let last = 0;
-  for (const child of doc.element(fragment.id)!.children) {
-    const element = doc.element(child);
-    if (element === null || element.ns !== NS_SVG || element.local !== "stop") continue;
-    const color = paint(valueOf(element, NS_NONE, "stop-color") ?? "black");
-    if (color === null || color === "none") return null;
-    const alpha = opacity(valueOf(element, NS_NONE, "stop-opacity") ?? "1") ?? 1;
-    last = Math.max(last, Math.min(1, Math.max(0, fraction(valueOf(element, NS_NONE, "offset") ?? "0") ?? 0)));
-    stops.push([`rgb(${color.join(" ")} / ${formatNumber(alpha, 3)})`, last]);
-  }
-  if (stops.length === 0) return null;
+  const read = readGradient(node);
+  if (read === null) return null;
+  const stops: Array<[string, number]> = read.stops.map((stop) => [`rgb(${stop.color.join(" ")} / ${formatNumber(stop.alpha, 3)})`, stop.offset]);
   // Un punto solo è un colore pieno; CSS ne vuole due.
   if (stops.length === 1) stops.push([stops[0]![0], 1]);
   return `${head}, ${stops.map(([color, at]) => `${color} ${formatNumber(at * 100, 2)}%`).join(", ")})`;
+}
+
+/// Un punto di una sfumatura: dove sta, fra 0 e 1, il colore e la sua
+/// opacità.
+interface Stop {
+  readonly offset: number;
+  readonly color: Rgb;
+  readonly alpha: number;
+}
+
+/// L'elemento della sfumatura `node`, nel suo frammento, e i suoi punti:
+/// ognuno fra 0 e 1, mai prima del precedente, come li porta SVG. `null` se
+/// non ne ha, o se un colore non si legge.
+function readGradient(node: LeafNode): { readonly doc: XmlDocument; readonly element: ElementNode; readonly stops: readonly Stop[] } | null {
+  const fragment = parseFragment(node.raw, scopeOf(node.parent!));
+  if (fragment === null) return null;
+  const { doc } = fragment;
+  const element = doc.element(fragment.id)!;
+  const stops: Stop[] = [];
+  let last = 0;
+  for (const child of element.children) {
+    const stop = doc.element(child);
+    if (stop === null || stop.ns !== NS_SVG || stop.local !== "stop") continue;
+    const color = paint(valueOf(stop, NS_NONE, "stop-color") ?? "black");
+    if (color === null || color === "none") return null;
+    const alpha = opacity(valueOf(stop, NS_NONE, "stop-opacity") ?? "1") ?? 1;
+    last = Math.max(last, Math.min(1, Math.max(0, fraction(valueOf(stop, NS_NONE, "offset") ?? "0") ?? 0)));
+    stops.push({ offset: last, color, alpha });
+  }
+  return stops.length === 0 ? null : { doc, element, stops };
+}
+
+// ---------------------------------------------------------------------------
+// Il colore di una sfumatura in un punto.
+// ---------------------------------------------------------------------------
+
+/// Una sfumatura lineare o radiale, letta per sapere il suo colore in un
+/// punto: le coordinate nelle sue unità, `x1 y1 x2 y2` o `cx cy r fx fy`.
+export interface Gradient {
+  readonly kind: "linear" | "radial";
+  readonly coords: readonly number[];
+  /// Vero nelle unità del riquadro di chi la usa (`objectBoundingBox`).
+  readonly inBox: boolean;
+  readonly transform: Matrix;
+  readonly spread: "pad" | "reflect" | "repeat";
+  readonly stops: readonly Stop[];
+}
+
+/// La sfumatura `node`, una risorsa del disegno; `null` se non è una
+/// sfumatura o non si legge.
+export function gradientOf(node: LeafNode): Gradient | null {
+  const local = node.facts.local;
+  if (local !== "linearGradient" && local !== "radialGradient") return null;
+  const read = readGradient(node);
+  if (read === null) return null;
+  const at = (name: string): string | null => valueOf(read.element, NS_NONE, name)?.trim() ?? null;
+  const inBox = at("gradientUnits") !== "userSpaceOnUse";
+  // Nel riquadro un numero o una percentuale, nelle coordinate di chi la usa
+  // una lunghezza.
+  const coord = (name: string, start: number): number | null => {
+    const value = at(name);
+    if (value === null) return start;
+    return inBox ? fraction(value) : length(value);
+  };
+  const transform = at("gradientTransform");
+  const matrix = transform === null ? IDENTITY : parseTransform(transform);
+  const written = at("spreadMethod");
+  const spread = written === "reflect" || written === "repeat" ? written : "pad";
+  const names: ReadonlyArray<readonly [string, number]> =
+    local === "linearGradient"
+      ? [["x1", 0], ["y1", 0], ["x2", inBox ? 1 : 0], ["y2", 0]]
+      : [["cx", 0.5], ["cy", 0.5], ["r", 0.5]];
+  const coords = names.map(([name, start]) => coord(name, start));
+  if (matrix === null || coords.some((value) => value === null || !Number.isFinite(value))) return null;
+  if (local === "radialGradient") {
+    // Il fuoco sta nel centro, se non è scritto.
+    const fx = coord("fx", coords[0]!);
+    const fy = coord("fy", coords[1]!);
+    if (fx === null || fy === null) return null;
+    coords.push(fx, fy);
+  }
+  return { kind: local === "linearGradient" ? "linear" : "radial", coords: coords as number[], inBox, transform: matrix, spread, stops: read.stops };
+}
+
+/// Il colore di `gradient` nel punto `p`, nelle coordinate di chi la usa, il
+/// cui riquadro è `box`, come lo disegna SVG: i colori fra due punti si
+/// mescolano in sRGB, e l'opacità non conta. `null` se in quel punto non si
+/// disegna: nelle unità del riquadro, un riquadro senza larghezza o altezza.
+export function gradientColor(gradient: Gradient, p: Point, box: Bounds | null): Rgb | null {
+  let space = gradient.transform;
+  if (gradient.inBox) {
+    if (box === null) return null;
+    const w = box.max[0] - box.min[0];
+    const h = box.max[1] - box.min[1];
+    if (!(w > 0 && h > 0)) return null;
+    space = compose([w, 0, 0, h, box.min[0], box.min[1]], space);
+  }
+  const back = invert(space);
+  if (back === null) return null;
+  const [x, y] = apply(back, p);
+  const t = gradient.kind === "linear" ? linearAt(gradient.coords, x, y) : radialAt(gradient.coords, x, y);
+  return stopColor(gradient.stops, spreadOf(t, gradient.spread));
+}
+
+/// Dove sta `(x, y)` lungo la sfumatura lineare `x1 y1 x2 y2`: 0 sulla
+/// perpendicolare dal primo punto, 1 da quella del secondo. Due punti uguali
+/// danno il colore dell'ultimo punto, come in SVG.
+function linearAt([x1, y1, x2, y2]: readonly number[], x: number, y: number): number {
+  const dx = x2! - x1!;
+  const dy = y2! - y1!;
+  const squared = dx * dx + dy * dy;
+  return squared === 0 ? 1 : ((x - x1!) * dx + (y - y1!) * dy) / squared;
+}
+
+/// Dove sta `(x, y)` nella sfumatura radiale `cx cy r fx fy`: il cerchio
+/// che passa per il punto, fra il fuoco (0) e il cerchio esterno (1). Un
+/// fuoco fuori dal cerchio si porta appena dentro, come in SVG 1.1.
+function radialAt([cx, cy, r, fx, fy]: readonly number[], x: number, y: number): number {
+  if (!(r! > 0)) return 1;
+  let ox = fx! - cx!;
+  let oy = fy! - cy!;
+  const away = Math.hypot(ox, oy);
+  const most = r! * 0.999;
+  if (away > most) {
+    ox = (ox / away) * most;
+    oy = (oy / away) * most;
+  }
+  // Il punto e il centro visti dal fuoco: |p − t·d| = t·r.
+  const px = x - (cx! + ox);
+  const py = y - (cy! + oy);
+  const dx = -ox;
+  const dy = -oy;
+  const a = dx * dx + dy * dy - r! * r!;
+  const b = px * dx + py * dy;
+  const c = px * px + py * py;
+  // Il fuoco è dentro il cerchio: `a` è negativo, e la radice positiva è
+  // una sola.
+  const disc = Math.max(0, b * b - a * c);
+  return (b - Math.sqrt(disc)) / a;
+}
+
+/// `t` portato fra 0 e 1 dal modo in cui la sfumatura continua oltre i
+/// suoi capi.
+function spreadOf(t: number, spread: Gradient["spread"]): number {
+  if (!Number.isFinite(t)) return 1;
+  if (spread === "pad") return Math.min(1, Math.max(0, t));
+  if (spread === "repeat") return t - Math.floor(t);
+  const folded = t - 2 * Math.floor(t / 2);
+  return folded <= 1 ? folded : 2 - folded;
+}
+
+/// Il colore dei punti `stops` in `t`, fra 0 e 1.
+function stopColor(stops: readonly Stop[], t: number): Rgb {
+  const first = stops[0]!;
+  if (t <= first.offset) return first.color;
+  for (let i = 1; i < stops.length; i++) {
+    const stop = stops[i]!;
+    if (t > stop.offset) continue;
+    const before = stops[i - 1]!;
+    const span = stop.offset - before.offset;
+    const k = span > 0 ? (t - before.offset) / span : 1;
+    return [0, 1, 2].map((at) => Math.round(before.color[at]! + (stop.color[at]! - before.color[at]!) * k)) as unknown as Rgb;
+  }
+  return stops[stops.length - 1]!.color;
+}
+
+/// `color` come lo scrive il file: `#rrggbb` minuscolo, o `none`.
+export function paintCode(color: Paint): string {
+  return color === "none" ? "none" : `#${color.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,7 +318,9 @@ function gradientImage(node: LeafNode, head: string): string | null {
 export class ResourceCopies {
   private readonly resources: Map<string, LeafNode>;
   /// Le risorse copiate: il loro id, e quello della copia.
-  private readonly renamed = new Map<string, string>();
+  private renamed = new Map<string, string>();
+  /// Le copie di [`paint`], per chi le riceve.
+  private readonly owned = new Map<object, Map<string, string>>();
   private readonly adds: Op[] = [];
   private home: Home | null = null;
 
@@ -169,8 +329,36 @@ export class ResourceCopies {
     private readonly ids: NewIds,
     /// Una risorsa come la scrive un'operazione: `elemOf` di `arrange.ts`.
     private readonly elemOf: (node: ElementPart) => Elem | null,
+    /// Le risorse private com'erano quando uno stile si è copiato: valgono
+    /// più di quelle del disegno, che nel frattempo possono essere cambiate
+    /// o sparite.
+    private readonly kept: ReadonlyMap<string, Elem> = new Map(),
   ) {
     this.resources = resourcesOf(model);
+  }
+
+  /// `value`, un `fill` o uno `stroke` di un altro oggetto, per `owner`: una
+  /// risorsa privata dell'altro diventa una copia sua, la stessa per tutti i
+  /// suoi colori, e una sfumatura nelle coordinate di chi la usa passa dal
+  /// riquadro dell'altro al suo con la trasformazione che dà `fit`, se ne dà
+  /// una. Le altre risorse restano le stesse. `null` se la copia non si sa
+  /// scrivere.
+  paint(value: string, owner: object, fit: () => Matrix | null): string | null {
+    const used = paintReference(value);
+    if (used === null || !(this.kept.has(used.id) || this.resources.get(used.id)?.details?.lifecycle === "private")) return value;
+    let renamed = this.owned.get(owner);
+    if (renamed === undefined) {
+      renamed = new Map();
+      this.owned.set(owner, renamed);
+    }
+    const before = this.renamed;
+    this.renamed = renamed;
+    try {
+      if (!this.copy(used.id, fit)) return null;
+      return renameUrls(value, (id) => renamed.get(id) ?? null);
+    } finally {
+      this.renamed = before;
+    }
   }
 
   /// `elem`, con le sue parti, rivolto alle copie delle risorse private che
@@ -208,16 +396,20 @@ export class ResourceCopies {
   }
 
   /// Copia la risorsa `id` se è privata, dopo ciò che usa lei; falso se non
-  /// si sa scrivere.
-  private copy(id: string): boolean {
+  /// si sa scrivere. Una sfumatura nelle coordinate di chi la usa si porta
+  /// con la trasformazione che dà `fit`.
+  private copy(id: string, fit: (() => Matrix | null) | null = null): boolean {
     if (this.renamed.has(id)) return true;
-    const node = this.resources.get(id);
-    if (node === undefined || node.details!.lifecycle !== "private") return true;
-    const elem = this.elemOf(node);
-    if (elem === null) return false;
+    let elem = this.kept.get(id) ?? null;
+    if (elem === null) {
+      const node = this.resources.get(id);
+      if (node === undefined || node.details!.lifecycle !== "private") return true;
+      elem = this.elemOf(node);
+      if (elem === null) return false;
+    }
     const fresh = this.ids.next("resource");
     this.renamed.set(id, fresh);
-    const copy = this.adopt(this.withIds(elem, fresh));
+    const copy = this.adopt(fitted(this.withIds(elem, fresh), fit));
     if (copy === null) return false;
     this.home ??= homeOf(this.model);
     this.adds.push({ op: "add", parent: this.home.parent, pos: { last: true }, elem: copy });
@@ -238,4 +430,38 @@ export class ResourceCopies {
   ops(): Op[] {
     return this.adds.length === 0 ? [] : [...this.home!.prelude, ...this.adds];
   }
+}
+
+/// La sfumatura `elem`, se è nelle coordinate di chi la usa, portata dalla
+/// trasformazione che dà `fit`; le altre risorse restano com'erano.
+function fitted(elem: Elem, fit: (() => Matrix | null) | null): Elem {
+  if (fit === null || (elem.tag !== "linearGradient" && elem.tag !== "radialGradient") || trim(elem.attrs.gradientUnits ?? "") !== "userSpaceOnUse") return elem;
+  const m = fit();
+  const written = elem.attrs.gradientTransform;
+  const old = written === undefined ? IDENTITY : parseTransform(written);
+  if (m === null || old === null || m.every((value, at) => value === IDENTITY[at])) return elem;
+  return { ...elem, attrs: { ...elem.attrs, gradientTransform: formatTransform(compose(m, old)) } };
+}
+
+/// Le risorse private che usano i colori `values`, e quelle che usano loro,
+/// come le scrive un'operazione: ciò che uno stile copiato porta con sé.
+/// `elemOf` come per [`ResourceCopies`].
+export function privateResources(model: DocumentModel, values: readonly string[], elemOf: (node: ElementPart) => Elem | null): Map<string, Elem> {
+  const out = new Map<string, Elem>();
+  if (!values.some((value) => /url\(/i.test(value))) return out;
+  const resources = resourcesOf(model);
+  const visit = (id: string): void => {
+    const node = resources.get(id);
+    if (out.has(id) || node === undefined || node.details!.lifecycle !== "private") return;
+    const elem = elemOf(node);
+    if (elem === null) return;
+    out.set(id, elem);
+    const inner = (each: Elem): void => {
+      for (const value of Object.values(each.attrs)) for (const used of urlIds(value)) visit(used);
+      for (const child of each.children ?? []) inner(child);
+    };
+    inner(elem);
+  };
+  for (const value of values) for (const id of urlIds(value)) visit(id);
+  return out;
 }

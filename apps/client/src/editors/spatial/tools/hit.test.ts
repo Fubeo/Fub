@@ -11,7 +11,7 @@ import { strokeElem } from "./edit";
 import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode } from "../scene/model";
-import { elemBounds, linesBounds, SceneIndexer } from "./hit";
+import { elemBounds, geometryBox, linesBounds, SceneIndexer } from "./hit";
 import { LAYER, open } from "./test-support";
 
 const SHAPES = doc(
@@ -339,6 +339,48 @@ describe("il riquadro di un elemento nuovo", () => {
     const elem = { tag: "rect", attrs: { id: "n", x: "10", y: "10", width: "20", height: "20", fill: "none", stroke: "#000000", "stroke-width": "4" } };
     expect(elemBounds(elem, [1, 0, 0, 1, 0, 0])).toEqual({ min: [8, 8], max: [32, 32] });
     expect(elemBounds(elem, [2, 0, 0, 2, 5, 0])).toEqual({ min: [21, 16], max: [69, 64] });
+  });
+
+  it("senza contorno né trasformazione è quello della geometria", () => {
+    const elem = { tag: "rect", attrs: { x: "10", y: "10", width: "20", height: "20", stroke: "#000000", "stroke-width": "4", transform: "scale(3)" } };
+    expect(geometryBox(elem)).toEqual({ min: [10, 10], max: [30, 30] });
+    expect(geometryBox({ tag: "rect", attrs: { width: "0", height: "5" } })).toBeNull();
+  });
+});
+
+describe("che cosa si vede in un punto", () => {
+  const SEEN = doc(
+    `${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2" stroke="#000000" stroke-width="4"/>` +
+      // Il buco gira al contrario: con `nonzero` non si riempie.
+      '<path id="o" d="M50 0 H90 V40 H50 Z M60 10 V30 H80 V10 Z" fill="#d55e00"/>' +
+      '<g id="g" transform="translate(0 50)"><path id="n" d="M0 0 H40 V40 H0 Z"/><polyline id="p" points="50 0 90 0 90 40" fill="none" stroke="#000000" stroke-width="2"/></g></g>',
+  );
+  const at = (key: string, p: [number, number], tolerance = 0): [string | null, string] | null => {
+    const sampled = open(SEEN).index.get(key)!.sampleAt(p, tolerance);
+    return sampled === null ? null : [sampled.leaf.facts.id, sampled.on];
+  };
+
+  it("il contorno sta sopra il riempimento", () => {
+    expect(at("r", [20, 20])).toEqual(["r", "fill"]);
+    expect(at("r", [1, 20])).toEqual(["r", "stroke"]);
+    expect(at("r", [-1.5, 20])).toEqual(["r", "stroke"]);
+    expect(at("r", [-3, 20])).toBeNull();
+    expect(at("r", [-3, 20], 2)).toEqual(["r", "stroke"]);
+  });
+
+  it("un buco lascia vedere sotto; vicino al suo bordo, con la tolleranza, si vede il riempimento", () => {
+    expect(at("o", [55, 20])).toEqual(["o", "fill"]);
+    expect(at("o", [70, 20])).toBeNull();
+    expect(at("o", [61, 20], 2)).toEqual(["o", "fill"]);
+    expect(at("g", [20, 70])).toEqual(["n", "fill"]);
+  });
+
+  it("il contorno di una spezzata aperta non ha il lato che la chiude, e dà la sua geometria", () => {
+    const { index } = open(SEEN);
+    const sampled = index.get("g")!.sampleAt([90, 70], 0)!;
+    expect([sampled.leaf.facts.id, sampled.on, sampled.matrix]).toEqual(["p", "stroke", [1, 0, 0, 1, 0, 50]]);
+    expect(sampled.segments.length).toBeGreaterThan(0);
+    expect(at("g", [70, 70])).toBeNull();
   });
 });
 
