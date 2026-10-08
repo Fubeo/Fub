@@ -76,54 +76,63 @@
 // finestra, pagina 1280×800, foglio 410×439), a 300 connettori e 571
 // elementi, nel peggio di ogni gruppo di corse:
 //
-// - **A riposo**, tre corse. Il nodo si muove in 15 ms (50° percentile),
-//   24 al più, e si rilascia in 35. Le 200 forme, o tutto il disegno, si
-//   muovono in 30 ms (50° percentile), 44 al più, a 60 fotogrammi al
+// - **A riposo**, otto corse. Il nodo si muove in 15 ms (50° percentile),
+//   24 al più, e si rilascia in 36. Le 200 forme, o tutto il disegno, si
+//   muovono in 31 ms (50° percentile), 47 al più, a 60 fotogrammi al
 //   secondo: il 95° percentile degli intervalli è 16,8 ms. Nessun compito
-//   lungo durante i movimenti. Il rilascio di 230 o 530 oggetti costa da 118
-//   a 145 ms, un compito lungo solo; un tasto da 91 a 100 ms (50° percentile),
-//   168 al più; Annulla 70 al più.
+//   lungo durante i movimenti. Il rilascio di 230 o 530 oggetti costa da 90
+//   a 127 ms, un compito lungo solo; un tasto da 79 a 95 ms (50° percentile),
+//   207 al più; Annulla 81 al più.
 // - **A macchina piena**, sedici processi che girano a vuoto, uno per
-//   thread, tre corse: i movimenti al più 104 ms (50° percentile da 51 a 59),
-//   il 95° percentile degli intervalli 50 ms, il rilascio al più 405 ms, un
-//   tasto 494 al più, Annulla 258. Qualche movimento contiene un compito
-//   lungo, fino a 89 ms.
+//   thread, sei corse: i movimenti al più 123 ms (50° percentile da 53 a 62),
+//   il 95° percentile degli intervalli 50 ms, il rilascio al più 395 ms, un
+//   tasto 510 al più, Annulla 265. Qualche movimento contiene un compito
+//   lungo, fino a 83 ms.
 // - **A pagina rallentata** (`--cpu N`, che chiede a Chromium di rallentarla
-//   N volte, dopo l'apertura): due volte, i movimenti al più 64 ms, gli
-//   intervalli 33 ms, il rilascio 262, un tasto 251, nessun compito lungo
-//   durante i movimenti; quattro volte, 120 ms, 67, 524 e 771 (in una delle
-//   due corse un tasto ha toccato i 771 ms, nell'altra il peggio era 495);
-//   sei volte, un movimento di 445 ms e intervalli di 100 ms, ed è rosso.
+//   N volte, dopo l'apertura): due volte, due corse, i movimenti al più
+//   69 ms, gli intervalli 33 ms, il rilascio 239, un tasto 316, un compito
+//   lungo di 61 ms in qualche movimento; quattro volte, sei corse, 173 ms,
+//   67, 460 e 690 (in una un tasto ha toccato i 690 ms, e in una un
+//   movimento i 173); sei volte, due corse, un movimento di 214 ms e
+//   intervalli di 133 ms, ed è rosso.
 //
-// Le soglie stanno una volta e mezza sopra il peggio della macchina piena per
-// i movimenti, due volte per i passi che scrivono e una volta e settanta per
-// gli intervalli; con la pagina quattro volte più lenta le rispettano, con
-// sei no. Un secondo, per un passo che scrive, è il limite oltre il quale chi
+// Le soglie stanno sopra il peggio della macchina piena di un quinto per i
+// movimenti (150 ms contro 123), di quasi due volte per i passi che scrivono
+// (un secondo contro 510 ms) e di una volta e settanta per gli intervalli
+// (85 contro 50); con la pagina quattro volte più lenta le rispettano di
+// poco (una corsa su sei ha un movimento oltre i 150 ms), con sei no. Un
+// secondo, per un passo che scrive, è il limite oltre il quale chi
 // lavora perde il filo: a riposo il rilascio e i tasti ne usano un decimo o
 // poco più, e la soglia è larga perché un banco che sfarfalla si spegne, non
 // perché sia il traguardo.
 //
-// I 50 ms dei compiti lunghi bastano ai movimenti a riposo e a pagina due
-// volte più lenta, non alla macchina piena: un movimento di un gruppo è circa
-// 15 ms di lavoro dell'editor, e con la macchina presa un compito arriva a
-// 89. Perciò durante i movimenti i compiti lunghi si misurano e si
-// riferiscono, e vale la soglia del movimento; si vietano fuori dai passi del
-// gesto, dove a riposo non ce n'è mai, e non ce ne sono nemmeno a pagina sei
-// volte più lenta.
+// I 50 ms dei compiti lunghi bastano ai movimenti a riposo e, quasi sempre, a
+// pagina due volte più lenta (in due corse un movimento ne ha avuto uno di
+// 61 ms), non alla macchina piena: un movimento di un gruppo è circa 15 ms di
+// lavoro dell'editor, e con la macchina presa un compito arriva a 89. Perciò
+// durante i movimenti i compiti lunghi si misurano e si riferiscono, e vale la
+// soglia del movimento; si vietano fuori dai passi del gesto, dove a riposo
+// non ce n'è mai, e non ce ne sono nemmeno a pagina sei volte più lenta.
 //
 // Dove va il tempo, a riposo: un movimento di un gruppo è circa 15 ms di
 // lavoro, 4 per il percorso dei 300 connettori che lo seguono
 // (`ConnectorPreview`), 5 per le maniglie e la barra, 3 per disegnare la
-// bozza, il resto per il fotogramma. Un tasto sono circa 100 ms: 43 per
-// rimettere a posto i pannelli e le maniglie (`refresh`), 23 perché il
-// motore riscriva i 300 connettori, 20 per calcolare i loro percorsi
-// (`followConnectors`); il rilascio di un gruppo è lo stesso lavoro, in un
-// compito solo.
+// bozza, il resto per il fotogramma. Un tasto sono circa 85 ms: 43 per
+// rimettere a posto i pannelli e le maniglie (`refresh`), 14 per calcolare i
+// percorsi dei connettori (`followConnectors`), 16 perché il motore riscriva
+// i 300 connettori e 8 le 230 forme che il tasto sposta; il rilascio di un
+// gruppo è lo stesso lavoro, in un compito solo. Le cifre del motore e di
+// `followConnectors` sono misurate fuori dal browser, nello stesso processo,
+// con lo stesso disegno: il motore applica una `batch` di `set` su unità
+// diverse in un passaggio solo (`leafPass`), invece di rileggere un
+// frammento a ogni `set`, e lascia lette le unità che ha appena riscritto
+// (`rememberHead`), così che il seguito non le rilegga; prima erano 29, 15 e
+// 22 ms.
 //
 // A mille connettori (667 forme) le soglie non valgono: il lavoro cresce con
-// i connettori. A riposo un movimento di un gruppo si dipinge in 49-61 ms
-// (50° percentile), 90 al più; il rilascio costa da 450 a 540 ms e un tasto
-// da 390 a 500.
+// i connettori. A riposo un movimento di un gruppo si dipinge in 49-64 ms
+// (50° percentile), 90 al più; il rilascio costa da 343 a 450 ms e un tasto
+// da 294 a 318 ms (50° percentile), 698 al più.
 //
 // Dopo le corse il banco prova sé stesso: un file con una forma spostata, un
 // connettore tolto, un aggancio cambiato o un'etichetta staccata deve fargli
