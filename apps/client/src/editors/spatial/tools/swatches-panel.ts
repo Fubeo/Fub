@@ -124,6 +124,8 @@ export interface SwatchesPanelOptions {
   /// Sceglie gli oggetti che mostrano `value`: `#rrggbb`, o `url(#id)` per
   /// un campione.
   onSelect(value: string): string | null;
+  /// «Applica a» cambia.
+  onTarget(target: PaintTarget): void;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
 }
@@ -137,6 +139,9 @@ export interface SwatchesPanel {
   /// Il bersaglio scelto in «Applica a», anche se la selezione di adesso
   /// non l'ha.
   target(): PaintTarget;
+  /// Sceglie il bersaglio di «Applica a» senza dirlo all'editor: l'ha
+  /// scelto l'altra sezione.
+  setTarget(target: PaintTarget): void;
   /// Riscrive i testi nella lingua di adesso.
   relabel(): void;
 }
@@ -245,6 +250,7 @@ export function createSwatchesPanel(life: Lifetime, options: SwatchesPanelOption
     life.listen(button, "click", () => {
       if (chosen === target) return;
       chosen = target;
+      options.onTarget(target);
       paint();
     });
   }
@@ -965,6 +971,11 @@ export function createSwatchesPanel(life: Lifetime, options: SwatchesPanelOption
       paint();
     },
     target: () => chosen,
+    setTarget(target) {
+      if (chosen === target) return;
+      chosen = target;
+      paint();
+    },
     relabel,
   };
 }

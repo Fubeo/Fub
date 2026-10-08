@@ -252,6 +252,12 @@ le esportazioni di Mermaid usano.
   `marker-*`, `clip-path`, `clip-rule`, `mask` e `filter` seguono il
   contorno e `stop-*`, `flood-*` e `color-interpolation-filters` seguono
   `display`.
+- **Le sfumature che FubDraw scrive** stanno nelle coordinate dell'oggetto
+  che le usa, in `userSpaceOnUse`, così che una trasformazione dell'oggetto
+  le porti con sé: i capi di una lineare, il centro, il raggio e il fuoco di
+  una radiale come stanno, con una `gradientTransform` soltanto per
+  un'ellisse o uno scorrimento. Il ripiego di chi le usa è la media dei
+  loro colori lungo la sfumatura, pesata sull'opacità.
 - **Una risorsa riscritta** da un `set` si scrive intera in forma canonica,
   figli compresi, e resta al suo posto.
 

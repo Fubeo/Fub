@@ -427,6 +427,13 @@ describe("le risorse", () => {
     expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o1", "o2", "o3", "o4", "o5", "o6"]);
   });
 
+  it("della scena delle sfumature sono tutte vive, come gli oggetti che le usano", () => {
+    const scene = sceneOf(FIDELITY.find((each) => each.id === "sfumature")!.text);
+    expect(kinds(scene)).toEqual(["live"]);
+    expect(ids(scene.resources)).toEqual(["g1", "g2", "g3", "g4", "g5", "g6", "g7"]);
+    expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o1", "o2", "o3", "o4", "o5", "o6", "o7"]);
+  });
+
   it("restano gli stessi oggetti finché non cambiano, anche in un motore riaperto", () => {
     const source = doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000"/><rect id="b" width="1" height="1"/></g>`);
     const engine = SceneEngine.open(source);

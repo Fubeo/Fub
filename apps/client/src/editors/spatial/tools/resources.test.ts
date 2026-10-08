@@ -8,7 +8,7 @@ import type { Elem } from "../scene/serialize";
 import { doc } from "../scene/test-support";
 import { elemOf, plainAttributes } from "./arrange";
 import { NewIds } from "./edit";
-import { gradientColor, gradientOf, holdsEffect, homeOf, paintCode, paintSample, privateResources, resourceHome, resourcesOf, ResourceCopies, usesResources } from "./resources";
+import { gradientColor, gradientOf, holdsEffect, homeOf, paintCode, paintSample, privateResources, resourceHome, resourcesOf, ResourceCopies, usersOf } from "./resources";
 import { LAYER, open, type Opened } from "./test-support";
 
 const STOP = '<stop offset="0" stop-color="#ffffff"/>';
@@ -59,17 +59,17 @@ describe("chi usa le risorse", () => {
     expect(holdsEffect(new Map([["fill", "url(#rgggggggg)"]]))).toBe(false);
   });
 
-  it("li usa chi li nomina, o chi eredita un colore che è una risorsa", () => {
+  it("li usa chi li nomina: un elemento una volta sola, un'unità con ciò che contiene", () => {
     const opened = open(
       doc(
-        `${DEFS}${LAYER}<rect id="oaaaaaaaa" x="0" y="0" width="5" height="5" clip-path="url(#rcccccccc)"/>` +
-          '<rect id="obbbbbbbb" x="0" y="0" width="5" height="5" fill="#000000"/></g>',
+        `${DEFS}${LAYER}<rect id="oaaaaaaaa" x="0" y="0" width="5" height="5" clip-path="url(#rcccccccc)" fill="url(#rgggggggg)" stroke="url(#rgggggggg)"/>` +
+          '<g id="obbbbbbbb" fill="url(#rgggggggg)"><rect x="0" y="0" width="5" height="5"/></g>' +
+          '<text id="occcccccc" x="0" y="20"><tspan x="0" dy="0" fill="url(#rgggggggg)">Ciao</tspan></text></g>',
       ),
     );
-    const none = new Map<string, string>();
-    expect(usesResources(node(opened, "oaaaaaaaa"), none)).toBe(true);
-    expect(usesResources(node(opened, "obbbbbbbb"), none)).toBe(false);
-    expect(usesResources(node(opened, "obbbbbbbb"), new Map([["stroke", "url(#rgggggggg) #000000"]]))).toBe(true);
+    const users = usersOf(opened.engine.model!);
+    expect(users.get("rgggggggg")).toBe(3);
+    expect(users.get("rcccccccc")).toBe(1);
     expect(holdsEffect(plainAttributes(node(opened, "oaaaaaaaa")))).toBe(true);
   });
 });

@@ -362,7 +362,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Sfumatura", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -4174,6 +4174,336 @@ describe("il contagocce, dal livello Standard", () => {
   });
 });
 
+describe("lo strumento Sfumatura, dal livello Standard", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  /// A con la sua sfumatura lineare, dal blu al bianco da sinistra a destra;
+  /// B arancione pieno; C con la sua radiale, dal bianco al vermiglio.
+  const SHADES = doc(
+    '<defs id="fub-defs"><linearGradient id="ra" fub:role="private" gradientUnits="userSpaceOnUse" x1="20" y1="50" x2="180" y2="50"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#ffffff"/></linearGradient>' +
+      '<radialGradient id="rc" fub:role="private" gradientUnits="userSpaceOnUse" cx="300" cy="200" r="50"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#e69f00"/><stop offset="1" stop-color="#d55e00"/></radialGradient></defs>' +
+      `${LAYER}<rect id="${A}" x="0" y="0" width="200" height="100" fill="url(#ra) #80b9d8"/>` +
+      `<rect id="${B}" x="0" y="150" width="100" height="100" fill="#e69f00"/>` +
+      `<rect id="${C}" x="250" y="150" width="100" height="100" fill="url(#rc) #e69f00"/></g>`,
+  );
+  /// La sfumatura che riempie `id`, com'è scritta adesso.
+  const shade = (id: string): string => {
+    const text = editor.engine.text;
+    const ref = new RegExp(`<rect id="${id}"[^>]* fill="url\\(#([^)]+)\\)`).exec(text)?.[1];
+    if (ref === undefined) return new RegExp(`<rect id="${id}"[^>]*/>`).exec(text)![0];
+    return new RegExp(`<(linear|radial)Gradient id="${ref}"[^>]*>[\\s\\S]*?</\\1Gradient>`).exec(text)![0].replace(/\s*\n\s*/g, "");
+  };
+  /// Un tocco, lontano nel tempo dal precedente: non fa un doppio tocco.
+  const tap = (x: number, y: number, init: Init = {}): void => {
+    clock += 1000;
+    drag([[x, y]], init);
+  };
+  const hover = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const gradientTool = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-tool[aria-label="Sfumatura"]')!;
+
+  /// Il disegno `source`, con gli oggetti `keys` scelti e lo strumento
+  /// Sfumatura.
+  const shading = (keys: readonly string[] = [A], source = SHADES): void => {
+    mount(source, { level: "standard" });
+    size(400, 300);
+    editor.focus();
+    editor.select(keys);
+    key("g");
+  };
+
+  it("c'è dal livello Standard, col tasto G, e dice dove va la sfumatura", () => {
+    mount(SHADES, { level: "standard" });
+    size(400, 300);
+    editor.focus();
+    expect(gradientTool().title).toBe("Sfumatura (G)");
+    key("g");
+    expect(editor.tool).toBe("gradient");
+    expect(surface().dataset.tool).toBe("gradient");
+    expect(spoken()).toBe("Strumento: Sfumatura. Scegli gli oggetti a cui dare una sfumatura: un clic su un oggetto lo sceglie.");
+    editor.select([B]);
+    key("v");
+    key("g");
+    expect(spoken()).toBe("Strumento: Sfumatura. La sfumatura va al riempimento degli oggetti scelti.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    expect(changes).toEqual([]);
+  });
+
+  it("trascinata sugli oggetti scelti traccia la loro sfumatura, dal loro colore; con Maiusc va di 45° in 45°", () => {
+    shading([B]);
+    drag([[20, 200], [50, 200], [80, 200]]);
+    expect(shade(B)).toMatch(/^<linearGradient id="[^"]+" fub:role="private" x1="20" y1="200" x2="80" y2="200" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e69f00"\/><stop offset="1" stop-color="#e69f00" stop-opacity="0"\/><\/linearGradient>$/);
+    expect(spoken()).toBe("Sfumatura lineare tracciata: angolo 0°, lunga 60.");
+    expect(editor.selection).toEqual([B]);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(SHADES);
+    expect(spoken()).toBe("Annullato: Sfumatura tracciata.");
+    drag([[20, 200], [50, 220], [80, 230]], { shiftKey: true });
+    expect(shade(B)).toContain('x1="20" y1="200" x2="65" y2="245"');
+    expect(spoken()).toBe("Sfumatura lineare tracciata: angolo 45°, lunga 63,6.");
+  });
+
+  it("radiale se lo sono già tutte quelle degli oggetti scelti, col centro dove parte", () => {
+    shading([C]);
+    drag([[280, 180], [290, 180], [300, 180]]);
+    // La stessa sfumatura, cambiata sul posto, coi punti di prima.
+    expect(shade(C)).toBe(
+      '<radialGradient id="rc" fub:role="private" cx="280" cy="180" r="20" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset="0.5" stop-color="#e69f00"/><stop offset="1" stop-color="#d55e00"/></radialGradient>',
+    );
+    expect(spoken()).toBe("Sfumatura radiale tracciata: raggio 20.");
+  });
+
+  it("senza niente di scelto, il trascinamento sceglie l'oggetto da cui parte; dal vuoto dice che cosa serve", () => {
+    shading([]);
+    drag([[20, 200], [50, 200], [80, 200]]);
+    expect(editor.selection).toEqual([B]);
+    expect(shade(B)).toContain('x1="20" y1="200" x2="80" y2="200"');
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    editor.select([]);
+    drag([[380, 20], [380, 50], [380, 80]]);
+    expect(spoken()).toBe("Scegli gli oggetti a cui dare una sfumatura: un clic su un oggetto lo sceglie.");
+    expect(editor.selection).toEqual([]);
+    expect(editor.engine.text).toBe(SHADES);
+  });
+
+  it("un tocco sul foglio sceglie l'oggetto, con Maiusc lo aggiunge o lo toglie, e sul vuoto lascia la selezione", () => {
+    shading([]);
+    tap(50, 200);
+    expect(editor.selection).toEqual([B]);
+    expect(spoken()).toBe("1 oggetto scelto. La sfumatura va al riempimento degli oggetti scelti.");
+    tap(300, 160, { shiftKey: true });
+    expect(editor.selection).toEqual([B, C]);
+    tap(50, 200, { shiftKey: true });
+    expect(editor.selection).toEqual([C]);
+    tap(380, 20);
+    expect(editor.selection).toEqual([]);
+    expect(spoken()).toBe("Scegli gli oggetti a cui dare una sfumatura: un clic su un oggetto lo sceglie.");
+    expect(changes).toEqual([]);
+  });
+
+  it("i capi si trascinano: uno gira e allunga la linea attorno all'altro, con Maiusc di 45° in 45°; la linea la sposta", () => {
+    shading();
+    drag([[180, 50], [180, 70], [180, 90]]);
+    expect(shade(A)).toContain('x1="20" y1="50" x2="180" y2="90"');
+    expect(spoken()).toBe("Fine della sfumatura: x 180, y 90.");
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Capo della sfumatura spostato.");
+    drag([[180, 50], [180, 100], [180, 140]], { shiftKey: true });
+    expect(shade(A)).toContain('x1="20" y1="50" x2="145" y2="175"');
+    editor.undo();
+    // La linea, presa a metà, porta con sé la sfumatura.
+    drag([[100, 50], [110, 60], [120, 70]]);
+    expect(shade(A)).toContain('x1="40" y1="70" x2="200" y2="70"');
+    expect(spoken()).toBe("Inizio della sfumatura: x 40, y 70.");
+    editor.undo();
+    expect(editor.engine.text).toBe(SHADES);
+  });
+
+  it("il centro di una radiale la sposta, il raggio la gira e la allarga; con Alt sul centro si prende il fuoco", () => {
+    shading([C]);
+    drag([[300, 200], [310, 200], [320, 210]]);
+    expect(shade(C)).toContain('cx="320" cy="210" r="50"');
+    expect(spoken()).toBe("Centro della sfumatura: x 320, y 210.");
+    editor.undo();
+    drag([[350, 200], [360, 200], [370, 200]]);
+    expect(shade(C)).toContain('cx="300" cy="200" r="70"');
+    editor.undo();
+    drag([[300, 200], [310, 200], [320, 200]], { altKey: true });
+    expect(shade(C)).toContain('cx="300" cy="200" r="50" fx="320" fy="200"');
+    expect(spoken()).toBe("Fuoco della sfumatura: x 320, y 200.");
+  });
+
+  it("un punto scorre lungo la linea, e lontano da lei si toglie, se ne restano due", () => {
+    shading([C]);
+    // Il punto a metà pende 16 pixel sotto la linea, a 325.
+    drag([[325, 216], [330, 216], [335, 216]]);
+    expect(shade(C)).toContain('<stop offset="0.7" stop-color="#e69f00"/>');
+    expect(spoken()).toBe("Punto 2 di 3 della sfumatura, Arancione, al 70%.");
+    expect(changes).toHaveLength(1);
+    // Tirato giù, lontano dalla linea, se ne va.
+    drag([[335, 216], [335, 240], [335, 260]]);
+    expect(shade(C)).not.toContain("#e69f00\"/>");
+    expect(spoken()).toBe("Punto 2 tolto.");
+    // Degli ultimi due, nessuno si stacca.
+    drag([[350, 216], [350, 240], [350, 260]]);
+    expect(changes).toHaveLength(2);
+  });
+
+  it("un tocco sceglie un capo o un punto e lo dice; due sulla linea aggiungono un punto, del colore che si vede lì", () => {
+    shading();
+    tap(20, 50);
+    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50.");
+    tap(180, 66);
+    expect(spoken()).toBe("Punto 2 di 2 della sfumatura, #ffffff, al 100%.");
+    tap(60, 50);
+    expect(spoken()).toBe("Linea della sfumatura, al 25%: il doppio clic aggiunge un punto qui.");
+    drag([[60, 50]]);
+    expect(shade(A)).toMatch(/<stop offset="0" stop-color="#0072b2"\/><stop offset="0.25" stop-color="#[0-9a-f]{6}"\/><stop offset="1" stop-color="#ffffff"\/>/);
+    expect(spoken()).toBe("Punto 2 aggiunto, al 25%.");
+    expect(changes).toHaveLength(1);
+  });
+
+  it("due tocchi su un punto, o Invio, portano al suo colore nel pannello; Invio su un capo, alla sezione", () => {
+    shading();
+    /// Il campo che ha il fuoco, se sta nella sezione «Sfumatura».
+    const focused = (): HTMLInputElement | null =>
+      document.activeElement?.closest('.draw-properties-section[data-section="gradient"]') === null ? null : (document.activeElement as HTMLInputElement);
+    tap(180, 66);
+    drag([[180, 66]]);
+    expect(focused()?.value).toBe("#ffffff");
+    editor.focus();
+    key("Home");
+    key("Enter");
+    expect(focused()).not.toBeNull();
+    editor.focus();
+    key("Tab");
+    key("Tab");
+    key("Enter");
+    expect(focused()?.value).toBe("#0072b2");
+    expect(changes).toEqual([]);
+  });
+
+  it("dalla tastiera: Tab va di capo in capo e di punto in punto, Inizio e Fine agli estremi, Esc lascia", () => {
+    shading();
+    key("Tab");
+    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50.");
+    key("Tab");
+    expect(spoken()).toBe("Fine della sfumatura: x 180, y 50.");
+    key("Tab");
+    expect(spoken()).toBe("Punto 1 di 2 della sfumatura, Blu, al 0%.");
+    key("End");
+    expect(spoken()).toBe("Punto 2 di 2 della sfumatura, #ffffff, al 100%.");
+    key("Home");
+    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50.");
+    key("Tab", { shiftKey: true });
+    key("Escape");
+    expect(spoken()).toBe("Nessun capo o punto della sfumatura scelto.");
+    expect(changes).toEqual([]);
+  });
+
+  it("le frecce spostano il capo scelto come un nodo, e il punto scelto lungo la linea", () => {
+    shading();
+    key("Tab");
+    key("ArrowRight");
+    expect(shade(A)).toContain('x1="21" y1="50" x2="180" y2="50"');
+    expect(spoken()).toBe("Inizio della sfumatura: x 21, y 50.");
+    key("ArrowDown", { shiftKey: true });
+    expect(shade(A)).toContain('x1="21" y1="60" x2="180" y2="50"');
+    // Il punto: verso la fine con →, verso l'inizio con ←; di traverso, ↑ va
+    // avanti.
+    key("End");
+    key("ArrowLeft");
+    expect(shade(A)).toContain('<stop offset="0.99" stop-color="#ffffff"/>');
+    expect(spoken()).toBe("Punto 2 di 2 della sfumatura, #ffffff, al 99%.");
+    key("ArrowLeft", { shiftKey: true });
+    expect(shade(A)).toContain('<stop offset="0.89" stop-color="#ffffff"/>');
+    expect(changes).toHaveLength(4);
+  });
+
+  it("Canc toglie il punto scelto, mai l'oggetto; Ins ne aggiunge uno a metà col seguente", () => {
+    shading([C]);
+    key("Delete");
+    expect(spoken()).toBe("Canc e Ins valgono per un punto della sfumatura: sceglilo con Tab.");
+    expect(editor.engine.text).toBe(SHADES);
+    key("End");
+    key("Insert");
+    expect(shade(C)).toMatch(/<stop offset="0.5" stop-color="#e69f00"\/><stop offset="0.75" stop-color="#[0-9a-f]{6}"\/><stop offset="1" stop-color="#d55e00"\/>/);
+    expect(spoken()).toBe("Punto 3 aggiunto, al 75%.");
+    key("Delete");
+    expect(spoken()).toBe("Punto 3 tolto.");
+    expect(changes).toHaveLength(2);
+  });
+
+  it("con più sfumature dice di quale parla", () => {
+    shading([A, C]);
+    key("Tab");
+    expect(spoken()).toBe("Inizio della sfumatura: x 20, y 50. Sfumatura 1 di 2.");
+  });
+
+  it("«Applica a» il contorno: la sfumatura va al contorno degli oggetti scelti", () => {
+    const D = "od4d4d4d4";
+    shading([D], doc(`${LAYER}<rect id="${D}" x="0" y="0" width="100" height="100" fill="#ffffff" stroke="#000000" stroke-width="4"/></g>`));
+    properties().querySelector<HTMLButtonElement>('.draw-properties-section[data-section="colors"] .draw-swatches-target [data-target="stroke"]')!.click();
+    drag([[20, 50], [50, 50], [80, 50]]);
+    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${D}"[^>]* fill="#ffffff" stroke="url\\(#[^)]+\\) #000000"`));
+    expect(shade(D)).toBe(new RegExp(`<rect id="${D}"[^>]*/>`).exec(editor.engine.text)![0]);
+  });
+
+  it("mentre si trascina, il foglio mostra la sfumatura nuova; Esc la lascia com'era", () => {
+    shading();
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 180, clientY: 50, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 180, clientY: 90, timeStamp: (clock += 8) }));
+    const rect = host.querySelector<SVGElement>(`[data-scene-id="${A}"]`)!;
+    const shown = host.querySelector<SVGElement>("svg.spatial-defs:last-child linearGradient")!;
+    expect(rect.style.fill.replace(/"/g, "")).toBe(`url(#${shown.id})`);
+    expect(["x1", "y1", "x2", "y2"].map((name) => shown.getAttribute(name))).toEqual(["20", "50", "180", "90"]);
+    key("Escape");
+    expect(rect.style.fill).toBe("");
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 180, clientY: 90, timeStamp: (clock += 8) }));
+    expect(editor.engine.text).toBe(SHADES);
+    expect(changes).toEqual([]);
+  });
+
+  it("il foglio mostra la linea, i capi e i quadratini dei punti, appesi sotto la linea; di una radiale anche il bordo", () => {
+    const layer = recording();
+    shading();
+    layer.frame();
+    const at = (name: string, x: number, y: number): boolean => layer.calls().some((call) => call[0] === name && Math.round(call[1] as number) === x && Math.round(call[2] as number) === y);
+    // La linea e l'asta del primo punto; il cerchio dell'inizio; i
+    // quadratini, larghi 12.
+    expect([at("moveTo", 20, 50), at("lineTo", 180, 50), at("lineTo", 20, 66), at("arc", 20, 50)]).toEqual([true, true, true, true]);
+    expect([at("fillRect", 14, 60), at("fillRect", 174, 60)]).toEqual([true, true]);
+    expect(layer.calls().some(([name, dash]) => name === "setLineDash" && (dash as number[]).length > 0)).toBe(false);
+    editor.select([C]);
+    layer.frame();
+    expect(layer.calls().some(([name, dash]) => name === "setLineDash" && (dash as number[]).length > 0)).toBe(true);
+    // Senza lo strumento, niente.
+    key("v");
+    layer.frame();
+    expect(at("fillRect", 294, 210)).toBe(false);
+  });
+
+  it("il puntatore sopra un capo, un punto o la linea dice che li sposta", () => {
+    shading();
+    hover(20, 50);
+    expect(surface().dataset.grip).toBe("move");
+    hover(100, 66);
+    expect(surface().dataset.grip).toBeUndefined();
+    hover(100, 51);
+    expect(surface().dataset.grip).toBe("move");
+  });
+
+  it("il cursore dice il capo, il punto o la linea sotto di sé; Spazio, le frecce e Spazio li spostano", () => {
+    shading([C]);
+    // Il cursore parte dal mezzo del foglio, a 200, 150.
+    key("ArrowRight", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    expect(spoken()).toBe("x 300, y 150: Rettangolo");
+    key("ArrowDown", { shiftKey: true });
+    expect(spoken()).toBe("x 300, y 200: Centro della sfumatura.");
+    key(" ");
+    key("ArrowRight", { shiftKey: true });
+    key(" ");
+    expect(shade(C)).toContain('cx="350" cy="200" r="50"');
+    expect(spoken()).toBe("Centro della sfumatura: x 350, y 200.");
+    expect(changes).toHaveLength(1);
+  });
+
+  it("i tasti della Sfumatura stanno nell'elenco", () => {
+    shading();
+    key("?", { shiftKey: true });
+    const table = [...dialog().querySelectorAll("table")].find((each) => each.querySelector("caption")!.textContent === "Sfumatura")!;
+    expect([...table.querySelectorAll("tr")].map((row) => row.querySelector("th")!.textContent)).toEqual(["Space", "Shift", "Alt", "Tab o Shift+Tab", "Home o End", "←↑→↓", "Insert", "Del", "Enter", "Esc"]);
+    dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
+  });
+});
+
 describe("la barra accanto alla selezione, dal livello Standard", () => {
   const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
   const spot = (): readonly number[] => /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(bar().style.transform)!.slice(1).map(Number);
@@ -4519,6 +4849,7 @@ describe("da tastiera", () => {
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
       "Contagocce · dal livello Standard",
+      "Sfumatura · dal livello Standard",
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
@@ -4540,7 +4871,7 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
     // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
@@ -4581,25 +4912,25 @@ describe("da tastiera", () => {
       ["I", "Nell’albero degli oggetti, dà agli oggetti scelti l’aspetto della riga; senza selezione, ne prende il colore per disegnare"],
       ["Shift+I", "Nell’albero degli oggetti, prende soltanto il colore della riga"],
     ]);
-    expect(tables[10]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[11]!.rows).toEqual([
+    expect(tables[11]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[12]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
     // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
-    expect(tables[14]!.rows).toEqual([
+    expect(tables[15]!.rows).toEqual([
       ["4", "Ruota la vista a sinistra"],
       ["6", "Ruota la vista a destra"],
       ["5", "Raddrizza la vista"],
       ["Shift+F10", "Apre il menu radiale: strumenti, colori, annulla"],
     ]);
     // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[15]!.rows).toEqual([
+    expect(tables[16]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
     // L'elenco delle tavole e la cronologia, tutti dallo Standard.
-    expect(tables[16]!.rows).toEqual([
+    expect(tables[17]!.rows).toEqual([
       ["↑ o ↓ o Home o End", "Nell’elenco delle tavole, la tavola prima o dopo, la prima o l’ultima"],
       ["Enter o Space", "Nell’elenco delle tavole, porta alla tavola"],
       ["F2", "Nell’elenco delle tavole, cambia il nome della tavola"],
@@ -4609,7 +4940,7 @@ describe("da tastiera", () => {
       ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
       ["Esc", "Dall’elenco delle tavole torna al foglio"],
     ]);
-    expect(tables[17]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
+    expect(tables[18]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -10425,6 +10756,7 @@ describe("il livello Personalizzato", () => {
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
       "Contagocce · dal livello Standard",
+      "Sfumatura · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
@@ -10443,8 +10775,8 @@ describe("il livello Personalizzato", () => {
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[18]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[19]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

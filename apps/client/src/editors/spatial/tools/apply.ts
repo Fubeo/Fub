@@ -30,9 +30,14 @@
 //   estraneo non cambia, e i suoi figli applicano solo la loro; così uno
 //   con un ritaglio, una maschera o un filtro, che valgono nelle sue
 //   coordinate.
-// - **Chi usa una risorsa**, sua o ereditata, tiene la trasformazione: una
-//   sfumatura, un motivo o un marcatore vivono nelle coordinate di chi li
-//   usa, e nella geometria nuova si vedrebbero altrove.
+// - **Le sfumature vanno con la geometria.** Una sfumatura del riempimento
+//   o del contorno si riscrive nelle coordinate nuove, e si vede dov'era:
+//   sul posto se è soltanto dell'oggetto, se no in una copia sua, come
+//   quando la si cambia. Un campione, o una sfumatura di un colore solo, si
+//   vede uguale dovunque. Chi usa un'altra risorsa tiene la trasformazione:
+//   un motivo, un marcatore, una sfumatura ereditata da chi lo contiene o
+//   che ne usa un'altra vivono nelle coordinate di chi li usa, e nella
+//   geometria nuova si vedrebbero altrove.
 // - **Niente che il file non sappia scrivere.** Un oggetto la cui geometria
 //   nuova non si rileggerebbe, o il cui resto non si scrive in `matrix()`
 //   (come in «Trasforma»), resta com'è. Un percorso con una forma o uno
@@ -46,19 +51,22 @@ import { quantizeAzimuth, quantizeCoordinate } from "../ink/sample";
 import { svgAttribute } from "../scene/classify";
 import { parsePath, type Segment } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, mappedEllipse, toRadians, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import type { Op } from "../scene/ops";
 import { polygonalAttrs } from "../scene/parametric";
 import { spineOf } from "../scene/varwidth";
-import { pathData } from "../scene/serialize";
-import { length, nonNegativeLength, points as parsePoints, transform as parseTransform } from "../scene/values";
+import { pathData, type Elem } from "../scene/serialize";
+import { length, nonNegativeLength, paintReference, points as parsePoints, transform as parseTransform, trim, urlIds } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
 import { fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { transformValue, type NewIds } from "./edit";
+import { movedCopy, movedPlace, paintFollows, placeChanges } from "./gradients";
 import type { Unit } from "./hit";
 import { inheritedBy, passed, type Inherited } from "./outline";
 import { scaledProfile, swappedProfile, widthAttrs } from "./profile";
-import { holdsEffect, usesResources } from "./resources";
+import { holdsEffect, homeOf, resourcesOf, usersOf } from "./resources";
 import { arrowPath } from "./shapes";
+import { renameUrls } from "./stylesheet";
 import { writable } from "./transform";
 
 /// Gli attributi di un percorso che dicono che la sua geometria non è solo
@@ -75,6 +83,9 @@ const STROKED: ReadonlySet<string> = new Set(["arrow", "ngon", "star", "path", "
 
 /// Un numero della geometria come lo scrive il file.
 const place = (value: number): string => formatNumber(value, 2);
+
+/// Gli attributi che scrivono un colore.
+const PAINTS = ["fill", "stroke"] as const;
 
 const linear = (m: Matrix): Matrix => [m[0], m[1], m[2], m[3], 0, 0];
 
@@ -420,10 +431,11 @@ interface Change {
   readonly attrs: Record<string, string | null>;
 }
 
-/// Ciò che diventa un oggetto: i cambi, e se a lui o a una sua parte resta
-/// una trasformazione.
+/// Ciò che diventa un oggetto: i cambi, le sfumature nuove che usano, e se
+/// a lui o a una sua parte resta una trasformazione.
 interface Baked {
   readonly changes: readonly Change[];
+  readonly copies: readonly Elem[];
   readonly kept: boolean;
 }
 
@@ -434,24 +446,127 @@ function keep(node: ElementPart, own: ReadonlyMap<string, string>, m: Matrix, pu
   if (value !== null && pushed && !writable(m)) return null;
   const current = own.get("transform");
   const same = value === null ? current === undefined : !pushed || value === current;
-  return { changes: same ? [] : [{ node, attrs: { transform: value } }], kept: value !== null };
+  return { changes: same ? [] : [{ node, attrs: { transform: value } }], copies: [], kept: value !== null };
 }
+
+// ---------------------------------------------------------------------------
+// Le sfumature.
+// ---------------------------------------------------------------------------
+
+/// Le risorse del disegno, per portare le sfumature nelle coordinate nuove:
+/// per id, quanti le usano, e gli id delle copie.
+class Resources {
+  readonly byId: Map<string, LeafNode>;
+  private users: Map<string, number> | null = null;
+
+  constructor(
+    private readonly model: DocumentModel,
+    readonly ids: NewIds,
+  ) {
+    this.byId = resourcesOf(model);
+  }
+
+  /// Vero se un elemento solo usa `id`.
+  alone(id: string): boolean {
+    this.users ??= usersOf(this.model);
+    return this.users.get(id) === 1;
+  }
+}
+
+/// Le sfumature che `node`, coi suoi attributi `own`, mostra come colore e
+/// porta nelle coordinate nuove: per id, vero se è soltanto sua. Un
+/// campione, o una sfumatura di un colore solo, si vede uguale dovunque, e
+/// non c'è. `null` se usa una risorsa che resta nelle coordinate di prima:
+/// un motivo, un marcatore, una sfumatura che ne usa un'altra, o una che
+/// eredita da chi lo contiene, e che vale anche per gli altri.
+function paintsOf(node: ElementPart, own: ReadonlyMap<string, string>, from: Inherited, resources: Resources): Map<string, boolean> | null {
+  const used = new Set<string>();
+  for (const [name, value] of own) {
+    if (urlIds(value).length === 0) continue;
+    const paint = name === "fill" || name === "stroke" ? paintReference(value) : null;
+    if (paint === null) return null;
+    used.add(paint.id);
+  }
+  // Un rimando che non viene dai colori: da una parte, da un `href`, da un
+  // attributo con un prefisso.
+  if ((node.kind === "leaf" ? node.refs : node.facts.refs).some((id) => !used.has(id))) return null;
+  const out = new Map<string, boolean>();
+  for (const id of used) {
+    const resource = resources.byId.get(id);
+    const follows = resource === undefined ? null : paintFollows(resource);
+    if (follows === null) return null;
+    if (follows === "gradient") out.set(id, resource!.details!.lifecycle === "private" && resources.alone(id));
+  }
+  for (const name of PAINTS) {
+    const written = own.get(name);
+    if (written !== undefined && trim(written) !== "inherit") continue;
+    const paint = paintReference(from.get(name) ?? "");
+    const resource = paint === null ? undefined : resources.byId.get(paint.id);
+    if (paint !== null && (resource === undefined || paintFollows(resource) !== "same")) return null;
+  }
+  return out;
+}
+
+/// Ciò che un oggetto scrive per portare con sé le sue sfumature: i suoi
+/// colori, le sfumature che cambiano sul posto e le copie nuove.
+interface Carried {
+  readonly attrs: Record<string, string>;
+  readonly changes: Change[];
+  readonly copies: Elem[];
+}
+
+/// Ciò che scrive `node`, coi suoi attributi `own`, per portare le sfumature
+/// `paints` di [`paintsOf`] nelle coordinate che `m` dà alle sue: ognuna
+/// dove si vedeva, sul posto se è soltanto sua, se no in una copia sua, a
+/// cui rimandano i suoi colori. `null` se una non si scrive.
+function carry(node: ElementPart, own: ReadonlyMap<string, string>, paints: ReadonlyMap<string, boolean>, m: Matrix, resources: Resources): Carried | null {
+  const carried: Carried = { attrs: {}, changes: [], copies: [] };
+  // Coordinate che restano le stesse non cambiano niente.
+  if (paints.size === 0 || transformValue(m) === null) return carried;
+  const renamed = new Map<string, string>();
+  for (const [id, alone] of paints) {
+    const gradient = resources.byId.get(id)!;
+    const coords = movedPlace(gradient, node, m);
+    if (coords === null) return null;
+    if (alone) {
+      const attrs = placeChanges(gradient, coords);
+      if (Object.keys(attrs).length > 0) carried.changes.push({ node: gradient, attrs });
+      continue;
+    }
+    const copy = movedCopy(gradient, resources.ids.next("resource"), coords, resources.ids);
+    if (copy === null) return null;
+    renamed.set(id, copy.attrs.id!);
+    carried.copies.push(copy);
+  }
+  for (const name of PAINTS) {
+    const value = own.get(name);
+    if (value === undefined) continue;
+    const next = renameUrls(value, (id) => renamed.get(id) ?? null);
+    if (next !== value) carried.attrs[name] = next;
+  }
+  return carried;
+}
+
+// ---------------------------------------------------------------------------
+// Gli oggetti.
+// ---------------------------------------------------------------------------
 
 /// `node` con la sua trasformazione, e `pushed` del gruppo che la passa,
 /// nella geometria. `from` è ciò che eredita. `null` se un gruppo deve
 /// tenere `pushed` per lui.
-function bake(node: ElementPart, pushed: Matrix | null, from: Inherited): Baked | null {
+function bake(node: ElementPart, pushed: Matrix | null, from: Inherited, resources: Resources): Baked | null {
   const role = node.details!.role;
-  if ((role === "group" || role === "link") && node.kind === "container") return bakeContainer(node, pushed, from);
+  if ((role === "group" || role === "link") && node.kind === "container") return bakeContainer(node, pushed, from, resources);
   const own = plainAttributes(node);
   const before = parseTransform(own.get("transform") ?? "") ?? IDENTITY;
   const m = pushed === null ? before : compose(pushed, before);
   const kept = (): Baked | null => keep(node, own, m, pushed !== null);
   // Una trasformazione che schiaccia il piano non ha una geometria in cui
-  // passare: l'oggetto non si vede, e resta com'è. Chi usa una risorsa la
-  // vede nelle sue coordinate: le tiene.
+  // passare: l'oggetto non si vede, e resta com'è. Chi usa una risorsa che
+  // non si riscrive la vede nelle sue coordinate: le tiene.
   if (transformValue(m) === null || !(determinant(m) !== 0 && Number.isFinite(determinant(m)))) return kept();
-  if (usesResources(node, from)) return kept();
+  const paints = paintsOf(node, own, from, resources);
+  if (paints === null) return kept();
   const outline = STROKED.has(role) ? outlineOf(own, from) : null;
   const reshaped = reshape(node, own, m, outline !== null && outline.dashes !== null);
   if (reshaped === null) return kept();
@@ -480,46 +595,74 @@ function bake(node: ElementPart, pushed: Matrix | null, from: Inherited): Baked 
   for (const [name, value] of Object.entries(attrs)) {
     if (value !== null && !name.includes(":") && !svgAttribute(tag, name, value)) return kept();
   }
+  // I colori rivolti alle copie valgono quanto quelli di prima.
+  const carried = carry(node, own, paints, reshaped.geometry, resources);
+  if (carried === null) return kept();
+  Object.assign(attrs, carried.attrs);
   // Ciò che resta uguale non si scrive, e uno zero assente resta assente.
   const fub = Object.keys(attrs).some((name) => name.startsWith("fub:")) ? fubAttributes(node) : null;
   for (const [name, value] of Object.entries(attrs)) {
     const current = name.startsWith("fub:") ? fub!.get(name.slice(4)) : own.get(name);
     if (value === null ? current === undefined : value === current || (current === undefined && value === "0" && ZERO.has(name))) delete attrs[name];
   }
-  return { changes: Object.keys(attrs).length === 0 ? [] : [{ node, attrs }], kept: rest !== null };
+  const changes = Object.keys(attrs).length === 0 ? carried.changes : [{ node, attrs }, ...carried.changes];
+  return { changes, copies: carried.copies, kept: rest !== null };
 }
 
 /// Un gruppo o un collegamento passa la sua trasformazione ai figli, se sono
 /// tutti modificabili e la sanno prendere; altrimenti la tiene, e i figli
 /// applicano solo la loro.
-function bakeContainer(node: ContainerNode, pushed: Matrix | null, from: Inherited): Baked | null {
+function bakeContainer(node: ContainerNode, pushed: Matrix | null, from: Inherited, resources: Resources): Baked | null {
   const own = plainAttributes(node);
   const before = parseTransform(own.get("transform") ?? "") ?? IDENTITY;
   const m = pushed === null ? before : compose(pushed, before);
-  const inner = passed(node, from);
+  const inner = handed(node, from);
   // Titolo e descrizione non si disegnano. Un ritaglio, una maschera o un
   // filtro valgono nelle coordinate del gruppo: lui tiene la sua.
   const children = elementChildren(node).filter((child) => !(child.facts.uri === SVG_NS && (child.facts.local === "title" || child.facts.local === "desc")));
   if (transformValue(m) !== null && !holdsEffect(own) && children.every((child) => child.details !== null)) {
-    const baked = children.map((child) => bake(child, m, inner));
+    const baked = children.map((child) => bake(child, m, inner, resources));
     if (baked.every((one) => one !== null)) {
       const changes: Change[] = own.has("transform") ? [{ node, attrs: { transform: null } }] : [];
-      for (const one of baked) changes.push(...one!.changes);
-      return { changes, kept: baked.some((one) => one!.kept) };
+      const copies: Elem[] = [];
+      for (const one of baked) {
+        changes.push(...one!.changes);
+        copies.push(...one!.copies);
+      }
+      return { changes, copies, kept: baked.some((one) => one!.kept) };
     }
   }
   const self = keep(node, own, m, pushed !== null);
   if (self === null) return null;
   const changes = [...self.changes];
+  const copies: Elem[] = [];
   let kept = self.kept;
   for (const child of children) {
     if (child.details === null) continue;
     // Senza niente da passare, un figlio non chiede mai al gruppo di tenere.
-    const one = bake(child, null, inner)!;
+    const one = bake(child, null, inner, resources)!;
     changes.push(...one.changes);
+    copies.push(...one.copies);
     kept ||= one.kept;
   }
-  return { changes, kept };
+  return { changes, copies, kept };
+}
+
+/// Ciò che i figli di `node` ereditano da lui e da `from`: il contorno, e
+/// il riempimento, che può usare una risorsa.
+function handed(node: ElementPart, from: Inherited): Inherited {
+  const fill = plainAttributes(node).get("fill");
+  const out = passed(node, from);
+  return fill === undefined ? out : new Map([...out, ["fill", fill]]);
+}
+
+/// Ciò che eredita `node`, dalla radice in giù, come [`handed`].
+function inheritedOf(node: ElementPart): Inherited {
+  for (let at = node.parent; at !== null; at = at.parent) {
+    const fill = plainAttributes(at).get("fill");
+    if (fill !== undefined) return new Map([...inheritedBy(node), ["fill", fill]]);
+  }
+  return inheritedBy(node);
 }
 
 /// «Applica trasformazione» pronta: le operazioni, quanti oggetti scelti
@@ -535,17 +678,27 @@ export interface Applied extends Arranged {
 /// ne riceve uno.
 export function applyOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Applied {
   const plan = new Plan(model, ids);
+  const resources = new Resources(model, ids);
+  const sets: Op[] = [];
+  const copies: Elem[] = [];
   let changed = 0;
   let kept = 0;
   for (const unit of units) {
     const node = nodeOf(model, unit);
     // Un oggetto scelto non ha un gruppo che gli passi qualcosa: `bake` lo
     // fa sempre.
-    const baked = bake(node, null, inheritedBy(node))!;
-    for (const change of baked.changes) plan.ops.push({ op: "set", id: plan.idOf(change.node), attrs: change.attrs });
+    const baked = bake(node, null, inheritedOf(node), resources)!;
+    for (const change of baked.changes) sets.push({ op: "set", id: plan.idOf(change.node), attrs: change.attrs });
+    copies.push(...baked.copies);
     if (baked.changes.length > 0) changed++;
     if (baked.kept) kept++;
   }
+  // Le copie prima di chi le usa.
+  if (copies.length > 0) {
+    const home = homeOf(model);
+    plan.ops.push(...home.prelude, ...copies.map((elem): Op => ({ op: "add", parent: home.parent, pos: { last: true }, elem })));
+  }
+  plan.ops.push(...sets);
   const keys = units.map((unit) => plan.keyOf(nodeOf(model, unit), unit.key));
   return { ...plan.finish(keys), changed, kept };
 }

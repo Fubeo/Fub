@@ -590,6 +590,63 @@ describe("l'anteprima degli strumenti", () => {
     painter.dispose();
   });
 
+  it("mostra un'altra sfumatura o un altro colore al posto di quelli dipinti, e li riporta", async () => {
+    const engine = SceneEngine.open(
+      doc(`${LAYER}<rect id="r" x="1" y="2" width="4" height="4" fill="#ff0000" stroke="#0000ff"/><circle id="c" r="2" fill="#00ff00"/></g>`),
+    );
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const rect = host.querySelector(`[data-scene-id="r"]`) as SVGElement;
+    const circle = host.querySelector(`[data-scene-id="c"]`) as SVGElement;
+    const [r] = builder.paintsOf(engine.holder("r")!);
+    const [c] = builder.paintsOf(engine.holder("c")!);
+    const shade: Elem = {
+      tag: "linearGradient",
+      attrs: { id: "preview", "fub:role": "private", gradientUnits: "userSpaceOnUse", x1: "1", y1: "0", x2: "5", y2: "0", onload: "x" },
+      children: [
+        { tag: "stop", attrs: { offset: "0", "stop-color": "#0072b2" } },
+        { tag: "stop", attrs: { offset: "1", "stop-color": "#ffffff", "stop-opacity": "0" } },
+      ],
+    };
+    painter.setDraft({ paints: new Map([[r!, { fill: shade, stroke: "#000000" }], [c!, { fill: "#d55e00" }]]) });
+    const shown = host.querySelector("svg.spatial-defs:last-child linearGradient") as SVGElement;
+    // Un id dell'anteprima, i soli attributi del formato, i punti.
+    expect(shown.id).toMatch(/^fubdraw\d+-draft-\d+$/);
+    expect(shown.getAttribute("x2")).toBe("5");
+    expect(shown.hasAttribute("onload")).toBe(false);
+    expect(shown.hasAttribute("fub:role")).toBe(false);
+    expect([...shown.children].map((stop) => stop.getAttribute("stop-opacity"))).toEqual([null, "0"]);
+    expect(rect.style.fill.replace(/"/g, "")).toBe(`url(#${shown.id})`);
+    expect(["#000000", "rgb(0, 0, 0)"]).toContain(rect.style.stroke);
+    expect(["#d55e00", "rgb(213, 94, 0)"]).toContain(circle.style.fill);
+    // Gli attributi dipinti restano.
+    expect(rect.getAttribute("fill")).toBe("#ff0000");
+    painter.setDraft(null);
+    expect([rect.style.fill, rect.style.stroke, circle.style.fill]).toEqual(["", "", ""]);
+    expect(host.querySelector("linearGradient")).toBeNull();
+    painter.dispose();
+  });
+
+  it("dà il colore dell'anteprima anche ai pezzi di un testo che hanno il loro", async () => {
+    const engine = SceneEngine.open(
+      doc(`${LAYER}<text id="t" x="1" y="10" fill="#000000"><tspan x="1" dy="0">Uno <tspan fill="#0072b2">due</tspan></tspan></text></g>`),
+    );
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const piece = host.querySelector(`[data-scene-id="t"] tspan[fill]`) as SVGElement;
+    const [text] = builder.paintsOf(engine.holder("t")!);
+    painter.setDraft({ paints: new Map([[text!, { fill: "#d55e00" }]]) });
+    expect(["#d55e00", "rgb(213, 94, 0)"]).toContain(piece.style.fill);
+    painter.setDraft(null);
+    expect(piece.style.fill).toBe("");
+    expect(piece.getAttribute("fill")).toBe("#0072b2");
+    painter.dispose();
+  });
+
   it("mostra un contorno pieno sopra una forma che resta senza contorno, e lo toglie", async () => {
     const engine = SceneEngine.open(
       doc(`${LAYER}<rect id="r" x="1" y="2" width="4" height="4" fill="#ff0000" stroke="#0000ff" stroke-width="2" opacity="0.5"/><circle id="c" r="2"/></g>`),

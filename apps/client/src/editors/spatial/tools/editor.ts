@@ -239,6 +239,35 @@ import {
   type SelectionFacts,
 } from "./fields";
 import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
+import {
+  constrained,
+  drawnPlace,
+  fadeOf,
+  gradientHandles,
+  gradientOps,
+  gradientPreview,
+  gradientView,
+  movedStop,
+  paintedParts,
+  placeAngle,
+  placeGrips,
+  placeMapped,
+  placeWith,
+  pointAt as placePoint,
+  sameLook,
+  withStop,
+  type GradientChange,
+  type GradientHandles,
+  type GradientKind,
+  type GradientLook,
+  type GradientPlace,
+  type GradientStop,
+  type GradientView,
+  type Painted,
+  type PaintChannel,
+  type PlaceGrip,
+} from "./gradients";
+import type { GradientPanelView } from "./gradient-panel";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
@@ -987,6 +1016,67 @@ const CORNER_ROOM_PX = 32;
 /// La forma di un nodo, per tipo, come la disegna lo strato sopra.
 const NODE_SHAPES: Readonly<Record<NodeKind, NodeShape>> = { corner: "diamond", smooth: "square", symmetric: "circle" };
 
+/// Come si vedono i capi di una sfumatura sul foglio: il primo capo e il
+/// centro tondi, l'altro capo e quello del raggio quadrati; il secondo
+/// raggio e il fuoco, che si toccano meno, più piccoli, e il fuoco a rombo.
+const GRIP_SHAPES: Readonly<Record<PlaceGrip, { readonly shape: NodeShape; readonly small: boolean }>> = {
+  start: { shape: "circle", small: false },
+  end: { shape: "square", small: false },
+  center: { shape: "circle", small: false },
+  a: { shape: "square", small: false },
+  b: { shape: "square", small: true },
+  focus: { shape: "diamond", small: true },
+};
+
+/// I nomi dei capi di una sfumatura, e il nome nella cronologia di chi li
+/// sposta: il centro sposta la sfumatura intera.
+const GRIP_NAMES: Readonly<Record<PlaceGrip, DrawKey>> = {
+  start: "draw.gradient.grip.start",
+  end: "draw.gradient.grip.end",
+  center: "draw.gradient.grip.center",
+  a: "draw.gradient.grip.a",
+  b: "draw.gradient.grip.b",
+  focus: "draw.gradient.grip.focus",
+};
+const GRIP_ACTIONS: Readonly<Record<PlaceGrip, DrawKey>> = {
+  start: "draw.action.gradient_end",
+  end: "draw.action.gradient_end",
+  center: "draw.action.gradient_move",
+  a: "draw.action.gradient_end",
+  b: "draw.action.gradient_end",
+  focus: "draw.action.gradient_focus",
+};
+
+/// Quanto pende dalla linea di una sfumatura, sullo schermo, il quadratino
+/// di un punto, in pixel: a destra della linea nel suo verso, come sotto la
+/// barra di Illustrator, così non copre mai i capi.
+const STOP_HANG_PX = 16;
+
+/// Quanto lontano dalla riga dei punti, in pixel, un punto trascinato si
+/// stacca e, lasciato, si toglie: quanto dalla barra del pannello.
+const STOP_TEAR_PX = 32;
+
+/// Di quanto si sposta un punto di una sfumatura con le frecce, e con
+/// Maiusc.
+const STOP_STEP = 0.01;
+const STOP_STEP_SHIFT = 0.1;
+
+/// Sotto quale coseno fra una freccia e la linea di una sfumatura la freccia
+/// le va di traverso: oltre 67,5°, a metà fra due direzioni di 45°.
+const STOP_ALONG = 0.38;
+
+/// Il cerchio di raggio uno attorno all'origine, in quattro cubiche: il
+/// bordo di una sfumatura radiale, portato dove sta dalla sua matrice.
+const RING_K = 0.5522847498;
+const UNIT_RING: readonly Segment[] = [
+  { kind: "move", to: [1, 0] },
+  { kind: "cubic", c1: [1, RING_K], c2: [RING_K, 1], to: [0, 1] },
+  { kind: "cubic", c1: [-RING_K, 1], c2: [-1, RING_K], to: [-1, 0] },
+  { kind: "cubic", c1: [-1, -RING_K], c2: [-RING_K, -1], to: [0, -1] },
+  { kind: "cubic", c1: [RING_K, -1], c2: [1, -RING_K], to: [1, 0] },
+  { kind: "close" },
+];
+
 /// Gli angoli dello scostamento, coi loro nomi, nell'ordine della barra.
 const JOIN_NAMES: ReadonlyMap<Join, DrawKey> = new Map([
   ["miter", "draw.offset.join.miter"],
@@ -1055,6 +1145,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-board": ["M2 6h20", "M2 18h20", "M6 2v20", "M18 2v20"],
   // Una pipetta: la punta in basso a sinistra, il bulbo in alto a destra.
   "draw-eyedropper": ["M13 9L5.5 16.5 4 20l3.5-1.5L15 11", "M11.5 7.5l5 5", "M12.5 8.5l4-4a2.1 2.1 0 0 1 3 3l-4 4"],
+  // Un riquadro che scurisce verso destra, con righe sempre più fitte.
+  "draw-gradient": ["M3 5h18v14H3z", "M11 5v14", "M15 5v14", "M18 5v14"],
   "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
   "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
@@ -1192,6 +1284,7 @@ type Gesture =
   | GuideGesture
   | BoardGesture
   | DropperGesture
+  | GradientGesture
   | NoteGesture
   | RefusedGesture;
 
@@ -1727,6 +1820,61 @@ interface DropperGesture extends GestureBase {
   readonly kind: "dropper";
   at: Point | null;
   seen: Dropped | null;
+}
+
+/// Le sfumature che lo strumento Sfumatura mostra e cambia: il colore a cui
+/// vanno, le parti scelte che lo mostrano, e una sfumatura per gruppo di
+/// parti che la mostrano uguale e nello stesso posto.
+interface GradientRead {
+  readonly target: PaintChannel;
+  readonly painted: readonly Painted[];
+  readonly groups: readonly GradientHandles[];
+}
+
+/// Ciò che il primo punto di un gesto della Sfumatura prende: un capo, il
+/// centro, un raggio o il fuoco della sfumatura `group`; un suo punto; la
+/// sua linea, in `t`; o il foglio, dove si traccia una sfumatura nuova, con
+/// l'oggetto sotto, se c'è.
+type GradientGrab =
+  | { readonly kind: "grip"; readonly group: number; readonly grip: PlaceGrip }
+  | { readonly kind: "stop"; readonly group: number; readonly index: number }
+  | { readonly kind: "line"; readonly group: number; readonly t: number }
+  | { readonly kind: "sheet"; readonly hit: Unit | null };
+
+/// Ciò che il primo punto di un gesto della Sfumatura prende su una
+/// sfumatura che c'è.
+type GradientSpot = Exclude<GradientGrab, { readonly kind: "sheet" }>;
+
+/// Un gesto dello strumento Sfumatura. Trascinato sul foglio traccia una
+/// sfumatura per tutte le parti scelte; su un capo o sul centro sposta,
+/// gira o allunga la sua; sulla linea la sposta; su un punto lo porta lungo
+/// la linea, e lontano da lei lo toglie. Un tocco sceglie un capo o un
+/// punto, sulla linea dice dove si è, e due ci aggiungono un punto;
+/// altrove sceglie l'oggetto sotto.
+interface GradientGesture extends GestureBase {
+  readonly kind: "gradient";
+  /// Dov'è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// Le sfumature di quando è sceso, e ciò che ha preso.
+  read: GradientRead | null;
+  grab: GradientGrab | null;
+  /// Oltre la soglia del trascinamento.
+  dragging: boolean;
+  /// Il cambio che il trascinamento scriverebbe, e le parti a cui va:
+  /// `null` tutte quelle scelte.
+  change: GradientChange | null;
+  only: ReadonlySet<ElementPart> | null;
+  /// Dove sta la sfumatura che si traccia o si sposta.
+  place: GradientPlace | null;
+  /// I punti come li lascia il trascinamento di un punto, e dove sta
+  /// adesso quello che si muove; `null` se, lontano dalla linea, si toglie.
+  stops: readonly GradientStop[] | null;
+  stop: number | null;
+  /// Il punto staccato dalla linea, dov'è e com'è.
+  torn: { readonly at: Point; readonly stop: GradientStop } | null;
+  /// Il punto che le guide agganciano, per mostrarle.
+  snapped: Point | null;
 }
 
 /// Un'immagine che il contagocce legge, del disegno aperto per `loaded`:
@@ -2580,6 +2728,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       onDelete: (id) => deleteSwatch(id),
       onSelect: (value) => selectShowing(value),
     },
+    gradient: {
+      onChange: (target, change, label) => changeGradient(target, change, label),
+      onPreview: (target, change) => previewGradient(target, change),
+      onStop: (index) => chooseGradientStop(index),
+    },
+    // Lo strumento Sfumatura mostra le sfumature dell'altro colore.
+    onTarget: () => {
+      panelShown = null;
+      syncProperties();
+      showHandles();
+    },
     announce: (text) => announce(text),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
@@ -2599,6 +2758,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly board: Board | null;
     readonly drawing: string;
     readonly recent: readonly string[];
+    readonly stop: unknown;
   } | null = null;
   /// I colori del documento contati per la scena `index`: si ricontano
   /// soltanto quando il disegno cambia.
@@ -2606,6 +2766,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
   let ratioLock: { readonly keys: string; readonly on: boolean } | null = null;
+  /// Il punto scelto della sfumatura comune del bersaglio `target`, per la
+  /// selezione di chiavi `keys`: lo stesso nel pannello e, con lo strumento
+  /// Sfumatura, sul foglio, dove sta nella sfumatura `group`.
+  let gradientStop: { readonly keys: string; readonly target: PaintChannel; readonly index: number; readonly group: number } | null = null;
+  /// Il capo scelto della sfumatura `group` sul foglio, con lo strumento
+  /// Sfumatura, come il punto scelto: scegliere l'uno lascia l'altro.
+  let gradientGrip: { readonly keys: string; readonly target: PaintChannel; readonly group: number; readonly grip: PlaceGrip } | null = null;
+  /// Le sfumature che lo strumento Sfumatura mostra, lette per la scena, la
+  /// selezione, «Applica a» e lo zoom di quando le si è lette.
+  let gradientCache: {
+    readonly index: SceneIndex;
+    readonly keys: string;
+    readonly chosen: PaintChannel;
+    readonly scale: number;
+    readonly read: GradientRead | null;
+  } | null = null;
+  /// L'ultimo tocco dello strumento Sfumatura su un punto o sulla linea, per
+  /// il doppio tocco.
+  let gradientTap: { readonly kind: "stop" | "line"; readonly group: number; readonly index: number; readonly at: Point; readonly time: number } | null = null;
+  /// Vero mentre la sezione «Sfumatura» mostra sul disegno un cambio che non
+  /// ha ancora scritto.
+  let gradientShown = false;
   relabels.push(() => {
     panel.relabel();
     panelShown = null;
@@ -3296,8 +3478,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       ? plural(currentIndex().units.length, "draw.objects.one", "draw.objects.other")
       : plural(currentIndex().units.length, "draw.page.objects.one", "draw.page.objects.other");
 
+  /// Quanti oggetti sono scelti, a parole.
+  const selectionSaid = (): string => (selection.length === 0 ? t("draw.selected.none") : plural(selection.length, "draw.selected.one", "draw.selected.other"));
+
   const announceSelection = (): void => {
-    announce(selection.length === 0 ? t("draw.selected.none") : plural(selection.length, "draw.selected.one", "draw.selected.other"));
+    announce(selectionSaid());
   };
 
   // --- Camera -------------------------------------------------------------
@@ -4157,6 +4342,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...cutHandles());
     handles.push(...widthHandles());
     handles.push(...dropperHandles());
+    handles.push(...gradientOverlay());
     handles.push(...pathsHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
@@ -4297,6 +4483,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     overlay.setInk(INK_KEY, null);
     showShape(null, [1, 0, 0, 1, 0, 0]);
     painter.setDraft(null);
+    gradientShown = false;
     showGuideLines();
     showHandles();
     overlay.flush();
@@ -5266,14 +5453,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last.polygon === polygonNow &&
       last.board === boardNow &&
       last.drawing === drawing &&
-      last.recent === recentColors
+      last.recent === recentColors &&
+      last.stop === gradientStop
     ) {
       return;
     }
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors };
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors, stop: gradientStop };
     const list = boardsNow();
     const model = engine.model;
     const units = selection.length === 0 || model === null ? [] : selectedUnits();
+    const swatches = model === null ? [] : documentSwatches(model);
     panel.update(
       propertiesView({
         features,
@@ -5289,7 +5478,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           boardNow === null
             ? null
             : { id: boardNow.id, name: boardNow.name, rect: boardNow.rect, index: list.indexOf(boardNow) + 1, count: list.length },
-        swatches: model === null ? [] : documentSwatches(model),
+        swatches,
         recent: recentColors,
         paper: model === null ? null : paperColor(model),
         // I colori si contano soltanto con la loro sezione aperta.
@@ -5301,8 +5490,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
                 drawing: style().color,
                 swatch: style().swatch,
               },
+        gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches),
       }),
     );
+  }
+
+  /// La sezione «Sfumatura» per gli oggetti scelti `units`, di chiavi
+  /// `keys`; `null` se non hanno né riempimento né contorno.
+  function gradientSection(model: DocumentModel, units: readonly Unit[], keys: string, swatches: GradientPanelView["swatches"]): GradientPanelView | null {
+    const channels: Partial<Record<PaintChannel, GradientView>> = {};
+    for (const target of ["fill", "stroke"] as const) {
+      const shown = gradientView(paintedParts(model, units, target));
+      if (shown.count > 0) channels[target] = shown;
+    }
+    const chosen = panel.colorTarget();
+    const target = channels[chosen] !== undefined ? chosen : channels.fill !== undefined ? "fill" : channels.stroke !== undefined ? "stroke" : null;
+    if (target === null) return null;
+    return {
+      key: keys,
+      channels,
+      stop: gradientStop !== null && gradientStop.keys === keys && gradientStop.target === target ? gradientStop.index : null,
+      // Nel Personalizzato non c'è un livello: chi ha scelto lo strumento
+      // Sfumatura ha anche «Oltre i capi», che altrimenti non avrebbe mai.
+      expert: level === "expert" || level === "custom",
+      swatches,
+    };
   }
 
   /// I colori del documento, contati, per la scena di adesso.
@@ -5553,6 +5765,61 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     select(units.map((unit) => unit.key));
     announceSelection();
     return null;
+  }
+
+  // --- Le sfumature ----------------------------------------------------------
+
+  /// La sfumatura `change` per il bersaglio `target` degli oggetti scelti,
+  /// dalla sezione «Sfumatura», col nome `label` nella cronologia.
+  function changeGradient(target: PaintChannel, change: GradientChange, label: DrawKey): string | null {
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    previewGradient(target, null);
+    const changed = gradientOps(model, units, target, change, measureText, newIds());
+    // Un cambio che non arriva a nessuno è di oggetti senza una misura su
+    // cui stendere la sfumatura.
+    if (changed.reached === 0) return t("draw.gradient.no_place");
+    const before = selection.join("\n");
+    const failure = changeFromPanel(label, changed.ops, changed.keys);
+    if (failure === null) rekeyGradient(before);
+    return failure;
+  }
+
+  /// Mostra sul disegno la sfumatura `change` del bersaglio `target` degli
+  /// oggetti scelti, o delle sole parti `only`, senza scriverla; `null` toglie
+  /// ciò che mostrava.
+  function previewGradient(target: PaintChannel, change: GradientChange | null, only: ReadonlySet<ElementPart> | null = null): void {
+    const model = engine.model;
+    if (change === null || model === null) {
+      if (!gradientShown) return;
+      gradientShown = false;
+      painter.setDraft(null);
+      return;
+    }
+    const paints = new Map<PaintNode, Partial<Record<PaintChannel, string | Elem>>>();
+    for (const [node, shown] of gradientPreview(model, selectedUnits(), target, change, only)) {
+      for (const paint of builder.paintsOf(node)) paints.set(paint, { [shown.name]: shown.value });
+    }
+    gradientShown = paints.size > 0;
+    painter.setDraft(gradientShown ? { paints } : null);
+  }
+
+  /// Il punto `index` della sfumatura comune diventa quello scelto, nel
+  /// pannello e sul foglio, dove lascia il capo scelto; `null` nessuno, e il
+  /// pannello mostra il primo. Il pannello ridice dopo ogni cambio il punto
+  /// che mostra: lo stesso di prima lascia le cose come stanno.
+  function chooseGradientStop(index: number | null): void {
+    const model = engine.model;
+    const units = selectedUnits();
+    const target = model === null || units.length === 0 ? null : gradientTarget(model, units);
+    const keys = selection.join("\n");
+    const before = gradientStop !== null && gradientStop.keys === keys && gradientStop.target === target ? gradientStop : null;
+    if (index !== null && index === (before?.index ?? 0)) return;
+    gradientStop = index === null || target === null ? null : { keys, target, index, group: before?.group ?? 0 };
+    gradientGrip = null;
+    showHandles();
+    syncProperties();
   }
 
   /// Un campo di «Forma»: cambia i poligoni, le stelle e i rettangoli
@@ -6596,11 +6863,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       recentTools = [tool, ...recentTools.filter((each) => each !== tool && each !== id)].slice(0, RECENT_MAX);
       forgetBuilder();
       // Il punto scelto dello Spessore è dello strumento, e le immagini
-      // aperte del contagocce.
+      // aperte del contagocce, e il capo scelto della sfumatura: il punto
+      // scelto è anche del pannello.
       widthPicked = null;
       widthHover = null;
       dropperHover = null;
       dropPixels();
+      gradientGrip = null;
+      gradientTap = null;
     }
     tool = id;
     // Lo strumento Tavola sceglie le tavole, non gli oggetti: la selezione si
@@ -6615,15 +6885,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showPage();
     showHandles();
     showGrip(null);
-    // Il contagocce mostra subito che cosa vede sotto il puntatore.
+    // Il contagocce mostra subito che cosa vede sotto il puntatore, e lo
+    // strumento Sfumatura che cosa sposterebbe.
     if (id === "eyedropper" && pointerAt !== null) hoverDropper(pointerAt.at, pointerAt.pointer);
+    if (id === "gradient" && pointerAt !== null) hoverGradient(pointerAt.at, pointerAt.pointer);
     const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi; col
     // Costruttore, su quante regioni lavora; con lo strumento Tavola, quale
-    // tavola è scelta; col contagocce, dove va ciò che prende.
+    // tavola è scelta; col contagocce, dove va ciò che prende; con lo
+    // strumento Sfumatura, dove va la sfumatura.
     const sheet = id === "board" ? chosenSheet() : null;
     const target =
-      id === "nodes" ? targetText() : id === "builder" ? builderText() : id === "eyedropper" ? dropperFor() : sheet !== null ? sheetText(sheet) : "";
+      id === "nodes"
+        ? targetText()
+        : id === "builder"
+          ? builderText()
+          : id === "eyedropper"
+            ? dropperFor()
+            : id === "gradient"
+              ? gradientFor()
+              : sheet !== null
+                ? sheetText(sheet)
+                : "";
     announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
@@ -7037,6 +7320,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return p === null ? null : point(bezierGuides(), p);
     }
     if (g === null && tool === "bezier" && hover !== null && drawing() !== null) return point(bezierGuides(), bezierPoint(hover.at, hover.pointer));
+    if (g?.kind === "gradient" && g.dragging && g.snapped !== null) return point(gradientGuides(g), g.snapped);
     return null;
   };
 
@@ -7477,6 +7761,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
         return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null, end: null, dragging: false };
+      case "gradient":
+        return {
+          ...base,
+          kind: "gradient",
+          from: null,
+          end: null,
+          read: null,
+          grab: null,
+          dragging: false,
+          change: null,
+          only: null,
+          place: null,
+          stops: null,
+          stop: null,
+          torn: null,
+          snapped: null,
+        };
     }
   };
 
@@ -9882,6 +10183,845 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return true;
   }
 
+  // --- Lo strumento Sfumatura ---------------------------------------------------
+
+  /// L'altro colore: il contorno del riempimento, e viceversa.
+  const otherChannel = (channel: PaintChannel): PaintChannel => (channel === "fill" ? "stroke" : "fill");
+
+  /// Il colore degli oggetti scelti `units` che prende le sfumature: quello
+  /// scelto in «Applica a», se lo mostrano, o l'altro; `null` se non ne
+  /// mostrano nessuno. Lo stesso della sezione «Sfumatura».
+  const gradientTarget = (model: DocumentModel, units: readonly Unit[]): PaintChannel | null => {
+    const chosen = panel.colorTarget();
+    for (const target of [chosen, otherChannel(chosen)]) if (paintedParts(model, units, target).length > 0) return target;
+    return null;
+  };
+
+  /// Le sfumature degli oggetti scelti come le mostra lo strumento Sfumatura,
+  /// lette una volta per la scena, la selezione, «Applica a» e lo zoom: due
+  /// che sullo schermo stanno a meno di mezzo pixel sono una. `null` senza lo
+  /// strumento, o senza oggetti scelti che mostrino un colore.
+  const gradientNow = (): GradientRead | null => {
+    const model = engine.model;
+    if (tool !== "gradient" || !has("gradient") || !editable() || model === null || selection.length === 0) return null;
+    const index = currentIndex();
+    const keys = selection.join("\n");
+    const chosen = panel.colorTarget();
+    const cached = gradientCache;
+    if (cached !== null && cached.index === index && cached.keys === keys && cached.chosen === chosen && cached.scale === camera.scale) return cached.read;
+    const units = selectedUnits();
+    let read: GradientRead | null = null;
+    for (const target of [chosen, otherChannel(chosen)]) {
+      const painted = paintedParts(model, units, target);
+      if (painted.length === 0) continue;
+      read = { target, painted, groups: gradientHandles(painted, 0.5 / camera.scale) };
+      break;
+    }
+    gradientCache = { index, keys, chosen, scale: camera.scale, read };
+    return read;
+  };
+
+  /// Il capo scelto sul foglio, se vale per `read`: per gli stessi oggetti e
+  /// lo stesso colore, su una sfumatura che lo ha.
+  const gripChosen = (read: GradientRead): { readonly group: number; readonly grip: PlaceGrip } | null => {
+    const chosen = gradientGrip;
+    if (chosen === null || chosen.keys !== selection.join("\n") || chosen.target !== read.target) return null;
+    const group = read.groups[chosen.group];
+    return group !== undefined && gripPoint(group.place, chosen.grip) !== null ? chosen : null;
+  };
+
+  /// Il punto scelto, se vale sul foglio per `read`.
+  const stopChosen = (read: GradientRead): { readonly group: number; readonly index: number } | null => {
+    const chosen = gradientStop;
+    if (chosen === null || chosen.keys !== selection.join("\n") || chosen.target !== read.target) return null;
+    const group = read.groups[chosen.group];
+    return group !== undefined && chosen.index < group.look.stops.length ? chosen : null;
+  };
+
+  /// Ciò che è scelto sul foglio: il capo, o senza capo il punto.
+  const gradientPicked = (read: GradientRead): GradientSpot | null => {
+    const grip = gripChosen(read);
+    if (grip !== null) return { kind: "grip", group: grip.group, grip: grip.grip };
+    const stop = stopChosen(read);
+    return stop === null ? null : { kind: "stop", group: stop.group, index: stop.index };
+  };
+
+  /// Sceglie sul foglio il capo o il punto `spot` delle sfumature `read`: il
+  /// punto è anche quello del pannello, e lascia il capo.
+  const pickGradient = (read: GradientRead, spot: GradientSpot): void => {
+    const keys = selection.join("\n");
+    if (spot.kind === "grip") {
+      gradientGrip = { keys, target: read.target, group: spot.group, grip: spot.grip };
+    } else if (spot.kind === "stop") {
+      gradientGrip = null;
+      gradientStop = { keys, target: read.target, index: spot.index, group: spot.group };
+    }
+    showHandles();
+    syncProperties();
+  };
+
+  /// Dopo un cambio scritto, il punto e il capo scelti per gli oggetti di
+  /// chiavi `before` restano scelti: gli oggetti possono aver preso un id, o
+  /// un altro posto nel documento.
+  function rekeyGradient(before: string): void {
+    const keys = selection.join("\n");
+    if (keys === before) return;
+    if (gradientStop?.keys === before) gradientStop = { ...gradientStop, keys };
+    if (gradientGrip?.keys === before) gradientGrip = { ...gradientGrip, keys };
+    showHandles();
+    syncProperties();
+  }
+
+  /// La linea di `place`: da un capo all'altro, o dal centro al capo del
+  /// primo raggio.
+  const rampOf = (place: GradientPlace): readonly [Point, Point] => (place.kind === "linear" ? [place.start, place.end] : [place.center, place.a]);
+
+  /// Dove cade `p` lungo la linea di `place`: 0 al primo capo, 1 al secondo,
+  /// oltre fuori; e quanto le sta a destra, nella scena.
+  const rampSpot = (place: GradientPlace, p: Point): { readonly t: number; readonly across: number } => {
+    const [from, to] = rampOf(place);
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const squared = dx * dx + dy * dy;
+    if (!(squared > 0)) return { t: 0, across: 0 };
+    const px = p[0] - from[0];
+    const py = p[1] - from[1];
+    return { t: (px * dx + py * dy) / squared, across: (py * dx - px * dy) / Math.sqrt(squared) };
+  };
+
+  /// Dove sta il capo `grip` di `place`; `null` se `place` non lo ha.
+  const gripPoint = (place: GradientPlace, grip: PlaceGrip): Point | null => placeGrips(place).find(([each]) => each === grip)?.[1] ?? null;
+
+  /// Dove sta sulla linea di `place` il punto della sfumatura in `t`, e dove
+  /// pende il suo quadratino: [`STOP_HANG_PX`] pixel alla destra della linea.
+  const stopSpot = (place: GradientPlace, t: number): { readonly at: Point; readonly chip: Point } => {
+    const [from, to] = rampOf(place);
+    const at = placePoint(place, t);
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const length = Math.hypot(dx, dy);
+    const hang = STOP_HANG_PX / camera.scale;
+    const [nx, ny] = length > 0 ? [-dy / length, dx / length] : [0, 1];
+    return { at, chip: [at[0] + nx * hang, at[1] + ny * hang] };
+  };
+
+  /// Vero se il fuoco di `place` si vede: lontano dal centro almeno un pixel,
+  /// o scelto. Sul centro lo si prende con Alt.
+  const focusShown = (place: GradientPlace, chosen: boolean): boolean =>
+    place.kind === "radial" && (chosen || Math.hypot(place.focus[0] - place.center[0], place.focus[1] - place.center[1]) * camera.scale >= 1);
+
+  /// Dove sta, sul foglio, ciò che lo strumento Sfumatura guarda in `spot`.
+  const spotPoint = (read: GradientRead, spot: GradientSpot): Point => {
+    const { place, look } = read.groups[spot.group]!;
+    switch (spot.kind) {
+      case "grip":
+        return gripPoint(place, spot.grip)!;
+      case "stop":
+        return stopSpot(place, look.stops[spot.index]!.offset).chip;
+      case "line":
+        return placePoint(place, spot.t);
+    }
+  };
+
+  /// Le sfumature di `read` dalla più in alto sul foglio: quella di ciò che è
+  /// scelto, poi le altre dall'ultima.
+  const gradientOrder = (read: GradientRead): number[] => {
+    const top = gradientPicked(read)?.group ?? null;
+    const out: number[] = [];
+    for (let at = read.groups.length - 1; at >= 0; at--) if (at !== top) out.push(at);
+    return top === null ? out : [top, ...out];
+  };
+
+  /// Ciò che lo strumento Sfumatura prende in `p` col puntatore `pointer`: il
+  /// capo o il quadratino più vicino della sfumatura più in alto che ne ha
+  /// uno a portata, o la linea. Con `focus`, sul centro di una radiale si
+  /// prende il fuoco, che di solito gli sta sotto. `null` lontano da tutto.
+  const gradientSpotAt = (read: GradientRead, p: Point, pointer: InkPointerType, focus: boolean): GradientSpot | null => {
+    const order = gradientOrder(read);
+    const picked = gripChosen(read);
+    const reach = NODE_PX[pointer] / camera.scale;
+    const away = (q: Point): number => Math.hypot(p[0] - q[0], p[1] - q[1]);
+    for (const group of order) {
+      const { place, look } = read.groups[group]!;
+      let best: GradientSpot | null = null;
+      let near = Infinity;
+      // A pari distanza un capo vince su quelli dopo, e il centro sul fuoco;
+      // un quadratino su quelli prima, che gli stanno sotto.
+      for (const [grip, at] of placeGrips(place)) {
+        if (grip === "focus" && !focusShown(place, picked?.group === group && picked.grip === "focus")) continue;
+        const d = away(at);
+        if (d <= reach && d < near) {
+          best = { kind: "grip", group, grip };
+          near = d;
+        }
+      }
+      for (let index = 0; index < look.stops.length; index++) {
+        const d = away(stopSpot(place, look.stops[index]!.offset).chip);
+        if (d <= reach && d <= near) {
+          best = { kind: "stop", group, index };
+          near = d;
+        }
+      }
+      if (focus && place.kind === "radial" && best?.kind === "grip" && best.grip === "center" && away(place.focus) <= reach) return { kind: "grip", group, grip: "focus" };
+      if (best !== null) return best;
+    }
+    const line = HIT_PX[pointer] / camera.scale;
+    for (const group of order) {
+      const { place } = read.groups[group]!;
+      const t = Math.min(1, Math.max(0, rampSpot(place, p).t));
+      if (away(placePoint(place, t)) <= line) return { kind: "line", group, t };
+    }
+    return null;
+  };
+
+  /// Il colore del punto `stop`, a parole, come lo dice il pannello: il nome
+  /// della tavolozza o il codice, con l'opacità se non è piena.
+  const stopColorText = (stop: GradientStop): string => {
+    const swatch = swatchOf(stop.color);
+    const color = swatch === null ? stop.color : t(swatch.label);
+    return stop.opacity >= 1 ? color : t("draw.gradient.stop.alpha", { color, opacity: percentText(stop.opacity) });
+  };
+
+  /// `text`, e di quale sfumatura si parla, se sul foglio ce n'è più d'una.
+  const ofGroup = (read: GradientRead, group: number, text: string): string =>
+    read.groups.length < 2 ? text : `${text} ${t("draw.gradient.cursor.group", { index: group + 1, count: read.groups.length })}`;
+
+  /// Ciò che lo strumento Sfumatura guarda in `spot`, a parole: un capo e
+  /// dove sta, un punto col suo colore e dove sta, o la linea. Per il
+  /// cursore, che dice già dove sta, il capo è soltanto il suo nome.
+  const gradientSpotText = (read: GradientRead, spot: GradientSpot, cursor = false): string => {
+    const { place, look } = read.groups[spot.group]!;
+    switch (spot.kind) {
+      case "grip": {
+        const name = t(GRIP_NAMES[spot.grip]);
+        if (cursor) return ofGroup(read, spot.group, `${name}.`);
+        const p = gripPoint(place, spot.grip)!;
+        return ofGroup(read, spot.group, t("draw.gradient.cursor.grip", { name, x: coordText(p[0]), y: coordText(p[1]) }));
+      }
+      case "stop": {
+        const stop = look.stops[spot.index]!;
+        const words = { index: spot.index + 1, count: look.stops.length, color: stopColorText(stop), at: percentText(stop.offset) };
+        return ofGroup(read, spot.group, t("draw.gradient.cursor.stop", words));
+      }
+      case "line":
+        return ofGroup(read, spot.group, t("draw.gradient.line", { at: percentText(spot.t) }));
+    }
+  };
+
+  /// A che cosa va la sfumatura, a parole: al riempimento o al contorno degli
+  /// oggetti scelti; o perché non va da nessuna parte.
+  const gradientFor = (): string => {
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return t("draw.gradient.no_selection");
+    const target = gradientTarget(model, units);
+    if (target === null) return t(panel.colorTarget() === "fill" ? "draw.gradient.no_fill" : "draw.gradient.no_stroke");
+    return t(target === "fill" ? "draw.gradient.for.fill" : "draw.gradient.for.stroke");
+  };
+
+  /// Le parti di `group`, a cui va un cambio di dove sta.
+  const groupParts = (group: GradientHandles): ReadonlySet<ElementPart> => new Set(group.parts.map((part) => part.node));
+
+  /// Le parti di `read` che mostrano la sfumatura `look`, ovunque stia: un
+  /// cambio dei punti va a tutte, come dal pannello.
+  const sameLookParts = (read: GradientRead, look: GradientLook): ReadonlySet<ElementPart> =>
+    new Set(read.painted.filter((part) => part.gradient !== null && sameLook(part.gradient.look, look)).map((part) => part.node));
+
+  /// Il tipo di una sfumatura tracciata sul foglio: radiale se lo sono tutte
+  /// quelle degli oggetti scelti, altrimenti lineare.
+  const drawnKind = (read: GradientRead): GradientKind => {
+    const shaded = read.painted.filter((part) => part.gradient !== null);
+    return shaded.length > 0 && shaded.every((part) => part.gradient!.look.kind === "radial") ? "radial" : "linear";
+  };
+
+  /// I punti di una sfumatura che si traccia, come li mostra il foglio:
+  /// quelli della prima sfumatura degli oggetti scelti, o la dissolvenza del
+  /// primo colore.
+  const drawnStops = (read: GradientRead): readonly GradientStop[] => {
+    const shaded = read.painted.find((part) => part.gradient !== null);
+    return shaded !== undefined ? shaded.gradient!.look.stops : fadeOf(read.painted[0]?.solid ?? null);
+  };
+
+  /// Attorno a che cosa va, con Maiusc, il capo `grip` di `place` che stava
+  /// in `origin`: un capo di una lineare attorno all'altro, il raggio attorno
+  /// al centro, il centro attorno a dove stava. `null` per il secondo raggio
+  /// e il fuoco, che vanno liberi.
+  const gripPivot = (place: GradientPlace, grip: PlaceGrip, origin: Point): Point | null => {
+    if (place.kind === "linear") return grip === "start" ? place.end : place.start;
+    return grip === "a" ? place.center : grip === "center" ? origin : null;
+  };
+
+  /// Vero se `a` e `b` hanno i capi negli stessi punti.
+  const samePlaced = (a: GradientPlace, b: GradientPlace): boolean => {
+    const p = placeGrips(a);
+    const q = placeGrips(b);
+    return p.length === q.length && p.every(([, at], k) => at[0] === q[k]![1][0] && at[1] === q[k]![1][1]);
+  };
+
+  /// Vero se `a` e `b` sono gli stessi punti.
+  const sameStops = (a: readonly GradientStop[], b: readonly GradientStop[]): boolean =>
+    a.length === b.length && a.every((stop, k) => stop.offset === b[k]!.offset && stop.color === b[k]!.color && stop.opacity === b[k]!.opacity);
+
+  /// La sfumatura di `read` che sta più vicina a `place`, dello stesso tipo:
+  /// dopo un cambio scritto, quella che si è cambiata. `null` se non c'è.
+  const groupNear = (read: GradientRead, place: GradientPlace): number | null => {
+    const grips = placeGrips(place);
+    let best: number | null = null;
+    let near = Infinity;
+    for (let at = 0; at < read.groups.length; at++) {
+      const other = placeGrips(read.groups[at]!.place);
+      if (other.length !== grips.length) continue;
+      const d = grips.reduce((sum, [, p], k) => sum + Math.hypot(p[0] - other[k]![1][0], p[1] - other[k]![1][1]), 0);
+      if (d < near) {
+        best = at;
+        near = d;
+      }
+    }
+    return best;
+  };
+
+  /// Le guide del gesto `g` dello strumento Sfumatura: gli oggetti, la
+  /// griglia e gli altri capi della sfumatura che si sposta, o il punto da
+  /// cui se ne traccia una.
+  const gradientGuides = (g: GradientGesture): GuideIndex =>
+    guidesFor(g, [], () => {
+      const grab = g.grab;
+      if (grab?.kind === "sheet") return g.from === null ? [] : [g.from];
+      if (grab?.kind !== "grip" || g.read === null) return [];
+      return placeGrips(g.read.groups[grab.group]!.place)
+        .filter(([grip]) => grip !== grab.grip)
+        .map(([, p]) => p);
+    });
+
+  /// Scrive `change` per il colore `target` degli oggetti scelti, o delle
+  /// sole parti `only`, col nome `label`; ciò che era scelto resta scelto.
+  /// Vero se l'ha scritto; altrimenti dice perché no.
+  const writeGradient = (target: PaintChannel, change: GradientChange, only: ReadonlySet<ElementPart> | null, label: DrawKey): boolean => {
+    const model = engine.model;
+    previewGradient(target, null);
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return false;
+    const changed = gradientOps(model, units, target, change, measureText, newIds(), only);
+    if (changed.reached === 0) {
+      showHandles();
+      announce(t("draw.gradient.no_place"));
+      return false;
+    }
+    const before = selection.join("\n");
+    const failure = changeFromPanel(label, changed.ops, changed.keys);
+    if (failure !== null) {
+      showHandles();
+      announce(failure);
+      return false;
+    }
+    rekeyGradient(before);
+    return true;
+  };
+
+  /// Dopo un cambio scritto, le sfumature di adesso e quella che sta più
+  /// vicina a `place`, la sfumatura `group` di prima: ciò che vi era scelto
+  /// passa a lei. `null` se non c'è più.
+  const settleGradient = (group: number, place: GradientPlace): { readonly read: GradientRead; readonly group: number } | null => {
+    const read = gradientNow();
+    const found = read === null ? null : groupNear(read, place);
+    if (read === null || found === null) return null;
+    if (gradientGrip !== null && gradientGrip.group === group) gradientGrip = { ...gradientGrip, group: found };
+    if (gradientStop !== null && gradientStop.group === group) gradientStop = { ...gradientStop, group: found };
+    return { read, group: found };
+  };
+
+  /// Dopo un cambio dei punti scritto, il punto `index` della sfumatura
+  /// `group`, che stava in `place`, diventa quello scelto: le sfumature di
+  /// adesso, e dove sta. `null` se non c'è più.
+  const settleStop = (group: number, place: GradientPlace, index: number): { readonly read: GradientRead; readonly spot: GradientSpot } | null => {
+    const settled = settleGradient(group, place);
+    if (settled === null) return null;
+    const spot: GradientSpot = { kind: "stop", group: settled.group, index: Math.min(index, settled.read.groups[settled.group]!.look.stops.length - 1) };
+    pickGradient(settled.read, spot);
+    return { read: settled.read, spot };
+  };
+
+  /// Dopo un punto spostato e scritto, lo sceglie e lo dice.
+  const settleMovedStop = (group: number, place: GradientPlace, index: number): void => {
+    const settled = settleStop(group, place, index);
+    if (settled !== null) announce(gradientSpotText(settled.read, settled.spot));
+  };
+
+  /// Porta in `place` la sfumatura `group` di `read`, col nome `label`; ciò
+  /// che vi era scelto resta scelto, e con `grip` il capo che si è spostato,
+  /// di cui si dice dove sta, anche se non si è potuto spostare.
+  const placeGradient = (read: GradientRead, group: number, place: GradientPlace, label: DrawKey, grip: PlaceGrip | null): void => {
+    const handles = read.groups[group]!;
+    if (samePlaced(place, handles.place)) {
+      clearPreviews();
+      announce(grip === null ? t("draw.unchanged") : gradientSpotText(read, { kind: "grip", group, grip }));
+      return;
+    }
+    if (!writeGradient(read.target, { place }, groupParts(handles), label)) return;
+    const settled = settleGradient(group, place);
+    if (settled === null) return;
+    const spot: GradientSpot = { kind: "grip", group: settled.group, grip: grip ?? placeGrips(place)[0]![0] };
+    if (grip !== null) pickGradient(settled.read, spot);
+    announce(gradientSpotText(settled.read, spot));
+  };
+
+  /// Aggiunge alla sfumatura `group` di `read` un punto in `at`, del colore
+  /// che si vede lì, e lo sceglie.
+  const addGradientStop = (read: GradientRead, group: number, at: number): void => {
+    const { look, place } = read.groups[group]!;
+    const out = withStop(look.stops, at);
+    if (!writeGradient(read.target, { stops: out.stops }, sameLookParts(read, look), "draw.action.gradient_stop_add")) return;
+    settleStop(group, place, out.index);
+    announce(t("draw.gradient.added", { index: out.index + 1, at: percentText(out.stops[out.index]!.offset) }));
+  };
+
+  /// Toglie dalla sfumatura `group` di `read` il punto `index`, se ne restano
+  /// almeno due; il seguente diventa quello scelto, come nel pannello.
+  const removeGradientStop = (read: GradientRead, group: number, index: number): void => {
+    const { look, place } = read.groups[group]!;
+    if (look.stops.length <= 2) {
+      announce(t("draw.gradient.problem.last"));
+      return;
+    }
+    const left = look.stops.filter((_, at) => at !== index);
+    if (!writeGradient(read.target, { stops: left }, sameLookParts(read, look), "draw.action.gradient_stop_remove")) return;
+    settleStop(group, place, Math.min(index, left.length - 1));
+    announce(t("draw.gradient.removed", { index: index + 1 }));
+  };
+
+  /// Il primo punto del gesto dello strumento Sfumatura: un capo, un punto o
+  /// la linea di una sfumatura degli oggetti scelti; altrimenti il foglio, da
+  /// cui se ne traccia una nuova, con l'oggetto sotto il puntatore per un
+  /// tocco. Con Ctrl o ⌘ l'oggetto più dentro, come con la Selezione.
+  const gradientStart = (g: GradientGesture, p: Point): void => {
+    g.from = p;
+    g.read = gradientNow();
+    const spot = g.read === null ? null : gradientSpotAt(g.read, p, g.pointer, alt);
+    if (spot !== null) {
+      g.grab = spot;
+      return;
+    }
+    const index = currentIndex();
+    const tolerance = HIT_PX[g.pointer] / camera.scale;
+    g.grab = { kind: "sheet", hit: free && has("selection") ? index.deepAt(p, tolerance) : index.at(p, tolerance) };
+  };
+
+  /// Il gesto `g` dello strumento Sfumatura col puntatore in `g.end`: oltre la
+  /// soglia del trascinamento, ciò che ha preso lo segue, e il disegno lo
+  /// mostra senza scriverlo. Dal foglio si traccia una sfumatura per tutti
+  /// gli oggetti scelti, o senza selezione per quello da cui si parte. Le
+  /// estremità vanno sulla griglia e sulle guide, finché Ctrl o ⌘ non è
+  /// tenuto; con Maiusc la linea va di 45° in 45°.
+  const gradientUpdate = (g: GradientGesture): void => {
+    const { from, end, grab } = g;
+    if (from === null || end === null || grab === null) return;
+    if (!g.dragging) {
+      if (Math.hypot(end[0] - from[0], end[1] - from[1]) * camera.scale <= DRAG_PX[g.pointer]) return;
+      g.dragging = true;
+      if (grab.kind === "sheet" && selection.length === 0 && grab.hit !== null) {
+        select([grab.hit.key]);
+        g.read = gradientNow();
+      }
+    }
+    const read = g.read;
+    if (read === null) return;
+    g.snapped = null;
+    const delta: Point = [end[0] - from[0], end[1] - from[1]];
+    switch (grab.kind) {
+      case "sheet": {
+        const start = guided(from, () => gradientGuides(g), g.pointer);
+        const to = shift ? constrained(start, end) : guided(end, () => gradientGuides(g), g.pointer);
+        if (!shift) g.snapped = to;
+        g.place = drawnPlace(drawnKind(read), start, to);
+        g.change = g.place === null ? null : { place: g.place };
+        g.only = null;
+        break;
+      }
+      case "grip": {
+        const group = read.groups[grab.group]!;
+        const origin = gripPoint(group.place, grab.grip)!;
+        const moved: Point = [origin[0] + delta[0], origin[1] + delta[1]];
+        const pivot = gripPivot(group.place, grab.grip, origin);
+        const to = shift && pivot !== null ? constrained(pivot, moved) : guided(moved, () => gradientGuides(g), g.pointer);
+        if (!(shift && pivot !== null)) g.snapped = to;
+        g.place = placeWith(group.place, grab.grip, to);
+        g.change = { place: g.place };
+        g.only = groupParts(group);
+        break;
+      }
+      case "line": {
+        const group = read.groups[grab.group]!;
+        const [first] = rampOf(group.place);
+        const moved: Point = [first[0] + delta[0], first[1] + delta[1]];
+        const to = shift ? constrained(first, moved) : guided(moved, () => gradientGuides(g), g.pointer);
+        if (!shift) g.snapped = to;
+        g.place = placeMapped(group.place, translate(to[0] - first[0], to[1] - first[1]));
+        g.change = { place: g.place };
+        g.only = groupParts(group);
+        break;
+      }
+      case "stop": {
+        const group = read.groups[grab.group]!;
+        const stops = group.look.stops;
+        const was = rampSpot(group.place, from);
+        const now = rampSpot(group.place, end);
+        // Lontano dalla linea, sullo schermo, il punto si stacca: lasciato
+        // lì, si toglie.
+        if (stops.length > 2 && Math.abs(now.across - was.across) * camera.scale > STOP_TEAR_PX) {
+          g.torn = { at: end, stop: stops[grab.index]! };
+          g.stops = stops.filter((_, at) => at !== grab.index);
+          g.stop = null;
+        } else {
+          g.torn = null;
+          const moved = movedStop(stops, grab.index, stops[grab.index]!.offset + now.t - was.t);
+          g.stops = moved.stops;
+          g.stop = moved.index;
+        }
+        g.change = { stops: g.stops };
+        g.only = sameLookParts(read, group.look);
+        break;
+      }
+    }
+    previewGradient(read.target, g.change, g.only);
+    showHandles();
+  };
+
+  /// Il gesto dello strumento Sfumatura finisce. Un trascinamento scrive ciò
+  /// che mostra; un tocco sceglie il capo o il punto che tocca, due su un
+  /// punto portano al suo colore e due sulla linea aggiungono un punto lì.
+  /// Un tocco sul foglio sceglie l'oggetto toccato, con Maiusc lo aggiunge o
+  /// lo toglie, e sul vuoto lascia la selezione.
+  const gradientEnd = (g: GradientGesture, time: number): void => {
+    current = null;
+    const { grab, read, from } = g;
+    if (grab === null || from === null) {
+      showHandles();
+      return;
+    }
+    if (g.dragging) {
+      gradientDrop(g, grab, read);
+      return;
+    }
+    showHandles();
+    if (grab.kind === "sheet") {
+      const hit = grab.hit;
+      if (hit !== null && shift) {
+        select(selection.includes(hit.key) ? selection.filter((key) => key !== hit.key) : [...selectedUnits().filter((unit) => !holdsPath(unit.path, hit.path)).map((unit) => unit.key), hit.key]);
+      } else if (hit !== null) {
+        select([hit.key]);
+      } else if (!shift && selection.length > 0) {
+        select([]);
+      }
+      announce(selection.length === 0 ? gradientFor() : `${selectionSaid()} ${gradientFor()}`);
+      return;
+    }
+    if (read === null) return;
+    const tap = gradientTap;
+    const index = grab.kind === "stop" ? grab.index : -1;
+    const twice =
+      grab.kind !== "grip" &&
+      tap !== null &&
+      tap.kind === grab.kind &&
+      tap.group === grab.group &&
+      tap.index === index &&
+      time - tap.time <= DOUBLE_TAP_MS &&
+      Math.hypot(tap.at[0] - from[0], tap.at[1] - from[1]) * camera.scale <= DOUBLE_TAP_PX[g.pointer];
+    gradientTap = grab.kind === "grip" || twice ? null : { kind: grab.kind, group: grab.group, index, at: from, time };
+    if (grab.kind === "line") {
+      if (twice) addGradientStop(read, grab.group, grab.t);
+      else announce(gradientSpotText(read, grab));
+      return;
+    }
+    pickGradient(read, grab);
+    if (twice && has("properties")) editGradient();
+    else announce(gradientSpotText(read, grab));
+  };
+
+  /// Scrive ciò che il trascinamento `g` dello strumento Sfumatura mostra.
+  const gradientDrop = (g: GradientGesture, grab: GradientGrab, read: GradientRead | null): void => {
+    if (read === null) {
+      clearPreviews();
+      announce(gradientFor());
+      return;
+    }
+    switch (grab.kind) {
+      case "sheet": {
+        const place = g.place;
+        if (place === null) {
+          clearPreviews();
+          announce(t("draw.unchanged"));
+          return;
+        }
+        if (!writeGradient(read.target, { place }, null, "draw.action.gradient_draw")) return;
+        // Una sfumatura nuova non ha niente di scelto.
+        gradientGrip = null;
+        gradientStop = null;
+        showHandles();
+        syncProperties();
+        const [a, b] = rampOf(place);
+        const length = lengthSpoken(Math.hypot(b[0] - a[0], b[1] - a[1]));
+        announce(
+          place.kind === "linear"
+            ? t("draw.gradient.drawn.linear", { angle: degreesText(placeAngle(place)), length })
+            : t("draw.gradient.drawn.radial", { length }),
+        );
+        return;
+      }
+      case "grip":
+      case "line":
+        if (g.place === null) {
+          clearPreviews();
+          return;
+        }
+        placeGradient(read, grab.group, g.place, grab.kind === "grip" ? GRIP_ACTIONS[grab.grip] : "draw.action.gradient_move", grab.kind === "grip" ? grab.grip : null);
+        return;
+      case "stop": {
+        const { look, place } = read.groups[grab.group]!;
+        if (g.torn !== null) {
+          clearPreviews();
+          removeGradientStop(read, grab.group, grab.index);
+          return;
+        }
+        if (g.stops === null || g.stop === null || sameStops(g.stops, look.stops)) {
+          clearPreviews();
+          pickGradient(read, grab);
+          announce(gradientSpotText(read, grab));
+          return;
+        }
+        if (!writeGradient(read.target, { stops: g.stops }, g.only, "draw.action.gradient_stop_move")) return;
+        settleMovedStop(grab.group, place, g.stop);
+        return;
+      }
+    }
+  };
+
+  /// La misura che il trascinamento `g` mostra accanto al puntatore: l'angolo
+  /// della linea, la lunghezza del raggio, o dove sta il punto.
+  const gradientDragText = (g: GradientGesture): string | null => {
+    const grab = g.grab;
+    if (grab === null || grab.kind === "line") return null;
+    if (grab.kind === "stop") return g.torn !== null || g.stops === null || g.stop === null ? null : percentText(g.stops[g.stop]!.offset);
+    const place = g.place;
+    if (place === null || (grab.kind === "grip" && grab.grip !== "start" && grab.grip !== "end" && grab.grip !== "a")) return null;
+    if (place.kind === "linear") return degreesText(placeAngle(place));
+    return lengthText(Math.hypot(place.a[0] - place.center[0], place.a[1] - place.center[1]));
+  };
+
+  /// Le maniglie di una sfumatura che sta in `place` coi punti `stops`: il
+  /// bordo tratteggiato di una radiale, la linea, i capi, col capo `grip`
+  /// scelto, e i quadratini dei punti, col punto `stop` scelto.
+  const gradientMarks = (place: GradientPlace, stops: readonly GradientStop[], grip: PlaceGrip | null, stop: number | null): OverlayHandle[] => {
+    const out: OverlayHandle[] = [];
+    if (place.kind === "radial") {
+      const { center: c, a, b } = place;
+      out.push({ kind: "outline", segments: UNIT_RING, matrix: [a[0] - c[0], a[1] - c[1], b[0] - c[0], b[1] - c[1], c[0], c[1]], dashed: true });
+    }
+    const [from, to] = rampOf(place);
+    out.push({ kind: "ramp", from, to });
+    for (const [each, p] of placeGrips(place)) {
+      if (each === "focus" && !focusShown(place, grip === "focus")) continue;
+      const { shape, small } = GRIP_SHAPES[each];
+      out.push({ kind: "node", x: p[0], y: p[1], shape, selected: each === grip, ...(small ? { hint: true } : {}) });
+    }
+    stops.forEach((each, index) => {
+      const { at, chip } = stopSpot(place, each.offset);
+      out.push({ kind: "stop", x: chip[0], y: chip[1], at, color: each.color, opacity: each.opacity, selected: index === stop });
+    });
+    return out;
+  };
+
+  /// Le sfumature degli oggetti scelti, con lo strumento Sfumatura: per
+  /// ognuna la linea coi capi e coi quadratini dei punti; di una radiale
+  /// anche il bordo. Sopra sta quella di ciò che è scelto, e il punto scelto
+  /// si vede in tutte quelle uguali, che cambiano con lui. Mentre si
+  /// trascina, com'è nel gesto, con la misura accanto al puntatore; mentre
+  /// se ne traccia una, quella sola.
+  const gradientOverlay = (): OverlayHandle[] => {
+    if (tool !== "gradient") return [];
+    const g = current?.kind === "gradient" && current.dragging ? current : null;
+    const read = g?.read ?? gradientNow();
+    if (read === null) return [];
+    const out: OverlayHandle[] = [];
+    const grab = g?.grab ?? null;
+    if (g !== null && grab?.kind === "sheet") {
+      if (g.place !== null) out.push(...gradientMarks(g.place, drawnStops(read), null, null));
+    } else {
+      const picked = g === null ? gradientPicked(read) : null;
+      const top = grab !== null && grab.kind !== "sheet" ? grab.group : (picked?.group ?? null);
+      const order = read.groups.map((_, at) => at).filter((at) => at !== top);
+      if (top !== null) order.push(top);
+      const pickedStop = picked?.kind === "stop" ? { look: read.groups[picked.group]!.look, index: picked.index } : null;
+      const dragged = grab?.kind === "stop" ? read.groups[grab.group]!.look : null;
+      for (const at of order) {
+        const group = read.groups[at]!;
+        if (g !== null && dragged !== null && sameLook(group.look, dragged)) {
+          out.push(...gradientMarks(group.place, g.stops ?? group.look.stops, null, g.stop));
+          continue;
+        }
+        const moved = g !== null && (grab?.kind === "grip" || grab?.kind === "line") && grab.group === at && g.place !== null ? g.place : null;
+        const grip = grab?.kind === "grip" && grab.group === at ? grab.grip : picked?.kind === "grip" && picked.group === at ? picked.grip : null;
+        const stop = pickedStop !== null && sameLook(group.look, pickedStop.look) ? pickedStop.index : null;
+        out.push(...gradientMarks(moved ?? group.place, group.look.stops, grip, stop));
+      }
+      const torn = g?.torn ?? null;
+      if (torn !== null) out.push({ kind: "stop", x: torn.at[0], y: torn.at[1], at: torn.at, color: torn.stop.color, opacity: torn.stop.opacity, selected: true, torn: true });
+    }
+    const text = g === null ? null : gradientDragText(g);
+    if (g !== null && text !== null && g.end !== null) out.push({ kind: "label", x: g.end[0], y: g.end[1], text });
+    return out;
+  };
+
+  /// Il puntatore passa sopra `p` senza premere: con lo strumento Sfumatura,
+  /// sopra un capo, un punto o la linea il cursore dice che li sposta.
+  const hoverGradient = (p: Point | null, pointer: InkPointerType): void => {
+    if (tool !== "gradient") return;
+    const read = p === null ? null : gradientNow();
+    showGrip(p !== null && read !== null && gradientSpotAt(read, p, pointer, alt) !== null ? "move" : null);
+  };
+
+  /// Vero se i tasti valgono per le sfumature sul foglio: lo strumento
+  /// Sfumatura ne mostra, e la tastiera non sta premendo.
+  const gradientKeysOn = (): boolean => pressed === null && (gradientNow()?.groups.length ?? 0) > 0;
+
+  /// I capi e i punti delle sfumature sul foglio, nell'ordine della
+  /// tastiera: sfumatura per sfumatura, prima i capi e poi i punti.
+  const gradientEntries = (read: GradientRead): GradientSpot[] =>
+    read.groups.flatMap((group, at): GradientSpot[] => [
+      ...placeGrips(group.place).map(([grip]): GradientSpot => ({ kind: "grip", group: at, grip })),
+      ...group.look.stops.map((_, index): GradientSpot => ({ kind: "stop", group: at, index })),
+    ]);
+
+  /// Se `a` e `b` sono lo stesso capo o lo stesso punto della stessa
+  /// sfumatura.
+  const sameSpot = (a: GradientSpot, b: GradientSpot): boolean =>
+    a.group === b.group &&
+    (a.kind === "grip" ? b.kind === "grip" && a.grip === b.grip : a.kind === "stop" && b.kind === "stop" && a.index === b.index);
+
+  /// Sceglie il capo o il punto `at` delle sfumature sul foglio, in ordine,
+  /// lo porta in vista e lo dice. `false` se non c'è.
+  const visitGradient = (at: number): boolean => {
+    const read = gradientNow();
+    const entry = read === null ? undefined : gradientEntries(read)[at];
+    if (read === null || entry === undefined) return false;
+    cancelGesture();
+    pickGradient(read, entry);
+    const p = spotPoint(read, entry);
+    frameBounds({ min: p, max: p });
+    announce(gradientSpotText(read, entry));
+    return true;
+  };
+
+  /// Tab con lo strumento Sfumatura: il capo o il punto dopo quello scelto, o
+  /// con Maiusc prima, anche di un'altra sfumatura; senza, il primo o
+  /// l'ultimo. Oltre le estremità, `false`.
+  const walkGradient = (step: 1 | -1): boolean => {
+    const read = gradientNow();
+    if (read === null) return false;
+    const entries = gradientEntries(read);
+    const picked = gradientPicked(read);
+    const at = picked === null ? -1 : entries.findIndex((entry) => sameSpot(entry, picked));
+    return visitGradient(at < 0 ? (step > 0 ? 0 : entries.length - 1) : at + step);
+  };
+
+  /// Le frecce con lo strumento Sfumatura: muovono ciò che è scelto sul
+  /// foglio. Un capo va come un nodo, di 1, di 10 con Maiusc, di un pixel
+  /// dello schermo con Ctrl o ⌘, e con l'aggancio di riga in riga della
+  /// griglia; un punto va lungo la linea, dell'1% o con Maiusc del 10%,
+  /// verso dove punta la freccia, e di traverso alla linea → e ↑ lo portano
+  /// avanti. Falso se non c'è niente di scelto.
+  const nudgeGradient = (x: number, y: number, direction: readonly [number, number], fine: boolean, big: boolean): boolean => {
+    const read = gradientNow();
+    const picked = read === null ? null : gradientPicked(read);
+    if (read === null || picked === null) return false;
+    const group = read.groups[picked.group]!;
+    if (picked.kind === "grip") {
+      const p = gripPoint(group.place, picked.grip)!;
+      let delta: Point;
+      if (fine) {
+        delta = [x / camera.scale, y / camera.scale];
+      } else if (gridOn()) {
+        const lines = big ? GRID_MAJOR : 1;
+        delta = [x === 0 ? 0 : lineBeyond(p[0], stepNow(), sign(x), lines) - p[0], y === 0 ? 0 : lineBeyond(p[1], stepNow(), sign(y), lines) - p[1]];
+      } else {
+        const step = big ? NUDGE_SHIFT : NUDGE;
+        delta = [x * step, y * step];
+      }
+      placeGradient(read, picked.group, placeWith(group.place, picked.grip, [p[0] + delta[0], p[1] + delta[1]]), GRIP_ACTIONS[picked.grip], picked.grip);
+      return true;
+    }
+    if (picked.kind !== "stop") return false;
+    const [from, to] = rampOf(group.place);
+    const dx = to[0] - from[0];
+    const dy = to[1] - from[1];
+    const length = Math.hypot(dx, dy) * Math.hypot(x, y);
+    const cos = length > 0 ? (x * dx + y * dy) / length : 0;
+    const forward = Math.abs(cos) >= STOP_ALONG ? cos > 0 : direction[0] > 0 || direction[1] < 0;
+    const step = big ? STOP_STEP_SHIFT : STOP_STEP;
+    const stops = group.look.stops;
+    const offset = Math.round((stops[picked.index]!.offset + (forward ? step : -step)) * 1e4) / 1e4;
+    const moved = movedStop(stops, picked.index, offset);
+    if (sameStops(moved.stops, stops)) {
+      announce(gradientSpotText(read, picked));
+      return true;
+    }
+    if (!writeGradient(read.target, { stops: moved.stops }, sameLookParts(read, group.look), "draw.action.gradient_stop_move")) return true;
+    settleMovedStop(picked.group, group.place, moved.index);
+    return true;
+  };
+
+  /// Il punto scelto sul foglio, e la sua sfumatura; `null` se ciò che è
+  /// scelto non è un punto, e lo si dice.
+  const pickedStop = (): { readonly read: GradientRead; readonly group: number; readonly index: number } | null => {
+    const read = gradientNow();
+    const picked = read === null ? null : gradientPicked(read);
+    if (read === null || picked === null || picked.kind !== "stop") {
+      announce(t("draw.gradient.no_stop"));
+      return null;
+    }
+    return { read, group: picked.group, index: picked.index };
+  };
+
+  /// Canc con lo strumento Sfumatura: toglie il punto scelto, mai l'oggetto.
+  const deleteGradientStop = (): void => {
+    const chosen = pickedStop();
+    if (chosen !== null) removeGradientStop(chosen.read, chosen.group, chosen.index);
+  };
+
+  /// Ins con lo strumento Sfumatura: un punto a metà fra quello scelto e il
+  /// seguente, o il precedente se è l'ultimo, del colore che si vede lì.
+  const insertGradientStop = (): void => {
+    const chosen = pickedStop();
+    if (chosen === null) return;
+    const stops = chosen.read.groups[chosen.group]!.look.stops;
+    const stop = stops[chosen.index]!;
+    const next = stops[chosen.index + 1];
+    const before = stops[chosen.index - 1];
+    const at = next !== undefined ? (stop.offset + next.offset) / 2 : before !== undefined ? (before.offset + stop.offset) / 2 : stop.offset;
+    addGradientStop(chosen.read, chosen.group, at);
+  };
+
+  /// Esc con lo strumento Sfumatura: lascia il capo o il punto scelto. Falso
+  /// se non ce n'era uno.
+  const unpickGradient = (): boolean => {
+    const read = gradientNow();
+    if (read === null || gradientPicked(read) === null) return false;
+    gradientGrip = null;
+    gradientStop = null;
+    showHandles();
+    syncProperties();
+    announce(t("draw.gradient.unpicked"));
+    return true;
+  };
+
+  /// Invio con lo strumento Sfumatura, o due tocchi su un punto: il pannello,
+  /// al colore del punto scelto o alla sezione «Sfumatura».
+  function editGradient(): void {
+    showPanel(true, false);
+    const read = gradientNow();
+    if (read !== null && gradientPicked(read)?.kind === "stop" && panel.focusGradientColor()) return;
+    if (!panel.focusSection("gradient")) panel.focus();
+  }
+
   // --- I gesti dei nodi --------------------------------------------------------
 
   /// Quanti nodi ha il tracciato.
@@ -11471,7 +12611,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Sopra una maniglia della cornice o una guida, il cursore dice che
       // cosa fa; con lo strumento Nodi, la forma sotto mostra i suoi nodi,
       // col Costruttore la regione sotto si accende, con le Forbici si vede
-      // dove tagliano e col contagocce che cosa prende.
+      // dove tagliano, col contagocce che cosa prende e con lo strumento
+      // Sfumatura che cosa sposta.
       if (current === null && pressed === null) {
         hoverGrip(event);
         hoverGuide(event);
@@ -11480,6 +12621,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hoverCut(event.buttons === 0 ? point : null, pointer);
         hoverWidth(event.buttons === 0 ? point : null, pointer);
         hoverDropper(event.buttons === 0 ? point : null, pointer);
+        hoverGradient(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -11705,6 +12847,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "dropper":
           dropperMove(g, toPoint(samples[samples.length - 1]!));
           break;
+        case "gradient":
+          if (g.from === null) gradientStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          gradientUpdate(g);
+          break;
         case "refused":
           break;
       }
@@ -11799,6 +12946,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           if (at !== null) void takeAt(at, g.pointer, shift);
           return;
         }
+        case "gradient":
+          gradientEnd(g, stroke.timeStamp);
+          return;
         case "refused":
           current = null;
           return;
@@ -11810,7 +12960,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       current = null;
       if (g.kind === "ink") clearTimeout(holdTimer);
       if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso" || (g.kind === "builder" && g.mode === "objects")) select(g.base);
-      if (g.kind === "select" || g.kind === "guide" || g.kind === "board") showGrip(null);
+      if (g.kind === "select" || g.kind === "guide" || g.kind === "board" || g.kind === "gradient") showGrip(null);
       // I nodi tornano com'erano, e le forme e gli oggetti con loro.
       if (g.kind === "nodes") {
         focused = g.shapes;
@@ -12138,7 +13288,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Dove è il cursore, e che cosa c'è sotto: con la penna di Bézier, il
   /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato;
   /// con la Curvatura anche un punto in mezzo, che un tocco cambia; col
-  /// contagocce la forma e il colore.
+  /// contagocce la forma e il colore; con lo strumento Sfumatura un capo, un
+  /// punto o la linea.
   const announceCursor = (): void => {
     const p = cursorPoint();
     const at = t("draw.cursor.at", { x: coordText(p[0]), y: coordText(p[1]) });
@@ -12162,6 +13313,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const found = widthSpotAt(p, "mouse");
       if (typeof found !== "string") {
         announce(`${at}: ${widthSpotText(found)}`);
+        return;
+      }
+    }
+    if (pressed === null && tool === "gradient") {
+      const read = gradientNow();
+      const spot = read === null ? null : gradientSpotAt(read, p, "mouse", false);
+      if (read !== null && spot !== null) {
+        announce(`${at}: ${gradientSpotText(read, spot, true)}`);
         return;
       }
     }
@@ -15031,8 +16190,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// ridimensionano; senza, o mentre la tastiera preme, muovono il cursore.
   /// Con l'aggancio vanno di riga in riga della griglia, cinque con Maiusc.
   /// Con lo strumento Nodi spostano i nodi scelti, e senza il cursore: mai
-  /// l'oggetto. Con la penna di Bézier muovono sempre il cursore, che mette
-  /// i nodi, e così col contagocce, che prende da ciò che gli sta sotto.
+  /// l'oggetto; così con lo strumento Sfumatura, col capo o il punto scelto.
+  /// Con la penna di Bézier muovono sempre il cursore, che mette i nodi, e
+  /// così col contagocce, che prende da ciò che gli sta sotto.
   ///
   /// Sul foglio girato il cursore libero va dove la freccia punta sullo
   /// schermo, come il puntatore; il resto va lungo l'asse del disegno che si
@@ -15049,8 +16209,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       nudgeNodes(x, y, fine, event.shiftKey);
       return true;
     }
+    if (gradientKeysOn() && nudgeGradient(x, y, direction, fine, event.shiftKey)) return true;
     if (tool === "board" && pressed === null && selection.length === 0 && editable() && nudgeBoard(x, y, grow, fine, event.shiftKey)) return true;
-    if (tool !== "nodes" && tool !== "bezier" && tool !== "eyedropper" && pressed === null && selection.length > 0 && editable()) {
+    if (tool !== "nodes" && tool !== "bezier" && tool !== "eyedropper" && tool !== "gradient" && pressed === null && selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       const [gx, gy] = [x === 0 ? 0 : grow, y === 0 ? 0 : grow];
       if (gridOn()) {
@@ -15132,12 +16293,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Tab con una selezione: l'oggetto dopo l'ultimo scelto, o con Maiusc
   /// quello prima del primo. Oltre le estremità il Tab esce dal foglio. Con
   /// lo strumento Nodi passa prima di nodo in nodo, e oltre l'ultimo
-  /// all'oggetto dopo; col Costruttore, di regione in regione; con lo
+  /// all'oggetto dopo, e così con lo strumento Sfumatura di capo in capo e
+  /// di punto in punto; col Costruttore, di regione in regione; con lo
   /// strumento Tavola, di tavola in tavola.
   const walk = (step: 1 | -1): boolean => {
     if (tool === "board" && pressed === null) return walkBoards(step);
     if (builderKeysOn()) return walkRegions(step);
     if (nodeKeysOn() && walkNodes(step)) return true;
+    if (gradientKeysOn() && walkGradient(step)) return true;
     if (selection.length === 0 || pressed !== null) return false;
     const anchor = currentIndex().get(step > 0 ? selection[selection.length - 1]! : selection[0]!);
     const units = walkList(anchor);
@@ -15480,6 +16643,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti dello strumento Sfumatura, se le parti `at` lo offrono.
+  const gradientToolKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("gradient")
+      ? [
+          {
+            title: t("draw.tool.gradient"),
+            rows: [
+              ["Space", t("draw.keys.gradient.space")],
+              ["Shift", t("draw.keys.gradient.shift")],
+              ["Alt", t("draw.keys.gradient.alt")],
+              ["Tab Shift-Tab", t("draw.keys.gradient.walk")],
+              ["Home End", t("draw.keys.gradient.ends")],
+              [ARROW_KEYS, t(gridOn(at) ? "draw.keys.gradient.nudge.grid" : "draw.keys.gradient.nudge")],
+              ["Insert", t("draw.keys.gradient.insert")],
+              ["Delete", t("draw.keys.gradient.delete")],
+              ["Enter", t("draw.keys.gradient.edit")],
+              ["Escape", t("draw.keys.gradient.deselect")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti del menu Tracciato, se le parti `at` lo offrono.
   const pathKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("path") ? [{ title: t("draw.path"), rows: [["Mod-j", t("draw.keys.join")]] }] : [];
@@ -15688,6 +16873,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...textKeys(at),
     ...boardKeys(at),
     ...eyedropperKeys(at),
+    ...gradientToolKeys(at),
     ...gridKeys(at),
     ...guidesKeys(at),
     ...rulersKeys(at),
@@ -16472,6 +17658,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (current?.kind === "nodes" && current.dragging) nodesUpdate(current);
     else if (current?.kind === "bezier") bezierUpdate(current);
     else if (current?.kind === "board" && current.mode !== "pending") boardUpdate(current);
+    else if (current?.kind === "gradient" && current.dragging) gradientUpdate(current);
     else if (hover !== null && drawing() !== null) showBezier();
     else if (current?.kind === "builder" || (current === null && regionHover >= 0)) showHandles();
     // Col contagocce Maiusc passa dall'aspetto al colore.
@@ -16669,6 +17856,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       else orderSelection(event.shiftKey ? "back" : "backward");
     } else if (onSurface && (event.key === "Home" || event.key === "End") && nodeKeysOn()) {
       visitNode(event.key === "Home" ? 0 : nodeList().length - 1);
+    } else if (onSurface && (event.key === "Home" || event.key === "End") && gradientKeysOn()) {
+      const read = gradientNow()!;
+      visitGradient(event.key === "Home" ? 0 : gradientEntries(read).length - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End") && builderKeysOn()) {
       visitRegion(event.key === "Home" ? 0 : builderNow()!.regions.regions.length - 1);
     } else if (onSurface && (event.key === "Home" || event.key === "End") && tool === "board") {
@@ -16708,6 +17898,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       } else if (widthKeysOn()) {
         // Con lo Spessore, le misure del punto scelto.
         void widthDialog();
+      } else if (gradientKeysOn() && has("properties")) {
+        // Con lo strumento Sfumatura, il colore del punto scelto.
+        editGradient();
       } else if (folio === undefined) {
         void properties();
       } else if (selection.length > 0) {
@@ -16729,6 +17922,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Con lo Spessore, il punto scelto, mai l'oggetto.
       if (pressed !== null || current !== null) return;
       deleteWidthPoint();
+    } else if ((event.key === "Delete" || event.key === "Backspace") && gradientKeysOn()) {
+      // Con lo strumento Sfumatura, il punto scelto, mai l'oggetto.
+      if (current !== null) return;
+      deleteGradientStop();
     } else if ((event.key === "Delete" || event.key === "Backspace") && curveOn() && pressed === null && current === null && chosenCount() > 0) {
       // Con la Curvatura, i nodi scelti, e la curva si rifà.
       curveDelete();
@@ -16745,6 +17942,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       deleteSelection();
     } else if (event.key === "Insert" && !event.shiftKey && nodeKeysOn() && (onSurface || inNodesBar)) {
       insertSelectedNodes();
+    } else if (event.key === "Insert" && !event.shiftKey && onSurface && gradientKeysOn()) {
+      if (current !== null) return;
+      insertGradientStop();
     } else if (event.shiftKey && onSurface && (event.key.toLowerCase() === "c" || event.key.toLowerCase() === "s") && tool === "bezier" && curvature && drawing() !== null) {
       // Con la Curvatura, il punto sotto il cursore, o l'ultimo, a spigolo
       // o liscio: le lettere dello strumento Nodi.
@@ -16765,6 +17965,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         widthPicked = null;
         showHandles();
         announce(t("draw.width.unpicked"));
+      } else if (gradientKeysOn() && unpickGradient()) {
+        // Con lo strumento Sfumatura, il capo o il punto scelto si lascia.
       } else if (builderNow() !== null && (regionsChosen.length > 0 || regionActive >= 0)) {
         regionsChosen = [];
         regionActive = -1;

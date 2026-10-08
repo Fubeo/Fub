@@ -92,6 +92,8 @@ Lo Standard aggiunge:
   disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
 - il **Contagocce** (`I`), dopo la Tavola, e nelle «Proprietà» i **colori del
   documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
+- la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
+  **«Sfumatura»**: lineare o radiale, coi suoi punti ([Disegni, sfumature](drawing-gradients.md));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
@@ -120,8 +122,8 @@ Lo Standard aggiunge:
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
-il Lazo, la Tavola o il Contagocce la Selezione, un colore a piacere torna al
-colore di partenza e la vista girata si raddrizza.
+il Lazo, la Tavola, il Contagocce o la Sfumatura la Selezione, un colore a
+piacere torna al colore di partenza e la vista girata si raddrizza.
 
 ## Disporre
 
@@ -349,10 +351,8 @@ tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco dell
 ## Il livello Personalizzato
 
 Il Personalizzato ha soltanto le parti che si scelgono, una per una, dagli
-altri tre livelli: la penna, il testo e i livelli senza la gomma, o le forme,
-la griglia e i collegamenti senza l'evidenziatore. Le parti si scelgono nelle
-Impostazioni, sotto il livello, e il Personalizzato ha una pagina sua:
-[Disegni, livello Personalizzato](drawing-custom.md).
+altri tre livelli, nelle Impostazioni sotto il livello: [Disegni, livello
+Personalizzato](drawing-custom.md).
 
 ## Da tastiera
 

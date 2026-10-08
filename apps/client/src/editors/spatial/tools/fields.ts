@@ -65,6 +65,7 @@ import { NAME_MAX } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
 import type { ShapeChange, ShapeFacts } from "./reshape";
+import type { GradientPanelView } from "./gradient-panel";
 import type { ColorsView, PaintTarget } from "./swatches-panel";
 import type { DocumentColors } from "./swatches";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
@@ -347,6 +348,9 @@ export interface FieldsInput {
   /// I colori del documento, contati, e quello con cui si disegna, col
   /// campione da cui viene, se il livello offre la loro sezione.
   readonly colors: { readonly document: DocumentColors; readonly drawing: string; readonly swatch: string | null } | null;
+  /// La sezione «Sfumatura», com'è già pronta, se il livello la offre e la
+  /// selezione ha un riempimento o un contorno.
+  readonly gradient: GradientPanelView | null;
 }
 
 /// Un campo di una lunghezza, `value` in unità della scena, mostrata in
@@ -690,6 +694,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     swatches: input.swatches,
     recent: input.recent,
     ...(input.colors === null ? {} : { colors: colorsView(input.colors, selection, input.recent) }),
+    ...(input.gradient === null ? {} : { gradient: input.gradient }),
   };
 }
 

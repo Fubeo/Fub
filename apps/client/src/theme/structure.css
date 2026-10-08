@@ -1302,7 +1302,8 @@ html, body, #app {
   cursor: grabbing;
 }
 /* Con lo strumento Tavola, sopra una tavola che si sposta, e con Alt
-   mentre se ne porta una copia. */
+   mentre se ne porta una copia; con lo strumento Sfumatura, sopra un capo,
+   un punto o la linea di una sfumatura. */
 .draw-surface[data-grip="move"] {
   cursor: move;
 }
@@ -2631,6 +2632,86 @@ textarea.draw-properties-input {
   background-size: 8px 8px;
   background-position: 0 0, 4px 4px;
 }
+/* La sfumatura prende la riga della sezione: «Applica a», il tipo, la
+   barra coi punti, i campi del punto scelto, i comandi e l'angolo, uno
+   sotto l'altro. La barra rientra di mezzo punto per lato, così i punti ai
+   capi non escono; sotto, ogni punto è un bersaglio di 24 px al suo posto
+   (`--at`, da 0 a 1), con la punta verso la barra. I colori della barra e
+   dei punti sono quelli del disegno, anche coi colori forzati. I campi del
+   punto stanno nelle colonne del pannello. */
+.draw-gradient {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-gradient-target,
+.draw-gradient-row,
+.draw-gradient-stops {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-gradient-bar {
+  position: relative;
+  height: 56px;
+  touch-action: none;
+}
+.draw-gradient-strip {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  left: 12px;
+  box-sizing: border-box;
+  height: 24px;
+  forced-color-adjust: none;
+}
+.draw-gradient-thumb {
+  position: absolute;
+  top: 24px;
+  left: calc(12px + (100% - 24px) * var(--at, 0));
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  width: 24px;
+  height: 32px;
+  transform: translateX(-50%);
+  touch-action: none;
+}
+.draw-gradient-thumb::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-width: 0 6px 6px;
+  border-style: solid;
+  border-color: transparent;
+}
+.draw-gradient-thumb-color {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  forced-color-adjust: none;
+}
+.draw-gradient-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  align-items: end;
+}
+.draw-gradient-stop-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-gradient-fields > .draw-properties-error {
+  grid-column: 1 / -1;
+}
+.draw-gradient-remove {
+  grid-column: 3;
+}
 /* Gli attributi, come sezione delle proprietà, scorrono con loro e non
    hanno un titolo loro. */
 .draw-inspector[data-nested] {
@@ -2810,6 +2891,23 @@ textarea.draw-properties-input {
   .draw-width-bar,
   .draw-swatch-frame {
     background: CanvasText;
+  }
+  /* La barra e i punti della sfumatura tengono i colori del disegno, col
+     bordo del testo; il punto scelto ha l'anello e la punta della scelta. */
+  .draw-gradient-strip,
+  .draw-gradient-thumb-color {
+    border-color: CanvasText;
+  }
+  .draw-gradient-thumb::before {
+    border-color: transparent transparent CanvasText;
+    forced-color-adjust: none;
+  }
+  .draw-gradient-thumb[data-selected]::before {
+    border-color: transparent transparent Highlight;
+  }
+  .draw-gradient-thumb[data-selected] > .draw-gradient-thumb-color {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
   }
   .draw-cursor::before,
   .draw-cursor::after {

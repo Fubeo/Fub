@@ -76,6 +76,7 @@ const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): F
     recent: [],
     paper: "#ffffff",
     colors: null,
+    gradient: null,
     ...rest,
   };
 };

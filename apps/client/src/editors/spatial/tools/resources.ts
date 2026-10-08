@@ -11,9 +11,10 @@
 //   FubDraw, restano le stesse. Toglierle quando nessuno le usa più lo fa il
 //   motore.
 // - **Ciò che si vede resta.** Una risorsa vive nelle coordinate di chi la
-//   usa: un oggetto che ne usa una tiene la sua trasformazione invece di
-//   passarla nella geometria, e un gruppo con un ritaglio, una maschera o un
-//   filtro non si separa.
+//   usa: un oggetto che passa la sua trasformazione nella geometria riscrive
+//   le sue sfumature nelle coordinate nuove, e tiene la trasformazione se
+//   usa una risorsa che non si riscrive; un gruppo con un ritaglio, una
+//   maschera o un filtro non si separa.
 
 import { formatNumber } from "../number";
 import type { Bounds } from "../scene/geometry";
@@ -25,7 +26,6 @@ import { formatTransform, type Elem } from "../scene/serialize";
 import { fraction, length, opacity, paint, paintReference, reference, transform as parseTransform, trim, urlIds, type Paint, type Rgb } from "../scene/values";
 import { NS_NONE, NS_SVG, valueOf, type ElementNode, type XmlDocument } from "../scene/xml";
 import type { NewIds } from "./edit";
-import type { Inherited } from "./outline";
 import { renameUrls } from "./stylesheet";
 
 /// Le risorse modificabili di `model`, per id: i figli delle `defs` della
@@ -84,15 +84,23 @@ export function holdsEffect(attrs: ReadonlyMap<string, string>): boolean {
   });
 }
 
-/// Vero se `node` usa una risorsa, sua o ereditata da `from`: una
-/// trasformazione passata nella sua geometria lo cambierebbe a vederlo,
-/// perché la risorsa resta nelle coordinate di prima.
-export function usesResources(node: ElementPart, from: Inherited): boolean {
-  if (node.facts.refs.length > 0) return true;
-  return ["fill", "stroke"].some((name) => {
-    const value = from.get(name);
-    return value !== undefined && paintReference(value) !== null;
-  });
+/// Quanti elementi di `model` rimandano a ciascun id: un contenitore coi
+/// suoi attributi, un'unità con tutto ciò che contiene.
+export function usersOf(model: DocumentModel): Map<string, number> {
+  const out = new Map<string, number>();
+  const count = (ids: readonly string[]): void => {
+    for (const id of new Set(ids)) out.set(id, (out.get(id) ?? 0) + 1);
+  };
+  const visit = (node: ElementPart): void => {
+    if (node.kind === "leaf") {
+      count(node.refs);
+      return;
+    }
+    count(node.facts.refs);
+    for (const child of elementChildren(node)) visit(child);
+  };
+  visit(model.root);
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -138,11 +146,13 @@ function gradientImage(node: LeafNode, head: string): string | null {
 }
 
 /// Un punto di una sfumatura: dove sta, fra 0 e 1, il colore e la sua
-/// opacità.
-interface Stop {
+/// opacità, e il suo posto fra i figli elemento della sfumatura, per un
+/// `set` con `part`.
+export interface Stop {
   readonly offset: number;
   readonly color: Rgb;
   readonly alpha: number;
+  readonly index: number;
 }
 
 /// L'elemento della sfumatura `node`, nel suo frammento, e i suoi punti:
@@ -155,14 +165,17 @@ function readGradient(node: LeafNode): { readonly doc: XmlDocument; readonly ele
   const element = doc.element(fragment.id)!;
   const stops: Stop[] = [];
   let last = 0;
+  let index = -1;
   for (const child of element.children) {
     const stop = doc.element(child);
-    if (stop === null || stop.ns !== NS_SVG || stop.local !== "stop") continue;
+    if (stop === null) continue;
+    index++;
+    if (stop.ns !== NS_SVG || stop.local !== "stop") continue;
     const color = paint(valueOf(stop, NS_NONE, "stop-color") ?? "black");
     if (color === null || color === "none") return null;
     const alpha = opacity(valueOf(stop, NS_NONE, "stop-opacity") ?? "1") ?? 1;
     last = Math.max(last, Math.min(1, Math.max(0, fraction(valueOf(stop, NS_NONE, "offset") ?? "0") ?? 0)));
-    stops.push({ offset: last, color, alpha });
+    stops.push({ offset: last, color, alpha, index });
   }
   return stops.length === 0 ? null : { doc, element, stops };
 }

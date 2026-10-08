@@ -53,6 +53,9 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
   Angoli, come il menu «Contorno» di [Disegni, livello
   Esperto](drawing-expert.md).
+- **Sfumatura.** Il tipo, Pieno, Lineare o Radiale, la barra dei punti coi
+  campi del punto scelto, le sfumature pronte, «Inverti» e l'Angolo;
+  all'Esperto anche «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)).
 - **Colori del documento**, anche senza selezione, e allora per prima: i
   campioni, i colori usati e i recenti, da dare agli oggetti scelti o con cui
   disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).

@@ -3,9 +3,10 @@
 // selezione, il documento e la vista. Che cosa mostra lo decide l'editor, e
 // lui scrive ogni cambio; qui c'è come si legge, si scrive e si raggiunge.
 //
-// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Colori
-//   del documento (`swatches-panel.ts`), Testo, Disponi, e all'Esperto
-//   Trasforma e Attributi; senza selezione i Colori del documento, Documento
+// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto,
+//   Sfumatura (`gradient-panel.ts`), Colori del documento
+//   (`swatches-panel.ts`), Testo, Disponi, e all'Esperto Trasforma e
+//   Attributi; senza selezione i Colori del documento, Documento
 //   e Vista, Forma se lo strumento è il Poligono, e Tavola se è lo strumento
 //   Tavola con una tavola scelta. L'intestazione di una sezione è il
 //   pulsante che la apre e la chiude, e il pannello dice all'editor quali
@@ -43,10 +44,23 @@ import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
+import { createGradientPanel, type GradientPanelOptions, type GradientPanelView } from "./gradient-panel";
 import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPanelOptions } from "./swatches-panel";
 
 /// Le sezioni, nell'ordine in cui si vedono.
-export type SectionId = "place" | "shape" | "look" | "colors" | "text" | "arrange" | "transform" | "attributes" | "board" | "document" | "view";
+export type SectionId =
+  | "place"
+  | "shape"
+  | "look"
+  | "gradient"
+  | "colors"
+  | "text"
+  | "arrange"
+  | "transform"
+  | "attributes"
+  | "board"
+  | "document"
+  | "view";
 
 export type NumberId =
   | "x"
@@ -246,6 +260,8 @@ export interface PropertiesView {
   readonly recent?: readonly string[];
   /// La sezione «Colori del documento»; senza, non c'è.
   readonly colors?: ColorsView;
+  /// La sezione «Sfumatura»; senza, non c'è.
+  readonly gradient?: GradientPanelView;
 }
 
 export interface PropertiesOptions {
@@ -260,7 +276,11 @@ export interface PropertiesOptions {
   /// Una sezione si apre o si chiude.
   onSection(id: SectionId, open: boolean): void;
   /// I gesti della sezione «Colori del documento» (`swatches-panel.ts`).
-  readonly colors: Omit<SwatchesPanelOptions, "announce">;
+  readonly colors: Omit<SwatchesPanelOptions, "announce" | "onTarget">;
+  /// I gesti della sezione «Sfumatura» (`gradient-panel.ts`).
+  readonly gradient: Omit<GradientPanelOptions, "announce" | "onTarget">;
+  /// «Applica a» cambia, in una delle due sezioni che lo hanno.
+  onTarget(target: PaintTarget): void;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
   /// Esc su un campo senza niente da annullare: il fuoco torna al foglio.
@@ -277,10 +297,14 @@ export interface Properties {
   focus(): void;
   /// Apre la sezione `id` e le dà il fuoco. Falso se la sezione non c'è.
   focusSection(id: SectionId): boolean;
+  /// Apre la sezione «Sfumatura» e dà il fuoco al colore del punto scelto.
+  /// Falso se la sezione non c'è o non mostra punti.
+  focusGradientColor(): boolean;
   /// Chiude le sezioni `ids` e apre le altre, come le ricorda l'editor,
   /// senza dirglielo.
   setClosed(ids: readonly SectionId[]): void;
-  /// Il bersaglio scelto in «Applica a» fra i colori del documento.
+  /// Il bersaglio scelto in «Applica a» fra i colori del documento e nella
+  /// sfumatura, che è lo stesso.
   colorTarget(): PaintTarget;
   /// Riscrive i testi nella lingua di adesso: quelli dei campi arrivano con
   /// la vista dopo.
@@ -357,6 +381,7 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "place", label: "draw.properties.selection" },
   { id: "shape", label: "draw.properties.shape" },
   { id: "look", label: "draw.properties.look" },
+  { id: "gradient", label: "draw.properties.gradient" },
   { id: "colors", label: "draw.properties.colors" },
   { id: "text", label: "draw.properties.text" },
   { id: "arrange", label: "draw.properties.arrange" },
@@ -669,8 +694,28 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   // --- I colori del documento ---------------------------------------------------
 
-  const colors = createSwatchesPanel(life, { ...options.colors, announce: (text) => options.announce(text) });
+  // «Applica a» è uno solo: la scelta in una sezione passa all'altra.
+  const colors = createSwatchesPanel(life, {
+    ...options.colors,
+    onTarget: (target) => {
+      gradient.setTarget(target);
+      options.onTarget(target);
+    },
+    announce: (text) => options.announce(text),
+  });
   sections.get("colors")!.body.append(colors.element);
+
+  // --- La sfumatura ---------------------------------------------------------------
+
+  const gradient = createGradientPanel(life, {
+    ...options.gradient,
+    onTarget: (target) => {
+      colors.setTarget(target);
+      options.onTarget(target);
+    },
+    announce: (text) => options.announce(text),
+  });
+  sections.get("gradient")!.body.append(gradient.element);
 
   // --- Le barre di pulsanti ---------------------------------------------------
 
@@ -1621,6 +1666,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     }
     applyButton.textContent = t("draw.properties.apply");
     colors.relabel();
+    gradient.relabel();
   };
 
   const update = (next: PropertiesView): void => {
@@ -1663,6 +1709,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         shown.add("colors");
         colors.update(next.colors, next.editable);
       }
+      if (next.gradient !== undefined) {
+        shown.add("gradient");
+        gradient.update(next.gradient, next.editable);
+      }
       for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
     } finally {
       rendering = false;
@@ -1701,6 +1751,12 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       section.root.scrollIntoView?.({ block: "nearest" });
       (firstIn(section) ?? section.toggle).focus({ preventScroll: true });
       return true;
+    },
+    focusGradientColor() {
+      const section = sections.get("gradient")!;
+      if (section.root.hidden || !gradient.hasStops()) return false;
+      setOpen(section, true);
+      return gradient.focusColor();
     },
     setClosed(ids) {
       const shut = new Set(ids);
