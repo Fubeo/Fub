@@ -282,7 +282,8 @@ describe("contorno in tracciato con le punte", () => {
     expect(text).not.toContain("marker");
   });
 
-  it("ogni forma di punta, di ogni misura e a ogni capo, copre ciò che il clic trova sulla linea", () => {
+  // Più di un milione di clic: su una macchina carica supera i 5 secondi.
+  it("ogni forma di punta, di ogni misura e a ogni capo, copre ciò che il clic trova sulla linea", { timeout: 60_000 }, () => {
     // Una linea orizzontale e una obliqua, con spessori diversi.
     const lines = [
       { geometry: 'x1="10" y1="30" x2="60" y2="30"', width: 2, ends: { start: [10, 30], end: [60, 30] } },
