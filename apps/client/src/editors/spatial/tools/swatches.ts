@@ -43,7 +43,7 @@ import { elemOf, plainAttributes, Plan, readHead, type Arranged } from "./arrang
 import type { NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { FILLED, INKED, OUTLINED, paintText } from "./look";
-import { cleanName, NAME_MAX } from "./naming";
+import { cleanName, NAME_MAX, nameKey } from "./naming";
 import { customColor } from "./palette";
 import { homeOf, resourcesOf } from "./resources";
 import { richOf, visibleSpans, type Rich } from "./rich";
@@ -416,10 +416,6 @@ export function swatchPaint(swatch: { readonly id: string; readonly color: strin
 // ---------------------------------------------------------------------------
 // I nomi.
 // ---------------------------------------------------------------------------
-
-/// Un nome come lo confrontano i campioni: senza maiuscole, come lo dice uno
-/// screen reader.
-const nameKey = (name: string): string => cleanName(name).toLocaleLowerCase();
 
 /// Un campione col suo nome, per i nomi: basta l'id e il nome.
 type Named = Pick<DocumentSwatch, "id" | "name">;

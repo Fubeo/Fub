@@ -51,6 +51,10 @@
 //   gruppo che lo contiene. Il contagocce prende lo stesso, dalla forma
 //   sotto il puntatore o dall'oggetto di una riga dell'albero, anche
 //   bloccato o nascosto: leggerlo non lo cambia.
+// - **Lo stile vale anche in un altro disegno**: un campione che lì non c'è
+//   lascia il posto a quello con lo stesso nome e lo stesso colore, o al
+//   suo colore; un'altra risorsa che manca, al colore di ripiego. Un
+//   campione che c'è porta come ripiego il suo colore di adesso.
 // - **Una risorsa privata resta di un oggetto solo** (formato della scena,
 //   risorse): un colore che ne usa una, preso da un altro oggetto, ne porta
 //   una copia, com'era quando lo stile si è copiato; e una sfumatura nelle
@@ -62,21 +66,23 @@
 
 import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
+import type { SwatchFacts } from "../scene/classify";
 import type { Bounds } from "../scene/geometry";
 import type { Matrix } from "../scene/matrix";
 import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
-import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim } from "../scene/values";
+import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim, type PaintReference } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import { geometryBox, type Unit } from "./hit";
 import type { Measure } from "./measure";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
+import { nameKey } from "./naming";
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
-import { paintSample, privateResources, ResourceCopies, resourcesOf, type PaintSample } from "./resources";
+import { paintCode, paintSample, privateResources, ResourceCopies, resourcesOf, type PaintSample } from "./resources";
 import { arrowPath } from "./shapes";
 import {
   anchorsOf,
@@ -531,6 +537,7 @@ class Changes {
   private replaced = 0;
   private overflow = false;
   private copies: ResourceCopies | null = null;
+  private resources: Map<string, LeafNode> | null = null;
 
   constructor(
     private readonly plan: Plan,
@@ -538,6 +545,8 @@ class Changes {
     private readonly measure: Measure,
     /// Le risorse private di uno stile copiato, com'erano.
     private readonly kept: ReadonlyMap<string, Elem> = new Map(),
+    /// I campioni di uno stile copiato, per id.
+    private readonly swatches: ReadonlyMap<string, SwatchFacts> = new Map(),
   ) {}
 
   of(part: Part): Record<string, string | null> {
@@ -578,15 +587,40 @@ class Changes {
   }
 
   /// `value` per `part`, con le copie delle risorse private che usa; `null`
-  /// se una copia non si sa scrivere.
+  /// se una copia non si sa scrivere. Un campione porta come ripiego il suo
+  /// colore di adesso. Una risorsa che il disegno non ha, perché lo stile
+  /// viene da un altro disegno o lei se n'è andata, lascia il posto a ciò
+  /// che dice [`elsewhere`].
   private copied(part: Part, value: string, box: Bounds | null): string | null {
-    if (paintReference(value) === null) return value;
+    const used = paintReference(value);
+    if (used === null) return value;
+    if (!this.kept.has(used.id)) {
+      this.resources ??= resourcesOf(this.model);
+      const there = this.resources.get(used.id);
+      const swatch = there?.details?.swatch;
+      if (swatch !== undefined) return `url(#${used.id}) ${swatch.color}`;
+      if (there === undefined) return this.elsewhere(used);
+    }
     this.copies ??= new ResourceCopies(this.model, this.plan.ids, elemOf, this.kept);
     return this.copies.paint(value, part.node, () => {
       const elem = box === null ? null : elemOf(part.node);
       const target = elem === null ? null : geometryBox(elem);
       return target === null ? null : boxFit(box!, target);
     });
+  }
+
+  /// Il colore al posto di `used`, una risorsa che il disegno non ha: il
+  /// suo campione con lo stesso nome e lo stesso colore, se lei era un
+  /// campione e il disegno ne ha uno così, o il colore che si vedeva.
+  private elsewhere(used: PaintReference): string {
+    const swatch = this.swatches.get(used.id);
+    if (swatch === undefined) return used.fallback === null ? "none" : paintCode(used.fallback);
+    const key = nameKey(swatch.name);
+    for (const [id, node] of this.resources!) {
+      const other = node.details?.swatch;
+      if (other !== undefined && other.color === swatch.color && nameKey(other.name) === key) return `url(#${id}) ${other.color}`;
+    }
+    return swatch.color;
   }
 
   /// L'opacità `value` sull'oggetto scelto `part`: senza attributo se è
@@ -860,6 +894,9 @@ export interface Style {
   readonly box: Bounds | null;
   /// Le risorse private che usano i colori, com'erano, per id.
   readonly resources: ReadonlyMap<string, Elem>;
+  /// I campioni che usano i colori, col nome e il colore, per id: in un
+  /// altro disegno vale il campione con lo stesso nome e lo stesso colore.
+  readonly swatches: ReadonlyMap<string, SwatchFacts>;
 }
 
 /// La prima parte di `from` che ha un aspetto suo, nell'ordine del
@@ -922,7 +959,21 @@ function styleFrom(model: DocumentModel, node: ElementPart, from: ElementPart): 
     font: part.role === "text" && size !== null ? fontOf(part, size) : null,
     box: elem === null ? null : geometryBox(elem),
     resources: privateResources(model, paints, elemOf),
+    swatches: swatchesOf(model, paints),
   };
+}
+
+/// I campioni del disegno che usano i colori `values`, per id.
+function swatchesOf(model: DocumentModel, values: readonly string[]): Map<string, SwatchFacts> {
+  const out = new Map<string, SwatchFacts>();
+  const ids = values.flatMap((value) => paintReference(value)?.id ?? []);
+  if (ids.length === 0) return out;
+  const resources = resourcesOf(model);
+  for (const id of ids) {
+    const swatch = resources.get(id)?.details?.swatch;
+    if (swatch !== undefined) out.set(id, swatch);
+  }
+  return out;
 }
 
 /// Il carattere del testo `part`, come lo vede il suo primo carattere.
@@ -955,7 +1006,7 @@ const shown = (...values: Array<string | null>): string | null => values.find((v
 /// si vede dello stile, il riempimento per il testo, il contorno per il
 /// tratto. La selezione resta la stessa.
 export function styleOps(model: DocumentModel, units: readonly Unit[], style: Style, measure: Measure, ids: NewIds): Restyled {
-  const changes = new Changes(new Plan(model, ids), model, measure, style.resources);
+  const changes = new Changes(new Plan(model, ids), model, measure, style.resources, style.swatches);
   const parts = partsOf(model, units);
   for (const part of parts.chosen) changes.opacity(part, style.opacity);
   for (const part of parts.fills) {

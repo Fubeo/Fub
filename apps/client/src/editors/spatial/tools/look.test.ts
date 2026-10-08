@@ -325,12 +325,13 @@ describe("lo stile copiato e incollato", () => {
       font: null,
       box: null,
       resources: new Map(),
+      swatches: new Map(),
     });
   });
 
   it("copia il colore di un tratto a penna come contorno, e di un testo il carattere", () => {
     const opened = open(doc(`${LAYER}${PEN("oaaaaaaaa")}${TEXT("obbbbbbbb", ["Uno"], ' font-family="Literata, serif" font-size="24" font-weight="bold"')}</g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null, box: null, resources: new Map() });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null, box: null, resources: new Map(), swatches: new Map() });
     expect(copied(opened, "obbbbbbbb")).toEqual({
       fill: "#000000",
       stroke: null,
@@ -339,6 +340,7 @@ describe("lo stile copiato e incollato", () => {
       font: { family: "Literata, serif", size: 24, weight: "bold", style: "normal", spacing: 0, underline: false, strike: false, leading: null },
       box: null,
       resources: new Map(),
+      swatches: new Map(),
     });
   });
 
@@ -357,9 +359,42 @@ describe("lo stile copiato e incollato", () => {
     );
   });
 
+  it("una risorsa che il disegno non ha lascia il ripiego, e un campione il suo colore o il campione con lo stesso nome e colore", () => {
+    const opened = open(
+      doc(
+        '<defs id="fub-defs"><linearGradient id="rmare0000" fub:role="swatch" fub:name="BLU  mare" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient></defs>' +
+          `${LAYER}${RECT("oaaaaaaaa")}${RECT("obbbbbbbb")}</g>`,
+      ),
+    );
+    const style = (fill: string, stroke: string, swatches: ReadonlyArray<readonly [string, string, string]> = []): Style => ({
+      fill,
+      stroke,
+      outline: null,
+      opacity: 1,
+      font: null,
+      box: null,
+      resources: new Map(),
+      swatches: new Map(swatches.map(([id, name, color]) => [id, { name, color }])),
+    });
+    // Una sfumatura di un altro disegno: il ripiego, o niente se non ce l'ha,
+    // che per il contorno è come non scriverlo.
+    expect(applied(opened, pasted(opened, ["oaaaaaaaa"], style("url(#raltro000) #009e73", "url(#raltro000)")))).toContain(
+      '<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="#009e73" stroke-width="2"/>',
+    );
+    // Un campione di un altro disegno: quello di qui col nome uguale, spazi e
+    // maiuscole a parte, se ha lo stesso colore; altrimenti il suo colore,
+    // anche se il ripiego scritto era rimasto indietro.
+    const swatches = [["rblu00000", "Blu mare", "#0072b2"], ["rrosso000", "Blu mare", "#d55e00"]] as const;
+    expect(applied(opened, pasted(opened, ["obbbbbbbb"], style("url(#rblu00000) #0072b2", "url(#rrosso000) #000000", swatches)))).toContain(
+      '<rect id="obbbbbbbb" x="0" y="0" width="10" height="10" fill="url(#rmare0000) #0072b2" stroke="#d55e00" stroke-width="2"/>',
+    );
+    // Un campione di qui porta il suo colore di adesso.
+    expect(applied(opened, pasted(opened, ["obbbbbbbb"], style("url(#rmare0000) #ffffff", "#000000")))).toContain('fill="url(#rmare0000) #0072b2"');
+  });
+
   it("di un'immagine copia soltanto l'opacità", () => {
     const opened = open(doc(`${LAYER}<image id="oaaaaaaaa" x="0" y="0" width="10" height="10" href="foto.png" opacity="0.25"/></g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null, box: null, resources: new Map() });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null, box: null, resources: new Map(), swatches: new Map() });
   });
 
   it("incolla tutto in un passo, e toglie ciò che la parte eredita già", () => {

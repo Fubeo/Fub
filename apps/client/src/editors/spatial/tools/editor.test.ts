@@ -12,6 +12,7 @@ import { closeContextMenu } from "../../../ui/menu";
 import { decodeInk, inkLength, inkPoint } from "../ink/codec";
 import { polygonalAttrs, readPolygonal } from "../scene/parametric";
 import { SceneEngine } from "../scene/engine";
+import type { Op } from "../scene/ops";
 import { readScene } from "../scene/read";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages, type DrawPlace } from "./editor";
@@ -10857,6 +10858,64 @@ describe("gli appunti", () => {
     expect(changes).toHaveLength(1);
     editor.undo();
     expect(editor.engine.text).toBe(PAIR);
+  });
+
+  /// Il campione `name` di colore `color`, con l'id `id`.
+  const swatch = (id: string, name: string, color: string): string =>
+    `<linearGradient id="${id}" fub:role="swatch" fub:name="${name}" gradientUnits="userSpaceOnUse"><stop stop-color="${color}"/></linearGradient>`;
+
+  it("lo stile incollato in un altro disegno usa il campione con lo stesso nome e colore, o il colore del campione", () => {
+    const A = "oa1a1a1a1";
+    const B = "ob2b2b2b2";
+    mount(
+      doc(
+        `<defs id="fub-defs">${swatch("rs1s1s1s1", "Blu mare", "#0072b2")}${swatch("rs2s2s2s2", "Vermiglio", "#d55e00")}</defs>` +
+          `${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #0072b2" stroke="url(#rs2s2s2s2) #d55e00" stroke-width="4"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    editor.select([A]);
+    key("c", { ctrlKey: true, altKey: true });
+    editor.dispose();
+    // Qui «blu mare» ha lo stesso colore, e «Vermiglio» un altro.
+    const OTHER = doc(
+      `<defs id="fub-defs">${swatch("rt1t1t1t1", "blu mare", "#0072b2")}${swatch("rt2t2t2t2", "Vermiglio", "#e69f00")}</defs>` +
+        `${LAYER}<rect id="${B}" x="50" y="10" width="20" height="20" fill="#000000"/></g>`,
+    );
+    mount(OTHER, { level: "standard" });
+    editor.select([B]);
+    key("v", { ctrlKey: true, altKey: true });
+    expect(spoken()).toBe("Stile incollato su 1 oggetto.");
+    expect(rects()[0]).toBe(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="url(#rt1t1t1t1) #0072b2" stroke="#d55e00" stroke-width="4"/>`);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(OTHER);
+  });
+
+  it("lo stile incollato dopo che il campione ha cambiato colore lo usa col colore di adesso", () => {
+    const A = "oa1a1a1a1";
+    const B = "ob2b2b2b2";
+    mount(
+      doc(
+        `<defs id="fub-defs">${swatch("rs1s1s1s1", "Blu mare", "#0072b2")}</defs>` +
+          `${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #0072b2"/>` +
+          `<rect id="${B}" x="50" y="10" width="20" height="20" fill="#000000"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    editor.select([A]);
+    key("c", { ctrlKey: true, altKey: true });
+    const recolor: Op = {
+      op: "batch",
+      ops: [
+        { op: "set", id: "rs1s1s1s1", part: [0], attrs: { "stop-color": "#56b4e9" } },
+        { op: "set", id: A, attrs: { fill: "url(#rs1s1s1s1) #56b4e9" } },
+      ],
+    };
+    expect(editor.perform("draw.action.swatch_recolor", recolor)).toBe(true);
+    editor.select([B]);
+    key("v", { ctrlKey: true, altKey: true });
+    expect(rects()[1]).toBe(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #56b4e9"/>`);
   });
 });
 
