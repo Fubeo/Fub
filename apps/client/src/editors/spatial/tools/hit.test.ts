@@ -384,6 +384,72 @@ describe("che cosa si vede in un punto", () => {
   });
 });
 
+describe("le punte delle linee", () => {
+  /// Un triangolo col vertice sul punto di riferimento: largo 4 e lungo 4
+  /// volte il contorno, girato col tracciato e al contrario all'inizio.
+  const ARROW = '<marker id="m" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">'
+    + '<path d="M0 0 L10 5 L0 10 Z" fill="#000000"/></marker>';
+  const tipped = (defs: string, body: string) => open(doc(`<defs id="fub-defs">${defs}</defs>${LAYER}${body}</g>`));
+
+  it("si toccano e stanno nel riquadro col contorno, ma non nella geometria", () => {
+    const opened = tipped(ARROW, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>');
+    const line = opened.index.get("a")!;
+    // La punta va da x 52 a 60, alta da 46 a 54: fuori dal contorno della linea.
+    expect(line.hits([54, 47.5], 0)).toBe(true);
+    expect(line.hits([54, 46.5], 0)).toBe(false);
+    expect(line.touches([55, 40], [55, 48], 0)).toBe(true);
+    expect(line.bounds).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(line.frame()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(opened.extent()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(line.geometry).toEqual({ min: [10, 50], max: [60, 50] });
+    expect(line.shapeFrame()).toEqual({ min: [10, 50], max: [60, 50] });
+    // La punta non è una forma della linea, e il suo riempimento non è il suo.
+    expect(line.shapes().map((shape) => shape.leaf.facts.id)).toEqual(["a"]);
+    expect(line.filled).toBe(false);
+  });
+
+  it("si vedono come il contorno della linea che le porta", () => {
+    const opened = tipped(ARROW, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>');
+    const sampled = opened.index.get("a")!.sampleAt([54, 47.5], 0)!;
+    expect([sampled.leaf.facts.id, sampled.on, sampled.matrix, sampled.segments.length]).toEqual(["a", "stroke", [1, 0, 0, 1, 0, 0], 2]);
+  });
+
+  it("si girano col tracciato, e all'inizio al contrario con auto-start-reverse", () => {
+    const opened = tipped(ARROW, '<path id="v" d="M50 10 V60" fill="none" stroke="#000000" stroke-width="2" marker-start="url(#m)"/>');
+    const path = opened.index.get("v")!;
+    // All'inizio la punta guarda in su: sta da y 10 a 18, non sopra.
+    expect(path.hits([51.5, 14], 0)).toBe(true);
+    expect(path.hits([51.5, 6], 0)).toBe(false);
+    expect(path.bounds).toEqual({ min: [46, 9], max: [54, 61] });
+  });
+
+  it("crescono col contorno che la linea eredita, e nella cornice seguono la sua trasformazione", () => {
+    const opened = tipped(ARROW, '<g id="g" stroke-width="4"><line x1="10" y1="50" x2="60" y2="50" stroke="#000000" marker-end="url(#m)"/></g>'
+      + '<line id="t" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" transform="translate(0 100)" marker-end="url(#m)"/>');
+    expect(opened.index.get("g")!.bounds).toEqual({ min: [8, 42], max: [62, 58] });
+    const moved = opened.index.get("t")!;
+    expect(moved.frame()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(moved.bounds).toEqual({ min: [9, 146], max: [61, 154] });
+  });
+
+  it("restano dentro la finestra del marcatore, che taglia il contenuto che ne esce", () => {
+    const opened = tipped(
+      '<marker id="o" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse"><circle cx="5" cy="5" r="10" fill="#000000"/></marker>',
+      '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#o)"/>',
+    );
+    // Il cerchio sarebbe largo 12; se ne vede il quadrato di 6 della finestra.
+    expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 47], max: [63, 53] });
+  });
+
+  it("non contano se il marcatore non disegna niente", () => {
+    const opened = tipped(
+      '<marker id="vuoto" markerWidth="0"><path d="M0 0 L10 5 L0 10 Z"/></marker>',
+      '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#vuoto)"/>',
+    );
+    expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 49], max: [61, 51] });
+  });
+});
+
 describe("come si vede un testo", () => {
   const TEXTS = doc(
     `${LAYER}<text id="t" x="10" y="40" fill="#0072b2" font-family="Inter, sans-serif" font-size="20"><tspan x="10" dy="0">Ciao</tspan><tspan x="10" dy="30">a te</tspan></text>`

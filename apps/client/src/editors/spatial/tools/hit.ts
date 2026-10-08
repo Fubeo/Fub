@@ -29,17 +29,21 @@
 // della scena, e un tratto a penna si tocca dentro il suo contorno pieno
 // come lo riempie il browser, con la regola non zero. Un testo si tocca nel
 // riquadro stimato delle sue righe: la misura vera dipende dai caratteri.
+// I marcatori di un tracciato, come le punte delle linee, si disegnano sopra
+// la forma che li usa: si toccano come il suo contorno e stanno nei riquadri
+// col contorno, ma non nella geometria che la griglia aggancia.
 
 import type { Role } from "../scene/analysis";
 import { BoundsBuilder, fmin, parsePath, rectPath, Track, type Bounds, type Segment } from "../scene/geometry";
 import { arcCenter, onEllipse } from "../scene/curves";
+import { markerFit, markerMatrix, placed, vertices, type MarkerFit, type MarkerPlace, type Vertex } from "../scene/markers";
 import { apply, compose, IDENTITY, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, parseFragment, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Fragment, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, startOffset, transform as parseTransform } from "../scene/values";
+import { length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, reference, startOffset, transform as parseTransform } from "../scene/values";
 import { NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
-import type { PaintAttr, PaintBuilder, PaintNode, PaintResource, PaintShape, TextPiece, TextRun } from "../painter/paint";
+import type { PaintAttr, PaintBuilder, PaintDef, PaintNode, PaintResource, PaintShape, TextPiece, TextRun } from "../painter/paint";
 
 /// L'errore massimo dell'appiattimento, in unità della scena.
 export const FLATNESS = 0.05;
@@ -98,6 +102,10 @@ interface Part {
   readonly radius: number;
   readonly cache: ShapeCache | null;
   flat: Flat | null;
+  /// Per un marcatore, come la punta di una linea, la forma che lo usa;
+  /// `null` per una forma. Un marcatore si tocca e sta nei riquadri col
+  /// contorno, ma non è geometria della forma: si vede come il suo contorno.
+  readonly host: Part | null;
 }
 
 /// Ciò che si vede di un oggetto in un punto: la forma, la sua geometria e
@@ -128,6 +136,8 @@ interface ShapeCache {
   segments: readonly Segment[] | null;
   scene: { readonly matrix: Matrix; readonly bounds: Bounds | null } | null;
   local: Bounds | null | undefined;
+  /// I vertici, dove vanno i marcatori.
+  vertices?: readonly Vertex[];
 }
 
 /// Un blocco estraneo fuori dagli oggetti, con le forme che se ne stimano.
@@ -208,6 +218,7 @@ export class Unit {
     if (this.shapeBounds === undefined) {
       const out = new BoundsBuilder();
       for (const part of this.parts) {
+        if (part.host !== null) continue;
         const local = part.frameMatrix === IDENTITY && part.cache !== null ? localBounds(part) : transformedBounds(part.segments, part.frameMatrix);
         if (local !== null) includeInflated(out, local, 0);
       }
@@ -230,13 +241,14 @@ export class Unit {
 
   /// Vero se una delle forme che lo disegnano si riempie.
   get filled(): boolean {
-    return this.parts.some((part) => part.fill);
+    return this.parts.some((part) => part.host === null && part.fill);
   }
 
   /// Le forme che disegnano l'oggetto, in ordine di documento: l'elemento,
-  /// e la matrice dalle sue coordinate a quelle della scena.
+  /// e la matrice dalle sue coordinate a quelle della scena. I marcatori non
+  /// ci sono: stanno con la forma che li usa.
   shapes(): Array<{ readonly leaf: LeafNode; readonly matrix: Matrix }> {
-    return this.parts.map((part) => ({ leaf: part.leaf, matrix: part.matrix }));
+    return this.parts.filter((part) => part.host === null).map((part) => ({ leaf: part.leaf, matrix: part.matrix }));
   }
 
   /// Vero se il punto `p` della scena tocca l'oggetto, con una tolleranza
@@ -257,16 +269,22 @@ export class Unit {
   /// La forma più in alto dell'oggetto che si vede nel punto `p` della
   /// scena, e che cosa la colora lì: il contorno, che sta sopra, o il
   /// riempimento. Con `tolerance` un punto vicino a un bordo prende il
-  /// contorno della forma, o il riempimento se non ne ha. Con `below`, una
-  /// sua forma, soltanto fra quelle che le stanno sotto. `null` se nessuna
-  /// forma lo copre.
+  /// contorno della forma, o il riempimento se non ne ha. Un marcatore, come
+  /// la punta di una linea, dà il contorno della forma che lo usa. Con
+  /// `below`, una sua forma, soltanto fra quelle che le stanno sotto. `null`
+  /// se nessuna forma lo copre.
   sampleAt(p: Point, tolerance: number, below: LeafNode | null = null): Sampled | null {
     if (!near(this.bounds, p, p, tolerance)) return null;
     const top = below === null ? this.parts.length : this.parts.findIndex((part) => part.leaf === below);
     for (let i = top - 1; i >= 0; i--) {
       const part = this.parts[i]!;
       const on = partSample(part, p, tolerance);
-      if (on !== null) return { leaf: part.leaf, segments: part.segments, matrix: part.matrix, on };
+      if (on === null) continue;
+      // Un marcatore si vede come il contorno della forma che lo usa.
+      const host = part.host;
+      return host === null
+        ? { leaf: part.leaf, segments: part.segments, matrix: part.matrix, on }
+        : { leaf: host.leaf, segments: host.segments, matrix: host.matrix, on: "stroke" };
     }
     return null;
   }
@@ -480,6 +498,7 @@ export type Holder = (id: string) => ElementPart | null;
 export class SceneIndexer {
   private cache = new WeakMap<PaintShape, ShapeCache>();
   private tracks = new WeakMap<PaintResource, Track | null>();
+  private markers = new WeakMap<PaintResource, MarkerLook | null>();
   private readonly foreign: ForeignShapes;
 
   /// `holder` trova gli elementi a cui i blocchi estranei rimandano; senza,
@@ -490,7 +509,7 @@ export class SceneIndexer {
   /// livelli che si scrivono, per l'indice e per ogni altra ricerca.
   constructor(
     private readonly builder: PaintBuilder,
-    holder: Holder | null = null,
+    private readonly holder: Holder | null = null,
     private readonly pages: ((model: DocumentModel) => readonly ContainerNode[]) | null = null,
   ) {
     this.foreign = new ForeignShapes(builder, holder);
@@ -746,7 +765,7 @@ export class SceneIndexer {
       const bounds = this.sceneBounds(part);
       if (bounds === null) continue;
       includeInflated(scene, bounds, part.radius * scaleOf(part.matrix));
-      includeInflated(geometry, bounds, 0);
+      if (part.host === null) includeInflated(geometry, bounds, 0);
     }
     const id = node.facts.id;
     const tag = tagName(node);
@@ -783,7 +802,9 @@ export class SceneIndexer {
   private collect(node: ElementPart, matrix: Matrix, frame: Matrix, style: Style, out: Part[]): void {
     if (node.kind === "leaf") {
       const shape = this.builder.shape(node)!;
-      out.push(this.part(node, shape, matrix, frame, style));
+      const part = this.part(node, shape, matrix, frame, style);
+      out.push(part);
+      if (MARKED.has(shape.tag)) this.tips(part, shape.attrs, style, out);
       return;
     }
     childLoop(node, (child) => {
@@ -819,7 +840,53 @@ export class SceneIndexer {
     // riquadro.
     const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
     const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
-    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null };
+    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null, host: null };
+  }
+
+  /// I marcatori di `host`, una forma con gli attributi `attrs` e lo stile
+  /// `style`, che si disegnano sopra di lei: le punte delle linee. Un
+  /// marcatore che non c'è o che non disegna niente non conta.
+  private tips(host: Part, attrs: readonly PaintAttr[], style: Style, out: Part[]): void {
+    let list: readonly Vertex[] | null = null;
+    for (const [place, name] of MARKER_PROPERTIES) {
+      const value = attr(attrs, name);
+      const id = value === undefined ? null : reference(value);
+      const look = id === null ? null : this.marker(host.leaf, id);
+      if (look === null) continue;
+      list ??= host.cache === null ? vertices(host.segments) : (host.cache.vertices ??= vertices(host.segments));
+      for (const vertex of placed(list, place)) {
+        const m = markerMatrix(look.fit, vertex, place, style.strokeWidth);
+        for (const shape of look.shapes) {
+          const local = compose(m, shape.matrix);
+          out.push({
+            leaf: host.leaf,
+            segments: shape.segments,
+            matrix: compose(host.matrix, local),
+            frameMatrix: compose(host.frameMatrix, local),
+            fill: shape.fill,
+            radius: shape.radius,
+            cache: null,
+            flat: null,
+            host,
+          });
+        }
+      }
+    }
+  }
+
+  /// Il marcatore vivo di id `id` nel documento di `leaf`, letto e ricordato
+  /// per risorsa; `null` se non c'è o non disegna niente.
+  private marker(leaf: LeafNode, id: string): MarkerLook | null {
+    const node = this.holder === null ? this.resourceNode(leaf, id) : this.holder(id);
+    if (node === null || node.kind !== "leaf" || node.details?.role !== "resource") return null;
+    const resource = this.builder.resource(node);
+    if (resource.tag !== "marker") return null;
+    let look = this.markers.get(resource);
+    if (look === undefined) {
+      look = markerLook(resource);
+      this.markers.set(resource, look);
+    }
+    return look;
   }
 
   /// Il tracciato misurato del testo su tracciato `leaf`: una risorsa del
@@ -827,22 +894,29 @@ export class SceneIndexer {
   private textTrack(leaf: LeafNode): Track | null {
     const id = leaf.details?.textPath;
     if (id === undefined) return null;
+    const child = this.resourceNode(leaf, id);
+    if (child === null) return null;
+    const resource = this.builder.resource(child);
+    let track = this.tracks.get(resource);
+    if (track === undefined) {
+      const d = resource.attrs.find(([name]) => name === "d")?.[1];
+      const segments = d === undefined ? null : parsePath(d);
+      track = segments === null ? null : new Track(segments);
+      this.tracks.set(resource, track);
+    }
+    return track;
+  }
+
+  /// La risorsa di id `id` nelle `defs` della radice del documento di
+  /// `leaf`; `null` se non c'è.
+  private resourceNode(leaf: LeafNode, id: string): LeafNode | null {
     let root = leaf.parent;
     while (root !== null && root.parent !== null) root = root.parent;
     if (root === null) return null;
     for (const defs of elementChildren(root)) {
       if (defs.kind !== "container" || defs.details?.role !== "defs") continue;
       for (const child of elementChildren(defs)) {
-        if (child.kind !== "leaf" || child.details?.role !== "resource" || child.facts.id !== id) continue;
-        const resource = this.builder.resource(child);
-        let track = this.tracks.get(resource);
-        if (track === undefined) {
-          const d = resource.attrs.find(([name]) => name === "d")?.[1];
-          const segments = d === undefined ? null : parsePath(d);
-          track = segments === null ? null : new Track(segments);
-          this.tracks.set(resource, track);
-        }
-        return track;
+        if (child.kind === "leaf" && child.details?.role === "resource" && child.facts.id === id) return child;
       }
     }
     return null;
@@ -861,6 +935,7 @@ export class SceneIndexer {
         radius: shape.radius,
         cache: shape.cache,
         flat: null,
+        host: null,
       });
     }
   }
@@ -1367,6 +1442,81 @@ function elemSegments(elem: Elem, attrs: readonly PaintAttr[], style: Style): re
   return elem.tag === "text"
     ? textSegments(attrs, (elem.children ?? []).map(elemLine), style, wrap === undefined ? null : length(wrap))
     : shapeSegments(elem.tag, attrs);
+}
+
+// ---------------------------------------------------------------------------
+// Marcatori.
+// ---------------------------------------------------------------------------
+
+/// Le forme su cui i browser disegnano i marcatori.
+const MARKED: ReadonlySet<string> = new Set(["path", "line", "polyline", "polygon"]);
+
+/// Le proprietà dei marcatori, coi vertici dove ciascuna li mette.
+const MARKER_PROPERTIES: ReadonlyArray<readonly [MarkerPlace, string]> = [["start", "marker-start"], ["mid", "marker-mid"], ["end", "marker-end"]];
+
+/// Una forma del contenuto di un marcatore: i segmenti, la matrice dalle sue
+/// coordinate a quelle del contenuto, e come si tocca.
+interface MarkerShape {
+  readonly segments: readonly Segment[];
+  readonly matrix: Matrix;
+  readonly fill: boolean;
+  readonly radius: number;
+}
+
+/// Un marcatore vivo: come si mette su un vertice, e le forme del suo
+/// contenuto già tagliate dalla sua finestra.
+interface MarkerLook {
+  readonly fit: MarkerFit;
+  readonly shapes: readonly MarkerShape[];
+}
+
+/// Il marcatore vivo `resource`; `null` se non disegna niente. Il contenuto
+/// non eredita niente da chi lo usa: parte dallo stile iniziale.
+function markerLook(resource: PaintResource): MarkerLook | null {
+  const fit = markerFit((name) => attr(resource.attrs, name));
+  if (fit === null) return null;
+  const shapes: MarkerShape[] = [];
+  contentShapes(resource.children, IDENTITY, INITIAL, fit.clip, shapes);
+  return { fit, shapes };
+}
+
+/// Le forme di `children`, il contenuto di un marcatore o di un suo gruppo,
+/// con `matrix` dalle loro coordinate a quelle del contenuto. Un testo non
+/// conta: dentro un marcatore non se ne stima il riquadro.
+function contentShapes(children: readonly (PaintDef | string)[], matrix: Matrix, style: Style, clip: Bounds, out: MarkerShape[]): void {
+  for (const child of children) {
+    if (typeof child === "string" || hidden(child.attrs)) continue;
+    const m = compose(matrix, transformOf(child.attrs));
+    const inner = styleOf(style, child.attrs);
+    if (child.tag === "g") {
+      contentShapes(child.children, m, inner, clip, out);
+      continue;
+    }
+    const segments = shapeSegments(child.tag, child.attrs);
+    const fill = child.tag !== "line" && inner.fill;
+    const radius = inner.stroke ? inner.strokeWidth / 2 : 0;
+    if (segments.length > 0 && (fill || radius > 0)) clipShape(out, { segments, matrix: m, fill, radius }, clip);
+  }
+}
+
+/// Aggiunge a `out` la forma `shape`, tagliata dalla finestra `clip`: intera
+/// se ci sta, il rettangolo che resta dentro se ne esce in parte, niente se
+/// ne sta fuori. Un'uscita di un miliardesimo della finestra è un errore
+/// d'arrotondamento: la forma ci sta.
+function clipShape(out: MarkerShape[], shape: MarkerShape, clip: Bounds): void {
+  const bounds = transformedBounds(shape.segments, shape.matrix);
+  if (bounds === null) return;
+  const by = shape.radius * scaleOf(shape.matrix);
+  const box: Bounds = { min: [bounds.min[0] - by, bounds.min[1] - by], max: [bounds.max[0] + by, bounds.max[1] + by] };
+  const slack = 1e-9 * Math.max(clip.max[0] - clip.min[0], clip.max[1] - clip.min[1]);
+  const room: Bounds = { min: [clip.min[0] - slack, clip.min[1] - slack], max: [clip.max[0] + slack, clip.max[1] + slack] };
+  if (holds(room, box)) {
+    out.push(shape);
+    return;
+  }
+  const [x0, y0] = [Math.max(box.min[0], clip.min[0]), Math.max(box.min[1], clip.min[1])];
+  const [x1, y1] = [Math.min(box.max[0], clip.max[0]), Math.min(box.max[1], clip.max[1])];
+  if (x1 > x0 && y1 > y0) out.push({ segments: rectPath(x0, y0, x1 - x0, y1 - y0, 0, 0), matrix: IDENTITY, fill: true, radius: 0 });
 }
 
 // ---------------------------------------------------------------------------
