@@ -16,8 +16,12 @@
 //   non si scrive; e un lato non scende sotto la misura a cui lo riducono i
 //   tasti, se non lo era già.
 // - **Ciò che il livello non offre non c'è**: i colori a piacere, gli estremi
-//   e gli angoli del contorno, «Disponi», «Trasforma», la griglia, le guide e
-//   i righelli. Il tratteggio c'è dallo Standard, accanto allo spessore.
+//   e gli angoli del contorno, «Disponi», «Trasforma», i colori del
+//   documento, la griglia, le guide e i righelli. Il tratteggio c'è dallo
+//   Standard, accanto allo spessore.
+// - **Un colore dice il suo contrasto con la carta**: per il riempimento di
+//   una selezione con testi le soglie del testo, altrimenti quella di una
+//   forma; con l'opacità degli oggetti, se è una sola.
 // - **La forma dei poligoni, delle stelle e dei rettangoli**: il tipo, i
 //   lati o le punte, il raggio interno di una stella e il raggio degli
 //   angoli, nella scena come la larghezza (`reshape.ts`).
@@ -50,7 +54,9 @@ import {
   type ChoiceState,
   type FieldId,
   type FieldState,
+  type FieldSwatch,
   type NumberState,
+  type PaintContrast,
   type PropertiesView,
   type SegmentState,
 } from "./properties";
@@ -59,6 +65,8 @@ import { NAME_MAX } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
 import type { ShapeChange, ShapeFacts } from "./reshape";
+import type { ColorsView, PaintTarget } from "./swatches-panel";
+import type { DocumentColors } from "./swatches";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
 import { MIN_RATIO } from "./shapes";
 import { TEXT_FAMILIES, TEXT_SIZE } from "./text";
@@ -329,6 +337,16 @@ export interface FieldsInput {
   /// La tavola scelta dallo strumento Tavola, se è lo strumento di adesso:
   /// senza selezione il pannello la mostra.
   readonly board: BoardFacts | null;
+  /// I campioni del documento, che i campi dei colori scrivono per nome.
+  readonly swatches: readonly FieldSwatch[];
+  /// I colori scelti di recente, dal più recente.
+  readonly recent: readonly string[];
+  /// Il colore della carta, `#rrggbb`, per il contrasto dei colori; `null`
+  /// se non si sa.
+  readonly paper: string | null;
+  /// I colori del documento, contati, e quello con cui si disegna, col
+  /// campione da cui viene, se il livello offre la loro sezione.
+  readonly colors: { readonly document: DocumentColors; readonly drawing: string; readonly swatch: string | null } | null;
 }
 
 /// Un campo di una lunghezza, `value` in unità della scena, mostrata in
@@ -438,8 +456,15 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       const sample = value === null ? undefined : look.samples.get(value);
       return sample === undefined ? {} : { sample };
     };
-    if (has("colors") && look.fill.count > 0) fields.fill = { kind: "paint", label: t("draw.properties.fill"), value: look.fill.value, ...sampled(look.fill.value) };
-    if (has("colors") && look.stroke.count > 0) fields.stroke = { kind: "paint", label: t("draw.properties.stroke"), value: look.stroke.value, ...sampled(look.stroke.value) };
+    // Il contrasto con la carta: i testi chiedono di più delle forme.
+    const measured = (text: boolean): { contrast?: PaintContrast } =>
+      input.paper === null ? {} : { contrast: { paper: input.paper, alpha: look.opacity.value ?? 1, text } };
+    if (has("colors") && look.fill.count > 0) {
+      fields.fill = { kind: "paint", label: t("draw.properties.fill"), value: look.fill.value, ...sampled(look.fill.value), ...measured(look.size.count > 0) };
+    }
+    if (has("colors") && look.stroke.count > 0) {
+      fields.stroke = { kind: "paint", label: t("draw.properties.stroke"), value: look.stroke.value, ...sampled(look.stroke.value), ...measured(false) };
+    }
     if (look.width.count > 0) {
       fields.strokeWidth = {
         kind: "number",
@@ -662,6 +687,29 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     fields,
     actions,
     attributes: selection !== null && input.attributes,
+    swatches: input.swatches,
+    recent: input.recent,
+    ...(input.colors === null ? {} : { colors: colorsView(input.colors, selection, input.recent) }),
+  };
+}
+
+/// La sezione «Colori del documento»: i colori del documento e i recenti, e
+/// dove va un colore, secondo la selezione: il riempimento e il contorno
+/// che ha; senza selezione, ciò che si disegna.
+function colorsView(colors: NonNullable<FieldsInput["colors"]>, selection: SelectionFacts | null, recent: readonly string[]): ColorsView {
+  const look = selection?.look;
+  const targets: PaintTarget[] | null = look === undefined ? null : [];
+  if (look !== undefined && look.fill.count > 0) targets!.push("fill");
+  if (look !== undefined && look.stroke.count > 0) targets!.push("stroke");
+  return {
+    swatches: colors.document.swatches.map(({ id, name, color, uses }) => ({ id, name, color, uses })),
+    used: colors.document.used,
+    hidden: colors.document.hidden,
+    recent,
+    targets,
+    current: look === undefined ? {} : { fill: look.fill.value, stroke: look.stroke.value },
+    drawing: colors.drawing,
+    drawingSwatch: colors.swatch,
   };
 }
 

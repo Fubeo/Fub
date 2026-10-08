@@ -3427,6 +3427,337 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
   });
 });
 
+describe("i colori del documento, dal livello Standard", () => {
+  const A = "o1a2b3c4d";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  /// Il campione «Blu marca», che il riempimento di A usa; B e C hanno il
+  /// colore scritto, C proprio quello del campione.
+  const SWATCHED = doc(
+    '<defs id="fub-defs"><linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient></defs>' +
+      `${LAYER}<rect id="${A}" x="60" y="60" width="20" height="20" fill="url(#rs) #0072b2" stroke="#000000" stroke-width="2"/>` +
+      `<rect id="${B}" x="10" y="20" width="10" height="10" fill="#d55e00"/><rect id="${C}" x="30" y="20" width="10" height="10" fill="#0072b2"/></g>`,
+  );
+  const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
+  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="colors"]')!;
+  const group = (kind: string): HTMLElement => section().querySelector<HTMLElement>(`.draw-swatches-group[data-group="${kind}"]`)!;
+  const chips = (kind: string): HTMLButtonElement[] => [...group(kind).querySelectorAll<HTMLButtonElement>(".draw-swatches-chip")];
+  const chip = (kind: string, key: string): HTMLButtonElement => group(kind).querySelector<HTMLButtonElement>(`.draw-swatches-chip[data-key="${key}"]`)!;
+  const keys = (kind: string): string[] => chips(kind).map((each) => each.dataset.key!);
+  const labels = (kind: string): string[] => chips(kind).map((each) => each.getAttribute("aria-label")!);
+  /// I colori detti «di adesso», con la loro griglia.
+  const current = (): string[] =>
+    [...section().querySelectorAll<HTMLElement>('.draw-swatches-chip[aria-current="true"]')].map(
+      (each) => `${each.closest<HTMLElement>(".draw-swatches-group")!.dataset.group} ${each.dataset.key}`,
+    );
+  const addButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>(".draw-swatches-add")!;
+  const targetButton = (target: string): HTMLButtonElement => section().querySelector<HTMLButtonElement>(`.draw-swatches-target [data-target="${target}"]`)!;
+  const form = (): HTMLElement => section().querySelector<HTMLElement>(".draw-swatches-form")!;
+  const formTitle = (): string => form().querySelector(".draw-swatches-form-title")!.textContent!;
+  const nameInput = (): HTMLInputElement => form().querySelectorAll<HTMLInputElement>('input[type="text"]')[0]!;
+  const colorInput = (): HTMLInputElement => form().querySelectorAll<HTMLInputElement>('input[type="text"]')[1]!;
+  const shiftClick = (target: HTMLElement): void => {
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: true }));
+  };
+  /// Il menu di un colore, col clic destro, e una sua voce.
+  const menuOf = (kind: string, key: string): void => {
+    chip(kind, key).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+  };
+  const item = (label: string): HTMLButtonElement => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === label)!;
+  };
+  /// Il rettangolo `id` com'è scritto adesso.
+  const rect = (id: string): string => new RegExp(`<rect id="${id}"[^>]*/>`).exec(editor.engine.text)![0];
+  /// Il colore dei tratti della penna e del contorno dei rettangoli nuovi,
+  /// nell'ordine del file.
+  const inked = (): string[] => [...editor.engine.text.matchAll(/fub:tool="pen"[^>]*? fill="([^"]*)"/g)].map((match) => match[1]!);
+  const outlined = (): string[] =>
+    [...editor.engine.text.matchAll(new RegExp(`<rect id="(?!(?:${A}|${B}|${C})")[^"]*"[^>]*? stroke="([^"]*)"`, "g"))].map((match) => match[1]!);
+  /// Il colore che la barra dà per scelto.
+  const checked = (): string | null => host.querySelector('[role="toolbar"] .draw-color[aria-checked="true"]')?.getAttribute("aria-label") ?? null;
+
+  afterEach(() => {
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("mostra i campioni, i colori scritti e i recenti, contati, e il colore di adesso", () => {
+    mount(SWATCHED, { level: "standard", colors: ["#e69f00"] });
+    panelButton().click();
+    expect(section().hidden).toBe(false);
+    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 1 oggetto"]);
+    expect(keys("used")).toEqual(["#000000", "#d55e00", "#0072b2"]);
+    expect(labels("used")).toEqual(["Nero, usato da 1 oggetto", "Vermiglio, usato da 1 oggetto", "Blu, usato da 1 oggetto"]);
+    expect(keys("recent")).toEqual(["#e69f00"]);
+    // Senza selezione il colore di adesso è quello con cui si disegna.
+    expect(current()).toEqual(["used #000000"]);
+    expect(formatIssues(checkAccessibility(section()))).toBe("");
+    // Con una selezione, quello del riempimento; «Applica a» sceglie il
+    // contorno.
+    editor.select([A]);
+    expect(current()).toEqual(["swatches rs"]);
+    targetButton("stroke").click();
+    expect(current()).toEqual(["used #000000"]);
+    expect(formatIssues(checkAccessibility(section()))).toBe("");
+  });
+
+  it("un clic dà il colore al riempimento della selezione e Maiusc al contorno; un campione si scrive col suo colore", () => {
+    const remembered: (readonly string[])[] = [];
+    mount(SWATCHED, { level: "standard", onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([B]);
+    key("Enter");
+    chip("swatches", "rs").click();
+    expect(rect(B)).toBe(`<rect id="${B}" x="10" y="20" width="10" height="10" fill="url(#rs) #0072b2"/>`);
+    expect(spoken()).toBe("Riempimento: Blu marca.");
+    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 2 oggetti"]);
+    expect(current()).toEqual(["swatches rs"]);
+    // Un campione non è un colore recente: ha la sua griglia.
+    expect(remembered).toEqual([]);
+    shiftClick(chip("used", "#000000"));
+    expect(rect(B)).toContain('stroke="#000000"');
+    expect(spoken()).toBe("Contorno: Nero.");
+    expect(remembered).toEqual([["#000000"]]);
+    expect(keys("recent")).toEqual(["#000000"]);
+    editor.undo();
+    expect(rect(B)).not.toContain("stroke=");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Riempimento.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("«Nuovo campione…» fa un campione del colore della selezione, e il fuoco va a lui", () => {
+    mount(SWATCHED, { level: "standard" });
+    editor.select([B]);
+    key("Enter");
+    addButton().click();
+    expect(formTitle()).toBe("Nuovo campione");
+    // Un colore della tavolozza dà il suo nome al campione.
+    expect(nameInput().value).toBe("Vermiglio");
+    expect(colorInput().value).toBe("#d55e00");
+    expect(document.activeElement).toBe(nameInput());
+    key("Enter", {}, nameInput());
+    const made = /<linearGradient id="([a-z0-9]+)" fub:role="swatch" fub:name="Vermiglio" gradientUnits="userSpaceOnUse">\s*<stop stop-color="#d55e00"\/>\s*<\/linearGradient>/.exec(
+      editor.engine.text,
+    );
+    expect(made).not.toBeNull();
+    // Nuovo, il campione non prende chi ha il colore scritto.
+    expect(rect(B)).toContain('fill="#d55e00"');
+    expect(spoken()).toBe("Campione «Vermiglio» creato.");
+    expect(form().hidden).toBe(true);
+    expect(keys("swatches")).toEqual(["rs", made![1]]);
+    expect(document.activeElement).toBe(chip("swatches", made![1]!));
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nuovo campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("«Rendi campione…» dal menu di un colore scritto: chi lo usa passa al campione", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    menuOf("used", "#d55e00");
+    item("Rendi campione…").click();
+    expect(formTitle()).toBe("Rendi campione #d55e00");
+    typeIn(nameInput(), "Accento");
+    key("Enter", {}, nameInput());
+    const id = /<linearGradient id="([a-z0-9]+)" fub:role="swatch" fub:name="Accento"/.exec(editor.engine.text)![1]!;
+    expect(rect(B)).toBe(`<rect id="${B}" x="10" y="20" width="10" height="10" fill="url(#${id}) #d55e00"/>`);
+    expect(spoken()).toBe("Campione «Accento» creato: lo usa 1 oggetto.");
+    expect(keys("used")).toEqual(["#000000", "#0072b2"]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Colore reso campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("«Usa il campione» porta al campione chi ha il suo colore scritto", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    menuOf("used", "#0072b2");
+    item("Usa il campione «Blu marca»").click();
+    expect(rect(C)).toBe(`<rect id="${C}" x="30" y="20" width="10" height="10" fill="url(#rs) #0072b2"/>`);
+    expect(spoken()).toBe("Ora «Blu marca» lo usano 2 oggetti.");
+    expect(keys("used")).toEqual(["#000000", "#d55e00"]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Oggetti passati a un campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("F2 rinomina un campione, e «Cambia colore…» lo cambia per chi lo usa", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").focus();
+    key("F2", {}, chip("swatches", "rs"));
+    expect(formTitle()).toBe("Rinomina «Blu marca»");
+    expect(nameInput().value).toBe("Blu marca");
+    typeIn(nameInput(), "Blu scuro");
+    key("Enter", {}, nameInput());
+    expect(editor.engine.text).toContain('fub:name="Blu scuro"');
+    expect(spoken()).toBe("Il campione ora si chiama «Blu scuro».");
+    expect(document.activeElement).toBe(chip("swatches", "rs"));
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nome di un campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+
+    menuOf("swatches", "rs");
+    item("Cambia colore…").click();
+    expect(formTitle()).toBe("Cambia il colore di «Blu marca»");
+    expect(document.activeElement).toBe(colorInput());
+    typeIn(colorInput(), "#56b4e9");
+    key("Enter", {}, colorInput());
+    expect(editor.engine.text).toContain('<stop stop-color="#56b4e9"/>');
+    expect(rect(A)).toContain('fill="url(#rs) #56b4e9"');
+    // Chi ha il colore di prima scritto lo tiene: non usa il campione.
+    expect(rect(C)).toContain('fill="#0072b2"');
+    expect(spoken()).toBe("«Blu marca» ora è Azzurro.");
+    expect(labels("swatches")).toEqual(["Blu marca, campione #56b4e9, usato da 1 oggetto"]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Colore di un campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("Canc elimina un campione: chi lo usava tiene il suo colore, scritto, e il fuoco resta nella griglia", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").focus();
+    key("Delete", {}, chip("swatches", "rs"));
+    expect(editor.engine.text).not.toContain("linearGradient");
+    expect(rect(A)).toContain('fill="#0072b2"');
+    expect(spoken()).toBe("Campione «Blu marca» eliminato: chi lo usava tiene il suo colore.");
+    expect(keys("swatches")).toEqual([]);
+    expect(document.activeElement).toBe(addButton());
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Campione eliminato.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("il menu di un colore sceglie gli oggetti che lo mostrano, se si possono scegliere", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    menuOf("swatches", "rs");
+    item("Scegli gli oggetti con questo campione").click();
+    expect(editor.selection).toEqual([A]);
+    expect(spoken()).toBe("1 oggetto scelto.");
+    menuOf("used", "#0072b2");
+    item("Scegli gli oggetti con questo colore").click();
+    expect(editor.selection).toEqual([C]);
+    editor.dispose();
+
+    mount(
+      doc(
+        `${LAYER}<rect id="${A}" x="0" y="0" width="5" height="5" fill="#000000"/></g>` +
+          `<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="${B}" x="10" y="0" width="5" height="5" fill="#009e73"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    editor.select([A]);
+    key("Enter");
+    menuOf("used", "#009e73");
+    item("Scegli gli oggetti con questo colore").click();
+    expect(spoken()).toBe("Nessun oggetto che si può scegliere mostra questo colore.");
+    expect(editor.selection).toEqual([A]);
+  });
+
+  it("senza selezione un campione è il colore con cui si disegna: gli oggetti nuovi lo usano e lo seguono", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").click();
+    expect(spoken()).toBe("Colore: Blu marca.");
+    expect(current()).toEqual(["swatches rs"]);
+    expect(checked()).toBe("Blu");
+    drag([[100, 100], [140, 120]]);
+    editor.setTool("rect");
+    drag([[100, 20], [130, 50]]);
+    expect(editor.selection).toEqual([]);
+    expect(inked()).toEqual(["url(#rs) #0072b2"]);
+    expect(outlined()).toEqual(["url(#rs) #0072b2"]);
+    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 3 oggetti"]);
+
+    // Il campione cambia colore, e ciò che si disegna con lui; anche
+    // annullando.
+    menuOf("swatches", "rs");
+    item("Cambia colore…").click();
+    typeIn(colorInput(), "#009e73");
+    key("Enter", {}, colorInput());
+    expect(checked()).toBe("Verde");
+    expect(current()).toEqual(["swatches rs"]);
+    // Annullare sceglie gli oggetti che tornano come prima.
+    editor.undo();
+    expect(checked()).toBe("Blu");
+    editor.select([]);
+    expect(current()).toEqual(["swatches rs"]);
+
+    // Un colore della barra lascia il campione.
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] .draw-color[aria-label="Vermiglio"]')!.click();
+    expect(current()).toEqual(["used #d55e00", "recent #d55e00"]);
+    drag([[140, 20], [170, 50]]);
+    expect(outlined()).toEqual(["url(#rs) #0072b2", "#d55e00"]);
+
+    // Se il campione se ne va, ciò che si disegna tiene il suo colore,
+    // scritto.
+    chip("swatches", "rs").click();
+    chip("swatches", "rs").focus();
+    key("Delete", {}, chip("swatches", "rs"));
+    expect(current()).toEqual(["used #0072b2"]);
+    drag([[180, 20], [210, 50]]);
+    expect(outlined()).toEqual(["#0072b2", "#d55e00", "#0072b2"]);
+  });
+
+  it("il colore lascia il campione con un disegno nuovo, o senza «Colori del documento»; e lì la sezione non c'è", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").click();
+    editor.setLevel("custom", ["pen", "properties", "colors"]);
+    expect(section().hidden).toBe(true);
+    editor.setLevel("standard");
+    expect(section().hidden).toBe(false);
+    expect(current()).toEqual(["used #0072b2"]);
+    drag([[100, 100], [140, 120]]);
+    expect(inked()).toEqual(["#0072b2"]);
+
+    chip("swatches", "rs").click();
+    editor.setEngine(SceneEngine.open(SOURCE));
+    expect(keys("swatches")).toEqual([]);
+    drag([[100, 100], [140, 120]]);
+    expect(inked()).toEqual(["#0072b2"]);
+  });
+
+  it("i colori scritti entrano fra i recenti, che chi monta l'editor ricorda; i campioni no", () => {
+    const remembered: (readonly string[])[] = [];
+    mount(SWATCHED, { level: "standard", colors: ["#cc79a7"], onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([B]);
+    key("Enter");
+    expect(keys("recent")).toEqual(["#cc79a7"]);
+    enter(propertyInput("fill"), "#e69f00");
+    expect(remembered).toEqual([["#e69f00", "#cc79a7"]]);
+    expect(keys("recent")).toEqual(["#e69f00", "#cc79a7"]);
+    // Il campione scritto per nome nel campo non è un recente.
+    enter(propertyInput("fill"), "blu marca");
+    expect(rect(B)).toContain('fill="url(#rs) #0072b2"');
+    expect(remembered).toHaveLength(1);
+    // Un recente si dà come gli altri colori.
+    chip("recent", "#cc79a7").click();
+    expect(rect(B)).toContain('fill="#cc79a7"');
+    expect(remembered[1]).toEqual(["#cc79a7", "#e69f00"]);
+    // I recenti di un'altra finestra, da chi monta l'editor, non gli
+    // tornano indietro.
+    editor.setRecentColors(["#56b4e9", "#3a7bd5"]);
+    expect(keys("recent")).toEqual(["#56b4e9", "#3a7bd5"]);
+    expect(labels("recent")).toEqual(["Azzurro", "#3a7bd5"]);
+    expect(remembered).toHaveLength(2);
+  });
+
+  it("in sola lettura la sezione mostra i colori, e un gesto dice perché non cambia nulla", () => {
+    mount(SWATCHED, { level: "standard" });
+    editor.select([B]);
+    key("Enter");
+    editor.setReadOnly(true);
+    chip("swatches", "rs").click();
+    expect(spoken()).toBe("Modifica non applicata: il disegno è in sola lettura.");
+    expect(addButton().getAttribute("aria-disabled")).toBe("true");
+    expect(changes).toEqual([]);
+  });
+});
+
 describe("la barra accanto alla selezione, dal livello Standard", () => {
   const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
   const spot = (): readonly number[] => /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(bar().style.transform)!.slice(1).map(Number);
@@ -5490,7 +5821,7 @@ describe("trasformare con i numeri, dal livello Esperto", () => {
   const SHAPES = doc(`${LAYER}${RECT_A}${RECT_B}</g>`);
 
   const transform = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Trasforma…"]')!;
-  const apply = (): HTMLButtonElement => properties().querySelector<HTMLButtonElement>(".draw-properties-apply")!;
+  const apply = (): HTMLButtonElement => properties().querySelector<HTMLButtonElement>('[data-section="transform"] .draw-properties-apply')!;
   /// Senza il pannello delle proprietà, «Trasforma…» apre una finestra.
   const DIALOG: DrawEditorOptions = { level: "custom", custom: ["rect", "transform"] };
 
@@ -10433,6 +10764,23 @@ describe("il menu radiale, dal livello Standard", () => {
     // tornarci.
     expect(voices().slice(1, 4)).toEqual(["ne Selezione", "e Gomma", "se Evidenziatore"]);
     expect(voices().slice(5)).toEqual(["sw Colore: Verde", "w Colore: Nero", "nw Colore: Vermiglio"]);
+  });
+
+  it("i colori a sinistra sono i recenti che chi monta l'editor ricorda, senza quello di adesso", () => {
+    /// Le voci a sinistra, quelle dei colori.
+    const colors = (): string[] => voices().filter((each) => /^(sw|w|nw) /.test(each));
+    mount(SOURCE, { level: "standard", colors: ["#3a7bd5", "#000000", "#cc79a7", "#56b4e9"] });
+    size(200, 100);
+    surface().focus();
+    rightClick(100, 50);
+    expect(colors()).toEqual(["sw Colore: Azzurro", "w Colore: Personalizzato #3a7bd5", "nw Colore: Porpora"]);
+    voice("Colore: Personalizzato #3a7bd5").click();
+    expect(spoken()).toBe("Colore: Personalizzato #3a7bd5.");
+    // Senza i colori a piacere la penna torna al nero, e a sinistra restano
+    // i recenti della tavolozza.
+    editor.setLevel("custom", ["pen", "gestures"]);
+    rightClick(100, 50);
+    expect(colors()).toEqual(["sw Colore: Blu", "w Colore: Porpora", "nw Colore: Azzurro"]);
   });
 
   it("tenuto premuto segue il puntatore: lasciato verso una voce la sceglie, e non disegna", () => {

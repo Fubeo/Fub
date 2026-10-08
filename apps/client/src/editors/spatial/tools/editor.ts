@@ -145,7 +145,7 @@ import type { ElementItem, Item } from "../scene/classify";
 import { MAX_VALUE_BYTES, ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
-import { href as parseHref } from "../scene/values";
+import { paintReference, href as parseHref } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
 import { PaintBuilder, resourcesFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
@@ -241,6 +241,20 @@ import {
 import { framedText, initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
+import {
+  documentColors,
+  documentSwatches,
+  linkSwatchOps,
+  newSwatchOps,
+  paperColor,
+  recolorSwatchOps,
+  removeSwatchOps,
+  renameSwatchOps,
+  swatchPaint,
+  unitsShowing,
+  type DocumentColors,
+  type SwatchChange,
+} from "./swatches";
 import {
   angleOf,
   directionCursor,
@@ -437,6 +451,7 @@ import {
   HIGHLIGHTER_WIDTHS,
   isLight,
   PALETTE,
+  RECENT_COLORS,
   swatchOf,
   WIDTHS,
   type Width,
@@ -571,6 +586,12 @@ export interface DrawEditorOptions {
   readonly grid?: Grid;
   /// Chi disegna ha cambiato la griglia, dal menu o coi tasti.
   readonly onGridChange?: (grid: Grid) => void;
+  /// I colori scelti di recente, `#rrggbb`, dal più recente (default
+  /// nessuno).
+  readonly colors?: readonly string[];
+  /// Chi disegna ha scelto un colore: i colori recenti di adesso, dal più
+  /// recente.
+  readonly onColorsChange?: (colors: readonly string[]) => void;
   readonly links?: DrawLinks;
   readonly place?: DrawPlace;
   readonly onChange?: (change: DrawChange) => void;
@@ -641,6 +662,9 @@ export interface DrawEditor {
   /// Un'altra griglia, da chi monta l'editor: non si annuncia e non torna a
   /// `onGridChange`. Un passo fuori dai limiti lascia quello di prima.
   setGrid(grid: Grid): void;
+  /// Altri colori recenti, da chi monta l'editor: non tornano a
+  /// `onColorsChange`.
+  setRecentColors(colors: readonly string[]): void;
   select(keys: readonly string[]): void;
   deleteSelection(): void;
   undo(): void;
@@ -722,7 +746,7 @@ const TAP_SLOP_PX = 12;
 /// contestuale che il sistema gli manda dietro, in millisecondi.
 const RADIAL_ECHO_MS = 500;
 
-/// Quanti strumenti e colori di prima l'editor ricorda per il menu radiale.
+/// Quanti strumenti di prima l'editor ricorda per il menu radiale.
 const RECENT_MAX = 6;
 
 /// Gli strumenti che il menu radiale offre quando chi disegna ne ha usati
@@ -1110,6 +1134,19 @@ function straight(samples: readonly InkSample[]): InkSample[] {
     out.push({ ...first, x: first.x + (last.x - first.x) * k, y: first.y + (last.y - first.y) * k, t: first.t + (last.t - first.t) * k });
   }
   return out;
+}
+
+/// I colori di un disegno che non se ne contano: per la sezione chiusa,
+/// che non li mostra.
+const NO_COLORS: DocumentColors = { swatches: [], used: [], hidden: 0 };
+
+/// Il colore e lo spessore con cui disegna uno strumento.
+interface DrawStyle {
+  /// `#rrggbb`.
+  color: string;
+  width: number;
+  /// Il campione da cui viene il colore, che gli oggetti nuovi usano.
+  swatch: string | null;
 }
 
 /// Come un comando che sposta gli elementi senza cambiarli tiene lo stile
@@ -1925,24 +1962,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let tool: ToolId = startTool(tools, profile);
   /// Il colore e lo spessore di chi scrive: la penna, le forme e le note li
   /// condividono, l'evidenziatore e la copertura hanno i loro.
-  const styles: Record<Tool | "cover", { color: string; width: number }> = {
-    pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH },
-    highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH },
-    cover: { color: COVER_COLOR, width: DEFAULT_WIDTH },
+  const styles: Record<Tool | "cover", DrawStyle> = {
+    pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH, swatch: null },
+    highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH, swatch: null },
+    cover: { color: COVER_COLOR, width: DEFAULT_WIDTH, swatch: null },
   };
-  /// Il testo ha il colore della penna e il corpo suo, che la barra mostra
-  /// al posto dello spessore.
-  const textStyle = {
+  /// Il testo ha il colore della penna, col suo campione, e il corpo suo,
+  /// che la barra mostra al posto dello spessore.
+  const textStyle: DrawStyle = {
     get color(): string {
       return styles.pen.color;
     },
     set color(value: string) {
       styles.pen.color = value;
     },
+    get swatch(): string | null {
+      return styles.pen.swatch;
+    },
+    set swatch(value: string | null) {
+      styles.pen.swatch = value;
+    },
     width: TEXT_SIZE,
   };
-  const style = (): { color: string; width: number } =>
-    tool === "text" ? textStyle : styles[tool === "highlighter" || tool === "cover" ? tool : "pen"];
+  const style = (): DrawStyle => (tool === "text" ? textStyle : styles[tool === "highlighter" || tool === "cover" ? tool : "pen"]);
   /// Come disegna lo strumento Poligono: poligono o stella, i lati, le punte,
   /// il rapporto interno e il raggio degli angoli. Vale finché l'editor vive,
   /// come il colore; lo cambiano i tasti mentre si disegna e il pannello
@@ -1960,10 +2002,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const widthsNow = (): readonly Width[] => (tool === "highlighter" ? HIGHLIGHTER_WIDTHS : tool === "text" ? TEXT_SIZES : WIDTHS);
   /// L'ultimo colore scelto a piacere: un campione in più nella barra.
   let custom: string | null = null;
-  /// Gli strumenti e i colori di prima, il più recente per primo: le voci
-  /// del menu radiale.
+  /// Gli strumenti di prima, il più recente per primo: le voci del menu
+  /// radiale.
   let recentTools: ToolId[] = [];
-  let recentColors: string[] = [];
+  /// I colori scelti di recente, il più recente per primo, quello di adesso
+  /// compreso: della sezione «Colori del documento» e, senza quello di
+  /// adesso, del menu radiale. Li ricorda chi monta l'editor.
+  let recentColors: readonly string[] = (options.colors ?? []).slice(0, RECENT_COLORS);
   let selection: string[] = [];
   let camera: View = { scale: 1, angle: 0, tx: 0, ty: 0 };
   /// Il formato della percentuale di zoom, nella lingua di adesso.
@@ -2472,6 +2517,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const closed = grid.closed.filter((each) => each !== id);
       changeGrid({ ...grid, closed: open ? closed : [...closed, id] });
     },
+    colors: {
+      onApply: (choice, target) => applyColor(choice.value, choice.color, choice.name, target),
+      onCreate: (name, color, link) => createSwatch(name, color, link),
+      onLink: (id) => linkSwatch(id),
+      onRename: (id, name) => renameSwatch(id, name),
+      onRecolor: (id, color) => recolorSwatch(id, color),
+      onDelete: (id) => deleteSwatch(id),
+      onSelect: (value) => selectShowing(value),
+    },
     announce: (text) => announce(text),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
@@ -2489,7 +2543,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly kept: unknown;
     readonly polygon: PolygonTool | null;
     readonly board: Board | null;
+    readonly drawing: string;
+    readonly recent: readonly string[];
   } | null = null;
+  /// I colori del documento contati per la scena `index`: si ricontano
+  /// soltanto quando il disegno cambia.
+  let colorsCounted: { readonly index: SceneIndex; readonly colors: DocumentColors } | null = null;
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
   let ratioLock: { readonly keys: string; readonly on: boolean } | null = null;
@@ -5136,6 +5195,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // tavola scelta dallo strumento Tavola.
     const polygonNow = tool === "polygon" ? polygonTool : null;
     const boardNow = tool === "board" ? (chosenSheet()?.board ?? null) : null;
+    // Il colore con cui si disegna, col campione da cui viene.
+    const drawing = `${style().color} ${style().swatch ?? ""}`;
     const last = panelShown;
     if (
       last !== null &&
@@ -5148,13 +5209,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last.ratio === ratioLock &&
       last.kept === kept &&
       last.polygon === polygonNow &&
-      last.board === boardNow
+      last.board === boardNow &&
+      last.drawing === drawing &&
+      last.recent === recentColors
     ) {
       return;
     }
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow };
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors };
     const list = boardsNow();
-    const units = selection.length === 0 || engine.model === null ? [] : selectedUnits();
+    const model = engine.model;
+    const units = selection.length === 0 || model === null ? [] : selectedUnits();
     panel.update(
       propertiesView({
         features,
@@ -5170,8 +5234,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           boardNow === null
             ? null
             : { id: boardNow.id, name: boardNow.name, rect: boardNow.rect, index: list.indexOf(boardNow) + 1, count: list.length },
+        swatches: model === null ? [] : documentSwatches(model),
+        recent: recentColors,
+        paper: model === null ? null : paperColor(model),
+        // I colori si contano soltanto con la loro sezione aperta.
+        colors:
+          model === null || !has("swatches")
+            ? null
+            : {
+                document: grid.closed.includes("colors") ? (colorsCounted?.colors ?? NO_COLORS) : colorsNow(),
+                drawing: style().color,
+                swatch: style().swatch,
+              },
       }),
     );
+  }
+
+  /// I colori del documento, contati, per la scena di adesso.
+  function colorsNow(): DocumentColors {
+    const index = currentIndex();
+    if (colorsCounted?.index !== index) colorsCounted = { index, colors: documentColors(engine.model!) };
+    return colorsCounted.colors;
   }
 
   /// Invio e Ctrl+Maiusc+X con gli attributi nel pannello: il fuoco va alla
@@ -5305,6 +5388,117 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const outlined = outlineOps(model, units, change, newIds());
     return changeFromPanel("dash" in change ? "draw.action.dash" : "cap" in change ? "draw.action.cap" : "draw.action.join", outlined.ops, outlined.keys);
   };
+
+  // --- I colori del documento ------------------------------------------------
+
+  /// Il campione `id` del disegno di adesso, se c'è.
+  const swatchNamed = (id: string): { readonly id: string; readonly name: string; readonly color: string } | null => {
+    const model = engine.model;
+    return (model === null ? undefined : documentSwatches(model).find((each) => each.id === id)) ?? null;
+  };
+
+  /// Quanti elementi mostrano il campione `id`, nel disegno di adesso.
+  const swatchUses = (id: string): number => colorsNow().swatches.find((each) => each.id === id)?.uses ?? 0;
+
+  /// `said`, e quanti oggetti tengono il colore scritto, se ce ne sono.
+  const withKept = (said: string, change: SwatchChange): string =>
+    change.kept === 0 ? said : `${said} ${plural(change.kept, "draw.colors.kept.one", "draw.colors.kept.other")}`;
+
+  /// Un colore dalla sezione «Colori del documento»: `value` si scrive,
+  /// `color` è il suo `#rrggbb` e `name` come si dice. Va al bersaglio
+  /// `target` della selezione o, con `null`, a ciò che si disegna.
+  function applyColor(value: string, color: string, name: string, target: "fill" | "stroke" | null): string | null {
+    if (target === null) {
+      setColor(color, { swatch: paintReference(value)?.id ?? null });
+      announce(t("draw.announce.color", { color: name }));
+      return null;
+    }
+    const outcome = styleFromPanel(target, value);
+    if (outcome === null) {
+      if (paintReference(value) === null) rememberColors(color);
+      announce(t("draw.colors.applied", { target: t(target === "fill" ? "draw.properties.fill" : "draw.properties.stroke"), name }));
+    }
+    panelShown = null;
+    syncProperties();
+    return outcome;
+  }
+
+  /// Il campione nuovo `name` del colore `color`; con `link`, chi usa
+  /// `color` scritto passa a lui.
+  function createSwatch(name: string, color: string, link: boolean): string | null {
+    const model = engine.model;
+    if (model === null) return null;
+    const made = newSwatchOps(model, color, name, link, selectedUnits(), newIds());
+    const outcome = changeFromPanel(link ? "draw.action.swatch_make" : "draw.action.swatch_new", made.ops, made.keys);
+    if (outcome !== null) return outcome;
+    const uses = link ? swatchUses(made.id) : 0;
+    announce(withKept(uses === 0 ? t("draw.colors.created", { name }) : plural(uses, "draw.colors.created.one", "draw.colors.created.other", { name }), made));
+    return null;
+  }
+
+  /// Chi usa scritto il colore del campione `id` passa a lui.
+  function linkSwatch(id: string): string | null {
+    const model = engine.model;
+    const swatch = swatchNamed(id);
+    if (model === null || swatch === null) return null;
+    const linked = linkSwatchOps(model, id, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_link", linked.ops, linked.keys);
+    if (outcome !== null) return outcome;
+    const { name } = swatch;
+    announce(withKept(linked.ops.length === 0 ? t("draw.colors.linked.none", { name }) : plural(swatchUses(id), "draw.colors.linked.one", "draw.colors.linked.other", { name }), linked));
+    return null;
+  }
+
+  function renameSwatch(id: string, name: string): string | null {
+    const model = engine.model;
+    if (model === null) return null;
+    const renamed = renameSwatchOps(model, id, name, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_rename", renamed.ops, renamed.keys);
+    if (outcome === null && renamed.ops.length > 0) announce(t("draw.colors.renamed", { name }));
+    return outcome;
+  }
+
+  /// Il colore nuovo `color` del campione `id`, per chi lo usa e, se viene
+  /// da lui, per ciò che si disegna.
+  function recolorSwatch(id: string, color: string): string | null {
+    const model = engine.model;
+    const swatch = swatchNamed(id);
+    if (model === null || swatch === null) return null;
+    const recolored = recolorSwatchOps(model, id, color, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_recolor", recolored.ops, recolored.keys);
+    if (outcome !== null) return outcome;
+    announce(t("draw.colors.recolored", { name: swatch.name, color: colorName(color) }));
+    return null;
+  }
+
+  /// Toglie il campione `id`: chi lo usa torna al suo colore, scritto.
+  function deleteSwatch(id: string): string | null {
+    const model = engine.model;
+    const swatch = swatchNamed(id);
+    if (model === null || swatch === null) return null;
+    const removed = removeSwatchOps(model, id, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_delete", removed.ops, removed.keys);
+    if (outcome !== null) return outcome;
+    const { name } = swatch;
+    announce(removed.kept === 0 ? t("draw.colors.deleted", { name }) : plural(removed.kept, "draw.colors.deleted.kept.one", "draw.colors.deleted.kept.other", { name }));
+    return null;
+  }
+
+  /// Sceglie gli oggetti che si scelgono e che mostrano `value`, un colore
+  /// `#rrggbb` o un campione `url(#id)`, come «Scegli simili».
+  function selectShowing(value: string): string | null {
+    const model = engine.model;
+    if (model === null) return null;
+    const units = unitsShowing(model, currentIndex(), value);
+    if (units.length === 0) {
+      announce(t("draw.colors.selected.none"));
+      return null;
+    }
+    cancelGesture();
+    select(units.map((unit) => unit.key));
+    announceSelection();
+    return null;
+  }
 
   /// Un campo di «Forma»: cambia i poligoni, le stelle e i rettangoli
   /// scelti, o senza selezione lo strumento Poligono.
@@ -5449,6 +5643,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         break;
       default:
         outcome = styleFromPanel(id, value);
+        // Un colore scritto nel riempimento o nel contorno entra fra i
+        // recenti; un campione no, perché ha la sua griglia.
+        if (outcome === null && (id === "fill" || id === "stroke") && typeof value === "string") {
+          const code = paintReference(value) === null ? customColor(value) : null;
+          if (code !== null) rememberColors(code);
+        }
     }
     panelShown = null;
     syncProperties();
@@ -5813,6 +6013,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncArrange();
   };
 
+  /// Il valore con cui un oggetto nuovo scrive `color`, il colore dello
+  /// strumento: il campione da cui il colore viene, se il disegno lo ha
+  /// ancora di quel colore, così che l'oggetto lo segua; se no il colore.
+  function drawnPaint(color: string): string {
+    const { swatch } = style();
+    const model = engine.model;
+    if (swatch === null || model === null || style().color !== color) return color;
+    const found = documentSwatches(model).find((each) => each.id === swatch);
+    return found?.color === color ? swatchPaint(found) : color;
+  }
+
+  /// Il colore di uno strumento che viene da un campione lo segue: ne
+  /// prende il colore quando cambia, anche annullando, e lo lascia quando il
+  /// campione se ne va.
+  function followSwatches(): void {
+    const linked = Object.values(styles).filter((each) => each.swatch !== null);
+    if (linked.length === 0) return;
+    const swatches = engine.model === null ? [] : documentSwatches(engine.model);
+    for (const each of linked) {
+      const swatch = swatches.find((one) => one.id === each.swatch);
+      if (swatch === undefined) each.swatch = null;
+      else each.color = swatch.color;
+    }
+  }
+
   /// Porta la superficie alla scena del motore.
   const refresh = (): void => {
     scene = builder.build(paintSource());
@@ -5838,6 +6063,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       chosen = layer === null ? null : { key: keyOf(layer), at: layer.path[0]! };
     }
     showTyping();
+    followSwatches();
     syncControls();
     if (hotGuide !== null && (scene.root.guides?.[hotGuide] === undefined || scene.root.guides[hotGuide]!.locked)) hotGuide = null;
     showGuideLines();
@@ -6279,12 +6505,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       cancelGesture();
       tool = toolAfter(tools, tool, profile);
     }
-    // Senza i colori a piacere la barra non ha un campione per uno di loro:
-    // chi lo usava riparte dai colori di partenza, che la barra mostra.
+    // Senza i colori del documento il colore non segue più un campione; senza
+    // i colori a piacere la barra non ha un campione per uno di loro: chi lo
+    // usava riparte dai colori di partenza, che la barra mostra.
+    if (!has("swatches")) for (const each of Object.values(styles)) each.swatch = null;
     if (!has("colors")) {
-      if (swatchOf(styles.pen.color) === null) styles.pen.color = DEFAULT_COLOR;
-      if (swatchOf(styles.highlighter.color) === null) styles.highlighter.color = HIGHLIGHTER_COLOR;
-      if (swatchOf(styles.cover.color) === null) styles.cover.color = COVER_COLOR;
+      const starts: Readonly<Record<Tool | "cover", string>> = { pen: DEFAULT_COLOR, highlighter: HIGHLIGHTER_COLOR, cover: COVER_COLOR };
+      for (const [name, each] of Object.entries(styles) as Array<[Tool | "cover", DrawStyle]>) {
+        if (swatchOf(each.color) !== null) continue;
+        each.color = starts[name];
+        each.swatch = null;
+      }
     }
     showSurfaceHint();
     showGrid();
@@ -6335,16 +6566,38 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
-  function setColor(value: string): void {
+  /// Mette `codes`, colori `#rrggbb` appena scelti, il primo come il più
+  /// recente, davanti ai colori recenti, e lo dice a chi monta l'editor. I
+  /// recenti sono colori scritti: un campione ha la sua griglia, e da un
+  /// recente si scriverebbe staccato da lui.
+  function rememberColors(...codes: string[]): void {
+    const next = [...codes, ...recentColors].filter((each, at, all) => all.indexOf(each) === at).slice(0, RECENT_COLORS);
+    if (next.length === recentColors.length && next.every((each, at) => each === recentColors[at])) return;
+    recentColors = next;
+    options.onColorsChange?.(recentColors);
+  }
+
+  /// Il colore dello strumento di adesso, `value` come lo legge
+  /// `customColor`. Un colore fuori dalla tavolozza chiede i colori
+  /// personalizzati, tranne quello che viene dai colori del documento
+  /// (`from`), che li offrono già; `from.swatch` è il campione da cui viene,
+  /// che gli oggetti nuovi usano. Anche il colore di prima resta fra i
+  /// recenti, per il menu radiale.
+  function setColor(value: string, from: { readonly swatch: string | null } | null = null): void {
     const code = customColor(value);
     if (code === null) return;
     if (swatchOf(code) === null) {
-      if (!has("colors")) return;
+      if (!has("colors") && from === null) return;
       custom = code;
     }
-    const before = style().color;
-    if (before !== code) recentColors = [before, ...recentColors.filter((each) => each !== before && each !== code)].slice(0, RECENT_MAX);
+    const before = style();
+    const swatch = from?.swatch ?? null;
+    const written: string[] = [];
+    if (swatch === null) written.push(code);
+    if (before.swatch === null) written.push(before.color);
+    rememberColors(...written);
     style().color = code;
+    style().swatch = swatch;
     syncControls();
     // Mentre si scrive, il colore va a ciò che è scelto nel campo, o a ciò
     // che si scriverà; e così il tracciato della penna.
@@ -7203,7 +7456,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const shapeOf = (g: ShapeGesture, id: string, to: Destination): Elem | null => {
     const ends = shapeEnds(g, to);
     if (ends === null) return null;
-    return shapeElem(g.tool, id, ends[0], ends[1], { color: g.color, width: g.width }, minimumFor(to), { ...polygonTool, straight: shift });
+    return shapeElem(g.tool, id, ends[0], ends[1], { color: drawnPaint(g.color), width: g.width }, minimumFor(to), { ...polygonTool, straight: shift });
   };
 
   const drawShape = (g: ShapeGesture): void => {
@@ -9731,7 +9984,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     for (const point of outline) bounds.include(apply(to.matrix, point));
     const id = g.ids.next("object");
     const at = new Date(performance.timeOrigin + g.began).toISOString();
-    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, g.color, brush, ink, at, g.tool))];
+    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, drawnPaint(g.color), brush, ink, at, g.tool))];
     const page = grownPage(bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });
     return commit(g.tool === "highlighter" ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) === null ? null : { id, to };
@@ -9884,7 +10137,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           return;
         }
         const highlight = tool === "highlighter";
-        const elem = strokeElem(ids.next("object"), color, brush, ink, new Date().toISOString(), tool);
+        const elem = strokeElem(ids.next("object"), drawnPaint(color), brush, ink, new Date().toISOString(), tool);
         placeNew(to, elem, highlight ? "draw.action.highlight" : "draw.action.stroke", highlight ? "draw.added.highlight" : "draw.added.stroke", true);
         return;
       }
@@ -9899,7 +10152,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         const flat = tool === "line" || tool === "arrow";
         const from = apply(to.inverse, [cx - half, flat ? cy : cy - half / 2]);
         const end = apply(to.inverse, [cx + half, flat ? cy : cy + half / 2]);
-        const elem = shapeElem(tool, ids.next("object"), from, end, { color, width }, 0);
+        const elem = shapeElem(tool, ids.next("object"), from, end, { color: drawnPaint(color), width }, 0);
         if (elem !== null) placeNew(to, elem, toolLabel(tool), ADDED[tool], true);
         return;
       }
@@ -10207,7 +10460,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         id,
         d: pathData(writeNodes([sub])),
         fill: "none",
-        stroke: color,
+        stroke: drawnPaint(color),
         "stroke-width": formatNumber(width, 2),
         // Un tracciato chiuso non ha capi.
         ...(closed ? {} : { "stroke-linecap": "round" }),
@@ -11114,7 +11367,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Gli attributi di un testo nuovo: il colore e la dimensione dello
   /// strumento.
-  const newTextAttrs = (): Record<string, string> => ({ fill: textStyle.color, "font-family": TEXT_FAMILY, "font-size": formatNumber(textStyle.width, 2) });
+  const newTextAttrs = (): Record<string, string> => ({ fill: drawnPaint(textStyle.color), "font-family": TEXT_FAMILY, "font-size": formatNumber(textStyle.width, 2) });
 
   /// Il contesto con cui il browser misura un carattere; `null` dove non sa.
   let probe: CanvasRenderingContext2D | null | undefined;
@@ -16088,6 +16341,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (grid.panel !== null && has("properties") && grid.panel === panel.element.hidden) showPanel(grid.panel, false, false);
       syncProperties();
     },
+    setRecentColors(colors) {
+      if (disposed) return;
+      recentColors = colors.slice(0, RECENT_COLORS);
+      syncProperties();
+    },
     setEngine(next) {
       if (disposed) return;
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
@@ -16117,6 +16375,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       isolation = null;
       cursor = null;
       cursorMark.hidden = true;
+      // I campioni erano del documento di prima: il colore resta, da solo.
+      for (const each of Object.values(styles)) each.swatch = null;
       refresh();
       placed = false;
       fit();
@@ -16126,7 +16386,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     adopt,
     setLevel,
     setTool,
-    setColor,
+    setColor: (color) => setColor(color),
     setWidth,
     select,
     deleteSelection,

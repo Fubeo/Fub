@@ -352,6 +352,13 @@ describe("i nomi dei campioni", () => {
     expect(swatchNameProblem(SWATCHES, "Azzurro")).toBeNull();
   });
 
+  it("un nome non è un colore che il campo leggerebbe come tale: un codice, o «nessuno»", () => {
+    for (const name of ["#0072b2", "#FFF", "none", "None", "Nessuno"]) expect(swatchNameProblem(SWATCHES, name)).toBe("color");
+    // Il nome di un colore sì: nel campo vale prima il campione, che è del
+    // disegno; e un cancelletto che non fa un colore anche.
+    for (const name of ["red", "Rosso", "#1", "#blu", "Nessuno 2"]) expect(swatchNameProblem(SWATCHES, name)).toBeNull();
+  });
+
   it("il primo nome libero, entro la lunghezza di un nome", () => {
     expect(freshSwatchName(SWATCHES, "Rosso")).toBe("Rosso");
     expect(freshSwatchName(SWATCHES, "  blu ")).toBe("blu 3");

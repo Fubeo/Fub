@@ -33,16 +33,18 @@
 // - **Mille oggetti** si leggono una volta sola: ciò che un nodo scrive si
 //   rilegge soltanto quando cambia.
 
-import type { Role } from "../scene/analysis";
+import { Context, WHITE, type Role } from "../scene/analysis";
 import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Elem } from "../scene/serialize";
-import { paintReference, type Paint } from "../scene/values";
+import { paint, paintReference, type Paint, type Rgb } from "../scene/values";
 import { NS_SVG, SVG_NS } from "../scene/xml";
+import { t } from "../strings";
 import { elemOf, plainAttributes, Plan, readHead, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { FILLED, INKED, OUTLINED, paintText } from "./look";
 import { cleanName, NAME_MAX } from "./naming";
+import { customColor } from "./palette";
 import { homeOf, resourcesOf } from "./resources";
 import { richOf, visibleSpans, type Rich } from "./rich";
 import { allUnits } from "./selecting";
@@ -210,6 +212,21 @@ function stopOf(node: LeafNode): number[] | null {
   return at < 0 ? null : [at];
 }
 
+/// Il campione `node`, una risorsa di una `defs` della radice, se si legge
+/// come campione.
+function swatchIn(node: ElementPart): Omit<DocumentSwatch, "uses"> | null {
+  const id = node.facts.id;
+  const swatch = node.details?.role === "resource" ? node.details.swatch : undefined;
+  if (node.kind !== "leaf" || id === null || swatch === undefined) return null;
+  const stop = stopOf(node);
+  return stop === null ? null : { id, name: cleanName(swatch.name), color: swatch.color, stop };
+}
+
+/// Le `defs` della radice, dove stanno le risorse.
+function rootDefs(model: DocumentModel): ContainerNode[] {
+  return elementChildren(model.root).filter((child): child is ContainerNode => child.kind === "container" && child.details?.role === "defs");
+}
+
 /// Ciò che il disegno scrive e mostra, in ordine di documento.
 class Walk {
   readonly sites: Site[] = [];
@@ -257,12 +274,10 @@ class Walk {
   /// radice.
   private resources(defs: ContainerNode, from: Paints): void {
     for (const node of elementChildren(defs)) {
-      const id = node.facts.id;
-      if (node.kind !== "leaf" || node.details?.role !== "resource" || id === null) continue;
-      const swatch = node.details.swatch;
-      if (swatch !== undefined) {
-        const stop = stopOf(node);
-        if (stop !== null) this.swatches.push({ id, name: cleanName(swatch.name), color: swatch.color, stop });
+      if (node.kind !== "leaf" || node.details?.role !== "resource" || node.facts.id === null) continue;
+      if (node.details.swatch !== undefined) {
+        const swatch = swatchIn(node);
+        if (swatch !== null) this.swatches.push(swatch);
         continue;
       }
       const paints = node.facts.uri === SVG_NS ? CONTENT.get(node.facts.local) : undefined;
@@ -346,6 +361,45 @@ export function documentColors(model: DocumentModel): DocumentColors {
   return { swatches, used: used.slice(0, USED_MAX), hidden: Math.max(0, used.length - USED_MAX) };
 }
 
+/// I campioni di `model` senza contare chi li usa, gli stessi e nello
+/// stesso ordine di [`documentColors`]: per il campo di un colore, che li
+/// scrive per nome.
+export function documentSwatches(model: DocumentModel): Array<Omit<DocumentSwatch, "uses">> {
+  const out: Array<Omit<DocumentSwatch, "uses">> = [];
+  for (const defs of rootDefs(model)) {
+    for (const node of elementChildren(defs)) {
+      const swatch = swatchIn(node);
+      if (swatch !== null) out.push(swatch);
+    }
+  }
+  return out;
+}
+
+/// Il colore della prima carta del disegno sul bianco della superficie,
+/// `#rrggbb`, come lo legge la verifica del contrasto: col riempimento che
+/// eredita dalla radice e la sua opacità, il bianco se non c'è o non si
+/// vede; `null` se non si sa, come sotto un filtro.
+export function paperColor(model: DocumentModel): string | null {
+  // Il colore dei campioni, come lo legge la verifica: il primo id vale.
+  const swatches = new Map<string, Rgb>();
+  for (const defs of rootDefs(model)) {
+    for (const node of elementChildren(defs)) {
+      const id = node.facts.id;
+      const swatch = node.details?.role === "resource" ? node.details.swatch : undefined;
+      const color = swatch === undefined ? null : paint(swatch.color);
+      if (id !== null && color !== null && color !== "none" && !swatches.has(id)) swatches.set(id, color);
+    }
+  }
+  const root = model.root;
+  const context = Context.rootOf((name) => attrsOf(root).get(name), swatches);
+  for (const child of elementChildren(root)) {
+    if (child.details?.role !== "paper") continue;
+    const color = context.childOf((name) => attrsOf(child).get(name)).paperColor();
+    return color === null ? null : hexOf(color);
+  }
+  return hexOf(WHITE);
+}
+
 /// Gli oggetti che si scelgono e che mostrano `value`, un colore `#rrggbb` o
 /// un campione `url(#id)`: a ogni profondità, in ordine di documento.
 export function unitsShowing(model: DocumentModel, index: SceneIndex, value: string): Unit[] {
@@ -367,18 +421,24 @@ export function swatchPaint(swatch: { readonly id: string; readonly color: strin
 /// screen reader.
 const nameKey = (name: string): string => cleanName(name).toLocaleLowerCase();
 
+/// Un campione col suo nome, per i nomi: basta l'id e il nome.
+type Named = Pick<DocumentSwatch, "id" | "name">;
+
 /// Il problema del nome `name`, già pulito da [`cleanName`], per un
-/// campione: vuoto, o di un altro campione. `except` è il campione che si
+/// campione: vuoto; un colore, che il campo del colore leggerebbe come
+/// tale, un codice `#` o «nessuno», e che dopo un cambio di colore direbbe
+/// il falso; o di un altro campione. `except` è il campione che si
 /// rinomina.
-export function swatchNameProblem(swatches: readonly DocumentSwatch[], name: string, except: string | null = null): "empty" | "taken" | null {
+export function swatchNameProblem(swatches: readonly Named[], name: string, except: string | null = null): "empty" | "color" | "taken" | null {
   if (name === "") return "empty";
   const key = nameKey(name);
+  if (key === "none" || key === t("draw.properties.none").toLocaleLowerCase() || (name.startsWith("#") && customColor(name) !== null)) return "color";
   return swatches.some((swatch) => swatch.id !== except && nameKey(swatch.name) === key) ? "taken" : null;
 }
 
 /// Il primo nome libero da `base`, che non è vuoto: lui, poi `base 2`,
 /// `base 3` e così via, entro [`NAME_MAX`] caratteri.
-export function freshSwatchName(swatches: readonly DocumentSwatch[], base: string): string {
+export function freshSwatchName(swatches: readonly Named[], base: string): string {
   const clean = cleanName(base);
   if (swatchNameProblem(swatches, clean) === null) return clean;
   const chars = Array.from(clean);

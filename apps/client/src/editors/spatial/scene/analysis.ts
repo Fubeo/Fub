@@ -253,10 +253,16 @@ export class Context {
   /// Il contesto dei figli della radice. Della radice contano solo `fill` e
   /// `fill-opacity`, che si ereditano.
   static root(root: ElementNode, swatches: Swatches): Context {
-    const fill = valueOf(root, NS_NONE, "fill");
-    const alpha = valueOf(root, NS_NONE, "fill-opacity");
-    const size = valueOf(root, NS_NONE, "font-size");
-    const weight = valueOf(root, NS_NONE, "font-weight");
+    return Context.rootOf((name) => valueOf(root, NS_NONE, name), swatches);
+  }
+
+  /// Come [`Context.root`], con gli attributi senza namespace della radice
+  /// letti da `value`: per chi li ha già, come l'editor.
+  static rootOf(value: (name: string) => string | undefined, swatches: Swatches): Context {
+    const fill = value("fill");
+    const alpha = value("fill-opacity");
+    const size = value("font-size");
+    const weight = value("font-weight");
     return new Context(
       IDENTITY,
       false,
@@ -273,7 +279,12 @@ export class Context {
   /// Il contesto di `element`, un elemento modificabile: i suoi valori
   /// rispettano già §4.
   child(element: ElementNode): Context {
-    const value = (name: string): string | undefined => valueOf(element, NS_NONE, name);
+    return this.childOf((name) => valueOf(element, NS_NONE, name));
+  }
+
+  /// Come [`Context.child`], con gli attributi senza namespace
+  /// dell'elemento letti da `value`.
+  childOf(value: (name: string) => string | undefined): Context {
     let matrix = this.matrix;
     const transformed = value("transform");
     const m = transformed === undefined ? null : transform(transformed);

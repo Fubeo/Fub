@@ -72,6 +72,10 @@ const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): F
     attributes: false,
     tool: null,
     board: null,
+    swatches: [],
+    recent: [],
+    paper: "#ffffff",
+    colors: null,
     ...rest,
   };
 };
@@ -353,6 +357,51 @@ describe("l'aspetto", () => {
   it("ciò che nessuno ha non c'è", () => {
     const view = propertiesView(input({ selection: selection({ look: look({ fill: { count: 1, value: "#000000" } }) }) }));
     expect(["strokeWidth", "opacity", "stroke", "preset", "family", "size", "weight", "emphasis", "leading", "spacing", "anchor"].filter((id) => id in view.fields)).toEqual([]);
+  });
+
+  it("un colore misura il contrasto con la carta, con la sua opacità; un testo chiede di più", () => {
+    const shape = propertiesView(input({ paper: "#fafafa", selection: selection({ look: painted }) }));
+    expect(shape.fields.fill).toMatchObject({ contrast: { paper: "#fafafa", alpha: 0.5, text: false } });
+    expect(shape.fields.stroke).toMatchObject({ contrast: { paper: "#fafafa", alpha: 0.5, text: false } });
+    const text = propertiesView(input({ selection: selection({ look: look({ fill: { count: 1, value: "#0072b2" }, size: { count: 1, value: 16 } }) }) }));
+    expect(text.fields.fill).toMatchObject({ contrast: { paper: "#ffffff", alpha: 1, text: true } });
+    // Senza la carta non si misura.
+    const unknown = propertiesView(input({ paper: null, selection: selection({ look: painted }) }));
+    expect("contrast" in unknown.fields.fill!).toBe(false);
+  });
+});
+
+describe("i colori del documento", () => {
+  const DOCUMENT = {
+    swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", stop: [0], uses: 3 }],
+    used: [{ color: "#000000", uses: 2 }],
+    hidden: 1,
+  };
+  const colors = (drawing = "#000000", swatch: string | null = null): FieldsInput["colors"] => ({ document: DOCUMENT, drawing, swatch });
+
+  it("ci sono se il livello li offre, coi recenti; senza selezione un colore è quello con cui si disegna", () => {
+    expect(propertiesView(input()).colors).toBeUndefined();
+    const view = propertiesView(input({ recent: ["#d55e00"], colors: colors("#0072b2", "ra") }));
+    expect(view.colors).toEqual({
+      swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", uses: 3 }],
+      used: [{ color: "#000000", uses: 2 }],
+      hidden: 1,
+      recent: ["#d55e00"],
+      targets: null,
+      current: {},
+      drawing: "#0072b2",
+      drawingSwatch: "ra",
+    });
+  });
+
+  it("con una selezione, il colore va al riempimento e al contorno che ha, e il pannello dice i loro", () => {
+    const both = propertiesView(input({ colors: colors(), selection: selection({ look: look({ fill: { count: 2, value: "url(#ra) #0072b2" }, stroke: { count: 1, value: null } }) }) }));
+    expect([both.colors!.targets, both.colors!.current]).toEqual([["fill", "stroke"], { fill: "url(#ra) #0072b2", stroke: null }]);
+    const line = propertiesView(input({ colors: colors(), selection: selection({ look: look({ stroke: { count: 1, value: "#000000" } }) }) }));
+    expect(line.colors!.targets).toEqual(["stroke"]);
+    // Un'immagine non ha un colore da cambiare.
+    const image = propertiesView(input({ colors: colors(), selection: selection() }));
+    expect(image.colors!.targets).toEqual([]);
   });
 });
 

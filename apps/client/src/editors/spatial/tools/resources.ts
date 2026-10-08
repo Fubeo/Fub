@@ -99,18 +99,20 @@ export function usesResources(node: ElementPart, from: Inherited): boolean {
 
 /// Un colore che è una risorsa, come lo mostra il pannello: il tipo, e per
 /// una sfumatura l'immagine CSS dei suoi punti, da sinistra a destra o dal
-/// centro; `null` se non si legge.
-export interface PaintSample {
-  readonly kind: "gradient" | "pattern";
-  readonly image: string | null;
-}
+/// centro, `null` se non si legge; un campione del documento col suo nome,
+/// com'è scritto, e il suo colore, `#rrggbb` minuscolo.
+export type PaintSample =
+  | { readonly kind: "gradient" | "pattern"; readonly image: string | null }
+  | { readonly kind: "swatch"; readonly image: null; readonly name: string; readonly color: string };
 
 /// Il campione di `value`, un `fill` o uno `stroke` di `model`; `null` se non
-/// usa una sfumatura o un motivo del disegno.
+/// usa una sfumatura, un motivo o un campione del disegno.
 export function paintSample(model: DocumentModel, value: string, resources: ReadonlyMap<string, LeafNode> = resourcesOf(model)): PaintSample | null {
   const used = paintReference(value);
   const node = used === null ? undefined : resources.get(used.id);
   if (node === undefined) return null;
+  const swatch = node.details?.lifecycle === "swatch" ? node.details.swatch : undefined;
+  if (swatch !== undefined) return { kind: "swatch", image: null, name: swatch.name, color: swatch.color };
   switch (node.facts.local) {
     case "pattern":
       return { kind: "pattern", image: null };

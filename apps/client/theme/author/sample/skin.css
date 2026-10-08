@@ -2973,6 +2973,11 @@ button.draw-isolation-crumb:hover {
   color: var(--danger);
   font-size: var(--text-sm);
 }
+/* Il rapporto di contrasto con le cifre in colonna, che non si muovono
+   quando il colore cambia. */
+.draw-properties-contrast {
+  font-variant-numeric: tabular-nums;
+}
 .draw-properties-actions,
 .draw-properties-bar {
   gap: var(--space-1);
@@ -2982,6 +2987,60 @@ button.draw-isolation-crumb:hover {
   border: 1px solid var(--border);
   color: var(--text);
   font-size: var(--text-sm);
+}
+/* I colori del documento: il titolo di ogni griglia come il nome di un
+   campo, in grassetto; sotto ogni colore, piccolo e in grigio, il numero
+   degli oggetti che lo mostrano. Il colore di adesso è segnato come la
+   scelta della barra, col filo sotto; il più dei campioni ha il bordo a
+   tratti di ciò che ancora non c'è. Il modulo sta in una cornice. */
+.draw-swatches {
+  gap: var(--space-3);
+}
+.draw-swatches-target,
+.draw-swatches-group,
+.draw-swatches-form-row {
+  gap: var(--space-1);
+}
+.draw-swatches-target .draw-button {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+.draw-swatches-heading,
+.draw-swatches-form-title {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-swatches-grid,
+.draw-swatches-form-actions {
+  gap: var(--space-1);
+}
+.draw-swatches-chip {
+  gap: var(--space-1);
+}
+.draw-swatches-count {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1;
+}
+.draw-swatches-chip[aria-current="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+  box-shadow:
+    inset 0 -3px 0 var(--text),
+    var(--shadow-sm);
+}
+.draw-swatches-chip[aria-current="true"] > .draw-swatches-count {
+  color: var(--text);
+}
+.draw-swatches-add {
+  border: 1px dashed var(--border);
+}
+.draw-swatches-form {
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }
 /* Un colore misto: righe del colore del testo, che non sono un colore. */
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {

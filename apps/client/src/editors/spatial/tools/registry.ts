@@ -128,6 +128,7 @@ export function defaultTool(profile: ToolProfile): ToolId {
 export type Feature =
   | Exclude<ToolId, "select">
   | "colors"
+  | "swatches"
   | "selection"
   | "arrange"
   | "layers"
@@ -163,6 +164,9 @@ export interface FeatureSpec {
 /// dell'Esperto.
 const COMMANDS: readonly FeatureSpec[] = [
   { id: "colors", level: "standard", label: "draw.feature.colors" },
+  // I colori del documento sono una sezione del pannello delle proprietà:
+  // nel Personalizzato si vedono con lui.
+  { id: "swatches", level: "standard", label: "draw.feature.swatches" },
   { id: "selection", level: "standard", label: "draw.feature.selection" },
   { id: "arrange", level: "standard", label: "draw.feature.arrange" },
   { id: "layers", level: "standard", label: "draw.feature.layers" },

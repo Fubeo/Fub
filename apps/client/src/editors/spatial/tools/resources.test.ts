@@ -102,6 +102,14 @@ describe("il campione del pannello", () => {
     expect(sample(pattern, "url(#altro)")).toBeNull();
     expect(sample(pattern, "#ff0000")).toBeNull();
   });
+
+  it("un campione del documento ha il suo nome, com'è scritto, e il suo colore", () => {
+    const swatch = '<linearGradient id="rgggggggg" fub:role="swatch" fub:name="Blu  mare" gradientUnits="userSpaceOnUse"><stop stop-color="#0072B2"/></linearGradient>';
+    expect(sample(swatch, "url(#rgggggggg) #000000")).toEqual({ kind: "swatch", image: null, name: "Blu  mare", color: "#0072b2" });
+    // Con due punti non è un campione: è la sfumatura che si vede.
+    const two = `<linearGradient id="rgggggggg" fub:role="swatch" fub:name="Blu">${STOP}<stop offset="1" stop-color="#000000"/></linearGradient>`;
+    expect(sample(two)!.kind).toBe("gradient");
+  });
 });
 
 describe("le copie delle private", () => {
