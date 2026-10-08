@@ -250,5 +250,16 @@
     "expect": {
       "error": "malformed"
     }
+  },
+  {
+    "name": "swatches",
+    "description": "un campione usato resta, una sfumatura di un colore senza il nome e il ruolo; uno che nessuno usa se ne va come ogni risorsa",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 200 100\" width=\"200\" height=\"100\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1\" fub:role=\"swatch\" fub:name=\"Blu mare\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#0072b2\"/></linearGradient>\n    <linearGradient id=\"r2\" fub:role=\"swatch\" fub:name=\"Vermiglio\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#d55e00\"/></linearGradient>\n  </defs>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"80\" height=\"40\" fill=\"url(#r1) #0072b2\"/>\n    <line id=\"o2\" x1=\"10\" y1=\"70\" x2=\"190\" y2=\"70\" stroke=\"url(#r1) #0072b2\" stroke-width=\"4\"/>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" width=\"200\" height=\"100\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#0072b2\"/></linearGradient>\n  </defs>\n  <g id=\"l1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"80\" height=\"40\" fill=\"url(#r1) #0072b2\"/>\n    <line id=\"o2\" x1=\"10\" y1=\"70\" x2=\"190\" y2=\"70\" stroke=\"url(#r1) #0072b2\" stroke-width=\"4\"/>\n  </g>\n</svg>\n"
+    }
   }
 ]

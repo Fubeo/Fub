@@ -229,7 +229,10 @@ le esportazioni di Mermaid usano.
 - **`swatch`:** un campione (§2), un colore del documento. Resta anche
   quando nessuno lo usa, e duplicare chi lo usa lo condivide. Un campione
   eliminato che qualcuno usa ancora, e che FubDraw non riscrive, diventa
-  `shared` e perde il nome: se ne va col suo ultimo riferimento.
+  `shared` e perde il nome: se ne va col suo ultimo riferimento. Nell'SVG
+  pulito dell'[export](scene-format-export.md) un campione usato resta una
+  sfumatura di un colore, senza ruolo e senza nome, e uno che nessuno usa se
+  ne va.
 - **Senza `fub:role`, o con un altro valore:** non è di FubDraw. Resta anche
   quando nessuno la usa, e duplicare la condivide.
 - **La `fub-defs`** che resta senza figli se ne va con l'ultima risorsa: un
