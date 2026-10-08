@@ -13,6 +13,9 @@
 //   cambierebbe la griglia degli altri.
 // - **Le scelte di «Esporta»** sono anche loro uno stato della vista, per
 //   disegno: gli ultimi disegni esportati, ognuno con le sue.
+// - **I colori recenti** sono uno stato della vista come la griglia: quelli
+//   scelti per ultimi, in qualunque disegno, che la sezione «Colori del
+//   documento» e il menu radiale offrono in ogni disegno che si apre dopo.
 //
 // L'ultima lettura resta qui: una superficie nuova parte da lì, e la lettura
 // che fa la conferma o la corregge, senza che la barra cambi sotto gli occhi
@@ -27,6 +30,7 @@ import { notify } from "../../ui/notify";
 import { validCurve } from "./pen/pressure";
 import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
 import { DEFAULT_GRID, validClosed, validStep, validSteps, type Grid } from "./tools/grid";
+import { RECENT_COLORS } from "./tools/palette";
 import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
 
 /// Il bundle che dichiara il livello.
@@ -48,6 +52,9 @@ export const EXPORT_KEY = "draw.export";
 /// esportati.
 export const EXPORT_MEMORIES = 100;
 
+/// La chiave dello stato di vista che ricorda i colori recenti.
+export const COLORS_KEY = "draw.colors";
+
 /// Il livello di partenza, quando l'impostazione non dice niente.
 const DEFAULT_LEVEL: Level = "essential";
 
@@ -68,6 +75,10 @@ let saving: Promise<void> = Promise.resolve();
 let saves = 0;
 /// Le scritture delle scelte di «Esporta» in fila.
 let exporting: Promise<void> = Promise.resolve();
+let lastColors: readonly string[] = [];
+/// Le scritture dei colori recenti in fila, e quante ne sono partite.
+let coloring: Promise<void> = Promise.resolve();
+let colorSaves = 0;
 
 /// Il livello dell'ultima lettura.
 export function currentLevel(): Level {
@@ -194,6 +205,52 @@ export function saveGrid(grid: Grid): void {
   saving = saving
     .then(() => api.setViewState(GRID_KEY, grid))
     .catch((error: unknown) => notify(t("vector.grid.save_failed", { reason: errorText(error) }), "guasto"));
+}
+
+/// `value` come colori recenti, dal più recente: i codici `#rrggbb` del suo
+/// elenco, minuscoli e una volta sola, al più [`RECENT_COLORS`]; ciò che
+/// non è un codice non conta.
+export function recentColorsOf(value: unknown): readonly string[] {
+  const colors = typeof value === "object" && value !== null ? (value as Record<string, unknown>).colors : undefined;
+  if (!Array.isArray(colors)) return [];
+  const out: string[] = [];
+  for (const each of colors as unknown[]) {
+    const code = typeof each === "string" && /^#[0-9a-fA-F]{6}$/.test(each) ? each.toLowerCase() : null;
+    if (code === null || out.includes(code)) continue;
+    out.push(code);
+    if (out.length === RECENT_COLORS) break;
+  }
+  return out;
+}
+
+/// I colori recenti dell'ultima lettura o dell'ultima scelta.
+export function currentRecentColors(): readonly string[] {
+  return lastColors;
+}
+
+/// Legge i colori recenti ricordati: nessuno se non ce ne sono. Legge dopo
+/// le scritture in corso, e se la lettura non riesce restano quelli di
+/// prima.
+export async function readRecentColors(): Promise<readonly string[]> {
+  await coloring;
+  const ticket = colorSaves;
+  try {
+    const read = recentColorsOf(await api.viewState<unknown>(COLORS_KEY));
+    // Una scelta fatta mentre si leggeva è più recente di ciò che si è letto.
+    if (ticket === colorSaves) lastColors = read;
+  } catch {
+    // Lo stato di vista che non si legge lascia gli ultimi colori.
+  }
+  return lastColors;
+}
+
+/// Ricorda `colors`, dal più recente, per i disegni che si aprono dopo. Le
+/// scritture vanno in fila, così resta l'ultima; una che non riesce non dice
+/// niente, perché i recenti sono una comodità.
+export function saveRecentColors(colors: readonly string[]): void {
+  lastColors = colors;
+  colorSaves += 1;
+  coloring = coloring.then(() => api.setViewState(COLORS_KEY, { colors })).catch(() => undefined);
 }
 
 /// Un disegno ricordato da «Esporta»: il suo `DocId` e le sue scelte.

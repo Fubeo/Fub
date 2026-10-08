@@ -660,6 +660,34 @@ describe("il livello e la griglia", () => {
     expect(reads(host), "una superficie distrutta non rilegge").toBe(2);
   });
 
+  it("i colori recenti vengono dallo stato di vista, si ricordano scelti, e una superficie nuova parte da lì", async () => {
+    /// I recenti della sezione «Colori del documento», col pannello aperto.
+    const recent = (at: HTMLElement): string[] => {
+      const panel = at.querySelector<HTMLElement>(".draw-properties")!;
+      if (panel.hidden) at.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
+      return [...panel.querySelectorAll<HTMLElement>('.draw-swatches-group[data-group="recent"] .draw-swatches-chip')].map((chip) => chip.dataset.key!);
+    };
+    const host = createFakeHost({ settings: [level("standard")] });
+    await host.module.api.setViewState("draw.colors", { colors: ["#cc79a7"] });
+    const mountFresh = await fresh(host);
+    mountFresh(parent);
+    await settle();
+    expect(recent(parent)).toEqual(["#cc79a7"]);
+    parent.querySelector<HTMLButtonElement>('[role="toolbar"] .draw-color[aria-label="Vermiglio"]')!.click();
+    expect(recent(parent)).toEqual(["#d55e00", "#000000", "#cc79a7"]);
+    await settle();
+    expect(await host.module.api.viewState("draw.colors")).toEqual({ colors: ["#d55e00", "#000000", "#cc79a7"] });
+
+    const other = document.createElement("div");
+    document.body.append(other);
+    try {
+      mountFresh(other);
+      expect(recent(other), "subito").toEqual(["#d55e00", "#000000", "#cc79a7"]);
+    } finally {
+      other.remove();
+    }
+  });
+
   it("il Personalizzato ha le parti scelte, anche su una superficie nuova, e ne segue i cambi", async () => {
     const host = createFakeHost({ settings: [level("custom"), custom(["rect", "text"])] });
     const mountFresh = await fresh(host);

@@ -363,6 +363,69 @@ describe("la griglia ricordata", () => {
   });
 });
 
+describe("i colori recenti ricordati", () => {
+  const COLORS_KEY = "draw.colors";
+
+  it("si leggono dallo stato di vista: codici minuscoli, una volta sola, al più otto", async () => {
+    const host = createFakeHost();
+    const { readRecentColors, recentColorsOf, RECENT_COLORS } = { ...(await boot(host)), ...(await import("./tools/palette")) };
+    expect(await readRecentColors(), "niente di ricordato").toEqual([]);
+    await host.module.api.setViewState(COLORS_KEY, { colors: ["#D55E00", "red", "#d55e00", 7, null, "#0072b2", "#fff", "#00723"] });
+    expect(await readRecentColors()).toEqual(["#d55e00", "#0072b2"]);
+    const many = Array.from({ length: 12 }, (_, at) => `#0000${at.toString(16).padStart(2, "0")}`);
+    expect(RECENT_COLORS).toBe(8);
+    expect(recentColorsOf({ colors: many })).toEqual(many.slice(0, 8));
+    for (const broken of [null, "rotto", [], { colors: "#d55e00" }, { colori: ["#d55e00"] }]) {
+      expect(recentColorsOf(broken), JSON.stringify(broken)).toEqual([]);
+    }
+    await host.module.api.setViewState(COLORS_KEY, "rotto");
+    expect(await readRecentColors()).toEqual([]);
+  });
+
+  it("si ricordano nell'ordine delle scelte, la lettura le aspetta, e una scelta fatta mentre si legge vale di più", async () => {
+    const host = createFakeHost();
+    const { currentRecentColors, readRecentColors, saveRecentColors } = await boot(host);
+    const release = host.throttle("setViewState");
+    saveRecentColors(["#d55e00"]);
+    saveRecentColors(["#0072b2", "#d55e00"]);
+    expect(currentRecentColors(), "la scelta vale subito").toEqual(["#0072b2", "#d55e00"]);
+    const reading = readRecentColors();
+    await settle();
+    expect(host.atGate("viewState"), "la lettura aspetta").toHaveLength(0);
+    release();
+    expect(await reading).toEqual(["#0072b2", "#d55e00"]);
+    expect(host.atGate("setViewState").map((call) => call.args)).toEqual([
+      [COLORS_KEY, { colors: ["#d55e00"] }],
+      [COLORS_KEY, { colors: ["#0072b2", "#d55e00"] }],
+    ]);
+
+    const slow = host.throttle("viewState");
+    const again = readRecentColors();
+    await settle();
+    saveRecentColors(["#009e73", "#0072b2", "#d55e00"]);
+    slow();
+    expect(await again).toEqual(["#009e73", "#0072b2", "#d55e00"]);
+    expect(currentRecentColors()).toEqual(["#009e73", "#0072b2", "#d55e00"]);
+  });
+
+  it("una scrittura che non riesce non dice niente, e la fila va avanti; una lettura che non riesce lascia gli ultimi", async () => {
+    const host = createFakeHost();
+    const { clearHistory, readRecentColors, recentNotices, saveRecentColors } = await boot(host);
+    clearHistory();
+    const heal = host.fault("setViewState", "disco pieno");
+    saveRecentColors(["#d55e00"]);
+    await settle();
+    expect(recentNotices()).toEqual([]);
+    heal();
+    saveRecentColors(["#0072b2", "#d55e00"]);
+    await settle();
+    expect(await host.module.api.viewState(COLORS_KEY)).toEqual({ colors: ["#0072b2", "#d55e00"] });
+    const broken = host.fault("viewState");
+    expect(await readRecentColors()).toEqual(["#0072b2", "#d55e00"]);
+    broken();
+  });
+});
+
 describe("le scelte di «Esporta» ricordate", () => {
   const EXPORT_KEY = "draw.export";
   const PNG = { what: "boards", off: ["b2"], format: "png", size: { scale: 3 }, background: "paper" } as const;

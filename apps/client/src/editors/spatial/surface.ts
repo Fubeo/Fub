@@ -51,7 +51,19 @@ import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
 import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
-import { currentCustom, currentGrid, currentLevel, readExportMemory, readGrid, saveExportMemory, saveGrid, watchLevel } from "./preferences";
+import {
+  currentCustom,
+  currentGrid,
+  currentLevel,
+  currentRecentColors,
+  readExportMemory,
+  readGrid,
+  readRecentColors,
+  saveExportMemory,
+  saveGrid,
+  saveRecentColors,
+  watchLevel,
+} from "./preferences";
 import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
@@ -251,6 +263,9 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
   /// indietro.
   let gridChosen = false;
+  /// I colori recenti, come la griglia.
+  let colors = currentRecentColors();
+  let colorsChosen = false;
 
   // --- I collegamenti -------------------------------------------------------
 
@@ -330,6 +345,12 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         grid = next;
         gridChosen = true;
         saveGrid(next);
+      },
+      colors,
+      onColorsChange: (next) => {
+        colors = next;
+        colorsChosen = true;
+        saveRecentColors(next);
       },
       links,
       ...(images === undefined ? {} : { images }),
@@ -596,6 +617,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     if (life.closed || gridChosen) return;
     grid = next;
     editor?.setGrid(next);
+  });
+  void readRecentColors().then((next) => {
+    if (life.closed || colorsChosen) return;
+    colors = next;
+    editor?.setRecentColors(next);
   });
 
   // --- Le selezioni ---------------------------------------------------------
