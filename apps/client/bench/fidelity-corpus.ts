@@ -18,6 +18,9 @@ const HEAD = root(FIDELITY_SIZE.width, FIDELITY_SIZE.height);
 const LAYER = '<g id="l1" fub:layer="Livello 1">';
 const scene = (body: string, head = HEAD): string => `${head}${body}</svg>`;
 
+/// Gli attributi che le etichette della scena «etichette» hanno in comune.
+const LABEL = 'x="0" y="0" fill="#1a202c" font-family="Inter, sans-serif"';
+
 /// Un PNG di 8 × 8 a scacchi, rosso e blu.
 const CHECKER = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAH0lEQVR4nGO4Y6MBRBoVJ4AImc2AUwJTCMLGLUEHOwA5N1UBvmzgIgAAAABJRU5ErkJggg==";
 
@@ -348,5 +351,20 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<g id="m"><g class="node"><rect x="10" y="50" width="90" height="40" rx="5"/><text class="label" x="55" y="75" text-anchor="middle">Inizio</text></g>'
       + '<path class="edge" d="M 100 70 L 140 70"/><path d="M 140 64 L 150 70 L 140 76 Z" fill="#333"/>'
       + '<g class="node"><rect x="150" y="50" width="80" height="40" rx="5"/><text class="label" x="190" y="75" text-anchor="middle">Fine</text></g></g>'),
+  },
+  {
+    // Le etichette nelle forme, dove le mette FubDraw: un rettangolo, un
+    // testo su due righe in un'ellisse, un rettangolo tondo e girato, che
+    // gira la sua, e un rombo, col riquadro trovato dalla griglia.
+    id: "etichette",
+    text: scene(`${LAYER}<g id="o00000001"><rect id="r1" x="10" y="10" width="100" height="56" fill="#fde68a" stroke="#1a202c" stroke-width="2"/>`
+      + `<text id="o00000002" fub:inside="r1" fub:wrap="88" ${LABEL} font-size="14" text-anchor="middle" transform="matrix(1 0 0 1 60 41.85)"><tspan x="0" dy="0">Inizio</tspan></text></g>`
+      + '<g id="o00000003"><ellipse id="e1" cx="178" cy="40" rx="54" ry="30" fill="#bee3f8" stroke="#2b6cb0" stroke-width="2"/>'
+      + `<text id="o00000004" fub:inside="e1" fub:wrap="64.37" ${LABEL} font-size="12" text-anchor="middle" transform="matrix(1 0 0 1 178 35.8)">`
+      + '<tspan x="0" dy="0">Verifica</tspan><tspan fub:join="space" x="0" dy="15">dei dati</tspan></text></g>'
+      + '<g id="o00000005"><rect id="r2" x="18" y="92" width="96" height="44" rx="10" transform="rotate(-12 66 114)" fill="#c6f6d5" stroke="#2f855a" stroke-width="2"/>'
+      + `<text id="o00000006" fub:inside="r2" fub:wrap="78.14" ${LABEL} font-size="14" text-anchor="middle" transform="matrix(0.9781 -0.2079 0.2079 0.9781 66.8005 117.7659)"><tspan x="0" dy="0">Girata</tspan></text></g>`
+      + '<g id="o00000007"><path id="p1" d="M178 82 L234 116 L178 150 L122 116 Z" fill="#fed7e2" stroke="#c53030" stroke-width="2"/>'
+      + `<text id="o00000008" fub:inside="p1" fub:wrap="49.79" ${LABEL} font-size="12" text-anchor="middle" transform="matrix(1 0 0 1 178 119.3)"><tspan x="0" dy="0">Esito?</tspan></text></g></g>`),
   },
 ];

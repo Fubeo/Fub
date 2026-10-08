@@ -116,6 +116,20 @@ describe("i capi", () => {
     expect(p![0]).toBeCloseTo(40, 2);
   });
 
+  it("l'etichetta di una forma non fa parte del contorno, nemmeno quando esce dalla forma", () => {
+    const label = '<text id="t" fub:inside="r" fub:wrap="28" x="0" y="0" text-anchor="middle" transform="matrix(1 0 0 1 20 124)"><tspan x="0" dy="0">Unaparolalunghissima</tspan></text>';
+    const group = `<g id="g"><rect id="r" x="0" y="100" width="40" height="40"/>${label}</g>`;
+    const opened = sheet(`${group}<rect id="b" x="300" y="100" width="40" height="40"/>${LINE("straight", "g center", "b center")}`);
+    applied(opened, { op: "set", id: "b", attrs: { "fub:name": "B" } });
+    const [p] = points(opened);
+    expect(p![0]).toBeCloseTo(40, 2);
+    expect(p![1]).toBeCloseTo(120, 2);
+    // Staccata dalla forma, è un testo qualunque del gruppo, e il capo lo tocca.
+    const loose = sheet(`${group.replace(' fub:inside="r"', "")}<rect id="b" x="300" y="100" width="40" height="40"/>${LINE("straight", "g center", "b center")}`);
+    applied(loose, { op: "set", id: "b", attrs: { "fub:name": "B" } });
+    expect(points(loose)[0]![0]).toBeGreaterThan(60);
+  });
+
   it("un capo verso un oggetto senza id, un livello o sé stesso è libero", () => {
     const opened = sheet(`${A}${B}${LINE("straight", "l1 auto", "c auto")}`);
     const before = opened.engine.text;

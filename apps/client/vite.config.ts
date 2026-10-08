@@ -133,13 +133,14 @@ export default defineConfig({
           // a capo con la misura dei caratteri, il testo su tracciato, le
           // tavole, i campioni, le sfumature, le punte delle linee, il
           // ritaglio delle immagini, le maschere, gli effetti, le campiture,
-          // i motivi e i connettori.
+          // i motivi, i connettori e le etichette nelle forme, con ciò che
+          // il seguito delle une e degli altri ha in comune.
           // Con loro ciò che i pannelli leggono senza DOM: copiare e
           // incollare, la cronologia, il controllo dell'accessibilità e la
           // descrizione del disegno, gli attributi e le misure con le unità,
           // le scelte dell'export.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi colori del documento, la

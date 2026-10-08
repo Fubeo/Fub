@@ -4,11 +4,13 @@
 // Il dato è quello della scena, le voci in ordine di documento che il lettore
 // ricava dal testo: lo stesso per l'editor e per un documento che si guarda
 // soltanto, e nessun secondo calcolo. Un nome dice che cosa è l'oggetto e,
-// quando lo sa, come si chiama: il suo `title`, o le parole di un testo, o
-// il nome di un livello. Un collegamento dice anche dove porta, col
-// nome della nota, e un connettore da che cosa a che cosa va. Lo stato di un
-// livello è una parola, non un colore. Il colore di un oggetto lo aggiunge chi
-// lo conosce: l'editor, che ha il painter.
+// quando lo sa, come si chiama: il suo `title`, o le parole di un testo o
+// dell'etichetta di una forma, o il nome di un livello. Una forma con
+// l'etichetta si chiama con le parole che si vedono, e il suo `title`, se ne
+// ha uno, dice che cosa è al posto del tipo. Un collegamento dice anche dove
+// porta, col nome della nota, e un connettore da che cosa a che cosa va. Lo
+// stato di un livello è una parola, non un colore. Il colore di un oggetto lo
+// aggiunge chi lo conosce: l'editor, che ha il painter.
 
 import { pageName } from "../../rules/mirrored";
 import { plural, t, type DrawKey } from "./strings";
@@ -27,8 +29,13 @@ export interface OutlineNode {
   /// La chiave con cui l'editor sceglie l'oggetto: l'id, o `@` e il percorso.
   readonly key: string;
   /// Il nome proprio: il nome del livello, il `title` dell'oggetto, le parole
-  /// di un testo; `null` se non ne ha.
+  /// di un testo o dell'etichetta di una forma; `null` se non ne ha.
   readonly name: string | null;
+  /// Che cosa è, al posto del tipo, per una forma che ha la sua etichetta e
+  /// un `title`: il `title`, perché il nome sono le parole dell'etichetta, le
+  /// stesse che si vedono. «Decisione «Controlla l'ordine»», non «Tracciato
+  /// «Decisione»». `null` per ogni altro oggetto, che dice il suo tipo.
+  readonly kind: string | null;
   /// Dove porta un collegamento: il percorso del vault com'è scritto nel suo
   /// `href`. `null` per ogni altro oggetto, e per un collegamento che non
   /// porta nel vault.
@@ -154,6 +161,19 @@ function wordsOf(text: string): string | null {
   return collapsed === "" ? null : collapsed;
 }
 
+/// Le righe di un testo come le legge chi lo guarda: unite con uno spazio,
+/// tranne una che continua la parola della riga prima, `fub:join="word"` in
+/// un testo in area, che si unisce senza («Pronto» e «?» sono «Pronto?»).
+/// Come il paragrafo del formato della scena; `null` se non ne ha.
+function textOf(item: ElementItem): string | null {
+  let out = "";
+  (item.lines ?? []).forEach((line, at) => {
+    const words = wordsOf(line);
+    if (words !== null) out += out === "" || item.glued?.[at] === true ? words : ` ${words}`;
+  });
+  return out === "" ? null : out;
+}
+
 /// Un testo come nome: gli spazi raccolti, e tagliato con i puntini oltre
 /// [`NAME_CHARS`] caratteri.
 function nameOf(text: string): string | null {
@@ -169,6 +189,7 @@ interface Building {
   readonly item: ElementItem;
   readonly key: string;
   name: string | null;
+  kind: string | null;
   readonly target: string | null;
   connection: Connection | null;
   joined: Joined | null;
@@ -183,6 +204,33 @@ function endWords(node: Building): string {
 /// Il nome proprio di `node`, o il suo tipo se non ne ha uno.
 function plainWords(node: Building): string {
   return node.name ?? kindOf(node.item);
+}
+
+/// I ruoli delle forme che possono avere un'etichetta dentro. Un tracciato
+/// conta anche aperto: il nome non chiede la geometria, e l'etichetta che lo
+/// nomina dice lo stesso che cosa è.
+const LABELLED: ReadonlySet<Role> = new Set<Role>(["rect", "ellipse", "circle", "ngon", "star", "polygon", "path"]);
+
+/// Dà a ogni forma nei gruppi `groups` le parole della sua etichetta, il
+/// primo testo che la nomina: sono il testo che si vede, e il nome di chi lo
+/// legge lo contiene. Se la forma ha un `title`, questo prende il posto del
+/// tipo (vedi [`OutlineNode.kind`]). Il gruppo che tiene soltanto la forma e
+/// lei, senza un `title`, si chiama come la forma.
+function nameByLabels(groups: readonly Building[]): void {
+  for (const group of groups) {
+    const seen = new Set<string>();
+    for (const label of group.children) {
+      const { inside, role, textPath, along } = label.item;
+      if (role !== "text" || inside === undefined || textPath !== undefined || along !== undefined || seen.has(inside)) continue;
+      seen.add(inside);
+      const shape = group.children.find((child) => child.item.id === inside);
+      const words = nameOf(textOf(label.item) ?? "");
+      if (shape === undefined || !LABELLED.has(shape.item.role) || words === null) continue;
+      if (shape.name !== null) shape.kind = shape.name;
+      shape.name = words;
+      if (group.children.length === 2) group.name ??= words;
+    }
+  }
 }
 
 /// L'oggetto a cui è agganciato un capo, se c'è.
@@ -202,7 +250,7 @@ function connect(all: readonly Building[], connectors: readonly Building[]): voi
     const { id, role, along } = node.item;
     if (id !== null && role !== "layer" && role !== "connector" && !byId.has(id)) byId.set(id, node);
     if (along !== undefined && !labels.has(along.id)) {
-      const words = wordsOf((node.item.lines ?? []).join(" "));
+      const words = textOf(node.item);
       if (words !== null) labels.set(along.id, words);
     }
   }
@@ -238,14 +286,18 @@ function connect(all: readonly Building[], connectors: readonly Building[]): voi
 /// ciascun contenitore i suoi. Titolo, descrizione e carta non sono oggetti:
 /// il primo `title` di un oggetto ne è il nome, anche al posto delle parole
 /// di un testo, perché è il nome che qualcuno gli ha dato; un livello tiene
-/// il suo, se ne ha uno. `targets` dice dove portano i collegamenti. Un
-/// connettore senza `title` prende il nome dalla sua prima etichetta, e dice
-/// a quali oggetti è agganciato.
+/// il suo, se ne ha uno. `targets` dice dove portano i collegamenti. Una
+/// forma con un'etichetta prende il nome dalle sue parole, e il suo `title`
+/// dice che cosa è al posto del tipo; il gruppo che tiene soltanto lei e la
+/// forma, senza un `title`, ha il nome della forma. Un connettore senza
+/// `title` prende il nome dalla sua prima etichetta, e dice a quali oggetti
+/// è agganciato.
 export function outline(items: readonly Item[], targets: LinkTargets = () => null): OutlineNode[] {
   const top: Building[] = [];
   const byPath = new Map<string, Building>();
   const all: Building[] = [];
   const connectors: Building[] = [];
+  const groups: Building[] = [];
   for (const item of items) {
     if (item.kind !== "element" || item.path.length === 0) continue;
     const parent = item.path.length === 1 ? null : byPath.get(item.path.slice(0, -1).join("."));
@@ -254,13 +306,15 @@ export function outline(items: readonly Item[], targets: LinkTargets = () => nul
     const title = nameOf(item.title ?? "");
     const name = item.role === "layer"
       ? nameOf(item.layer?.name ?? "") ?? title
-      : title ?? (item.role === "text" ? nameOf((item.lines ?? []).join(" ")) : null);
-    const node: Building = { item, key: keyOf(item), name, target: item.role === "link" ? targets(item) : null, connection: null, joined: null, children: [] };
+      : title ?? (item.role === "text" ? nameOf(textOf(item) ?? "") : null);
+    const node: Building = { item, key: keyOf(item), name, kind: null, target: item.role === "link" ? targets(item) : null, connection: null, joined: null, children: [] };
     byPath.set(item.path.join("."), node);
     (parent?.children ?? top).push(node);
     all.push(node);
     if (item.role === "connector") connectors.push(node);
+    else if (item.role === "group") groups.push(node);
   }
+  if (groups.length > 0) nameByLabels(groups);
   if (connectors.length > 0) connect(all, connectors);
   return top;
 }
@@ -289,7 +343,7 @@ function joinedTo(connector: string, connection: Connection | null): string {
 /// «Sfondo», bloccato», «Collegamento a «Pioggia»».
 export function describe(node: OutlineNode, options: DescribeOptions = {}): string {
   const item = node.item;
-  const kind = kindOf(item);
+  const kind = node.kind ?? kindOf(item);
   const named = node.name === null ? kind : t("draw.describe.named", { kind, name: node.name });
   const parts = [node.target === null ? joinedTo(named, node.connection) : t("draw.describe.link", { link: named, note: linkName(node.target) })];
   if (item.locked && options.state !== false) parts.push(t("draw.state.locked"));

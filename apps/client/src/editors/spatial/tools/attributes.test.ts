@@ -10,6 +10,7 @@ import {
   canonicalValue,
   cites,
   EDIT_LIMIT,
+  heldNamer,
   idProblem,
   initialValue,
   MAX_ID_LENGTH,
@@ -18,8 +19,13 @@ import {
   type Subject,
 } from "./attributes";
 import { nodeOf } from "./arrange";
+import { followConnectors } from "./connectors";
+import { followLabels } from "./labels";
+import { estimate } from "./measure";
+import type { Op } from "../scene/ops";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
+import { attrOf } from "./tip-support";
 
 const INK = "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8";
 const BRUSH = "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0";
@@ -234,7 +240,7 @@ describe("le operazioni", () => {
 
   it("un id si cambia togliendo il vecchio, e l'annulla lo rimette com'era", () => {
     const opened = open(doc(`${LAYER}<rect id='rect12' width="10" height="10"/></g>`));
-    const ops = renameOps(first(opened), "sole");
+    const ops = renameOps(first(opened), "sole", opened.engine.model);
     expect(ops).toEqual([
       { op: "ident", path: [0, 0], tag: "rect", id: null },
       { op: "ident", path: [0, 0], tag: "rect", id: "sole" },
@@ -242,7 +248,124 @@ describe("le operazioni", () => {
     expect(applied(opened, ops)).toContain('<rect id="sole" width="10" height="10"/>');
 
     const bare = open(doc(`${LAYER}<rect width="10" height="10"/></g>`));
-    expect(renameOps(first(bare), "sole")).toEqual([{ op: "ident", path: [0, 0], tag: "rect", id: "sole" }]);
+    expect(renameOps(first(bare), "sole", bare.engine.model)).toEqual([{ op: "ident", path: [0, 0], tag: "rect", id: "sole" }]);
+  });
+});
+
+describe("rinominare chi è nominato", () => {
+  const A = '<rect id="r" x="100" y="100" width="200" height="120" fill="#e69f00"/>';
+  const B = '<rect id="b" x="500" y="400" width="200" height="120" fill="#009e73"/>';
+  /// L'etichetta di `r`, come la scrive l'editor.
+  const LABEL = '<text id="t" fub:inside="r" fub:wrap="188" x="0" y="0" font-size="16" text-anchor="middle" transform="matrix(1 0 0 1 0 0)"><tspan x="0" dy="0">Processo</tspan></text>';
+  /// Il connettore da `r` a `b`, con una geometria vecchia, e la sua etichetta.
+  const LINE = (from = "r auto"): string =>
+    `<path id="c" fub:shape="connector" fub:geom="elbow 0 0 10 10" fub:from="${from}" fub:to="b auto" d="M0 0 L10 10" fill="none" stroke="#000000" stroke-width="2"/>`;
+  const ALONG = (on = "c"): string =>
+    `<text id="k" fub:along="${on} 0.5 12" x="0" y="0" font-size="14" text-anchor="middle"><tspan x="0" dy="0">sì</tspan></text>`;
+
+  /// Come lo installa l'editor: le etichette, poi i connettori, in un seguito.
+  function sheet(body: string, after = ""): Opened {
+    const opened = open(doc(`${LAYER}${body}</g>${after}`));
+    const find = (id: string) => opened.engine.holder(id);
+    opened.engine.follow = (model, touched, op) => {
+      const ops = [followLabels(model, touched, find, estimate, op), followConnectors(model, touched, find, estimate, op)].filter((each): each is Op => each !== null);
+      return ops.length === 0 ? null : ops.length === 1 ? ops[0]! : { op: "batch", ops };
+    };
+    return opened;
+  }
+
+  /// L'oggetto di id `id`, com'è per il pannello.
+  const subjectOfId = (opened: Opened, id: string): Subject => subjectOf(opened.engine.holder(id)!)!;
+
+  /// Rinomina `id` in `next` come l'editor, in un passo; il testo di prima e di dopo.
+  function rename(opened: Opened, id: string, next: string): { readonly before: string; readonly after: string; readonly ops: Op[] } {
+    const before = opened.engine.text;
+    const ops = renameOps(subjectOfId(opened, id), next, opened.engine.model);
+    const outcome = opened.engine.apply(gesture(ops)!);
+    if (outcome.outcome !== "applied") throw new Error(`rifiutato: ${outcome.detail}`);
+    const after = opened.engine.text;
+    // Un annulla solo riporta tutto com'era, e rifare com'è dopo.
+    const back = opened.engine.undo(outcome.undo);
+    if (back.outcome !== "applied") throw new Error(`annulla rifiutato: ${back.detail}`);
+    expect(opened.engine.text, "l'annulla").toBe(before);
+    const again = opened.engine.undo(back.undo);
+    if (again.outcome !== "applied") throw new Error(`rifai rifiutato: ${again.detail}`);
+    expect(opened.engine.text, "il rifai").toBe(after);
+    return { before, after, ops };
+  }
+
+  const scene = (name: string): string => `<g id="g">${A.replace('id="r"', `id="${name}"`)}${LABEL.replace('fub:inside="r"', `fub:inside="${name}"`)}</g>${B}${LINE(`${name} auto`)}${ALONG()}`;
+
+  it("l'etichetta di una forma e i capi e le etichette di un connettore ricevono l'id nuovo, in un passo", () => {
+    const opened = sheet(scene("r"));
+    const { ops, after } = rename(opened, "r", "casa");
+    expect(ops.slice(0, 2)).toEqual([
+      { op: "ident", path: [0, 0, 0], tag: "rect", id: null },
+      { op: "ident", path: [0, 0, 0], tag: "rect", id: "casa" },
+    ]);
+    // La forma, l'etichetta e il connettore: un solo `set` ciascuno.
+    expect(ops.slice(2)).toEqual([
+      { op: "set", id: "t", attrs: { "fub:inside": "casa" } },
+      { op: "set", id: "c", attrs: { "fub:from": "casa auto" } },
+    ]);
+    expect(after).toContain('<rect id="casa"');
+    expect(after).not.toMatch(/fub:(inside|from)="r[ "]/);
+  });
+
+  it("il capo `to` e il punto d'aggancio, l'etichetta del connettore con `t` e distanza", () => {
+    const opened = sheet(`${A}<rect id="b" x="500" y="400" width="200" height="120"/><path id="c" fub:shape="connector" fub:geom="elbow 0 0 10 10" fub:from="r right" fub:to="b auto" d="M0 0 L10 10" fill="none" stroke="#000000" stroke-width="2"/>${ALONG()}`);
+    expect(rename(opened, "c", "linea").ops.slice(2)).toEqual([{ op: "set", id: "k", attrs: { "fub:along": "linea 0.5 12" } }]);
+    const target = sheet(`${A}<rect id="b" x="500" y="400" width="200" height="120"/><path id="c" fub:shape="connector" fub:geom="elbow 0 0 10 10" fub:from="r right" fub:to="b auto" d="M0 0 L10 10" fill="none" stroke="#000000" stroke-width="2"/>`);
+    expect(rename(target, "b", "fine").ops.slice(2)).toEqual([{ op: "set", id: "c", attrs: { "fub:to": "fine auto" } }]);
+    // Un connettore agganciato a due capi della stessa forma ha un `set` solo.
+    const both = sheet(`${A}<path id="c" fub:shape="connector" fub:geom="elbow 0 0 10 10" fub:from="r right" fub:to="r left" d="M0 0 L10 10" fill="none" stroke="#000000" stroke-width="2"/>`);
+    expect(rename(both, "r", "anello").ops.slice(2)).toEqual([{ op: "set", id: "c", attrs: { "fub:from": "anello right", "fub:to": "anello left" } }]);
+  });
+
+  it("dopo il cambio l'etichetta e il connettore seguono ancora la forma, come prima", () => {
+    // La stessa scena senza il cambio fa da controllo: spostata la forma allo
+    // stesso modo, etichetta, connettore e sua etichetta finiscono uguali.
+    const renamed = sheet(scene("r"));
+    rename(renamed, "r", "casa");
+    const control = sheet(scene("r"));
+    const move = (id: string): Op => ({ op: "set", id, attrs: { transform: "matrix(1 0 0 1 60 -40)" } });
+    expect(renamed.engine.apply(move("casa")).outcome).toBe("applied");
+    expect(control.engine.apply(move("r")).outcome).toBe("applied");
+    expect(attrOf(renamed, "t", "fub:inside")).toBe("casa");
+    expect(attrOf(renamed, "c", "fub:from")).toBe("casa auto");
+    expect(attrOf(renamed, "t", "transform")).toBe(attrOf(control, "t", "transform"));
+    expect(attrOf(renamed, "c", "fub:geom")).toBe(attrOf(control, "c", "fub:geom"));
+    expect(attrOf(renamed, "c", "d")).toBe(attrOf(control, "c", "d"));
+    expect(attrOf(renamed, "k", "transform")).toBe(attrOf(control, "k", "transform"));
+    // Il connettore si è davvero mosso con la forma.
+    expect(attrOf(renamed, "c", "fub:geom")).not.toBe(attrOf(sheet(scene("r")), "c", "fub:geom"));
+  });
+
+  it("una forma senza id nuovo da dare, o senza chi la nomina, non scrive altro", () => {
+    const bare = sheet(`<rect x="100" y="100" width="20" height="20"/>${LABEL}`);
+    expect(renameOps(first(bare), "casa", bare.engine.model)).toEqual([{ op: "ident", path: [0, 0], tag: "rect", id: "casa" }]);
+    const alone = sheet(`${A}<rect id="o" x="0" y="0" width="5" height="5"/>${LABEL.replace('fub:inside="r"', 'fub:inside="o"')}`);
+    expect(rename(alone, "r", "casa").ops).toHaveLength(2);
+    // Senza il documento, soltanto l'id.
+    const scenic = sheet(scene("r"));
+    expect(renameOps(subjectOfId(scenic, "r"), "casa", null)).toHaveLength(2);
+  });
+
+  it("chi sta in un livello bloccato ferma il cambio, che lo staccherebbe; chi non ha un id resta com'è", () => {
+    const locked = sheet(`${A}${B}`, `<g id="l2" fub:layer="Due" fub:locked="true">${LINE()}${ALONG()}</g>`);
+    const model = locked.engine.model!;
+    expect(heldNamer(model, "r")).toBe(true);
+    expect(heldNamer(model, "b")).toBe(true);
+    const free = sheet(scene("r"));
+    expect(heldNamer(free.engine.model!, "r")).toBe(false);
+    const never = (): boolean => false;
+    expect(idProblem(subjectOfId(locked, "r"), "casa", never, never, (id) => heldNamer(model, id))).toBe("held");
+    // Anche chiesta lo stesso, il motore non la scrive: niente cambia.
+    const before = locked.engine.text;
+    expect(locked.engine.apply(gesture(renameOps(subjectOfId(locked, "r"), "casa", model))!).outcome).not.toBe("applied");
+    expect(locked.engine.text).toBe(before);
+    const unnamed = sheet(`${A}${B}<path fub:shape="connector" fub:geom="elbow 0 0 10 10" fub:from="r auto" fub:to="b auto" d="M0 0 L10 10" fill="none" stroke="#000000" stroke-width="2"/>`);
+    expect(rename(unnamed, "r", "casa").ops).toHaveLength(2);
   });
 });
 
@@ -263,16 +386,21 @@ describe("l'id", () => {
     ["FUB-sole", "reserved"],
     ["obbbbbbbb", "taken"],
   ])("%j è %s", (next, problem) => {
-    expect(idProblem(subject, next, taken, never)).toBe(problem);
+    expect(idProblem(subject, next, taken, never, never)).toBe(problem);
   });
 
   it.each(["sole", "_sole", "città.1", "Été-2", "a".repeat(MAX_ID_LENGTH), "oaaaaaaaa"])("%j va bene", (next) => {
-    expect(idProblem(subject, next, taken, never)).toBeNull();
+    expect(idProblem(subject, next, taken, never, never)).toBeNull();
   });
 
   it("un id citato da una parte estranea non si cambia", () => {
-    expect(idProblem(subject, "sole", taken, (id) => id === "oaaaaaaaa")).toBe("cited");
-    expect(idProblem(subject, "oaaaaaaaa", taken, () => true), "lo stesso id").toBeNull();
+    expect(idProblem(subject, "sole", taken, (id) => id === "oaaaaaaaa", never)).toBe("cited");
+    expect(idProblem(subject, "oaaaaaaaa", taken, () => true, never), "lo stesso id").toBeNull();
+  });
+
+  it("un id che un oggetto bloccato nomina non si cambia", () => {
+    expect(idProblem(subject, "sole", taken, never, (id) => id === "oaaaaaaaa")).toBe("held");
+    expect(idProblem(subject, "oaaaaaaaa", taken, never, () => true), "lo stesso id").toBeNull();
   });
 
   it.each([

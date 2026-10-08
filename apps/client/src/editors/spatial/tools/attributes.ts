@@ -20,12 +20,15 @@
 // - **L'id è un nome.** Uno scritto a mano comincia con una lettera o `_` e
 //   continua con lettere, cifre, `_`, `.` e `-`, fino a 64 caratteri; è unico
 //   nel documento, e `fub-` è del formato. Un id che una parte estranea del
-//   disegno cita non si cambia, perché il riferimento si romperebbe.
+//   disegno cita non si cambia, perché il riferimento si romperebbe. Chi lo
+//   nomina nel disegno (l'etichetta di una forma, i capi e le etichette di
+//   un connettore) lo riceve nuovo nello stesso passo.
 
 import type { Details, Tag } from "../scene/classify";
 import { svgAttribute } from "../scene/classify";
 import { parsePath } from "../scene/geometry";
-import { pathOf, writtenOf, type ElementPart } from "../scene/model";
+import { writeConnectorEnd, writeLabelPlace } from "../scene/connectors";
+import { elementChildren, pathOf, writtenOf, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { attributeKey, canonicalOrder, pathData, type OutAttr } from "../scene/serialize";
 import {
@@ -47,6 +50,7 @@ import type { Role } from "../scene/analysis";
 import { formatNumber } from "../number";
 import { readHead } from "./arrange";
 import { transformValue, type NewIds } from "./edit";
+import { lockedAbove } from "./follow";
 import { customColor } from "./palette";
 import { arrowPath } from "./shapes";
 import { TEXT_FAMILIES, TEXT_FAMILY } from "./text";
@@ -473,30 +477,84 @@ export type IdProblem =
   /// Un altro elemento lo porta già.
   | "taken"
   /// Una parte estranea del disegno cita l'id di adesso.
-  | "cited";
+  | "cited"
+  /// Un oggetto in un livello o in un gruppo bloccato nomina l'id di adesso,
+  /// e non si riscrive (vedi [`heldNamer`]).
+  | "held";
 
 /// Che cosa non va nel dare l'id `next` a `subject`; `null` se va bene.
 /// `taken` dice se un elemento del documento porta già un id, `cited` se una
-/// parte estranea del disegno lo cita.
-export function idProblem(subject: Subject, next: string, taken: (id: string) => boolean, cited: (id: string) => boolean): IdProblem | null {
+/// parte estranea del disegno lo cita, `held` se lo nomina un oggetto
+/// bloccato.
+export function idProblem(
+  subject: Subject,
+  next: string,
+  taken: (id: string) => boolean,
+  cited: (id: string) => boolean,
+  held: (id: string) => boolean,
+): IdProblem | null {
   if (next === "") return "empty";
   if ([...next].length > MAX_ID_LENGTH) return "long";
   if (!NAME.test(next)) return "form";
   if (next.toLowerCase().startsWith("fub-")) return "reserved";
   if (next !== subject.id && taken(next)) return "taken";
   if (subject.id !== null && subject.id !== next && cited(subject.id)) return "cited";
+  if (subject.id !== null && subject.id !== next && held(subject.id)) return "held";
   return null;
 }
 
 /// Dà a `subject` l'id `next`: uno solo se non ne ha, altrimenti tolto il
-/// vecchio, così che l'undo lo rimetta com'era scritto.
-export function renameOps(subject: Subject, next: string): Op[] {
+/// vecchio, così che l'undo lo rimetta com'era scritto. Se aveva un id, chi
+/// lo nomina nel disegno `model` (vedi [`namersOps`]) riceve quello nuovo
+/// nelle stesse operazioni: un solo passo, e un solo annulla.
+export function renameOps(subject: Subject, next: string, model: DocumentModel | null): Op[] {
   const at = { path: [...subject.path], tag: subject.tag };
   if (subject.id === null) return [{ op: "ident", ...at, id: next }];
   return [
     { op: "ident", ...at, id: null },
     { op: "ident", ...at, id: next },
+    ...(model === null ? [] : namersOps(model, subject.id, next)),
   ];
+}
+
+/// Chi nomina `old` nel disegno, con gli attributi che lo direbbero `next`:
+/// l'etichetta di una forma (`fub:inside`), i capi di un connettore
+/// (`fub:from` e `fub:to`, col punto d'aggancio che avevano) e le etichette
+/// di un connettore (`fub:along`, con `t` e la distanza), scritti come li
+/// scrive FubDraw.
+function namers(model: DocumentModel, old: string, next: string): { readonly node: ElementPart; readonly attrs: Record<string, string> }[] {
+  const found: { readonly node: ElementPart; readonly attrs: Record<string, string> }[] = [];
+  const walk = (container: ElementPart): void => {
+    if (container.kind !== "container") return;
+    for (const child of elementChildren(container)) {
+      const details = child.details;
+      if (details === null) continue;
+      const attrs: Record<string, string> = {};
+      if (details.inside === old) attrs["fub:inside"] = next;
+      const connector = details.connector;
+      if (connector?.from?.id === old) attrs["fub:from"] = writeConnectorEnd({ ...connector.from, id: next });
+      if (connector?.to?.id === old) attrs["fub:to"] = writeConnectorEnd({ ...connector.to, id: next });
+      if (details.along?.id === old) attrs["fub:along"] = writeLabelPlace({ ...details.along, id: next });
+      if (child.facts.id !== old && Object.keys(attrs).length > 0) found.push({ node: child, attrs });
+      if (details.role === "layer" || details.role === "group" || details.role === "link") walk(child);
+    }
+  };
+  walk(model.root);
+  return found;
+}
+
+/// Vero se un oggetto in un livello o in un gruppo bloccato nomina `id`: il
+/// motore non lo riscriverebbe, e una rinomina lo staccherebbe, perciò non
+/// si fa.
+export function heldNamer(model: DocumentModel, id: string): boolean {
+  return namers(model, id, id).some(({ node }) => lockedAbove(node));
+}
+
+/// Le operazioni che portano da `old` a `next` chi nomina `old` nel disegno
+/// (vedi [`namers`]). Un elemento senza id non si indirizza e resta com'era;
+/// FubDraw non ne scrive.
+function namersOps(model: DocumentModel, old: string, next: string): Op[] {
+  return namers(model, old, next).flatMap(({ node, attrs }): Op[] => (node.facts.id === null ? [] : [{ op: "set", id: node.facts.id, attrs }]));
 }
 
 /// Vero se `text` cita l'id `id`: un `url(#id)`, un `href="#id"`, un

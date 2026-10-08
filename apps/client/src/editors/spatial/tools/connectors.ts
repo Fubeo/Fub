@@ -32,10 +32,12 @@ import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } 
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
-import { length, transform as parseTransform } from "../scene/values";
+import { length } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes } from "./arrange";
 import { gesture, transformValue, type Destination, type NewIds } from "./edit";
 import { strokeHalf, textExtent } from "./effects";
+import { among, Changes, lockedAbove, movedBy, namedBy, SceneMatrices, touchedBy } from "./follow";
+import { labelTarget } from "./label-hosts";
 import { shapeSegments, type Unit } from "./hit";
 import type { Measure } from "./measure";
 
@@ -110,12 +112,6 @@ export function targetOf(connector: ElementPart, id: string, find: (id: string) 
   return node !== null && node !== connector && attachable(node) && !holds(node, connector) ? node : null;
 }
 
-/// Vero se un contenitore bloccato contiene `node`: il motore non vi scrive.
-function lockedAbove(node: ElementPart): boolean {
-  for (let at = node.parent; at !== null; at = at.parent) if (at.details?.locked === true) return true;
-  return false;
-}
-
 // ---------------------------------------------------------------------------
 // Piccoli conti.
 // ---------------------------------------------------------------------------
@@ -138,16 +134,6 @@ const linear = (m: Matrix, [x, y]: Point): Point => [m[0] * x + m[2] * y, m[1] *
 /// Di quanto `m` allarga le lunghezze, in media.
 const scaleOf = (m: Matrix): number => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 
-/// Il `transform` di `node`; uno che non si legge non trasforma, come lo
-/// disegna un browser.
-function ownMatrix(node: ElementPart): Matrix {
-  // Senza la parola nel tag d'apertura non c'è l'attributo: la maggior parte
-  // degli oggetti non si legge.
-  if (!(node.kind === "leaf" ? node.raw.slice(0, node.openLength) : node.head).includes("transform")) return IDENTITY;
-  const written = plainAttributes(node).get("transform");
-  return written === undefined ? IDENTITY : (parseTransform(written) ?? IDENTITY);
-}
-
 /// I quattro lati di `box`, in giro.
 function boxChords({ min, max }: Bounds): Chord[] {
   const corners: Point[] = [min, [max[0], min[1]], max, [min[0], max[1]]];
@@ -167,11 +153,13 @@ interface Local {
 }
 
 /// Vero se `node` disegna qualcosa che fa parte del contorno di chi lo
-/// contiene: non i titoli, le descrizioni, i connettori, gli estranei e ciò
-/// che è nascosto.
+/// contiene: non i titoli, le descrizioni, i connettori, gli estranei, ciò
+/// che è nascosto e le etichette nelle forme, che un connettore non tocca
+/// nemmeno quando escono dalla loro forma.
 function outlined(node: ElementPart): boolean {
   const details = node.details;
   if (details === null || details.hidden === true) return false;
+  if (details.inside !== undefined && labelTarget(node) !== null) return false;
   return details.role !== "title" && details.role !== "desc" && details.role !== "connector";
 }
 
@@ -258,8 +246,7 @@ function sameMatrix(a: Matrix, b: Matrix): boolean {
 /// sposta i contorni senza rileggerli.
 export class Router {
   private readonly locals = new Map<ElementPart, Local | null>();
-  private readonly known = new Map<ElementPart, Matrix>();
-  private readonly owns = new Map<ElementPart, Matrix>();
+  private readonly matrices = new SceneMatrices();
   private readonly seen = new Map<ElementPart, { readonly matrix: Matrix; readonly outline: Outline | null }>();
   private readonly extents = new Map<ElementPart, Bounds | null>();
   shift: (node: ElementPart) => Matrix | null = () => null;
@@ -269,28 +256,13 @@ export class Router {
   /// Dalle coordinate di `node` alla scena, col suo `transform`.
   matrixOf(node: ElementPart): Matrix {
     const moved = this.shift(node);
-    const base = this.base(node);
+    const base = this.matrices.of(node);
     return moved === null ? base : compose(moved, base);
   }
 
   /// Il `transform` di `node` da solo: si legge una volta.
   own(node: ElementPart): Matrix {
-    let m = this.owns.get(node);
-    if (m === undefined) {
-      m = ownMatrix(node);
-      this.owns.set(node, m);
-    }
-    return m;
-  }
-
-  private base(node: ElementPart): Matrix {
-    if (node.parent === null) return IDENTITY;
-    let m = this.known.get(node);
-    if (m === undefined) {
-      m = compose(this.base(node.parent), this.own(node));
-      this.known.set(node, m);
-    }
-    return m;
+    return this.matrices.own(node);
   }
 
   /// Il riquadro delle righe del testo `node`, nelle sue coordinate; `null`
@@ -883,57 +855,6 @@ function scan(model: DocumentModel): { readonly lines: ElementPart[]; readonly l
   return { lines, labels };
 }
 
-/// Gli id di cui `op` sposta, gira o ridimensiona l'oggetto: un `set` di
-/// `transform` che non riscrive la geometria. «Applica trasformazione»,
-/// che porta il `transform` nella geometria, non sposta niente.
-function movedBy(op: Op, out = new Set<string>()): Set<string> {
-  if (op.op === "batch") for (const inner of op.ops) movedBy(inner, out);
-  else if (op.op === "set" && op.part === undefined && "transform" in op.attrs && !("fub:geom" in op.attrs)) out.add(op.id);
-  return out;
-}
-
-/// Gli id degli elementi che `op` nomina: quelli che ha cambiato chi l'ha
-/// chiesta, non ciò che un seguito ha toccato dopo.
-function namedBy(op: Op, out = new Set<string>()): Set<string> {
-  if (op.op === "batch") {
-    for (const inner of op.ops) namedBy(inner, out);
-    return out;
-  }
-  const named = op as { readonly id?: unknown; readonly target?: unknown };
-  if (typeof named.id === "string") out.add(named.id);
-  if (typeof named.target === "string") out.add(named.target);
-  return out;
-}
-
-/// Vero se `node`, o chi lo contiene, ha l'id in `ids`.
-function among(node: ElementPart, ids: ReadonlySet<string>): boolean {
-  for (let at: ElementPart | null = node; at !== null; at = at.parent) if (at.facts.id !== null && ids.has(at.facts.id)) return true;
-  return false;
-}
-
-/// Che cosa è cambiato: gli oggetti toccati e quelli che li contengono.
-class Changes {
-  private readonly hit: ReadonlySet<ElementPart>;
-  private readonly inside = new Set<ElementPart>();
-
-  constructor(hit: ReadonlySet<ElementPart>) {
-    this.hit = hit;
-    for (const node of hit) for (let at: ElementPart | null = node; at !== null && !this.inside.has(at); at = at.parent) this.inside.add(at);
-  }
-
-  /// Vero se è cambiato `node` o chi lo contiene: si è spostato con lui.
-  under(node: ElementPart): boolean {
-    for (let at: ElementPart | null = node; at !== null; at = at.parent) if (this.hit.has(at)) return true;
-    return false;
-  }
-
-  /// Vero se è cambiato `node`, chi lo contiene o qualcosa che contiene: il
-  /// suo contorno può essere un altro.
-  changed(node: ElementPart): boolean {
-    return this.inside.has(node) || this.under(node);
-  }
-}
-
 /// I due capi di `line`: gli oggetti a cui sono agganciati, `null` per un
 /// capo libero o che non vale.
 function targetsOf(line: ElementPart, facts: ConnectorFacts, find: (id: string) => ElementPart | null): readonly [ElementPart | null, ElementPart | null] {
@@ -1210,14 +1131,7 @@ export function followConnectors(model: DocumentModel, touched: ReadonlySet<stri
   if (touched.size === 0) return null;
   const { lines, labels } = scan(model);
   if (lines.length === 0 && labels.length === 0) return null;
-  const removed = new Set<string>();
-  const hit = new Set<ElementPart>();
-  for (const id of touched) {
-    const node = find(id);
-    if (node === null) removed.add(id);
-    else hit.add(node);
-  }
-  const changes = new Changes(hit);
+  const { changes, removed } = touchedBy(touched, find);
   const moved = op === null ? new Set<string>() : movedBy(op);
   const named = op === null ? touched : namedBy(op);
   const router = new Router(measure);
