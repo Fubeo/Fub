@@ -80,8 +80,7 @@ import { mapped } from "./boolean";
 import { gesture, type NewIds } from "./edit";
 import { geometryBox, shapeSegments, type Unit } from "./hit";
 import { strokeArea, type Cap, type Join } from "./offset";
-import { gradientOf, gradientPaint, homeOf, paintCode, resourcesOf, type Gradient, type Home } from "./resources";
-import { swatchPaint } from "./swatches";
+import { gradientOf, gradientPaint, homeOf, paintCode, resourcesOf, swatchPaint, type Gradient, type Home } from "./resources";
 
 /// Una forma della raccolta: il triangolo pieno, la punta aperta, il
 /// cerchio, il quadrato, il rombo e la barra di traverso.

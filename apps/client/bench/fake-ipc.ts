@@ -51,6 +51,7 @@ import type {
   ViewSpec,
 } from "../src/host/contract";
 import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
+import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -73,6 +74,21 @@ type BoardsBenchMetadata = Readonly<{
     doc: string;
     boards: BoardsFixture["boards"];
     objects: number;
+    elements: number;
+    bytes: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco dei connettori (`connectors.mjs`) legge del disegno che
+/// sposta: dove sta, le forme e i connettori con ciò che li unisce, i nodi.
+type ConnectorsBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    shapes: ConnectorsFixture["shapes"];
+    connectors: ConnectorsFixture["connectors"];
+    hubs: ConnectorsFixture["hubs"];
+    labels: ConnectorsFixture["labels"];
     elements: number;
     bytes: number;
     digest: string;
@@ -154,6 +170,42 @@ globalThis.__fubBoardsBench = Object.freeze({
       })
     : null,
 });
+
+// `?connectors=N` mette nel vault il disegno di N connettori del banco dei
+// connettori (`connectors-fixture.ts`), con due forme ogni tre connettori, e
+// accende l'editor come `?boards=N`. I due disegni non stanno insieme.
+//
+// Questo modulo sta nel giro fra le stringhe della shell e l'host
+// (`i18n/strings.ts` legge le impostazioni dall'host, che qui è lui): ciò che
+// importa si valuta mentre le stringhe sono a metà. Perciò i due disegni si
+// fanno coi moduli dell'editor che non leggono le stringhe: un catalogo
+// valutato qui troverebbe quello della shell non ancora pronto, e la pagina
+// del catalogo del banco non partirebbe.
+const connectorsParam = params.get("connectors");
+let CONNECTORS: ConnectorsFixture | null = null;
+if (connectorsParam !== null) {
+  if (BOARDS !== null) throw new RangeError("boards and connectors are two different drawings");
+  if (!/^[1-9]\d*$/.test(connectorsParam)) throw new RangeError("connectors must be a positive decimal integer");
+  CONNECTORS = connectorsFixture(Number(connectorsParam));
+}
+
+globalThis.__fubConnectorsBench = Object.freeze({
+  fixture: CONNECTORS
+    ? Object.freeze({
+        doc: CONNECTORS_DOC,
+        shapes: CONNECTORS.shapes,
+        connectors: CONNECTORS.connectors,
+        hubs: CONNECTORS.hubs,
+        labels: CONNECTORS.labels,
+        elements: CONNECTORS.elements,
+        bytes: new TextEncoder().encode(CONNECTORS.text).length,
+        digest: CONNECTORS.digest,
+      })
+    : null,
+});
+
+/// Il disegno che il banco apre dall'albero, se ne ha uno.
+const DRAWING = BOARDS !== null ? { doc: BOARDS_DOC, text: BOARDS.text } : CONNECTORS !== null ? { doc: CONNECTORS_DOC, text: CONNECTORS.text } : null;
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -493,8 +545,8 @@ const SETTINGS: SettingEntry[] = [
 ];
 
 /// Il livello dell'editor dei disegni come lo dichiara il bundle `fub.draw`,
-/// a Standard: serve solo al banco delle tavole, e sta fuori da `SETTINGS`
-/// perché il pannello delle impostazioni si fotografa senza.
+/// a Standard: serve ai banchi che aprono un disegno, e sta fuori da
+/// `SETTINGS` perché il pannello delle impostazioni si fotografa senza.
 const DRAW_LEVEL: SettingEntry = {
   spec: {
     key: "draw.level",
@@ -885,15 +937,15 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: BOARDS === null ? CORPUS : { ...CORPUS, [BOARDS_DOC]: BOARDS.text },
+  file: DRAWING === null ? CORPUS : { ...CORPUS, [DRAWING.doc]: DRAWING.text },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
   commands: BENCH_COMMANDS,
-  settings: BOARDS === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
+  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
-  ...(BOARDS === null ? {} : { draw: true }),
+  ...(DRAWING === null ? {} : { draw: true }),
 };
 
 const host = createFakeHost(options);
@@ -909,6 +961,7 @@ const host = createFakeHost(options);
 declare global {
   var __fubGraphBench: GraphBenchMetadata;
   var __fubBoardsBench: BoardsBenchMetadata;
+  var __fubConnectorsBench: ConnectorsBenchMetadata;
   interface Window {
     bench: {
       emit: typeof host.emit;

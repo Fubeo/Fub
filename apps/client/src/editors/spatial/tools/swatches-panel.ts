@@ -38,7 +38,8 @@ import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/me
 import { plural, t } from "../strings";
 import { cleanName, NAME_MAX } from "./naming";
 import { customColor, swatchOf } from "./palette";
-import { freshSwatchName, swatchNameProblem, swatchPaint } from "./swatches";
+import { swatchPaint } from "./resources";
+import { freshSwatchName, swatchNameProblem } from "./swatches";
 
 /// Dopo il menu aperto dalla tastiera, per tanti millisecondi il clic destro
 /// che il tasto del menu manda dietro non ne apre un altro.

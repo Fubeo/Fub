@@ -318,3 +318,15 @@ jobs:
           name: banco-tavole-${{ github.sha }}
           path: apps/client/bench/.output/boards-20.json
           include-hidden-files: true
+      - name: trecento connettori si spostano senza scatti
+        id: bench_connectors
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:connectors
+        working-directory: apps/client
+      - name: il referto del banco dei connettori
+        if: ${{ failure() && steps.bench_connectors.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-connettori-${{ github.sha }}
+          path: apps/client/bench/.output/connectors-300.json
+          include-hidden-files: true

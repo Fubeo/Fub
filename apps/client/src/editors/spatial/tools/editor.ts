@@ -274,7 +274,7 @@ import type { GradientPanelView } from "./gradient-panel";
 import type { HatchPanelView } from "./hatch-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
-import { paintCode, resourceHome } from "./resources";
+import { paintCode, resourceHome, swatchPaint } from "./resources";
 import { createProperties, type ActionId, type FieldId, type PropertiesView, type SectionId, type TransformId } from "./properties";
 import {
   documentColors,
@@ -285,7 +285,6 @@ import {
   recolorSwatchOps,
   removeSwatchOps,
   renameSwatchOps,
-  swatchPaint,
   unitsShowing,
   type DocumentColors,
   type SwatchChange,
