@@ -46,6 +46,19 @@
 //   colore o l'opacità del contorno, quello del gruppo che lo passa,
 //   spostare la linea su una sfumatura, cambiare la sfumatura o ricolorare
 //   un campione non lascia punte del colore di prima.
+// - **Le punte vanno con lo stile.** Copiare lo stile di una linea porta le
+//   punte, capo per capo: la forma e la misura, `none` per un capo senza
+//   punta, niente per un capo con un marcatore di un altro programma. Chi
+//   lo riceve le ricrea per nome con i marcatori del proprio disegno,
+//   riusati o aggiunti una volta sola: l'id di un marcatore non passa da un
+//   disegno all'altro. Il colore lo rimette il seguito, nello stesso passo.
+// - **Le punte entrano nel contorno.** «Contorno in tracciato» fa della
+//   linea e delle sue punte una forma sola: l'area di ogni punta si mette
+//   dove la mette lo schermo (il vertice, il suo verso, lo spessore) e si
+//   unisce a quella del contorno. Un marcatore che non è della raccolta, o a
+//   metà del tracciato, non si sa contornare, e la forma resta com'è. Lo
+//   scostamento non porta le punte sul tracciato nuovo, e lo spessore
+//   variabile non le ha: una linea con le punte non lo cambia.
 // - **Mille linee** si leggono entro un fotogramma: gli attributi di un
 //   nodo e ciò che un contenitore passa ai figli si leggono una volta sola,
 //   finché un'operazione non li cambia; i marcatori del disegno si leggono
@@ -56,14 +69,17 @@ import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
 import { parsePath } from "../scene/geometry";
 import type { Segment } from "../scene/geometry";
+import { markerFit, markerMatrix, placed, vertices, type MarkerPlace, type Vertex } from "../scene/markers";
 import type { Point } from "../scene/matrix";
 import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { pathData, type Elem } from "../scene/serialize";
-import { length, opacity as parseOpacity, paint as parsePaint, paintReference, points as parsePoints, reference, trim } from "../scene/values";
+import { length, nonNegativeLength, opacity as parseOpacity, paint as parsePaint, paintReference, points as parsePoints, reference, trim } from "../scene/values";
 import { elemOf, plainAttributes, Plan, type Arranged } from "./arrange";
+import { mapped } from "./boolean";
 import { gesture, type NewIds } from "./edit";
-import { geometryBox, type Unit } from "./hit";
+import { geometryBox, shapeSegments, type Unit } from "./hit";
+import { strokeArea, type Cap, type Join } from "./offset";
 import { gradientOf, gradientPaint, homeOf, paintCode, resourcesOf, type Gradient, type Home } from "./resources";
 import { swatchPaint } from "./swatches";
 
@@ -508,7 +524,7 @@ function vertexOf(node: ElementPart, end: TipEnd, own: ReadonlyMap<string, strin
 }
 
 /// Il colore e l'opacità che una punta deve avere.
-interface Wanted {
+export interface Wanted {
   readonly paint: string;
   readonly opacity: number;
 }
@@ -517,7 +533,7 @@ interface Wanted {
 const BLACK: Wanted = { paint: "#000000", opacity: 1 };
 
 /// Un marcatore del disegno, e la punta della raccolta che è.
-interface Marker {
+export interface Marker {
   readonly node: LeafNode;
   readonly info: MarkerTip | null;
 }
@@ -608,8 +624,9 @@ class Reader {
 const keyOf = (tip: Tip, end: TipEnd, wanted: Wanted): string => `${tipName(tip, end)}|${wanted.paint}|${wanted.opacity}`;
 
 /// I marcatori che un comando usa: quelli del disegno che sono uguali a ciò
-/// che serve, e gli altri, aggiunti una volta sola.
-class Shelf {
+/// che serve, e gli altri, aggiunti una volta sola. Un comando che scrive
+/// punte della raccolta in un `Plan` ne chiede l'id qui.
+export class Shelf {
   private readonly known = new Map<string, string>();
   private readonly adds: Op[] = [];
   private home: Home | null = null;
@@ -617,7 +634,7 @@ class Shelf {
   constructor(
     private readonly model: DocumentModel,
     private readonly ids: NewIds,
-    markers: ReadonlyMap<string, Marker>,
+    markers: ReadonlyMap<string, Marker> = markersOf(model),
   ) {
     for (const [id, marker] of markers) {
       if (marker.info === null) continue;
@@ -641,9 +658,11 @@ class Shelf {
   }
 
   /// Le operazioni che aggiungono i marcatori nuovi, da fare prima di chi li
-  /// usa; nessuna se non ce ne sono.
-  ops(): Op[] {
-    return this.adds.length === 0 ? [] : [...this.home!.prelude, ...this.adds];
+  /// usa; nessuna se non ce ne sono. Con `prelude` falso senza quella che
+  /// crea la `defs` del disegno, se un'altra aggiunta dello stesso passo l'ha
+  /// già fatta.
+  ops(prelude = true): Op[] {
+    return this.adds.length === 0 ? [] : [...(prelude ? this.home!.prelude : []), ...this.adds];
   }
 }
 
@@ -763,6 +782,155 @@ export function tipOps(model: DocumentModel, units: readonly Unit[], change: Tip
   plan.ops.push(...shelf.ops(), ...sets);
   const keys = sets.length === 0 ? units.map((unit) => unit.key) : units.map((unit, at) => plan.keyOf(nodes[at]!, unit.key));
   return { ...plan.finish(keys), changed: sets.length };
+}
+
+// ---------------------------------------------------------------------------
+// Copiare le punte con lo stile.
+// ---------------------------------------------------------------------------
+
+/// Ciò che uno stile copiato dice di un capo: una punta della raccolta;
+/// `none` se il capo non ne ha; `null` se non si copia, perché il suo
+/// marcatore non è della raccolta, e chi riceve lo stile tiene il suo.
+export type EndStyle = Tip | "none" | null;
+
+/// Le punte di uno stile copiato. Sono la forma e la misura, mai l'id di un
+/// marcatore: lo stile vale anche in un altro disegno, dove la punta si
+/// riscrive con questo nome.
+export interface TipsStyle {
+  readonly start: EndStyle;
+  readonly end: EndStyle;
+}
+
+/// Le punte di `node` per uno stile copiato; `null` se non può averne, come
+/// un rettangolo o un testo, e chi riceve lo stile tiene le sue.
+export function tipsStyleOf(model: DocumentModel, node: ElementPart): TipsStyle | null {
+  if (!tippable(node)) return null;
+  const reader = new Reader(model);
+  const own = ownOf(node);
+  const styled = (end: TipEnd): EndStyle => {
+    const state = reader.state(own, end);
+    if (state.kind === "custom") return null;
+    return state.kind === "none" ? "none" : { shape: state.info.tip.shape, size: state.info.tip.size };
+  };
+  return { start: styled("start"), end: styled("end") };
+}
+
+/// Le punte che un comando dà a più parti, in un `Plan`: i marcatori giusti,
+/// riusati se il disegno li ha e aggiunti una volta sola se no.
+export class Tipper {
+  private readonly reader: Reader;
+  private readonly shelf: Shelf;
+
+  constructor(model: DocumentModel, ids: NewIds) {
+    this.reader = new Reader(model);
+    this.shelf = new Shelf(model, ids, this.reader.markers);
+  }
+
+  /// Gli attributi che danno a `node` le punte di `tips`: `marker-start` e
+  /// `marker-end` dei capi che lo stile dice, tolti con `none`. Il colore
+  /// della punta è quello che la linea ha adesso; se lo stesso comando lo
+  /// cambia, [`followTips`] lo porta in pari nello stesso passo. `null` se
+  /// la parte non può averne, o se le mostra già.
+  give(node: ElementPart, tips: TipsStyle): Record<string, string | null> | null {
+    if (node.kind !== "leaf" || !tippable(node)) return null;
+    const own = ownOf(node);
+    const attrs: Record<string, string | null> = {};
+    for (const end of TIP_ENDS) {
+      const wanted = tips[end];
+      if (wanted === null) continue;
+      put(attrs, own, end, wanted === "none" ? null : `url(#${this.shelf.idFor(wanted, end, this.reader.wanted(node, end) ?? BLACK)})`);
+    }
+    return Object.keys(attrs).length === 0 ? null : attrs;
+  }
+
+  /// Le operazioni che aggiungono i marcatori nuovi, da fare prima di chi li
+  /// usa: come [`Shelf.ops`].
+  ops(prelude = true): Op[] {
+    return this.shelf.ops(prelude);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Le punte nel contorno.
+// ---------------------------------------------------------------------------
+
+/// I tag su cui SVG disegna i marcatori.
+const MARKED_TAGS: ReadonlySet<string> = new Set(["path", "line", "polyline", "polygon"]);
+
+/// Le proprietà dei marcatori, coi vertici dove ciascuna li mette.
+const MARKER_PLACES: ReadonlyArray<readonly [MarkerPlace, string]> = [["start", "marker-start"], ["mid", "marker-mid"], ["end", "marker-end"]];
+
+/// Dove `node` ha un marcatore, della raccolta o no: all'inizio, a metà, alla
+/// fine. Vuoto per una forma su cui SVG non li disegna.
+export function markedPlaces(node: ElementPart): ReadonlySet<MarkerPlace> {
+  const out = new Set<MarkerPlace>();
+  if (node.details === null || !MARKED_TAGS.has(node.details.tag)) return out;
+  const own = ownOf(node);
+  for (const [place, name] of MARKER_PLACES) {
+    const value = own.get(name);
+    if (value !== undefined && reference(value) !== null) out.add(place);
+  }
+  return out;
+}
+
+const capOf = (value: string | undefined): Cap => (value === "round" || value === "square" ? value : "butt");
+const joinOf = (value: string | undefined): Join => (value === "round" || value === "bevel" ? value : "miter");
+
+/// Le aree che il contenuto di un marcatore della raccolta dipinge, nelle
+/// coordinate del marcatore, una per forma: la forma com'è se si riempie, il
+/// suo contorno se si traccia. `null` se un contorno non diventa un'area.
+function contentAreas(children: readonly Elem[]): Segment[][] | null {
+  const out: Segment[][] = [];
+  for (const child of children) {
+    const segments = shapeSegments(child.tag, Object.entries(child.attrs));
+    if (segments.length === 0) continue;
+    const { fill, stroke } = child.attrs;
+    if (fill === undefined || trim(fill) !== "none") out.push([...segments]);
+    if (stroke === undefined || trim(stroke) === "none") continue;
+    const width = nonNegativeLength(child.attrs["stroke-width"] ?? "1") ?? 1;
+    const area = strokeArea(segments, { width, cap: capOf(child.attrs["stroke-linecap"]), join: joinOf(child.attrs["stroke-linejoin"]), miterLimit: 4, dashes: [] });
+    if (typeof area === "string") return null;
+    if (area.length > 0) out.push(area);
+  }
+  return out;
+}
+
+/// Le aree che le punte di `node` coprono, nelle coordinate della forma, una
+/// per punta e per forma del suo contenuto; `segments` è il tracciato di
+/// `node` e `width` lo spessore del suo contorno. Ogni punta sta dove la
+/// mette il disegno: sul vertice del suo capo, girata come il tracciato e
+/// grande quanto lo spessore, con le regole di `scene/markers.ts`. Il
+/// contenuto non si ritaglia col riquadro del marcatore, che SVG applica:
+/// nessuna punta della raccolta lo supera.
+///
+/// Vuoto se `node` non ha punte. `null` se non si possono mettere nel
+/// contorno: un marcatore che non è della raccolta a un capo, un marcatore a
+/// metà (FubDraw non ne scrive), o un'area che non si calcola.
+export function tipAreas(model: DocumentModel, node: ElementPart, segments: readonly Segment[], width: number): Segment[][] | null {
+  const marked = markedPlaces(node);
+  if (marked.size === 0) return [];
+  if (marked.has("mid")) return null;
+  const reader = new Reader(model);
+  const own = ownOf(node);
+  const out: Segment[][] = [];
+  let list: readonly Vertex[] | null = null;
+  for (const end of TIP_ENDS) {
+    const state = reader.state(own, end);
+    if (state.kind === "none") continue;
+    if (state.kind === "custom") return null;
+    const elem = elemOf(reader.markers.get(state.id)!.node);
+    if (elem === null || elem.children === undefined) return null;
+    const fit = markerFit((name) => elem.attrs[name]);
+    if (fit === null) continue;
+    const content = contentAreas(elem.children);
+    if (content === null) return null;
+    list ??= vertices(segments);
+    for (const vertex of placed(list, end)) {
+      const matrix = markerMatrix(fit, vertex, end, width);
+      for (const area of content) out.push(mapped(area, matrix));
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

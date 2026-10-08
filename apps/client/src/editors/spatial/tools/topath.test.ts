@@ -9,6 +9,7 @@ import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
 import type { SceneIndex } from "./hit";
 import { LAYER, open, type Opened } from "./test-support";
+import { DEFS, MARKER } from "./tip-support";
 import { pathOps, type Traced } from "./topath";
 
 const ids = (opened: Opened): NewIds => new NewIds((id) => opened.engine.holder(id) !== null);
@@ -216,5 +217,20 @@ describe("«Oggetto in tracciato» quando non c'è niente da fare", () => {
     expect(change).toMatchObject({ changed: 1, refused: 0, keys: ["g"] });
     expect(text).toContain(foreign);
     expect(text).toContain('<path id="r" d="M5 0 L9 0 L9 4 L5 4 Z"/>');
+  });
+});
+
+describe("le punte delle linee", () => {
+  it("una linea e una spezzata diventano tracciati con le stesse punte", () => {
+    const defs = DEFS(MARKER("mt", "triangle", "medium", "end", "#000000"), MARKER("mc", "circle", "medium", "start", "#000000"));
+    const opened = open(
+      doc(`${defs}${LAYER}<line id="l" x1="0" y1="10" x2="50" y2="10" ${STROKE} marker-end="url(#mt)"/><polyline id="p" points="0,30 25,40 50,30" ${STROKE} marker-start="url(#mc)" marker-end="url(#mt)"/></g>`),
+    );
+    const text = written(opened, traced(opened, ["l", "p"]));
+    const opening = (id: string): string => new RegExp(`<\\w+ id="${id}"[^>]*>`).exec(text)![0];
+    expect(opening("l")).toMatch(/^<path id="l" d="M0 10 L50 10" [^>]*marker-end="url\(#mt\)"\/>$/);
+    expect(opening("l")).not.toContain("marker-start");
+    expect(opening("p")).toMatch(/^<path id="p" d="M0 30 L25 40 L50 30" [^>]*marker-start="url\(#mc\)" marker-end="url\(#mt\)"\/>$/);
+    expect(text.match(/<marker /g)).toHaveLength(2);
   });
 });

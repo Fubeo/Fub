@@ -18282,6 +18282,7 @@ const BUILD_REFUSALS: Readonly<Record<BuildRefused["reason"], DrawKey>> = {
 const NO_WIDTH: Readonly<Record<NoWidth, DrawKey>> = {
   unstroked: "draw.width.unstroked",
   dashed: "draw.width.dashed",
+  tipped: "draw.width.tipped",
   pieces: "draw.width.pieces",
   foreign: "draw.width.foreign",
   kind: "draw.width.kind",

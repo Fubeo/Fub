@@ -14,10 +14,18 @@
 //   è già il suo contorno pieno: diventa un tracciato e basta. Testi,
 //   immagini, tratti a penna e forme senza contorno restano come sono, e il
 //   comando li conta.
+// - **Le punte entrano nel contorno.** Il tracciato che prende il posto del
+//   contorno è l'unione della sua area e di quella di ogni punta della
+//   raccolta, messa dove la disegna il marcatore: la forma finita non ha più
+//   marcatori, e quelli che nessuno usa se ne vanno con il passo. Una forma
+//   con un marcatore che non è della raccolta a un capo, o con uno a metà,
+//   resta com'è e il comando la conta fra quelle che non riesce a cambiare:
+//   FubDraw non sa contornare il contenuto di un marcatore estraneo.
 // - **«Scostamento»** aggiunge accanto a ogni forma il tracciato parallelo,
 //   a una distanza nella scena: sotto la forma se è più grande, sopra se è
-//   più piccolo, con i suoi colori e la sua trasformazione. Dopo sono scelti
-//   i tracciati nuovi.
+//   più piccolo, con i suoi colori e la sua trasformazione, ma senza punte:
+//   il tracciato parallelo non ha capi da decorare. Dopo sono scelti i
+//   tracciati nuovi.
 // - **«Semplifica»** toglie i nodi entro una tolleranza nella scena. Una
 //   forma che perde nodi diventa un tracciato; le altre restano. Di una
 //   linea a spessore variabile si semplifica la linea, e il profilo resta.
@@ -34,16 +42,17 @@ import { pathData, type Elem } from "../scene/serialize";
 import { nonNegativeLength, number } from "../scene/values";
 import { spineOf } from "../scene/varwidth";
 import { elemOf, fubAttributes, nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
-import { mapped } from "./boolean";
+import { combine, mapped, type Shape } from "./boolean";
 import type { NewIds } from "./edit";
 import { shapeSegments, type SceneIndex, type Unit } from "./hit";
 import { isPenStroke, strokePoints } from "./inkshape";
 import { writeNodes } from "./nodes";
-import { offsetArea, strokeArea, type Cap, type Join, type OffsetStyle, type StrokeStyle } from "./offset";
+import { MAX_PIECES, offsetArea, strokeArea, type Cap, type Join, type OffsetStyle, type StrokeStyle } from "./offset";
 import { writtenDashes } from "./outline";
 import { widthAttrs } from "./profile";
 import { nodeCount, simplified } from "./simplify";
 import { fitSpine, spineTolerance } from "./spine";
+import { tipAreas } from "./tips";
 import { GEOMETRY, replaceElem, rewriteShape, syntheticNulls, withoutStill } from "./topath";
 
 /// Le forme: ciò che ha un tracciato e un'area o un contorno.
@@ -66,10 +75,13 @@ const PAINT: ReadonlyMap<string, string> = new Map([
 /// Gli attributi del contorno, che una forma piena non ha più.
 const STROKE_ATTRIBUTES = ["stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "stroke-dashoffset"];
 
+/// I marcatori: un tracciato pieno, o parallelo a un altro, non ne ha.
+const MARKERS = ["marker-start", "marker-mid", "marker-end"];
+
 /// Un comando del menu Tracciato pronto: le operazioni; quanti oggetti
 /// cambiano; quanti il comando non riguarda, come un testo; e quanti non
-/// riesce a cambiare, perché la geometria è troppo intricata o non si
-/// scrive.
+/// riesce a cambiare, perché la geometria è troppo intricata, non si scrive,
+/// o ha un marcatore che il contorno non sa includere.
 export interface PathsDone extends Arranged {
   readonly changed: number;
   readonly skipped: number;
@@ -197,8 +209,8 @@ const sameKeys = (model: DocumentModel, plan: Plan, units: readonly Unit[]): str
 /// L'elemento che prende il posto della forma `node` quando il suo contorno
 /// diventa una forma piena del suo colore, con gli attributi `outline`. Una
 /// forma senza riempimento diventa un `path`; una piena un gruppo, col
-/// riempimento sotto e il contorno sopra. `null` se ha parti che non si
-/// scrivono.
+/// riempimento sotto e il contorno sopra. Non ha marcatori: se `node` aveva
+/// punte, sono già nel contorno. `null` se ha parti che non si scrivono.
 function strokeReplaced(node: ElementPart, outline: Readonly<Record<string, string>>, ids: NewIds): Elem | null {
   const elem = elemOf(node);
   if (elem === null) return null;
@@ -208,14 +220,14 @@ function strokeReplaced(node: ElementPart, outline: Readonly<Record<string, stri
   const synthetic = Object.keys(syntheticNulls(node));
   const inherited = paintOf(node.parent);
   if (paint.get("fill") === "none" || tag === "line") {
-    const attrs = without(elem.attrs, ["id", ...geometry, ...synthetic, ...STROKE_ATTRIBUTES, "fill", "fill-opacity"]);
+    const attrs = without(elem.attrs, ["id", ...geometry, ...synthetic, ...STROKE_ATTRIBUTES, ...MARKERS, "fill", "fill-opacity"]);
     return { tag: "path", attrs: { ...attrs, ...outline, ...strokeAsFill(paint, inherited) }, ...(elem.children === undefined ? {} : { children: elem.children }) };
   }
   // Il gruppo prende il posto della forma: l'id, la trasformazione,
   // l'opacità, il titolo e gli altri attributi. Dentro, il riempimento
   // resta la forma che era, senza contorno, e il contorno le sta sopra.
   const paints = new Set([...PAINT.keys()]);
-  const group = without(elem.attrs, ["id", ...geometry, ...synthetic, ...paints]);
+  const group = without(elem.attrs, ["id", ...geometry, ...synthetic, ...paints, ...MARKERS]);
   const own = (name: string): Record<string, string> => (elem.attrs[name] === undefined ? {} : { [name]: elem.attrs[name]! });
   const shapeAttrs: Record<string, string> = { id: ids.next("object") };
   for (const name of [...geometry, ...synthetic]) Object.assign(shapeAttrs, own(name));
@@ -224,6 +236,16 @@ function strokeReplaced(node: ElementPart, outline: Readonly<Record<string, stri
   const fill: Elem = { tag, attrs: shapeAttrs };
   const stroke: Elem = { tag: "path", attrs: { id: ids.next("object"), ...outline, ...strokeAsFill(paint, inherited) } };
   return { tag: "g", attrs: group, children: [...(elem.children ?? []), fill, stroke] };
+}
+
+/// L'unione di `area`, l'area del contorno di una forma, e delle aree delle
+/// sue punte, un tracciato solo; `area` può essere vuota, se il contorno non
+/// disegna niente e le punte sì. `null` se il calcolo non riesce o è troppo
+/// intricato.
+function withTips(area: readonly Segment[], tips: readonly Segment[][]): Segment[] | null {
+  const shapes: Shape[] = [...(area.length === 0 ? [] : [area]), ...tips].map((segments) => ({ segments, evenOdd: false, written: false, built: true }));
+  const united = combine("union", shapes, MAX_PIECES);
+  return united === null || united === "complex" ? null : (united[0] ?? null);
 }
 
 /// Le operazioni di «Contorno in tracciato» su `units`. La selezione resta la
@@ -244,19 +266,28 @@ export function outlineStrokeOps(model: DocumentModel, index: SceneIndex, units:
       skipped++;
       return;
     }
-    const area = strokeArea(segmentsOf(node), style);
+    const segments = segmentsOf(node);
+    const area = strokeArea(segments, style);
     if (typeof area === "string") {
       refused++;
       return;
     }
+    // Le punte della raccolta entrano nel contorno; un marcatore che non
+    // è della raccolta non si contorna.
+    const tips = tipAreas(model, node, segments, style.width);
+    if (tips === null) {
+      refused++;
+      return;
+    }
     // Un contorno che non disegna niente, come quello di una linea lunga
-    // zero senza estremi, non c'è.
-    if (area.length === 0) {
+    // zero senza estremi, non c'è, a meno che non abbia punte.
+    if (area.length === 0 && tips.length === 0) {
       skipped++;
       return;
     }
-    const d = pathData(area);
-    const out = readable(d) ? strokeReplaced(node, { d }, ids) : null;
+    const outlined = tips.length === 0 ? area : withTips(area, tips);
+    const d = outlined === null ? "" : pathData(outlined);
+    const out = outlined !== null && readable(d) ? strokeReplaced(node, { d }, ids) : null;
     if (out === null || !replaceElem(plan, node, out)) {
       refused++;
       return;
@@ -353,8 +384,8 @@ export function offsetOps(model: DocumentModel, index: SceneIndex, units: readon
     const geometry = [...(GEOMETRY[tag] ?? []), "d"];
     const synthetic = Object.keys(syntheticNulls(node));
     // I colori, la trasformazione e gli attributi della forma; l'inchiostro,
-    // il pennello e i titoli restano suoi.
-    const look = without(elem.attrs, ["id", ...geometry, ...synthetic]);
+    // il pennello e i titoli restano suoi. Le punte no: restano della forma.
+    const look = without(elem.attrs, ["id", ...geometry, ...synthetic, ...MARKERS]);
     const id = plan.idOf(node);
     const added = ids.next("object");
     const parent = plan.parentOf(node);

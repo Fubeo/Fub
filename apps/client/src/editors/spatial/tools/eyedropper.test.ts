@@ -6,7 +6,11 @@ import type { Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import type { LeafNode } from "../scene/model";
 import { imagePixel, paintAt, pixelColor, shownPaint, sightAt, sightStyle, type ImageSight, type ShapeSight, type Sight } from "./eyedropper";
+import { estimate } from "./measure";
+import { gesture, NewIds } from "./edit";
+import { styleOps } from "./look";
 import { LAYER, open, type Opened } from "./test-support";
+import { MARKER } from "./tip-support";
 
 /// Ciò che si vede nel punto `p` del disegno `opened`.
 const sight = (opened: Opened, p: Point, tolerance = 0): Sight | null => sightAt(opened.seen(), opened.foreign(), p, tolerance);
@@ -167,6 +171,44 @@ describe("il colore che si vede in un punto", () => {
     );
     const style = sightStyle(opened.engine.model!, sight(opened, [25, 5]) as ShapeSight)!;
     expect([style.fill, style.stroke, style.opacity]).toEqual(["#d55e00", "#000000", 0.5]);
+  });
+});
+
+describe("una punta di linea", () => {
+  /// Una linea rossa spessa 2, da (0, 10) a (50, 10), con un cerchio all'inizio
+  /// e un triangolo in fondo, e una linea blu senza punte sotto di lei.
+  const SCENE = doc(
+    `<defs id="fub-defs">${MARKER("mt", "triangle", "medium", "end")}${MARKER("mc", "circle", "medium", "start")}</defs>` +
+      `${LAYER}<line id="rossa" x1="0" y1="10" x2="50" y2="10" stroke="#d55e00" stroke-width="2" marker-start="url(#mc)" marker-end="url(#mt)"/>` +
+      '<line id="blu" x1="0" y1="40" x2="50" y2="40" stroke="#0072b2" stroke-width="2"/></g>',
+  );
+
+  it("dà la linea che la usa, e il suo contorno: il colore e le punte di tutta la linea", () => {
+    const opened = open(SCENE);
+    // Dentro il triangolo e dentro il cerchio, fuori dal corpo della linea.
+    for (const p of [[47, 7], [47, 13], [-2, 8], [1, 13]] as const) {
+      expect(seen(opened, [...p]), `${p}`).toBe("rossa/rossa/stroke");
+      const found = sight(opened, [...p]) as ShapeSight;
+      expect(paintAt(opened.engine.model!, found, [...p])).toBe("#d55e00");
+      const style = sightStyle(opened.engine.model!, found)!;
+      expect(style.stroke).toBe("#d55e00");
+      expect(style.tips).toEqual({ start: { shape: "circle", size: "medium" }, end: { shape: "triangle", size: "medium" } });
+    }
+    // Appena fuori dalla punta non c'è niente.
+    expect(seen(opened, [53.5, 10])).toBeNull();
+    expect(seen(opened, [47, 3])).toBeNull();
+  });
+
+  it("la linea senza punte dice che non ne ha, e il suo stile le toglie", () => {
+    const opened = open(SCENE);
+    const plain = sightStyle(opened.engine.model!, sight(opened, [25, 40]) as ShapeSight)!;
+    expect(plain.tips).toEqual({ start: "none", end: "none" });
+    // Incollata sulla linea con le punte, gliele toglie.
+    const unit = opened.index.get("rossa")!;
+    const ops = styleOps(opened.engine.model!, [unit], plain, estimate, new NewIds((id) => opened.engine.holder(id) !== null));
+    expect(opened.engine.apply(gesture(ops.ops)!).outcome).toBe("applied");
+    expect(opened.engine.text).not.toContain("marker-end");
+    expect(opened.engine.text).not.toContain("marker-start");
   });
 });
 

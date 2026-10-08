@@ -10,6 +10,8 @@ import { lookOf, lookOps, paintText, styleOf, styleOps, type LookChange, type Re
 import { estimate } from "./measure";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
+import { BLUE, CUSTOM, DEFS, GREEN, MARKER, RED } from "./tip-support";
+import { followTips, type TipEnd } from "./tips";
 
 const INK = "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8";
 const BRUSH = "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0";
@@ -324,6 +326,7 @@ describe("lo stile copiato e incollato", () => {
       opacity: 0.5,
       font: null,
       box: null,
+      tips: null,
       resources: new Map(),
       swatches: new Map(),
     });
@@ -331,7 +334,7 @@ describe("lo stile copiato e incollato", () => {
 
   it("copia il colore di un tratto a penna come contorno, e di un testo il carattere", () => {
     const opened = open(doc(`${LAYER}${PEN("oaaaaaaaa")}${TEXT("obbbbbbbb", ["Uno"], ' font-family="Literata, serif" font-size="24" font-weight="bold"')}</g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null, box: null, resources: new Map(), swatches: new Map() });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null, box: null, tips: null, resources: new Map(), swatches: new Map() });
     expect(copied(opened, "obbbbbbbb")).toEqual({
       fill: "#000000",
       stroke: null,
@@ -339,6 +342,7 @@ describe("lo stile copiato e incollato", () => {
       opacity: 1,
       font: { family: "Literata, serif", size: 24, weight: "bold", style: "normal", spacing: 0, underline: false, strike: false, leading: null },
       box: null,
+      tips: null,
       resources: new Map(),
       swatches: new Map(),
     });
@@ -373,6 +377,7 @@ describe("lo stile copiato e incollato", () => {
       opacity: 1,
       font: null,
       box: null,
+      tips: null,
       resources: new Map(),
       swatches: new Map(swatches.map(([id, name, color]) => [id, { name, color }])),
     });
@@ -394,7 +399,7 @@ describe("lo stile copiato e incollato", () => {
 
   it("di un'immagine copia soltanto l'opacità", () => {
     const opened = open(doc(`${LAYER}<image id="oaaaaaaaa" x="0" y="0" width="10" height="10" href="foto.png" opacity="0.25"/></g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null, box: null, resources: new Map(), swatches: new Map() });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null, box: null, tips: null, resources: new Map(), swatches: new Map() });
   });
 
   it("incolla tutto in un passo, e toglie ciò che la parte eredita già", () => {
@@ -579,5 +584,156 @@ describe("mille oggetti scelti", () => {
     // cresca col quadrato degli oggetti, che sarebbero secondi, con il
     // margine per una macchina lenta o carica di altri test.
     expect(cold).toBeLessThan(250);
+  });
+});
+
+describe("lo stile con le punte", () => {
+  /// Una linea orizzontale spessa 2 del colore `stroke`, con gli attributi `extra`.
+  const LINE = (id: string, stroke: string, extra = "", y = 10): string => `<line id="${id}" x1="0" y1="${y}" x2="50" y2="${y}" stroke="${stroke}" stroke-width="2"${extra}/>`;
+  /// Le punte della raccolta: un triangolo di fine e un cerchio d'inizio, rossi.
+  const TIPS = DEFS(MARKER("mt", "triangle", "medium", "end"), MARKER("mc", "circle", "medium", "start"));
+  const BOTH = ' marker-start="url(#mc)" marker-end="url(#mt)"';
+
+  /// Il motore di `source` con le punte che seguono la linea, come lo installa
+  /// l'editor.
+  function following(source: string): Opened {
+    const opened = open(source);
+    opened.engine.follow = (model, touched) => followTips(model, touched, ids(opened), (id) => opened.engine.holder(id));
+    return opened;
+  }
+  const copied = (opened: Opened, key: string): Style | null => styleOf(opened.engine.model!, opened.index.get(key)!);
+  const pasted = (opened: Opened, keys: readonly string[], style: Style): Restyled =>
+    styleOps(opened.engine.model!, keys.map((key) => opened.index.get(key)!), style, estimate, ids(opened));
+  /// Gli attributi dell'elemento di id `id` in `text`.
+  function attrsOf(text: string, id: string): Record<string, string> {
+    const found = new RegExp(`<[a-z]+ id="${id}"([^>]*?)/?>`).exec(text);
+    if (found === null) throw new Error(`nessun elemento ${id}`);
+    const attrs: Record<string, string> = {};
+    for (const [, name, value] of found[1]!.matchAll(/([\w:-]+)="([^"]*)"/g)) attrs[name!] = value!;
+    return attrs;
+  }
+  /// I marcatori di `text`: id, forma e capo.
+  const markersIn = (text: string): Array<{ id: string; kind: string; paint: string }> =>
+    [...text.matchAll(/<marker id="([^"]+)"[^>]*fub:marker="([^"]+)"[^>]*>\s*<[a-z]+ [^>]*?(?:fill|stroke)="(#\w+)"/g)].map((m) => ({ id: m[1]!, kind: m[2]!, paint: m[3]! }));
+  /// Il marcatore che la linea `id` di `text` usa al capo `end`, com'è scritto.
+  const used = (text: string, id: string, end: TipEnd): { id: string; kind: string; paint: string } | null => {
+    const url = /url\(#([^)]+)\)/.exec(attrsOf(text, id)[`marker-${end}`] ?? "");
+    return url === null ? null : markersIn(text).find((marker) => marker.id === url[1]) ?? null;
+  };
+
+  it("copia le punte di una linea, capo per capo, e il capo senza punta dice che non ne ha", () => {
+    const opened = open(doc(`${TIPS}${LAYER}${LINE("oaaaaaaaa", RED, BOTH)}${LINE("obbbbbbbb", BLUE, "", 30)}${LINE("occcccccc", GREEN, ' marker-end="url(#mt)"', 50)}</g>`));
+    expect(copied(opened, "oaaaaaaaa")!.tips).toEqual({ start: { shape: "circle", size: "medium" }, end: { shape: "triangle", size: "medium" } });
+    expect(copied(opened, "obbbbbbbb")!.tips).toEqual({ start: "none", end: "none" });
+    expect(copied(opened, "occcccccc")!.tips).toEqual({ start: "none", end: { shape: "triangle", size: "medium" } });
+  });
+
+  it("un capo con un marcatore di un altro programma non si copia, e una forma che non può averle non ha niente da copiare", () => {
+    const opened = open(doc(`${DEFS(MARKER("mt", "triangle", "medium", "end"), CUSTOM("mx"))}${LAYER}${LINE("oaaaaaaaa", RED, ' marker-start="url(#mx)" marker-end="url(#mt)"')}${RECT("obbbbbbbb")}${PEN("occcccccc")}${ARROW}</g>`));
+    expect(copied(opened, "oaaaaaaaa")!.tips).toEqual({ start: null, end: { shape: "triangle", size: "medium" } });
+    expect(copied(opened, "obbbbbbbb")!.tips).toBeNull();
+    expect(copied(opened, "occcccccc")!.tips).toBeNull();
+    expect(copied(opened, "oarrow000")!.tips).toBeNull();
+  });
+
+  it("di un gruppo copia le punte della sua prima linea, come il resto dello stile", () => {
+    const opened = open(doc(`${TIPS}${LAYER}<g id="ogroup000">${LINE("oaaaaaaaa", RED, BOTH)}</g></g>`));
+    expect(copied(opened, "ogroup000")!.tips).toEqual({ start: { shape: "circle", size: "medium" }, end: { shape: "triangle", size: "medium" } });
+  });
+
+  it("incollate su una linea, le punte arrivano del colore del contorno nuovo, e il marcatore che non serve se ne va", () => {
+    const opened = following(doc(`${TIPS}${LAYER}${LINE("oaaaaaaaa", RED, BOTH)}${LINE("obbbbbbbb", BLUE, "", 30)}</g>`));
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], copied(opened, "oaaaaaaaa")!));
+    const attrs = attrsOf(after, "obbbbbbbb");
+    expect(attrs.stroke).toBe(RED);
+    // Le punte rosse della prima linea servono anche alla seconda: nessun
+    // marcatore blu resta, e non se ne aggiungono.
+    expect(attrs["marker-start"]).toBe("url(#mc)");
+    expect(attrs["marker-end"]).toBe("url(#mt)");
+    expect(markersIn(after).map((marker) => marker.id)).toEqual(["mt", "mc"]);
+  });
+
+  it("incollate con un contorno di un altro colore, le punte prendono quel colore: marcatori nuovi, e quelli della prima linea restano", () => {
+    const opened = following(doc(`${TIPS}${LAYER}${LINE("oaaaaaaaa", RED, BOTH)}${LINE("obbbbbbbb", BLUE, "", 30)}</g>`));
+    const style: Style = { ...copied(opened, "oaaaaaaaa")!, stroke: GREEN };
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], style));
+    const [start, end] = [used(after, "obbbbbbbb", "start")!, used(after, "obbbbbbbb", "end")!];
+    expect([start.kind, start.paint]).toEqual(["circle medium start", GREEN]);
+    expect([end.kind, end.paint]).toEqual(["triangle medium end", GREEN]);
+    // Quelle rosse restano alla prima linea, e quelle blu non ci sono.
+    expect(markersIn(after)).toHaveLength(4);
+    expect(markersIn(after).some((marker) => marker.paint === BLUE)).toBe(false);
+  });
+
+  it("senza il seguito delle punte il marcatore ha il colore di prima e basta", () => {
+    const opened = open(doc(`${TIPS}${LAYER}${LINE("oaaaaaaaa", RED, BOTH)}${LINE("obbbbbbbb", BLUE, "", 30)}</g>`));
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], copied(opened, "oaaaaaaaa")!));
+    expect(used(after, "obbbbbbbb", "end")).toMatchObject({ kind: "triangle medium end", paint: BLUE });
+  });
+
+  it("una linea senza punte le toglie a chi le ha, e il marcatore rimasto solo se ne va", () => {
+    const opened = following(doc(`${TIPS}${LAYER}${LINE("oaaaaaaaa", RED, BOTH)}${LINE("obbbbbbbb", BLUE, "", 30)}</g>`));
+    const after = applied(opened, pasted(opened, ["oaaaaaaaa"], copied(opened, "obbbbbbbb")!));
+    expect(attrsOf(after, "oaaaaaaaa")).not.toHaveProperty("marker-start");
+    expect(attrsOf(after, "oaaaaaaaa")).not.toHaveProperty("marker-end");
+    expect(after).not.toContain("<marker");
+    expect(after).not.toContain("fub-defs");
+  });
+
+  it("un capo che non si copia lascia quello che c'è, e le altre forme non hanno punte da cambiare", () => {
+    const defs = DEFS(MARKER("mt", "triangle", "medium", "end"), MARKER("mc", "circle", "medium", "start"), CUSTOM("mx"));
+    const opened = following(doc(`${defs}${LAYER}${LINE("oaaaaaaaa", RED, ' marker-start="url(#mc)" marker-end="url(#mx)"')}${LINE("obbbbbbbb", RED, ' marker-end="url(#mt)"', 30)}${RECT("occcccccc")}</g>`));
+    const style = copied(opened, "oaaaaaaaa")!;
+    expect(style.tips).toEqual({ start: { shape: "circle", size: "medium" }, end: null });
+    const after = applied(opened, pasted(opened, ["obbbbbbbb", "occcccccc"], style));
+    expect(attrsOf(after, "obbbbbbbb")).toMatchObject({ "marker-start": "url(#mc)", "marker-end": "url(#mt)" });
+    expect(attrsOf(after, "occcccccc")).not.toHaveProperty("marker-start");
+    expect(after).toContain('<marker id="mx"');
+  });
+
+  it("dentro un gruppo le punte vanno alle linee che si possono toccare, e non a quelle bloccate né a quelle che non le hanno", () => {
+    const opened = following(
+      doc(`${TIPS}${LAYER}${LINE("oaaaaaaaa", RED, BOTH)}<g id="ogroup000">${LINE("obbbbbbbb", BLUE, "", 30)}${LINE("occcccccc", BLUE, ' fub:locked="true"', 50)}${RECT("odddddddd")}${PEN("oeeeeeeee")}</g></g>`),
+    );
+    const after = applied(opened, pasted(opened, ["ogroup000"], copied(opened, "oaaaaaaaa")!));
+    expect(attrsOf(after, "obbbbbbbb")).toMatchObject({ "marker-start": "url(#mc)", "marker-end": "url(#mt)" });
+    expect(attrsOf(after, "occcccccc")).not.toHaveProperty("marker-end");
+    expect(attrsOf(after, "occcccccc")["fub:locked"]).toBe("true");
+    expect(attrsOf(after, "odddddddd")).not.toHaveProperty("marker-end");
+    expect(markersIn(after).map((marker) => marker.id).sort()).toEqual(["mc", "mt"]);
+  });
+
+  it("in un disegno senza risorse la defs nasce una volta sola, e la punta è una per tutte le linee che la usano", () => {
+    const source = following(doc(`${DEFS(MARKER("mt", "triangle", "large", "end"))}${LAYER}${LINE("oaaaaaaaa", RED, ' marker-end="url(#mt)"')}</g>`));
+    const style = copied(source, "oaaaaaaaa")!;
+    const target = following(doc(`${LAYER}${LINE("obbbbbbbb", BLUE, "", 30)}${LINE("occcccccc", GREEN, "", 50)}</g>`));
+    const after = applied(target, pasted(target, ["obbbbbbbb", "occcccccc"], style));
+    // Due linee con la stessa punta dello stesso colore la dividono. Nasce
+    // nel disegno di arrivo: l'id del disegno di partenza non viaggia.
+    expect(after.match(/<defs /g)).toHaveLength(1);
+    const [first, second] = [used(after, "obbbbbbbb", "end")!, used(after, "occcccccc", "end")!];
+    expect(first.kind).toBe("triangle large end");
+    expect(first.paint).toBe(RED);
+    expect(second.kind).toBe("triangle large end");
+    expect(markersIn(after)).toHaveLength(1);
+    expect(markersIn(after)[0]!.id).toBe(first.id);
+    expect(first.id).toBe(second.id);
+    expect(first.id).not.toBe("mt");
+    // La punta rossa è del contorno rosso che lo stile dà.
+    expect(attrsOf(after, "obbbbbbbb").stroke).toBe(RED);
+  });
+
+  it("le risorse private dello stile e le punte stanno nella stessa defs, aperta una volta sola", () => {
+    const GRADIENT =
+      `<linearGradient id="rgggggggg" fub:role="private" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="50" y2="0"><stop offset="0" stop-color="${RED}"/><stop offset="1" stop-color="${BLUE}"/></linearGradient>`;
+    const source = following(doc(`${DEFS(GRADIENT, MARKER("mt", "triangle", "medium", "end", BLUE))}${LAYER}${LINE("oaaaaaaaa", "url(#rgggggggg) #d55e00", ' marker-end="url(#mt)"')}</g>`));
+    const style = copied(source, "oaaaaaaaa")!;
+    expect([...style.resources.keys()]).toEqual(["rgggggggg"]);
+    const target = following(doc(`${LAYER}${LINE("obbbbbbbb", BLUE, "", 30)}</g>`));
+    const after = applied(target, pasted(target, ["obbbbbbbb"], style));
+    expect(after.match(/<defs /g)).toHaveLength(1);
+    expect(after.match(/<linearGradient /g)).toHaveLength(1);
+    expect(after.match(/<marker /g)).toHaveLength(1);
+    expect(used(after, "obbbbbbbb", "end")!.kind).toBe("triangle medium end");
   });
 });
