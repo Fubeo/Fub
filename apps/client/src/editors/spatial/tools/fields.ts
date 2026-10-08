@@ -74,6 +74,7 @@ import { NAME_MAX } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
 import type { ShapeChange, ShapeFacts } from "./reshape";
+import type { ConnectorPanelView } from "./connector-panel";
 import type { GradientPanelView } from "./gradient-panel";
 import type { HatchPanelView } from "./hatch-panel";
 import type { ColorsView, PaintTarget } from "./swatches-panel";
@@ -415,6 +416,9 @@ export interface FieldsInput {
   /// I colori del documento, contati, e quello con cui si disegna, col
   /// campione da cui viene, se il livello offre la loro sezione.
   readonly colors: { readonly document: DocumentColors; readonly drawing: string; readonly swatch: string | null } | null;
+  /// La sezione «Connettore», com'è già pronta, se il livello la offre e la
+  /// selezione ha un connettore; senza, o `null`, non c'è.
+  readonly connector?: ConnectorPanelView | null;
   /// La sezione «Sfumatura», com'è già pronta, se il livello la offre e la
   /// selezione ha un riempimento o un contorno.
   readonly gradient: GradientPanelView | null;
@@ -823,6 +827,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     swatches: input.swatches,
     recent: input.recent,
     ...(input.colors === null ? {} : { colors: colorsView(input.colors, selection, input.recent) }),
+    ...(input.connector === undefined || input.connector === null ? {} : { connector: input.connector }),
     ...(input.gradient === null ? {} : { gradient: input.gradient }),
     ...(input.hatch === null ? {} : { hatch: input.hatch }),
   };

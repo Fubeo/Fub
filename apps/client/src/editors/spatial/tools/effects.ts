@@ -495,6 +495,39 @@ function runsWidth(runs: readonly Run[], style: Inherited, measure: Measure): { 
   return { width, size };
 }
 
+/// Il riquadro delle righe di un testo nelle sue coordinate, misurato con
+/// `measure`: da dove ogni riga comincia a dove finisce, dall'altezza delle
+/// maiuscole alle discendenti. `null` per un testo su tracciato, che non sta in
+/// righe, o vuoto.
+export function textExtent(node: ElementPart, measure: Measure): Bounds | null {
+  const elem = elemOf(node);
+  if (elem === null || elem.tag !== "text") return null;
+  const style = inherit(inheritedBy(node), elem.attrs);
+  const out = new BoundsBuilder();
+  const x = length(elem.attrs.x ?? "0") ?? 0;
+  let y = length(elem.attrs.y ?? "0") ?? 0;
+  for (const line of elem.children ?? []) {
+    if (line.tag === "textPath") return null;
+    if (line.tag !== "tspan") continue;
+    const own = inherit(style, line.attrs);
+    const lineX = line.attrs.x === undefined ? x : (length(line.attrs.x) ?? x);
+    y += line.attrs.dy === undefined ? 0 : (length(line.attrs.dy) ?? 0);
+    const { width, size } = runsWidth(line.runs ?? [line.text ?? ""], own, measure);
+    if (!(width > 0)) continue;
+    const left = own.anchor === "middle" ? lineX - width / 2 : own.anchor === "end" ? lineX - width : lineX;
+    out.include([left, y - 0.8 * size]);
+    out.include([left + width, y + 0.25 * size]);
+  }
+  return out.finish();
+}
+
+/// Mezzo spessore del contorno di `node`, con quello che eredita; 0 senza
+/// contorno.
+export function strokeHalf(node: ElementPart): number {
+  const style = inherit(inheritedBy(node), plainAttributes(node));
+  return style.stroke ? style.strokeWidth / 2 : 0;
+}
+
 /// Il riquadro di un testo nelle sue coordinate, misurato con `measure`;
 /// `null` se non si sa.
 function textBox(model: DocumentModel, elem: Elem, style: Inherited, measure: Measure): Bounds | null {
@@ -734,7 +767,7 @@ export type EffectsRefusal = "clipped" | "unknown" | "kind";
 /// I ruoli che prendono effetti: ogni oggetto che si disegna, anche le forme
 /// di FubDraw scritte come tracciati, i tratti a penna, le frecce, i poligoni,
 /// le stelle e le linee a spessore variabile.
-const TAKES: ReadonlySet<string> = new Set(["path", "stroke", "arrow", "ngon", "star", "width", "rect", "ellipse", "circle", "line", "polyline", "polygon", "text", "image", "group", "link"]);
+const TAKES: ReadonlySet<string> = new Set(["path", "stroke", "arrow", "connector", "ngon", "star", "width", "rect", "ellipse", "circle", "line", "polyline", "polygon", "text", "image", "group", "link"]);
 
 /// `null` se `node` può avere gli effetti; altrimenti perché no.
 export function effectsRefusal(model: DocumentModel, node: ElementPart, measure: Measure): EffectsRefusal | null {

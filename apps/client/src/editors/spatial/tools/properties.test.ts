@@ -24,6 +24,7 @@ import {
 } from "./properties";
 import { lengthUnits, PERCENT_UNITS } from "./quantity";
 import { defaultEffect } from "./effects";
+import type { ConnectorPanelView } from "./connector-panel";
 import type { EffectsPanelView } from "./effects-panel";
 import type { GradientPanelView } from "./gradient-panel";
 import type { HatchPanelView } from "./hatch-panel";
@@ -54,6 +55,8 @@ let state: {
   recent: string[] | null;
   /// La sezione «Colori del documento», se c'è.
   colors: ColorsView | null;
+  /// La sezione «Connettore», se c'è.
+  connector: ConnectorPanelView | null;
   /// La sezione «Sfumatura», se c'è.
   gradient: GradientPanelView | null;
   /// La sezione «Campitura», se c'è.
@@ -195,6 +198,7 @@ function view(): PropertiesView {
     ...(state.swatches === null ? {} : { swatches: state.swatches }),
     ...(state.recent === null ? {} : { recent: state.recent }),
     ...(state.colors === null ? {} : { colors: state.colors }),
+    ...(state.connector === null ? {} : { connector: state.connector }),
     ...(state.gradient === null ? {} : { gradient: state.gradient }),
     ...(state.hatch === null ? {} : { hatch: state.hatch }),
     ...(state.effects === null ? {} : { effects: state.effects }),
@@ -258,6 +262,9 @@ function mount(): Properties {
       onRecolor: (id, color) => (calls.push(`recolor ${id} ${color}`), null),
       onDelete: (id) => (calls.push(`delete ${id}`), null),
       onSelect: (value) => (calls.push(`select ${value}`), null),
+    },
+    connector: {
+      onChange: (change, label) => (calls.push(`connector ${JSON.stringify(change)} ${label}`), refusal),
     },
     gradient: {
       onChange: (target, change, label) => (calls.push(`gradient ${target} ${JSON.stringify(change)} ${label}`), null),
@@ -324,6 +331,7 @@ beforeEach(() => {
     swatches: null,
     recent: null,
     colors: null,
+    connector: null,
     gradient: null,
     hatch: null,
     effects: null,
@@ -960,6 +968,273 @@ describe("la sezione «Campitura»", () => {
     expect(menuButton().getAttribute("aria-expanded")).toBe("false");
     expect(announced).toEqual(["Modifica non applicata: il disegno è in sola lettura."]);
     expect(calls).toEqual([]);
+  });
+});
+
+describe("la sezione «Connettore»", () => {
+  const CONNECTOR: ConnectorPanelView = { key: "oaaaaaaaa", count: 1, kind: "elbow", from: "right", to: "auto", label: "Costa", locked: 0 };
+  const GRADIENT: GradientPanelView = {
+    key: "oaaaaaaaa",
+    channels: { fill: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null } },
+    stop: null,
+    expert: false,
+    swatches: [],
+  };
+  const visibleSections = (): Array<string | undefined> =>
+    [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+  const radios = (): HTMLButtonElement[] => [...section("connector").querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+  const menu = (end: "from" | "to"): HTMLSelectElement => field(`connector-${end}`).querySelector("select")!;
+  const label = (): HTMLTextAreaElement => field("connector-label").querySelector("textarea")!;
+  const invert = (): HTMLButtonElement => section("connector").querySelector<HTMLButtonElement>('[data-field="connector-invert"]')!;
+  const optionTexts = (select: HTMLSelectElement): string[] => [...select.options].map((each) => each.textContent!);
+
+  it("non c'è senza il connettore nella vista, e sta dopo l'aspetto e prima della sfumatura", () => {
+    state.gradient = GRADIENT;
+    mount();
+    expect(section("connector").hidden).toBe(true);
+    expect(visibleSections()).toEqual(["place", "look", "gradient", "text", "document", "view"]);
+    state.connector = CONNECTOR;
+    panel.update(view());
+    expect(visibleSections()).toEqual(["place", "look", "connector", "gradient", "text", "document", "view"]);
+    expect(toggle("connector").textContent).toBe("Connettore");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    state.connector = null;
+    panel.update(view());
+    expect(section("connector").hidden).toBe(true);
+  });
+
+  it("il tipo è un gruppo di tre scelte, con quella di adesso segnata", () => {
+    state.connector = CONNECTOR;
+    mount();
+    const group = section("connector").querySelector<HTMLElement>('[role="radiogroup"]')!;
+    expect(document.getElementById(group.getAttribute("aria-labelledby")!)!.textContent).toBe("Tipo");
+    expect(radios().map((each) => each.getAttribute("aria-label"))).toEqual(["Dritto", "A gomito", "Curvo"]);
+    expect(radios().map((each) => each.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(radios().map((each) => each.tabIndex)).toEqual([-1, 0, -1]);
+    expect(radios().every((each) => each.querySelector("svg") !== null)).toBe(true);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("scegliere un tipo lo manda all'editor col nome del suo passo; il tipo di adesso, no", () => {
+    state.connector = CONNECTOR;
+    mount();
+    radios()[2]!.click();
+    expect(calls).toEqual(['connector {"kind":"curved"} draw.action.connector_kind']);
+    radios()[1]!.click();
+    expect(calls).toHaveLength(1);
+  });
+
+  it("le frecce spostano la scelta e la danno; Inizio e Fine vanno ai capi del gruppo", () => {
+    state.connector = { ...CONNECTOR, kind: "straight" };
+    mount();
+    radios()[0]!.focus();
+    expect(press(radios()[0]!, "ArrowRight").defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(radios()[1]);
+    expect(calls).toEqual(['connector {"kind":"elbow"} draw.action.connector_kind']);
+    expect(radios().map((each) => each.tabIndex)).toEqual([-1, 0, -1]);
+    press(radios()[1]!, "ArrowLeft");
+    expect(document.activeElement).toBe(radios()[0]);
+    press(radios()[0]!, "ArrowLeft");
+    expect(document.activeElement).toBe(radios()[2]);
+    expect(calls[calls.length - 1]).toBe('connector {"kind":"curved"} draw.action.connector_kind');
+    press(radios()[2]!, "Home");
+    expect(document.activeElement).toBe(radios()[0]);
+    press(radios()[0]!, "End");
+    expect(document.activeElement).toBe(radios()[2]);
+  });
+
+  it("con tipi diversi nessuno è scelto, e il Tab arriva al primo", () => {
+    state.connector = { ...CONNECTOR, kind: null };
+    mount();
+    expect(radios().map((each) => each.getAttribute("aria-checked"))).toEqual(["false", "false", "false"]);
+    expect(radios().map((each) => each.tabIndex)).toEqual([0, -1, -1]);
+    radios()[1]!.click();
+    expect(calls).toEqual(['connector {"kind":"elbow"} draw.action.connector_kind']);
+  });
+
+  it("gli agganci sono due menu coi sei punti, e scegliere un punto lo manda all'editor", () => {
+    state.connector = CONNECTOR;
+    mount();
+    expect(field("connector-from").querySelector("label")!.textContent).toBe("Aggancio d’inizio");
+    expect(field("connector-to").querySelector("label")!.textContent).toBe("Aggancio di fine");
+    expect(optionTexts(menu("from"))).toEqual(["Automatico", "Al centro", "In alto", "A destra", "In basso", "A sinistra"]);
+    expect(menu("from").value).toBe("right");
+    expect(menu("to").value).toBe("auto");
+    expect(menu("from").disabled).toBe(false);
+    menu("to").value = "bottom";
+    menu("to").dispatchEvent(new Event("change", { bubbles: true }));
+    expect(calls).toEqual(['connector {"end":"to","anchor":"bottom"} draw.action.connector_anchor']);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("un capo libero ha il menu spento che dice «Libero», e la nota di come si aggancia", () => {
+    state.connector = { ...CONNECTOR, to: "free" };
+    mount();
+    expect(menu("to").disabled).toBe(true);
+    expect(optionTexts(menu("to"))).toEqual(["Libero"]);
+    expect(menu("to").value).toBe("free");
+    const note = section("connector").querySelector<HTMLElement>(".draw-connector > .draw-properties-note:not([hidden])")!;
+    expect(note.textContent).toBe("Per agganciarlo, trascina il capo su un oggetto con lo strumento Connettore.");
+    expect(menu("to").getAttribute("aria-describedby")).toBe(note.id);
+    expect(menu("from").hasAttribute("aria-describedby")).toBe(false);
+    expect(menu("from").disabled).toBe(false);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    state.connector = CONNECTOR;
+    panel.update(view());
+    expect(menu("to").disabled).toBe(false);
+    expect(optionTexts(menu("to"))).toHaveLength(6);
+    expect(section("connector").querySelector(".draw-connector > .draw-properties-note:not([hidden])")).toBeNull();
+  });
+
+  it("con agganci diversi il menu dice «Misto» in una voce scelta e spenta", () => {
+    state.connector = { ...CONNECTOR, from: null };
+    mount();
+    expect(optionTexts(menu("from"))).toEqual(["Misto", "Automatico", "Al centro", "In alto", "A destra", "In basso", "A sinistra"]);
+    expect(menu("from").value).toBe("mixed");
+    expect(menu("from").selectedOptions[0]!.disabled).toBe(true);
+    expect(menu("from").disabled).toBe(false);
+    menu("from").value = "left";
+    menu("from").dispatchEvent(new Event("change", { bubbles: true }));
+    expect(calls).toEqual(['connector {"end":"from","anchor":"left"} draw.action.connector_anchor']);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("l'etichetta si scrive con Invio e con l'uscita dal campo", () => {
+    state.connector = CONNECTOR;
+    mount();
+    expect(label().value).toBe("Costa");
+    expect(label().labels![0]!.textContent).toBe("Etichetta");
+    write(label(), "Nuova");
+    expect(press(label(), "Enter").defaultPrevented).toBe(true);
+    expect(calls).toEqual(['connector {"label":"Nuova"} draw.action.connector_label']);
+    write(label(), "Altra");
+    label().blur();
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe('connector {"label":"Altra"} draw.action.connector_label');
+  });
+
+  it("Maiusc e Invio va a capo senza scrivere, e Invio manda tutte le righe", () => {
+    state.connector = CONNECTOR;
+    mount();
+    write(label(), "Prima\nSeconda");
+    expect(press(label(), "Enter", { shiftKey: true }).defaultPrevented).toBe(false);
+    expect(calls).toEqual([]);
+    press(label(), "Enter");
+    expect(calls).toEqual(['connector {"label":"Prima\\nSeconda"} draw.action.connector_label']);
+  });
+
+  it("Esc riporta il testo com'era; senza niente da annullare torna al foglio", () => {
+    state.connector = CONNECTOR;
+    mount();
+    write(label(), "A metà");
+    expect(press(label(), "Escape").defaultPrevented).toBe(true);
+    expect(label().value).toBe("Costa");
+    expect(calls).toEqual([]);
+    press(label(), "Escape");
+    expect(calls).toEqual(["leave"]);
+  });
+
+  it("vuoto manda un testo vuoto, che toglie le etichette", () => {
+    state.connector = CONNECTOR;
+    mount();
+    write(label(), "");
+    press(label(), "Enter");
+    expect(calls).toEqual(['connector {"label":""} draw.action.connector_label']);
+  });
+
+  it("uno stesso testo non parte, e un'etichetta mista è un campo vuoto che dice «Misto»", () => {
+    state.connector = { ...CONNECTOR, label: null };
+    mount();
+    expect(label().value).toBe("");
+    expect(label().placeholder).toBe("Misto");
+    press(label(), "Enter");
+    label().focus();
+    label().blur();
+    expect(calls).toEqual([]);
+    write(label(), "Tutte");
+    press(label(), "Enter");
+    expect(calls).toEqual(['connector {"label":"Tutte"} draw.action.connector_label']);
+  });
+
+  it("un testo che il disegno non accetta resta scritto e segnato", () => {
+    state.connector = CONNECTOR;
+    refusal = "Modifica non applicata: no.";
+    mount();
+    write(label(), "Rifiutata");
+    press(label(), "Enter");
+    expect(label().value).toBe("Rifiutata");
+    expect(label().getAttribute("aria-invalid")).toBe("true");
+    expect(field("connector-label").querySelector<HTMLElement>(".draw-properties-error")!.textContent).toBe("Modifica non applicata: no.");
+    expect(announced).toEqual(["Modifica non applicata: no."]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("il testo scritto a metà resta finché la selezione è la stessa, e cade con un'altra", () => {
+    state.connector = CONNECTOR;
+    mount();
+    write(label(), "A metà");
+    panel.update(view());
+    expect(label().value).toBe("A metà");
+    state.key = "obbbbbbbb";
+    state.connector = { ...CONNECTOR, key: "obbbbbbbb", label: "Un altro" };
+    panel.update(view());
+    expect(label().value).toBe("Un altro");
+  });
+
+  it("«Inverti» manda il cambio all'editor, e dice che cosa scambia", () => {
+    state.connector = CONNECTOR;
+    mount();
+    expect(invert().textContent).toBe("Inverti");
+    expect(invert().title).toBe("Scambia l’inizio e la fine: la punta passa all’altro capo.");
+    invert().click();
+    expect(calls).toEqual(['connector {"invert":true} draw.action.connector_invert']);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("dice quanti connettori sono bloccati, e se lo sono tutti i comandi sono spenti", () => {
+    state.connector = { ...CONNECTOR, count: 3, locked: 1 };
+    mount();
+    const note = section("connector").querySelector<HTMLElement>(".draw-connector > .draw-properties-note:not([hidden])")!;
+    expect(note.textContent).toBe("1 connettore è bloccato: non cambia.");
+    expect(radios()[0]!.hasAttribute("aria-disabled")).toBe(false);
+    state.connector = { ...CONNECTOR, count: 2, locked: 2 };
+    panel.update(view());
+    expect(note.textContent).toBe("2 connettori sono bloccati: non cambiano.");
+    expect(radios().every((each) => each.getAttribute("aria-disabled") === "true")).toBe(true);
+    expect(menu("from").disabled).toBe(true);
+    expect(label().readOnly).toBe(true);
+    expect(invert().getAttribute("aria-disabled")).toBe("true");
+    radios()[0]!.click();
+    invert().click();
+    expect(calls).toEqual([]);
+    expect(announced).toEqual(["2 connettori sono bloccati: non cambiano.", "2 connettori sono bloccati: non cambiano."]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("in sola lettura si guarda e niente cambia", () => {
+    state.connector = CONNECTOR;
+    state.editable = false;
+    mount();
+    expect(radios().every((each) => each.getAttribute("aria-disabled") === "true")).toBe(true);
+    expect(menu("from").disabled).toBe(true);
+    expect(menu("to").disabled).toBe(true);
+    expect(label().readOnly).toBe(true);
+    expect(invert().getAttribute("aria-disabled")).toBe("true");
+    radios()[0]!.click();
+    expect(announced).toEqual(["Modifica non applicata: il disegno è in sola lettura."]);
+    invert().click();
+    write(label(), "Niente");
+    press(label(), "Enter");
+    expect(calls).toEqual([]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("si chiude come le altre, e lo dice all'editor", () => {
+    state.connector = CONNECTOR;
+    mount();
+    toggle("connector").click();
+    expect(calls).toEqual(["section connector closed"]);
+    expect(section("connector").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
   });
 });
 

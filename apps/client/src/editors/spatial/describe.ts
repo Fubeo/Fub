@@ -6,14 +6,15 @@
 // soltanto, e nessun secondo calcolo. Un nome dice che cosa è l'oggetto e,
 // quando lo sa, come si chiama: il suo `title`, o le parole di un testo, o
 // il nome di un livello. Un collegamento dice anche dove porta, col
-// nome della nota. Lo stato di un livello è una parola, non un colore. Il
-// colore di un oggetto lo aggiunge chi lo conosce: l'editor, che ha il
-// painter.
+// nome della nota, e un connettore da che cosa a che cosa va. Lo stato di un
+// livello è una parola, non un colore. Il colore di un oggetto lo aggiunge chi
+// lo conosce: l'editor, che ha il painter.
 
 import { pageName } from "../../rules/mirrored";
 import { plural, t, type DrawKey } from "./strings";
 import type { Role } from "./scene/analysis";
-import type { ElementItem, Item } from "./scene/classify";
+import type { ConnectorFacts, ElementItem, Item } from "./scene/classify";
+import type { ConnectorEnd } from "./scene/connectors";
 import type { Polygonal } from "./scene/parametric";
 import type { Scene } from "./scene/read";
 
@@ -32,7 +33,31 @@ export interface OutlineNode {
   /// `href`. `null` per ogni altro oggetto, e per un collegamento che non
   /// porta nel vault.
   readonly target: string | null;
+  /// I due capi di un connettore a parole; `null` per ogni altro oggetto.
+  readonly connection: Connection | null;
+  /// Il connettore come lo dice l'elenco della Lettura; `null` se un capo è
+  /// libero, e per ogni altro oggetto.
+  readonly joined: Joined | null;
   readonly children: readonly OutlineNode[];
+}
+
+/// I capi di un connettore, le parole già pronte per la frase: il nome
+/// proprio dell'oggetto agganciato fra caporali, o il suo tipo se non ne ha
+/// uno; `null` per un capo libero. Sono lette al momento, nella lingua di
+/// adesso: l'albero resta lo stesso se la lingua cambia.
+export interface Connection {
+  readonly from: string | null;
+  readonly to: string | null;
+}
+
+/// Un connettore con tutti e due i capi agganciati, per la Lettura, dove la
+/// freccia separa i capi: il nome proprio dell'oggetto o il suo tipo, senza
+/// caporali, e le parole della prima etichetta del connettore, se ne ha. Anche
+/// questi seguono la lingua.
+export interface Joined {
+  readonly from: string;
+  readonly to: string;
+  readonly label: string | null;
 }
 
 /// Dove porta il collegamento `item`, come [`OutlineNode.target`].
@@ -76,6 +101,7 @@ const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper" | "defs" |
   link: "draw.kind.link",
   stroke: "draw.kind.stroke",
   arrow: "draw.tool.arrow",
+  connector: "draw.kind.connector",
   // Un poligono regolare e una stella hanno sempre la geometria, che dà il
   // nome: questi due valgono soltanto da ripiego.
   ngon: "draw.tool.polygon",
@@ -122,31 +148,104 @@ export function kindOf(item: ElementItem): string {
   return t(KINDS[item.role as keyof typeof KINDS]);
 }
 
+/// Un testo a parole: gli spazi raccolti; `null` se non ne ha.
+function wordsOf(text: string): string | null {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  return collapsed === "" ? null : collapsed;
+}
+
 /// Un testo come nome: gli spazi raccolti, e tagliato con i puntini oltre
 /// [`NAME_CHARS`] caratteri.
 function nameOf(text: string): string | null {
-  const collapsed = text.replace(/\s+/g, " ").trim();
-  if (collapsed === "") return null;
+  const collapsed = wordsOf(text);
+  if (collapsed === null) return null;
   const chars = Array.from(collapsed);
   return chars.length <= NAME_CHARS ? collapsed : `${chars.slice(0, NAME_CHARS - 1).join("").trimEnd()}…`;
 }
 
+/// Un nodo mentre l'albero si costruisce: il nome e i capi di un connettore
+/// si sanno soltanto quando tutti gli oggetti ci sono.
 interface Building {
   readonly item: ElementItem;
   readonly key: string;
-  readonly name: string | null;
+  name: string | null;
   readonly target: string | null;
+  connection: Connection | null;
+  joined: Joined | null;
   readonly children: Building[];
+}
+
+/// Il nome proprio di `node` fra caporali, o il suo tipo se non ne ha uno.
+function endWords(node: Building): string {
+  return node.name === null ? kindOf(node.item) : t("draw.describe.quoted", { name: node.name });
+}
+
+/// Il nome proprio di `node`, o il suo tipo se non ne ha uno.
+function plainWords(node: Building): string {
+  return node.name ?? kindOf(node.item);
+}
+
+/// L'oggetto a cui è agganciato un capo, se c'è.
+function attached(end: ConnectorEnd | null, byId: ReadonlyMap<string, Building>): Building | null {
+  return end === null ? null : byId.get(end.id) ?? null;
+}
+
+/// Dà ai connettori in `connectors` i capi e, se non hanno un `title`, il nome
+/// delle parole della loro prima etichetta: quella in cima al documento che
+/// ne ha. Un capo il cui id non c'è, o è di un livello o di un altro
+/// connettore, è libero. `all` sono gli oggetti dell'albero in ordine di
+/// documento: una passata sola, con due indici per id.
+function connect(all: readonly Building[], connectors: readonly Building[]): void {
+  const byId = new Map<string, Building>();
+  const labels = new Map<string, string>();
+  for (const node of all) {
+    const { id, role, along } = node.item;
+    if (id !== null && role !== "layer" && role !== "connector" && !byId.has(id)) byId.set(id, node);
+    if (along !== undefined && !labels.has(along.id)) {
+      const words = wordsOf((node.item.lines ?? []).join(" "));
+      if (words !== null) labels.set(along.id, words);
+    }
+  }
+  for (const node of connectors) {
+    const facts: ConnectorFacts | undefined = node.item.connector;
+    const start = attached(facts?.from ?? null, byId);
+    const end = attached(facts?.to ?? null, byId);
+    const label = node.item.id === null ? null : labels.get(node.item.id) ?? null;
+    if (node.name === null && label !== null) node.name = nameOf(label);
+    node.connection = {
+      get from() {
+        return start === null ? null : endWords(start);
+      },
+      get to() {
+        return end === null ? null : endWords(end);
+      },
+    };
+    if (start !== null && end !== null) {
+      node.joined = {
+        get from() {
+          return plainWords(start);
+        },
+        get to() {
+          return plainWords(end);
+        },
+        label,
+      };
+    }
+  }
 }
 
 /// Gli oggetti di `items` in albero: i figli della radice in cima, e sotto
 /// ciascun contenitore i suoi. Titolo, descrizione e carta non sono oggetti:
 /// il primo `title` di un oggetto ne è il nome, anche al posto delle parole
 /// di un testo, perché è il nome che qualcuno gli ha dato; un livello tiene
-/// il suo, se ne ha uno. `targets` dice dove portano i collegamenti.
+/// il suo, se ne ha uno. `targets` dice dove portano i collegamenti. Un
+/// connettore senza `title` prende il nome dalla sua prima etichetta, e dice
+/// a quali oggetti è agganciato.
 export function outline(items: readonly Item[], targets: LinkTargets = () => null): OutlineNode[] {
   const top: Building[] = [];
   const byPath = new Map<string, Building>();
+  const all: Building[] = [];
+  const connectors: Building[] = [];
   for (const item of items) {
     if (item.kind !== "element" || item.path.length === 0) continue;
     const parent = item.path.length === 1 ? null : byPath.get(item.path.slice(0, -1).join("."));
@@ -156,10 +255,13 @@ export function outline(items: readonly Item[], targets: LinkTargets = () => nul
     const name = item.role === "layer"
       ? nameOf(item.layer?.name ?? "") ?? title
       : title ?? (item.role === "text" ? nameOf((item.lines ?? []).join(" ")) : null);
-    const node: Building = { item, key: keyOf(item), name, target: item.role === "link" ? targets(item) : null, children: [] };
+    const node: Building = { item, key: keyOf(item), name, target: item.role === "link" ? targets(item) : null, connection: null, joined: null, children: [] };
     byPath.set(item.path.join("."), node);
     (parent?.children ?? top).push(node);
+    all.push(node);
+    if (item.role === "connector") connectors.push(node);
   }
+  if (connectors.length > 0) connect(all, connectors);
   return top;
 }
 
@@ -172,13 +274,24 @@ export interface DescribeOptions {
   readonly state?: boolean;
 }
 
+/// Il connettore `connector` con i suoi capi: «Connettore da «Ingresso» a
+/// «Verifica»», «Connettore da «Ingresso»», «Connettore verso «Verifica»».
+function joinedTo(connector: string, connection: Connection | null): string {
+  if (connection === null) return connector;
+  const { from, to } = connection;
+  if (from !== null && to !== null) return t("draw.describe.connector.both", { connector, from, to });
+  if (from !== null) return t("draw.describe.connector.from", { connector, from });
+  if (to !== null) return t("draw.describe.connector.to", { connector, to });
+  return connector;
+}
+
 /// Il nome di un oggetto a parole: «Rettangolo», «Testo «Cucina»», «Livello
 /// «Sfondo», bloccato», «Collegamento a «Pioggia»».
 export function describe(node: OutlineNode, options: DescribeOptions = {}): string {
   const item = node.item;
   const kind = kindOf(item);
   const named = node.name === null ? kind : t("draw.describe.named", { kind, name: node.name });
-  const parts = [node.target === null ? named : t("draw.describe.link", { link: named, note: linkName(node.target) })];
+  const parts = [node.target === null ? joinedTo(named, node.connection) : t("draw.describe.link", { link: named, note: linkName(node.target) })];
   if (item.locked && options.state !== false) parts.push(t("draw.state.locked"));
   if (item.hidden && options.state !== false) parts.push(t("draw.state.hidden"));
   if (options.color) parts.push(options.color);

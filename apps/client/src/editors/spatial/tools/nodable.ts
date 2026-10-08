@@ -72,7 +72,7 @@ export type Nodable =
 /// che non si leggono, una forma che non disegna niente, un tratto che non
 /// si ridisegna, una parte di un altro programma, che resta com'è, o un
 /// oggetto che non è una forma.
-export type NoNodes = "text" | "image" | "unreadable" | "empty" | "stroke" | "foreign" | "other";
+export type NoNodes = "text" | "image" | "connector" | "unreadable" | "empty" | "stroke" | "foreign" | "other";
 
 /// La spina di un inchiostro: `text` è il suo `fub:ink`, per chi la ricorda.
 export type SpineOf = (text: string, ink: Ink, tolerance: number) => Spine;
@@ -134,6 +134,9 @@ export function nodableOf(node: ElementPart, spineOf: SpineOf = freshSpine, trac
     }
     case "image":
       return "image";
+    // Il percorso lo calcola FubDraw dagli agganci.
+    case "connector":
+      return "connector";
     case "path": {
       const subs = pathSubs(attrs.get("d"));
       return subs === null ? "unreadable" : nodable({ kind: "path", subs });

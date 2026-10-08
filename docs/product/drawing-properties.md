@@ -49,12 +49,15 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
 - **Forma**, per poligoni, stelle e rettangoli: Tipo, Lati o Punte, Raggio
   interno di una stella e Raggio degli angoli; senza selezione, col Poligono
   in mano, quelli dello strumento ([Disegni, poligoni e stelle](drawing-shapes.md)).
+- **Connettore**, per i connettori scelti: il Tipo, fra Dritto, A gomito e
+  Curvo; l'Aggancio d’inizio e quello di fine; l'Etichetta; e «Inverti», che
+  scambia inizio e fine ([Disegni, connettori](drawing-connectors.md)).
 - **Aspetto.** Riempimento e Contorno, con la parte «Colori personalizzati»;
   Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
   Angoli, come il menu «Contorno» di [Disegni, livello
   Esperto](drawing-expert.md), e la Fusione, con «Isola la fusione» per
   gruppi e collegamenti ([Disegni, effetti e fusione](drawing-effects.md#la-fusione));
-  per linee e tracciati aperti, «Punta d’inizio» e «Punta di fine»
+  per linee, connettori e tracciati aperti, «Punta d’inizio» e «Punta di fine»
   ([Disegni, punte delle linee](drawing-tips.md)).
 - **Sfumatura.** Il tipo, Pieno, Lineare o Radiale, la barra dei punti coi
   campi del punto scelto, le sfumature pronte, «Inverti» e l'Angolo;

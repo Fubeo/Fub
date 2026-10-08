@@ -6,8 +6,9 @@
 //   e poligoni diventano il tracciato con cui SVG 2 li definisce: stesso
 //   punto di partenza e stesso verso, così anche un tratteggio comincia dove
 //   cominciava. Una freccia, un poligono regolare, una stella e una linea a
-//   spessore variabile perdono `fub:shape` e `fub:geom`, un tratto a penna
-//   l'inchiostro e il pennello: resta il `d` che si vedeva.
+//   spessore variabile perdono `fub:shape` e `fub:geom`, un connettore anche
+//   gli agganci, e non segue più gli oggetti; un tratto a penna l'inchiostro
+//   e il pennello: resta il `d` che si vedeva.
 // - **L'oggetto resta lui.** Stesso id, stesso posto fra i fratelli, stessi
 //   attributi tranne la geometria che `d` sostituisce: colori, contorno,
 //   trasformazione, titolo e gli attributi di altri programmi.
@@ -39,6 +40,7 @@ export const GEOMETRY: Readonly<Record<string, readonly string[]>> = {
 /// (formato della scena, §5 e §6).
 const SYNTHETIC: Readonly<Record<string, readonly string[]>> = {
   arrow: ["shape", "geom"],
+  connector: ["shape", "geom", "from", "to"],
   ngon: ["shape", "geom"],
   star: ["shape", "geom"],
   width: ["shape", "geom"],
@@ -69,7 +71,7 @@ export function withoutStill(segments: readonly Segment[]): Segment[] {
   return out;
 }
 
-/// Gli attributi `fub:` che fanno di `node` una freccia o un tratto, a
+/// Gli attributi `fub:` che fanno di `node` una forma o un tratto, a
 /// `null`: da togliere perché resti un tracciato e basta. Vuoti per gli
 /// altri oggetti.
 export function syntheticNulls(node: ElementPart): Record<string, null> {
@@ -165,6 +167,7 @@ export function pathOps(model: DocumentModel, units: readonly Unit[], ids: NewId
       case "path":
         return;
       case "arrow":
+      case "connector":
       case "ngon":
       case "star":
       case "width":

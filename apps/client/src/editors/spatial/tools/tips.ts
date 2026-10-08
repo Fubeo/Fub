@@ -393,7 +393,7 @@ function passedBy(node: ElementPart | null): Inherited {
 }
 
 /// I ruoli dove SVG disegna i marcatori.
-const MARKED: ReadonlySet<Role> = new Set(["path", "line", "polyline", "polygon"]);
+const MARKED: ReadonlySet<Role> = new Set(["path", "line", "polyline", "polygon", "connector"]);
 
 /// I ruoli che passano il cambio ai figli.
 const CONTAINERS: ReadonlySet<Role> = new Set(["group", "link"]);
@@ -407,15 +407,15 @@ function marked(own: ReadonlyMap<string, string>, end: TipEnd): boolean {
   return value !== undefined && reference(value) !== null;
 }
 
-/// Vero se `node` può avere le punte: una linea, una spezzata o un tracciato
-/// senza `Z`; e ogni forma su cui SVG disegna i marcatori che ne ha già, perché
-/// si possano togliere. Non le frecce, i poligoni regolari e le stelle, i
-/// tratti a penna, le linee a spessore variabile, i testi e le parti
-/// estranee.
+/// Vero se `node` può avere le punte: una linea, una spezzata, un connettore
+/// o un tracciato senza `Z`; e ogni forma su cui SVG disegna i marcatori che
+/// ne ha già, perché si possano togliere. Non le frecce, i poligoni regolari
+/// e le stelle, i tratti a penna, le linee a spessore variabile, i testi e le
+/// parti estranee.
 export function tippable(node: ElementPart): boolean {
   const role = node.details?.role;
   if (role === undefined || node.kind !== "leaf" || !MARKED.has(role)) return false;
-  if (role === "line" || role === "polyline") return true;
+  if (role === "line" || role === "polyline" || role === "connector") return true;
   const own = ownOf(node);
   if (role === "path" && !/[zZ]/.test(own.get("d") ?? "")) return true;
   return marked(own, "start") || marked(own, "end");

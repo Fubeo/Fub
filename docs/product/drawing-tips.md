@@ -5,10 +5,10 @@
 > **Risultato:** sapere quali punte ci sono, dove si scelgono, di che colore
 > e quanto grandi vengono, e che cosa ne fanno i comandi.
 
-Dal livello Standard una linea, una spezzata o un tracciato aperto possono
-avere una **punta** all'inizio e una alla fine, come nel pannello Traccia di
-Illustrator. Si scelgono in «Aspetto», nel [pannello delle
-proprietà](drawing-properties.md). Il modello è in
+Dal livello Standard una linea, una spezzata, un connettore o un tracciato
+aperto possono avere una **punta** all'inizio e una alla fine, come nel
+pannello Traccia di Illustrator. Si scelgono in «Aspetto», nel [pannello
+delle proprietà](drawing-properties.md). Il modello è in
 `apps/client/src/editors/spatial/tools/tips.ts`; dove SVG mette e gira un
 marcatore, per la selezione e i riquadri, in `scene/markers.ts`.
 
@@ -23,11 +23,12 @@ marcatore, per la selezione e i riquadri, in `scene/markers.ts`.
 - **La punta copre il capo della linea.** La cima del triangolo e del rombo
   sta poco oltre l'estremo, l'angolo della punta aperta è tondo: una linea
   con gli estremi quadrati o tondi non sporge mai dalla sua punta.
-- **Chi può averle:** linee, spezzate e tracciati senza chiusura. Non le
-  frecce, che hanno la loro testa, i poligoni regolari e le stelle, i tratti
-  a penna, le linee a spessore variabile e i testi. Un gruppo passa il
-  cambio alle sue parti; una parte bloccata resta com'è. Una forma chiusa
-  con una punta scritta da un altro programma può soltanto toglierla.
+- **Chi può averle:** linee, spezzate, connettori e tracciati senza
+  chiusura. Non le frecce, che hanno la loro testa, i poligoni regolari e le
+  stelle, i tratti a penna, le linee a spessore variabile e i testi. Un
+  gruppo passa il cambio alle sue parti; una parte bloccata resta com'è. Una
+  forma chiusa con una punta scritta da un altro programma può soltanto
+  toglierla.
 
 ## Nel pannello delle proprietà
 
@@ -118,6 +119,10 @@ risorse](../reference/scene-format-resources.md#le-punte-delle-linee).
   Il contagocce su una punta prende l'aspetto della sua linea.
 - **Duplicare, copiare e incollare** portano le punte con la linea: in un
   altro disegno, una punta uguale a una che c'è già usa quella.
+- **I connettori** hanno le punte come ogni linea, e uno nuovo parte con un
+  triangolo medio alla fine. «Inverti», nella sezione «Connettore», scambia
+  inizio e fine del connettore, e la punta va all'altro capo con la fine
+  ([Disegni, connettori](drawing-connectors.md)).
 - **In Lettura e nell'export** le punte sono quelle del file, uguali a
   quelle del foglio.
 

@@ -2809,6 +2809,18 @@ textarea.draw-properties-input {
 .draw-hatch-motif > .draw-button {
   grid-column: 1 / -1;
 }
+/* Il connettore non ha una riga sua: i suoi campi sono le celle della
+   griglia della sezione. Il tipo, l'etichetta e le note prendono la riga
+   intera, i due agganci una colonna ciascuno; «Inverti» sta a sinistra. */
+.draw-connector {
+  display: contents;
+}
+.draw-connector > .draw-properties-note {
+  grid-column: 1 / -1;
+}
+.draw-connector > .draw-properties-apply {
+  justify-self: start;
+}
 /* Gli effetti prendono la riga della sezione: sotto la nota, una riga per
    effetto, coi comandi sotto quando gli oggetti ne hanno di diversi o un
    filtro d'altri. L'intestazione della sezione porta, accanto al titolo,
@@ -2971,9 +2983,9 @@ textarea.draw-properties-input {
   min-width: 0;
   min-height: 0;
 }
-/* In Lettura, sotto l'immagine, il disegno a parole: la descrizione e
-   l'elenco degli oggetti, che scorre da sé e non toglie all'immagine più di
-   un terzo del riquadro. */
+/* In Lettura, sotto l'immagine, il disegno a parole: la descrizione, i
+   collegamenti, le connessioni e l'elenco degli oggetti, che scorre da sé e
+   non toglie all'immagine più di un terzo del riquadro. */
 .vector-about {
   flex: none;
   max-height: 33%;
@@ -2989,7 +3001,8 @@ textarea.draw-properties-input {
   min-height: 44px;
   cursor: pointer;
 }
-.vector-about-objects ul {
+.vector-about-objects ul,
+.vector-about-connections ul {
   margin: 0;
   padding-inline-start: 1.5em;
 }

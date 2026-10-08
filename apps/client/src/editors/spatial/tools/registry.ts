@@ -49,6 +49,7 @@ export type ToolId =
   | "ellipse"
   | "line"
   | "arrow"
+  | "connector"
   | "cover"
   | "polygon"
   | "bezier"
@@ -111,6 +112,10 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "ellipse", levels: SHAPE, group: "shape", icon: "draw-ellipse", label: "draw.tool.ellipse", description: "draw.tool.ellipse.hint", shortcut: "o" },
   { id: "line", levels: SHAPE, group: "shape", icon: "draw-line", label: "draw.tool.line", description: "draw.tool.line.hint", shortcut: "l" },
   { id: "arrow", levels: SHAPE, group: "shape", icon: "draw-arrow", label: "draw.tool.arrow", description: "draw.tool.arrow.hint", shortcut: "a" },
+  // La lettera di FigJam. Lo strumento porta con sé la sezione «Connettore»
+  // del pannello delle proprietà e «Collega le forme scelte»: nel
+  // Personalizzato si scelgono insieme.
+  { id: "connector", levels: { vector: "standard" }, group: "shape", icon: "draw-connector", label: "draw.tool.connector", description: "draw.tool.connector.hint", shortcut: "x" },
   // La copertura è del PDF: nel disegno la «C» è delle Forbici.
   { id: "cover", levels: { pdf: "standard" }, group: "shape", icon: "draw-cover", label: "draw.tool.cover", description: "draw.tool.cover.hint", shortcut: "c" },
   // Lo stesso tasto di CorelDRAW. Premuto di nuovo, lo strumento passa dal

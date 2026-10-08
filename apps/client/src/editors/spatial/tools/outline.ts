@@ -47,7 +47,7 @@ const PATTERNS: Readonly<Record<Exclude<Dash, "solid">, readonly number[]>> = {
 };
 
 /// I ruoli che hanno un contorno.
-const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
+const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "connector", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
 
 /// I ruoli che passano la scelta ai figli.
 const CONTAINERS: ReadonlySet<Role> = new Set(["group", "link"]);

@@ -45,6 +45,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Sfumatura | Standard | lo strumento (`G`); nel pannello delle proprietà la sezione «Sfumatura», con «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)) |
 | Evidenziatore | Standard | lo strumento (`H`) |
 | Poligono | Standard | lo strumento (`Y`), per poligoni e stelle; la sezione «Forma» delle proprietà e la maniglia degli angoli arrotondati |
+| Connettore | Standard | lo strumento (`X`); nel pannello delle proprietà la sezione «Connettore»; «Collega le forme scelte» nella barra «Disponi», nel menu «Selezione avanzata» e col tasto destro ([Disegni, connettori](drawing-connectors.md)) |
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
 | Colori personalizzati | Standard | «Altro colore…» e l'anello del colore scelto |
 | Colori del documento | Standard | nel pannello delle proprietà la sezione «Colori del documento», coi campioni, i colori usati e i recenti; disegnare con un campione ([Disegni, colori](drawing-colors.md)) |

@@ -134,6 +134,8 @@ export type Note =
   | "ink"
   /// Il `d` di una freccia, che viene dalla sua geometria.
   | "arrow"
+  /// Il `d` di un connettore, che viene dal suo percorso.
+  | "connector"
   /// Il `d` di un poligono regolare o di una stella, che viene dai loro
   /// parametri.
   | "shape"
@@ -216,8 +218,9 @@ function offered(role: Role): readonly string[] {
     case "stroke":
     case "width":
       return [...PAINT, ...COMMON];
-    // Una freccia è tutta contorno.
+    // Una freccia e un connettore sono tutti contorno.
     case "arrow":
+    case "connector":
       return [...OUTLINE, ...COMMON];
     case "line":
       return [...geometry, ...OUTLINE, ...COMMON];
@@ -248,6 +251,7 @@ function rowOf(role: Role, attr: OutAttr): Row {
   if (attr.uri !== "") return read("namespace");
   if (attr.local === "d" && role === "stroke") return read("ink");
   if (attr.local === "d" && role === "arrow") return read("arrow");
+  if (attr.local === "d" && role === "connector") return read("connector");
   if (attr.local === "d" && (role === "ngon" || role === "star")) return read("shape");
   if (attr.local === "d" && role === "width") return read("width");
   if (value.length > EDIT_LIMIT) return read("long");

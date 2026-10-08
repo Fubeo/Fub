@@ -469,6 +469,108 @@ describe("i collegamenti", () => {
   });
 });
 
+describe("le connessioni", () => {
+  const rect = (id: string, title?: string): string =>
+    `<rect id="${id}" x="0" y="0" width="20" height="10">${title === undefined ? "" : `<title>${title}</title>`}</rect>`;
+  /// Un connettore dritto fra `ends`; un capo che manca è libero.
+  const connector = (id: string, ends: { readonly from?: string; readonly to?: string }): string =>
+    `<path id="${id}" fub:shape="connector" fub:geom="straight 10 10 90 10"` +
+    (ends.from === undefined ? "" : ` fub:from="${ends.from} auto"`) +
+    (ends.to === undefined ? "" : ` fub:to="${ends.to} auto"`) +
+    ' d="M10 10 L90 10" fill="none" stroke="#000000"/>';
+  const label = (id: string, along: string, words: string): string =>
+    `<text id="${id}" fub:along="${along} 0.5 6" x="50" y="4"><tspan x="50" dy="0">${words}</tspan></text>`;
+  const CONNECTED = doc(
+    `<title>Flusso</title>${LAYER}` +
+      rect("o1", "Ingresso") + rect("o2", "Verifica") + rect("o3") +
+      connector("c1", { from: "o1", to: "o2" }) + label("t1", "c1", "sì") +
+      connector("c2", { from: "o2", to: "o3" }) +
+      connector("c3", { from: "o3" }) +
+      "</g>",
+  );
+
+  const section = (): HTMLElement => parent.querySelector<HTMLElement>(".vector-about-connections")!;
+  const title = (): string => document.getElementById(section().querySelector("ul")!.getAttribute("aria-labelledby")!)!.textContent!;
+  /// Per ogni voce, ciò che si vede e ciò che si dice.
+  const entries = (): { readonly shown: string; readonly spoken: string }[] =>
+    [...section().querySelectorAll("li")].map((item) => ({
+      shown: item.querySelector('[aria-hidden="true"]')!.textContent!,
+      spoken: item.querySelector(".sr-only")!.textContent!,
+    }));
+
+  it("in Lettura sono un elenco, «da dove a dove», col nome che si dice per esteso", () => {
+    const { surface } = mount(CONNECTED);
+    surface.setMode!("read");
+    expect(section().hidden).toBe(false);
+    expect(title()).toBe("Connessioni (2)");
+    // Un connettore con un capo libero non è una connessione; un oggetto senza
+    // nome si dice col suo tipo.
+    expect(entries()).toEqual([
+      { shown: "Ingresso → Verifica: sì", spoken: "da Ingresso a Verifica, sì" },
+      { shown: "Verifica → Rettangolo", spoken: "da Verifica a Rettangolo" },
+    ]);
+    // La freccia non si legge: il testo che si vede è nascosto a chi ascolta,
+    // e quello che si dice non si vede.
+    const first = section().querySelector("li")!;
+    expect(first.querySelector('[aria-hidden="true"]')!.classList.contains("sr-only")).toBe(false);
+    expect(first.querySelector(".sr-only")!.getAttribute("aria-hidden")).toBeNull();
+    // Sta sotto i collegamenti e sopra l'elenco degli oggetti.
+    const about = [...parent.querySelector(".vector-about")!.children];
+    expect(about.indexOf(section())).toBeGreaterThan(about.indexOf(parent.querySelector(".vector-about-links")!));
+    expect(about.indexOf(section())).toBeLessThan(about.indexOf(parent.querySelector(".vector-about-objects")!));
+  });
+
+  it("senza connessioni non c'è, e un connettore con un capo libero non lo è", () => {
+    const { surface } = mount(SOURCE);
+    surface.setMode!("read");
+    expect(section().hidden).toBe(true);
+    expect(entries()).toEqual([]);
+    surface.buffer!.syncDoc(doc(`${LAYER}${rect("o1", "Ingresso")}${connector("c1", { from: "o1" })}${connector("c2", { to: "o1" })}${connector("c3", {})}</g>`));
+    expect(section().hidden).toBe(true);
+    expect(entries()).toEqual([]);
+  });
+
+  it("si aggiorna quando il testo cambia", () => {
+    const { surface } = mount(CONNECTED);
+    surface.setMode!("read");
+    expect(title()).toBe("Connessioni (2)");
+    surface.buffer!.syncDoc(CONNECTED.replace(">sì<", ">no<"));
+    expect(entries()[0]).toEqual({ shown: "Ingresso → Verifica: no", spoken: "da Ingresso a Verifica, no" });
+    // Un capo che si stacca toglie la connessione; uno che si attacca la dà.
+    surface.buffer!.syncDoc(CONNECTED.replace(' fub:to="o2 auto"', "").replace('<path id="c3" fub:shape="connector" fub:geom="straight 10 10 90 10" fub:from="o3 auto"', '<path id="c3" fub:shape="connector" fub:geom="straight 10 10 90 10" fub:from="o3 auto" fub:to="o1 auto"'));
+    expect(title()).toBe("Connessioni (2)");
+    expect(entries().map((entry) => entry.shown)).toEqual(["Verifica → Rettangolo", "Rettangolo → Ingresso"]);
+    surface.buffer!.syncDoc(SOURCE);
+    expect(section().hidden).toBe(true);
+    surface.buffer!.syncDoc(CONNECTED);
+    expect(section().hidden).toBe(false);
+    expect(title()).toBe("Connessioni (2)");
+  });
+
+  it("segue la lingua", () => {
+    const { surface } = mount(CONNECTED);
+    surface.setMode!("read");
+    vi.stubGlobal("navigator", { language: "en-GB" });
+    try {
+      // La lingua cambia, il testo no: la superficie si ridisegna.
+      surface.setReadOnly!(false);
+      expect(title()).toBe("Connections (2)");
+      expect(entries()).toEqual([
+        { shown: "Ingresso → Verifica: sì", spoken: "from Ingresso to Verifica, sì" },
+        { shown: "Verifica → Rectangle", spoken: "from Verifica to Rectangle" },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("anche un documento che si guarda soltanto ha le sue connessioni", () => {
+    mount(`<!DOCTYPE svg>${CONNECTED}`);
+    expect(title()).toBe("Connessioni (2)");
+    expect(entries()[0]).toEqual({ shown: "Ingresso → Verifica: sì", spoken: "da Ingresso a Verifica, sì" });
+  });
+});
+
 describe("le selezioni e `reveal`", () => {
   // Un titolo con lettere fuori dall'ASCII: i byte non sono più i caratteri.
   const ACCENTED = doc(

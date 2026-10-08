@@ -32,6 +32,11 @@
 //   `url(#…)`, `href`, gli attributi ARIA, l'inizio e la fine delle
 //   animazioni, i selettori dei fogli di stile. Un foglio di un altro
 //   programma vale solo dentro il suo gruppo (`stylesheet.ts`).
+// - **I connettori.** Un capo agganciato a un oggetto incollato nomina il suo
+//   id nuovo; uno agganciato a ciò che non entra, e un'etichetta senza il suo
+//   connettore, perdono `fub:from`, `fub:to` o `fub:along`, e restano un capo
+//   libero e un testo qualunque (`connector-copies.ts`). Un valore fuori
+//   grammatica resta com'è. La copia scrive l'SVG con gli id di prima.
 // - **Byte per byte.** Ciò che non deve cambiare resta come era scritto: fra
 //   due disegni con le stesse unità, da un livello senza trasformazioni a un
 //   altro, un giro di copia e incolla riporta gli stessi byte, id a parte.
@@ -82,6 +87,7 @@ import {
 } from "../scene/xml";
 import { t } from "../strings";
 import { INHERITED, plainAttributes } from "./arrange";
+import { isLinkName, relinked } from "./connector-copies";
 import { mappedBounds, transformValue, type Destination, type NewIds } from "./edit";
 import { cleanName, nameKey } from "./naming";
 import { inheritedBy, INITIAL } from "./place";
@@ -472,10 +478,17 @@ function nameEnd(element: ElementNode): number {
   return element.start + 1 + element.name.length;
 }
 
+/// Nessun attributo da togliere.
+const KEPT: ReadonlySet<number> = new Set();
+
 /// Ciò che cambia nel testo di un SVG che si copia o si incolla.
 interface Rules {
   /// L'id nuovo a cui va un riferimento; `null` se resta.
   readonly rename: (id: string) => string | null;
+  /// Vero nell'incolla: `fub:from`, `fub:to` e `fub:along` seguono gli id
+  /// nuovi, e si tolgono se ciò che nominano non entra. Nella copia gli id
+  /// restano, e con loro i riferimenti.
+  readonly relink: boolean;
   /// L'id nuovo di un elemento.
   readonly ids: ReadonlyMap<NodeId, string>;
   /// Il nome nuovo di un campione, per elemento.
@@ -556,12 +569,14 @@ class Rewriter {
       const element = this.doc.element(at)!;
       this.uses(element);
       if (at !== id || !head) {
+        // L'id prima degli attributi tolti, che cominciano dov'è finito il nome.
+        const fresh = this.fresh.get(at);
+        if (fresh !== undefined) this.edits.add(nameEnd(element), nameEnd(element), ` id="${fresh}"`);
         for (const [index, text] of this.values(at)) {
           const attr = element.attrs[index]!;
           this.edits.add(attr.raw[0], attr.raw[1], text);
         }
-        const fresh = this.fresh.get(at);
-        if (fresh !== undefined) this.edits.add(nameEnd(element), nameEnd(element), ` id="${fresh}"`);
+        for (const index of this.dropped(element)) this.drop(element, element.attrs[index]!);
       }
       if (this.rules.sheets !== undefined && isSvg(element, "style")) this.sheet(element);
       for (let i = element.children.length - 1; i >= 0; i--) {
@@ -577,12 +592,14 @@ class Rewriter {
   head(id: NodeId, head: Head, indent: string): void {
     const element = this.doc.element(id)!;
     const values = this.values(id);
+    const dropped = this.dropped(element);
     const selfClosing = element.closeStart === null;
     const child = head.child === null ? "" : `\n${indent}  ${head.child}`;
     if (head.canonical) {
       const attrs: OutAttr[] = [];
       attributesOf(this.doc, element).forEach((attr, index) => {
         if (head.unlayer && attr.uri === FUB_NS && attr.local === "layer") return;
+        if (dropped.has(index)) return;
         if (attr.uri === "" && head.set.has(attr.local)) return;
         attrs.push({ ...attr, text: values.get(index) ?? attr.text });
       });
@@ -610,6 +627,10 @@ class Rewriter {
     const set = new Map(head.set);
     let before = head.before;
     element.attrs.forEach((attr, index) => {
+      if (dropped.has(index)) {
+        this.drop(element, attr);
+        return;
+      }
       const single = this.text.charCodeAt(attr.raw[0] - 1) === 0x27;
       let text = values.get(index) ?? null;
       if (attr.ns === NS_NONE && set.has(attr.local)) {
@@ -637,7 +658,9 @@ class Rewriter {
   values(id: NodeId): Map<number, string> {
     const out = new Map<number, string>();
     const element = this.doc.element(id)!;
+    const dropped = this.dropped(element);
     element.attrs.forEach((attr, index) => {
+      if (dropped.has(index)) return;
       const declaration = attr.name === "xmlns" || attr.name.startsWith("xmlns:");
       const next = declaration ? attr.value : this.value(id, element, attr);
       if (next === attr.value && !ENTITY.test(this.text.slice(attr.raw[0], attr.raw[1]))) return;
@@ -646,11 +669,30 @@ class Rewriter {
     return out;
   }
 
+  /// Gli indici degli attributi di `element` che si tolgono: `fub:from`,
+  /// `fub:to` e `fub:along` che nominano ciò che non entra.
+  private dropped(element: ElementNode): ReadonlySet<number> {
+    if (!this.rules.relink) return KEPT;
+    let out: Set<number> | null = null;
+    element.attrs.forEach((attr, index) => {
+      if (attr.ns === NS_FUB && isLinkName(attr.local) && relinked(attr.local, attr.value, this.rules.rename) === null) (out ??= new Set()).add(index);
+    });
+    return out ?? KEPT;
+  }
+
+  /// Toglie l'attributo `attr` di `element`, con gli spazi che lo precedono.
+  private drop(element: ElementNode, attr: Attr): void {
+    let from = this.text.lastIndexOf(attr.name, attr.raw[0]);
+    while (from > element.start && /[ \t\r\n]/.test(this.text[from - 1]!)) from--;
+    this.edits.add(from, attr.raw[1] + 1, "");
+  }
+
   /// Il valore nuovo di un attributo.
   private value(id: NodeId, element: ElementNode, attr: Attr): string {
     const { rename } = this.rules;
     if (attr.ns === NS_NONE && attr.local === "id") return this.rules.ids.get(id) ?? attr.value;
     if (attr.ns === NS_FUB && attr.local === "name") return this.rules.named.get(id) ?? attr.value;
+    if (this.rules.relink && attr.ns === NS_FUB && isLinkName(attr.local)) return relinked(attr.local, attr.value, rename) ?? attr.value;
     let next = /url\(/i.test(attr.value) ? renameUrls(attr.value, rename) : attr.value;
     if (attr.ns === NS_NONE && (attr.local === "fill" || attr.local === "stroke")) next = this.fallback(next);
     const fragment = /^#(.+)$/.exec(next);
@@ -757,7 +799,7 @@ export function copySvg(input: CopyInput): string | null {
   const scope = known === null ? rootScope.declare([[fub, FUB_NS]]) : rootScope;
   const index = resourceIndex(doc);
   const resolve: Resolve = (id) => index.get(id) ?? null;
-  const rewriter = new Rewriter(doc, { rename: () => null, ids: new Map(), named: new Map(), colors: new Map(), sheets: undefined, href: () => null, resolve, written: resolve });
+  const rewriter = new Rewriter(doc, { rename: () => null, relink: false, ids: new Map(), named: new Map(), colors: new Map(), sheets: undefined, href: () => null, resolve, written: resolve });
 
   try {
     const pieces: string[] = [];
@@ -1327,6 +1369,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   }
   const rewriter = new Rewriter(doc, {
     rename: (id) => names.get(id) ?? null,
+    relink: true,
     ids: renamed,
     named: lift.named,
     colors: lift.colors,

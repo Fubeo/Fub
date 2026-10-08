@@ -145,7 +145,7 @@ import type { ElementItem, Item } from "../scene/classify";
 import { MAX_VALUE_BYTES, ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
-import { paintReference, href as parseHref, transform as parseTransform } from "../scene/values";
+import { paint as parsePaint, paintReference, href as parseHref, transform as parseTransform } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone, type SamplePaint } from "../painter/overlay";
 import { PaintBuilder, resourcesFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
@@ -274,7 +274,7 @@ import type { GradientPanelView } from "./gradient-panel";
 import type { HatchPanelView } from "./hatch-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
-import { resourceHome } from "./resources";
+import { paintCode, resourceHome } from "./resources";
 import { createProperties, type ActionId, type FieldId, type PropertiesView, type SectionId, type TransformId } from "./properties";
 import {
   documentColors,
@@ -290,7 +290,26 @@ import {
   type DocumentColors,
   type SwatchChange,
 } from "./swatches";
-import { followTips, tipOps, tipsLookOf, type TipChange } from "./tips";
+import { DEFAULT_TIP_SIZE, followTips, Shelf, tipElem, tipOps, tipsLookOf, type TipChange } from "./tips";
+import {
+  anchorPoints,
+  attachable,
+  connectOps,
+  connectorAttrsFor,
+  connectorElem,
+  ConnectorPreview,
+  endInputs,
+  followConnectors,
+  labelsOf,
+  lineEnds,
+  outlineSegments,
+  sceneRoute,
+  type EndInput,
+  type LineEnd,
+} from "./connectors";
+import { writeConnectorEnd, type Anchor, type ConnectorEnd, type ConnectorKind } from "../scene/connectors";
+import { connectorOps, connectorView, type ConnectorChange, type ConnectorView } from "./connector-ops";
+import type { ConnectorPanelView } from "./connector-panel";
 import { effectsOps, effectsState, effectsStates, followEffects, holdsFilters, MAX_EFFECTS, visibleBox, type EffectsChange } from "./effects";
 import { effectsView } from "./effects-panel";
 import {
@@ -895,7 +914,7 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector"];
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -1016,6 +1035,14 @@ const DOUBLE_TAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse:
 /// pixel: un bersaglio largo almeno 24 pixel (WCAG 2.5.8), di più per il
 /// dito. Fra due vicini vince il più vicino.
 const NODE_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 12, touch: 20 };
+
+/// Quanto vicino a uno dei punti d'aggancio di un oggetto il capo di un
+/// connettore vi si aggancia, in pixel; più lontano FubDraw sceglie il lato.
+const ANCHOR_PX: Readonly<Record<InkPointerType, number>> = { pen: 12, mouse: 10, touch: 20 };
+
+/// I marcatori delle anteprime dei connettori, uno per editor: l'id deve
+/// essere unico nella pagina.
+let previewTips = 0;
 
 /// Il lato più corto di un ritaglio mentre lo si tira, in pixel.
 const CROP_MIN_PX = 4;
@@ -1152,6 +1179,9 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-ellipse": ["M3 12a9 6.5 0 1 0 18 0a9 6.5 0 1 0-18 0"],
   "draw-line": ["M5 19L19 5"],
   "draw-arrow": ["M5 19L19 5", "M10 5h9v9"],
+  // Due quadratini, uno in alto a sinistra e uno in basso a destra, e il
+  // gomito che li unisce con la freccia.
+  "draw-connector": ["M3 3h6v6H3z", "M15 15h6v6h-6z", "M9 6h3v12h3", "M13 16l2 2-2 2"],
   "draw-polygon": ["M7.5 4.2h9l4.5 7.8-4.5 7.8h-9L3 12z"],
   "draw-star": ["M12 3l2.1 6.6H21l-5.5 4 2.1 6.6-5.6-4.1-5.6 4.1 2.1-6.6L3 9.6h6.9z"],
   "draw-highlighter": ["M13.5 3.5l7 7-7 7-7-7z", "M6.5 10.5L3 18l3 3 7.5-3.5", "M15 21h6"],
@@ -1255,6 +1285,13 @@ function comparePaths(a: readonly number[], b: readonly number[]): number {
 }
 
 /// Vero se il percorso `outer` contiene `inner`, a qualunque profondità.
+/// Vero se `a` e `b` sono lo stesso elemento, o uno contiene l'altro.
+function related(a: ElementPart, b: ElementPart): boolean {
+  for (let node: ElementPart | null = a; node !== null; node = node.parent) if (node === b) return true;
+  for (let node: ElementPart | null = b; node !== null; node = node.parent) if (node === a) return true;
+  return false;
+}
+
 function holdsPath(outer: readonly number[], inner: readonly number[]): boolean {
   return inner.length > outer.length && outer.every((step, at) => inner[at] === step);
 }
@@ -1317,6 +1354,7 @@ interface LinkMark {
 type Gesture =
   | InkGesture
   | ShapeGesture
+  | ConnectorGesture
   | SelectGesture
   | LassoGesture
   | NodesGesture
@@ -1385,6 +1423,34 @@ interface ShapeGesture extends GestureBase {
   end: Point | null;
 }
 
+/// L'oggetto a cui si aggancerebbe un capo del Connettore: l'oggetto, il
+/// punto d'aggancio, e i suoi cinque punti nella scena, da mostrare.
+interface Hook {
+  readonly unit: Unit;
+  readonly anchor: Anchor;
+  readonly points: ReadonlyMap<Exclude<Anchor, "auto">, Point>;
+}
+
+/// Un gesto dello strumento Connettore. Trascinato da un oggetto, o dal
+/// foglio, tira un connettore fin dove si rilascia: sopra un oggetto vi si
+/// aggancia, sul foglio il capo resta libero. Preso il capo di un connettore
+/// scelto, lo riaggancia. Un tocco sceglie ciò che tocca.
+interface ConnectorGesture extends GestureBase {
+  readonly kind: "connector";
+  readonly ids: NewIds;
+  /// Dov'è sceso il puntatore e dov'è adesso, nella scena.
+  from: Point | null;
+  end: Point | null;
+  /// Il capo preso, e l'altro com'è adesso; `null` per un connettore nuovo.
+  grab: { readonly end: LineEnd; readonly other: EndInput } | null;
+  /// L'oggetto da cui parte un connettore nuovo.
+  start: Hook | null;
+  /// L'oggetto sotto il puntatore, a cui il capo si aggancerebbe.
+  hook: Hook | null;
+  /// Oltre la soglia del trascinamento.
+  dragging: boolean;
+}
+
 interface SelectGesture extends GestureBase {
   readonly kind: "select";
   from: Point | null;
@@ -1412,6 +1478,9 @@ interface SelectGesture extends GestureBase {
   /// rotazione.
   matrix: Matrix | null;
   angle: number;
+  /// I connettori che seguono gli oggetti presi, per l'anteprima; `null`
+  /// finché il gesto non li sposta.
+  lines: ConnectorPreview | null;
 }
 
 /// La cornice di un testo in area presa da un lato o da un angolo: cambia
@@ -2250,17 +2319,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Le larghezze del testo, coi caratteri del browser dove li sa misurare.
   const measureText: Measure = browserMeasure() ?? estimate;
 
-  /// `next`, con le punte delle linee che tengono il colore del contorno e
-  /// i filtri degli effetti la regione dell'oggetto: il motore li segue a
-  /// ogni operazione, nello stesso passo d'annulla, e trova ciò che ha
-  /// toccato col suo indice invece di scorrere il disegno.
+  /// `next`, coi connettori che seguono gli oggetti a cui sono agganciati,
+  /// le punte delle linee che tengono il colore del contorno e i filtri
+  /// degli effetti la regione dell'oggetto: il motore li segue a ogni
+  /// operazione, nello stesso passo d'annulla, e trova ciò che ha toccato
+  /// col suo indice invece di scorrere il disegno.
   const following = (next: SceneEngine): SceneEngine => {
     const find = (id: string): ElementPart | null => next.holder(id);
-    next.follow = (model, touched) => {
+    next.follow = (model, touched, op) => {
+      const lines = followConnectors(model, touched, find, measureText, op);
       const tips = followTips(model, touched, new NewIds((id) => find(id) !== null), find);
       const regions = followEffects(model, touched, find, measureText);
-      if (tips === null || regions === null) return tips ?? regions;
-      return { op: "batch", ops: [tips, regions] };
+      const ops = [lines, tips, regions].filter((each): each is Op => each !== null);
+      return ops.length === 0 ? null : ops.length === 1 ? ops[0]! : { op: "batch", ops };
     };
     return next;
   };
@@ -2863,6 +2934,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       onRename: (id, name) => renameMotif(id, name),
       onDelete: (id) => deleteMotif(id),
     },
+    connector: {
+      onChange: (change, label) => changeConnector(change, label),
+    },
     effects: {
       onChange: (change, label) => changeEffects(change, label),
     },
@@ -2900,6 +2974,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// con mille oggetti scelti si rileggono soltanto quando il disegno o la
   /// selezione cambiano, non a ogni colore recente o cambio di vista.
   let hatchRead: { readonly index: SceneIndex; readonly keys: string; readonly view: HatchView } | null = null;
+  /// I connettori fra gli oggetti scelti `keys` letti per la scena `index`,
+  /// come le campiture.
+  let connectorRead: { readonly index: SceneIndex; readonly keys: string; readonly view: ConnectorView | null } | null = null;
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
   let ratioLock: { readonly keys: string; readonly on: boolean } | null = null;
@@ -3069,6 +3146,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     opacityField.title = name;
     opacityShown = null;
   });
+  // Dal livello Standard, col Connettore: ogni oggetto scelto si unisce al
+  // seguente sul foglio. C'è quando ce ne sono almeno due da unire.
+  const connectButton = arrangeButton("draw.connect", "draw-connector", null, () => connectSelection());
   // Dal livello Standard: i tratti a penna scelti diventano le forme a cui
   // somigliano. C'è solo quando ce n'è uno.
   const shapeButton = arrangeButton("draw.to_shape", "draw-to-shape", null, () => shapeSelectedInk());
@@ -3451,6 +3531,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// `loaded`: il suo ritaglio quando si è aperto e quello di adesso, nelle
   /// sue coordinate. Si scrive quando si applica.
   let cropping: { readonly key: string; readonly loaded: number; readonly start: Crop; crop: Crop } | null = null;
+  /// Il tipo del prossimo connettore: l'ultimo scelto nel pannello.
+  let connectorKind: ConnectorKind = "elbow";
+  /// Con lo strumento Connettore, il puntatore sopra il foglio senza
+  /// premere: l'oggetto a cui un capo si aggancerebbe, o il capo di un
+  /// connettore scelto che prenderebbe.
+  let connectorHover: { readonly hook: Hook | null; readonly end: LineEnd | null } | null = null;
+  /// I capi dei connettori che si possono prendere, per l'indice `index`.
+  let lineEndsFor: { readonly index: SceneIndex; readonly ends: readonly LineEnd[] } | null = null;
+  /// L'id del marcatore dell'anteprima di un connettore nuovo.
+  const previewTip = `draw-preview-tip-${++previewTips}`;
   /// L'ultimo tocco dentro l'immagine che si ritaglia, per il doppio tocco
   /// che applica.
   let cropTap: { readonly time: number; readonly at: Point } | null = null;
@@ -4567,6 +4657,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...gradientOverlay());
     handles.push(...pathsHandles());
     handles.push(...cropHandles());
+    handles.push(...connectorHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
     const lasso = current?.kind === "select" && current.mode === "marquee"
@@ -4692,14 +4783,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (mark !== undefined) openLink(mark.target);
   });
 
-  const showShape = (elem: Elem | null, matrix: Matrix): void => {
+  /// Mostra `elem`, una forma che si sta disegnando, nella scena con
+  /// `matrix`; `defs` sono le risorse che usa, come la punta di un
+  /// connettore.
+  const showShape = (elem: Elem | null, matrix: Matrix, defs: readonly Elem[] = []): void => {
     previewLayer.replaceChildren();
     if (elem === null) return;
     previewLayer.setAttribute("transform", matrixText(matrix));
-    const shape = document.createElementNS(SVG_NS, elem.tag);
-    // I nomi con un prefisso sono dati di FubDraw: non si disegnano.
-    for (const [name, value] of Object.entries(elem.attrs)) if (!name.includes(":")) shape.setAttribute(name, value);
-    previewLayer.append(shape);
+    const build = (each: Elem): SVGElement => {
+      const shape = document.createElementNS(SVG_NS, each.tag);
+      // I nomi con un prefisso sono dati di FubDraw: non si disegnano.
+      for (const [name, value] of Object.entries(each.attrs)) if (!name.includes(":")) shape.setAttribute(name, value);
+      for (const child of each.children ?? []) shape.append(build(child));
+      return shape;
+    };
+    if (defs.length > 0) {
+      const holder = document.createElementNS(SVG_NS, "defs");
+      for (const each of defs) holder.append(build(each));
+      previewLayer.append(holder);
+    }
+    previewLayer.append(build(elem));
   };
 
   const clearPreviews = (): void => {
@@ -5765,6 +5868,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               },
         gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches),
         hatch: model === null || units.length === 0 || !has("hatches") ? null : hatchSection(model, units, keys, swatches, unit),
+        connector: model === null || units.length === 0 || !has("connector") ? null : connectorSection(model, units, keys),
       }), effects),
     );
   }
@@ -5784,6 +5888,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const shown = hatchRead.view;
     if (shown.count === 0) return null;
     return { key: keys, hatch: shown, unit: lookUnit(unit), swatches, motifs: documentPatterns(model), expert: has("motifs") };
+  }
+
+  /// La sezione «Connettore» per gli oggetti scelti `units`, di chiavi
+  /// `keys`; `null` se fra loro non c'è un connettore.
+  function connectorSection(model: DocumentModel, units: readonly Unit[], keys: string): ConnectorPanelView | null {
+    const index = currentIndex();
+    if (connectorRead?.index !== index || connectorRead.keys !== keys) {
+      connectorRead = { index, keys, view: connectorView(model, units, (id) => engine.holder(id)) };
+    }
+    return connectorRead.view === null ? null : { key: keys, ...connectorRead.view };
   }
 
   /// La sezione «Sfumatura» per gli oggetti scelti `units`, di chiavi
@@ -5882,10 +5996,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const moved = moveOps(units, dx, dy, newIds());
     let bounds: Bounds | null = null;
     for (const unit of units) bounds = union(bounds, translated(unit.bounds, dx, dy));
+    const hooked = hookedIn(units);
     const outcome = changeFromPanel("draw.action.move", moved.ops, moved.keys, bounds);
+    if (outcome !== null) return outcome;
     // La cornice che più oggetti tengono si sposta con loro.
-    if (outcome === null && units.length > 1 && frame.matrix !== IDENTITY) keepFrame(movedFrame(frame, translate(dx, dy)));
-    return outcome;
+    if (units.length > 1 && frame.matrix !== IDENTITY) keepFrame(movedFrame(frame, translate(dx, dy)));
+    const detached = detachedNote(hooked);
+    if (detached !== "") announce(detached);
+    return null;
   };
 
   /// Applica `m`, una trasformazione della cornice `frame`, dal pannello.
@@ -6110,6 +6228,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return blurred ? t("draw.effects.full.blur") : t("draw.effects.full", { max: String(MAX_EFFECTS) });
     }
     return changeFromPanel(label, changed.ops, changed.keys);
+  }
+
+  // --- Il connettore nelle proprietà ----------------------------------------
+
+  /// Il cambio `change` dei connettori scelti, dalla sezione «Connettore»,
+  /// col nome `label` nella cronologia. Una scelta (tipo, aggancio, verso)
+  /// dice a quanti connettori è arrivata; il testo di un'etichetta no, che si
+  /// legge. Il tipo scelto è anche quello dei connettori che lo strumento
+  /// disegna dopo. `null` se è fatto, altrimenti perché no.
+  function changeConnector(change: ConnectorChange, label: DrawKey): string | null {
+    settleCrop();
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    if ("kind" in change) connectorKind = change.kind;
+    const changed = connectorOps(model, units, change, (id) => engine.holder(id), measureText, newIds(), { color: textStyle.color, size: textStyle.width });
+    const chosen = !("label" in change);
+    if (changed.ops.length === 0) {
+      if (chosen) announce(t("draw.unchanged"));
+      return null;
+    }
+    const failure = changeFromPanel(label, changed.ops, changed.keys);
+    if (failure !== null || !chosen) return failure;
+    announce(plural(changed.reached, "draw.connector.applied.one", "draw.connector.applied.other"));
+    return null;
   }
 
   // --- Le campiture e i motivi -----------------------------------------------
@@ -6765,6 +6908,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     booleanButton.hidden = !has("boolean");
     maskButton.hidden = !has("masks");
     motifButton.hidden = !has("motifs");
+    connectButton.hidden = !has("connector") || units.filter((unit) => attachable(unit.node)).length < 2;
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
     textPathButton.hidden = !has("typeset") || !units.some((unit) => unit.role === "text");
@@ -6877,12 +7021,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Il valore con cui un oggetto nuovo scrive `color`, il colore dello
-  /// strumento: il campione da cui il colore viene, se il disegno lo ha
-  /// ancora di quel colore, così che l'oggetto lo segua; se no il colore.
-  function drawnPaint(color: string): string {
-    const { swatch } = style();
+  /// strumento o dello stile `from`: il campione da cui il colore viene, se
+  /// il disegno lo ha ancora di quel colore, così che l'oggetto lo segua; se
+  /// no il colore.
+  function drawnPaint(color: string, from: DrawStyle = style()): string {
+    const { swatch } = from;
     const model = engine.model;
-    if (swatch === null || model === null || style().color !== color) return color;
+    if (swatch === null || model === null || from.color !== color) return color;
     const found = documentSwatches(model).find((each) => each.id === swatch);
     return found?.color === color ? swatchPaint(found) : color;
   }
@@ -7110,18 +7255,62 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     replay(history.redo(engine), "redo");
   }
 
+  /// `units` con le etichette dei connettori che contengono, che vanno con
+  /// loro quando si eliminano, si copiano o si duplicano: quelle che si
+  /// scelgono, cioè non bloccate né nascoste.
+  const withLabels = (units: readonly Unit[]): Unit[] => {
+    const model = engine.model;
+    if (model === null || !units.some((unit) => unit.role === "connector" || unit.node.kind === "container")) return [...units];
+    const index = currentIndex();
+    const out = [...units];
+    for (const label of labelsOf(model, units.map((unit) => unit.node))) {
+      const unit = index.get(keyOfNode(label));
+      if (unit !== null && !out.some((each) => each.key === unit.key)) out.push(unit);
+    }
+    return out;
+  };
+
   function deleteSelection(): void {
     if (!editable()) return;
     settleCrop();
     const units = selectedUnits();
     if (units.length === 0) return;
     cancelGesture();
-    if (commit("draw.action.delete", asGesture(removeOps(units))) === null) return;
+    if (commit("draw.action.delete", asGesture(removeOps(withLabels(units)))) === null) return;
     selection = [];
     syncControls();
     showHandles();
     announce(`${plural(units.length, "draw.deleted.one", "draw.deleted.other")} ${objects()}`);
   }
+
+  /// Gli id dei connettori fra `units`, o dentro di loro, con almeno un capo
+  /// agganciato: dopo uno spostamento `detachedNote` dice quanti si sono
+  /// staccati.
+  const hookedIn = (units: readonly Unit[]): ReadonlySet<string> => {
+    const out = new Set<string>();
+    const walk = (node: ElementPart): void => {
+      const facts = node.details?.connector;
+      if (facts !== undefined) {
+        if (node.facts.id !== null && (facts.from !== null || facts.to !== null)) out.add(node.facts.id);
+      } else if (node.kind === "container") {
+        for (const child of elementChildren(node)) walk(child);
+      }
+    };
+    for (const unit of units) walk(unit.node);
+    return out;
+  };
+
+  /// Ciò che si dice dei connettori di `hooked` che uno spostamento, una
+  /// rotazione o un cambio di misura ha staccato, perché fatto senza i loro
+  /// oggetti: sul foglio non si vede.
+  const detachedNote = (hooked: ReadonlySet<string>): string => {
+    let count = 0;
+    for (const id of hooked) {
+      const facts = engine.holder(id)?.details?.connector;
+      if (facts !== undefined && facts.from === null && facts.to === null) count++;
+    }
+    return count === 0 ? "" : plural(count, "draw.connector.detached.one", "draw.connector.detached.other");
+  };
 
   /// Sposta gli oggetti scelti e ne tiene la selezione: un oggetto senza id
   /// lo riceve, e la sua chiave diventa quella. `note` dice, dopo, a che cosa
@@ -7136,12 +7325,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const page = grownPage(bounds);
     const ops: Op[] = [...moved.ops];
     if (page !== null) ops.push({ op: "page", viewBox: page });
+    const hooked = hookedIn(units);
     if (commit("draw.action.move", asGesture(ops)) === null) return;
     selection = inOrder(moved.keys);
     if (frame !== null && frame.matrix !== IDENTITY) kept = { index: currentIndex(), keys: selection.join("\n"), frame: movedFrame(frame, translate(dx, dy)) };
     syncControls();
     showHandles();
-    announce(noted(plural(units.length, "draw.moved.one", "draw.moved.other"), note));
+    announce(noted(noted(plural(units.length, "draw.moved.one", "draw.moved.other"), note), detachedNote(hooked)));
   };
 
   function select(keys: readonly string[]): void {
@@ -7451,6 +7641,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // strumento Sfumatura che cosa sposterebbe.
     if (id === "eyedropper" && pointerAt !== null) hoverDropper(pointerAt.at, pointerAt.pointer);
     if (id === "gradient" && pointerAt !== null) hoverGradient(pointerAt.at, pointerAt.pointer);
+    connectorHover = null;
+    if (id === "connector" && pointerAt !== null) hoverConnector(pointerAt.at, pointerAt.pointer);
     const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi; col
     // Costruttore, su quante regioni lavora; con lo strumento Tavola, quale
@@ -8263,6 +8455,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         const { color, width } = style();
         return { ...base, kind: "shape", tool, color, width, to, ids, from: null, end: null };
       }
+      case "connector":
+        return { ...base, kind: "connector", ids: newIds(), from: null, end: null, grab: null, start: null, hook: null, dragging: false };
       case "bezier": {
         // Il livello si guarda a ogni nodo: se non riceve più, lo si dice e
         // il nodo non entra.
@@ -8291,6 +8485,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           area: null,
           matrix: null,
           angle: 0,
+          lines: null,
         };
       case "lasso":
         return { ...base, kind: "lasso", points: [], base: [...selection], mode: shift ? "add" : alt ? "remove" : "replace", dragging: false };
@@ -8497,15 +8692,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     if (transformed.changed === 0) return;
+    const hooked = hookedIn(units);
     if (arrange(turn === null ? "draw.action.resize" : "draw.action.rotate", transformed, boundsAfter(units, m)) === null) return;
     const after = movedFrame(frame, m);
     kept = units.length > 1 ? { index: currentIndex(), keys: selection.join("\n"), frame: after } : null;
     showHandles();
     if (turn === null) {
       const [width, height] = frameSize(after);
-      announce(noted(t("draw.resized", { width: lengthSpoken(width), height: lengthSpoken(height) }), note));
+      announce(noted(noted(t("draw.resized", { width: lengthSpoken(width), height: lengthSpoken(height) }), note), detachedNote(hooked)));
     } else {
-      announce(t(turn > 0 ? "draw.rotated.clockwise" : "draw.rotated.counter", { angle: degreesText(Math.abs(turn)) }));
+      announce(noted(t(turn > 0 ? "draw.rotated.clockwise" : "draw.rotated.counter", { angle: degreesText(Math.abs(turn)) }), detachedNote(hooked)));
     }
   };
 
@@ -8707,7 +8903,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         for (const paint of unit.paints) transforms.set(paint, value);
         followImages(carried, unit, next);
       }
-      painter.setDraft({ transforms, carried });
+      const paths = g.matrix === null ? undefined : followingDraft(g, g.matrix, transforms);
+      painter.setDraft({ transforms, carried, ...(paths === undefined ? {} : { paths }) });
     } else if (g.mode === "move") {
       const [dx, dy] = moveDelta(g);
       const transforms = new Map<PaintNode, string | null>();
@@ -8719,7 +8916,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         for (const paint of unit.paints) transforms.set(paint, value);
         followImages(carried, unit, moved);
       }
-      painter.setDraft({ transforms, carried });
+      const paths = followingDraft(g, translate(dx, dy), transforms);
+      painter.setDraft({ transforms, carried, paths });
     } else {
       selection = inOrder([...g.base, ...marqueed(g.from, g.end).map((unit) => unit.key)]);
       syncControls();
@@ -12508,6 +12706,370 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (commit(toolLabel(g.tool), asGesture(ops)) !== null) announce(noted(`${added} ${objects()}`, note));
   };
 
+  // --- Il Connettore ------------------------------------------------------------
+  //
+  // Un connettore si tira da un oggetto a un altro. Sopra un oggetto se ne
+  // vedono il contorno e i cinque punti d'aggancio, il centro e i centri dei
+  // lati: vicino a uno il capo si aggancia lì, altrove FubDraw sceglie il
+  // lato verso l'altro capo. Il percorso lo calcola `connectors.ts`, e il
+  // motore lo ricalcola quando gli oggetti si muovono.
+
+  /// L'aggancio a `unit` del capo in `p`: al punto più vicino entro
+  /// [`ANCHOR_PX`], se no scelto da FubDraw. `null` se `unit` non ha un
+  /// contorno a cui agganciarsi.
+  const hookOn = (unit: Unit, p: Point, pointer: InkPointerType): Hook | null => {
+    const points = anchorPoints(unit.node, measureText);
+    if (points === null) return null;
+    let anchor: Anchor = "auto";
+    let near = ANCHOR_PX[pointer] / camera.scale;
+    for (const [name, at] of points) {
+      const apart = Math.hypot(p[0] - at[0], p[1] - at[1]);
+      if (apart <= near) {
+        anchor = name;
+        near = apart;
+      }
+    }
+    return { unit, anchor, points };
+  };
+
+  /// L'oggetto sotto `p` a cui si aggancerebbe un capo: il più in alto che
+  /// `p` tocca, o se nessuno il più in alto nel cui riquadro cade; con Ctrl
+  /// o ⌘ quello più dentro, come quando si sceglie, ma una linea che passa
+  /// sopra non lo copre. Mai `besides`, l'oggetto dell'altro capo, né chi lo
+  /// contiene o vi sta dentro.
+  const hookAt = (p: Point, pointer: InkPointerType, besides: ElementPart | null): Hook | null => {
+    const index = currentIndex();
+    const reach = HIT_PX[pointer] / camera.scale;
+    const fits = (unit: Unit): boolean => attachable(unit.node) && (besides === null || !related(unit.node, besides));
+    /// L'oggetto più dentro, fra quelli a cui ci si può agganciare, che `p`
+    /// tocca: scende nei gruppi, anche in quello di `besides`, dove sta
+    /// l'altro capo.
+    const deepest = (): Unit | null => {
+      for (let i = index.units.length - 1; i >= 0; i--) {
+        let unit = index.units[i]!;
+        if (!attachable(unit.node) || !unit.hits(p, reach)) continue;
+        for (;;) {
+          const inner = index.children(unit).reverse().find((child) => attachable(child.node) && child.hits(p, reach));
+          if (inner === undefined) return unit;
+          unit = inner;
+        }
+      }
+      return null;
+    };
+    if (free) {
+      const deep = deepest();
+      if (deep !== null && fits(deep)) return hookOn(deep, p, pointer);
+    }
+    const units = index.units;
+    for (let i = units.length - 1; i >= 0; i--) {
+      const unit = units[i]!;
+      if (fits(unit) && unit.hits(p, reach)) return hookOn(unit, p, pointer);
+    }
+    for (let i = units.length - 1; i >= 0; i--) {
+      const unit = units[i]!;
+      if (fits(unit) && unit.bounds !== null && insideBounds(unit.bounds, p)) return hookOn(unit, p, pointer);
+    }
+    return null;
+  };
+
+  /// I capi dei connettori scelti, che si prendono per riagganciarli: non
+  /// quelli bloccati o nascosti.
+  const lineEndsNow = (): readonly LineEnd[] => {
+    const model = engine.model;
+    if (model === null || selection.length === 0) return [];
+    const index = currentIndex();
+    if (lineEndsFor?.index !== index) lineEndsFor = { index, ends: lineEnds(model, measureText).filter((end) => index.get(end.id) !== null) };
+    return lineEndsFor.ends.filter((end) => selection.includes(end.id));
+  };
+
+  /// Il capo di un connettore scelto che `p` prende: il più vicino.
+  const lineEndAt = (p: Point, pointer: InkPointerType): LineEnd | null => {
+    let best: LineEnd | null = null;
+    let near = NODE_PX[pointer] / camera.scale;
+    for (const end of lineEndsNow()) {
+      const apart = Math.hypot(p[0] - end.at[0], p[1] - end.at[1]);
+      if (apart <= near) {
+        best = end;
+        near = apart;
+      }
+    }
+    return best;
+  };
+
+  /// Il puntatore passa sopra `p` senza premere: con lo strumento
+  /// Connettore l'oggetto sotto mostra il contorno e i punti d'aggancio, e
+  /// sopra il capo di un connettore scelto il cursore dice che lo sposta.
+  const hoverConnector = (p: Point | null, pointer: InkPointerType): void => {
+    if (tool !== "connector") return;
+    const end = p === null || !editable() ? null : lineEndAt(p, pointer);
+    const hook = p === null || end !== null || !editable() ? null : hookAt(p, pointer, null);
+    const before = connectorHover;
+    connectorHover = end === null && hook === null ? null : { hook, end };
+    showGrip(end === null ? null : "move");
+    const same =
+      before?.hook?.unit.node === connectorHover?.hook?.unit.node &&
+      before?.hook?.anchor === connectorHover?.hook?.anchor &&
+      before?.end?.id === connectorHover?.end?.id &&
+      before?.end?.end === connectorHover?.end?.end;
+    if (!same) showHandles();
+  };
+
+  /// Le maniglie dello strumento Connettore: il contorno e i punti
+  /// d'aggancio dell'oggetto sotto il puntatore, e di quello da cui parte il
+  /// connettore che si tira; i capi dei connettori scelti.
+  const connectorHandles = (): OverlayHandle[] => {
+    if (tool !== "connector") return [];
+    const g = current?.kind === "connector" ? current : null;
+    const out: OverlayHandle[] = [];
+    const show = (hook: Hook | null, hint: boolean): void => {
+      if (hook === null) return;
+      const segments = outlineSegments(hook.unit.node, measureText);
+      if (segments !== null) out.push({ kind: "outline", segments, matrix: IDENTITY, hint });
+      for (const [name, [x, y]] of hook.points) {
+        const chosen = name === hook.anchor;
+        out.push({ kind: "node", x, y, shape: "circle", selected: chosen, ...(chosen ? {} : { hint: true }) });
+      }
+    };
+    if (g === null) {
+      show(connectorHover?.hook ?? null, true);
+    } else {
+      show(g.start, false);
+      if (g.dragging) show(g.hook, false);
+    }
+    if (g !== null && g.grab !== null && g.dragging) return out;
+    for (const end of lineEndsNow()) {
+      const chosen = (g?.grab?.end ?? connectorHover?.end) ?? null;
+      out.push({ kind: "node", x: end.at[0], y: end.at[1], shape: "square", selected: chosen !== null && chosen.id === end.id && chosen.end === end.end });
+    }
+    return out;
+  };
+
+  /// Il primo punto di un gesto del Connettore: il capo di un connettore
+  /// scelto, o l'oggetto da cui parte un connettore nuovo.
+  const connectorStart = (g: ConnectorGesture, p: Point): void => {
+    g.from = p;
+    connectorHover = null;
+    const end = lineEndAt(p, g.pointer);
+    const now = end === null ? null : endInputs(end.line, (id) => engine.holder(id), measureText);
+    if (end !== null && now !== null) {
+      g.grab = { end, other: end.end === "from" ? now[1] : now[0] };
+      showGrip("move");
+    } else {
+      g.start = hookAt(p, g.pointer, null);
+    }
+    showHandles();
+  };
+
+  /// I capi del connettore che `g` tira, o di quello di cui sposta un capo:
+  /// agganciati all'oggetto sotto, o liberi dove sono, sulla griglia se
+  /// aggancia.
+  const gestureEnds = (g: ConnectorGesture): [EndInput, EndInput] | null => {
+    if (g.from === null || g.end === null) return null;
+    const moving: EndInput = g.hook !== null ? { node: g.hook.unit.node, anchor: g.hook.anchor } : { at: snapped(g.end) };
+    if (g.grab !== null) return g.grab.end.end === "from" ? [moving, g.grab.other] : [g.grab.other, moving];
+    const start: EndInput = g.start !== null ? { node: g.start.unit.node, anchor: g.start.anchor } : { at: snapped(g.from) };
+    return [start, moving];
+  };
+
+  /// Il gesto `g` col puntatore in `end`: oltre la soglia del
+  /// trascinamento il connettore si vede dove andrebbe, agganciato
+  /// all'oggetto sotto il puntatore.
+  const connectorUpdate = (g: ConnectorGesture): void => {
+    if (g.from === null || g.end === null) return;
+    if (!g.dragging) {
+      if (Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale <= DRAG_PX[g.pointer]) return;
+      g.dragging = true;
+    }
+    const besides = g.grab !== null ? ("node" in g.grab.other ? g.grab.other.node : null) : (g.start?.unit.node ?? null);
+    g.hook = hookAt(g.end, g.pointer, besides);
+    const ends = gestureEnds(g);
+    if (ends === null) return;
+    if (g.grab !== null) {
+      const line = engine.holder(g.grab.end.id);
+      const kind = line?.details?.connector?.geom.kind;
+      const attrs = line === null || kind === undefined ? null : connectorAttrsFor(line, kind, ends[0], ends[1], measureText);
+      painter.setDraft(line === null || attrs === null ? null : { paths: new Map(builder.paintsOf(line).map((paint) => [paint, attrs.d])) });
+    } else {
+      const to = destinationNow();
+      if (to !== null) {
+        const { color, width } = style();
+        const points = sceneRoute(connectorKind, ends[0], ends[1], measureText).map((p) => apply(to.inverse, p));
+        const elem = connectorElem("", connectorKind, points, null, null, { paint: color, width, tip: previewTip });
+        showShape(elem, to.matrix, [tipElem(previewTip, { shape: "triangle", size: DEFAULT_TIP_SIZE }, "end", color, 1)]);
+      }
+    }
+    showHandles();
+  };
+
+  /// Il gesto `g` finito: un trascinamento scrive il connettore nuovo, o
+  /// riaggancia il capo preso; un tocco sceglie ciò che tocca, con Maiusc
+  /// lo aggiunge o lo toglie, con Ctrl o ⌘ dentro i gruppi.
+  const connectorEnd = (g: ConnectorGesture): void => {
+    // Il connettore è quello dei modificatori di quando il puntatore si alza.
+    if (g.dragging) connectorUpdate(g);
+    current = null;
+    showGrip(null);
+    showShape(null, IDENTITY);
+    painter.setDraft(null);
+    if (g.from === null) return;
+    if (!g.dragging) {
+      const index = currentIndex();
+      const reach = HIT_PX[g.pointer] / camera.scale;
+      const hit = free && has("selection") ? index.deepAt(g.from, reach) : index.at(g.from, reach);
+      if (hit === null) {
+        if (!shift) select([]);
+      } else if (shift && has("selection")) {
+        select(selection.includes(hit.key)
+          ? selection.filter((key) => key !== hit.key)
+          : [...selectedUnits().filter((unit) => !holdsPath(unit.path, hit.path)).map((unit) => unit.key), hit.key]);
+      } else {
+        select([hit.key]);
+      }
+      return;
+    }
+    const ends = gestureEnds(g);
+    if (ends !== null) {
+      if (g.grab !== null) hookEnd(g, g.grab.end, ends);
+      else addConnector(g, ends);
+    }
+    showHandles();
+  };
+
+  /// Dove va un connettore nuovo, senza dirlo se non può: per l'anteprima.
+  const destinationNow = (): Destination | null => {
+    const quiet = newIds();
+    const model = engine.model;
+    if (folio !== undefined) return model === null ? null : folio.destination(model, currentIndex(), quiet, (id) => engine.holder(id) !== null);
+    const group = isolatedUnit();
+    if (group !== null) return destinationInto(group, quiet);
+    const layer = has("layers") ? currentLayer() : null;
+    if (layer === null) return destination(currentIndex(), quiet);
+    return layerRefusal(layer) === null ? destinationIn(layer, quiet) : null;
+  };
+
+  /// L'aggancio di `hook` come lo scrive un capo; un oggetto senza id ne
+  /// riceve uno in `ops`.
+  const hookedEnd = (hook: Hook | null, ids: NewIds, ops: Op[]): ConnectorEnd | null => {
+    if (hook === null) return null;
+    let id = hook.unit.id;
+    if (id === null) {
+      id = ids.next("object");
+      ops.push({ op: "ident", path: hook.unit.path, tag: hook.unit.tag, id });
+    }
+    return { id, anchor: hook.anchor };
+  };
+
+  /// Scrive il connettore che `g` ha tirato fra `from` e `to`: del tipo
+  /// scelto per ultimo, col colore e lo spessore della penna e la punta alla
+  /// fine. Resta scelto, e lo strumento resta il Connettore.
+  const addConnector = (g: ConnectorGesture, [from, to]: [EndInput, EndInput]): void => {
+    const model = engine.model;
+    const dest = target(g.ids);
+    if (model === null || dest === null) return;
+    const kind = connectorKind;
+    const scene = sceneRoute(kind, from, to, measureText);
+    const first = scene[0]!;
+    const last = scene[scene.length - 1]!;
+    // Fra due punti liberi quasi uguali non c'è niente da unire.
+    if (g.start === null && g.hook === null && Math.hypot(last[0] - first[0], last[1] - first[1]) * camera.scale < MIN_SHAPE_PX) return;
+    const ops: Op[] = [...dest.prelude];
+    const start = hookedEnd(g.start, g.ids, ops);
+    const finish = hookedEnd(g.hook, g.ids, ops);
+    const id = g.ids.next("object");
+    const shelf = new Shelf(model, g.ids);
+    const { color, width } = style();
+    const paint = drawnPaint(color);
+    const tip = newTip(shelf, paint, color);
+    const elem = connectorElem(id, kind, scene.map((p) => apply(dest.inverse, p)), start, finish, { paint, width, tip });
+    ops.push(...shelf.ops(), addOp(dest, elem));
+    const page = grownPage(elemBounds(elem, dest.matrix));
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    if (commit(toolLabel("connector"), asGesture(ops)) === null) return;
+    select([id]);
+    const names = { from: g.start === null ? "" : nameOfNode(g.start.unit.node), to: g.hook === null ? "" : nameOfNode(g.hook.unit.node) };
+    const said = g.start !== null && g.hook !== null ? "draw.added.connector.both" : g.start !== null ? "draw.added.connector.from" : g.hook !== null ? "draw.added.connector.to" : "draw.added.connector";
+    announce(`${t(said, names)} ${objects()}`);
+  };
+
+  /// La punta di un connettore nuovo, un triangolo medio alla fine, del
+  /// colore con cui si scrive `color`, `paint`: un marcatore di `shelf`.
+  const newTip = (shelf: Shelf, paint: string, color: string): string => {
+    const parsed = parsePaint(color);
+    return shelf.idFor({ shape: "triangle", size: DEFAULT_TIP_SIZE }, "end", { paint: paint !== color || parsed === null ? paint : paintCode(parsed), opacity: 1 });
+  };
+
+  /// «Collega le forme scelte», dallo Standard: ogni oggetto scelto si
+  /// unisce al seguente sul foglio con un connettore del tipo scelto per
+  /// ultimo, col colore e lo spessore della penna. I connettori nuovi
+  /// restano scelti, e il pannello li mostra.
+  function connectSelection(): void {
+    // In sola lettura il comando c'è e lo dice, invece di non fare niente.
+    if (has("connector") && !editable()) {
+      announce(t("draw.rejected", { reason: t("draw.reason.read_only") }));
+      return;
+    }
+    const units = arranging("connector");
+    const model = engine.model;
+    if (units === null || model === null) return;
+    const ids = newIds();
+    const to = target(ids);
+    if (to === null) return;
+    const pen = styles.pen;
+    const paint = drawnPaint(pen.color, pen);
+    const shelf = new Shelf(model, ids);
+    const made = connectOps(model, units, connectorKind, { paint, width: pen.width, tip: newTip(shelf, paint, pen.color) }, to, ids, measureText);
+    if (made === null) {
+      announce(t("draw.connect.few"));
+      return;
+    }
+    if (made.lines.length === 0) {
+      announce(t("draw.connect.already"));
+      return;
+    }
+    if (commit("draw.action.connect", asGesture([...to.prelude, ...made.idents, ...shelf.ops(), ...made.adds])) === null) return;
+    select(made.lines);
+    const skipped = made.skipped === 0 ? "" : ` ${plural(made.skipped, "draw.connect.skipped.one", "draw.connect.skipped.other")}`;
+    announce(`${plural(made.lines.length, "draw.connect.done.one", "draw.connect.done.other")}${skipped} ${objects()}`);
+  }
+
+  /// Riaggancia il capo `grabbed` all'oggetto sotto il puntatore, o lo
+  /// lascia libero dove si è rilasciato; il percorso si rifà con l'altro
+  /// capo dov'è.
+  const hookEnd = (g: ConnectorGesture, grabbed: LineEnd, [from, to]: [EndInput, EndInput]): void => {
+    const line = engine.holder(grabbed.id);
+    const kind = line?.details?.connector?.geom.kind;
+    if (line === null || kind === undefined) return;
+    const attrs = connectorAttrsFor(line, kind, from, to, measureText);
+    if (attrs === null) return;
+    const ops: Op[] = [];
+    const end = hookedEnd(g.hook, g.ids, ops);
+    ops.push({ op: "set", id: grabbed.id, attrs: { ...attrs, [`fub:${grabbed.end}`]: end === null ? null : writeConnectorEnd(end) } });
+    if (commit("draw.action.connector_anchor", asGesture(ops)) === null) return;
+    const which = grabbed.end === "from" ? "from" : "to";
+    announce(g.hook === null ? t(`draw.connector.freed.${which}`) : t(`draw.connector.hooked.${which}`, { name: nameOfNode(g.hook.unit.node) }));
+  };
+
+  /// I connettori che seguono gli oggetti presi da `g`, portati di `m`, una
+  /// trasformazione della scena, per l'anteprima: i loro `d`, e in
+  /// `transforms` le loro etichette dove vanno, se `g` non le porta già.
+  const followingDraft = (g: SelectGesture, m: Matrix, transforms: Map<PaintNode, string | null>): Map<PaintNode, string> => {
+    const paths = new Map<PaintNode, string>();
+    const model = engine.model;
+    if (model === null) return paths;
+    g.lines ??= new ConnectorPreview(model, new Set(g.units.map((unit) => unit.node)), (id) => engine.holder(id), measureText);
+    if (g.lines.empty) return paths;
+    const draft = g.lines.at(m);
+    for (const [id, d] of draft.paths) {
+      const node = engine.holder(id);
+      for (const paint of node === null ? [] : builder.paintsOf(node)) paths.set(paint, d);
+    }
+    for (const [id, value] of draft.transforms) {
+      const node = engine.holder(id);
+      for (const paint of node === null ? [] : builder.paintsOf(node)) if (!transforms.has(paint)) transforms.set(paint, value);
+    }
+    return paths;
+  };
+
   // --- La penna di Bézier ------------------------------------------------------
   //
   // Il tracciato si disegna in più gesti, e vive fra un gesto e l'altro: un
@@ -13088,7 +13650,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       painter.setDraft(null);
       return;
     }
-    if (commit("draw.action.erase", asGesture(removeOps(units))) !== null) {
+    if (commit("draw.action.erase", asGesture(removeOps(withLabels(units)))) !== null) {
       announce(`${plural(units.length, "draw.erased.one", "draw.erased.other")} ${objects()}`);
     }
   };
@@ -13201,8 +13763,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // Sopra una maniglia della cornice o una guida, il cursore dice che
       // cosa fa; con lo strumento Nodi, la forma sotto mostra i suoi nodi,
       // col Costruttore la regione sotto si accende, con le Forbici si vede
-      // dove tagliano, col contagocce che cosa prende e con lo strumento
-      // Sfumatura che cosa sposta.
+      // dove tagliano, col contagocce che cosa prende, con lo strumento
+      // Sfumatura che cosa sposta e col Connettore dove si aggancia.
       if (current === null && pressed === null) {
         hoverGrip(event);
         hoverGuide(event);
@@ -13212,6 +13774,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hoverWidth(event.buttons === 0 ? point : null, pointer);
         hoverDropper(event.buttons === 0 ? point : null, pointer);
         hoverGradient(event.buttons === 0 ? point : null, pointer);
+        hoverConnector(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -13319,6 +13882,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     hoverCut(null, "mouse");
     hoverWidth(null, "mouse");
     hoverDropper(null, "mouse");
+    hoverConnector(null, "mouse");
     if (hover !== null) {
       hover = null;
       showBezier();
@@ -13447,6 +14011,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           g.end = toPoint(samples[samples.length - 1]!);
           cropUpdate(g);
           break;
+        case "connector":
+          if (g.from === null) connectorStart(g, toPoint(samples[0]!));
+          g.end = toPoint(samples[samples.length - 1]!);
+          connectorUpdate(g);
+          break;
         case "refused":
           break;
       }
@@ -13547,6 +14116,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "crop":
           cropEnd(g, stroke.timeStamp);
           return;
+        case "connector":
+          connectorEnd(g);
+          return;
         case "refused":
           current = null;
           return;
@@ -13558,7 +14130,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       current = null;
       if (g.kind === "ink") clearTimeout(holdTimer);
       if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso" || (g.kind === "builder" && g.mode === "objects")) select(g.base);
-      if (g.kind === "select" || g.kind === "guide" || g.kind === "board" || g.kind === "gradient") showGrip(null);
+      if (g.kind === "select" || g.kind === "guide" || g.kind === "board" || g.kind === "gradient" || g.kind === "connector") showGrip(null);
       // I nodi tornano com'erano, e le forme e gli oggetti con loro.
       if (g.kind === "nodes") {
         focused = g.shapes;
@@ -14609,12 +15181,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // ciò che ci stava sopra ci resta.
     const distance = COPY_STEP_PX / camera.scale;
     const step = gridOn() ? wholeSteps(distance, stepNow()) : roundDelta(distance);
-    const arranged = duplicateOps(engine.model!, units, step, step, newIds());
+    const copied = withLabels(units);
+    const arranged = duplicateOps(engine.model!, copied, step, step, newIds());
     if (arranged === null) {
       announce(t("draw.duplicate.foreign"));
       return;
     }
-    if (arrange("draw.action.duplicate", arranged, translated(boundsOf(units), step, step)) === null) return;
+    if (arrange("draw.action.duplicate", arranged, translated(boundsOf(copied), step, step)) === null) return;
     announce(`${plural(units.length, "draw.duplicated.one", "draw.duplicated.other")} ${objects()}`);
   }
 
@@ -15005,6 +15578,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       { label: t("draw.unlock_all"), disabled: !unlockable, ...(canEdit && !unlockable ? { description: t("draw.unlocked.none") } : {}), run: () => unflagAll("locked") },
       { label: t("draw.show_all"), disabled: !showable, ...(canEdit && !showable ? { description: t("draw.shown.none") } : {}), run: () => unflagAll("hidden") },
     );
+    if (has("connector")) {
+      const few = units.filter((unit) => attachable(unit.node)).length < 2;
+      items.push({ label: t("draw.connect"), separator: true, disabled: !canEdit || few, ...(canEdit && few ? { description: t("draw.connect.few") } : {}), run: () => connectSelection() });
+    }
     if (has("motifs")) {
       const reason = motifReason();
       items.push({ label: t("draw.hatch.motif.make"), separator: true, disabled: reason !== null, ...(reason === null ? {} : { description: reason }), run: () => motifFromSelection() });
@@ -18514,7 +19091,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     if (kind === "cut" && !editable()) return;
     event.preventDefault();
-    const svg = selectionSvg(units);
+    const svg = selectionSvg(withLabels(units));
     if (svg === null) {
       announce(t("draw.copy.failed"));
       return;
@@ -18528,7 +19105,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     cancelGesture();
-    if (commit("draw.action.cut", asGesture(removeOps(units))) === null) return;
+    if (commit("draw.action.cut", asGesture(removeOps(withLabels(units)))) === null) return;
     selection = [];
     syncControls();
     showHandles();
@@ -19552,6 +20129,7 @@ const PROFILE_LABELS: Readonly<Record<Preset, DrawKey>> = {
 const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
   text: "draw.nodes.text",
   image: "draw.nodes.image",
+  connector: "draw.nodes.connector",
   unreadable: "draw.nodes.unreadable",
   empty: "draw.nodes.empty",
   stroke: "draw.nodes.stroke_fixed",
