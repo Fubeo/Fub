@@ -136,6 +136,14 @@
     outline: 2px dashed Highlight;
     outline-offset: -2px;
   }
+
+  /* La riga che divide le voci di un menu è un fondo, e i fondi si
+     forzano: resta del colore del testo, perché i gruppi si vedano. La
+     pelle viene dopo questo foglio e colora lo stesso selettore, quindi il
+     pavimento vince con `!important`. */
+  .context-menu .menu-separator {
+    background: CanvasText !important;
+  }
 }
 
 /* Il fuoco si vede, ovunque e per costruzione (§12.4).
@@ -2541,6 +2549,39 @@ textarea.draw-inspector-input {
 textarea.draw-properties-input {
   resize: vertical;
 }
+/* Un campo a menu è un pulsante largo quanto il campo: la figura della
+   scelta, le parole che la dicono e, in fondo, la freccia che dice che si
+   apre. Le parole vanno a capo invece di uscire dal pannello, e il posto
+   della figura resta anche quando non ce n'è una. */
+.draw-properties-menu {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  text-align: start;
+}
+.draw-properties-menu-picture {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+.draw-properties-menu-picture > svg {
+  width: 24px;
+  height: 24px;
+}
+.draw-properties-menu-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.draw-properties-menu > svg {
+  flex: none;
+}
 .draw-properties-unit {
   flex: none;
 }
@@ -2891,6 +2932,12 @@ textarea.draw-properties-input {
   .draw-width-bar,
   .draw-swatch-frame {
     background: CanvasText;
+  }
+  /* Il pulsante di un campo a menu aperto: il fondo della pelle si forza,
+     e il menu ha il fuoco; l'anello dice di chi è il menu. */
+  .draw-properties-menu[aria-expanded="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
   /* La barra e i punti della sfumatura tengono i colori del disegno, col
      bordo del testo; il punto scelto ha l'anello e la punta della scelta. */

@@ -16,6 +16,12 @@
 // - **Una linea sola.** Un tracciato di più pezzi, un contorno tratteggiato,
 //   un tratto a penna, una freccia, un testo e un'immagine restano come
 //   sono, e il comando li conta.
+// - **Una linea con le punte resta uniforme.** Le punte della raccolta
+//   crescono con lo spessore della linea, che ora non ha più uno spessore
+//   solo: il comando la lascia com'è e la conta, e per cambiarla si tolgono
+//   prima le punte. Lo stesso vale per un marcatore di un altro programma
+//   all'inizio o alla fine; uno a metà la rende una parte di un altro
+//   programma.
 
 import { pathOf, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
@@ -26,6 +32,7 @@ import type { NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { strokeAsWidth, strokeOf, widthAsStroke } from "./paths";
 import { flippedProfile, presetProfile, profileWidth, swappedProfile, widthAttrs, type Preset, type WidthShape } from "./profile";
+import { markedPlaces } from "./tips";
 import { replaceElem } from "./topath";
 
 /// Una forma che lo strumento Spessore e i profili cambiano: la linea a
@@ -39,9 +46,10 @@ export interface WidthTarget {
 }
 
 /// Perché una forma non ha una linea a spessore variabile: non ha un
-/// contorno che si vede, il contorno è tratteggiato, la linea ha più pezzi,
-/// viene da un altro programma, o non è una forma con una linea.
-export type NoWidth = "unstroked" | "dashed" | "pieces" | "foreign" | "kind";
+/// contorno che si vede, il contorno è tratteggiato, la linea ha le punte,
+/// ha più pezzi, viene da un altro programma, o non è una forma con una
+/// linea.
+export type NoWidth = "unstroked" | "dashed" | "tipped" | "pieces" | "foreign" | "kind";
 
 /// I ruoli il cui contorno diventa una linea a spessore variabile.
 const CONVERTIBLE: ReadonlySet<string> = new Set(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "ngon", "star"]);
@@ -58,6 +66,9 @@ export function widthTarget(node: ElementPart): WidthTarget | NoWidth {
   const stroke = strokeOf(node);
   if (stroke === null) return "unstroked";
   if (stroke.style.dashes.length > 0) return "dashed";
+  const marked = markedPlaces(node);
+  if (marked.has("start") || marked.has("end")) return "tipped";
+  if (marked.has("mid")) return "foreign";
   if (stroke.segments.filter((segment) => segment.kind === "move").length !== 1) return "pieces";
   const h = stroke.style.width / 2;
   const profile: WidthPoint[] = [

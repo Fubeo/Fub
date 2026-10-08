@@ -5,13 +5,16 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
+import { iconEl, iconNames } from "../../../ui/icons";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
+import { closeContextMenu } from "../../../ui/menu";
 import {
   createProperties,
   type ActionState,
   type FieldId,
   type FieldState,
   type FieldSwatch,
+  type MenuChoiceState,
   type NumberState,
   type PaintContrast,
   type Properties,
@@ -23,6 +26,7 @@ import { lengthUnits, PERCENT_UNITS } from "./quantity";
 import type { GradientPanelView } from "./gradient-panel";
 import type { PaintSample } from "./resources";
 import type { ColorsView } from "./swatches-panel";
+import { TIP_SHAPES } from "./tips";
 
 let host: HTMLElement;
 let life: Lifetime;
@@ -60,8 +64,13 @@ let state: {
   name: string | null;
   actions: Partial<Record<string, ActionState>>;
   transform: boolean;
+  /// Le punte delle due estremità, se i campi a menu ci sono.
+  tips: { start: TipLook; end: TipLook } | null;
   only: FieldId[] | null;
 };
+
+/// La punta di un capo: la forma (`null` se sono più d'una) e la misura.
+type TipLook = { shape: string | null; size: string };
 
 const length = (value: number | null, label: string): NumberState => ({
   kind: "number",
@@ -72,6 +81,42 @@ const length = (value: number | null, label: string): NumberState => ({
   relative: true,
   places: 3,
 });
+
+const TIP_SHAPE_NAMES: Array<[string, string]> = [
+  ["none", "Nessuna"],
+  ["triangle", "Triangolo"],
+  ["circle", "Cerchio"],
+];
+const TIP_SIZE_NAMES: Array<[string, string]> = [
+  ["small", "Piccola"],
+  ["medium", "Media"],
+  ["large", "Grande"],
+];
+
+/// Il campo della punta di un capo come lo dà l'editor: le forme con la loro
+/// figura, le misure, che dove non c'è una punta si vedono e non si scelgono,
+/// e lo scambio, che è un comando.
+function tipMenu(end: "start" | "end", look: TipLook): MenuChoiceState {
+  const shape = TIP_SHAPE_NAMES.find(([value]) => value === look.shape);
+  const size = TIP_SIZE_NAMES.find(([value]) => value === look.size)![1].toLowerCase();
+  return {
+    kind: "menu",
+    label: end === "start" ? "Punta d’inizio" : "Punta di fine",
+    value: look.shape,
+    summary: shape === undefined ? "Misto" : look.shape === "none" ? shape[1] : `${shape[1]}, ${size}`,
+    options: [
+      ...TIP_SHAPE_NAMES.map(([value, label]) => ({ value, label, icon: value === "none" ? "draw-tip-none" : `draw-tip-${value}-${end}`, checked: look.shape === value })),
+      ...TIP_SIZE_NAMES.map(([value, label], at) => ({
+        value: `size:${value}`,
+        label,
+        checked: look.size === value,
+        ...(look.shape === "none" ? { disabled: true } : {}),
+        ...(at === 0 ? { separator: true } : {}),
+      })),
+      { value: "swap", label: "Scambia inizio e fine", icon: "draw-tips-swap", action: true, separator: true },
+    ],
+  };
+}
 
 function view(): PropertiesView {
   const fields: Partial<Record<FieldId, FieldState>> = {
@@ -117,6 +162,10 @@ function view(): PropertiesView {
     grid: { kind: "switch", label: "Mostra la griglia", on: state.grid, note: "Le righe si vedono soltanto qui." },
     desc: { kind: "text", label: "Descrizione", value: state.desc },
   };
+  if (state.tips !== null) {
+    fields.tipStart = tipMenu("start", state.tips.start);
+    fields.tipEnd = tipMenu("end", state.tips.end);
+  }
   if (state.name !== null) fields.boardName = { kind: "line", label: "Nome", value: state.name, max: 20 };
   if (state.transform) {
     const draft = (label: string, value: number, unit: string): NumberState => ({ kind: "number", label, value, unit, units: { [unit]: 1 }, relative: false, places: 2 });
@@ -172,6 +221,12 @@ function change(id: FieldId, value: number | string | boolean): string | null {
   else if (id === "grid") state.grid = value as boolean;
   else if (id === "desc") state.desc = value as string;
   else if (id === "boardName") state.name = value as string;
+  else if ((id === "tipStart" || id === "tipEnd") && state.tips !== null) {
+    const end = id === "tipStart" ? "start" : "end";
+    const text = value as string;
+    if (text.startsWith("size:")) state.tips[end] = { ...state.tips[end], size: text.slice("size:".length) };
+    else if (text !== "swap") state.tips[end] = { ...state.tips[end], shape: text };
+  }
   panel.update(view());
   return null;
 }
@@ -261,6 +316,7 @@ beforeEach(() => {
     name: null,
     actions: {},
     transform: false,
+    tips: null,
     only: null,
   };
 });
@@ -869,6 +925,243 @@ describe("le scelte e i pulsanti", () => {
     action("align-left").dispatchEvent(down);
     expect(down.defaultPrevented).toBe(true);
     expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+});
+
+describe("un campo a menu", () => {
+  const button = (id: "tipStart" | "tipEnd" = "tipEnd"): HTMLButtonElement => field(id).querySelector<HTMLButtonElement>(".draw-properties-menu")!;
+  const caption = (id: "tipStart" | "tipEnd" = "tipEnd"): string => button(id).querySelector(".draw-properties-menu-text")!.textContent!;
+  const picture = (id: "tipStart" | "tipEnd" = "tipEnd"): HTMLElement => button(id).querySelector<HTMLElement>(".draw-properties-menu-picture")!;
+  const items = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")];
+  const names = (): string[] => items().map((item) => item.querySelector(".menu-label")!.textContent!);
+  /// Cambia le punte come farebbe l'editor, e lascia che il pannello le segua.
+  const show = (end: TipLook, start: TipLook = { shape: "none", size: "medium" }): void => {
+    state.tips = { start, end };
+    panel.update(view());
+  };
+
+  beforeEach(() => {
+    state.tips = { start: { shape: "none", size: "medium" }, end: { shape: "triangle", size: "medium" } };
+  });
+
+  afterEach(() => closeContextMenu());
+
+  it("sta nell'aspetto, un pulsante per capo, dopo il tratteggio", () => {
+    mount();
+    expect(field("tipStart").closest<HTMLElement>(".draw-properties-section")!.dataset.section).toBe("look");
+    expect(field("tipEnd").closest<HTMLElement>(".draw-properties-section")!.dataset.section).toBe("look");
+    const order = [...section("look").querySelectorAll<HTMLElement>(".draw-properties-field")].map((each) => each.dataset.field);
+    expect(order.slice(order.indexOf("dash"))).toEqual(["dash", "tipStart", "tipEnd"]);
+    expect(field("tipStart").dataset.column).toBe("all");
+  });
+
+  it("è un pulsante che dice la scelta di adesso con una figura, e a chi ascolta la dice per intero", () => {
+    mount();
+    expect(button().tagName).toBe("BUTTON");
+    expect(button().getAttribute("aria-haspopup")).toBe("menu");
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(caption()).toBe("Triangolo, media");
+    expect(button().getAttribute("aria-label")).toBe("Punta di fine: Triangolo, media");
+    expect(button().title).toBe("Punta di fine: Triangolo, media");
+    expect(caption("tipStart")).toBe("Nessuna");
+    expect(button("tipStart").getAttribute("aria-label")).toBe("Punta d’inizio: Nessuna");
+    // Il nome sta sopra per chi vede; a chi ascolta lo dice il pulsante, una volta.
+    const name = field("tipEnd").querySelector<HTMLElement>(".draw-properties-label")!;
+    expect(name.textContent).toBe("Punta di fine");
+    expect(name.getAttribute("aria-hidden")).toBe("true");
+    // La figura è quella della forma di quel capo, e a chi ascolta non dice niente.
+    expect(picture().getAttribute("aria-hidden")).toBe("true");
+    expect(picture().innerHTML).toBe(iconEl("draw-tip-triangle-end")!.outerHTML);
+    expect(picture("tipStart").innerHTML).toBe(iconEl("draw-tip-none")!.outerHTML);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("segue la scelta: la figura e le parole, e «Misto» se le punte sono più d'una", () => {
+    mount();
+    show({ shape: "circle", size: "large" });
+    expect(caption()).toBe("Cerchio, grande");
+    expect(picture().innerHTML).toBe(iconEl("draw-tip-circle-end")!.outerHTML);
+    show({ shape: "none", size: "large" });
+    expect(caption()).toBe("Nessuna");
+    expect(button().getAttribute("aria-label")).toBe("Punta di fine: Nessuna");
+    show({ shape: null, size: "large" });
+    expect(caption()).toBe("Misto");
+    expect(button().getAttribute("aria-label")).toBe("Punta di fine: Misto");
+    expect(picture().childElementCount).toBe(0);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("si apre col clic: le voci come le dà il campo, quelle di adesso segnate, e il fuoco parte dalla forma", () => {
+    mount();
+    button().focus();
+    button().click();
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    const menu = document.getElementById("context-menu")!;
+    expect(menu.getAttribute("role")).toBe("menu");
+    expect(menu.getAttribute("aria-labelledby")).toBe(field("tipEnd").querySelector(".draw-properties-label")!.id);
+    expect(names()).toEqual(["Nessuna", "Triangolo", "Cerchio", "Piccola", "Media", "Grande", "Scambia inizio e fine"]);
+    expect(items().map((item) => item.getAttribute("role"))).toEqual([...Array<string>(6).fill("menuitemradio"), "menuitem"]);
+    expect(items().map((item) => item.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false", "true", "false", null]);
+    // La figura accanto al nome: alle forme e allo scambio; le misure ne tengono il posto.
+    expect(items().map((item) => item.querySelector(".menu-icon svg") !== null)).toEqual([true, true, true, false, false, false, true]);
+    expect(items().every((item) => item.querySelector(".menu-icon") !== null)).toBe(true);
+    expect(items()[1]!.querySelector(".menu-icon")!.innerHTML).toBe(iconEl("draw-tip-triangle-end")!.outerHTML);
+    expect(menu.querySelectorAll("[role=separator]")).toHaveLength(2);
+    expect(document.activeElement).toBe(items()[1]);
+    expect(formatIssues(checkAccessibility(menu))).toBe("");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("scegliere una voce la scrive, chiude il menu e riporta il fuoco al pulsante", () => {
+    mount();
+    button().focus();
+    button().click();
+    items()[2]!.click();
+    expect(calls).toEqual(["tipEnd=circle"]);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(button());
+    expect(caption()).toBe("Cerchio, media");
+    expect(picture().innerHTML).toBe(iconEl("draw-tip-circle-end")!.outerHTML);
+    // Una misura, e lo scambio, partono col loro valore.
+    button().click();
+    items()[5]!.click();
+    button().click();
+    items()[6]!.click();
+    expect(calls).toEqual(["tipEnd=circle", "tipEnd=size:large", "tipEnd=swap"]);
+    expect(caption()).toBe("Cerchio, grande");
+    expect(announced).toEqual([]);
+  });
+
+  it("la voce di adesso non cambia niente; una voce spenta si vede, la tastiera la salta e il clic non la sceglie", () => {
+    mount();
+    button().click();
+    items()[1]!.click();
+    expect(calls).toEqual([]);
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    // Senza una punta le misure non si scelgono.
+    show({ shape: "none", size: "medium" });
+    button().focus();
+    button().click();
+    expect(items().map((item) => item.getAttribute("aria-disabled"))).toEqual([null, null, null, "true", "true", "true", null]);
+    expect(document.activeElement).toBe(items()[0]);
+    items()[4]!.click();
+    expect(calls).toEqual([]);
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    for (const next of [1, 2, 6]) {
+      press(document.activeElement as HTMLElement, "ArrowDown");
+      expect(document.activeElement).toBe(items()[next]);
+    }
+  });
+
+  it("si apre anche con le frecce; Invio e Spazio sono il clic del pulsante; Esc chiude e torna al pulsante", () => {
+    mount();
+    button().focus();
+    for (const key of ["ArrowDown", "ArrowUp"]) {
+      expect(press(button(), key).defaultPrevented, key).toBe(true);
+      expect(button().getAttribute("aria-expanded"), key).toBe("true");
+      expect(document.activeElement, key).toBe(items()[1]);
+      press(items()[1]!, "Escape");
+      expect(button().getAttribute("aria-expanded"), key).toBe("false");
+      expect(document.activeElement, key).toBe(button());
+    }
+    // L'Esc del menu è del menu: il pannello non esce.
+    expect(calls).toEqual([]);
+    // Con un tasto di comando le frecce non aprono, né ci si ferma sul pulsante.
+    for (const init of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, { shiftKey: true }]) {
+      expect(press(button(), "ArrowDown", init).defaultPrevented, JSON.stringify(init)).toBe(false);
+      expect(button().getAttribute("aria-expanded")).toBe("false");
+    }
+    // Chiuso, Esc lascia il pannello, come per ogni campo che non si scrive.
+    press(button(), "Escape");
+    expect(calls).toEqual(["leave"]);
+  });
+
+  it("con un secondo clic sul pulsante si chiude; aprirne un altro chiude il primo", () => {
+    mount();
+    button().click();
+    expect(button().getAttribute("aria-expanded")).toBe("true");
+    button().click();
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    button().click();
+    button("tipStart").click();
+    expect(button("tipStart").getAttribute("aria-expanded")).toBe("true");
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById("context-menu")!.getAttribute("aria-labelledby")).toBe(field("tipStart").querySelector(".draw-properties-label")!.id);
+    items()[1]!.click();
+    expect(calls).toEqual(["tipStart=triangle"]);
+    expect(caption("tipStart")).toBe("Triangolo, media");
+  });
+
+  it("un menu rimasto aperto mentre il campo cambia sceglie com'è adesso, non com'era", () => {
+    mount();
+    button().click();
+    const opened = items();
+    // Intanto la punta è diventata un cerchio: sceglierlo non cambia niente.
+    show({ shape: "circle", size: "medium" });
+    opened[2]!.click();
+    expect(calls).toEqual([]);
+    // E senza una punta le misure non si scelgono.
+    button().click();
+    const sizes = items();
+    show({ shape: "none", size: "medium" });
+    sizes[5]!.click();
+    expect(calls).toEqual([]);
+    expect(caption()).toBe("Nessuna");
+  });
+
+  it("se il disegno non lo accetta, lo dice sotto il campo e a chi ascolta; una scelta riuscita lo toglie", () => {
+    refusal = "Le punte non vanno a una linea chiusa.";
+    mount();
+    button().click();
+    items()[2]!.click();
+    expect(calls).toEqual(["tipEnd=circle"]);
+    expect(error("tipEnd").hidden).toBe(false);
+    expect(error("tipEnd").textContent).toBe(refusal);
+    expect(announced).toEqual([refusal]);
+    expect(button().getAttribute("aria-describedby")).toBe(error("tipEnd").id);
+    expect(caption()).toBe("Triangolo, media");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    refusal = null;
+    button().click();
+    items()[2]!.click();
+    expect(error("tipEnd").hidden).toBe(true);
+    expect(button().hasAttribute("aria-describedby")).toBe(false);
+    expect(caption()).toBe("Cerchio, media");
+  });
+
+  it("in un documento che si legge soltanto si vede, resta raggiungibile e non si apre", () => {
+    state.editable = false;
+    mount();
+    expect(button().getAttribute("aria-disabled")).toBe("true");
+    expect(button().disabled).toBe(false);
+    expect(button().getAttribute("aria-label")).toBe("Punta di fine: Triangolo, media");
+    button().click();
+    press(button(), "ArrowDown");
+    expect(button().getAttribute("aria-expanded")).toBe("false");
+    expect(calls).toEqual([]);
+    state.editable = true;
+    panel.update(view());
+    expect(button().hasAttribute("aria-disabled")).toBe(false);
+  });
+
+  it("il puntatore non gli porta via il fuoco", () => {
+    mount();
+    const down = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    picture().dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+  });
+
+  it("le icone che le sue voci nominano sono tutte disegnate, e sono tutte quelle delle punte", () => {
+    mount();
+    const wanted = ["draw-tip-none", "draw-tips-swap"];
+    for (const end of ["start", "end"]) for (const shape of [...TIP_SHAPES, "other"]) wanted.push(`draw-tip-${shape}-${end}`);
+    for (const name of wanted) {
+      const svg = iconEl(name);
+      expect(svg, name).not.toBeNull();
+      expect(svg!.getAttribute("viewBox"), name).toBe("0 0 24 24");
+      expect(svg!.querySelectorAll("path").length, name).toBeGreaterThan(0);
+    }
+    expect(iconNames().filter((name) => name.startsWith("draw-tip")).sort()).toEqual([...wanted].sort());
   });
 });
 

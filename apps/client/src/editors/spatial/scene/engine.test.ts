@@ -1210,6 +1210,123 @@ describe("le risorse", () => {
   });
 });
 
+describe("ciò che segue", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const G = "r1a2b3c4d";
+  const GRADIENT = [
+    `    <linearGradient id="${G}" fub:role="shared" x1="0" y1="0" x2="1" y2="0">`,
+    '      <stop offset="0" stop-color="#0072b2"/>',
+    '      <stop offset="1" stop-color="#56b4e9"/>',
+    "    </linearGradient>",
+  ];
+  const E1_BLACK = E1.replace('stroke="#0072b2"', 'stroke="#000000"');
+  const R2_BLACK = R2.replace('fill="#e69f00"', 'fill="#000000"');
+  const R3_USER = `    <rect id="o3c4d5e6f" x="800" y="100" width="200" height="120" fill="url(#${G}) #0072b2"/>`;
+  const stroke: Op = { op: "set", id: "o1a2b3c4d", attrs: { stroke: "#000000" } };
+  const fill = (id: string, value: string): Op => ({ op: "set", id, attrs: { fill: value } });
+  const MISSING = fill("o9z9z9z9z", "#000000");
+
+  /// Un motore su `source` che, a ogni operazione che tocca l'ellisse,
+  /// aggiunge `extra`, e conta le volte in cui lo chiede.
+  const following = (source: string, extra: () => Op | null): { engine: SceneEngine; calls: ReadonlySet<string>[] } => {
+    const engine = SceneEngine.open(source);
+    const calls: ReadonlySet<string>[] = [];
+    engine.follow = (_model, touched) => {
+      calls.push(new Set(touched));
+      return touched.has("o1a2b3c4d") ? extra() : null;
+    };
+    return { engine, calls };
+  };
+
+  it("va nello stesso passo, e un undo solo lo toglie, byte per byte", () => {
+    const { engine, calls } = following(BASE, () => fill("o2b3c4d5e", "#000000"));
+    const out = apply(engine, stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3, END_G, END));
+    expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+    expect([...out.touched].sort()).toEqual(["o1a2b3c4d", "o2b3c4d5e"]);
+    expect(calls).toEqual([new Set(["o1a2b3c4d"])]);
+    expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("annullato dall'inversa, non si chiede di nuovo: l'inversa porta già la sua", () => {
+    const { engine, calls } = following(BASE, () => fill("o2b3c4d5e", "#000000"));
+    const out = apply(engine, stroke);
+    apply(engine, fill("o3c4d5e6f", "#111111"));
+    expect(calls).toHaveLength(2);
+    const undone = applied(engine.undo(out.undo));
+    expect(undone.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3.replace("#009e73", "#111111"), END_G, END));
+    expect(calls).toHaveLength(2);
+  });
+
+  it("null lascia l'operazione com'è", () => {
+    const { engine, calls } = following(BASE, () => null);
+    const out = apply(engine, stroke);
+    expect(out.forward).toEqual(stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+    expect(calls).toEqual([new Set(["o1a2b3c4d"])]);
+  });
+
+  it("il passo resta col nome dell'operazione chiesta", () => {
+    const { engine } = following(BASE, () => ({ op: "batch", label: "Seguito", ops: [fill("o2b3c4d5e", "#000000")] }));
+    expect(apply(engine, stroke).forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+    const named: Op = { op: "batch", label: "Colore", ops: [fill("o1a2b3c4d", "#000000")] };
+    const out = apply(engine, named);
+    expect(out.forward).toEqual({ op: "batch", label: "Colore", ops: [fill("o1a2b3c4d", "#000000"), fill("o2b3c4d5e", "#000000")] });
+    expect(out.inverse).toMatchObject({ op: "batch", label: "Colore" });
+  });
+
+  it("un seguito rifiutato non c'è, nemmeno a metà, e l'operazione resta con ciò che ha toccato", () => {
+    for (const extra of [MISSING, { op: "batch", ops: [fill("o2b3c4d5e", "#000000"), MISSING] } as Op]) {
+      const { engine } = following(BASE, () => extra);
+      const out = apply(engine, stroke);
+      expect(out.forward).toEqual(stroke);
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+      expect(out.touched).toEqual(["o1a2b3c4d"]);
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    }
+  });
+
+  it("un seguito che non si sa calcolare non c'è", () => {
+    const { engine } = following(BASE, () => {
+      throw new Error("guasto");
+    });
+    const out = apply(engine, stroke);
+    expect(out.forward).toEqual(stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+
+  it("un'operazione rifiutata non lo chiede", () => {
+    const { engine, calls } = following(BASE, () => fill("o2b3c4d5e", "#000000"));
+    expect(engine.apply({ op: "batch", ops: [stroke, MISSING] })).toMatchObject({ outcome: "rejected", reason: "missing-target" });
+    expect(engine.text).toBe(BASE);
+    expect(calls).toEqual([]);
+  });
+
+  it("la raccolta prende, nello stesso passo, ciò che il seguito lascia solo", () => {
+    const source = lf(ROOT, TITLE, DEFS, ...GRADIENT, END_DEFS, PAPER, L1, E1, R2, R3_USER, END_G, END);
+    const { engine } = following(source, () => fill("o3c4d5e6f", "#000000"));
+    const out = apply(engine, stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3.replace("#009e73", "#000000"), END_G, END));
+    expect(out.forward).toEqual({
+      op: "batch",
+      ops: [stroke, fill("o3c4d5e6f", "#000000"), { op: "remove", target: G }, { op: "remove", target: "fub-defs" }],
+    });
+    expect(applied(engine.undo(out.undo)).text).toBe(source);
+  });
+
+  it("un seguito rifiutato non fa raccogliere la risorsa che aveva ripreso", () => {
+    // La sfumatura non la usa nessuno già prima: la raccolta guarda solo ciò
+    // che le operazioni applicate lasciano solo.
+    const source = lf(ROOT, TITLE, DEFS, ...GRADIENT, END_DEFS, PAPER, L1, E1, R2, R3, END_G, END);
+    const { engine } = following(source, () => ({ op: "batch", ops: [fill("o2b3c4d5e", `url(#${G}) #0072b2`), MISSING] }));
+    const out = apply(engine, stroke);
+    expect(out.forward).toEqual(stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, ...GRADIENT, END_DEFS, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+});
+
 describe("il testo in area e su tracciato", () => {
   const DEFS = '  <defs id="fub-defs">';
   const END_DEFS = "  </defs>";

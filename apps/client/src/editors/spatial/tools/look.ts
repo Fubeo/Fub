@@ -51,6 +51,14 @@
 //   gruppo che lo contiene. Il contagocce prende lo stesso, dalla forma
 //   sotto il puntatore o dall'oggetto di una riga dell'albero, anche
 //   bloccato o nascosto: leggerlo non lo cambia.
+// - **Le punte vanno con lo stile.** Di una linea, una spezzata o un
+//   tracciato aperto si copia la punta di ogni capo, forma e misura, o
+//   l'assenza; si dà a ogni parte che può averne, dentro i gruppi, e `none`
+//   le toglie. Un capo con un marcatore che non è della raccolta non si
+//   copia, e chi riceve lo stile tiene il suo; una forma che non può averne
+//   punte, come un rettangolo, non le dice, e le punte di chi riceve restano.
+//   La punta si ricrea per nome nel disegno che la riceve, anche se è un
+//   altro, e il suo colore lo porta [`followTips`] nello stesso passo.
 // - **Lo stile vale anche in un altro disegno**: un campione che lì non c'è
 //   lascia il posto a quello con lo stesso nome e lo stesso colore, o al
 //   suo colore; un'altra risorsa che manca, al colore di ripiego. Un
@@ -105,6 +113,7 @@ import {
   type Emphasis,
   type Rich,
 } from "./rich";
+import { Tipper, tippable, tipsStyleOf, type TipsStyle } from "./tips";
 import { replaceElem } from "./topath";
 import { areaText, pointText, rewrapped, withWrap, type Side } from "./wrap";
 
@@ -537,6 +546,7 @@ class Changes {
   private replaced = 0;
   private overflow = false;
   private copies: ResourceCopies | null = null;
+  private tipper: Tipper | null = null;
   private resources: Map<string, LeafNode> | null = null;
 
   constructor(
@@ -657,6 +667,14 @@ class Changes {
     }
   }
 
+  /// Le punte `tips` di uno stile copiato su `part`, se può averne.
+  tips(part: Part, tips: TipsStyle): void {
+    if (!tippable(part.node)) return;
+    this.tipper ??= new Tipper(this.model, this.plan.ids);
+    const attrs = this.tipper.give(part.node, tips);
+    if (attrs !== null) Object.assign(this.of(part), attrs);
+  }
+
   /// Una freccia il cui spessore cambia ridisegna la punta.
   arrow(part: Part): void {
     const arrow = part.node.details?.arrow;
@@ -735,8 +753,11 @@ class Changes {
 
   /// Le operazioni, con le chiavi di `units` dopo.
   finish(units: readonly Unit[]): Restyled {
-    // Le copie delle risorse prima di chi le usa.
-    if (this.copies !== null) this.plan.ops.push(...this.copies.ops());
+    // Le copie delle risorse e i marcatori delle punte prima di chi li usa;
+    // la `defs` che manca nasce una volta sola.
+    const copies = this.copies === null ? [] : this.copies.ops();
+    this.plan.ops.push(...copies);
+    if (this.tipper !== null) this.plan.ops.push(...this.tipper.ops(copies.length === 0));
     this.finishTexts();
     for (const [node, attrs] of this.attrs) {
       if (Object.keys(attrs).length === 0) continue;
@@ -949,6 +970,9 @@ export interface Style {
   /// I campioni che usano i colori, col nome e il colore, per id: in un
   /// altro disegno vale il campione con lo stesso nome e lo stesso colore.
   readonly swatches: ReadonlyMap<string, SwatchFacts>;
+  /// Le punte della parte copiata, per capo, o `null` se non può averne:
+  /// chi riceve lo stile tiene le sue.
+  readonly tips: TipsStyle | null;
 }
 
 /// La prima parte di `from` che ha un aspetto suo, nell'ordine del
@@ -1012,6 +1036,7 @@ function styleFrom(model: DocumentModel, node: ElementPart, from: ElementPart): 
     box: elem === null ? null : geometryBox(elem),
     resources: privateResources(model, paints, elemOf),
     swatches: swatchesOf(model, paints),
+    tips: tipsStyleOf(model, part.node),
   };
 }
 
@@ -1076,6 +1101,7 @@ export function styleOps(model: DocumentModel, units: readonly Unit[], style: St
       continue;
     }
     if (style.stroke !== null) changes.paint(part, "stroke", style.stroke, style.box);
+    if (style.tips !== null) changes.tips(part, style.tips);
     const outline = style.outline;
     if (outline === null) continue;
     changes.write(part, "stroke-width", outline.width, sameLength);

@@ -237,6 +237,12 @@ export function gradientOf(node: LeafNode): Gradient | null {
 /// mescolano in sRGB, e l'opacità non conta. `null` se in quel punto non si
 /// disegna: nelle unità del riquadro, un riquadro senza larghezza o altezza.
 export function gradientColor(gradient: Gradient, p: Point, box: Bounds | null): Rgb | null {
+  return gradientPaint(gradient, p, box)?.color ?? null;
+}
+
+/// Il colore di `gradient` nel punto `p`, come [`gradientColor`], con
+/// l'opacità dei punti in quel punto, fra 0 e 1: si mescola come i colori.
+export function gradientPaint(gradient: Gradient, p: Point, box: Bounds | null): { readonly color: Rgb; readonly alpha: number } | null {
   let space = gradient.transform;
   if (gradient.inBox) {
     if (box === null) return null;
@@ -249,7 +255,7 @@ export function gradientColor(gradient: Gradient, p: Point, box: Bounds | null):
   if (back === null) return null;
   const [x, y] = apply(back, p);
   const t = gradient.kind === "linear" ? linearAt(gradient.coords, x, y) : radialAt(gradient.coords, x, y);
-  return stopColor(gradient.stops, spreadOf(t, gradient.spread));
+  return stopPaint(gradient.stops, spreadOf(t, gradient.spread));
 }
 
 /// Dove sta `(x, y)` lungo la sfumatura lineare `x1 y1 x2 y2`: 0 sulla
@@ -299,19 +305,21 @@ function spreadOf(t: number, spread: Gradient["spread"]): number {
   return folded <= 1 ? folded : 2 - folded;
 }
 
-/// Il colore dei punti `stops` in `t`, fra 0 e 1.
-function stopColor(stops: readonly Stop[], t: number): Rgb {
+/// Il colore e l'opacità dei punti `stops` in `t`, fra 0 e 1.
+function stopPaint(stops: readonly Stop[], t: number): { readonly color: Rgb; readonly alpha: number } {
   const first = stops[0]!;
-  if (t <= first.offset) return first.color;
+  if (t <= first.offset) return { color: first.color, alpha: first.alpha };
   for (let i = 1; i < stops.length; i++) {
     const stop = stops[i]!;
     if (t > stop.offset) continue;
     const before = stops[i - 1]!;
     const span = stop.offset - before.offset;
     const k = span > 0 ? (t - before.offset) / span : 1;
-    return [0, 1, 2].map((at) => Math.round(before.color[at]! + (stop.color[at]! - before.color[at]!) * k)) as unknown as Rgb;
+    const color = [0, 1, 2].map((at) => Math.round(before.color[at]! + (stop.color[at]! - before.color[at]!) * k)) as unknown as Rgb;
+    return { color, alpha: before.alpha + (stop.alpha - before.alpha) * k };
   }
-  return stops[stops.length - 1]!.color;
+  const last = stops[stops.length - 1]!;
+  return { color: last.color, alpha: last.alpha };
 }
 
 /// `color` come lo scrive il file: `#rrggbb` minuscolo, o `none`.

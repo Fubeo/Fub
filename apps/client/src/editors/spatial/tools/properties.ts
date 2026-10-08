@@ -29,6 +29,11 @@
 // - **I pulsanti non prendono il fuoco al clic**, come quelli della barra
 //   della selezione: dopo «Allinea a sinistra» Canc elimina ancora. Dalla
 //   tastiera, una fila di pulsanti è una barra col roving tabindex.
+// - **Un campo a menu** è un pulsante che dice la scelta di adesso, con la
+//   sua figura, e ne apre le voci: Invio, Spazio e le frecce su e giù lo
+//   aprono sulla voce segnata, Esc lo chiude e riporta il fuoco al pulsante.
+//   Una voce è una scelta fra le altre, segnata, o un comando; la scelta
+//   parte come quella di un elenco.
 // - **Il pannello tiene i suoi tasti**, come quello degli attributi: le
 //   scorciatoie del foglio non partono da qui.
 
@@ -36,7 +41,7 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { icon, iconEl, registerIcon } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
-import { showContextMenu, type MenuItem } from "../../../ui/menu";
+import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
 import { contrast, MIN_CONTRAST, MIN_TEXT_CONTRAST, over } from "../scene/analysis";
 import { paint } from "../scene/values";
 import { t, type DrawKey } from "../strings";
@@ -90,8 +95,10 @@ export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 
 export type PaintId = "fill" | "stroke";
 export type ChoiceId = "dash" | "cap" | "join" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
+/// I campi a menu: le punte delle linee, all'inizio e alla fine.
+export type MenuId = "tipStart" | "tipEnd";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar";
-export type FieldId = NumberId | PaintId | ChoiceId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
+export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
 
 export type ActionId =
   | "align-left"
@@ -178,6 +185,38 @@ export interface ChoiceState extends FieldBase {
   readonly options: readonly ChoiceOption[];
 }
 
+/// Una voce del menu di un campo a menu.
+export interface MenuOption {
+  /// Ciò che si scrive scegliendola.
+  readonly value: string;
+  readonly label: string;
+  /// L'icona accanto al nome (`ui/icons.ts`); senza, il nome soltanto.
+  readonly icon?: string;
+  /// La voce di adesso: è segnata, e da lei parte il fuoco quando il menu si
+  /// apre. Sceglierla di nuovo non cambia niente.
+  readonly checked?: boolean;
+  /// C'è, ma adesso non si sceglie.
+  readonly disabled?: boolean;
+  /// Una riga di separazione prima della voce.
+  readonly separator?: boolean;
+  /// Un comando e non una scelta fra le altre: non ha uno stato da segnare,
+  /// e si dà ogni volta che lo si sceglie.
+  readonly action?: boolean;
+}
+
+/// Una scelta da un menu: un pulsante che dice quella di adesso e apre le
+/// voci.
+export interface MenuChoiceState extends FieldBase {
+  readonly kind: "menu";
+  /// Il valore di adesso, che dà la figura del pulsante: quella della voce
+  /// che lo ha; `null` se la selezione ne ha più d'uno.
+  readonly value: string | null;
+  /// La scelta di adesso a parole, sul pulsante e per chi ascolta; senza, il
+  /// nome della voce di `value`, o «Misto».
+  readonly summary?: string;
+  readonly options: readonly MenuOption[];
+}
+
 /// Un interruttore della vista: si cambia anche in un documento che si legge
 /// soltanto.
 export interface SwitchState extends FieldBase {
@@ -230,7 +269,7 @@ export interface LineState extends FieldBase {
   readonly max?: number;
 }
 
-export type FieldState = NumberState | PaintState | ChoiceState | SwitchState | PressState | SegmentState | TogglesState | TextState | LineState;
+export type FieldState = NumberState | PaintState | ChoiceState | MenuChoiceState | SwitchState | PressState | SegmentState | TogglesState | TextState | LineState;
 
 /// Un comando: il nome, e perché adesso non si usa.
 export interface ActionState {
@@ -341,6 +380,8 @@ const SPECS: readonly Spec[] = [
   { id: "dash", kind: "choice", section: "look", column: "all" },
   { id: "cap", kind: "choice", section: "look", column: "1" },
   { id: "join", kind: "choice", section: "look", column: "2" },
+  { id: "tipStart", kind: "menu", section: "look", column: "all" },
+  { id: "tipEnd", kind: "menu", section: "look", column: "all" },
   { id: "preset", kind: "choice", section: "text", column: "all" },
   { id: "family", kind: "choice", section: "text", column: "all" },
   { id: "size", kind: "number", section: "text", column: "1" },
@@ -460,6 +501,27 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-portrait": ["M7 3h10v18H7z"],
   "draw-landscape": ["M3 7h18v10H3z"],
   "draw-section": ["M8 10l4 4 4-4"],
+  // Le punte delle linee: una linea orizzontale con la punta a sinistra
+  // (l'inizio) o a destra (la fine). Le icone sono soltanto tratti: una forma
+  // piena è il suo contorno con dentro altri contorni a un'unità l'uno
+  // dall'altro, che a 16 e a 24 px si vedono come un riempimento.
+  "draw-tip-none": ["M3 12h18"],
+  "draw-tip-triangle-start": ["M21 12h-9.5", "M11.5 6.5 3 12l8.5 5.5z", "M10.5 8.34 4.84 12l5.66 3.66z", "M9.5 10.18 6.68 12l2.82 1.82z", "M8.5 12h.01"],
+  "draw-tip-triangle-end": ["M3 12h9.5", "M12.5 6.5 21 12l-8.5 5.5z", "M13.5 8.34 19.16 12l-5.66 3.66z", "M14.5 10.18 17.32 12l-2.82 1.82z", "M15.5 12h.01"],
+  "draw-tip-vee-start": ["M3 12h18", "M9.5 7 3 12l6.5 5"],
+  "draw-tip-vee-end": ["M3 12h18", "M14.5 7 21 12l-6.5 5"],
+  "draw-tip-circle-start": ["M21 12h-9", "M3 12a4.5 4.5 0 1 0 9 0 4.5 4.5 0 1 0-9 0z", "M4 12a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0z", "M5 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0z", "M6 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z", "M7 12a.5 .5 0 1 0 1 0 .5 .5 0 1 0-1 0z"],
+  "draw-tip-circle-end": ["M3 12h9", "M12 12a4.5 4.5 0 1 0 9 0 4.5 4.5 0 1 0-9 0z", "M13 12a3.5 3.5 0 1 0 7 0 3.5 3.5 0 1 0-7 0z", "M14 12a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0z", "M15 12a1.5 1.5 0 1 0 3 0 1.5 1.5 0 1 0-3 0z", "M16 12a.5 .5 0 1 0 1 0 .5 .5 0 1 0-1 0z"],
+  "draw-tip-square-start": ["M21 12h-10", "M3 8h8v8H3z", "M4 9h6v6H4z", "M5 10h4v4H5z", "M6 11h2v2H6z"],
+  "draw-tip-square-end": ["M3 12h10", "M13 8h8v8h-8z", "M14 9h6v6h-6z", "M15 10h4v4h-4z", "M16 11h2v2h-2z"],
+  "draw-tip-diamond-start": ["M21 12h-8", "M13 12l-5-5-5 5 5 5z", "M11.59 12 8 8.41 4.41 12 8 15.59z", "M10.17 12 8 9.83 5.83 12 8 14.17z", "M7.24 12 8 11.24 8.76 12 8 12.76z"],
+  "draw-tip-diamond-end": ["M3 12h8", "M11 12l5-5 5 5-5 5z", "M12.41 12 16 8.41 19.59 12 16 15.59z", "M13.83 12 16 9.83 18.17 12 16 14.17z", "M15.24 12 16 11.24 16.76 12 16 12.76z"],
+  "draw-tip-bar-start": ["M21 12H4", "M4 6.5v11"],
+  "draw-tip-bar-end": ["M3 12h17", "M20 6.5v11"],
+  // Una punta che non è della raccolta: un punto interrogativo al posto della forma.
+  "draw-tip-other-start": ["M13 12h8", "M5.6 9.2a2.9 2.9 0 1 1 4.6 2.3c-1.2.8-1.8 1.4-1.8 2.7", "M8.4 17.6h.01"],
+  "draw-tip-other-end": ["M3 12h8", "M13.6 9.2a2.9 2.9 0 1 1 4.6 2.3c-1.2.8-1.8 1.4-1.8 2.7", "M16.4 17.6h.01"],
+  "draw-tips-swap": ["M4 8h14", "M14.5 4.5 18 8l-3.5 3.5", "M20 16H6", "M9.5 12.5 6 16l3.5 3.5"],
 };
 
 /// Registra le icone una volta per tutte le superfici, come l'editor le sue.
@@ -507,11 +569,15 @@ interface Line {
   readonly contrast: HTMLElement | null;
   /// I pulsanti di una scelta a pulsanti, per valore.
   readonly segments: Map<string, HTMLButtonElement>;
+  /// La figura e il testo del pulsante di un campo a menu.
+  readonly picture: HTMLElement | null;
+  readonly caption: HTMLElement | null;
   state: FieldState | null;
   /// Il testo scritto nel campo l'ultima volta: un campo che dice altro ha
   /// un valore scritto a metà.
   shown: string;
-  /// Le voci della scelta disegnate, per non rifarle a ogni aggiornamento.
+  /// Le voci della scelta disegnate, per non rifarle a ogni aggiornamento; di
+  /// un campo a menu, l'icona del pulsante.
   options: string;
 }
 
@@ -855,6 +921,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     let chipColor: HTMLElement | null = null;
     let picker: HTMLInputElement | null = null;
     let contrast: HTMLElement | null = null;
+    let picture: HTMLElement | null = null;
+    let caption: HTMLElement | null = null;
     const segments = new Map<string, HTMLButtonElement>();
     switch (spec.kind) {
       case "number": {
@@ -909,6 +977,31 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         name = labelFor(select);
         root.append(name, select, note, error);
         control = select;
+        break;
+      }
+      case "menu": {
+        // Il nome sta nel pulsante, che lo dice insieme alla scelta: quello
+        // che si vede non si ripete a chi ascolta.
+        name = document.createElement("span");
+        name.className = "draw-properties-label";
+        name.id = identifier("draw-properties-label");
+        name.setAttribute("aria-hidden", "true");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "draw-button draw-properties-menu";
+        button.id = identifier("draw-properties-menu");
+        button.setAttribute("aria-haspopup", "menu");
+        button.setAttribute("aria-expanded", "false");
+        picture = document.createElement("span");
+        picture.className = "draw-properties-menu-picture";
+        picture.setAttribute("aria-hidden", "true");
+        caption = document.createElement("span");
+        caption.className = "draw-properties-menu-text";
+        button.append(picture, caption);
+        const arrow = iconEl("draw-section");
+        if (arrow !== null) button.append(arrow);
+        root.append(name, button, note, error);
+        control = button;
         break;
       }
       case "line": {
@@ -972,7 +1065,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       }
     }
-    return { spec, root, name, note, error, control, unit, spoken, chip, chipFrame, chipColor, picker, contrast, segments, state: null, shown: "", options: "" };
+    return { spec, root, name, note, error, control, unit, spoken, chip, chipFrame, chipColor, picker, contrast, segments, picture, caption, state: null, shown: "", options: "" };
   };
 
   // Un campo entra nella sua sezione la prima volta che ha di che mostrarsi:
@@ -995,6 +1088,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       life.listen(picker, "change", () => commitPaint(line, picker.value, true));
     }
     if (spec.kind === "press") life.listen(line.control, "click", () => press(line));
+    // Un secondo clic sul pulsante lo chiude, come dice `aria-expanded`.
+    if (spec.kind === "menu") life.listen(line.control, "click", () => (line.control.getAttribute("aria-expanded") === "true" ? closeContextMenu() : openMenu(line)));
     if (spec.kind === "choice" || spec.kind === "switch") life.listen(line.control, "change", () => choose(line));
   }
   transformBody.append(applyButton);
@@ -1181,6 +1276,25 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     select.disabled = !view.editable || state.disabled === true;
   };
 
+  const paintMenu = (line: Line, state: MenuChoiceState): void => {
+    const button = line.control as HTMLButtonElement;
+    line.name.textContent = state.label;
+    const current = state.value === null ? undefined : state.options.find((option) => option.value === state.value);
+    const summary = state.summary ?? current?.label ?? t("draw.properties.mixed");
+    line.caption!.textContent = summary;
+    // La figura è quella della voce di adesso; una scelta mista non ne ha.
+    const drawn = current?.icon ?? "";
+    if (drawn !== line.options) {
+      const glyph = drawn === "" ? null : iconEl(drawn);
+      line.picture!.replaceChildren(...(glyph === null ? [] : [glyph]));
+      line.options = drawn;
+    }
+    const spoken = t("draw.properties.menu_name", { label: state.label, value: summary });
+    button.setAttribute("aria-label", spoken);
+    button.title = spoken;
+    showOff(button, !view.editable || state.disabled === true);
+  };
+
   const paintSwitch = (line: Line, state: SwitchState): void => {
     line.name.textContent = state.label;
     const box = line.control as HTMLInputElement;
@@ -1276,6 +1390,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       case "choice":
         paintChoice(line, state);
+        break;
+      case "menu":
+        paintMenu(line, state);
         break;
       case "switch":
         paintSwitch(line, state);
@@ -1475,6 +1592,42 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     else showError(line, null);
   }
 
+  /// Il menu di un campo a menu, sotto il suo pulsante: le voci come le dà lo
+  /// stato, e il fuoco parte dalla prima segnata.
+  function openMenu(line: Line): void {
+    const state = line.state;
+    const button = line.control as HTMLButtonElement;
+    if (state === null || state.kind !== "menu" || !view.editable || state.disabled === true) return;
+    const items: MenuItem[] = state.options.map((option) => ({
+      label: option.label,
+      ...(option.icon === undefined ? {} : { icon: option.icon }),
+      ...(option.action === true ? {} : { choice: "radio" as const, checked: option.checked === true }),
+      ...(option.checked === true ? { selected: true } : {}),
+      ...(option.disabled === true ? { disabled: true } : {}),
+      ...(option.separator === true ? { separator: true } : {}),
+      run: () => chooseOption(line, option),
+    }));
+    button.setAttribute("aria-expanded", "true");
+    showContextMenu(button, items, {
+      labelledBy: line.name.id,
+      onClose: () => button.setAttribute("aria-expanded", "false"),
+    });
+  }
+
+  /// La voce `option` del menu di `line` è scelta: parte come la scelta di un
+  /// elenco. Una voce già segnata non cambia niente. Il menu può essere
+  /// rimasto aperto mentre il campo cambiava: conta com'è la voce adesso, non
+  /// com'era quando si è aperto.
+  function chooseOption(line: Line, option: MenuOption): void {
+    const state = line.state;
+    if (state === null || state.kind !== "menu" || !view.editable || state.disabled === true) return;
+    const now = state.options.find((each) => each.value === option.value);
+    if (now === undefined || now.disabled === true || (now.action !== true && now.checked === true)) return;
+    const failure = options.onChange(line.spec.id, now.value);
+    if (failure !== null) fail(line, failure, true);
+    else showError(line, null);
+  }
+
   /// Un interruttore della fila: si accende se era spento o misto, e si
   /// spegne se era acceso.
   function flip(line: Line, value: string): void {
@@ -1518,9 +1671,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       group[0]!.separator = true;
       items.push(...group);
     }
-    const box = chip.getBoundingClientRect();
     chip.setAttribute("aria-expanded", "true");
-    showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+    showContextMenu(chip, items, {
       labelledBy: chip.id,
       onClose: () => chip.setAttribute("aria-expanded", "false"),
     });
@@ -1597,6 +1749,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       }
     } else if ((event.key === "ArrowUp" || event.key === "ArrowDown") && plain && line !== null && line.spec.kind === "number") {
       step(line, (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? 10 : 1));
+    } else if ((event.key === "ArrowUp" || event.key === "ArrowDown") && plain && !event.shiftKey && line !== null && line.spec.kind === "menu") {
+      // Invio e Spazio lo aprono da soli, col clic del pulsante; le frecce no.
+      openMenu(line);
     } else {
       return;
     }

@@ -62,7 +62,7 @@ export const OFFSET_ERROR = 0.005;
 export const MAX_DASHES = 10_000;
 /// I pezzi al più delle spezzate dell'unione: oltre, il calcolo terrebbe
 /// fermo l'editor per secondi.
-const MAX_PIECES = 250_000;
+export const MAX_PIECES = 250_000;
 /// Quante volte al più si divide un pezzo.
 const MAX_DEPTH = 16;
 const QUARTER = Math.PI / 2;

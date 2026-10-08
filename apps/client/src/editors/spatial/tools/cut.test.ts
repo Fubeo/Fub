@@ -5,8 +5,8 @@ import { describe, expect, it } from "vitest";
 import { parsePath } from "../scene/geometry";
 import type { Matrix } from "../scene/matrix";
 import { pathData } from "../scene/serialize";
-import { crossings, cutAt, joinAcross, joinEnds, joinPaths, mapSubs, nodeSpot } from "./cut";
-import { readNodes, writeNodes, type Subpath } from "./nodes";
+import { crossings, cutAt, followEnds, joinAcross, joinEnds, joinPaths, mapSubs, nodeSpot, tipKeys, tipsAfter } from "./cut";
+import { breakNodes, deleteNodes, insertNode, joinNodes, readNodes, writeNodes, type Subpath } from "./nodes";
 
 const subsOf = (d: string): Subpath[] => readNodes(parsePath(d)!);
 const each = (subs: readonly Subpath[]): string[] => subs.map((sub) => pathData(writeNodes([sub])));
@@ -154,5 +154,165 @@ describe("Unisci", () => {
   it("i pezzi vengono da altre coordinate", () => {
     const m: Matrix = [2, 0, 0, 2, 10, 0];
     expect(each(mapSubs(subsOf("M0 0 L10 0 A5 5 0 0 1 20 0"), m))).toEqual(["M10 0 L30 0 A10 10 0 0 1 50 0"]);
+  });
+});
+
+describe("dove stanno le punte quando si unisce", () => {
+  /// Il capo che è diventato l'inizio e quello che è diventato la fine.
+  const ends = (d: string, merge = 0.5): [string, string] | null => {
+    const joined = joinPaths(subsOf(d), merge)!;
+    return joined.start === null || joined.end === null ? null : [`${joined.start.piece}:${joined.start.end}`, `${joined.end.piece}:${joined.end.end}`];
+  };
+
+  it("due pezzi uno dopo l'altro tengono l'inizio del primo e la fine del secondo", () => {
+    expect(ends("M0 0 L10 0 M10 0 L20 0")).toEqual(["0:start", "1:end"]);
+    // Nell'ordine in cui sono dati, non in quello del documento: il secondo
+    // è quello che continua il primo.
+    expect(ends("M10 0 L20 0 M0 0 L10 0")).toEqual(["1:start", "0:end"]);
+  });
+
+  it("un pezzo percorso al contrario porta il suo capo opposto", () => {
+    // Fine con fine: il secondo si percorre al contrario, e la sua fine è l'inizio.
+    expect(ends("M0 0 L10 0 M20 0 L10 0")).toEqual(["0:start", "1:start"]);
+    // Inizio con inizio: il primo si percorre al contrario.
+    expect(ends("M10 0 L0 0 M10 0 L20 0")).toEqual(["0:end", "1:end"]);
+    // Il secondo finisce dove il primo comincia: viene prima, e nessuno si
+    // percorre al contrario.
+    expect(ends("M10 0 L0 0 M20 0 L10 0")).toEqual(["1:start", "0:end"]);
+  });
+
+  it("uniti da una linea, i capi liberi restano quelli di prima", () => {
+    expect(ends("M0 0 L10 0 M30 0 L40 0")).toEqual(["0:start", "1:end"]);
+    expect(ends("M0 0 L10 0 M40 0 L30 0")).toEqual(["0:start", "1:start"]);
+  });
+
+  it("tre pezzi in fila: i capi liberi sono il primo e l'ultimo della catena", () => {
+    expect(ends("M0 0 L10 0 M30 0 L40 0 M10.2 0 L29.9 0")).toEqual(["0:start", "1:end"]);
+    // Il pezzo in mezzo è rovesciato, e i capi liberi sono quelli dei due esterni.
+    expect(ends("M0 0 L10 0 M30 0 L40 0 M29.9 0 L10.2 0")).toEqual(["0:start", "1:end"]);
+    // La catena comincia dove comincia il primo pezzo e finisce dove finisce il
+    // secondo, quello in mezzo (il terzo) li lega senza che i suoi capi restino.
+    expect(ends("M40 0 L30 0 M10 0 L0 0 M10.1 0 L29.9 0")).toEqual(["0:start", "1:end"]);
+  });
+
+  it("un tracciato che si chiude non ha né inizio né fine", () => {
+    const closed = joinPaths(subsOf("M0 0 L50 0 L50 50"), 0.5)!;
+    expect([closed.start, closed.end]).toEqual([null, null]);
+    const circle = joinPaths(subsOf("M0 0 A50 50 0 0 1 100 0 M100 0 A50 50 0 0 1 0 0"), 0.5)!;
+    expect(circle.closed).toBe(true);
+    expect([circle.start, circle.end]).toEqual([null, null]);
+  });
+});
+
+describe("dove stanno le punte dopo una modifica dei nodi", () => {
+  const open = subsOf("M0 0 L10 0 L20 0 L30 0");
+
+  it("il primo e l'ultimo vertice, chiuso o aperto", () => {
+    expect(tipKeys(open)).toEqual({ start: "0:0", end: "0:3" });
+    expect(tipKeys(subsOf("M0 0 L10 0 M20 0 L30 0 L40 0"))).toEqual({ start: "0:0", end: "1:2" });
+    // L'ultimo vertice di un chiuso è il suo primo.
+    expect(tipKeys(subsOf("M0 0 L10 0 L10 10 Z"))).toEqual({ start: "0:0", end: "0:0" });
+    expect(tipKeys([])).toBeNull();
+  });
+
+  it("inserire, spostare, togliere o spezzare nodi lascia le punte dov'erano", () => {
+    expect(tipsAfter(open, insertNode(open, 0, 1, 0.5).subs, insertNode(open, 0, 1, 0.5).moved)).toBeUndefined();
+    expect(tipsAfter(open, open, null)).toBeUndefined();
+    // Si toglie il primo nodo: il vertice che prende il suo posto tiene la punta.
+    const noFirst = deleteNodes(open, new Set(["0:0"]));
+    expect(tipsAfter(open, noFirst.subs, noFirst.moved)).toBeUndefined();
+    const noLast = deleteNodes(open, new Set(["0:3"]));
+    expect(tipsAfter(open, noLast.subs, noLast.moved)).toBeUndefined();
+    // Si spezza in mezzo: due sottotracciati, e la punta d'inizio sta sul primo, quella di fine sull'ultimo.
+    const broken = breakNodes(open, new Set(["0:1"]));
+    expect(broken.subs).toHaveLength(2);
+    expect(tipsAfter(open, broken.subs, broken.moved)).toBeUndefined();
+  });
+
+  it("chiudere l'ultimo sottotracciato aperto toglie le punte", () => {
+    const closed = joinNodes(open, new Set(["0:0", "0:3"]))!;
+    expect(closed.subs[0]!.closed).toBe(true);
+    expect(tipsAfter(open, closed.subs, closed.moved)).toEqual({ start: null, end: null });
+    // Con un altro aperto, no.
+    const two = subsOf("M0 0 L10 0 L20 0 M50 0 L60 0");
+    const first = joinNodes(two, new Set(["0:0", "0:2"]))!;
+    expect(tipsAfter(two, first.subs, first.moved)).toBeUndefined();
+    // Un tracciato che era già chiuso resta com'è.
+    const ring = subsOf("M0 0 L10 0 L10 10 Z");
+    expect(tipsAfter(ring, ring, new Map([["0:0", "0:0"], ["0:1", "0:1"], ["0:2", "0:2"]]))).toBeUndefined();
+  });
+
+  it("aprire un sottotracciato chiuso toglie le sue punte, da qualunque nodo si apra", () => {
+    const square = subsOf("M0 0 L10 0 L10 10 L0 10 Z");
+    for (const key of ["0:0", "0:1", "0:3"]) {
+      const broken = breakNodes(square, new Set([key]));
+      expect(broken.subs[0]!.closed).toBe(false);
+      expect(tipsAfter(square, broken.subs, broken.moved)).toEqual({ start: null, end: null });
+    }
+    // Il chiuso in testa perde la punta d'inizio; la fine, su un aperto, resta.
+    const mixed = subsOf("M0 0 L10 0 L10 10 Z M50 0 L60 0");
+    const head = breakNodes(mixed, new Set(["0:1"]));
+    expect(tipsAfter(mixed, head.subs, head.moved)).toEqual({ start: null, end: "end" });
+  });
+
+  it("un capo che si unisce a un altro non è più un capo, e la sua punta se ne va", () => {
+    // Due pezzi: A..B e C..D. B con C: l'inizio e la fine restano.
+    const two = subsOf("M0 0 L10 0 M20 0 L30 0");
+    const middle = joinNodes(two, new Set(["0:1", "1:0"]))!;
+    expect(tipsAfter(two, middle.subs, middle.moved)).toBeUndefined();
+    // A con C: il primo pezzo si rovescia, e l'inizio di prima (A) è dentro.
+    const inner = joinNodes(two, new Set(["0:0", "1:0"]))!;
+    expect(each(inner.subs)).toEqual(["M10 0 L0 0 L20 0 L30 0"]);
+    expect(tipsAfter(two, inner.subs, inner.moved)).toEqual({ start: null, end: "end" });
+    // A con D: il secondo si rovescia.
+    const other = joinNodes(two, new Set(["0:0", "1:1"]))!;
+    expect(each(other.subs)).toEqual(["M10 0 L0 0 L30 0 L20 0"]);
+    expect(tipsAfter(two, other.subs, other.moved)).toEqual({ start: null, end: null });
+    // B con D: nessun rovescio nel primo, il secondo è rovesciato; la fine di
+    // prima (D) è dentro e la fine nuova è C.
+    const last = joinNodes(two, new Set(["0:1", "1:1"]))!;
+    expect(each(last.subs)).toEqual(["M0 0 L10 0 L30 0 L20 0"]);
+    expect(tipsAfter(two, last.subs, last.moved)).toEqual({ start: "start", end: null });
+  });
+
+  it("le punte di un tracciato che si riscrive seguono i nodi di cui sono", () => {
+    const spots = [{ owner: 0, end: "start", key: "0:0" }, { owner: 0, end: "end", key: "0:3" }] as const;
+    const reversed = new Map([["0:0", "0:3"], ["0:1", "0:2"], ["0:2", "0:1"], ["0:3", "0:0"]]);
+    expect(followEnds(spots, open, reversed)).toEqual({ start: { owner: 0, end: "end" }, end: { owner: 0, end: "start" } });
+    expect(followEnds(spots, open, null)).toEqual({ start: { owner: 0, end: "start" }, end: { owner: 0, end: "end" } });
+    expect(followEnds(spots, [], null)).toEqual({ start: null, end: null });
+  });
+
+  it("l'unione di capi di due tracciati: le punte del primo prendono i capi del primo o del secondo", () => {
+    const m: Matrix = [1, 0, 0, 1, 0, 0];
+    // A..B con C..D, B con C: l'inizio è quello del primo, la fine quella del secondo.
+    const across = joinAcross(subsOf("M0 0 L10 0"), "0:1", subsOf("M10 0 L20 0"), "0:0", m, 0.5)!;
+    expect(each(across.kept.subs)).toEqual(["M0 0 L10 0 L20 0"]);
+    expect(across.tips.kept).toEqual({ start: { owner: 0, end: "start" }, end: { owner: 1, end: "end" } });
+    // Il secondo non ha più il sottotracciato, e con lui le sue punte.
+    expect(across.tips.rest).toEqual({ start: null, end: null });
+    // A con C: il primo si rovescia, e l'inizio nuovo è la fine del primo.
+    const flipped = joinAcross(subsOf("M0 0 L10 0"), "0:0", subsOf("M0 0 L10 0"), "0:0", m, 0.5)!;
+    expect(each(flipped.kept.subs)).toEqual(["M10 0 L0 0 L10 0"]);
+    expect(flipped.tips.kept).toEqual({ start: { owner: 0, end: "end" }, end: { owner: 1, end: "end" } });
+    // Fine con fine: la fine nuova è l'inizio del secondo.
+    const ends = joinAcross(subsOf("M0 0 L10 0"), "0:1", subsOf("M20 0 L10 0"), "0:1", m, 0.5)!;
+    expect(ends.tips.kept).toEqual({ start: { owner: 0, end: "start" }, end: { owner: 1, end: "start" } });
+  });
+
+  it("del secondo restano le punte dei capi che non sono passati nel primo", () => {
+    const m: Matrix = [1, 0, 0, 1, 0, 0];
+    const first = subsOf("M0 0 L10 0");
+    // Il secondo ha tre sottotracciati: quello unito è in mezzo, e i suoi capi non hanno punte.
+    const middle = joinAcross(first, "0:1", subsOf("M50 0 L60 0 M10 0 L20 0 M70 0 L80 0"), "1:0", m, 0.5)!;
+    expect(middle.tips.kept).toEqual({ start: { owner: 0, end: "start" }, end: null });
+    expect(middle.tips.rest).toEqual({ start: "start", end: "end" });
+    // Se è il primo, il secondo perde la punta d'inizio; se è l'ultimo, quella di fine.
+    const head = joinAcross(first, "0:1", subsOf("M10 0 L20 0 M70 0 L80 0"), "0:0", m, 0.5)!;
+    expect(head.tips.kept).toEqual({ start: { owner: 0, end: "start" }, end: null });
+    expect(head.tips.rest).toEqual({ start: null, end: "end" });
+    const tail = joinAcross(first, "0:1", subsOf("M70 0 L80 0 M10 0 L20 0"), "1:0", m, 0.5)!;
+    expect(tail.tips.kept).toEqual({ start: { owner: 0, end: "start" }, end: { owner: 1, end: "end" } });
+    expect(tail.tips.rest).toEqual({ start: "start", end: null });
   });
 });

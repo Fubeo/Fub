@@ -186,6 +186,43 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<g id="o7" transform="rotate(-20 214 112)"><rect id="o8" x="196" y="88" width="36" height="48" fill="url(#g6) #6676ad"/></g></g>'),
   },
   {
+    // Le punte delle linee come le scrive FubDraw, coi loro marcatori: due
+    // forme e due misure su una linea, la punta aperta su una spezzata con
+    // l'opacità del contorno, il quadrato e il rombo su una curva, le barre
+    // su una linea tratteggiata con gli estremi quadrati, le punte di un
+    // campione, quelle di una sfumatura col colore che ha nei capi, quelle di
+    // un contorno ereditato da un gruppo ruotato, e una punta dopo un tratto
+    // lungo zero, che Chromium gira verso destra: il foglio, la Lettura e
+    // l'export la girano allo stesso modo.
+    id: "punte",
+    text: scene('<defs id="fub-defs">'
+      + '<linearGradient id="s1" fub:role="swatch" fub:name="Arancio" gradientUnits="userSpaceOnUse"><stop stop-color="#e69f00"/></linearGradient>'
+      + '<linearGradient id="g1" fub:role="private" x1="132" y1="0" x2="228" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#d55e00"/></linearGradient>'
+      + '<marker id="p1" fub:role="shared" fub:marker="triangle medium end" refX="3.44" refY="3" markerWidth="5.34" markerHeight="6" orient="auto"><path d="M4.84 3 L0.51 5.5 L0.51 0.5 Z" fill="#0072b2"/></marker>'
+      + '<marker id="p2" fub:role="shared" fub:marker="circle small start" refX="1.9" refY="1.9" markerWidth="3.8" markerHeight="3.8" orient="auto"><circle cx="1.9" cy="1.9" r="1.4" fill="#0072b2"/></marker>'
+      + '<marker id="p3" fub:role="shared" fub:marker="vee large end" refX="6.57" refY="4.5" markerWidth="8.07" markerHeight="9" orient="auto"><path d="M1.01 1 L7.07 4.5 L1.01 8" fill="none" stroke="#d55e00" stroke-width="1" stroke-opacity="0.6" stroke-linecap="round" stroke-linejoin="round"/></marker>'
+      + '<marker id="p4" fub:role="shared" fub:marker="square medium start" refX="2.25" refY="2.25" markerWidth="4.5" markerHeight="4.5" orient="auto"><path d="M4 0.5 L0.5 0.5 L0.5 4 L4 4 Z" fill="#009e73"/></marker>'
+      + '<marker id="p5" fub:role="shared" fub:marker="diamond medium end" refX="4.1" refY="2" markerWidth="6" markerHeight="4" orient="auto"><path d="M5.5 2 L3 3.5 L0.5 2 L3 0.5 Z" fill="#009e73"/></marker>'
+      + '<marker id="p6" fub:role="shared" fub:marker="bar medium start" refX="1" refY="3" markerWidth="2" markerHeight="6" orient="auto"><path d="M1 0.5 L1 5.5" fill="none" stroke="#cc79a7" stroke-width="1" stroke-linecap="butt"/></marker>'
+      + '<marker id="p7" fub:role="shared" fub:marker="bar medium end" refX="1" refY="3" markerWidth="2" markerHeight="6" orient="auto"><path d="M1 0.5 L1 5.5" fill="none" stroke="#cc79a7" stroke-width="1" stroke-linecap="butt"/></marker>'
+      + '<marker id="p8" fub:role="shared" fub:marker="triangle large end" refX="5.17" refY="4" markerWidth="7.07" markerHeight="8" orient="auto"><path d="M6.57 4 L0.51 7.5 L0.51 0.5 Z" fill="url(#s1) #e69f00"/></marker>'
+      + '<marker id="p9" fub:role="shared" fub:marker="triangle small start" refX="1.9" refY="2.25" markerWidth="4.04" markerHeight="4.5" orient="auto"><path d="M0.5 2.25 L3.53 4 L3.53 0.5 Z" fill="url(#s1) #e69f00"/></marker>'
+      + '<marker id="p10" fub:role="shared" fub:marker="triangle medium start" refX="1.9" refY="3" markerWidth="5.34" markerHeight="6" orient="auto"><path d="M0.5 3 L4.83 5.5 L4.83 0.5 Z" fill="#1270a3"/></marker>'
+      + '<marker id="p11" fub:role="shared" fub:marker="triangle medium end" refX="3.44" refY="3" markerWidth="5.34" markerHeight="6" orient="auto"><path d="M4.84 3 L0.51 5.5 L0.51 0.5 Z" fill="#c3600f"/></marker>'
+      + '<marker id="p12" fub:role="shared" fub:marker="circle medium start" refX="2.5" refY="2.5" markerWidth="5" markerHeight="5" orient="auto"><circle cx="2.5" cy="2.5" r="2" fill="#56b4e9"/></marker>'
+      + '<marker id="p13" fub:role="shared" fub:marker="vee medium end" refX="4.84" refY="3.5" markerWidth="6.34" markerHeight="7" orient="auto"><path d="M1.01 1 L5.34 3.5 L1.01 6" fill="none" stroke="#56b4e9" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></marker>'
+      + '<marker id="p14" fub:role="shared" fub:marker="triangle medium end" refX="3.44" refY="3" markerWidth="5.34" markerHeight="6" orient="auto"><path d="M4.84 3 L0.51 5.5 L0.51 0.5 Z" fill="#1a202c"/></marker>'
+      + `</defs>${LAYER}`
+      + '<line id="o1" x1="16" y1="20" x2="104" y2="20" stroke="#0072b2" stroke-width="3" marker-start="url(#p2)" marker-end="url(#p1)"/>'
+      + '<polyline id="o2" points="136,36 160,12 184,36 208,12" fill="none" stroke="#d55e00" stroke-width="2" stroke-opacity="0.6" stroke-linejoin="round" marker-end="url(#p3)"/>'
+      + '<path id="o3" d="M 16 64 C 40 30 76 92 104 56" fill="none" stroke="#009e73" stroke-width="2.5" marker-start="url(#p4)" marker-end="url(#p5)"/>'
+      + '<line id="o4" x1="140" y1="52" x2="224" y2="76" stroke="#cc79a7" stroke-width="3" stroke-linecap="square" stroke-dasharray="6 4" marker-start="url(#p6)" marker-end="url(#p7)"/>'
+      + '<line id="o5" x1="20" y1="100" x2="100" y2="100" stroke="url(#s1) #e69f00" stroke-width="3" marker-start="url(#p9)" marker-end="url(#p8)"/>'
+      + '<line id="o6" x1="140" y1="100" x2="220" y2="100" stroke="url(#g1) #6a6859" stroke-width="4" marker-start="url(#p10)" marker-end="url(#p11)"/>'
+      + '<g id="g2" transform="rotate(-12 60 136)" stroke="#56b4e9" stroke-width="3"><path id="o7" d="M 20 136 L 100 136" fill="none" marker-start="url(#p12)" marker-end="url(#p13)"/></g>'
+      + '<path id="o8" d="M 136 144 L 204 124 L 204 124" fill="none" stroke="#1a202c" stroke-width="2" marker-end="url(#p14)"/></g>'),
+  },
+  {
     // Tre tavole: due con la carta, bianca e azzurra, una senza, che mostra
     // il fondo. Le forme stanno sulle tavole, il testo su quella senza carta,
     // e un rettangolo passa sopra lo spazio fra le prime due.

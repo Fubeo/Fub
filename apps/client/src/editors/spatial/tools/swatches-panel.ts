@@ -531,12 +531,7 @@ export function createSwatchesPanel(life: Lifetime, options: SwatchesPanelOption
   const openMenu = (entry: Entry, at: MouseEvent | null): void => {
     const chip = chipOf(entry.group, entry.key);
     if (chip === null) return;
-    let point = at;
-    if (point === null) {
-      const box = chip.getBoundingClientRect();
-      point = new MouseEvent("contextmenu", { clientX: box.left, clientY: box.bottom + 4, bubbles: true, cancelable: true });
-    }
-    showContextMenu(point, menuItems(entry), { labelledBy: chip.id });
+    showContextMenu(at ?? chip, menuItems(entry), { labelledBy: chip.id });
   };
 
   // --- La tastiera e il puntatore -------------------------------------------------

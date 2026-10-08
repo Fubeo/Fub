@@ -9,11 +9,14 @@ import { decodeInk, inkToQuantized } from "../ink/codec";
 import { parseBrush } from "../ink/brush";
 import { pf1 } from "../ink/pf1";
 import { doc } from "../scene/test-support";
-import { Plan } from "./arrange";
+import { nodeOf, Plan, plainAttributes } from "./arrange";
+import { joinAcross, joinEnds } from "./cut";
 import { gesture, NewIds } from "./edit";
-import { breakNodes, inferred, insertNode, moveNodes, setLinks, type NodeKey, type Subpath } from "./nodes";
+import { pooledTips, type EndTips } from "./endtips";
+import { breakNodes, deleteNodes, inferred, insertNode, moveNodes, setLinks, type Edited, type NodeKey, type Subpath } from "./nodes";
 import { draftOf, nodableOf, rewrite, rewriteOps, type Nodable } from "./nodable";
 import { LAYER, open, type Opened } from "./test-support";
+import { applied, attrOf, BLUE, DEFS, ENDS, followed, MARKER, markersIn, RED, tipOf } from "./tip-support";
 
 const STROKE = 'fill="none" stroke="#000000" stroke-width="2"';
 const BRUSH = "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0";
@@ -261,5 +264,239 @@ describe("un tratto a penna resta un tratto", () => {
   it("e mentre lo si tira si vede col contorno del pennello", () => {
     const n = nodable(opened(stroke("s")), "s");
     expect(draftOf(n, move(n.subs, ["0:1"], 0, 100))).toMatch(/^M[^Z]* Z$/);
+  });
+});
+
+describe("le punte quando si modificano i nodi", () => {
+  const MARKERS: Record<string, string> = {
+    ms: MARKER("ms", "circle", "small", "start"),
+    me: MARKER("me", "triangle", "large", "end"),
+    mb: MARKER("mb", "square", "medium", "end", BLUE),
+    mbs: MARKER("mbs", "vee", "medium", "start", BLUE),
+  };
+  const START = "circle small start #d55e00";
+  const END = "triangle large end #d55e00";
+
+  const path = (id: string, d: string, stroke = RED, tips = ENDS("ms", "me")): string => `<path id="${id}" d="${d}" fill="none" stroke="${stroke}" stroke-width="2"${tips}/>`;
+
+  /// Il disegno con `body` e i marcatori che `body` usa, col seguito delle
+  /// punte: un marcatore che già in partenza nessuno usa non lo raccoglie
+  /// nessun comando.
+  const sheet = (body: string): Opened =>
+    followed(doc(DEFS(...Object.entries(MARKERS).filter(([id]) => body.includes(`url(#${id})`)).map(([, marker]) => marker)) + LAYER + body + "</g>"));
+
+  /// Scrive `edit` su `id` come lo scrive l'editor, in un passo, e torna il
+  /// testo di dopo.
+  function edited(o: Opened, id: string, edit: Edited, tips?: EndTips): string {
+    const change = rewrite(nodable(o, id), edit.subs, edit.moved, tips);
+    if (change.kind !== "set" && change.kind !== "path") throw new Error(`niente da scrivere: ${change.kind}`);
+    const plan = new Plan(o.engine.model!, new NewIds((name) => o.engine.holder(name) !== null));
+    expect(rewriteOps(plan, o.engine.holder(id)!, change)).not.toBeNull();
+    return applied(o, plan.finish([id]).ops);
+  }
+
+  const subsOf = (o: Opened, id: string): readonly Subpath[] => nodable(o, id).subs;
+  const OPEN = "M0 0 L50 0 L100 0 L100 50";
+
+  it("chiudere l'unico sottotracciato aperto toglie le punte, e i marcatori che non servono più", () => {
+    const o = sheet(path("oa", OPEN));
+    const text = edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:0", "0:3", 0.5)!);
+    expect(text).toContain(`<path id="oa" d="M0 0 L50 0 L100 0 L100 50 Z" fill="none" stroke="${RED}" stroke-width="2"/>`);
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("un capo che si chiude con un nodo solo, a metà strada, toglie le punte allo stesso modo", () => {
+    const o = sheet(path("oa", "M0 0 L50 0 L50 40 L0.2 0.2"));
+    const text = edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:0", "0:3", 0.5)!);
+    expect(text).toContain(" Z");
+    expect(attrOf(o, "oa", "marker-start")).toBeNull();
+    expect(attrOf(o, "oa", "marker-end")).toBeNull();
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("se resta un sottotracciato aperto, le punte restano", () => {
+    const o = sheet(path("oa", "M0 0 L50 0 L100 0 M200 0 L250 0"));
+    const text = edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:0", "0:2", 0.5)!);
+    expect(text).toContain(`d="M0 0 L50 0 L100 0 Z M200 0 L250 0"`);
+    expect([tipOf(o, "oa", "start"), tipOf(o, "oa", "end")]).toEqual([START, END]);
+    expect(markersIn(o)).toEqual(["ms", "me"]);
+  });
+
+  it("inserire, togliere, spezzare o spostare nodi lascia le punte com'erano: cambia solo `d`", () => {
+    const cases: Array<[string, (subs: readonly Subpath[]) => Edited]> = [
+      ["inserire in mezzo", (subs) => insertNode(subs, 0, 1, 0.5)],
+      ["togliere il primo", (subs) => deleteNodes(subs, new Set(["0:0"]))],
+      ["togliere l'ultimo", (subs) => deleteNodes(subs, new Set(["0:3"]))],
+      ["togliere i due in mezzo", (subs) => deleteNodes(subs, new Set(["0:1", "0:2"]))],
+      ["spezzare in un nodo", (subs) => breakNodes(subs, new Set(["0:1"]))],
+      ["spezzare in un altro", (subs) => breakNodes(subs, new Set(["0:2"]))],
+      ["spezzare in due", (subs) => breakNodes(subs, new Set(["0:1", "0:2"]))],
+    ];
+    for (const [name, edit] of cases) {
+      const o = sheet(path("oa", OPEN));
+      const done = edit(subsOf(o, "oa"));
+      const change = rewrite(nodable(o, "oa"), done.subs, done.moved);
+      expect([name, change.kind]).toEqual([name, "set"]);
+      expect([name, "tips" in change]).toEqual([name, false]);
+      const before = o.engine.text;
+      const text = edited(o, "oa", done);
+      expect(text, name).not.toBe(before);
+      expect([name, attrOf(o, "oa", "marker-start"), attrOf(o, "oa", "marker-end")]).toEqual([name, "url(#ms)", "url(#me)"]);
+      expect([name, markersIn(o)]).toEqual([name, ["ms", "me"]]);
+    }
+  });
+
+  it("togliere il primo nodo lascia la punta d'inizio al vertice che prende il suo posto", () => {
+    const o = sheet(path("oa", OPEN));
+    const text = edited(o, "oa", deleteNodes(subsOf(o, "oa"), new Set(["0:0"])));
+    expect(text).toContain(`<path id="oa" d="M50 0 L100 0 L100 50" fill="none" stroke="${RED}" stroke-width="2" marker-start="url(#ms)" marker-end="url(#me)"/>`);
+  });
+
+  it("due capi di sottotracciati diversi che si uniscono: la punta del capo che non lo è più se ne va", () => {
+    // L'inizio con l'inizio: il primo si percorre al contrario e l'inizio di prima è in mezzo.
+    const o = sheet(path("oa", "M0 0 L50 0 M0 10 L50 10"));
+    const text = edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:0", "1:0", 0.5)!);
+    expect(text).toContain(`d="M50 0 L0 0 L0 10 L50 10"`);
+    expect(attrOf(o, "oa", "marker-start")).toBeNull();
+    expect(tipOf(o, "oa", "end")).toBe(END);
+    expect(markersIn(o)).toEqual(["me"]);
+  });
+
+  it("la fine con la fine: la fine di prima è in mezzo, e la fine nuova non ha punta", () => {
+    const o = sheet(path("oa", "M0 0 L50 0 M100 0 L50 0"));
+    const text = edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:1", "1:1", 0.5)!);
+    expect(text).toContain(`d="M0 0 L50 0 L100 0"`);
+    expect(tipOf(o, "oa", "start")).toBe(START);
+    expect(attrOf(o, "oa", "marker-end")).toBeNull();
+    expect(markersIn(o)).toEqual(["ms"]);
+  });
+
+  it("la fine con l'inizio, in ordine: capo e coda restano com'erano", () => {
+    const o = sheet(path("oa", "M0 0 L50 0 M50 0 L100 0"));
+    const done = joinEnds(subsOf(o, "oa"), "0:1", "1:0", 0.5)!;
+    expect("tips" in rewrite(nodable(o, "oa"), done.subs, done.moved)).toBe(false);
+    const text = edited(o, "oa", done);
+    expect(text).toContain(`d="M0 0 L50 0 L100 0"`);
+    expect([tipOf(o, "oa", "start"), tipOf(o, "oa", "end")]).toEqual([START, END]);
+  });
+
+  it("l'inizio con la fine: tutti e due i capi che avevano la punta finiscono in mezzo", () => {
+    const o = sheet(path("oa", "M50 0 L100 0 M0 0 L50 0"));
+    const text = edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:0", "1:1", 0.5)!);
+    // Tutti e due si percorrono al contrario, e il tracciato nuovo comincia e finisce
+    // nei capi che non erano né il primo vertice né l'ultimo.
+    expect(text).toContain(`d="M100 0 L50 0 L0 0"`);
+    // Il primo vertice di prima era 50 0 e l'ultimo 50 0: tutti e due in mezzo adesso.
+    expect(attrOf(o, "oa", "marker-start")).toBeNull();
+    expect(attrOf(o, "oa", "marker-end")).toBeNull();
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("una spezzata chiusa diventa un tracciato senza punte, con lo stesso id", () => {
+    const o = sheet(`<polyline id="op" points="0,0 50,0 50,50" fill="none" stroke="${RED}" stroke-width="2"${ENDS("ms", "me")}/>`);
+    const text = edited(o, "op", joinEnds(subsOf(o, "op"), "0:0", "0:2", 0.5)!);
+    expect(text).not.toContain("<polyline");
+    expect(text).toContain(`<path id="op" d="M0 0 L50 0 L50 50 Z" fill="none" stroke="${RED}" stroke-width="2"/>`);
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("una linea con un nodo in più diventa un tracciato che tiene le punte", () => {
+    const o = sheet(`<line id="ol" x1="0" y1="0" x2="100" y2="0" stroke="${RED}" stroke-width="2"${ENDS("ms", "me")}/>`);
+    const done = insertNode(subsOf(o, "ol"), 0, 0, 0.5);
+    const text = edited(o, "ol", done);
+    expect(text).not.toContain("<line");
+    expect(text).toContain(`<path id="ol" d="M0 0 L50 0 L100 0" stroke="${RED}" stroke-width="2" marker-start="url(#ms)" marker-end="url(#me)"/>`);
+    expect([tipOf(o, "ol", "start"), tipOf(o, "ol", "end")]).toEqual([START, END]);
+    expect(markersIn(o)).toEqual(["ms", "me"]);
+  });
+
+  it("una spezzata senza l'ultimo nodo tiene la punta di fine sul vertice che prende il suo posto", () => {
+    const o = sheet(`<polyline id="op" points="0,0 50,0 50,50" fill="none" stroke="${RED}" stroke-width="2"${ENDS("ms", "me")}/>`);
+    edited(o, "op", deleteNodes(subsOf(o, "op"), new Set(["0:2"])));
+    expect([tipOf(o, "op", "start"), tipOf(o, "op", "end")]).toEqual([START, END]);
+  });
+
+  it("senza punte, i nodi non scrivono nessun attributo di punta", () => {
+    const o = sheet(path("oa", OPEN, RED, ""));
+    const text = edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:0", "0:3", 0.5)!);
+    expect(text).not.toContain("marker-");
+    expect(text).toContain(" Z");
+  });
+
+  it("un marcatore che non è della raccolta segue le stesse regole", () => {
+    const custom = `<marker id="cm" markerWidth="4" markerHeight="4" refX="2" refY="2" orient="auto"><circle cx="2" cy="2" r="2" fill="#000000"/></marker>`;
+    const body = path("oa", OPEN, RED, ` marker-start="url(#cm)" marker-end="url(#cm)"`);
+    const o = followed(doc(DEFS(custom) + LAYER + body + "</g>"));
+    edited(o, "oa", joinEnds(subsOf(o, "oa"), "0:0", "0:3", 0.5)!);
+    expect(attrOf(o, "oa", "marker-start")).toBeNull();
+    expect(attrOf(o, "oa", "marker-end")).toBeNull();
+  });
+
+  describe("uniti da un tracciato all'altro", () => {
+    /// Come `joinTwo` dell'editor: il primo prende il sottotracciato del
+    /// secondo, che lo perde, e se è il solo se ne va.
+    function across(o: Opened, firstId: string, a: NodeKey, secondId: string, b: NodeKey): string {
+      const model = o.engine.model!;
+      const first = nodable(o, firstId);
+      const second = nodable(o, secondId);
+      const joined = joinAcross(first.subs, a, second.subs, b, [1, 0, 0, 1, 0, 0], 0.5)!;
+      const plan = new Plan(model, new NewIds((name) => o.engine.holder(name) !== null));
+      const firstNode = nodeOf(model, { path: o.index.get(firstId)!.path });
+      const secondNode = nodeOf(model, { path: o.index.get(secondId)!.path });
+      const kept = rewrite(first, joined.kept.subs, joined.kept.moved, pooledTips([plainAttributes(secondNode)], joined.tips.kept));
+      if (kept.kind !== "set" && kept.kind !== "path") throw new Error(kept.kind);
+      expect(rewriteOps(plan, firstNode, kept)).not.toBeNull();
+      const rest = rewrite(second, joined.rest.subs, joined.rest.moved, joined.tips.rest);
+      if (rest.kind === "remove") plan.ops.push({ op: "remove", target: secondId });
+      else if (rest.kind === "set" || rest.kind === "path") expect(rewriteOps(plan, secondNode, rest)).not.toBeNull();
+      else throw new Error(rest.kind);
+      return applied(o, plan.finish([firstId]).ops);
+    }
+
+    it("la fine di uno con l'inizio dell'altro: l'inizio è del primo, la fine del secondo, nel colore del primo", () => {
+      const o = sheet(path("oa", "M0 0 L50 0") + path("ob", "M50 0 L100 0", BLUE, ENDS(null, "mb")));
+      const text = across(o, "oa", "0:1", "ob", "0:0");
+      expect(text).toContain(`d="M0 0 L50 0 L100 0"`);
+      expect(text).not.toContain(`id="ob"`);
+      expect(tipOf(o, "oa", "start")).toBe(START);
+      expect(tipOf(o, "oa", "end")).toBe("square medium end #d55e00");
+    });
+
+    it("il secondo si percorre al contrario: la sua punta d'inizio diventa la fine del primo", () => {
+      const o = sheet(path("oa", "M0 0 L50 0", RED, ENDS("ms", null)) + path("ob", "M100 0 L50 0", BLUE, ENDS("mbs", null)));
+      const text = across(o, "oa", "0:1", "ob", "0:1");
+      expect(text).toContain(`d="M0 0 L50 0 L100 0"`);
+      expect(tipOf(o, "oa", "start")).toBe(START);
+      expect(tipOf(o, "oa", "end")).toBe("vee medium end #d55e00");
+    });
+
+    it("il primo si percorre al contrario: la sua fine diventa l'inizio", () => {
+      const o = sheet(path("oa", "M50 0 L0 0", RED, ENDS("ms", "me")) + path("ob", "M50 0 L100 0", BLUE, ENDS(null, "mb")));
+      const text = across(o, "oa", "0:0", "ob", "0:0");
+      expect(text).toContain(`d="M0 0 L50 0 L100 0"`);
+      expect(tipOf(o, "oa", "start")).toBe("triangle large start #d55e00");
+      expect(tipOf(o, "oa", "end")).toBe("square medium end #d55e00");
+    });
+
+    it("un capo senza punta non ne prende: la togliamo dal primo", () => {
+      const o = sheet(path("oa", "M0 0 L50 0", RED, ENDS("ms", "me")) + path("ob", "M50 0 L100 0", BLUE, ENDS("mbs", null)));
+      across(o, "oa", "0:1", "ob", "0:0");
+      expect(tipOf(o, "oa", "start")).toBe(START);
+      expect(attrOf(o, "oa", "marker-end")).toBeNull();
+      expect(markersIn(o)).toEqual(["ms"]);
+    });
+
+    it("l'altro, con altri sottotracciati, resta; ma senza la punta del capo che ha dato", () => {
+      const o = sheet(path("oa", "M0 0 L50 0", RED, ENDS("ms", "me")) + path("ob", "M50 0 L100 0 M300 0 L350 0", BLUE, ENDS("mbs", "mb")));
+      const text = across(o, "oa", "0:1", "ob", "0:0");
+      expect(text).toContain(`<path id="oa" d="M0 0 L50 0 L100 0"`);
+      expect(text).toContain(`<path id="ob" d="M300 0 L350 0"`);
+      // Il primo ha l'inizio suo e la fine di prima rimpiazzata dal capo di arrivo, senza punta in B alla sua fine di sottotracciato.
+      expect(tipOf(o, "oa", "start")).toBe(START);
+      expect(attrOf(o, "oa", "marker-end")).toBeNull();
+      // L'altro ha perso la punta d'inizio, che stava nel capo che ha dato, e tiene la fine.
+      expect(attrOf(o, "ob", "marker-start")).toBeNull();
+      expect(tipOf(o, "ob", "end")).toBe("square medium end #0072b2");
+    });
   });
 });

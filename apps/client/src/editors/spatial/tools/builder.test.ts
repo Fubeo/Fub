@@ -7,6 +7,7 @@ import { doc, HEAD } from "../scene/test-support";
 import { builderOf, buildOps, type Builder, type BuildRefused, type BuiltOps } from "./builder";
 import { gesture, NewIds } from "./edit";
 import { LAYER, open, type Opened } from "./test-support";
+import { applied, attrOf, DEFS, ENDS, followed, MARKER, markersIn } from "./tip-support";
 
 const ids = (opened: Opened): NewIds => new NewIds((id) => opened.engine.holder(id) !== null);
 
@@ -195,5 +196,80 @@ describe("il documento indentato", () => {
     expect(written(opened, change)).toBe(
       `${HEAD}\n  ${LAYER}\n    <path id="a" d="M10 10 L5 10 L5 5 L10 5 Z" ${RED}/>\n    <path id="${piece}" d="M0 0 L10 0 L10 5 L5 5 L5 10 L0 10 Z M10 10 L10 5 L15 5 L15 15 L5 15 L5 10 Z" ${RED}/>\n    <path id="b" d="M10 10 L5 10 L5 5 L10 5 Z" ${BLUE}/>\n  </g>\n</svg>\n`,
     );
+  });
+});
+
+describe("il Costruttore e le punte", () => {
+  const MS = MARKER("ms", "circle", "small", "start");
+  const ME = MARKER("me", "triangle", "large", "end");
+  const TIPS = `${ENDS("ms", "me")} marker-mid="url(#ms)"`;
+  const sheet = (body: string): Opened => followed(doc(DEFS(MS, ME) + LAYER + body + "</g>"));
+  const shape = (id: string, x: number, style: string, extra = ""): string => `<path id="${id}" d="M${x} ${x} L${x + 10} ${x} L${x + 10} ${x + 10} L${x} ${x + 10} Z" ${style}${extra}/>`;
+  /// Il Costruttore su `chosen`, scritto in un passo: il testo di dopo e il comando.
+  function run(o: Opened, chosen: readonly number[], erase = false): { text: string; change: BuiltOps } {
+    const change = built(o, chosen, erase);
+    if ("reason" in change) throw new Error(change.reason);
+    return { text: applied(o, change.ops), change };
+  }
+
+  it("le forme che riscrive e il pezzo nuovo sono regioni: nessuna punta", () => {
+    const o = sheet(shape("a", 0, RED, TIPS) + shape("b", 5, BLUE, TIPS));
+    const { text, change } = run(o, [1]);
+    expect(change.keys).toHaveLength(3);
+    expect(text).not.toContain("marker-");
+    expect(markersIn(o)).toEqual([]);
+    // Il pezzo nuovo ha ancora lo stile della forma più in alto.
+    expect(attrOf(o, change.keys[2]!, "fill")).toBe("#0000ff");
+  });
+
+  it("togliere una regione riscrive la forma senza punte; le forme che non tocca le tengono", () => {
+    const o = sheet(shape("a", 0, RED, TIPS) + shape("b", 5, BLUE, TIPS) + shape("c", 50, BLUE, ENDS("ms", "me")));
+    const { text } = run(o, [1], true);
+    expect(attrOf(o, "a", "marker-start")).toBeNull();
+    expect(attrOf(o, "b", "marker-end")).toBeNull();
+    expect(attrOf(o, "c", "marker-start")).toBe("url(#ms)");
+    expect(attrOf(o, "c", "marker-end")).toBe("url(#me)");
+    expect(text.match(/marker-/g)).toHaveLength(2);
+    expect(markersIn(o)).toEqual(["ms", "me"]);
+  });
+
+  it("l'unione fa una regione sola: la forma che la diventa non ha punte, e le altre se ne vanno con le loro", () => {
+    const o = sheet(shape("a", 0, RED, TIPS) + shape("b", 5, BLUE, TIPS));
+    const { text, change } = run(o, [2, 1, 0]);
+    expect(change).toMatchObject({ keys: ["b"], removed: 1 });
+    expect(text).not.toContain("marker-");
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("una linea che taglia soltanto resta com'è, con le sue punte; la forma che divide le perde", () => {
+    const o = sheet(`<path id="a" d="M0 0 L20 0 L20 20 L0 20 Z" ${RED}${TIPS}/><line id="b" x1="-5" y1="10" x2="25" y2="10" stroke="#000000"${ENDS("ms", "me")}/>`);
+    const { change } = run(o, [0]);
+    const piece = change.keys[1]!;
+    expect(attrOf(o, "a", "marker-start")).toBeNull();
+    expect(attrOf(o, "a", "marker-mid")).toBeNull();
+    expect(attrOf(o, piece, "marker-end")).toBeNull();
+    expect(attrOf(o, "b", "marker-start")).toBe("url(#ms)");
+    expect(attrOf(o, "b", "marker-end")).toBe("url(#me)");
+    expect(markersIn(o)).toEqual(["ms", "me"]);
+  });
+
+  it("una forma che resta disegnata com'era non si riscrive, e tiene quel che ha", () => {
+    // Unire due regioni che fanno una forma intera: la prima resta com'è.
+    const o = sheet(shape("a", 0, RED, ENDS("ms", "me")) + shape("b", 5, BLUE, ENDS("ms", "me")));
+    run(o, [0, 1]);
+    expect(attrOf(o, "a", "marker-start")).toBe("url(#ms)");
+    expect(attrOf(o, "b", "marker-start")).toBeNull();
+    expect(markersIn(o)).toEqual(["ms", "me"]);
+  });
+
+  it("senza il seguito, le operazioni scrivono soltanto gli attributi che cadono, e il pezzo nuovo non li porta", () => {
+    const o = open(doc(DEFS(MS, ME) + LAYER + shape("a", 0, RED, TIPS) + shape("b", 5, BLUE, "") + "</g>"));
+    const change = built(o, [1]) as BuiltOps;
+    const sets = change.ops.filter((op) => op.op === "set");
+    expect(sets).toContainEqual({ op: "set", id: "a", attrs: { "marker-start": null, "marker-mid": null, "marker-end": null } });
+    const added = change.ops.filter((op) => op.op === "add");
+    expect(added).toHaveLength(1);
+    expect(JSON.stringify(added)).not.toContain("marker");
+    expect(JSON.stringify(sets.filter((op) => op.op === "set" && op.id === "b"))).not.toContain("marker");
   });
 });

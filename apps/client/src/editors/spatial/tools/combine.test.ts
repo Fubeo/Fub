@@ -8,6 +8,7 @@ import type { BooleanKind } from "./boolean";
 import { combineOps, type Combined, type Refused } from "./combine";
 import { gesture, NewIds } from "./edit";
 import { LAYER, open, type Opened } from "./test-support";
+import { applied, attrOf, DEFS, ENDS, followed, MARKER, markersIn, RED } from "./tip-support";
 
 const ids = (opened: Opened): NewIds => new NewIds((id) => opened.engine.holder(id) !== null);
 
@@ -195,5 +196,70 @@ describe("le operazioni booleane che non si fanno", () => {
       doc(`${LAYER.replace(">", ' transform="scale(1e-38)">')}<rect id="a" x="0" y="0" width="20" height="20" transform="scale(1e-38)"/></g><g id="l2" fub:layer="Livello 2" transform="scale(1e38)"><rect id="b" x="0" y="0" width="3e38" height="3e38" transform="scale(1e38)"/></g>`),
     );
     expect(combined(huge, "union")).toEqual({ reason: "failed" });
+  });
+});
+
+describe("le booleane e le punte", () => {
+  const MS = MARKER("ms", "circle", "small", "start");
+  const ME = MARKER("me", "triangle", "large", "end");
+  const MID = 'marker-mid="url(#ms)"';
+  const SQUARE = "M0 0 L10 0 L10 10 L0 10";
+  const sheet = (body: string): Opened => followed(doc(DEFS(MS, ME) + LAYER + body + "</g>"));
+  const bottom = (id: string, d: string, extra: string): string => `<path id="${id}" d="${d}" fill="${RED}" stroke="#000000" stroke-width="2"${extra}/>`;
+  /// L'operazione `kind` su `keys`, in un passo: il testo di dopo e il comando.
+  function run(o: Opened, kind: BooleanKind, keys: readonly string[]): { text: string; change: Combined } {
+    const change = combined(o, kind, keys);
+    if ("reason" in change) throw new Error(change.reason);
+    return { text: applied(o, change.ops), change };
+  }
+
+  it("il risultato è una regione: la forma più in basso perde marker-start, marker-mid e marker-end", () => {
+    for (const kind of ["union", "difference", "intersection", "exclusion"] as const) {
+      const o = sheet(bottom("a", SQUARE, `${ENDS("ms", "me")} ${MID}`) + `<rect id="b" x="5" y="5" width="10" height="10"/>`);
+      const { text } = run(o, kind, ["a", "b"]);
+      expect([kind, text.includes("marker-")]).toEqual([kind, false]);
+      // I marcatori che servivano solo a lei sono raccolti.
+      expect([kind, markersIn(o)]).toEqual([kind, []]);
+    }
+  });
+
+  it("una forma chiusa con le punte, che l'unione non cambia, le perde lo stesso", () => {
+    const o = sheet(bottom("a", `${SQUARE} Z`, ENDS("ms", "me")));
+    const { text, change } = run(o, "union", ["a"]);
+    expect(change.ops).toEqual([{ op: "set", id: "a", attrs: { "marker-start": null, "marker-end": null } }]);
+    expect(text).toContain(`<path id="a" d="${SQUARE} Z" fill="${RED}" stroke="#000000" stroke-width="2"/>`);
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("le altre forme, con le loro punte, se ne vanno con loro: i marcatori che usavano non restano", () => {
+    const o = sheet(bottom("a", `${SQUARE} Z`, "") + bottom("b", "M5 5 L15 5 L15 15 L5 15", ENDS("ms", "me")));
+    const { text } = run(o, "union", ["a", "b"]);
+    expect(text).not.toContain('id="b"');
+    expect(text).not.toContain("marker-");
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("senza il seguito, le operazioni dicono soltanto quali attributi cadono", () => {
+    const o = open(doc(DEFS(MS, ME) + LAYER + bottom("a", SQUARE, `${ENDS("ms", "me")} ${MID}`) + `<rect id="b" x="5" y="5" width="10" height="10"/></g>`));
+    const change = combined(o, "union", ["a", "b"]) as Combined;
+    const sets = change.ops.filter((op) => op.op === "set");
+    expect(sets).toHaveLength(2);
+    expect(sets[1]).toEqual({ op: "set", id: "a", attrs: { "marker-start": null, "marker-mid": null, "marker-end": null } });
+    expect(change.ops.filter((op) => op.op === "add")).toEqual([]);
+  });
+
+  it("la divisione: nessun pezzo ha punte, né il primo né quelli nuovi", () => {
+    const o = sheet(bottom("a", `${SQUARE} Z`, `${ENDS("ms", "me")} ${MID}`) + `<line id="b" x1="5" y1="-5" x2="5" y2="15" stroke="#000000"/>`);
+    const { text, change } = run(o, "division", ["a", "b"]);
+    expect(change.keys).toHaveLength(2);
+    expect(text).not.toContain("marker-");
+    for (const key of change.keys) expect(attrOf(o, key, "stroke-width")).toBe("2");
+    expect(markersIn(o)).toEqual([]);
+  });
+
+  it("una forma senza punte non cambia: le booleane non scrivono attributi che non ci sono", () => {
+    const o = sheet(bottom("a", SQUARE, "") + `<rect id="b" x="5" y="5" width="10" height="10"/>`);
+    const change = combined(o, "union", ["a", "b"]) as Combined;
+    expect(JSON.stringify(change.ops)).not.toContain("marker");
   });
 });

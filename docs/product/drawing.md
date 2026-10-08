@@ -94,6 +94,7 @@ Lo Standard aggiunge:
   documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
 - la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
   **«Sfumatura»**: lineare o radiale, coi suoi punti ([Disegni, sfumature](drawing-gradients.md));
+- nelle «Proprietà» le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
@@ -181,9 +182,8 @@ sceglierne uno lo rende corrente; poi ha i comandi su quello corrente:
 
 Penna, evidenziatore, forme, testi e immagini, incollate o dal vault, vanno nel
 livello corrente. Se è nascosto o bloccato il gesto non scrive, e un annuncio
-dice perché e che cosa fare. Scegliere oggetti che stanno tutti in un livello
-rende corrente quel livello, e l'albero degli oggetti dice qual è: «Livello
-«Note», corrente».
+dice perché e che cosa fare. Scegliere oggetti tutti in un livello lo rende
+corrente, e l'albero degli oggetti lo dice: «Livello «Note», corrente».
 
 Nella barra «Disponi», **Sposta in un livello** porta gli oggetti scelti in cima
 a un altro livello, nell'ordine in cui stavano, dove si vedevano e con lo stile

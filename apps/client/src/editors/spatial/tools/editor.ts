@@ -235,6 +235,7 @@ import {
   SHAPE_ACTIONS,
   shapeChange,
   sheetChange,
+  tipChange,
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
@@ -284,6 +285,7 @@ import {
   type DocumentColors,
   type SwatchChange,
 } from "./swatches";
+import { followTips, tipOps, tipsLookOf, type TipChange } from "./tips";
 import {
   angleOf,
   directionCursor,
@@ -336,7 +338,8 @@ import { holdsWidth, profileOps, widthsOf, widthTarget, writeWidth, type NoWidth
 import type { BooleanKind } from "./boolean";
 import { combineOps, isShape, type Refused } from "./combine";
 import { crossings, cutAt, joinAcross, joinEnds, mapSubs, nodeSpot, type Spot } from "./cut";
-import { cuttable, dsOf, holdsOpenPath, joinOps, knifePieces, piecesOf, writePieces, type JoinRefused } from "./scissors";
+import { cuttable, dsOf, holdsOpenPath, joinOps, knifePieces, piecesOf, tipsOfCut, writePieces, type JoinRefused } from "./scissors";
+import { pooledTips, type EndTips } from "./endtips";
 import { builderOf, buildOps, type Builder, type BuildRefused } from "./builder";
 import {
   bend,
@@ -1709,6 +1712,9 @@ interface NodeChange {
   readonly kinds: ReadonlyMap<NodeKey, NodeKind>;
   readonly moved?: ReadonlyMap<NodeKey, NodeKey>;
   readonly changed?: number;
+  /// Le punte dei capi della forma dopo, se la modifica porta in lei i capi
+  /// di un'altra; se no le dicono i nodi.
+  readonly tips?: EndTips;
 }
 
 /// Un tocco con lo strumento Nota: dove, nella scena.
@@ -2081,6 +2087,13 @@ function layerRefusal(layer: LayerInfo): DrawKey | null {
   return layer.hidden ? "draw.layer.hidden_here" : layer.locked ? "draw.layer.locked_here" : null;
 }
 
+/// Il nome del passo d'annulla di un cambio delle punte.
+function tipAction(change: TipChange): DrawKey {
+  if ("swap" in change) return "draw.action.tips_swap";
+  if ("size" in change) return "draw.action.tip_size";
+  return change.end === "start" ? "draw.action.tip_start" : "draw.action.tip_end";
+}
+
 /// `next` come griglia, col passo di `before` se il suo è fuori dai limiti,
 /// e i passi delle altre unità che la griglia accetta.
 function checkedGrid(next: Grid, before: Grid): Grid {
@@ -2156,7 +2169,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const has = (feature: Feature): boolean => features.has(feature);
   const relabels: Array<() => void> = [];
 
-  let engine = initial;
+  /// `next`, con le punte delle linee che tengono il colore del contorno:
+  /// il motore le segue a ogni operazione, nello stesso passo d'annulla, e
+  /// trova ciò che ha toccato col suo indice invece di scorrere il disegno.
+  const following = (next: SceneEngine): SceneEngine => {
+    const find = (id: string): ElementPart | null => next.holder(id);
+    next.follow = (model, touched) => followTips(model, touched, new NewIds((id) => find(id) !== null), find);
+    return next;
+  };
+  let engine = following(initial);
   let tool: ToolId = startTool(tools, profile);
   /// Il colore e lo spessore di chi scrive: la penna, le forme e le note li
   /// condividono, l'evidenziatore e la copertura hanno i loro.
@@ -5421,6 +5442,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       drawn: drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => orderOps(model, index, units, order, newIds()).ops.length > 0) : []),
       shape: shapeFacts(model, units),
+      tips: has("tips") ? tipsLookOf(model, units) : null,
     };
   };
 
@@ -5649,6 +5671,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const outcome = changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
       if (outcome === null && restyled.overflow) announce(t("draw.text.overflow"));
       return outcome;
+    }
+    const tip = tipChange(id, value);
+    if (tip !== null) {
+      const tipped = tipOps(model, units, tip, newIds());
+      return changeFromPanel(tipAction(tip), tipped.ops, tipped.keys);
     }
     const change = outlineChange(id, value);
     if (change === null) return null;
@@ -9286,7 +9313,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const plan = new Plan(model, newIds());
     const node = nodeOf(model, { path: pathOf(found.leaf) });
-    const keys = writePieces(plan, node, written);
+    const keys = writePieces(plan, node, written, tipsOfCut(cut));
     if (keys === null) {
       announce(t("draw.nodes.unwritable"));
       return;
@@ -9331,16 +9358,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           if (crossings(nodable.subs, local).length > 0) skipped++;
           continue;
         }
-        const written = knifePieces(nodable.subs, local);
-        if (written === null) continue;
+        const knifed = knifePieces(nodable.subs, local);
+        if (knifed === null) continue;
+        const { pieces: written, tips } = knifed;
         const node = nodeOf(model, { path: pathOf(leaf) });
         // Una forma che non si riscrive si prova prima a parte: le sue
         // operazioni a metà non entrano nel passo delle altre.
-        if (writePieces(new Plan(model, newIds()), node, written) === null) {
+        if (writePieces(new Plan(model, newIds()), node, written, tips) === null) {
           skipped++;
           continue;
         }
-        const keys = writePieces(plan, node, written)!;
+        const keys = writePieces(plan, node, written, tips)!;
         objects++;
         pieces += written.length;
         if (unit.node === leaf) picked.push(...keys);
@@ -14110,10 +14138,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Apre il menu di un pulsante, sotto il pulsante, col nome del pulsante.
   function openMenu(trigger: HTMLButtonElement, items: MenuItem[]): void {
-    const box = trigger.getBoundingClientRect();
     if (trigger.id === "") trigger.id = identifier("draw-menu-button");
     trigger.setAttribute("aria-expanded", "true");
-    showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+    showContextMenu(trigger, items, {
       labelledBy: trigger.id,
       onClose: () => trigger.setAttribute("aria-expanded", "false"),
     });
@@ -15308,7 +15335,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     let refusal: DrawKey | null = null;
     for (const change of changes) {
       const { edit } = change;
-      const rewritten = pathData(writeNodes(change.subs)) === pathData(writeNodes(edit.subs)) ? null : rewrite(edit.nodable, change.subs, change.moved ?? null);
+      const rewritten = pathData(writeNodes(change.subs)) === pathData(writeNodes(edit.subs)) ? null : rewrite(edit.nodable, change.subs, change.moved ?? null, change.tips);
       if (rewritten?.kind === "refused") {
         refusal ??= NODES_REFUSED[rewritten.reason];
         continue;
@@ -15335,7 +15362,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           refusal ??= "draw.nodes.unwritable";
           continue;
         }
-        extent = union(extent, elemBounds(after, edit.matrix));
+        extent = union(extent, node.kind === "leaf" ? indexer.writtenBounds(after, edit.matrix, node) : elemBounds(after, edit.matrix));
         if (rewritten.kind === "set" && rewritten.spine !== undefined) learned.push([rewritten.attrs["fub:ink"]!, rewritten.spine]);
         if (rewritten.kind === "path" && edit.nodable.kind !== "path") conversions++;
       }
@@ -15577,8 +15604,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (joined === null) return "draw.nodes.join.none";
     const { rest } = joined;
     return [
-      changeOf(first, joined.kept),
-      { edit: second, subs: rest.subs, selected: [], kinds: remapped(nodeKinds.get(second.key) ?? NO_KINDS, rest.moved), moved: rest.moved },
+      { ...changeOf(first, joined.kept), tips: pooledTips([plainAttributes(nodeOf(engine.model!, second))], joined.tips.kept) },
+      { edit: second, subs: rest.subs, selected: [], kinds: remapped(nodeKinds.get(second.key) ?? NO_KINDS, rest.moved), moved: rest.moved, tips: joined.tips.rest },
     ];
   };
 
@@ -18073,7 +18100,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // avere più: il gesto si annulla. Tratto e forma si scrivono alla fine,
       // sul livello che c'è allora.
       if (current !== null && (current.kind === "select" || current.kind === "nodes" || current.kind === "erase" || current.kind === "board")) cancelGesture();
-      engine = next;
+      engine = following(next);
       refresh();
     },
     load(next) {
@@ -18084,7 +18111,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // della penna.
       finishText(false);
       dropBezier();
-      engine = next;
+      engine = following(next);
       loads++;
       closeDescriptions();
       closeTracing();
@@ -18260,6 +18287,7 @@ const BUILD_REFUSALS: Readonly<Record<BuildRefused["reason"], DrawKey>> = {
 const NO_WIDTH: Readonly<Record<NoWidth, DrawKey>> = {
   unstroked: "draw.width.unstroked",
   dashed: "draw.width.dashed",
+  tipped: "draw.width.tipped",
   pieces: "draw.width.pieces",
   foreign: "draw.width.foreign",
   kind: "draw.width.kind",

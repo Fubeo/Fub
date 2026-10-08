@@ -342,8 +342,8 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    sta sulla stessa riga del tag, coi pezzi della riga.
 2. **Ordine degli attributi:**
    1. `id`;
-   2. `fub:layer`, `fub:role`, `fub:name`, `fub:board`, `fub:tool`, `fub:shape`,
-      `fub:geom`, `fub:wrap`, `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
+   2. `fub:layer`, `fub:role`, `fub:name`, `fub:marker`, `fub:board`, `fub:tool`,
+      `fub:shape`, `fub:geom`, `fub:wrap`, `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
       stroke-linejoin stroke-dasharray opacity display font-family font-size font-weight

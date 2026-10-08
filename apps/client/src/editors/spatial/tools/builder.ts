@@ -17,6 +17,9 @@
 // - **Togliere** fa perdere le regioni alle forme che le coprono, e basta.
 //   **Separare** una regione è unirla da sola.
 // - Dopo restano scelti gli oggetti di prima che ci sono ancora, e l'unione.
+// - **Una regione non ha punte**: una forma riscritta, e l'unione, perdono
+//   `marker-start`, `marker-mid` e `marker-end`; una che resta disegnata
+//   com'era li tiene.
 
 import { parsePath, type Segment } from "../scene/geometry";
 import { compose, invert, type Matrix } from "../scene/matrix";
@@ -26,6 +29,7 @@ import { nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { mapped, regionsOf, type Regions, type Shape } from "./boolean";
 import { isShape } from "./combine";
 import type { NewIds } from "./edit";
+import { bareAttrs, bareLook } from "./endtips";
 import { shapeSegments, type Unit } from "./hit";
 import { lookOf, rewriteShape } from "./topath";
 
@@ -162,6 +166,8 @@ export function buildOps(model: DocumentModel, builder: Builder, chosen: readonl
     // Una forma che resta disegnata com'era non si riscrive.
     if (d === pathData(builder.local[k]!)) continue;
     if (!rewriteShape(plan, node, d)) return { reason: "foreign" };
+    const bare = bareAttrs(plainAttributes(node));
+    if (Object.keys(bare).length > 0) plan.ops.push({ op: "set", id: plan.idOf(node), attrs: bare });
   }
   let piece: string | null = null;
   if (!erase && !reused) {
@@ -169,7 +175,7 @@ export function buildOps(model: DocumentModel, builder: Builder, chosen: readonl
     if (d === null) return { reason: "failed" };
     const node = nodes[owner]!;
     piece = plan.ids.next("object");
-    plan.ops.push({ op: "add", parent: plan.parentOf(node), pos: { after: plan.idOf(node) }, elem: { tag: "path", attrs: { ...lookOf(node), id: piece, d } } });
+    plan.ops.push({ op: "add", parent: plan.parentOf(node), pos: { after: plan.idOf(node) }, elem: { tag: "path", attrs: { ...bareLook(lookOf(node)), id: piece, d } } });
   }
   for (const k of gone) plan.ops.push({ op: "remove", target: plan.idOf(nodes[k]!) });
 

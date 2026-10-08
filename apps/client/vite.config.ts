@@ -130,14 +130,14 @@ export default defineConfig({
           // trasformazioni, le booleane, i tagli, lo spessore variabile, i
           // livelli, la selezione avanzata, il gruppo di un ricalco, il testo
           // a pezzi del campo in cui si scrive, i suoi a capo con la misura
-          // dei caratteri, il testo su tracciato, le tavole, i campioni e le
-          // sfumature.
+          // dei caratteri, il testo su tracciato, le tavole, i campioni, le
+          // sfumature e le punte delle linee.
           // Con loro ciò che i pannelli leggono senza DOM: copiare e
           // incollare, la cronologia, il controllo dell'accessibilità e la
           // descrizione del disegno, gli attributi e le misure con le unità,
           // le scelte dell'export.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi colori del documento e la

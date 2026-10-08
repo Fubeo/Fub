@@ -15,9 +15,10 @@ import { lookOps } from "./look";
 import { estimate } from "./measure";
 import { nodableOf, rewrite } from "./nodable";
 import { outlineOps } from "./outline";
-import { outlineStrokeOps, simplifyOps } from "./paths";
+import { outlineStrokeOps, simplifyOps, strokeAsWidth } from "./paths";
 import { widthAttrs, type WidthShape } from "./profile";
 import { LAYER, open, type Opened } from "./test-support";
+import { CUSTOM, DEFS as TIP_DEFS, MARKER } from "./tip-support";
 import { pathOps } from "./topath";
 import { holdsWidth, profileOps, widthsOf, widthTarget, writeWidth, type ProfileChange, type WidthTarget } from "./width";
 
@@ -96,6 +97,87 @@ describe("la linea di una forma", () => {
     const opened = open(doc(`${LAYER}${body}</g>`));
     const reason = (id: string): unknown => widthTarget(opened.engine.holder(id)!);
     expect([reason("n"), reason("d"), reason("p"), reason("t"), reason("f")]).toEqual(["unstroked", "dashed", "pieces", "kind", "foreign"]);
+  });
+});
+
+describe("la linea di una forma con le punte", () => {
+  /// Le risorse del disegno: un triangolo di fine, un cerchio d'inizio, e un
+  /// marcatore che non è della raccolta.
+  const DEFS = TIP_DEFS(MARKER("mtri", "triangle", "medium", "end", "#336699"), MARKER("mcir", "circle", "medium", "start", "#336699"), CUSTOM("mx"));
+  const TIPPED = (id: string, extra: string): string => `<line id="${id}" x1="0" y1="0" x2="100" y2="0" stroke="#336699" stroke-width="8"${extra}/>`;
+
+  /// Il motore di `body` con le risorse, e il perché della linea `id`.
+  function reasonIn(body: string, id: string): { opened: Opened; target: ReturnType<typeof widthTarget> } {
+    const opened = open(doc(`${DEFS}${LAYER}${body}</g>`));
+    return { opened, target: widthTarget(opened.engine.holder(id)!) };
+  }
+
+  it("una linea con una punta, all'inizio o in fondo, della raccolta o no, resta uniforme", () => {
+    for (const extra of [' marker-end="url(#mtri)"', ' marker-start="url(#mcir)"', ' marker-start="url(#mcir)" marker-end="url(#mtri)"', ' marker-end="url(#mx)"', ' marker-start="url(#mx)"']) {
+      expect(reasonIn(TIPPED("a", extra), "a").target, extra).toBe("tipped");
+    }
+    // Le altre forme che SVG riempie di punte: una spezzata, un tracciato aperto.
+    expect(reasonIn('<polyline id="p" points="0,0 50,20 100,0" fill="none" stroke="#000000" marker-end="url(#mtri)"/>', "p").target).toBe("tipped");
+    expect(reasonIn('<path id="p" d="M0 0 C30 40 70 40 100 0" fill="none" stroke="#000000" marker-start="url(#mcir)"/>', "p").target).toBe("tipped");
+  });
+
+  it("il tratteggio viene prima, e un contorno che non si vede non ha punte da dire", () => {
+    expect(reasonIn(TIPPED("a", ' stroke-dasharray="4 2" marker-end="url(#mtri)"'), "a").target).toBe("dashed");
+    expect(reasonIn('<line id="a" x1="0" y1="0" x2="100" y2="0" marker-end="url(#mtri)"/>', "a").target).toBe("unstroked");
+  });
+
+  it("un marcatore a metà, che FubDraw non scrive, è un contorno di un altro programma", () => {
+    expect(reasonIn(TIPPED("a", ' marker-mid="url(#mx)"'), "a").target).toBe("foreign");
+    // Con una punta in fondo, la punta basta.
+    expect(reasonIn(TIPPED("a", ' marker-mid="url(#mx)" marker-end="url(#mtri)"'), "a").target).toBe("tipped");
+  });
+
+  it("anche un tracciato chiuso con un marcatore ha le punte: SVG le disegna sull'angolo dove comincia", () => {
+    expect(reasonIn('<path id="r" d="M0 0 L50 0 L50 50 Z" fill="#ff0000" stroke="#000000" marker-end="url(#mtri)"/>', "r").target).toBe("tipped");
+    expect(typeof reasonIn('<path id="r" d="M0 0 L50 0 L50 50 Z" fill="#ff0000" stroke="#000000"/>', "r").target).toBe("object");
+  });
+
+  it("i profili lasciano com'è una linea con le punte, e la contano fra quelle che restano", () => {
+    const body = TIPPED("a", ' marker-end="url(#mtri)"') + TIPPED("b", "").replace('y1="0"', 'y1="20"').replace('y2="0"', 'y2="20"');
+    const opened = open(doc(`${DEFS}${LAYER}${body}</g>`));
+    const units = [opened.index.get("a")!, opened.index.get("b")!];
+    const done = profileOps(opened.engine.model!, opened.index, units, { preset: "taper" }, ids(opened));
+    expect(done).toMatchObject({ changed: 1, skipped: 1, refused: 0 });
+    const text = written(opened, done.ops);
+    // La linea con la punta è la stessa, con la sua punta; l'altra è affusolata.
+    expect(element(text, "a")).toEqual(element(body, "a"));
+    expect(element(text, "a").attrs["marker-end"]).toBe("url(#mtri)");
+    expect(element(text, "b").attrs["fub:shape"]).toBe("width");
+    expect(text).toContain('<marker id="mtri"');
+    // Sola, non cambia niente.
+    const sole = open(doc(`${DEFS}${LAYER}${TIPPED("a", ' marker-end="url(#mtri)"')}</g>`));
+    const alone = profileOps(sole.engine.model!, sole.index, [sole.index.get("a")!], { preset: "taper" }, ids(sole));
+    expect(alone).toMatchObject({ ops: [], changed: 0, skipped: 1 });
+  });
+
+  it("nessuna linea con le punte arriva a scrivere il contorno come linea a spessore variabile", () => {
+    // `strokeAsWidth` è chiamata soltanto da `writeWidth` su un bersaglio
+    // che `widthTarget` ha dato: una linea con le punte non lo è, in nessun
+    // gruppo né con nessun profilo.
+    const tipped = TIPPED("a", ' marker-end="url(#mtri)"');
+    const opened = open(doc(`${DEFS}${LAYER}<g id="g">${tipped}</g></g>`));
+    const group = opened.index.get("g")!;
+    expect(holdsWidth(opened.index, [group])).toBe(false);
+    expect(widthsOf(opened.index, [group])).toEqual([]);
+    for (const change of [{ preset: "taper" }, { preset: "drop" }, { preset: "spindle" }, { preset: "uniform" }, { flip: "along" }, { flip: "across" }] as const) {
+      const done = profileOps(opened.engine.model!, opened.index, [group], change, ids(opened));
+      expect(done, JSON.stringify(change)).toMatchObject({ ops: [], changed: 0, skipped: 1, refused: 0 });
+    }
+    // Tolte le punte, la stessa linea è una linea da convertire.
+    const plain = open(doc(`${LAYER}${TIPPED("a", "")}</g>`));
+    expect(holdsWidth(plain.index, [plain.index.get("a")!])).toBe(true);
+  });
+
+  it("se una linea con le punte ci arrivasse lo stesso, il tracciato nuovo non le porterebbe", () => {
+    const { opened } = reasonIn(TIPPED("a", ' marker-start="url(#mcir)" marker-end="url(#mtri)"'), "a");
+    const elem = strokeAsWidth(opened.engine.holder("a")!, "geom", "M0 0 L100 0", ids(opened))!;
+    expect(elem.tag).toBe("path");
+    expect(Object.keys(elem.attrs).filter((name) => name.startsWith("marker"))).toEqual([]);
   });
 });
 

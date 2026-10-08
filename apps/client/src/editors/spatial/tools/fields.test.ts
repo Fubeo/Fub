@@ -4,15 +4,16 @@
 
 import { describe, expect, it } from "vitest";
 import type { LengthUnit } from "../scene/rulers";
-import { lookAction, lookChange, outlineChange, propertiesView, shapeChange, sheetChange, type BoardFacts, type FieldsInput, type SelectionFacts } from "./fields";
+import { lookAction, lookChange, outlineChange, propertiesView, shapeChange, sheetChange, tipChange, type BoardFacts, type FieldsInput, type SelectionFacts } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
 import { NAME_MAX } from "./naming";
-import type { ChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
+import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, TogglesState } from "./properties";
 import { featuresFor, type Level } from "./registry";
 import type { ShapeFacts } from "./reshape";
 import { fieldMin, fromUnit } from "./rulers";
+import type { EndLook, TipsLook } from "./tips";
 
 const NONE = { count: 0, value: null };
 
@@ -432,6 +433,153 @@ describe("il contorno", () => {
   });
 });
 
+describe("le punte delle linee", () => {
+  /// Le punte di `count` linee: senza punte, tranne `parts`.
+  const tipsLook = (parts: Partial<TipsLook> = {}): TipsLook => ({ count: 1, start: { shape: "none", size: null }, end: { shape: "none", size: null }, ...parts });
+  const end = (shape: EndLook["shape"], size: EndLook["size"] = null): EndLook => ({ shape, size });
+  const menu = (state: unknown): MenuChoiceState => state as MenuChoiceState;
+  /// Il campo `id` di una selezione con le punte `tips`.
+  const field = (id: "tipStart" | "tipEnd", tips: TipsLook): MenuChoiceState => menu(propertiesView(input({ selection: selection({ tips }) })).fields[id]);
+  /// Com'è il menu: per ogni voce il valore, e se è segnata.
+  const marked = (state: MenuChoiceState): Array<[string, boolean]> => state.options.map((option) => [option.value, option.checked === true]);
+
+  it("ci sono dallo Standard, di una selezione che ne ha, con la forma e la misura di adesso", () => {
+    const view = propertiesView(input({ selection: selection({ tips: tipsLook({ end: end("triangle", "medium") }) }) }));
+    expect(view.fields.tipStart).toMatchObject({ kind: "menu", label: "Punta d’inizio", value: "none", summary: "Nessuna" });
+    expect(view.fields.tipEnd).toMatchObject({ kind: "menu", label: "Punta di fine", value: "triangle", summary: "Triangolo, media" });
+    // Dopo l'aspetto, prima del testo: nell'ordine dei campi.
+    expect(Object.keys(view.fields).slice(-2)).toEqual(["tipStart", "tipEnd"]);
+  });
+
+  it("non ci sono senza la parte, senza linee che ne abbiano, o senza niente da dire", () => {
+    const tips = tipsLook({ end: end("vee", "small") });
+    for (const level of ["essential", "standard", "expert"] as const) {
+      const view = propertiesView(input({ level, selection: selection({ tips }) }));
+      expect(["tipStart", "tipEnd"].map((id) => id in view.fields), level).toEqual(level === "essential" ? [false, false] : [true, true]);
+    }
+    const custom = propertiesView(input({ features: featuresFor("custom", ["pen", "colors"]), selection: selection({ tips }) }));
+    expect(["tipStart", "tipEnd"].some((id) => id in custom.fields)).toBe(false);
+    const without = (facts: SelectionFacts): string[] => Object.keys(propertiesView(input({ selection: facts })).fields).filter((id) => id.startsWith("tip"));
+    expect(without(selection({ tips: tipsLook({ count: 0 }) }))).toEqual([]);
+    expect(without(selection({ tips: null }))).toEqual([]);
+    expect(without(selection())).toEqual([]);
+    expect(without(selection({ tips }))).toEqual(["tipStart", "tipEnd"]);
+    // Senza selezione non c'è niente da dire.
+    expect(Object.keys(propertiesView(input()).fields).some((id) => id.startsWith("tip"))).toBe(false);
+  });
+
+  it("il menu ha nessuna punta, le sei forme, le tre misure e lo scambio, con quella di adesso segnata", () => {
+    const state = field("tipEnd", tipsLook({ end: end("diamond", "large") }));
+    expect(state.options.map((option) => option.label)).toEqual([
+      "Nessuna",
+      "Triangolo",
+      "Punta aperta",
+      "Cerchio",
+      "Quadrato",
+      "Rombo",
+      "Barra",
+      "Piccola",
+      "Media",
+      "Grande",
+      "Scambia inizio e fine",
+    ]);
+    expect(marked(state)).toEqual([
+      ["none", false],
+      ["triangle", false],
+      ["vee", false],
+      ["circle", false],
+      ["square", false],
+      ["diamond", true],
+      ["bar", false],
+      ["size:small", false],
+      ["size:medium", false],
+      ["size:large", true],
+      ["swap", false],
+    ]);
+    // Le misure sono un gruppo e lo scambio un altro; lo scambio è un comando.
+    expect(state.options.filter((option) => option.separator === true).map((option) => option.value)).toEqual(["size:small", "swap"]);
+    expect(state.options.filter((option) => option.action === true).map((option) => option.value)).toEqual(["swap"]);
+    expect(state.summary).toBe("Rombo, grande");
+  });
+
+  it("ogni voce ha la sua figura, col capo che dice il campo; le misure no", () => {
+    const icons = (id: "tipStart" | "tipEnd"): Array<string | undefined> => field(id, tipsLook()).options.map((option) => option.icon);
+    expect(icons("tipEnd")).toEqual([
+      "draw-tip-none",
+      "draw-tip-triangle-end",
+      "draw-tip-vee-end",
+      "draw-tip-circle-end",
+      "draw-tip-square-end",
+      "draw-tip-diamond-end",
+      "draw-tip-bar-end",
+      undefined,
+      undefined,
+      undefined,
+      "draw-tips-swap",
+    ]);
+    expect(icons("tipStart").slice(0, 7)).toEqual([
+      "draw-tip-none",
+      "draw-tip-triangle-start",
+      "draw-tip-vee-start",
+      "draw-tip-circle-start",
+      "draw-tip-square-start",
+      "draw-tip-diamond-start",
+      "draw-tip-bar-start",
+    ]);
+  });
+
+  it("senza punta le misure ci sono e non si scelgono; con una della raccolta, sì", () => {
+    const sizes = (state: MenuChoiceState): Array<boolean | undefined> => state.options.filter((option) => option.value.startsWith("size:")).map((option) => option.disabled);
+    expect(sizes(field("tipStart", tipsLook()))).toEqual([true, true, true]);
+    expect(sizes(field("tipStart", tipsLook({ start: end("circle", "small") })))).toEqual([undefined, undefined, undefined]);
+    // Il capo misto può averne una, in qualche linea.
+    expect(sizes(field("tipStart", tipsLook({ start: end(null) })))).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("una punta che non è della raccolta c'è, segnata, spenta e per prima; non ha misura", () => {
+    const state = field("tipEnd", tipsLook({ end: end("custom") }));
+    expect(state).toMatchObject({ value: "custom", summary: "Un’altra punta" });
+    expect(state.options[0]).toEqual({ value: "custom", label: "Un’altra punta", icon: "draw-tip-other-end", checked: true, disabled: true });
+    expect(marked(state).filter(([, on]) => on)).toEqual([["custom", true]]);
+    expect(state.options.filter((option) => option.value.startsWith("size:")).every((option) => option.disabled === true)).toBe(true);
+    // E la sua figura è del capo.
+    expect(field("tipStart", tipsLook({ start: end("custom") })).options[0]!.icon).toBe("draw-tip-other-start");
+  });
+
+  it("un capo misto non ha forma né voce segnata, e lo dice", () => {
+    const state = field("tipEnd", tipsLook({ count: 3, end: end(null) }));
+    expect(state).toMatchObject({ value: null, summary: "Misto" });
+    expect(marked(state).filter(([, on]) => on)).toEqual([]);
+    // Con le misure d'accordo, la misura si segna lo stesso.
+    expect(marked(field("tipEnd", tipsLook({ count: 3, end: end(null, "large") }))).filter(([, on]) => on)).toEqual([["size:large", true]]);
+  });
+
+  it("di misure diverse, la forma si dice senza misura e nessuna misura è segnata", () => {
+    const state = field("tipEnd", tipsLook({ count: 2, end: end("circle") }));
+    expect(state).toMatchObject({ value: "circle", summary: "Cerchio" });
+    expect(marked(state).filter(([, on]) => on)).toEqual([["circle", true]]);
+  });
+
+  it("scambiare due punte uguali non cambia niente: la voce c'è e non si sceglie", () => {
+    const swap = (tips: TipsLook): boolean | undefined => field("tipStart", tips).options.find((option) => option.value === "swap")!.disabled;
+    expect(swap(tipsLook())).toBe(true);
+    expect(swap(tipsLook({ start: end("vee", "small"), end: end("vee", "small") }))).toBe(true);
+    expect(swap(tipsLook({ start: end("vee", "small"), end: end("vee", "large") }))).toBeUndefined();
+    expect(swap(tipsLook({ start: end("none"), end: end("triangle", "medium") }))).toBeUndefined();
+    // Due marcatori che non sono della raccolta possono essere diversi; due capi misti, anche.
+    expect(swap(tipsLook({ start: end("custom"), end: end("custom") }))).toBeUndefined();
+    expect(swap(tipsLook({ count: 2, start: end(null), end: end(null) }))).toBeUndefined();
+  });
+
+  it("i nomi sono quelli delle tabelle, per ogni forma", () => {
+    for (const shape of ["none", "triangle", "vee", "circle", "square", "diamond", "bar", "custom"] as const) {
+      expect(field("tipEnd", tipsLook({ end: end(shape, shape === "none" || shape === "custom" ? null : "small") })).summary).toBeTruthy();
+    }
+    expect(field("tipEnd", tipsLook({ end: end("bar", "small") })).summary).toBe("Barra, piccola");
+    expect(field("tipEnd", tipsLook({ end: end("vee", "medium") })).summary).toBe("Punta aperta, media");
+  });
+});
+
 describe("il testo", () => {
   it("ha i caratteri per nome, quello di serie se nessuno lo scrive, e uno estraneo col suo", () => {
     const families = (value: string | null): ChoiceState["options"] => options(propertiesView(input({ selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family);
@@ -604,5 +752,28 @@ describe("dal valore al cambio", () => {
     expect(outlineChange("join", "bevel")).toEqual({ join: "bevel" });
     expect(outlineChange("dash", "custom")).toBeNull();
     expect(outlineChange("fill", "dotted")).toBeNull();
+  });
+
+  it("le punte: la forma di un capo, la misura della punta e lo scambio", () => {
+    expect(tipChange("tipStart", "triangle")).toEqual({ end: "start", shape: "triangle" });
+    expect(tipChange("tipEnd", "vee")).toEqual({ end: "end", shape: "vee" });
+    expect(tipChange("tipEnd", "none")).toEqual({ end: "end", shape: "none" });
+    expect(tipChange("tipStart", "size:small")).toEqual({ end: "start", size: "small" });
+    expect(tipChange("tipEnd", "size:large")).toEqual({ end: "end", size: "large" });
+    expect(tipChange("tipStart", "swap")).toEqual({ swap: true });
+    expect(tipChange("tipEnd", "swap")).toEqual({ swap: true });
+  });
+
+  it("le punte: un valore che non è del campo, o un campo che non è delle punte, non cambia niente", () => {
+    // Una punta di un'altra specie si vede nel menu, ma non si scrive.
+    expect(tipChange("tipEnd", "custom")).toBeNull();
+    expect(tipChange("tipEnd", "star")).toBeNull();
+    expect(tipChange("tipEnd", "size:huge")).toBeNull();
+    expect(tipChange("tipEnd", "size:")).toBeNull();
+    expect(tipChange("tipEnd", "")).toBeNull();
+    expect(tipChange("tipEnd", 3)).toBeNull();
+    expect(tipChange("tipStart", true)).toBeNull();
+    expect(tipChange("dash", "triangle")).toBeNull();
+    expect(tipChange("fill", "swap")).toBeNull();
   });
 });

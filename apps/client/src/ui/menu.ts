@@ -8,6 +8,7 @@
 
 import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
+import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { enterSurface, exitSurface, finishSurface } from "./motion";
 
@@ -27,6 +28,11 @@ export interface MenuItem {
   description?: string;
   /// Una striscia di colori prima del nome: la voce è un aspetto da scegliere.
   swatches?: readonly string[];
+  /// Il nome di un'icona (`icons.ts`), disegnata prima del nome: decorativa,
+  /// perché il nome dice già tutto. Un nome che l'icona non conosce non
+  /// disegna niente. Se anche una sola voce del menu ha la sua figura, le
+  /// altre ne tengono il posto vuoto, perché i nomi stiano allineati.
+  icon?: string;
   /// La voce è una scelta: una fra alternative (`radio`) o un interruttore
   /// (`checkbox`), con il suo stato in `checked`.
   choice?: "radio" | "checkbox";
@@ -53,8 +59,11 @@ type MenuClose = () => void;
 let menuLifetime: Lifetime | null = null;
 let menuClose: MenuClose | null = null;
 
+/// Apre il menu `items` nel punto del gesto `at`, o sotto il pulsante `at`
+/// che lo apre: allora gli sta allineato, e dove sotto non c'è posto si apre
+/// sopra, senza mai coprirlo.
 export function showContextMenu(
-  at: MouseEvent,
+  at: MouseEvent | HTMLElement,
   items: MenuItem[],
   options: ContextMenuOptions = {},
 ): void {
@@ -73,10 +82,14 @@ export function showContextMenu(
   menu.setAttribute("aria-orientation", "vertical");
   if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
   menu.tabIndex = -1;
-  menu.style.left = `${at.clientX}px`;
-  menu.style.top = `${at.clientY}px`;
+  // Dove il menu comincia, perché si misuri largo quanto sarà.
+  const anchor = at instanceof MouseEvent ? null : at.getBoundingClientRect();
+  const [x, y] = at instanceof MouseEvent ? [at.clientX, at.clientY] : [anchor!.left, anchor!.bottom + ANCHOR_GAP];
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
   const buttons: HTMLButtonElement[] = [];
   const usable: MenuItem[] = [];
+  const pictured = items.some((item) => item.icon !== undefined && icon(item.icon) !== "");
   for (const item of items) {
     if (item.separator && menu.childElementCount > 0) {
       const rule = document.createElement("div");
@@ -99,6 +112,14 @@ export function showContextMenu(
         strip.append(swatch);
       }
       b.append(strip);
+    }
+    const glyph = item.icon === undefined ? null : iconEl(item.icon);
+    if (glyph !== null || pictured) {
+      const picture = document.createElement("span");
+      picture.className = "menu-icon";
+      picture.setAttribute("aria-hidden", "true");
+      if (glyph !== null) picture.append(glyph);
+      b.append(picture);
     }
     const label = document.createElement("span");
     label.className = "menu-label";
@@ -187,7 +208,8 @@ export function showContextMenu(
   }
   const workspace = document.getElementById("workspace");
   (workspace ?? document.body).appendChild(menu);
-  placeInViewport(menu, at.clientX, at.clientY);
+  if (anchor === null) placeInViewport(menu, x, y);
+  else placeBeside(menu, anchor);
   // WebKitGTK può terminare il processo web mentre fotografa in una View
   // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
   // canonica, senza portare questa superficie effimera nel percorso nativo.
@@ -219,6 +241,32 @@ function placeInViewport(menu: HTMLElement, x: number, y: number): void {
   if (top + height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - height);
   menu.style.left = `${Math.max(margin, left)}px`;
   menu.style.top = `${Math.max(margin, top)}px`;
+}
+
+/// Quanto un menu sta staccato dal pulsante che lo apre.
+const ANCHOR_GAP = 4;
+
+/// Un menu aperto da un pulsante gli sta sotto, allineato a sinistra, o a
+/// destra dove a sinistra uscirebbe dalla finestra. Se sotto non c'è posto e
+/// sopra ce n'è di più, si apre sopra; dalla parte dove si apre, un elenco più
+/// alto del posto scorre. Il pulsante resta sempre visibile, perché è lì che
+/// si guarda e che torna il fuoco.
+function placeBeside(menu: HTMLElement, anchor: DOMRectReadOnly): void {
+  const margin = 8;
+  const box = menu.getBoundingClientRect();
+  const below = window.innerHeight - margin - (anchor.bottom + ANCHOR_GAP);
+  const above = anchor.top - ANCHOR_GAP - margin;
+  let top = anchor.bottom + ANCHOR_GAP;
+  let room = below;
+  if (box.height > below && above > below) {
+    room = above;
+    top = anchor.top - ANCHOR_GAP - Math.min(box.height, above);
+  }
+  if (box.height > room) menu.style.maxHeight = `${Math.max(0, room)}px`;
+  let left = anchor.left;
+  if (left + box.width > window.innerWidth - margin) left = anchor.right - box.width;
+  menu.style.left = `${Math.max(margin, left)}px`;
+  menu.style.top = `${top}px`;
 }
 
 export function closeContextMenu(): void {

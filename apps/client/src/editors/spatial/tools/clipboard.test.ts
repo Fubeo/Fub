@@ -8,10 +8,11 @@ import { MAX_EDIT_BYTES, readScene } from "../scene/read";
 import { elementChildren, pathOf, rawOf, type ContainerNode, type ElementPart } from "../scene/model";
 import { doc, HEAD } from "../scene/test-support";
 import type { Bounds } from "../scene/geometry";
-import { boundsOf, nodeOf } from "./arrange";
+import { boundsOf, duplicateOps, nodeOf } from "./arrange";
 import { copySvg, looksLikeSvg, pasteFrame, planPaste, readPaste, type PastePlan, type PasteSource } from "./clipboard";
 import { destinationIn, NewIds } from "./edit";
 import { LAYER, open, type Opened } from "./test-support";
+import { applied, attrOf, BLUE, CUSTOM, DEFS, ids as newIds, followed, MARKER, markersIn, RED, tipOf } from "./tip-support";
 
 const NEW_ID = /[or][0-9a-z]{8}/g;
 
@@ -630,5 +631,161 @@ describe("looksLikeSvg", () => {
     expect(looksLikeSvg("un <svg> nel testo")).toBe(false);
     expect(looksLikeSvg("<html><body></body></html>")).toBe(false);
     expect(looksLikeSvg("")).toBe(false);
+  });
+});
+
+describe("le punte negli appunti e nel duplica", () => {
+  const MS = (id: string, paint = RED): string => MARKER(id, "circle", "small", "start", paint);
+  const ME = (id: string, paint = RED): string => MARKER(id, "triangle", "large", "end", paint);
+  const START = "circle small start #d55e00";
+  const END = "triangle large end #d55e00";
+  const LINE = (id: string, start: string | null, end: string | null, extra = ""): string =>
+    `<line id="${id}" x1="0" y1="0" x2="50" y2="0" stroke="${RED}" stroke-width="2"${start === null ? "" : ` marker-start="url(#${start})"`}${end === null ? "" : ` marker-end="url(#${end})"`}${extra}/>`;
+  /// Un disegno con la linea `oaaaaaaaa` che ha le punte `rs0000001` e `re0000001`.
+  const source = (): Opened => followed(doc(DEFS(MS("rs0000001"), ME("re0000001")) + LAYER + LINE("oaaaaaaaa", "rs0000001", "re0000001") + "</g>"));
+  const empty = (): Opened => followed(doc(`<defs id="fub-defs"/>${LAYER}</g>`));
+  const only = (opened: Opened): string => paste(opened, copy(source(), ["oaaaaaaaa"])).keys[0]!;
+
+  it("copia la linea con le sue punte: i marcatori vanno con lei, una volta sola", () => {
+    const svg = copy(source(), ["oaaaaaaaa"]);
+    expect(svg).toContain('marker-start="url(#rs0000001)"');
+    expect(svg).toContain('marker-end="url(#re0000001)"');
+    expect(svg.match(/<marker /g)).toHaveLength(2);
+    expect(svg).toContain('fub:role="shared"');
+    expect(svg).toContain('fub:marker="circle small start"');
+    // Una linea senza punte non porta marcatori.
+    const bare = followed(doc(DEFS(MS("rs0000001")) + LAYER + LINE("oaaaaaaaa", null, null) + "</g>"));
+    expect(copy(bare, ["oaaaaaaaa"])).not.toContain("<marker");
+  });
+
+  it("nello stesso disegno la copia nomina gli stessi marcatori, e nessuno si duplica", () => {
+    const opened = source();
+    const out = paste(opened, copy(opened, ["oaaaaaaaa"]));
+    const key = out.keys[0]!;
+    expect(attrOf(opened, key, "marker-start")).toBe("url(#rs0000001)");
+    expect(attrOf(opened, key, "marker-end")).toBe("url(#re0000001)");
+    expect([tipOf(opened, key, "start"), tipOf(opened, key, "end")]).toEqual([START, END]);
+    expect(markersIn(opened)).toEqual(["rs0000001", "re0000001"]);
+  });
+
+  it("in un altro disegno le punte arrivano con la linea, e restano due marcatori", () => {
+    const target = empty();
+    const key = only(target);
+    expect([tipOf(target, key, "start"), tipOf(target, key, "end")]).toEqual([START, END]);
+    expect(markersIn(target)).toHaveLength(2);
+    // Il disegno senza `defs` se ne fa una.
+    const bare = followed(TARGET);
+    const there = only(bare);
+    expect([tipOf(bare, there, "start"), tipOf(bare, there, "end")]).toEqual([START, END]);
+    expect(markersIn(bare)).toHaveLength(2);
+  });
+
+  it("incollata due volte nello stesso altro disegno, la linea non duplica i marcatori", () => {
+    const target = empty();
+    const svg = copy(source(), ["oaaaaaaaa"]);
+    const first = paste(target, svg).keys[0]!;
+    const second = paste(target, svg).keys[0]!;
+    expect(second).not.toBe(first);
+    expect(markersIn(target)).toHaveLength(2);
+    expect(markersIn(target)).toEqual(expect.arrayContaining([attrOf(target, second, "marker-start")!.slice(5, -1), attrOf(target, second, "marker-end")!.slice(5, -1)]));
+    expect([tipOf(target, second, "start"), tipOf(target, second, "end")]).toEqual([START, END]);
+  });
+
+  it("un marcatore uguale che il disegno ha già, con un altro id, è quello che la linea usa", () => {
+    const target = followed(doc(DEFS(MS("rt0000001"), ME("rt0000002")) + LAYER + LINE("ozzzzzzzz", "rt0000001", "rt0000002") + "</g>"));
+    const key = only(target);
+    expect(attrOf(target, key, "marker-start")).toBe("url(#rt0000001)");
+    expect(attrOf(target, key, "marker-end")).toBe("url(#rt0000002)");
+    expect(markersIn(target)).toEqual(["rt0000001", "rt0000002"]);
+  });
+
+  it("una punta di un campione usa quella del campione uguale che il disegno ha con un altro id", () => {
+    const SWATCH = (id: string): string =>
+      `<linearGradient id="${id}" fub:role="swatch" fub:name="Rosso" gradientUnits="userSpaceOnUse"><stop stop-color="${RED}"/></linearGradient>`;
+    const swatched = (swatch: string, marker: string, line: string, y: number): Opened => {
+      const paint = `url(#${swatch}) ${RED}`;
+      return followed(
+        doc(
+          DEFS(SWATCH(swatch), MARKER(marker, "triangle", "large", "end", paint)) +
+            LAYER +
+            `<line id="${line}" x1="0" y1="${y}" x2="50" y2="${y}" stroke="${paint}" stroke-width="2" marker-end="url(#${marker})"/></g>`,
+        ),
+      );
+    };
+    const target = swatched("rt2t2t2t2", "rm0000002", "ozzzzzzzz", 9);
+    const key = paste(target, copy(swatched("rs1s1s1s1", "rm0000001", "oaaaaaaaa", 0), ["oaaaaaaaa"])).keys[0]!;
+    expect(attrOf(target, key, "stroke")).toBe(`url(#rt2t2t2t2) ${RED}`);
+    expect(attrOf(target, key, "marker-end")).toBe("url(#rm0000002)");
+    expect(markersIn(target)).toEqual(["rm0000002"]);
+  });
+
+  it("uno solo dei due uguali, l'altro arriva", () => {
+    const target = followed(doc(DEFS(MS("rt0000001")) + LAYER + LINE("ozzzzzzzz", "rt0000001", null) + "</g>"));
+    const key = only(target);
+    expect(attrOf(target, key, "marker-start")).toBe("url(#rt0000001)");
+    const end = attrOf(target, key, "marker-end")!.slice(5, -1);
+    expect(end).not.toBe("rt0000001");
+    expect(markersIn(target)).toEqual(["rt0000001", end]);
+    expect(tipOf(target, key, "end")).toBe(END);
+  });
+
+  it("un marcatore dello stesso aspetto ma di un altro colore, o di un'altra forma, arriva col suo", () => {
+    const target = followed(doc(DEFS(MS("rt0000001", BLUE), MARKER("rt0000002", "square", "large", "end")) + LAYER + LINE("ozzzzzzzz", "rt0000001", "rt0000002", "") + "</g>"));
+    const key = only(target);
+    expect(markersIn(target)).toHaveLength(4);
+    expect([tipOf(target, key, "start"), tipOf(target, key, "end")]).toEqual([START, END]);
+  });
+
+  it("con lo stesso id e un altro contenuto, il marcatore che arriva ha un id nuovo", () => {
+    const target = followed(doc(DEFS(MARKER("rs0000001", "square", "large", "start")) + LAYER + LINE("ozzzzzzzz", "rs0000001", null) + "</g>"));
+    const key = only(target);
+    expect(attrOf(target, key, "marker-start")).not.toBe("url(#rs0000001)");
+    expect(tipOf(target, "ozzzzzzzz", "start")).toBe("square large start #d55e00");
+    expect([tipOf(target, key, "start"), tipOf(target, key, "end")]).toEqual([START, END]);
+    expect(markersIn(target)).toHaveLength(3);
+  });
+
+  it("un marcatore che non è della raccolta viaggia come una risorsa qualunque", () => {
+    const opened = followed(doc(DEFS(CUSTOM("rc0000001")) + LAYER + LINE("oaaaaaaaa", null, "rc0000001") + "</g>"));
+    const svg = copy(opened, ["oaaaaaaaa"]);
+    expect(svg).toContain("<marker ");
+    // Nello stesso disegno resta il suo.
+    const same = paste(opened, svg).keys[0]!;
+    expect(attrOf(opened, same, "marker-end")).toBe("url(#rc0000001)");
+    expect(markersIn(opened)).toEqual(["rc0000001"]);
+    // In un altro arriva con la linea.
+    const target = empty();
+    const there = paste(target, svg).keys[0]!;
+    expect(tipOf(target, there, "end")).toBe("custom");
+    expect(markersIn(target)).toHaveLength(1);
+  });
+
+  it("marker-mid viaggia com'è", () => {
+    const opened = followed(doc(DEFS(MS("rs0000001")) + LAYER + `<path id="oaaaaaaaa" d="M0 0 L25 0 L50 0" fill="none" stroke="${RED}" marker-mid="url(#rs0000001)"/></g>`));
+    const key = paste(opened, copy(opened, ["oaaaaaaaa"])).keys[0]!;
+    expect(attrOf(opened, key, "marker-mid")).toBe("url(#rs0000001)");
+    expect(markersIn(opened)).toEqual(["rs0000001"]);
+  });
+
+  it("duplicare la linea ne copia le punte senza copiare i marcatori", () => {
+    const opened = source();
+    const made = duplicateOps(opened.engine.model!, [opened.index.get("oaaaaaaaa")!], 10, 10, newIds(opened));
+    expect(made).not.toBeNull();
+    const text = applied(opened, made!.ops);
+    const key = made!.keys[0]!;
+    expect(text).toContain(`<line id="${key}"`);
+    expect(attrOf(opened, key, "marker-start")).toBe("url(#rs0000001)");
+    expect(attrOf(opened, key, "marker-end")).toBe("url(#re0000001)");
+    expect([tipOf(opened, key, "start"), tipOf(opened, key, "end")]).toEqual([START, END]);
+    expect(markersIn(opened)).toEqual(["rs0000001", "re0000001"]);
+    expect(JSON.stringify(made!.ops)).not.toContain("<marker");
+  });
+
+  it("duplicare un tracciato con un marcatore non della raccolta tiene il marcatore", () => {
+    const opened = followed(doc(DEFS(CUSTOM("rc0000001")) + LAYER + LINE("oaaaaaaaa", "rc0000001", "rc0000001") + "</g>"));
+    const made = duplicateOps(opened.engine.model!, [opened.index.get("oaaaaaaaa")!], 5, 0, newIds(opened))!;
+    applied(opened, made.ops);
+    expect(attrOf(opened, made.keys[0]!, "marker-end")).toBe("url(#rc0000001)");
+    expect(markersIn(opened)).toEqual(["rc0000001"]);
   });
 });

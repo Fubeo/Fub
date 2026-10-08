@@ -9,7 +9,8 @@
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
 > scrittura in `scene/serialize.ts`, le operazioni in `scene/engine.ts`, con
 > i vettori di prova da 50 a 59, 63, 64, 76 e 77 ([operazioni sulla
-> scena](scene-operations.md), §9), e il disegno in `painter/paint.ts`.
+> scena](scene-operations.md), §9), il disegno in `painter/paint.ts`, e le
+> punte delle linee in `tools/tips.ts`, coi vertici in `scene/markers.ts`.
 
 Una parte del [formato della scena](scene-format.md), §4. Una risorsa è un
 elemento che non si disegna da solo e che gli oggetti usano per riferimento:
@@ -261,6 +262,44 @@ le esportazioni di Mermaid usano.
 - **Una risorsa riscritta** da un `set` si scrive intera in forma canonica,
   figli compresi, e resta al suo posto.
 
+### Le punte delle linee
+
+Una punta che FubDraw scrive è un `marker` condiviso, `fub:role="shared"`,
+con `fub:marker`: la forma (`triangle`, `vee`, `circle`, `square`,
+`diamond`, `bar`), la misura (`small`, `medium`, `large`) e il capo
+(`start`, `end`), separati da uno spazio. Il colore non c'è: sta nel
+contenuto ([Disegni, punte delle linee](../product/drawing-tips.md)).
+
+- **La geometria:** niente `viewBox` e niente `markerUnits`, che resta
+  `strokeWidth`: la punta cresce con lo spessore della linea. `orient` è
+  `auto`, e l'estremo della linea sta nel punto di riferimento. La misura è
+  di 3,5, 5 o 7 spessori: la larghezza del triangolo, della punta aperta e
+  della barra e la lunghezza del rombo; il cerchio ne è largo 0,8, il
+  quadrato 0,7 e il rombo 0,6. La punta d'inizio è il capovolto di quella
+  di fine, un marcatore a sé, perché `auto-start-reverse` di SVG 2 non lo
+  leggono tutti. Il contenuto sta mezzo spessore dentro la finestra, che lo
+  ritaglia.
+- **Il verso** è quello di SVG 2, che FubDraw usa per toccare le punte e
+  per «Contorno in tracciato»: dopo un tratto lungo zero a un capo, quello
+  del tratto vicino. Chromium e WebKit girano invece quella punta verso
+  destra.
+- **Il colore** del contenuto è quello del contorno della linea che la usa,
+  con la sua opacità in `fill-opacity` o `stroke-opacity`, al più quattro
+  decimali: un `#rrggbb`, un campione come `url(#id) #rrggbb`, il colore
+  che una sfumatura ha nel vertice, con l'opacità dei suoi punti per quella
+  del contorno, il ripiego di un motivo, o `none`. Le
+  linee con la stessa punta dello stesso colore usano lo stesso marcatore.
+- **Riconoscerla:** è una punta della raccolta soltanto un marcatore
+  modificabile identico, attributi e contenuto, a quello che FubDraw
+  scriverebbe per il suo `fub:marker` col colore e l'opacità del suo
+  contenuto. Ogni altro marcatore, anche con un `fub:marker`, si legge, si
+  disegna e resta com'è.
+- **Il seguito:** un'operazione che cambia il contorno di una linea con una
+  punta della raccolta, quello del gruppo che glielo passa, un campione o
+  una sfumatura porta con sé, nello stesso passo, i `set` di `marker-start`
+  e `marker-end` verso il marcatore del colore nuovo, e prima gli `add` di
+  quelli che mancano (§9).
+
 ## 9. Le operazioni
 
 Le regole che tengono veri i riferimenti
@@ -292,10 +331,12 @@ non cambiano mai natura per un'operazione su un altro elemento.
   già senza riferimenti resta: la raccolta tocca soltanto ciò che
   l'operazione ha lasciato solo. Un riferimento conta da qualunque elemento,
   anche estraneo, e da un foglio di stile. I campioni non si raccolgono.
-- **La raccolta fa parte dell'operazione:** quella in avanti che il motore
-  restituisce, e che la sessione rimanda, è un `batch` con l'operazione e
-  poi i `remove`, con l'etichetta dell'operazione; l'inversa rimette prima
-  le risorse e poi annulla l'operazione.
+- **La raccolta fa parte dell'operazione,** come il seguito delle punte
+  (§8): quella in avanti che il motore restituisce, e che la sessione
+  rimanda, è un `batch` con l'operazione, il seguito e poi i `remove`, con
+  l'etichetta dell'operazione; l'inversa rimette prima le risorse, poi
+  disfa il seguito e l'operazione. Un seguito che il motore rifiuterebbe
+  non c'è.
 - **Il limite:** un documento ha al più 10 000 risorse modificabili. Un
   `add` che lo supererebbe è `limit`; un documento che ne ha di più si apre
   e si modifica, e un annulla rimette anche oltre il limite.

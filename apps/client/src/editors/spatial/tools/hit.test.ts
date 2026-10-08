@@ -10,7 +10,7 @@ import { doc } from "../scene/test-support";
 import { strokeElem } from "./edit";
 import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
-import { elementChildren, type ContainerNode } from "../scene/model";
+import { elementChildren, type ContainerNode, type LeafNode } from "../scene/model";
 import { elemBounds, geometryBox, linesBounds, SceneIndexer } from "./hit";
 import { LAYER, open } from "./test-support";
 
@@ -381,6 +381,89 @@ describe("che cosa si vede in un punto", () => {
     expect([sampled.leaf.facts.id, sampled.on, sampled.matrix]).toEqual(["p", "stroke", [1, 0, 0, 1, 0, 50]]);
     expect(sampled.segments.length).toBeGreaterThan(0);
     expect(at("g", [70, 70])).toBeNull();
+  });
+});
+
+describe("le punte delle linee", () => {
+  /// Un triangolo col vertice sul punto di riferimento: largo 4 e lungo 4
+  /// volte il contorno, girato col tracciato e al contrario all'inizio.
+  const ARROW = '<marker id="m" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">'
+    + '<path d="M0 0 L10 5 L0 10 Z" fill="#000000"/></marker>';
+  const tipped = (defs: string, body: string) => open(doc(`<defs id="fub-defs">${defs}</defs>${LAYER}${body}</g>`));
+
+  it("si toccano e stanno nel riquadro col contorno, ma non nella geometria", () => {
+    const opened = tipped(ARROW, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>');
+    const line = opened.index.get("a")!;
+    // La punta va da x 52 a 60, alta da 46 a 54: fuori dal contorno della linea.
+    expect(line.hits([54, 47.5], 0)).toBe(true);
+    expect(line.hits([54, 46.5], 0)).toBe(false);
+    expect(line.touches([55, 40], [55, 48], 0)).toBe(true);
+    expect(line.bounds).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(line.frame()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(opened.extent()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(line.geometry).toEqual({ min: [10, 50], max: [60, 50] });
+    expect(line.shapeFrame()).toEqual({ min: [10, 50], max: [60, 50] });
+    // La punta non è una forma della linea, e il suo riempimento non è il suo.
+    expect(line.shapes().map((shape) => shape.leaf.facts.id)).toEqual(["a"]);
+    expect(line.filled).toBe(false);
+  });
+
+  it("si vedono come il contorno della linea che le porta", () => {
+    const opened = tipped(ARROW, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>');
+    const sampled = opened.index.get("a")!.sampleAt([54, 47.5], 0)!;
+    expect([sampled.leaf.facts.id, sampled.on, sampled.matrix, sampled.segments.length]).toEqual(["a", "stroke", [1, 0, 0, 1, 0, 0], 2]);
+  });
+
+  it("si girano col tracciato, e all'inizio al contrario con auto-start-reverse", () => {
+    const opened = tipped(ARROW, '<path id="v" d="M50 10 V60" fill="none" stroke="#000000" stroke-width="2" marker-start="url(#m)"/>');
+    const path = opened.index.get("v")!;
+    // All'inizio la punta guarda in su: sta da y 10 a 18, non sopra.
+    expect(path.hits([51.5, 14], 0)).toBe(true);
+    expect(path.hits([51.5, 6], 0)).toBe(false);
+    expect(path.bounds).toEqual({ min: [46, 9], max: [54, 61] });
+  });
+
+  it("crescono col contorno che la linea eredita, e nella cornice seguono la sua trasformazione", () => {
+    const opened = tipped(ARROW, '<g id="g" stroke-width="4"><line x1="10" y1="50" x2="60" y2="50" stroke="#000000" marker-end="url(#m)"/></g>'
+      + '<line id="t" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" transform="translate(0 100)" marker-end="url(#m)"/>');
+    expect(opened.index.get("g")!.bounds).toEqual({ min: [8, 42], max: [62, 58] });
+    const moved = opened.index.get("t")!;
+    expect(moved.frame()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(moved.bounds).toEqual({ min: [9, 146], max: [61, 154] });
+  });
+
+  it("restano dentro la finestra del marcatore, che taglia il contenuto che ne esce", () => {
+    const opened = tipped(
+      '<marker id="o" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse"><circle cx="5" cy="5" r="10" fill="#000000"/></marker>',
+      '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#o)"/>',
+    );
+    // Il cerchio sarebbe largo 12; se ne vede il quadrato di 6 della finestra.
+    expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 47], max: [63, 53] });
+  });
+
+  it("stanno nel riquadro di una forma che uno strumento sta per scrivere al posto di una linea", () => {
+    const source = doc(`<defs id="fub-defs">${ARROW}</defs>${LAYER}<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/></g>`);
+    const engine = SceneEngine.open(source);
+    const builder = new PaintBuilder();
+    builder.build(engine);
+    const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
+    const leaf = engine.holder("a") as LeafNode;
+    // I nodi la portano a 80: la punta con lei, fino a 81 col contorno.
+    const after = { tag: "path", attrs: { id: "a", d: "M10 50 L80 50", fill: "none", stroke: "#000000", "stroke-width": "2", "marker-end": "url(#m)" } };
+    expect(elemBounds(after, IDENTITY)).toEqual({ min: [9, 49], max: [81, 51] });
+    expect(indexer.writtenBounds(after, IDENTITY, leaf)).toEqual({ min: [9, 46], max: [81, 54] });
+    // Senza punte, o con una che non c'è, è il riquadro di prima.
+    const bare = { d: "M10 50 L80 50", fill: "none", stroke: "#000000", "stroke-width": "2" };
+    expect(indexer.writtenBounds({ tag: "path", attrs: bare }, IDENTITY, leaf)).toEqual({ min: [9, 49], max: [81, 51] });
+    expect(indexer.writtenBounds({ tag: "path", attrs: { ...after.attrs, "marker-end": "url(#nessuno)" } }, IDENTITY, leaf)).toEqual({ min: [9, 49], max: [81, 51] });
+  });
+
+  it("non contano se il marcatore non disegna niente", () => {
+    const opened = tipped(
+      '<marker id="vuoto" markerWidth="0"><path d="M0 0 L10 5 L0 10 Z"/></marker>',
+      '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#vuoto)"/>',
+    );
+    expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 49], max: [61, 51] });
   });
 });
 

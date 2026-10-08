@@ -48,6 +48,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
 | Colori personalizzati | Standard | «Altro colore…» e l'anello del colore scelto |
 | Colori del documento | Standard | nel pannello delle proprietà la sezione «Colori del documento», coi campioni, i colori usati e i recenti; disegnare con un campione ([Disegni, colori](drawing-colors.md)) |
+| Punte delle linee | Standard | nel pannello delle proprietà «Punta d’inizio» e «Punta di fine», in «Aspetto» ([Disegni, punte delle linee](drawing-tips.md)) |
 | Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |
 | Duplica, raggruppa, ordina, allinea e distribuisci | Standard | questi comandi della barra «Disponi», coi loro tasti |
 | Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello; nell'albero i nomi, il filtro, le miniature e le righe da trascinare |

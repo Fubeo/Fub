@@ -23,8 +23,11 @@
 //   disegno con lo stesso id, o diventa quello con lo stesso nome e lo
 //   stesso colore, e chi lo usa ne prende il colore di adesso come
 //   ripiego; se arriva con un nome già preso, prende il primo libero
-//   (`swatches.ts`). Ciò che nessuno usa resta fuori. Con un foglio di
-//   stile, che può rimandarvi, restano dove sono.
+//   (`swatches.ts`). Una punta delle linee (`tips.ts`) uguale a una del
+//   disegno, a parte l'id, è quella del disegno: una linea con le punte
+//   rientra con le sue, senza marcatori doppi, anche da un altro disegno.
+//   Ciò che nessuno usa resta fuori. Con un foglio di stile, che può
+//   rimandarvi, restano dove sono.
 // - **Id nuovi.** Ogni id cambia, e i riferimenti interni lo seguono:
 //   `url(#…)`, `href`, gli attributi ARIA, l'inizio e la fine delle
 //   animazioni, i selettori dei fogli di stile. Un foglio di un altro
@@ -85,6 +88,7 @@ import { inheritedBy, INITIAL } from "./place";
 import { homeOf, paintCode, resourceHome, resourcesOf } from "./resources";
 import { renameUrls, restyle } from "./stylesheet";
 import { freshSwatchName, swatchNameProblem } from "./swatches";
+import { markerTip } from "./tips";
 
 /// Il tipo di un SVG negli appunti.
 export const SVG_TYPE = "image/svg+xml";
@@ -1049,6 +1053,13 @@ function compact(text: string): string {
   return lf(text).replace(/>\s+</g, "><").trim();
 }
 
+/// Il testo compatto di un elemento senza il suo `id`, se è il primo
+/// attributo, come lo scrive FubDraw: per riconoscere un marcatore uguale
+/// con un altro id.
+function withoutId(text: string): string {
+  return compact(text).replace(/^(<[^\s>]+)\s+id="[^"]*"/, "$1");
+}
+
 /// Il trasloco delle risorse di `doc` nel disegno `model`, per i figli della
 /// radice `tops`; i nomi nuovi vanno in `names` e `renamed`. Una risorsa
 /// privata ha sempre una copia, con id nuovi; una condivisa, o che non è di
@@ -1123,6 +1134,20 @@ function liftOf(
   }
   const named = new Map<NodeId, string>();
   const colors = new Map<string, string>();
+  // Le punte del disegno, per il loro testo senza id; si leggono quando ne
+  // arriva una.
+  let tips: Map<string, string> | null = null;
+  const tipOf = (text: string): string | undefined => {
+    if (tips === null) {
+      tips = new Map();
+      for (const [id, node] of resources) {
+        if (node.kind !== "leaf" || markerTip(node) === null) continue;
+        const key = withoutId(node.raw);
+        if (!tips.has(key)) tips.set(key, id);
+      }
+    }
+    return tips.get(withoutId(text));
+  };
 
   // Gli id, prima ciò che si usa e poi chi lo usa.
   const local = new Map<string, string>();
@@ -1149,6 +1174,16 @@ function liftOf(
           continue;
         }
         arriving = swatch;
+      }
+      // Una punta della raccolta è quella del disegno che le somiglia, col
+      // campione che usa già col nome che avrà: i campioni arrivano prima.
+      if (element.local === "marker" && valueOf(element, NS_FUB, "role") === "shared" && valueOf(element, NS_FUB, "marker") !== undefined) {
+        const text = doc.source.text.slice(element.start, element.end);
+        const kept = tipOf(text.replace(/url\(#([^)\s]+)\)/g, (whole, ref: string) => (local.has(ref) ? `url(#${local.get(ref)!})` : whole)));
+        if (kept !== undefined) {
+          local.set(id, kept);
+          continue;
+        }
       }
       const same =
         there !== undefined &&

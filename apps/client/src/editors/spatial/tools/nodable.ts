@@ -25,6 +25,12 @@
 //   risorsa, nelle coordinate del testo: la modifica cambia quel tracciato,
 //   e il testo lo segue. Il tracciato resta lungo più di zero, o il testo
 //   non avrebbe dove scorrere.
+// - **Le punte stanno ai capi** (`endtips.ts`). SVG le disegna sul primo e
+//   sull'ultimo vertice: inserire, togliere o spezzare nodi le lascia dov'è
+//   il primo e l'ultimo. Una modifica che unisce due capi, e uno di loro non
+//   è più un capo, si porta via la sua punta; una che lascia l'oggetto senza
+//   sottotracciati aperti, chiudendo l'ultimo, toglie `marker-start` e
+//   `marker-end`.
 
 import { formatNumber } from "../number";
 import { parseBrush, type Pf1Brush } from "../ink/brush";
@@ -38,6 +44,8 @@ import { pathData, type Elem } from "../scene/serialize";
 import { spineOf as widthSpine } from "../scene/varwidth";
 import { nonNegativeLength } from "../scene/values";
 import { fubAttributes, plainAttributes, type Plan } from "./arrange";
+import { tipsAfter } from "./cut";
+import { tipAttrs, type EndTips } from "./endtips";
 import { shapeSegments } from "./hit";
 import { arcsAsCubics, readNodes, writeNodes, type NodeKey, type Subpath } from "./nodes";
 import { arrowPath } from "./shapes";
@@ -184,10 +192,11 @@ export function nodableOf(node: ElementPart, spineOf: SpineOf = freshSpine, trac
 export type Rewrite =
   /// L'oggetto resta lui, con questi attributi; `look` è il `d` che si vedrà,
   /// quando non lo dicono gli attributi, e `spine` la spina nuova di un
-  /// tratto.
-  | { readonly kind: "set"; readonly attrs: Readonly<Record<string, string>>; readonly look?: string; readonly spine?: Spine }
-  /// Diventa un `path` con questo `d`.
-  | { readonly kind: "path"; readonly d: string }
+  /// tratto. `tips` dice le punte dei suoi capi, se la modifica le cambia.
+  | { readonly kind: "set"; readonly attrs: Readonly<Record<string, string>>; readonly look?: string; readonly spine?: Spine; readonly tips?: EndTips }
+  /// Diventa un `path` con questo `d`, e queste punte, se la modifica le
+  /// cambia.
+  | { readonly kind: "path"; readonly d: string; readonly tips?: EndTips }
   /// Il tracciato che il testo segue diventa `d`.
   | { readonly kind: "track"; readonly target: string; readonly d: string }
   /// Non disegna più niente.
@@ -312,8 +321,10 @@ function strokeFollowing(nodable: Extract<Nodable, { readonly kind: "stroke" }>,
 
 /// Ciò che diventa `nodable` coi nodi `subs`. `moved` porta ogni nodo che
 /// resta dove è finito, se la modifica ne ha aggiunti o tolti; senza, i nodi
-/// sono gli stessi.
-export function rewrite(nodable: Nodable, subs: readonly Subpath[], moved: ReadonlyMap<NodeKey, NodeKey> | null): Rewrite {
+/// sono gli stessi. Le punte di un tracciato o di una linea seguono i nodi
+/// che sono i loro capi, a meno che `tips` non dica altro: la modifica che
+/// porta in un oggetto i capi di un altro.
+export function rewrite(nodable: Nodable, subs: readonly Subpath[], moved: ReadonlyMap<NodeKey, NodeKey> | null, tips?: EndTips): Rewrite {
   const segments = writeNodes(subs);
   if (nodable.kind === "track") {
     return new Track(segments).length > 0 ? { kind: "track", target: nodable.target, d: pathData(segments) } : { kind: "refused", reason: "track" };
@@ -321,12 +332,16 @@ export function rewrite(nodable: Nodable, subs: readonly Subpath[], moved: Reado
   if (segments.length === 0) return { kind: "remove" };
   const d = pathData(segments);
   switch (nodable.kind) {
-    case "path":
-      return { kind: "set", attrs: { d } };
+    case "path": {
+      const ends = tips ?? tipsAfter(nodable.subs, subs, moved);
+      return ends === undefined ? { kind: "set", attrs: { d } } : { kind: "set", attrs: { d }, tips: ends };
+    }
     case "shape": {
       const attrs = keptShape(nodable, subs);
-      if (attrs === null) return { kind: "path", d };
-      return Object.keys(attrs).length === 0 ? { kind: "same" } : { kind: "set", attrs };
+      const ends = tips ?? tipsAfter(nodable.subs, subs, moved);
+      if (attrs === null) return ends === undefined ? { kind: "path", d } : { kind: "path", d, tips: ends };
+      if (Object.keys(attrs).length === 0) return { kind: "same" };
+      return ends === undefined ? { kind: "set", attrs } : { kind: "set", attrs, tips: ends };
     }
     case "polygonal": {
       const attrs = keptPolygonal(nodable, subs);
@@ -379,21 +394,34 @@ export function draftOf(nodable: Nodable, subs: readonly Subpath[]): string | nu
 /// attributo dell'oggetto non si sa riscrivere su un `path`.
 export function rewriteOps(plan: Plan, node: ElementPart, change: Extract<Rewrite, { readonly kind: "set" | "path" }>): Elem | null {
   const tag = node.details!.tag;
-  const plain = Object.fromEntries(plainAttributes(node));
+  const own = plainAttributes(node);
+  const plain = Object.fromEntries(own);
+  const tips = change.tips === undefined ? {} : tipAttrs(own, change.tips);
+  // L'elemento com'è dopo, senza gli attributi che le punte tolgono.
+  const tipped = (after: Record<string, string>): Record<string, string> => {
+    for (const [name, value] of Object.entries(tips)) {
+      if (value === null) delete after[name];
+      else after[name] = value;
+    }
+    return after;
+  };
   if (change.kind === "set") {
-    plan.ops.push({ op: "set", id: plan.idOf(node), attrs: change.attrs });
+    plan.ops.push({ op: "set", id: plan.idOf(node), attrs: { ...change.attrs, ...tips } });
     const after: Record<string, string> = { ...plain };
     for (const [name, value] of Object.entries(change.attrs)) if (!name.includes(":")) after[name] = value;
     if (change.look !== undefined) after.d = change.look;
-    return { tag, attrs: after };
+    return { tag, attrs: tipped(after) };
   }
   if (tag === "path") {
-    plan.ops.push({ op: "set", id: plan.idOf(node), attrs: { ...syntheticNulls(node), d: change.d } });
+    plan.ops.push({ op: "set", id: plan.idOf(node), attrs: { ...syntheticNulls(node), d: change.d, ...tips } });
   } else if (!replaceWithPath(plan, node, change.d)) {
     return null;
+  } else if (Object.keys(tips).length > 0) {
+    // Il `path` nuovo ha le punte che aveva la forma: le sue sono queste.
+    plan.ops.push({ op: "set", id: plan.idOf(node), attrs: tips });
   }
   const geometry = GEOMETRY[tag] ?? [];
   const after: Record<string, string> = { d: change.d };
   for (const [name, value] of Object.entries(plain)) if (!geometry.includes(name) && name !== "d") after[name] = value;
-  return { tag: "path", attrs: after };
+  return { tag: "path", attrs: tipped(after) };
 }

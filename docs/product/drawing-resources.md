@@ -49,8 +49,9 @@ nell'esportazione il file è quello che è.
 
 - **Duplica** copia le risorse proprie dell'oggetto, una volta sola anche
   se più oggetti duplicati le usano, e con nomi nuovi: cambiare la copia non
-  cambia l'originale. Le risorse condivise, come una punta di freccia, e
-  quelle scritte da un altro programma restano in comune.
+  cambia l'originale. Le risorse condivise, come una [punta di
+  freccia](drawing-tips.md), e quelle scritte da un altro programma restano
+  in comune.
 - **Separa** (`Ctrl+Maiusc+G`) non separa un gruppo con un ritaglio, una
   maschera o un filtro, che valgono per tutto il gruppo, e lo dice; con più
   gruppi separa gli altri e dice quanti ne restano interi. Allo stesso modo
