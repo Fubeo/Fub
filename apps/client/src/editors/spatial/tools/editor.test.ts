@@ -4051,6 +4051,126 @@ describe("il contagocce, dal livello Standard", () => {
     expect(editor.engine.text).toBe(LOOKS);
     expect(changes).toEqual([]);
   });
+
+  /// Le righe dell'albero: A da vestire e B, come sopra; K bloccato e N
+  /// nascosto, senza riempimento; R con una sfumatura sua; un'immagine; il
+  /// gruppo; e D nel livello bloccato.
+  const K = "ok1k1k1k1";
+  const N = "on2n2n2n2";
+  const R = "or3r3r3r3";
+  const ROWS = doc(
+    '<defs id="fub-defs"><linearGradient id="r1a1a1a1a" fub:role="private" x2="1"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#e69f00"/></linearGradient></defs>' +
+      `<g id="l2" fub:layer="Sfondo" fub:locked="true"><rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/></g>` +
+      `${LAYER}${A_RECT}${B_RECT}` +
+      `<rect id="${K}" x="100" y="10" width="40" height="40" fill="#009e73" fub:locked="true"/>` +
+      `<rect id="${N}" x="160" y="10" width="40" height="40" fill="none" stroke="#cc79a7" stroke-width="3" display="none"/>` +
+      `<rect id="${R}" x="10" y="200" width="40" height="40" fill="url(#r1a1a1a1a) #0072b2"/>` +
+      `<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="data:image/png;base64,iVBORw0KGgo="/>` +
+      `<g id="${G}"><rect id="oh6h6h6h6" x="100" y="200" width="40" height="40" fill="#009e73"/><rect id="oj7j7j7j7" x="140" y="200" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/></g></g>`,
+  );
+  const objectsTree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
+  const inTree = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, objectsTree());
+  /// Apre l'albero, se è chiuso, e porta la riga attiva a `id` con Ctrl e le
+  /// frecce, senza cambiare la selezione.
+  const reach = (id: string): void => {
+    if (objectsTree().closest<HTMLElement>(".draw-objects")!.hidden) host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    objectsTree().focus();
+    const keys = (): (string | undefined)[] => [...objectsTree().querySelectorAll<HTMLElement>('[role="treeitem"]')].map((row) => row.dataset.key);
+    const at = (): number => keys().indexOf(document.getElementById(objectsTree().getAttribute("aria-activedescendant") ?? "")?.dataset.key);
+    for (let step = 0; step < 20 && at() !== keys().indexOf(id); step++) inTree(at() < keys().indexOf(id) ? "ArrowDown" : "ArrowUp", { ctrlKey: true });
+    expect(keys()[at()]).toBe(id);
+  };
+
+  it("dall'albero, I dà agli oggetti scelti l'aspetto dell'oggetto della riga, anche bloccato o nascosto, e non cambia strumento", () => {
+    dropper(ROWS);
+    editor.select([A]);
+    const tool = editor.tool;
+    reach(B);
+    expect(inTree("i").defaultPrevented).toBe(true);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`);
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    expect(editor.tool).toBe(tool);
+    expect(editor.selection).toEqual([A]);
+    expect(document.activeElement).toBe(objectsTree());
+    editor.undo();
+    expect(editor.engine.text).toBe(ROWS);
+    // Bloccato o nascosto si legge senza cambiarlo. Col blocco delle
+    // maiuscole la lettera è grande, ed è sempre l'aspetto.
+    reach(K);
+    inTree("I");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#009e73"/>`);
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    reach(N);
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="none" stroke="#cc79a7" stroke-width="3"/>`);
+    expect(rect(N)).toContain('display="none"');
+    reach(D);
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#56b4e9"/>`);
+    // Un gruppo dà quello della sua prima parte; una sua parte, il suo.
+    reach(G);
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#009e73"/>`);
+    expect(spoken()).toBe("Aspetto di Gruppo dato a 1 oggetto.");
+    inTree("ArrowRight");
+    reach("oj7j7j7j7");
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/>`);
+    // Una sfumatura viene intera, in una copia che resta di A.
+    reach(R);
+    inTree("i");
+    expect(rect(A)).toMatch(new RegExp(`^<rect id="${A}" x="10" y="10" width="40" height="40" fill="url\\(#r[a-z0-9]+\\) #0072b2"/>$`));
+    expect(rect(A)).not.toContain("r1a1a1a1a");
+    expect(editor.engine.text.match(/<linearGradient /g)).toHaveLength(2);
+    // Un livello non ha un aspetto; l'oggetto stesso non cambia niente.
+    reach("l1");
+    inTree("i");
+    expect(spoken()).toBe("Un livello non ha un aspetto da prendere: il contagocce prende da un oggetto.");
+    reach(A);
+    inTree("i");
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(editor.selection).toEqual([A]);
+  });
+
+  it("dall'albero, Maiusc con I dà il colore della riga, il riempimento o il contorno se non riempie; senza selezione è quello con cui si disegna", () => {
+    const remembered: (readonly string[])[] = [];
+    dropper(ROWS, { onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([A]);
+    reach(B);
+    expect(inTree("I", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Riempimento: Arancione.");
+    expect(remembered).toEqual([["#e69f00"]]);
+    // Senza riempimento il contorno, anche nascosto; al contorno, come dice
+    // «Applica a».
+    panelButton().click();
+    targetButton("stroke").click();
+    reach(N);
+    inTree("I", { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#cc79a7" stroke-width="2"/>`);
+    expect(spoken()).toBe("Contorno: Porpora.");
+    // Una sfumatura ha un colore per punto, e un'immagine anche: sul foglio.
+    reach(R);
+    inTree("I", { shiftKey: true });
+    expect(spoken()).toBe("Una sfumatura ha un colore in ogni punto: prendine uno col contagocce sul foglio. Senza Maiusc, I dà l’aspetto intero, sfumatura compresa.");
+    reach(IMAGE);
+    inTree("I", { shiftKey: true });
+    expect(spoken()).toBe("Il colore di un’immagine è quello di un punto: prendilo col contagocce sul foglio.");
+    expect(changes).toHaveLength(2);
+    // Senza selezione, il colore con cui si disegna.
+    editor.select([]);
+    reach(K);
+    inTree("i");
+    expect(spoken()).toBe("Colore: Verde.");
+    expect(checked()).toBe("Verde");
+    reach(R);
+    inTree("i");
+    expect(spoken()).toBe("Una sfumatura ha un colore in ogni punto: prendine uno col contagocce sul foglio.");
+    expect(changes).toHaveLength(2);
+    // Senza il contagocce il tasto passa all'editor.
+    editor.setLevel("essential");
+    expect(inTree("i").defaultPrevented).toBe(false);
+  });
 });
 
 describe("la barra accanto alla selezione, dal livello Standard", () => {
@@ -4457,6 +4577,8 @@ describe("da tastiera", () => {
       ["←↑→↓", "Muovono il cursore, anche con oggetti scelti, e dicono che cosa c’è sotto"],
       ["Space", "Dà agli oggetti scelti l’aspetto di ciò che è sotto il cursore; senza selezione, ne prende il colore per disegnare"],
       ["Shift+Space", "Prende soltanto il colore sotto il cursore"],
+      ["I", "Nell’albero degli oggetti, dà agli oggetti scelti l’aspetto della riga; senza selezione, ne prende il colore per disegnare"],
+      ["Shift+I", "Nell’albero degli oggetti, prende soltanto il colore della riga"],
     ]);
     expect(tables[10]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
     expect(tables[11]!.rows).toEqual([

@@ -49,7 +49,8 @@
 //   il carattere di un oggetto vanno sugli oggetti scelti in un passo, a
 //   ciascuna parte ciò che ha. Si copia ciò che si vede, anche se viene dal
 //   gruppo che lo contiene. Il contagocce prende lo stesso, dalla forma
-//   sotto il puntatore.
+//   sotto il puntatore o dall'oggetto di una riga dell'albero, anche
+//   bloccato o nascosto: leggerlo non lo cambia.
 // - **Una risorsa privata resta di un oggetto solo** (formato della scena,
 //   risorse): un colore che ne usa una, preso da un altro oggetto, ne porta
 //   una copia, com'era quando lo stile si è copiato; e una sfumatura nelle
@@ -861,13 +862,15 @@ export interface Style {
   readonly resources: ReadonlyMap<string, Elem>;
 }
 
-/// La prima parte di `units` che ha un aspetto suo, nell'ordine del
-/// documento: una forma, un tratto a penna, un testo o un'immagine.
-function firstPart(model: DocumentModel, unit: Unit): Part | null {
+/// La prima parte di `from` che ha un aspetto suo, nell'ordine del
+/// documento: una forma, un tratto a penna, un testo o un'immagine; `from`
+/// stesso, se lo è. Una parte bloccata dentro di lui non conta; `from`
+/// bloccato sì, perché leggerlo non lo cambia.
+function firstPart(from: ElementPart): Part | null {
   let found: Part | null = null;
   const visit = (node: ElementPart, inherited: Inherited): void => {
     const role = node.details?.role;
-    if (found !== null || role === undefined || node.details?.locked === true) return;
+    if (found !== null || role === undefined || (node !== from && node.details?.locked === true)) return;
     if (CONTAINERS.has(role)) {
       if (node.kind !== "container") return;
       const inner = passedBy(node);
@@ -876,27 +879,31 @@ function firstPart(model: DocumentModel, unit: Unit): Part | null {
     }
     if (FILLED.has(role) || OUTLINED.has(role) || INKED.has(role) || role === "image") found = { node, role, own: ownOf(node), inherited };
   };
-  const [node] = nodesOf(model, [unit]);
-  visit(node!, passedBy(node!.parent));
+  visit(from, passedBy(from.parent));
   return found;
-}
-
-/// La parte `leaf` di un oggetto, se ha un aspetto suo: una forma, un
-/// tratto a penna, un testo o un'immagine.
-function leafPart(leaf: LeafNode): Part | null {
-  const role = leaf.details?.role;
-  if (role === undefined || !(FILLED.has(role) || OUTLINED.has(role) || INKED.has(role) || role === "image")) return null;
-  return { node: leaf, role, own: ownOf(leaf), inherited: passedBy(leaf.parent) };
 }
 
 /// Lo stile di `unit`: quello di `leaf`, una sua forma, o della sua prima
 /// parte, con l'opacità dell'oggetto stesso. `null` se non ha parti che si
 /// possano copiare.
 export function styleOf(model: DocumentModel, unit: Unit, leaf: LeafNode | null = null): Style | null {
-  const part = leaf === null ? firstPart(model, unit) : leafPart(leaf);
-  if (part === null) return null;
   const [node] = nodesOf(model, [unit]);
-  const written = ownOf(node!).get("opacity");
+  return styleFrom(model, node!, leaf ?? node!);
+}
+
+/// Lo stile del nodo `node` del disegno, un oggetto o una parte di un
+/// oggetto, come [`styleOf`]: anche bloccato o nascosto, che si legge
+/// senza cambiarlo.
+export function nodeStyle(model: DocumentModel, node: ElementPart): Style | null {
+  return styleFrom(model, node, node);
+}
+
+/// Lo stile della prima parte di `from`, con l'opacità di `node`, l'oggetto
+/// che la contiene.
+function styleFrom(model: DocumentModel, node: ElementPart, from: ElementPart): Style | null {
+  const part = firstPart(from);
+  if (part === null) return null;
+  const written = ownOf(node).get("opacity");
   const opacity = written === undefined ? 1 : (parseOpacity(written) ?? 1);
   const size = part.role === "text" ? sizeOf(part) : null;
   const fill = FILLED.has(part.role) ? seen(part, "fill") : null;

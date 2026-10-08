@@ -238,7 +238,7 @@ import {
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { framedText, initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
+import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
@@ -420,7 +420,7 @@ import {
   type Encoded,
   type ImageCodec,
 } from "./images";
-import { colorSeen, imagePixel, pixelColor, shownPaint, sightAt, sightStyle, type Beneath, type ImageSight, type ShapeSight, type Shown } from "./eyedropper";
+import { colorSeen, imagePixel, pixelColor, shownPaint, sightAt, sightStyle, styleColor, type Beneath, type ImageSight, type ShapeSight, type Shown } from "./eyedropper";
 import {
   addLayerOps,
   canShiftLayer,
@@ -2463,6 +2463,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     onMove: (keys, drop) => moveRows(keys, drop),
     onEdge: (key, front) => announce(t(outlineNow().byKey.get(key)?.item.role === "layer" ? (front ? "draw.layer.edge.top" : "draw.layer.edge.bottom") : front ? "draw.move.edge.front" : "draw.move.edge.back")),
+    onEyedropper: (key, colorOnly) => dropFromRow(key, colorOnly),
   });
   tree.element.hidden = true;
   relabels.push(() => tree.relabel());
@@ -9587,6 +9588,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// nell'albero: il colore il contagocce lo dice a parte.
   const sightName = (leaf: LeafNode): string => nameOfNode(leaf);
 
+  /// Il nome a parole di ciò da cui il contagocce prende l'aspetto, una forma
+  /// o un oggetto, come nell'albero ma senza lo stato e le parti: «Aspetto
+  /// di Rettangolo», anche se è bloccato.
+  const lookName = (node: ElementPart): string => {
+    const outlined = outlineNow().byKey.get(keyOfNode(node));
+    return outlined === undefined ? tagName(node) : describe(outlined, { state: false });
+  };
+
   /// Il nome breve di un colore, per l'anteprima: quello della tavolozza, o
   /// il codice.
   const shortColor = (code: string): string => {
@@ -9794,7 +9803,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// passo.
   function giveLook(sight: ShapeSight, units: readonly Unit[]): void {
     const model = engine.model!;
-    const name = sightName(sight.sampled.leaf);
+    const name = lookName(sight.sampled.leaf);
     const style = sightStyle(model, sight);
     if (style === null) {
       announce(t("draw.eyedropper.no_style", { name }));
@@ -9836,6 +9845,41 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     announce(t("draw.colors.applied", { target: t(target === "fill" ? "draw.properties.fill" : "draw.properties.stroke"), name }));
     panelShown = null;
     syncProperties();
+  }
+
+  /// Il contagocce sulla riga `key` dell'albero, senza puntatore: agli
+  /// oggetti scelti l'aspetto del suo oggetto, anche bloccato o nascosto,
+  /// come «Copia lo stile»; con `colorOnly`, o senza selezione, il suo
+  /// colore. Falso se il contagocce non c'è: il tasto sceglie lo strumento.
+  function dropFromRow(key: string, colorOnly: boolean): boolean {
+    if (!has("eyedropper")) return false;
+    const model = engine.model;
+    const outlined = outlineNow().byKey.get(key);
+    if (model === null || outlined === undefined || !editable()) return true;
+    if (outlined.item.role === "layer") {
+      announce(t("draw.eyedropper.row.layer"));
+      return true;
+    }
+    const node = nodeOf(model, outlined.item);
+    const name = lookName(node);
+    const style = nodeStyle(model, node);
+    if (style === null) {
+      announce(t("draw.eyedropper.no_style", { name }));
+      return true;
+    }
+    const units = selectedUnits();
+    if (units.length > 0 && !colorOnly) {
+      cancelGesture();
+      const restyled = styleOps(model, units, style, measureText, newIds());
+      if (arrange("draw.action.eyedropper", restyled) === null) return true;
+      announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+      return true;
+    }
+    const color = styleColor(model, style);
+    if (color === "gradient") announce(units.length > 0 ? `${t("draw.eyedropper.row.gradient")} ${t("draw.eyedropper.row.whole")}` : t("draw.eyedropper.row.gradient"));
+    else if (color === null || color.shown.kind === "none") announce(t(outlined.item.role === "image" ? "draw.eyedropper.row.image" : "draw.eyedropper.no_color"));
+    else giveColor(color.value, color.shown);
+    return true;
   }
 
   // --- I gesti dei nodi --------------------------------------------------------
@@ -15429,6 +15473,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               [ARROW_KEYS, t("draw.keys.eyedropper.cursor")],
               ["Space", t("draw.keys.eyedropper.take")],
               ["Shift-Space", t("draw.keys.eyedropper.color")],
+              ["i", t("draw.keys.eyedropper.row")],
+              ["Shift-i", t("draw.keys.eyedropper.row.color")],
             ],
           },
         ]

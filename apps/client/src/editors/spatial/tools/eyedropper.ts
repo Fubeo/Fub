@@ -18,6 +18,10 @@
 //   motivo il motivo, che un colore solo non ce l'ha. Di un'immagine il
 //   colore del pixel, sempre; dove è trasparente, o dove il riquadro non la
 //   mostra, il contagocce guarda ciò che sta sotto.
+// - **Senza puntatore**, da una riga dell'albero degli oggetti: l'aspetto
+//   dell'oggetto, come «Copia lo stile», e il suo colore, il riempimento o
+//   il contorno se non riempie. Una sfumatura senza un punto non ha un
+//   colore solo, e un'immagine nemmeno: il contagocce lo dice.
 
 import type { Bounds } from "../scene/geometry";
 import { apply, invert, type Point } from "../scene/matrix";
@@ -112,16 +116,41 @@ export function paintAt(model: DocumentModel, sight: ShapeSight, p: Point, style
   return seen === null || seen.shown.kind === "none" ? null : seen.value;
 }
 
-/// Il colore che si vede nel punto `p` di `sight`: come si mostra, e come
-/// lo scrive [`paintAt`]; `none` per nessun colore. `null` se non si legge.
-export function colorSeen(model: DocumentModel, sight: ShapeSight, p: Point, style: Style | null = sightStyle(model, sight)): { readonly shown: Shown; readonly value: string } | null {
+/// Un colore che il contagocce prende: come si mostra, e come lo scrive
+/// [`paintAt`].
+export interface Colored {
+  readonly shown: Shown;
+  readonly value: string;
+}
+
+/// Il colore che si vede nel punto `p` di `sight`; `none` per nessun
+/// colore. `null` se non si legge.
+export function colorSeen(model: DocumentModel, sight: ShapeSight, p: Point, style: Style | null = sightStyle(model, sight)): Colored | null {
   if (style === null) return null;
   // Un tratto a penna è tutto riempimento, e il suo colore è quello del
   // contorno.
   const value = sight.sampled.on === "stroke" ? style.stroke : (style.fill ?? style.stroke);
   const shown = value === null ? null : shownPaint(model, sight, p, value);
-  if (shown === null) return null;
-  return { shown, value: shown.kind === "swatch" || shown.kind === "pattern" ? trim(value!) : shown.kind === "none" ? "none" : shown.code };
+  return shown === null ? null : colored(shown, value!);
+}
+
+/// Il colore di un oggetto preso senza un punto, dal suo aspetto `style`:
+/// il riempimento, o il contorno se non riempie; `none` per nessun colore.
+/// Una sfumatura ha un colore in ogni punto, e dà `"gradient"`. `null` se
+/// non si legge, o se l'oggetto non ha colori, come un'immagine.
+export function styleColor(model: DocumentModel, style: Style): Colored | "gradient" | null {
+  const fill = style.fill === null ? null : trim(style.fill);
+  const value = fill === null || fill === "none" ? (style.stroke ?? fill) : fill;
+  if (value === null) return null;
+  const used = paintReference(trim(value));
+  const node = used === null ? undefined : resourcesOf(model).get(used.id);
+  if (node !== undefined && node.details?.lifecycle !== "swatch" && node.facts.local !== "pattern" && gradientOf(node) !== null) return "gradient";
+  const shown = shownPaint(model, null, [0, 0], value);
+  return shown === null ? null : colored(shown, value);
+}
+
+function colored(shown: Shown, value: string): Colored {
+  return { shown, value: shown.kind === "swatch" || shown.kind === "pattern" ? trim(value) : shown.kind === "none" ? "none" : shown.code };
 }
 
 /// Come si mostra un colore che il contagocce vede: il colore, `#rrggbb`
@@ -136,8 +165,9 @@ export type Shown =
 
 /// Come si mostra `value`, un colore come lo scrive il file, nel punto `p`
 /// della forma di `sight`. Una risorsa che non c'è, o che non si legge, si
-/// mostra col suo ripiego. `null` se non si legge.
-export function shownPaint(model: DocumentModel, sight: ShapeSight, p: Point, value: string): Shown | null {
+/// mostra col suo ripiego, e così una sfumatura senza `sight`. `null` se
+/// non si legge.
+export function shownPaint(model: DocumentModel, sight: ShapeSight | null, p: Point, value: string): Shown | null {
   const text = trim(value);
   if (text === "none") return { kind: "none" };
   const used = paintReference(text);
@@ -155,8 +185,8 @@ export function shownPaint(model: DocumentModel, sight: ShapeSight, p: Point, va
   }
   if (node.facts.local === "pattern") return { kind: "pattern" };
   const gradient = gradientOf(node);
-  const back = invert(sight.sampled.matrix);
-  if (gradient === null || back === null) return fallback;
+  const back = sight === null ? null : invert(sight.sampled.matrix);
+  if (gradient === null || sight === null || back === null) return fallback;
   const color = gradientColor(gradient, apply(back, p), leafBox(sight.sampled));
   return color === null ? null : { kind: "gradient", code: paintCode(color) };
 }
