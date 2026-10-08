@@ -132,6 +132,11 @@ export interface GradientPanel {
   /// Sceglie il bersaglio di «Applica a» senza dirlo all'editor: l'ha
   /// scelto l'altra sezione.
   setTarget(target: PaintTarget): void;
+  /// Vero se la sezione mostra i punti di una sfumatura.
+  hasStops(): boolean;
+  /// Il fuoco al colore del punto scelto, col testo scelto perché lo si
+  /// riscriva subito. Falso se la sezione non mostra punti.
+  focusColor(): boolean;
   /// Riscrive i testi nella lingua di adesso.
   relabel(): void;
 }
@@ -1184,6 +1189,14 @@ export function createGradientPanel(life: Lifetime, options: GradientPanelOption
       if (chosen === target) return;
       chosen = target;
       paint();
+    },
+    hasStops: () => !stopsRoot.hidden,
+    focusColor() {
+      if (stopsRoot.hidden) return false;
+      colorField.root.scrollIntoView?.({ block: "nearest" });
+      colorInput.focus({ preventScroll: true });
+      colorInput.select();
+      return true;
     },
     relabel,
   };

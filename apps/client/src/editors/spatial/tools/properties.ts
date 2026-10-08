@@ -279,6 +279,8 @@ export interface PropertiesOptions {
   readonly colors: Omit<SwatchesPanelOptions, "announce" | "onTarget">;
   /// I gesti della sezione «Sfumatura» (`gradient-panel.ts`).
   readonly gradient: Omit<GradientPanelOptions, "announce" | "onTarget">;
+  /// «Applica a» cambia, in una delle due sezioni che lo hanno.
+  onTarget(target: PaintTarget): void;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
   /// Esc su un campo senza niente da annullare: il fuoco torna al foglio.
@@ -295,6 +297,9 @@ export interface Properties {
   focus(): void;
   /// Apre la sezione `id` e le dà il fuoco. Falso se la sezione non c'è.
   focusSection(id: SectionId): boolean;
+  /// Apre la sezione «Sfumatura» e dà il fuoco al colore del punto scelto.
+  /// Falso se la sezione non c'è o non mostra punti.
+  focusGradientColor(): boolean;
   /// Chiude le sezioni `ids` e apre le altre, come le ricorda l'editor,
   /// senza dirglielo.
   setClosed(ids: readonly SectionId[]): void;
@@ -692,7 +697,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   // «Applica a» è uno solo: la scelta in una sezione passa all'altra.
   const colors = createSwatchesPanel(life, {
     ...options.colors,
-    onTarget: (target) => gradient.setTarget(target),
+    onTarget: (target) => {
+      gradient.setTarget(target);
+      options.onTarget(target);
+    },
     announce: (text) => options.announce(text),
   });
   sections.get("colors")!.body.append(colors.element);
@@ -701,7 +709,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   const gradient = createGradientPanel(life, {
     ...options.gradient,
-    onTarget: (target) => colors.setTarget(target),
+    onTarget: (target) => {
+      colors.setTarget(target);
+      options.onTarget(target);
+    },
     announce: (text) => options.announce(text),
   });
   sections.get("gradient")!.body.append(gradient.element);
@@ -1740,6 +1751,12 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       section.root.scrollIntoView?.({ block: "nearest" });
       (firstIn(section) ?? section.toggle).focus({ preventScroll: true });
       return true;
+    },
+    focusGradientColor() {
+      const section = sections.get("gradient")!;
+      if (section.root.hidden || !gradient.hasStops()) return false;
+      setOpen(section, true);
+      return gradient.focusColor();
     },
     setClosed(ids) {
       const shut = new Set(ids);

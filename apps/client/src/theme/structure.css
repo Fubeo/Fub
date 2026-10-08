@@ -1302,7 +1302,8 @@ html, body, #app {
   cursor: grabbing;
 }
 /* Con lo strumento Tavola, sopra una tavola che si sposta, e con Alt
-   mentre se ne porta una copia. */
+   mentre se ne porta una copia; con lo strumento Sfumatura, sopra un capo,
+   un punto o la linea di una sfumatura. */
 .draw-surface[data-grip="move"] {
   cursor: move;
 }

@@ -1,7 +1,7 @@
 // Lo strato sopra la scena: l'inchiostro mentre si scrive, le maniglie
 // della selezione, i nodi del tracciato che si modifica, le linee delle guide
-// e le misure, l'anteprima del contagocce, su un canvas 2D grande quanto la
-// vista.
+// e le misure, l'anteprima del contagocce, le linee delle sfumature coi loro
+// punti, su un canvas 2D grande quanto la vista.
 //
 // Non entra mai nel documento: è ciò che la superficie mostra fra un
 // evento e l'operazione che lo registrerà. L'inchiostro in corso si riempie
@@ -62,8 +62,9 @@ export type OverlayHandle =
   | { readonly kind: "region"; readonly segments: readonly Segment[]; readonly matrix: Matrix; readonly tone: RegionTone; readonly active?: boolean }
   /// Il contorno di un tracciato di cui si modificano i nodi: i segmenti
   /// nelle coordinate del tracciato, portati nella scena da `matrix`. Un
-  /// `hint` è il contorno dell'oggetto sotto il puntatore, più tenue.
-  | { readonly kind: "outline"; readonly segments: readonly Segment[]; readonly matrix: Matrix; readonly hint?: boolean }
+  /// `hint` è il contorno dell'oggetto sotto il puntatore, più tenue; uno
+  /// `dashed`, tratteggiato, è il bordo di una sfumatura radiale.
+  | { readonly kind: "outline"; readonly segments: readonly Segment[]; readonly matrix: Matrix; readonly hint?: boolean; readonly dashed?: boolean }
   /// Un nodo di un tracciato, di misura fissa sullo schermo: la forma dice
   /// il tipo, e un nodo scelto è pieno. Un `hint` è un nodo dell'oggetto
   /// sotto il puntatore, più piccolo.
@@ -80,6 +81,24 @@ export type OverlayHandle =
   /// Una misura: la linea fra due punti, con le stanghette ai capi, e la
   /// distanza scritta a metà.
   | { readonly kind: "measure"; readonly from: Point; readonly to: Point; readonly text: string }
+  /// La linea di una sfumatura, dal primo capo al secondo o dal centro al
+  /// capo del raggio: un filo del colore della linea su uno della carta più
+  /// largo, perché si veda sopra ogni colore.
+  | { readonly kind: "ramp"; readonly from: Point; readonly to: Point }
+  /// Un punto di una sfumatura: un quadratino del suo colore in `x`, `y`,
+  /// appeso con un'asta al punto `at` della linea, con la scacchiera sotto
+  /// un colore trasparente. Uno scelto ha il bordo spesso del colore della
+  /// linea; uno `torn`, trascinato via dalla linea, è tenue e senza asta.
+  | {
+    readonly kind: "stop";
+    readonly x: number;
+    readonly y: number;
+    readonly at: Point;
+    readonly color: string;
+    readonly opacity: number;
+    readonly selected: boolean;
+    readonly torn?: boolean;
+  }
   /// L'anteprima del contagocce accanto al punto: un disco di ciò che
   /// prende, vuoto se non c'è un colore da mostrare, con l'anello del
   /// contorno quando prende l'aspetto, e il suo nome. Sta in alto a destra
@@ -133,6 +152,14 @@ const REGION_HATCH = 6;
 
 /// Il diametro della maniglia che ruota, in pixel CSS.
 const ROTOR = 10;
+
+/// Il lato del quadratino di un punto di una sfumatura e dei quadretti della
+/// sua scacchiera, quanto è tenue uno trascinato via, e lo spessore della
+/// carta sotto la linea, in pixel CSS.
+const STOP = 12;
+const STOP_CHECK = 5;
+const STOP_TORN_ALPHA = 0.4;
+const RAMP_CASING = 3;
 
 /// Il diametro della maniglia degli angoli, e del punto in mezzo, in pixel
 /// CSS.
@@ -483,6 +510,42 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.strokeStyle = line;
   };
 
+  /// Il quadratino di un punto di una sfumatura: la carta, la scacchiera
+  /// sotto un colore trasparente come nei campioni del pannello, il colore,
+  /// e il bordo del testo, o della linea se è scelto.
+  const drawStop = (ctx: CanvasRenderingContext2D, stop: Extract<OverlayHandle, { kind: "stop" }>, line: string, base: string): void => {
+    const [px, py] = screen(stop.x, stop.y);
+    const x = Math.round(px - STOP / 2);
+    const y = Math.round(py - STOP / 2);
+    ctx.globalAlpha = stop.torn === true ? STOP_TORN_ALPHA : 1;
+    ctx.fillStyle = base;
+    ctx.fillRect(x, y, STOP, STOP);
+    if (stop.opacity < 1) {
+      ctx.fillStyle = "#c8c8c8";
+      for (let i = 0; i * STOP_CHECK < STOP; i++) {
+        for (let j = 0; j * STOP_CHECK < STOP; j++) {
+          if (((i + j) & 1) === 0) ctx.fillRect(x + i * STOP_CHECK, y + j * STOP_CHECK, Math.min(STOP_CHECK, STOP - i * STOP_CHECK), Math.min(STOP_CHECK, STOP - j * STOP_CHECK));
+        }
+      }
+    }
+    ctx.globalAlpha *= Math.min(1, Math.max(0, stop.opacity));
+    ctx.fillStyle = stop.color;
+    ctx.fillRect(x, y, STOP, STOP);
+    ctx.globalAlpha = stop.torn === true ? STOP_TORN_ALPHA : 1;
+    if (stop.selected) {
+      ctx.strokeStyle = line;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - 1, y - 1, STOP + 2, STOP + 2);
+    } else {
+      ctx.strokeStyle = ink();
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x - 0.5, y - 0.5, STOP + 1, STOP + 1);
+    }
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1;
+  };
+
   /// Un nodo in `x`, `y` sullo schermo, largo `size`.
   const drawNode = (ctx: CanvasRenderingContext2D, x: number, y: number, shape: NodeShape, size: number): void => {
     ctx.beginPath();
@@ -551,10 +614,28 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.lineJoin = "miter";
         ctx.lineCap = "butt";
       } else if (handle.kind === "outline") {
-        ctx.setLineDash([]);
+        ctx.setLineDash(handle.dashed === true ? [4, 3] : []);
         ctx.globalAlpha = handle.hint === true ? HINT_ALPHA : 1;
         traceOutline(ctx, handle.segments, handle.matrix);
         ctx.globalAlpha = 1;
+      } else if (handle.kind === "ramp") {
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(...screen(handle.from[0], handle.from[1]));
+        ctx.lineTo(...screen(handle.to[0], handle.to[1]));
+        ctx.strokeStyle = paper();
+        ctx.lineWidth = RAMP_CASING;
+        ctx.stroke();
+        ctx.strokeStyle = line;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else if (handle.kind === "stop") {
+        if (handle.torn === true) continue;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(...screen(handle.at[0], handle.at[1]));
+        ctx.lineTo(...screen(handle.x, handle.y));
+        ctx.stroke();
       } else if (handle.kind === "control") {
         ctx.setLineDash(handle.folded === true ? [2, 2] : []);
         ctx.beginPath();
@@ -637,6 +718,7 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
       ctx.fillStyle = handle.selected ? line : fill;
       drawNode(ctx, px, py, handle.shape, handle.hint === true ? HINT_NODE : NODE);
     }
+    for (const handle of handles) if (handle.kind === "stop") drawStop(ctx, handle, line, fill);
     for (const handle of handles) {
       if (handle.kind === "label") {
         const [px, py] = screen(handle.x, handle.y);

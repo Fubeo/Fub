@@ -200,6 +200,7 @@ function mount(): Properties {
       onPreview: (target, change) => calls.push(`preview ${target} ${JSON.stringify(change)}`),
       onStop: (index) => calls.push(`stop ${index}`),
     },
+    onTarget: (target) => calls.push(`target ${target}`),
     announce: (text) => announced.push(text),
     onLeave: () => calls.push("leave"),
   });
@@ -741,7 +742,7 @@ describe("la sezione «Sfumatura»", () => {
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
 
-  it("«Applica a» è lo stesso nei colori del documento e nella sfumatura", () => {
+  it("«Applica a» è lo stesso nei colori del documento e nella sfumatura, e lo sa l'editor", () => {
     state.gradient = GRADIENT;
     state.colors = COLORS;
     mount();
@@ -751,6 +752,26 @@ describe("la sezione «Sfumatura»", () => {
     expect(panel.colorTarget()).toBe("stroke");
     section("colors").querySelector<HTMLButtonElement>('[data-target="fill"]')!.click();
     expect([pressedTarget("gradient"), pressedTarget("colors")]).toEqual(["fill", "fill"]);
+    expect(calls).toEqual(["target stroke", "target fill"]);
+  });
+
+  it("il fuoco va al colore del punto scelto, se la sezione ne mostra, anche chiusa", () => {
+    closed = ["gradient"];
+    mount();
+    expect(panel.focusGradientColor()).toBe(false);
+    state.gradient = { ...GRADIENT, channels: { stroke: GRADIENT.channels.stroke! } };
+    panel.update(view());
+    expect(panel.focusGradientColor()).toBe(false);
+    expect(calls).toEqual([]);
+    state.gradient = { ...GRADIENT, stop: 1 };
+    panel.update(view());
+    expect(panel.focusGradientColor()).toBe(true);
+    const input = document.activeElement as HTMLInputElement;
+    expect(input.closest(".draw-properties-field")?.querySelector("label")?.textContent).toBe("Colore");
+    expect(input.value).toBe("#ffffff");
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 7]);
+    expect(section("gradient").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
+    expect(calls).toEqual(["section gradient open"]);
   });
 });
 
