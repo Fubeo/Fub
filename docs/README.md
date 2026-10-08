@@ -41,6 +41,7 @@ flowchart LR
 - [Disegni, proprietà](product/drawing-properties.md)
 - [Disegni, colori](product/drawing-colors.md)
 - [Disegni, sfumature](product/drawing-gradients.md)
+- [Disegni, punte delle linee](product/drawing-tips.md)
 - [Disegni, immagini](product/drawing-images.md)
 - [Disegni, appunti](product/drawing-clipboard.md)
 - [Disegni, esportare](product/drawing-export.md)

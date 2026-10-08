@@ -40,7 +40,8 @@ modifica.
   un livello. Le curve restano curve, a meno di mezzo centesimo, e un arco di
   cerchio resta un arco.
 - **Una forma senza riempimento**, come una linea, diventa il tracciato del
-  suo contorno, con lo stesso id, lo stesso posto e gli stessi attributi.
+  suo contorno, con lo stesso id, lo stesso posto e gli stessi attributi;
+  le sue [punte](drawing-tips.md) diventano parte della forma.
 - **Una forma col riempimento e col contorno** diventa un gruppo con lo
   stesso id, la trasformazione, l'opacità e il titolo: dentro, sotto, la
   forma col suo riempimento e senza contorno; sopra, il contorno in
