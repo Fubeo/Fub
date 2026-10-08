@@ -1078,7 +1078,7 @@ export function createGradientPanel(life: Lifetime, options: GradientPanelOption
     const gradients = current?.gradients ?? 0;
     const look = current?.look ?? null;
     const noteText =
-      current === null ? "" : look === null && gradients > 0 ? t("draw.gradient.note.mixed") : gradients > 0 ? "" : current.kind === "other" ? t("draw.gradient.note.other") : t("draw.gradient.note.color");
+      current === null ? "" : look === null && gradients > 0 ? t("draw.gradient.note.mixed") : gradients > 0 ? "" : current.based ? t("draw.gradient.note.color") : t("draw.gradient.note.other");
     note.hidden = noteText === "";
     setText(note, noteText);
 

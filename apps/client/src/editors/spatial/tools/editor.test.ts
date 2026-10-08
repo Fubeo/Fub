@@ -4248,6 +4248,18 @@ describe("lo strumento Sfumatura, dal livello Standard", () => {
     expect(spoken()).toBe("Sfumatura lineare tracciata: angolo 45°, lunga 63,6.");
   });
 
+  it("su un oggetto campito nasce dal fondo della campitura, come dal pannello", () => {
+    const hatched = doc(
+      '<defs id="fub-defs"><pattern id="rh" fub:role="private" fub:pattern="lines -45 8 1.5 #000000 #e69f00" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(-45)"><rect width="8" height="8" fill="#e69f00"/><rect y="3.25" width="8" height="1.5" fill="#000000"/></pattern></defs>' +
+        `${LAYER}<rect id="${B}" x="0" y="150" width="100" height="100" fill="url(#rh) #bb8100"/></g>`,
+    );
+    shading([B], hatched);
+    drag([[20, 200], [50, 200], [80, 200]]);
+    expect(shade(B)).toContain('<stop offset="0" stop-color="#e69f00"/><stop offset="1" stop-color="#e69f00" stop-opacity="0"/>');
+    // La campitura che nessuno usa più se ne va.
+    expect(editor.engine.text).not.toContain("<pattern");
+  });
+
   it("radiale se lo sono già tutte quelle degli oggetti scelti, col centro dove parte", () => {
     shading([C]);
     drag([[280, 180], [290, 180], [300, 180]]);

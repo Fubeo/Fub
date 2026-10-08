@@ -154,6 +154,29 @@ describe("una sfumatura nasce", () => {
     expect(opened.engine.holder("rs")).not.toBeNull();
   });
 
+  it("da una campitura col suo fondo, o col colore delle righe, e da un motivo col suo ripiego", () => {
+    const hatch = (id: string, value: string): string => {
+      const [, , step, width, color, background] = value.split(" ");
+      const fond = background === undefined ? "" : `<rect width="${step}" height="${step}" fill="${background}"/>`;
+      const middle = (Number(step) - Number(width)) / 2;
+      return `<pattern id="${id}" fub:role="private" fub:pattern="${value}" patternUnits="userSpaceOnUse" width="${step}" height="${step}" patternTransform="rotate(-45)">${fond}<rect y="${middle}" width="${step}" height="${width}" fill="${color}"/></pattern>`;
+    };
+    const defs = [
+      hatch("rh", "lines -45 8 1.5 #000000 #0072b2"),
+      hatch("rb", "lines -45 8 1.5 #009e73"),
+      '<pattern id="rm" fub:role="swatch" fub:name="Motivo" patternUnits="userSpaceOnUse" width="10" height="10"><rect width="10" height="10" fill="#cc79a7"/></pattern>',
+      '<pattern id="rp" fub:role="private" patternUnits="userSpaceOnUse" width="4" height="4"><circle cx="2" cy="2" r="1" fill="#000000"/></pattern>',
+    ].join("");
+    const fills = ["url(#rh) #003e60", "url(#rb) #009e73", "url(#rm) #cc79a7", "url(#rp) #e69f00"];
+    const opened = open(doc(`${DEFS(defs)}${LAYER}${fills.map((fill, at) => RECT(`o${at}`, ` fill="${fill}"`)).join("")}</g>`));
+    // Non hanno un tipo, e la sfumatura nasce dal loro colore.
+    expect(gradientView(painted(opened))).toMatchObject({ kind: "other", based: true });
+    applied(opened, changed(opened, { kind: "linear" }));
+    // Il fondo è il colore che l'oggetto aveva, non il ripiego mescolato
+    // alle righe.
+    expect(painted(opened).map((part) => part.gradient!.look.stops)).toEqual(["#0072b2", "#009e73", "#cc79a7", "#e69f00"].map(fadeOf));
+  });
+
   it("nelle coordinate dell'oggetto, che la porta con sé", () => {
     const opened = open(doc(`${LAYER}${RECT("oa", ' fill="#d55e00" transform="translate(5 5) rotate(30)"')}</g>`));
     const [before] = painted(opened);
@@ -382,12 +405,12 @@ describe("la selezione", () => {
     const parts = painted(opened);
     // L'angolo è quello delle parti con una sfumatura, anche se non tutte
     // ne hanno una.
-    expect(gradientView(parts)).toEqual({ count: 3, gradients: 2, kind: null, look: null, angle: 0 });
+    expect(gradientView(parts)).toEqual({ count: 3, gradients: 2, kind: null, based: true, look: null, angle: 0 });
     expect(gradientView(parts.slice(0, 2))).toMatchObject({ count: 2, gradients: 2, kind: "linear", angle: 0 });
-    expect(gradientView(parts.slice(2))).toEqual({ count: 1, gradients: 0, kind: "color", look: null, angle: null });
-    expect(gradientView([])).toEqual({ count: 0, gradients: 0, kind: null, look: null, angle: null });
+    expect(gradientView(parts.slice(2))).toEqual({ count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null });
+    expect(gradientView([])).toEqual({ count: 0, gradients: 0, kind: null, based: false, look: null, angle: null });
     const other = open(doc(`${LAYER}${RECT("oa", ' fill="none"')}</g>`));
-    expect(gradientView(painted(other)).kind).toBe("other");
+    expect(gradientView(painted(other))).toMatchObject({ kind: "other", based: false });
   });
 
   it("dà a ciascuna la dissolvenza del suo colore, e ne rovescia i punti", () => {

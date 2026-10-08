@@ -147,7 +147,8 @@ si vede. Le aree bloccate restano.
   sezione. Le forme di un motivo sì, come quelle di un marcatore
   ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).
 - **Un colore, un campione o una sfumatura** dati al riempimento prendono
-  il posto della campitura, e quella che nessuno usa più se ne va.
+  il posto della campitura, e quella che nessuno usa più se ne va. Una
+  sfumatura nasce dal fondo della campitura, il colore dell'oggetto.
 
 ## In Lettura e nell'export
 

@@ -29,12 +29,13 @@ const linear = (stops: readonly GradientStop[], more: Partial<GradientView> = {}
   count: 1,
   gradients: 1,
   kind: "linear",
+  based: false,
   look: { kind: "linear", stops, spread: "pad" },
   angle: 0,
   ...more,
 });
 
-const SOLID: GradientView = { count: 1, gradients: 0, kind: "color", look: null, angle: null };
+const SOLID: GradientView = { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null };
 
 /// Un oggetto col riempimento a sfumatura e il contorno pieno.
 function viewOf(more: Partial<GradientPanelView> = {}): GradientPanelView {
@@ -292,14 +293,20 @@ describe("la sezione", () => {
     expect(sent).toHaveLength(2);
   });
 
-  it("con un motivo, o senza colore, dice che la sfumatura nasce dal bianco al nero", () => {
-    mount(viewOf({ channels: { fill: { ...SOLID, kind: "other" } } }));
+  it("senza colore dice che la sfumatura nasce dal bianco al nero", () => {
+    mount(viewOf({ channels: { fill: { ...SOLID, kind: "other", based: false } } }));
     expect(pressed(kinds())).toEqual([]);
     expect(note().textContent).toBe("Lineare e Radiale danno una sfumatura dal bianco al nero; o scegline una pronta.");
   });
 
+  it("con una campitura o un motivo non ha un tipo, e la sfumatura nasce dal loro colore", () => {
+    mount(viewOf({ channels: { fill: { ...SOLID, kind: "other" } } }));
+    expect(pressed(kinds())).toEqual([]);
+    expect(note().textContent).toBe("Lineare e Radiale fanno del colore di adesso una sfumatura, da pieno a trasparente.");
+  });
+
   it("con sfumature diverse ha il tipo, le pronte, «Inverti» e l'angolo, che vale per tutte", () => {
-    mount(viewOf({ channels: { fill: { count: 2, gradients: 2, kind: null, look: null, angle: null } } }));
+    mount(viewOf({ channels: { fill: { count: 2, gradients: 2, kind: null, based: false, look: null, angle: null } } }));
     expect(pressed(kinds())).toEqual([]);
     expect(note().textContent).toBe("Gli oggetti scelti hanno sfumature diverse: il tipo, le sfumature pronte, «Inverti» e l’angolo valgono per tutti, ciascuno coi suoi colori.");
     expect(stopsGroup().hidden).toBe(true);

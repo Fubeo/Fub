@@ -11009,10 +11009,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// I punti di una sfumatura che si traccia, come li mostra il foglio:
   /// quelli della prima sfumatura degli oggetti scelti, o la dissolvenza del
-  /// primo colore.
+  /// colore da cui nasce, come dal pannello.
   const drawnStops = (read: GradientRead): readonly GradientStop[] => {
     const shaded = read.painted.find((part) => part.gradient !== null);
-    return shaded !== undefined ? shaded.gradient!.look.stops : fadeOf(read.painted[0]?.solid ?? null);
+    return shaded !== undefined ? shaded.gradient!.look.stops : fadeOf(read.painted[0]?.base ?? null);
   };
 
   /// Attorno a che cosa va, con Maiusc, il capo `grip` di `place` che stava

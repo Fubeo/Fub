@@ -786,8 +786,8 @@ describe("la sezione «Sfumatura»", () => {
   const GRADIENT: GradientPanelView = {
     key: "oaaaaaaaa",
     channels: {
-      fill: { count: 1, gradients: 1, kind: "linear", look: { kind: "linear", stops: STOPS, spread: "pad" }, angle: 0 },
-      stroke: { count: 1, gradients: 0, kind: "color", look: null, angle: null },
+      fill: { count: 1, gradients: 1, kind: "linear", based: false, look: { kind: "linear", stops: STOPS, spread: "pad" }, angle: 0 },
+      stroke: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null },
     },
     stop: null,
     expert: false,
@@ -863,7 +863,7 @@ describe("la sezione «Campitura»", () => {
   };
   const GRADIENT: GradientPanelView = {
     key: "oaaaaaaaa",
-    channels: { fill: { count: 1, gradients: 0, kind: "color", look: null, angle: null } },
+    channels: { fill: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null } },
     stop: null,
     expert: false,
     swatches: [],
@@ -986,7 +986,7 @@ describe("la sezione «Effetti»", () => {
   };
   const GRADIENT: GradientPanelView = {
     key: "oaaaaaaaa",
-    channels: { fill: { count: 1, gradients: 0, kind: "color", look: null, angle: null } },
+    channels: { fill: { count: 1, gradients: 0, kind: "color", based: true, look: null, angle: null } },
     stop: null,
     expert: false,
     swatches: [],
