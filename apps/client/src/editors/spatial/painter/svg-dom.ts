@@ -53,6 +53,7 @@
 
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { compose, invert, type Matrix } from "../scene/matrix";
+import type { Bounds } from "../scene/geometry";
 import type { Elem } from "../scene/serialize";
 import { toScene, viewMatrix, viewTransform, type View } from "../view";
 import type { FontSheets } from "../picture";
@@ -195,6 +196,17 @@ const PAINTING = /^(fill|stroke|marker)/;
 /// L'opacità di un nodo sbiadito dalla gomma.
 export const FADED_OPACITY = "0.25";
 
+/// L'opacità della parte di un'immagine che il ritaglio toglie, mentre lo
+/// si regola.
+export const CROPPED_OPACITY = "0.3";
+
+/// Un ritaglio che si regola: il riquadro dell'immagine (`x y width
+/// height`) e la parte che ne resterà, nelle sue coordinate.
+export interface CropCover {
+  readonly box: Bounds;
+  readonly rect: Bounds;
+}
+
 /// Quanto si attenua ciò che sta fuori dal gruppo isolato: un fattore
 /// dell'opacità che il nodo ha già.
 export const DIMMED_OPACITY = 0.4;
@@ -219,6 +231,11 @@ export interface ScenePainter {
   /// mentre un'anteprima la sposta. `null` le toglie. Valgono finché non le
   /// si cambia, anche dopo un `update` e con ogni anteprima.
   setCovers(covers: ReadonlyMap<PaintNode, Elem> | null): void;
+  /// Mostra ogni immagine di `crops` col suo riquadro e il ritaglio dati:
+  /// intera e attenuata, e sopra la parte che resterà. Il ritaglio che ha
+  /// e la maschera non contano. `null` le riporta come sono. Valgono come
+  /// le coperture.
+  setCrops(crops: ReadonlyMap<PaintNode, CropCover> | null): void;
   /// Sposta la camera.
   setView(view: PainterView): void;
   /// Ridisegna subito gli strati immagine che ne hanno bisogno, senza
@@ -418,6 +435,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   let draft: PainterDraft | null = null;
   /// Le immagini coperte da un ricalco, che si mostrano con l'anteprima.
   let covers: ReadonlyMap<PaintNode, Elem> | null = null;
+  /// Le immagini che si ritagliano.
+  let crops: ReadonlyMap<PaintNode, CropCover> | null = null;
   /// I nodi che mostrano l'anteprima, da riportare alla scena.
   let drafted: NodeRecord[] = [];
   /// I `path` e i gruppi che l'anteprima mostra al posto delle forme.
@@ -427,7 +446,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   /// I pezzi di un testo col loro colore a cui l'anteprima ha dato quello
   /// del testo, con l'attributo.
   let repainted: Array<readonly [Element, "fill" | "stroke"]> = [];
-  /// La `defs` delle sfumature dell'anteprima, finché ne mostra.
+  /// La `defs` delle sfumature e dei ritagli dell'anteprima, finché ne
+  /// mostra.
   let draftDefs: SVGSVGElement | null = null;
   let draftIds = 0;
 
@@ -435,7 +455,11 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   /// non è una risorsa che il painter dipinge.
   const draftResource = (elem: Elem): SVGElement | null => {
     const el = defElement(paintDefOf(elem), null, prefix);
-    if (el === null) return null;
+    return el === null ? null : draftDef(el);
+  };
+
+  /// Mette la risorsa `el` nella `defs` dell'anteprima, con un id nuovo.
+  const draftDef = (el: SVGElement): SVGElement => {
     el.setAttribute("id", `${prefix}draft-${++draftIds}`);
     if (draftDefs === null) {
       draftDefs = document.createElementNS(SVG, "svg");
@@ -519,7 +543,10 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
 
   const clearDraft = (): void => {
-    for (const record of drafted) restore(record);
+    for (const record of drafted) {
+      restore(record);
+      copiesOf.delete(record.el);
+    }
     drafted = [];
     for (const stand of standIns) stand.remove();
     standIns = [];
@@ -550,7 +577,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
 
   const applyDraft = (): void => {
-    if (draft === null && covers === null) return;
+    if (draft === null && covers === null && crops === null) return;
     const touched = new Set<NodeRecord>();
     for (const [paint, transform] of draft?.transforms ?? []) {
       for (const record of recordsOf(paint)) {
@@ -650,6 +677,16 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
         touched.add(record);
       }
     }
+    for (const [paint, crop] of crops ?? []) {
+      for (const record of recordsOf(paint)) {
+        if (record.el.localName !== "image") continue;
+        const [whole, kept] = croppedStands(record.el, crop);
+        record.el.after(whole, kept);
+        record.el.style.setProperty("visibility", "hidden");
+        standIns.push(whole, kept);
+        touched.add(record);
+      }
+    }
     drafted = [...touched];
     if (draft === null) return;
     for (const [id, d] of draft.tracks ?? []) {
@@ -688,6 +725,51 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     if (disposed) return;
     clearDraft();
     covers = next;
+    applyDraft();
+  };
+
+  /// L'immagine `el` come la mostra il ritaglio `crop`: una copia intera,
+  /// in un gruppo attenuato, e una copia ritagliata sopra, con un
+  /// `clipPath` nella `defs` dell'anteprima. Le copie hanno l'URL che
+  /// l'immagine mostra già, e nessun id della scena; se l'URL arriva dopo,
+  /// lo prendono quando arriva.
+  const croppedStands = (el: SVGElement, crop: CropCover): readonly [Element, Element] => {
+    const { box, rect } = crop;
+    const copies = new Set<Element>();
+    copiesOf.set(el, copies);
+    const copy = (): SVGElement => {
+      const image = el.cloneNode(false) as SVGElement;
+      copies.add(image);
+      image.removeAttribute("data-scene-id");
+      image.removeAttribute("clip-path");
+      image.removeAttribute("mask");
+      image.style.removeProperty("visibility");
+      image.setAttribute("x", String(box.min[0]));
+      image.setAttribute("y", String(box.min[1]));
+      image.setAttribute("width", String(box.max[0] - box.min[0]));
+      image.setAttribute("height", String(box.max[1] - box.min[1]));
+      return image;
+    };
+    const whole = document.createElementNS(SVG, "g");
+    whole.style.setProperty("opacity", CROPPED_OPACITY);
+    whole.append(copy());
+    const kept = copy();
+    const clip = document.createElementNS(SVG, "clipPath");
+    const shape = document.createElementNS(SVG, "rect");
+    shape.setAttribute("x", String(rect.min[0]));
+    shape.setAttribute("y", String(rect.min[1]));
+    shape.setAttribute("width", String(rect.max[0] - rect.min[0]));
+    shape.setAttribute("height", String(rect.max[1] - rect.min[1]));
+    clip.append(shape);
+    draftDef(clip);
+    kept.setAttribute("clip-path", `url(#${clip.id})`);
+    return [whole, kept];
+  };
+
+  const setCrops = (next: ReadonlyMap<PaintNode, CropCover> | null): void => {
+    if (disposed) return;
+    clearDraft();
+    crops = next;
     applyDraft();
   };
 
@@ -1114,6 +1196,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     disposed = true;
     draft = null;
     covers = null;
+    crops = null;
     drafted = [];
     carriedImages = [];
     fadedImages = [];
@@ -1129,7 +1212,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
   owner.add(dispose);
 
-  return { update, setDraft, setFocus, setCovers, setView, settle, dispose };
+  return { update, setDraft, setFocus, setCovers, setCrops, setView, settle, dispose };
 }
 
 /// Vero se lo strato racchiuso da `containers` sta dentro l'ultimo dei
@@ -1166,6 +1249,17 @@ function setCommon(el: SVGElement, id: string | null, space: string | null): voi
   else el.setAttributeNS(XML, "xml:space", space);
 }
 
+/// Le copie che l'anteprima di un ritaglio fa di un'immagine, per ogni
+/// immagine: l'URL che arriva dopo, perché il vault lo risolve a parte, va
+/// anche a loro.
+const copiesOf = new WeakMap<Element, Set<Element>>();
+
+/// Scrive l'URL di `el` e quello delle sue copie.
+function setHref(el: Element, url: string): void {
+  el.setAttribute("href", url);
+  for (const copy of copiesOf.get(el) ?? []) copy.setAttribute("href", url);
+}
+
 function showVaultImage(el: SVGElement, path: string, resolve: PainterOptions["images"], imageLife: Lifetime): void {
   if (resolve === undefined) {
     el.setAttribute("href", IMAGE_PLACEHOLDER);
@@ -1174,10 +1268,10 @@ function showVaultImage(el: SVGElement, path: string, resolve: PainterOptions["i
   resolve(path, imageLife).then(
     (url) => {
       if (imageLife.closed) return;
-      el.setAttribute("href", url ?? IMAGE_PLACEHOLDER);
+      setHref(el, url ?? IMAGE_PLACEHOLDER);
     },
     () => {
-      if (!imageLife.closed) el.setAttribute("href", IMAGE_PLACEHOLDER);
+      if (!imageLife.closed) setHref(el, IMAGE_PLACEHOLDER);
     },
   );
 }

@@ -41,6 +41,11 @@ export type OverlayHandle =
   /// Il riquadro di un elemento selezionato: il rettangolo locale portato
   /// nella scena da `matrix`.
   | { readonly kind: "box"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly matrix: Matrix }
+  /// Il ritaglio di un'immagine che si regola: il rettangolo locale portato
+  /// nella scena da `matrix`, col bordo e, agli angoli e a metà dei lati, i
+  /// segni spessi da tirare; con `thirds`, mentre lo si tira, le linee che
+  /// lo dividono in terzi.
+  | { readonly kind: "crop"; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly matrix: Matrix; readonly thirds: boolean }
   /// Un punto da trascinare, di misura fissa sullo schermo.
   | { readonly kind: "grip"; readonly x: number; readonly y: number }
   /// La maniglia tonda che ruota, legata da un gambo al punto `stem`.
@@ -160,6 +165,15 @@ const STOP = 12;
 const STOP_CHECK = 5;
 const STOP_TORN_ALPHA = 0.4;
 const RAMP_CASING = 3;
+
+/// I segni del ritaglio, in pixel CSS: il braccio di quelli agli angoli e
+/// la lunghezza di quelli a metà dei lati, mai più di un quarto del lato
+/// sullo schermo; lo spessore, e quanto la carta li borda. Le linee dei
+/// terzi sono più tenui.
+const CROP_ARM = 16;
+const CROP_MARK = 3;
+const CROP_CASING = 1;
+const CROP_THIRDS_ALPHA = 0.7;
 
 /// Il diametro della maniglia degli angoli, e del punto in mezzo, in pixel
 /// CSS.
@@ -546,6 +560,60 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     ctx.globalAlpha = 1;
   };
 
+  /// Il ritaglio `crop`: il bordo, le linee dei terzi se le ha, e i segni da
+  /// tirare, bordati dalla carta perché si vedano su ogni immagine.
+  const drawCrop = (ctx: CanvasRenderingContext2D, crop: Extract<OverlayHandle, { kind: "crop" }>, line: string): void => {
+    const [a, b, c, d, e, f] = crop.matrix;
+    const corner = (x: number, y: number): Point => screen(a * x + c * y + e, b * x + d * y + f);
+    const { x, y, width: w, height: h } = crop;
+    const corners = [corner(x, y), corner(x + w, y), corner(x + w, y + h), corner(x, y + h)];
+    const along = (from: Point, to: Point, t: number): Point => [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t];
+    const polyline = (points: readonly Point[]): void => {
+      points.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
+    };
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    polyline(corners);
+    ctx.closePath();
+    ctx.stroke();
+    if (crop.thirds) {
+      const [p0, p1, p2, p3] = corners as [Point, Point, Point, Point];
+      ctx.beginPath();
+      for (const t of [1 / 3, 2 / 3]) {
+        polyline([along(p0, p1, t), along(p3, p2, t)]);
+        polyline([along(p0, p3, t), along(p1, p2, t)]);
+      }
+      ctx.globalAlpha = CROP_THIRDS_ALPHA;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // Su ogni lato il braccio dei due angoli e il segno di mezzo.
+    const marks: Point[][] = [];
+    corners.forEach((from, i) => {
+      const to = corners[(i + 1) % 4]!;
+      const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      if (length === 0) return;
+      const t = Math.min(CROP_ARM, length / 4) / length;
+      const before = corners[(i + 3) % 4]!;
+      const back = Math.hypot(before[0] - from[0], before[1] - from[1]);
+      const s = back === 0 ? 0 : Math.min(CROP_ARM, back / 4) / back;
+      marks.push([along(from, before, s), from, along(from, to, t)]);
+      marks.push([along(from, to, 0.5 - t / 2), along(from, to, 0.5 + t / 2)]);
+    });
+    ctx.lineJoin = "miter";
+    ctx.beginPath();
+    for (const mark of marks) polyline(mark);
+    ctx.strokeStyle = paper();
+    ctx.lineWidth = CROP_MARK + 2 * CROP_CASING;
+    ctx.lineCap = "square";
+    ctx.stroke();
+    ctx.strokeStyle = line;
+    ctx.lineWidth = CROP_MARK;
+    ctx.lineCap = "butt";
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  };
+
   /// Un nodo in `x`, `y` sullo schermo, largo `size`.
   const drawNode = (ctx: CanvasRenderingContext2D, x: number, y: number, shape: NodeShape, size: number): void => {
     ctx.beginPath();
@@ -586,6 +654,8 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         corners.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)));
         ctx.closePath();
         ctx.stroke();
+      } else if (handle.kind === "crop") {
+        drawCrop(ctx, handle, line);
       } else if (handle.kind === "lasso") {
         if (handle.points.length < 2) continue;
         ctx.setLineDash([4, 3]);

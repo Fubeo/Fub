@@ -4844,6 +4844,7 @@ describe("da tastiera", () => {
       "Oggetti · dal livello Standard",
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
+      "Ritaglia l’immagine · dal livello Standard",
       "Poligono · dal livello Standard",
       "Evidenziatore · dal livello Standard",
       "Forme dal tratto · dal livello Standard",
@@ -4863,6 +4864,7 @@ describe("da tastiera", () => {
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Tracciato · dal livello Esperto",
+      "Maschera · dal livello Esperto",
       "Nodi · dal livello Esperto",
       "Costruttore di forme · dal livello Esperto",
       "Forbici · dal livello Esperto",
@@ -4888,12 +4890,19 @@ describe("da tastiera", () => {
       ["Ctrl+Shift+H", "Nasconde la selezione; nell’albero nasconde o mostra la riga"],
       ["Shift+F10", "Apre il menu della selezione"],
     ]);
-    expect(tables[4]!.rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
-    expect(tables[5]!.rows).toEqual([["Shift", "Tenuto premuto mentre si traccia, il tratto è dritto"]]);
-    expect(tables[6]!.rows).toEqual([["Shift", "Tenuto, la forma dal tratto resta regolare"]]);
+    expect(tables[4]!.rows).toEqual([
+      ["←↑→↓", "Sposta l’immagine sotto il ritaglio, con Maiusc di più"],
+      ["Shift", "Tirando un segno, tiene le proporzioni del ritaglio"],
+      ["Alt", "Tirando un segno, ritaglia attorno al centro"],
+      ["Enter", "Applica il ritaglio"],
+      ["Esc", "Annulla il ritaglio"],
+    ]);
+    expect(tables[5]!.rows).toContainEqual(["Y", "Di nuovo, dal poligono alla stella e ritorno"]);
+    expect(tables[6]!.rows).toEqual([["Shift", "Tenuto premuto mentre si traccia, il tratto è dritto"]]);
+    expect(tables[7]!.rows).toEqual([["Shift", "Tenuto, la forma dal tratto resta regolare"]]);
     // Le tavole, tutte dallo Standard: i passi fra loro valgono con ogni
     // strumento, il resto con lo strumento Tavola.
-    expect(tables[8]!.rows).toEqual([
+    expect(tables[9]!.rows).toEqual([
       ["Alt+PgUp o Alt+PgDn", "Va alla tavola prima o dopo, e la inquadra"],
       ["Tab o Shift+Tab", "Con lo strumento Tavola, la tavola dopo o prima"],
       ["Home o End", "Con lo strumento Tavola, la prima o l’ultima tavola"],
@@ -4906,32 +4915,32 @@ describe("da tastiera", () => {
       ["Shift", "Tenuto all’inizio del trascinamento: disegna una tavola anche dentro un’altra"],
       ["Alt", "Tenuto mentre si sposta una tavola: ne lascia una copia dove la si posa, con ciò che ci sta sopra"],
     ]);
-    expect(tables[9]!.rows).toEqual([
+    expect(tables[10]!.rows).toEqual([
       ["←↑→↓", "Muovono il cursore, anche con oggetti scelti, e dicono che cosa c’è sotto"],
       ["Space", "Dà agli oggetti scelti l’aspetto di ciò che è sotto il cursore; senza selezione, ne prende il colore per disegnare"],
       ["Shift+Space", "Prende soltanto il colore sotto il cursore"],
       ["I", "Nell’albero degli oggetti, dà agli oggetti scelti l’aspetto della riga; senza selezione, ne prende il colore per disegnare"],
       ["Shift+I", "Nell’albero degli oggetti, prende soltanto il colore della riga"],
     ]);
-    expect(tables[11]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[12]!.rows).toEqual([
+    expect(tables[12]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[13]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
     // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
-    expect(tables[15]!.rows).toEqual([
+    expect(tables[16]!.rows).toEqual([
       ["4", "Ruota la vista a sinistra"],
       ["6", "Ruota la vista a destra"],
       ["5", "Raddrizza la vista"],
       ["Shift+F10", "Apre il menu radiale: strumenti, colori, annulla"],
     ]);
     // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[16]!.rows).toEqual([
+    expect(tables[17]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
     // L'elenco delle tavole e la cronologia, tutti dallo Standard.
-    expect(tables[17]!.rows).toEqual([
+    expect(tables[18]!.rows).toEqual([
       ["↑ o ↓ o Home o End", "Nell’elenco delle tavole, la tavola prima o dopo, la prima o l’ultima"],
       ["Enter o Space", "Nell’elenco delle tavole, porta alla tavola"],
       ["F2", "Nell’elenco delle tavole, cambia il nome della tavola"],
@@ -4941,7 +4950,7 @@ describe("da tastiera", () => {
       ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
       ["Esc", "Dall’elenco delle tavole torna al foglio"],
     ]);
-    expect(tables[18]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
+    expect(tables[19]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -4966,6 +4975,7 @@ describe("da tastiera", () => {
       { caption: "Strumenti · dal livello Esperto", rows: [["N", "Nodi"], ["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]] },
       { caption: "Disponi · dal livello Esperto", rows: [["Ctrl+Shift+M", "Trasforma…"]] },
       { caption: "Tracciato · dal livello Esperto", rows: [["Ctrl+J", "Unisce i capi più vicini dei tracciati aperti scelti; un tracciato solo si chiude"]] },
+      { caption: "Maschera · dal livello Esperto", rows: [["Ctrl+7", "Crea maschera di ritaglio"], ["Ctrl+Alt+7", "Rilascia maschera"]] },
       {
         caption: "Nodi · dal livello Esperto",
         rows: [
@@ -10751,6 +10761,7 @@ describe("il livello Personalizzato", () => {
       "Oggetti · dal livello Standard",
       "Disponi · dal livello Standard",
       "Selezione avanzata · dal livello Standard",
+      "Ritaglia l’immagine · dal livello Standard",
       "Poligono · dal livello Standard",
       "Evidenziatore · dal livello Standard",
       "Forme dal tratto · dal livello Standard",
@@ -10769,6 +10780,7 @@ describe("il livello Personalizzato", () => {
       "Strumenti · dal livello Esperto",
       "Disponi · dal livello Esperto",
       "Tracciato · dal livello Esperto",
+      "Maschera · dal livello Esperto",
       "Costruttore di forme · dal livello Esperto",
       "Forbici · dal livello Esperto",
       "Spessore · dal livello Esperto",
@@ -10777,7 +10789,7 @@ describe("il livello Personalizzato", () => {
       "Attributi · dal livello Esperto",
     ]);
     expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[19]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
+    expect(tables[20]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
@@ -12485,5 +12497,713 @@ describe("le punte dei tracciati nei comandi, dal livello Esperto", () => {
     expect(markersIn(o)).toHaveLength(2);
     editor.undo();
     expect(editor.engine.text).toBe(SRC);
+  });
+});
+
+describe("«Ritaglia immagine», dal livello Standard", () => {
+  const IMAGE = "img";
+  const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
+  const DRAWING = doc(`${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}"/><rect id="r" x="60" y="60" width="20" height="20"/></g>`);
+  const CROPPED = doc(
+    `<defs id="fub-defs"><clipPath id="c1" fub:role="private"><rect x="20" y="10" width="20" height="20"/></clipPath></defs>` +
+      `${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}" clip-path="url(#c1)"/><rect id="r" x="60" y="60" width="20" height="20"/></g>`,
+  );
+
+  const arrangeAction = (label: string): HTMLButtonElement => host.querySelector<HTMLButtonElement>(`.draw-arrange button[aria-label="${label}"]`)!;
+  const cropButton = (): HTMLButtonElement => arrangeAction("Ritaglia…");
+  const uncropButton = (): HTMLButtonElement => arrangeAction("Togli il ritaglio");
+  const bar = (): HTMLElement => [...host.querySelectorAll<HTMLElement>(".draw-paths")].find((each) => each.querySelector(".draw-paths-title")!.textContent === "Ritaglia l’immagine")!;
+  const names = (): string[] => [...bar().querySelectorAll("label")].map((label) => label.querySelector("span")!.textContent ?? "");
+  const side = (name: string): HTMLInputElement => [...bar().querySelectorAll("label")].find((label) => label.textContent!.startsWith(name))!.querySelector("input")!;
+  const status = (): string => bar().querySelector("output")!.textContent ?? "";
+  const action = (name: string): HTMLButtonElement => [...bar().querySelectorAll("button")].find((each) => each.textContent === name)!;
+  const painted = (): SVGElement => surface().querySelector<SVGElement>(`image[data-scene-id="${IMAGE}"]`)!;
+  /// Il rettangolo del ritaglio scritto, e la posizione dell'immagine.
+  const written = (): string => {
+    const text = editor.engine.text;
+    const rect = /<clipPath id="([^"]+)" fub:role="private">\s*<rect ([^/]*)\/>\s*<\/clipPath>/.exec(text);
+    const image = new RegExp(`<image id="${IMAGE}" ([^>]*)/>`).exec(text)![1]!;
+    const at = / x="([^"]+)" y="([^"]+)"/.exec(` ${image}`)!;
+    const clip = /clip-path="url\(#([^)]+)\)"/.exec(image);
+    return `${at[1]} ${at[2]}${clip === null ? "" : ` ${clip[1] === rect![1] ? "" : "!"}${rect![2]}`}`;
+  };
+  /// Due tocchi del mouse nello stesso punto.
+  const twice = (x: number, y: number): void => {
+    clock += 1000;
+    drag([[x, y]]);
+    drag([[x, y]]);
+  };
+
+  it("c'è dallo Standard, con un'immagine scelta da sola; «Togli il ritaglio» con una ritagliata", () => {
+    mount(CROPPED, { level: "essential" });
+    editor.select([IMAGE]);
+    expect(cropButton().hidden).toBe(true);
+    editor.setLevel("standard");
+    expect(cropButton().hidden).toBe(false);
+    expect(uncropButton().hidden).toBe(false);
+    editor.select([IMAGE, "r"]);
+    expect(cropButton().hidden).toBe(true);
+    expect(uncropButton().hidden).toBe(false);
+    editor.select(["r"]);
+    expect(cropButton().hidden).toBe(true);
+    expect(uncropButton().hidden).toBe(true);
+  });
+
+  it("dalla barra: i margini e quanto si vede, l'anteprima, Invio scrive il ritaglio in un passo", () => {
+    mount(DRAWING, { level: "standard" });
+    const before = editor.engine.text;
+    editor.select([IMAGE]);
+    cropButton().click();
+    expect(bar().hidden).toBe(false);
+    expect(names()).toEqual(["In alto", "A destra", "In basso", "A sinistra"]);
+    expect(names().map((name) => side(name).value)).toEqual(["0", "0", "0", "0"]);
+    expect(document.activeElement).toBe(side("In alto"));
+    expect(status()).toBe("Si vede l’immagine intera.");
+    expect(spoken()).toBe("Tira i segni per ritagliare, e l’immagine per spostarla sotto il ritaglio; anche le frecce la spostano. Invio applica, Esc annulla.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    typeIn(side("A sinistra"), "10");
+    typeIn(side("In basso"), "5");
+    expect(status()).toBe("Si vede 30 × 15 di 40 × 20.");
+    // L'anteprima: l'immagine intera attenuata, e sopra la parte che resta.
+    expect(painted().style.visibility).toBe("hidden");
+    const stands = [...surface().querySelectorAll("image:not([data-scene-id])")];
+    expect(stands).toHaveLength(2);
+    expect(stands[0]!.parentElement!.getAttribute("style")).toMatch(/^opacity: ?0\.3;?$/);
+    expect(stands[1]!.getAttribute("clip-path")).toMatch(/^url\(#/);
+    expect(changes).toEqual([]);
+    // Un margine che lascia troppo poco non cambia il ritaglio.
+    typeIn(side("A destra"), "40");
+    expect(status()).toBe("I margini lasciano troppo poco dell’immagine.");
+    typeIn(side("A destra"), "0");
+    key("Enter", {}, side("A destra"));
+    expect(bar().hidden).toBe(true);
+    expect(painted().style.visibility).toBe("");
+    expect(surface().querySelectorAll("image:not([data-scene-id])")).toHaveLength(0);
+    expect(changes).toHaveLength(1);
+    expect(written()).toBe('10 10 x="20" y="10" width="30" height="15"');
+    expect(spoken()).toBe("Immagine ritagliata: si vede 30 × 15.");
+    expect(document.activeElement).toBe(surface());
+    expect(editor.selection).toEqual([IMAGE]);
+    // L'immagine è dove si vede, anche per l'export della selezione.
+    expect(editor.exportScene().scene.selection!.box).toEqual([20, 10, 30, 15]);
+    expect(uncropButton().hidden).toBe(false);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("sul foglio: un segno tira il ritaglio, l'immagine si sposta sotto, anche con le frecce, e Invio applica", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    // Il segno a metà del lato destro.
+    drag([[50, 20], [46, 20], [40, 20]]);
+    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
+    expect(spoken()).toBe("Si vede 30 × 20 di 40 × 20.");
+    expect(side("A destra").value).toBe("10");
+    // Dentro, l'immagine scorre sotto il ritaglio, e si ferma al suo bordo.
+    drag([[20, 20], [16, 20], [12, 20], [0, 20]]);
+    expect(spoken()).toBe("Margini: in alto 0, a destra 0, in basso 0, a sinistra 10.");
+    key("ArrowRight");
+    expect(spoken()).toBe("Margini: in alto 0, a destra 1, in basso 0, a sinistra 9.");
+    expect(changes).toEqual([]);
+    key("Enter");
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(written()).toBe('1 10 x="10" y="10" width="30" height="20"');
+  });
+
+  it("con Maiusc un angolo tiene le proporzioni, con Alt il ritaglio resta attorno al centro", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    // L'angolo in basso a destra verso l'alto a sinistra: metà, nelle
+    // proporzioni di 40 × 20.
+    drag([[50, 30], [40, 26], [30, 20]], { shiftKey: true });
+    expect(status()).toBe("Si vede 20 × 10 di 40 × 20.");
+    action("Annulla").click();
+    expect(spoken()).toBe("Ritaglio annullato.");
+    cropButton().click();
+    surface().focus();
+    drag([[50, 20], [46, 20], [45, 20]], { altKey: true });
+    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "5"]);
+    action("Applica").click();
+    expect(written()).toBe('10 10 x="15" y="10" width="30" height="20"');
+  });
+
+  it("due tocchi la aprono; Esc annulla; un tocco fuori applica e sceglie ciò che tocca", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.setTool("select");
+    twice(30, 20);
+    expect(bar().hidden).toBe(false);
+    expect(document.activeElement).toBe(surface());
+    drag([[50, 20], [46, 20], [40, 20]]);
+    key("Escape");
+    expect(bar().hidden).toBe(true);
+    expect(spoken()).toBe("Ritaglio annullato.");
+    expect(changes).toEqual([]);
+    expect(editor.selection).toEqual([IMAGE]);
+    twice(30, 20);
+    drag([[50, 20], [46, 20], [40, 20]]);
+    drag([[70, 70]]);
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
+    expect(editor.selection).toEqual(["r"]);
+  });
+
+  it("un ritaglio che c'è si cambia sul posto, e portato all'immagine intera se ne va", () => {
+    mount(CROPPED, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    expect(names().map((name) => side(name).value)).toEqual(["0", "10", "0", "10"]);
+    expect(status()).toBe("Si vede 20 × 20 di 40 × 20.");
+    typeIn(side("A destra"), "0");
+    key("Enter", {}, side("A destra"));
+    expect(written()).toBe('10 10 x="20" y="10" width="30" height="20"');
+    cropButton().click();
+    typeIn(side("A sinistra"), "0");
+    key("Enter", {}, side("A sinistra"));
+    expect(spoken()).toBe("Ritaglio tolto: si vede l’immagine intera.");
+    expect(written()).toBe("10 10");
+    expect(editor.engine.text).not.toContain("clipPath");
+  });
+
+  it("cambiare strumento o scelta applica il ritaglio; un annulla lo chiude senza scriverlo", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[50, 20], [46, 20], [40, 20]]);
+    editor.select(["r"]);
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(1);
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[40, 20], [36, 20], [30, 20]]);
+    key("r");
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(written()).toBe('10 10 x="10" y="10" width="20" height="20"');
+    key("v");
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[30, 20], [26, 20], [20, 20]]);
+    // Annulla chiude il ritaglio come Esc, e non annulla altro.
+    editor.undo();
+    expect(bar().hidden).toBe(true);
+    expect(spoken()).toBe("Ritaglio annullato.");
+    expect(written()).toBe('10 10 x="10" y="10" width="20" height="20"');
+    expect(changes).toHaveLength(2);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Ritaglio.");
+    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
+  });
+
+  /// Il ritaglio aperto con il lato destro tirato a 30, sull'immagine scelta.
+  const cropping = (source = DRAWING): void => {
+    mount(source, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[50, 20], [46, 20], [40, 20]]);
+    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
+  };
+
+  it("Ctrl+D con un ritaglio aperto lo applica prima: due passi, il ritaglio e la duplicazione", () => {
+    cropping();
+    const before = DRAWING;
+    key("d", { ctrlKey: true });
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(editor.engine.text.match(/<image /g)).toHaveLength(2);
+    // La copia è dell'immagine com'è dopo il ritaglio.
+    expect(editor.engine.text.match(/clip-path="url\(#/g)).toHaveLength(2);
+    // Ognuna col suo ritaglio.
+    expect(editor.engine.text.match(/<clipPath /g)).toHaveLength(2);
+    expect(editor.selection).toHaveLength(1);
+    expect(editor.selection[0]).not.toBe(IMAGE);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Duplicazione.");
+    expect(editor.engine.text.match(/<image /g)).toHaveLength(1);
+    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Ritaglio.");
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("Canc con un ritaglio aperto lo applica prima, e poi toglie l'immagine", () => {
+    cropping();
+    key("Delete");
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(editor.engine.text).not.toContain("<image");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Eliminazione.");
+    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Ritaglio.");
+    expect(editor.engine.text).toBe(DRAWING);
+  });
+
+  it("tagliare e incollare con un ritaglio aperto lo applicano prima, e poi tagliano o incollano", async () => {
+    cropping();
+    const clipboard = (type: "cut" | "paste", data = new DataTransfer()): DataTransfer => {
+      surface().dispatchEvent(new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: data }));
+      return data;
+    };
+    const cut = clipboard("cut");
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(editor.engine.text).not.toContain("<image");
+    // Ciò che si è tagliato è l'immagine già ritagliata.
+    expect(cut.getData("text/plain")).toContain("clip-path");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Taglio.");
+    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
+    // Incollare, con un altro ritaglio aperto.
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[40, 20], [36, 20], [30, 20]]);
+    const data = new DataTransfer();
+    data.setData("text/plain", cut.getData("text/plain"));
+    clipboard("paste", data);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(bar().hidden).toBe(true);
+    expect(written()).toBe('10 10 x="10" y="10" width="20" height="20"');
+    expect(editor.engine.text.match(/<image /g)).toHaveLength(2);
+  });
+
+  it("un valore scritto nel pannello delle proprietà applica prima il ritaglio aperto", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    key("Enter");
+    expect(propertyInput("x").value).toBe("10");
+    cropButton().click();
+    surface().focus();
+    drag([[50, 20], [46, 20], [40, 20]]);
+    enter(propertyInput("x"), "15");
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(2);
+    // L'immagine è ritagliata, e poi spostata di 5.
+    expect(editor.engine.text).toMatch(/<image id="img" [^>]*clip-path="url\(#[^)]+\)" transform="matrix\(1 0 0 1 5 0\)"/);
+    expect(editor.engine.text).toContain('<rect x="10" y="10" width="30" height="20"/>');
+    editor.undo();
+    expect(editor.engine.text).not.toContain("matrix(1 0 0 1 5 0)");
+    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
+    editor.undo();
+    expect(editor.engine.text).toBe(DRAWING);
+  });
+
+  it("un'immagine senza id, ritagliata da un comando, resta la scelta di quel comando", () => {
+    const loose = doc(`${LAYER}<image x="10" y="10" width="40" height="20" href="${PNG_HREF}"/><rect id="r" x="60" y="60" width="20" height="20"/></g>`);
+    mount(loose, { level: "standard" });
+    editor.setTool("select");
+    twice(30, 20);
+    expect(bar().hidden).toBe(false);
+    drag([[50, 20], [46, 20], [40, 20]]);
+    key("d", { ctrlKey: true });
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(editor.engine.text.match(/<image /g)).toHaveLength(2);
+    expect(editor.selection).toHaveLength(1);
+    editor.undo();
+    editor.undo();
+    expect(editor.engine.text).toBe(loose);
+  });
+
+  it("annulla con un ritaglio aperto lo chiude come Esc e non annulla altro; ripeti lo chiude e poi ripete", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select(["r"]);
+    key("d", { ctrlKey: true });
+    const duplicated = editor.engine.text;
+    expect(changes).toHaveLength(1);
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[50, 20], [46, 20], [40, 20]]);
+    key("z", { ctrlKey: true });
+    expect(bar().hidden).toBe(true);
+    expect(spoken()).toBe("Ritaglio annullato.");
+    expect(editor.engine.text).toBe(duplicated);
+    expect(changes).toHaveLength(1);
+    // Il passo prima è ancora lì, e si annulla col secondo annulla.
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Duplicazione.");
+    expect(editor.engine.text).toBe(DRAWING);
+    // Ripetere con il ritaglio aperto lo chiude, e poi ripete.
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[50, 20], [46, 20], [40, 20]]);
+    editor.redo();
+    expect(bar().hidden).toBe(true);
+    expect(spoken()).toBe("Ripetuto: Duplicazione.");
+    expect(editor.engine.text).toBe(duplicated);
+    expect(written()).toBe("10 10");
+  });
+
+  /// Un segno preso con il mouse e tirato fin dove si dice, senza lasciarlo.
+  const grab = (from: readonly [number, number], to: readonly [number, number], init: Init = {}): void => {
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: from[0], clientY: from[1], timeStamp: (clock += 8), ...init }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: to[0], clientY: to[1], timeStamp: (clock += 8), ...init }));
+  };
+  const release = (at: readonly [number, number], init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: at[0], clientY: at[1], timeStamp: (clock += 8), ...init }));
+  };
+  const modifier = (name: string, down: boolean, init: KeyboardEventInit = {}): void => {
+    surface().dispatchEvent(new KeyboardEvent(down ? "keydown" : "keyup", { key: name, bubbles: true, cancelable: true, ...init }));
+  };
+
+  it("Maiusc premuto a metà del segno, senza muovere il puntatore, rifà subito il ritaglio; lasciandolo, torna libero", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    grab([50, 30], [40, 26]);
+    expect(status()).toBe("Si vede 30 × 16 di 40 × 20.");
+    modifier("Shift", true, { shiftKey: true });
+    // Nelle proporzioni di 40 × 20.
+    expect(status()).toBe("Si vede 32 × 16 di 40 × 20.");
+    expect(names().map((name) => side(name).value)).toEqual(["0", "8", "4", "0"]);
+    modifier("Shift", false);
+    expect(status()).toBe("Si vede 30 × 16 di 40 × 20.");
+    modifier("Shift", true, { shiftKey: true });
+    // Il puntatore si alza con Maiusc premuto, senza muoversi: vale il ritaglio con le proporzioni.
+    release([40, 26], { shiftKey: true });
+    expect(spoken()).toBe("Si vede 32 × 16 di 40 × 20.");
+    expect(side("A destra").value).toBe("8");
+    action("Applica").click();
+    expect(written()).toBe('10 10 x="10" y="10" width="32" height="16"');
+  });
+
+  it("Maiusc lasciato prima del puntatore: al rilascio il ritaglio è quello senza proporzioni", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    grab([50, 30], [40, 26], { shiftKey: true });
+    expect(status()).toBe("Si vede 32 × 16 di 40 × 20.");
+    // Il tasto si lascia fuori dal foglio, e il puntatore si alza senza Maiusc.
+    release([40, 26], { shiftKey: false });
+    expect(spoken()).toBe("Si vede 30 × 16 di 40 × 20.");
+    expect([side("A destra").value, side("In basso").value]).toEqual(["10", "4"]);
+  });
+
+  it("Alt premuto e lasciato a metà del segno tiene il ritaglio attorno al centro, o no", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    grab([50, 20], [45, 20]);
+    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "0"]);
+    modifier("Alt", true, { altKey: true });
+    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "5"]);
+    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
+    modifier("Alt", false);
+    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "0"]);
+    modifier("Alt", true, { altKey: true });
+    release([45, 20], { altKey: true });
+    expect(spoken()).toBe("Si vede 30 × 20 di 40 × 20.");
+    expect(names().map((name) => side(name).value)).toEqual(["0", "5", "0", "5"]);
+  });
+
+  it("un margine vuoto o illeggibile non cambia niente, e lasciando il campo si riscrive com'è", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    typeIn(side("A destra"), "10");
+    expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
+    // Il campo svuotato, o con ciò che un campo numerico non legge, non porta il margine al bordo.
+    for (const text of ["", "abc"]) {
+      typeIn(side("A destra"), text);
+      expect(status()).toBe("Scrivi un valore.");
+      expect(painted().style.visibility).toBe("hidden");
+      side("A destra").dispatchEvent(new Event("change", { bubbles: true }));
+      expect(side("A destra").value).toBe("10");
+      expect(status()).toBe("Si vede 30 × 20 di 40 × 20.");
+    }
+    // Invio con il campo vuoto applica l'ultimo ritaglio che si vedeva.
+    typeIn(side("A destra"), "");
+    key("Enter", {}, side("A destra"));
+    expect(written()).toBe('10 10 x="10" y="10" width="30" height="20"');
+  });
+
+  it("i margini si leggono come i campi di «Trasforma»: la virgola dei decimali, lo zero negativo, il segno meno", () => {
+    mount(DRAWING, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    typeIn(side("A sinistra"), "2,5");
+    expect(status()).toBe("Si vede 37,5 × 20 di 40 × 20.");
+    typeIn(side("A sinistra"), "2.5");
+    expect(status()).toBe("Si vede 37,5 × 20 di 40 × 20.");
+    typeIn(side("In alto"), "-0");
+    expect(status()).toBe("Si vede 37,5 × 20 di 40 × 20.");
+    side("In alto").dispatchEvent(new Event("change", { bubbles: true }));
+    expect(side("In alto").value).toBe("0");
+    // Un margine non è sotto lo zero.
+    typeIn(side("A sinistra"), "-4");
+    expect(status()).toBe("Si vede l’immagine intera.");
+    side("A sinistra").dispatchEvent(new Event("change", { bubbles: true }));
+    expect(side("A sinistra").value).toBe("0");
+    typeIn(side("In basso"), "2+3");
+    expect(status()).toBe("Si vede 40 × 15 di 40 × 20.");
+    typeIn(side("In basso"), "1,5e1");
+    expect(status()).toBe("Si vede 40 × 5 di 40 × 20.");
+  });
+
+  it("un tocco fuori con Maiusc applica il ritaglio e aggiunge ciò che tocca; sul vuoto lascia la scelta", () => {
+    cropping();
+    drag([[40, 80]], { shiftKey: true });
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(editor.selection).toEqual([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[40, 20], [36, 20], [30, 20]]);
+    drag([[70, 70]], { shiftKey: true });
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(editor.selection).toEqual([IMAGE, "r"]);
+  });
+
+  it("un tocco fuori con Ctrl sceglie dentro i gruppi, dopo aver applicato il ritaglio", () => {
+    const grouped = doc(`${LAYER}<image id="${IMAGE}" x="10" y="10" width="40" height="20" href="${PNG_HREF}"/><g id="grp"><rect id="in" x="60" y="60" width="20" height="20"/></g></g>`);
+    mount(grouped, { level: "standard" });
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[50, 20], [46, 20], [40, 20]]);
+    drag([[70, 70]], { ctrlKey: true });
+    expect(bar().hidden).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(editor.selection).toEqual(["in"]);
+    editor.select([IMAGE]);
+    cropButton().click();
+    surface().focus();
+    drag([[40, 20], [36, 20], [30, 20]]);
+    drag([[70, 70]]);
+    expect(editor.selection).toEqual(["grp"]);
+  });
+
+  it("«Togli il ritaglio» rende intere le immagini scelte, in un passo", () => {
+    mount(CROPPED, { level: "standard" });
+    const before = editor.engine.text;
+    editor.select([IMAGE, "r"]);
+    uncropButton().click();
+    expect(spoken()).toBe("1 immagine di nuovo intera.");
+    expect(written()).toBe("10 10");
+    expect(editor.engine.text).not.toContain("clipPath");
+    expect(editor.selection).toEqual([IMAGE, "r"]);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+});
+
+describe("«Maschera», dal livello Esperto", () => {
+  const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
+  const SHAPES = doc(
+    `${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2"/>`
+      + `<circle id="c" cx="20" cy="20" r="10" fill="#000000"/>`
+      + `<line id="l" x1="0" y1="50" x2="40" y2="50" stroke="#000000"/>`
+      + `<image id="i" x="50" y="0" width="20" height="20" href="${PNG_HREF}"/></g>`,
+  );
+
+  const maskButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Maschera"]')!;
+  /// Le voci del menu aperto per ultimo.
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
+  /// Le voci, col nome, se sono spente e che cosa dicono.
+  const entries = (): (string | boolean | null)[][] =>
+    menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true", entry.querySelector(".menu-description")?.textContent ?? null]);
+  const closeMenus = (): void => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  };
+  const clipKey = (): KeyboardEvent => key("7", { code: "Digit7", ctrlKey: true });
+  /// Ctrl+Alt+7, coi tasti Ctrl e Alt e non con AltGr, che happy-dom non
+  /// distingue.
+  const releaseKey = (altGraph = false): KeyboardEvent => {
+    const event = new KeyboardEvent("keydown", { key: "7", code: "Digit7", ctrlKey: true, altKey: true, bubbles: true, cancelable: true });
+    Object.defineProperty(event, "getModifierState", { value: (state: string) => state === "AltGraph" && altGraph });
+    surface().dispatchEvent(event);
+    return event;
+  };
+
+  afterEach(closeMenus);
+
+  it("c'è solo all'Esperto, nella barra della selezione, con le tre voci", () => {
+    mount(SHAPES, { level: "standard" });
+    editor.select(["r", "c"]);
+    expect(maskButton().hidden).toBe(true);
+    // Sotto l'Esperto il tasto non scrive.
+    clipKey();
+    expect(changes).toEqual([]);
+    editor.setLevel("expert");
+    expect(maskButton().hidden).toBe(false);
+    expect(maskButton().getAttribute("aria-haspopup")).toBe("menu");
+    maskButton().click();
+    expect(entries()).toEqual([
+      ["Crea maschera di ritaglio", false, null],
+      ["Crea maschera d’opacità", false, null],
+      ["Rilascia maschera", true, "Fra gli oggetti scelti non c’è una maschera da rilasciare."],
+    ]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    closeMenus();
+    editor.select(["r"]);
+    maskButton().click();
+    const few = "Per una maschera servono almeno due oggetti: quello in cima fa da maschera agli altri.";
+    expect(entries().slice(0, 2)).toEqual([
+      ["Crea maschera di ritaglio", true, few],
+      ["Crea maschera d’opacità", true, few],
+    ]);
+    item("Crea maschera di ritaglio").click();
+    expect(changes).toEqual([]);
+  });
+
+  it("Ctrl+7: la forma in cima ritaglia le altre, in un gruppo nuovo e scelto; Ctrl+Alt+7 la rilascia", () => {
+    mount(SHAPES, { level: "expert" });
+    const before = editor.engine.text;
+    editor.select(["c", "r"]);
+    expect(clipKey().defaultPrevented).toBe(true);
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("Maschera di ritaglio: la forma in cima ritaglia 1 oggetto.");
+    const text = editor.engine.text;
+    const clip = /<clipPath id="([^"]+)" fub:role="private">\s*<circle cx="20" cy="20" r="10"[^>]*\/>\s*<\/clipPath>/.exec(text);
+    expect(clip).not.toBeNull();
+    expect(text).not.toContain('id="c"');
+    const group = new RegExp(`<g id="([^"]+)" clip-path="url\\(#${clip![1]}\\)">\\s*<rect id="r" `).exec(text);
+    expect(group).not.toBeNull();
+    expect(editor.selection).toEqual([group![1]]);
+    // Il gruppo è dove si vede, nel riquadro del cerchio, anche per l'export.
+    expect(editor.exportScene().scene.selection!.box).toEqual([10, 10, 20, 20]);
+    // Ciò che il cerchio nasconde non si tocca più.
+    editor.setTool("select");
+    editor.select([]);
+    drag([[2, 2]]);
+    expect(editor.selection).toEqual([]);
+    drag([[20, 20]]);
+    expect(editor.selection).toEqual([group![1]]);
+    // «Separa» non separa un gruppo ritagliato, e dice da dove si rilascia.
+    key("G", { ctrlKey: true, shiftKey: true });
+    expect(spoken()).toBe("Non separato: un ritaglio, una maschera o un filtro valgono per tutto il gruppo. Una maschera si rilascia dal menu «Maschera».");
+    expect(changes).toHaveLength(1);
+    expect(releaseKey().defaultPrevented).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(spoken()).toBe("1 maschera rilasciata: la sua forma torna un oggetto, in cima.");
+    const released = editor.engine.text;
+    expect(released).not.toContain("clipPath");
+    expect(released).not.toContain(group![1]);
+    expect(released).toMatch(/<rect id="r" [^>]*\/>\s*<circle id="[^"]+" cx="20" cy="20" r="10"/);
+    editor.undo();
+    expect(editor.engine.text).toBe(text);
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+  });
+
+  /// Il rettangolo e il cerchio, in un disegno col foglio di stile `sheet`.
+  const styledShapes = (sheet: string): string =>
+    doc(`<style>${sheet}</style>${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2"/><circle id="c" cx="20" cy="20" r="10" fill="#000000"/></g>`);
+
+  it("con un foglio di stile che non tocca il gruppo, la maschera si crea e si rilascia", () => {
+    mount(styledShapes(".nota{fill:#ff0000}"), { level: "expert" });
+    editor.select(["c", "r"]);
+    clipKey();
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("Maschera di ritaglio: la forma in cima ritaglia 1 oggetto.");
+    expect(editor.engine.text).toContain("<style>.nota{fill:#ff0000}</style>");
+    expect(editor.engine.text).toMatch(/<g id="[^"]+" clip-path="url\(#[^"]+\)">/);
+    releaseKey();
+    expect(changes).toHaveLength(2);
+    expect(spoken()).toBe("1 maschera rilasciata: la sua forma torna un oggetto, in cima.");
+    expect(editor.engine.text).not.toContain("clipPath");
+  });
+
+  it("con una regola che dà a ogni gruppo il suo ritaglio, che vincerebbe su quello della maschera, la maschera non si crea", () => {
+    mount(styledShapes("g{clip-path:none}"), { level: "expert" });
+    const before = editor.engine.text;
+    editor.select(["c", "r"]);
+    clipKey();
+    expect(changes).toEqual([]);
+    expect(spoken()).toMatch(/^Maschera non creata: /);
+    expect(editor.engine.text).toBe(before);
+  });
+
+  it("dal menu, la maschera d'opacità; con AltGr il tasto non la rilascia", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select(["r", "c"]);
+    maskButton().click();
+    item("Crea maschera d’opacità").click();
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("Maschera d’opacità su 1 oggetto: il chiaro dell’oggetto in cima lo mostra, lo scuro lo nasconde.");
+    expect(editor.engine.text).toMatch(/<mask id="([^"]+)" fub:role="private"[^>]*>\s*<circle cx="20" cy="20" r="10" fill="#000000"\/>\s*<\/mask>/);
+    closeMenus();
+    maskButton().click();
+    expect(entries()[2]).toEqual(["Rilascia maschera", false, null]);
+    closeMenus();
+    // AltGr arriva come Ctrl e Alt, e scrive un carattere: non rilascia.
+    expect(releaseKey(true).defaultPrevented).toBe(false);
+    expect(changes).toHaveLength(1);
+  });
+
+  it("il menu spegne le voci che il comando rifiuterebbe, con le sue parole, e mostra i tasti", () => {
+    mount(SHAPES, { level: "expert" });
+    const hints = (): (string | null)[] => menu().map((entry) => entry.querySelector(".menu-hint")?.textContent ?? null);
+    editor.select(["r", "c"]);
+    maskButton().click();
+    expect(hints()).toEqual(["Ctrl+7", null, "Ctrl+Alt+7"]);
+    expect(entries().map((entry) => entry[1])).toEqual([false, false, true]);
+    closeMenus();
+    // In cima una linea: non ha un'area.
+    editor.select(["r", "l"]);
+    maskButton().click();
+    const line = "La linea in cima non ha un’area: non ritaglia niente.";
+    expect(entries().slice(0, 2).map((entry) => entry[1])).toEqual([true, true]);
+    expect(entries()[0]![2]).toBe(line);
+    closeMenus();
+    clipKey();
+    expect(spoken()).toBe(line);
+    // In cima un'immagine: né ritaglia né fa da maschera di ritaglio.
+    editor.select(["r", "i"]);
+    maskButton().click();
+    const image = "A ritagliare è l’oggetto in cima, se è una forma o un testo: un’immagine, un gruppo, un collegamento o un testo su tracciato non ritagliano.";
+    expect(entries()[0]).toEqual(["Crea maschera di ritaglio", true, image]);
+    expect(entries()[1]).toEqual([
+      "Crea maschera d’opacità",
+      true,
+      "A fare da maschera è l’oggetto in cima, se è una forma, un testo o un gruppo di forme e testi: un’immagine, un collegamento o un testo su tracciato no.",
+    ]);
+    closeMenus();
+    clipKey();
+    expect(spoken()).toBe(image);
+    // Niente di scelto: lo dice.
+    editor.select([]);
+    maskButton().click();
+    expect(entries().slice(0, 2).map((entry) => entry[1])).toEqual([true, true]);
+    expect(changes).toEqual([]);
+  });
+
+  it("le maschere che non si fanno dicono perché, e non scrivono", () => {
+    mount(SHAPES, { level: "expert" });
+    editor.select(["r", "l"]);
+    clipKey();
+    expect(spoken()).toBe("La linea in cima non ha un’area: non ritaglia niente.");
+    editor.select(["r", "i"]);
+    clipKey();
+    expect(spoken()).toBe("A ritagliare è l’oggetto in cima, se è una forma o un testo: un’immagine, un gruppo, un collegamento o un testo su tracciato non ritagliano.");
+    editor.select(["r"]);
+    clipKey();
+    expect(spoken()).toBe("Per una maschera servono almeno due oggetti: quello in cima fa da maschera agli altri.");
+    releaseKey();
+    expect(spoken()).toBe("Fra gli oggetti scelti non c’è una maschera da rilasciare.");
+    expect(changes).toEqual([]);
   });
 });
