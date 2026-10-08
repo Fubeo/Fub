@@ -138,6 +138,7 @@ export type Feature =
   | "colors"
   | "swatches"
   | "tips"
+  | "hatches"
   | "selection"
   | "arrange"
   | "layers"
@@ -164,7 +165,8 @@ export type Feature =
   | "masks"
   | "typeset"
   | "effects"
-  | "blend";
+  | "blend"
+  | "motifs";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -183,6 +185,9 @@ const COMMANDS: readonly FeatureSpec[] = [
   // Le punte delle linee sono due campi del pannello delle proprietà, e i
   // comandi che le cambiano: nel Personalizzato si vedono con lui.
   { id: "tips", level: "standard", label: "draw.feature.tips" },
+  // La campitura è una sezione del pannello delle proprietà: nel
+  // Personalizzato si vede con lui.
+  { id: "hatches", level: "standard", label: "draw.feature.hatches" },
   { id: "selection", level: "standard", label: "draw.feature.selection" },
   { id: "arrange", level: "standard", label: "draw.feature.arrange" },
   { id: "layers", level: "standard", label: "draw.feature.layers" },
@@ -212,6 +217,10 @@ const COMMANDS: readonly FeatureSpec[] = [
   // proprietà: nel Personalizzato si vedono con lui.
   { id: "effects", level: "expert", label: "draw.feature.effects" },
   { id: "blend", level: "expert", label: "draw.feature.blend" },
+  // I motivi del documento sono una voce del menu della campitura e due
+  // campi, il nome e l'eliminazione, nel pannello delle proprietà: nel
+  // Personalizzato si vedono con lui.
+  { id: "motifs", level: "expert", label: "draw.feature.motifs" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli

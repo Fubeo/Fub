@@ -75,6 +75,7 @@ import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
 import type { ShapeChange, ShapeFacts } from "./reshape";
 import type { GradientPanelView } from "./gradient-panel";
+import type { HatchPanelView } from "./hatch-panel";
 import type { ColorsView, PaintTarget } from "./swatches-panel";
 import type { DocumentColors } from "./swatches";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
@@ -417,6 +418,9 @@ export interface FieldsInput {
   /// La sezione «Sfumatura», com'è già pronta, se il livello la offre e la
   /// selezione ha un riempimento o un contorno.
   readonly gradient: GradientPanelView | null;
+  /// La sezione «Campitura», com'è già pronta, se il livello la offre e la
+  /// selezione ha un riempimento.
+  readonly hatch: HatchPanelView | null;
 }
 
 /// Un campo di una lunghezza, `value` in unità della scena, mostrata in
@@ -820,6 +824,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     recent: input.recent,
     ...(input.colors === null ? {} : { colors: colorsView(input.colors, selection, input.recent) }),
     ...(input.gradient === null ? {} : { gradient: input.gradient }),
+    ...(input.hatch === null ? {} : { hatch: input.hatch }),
   };
 }
 

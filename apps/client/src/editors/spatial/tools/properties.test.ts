@@ -26,6 +26,7 @@ import { lengthUnits, PERCENT_UNITS } from "./quantity";
 import { defaultEffect } from "./effects";
 import type { EffectsPanelView } from "./effects-panel";
 import type { GradientPanelView } from "./gradient-panel";
+import type { HatchPanelView } from "./hatch-panel";
 import type { PaintSample } from "./resources";
 import type { ColorsView } from "./swatches-panel";
 import { TIP_SHAPES } from "./tips";
@@ -55,6 +56,8 @@ let state: {
   colors: ColorsView | null;
   /// La sezione «Sfumatura», se c'è.
   gradient: GradientPanelView | null;
+  /// La sezione «Campitura», se c'è.
+  hatch: HatchPanelView | null;
   /// La sezione «Effetti», se c'è.
   effects: EffectsPanelView | null;
   dash: string | null;
@@ -193,6 +196,7 @@ function view(): PropertiesView {
     ...(state.recent === null ? {} : { recent: state.recent }),
     ...(state.colors === null ? {} : { colors: state.colors }),
     ...(state.gradient === null ? {} : { gradient: state.gradient }),
+    ...(state.hatch === null ? {} : { hatch: state.hatch }),
     ...(state.effects === null ? {} : { effects: state.effects }),
   };
 }
@@ -260,6 +264,13 @@ function mount(): Properties {
       onPreview: (target, change) => calls.push(`preview ${target} ${JSON.stringify(change)}`),
       onStop: (index) => calls.push(`stop ${index}`),
     },
+    hatch: {
+      onChange: (change, label) => (calls.push(`hatch ${JSON.stringify(change)} ${label}`), null),
+      onMotif: () => calls.push("motif"),
+      motifReason: () => null,
+      onRename: (id, name) => (calls.push(`motif rename ${id} ${name}`), null),
+      onDelete: (id) => (calls.push(`motif delete ${id}`), null),
+    },
     effects: {
       onChange: (change, label) => (calls.push(`effects ${JSON.stringify(change)} ${label}`), null),
     },
@@ -314,6 +325,7 @@ beforeEach(() => {
     recent: null,
     colors: null,
     gradient: null,
+    hatch: null,
     effects: null,
     dash: "solid",
     anchor: "start",
@@ -837,6 +849,117 @@ describe("la sezione «Sfumatura»", () => {
     expect([input.selectionStart, input.selectionEnd]).toEqual([0, 7]);
     expect(section("gradient").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
     expect(calls).toEqual(["section gradient open"]);
+  });
+});
+
+describe("la sezione «Campitura»", () => {
+  const HATCH: HatchPanelView = {
+    key: "oaaaaaaaa",
+    hatch: { count: 1, hatched: 1, choice: "diagonal", kind: "lines", angle: 45, spacing: 8, width: 1, color: "#0072b2", background: "none" },
+    unit: "pt",
+    swatches: [],
+    motifs: [],
+    expert: false,
+  };
+  const GRADIENT: GradientPanelView = {
+    key: "oaaaaaaaa",
+    channels: { fill: { count: 1, gradients: 0, kind: "color", look: null, angle: null } },
+    stop: null,
+    expert: false,
+    swatches: [],
+  };
+  const COLORS: ColorsView = {
+    swatches: [],
+    used: [{ color: "#000000", uses: 2 }],
+    hidden: 0,
+    recent: [],
+    targets: ["fill", "stroke"],
+    current: { fill: "#0072b2", stroke: "#000000" },
+    drawing: "#000000",
+    drawingSwatch: null,
+  };
+  const visibleSections = (): Array<string | undefined> =>
+    [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+  const menuItems = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>('#context-menu [role^="menuitem"]')];
+  const menuButton = (): HTMLButtonElement => section("hatch").querySelector<HTMLButtonElement>(".draw-properties-menu")!;
+
+  afterEach(() => closeContextMenu());
+
+  it("non c'è senza la campitura nella vista, e sta dopo la sfumatura e prima degli effetti", () => {
+    state.gradient = GRADIENT;
+    state.effects = {
+      key: "oaaaaaaaa",
+      count: 1,
+      body: { kind: "list", effects: [defaultEffect("shadow")] },
+      refusal: null,
+      full: false,
+      blurred: false,
+      unit: "pt",
+      swatches: [],
+    };
+    state.colors = COLORS;
+    mount();
+    expect(section("hatch").hidden).toBe(true);
+    expect(visibleSections()).toEqual(["place", "look", "gradient", "effects", "colors", "text", "document", "view"]);
+    state.hatch = HATCH;
+    panel.update(view());
+    expect(visibleSections()).toEqual(["place", "look", "gradient", "hatch", "effects", "colors", "text", "document", "view"]);
+    expect(toggle("hatch").textContent).toBe("Campitura");
+    state.hatch = null;
+    panel.update(view());
+    expect(section("hatch").hidden).toBe(true);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("c'è anche senza la sfumatura, perché ha la sua parte del livello", () => {
+    state.hatch = HATCH;
+    mount();
+    expect(visibleSections()).toEqual(["place", "look", "hatch", "text", "document", "view"]);
+  });
+
+  it("mostra il menu del tipo e i campi, e un gesto va all'editor col nome del suo passo", () => {
+    state.hatch = HATCH;
+    mount();
+    expect(menuButton().textContent).toBe("Diagonale");
+    expect(menuButton().getAttribute("aria-label")).toBe("Tipo: Diagonale");
+    const shown = [...section("hatch").querySelectorAll<HTMLElement>('.draw-properties-field[data-field^="hatch-"]')].filter((each) => each.closest("[hidden]") === null);
+    expect(shown.map((each) => each.dataset.field)).toEqual(["hatch-kind", "hatch-color", "hatch-background", "hatch-spacing", "hatch-width", "hatch-angle"]);
+    menuButton().click();
+    expect(menuItems().map((each) => each.querySelector(".menu-label")!.textContent)).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata"]);
+    menuItems()[3]!.click();
+    expect(calls).toEqual(['hatch {"preset":"horizontal"} draw.action.hatch']);
+  });
+
+  it("si chiude come le altre, e lo dice all'editor", () => {
+    state.hatch = HATCH;
+    mount();
+    toggle("hatch").click();
+    expect(calls).toEqual(["section hatch closed"]);
+    expect(section("hatch").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
+    toggle("hatch").click();
+    expect(calls).toEqual(["section hatch closed", "section hatch open"]);
+    expect(section("hatch").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
+  });
+
+  it("se il fuoco è in un campo che sparisce, va all'intestazione della sezione", () => {
+    state.hatch = HATCH;
+    mount();
+    const color = section("hatch").querySelector<HTMLInputElement>('[data-field="hatch-color"] input[type="text"]')!;
+    color.focus();
+    state.hatch = { ...HATCH, hatch: { ...HATCH.hatch, choice: "none", hatched: 0, kind: null, angle: null, spacing: null, width: null, color: null, background: null } };
+    panel.update(view());
+    expect(document.activeElement).toBe(toggle("hatch"));
+  });
+
+  it("in sola lettura si guarda e niente cambia", () => {
+    state.hatch = HATCH;
+    state.editable = false;
+    mount();
+    expect(menuButton().getAttribute("aria-disabled")).toBe("true");
+    menuButton().click();
+    expect(menuButton().getAttribute("aria-expanded")).toBe("false");
+    expect(announced).toEqual(["Modifica non applicata: il disegno è in sola lettura."]);
+    expect(calls).toEqual([]);
   });
 });
 

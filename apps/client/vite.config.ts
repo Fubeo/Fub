@@ -143,12 +143,12 @@ export default defineConfig({
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi colori del documento, la
-          // sfumatura e gli effetti, gli oggetti, le tavole, la cronologia,
-          // l'accessibilità, l'ispettore degli attributi e la finestra
-          // «Esporta». Sono DOM attorno al foglio, che l'editor e la
+          // sfumatura, la campitura e gli effetti, gli oggetti, le tavole, la
+          // cronologia, l'accessibilità, l'ispettore degli attributi e la
+          // finestra «Esporta». Sono DOM attorno al foglio, che l'editor e la
           // superficie montano e che leggono i comandi; non dipendono
           // dall'editor, e cambiano con la loro interfaccia.
-          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|effects-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog)\.ts$/.test(id)) {
             return "drawing-panels";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {

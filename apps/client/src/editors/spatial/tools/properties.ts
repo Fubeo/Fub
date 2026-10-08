@@ -3,14 +3,14 @@
 // selezione, il documento e la vista. Che cosa mostra lo decide l'editor, e
 // lui scrive ogni cambio; qui c'è come si legge, si scrive e si raggiunge.
 //
-// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto,
-//   Sfumatura (`gradient-panel.ts`), Effetti (`effects-panel.ts`), Colori
-//   del documento (`swatches-panel.ts`), Testo, Disponi, e all'Esperto Trasforma e
-//   Attributi; senza selezione i Colori del documento, Documento
-//   e Vista, Forma se lo strumento è il Poligono, e Tavola se è lo strumento
-//   Tavola con una tavola scelta. L'intestazione di una sezione è il
-//   pulsante che la apre e la chiude, e il pannello dice all'editor quali
-//   sono chiuse, che le ricorda.
+// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Sfumatura
+//   (`gradient-panel.ts`), Campitura (`hatch-panel.ts`), Effetti
+//   (`effects-panel.ts`), Colori del documento (`swatches-panel.ts`), Testo,
+//   Disponi, e all'Esperto Trasforma e Attributi; senza selezione i Colori del
+//   documento, Documento e Vista, Forma se lo strumento è il Poligono, e Tavola
+//   se è lo strumento Tavola con una tavola scelta. L'intestazione di una
+//   sezione è il pulsante che la apre e la chiude, e il pannello dice
+//   all'editor quali sono chiuse, che le ricorda.
 // - **Un campo misto dice «Misto»** e non ha valore: scriverlo dà il valore a
 //   tutti gli oggetti scelti, in un passo.
 // - **Un colore si scrive** come codice, come nome (`red`) o col nome di un
@@ -51,6 +51,7 @@ import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
 import { createEffectsPanel, type EffectsPanelOptions, type EffectsPanelView } from "./effects-panel";
 import { createGradientPanel, type GradientPanelOptions, type GradientPanelView } from "./gradient-panel";
+import { createHatchPanel, type HatchPanelOptions, type HatchPanelView } from "./hatch-panel";
 import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPanelOptions } from "./swatches-panel";
 
 /// Le sezioni, nell'ordine in cui si vedono.
@@ -59,6 +60,7 @@ export type SectionId =
   | "shape"
   | "look"
   | "gradient"
+  | "hatch"
   | "effects"
   | "colors"
   | "text"
@@ -305,6 +307,8 @@ export interface PropertiesView {
   readonly colors?: ColorsView;
   /// La sezione «Sfumatura»; senza, non c'è.
   readonly gradient?: GradientPanelView;
+  /// La sezione «Campitura»; senza, non c'è.
+  readonly hatch?: HatchPanelView;
   /// La sezione «Effetti»; senza, non c'è.
   readonly effects?: EffectsPanelView;
 }
@@ -324,6 +328,8 @@ export interface PropertiesOptions {
   readonly colors: Omit<SwatchesPanelOptions, "announce" | "onTarget">;
   /// I gesti della sezione «Sfumatura» (`gradient-panel.ts`).
   readonly gradient: Omit<GradientPanelOptions, "announce" | "onTarget">;
+  /// I gesti della sezione «Campitura» (`hatch-panel.ts`).
+  readonly hatch: Omit<HatchPanelOptions, "announce">;
   /// I gesti della sezione «Effetti» (`effects-panel.ts`).
   readonly effects: Omit<EffectsPanelOptions, "announce" | "reveal">;
   /// «Applica a» cambia, in una delle due sezioni che lo hanno.
@@ -433,6 +439,7 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "shape", label: "draw.properties.shape" },
   { id: "look", label: "draw.properties.look" },
   { id: "gradient", label: "draw.properties.gradient" },
+  { id: "hatch", label: "draw.properties.hatch" },
   { id: "effects", label: "draw.properties.effects" },
   { id: "colors", label: "draw.properties.colors" },
   { id: "text", label: "draw.properties.text" },
@@ -794,6 +801,14 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     announce: (text) => options.announce(text),
   });
   sections.get("gradient")!.body.append(gradient.element);
+
+  // --- La campitura ---------------------------------------------------------------
+
+  const hatch = createHatchPanel(life, {
+    ...options.hatch,
+    announce: (text) => options.announce(text),
+  });
+  sections.get("hatch")!.body.append(hatch.element);
 
   // --- Gli effetti ----------------------------------------------------------------
 
@@ -1846,6 +1861,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     applyButton.textContent = t("draw.properties.apply");
     colors.relabel();
     gradient.relabel();
+    hatch.relabel();
     effects.relabel();
   };
 
@@ -1892,6 +1908,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       if (next.gradient !== undefined) {
         shown.add("gradient");
         gradient.update(next.gradient, next.editable);
+      }
+      if (next.hatch !== undefined) {
+        shown.add("hatch");
+        hatch.update(next.hatch, next.editable);
       }
       if (next.effects !== undefined) {
         shown.add("effects");

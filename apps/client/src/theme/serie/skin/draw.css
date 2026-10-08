@@ -1130,6 +1130,19 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
 }
+/* La campitura: il menu del tipo, i campi e i comandi del motivo hanno il
+   respiro dei campi delle altre sezioni. */
+.draw-hatch {
+  gap: var(--space-3);
+}
+.draw-hatch-fields,
+.draw-hatch-motif {
+  gap: var(--space-3) var(--space-2);
+}
+.draw-hatch-motif > .draw-button {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
 /* Gli effetti: ogni riga ha il suo filo; l'occhio è nel colore del testo
    quando l'effetto si vede, in grigio e sbarrato quando no, e l'effetto
    nascosto sbiadisce e ha il nome barrato, così lo stato non sta nel solo

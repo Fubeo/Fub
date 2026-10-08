@@ -2788,6 +2788,27 @@ textarea.draw-properties-input {
 .draw-gradient-remove {
   grid-column: 3;
 }
+/* La campitura prende la riga della sezione: la nota, il menu del tipo e,
+   quando c'è una campitura da regolare, i suoi campi in due colonne, con
+   i colori, il nome e i comandi di un motivo del documento sulla riga
+   intera. */
+.draw-hatch {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-hatch-fields,
+.draw-hatch-motif {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+}
+.draw-hatch-fields > .draw-properties-error,
+.draw-hatch-motif > .draw-properties-error,
+.draw-hatch-motif > .draw-button {
+  grid-column: 1 / -1;
+}
 /* Gli effetti prendono la riga della sezione: sotto la nota, una riga per
    effetto, coi comandi sotto quando gli oggetti ne hanno di diversi o un
    filtro d'altri. L'intestazione della sezione porta, accanto al titolo,
