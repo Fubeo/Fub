@@ -235,6 +235,7 @@ import {
   SHAPE_ACTIONS,
   shapeChange,
   sheetChange,
+  tipChange,
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
@@ -284,6 +285,7 @@ import {
   type DocumentColors,
   type SwatchChange,
 } from "./swatches";
+import { followTips, tipOps, tipsLookOf, type TipChange } from "./tips";
 import {
   angleOf,
   directionCursor,
@@ -2081,6 +2083,13 @@ function layerRefusal(layer: LayerInfo): DrawKey | null {
   return layer.hidden ? "draw.layer.hidden_here" : layer.locked ? "draw.layer.locked_here" : null;
 }
 
+/// Il nome del passo d'annulla di un cambio delle punte.
+function tipAction(change: TipChange): DrawKey {
+  if ("swap" in change) return "draw.action.tips_swap";
+  if ("size" in change) return "draw.action.tip_size";
+  return change.end === "start" ? "draw.action.tip_start" : "draw.action.tip_end";
+}
+
 /// `next` come griglia, col passo di `before` se il suo è fuori dai limiti,
 /// e i passi delle altre unità che la griglia accetta.
 function checkedGrid(next: Grid, before: Grid): Grid {
@@ -2156,7 +2165,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const has = (feature: Feature): boolean => features.has(feature);
   const relabels: Array<() => void> = [];
 
-  let engine = initial;
+  /// `next`, con le punte delle linee che tengono il colore del contorno:
+  /// il motore le segue a ogni operazione, nello stesso passo d'annulla, e
+  /// trova ciò che ha toccato col suo indice invece di scorrere il disegno.
+  const following = (next: SceneEngine): SceneEngine => {
+    const find = (id: string): ElementPart | null => next.holder(id);
+    next.follow = (model, touched) => followTips(model, touched, new NewIds((id) => find(id) !== null), find);
+    return next;
+  };
+  let engine = following(initial);
   let tool: ToolId = startTool(tools, profile);
   /// Il colore e lo spessore di chi scrive: la penna, le forme e le note li
   /// condividono, l'evidenziatore e la copertura hanno i loro.
@@ -5421,6 +5438,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       drawn: drawn(units),
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => orderOps(model, index, units, order, newIds()).ops.length > 0) : []),
       shape: shapeFacts(model, units),
+      tips: has("tips") ? tipsLookOf(model, units) : null,
     };
   };
 
@@ -5649,6 +5667,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const outcome = changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
       if (outcome === null && restyled.overflow) announce(t("draw.text.overflow"));
       return outcome;
+    }
+    const tip = tipChange(id, value);
+    if (tip !== null) {
+      const tipped = tipOps(model, units, tip, newIds());
+      return changeFromPanel(tipAction(tip), tipped.ops, tipped.keys);
     }
     const change = outlineChange(id, value);
     if (change === null) return null;
@@ -18073,7 +18096,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // avere più: il gesto si annulla. Tratto e forma si scrivono alla fine,
       // sul livello che c'è allora.
       if (current !== null && (current.kind === "select" || current.kind === "nodes" || current.kind === "erase" || current.kind === "board")) cancelGesture();
-      engine = next;
+      engine = following(next);
       refresh();
     },
     load(next) {
@@ -18084,7 +18107,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // della penna.
       finishText(false);
       dropBezier();
-      engine = next;
+      engine = following(next);
       loads++;
       closeDescriptions();
       closeTracing();

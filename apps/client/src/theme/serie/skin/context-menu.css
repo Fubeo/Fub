@@ -53,6 +53,24 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
+/* Le voci con una figura: 24 px prima del nome, nel colore della voce, che
+   la spenta attenua con le parole. Chi non ha la sua ne tiene il posto, e il
+   nome si centra sulla figura invece di restare sulla riga di base. */
+.context-menu .menu-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon > svg {
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon ~ .menu-label,
+.context-menu .menu-icon ~ .menu-body {
+  align-self: center;
+}
 /* Le voci che sono un aspetto: una striscia dei suoi colori, il nome con una
    riga di spiegazione, il segno della scelta. */
 .context-menu .menu-swatches {

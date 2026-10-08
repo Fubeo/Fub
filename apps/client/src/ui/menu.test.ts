@@ -207,6 +207,79 @@ describe("le voci a scelta", () => {
   });
 });
 
+describe("le voci con un'icona", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("la disegnano prima del nome, nascosta ai lettori di schermo", () => {
+    showContextMenu(clickEvent(), [
+      { label: "Chiudi", icon: "close", run: () => {} },
+      { label: "Senza", run: () => {} },
+    ]);
+    const [withIcon, without] = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
+    const picture = withIcon!.querySelector<HTMLElement>(".menu-icon")!;
+    expect(picture.getAttribute("aria-hidden")).toBe("true");
+    expect(picture.querySelector("svg")).not.toBeNull();
+    expect([...withIcon!.children].map((part) => part.className)).toEqual(["menu-icon", "menu-label"]);
+    // Il nome accessibile resta il nome: la figura non scrive niente.
+    expect(withIcon!.textContent).toBe("Chiudi");
+    // Una voce senza figura ne tiene il posto, vuoto, perché i nomi stiano allineati.
+    expect([...without!.children].map((part) => part.className)).toEqual(["menu-icon", "menu-label"]);
+    expect(without!.querySelector(".menu-icon")!.getAttribute("aria-hidden")).toBe("true");
+    expect(without!.querySelector(".menu-icon")!.childElementCount).toBe(0);
+    expect(without!.textContent).toBe("Senza");
+  });
+
+  it("senza nessuna figura non c'è nemmeno il posto, e una figura ignota non conta", () => {
+    showContextMenu(clickEvent(), [
+      { label: "Una", run: () => {} },
+      { label: "Ignota", icon: "questa-icona-non-esiste", run: () => {} },
+    ]);
+    expect(document.querySelectorAll("#context-menu .menu-icon")).toHaveLength(0);
+  });
+
+  it("un'icona che non esiste non disegna niente: ne tiene il posto soltanto se un'altra voce ne ha una", () => {
+    showContextMenu(clickEvent(), [{ label: "Ignota", icon: "questa-icona-non-esiste", run: () => {} }]);
+    const item = document.querySelector<HTMLButtonElement>("#context-menu button")!;
+    expect(item.querySelector(".menu-icon")).toBeNull();
+    expect([...item.children].map((part) => part.className)).toEqual(["menu-label"]);
+    showContextMenu(clickEvent(), [
+      { label: "Ignota", icon: "questa-icona-non-esiste", run: () => {} },
+      { label: "Nota", icon: "close", run: () => {} },
+    ]);
+    const [unknown, known] = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
+    expect(unknown!.querySelector(".menu-icon")!.childElementCount).toBe(0);
+    expect(known!.querySelector(".menu-icon svg")).not.toBeNull();
+  });
+
+  it("una voce a scelta con l'icona tiene il suo stato, col segno in fondo", () => {
+    const run = vi.fn();
+    showContextMenu(clickEvent(), [
+      { label: "Acceso", icon: "close", choice: "radio", checked: true, run },
+      { label: "Spento", icon: "minus", choice: "radio", checked: false, run: () => {} },
+    ]);
+    const items = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
+    expect(items.map((item) => [item.getAttribute("role"), item.getAttribute("aria-checked")])).toEqual([
+      ["menuitemradio", "true"],
+      ["menuitemradio", "false"],
+    ]);
+    expect([...items[0]!.children].map((part) => part.className)).toEqual(["menu-icon", "menu-label", "menu-check"]);
+    expect(items[0]!.querySelector(".menu-check")!.textContent).toBe("✓");
+    expect(items[1]!.querySelector(".menu-check")!.textContent).toBe("");
+    // La figura non cambia il nome della voce, né la sua azione.
+    expect(items[0]!.textContent).toBe("Acceso✓");
+    items[0]!.click();
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("il selettore di icona", () => {
   beforeEach(() => {
     vi.useFakeTimers();

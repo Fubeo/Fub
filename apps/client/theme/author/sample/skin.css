@@ -2959,6 +2959,24 @@ button.draw-isolation-crumb:hover {
   background: transparent;
   color: var(--muted);
 }
+/* Il campo a menu ha la faccia di un campo: il filo, il fondo e il testo
+   del campo, la figura della scelta prima delle parole e la freccia in
+   grigio. Aperto, il fondo è quello attivo. */
+.draw-properties-menu {
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-properties-menu > svg {
+  color: var(--muted);
+}
+.draw-properties-menu[aria-expanded="true"] {
+  background: var(--bg-active);
+}
 .draw-properties-picker {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -3308,6 +3326,24 @@ button.draw-isolation-crumb:hover {
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+/* Le voci con una figura: 24 px prima del nome, nel colore della voce, che
+   la spenta attenua con le parole. Chi non ha la sua ne tiene il posto, e il
+   nome si centra sulla figura invece di restare sulla riga di base. */
+.context-menu .menu-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon > svg {
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon ~ .menu-label,
+.context-menu .menu-icon ~ .menu-body {
+  align-self: center;
 }
 /* Le voci che sono un aspetto: una striscia dei suoi colori, il nome con una
    riga di spiegazione, il segno della scelta. */

@@ -137,6 +137,7 @@ export type Feature =
   | Exclude<ToolId, "select">
   | "colors"
   | "swatches"
+  | "tips"
   | "selection"
   | "arrange"
   | "layers"
@@ -175,6 +176,9 @@ const COMMANDS: readonly FeatureSpec[] = [
   // I colori del documento sono una sezione del pannello delle proprietà:
   // nel Personalizzato si vedono con lui.
   { id: "swatches", level: "standard", label: "draw.feature.swatches" },
+  // Le punte delle linee sono due campi del pannello delle proprietà, e i
+  // comandi che le cambiano: nel Personalizzato si vedono con lui.
+  { id: "tips", level: "standard", label: "draw.feature.tips" },
   { id: "selection", level: "standard", label: "draw.feature.selection" },
   { id: "arrange", level: "standard", label: "draw.feature.arrange" },
   { id: "layers", level: "standard", label: "draw.feature.layers" },

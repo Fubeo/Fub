@@ -382,6 +382,7 @@
     "draw-properties-actions",
     "draw-properties-bar",
     "draw-properties-apply",
+    "draw-properties-menu",
     "draw-properties-contrast",
     "draw-swatches",
     "draw-swatches-target",
@@ -530,6 +531,7 @@
     "menu-body",
     "menu-description",
     "menu-check",
+    "menu-icon",
     "palette-scope",
     "palette-desc",
     "palette-help",
@@ -1364,6 +1366,7 @@
         "draw-properties-actions",
         "draw-properties-bar",
         "draw-properties-apply",
+        "draw-properties-menu",
         "draw-properties-contrast",
         "draw-swatches",
         "draw-swatches-target",
@@ -1555,7 +1558,8 @@
         "menu-swatch",
         "menu-body",
         "menu-description",
-        "menu-check"
+        "menu-check",
+        "menu-icon"
       ],
       "states": [
         "rest",
@@ -2280,7 +2284,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 630,
+    "hooks": 632,
     "state_names": 7,
     "assigned_states": 157,
     "components": 49,

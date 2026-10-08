@@ -29,6 +29,12 @@
 //   come si vede il foglio. Il titolo resta nella barra. Con lo strumento
 //   Poligono, prima, la forma che disegna; con lo strumento Tavola, la tavola
 //   che ha scelto: il nome, la misura pronta, il verso, il posto e le misure.
+// - **Le punte delle linee** (livello Standard): «Punta d'inizio» e «Punta
+//   di fine» nell'Aspetto, di linee, spezzate e tracciati aperti. Ognuna
+//   dice la forma e la misura di adesso e apre un menu con le sei forme, la
+//   mancanza di punta, le tre misure e «Scambia inizio e fine»; un marcatore
+//   che non è della raccolta si dice «Un'altra punta», e senza punta le
+//   misure non si scelgono. Un capo misto non ha forma, e lo dice.
 // - **Le misure pronte** (`boards.ts`) si dicono col nome e coi numeri che
 //   darebbero, nel verso di adesso e nell'unità in cui sono nate: «A4 (297 ×
 //   210 mm)» per una tavola coricata. Le ha anche la pagina di un disegno
@@ -55,6 +61,8 @@ import {
   type FieldId,
   type FieldState,
   type FieldSwatch,
+  type MenuChoiceState,
+  type MenuOption,
   type NumberState,
   type PaintContrast,
   type PropertiesView,
@@ -71,6 +79,7 @@ import type { DocumentColors } from "./swatches";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
 import { MIN_RATIO } from "./shapes";
 import { TEXT_FAMILIES, TEXT_SIZE } from "./text";
+import { TIP_SHAPES, TIP_SIZES, type EndLook, type TipChange, type TipEnd, type TipShape, type TipSize, type TipsLook } from "./tips";
 import { MAX_SCALE_PERCENT, MAX_SKEW } from "./transform";
 
 /// Il nome di ogni unità, come lo dicono i menu e il pannello.
@@ -100,6 +109,25 @@ export const JOIN_LABELS: Readonly<Record<Join, DrawKey>> = {
   miter: "draw.outline.miter",
   round: "draw.outline.round_join",
   bevel: "draw.outline.bevel",
+};
+
+/// I nomi delle forme delle punte delle linee, di nessuna punta e di una che
+/// non è della raccolta, e quelli delle loro misure.
+export const TIP_LABELS: Readonly<Record<TipShape | "none" | "custom", DrawKey>> = {
+  none: "draw.tip.none",
+  triangle: "draw.tip.triangle",
+  vee: "draw.tip.vee",
+  circle: "draw.tip.circle",
+  square: "draw.tip.square",
+  diamond: "draw.tip.diamond",
+  bar: "draw.tip.bar",
+  custom: "draw.tip.custom",
+};
+
+export const TIP_SIZE_LABELS: Readonly<Record<TipSize, DrawKey>> = {
+  small: "draw.tip.small",
+  medium: "draw.tip.medium",
+  large: "draw.tip.large",
 };
 
 /// I nomi dell'allineamento del testo, e le loro icone.
@@ -239,6 +267,8 @@ export interface SelectionFacts {
   readonly orders: ReadonlySet<Order>;
   /// I poligoni, le stelle e i rettangoli scelti; `null` se non ce ne sono.
   readonly shape: ShapeFacts | null;
+  /// Le punte delle linee scelte; senza, o `null`, non ce n'è da mostrare.
+  readonly tips?: TipsLook | null;
 }
 
 /// Il disegno, quando non c'è niente di scelto.
@@ -421,6 +451,45 @@ function shapeFields(fields: Partial<Record<FieldId, FieldState>>, facts: ShapeF
   }
 }
 
+/// L'icona della forma `shape` a un capo della linea, da `ui/icons.ts`.
+const tipIcon = (shape: EndLook["shape"] & string, end: TipEnd): string =>
+  shape === "none" ? "draw-tip-none" : `draw-tip-${shape === "custom" ? "other" : shape}-${end}`;
+
+/// Il campo della punta del capo `end`: il pulsante con la forma e la misura
+/// di adesso, e nel menu «Nessuna» e le sei forme, le tre misure e «Scambia
+/// inizio e fine». Le misure si scelgono dove c'è una punta della raccolta,
+/// o può esserci: non dove non c'è, né dove c'è un'altra; e scambiare due
+/// punte uguali non cambia niente.
+function tipField(end: TipEnd, tips: TipsLook): MenuChoiceState {
+  const look = tips[end];
+  const other = tips[end === "start" ? "end" : "start"];
+  const options: MenuOption[] = [];
+  // Una punta che non è della raccolta si vede, segnata, ma non si sceglie.
+  if (look.shape === "custom") options.push({ value: "custom", label: t(TIP_LABELS.custom), icon: tipIcon("custom", end), checked: true, disabled: true });
+  for (const shape of ["none", ...TIP_SHAPES] as const) {
+    options.push({ value: shape, label: t(TIP_LABELS[shape]), icon: tipIcon(shape, end), checked: look.shape === shape });
+  }
+  const sizable = look.shape !== "none" && look.shape !== "custom";
+  TIP_SIZES.forEach((size, at) => {
+    options.push({
+      value: `size:${size}`,
+      label: t(TIP_SIZE_LABELS[size]),
+      checked: look.size === size,
+      ...(sizable ? {} : { disabled: true }),
+      ...(at === 0 ? { separator: true } : {}),
+    });
+  });
+  const same = look.shape !== null && look.shape !== "custom" && look.shape === other.shape && look.size === other.size;
+  options.push({ value: "swap", label: t("draw.tip.swap"), icon: "draw-tips-swap", action: true, separator: true, ...(same ? { disabled: true } : {}) });
+  // Come si dice: la forma, e la misura se c'è una punta della raccolta.
+  let summary = t("draw.properties.mixed");
+  if (look.shape !== null) {
+    const shape = t(TIP_LABELS[look.shape]);
+    summary = look.size === null || !sizable ? shape : t("draw.tip.summary", { shape, size: t(TIP_SIZE_LABELS[look.size]).toLocaleLowerCase() });
+  }
+  return { kind: "menu", label: t(end === "start" ? "draw.properties.tip_start" : "draw.properties.tip_end"), value: look.shape, summary, options };
+}
+
 /// Il nome di un carattere: la famiglia prima del ripiego.
 const familyName = (family: string): string => family.split(",")[0]!.trim();
 
@@ -503,6 +572,13 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         fields.cap = { kind: "choice", label: t("draw.properties.cap"), value: outline.cap, options: CAPS.map((cap) => ({ value: cap, label: t(CAP_LABELS[cap]) })) };
         fields.join = { kind: "choice", label: t("draw.properties.join"), value: outline.join, options: JOINS.map((join) => ({ value: join, label: t(JOIN_LABELS[join]) })) };
       }
+    }
+    // Le punte delle linee, se il livello le offre e ci sono linee che ne
+    // abbiano.
+    const { tips } = selection;
+    if (has("tips") && tips != null && tips.count > 0) {
+      fields.tipStart = tipField("start", tips);
+      fields.tipEnd = tipField("end", tips);
     }
 
     // --- Testo ---
@@ -821,4 +897,17 @@ export function outlineChange(id: FieldId, value: number | string | boolean): Ou
   if (id === "cap" && (CAPS as readonly unknown[]).includes(value)) return { cap: value as Cap };
   if (id === "join" && (JOINS as readonly unknown[]).includes(value)) return { join: value as Join };
   return null;
+}
+
+/// Il cambio delle punte che scrive il campo `id` col valore `value`: una
+/// forma, o `none` per togliere la punta, è del capo del campo; `size:` e una
+/// misura la cambiano alla punta; `swap` scambia le due. `null` se il campo
+/// non è delle punte, o il valore non è suo.
+export function tipChange(id: FieldId, value: number | string | boolean): TipChange | null {
+  if ((id !== "tipStart" && id !== "tipEnd") || typeof value !== "string") return null;
+  if (value === "swap") return { swap: true };
+  const end: TipEnd = id === "tipStart" ? "start" : "end";
+  if (value === "none" || (TIP_SHAPES as readonly unknown[]).includes(value)) return { end, shape: value as TipShape | "none" };
+  const size = value.startsWith("size:") ? value.slice("size:".length) : null;
+  return size !== null && (TIP_SIZES as readonly unknown[]).includes(size) ? { end, size: size as TipSize } : null;
 }

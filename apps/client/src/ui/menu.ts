@@ -8,6 +8,7 @@
 
 import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
+import { icon, iconEl } from "./icons";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { enterSurface, exitSurface, finishSurface } from "./motion";
 
@@ -27,6 +28,11 @@ export interface MenuItem {
   description?: string;
   /// Una striscia di colori prima del nome: la voce è un aspetto da scegliere.
   swatches?: readonly string[];
+  /// Il nome di un'icona (`icons.ts`), disegnata prima del nome: decorativa,
+  /// perché il nome dice già tutto. Un nome che l'icona non conosce non
+  /// disegna niente. Se anche una sola voce del menu ha la sua figura, le
+  /// altre ne tengono il posto vuoto, perché i nomi stiano allineati.
+  icon?: string;
   /// La voce è una scelta: una fra alternative (`radio`) o un interruttore
   /// (`checkbox`), con il suo stato in `checked`.
   choice?: "radio" | "checkbox";
@@ -77,6 +83,7 @@ export function showContextMenu(
   menu.style.top = `${at.clientY}px`;
   const buttons: HTMLButtonElement[] = [];
   const usable: MenuItem[] = [];
+  const pictured = items.some((item) => item.icon !== undefined && icon(item.icon) !== "");
   for (const item of items) {
     if (item.separator && menu.childElementCount > 0) {
       const rule = document.createElement("div");
@@ -99,6 +106,14 @@ export function showContextMenu(
         strip.append(swatch);
       }
       b.append(strip);
+    }
+    const glyph = item.icon === undefined ? null : iconEl(item.icon);
+    if (glyph !== null || pictured) {
+      const picture = document.createElement("span");
+      picture.className = "menu-icon";
+      picture.setAttribute("aria-hidden", "true");
+      if (glyph !== null) picture.append(glyph);
+      b.append(picture);
     }
     const label = document.createElement("span");
     label.className = "menu-label";

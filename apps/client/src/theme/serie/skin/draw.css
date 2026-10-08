@@ -942,6 +942,24 @@ button.draw-isolation-crumb:hover {
   background: transparent;
   color: var(--muted);
 }
+/* Il campo a menu ha la faccia di un campo: il filo, il fondo e il testo
+   del campo, la figura della scelta prima delle parole e la freccia in
+   grigio. Aperto, il fondo è quello attivo. */
+.draw-properties-menu {
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.draw-properties-menu > svg {
+  color: var(--muted);
+}
+.draw-properties-menu[aria-expanded="true"] {
+  background: var(--bg-active);
+}
 .draw-properties-picker {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
