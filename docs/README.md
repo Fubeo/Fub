@@ -43,6 +43,7 @@ flowchart LR
 - [Disegni, sfumature](product/drawing-gradients.md)
 - [Disegni, punte delle linee](product/drawing-tips.md)
 - [Disegni, immagini](product/drawing-images.md)
+- [Disegni, ritagli e maschere](product/drawing-masks.md)
 - [Disegni, appunti](product/drawing-clipboard.md)
 - [Disegni, esportare](product/drawing-export.md)
 - [Disegni, poligoni e stelle](product/drawing-shapes.md)

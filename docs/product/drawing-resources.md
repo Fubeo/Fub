@@ -55,7 +55,9 @@ nell'esportazione il file è quello che è.
 - **Separa** (`Ctrl+Maiusc+G`) non separa un gruppo con un ritaglio, una
   maschera o un filtro, che valgono per tutto il gruppo, e lo dice; con più
   gruppi separa gli altri e dice quanti ne restano interi. Allo stesso modo
-  «Togli il collegamento» lascia un collegamento con un effetto.
+  «Togli il collegamento» lascia un collegamento con un effetto. Un ritaglio
+  o una maschera si tolgono con «Rilascia maschera» ([Disegni, ritagli e
+  maschere](drawing-masks.md)).
 - **«Applica trasformazione»** riscrive le sfumature degli oggetti nelle
   coordinate nuove, e si vedono dov'erano: una sfumatura soltanto
   dell'oggetto cambia sul posto, una che usa con altri, o di un altro
@@ -64,7 +66,8 @@ nell'esportazione il file è quello che è.
   la trasformazione a un oggetto con un motivo, un marcatore o una sfumatura
   che eredita dal gruppo, e a un gruppo con un ritaglio, una maschera o un
   filtro: la risorsa vive nelle loro coordinate, e portarla nella geometria
-  cambierebbe ciò che si vede. Gli oggetti dentro il gruppo la applicano
+  cambierebbe ciò che si vede. Un'immagine col suo ritaglio la applica, e il
+  ritaglio la segue. Gli oggetti dentro il gruppo la applicano
   ciascuno per sé
   ([Disegni, livello Esperto](drawing-expert.md#applica-trasformazione)).
 - **Eliminare** un oggetto toglie anche le risorse proprie o condivise che
