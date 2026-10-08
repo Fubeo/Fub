@@ -24,6 +24,7 @@ let announced: string[];
 let calls: string[];
 let refusal: string | null;
 let cited: Set<string>;
+let held: Set<string>;
 let editable: boolean;
 let key: string;
 
@@ -52,10 +53,11 @@ function mount(source = doc(RECT)): Inspector {
     },
     onRename(subject, next) {
       calls.push(`rename ${next}`);
-      return apply(renameOps(subject, next));
+      return apply(renameOps(subject, next, opened.engine.model));
     },
     taken: (id) => opened.engine.holder(id) !== null,
     cited: (id) => cited.has(id),
+    held: (id) => held.has(id),
     announce: (text) => announced.push(text),
     onLeave: () => calls.push("leave"),
   });
@@ -102,6 +104,7 @@ beforeEach(() => {
   calls = [];
   refusal = null;
   cited = new Set();
+  held = new Set();
   editable = true;
   key = "oaaaaaaaa";
 });
@@ -414,6 +417,15 @@ describe("l'id", () => {
     write(control("id"), "sole");
     press(control("id"), "Enter");
     expect(error("id").textContent).toBe("Una parte di un altro programma cita «oaaaaaaaa»: cambiarlo romperebbe il riferimento.");
+    expect(calls).toEqual([]);
+  });
+
+  it("un id che un oggetto bloccato nomina non si cambia, e il campo dice come fare", () => {
+    mount();
+    held.add("oaaaaaaaa");
+    write(control("id"), "sole");
+    press(control("id"), "Enter");
+    expect(error("id").textContent).toBe("Un oggetto bloccato nomina «oaaaaaaaa»: cambiarlo lo staccherebbe. Sblocca prima il suo livello o il suo gruppo.");
     expect(calls).toEqual([]);
   });
 

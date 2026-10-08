@@ -102,7 +102,7 @@ Lo Standard aggiunge:
 - le **forme dal tratto**: un tratto a penna tenuto fermo alla fine diventa
   una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md));
 - il **Connettore** (`X`), dopo la freccia: una linea che unisce due oggetti e li segue ([Disegni, connettori](drawing-connectors.md));
-- il **Poligono** (`Y`), dopo il Connettore: poligoni regolari e stelle che si cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md));
+- il **Poligono** (`Y`), dopo il Connettore: poligoni regolari e stelle che si cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md)); il pannello **«Forme»**, accanto al foglio: cinquantuno forme pronte, da inserire col clic o trascinandole ([Disegni, raccolte di forme](drawing-library.md)); e le **etichette nelle forme**: due tocchi su una forma chiusa ci scrivono un testo che resta al centro ([Disegni, etichette nelle forme](drawing-labels.md));
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
   tre cifre o senza `#`, o il selettore del sistema. Il colore resta come un
   anello in più col codice per nome, che dice se sul bianco sta sotto il 3:1;

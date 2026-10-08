@@ -963,3 +963,34 @@ describe("i connettori negli appunti", () => {
     expect(pasted.map(refs)).toEqual(original.map(refs));
   });
 });
+
+describe("le etichette nelle forme negli appunti", () => {
+  /// Un rettangolo con la sua etichetta, nel loro gruppo.
+  const LABELLED =
+    '<g id="ogggggggg"><rect id="oaaaaaaaa" x="0" y="0" width="40" height="20"/>' +
+    '<text id="odddddddd" fub:inside="oaaaaaaaa" fub:wrap="28" x="0" y="0" text-anchor="middle" transform="matrix(1 0 0 1 20 14)"><tspan x="0" dy="0">sì</tspan></text></g>';
+  const source = (): Opened => open(doc(`${LAYER}${LABELLED}</g>`));
+
+  it("il gruppo incollato porta l'etichetta, che nomina la forma incollata, nello stesso disegno e in un altro", () => {
+    for (const opened of [source(), open(TARGET)]) {
+      const [group] = paste(opened, copy(source(), ["ogggggggg"])).keys as [string];
+      const [shape, label] = [...rawOf(node(opened, group)).matchAll(/<(?:rect|text) id="([^"]+)"/g)].map((match) => match[1]!) as [string, string];
+      expect(shape).not.toBe("oaaaaaaaa");
+      expect(attrOf(opened, label, "fub:inside")).toBe(shape);
+      expect(attrOf(opened, label, "transform")).toBe("matrix(1 0 0 1 20 14)");
+    }
+    // Gli originali restano legati fra loro.
+    const same = source();
+    paste(same, copy(same, ["ogggggggg"]));
+    expect(attrOf(same, "odddddddd", "fub:inside")).toBe("oaaaaaaaa");
+  });
+
+  it("l'etichetta senza la sua forma è un testo qualunque, col suo posto", () => {
+    const opened = open(TARGET);
+    const from = source();
+    const inside = copy(from, ["odddddddd"]);
+    const [label] = paste(opened, inside).keys as [string];
+    expect(attrOf(opened, label, "fub:inside")).toBeNull();
+    expect(attrOf(opened, label, "fub:wrap")).toBe("28");
+  });
+});

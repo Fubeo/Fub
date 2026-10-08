@@ -605,3 +605,21 @@ describe("duplicare i connettori", () => {
     expect(attrOf(opened, c, "fub:from")).toBeNull();
   });
 });
+
+describe("duplicare le etichette nelle forme", () => {
+  /// Un rettangolo con la sua etichetta, nel loro gruppo.
+  const LABELLED =
+    '<g id="ogggggggg"><rect id="oaaaaaaaa" x="0" y="0" width="40" height="20"/>' +
+    '<text id="odddddddd" fub:inside="oaaaaaaaa" fub:wrap="28" x="0" y="0" text-anchor="middle" transform="matrix(1 0 0 1 20 14)"><tspan x="0" dy="0">sì</tspan></text></g>';
+
+  it("il gruppo copiato porta l'etichetta, che nomina la forma copiata", () => {
+    const opened = open(doc(`${LAYER}${LABELLED}</g>`));
+    const arranged = duplicateOps(opened.engine.model!, units(opened, "ogggggggg"), 24, 24, ids(opened))!;
+    applied(opened, arranged);
+    const [group] = arranged.keys as [string];
+    const [shape, label] = [...rawOf(opened.engine.holder(group)!).matchAll(/<(?:rect|text) id="([^"]+)"/g)].map((match) => match[1]!) as [string, string];
+    expect(shape).not.toBe("oaaaaaaaa");
+    expect(attrOf(opened, label, "fub:inside")).toBe(shape);
+    expect(attrOf(opened, "odddddddd", "fub:inside")).toBe("oaaaaaaaa");
+  });
+});

@@ -102,6 +102,7 @@ import type { NewIds } from "./edit";
 import { effectsAttrs, effectsRefusal, effectsState, effectsStates, type Effect } from "./effects";
 import { hatchImage, hatchOf } from "./hatches";
 import { geometryBox, type Unit } from "./hit";
+import { labelTarget } from "./label-hosts";
 import type { Measure } from "./measure";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
 import { nameKey } from "./naming";
@@ -355,8 +356,12 @@ function partsOf(model: DocumentModel, units: readonly Unit[]): Parts {
       for (const child of elementChildren(node)) visit(child, inner, false);
       return;
     }
-    if (FILLED.has(role)) out.fills.push(part);
     if (role === "text") out.texts.push(part);
+    // L'etichetta di una forma in un gruppo scelto ha il suo colore: il
+    // riempimento e il contorno del gruppo sono quelli della forma, come in
+    // Visio e PowerPoint. Il carattere e il corpo sono i suoi.
+    if (!chosen && role === "text" && node.details?.inside !== undefined && labelTarget(node) !== null) return;
+    if (FILLED.has(role)) out.fills.push(part);
     if (INKED.has(role)) out.strokes.push(part);
     if (role === "width" && node.details?.varwidth !== undefined) out.widths.push(part);
     if (OUTLINED.has(role)) {
@@ -1050,6 +1055,12 @@ export function paintEachOps(
     if (part.role !== "text" || name !== "fill" || !changes.text(part, (rich) => restyleWhole(rich, name, value))) changes.write(part, name, value, sameText);
   }
   return changes.finish(units);
+}
+
+/// Il testo `node` con le sue righe e i suoi pezzi, e ciò che eredita da chi
+/// lo contiene; `null` se un'operazione non saprebbe riscriverlo intero.
+export function textRich(node: ElementPart): Rich | null {
+  return node.details?.role === "text" ? richOfPart({ node, role: "text", own: ownOf(node), inherited: passedBy(node.parent) }) : null;
 }
 
 /// Il testo in area `unit` col riquadro largo `width`, fermo il bordo

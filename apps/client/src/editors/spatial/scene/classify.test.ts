@@ -1133,6 +1133,23 @@ describe("il testo in area e su tracciato", () => {
     expect(index(`<defs>${PATH}</defs><text><textPath href="#r1">a <tspan>b</tspan></textPath></text>`)).toEqual(["a b"]);
   });
 
+  it("un testo in area dice quali righe continuano una parola", () => {
+    const glued = (body: string): readonly boolean[] | undefined => at(load(doc(body)), [0])!.glued;
+    // Dopo la prima riga, solo `word`; `space`, nessun valore e un valore
+    // sconosciuto continuano con uno spazio.
+    expect(
+      glued(
+        '<text fub:wrap="100"><tspan>Una pa</tspan><tspan fub:join="word">rola</tspan><tspan fub:join="space">e un trat-</tspan>' +
+          '<tspan fub:join="word">tino</tspan><tspan fub:join="parola">Nuovo</tspan></text>',
+      ),
+    ).toEqual([false, true, false, true, false]);
+    // Se nessuna riga lo fa, o fuori da un testo in area, o sulla prima riga,
+    // non c'è.
+    expect(glued('<text fub:wrap="100"><tspan>a</tspan><tspan fub:join="space">b</tspan></text>')).toBeUndefined();
+    expect(glued('<text><tspan>pa</tspan><tspan fub:join="word">rola</tspan></text>')).toBeUndefined();
+    expect(glued('<text fub:wrap="100"><tspan fub:join="word">a</tspan><tspan>b</tspan></text>')).toBeUndefined();
+  });
+
   it("il riquadro di un testo su tracciato è quello del suo tracciato", () => {
     const scene = load(doc(`<defs><path id="r1" d="M10 20 L60 20 L60 70"/></defs><text transform="translate(5 5)"><textPath href="#r1">a</textPath></text>`));
     expect(scene.summary.bbox).toEqual({ x: 15, y: 25, width: 50, height: 50 });

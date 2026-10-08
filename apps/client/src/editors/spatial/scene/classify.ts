@@ -27,6 +27,7 @@ import { Context, isContainer, Tally, type Role, type Stroke, type Swatches, typ
 import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
 import { readConnectorEnd, readConnectorGeom, readLabelPlace, type ConnectorEnd, type ConnectorGeom, type LabelPlace } from "./connectors";
 import { parsePath } from "./geometry";
+import { readInside } from "./labels";
 import { readPolygonal, type Polygonal } from "./parametric";
 import { readVarWidth, type VarWidth } from "./varwidth";
 import type { Span } from "./text";
@@ -141,11 +142,19 @@ export interface ElementItem extends Span {
   /// La larghezza di un testo in area, `fub:wrap` letto (formato della
   /// scena, testo).
   readonly wrap?: number;
+  /// Per ogni riga di un testo in area, se continua una parola della riga
+  /// prima: `fub:join="word"`, dopo la prima riga. C'è soltanto se una riga
+  /// la continua; il paragrafo unisce le altre con uno spazio.
+  readonly glued?: readonly boolean[];
   /// L'id del tracciato che un testo segue (formato della scena, testo).
   readonly textPath?: string;
   /// Il connettore di cui un testo è l'etichetta, e dove sta: `fub:along`
   /// letto (formato della scena, connettori).
   readonly along?: LabelPlace;
+  /// La forma di cui un testo è l'etichetta: `fub:inside` letto, l'id
+  /// (formato della scena, etichette). Se la forma va bene lo dice chi
+  /// conosce il resto del documento.
+  readonly inside?: string;
   /// Come vive una risorsa, da `fub:role` (formato della scena, risorse).
   readonly lifecycle?: Lifecycle;
   /// Il nome e il colore di un campione del documento.
@@ -1245,8 +1254,10 @@ export interface Details {
   readonly text?: string;
   readonly lines?: readonly string[];
   readonly wrap?: number;
+  readonly glued?: readonly boolean[];
   readonly textPath?: string;
   readonly along?: LabelPlace;
+  readonly inside?: string;
   readonly lifecycle?: Lifecycle;
   readonly swatch?: SwatchFacts;
   readonly motif?: MotifFacts;
@@ -1381,19 +1392,26 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
       details.lines = [lineText(doc, path)];
       details.textPath = textPathTarget(doc.element(path)!)!;
     } else {
-      details.lines = element.children
-        .filter((child) => {
-          const tspan = doc.element(child);
-          return tspan !== null && isSvg(tspan, "tspan");
-        })
-        .map((child) => lineText(doc, child));
+      const rows = element.children.filter((child) => {
+        const tspan = doc.element(child);
+        return tspan !== null && isSvg(tspan, "tspan");
+      });
+      details.lines = rows.map((child) => lineText(doc, child));
       const wrap = valueOf(element, NS_FUB, "wrap");
       const width = wrap === undefined ? null : wrapWidth(wrap);
-      if (width !== null) details.wrap = width;
+      if (width !== null) {
+        details.wrap = width;
+        // Dopo la prima riga, `fub:join="word"` continua la parola di prima.
+        const glued = rows.map((child, at) => at > 0 && valueOf(doc.element(child)!, NS_FUB, "join") === "word");
+        if (glued.includes(true)) details.glued = glued;
+      }
     }
     const along = valueOf(element, NS_FUB, "along");
     const place = along === undefined ? null : readLabelPlace(along);
     if (place !== null) details.along = place;
+    const inside = valueOf(element, NS_FUB, "inside");
+    const shape = inside === undefined ? null : readInside(inside);
+    if (shape !== null) details.inside = shape;
   }
   return { details, problems };
 }
@@ -1422,8 +1440,10 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.text !== undefined) item.text = details.text;
   if (details.lines !== undefined) item.lines = details.lines;
   if (details.wrap !== undefined) item.wrap = details.wrap;
+  if (details.glued !== undefined) item.glued = details.glued;
   if (details.textPath !== undefined) item.textPath = details.textPath;
   if (details.along !== undefined) item.along = details.along;
+  if (details.inside !== undefined) item.inside = details.inside;
   if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
   if (details.swatch !== undefined) item.swatch = details.swatch;
   if (details.motif !== undefined) item.motif = details.motif;

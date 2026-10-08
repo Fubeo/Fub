@@ -298,6 +298,125 @@ group("i connettori", () => {
     expect(connectors.map((node) => node.joined)).toEqual([null, null, null, null, null, null]);
   });
 
+  /// Il testo che sta dentro `shape`, come lo scrive l'editor.
+  const inside = (id: string, shape: string, words: string, extra = ""): string =>
+    `<text id="${id}" fub:inside="${shape}" fub:wrap="20" x="0" y="0" text-anchor="middle"${extra}><tspan x="0" dy="0">${words}</tspan></text>`;
+  /// Una forma delle raccolte: un tracciato col nome del tipo nel `title`.
+  const shaped = (id: string, title: string): string => `<path id="${id}" d="M0 5 L10 0 L20 5 L10 10 Z" fill="none" stroke="#000000"><title>${title}</title></path>`;
+
+  it("nomina una forma con le parole della sua etichetta, e come lei il gruppo che tiene soltanto loro due", () => {
+    const nodes = nodesOf(
+      '<g id="g1">' + rect("o1") + inside("t1", "o1", "Inizio") + "</g>" +
+        '<g id="g2">' + rect("o2", "Verifica") + inside("t2", "o2", "Controllo") + "</g>" +
+        '<g id="g3">' + rect("o3") + inside("t3", "o3", "Primo") + inside("t4", "o3", "Secondo") + rect("o4") + "</g>" +
+        connector("c1", { from: "g1", to: "o2" }) +
+        connector("c2", { from: "o3", to: "o4" }),
+    );
+    // Il `title` della seconda forma prende il posto del tipo: il nome sono le
+    // parole che si vedono.
+    expect(labels(nodes)).toEqual([
+      "Gruppo «Inizio», 2 oggetti",
+      "  Rettangolo «Inizio»",
+      "  Testo «Inizio»",
+      "Gruppo «Controllo», 2 oggetti",
+      "  Verifica «Controllo»",
+      "  Testo «Controllo»",
+      "Gruppo, 4 oggetti",
+      "  Rettangolo «Primo»",
+      "  Testo «Primo»",
+      "  Testo «Secondo»",
+      "  Rettangolo",
+      "Connettore da «Inizio» a «Controllo»",
+      "Connettore da «Primo» a Rettangolo",
+    ]);
+  });
+
+  it("una forma delle raccolte con l'etichetta si chiama col suo titolo al posto del tipo", () => {
+    const nodes = nodesOf(
+      '<g id="g1">' + shaped("o1", "Decisione") + inside("t1", "o1", "Controlla l’ordine") + "</g>" +
+        '<g id="g2">' + rect("o2") + inside("t2", "o2", "Inizio") + "</g>" +
+        // Senza l'etichetta il nome resta il titolo, e il tipo il suo.
+        shaped("o3", "Decisione") +
+        connector("c1", { from: "o2", to: "o1" }),
+    );
+    expect(labels(nodes)).toEqual([
+      "Gruppo «Controlla l’ordine», 2 oggetti",
+      "  Decisione «Controlla l’ordine»",
+      "  Testo «Controlla l’ordine»",
+      "Gruppo «Inizio», 2 oggetti",
+      "  Rettangolo «Inizio»",
+      "  Testo «Inizio»",
+      "Tracciato «Decisione»",
+      "Connettore da «Inizio» a «Controlla l’ordine»",
+    ]);
+    // I capi con le parole dell'etichetta, nell'albero e nella Lettura.
+    const connector1 = nodes[3]!;
+    expect(connector1.connection).toEqual({ from: "«Inizio»", to: "«Controlla l’ordine»" });
+    expect(connector1.joined).toEqual({ from: "Inizio", to: "Controlla l’ordine", label: null });
+    expect(nodes[0]!.children[0]!.kind).toBe("Decisione");
+    expect(nodes[2]!.kind).toBeNull();
+  });
+
+  it("il gruppo con un titolo suo lo tiene, e una forma con l'etichetta vuota non cambia nome", () => {
+    const nodes = nodesOf(
+      '<g id="g1"><title>Passo uno</title>' + shaped("o1", "Decisione") + inside("t1", "o1", "Sì") + "</g>" +
+        '<g id="g2">' + shaped("o2", "Decisione") + inside("t2", "o2", " ") + "</g>",
+    );
+    expect(labels(nodes)).toEqual([
+      "Gruppo «Passo uno», 2 oggetti",
+      "  Decisione «Sì»",
+      "  Testo «Sì»",
+      "Gruppo, 2 oggetti",
+      "  Tracciato «Decisione»",
+      "  Testo",
+    ]);
+  });
+
+  it("parla inglese: il titolo al posto del tipo, le parole dell'etichetta fra virgolette", () => {
+    const nodes = nodesOf(
+      '<g id="g1">' + shaped("o1", "Decision") + inside("t1", "o1", "Check the order") + "</g>" +
+        '<g id="g2">' + rect("o2") + inside("t2", "o2", "Start") + "</g>" +
+        connector("c1", { from: "o2", to: "o1" }),
+    );
+    vi.stubGlobal("navigator", { language: "en-GB" });
+    expect(labels(nodes)).toEqual([
+      "Group “Check the order”, 2 objects",
+      "  Decision “Check the order”",
+      "  Text “Check the order”",
+      "Group “Start”, 2 objects",
+      "  Rectangle “Start”",
+      "  Text “Start”",
+      "Connector from “Start” to “Check the order”",
+    ]);
+  });
+
+  it("nei nomi le righe di un'etichetta si uniscono come sono scritte: `word` senza spazio, il resto con uno", () => {
+    const area = (id: string, place: string, lines: ReadonlyArray<readonly [string, string | null]>): string =>
+      `<text id="${id}"${place === "" ? "" : ` ${place}`} fub:wrap="30" x="0" y="0">` +
+      lines.map(([words, join]) => `<tspan${join === null ? "" : ` fub:join="${join}"`} x="0" dy="1">${words}</tspan>`).join("") +
+      "</text>";
+    const nodes = nodesOf(
+      '<g id="g1">' + rect("o1") + area("t1", 'fub:inside="o1"', [["Pronto", null], ["?", "word"]]) + "</g>" +
+        '<g id="g2">' + rect("o2") + area("t2", 'fub:inside="o2"', [["Una", null], ["parola", "space"], ["lun", "space"], ["ga", "word"], ["Nuovo", null]]) + "</g>" +
+        // Un testo in area che non è un'etichetta, con una riga vuota in mezzo.
+        area("t3", "", [["Come", null], ["", "word"], ["ora", "word"]]) +
+        connector("c1", { from: "o1", to: "o2" }) + area("t4", 'fub:along="c1 0.5 6"', [["ok", null], ["!", "word"]]),
+    );
+    expect(labels(nodes)).toEqual([
+      "Gruppo «Pronto?», 2 oggetti",
+      "  Rettangolo «Pronto?»",
+      "  Testo «Pronto?»",
+      "Gruppo «Una parola lunga Nuovo», 2 oggetti",
+      "  Rettangolo «Una parola lunga Nuovo»",
+      "  Testo «Una parola lunga Nuovo»",
+      "Testo «Comeora»",
+      "Connettore «ok!» da «Pronto?» a «Una parola lunga Nuovo»",
+      "Testo «ok!»",
+    ]);
+    // La Lettura legge il connettore con la stessa etichetta.
+    expect(nodes[3]!.joined).toEqual({ from: "Pronto?", to: "Una parola lunga Nuovo", label: "ok!" });
+  });
+
   it("trova un oggetto in un livello o in un gruppo, per id", () => {
     const nodes = nodesOf(
       '<g id="l1" fub:layer="Entrata"><g id="g1">' + rect("o1", "Ingresso") + "</g></g>" +

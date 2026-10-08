@@ -1,15 +1,18 @@
-// Le copie dei connettori e delle loro etichette (Disegni, connettori):
-// duplicare, copiare e incollare oggetti coi connettori che li uniscono.
+// Le copie dei connettori e delle etichette (Disegni, connettori; Disegni,
+// etichette): duplicare, copiare e incollare oggetti coi connettori che li
+// uniscono, e le forme con le loro etichette.
 //
 // - **Un riferimento segue la copia.** `fub:from` e `fub:to` di un connettore
 //   nominano gli oggetti a cui è agganciato, `fub:along` di un'etichetta il
-//   suo connettore: se ciò che nominano è copiato nello stesso comando, anche
-//   dentro un gruppo, la copia nomina la copia, e tiene il resto del valore
-//   com'era scritto, il punto d'aggancio, `t` e la distanza.
+//   suo connettore, `fub:inside` di un'etichetta la sua forma: se ciò che
+//   nominano è copiato nello stesso comando, anche dentro un gruppo, la copia
+//   nomina la copia, e tiene il resto del valore com'era scritto, il punto
+//   d'aggancio, `t` e la distanza.
 // - **Altrimenti si toglie.** Un capo agganciato a ciò che non è stato copiato
-//   resta libero, e un'etichetta senza il suo connettore è un testo qualunque,
-//   col suo `transform`: nominare l'originale, o peggio un oggetto che il
-//   disegno di arrivo ha con lo stesso id, la porterebbe a seguire altro.
+//   resta libero, e un'etichetta senza il suo connettore o la sua forma è un
+//   testo qualunque, col suo `transform`: nominare l'originale, o peggio un
+//   oggetto che il disegno di arrivo ha con lo stesso id, la porterebbe a
+//   seguire altro.
 // - **Fuori grammatica resta com'è.** Un valore che il formato non legge non
 //   si usa, e non si cambia (formato della scena, connettori).
 // - **La geometria non si tocca.** `fub:geom` e `d` restano quelli
@@ -22,13 +25,15 @@
 // chiede qui soltanto il valore.
 
 import { readConnectorEnd, readLabelPlace } from "../scene/connectors";
+import { readInside } from "../scene/labels";
 import type { Elem } from "../scene/serialize";
 
 /// Gli attributi di FubDraw che nominano un altro oggetto per id: i due capi
-/// di un connettore e il connettore di un'etichetta.
-export type LinkName = "from" | "to" | "along";
+/// di un connettore, il connettore di un'etichetta e la forma di
+/// un'etichetta.
+export type LinkName = "from" | "to" | "along" | "inside";
 
-const LINK_NAMES: ReadonlySet<string> = new Set<LinkName>(["from", "to", "along"]);
+const LINK_NAMES: ReadonlySet<string> = new Set<LinkName>(["from", "to", "along", "inside"]);
 
 /// Vero se `local`, il nome senza prefisso di un attributo del namespace di
 /// FubDraw, nomina un altro oggetto per id.
@@ -45,9 +50,9 @@ const FIRST_WORD = /^([ \t\n\r\f]*)[^ \t\n\r\f]+/;
 /// resto com'era scritto; `null` se ciò che nomina non è stato copiato, e
 /// l'attributo va tolto. Un valore fuori dalla grammatica torna com'è.
 export function relinked(name: LinkName, value: string, renamed: (id: string) => string | null): string | null {
-  const parsed = name === "along" ? readLabelPlace(value) : readConnectorEnd(value);
-  if (parsed === null) return value;
-  const next = renamed(parsed.id);
+  const id = name === "inside" ? readInside(value) : ((name === "along" ? readLabelPlace(value) : readConnectorEnd(value))?.id ?? null);
+  if (id === null) return value;
+  const next = renamed(id);
   return next === null ? null : value.replace(FIRST_WORD, (_, lead: string) => lead + next);
 }
 

@@ -1580,6 +1580,34 @@ fn the_index_joins_without_a_space_the_lines_that_continue_a_word() {
 }
 
 #[test]
+fn an_area_text_says_which_lines_continue_a_word() {
+    let glued = |body: &str| at(&load(&doc(body)), &[0]).unwrap().glued.clone();
+    // Dopo la prima riga, solo `word`; `space`, nessun valore e un valore
+    // sconosciuto cominciano o continuano con uno spazio.
+    assert_eq!(
+        glued(concat!(
+            r#"<text fub:wrap="100"><tspan>Una pa</tspan><tspan fub:join="word">rola</tspan><tspan fub:join="space">e un trat-</tspan>"#,
+            r#"<tspan fub:join="word">tino</tspan><tspan fub:join="parola">Nuovo</tspan></text>"#
+        )),
+        Some(vec![false, true, false, true, false])
+    );
+    // Se nessuna riga lo fa, o fuori da un testo in area, o sulla prima
+    // riga, non c'è.
+    assert_eq!(
+        glued(r#"<text fub:wrap="100"><tspan>a</tspan><tspan fub:join="space">b</tspan></text>"#),
+        None
+    );
+    assert_eq!(
+        glued(r#"<text><tspan>pa</tspan><tspan fub:join="word">rola</tspan></text>"#),
+        None
+    );
+    assert_eq!(
+        glued(r#"<text fub:wrap="100"><tspan fub:join="word">a</tspan><tspan>b</tspan></text>"#),
+        None
+    );
+}
+
+#[test]
 fn the_box_of_a_text_on_a_path_is_that_of_its_path() {
     let scene = load(&doc(
         r##"<defs><path id="r1" d="M10 20 L60 20 L60 70"/></defs><text transform="translate(5 5)"><textPath href="#r1">a</textPath></text>"##,

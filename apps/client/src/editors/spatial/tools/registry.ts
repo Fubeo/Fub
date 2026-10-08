@@ -155,6 +155,7 @@ export type Feature =
   | "links"
   | "images"
   | "crop"
+  | "library"
   | "properties"
   | "style"
   | "history"
@@ -204,6 +205,7 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "links", level: "standard", label: "draw.feature.links" },
   { id: "images", level: "standard", label: "draw.feature.images" },
   { id: "crop", level: "standard", label: "draw.feature.crop" },
+  { id: "library", level: "standard", label: "draw.feature.library" },
   { id: "properties", level: "standard", label: "draw.feature.properties" },
   { id: "style", level: "standard", label: "draw.feature.style" },
   { id: "history", level: "standard", label: "draw.feature.history" },

@@ -1,5 +1,6 @@
-// Le copie dei connettori: il valore di un riferimento per una copia, e gli
-// elementi di un'operazione con i riferimenti rivolti alle copie.
+// Le copie dei connettori e delle etichette: il valore di un riferimento per
+// una copia, e gli elementi di un'operazione con i riferimenti rivolti alle
+// copie.
 
 import { describe, expect, it } from "vitest";
 import type { Elem } from "../scene/serialize";
@@ -15,8 +16,8 @@ const COPIES = new Map([
 const copy = (id: string): string | null => COPIES.get(id) ?? null;
 
 describe("isLinkName", () => {
-  it("riconosce i tre attributi che nominano un altro oggetto", () => {
-    expect(["from", "to", "along"].map(isLinkName)).toEqual([true, true, true]);
+  it("riconosce i quattro attributi che nominano un altro oggetto", () => {
+    expect(["from", "to", "along", "inside"].map(isLinkName)).toEqual([true, true, true, true]);
   });
 
   it("non riconosce gli altri attributi di FubDraw", () => {
@@ -38,6 +39,13 @@ describe("relinked", () => {
   it("cambia soltanto la prima parola, e lascia gli spazi dove sono", () => {
     expect(relinked("from", "  rrrrrrrr1\t\ttop\n", copy)).toBe("  rnuovo001\t\ttop\n");
     expect(relinked("along", "\ncccccccc1   1  0", copy)).toBe("\ncnuovo001   1  0");
+  });
+
+  it("dà all'etichetta di una forma la forma copiata, con gli spazi dove sono", () => {
+    expect(relinked("inside", "rrrrrrrr1", copy)).toBe("rnuovo001");
+    expect(relinked("inside", " rrrrrrrr2\n", copy)).toBe(" rnuovo002\n");
+    expect(relinked("inside", "altro0001", copy)).toBeNull();
+    for (const value of ["", "  ", "rrrrrrrr1 rrrrrrrr2"]) expect(relinked("inside", value, copy), value).toBe(value);
   });
 
   it("dà null se ciò che nomina non è copiato: l'attributo va tolto", () => {
@@ -106,6 +114,14 @@ describe("relinkCopies", () => {
     const [without] = relinkCopies([label("altro0001 0.5 -12")], COPIES);
     expect(without!.attrs).toEqual({ id: "onuovo001", transform: "matrix(1 0 0 1 20 30)" });
     expect(without!.text).toBe("ciao");
+  });
+
+  it("rivolge l'etichetta di una forma alla forma copiata, o la lascia testo qualunque", () => {
+    const label = (inside: string): Elem => ({ tag: "text", attrs: { id: "onuovo001", "fub:inside": inside, "fub:wrap": "188" }, text: "ciao" });
+    const [with_] = relinkCopies([{ tag: "g", attrs: { id: "gnuovo001" }, children: [rect("rnuovo001"), label("rrrrrrrr1")] }], COPIES);
+    expect(with_!.children![1]!.attrs["fub:inside"]).toBe("rnuovo001");
+    const [without] = relinkCopies([label("altro0001")], COPIES);
+    expect(without!.attrs).toEqual({ id: "onuovo001", "fub:wrap": "188" });
   });
 
   it("scende nei gruppi, a ogni profondità", () => {

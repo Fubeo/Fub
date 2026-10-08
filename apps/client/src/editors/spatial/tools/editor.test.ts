@@ -14,10 +14,13 @@ import { polygonalAttrs, readPolygonal } from "../scene/parametric";
 import { SceneEngine } from "../scene/engine";
 import type { Op } from "../scene/ops";
 import { readScene } from "../scene/read";
+import { transform as parseTransform } from "../scene/values";
 import { doc } from "../scene/test-support";
 import { filterElem, writeEffects, type Shadow } from "./effects";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages, type DrawPlace } from "./editor";
 import { MERGE_MS } from "./history";
+import { blockMiddle } from "./labels";
+import { textRich } from "./look";
 import type { Decoded, EncodeType, ImageCodec } from "./images";
 import { rasterize } from "./png";
 import { arrowPath } from "./shapes";
@@ -521,8 +524,10 @@ describe("disporre, dal livello Standard", () => {
     expect(bar().hidden).toBe(false);
     expect(bar().getAttribute("role")).toBe("toolbar");
     expect(bar().getAttribute("aria-label")).toBe("Disponi");
-    // «Sposta in un livello» non serve con un livello solo, che ha già tutto.
+    // «Sposta in un livello» non serve con un livello solo, che ha già tutto;
+    // «Modifica il testo» scrive l'etichetta della forma chiusa.
     expect([...bar().querySelectorAll("button:not([hidden])")].map((control) => control.getAttribute("aria-label"))).toEqual([
+      "Modifica il testo",
       "Duplica",
       "Raggruppa",
       "Separa",
@@ -541,6 +546,8 @@ describe("disporre, dal livello Standard", () => {
 
     surface().focus();
     expect(key("F10", { altKey: true }).defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(named("Modifica il testo"));
+    key("ArrowRight", {}, named("Modifica il testo"));
     expect(document.activeElement).toBe(named("Duplica"));
     key("ArrowRight", {}, named("Duplica"));
     expect(document.activeElement).toBe(named("Ordine"));
@@ -2216,7 +2223,7 @@ describe("il testo, dal livello Standard", () => {
   });
 
   it("con la selezione, due tocchi su un testo lo aprono; F2 e «Modifica il testo» aprono quello scelto", () => {
-    mount(doc(`<title>Prova</title>${LAYER}<rect id="oa1a1a1a1" x="60" y="60" width="20" height="20" fill="#000000"/>${TEXT.slice(TEXT.indexOf("<text"), TEXT.indexOf("</g>"))}</g>`), { level: "standard" });
+    mount(doc(`<title>Prova</title>${LAYER}<line id="oa1a1a1a1" x1="60" y1="60" x2="80" y2="80" stroke="#000000"/>${TEXT.slice(TEXT.indexOf("<text"), TEXT.indexOf("</g>"))}</g>`), { level: "standard" });
     editor.setTool("select");
     tap(20, 35);
     expect(editor.selection).toEqual([T]);
@@ -2248,7 +2255,8 @@ describe("il testo, dal livello Standard", () => {
     key("Escape", {}, input());
     editor.select(["oa1a1a1a1"]);
     expect(edit.hidden).toBe(true);
-    // Su un oggetto che non è un testo, F2 apre il suo nome nell'albero.
+    // Su un oggetto che non è un testo e non ne ha uno dentro, F2 apre il
+    // suo nome nell'albero.
     key("F2");
     expect(layer().hidden).toBe(true);
     expect(document.activeElement).toBe(host.querySelector(".draw-object-rename"));
@@ -2424,13 +2432,204 @@ describe("il testo, dal livello Standard", () => {
     key("Escape", {}, input());
   });
 
+  describe("le etichette nelle forme", () => {
+    const R = "or1r1r1r1";
+    /// Un rettangolo arancio da (100, 100) a (300, 220): il centro è in
+    /// (200, 160), e le righe di un'etichetta sono larghe 200 − 2 · 6.
+    const SHAPE = doc(`<title>Prova</title>${LAYER}<rect id="${R}" x="100" y="100" width="200" height="120" fill="#e69f00" stroke="#000000" stroke-width="2"/></g>`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
+    /// L'id dell'etichetta del disegno.
+    const labelId = (): string => /<text id="([^"]+)"/.exec(editor.engine.text)![1]!;
+    /// Dove cade, nella scena, il mezzo delle righe dell'etichetta: fra la
+    /// cima delle maiuscole della prima riga e il fondo dell'ultima.
+    const middleOf = (id: string): [number, number] => {
+      const label = editor.engine.holder(id)!;
+      const rich = textRich(label)!;
+      const [a, b, c, d, e, f] = parseTransform(rich.attrs.transform!)!;
+      const y = blockMiddle(rich);
+      expect([a, b, c, d]).toEqual([1, 0, 0, 1]);
+      return [e + c * y, f + d * y];
+    };
+
+    it("due tocchi su una forma chiusa ci scrivono dentro, al centro; Esc la mette in un gruppo con la forma, in un passo", () => {
+      mount(SHAPE, { level: "standard" });
+      editor.setTool("select");
+      tap(150, 130);
+      expect(editor.selection).toEqual([R]);
+      tap(151, 131);
+      expect(layer().hidden).toBe(false);
+      expect(document.activeElement).toBe(input());
+      expect(input().getAttribute("aria-label")).toBe("Etichetta nella forma");
+      expect(rows().map((row) => row.style.textAlign)).toEqual(["center"]);
+      expect(formatIssues(checkAccessibility(host))).toBe("");
+      type("Inizio");
+      key("Escape", {}, input());
+      expect(changes).toHaveLength(1);
+      const [group] = editor.selection;
+      expect(group).not.toBe(R);
+      const label = labelId();
+      expect(editor.engine.text).toMatch(
+        new RegExp(`<g id="${group}">\\s*<rect id="${R}"[^>]*/>\\s*<text id="${label}" fub:inside="${R}" fub:wrap="188" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" text-anchor="middle" transform="matrix\\(1 0 0 1 200 168.8\\)">`),
+      );
+      const [x, y] = middleOf(label);
+      expect(x).toBeCloseTo(200, 2);
+      expect(y).toBeCloseTo(160, 2);
+      expect(spoken()).toBe("Etichetta aggiunta.");
+      key("z", { ctrlKey: true });
+      expect(editor.engine.text).toBe(SHAPE);
+      expect(spoken()).toBe("Annullato: Etichetta nella forma.");
+    });
+
+    it("F2 e «Modifica il testo» sulla forma scelta fanno lo stesso; un'etichetta vuota non scrive niente e la forma resta scelta", () => {
+      mount(SHAPE, { level: "standard" });
+      editor.select([R]);
+      const edit = host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Modifica il testo"]')!;
+      expect(edit.hidden).toBe(false);
+      edit.click();
+      expect(document.activeElement).toBe(input());
+      key("Escape", {}, input());
+      expect(changes).toEqual([]);
+      expect(editor.selection).toEqual([R]);
+      surface().focus();
+      expect(key("F2").defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(input());
+      type("Fine");
+      key("Tab", {}, input());
+      expect(changes).toHaveLength(1);
+      // All'Essenziale, senza lo strumento Testo, niente etichette.
+      editor.setLevel("essential");
+      editor.select([R]);
+      expect(key("F2").defaultPrevented).toBe(false);
+      expect(layer().hidden).toBe(true);
+    });
+
+    it("due tocchi sul gruppo cambiano l'etichetta, che va a capo e resta al centro; svuotata, la forma torna com'era", () => {
+      mount(SHAPE, { level: "standard" });
+      editor.setTool("select");
+      editor.select([R]);
+      surface().focus();
+      key("F2");
+      type("Uno");
+      key("Escape", {}, input());
+      const [group] = editor.selection;
+      const label = labelId();
+      tap(150, 130);
+      tap(151, 131);
+      expect(shown()).toBe("Uno");
+      expect(input().getAttribute("aria-label")).toBe("Etichetta nella forma");
+      type("Uno due tre quattro cinque sei sette otto");
+      // Mentre si scrive il campo resta al centro della forma.
+      expect(rows().length).toBeGreaterThan(1);
+      key("Escape", {}, input());
+      expect(editor.selection).toEqual([group]);
+      expect(spoken()).toBe("Testo modificato.");
+      expect(lines(label).length).toBeGreaterThan(1);
+      const [x, y] = middleOf(label);
+      expect(x).toBeCloseTo(200, 2);
+      expect(y).toBeCloseTo(160, 2);
+
+      tap(150, 130);
+      tap(151, 131);
+      type(" ");
+      key("Escape", {}, input());
+      // La forma torna nel livello com'era, a capo come la scrive il motore.
+      expect(editor.engine.text.replace(/\n\s*/g, "")).toBe(SHAPE);
+      expect(editor.selection).toEqual([R]);
+      expect(spoken()).toBe("Etichetta tolta.");
+      key("z", { ctrlKey: true });
+      expect(lines(label).length).toBeGreaterThan(1);
+      expect(spoken()).toBe("Annullato: Rimozione dell’etichetta.");
+    });
+
+    it("due tocchi dentro una forma senza riempimento ci scrivono lo stesso", () => {
+      mount(SHAPE.replace('fill="#e69f00"', 'fill="none"'), { level: "standard" });
+      editor.setTool("select");
+      // Un tocco nel vuoto della forma non la sceglie: due ne aprono l'etichetta.
+      tap(200, 160);
+      expect(editor.selection).toEqual([]);
+      tap(201, 161);
+      expect(document.activeElement).toBe(input());
+      type("Dentro");
+      key("Escape", {}, input());
+      expect(changes).toHaveLength(1);
+      expect(editor.engine.text).toContain(`fub:inside="${R}"`);
+      // Fuori dalla forma due tocchi non aprono niente.
+      tap(360, 260);
+      tap(361, 261);
+      expect(layer().hidden).toBe(true);
+    });
+
+    it("svuotata l'etichetta, il gruppo a cui è agganciato un connettore resta", () => {
+      const G = "og1g1g1g1";
+      const L = "ot1t1t1t1";
+      const C = "oc1c1c1c1";
+      mount(
+        SHAPE.replace(
+          /<rect [^>]*\/>/,
+          (rect) =>
+            `<g id="${G}">${rect}` +
+            `<text id="${L}" fub:inside="${R}" fub:wrap="188" x="0" y="0" font-size="32" text-anchor="middle" transform="matrix(1 0 0 1 200 168.8)"><tspan x="0" dy="0">Uno</tspan></text></g>` +
+            `<path id="${C}" fub:shape="connector" fub:geom="straight 300 160 380 160" fub:from="${G} right" d="M300 160 L380 160" fill="none" stroke="#000000" stroke-width="2"/>`,
+        ),
+        { level: "standard" },
+      );
+      editor.setTool("select");
+      tap(150, 130);
+      tap(151, 131);
+      expect(shown()).toBe("Uno");
+      type(" ");
+      key("Escape", {}, input());
+      expect(spoken()).toBe("Etichetta tolta.");
+      expect(editor.engine.text).not.toContain(`id="${L}"`);
+      expect(editor.engine.holder(G)).not.toBeNull();
+      expect(editor.engine.text).toContain(`fub:from="${G} right"`);
+    });
+
+    it("la forma che cambia misura si porta dietro l'etichetta, nello stesso passo", () => {
+      mount(SHAPE, { level: "standard" });
+      editor.select([R]);
+      surface().focus();
+      key("F2");
+      type("Uno");
+      key("Escape", {}, input());
+      const label = labelId();
+      expect(editor.engine.apply({ op: "set", id: R, attrs: { x: "0", width: "100" } }).outcome).toBe("applied");
+      const [x, y] = middleOf(label);
+      expect(x).toBeCloseTo(50, 2);
+      expect(y).toBeCloseTo(160, 2);
+      expect(textRich(editor.engine.holder(label)!)!.attrs["fub:wrap"]).toBe("88");
+    });
+
+    it("un'etichetta che esce dalla pagina la fa crescere, nello stesso passo", () => {
+      mount(SHAPE, { level: "standard" });
+      editor.select([R]);
+      surface().focus();
+      key("F2");
+      type("uno due tre quattro cinque sei sette otto nove dieci undici dodici");
+      key("Escape", {}, input());
+      expect(changes).toHaveLength(1);
+      const [, , , height] = editor.engine.text.match(/viewBox="([^"]*)"/)![1]!.split(" ").map(Number);
+      expect(height).toBeGreaterThan(300);
+      key("z", { ctrlKey: true });
+      expect(editor.engine.text).toBe(SHAPE);
+    });
+
+    it("con la forma scelta, «Rinomina» nel menu non promette F2, che scrive l'etichetta", () => {
+      mount(SHAPE, { level: "standard" });
+      editor.select([R]);
+      host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!.click();
+      const open = document.querySelectorAll<HTMLElement>(".context-menu");
+      const rename = [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === "Rinomina")!;
+      expect(rename.querySelector(".menu-hint")).toBeNull();
+    });
+  });
+
   it("«?» elenca i tasti del testo", () => {
     mount(SOURCE, { level: "standard" });
     key("?", { shiftKey: true });
     expect([...dialog().querySelectorAll("caption")].map((caption) => caption.textContent)).toContain("Testo");
     const rows = [...dialog().querySelectorAll("tr")].map((row) => [row.querySelector("th")!.textContent, row.querySelector("td")!.textContent]);
     expect(rows).toContainEqual(["Space", "Con lo strumento Testo: scrive dov’è il cursore, o cambia il testo che c’è"]);
-    expect(rows).toContainEqual(["F2", "Modifica il testo scelto"]);
+    expect(rows).toContainEqual(["F2", "Modifica il testo scelto, o l’etichetta della forma scelta"]);
     expect(rows).toContainEqual(["Enter", "Va a capo, mentre si scrive"]);
     expect(rows).toContainEqual(["Esc o Tab o Ctrl+Enter", "Conclude il testo, mentre si scrive"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
@@ -5543,7 +5742,8 @@ describe("i nomi e il filtro dell'albero, dal livello Standard", () => {
   });
 
   it("F2 sul foglio e «Rinomina» nel menu della selezione aprono il nome nell'albero", () => {
-    mount(NAMED, { level: "standard" });
+    // Una linea: F2 su una forma chiusa ne scrive l'etichetta.
+    mount(NAMED.replace('<rect id="oa1a1a1a1" x="10" y="10" width="20" height="20" fill="#000000"/>', '<line id="oa1a1a1a1" x1="10" y1="10" x2="30" y2="30" stroke="#000000"/>'), { level: "standard" });
     editor.select(["oa1a1a1a1"]);
     surface().focus();
     expect(key("F2").defaultPrevented).toBe(true);
@@ -6414,6 +6614,39 @@ describe("gli attributi, dal livello Esperto", () => {
     expect(row("id").querySelector(".draw-inspector-error")!.textContent).toBe(
       "Una parte di un altro programma cita «o1a2b3c4d»: cambiarlo romperebbe il riferimento.",
     );
+  });
+
+  describe("l'id di una forma con l'etichetta", () => {
+    const shape = '<rect id="o1a2b3c4d" x="100" y="100" width="200" height="120" fill="#e69f00"/>';
+    const label = '<text id="o5e6f7g8h" fub:inside="o1a2b3c4d" fub:wrap="188" x="0" y="0" font-size="16" text-anchor="middle" transform="matrix(1 0 0 1 200 165.6)"><tspan x="0" dy="0">Inizio</tspan></text>';
+    const line = '<path id="o9j8k7m6n" fub:shape="connector" fub:geom="straight 300 160 380 160" fub:from="o1a2b3c4d right" d="M300 160 L380 160" fill="none" stroke="#000000" stroke-width="2"/>';
+
+    it("cambiato, la sua etichetta e il connettore agganciato la seguono ancora", () => {
+      const source = doc(`${LAYER}<g id="o2b3c4d5e">${shape}${label}</g>${line}</g>`);
+      mount(source, { level: "expert" });
+      editor.select(["o1a2b3c4d"]);
+      open();
+      write(control("id"), "Inizio");
+      key("Enter", {}, control("id"));
+      expect(editor.engine.text).toContain('fub:inside="Inizio"');
+      expect(editor.engine.text).toContain('fub:from="Inizio right"');
+      // Un passo solo: annullato, tutto com'era.
+      editor.undo();
+      expect(editor.engine.text).toBe(source);
+    });
+
+    it("non si cambia se un oggetto bloccato lo nomina: lo staccherebbe", () => {
+      const locked = doc(`${LAYER}<g id="o2b3c4d5e">${shape}${label}</g></g><g id="l2" fub:layer="Due" fub:locked="true">${line}</g>`);
+      mount(locked, { level: "expert" });
+      editor.select(["o1a2b3c4d"]);
+      open();
+      write(control("id"), "Inizio");
+      key("Enter", {}, control("id"));
+      expect(editor.engine.text).toBe(locked);
+      expect(row("id").querySelector(".draw-inspector-error")!.textContent).toBe(
+        "Un oggetto bloccato nomina «o1a2b3c4d»: cambiarlo lo staccherebbe. Sblocca prima il suo livello o il suo gruppo.",
+      );
+    });
   });
 
   it("i tasti del foglio non partono dal pannello", () => {
@@ -10720,7 +10953,10 @@ describe("il livello Personalizzato", () => {
     editor.select([T]);
     expect(bar().hidden).toBe(false);
     expect(barButtons()).toEqual(["Modifica il testo"]);
+    // Una forma chiusa ci riceve l'etichetta; due oggetti, niente.
     editor.select([A]);
+    expect(barButtons()).toEqual(["Modifica il testo"]);
+    editor.select([A, B]);
     expect(bar().hidden).toBe(true);
     expect(key("F10", { altKey: true }).defaultPrevented).toBe(false);
     editor.setLevel("custom", ["pen"]);

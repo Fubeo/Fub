@@ -46,7 +46,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Evidenziatore | Standard | lo strumento (`H`) |
 | Poligono | Standard | lo strumento (`Y`), per poligoni e stelle; la sezione «Forma» delle proprietà e la maniglia degli angoli arrotondati |
 | Connettore | Standard | lo strumento (`X`); nel pannello delle proprietà la sezione «Connettore»; «Collega le forme scelte» nella barra «Disponi», nel menu «Selezione avanzata» e col tasto destro ([Disegni, connettori](drawing-connectors.md)) |
-| Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
+| Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo»; gli stessi gesti scrivono l'etichetta di una forma chiusa ([Disegni, etichette nelle forme](drawing-labels.md)) |
 | Colori personalizzati | Standard | «Altro colore…» e l'anello del colore scelto |
 | Colori del documento | Standard | nel pannello delle proprietà la sezione «Colori del documento», coi campioni, i colori usati e i recenti; disegnare con un campione ([Disegni, colori](drawing-colors.md)) |
 | Punte delle linee | Standard | nel pannello delle proprietà «Punta d’inizio» e «Punta di fine», in «Aspetto» ([Disegni, punte delle linee](drawing-tips.md)) |
@@ -64,6 +64,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Collegamenti alle note | Standard | «Collega a una nota…» (`Ctrl+K`) e «Togli il collegamento» (`Ctrl+Maiusc+K`) |
 | Immagini dal vault | Standard | «Immagine dal vault…» (`Ctrl+I`) |
 | Ritaglia immagine | Standard | «Ritaglia…», con un'immagine scelta da sola, anche con due tocchi, e «Togli il ritaglio» ([Disegni, ritagli e maschere](drawing-masks.md)) |
+| Forme | Standard | il pulsante «Forme» e il suo pannello: le raccolte di forme, la ricerca, e inserire con un clic, con `Invio` o `Spazio`, o trascinando ([Disegni, raccolte di forme](drawing-library.md)) |
 | Copia e incolla lo stile | Standard | «Copia lo stile» (`Ctrl+Alt+C`) e «Incolla lo stile» (`Ctrl+Alt+V`) |
 | Pannello delle proprietà | Standard | «Proprietà», il pannello accanto al foglio; senza, `Invio` apre le finestre «Posizione e misure» e «Proprietà del disegno» |
 | Finestra «Esporta» | Standard | «Esporta…» apre la finestra con il disegno, la selezione o le tavole, i quattro formati, la misura e l'anteprima; senza, chiede soltanto PNG o PDF ([Disegni, esportare](drawing-export.md)) |
@@ -96,12 +97,11 @@ Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
 basso: chi aveva in mano il suo strumento riprende la penna, o il primo
 strumento che c'è, o la Selezione; chi sceglieva, col Lazo, coi Nodi, col
 Costruttore di forme o con la Tavola, e chi aveva il Contagocce o la
-Sfumatura, riprende la Selezione; un tracciato di Bézier a metà si conclude com'è; un colore a
-piacere torna al colore di partenza, e uno che seguiva un campione resta da
-solo; da un gruppo isolato si esce; la vista girata si raddrizza;
-l'elenco delle tavole si chiude; la cronologia si chiude, e la si ritrova
-riaprendola.
-Il disegno non cambia.
+Sfumatura, riprende la Selezione; un tracciato di Bézier a metà si conclude
+com'è; un colore a piacere torna al colore di partenza, e uno che seguiva un
+campione resta da solo; da un gruppo isolato si esce; la vista girata si
+raddrizza; l'elenco delle tavole si chiude; il pannello delle forme si chiude;
+la cronologia si chiude, e la si ritrova riaprendola. Il disegno non cambia.
 
 `?` elenca i tasti delle parti scelte, e **Mostra tutto** aggiunge in fondo
 quelli delle parti che mancano, ciascuno col livello da cui viene e con una

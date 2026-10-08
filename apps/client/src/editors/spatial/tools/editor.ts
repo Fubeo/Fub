@@ -134,7 +134,7 @@ import type { TouchPolicy } from "../pen/roles";
 import { pointAt } from "../scene/curves";
 import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
 import { widthsAt, type WidthPoint } from "../scene/varwidth";
-import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
+import { apply, compose, IDENTITY, invert, rotate, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, elementsIn, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { auditScene, MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, SVG_NS } from "../scene/read";
@@ -196,7 +196,7 @@ import {
   type Edge,
   type Order,
 } from "./arrange";
-import { attributeOps, cites, renameOps, subjectOf, type Subject } from "./attributes";
+import { attributeOps, cites, heldNamer, renameOps, subjectOf, type Subject } from "./attributes";
 import {
   addBoardOps,
   boardAt,
@@ -220,6 +220,7 @@ import {
   type CopyNames,
   type Rect,
 } from "./boards";
+import { ownMatrix } from "./follow";
 import { orderChanges } from "./order-changes";
 import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf, type OutlineChange } from "./outline";
 import { boundsAfter, MAX_SCALE_PERCENT, MAX_SKEW, numericMatrix, numericOps } from "./transform";
@@ -311,6 +312,8 @@ import { writeConnectorEnd, type Anchor, type ConnectorEnd, type ConnectorKind }
 import { connectorOps, connectorView, type ConnectorChange, type ConnectorView } from "./connector-ops";
 import type { ConnectorPanelView } from "./connector-panel";
 import { effectsOps, effectsState, effectsStates, followEffects, holdsFilters, MAX_EFFECTS, visibleBox, type EffectsChange } from "./effects";
+import { insideShape, labelable, labelledPair, labelOf as labelIn, labelTarget } from "./label-hosts";
+import { blockMiddle, followLabels, labelExtent, labelOps, labelPlace, labelWidth, unlabelOps } from "./labels";
 import { effectsView } from "./effects-panel";
 import {
   angleOf,
@@ -456,6 +459,9 @@ import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type ForeignBlock, t
 import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
 import { createBoardsPanel, type BoardRow } from "./boards-panel";
+import { createLibraryPanel } from "./library-panel";
+import { boxAround as shapeBox, boxIn, forPreview, libraryElem } from "./library-insert";
+import { libraryShape, type LibraryShape } from "./shape-library";
 import { createAccessPanel } from "./accessibility-panel";
 import { exportBox, type ExportScene } from "./export-plan";
 import { overlaps, problemsOf, readingOrder, type AuditCode, type Problem } from "./audit";
@@ -1268,6 +1274,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-access": ["M12 2.75a1.75 1.75 0 1 0 0 3.5a1.75 1.75 0 1 0 0-3.5z", "M5 8.5l7 1.5 7-1.5", "M12 10v4.5", "M8.5 21l3.5-6.5 3.5 6.5"],
   // L'elenco delle tavole: due fogli affiancati, ognuno col suo nome sopra.
   "draw-boards": ["M3 8.5h8v11H3z", "M14 8.5h7v7h-7z", "M3 5h5", "M14 5h4"],
+  // Le forme: un quadrato, un cerchio e un triangolo.
+  "draw-library": ["M3 3h8v8H3z", "M13 7a4 4 0 1 0 8 0a4 4 0 1 0-8 0", "M12 14l5 7H7z"],
 };
 
 /// Registra le icone una volta per tutte le superfici: restano finché la
@@ -1432,6 +1440,17 @@ interface ShapeGesture extends GestureBase {
   readonly ids: NewIds;
   from: Point | null;
   end: Point | null;
+}
+
+/// Una forma delle raccolte tirata dal pannello al foglio: il puntatore che
+/// la porta, se è sul foglio, e dove andrebbe, nella scena; `box` è `null`
+/// fuori dal foglio, o dove il livello non riceve.
+interface ShapeDrag {
+  readonly shape: LibraryShape;
+  readonly pointerId: number;
+  readonly pointer: InkPointerType;
+  over: boolean;
+  box: Bounds | null;
 }
 
 /// L'oggetto a cui si aggancerebbe un capo del Connettore: l'oggetto, il
@@ -1787,6 +1806,20 @@ interface Typing {
   readonly at: Point;
   /// Dalle coordinate del testo a quelle della scena.
   readonly matrix: Matrix;
+  /// L'etichetta di una forma che si scrive; `null` per gli altri testi.
+  readonly label: TypingLabel | null;
+}
+
+/// Un'etichetta che si scrive: il mezzo delle sue righe resta al centro della
+/// forma mentre le righe cambiano, come resterà nel file.
+interface TypingLabel {
+  /// Dove sta il mezzo delle righe, nelle coordinate del testo.
+  readonly middle: number;
+  /// La chiave di ciò che torna scelto dopo: la forma, o il suo gruppo.
+  readonly select: string;
+  /// La chiave della forma che riceve un'etichetta nuova; `null` per
+  /// un'etichetta che c'è.
+  readonly shape: string | null;
 }
 
 /// Un passo della penna di Bézier: i nodi di prima, o di dopo per un passo
@@ -2330,18 +2363,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Le larghezze del testo, coi caratteri del browser dove li sa misurare.
   const measureText: Measure = browserMeasure() ?? estimate;
 
-  /// `next`, coi connettori che seguono gli oggetti a cui sono agganciati,
-  /// le punte delle linee che tengono il colore del contorno e i filtri
-  /// degli effetti la regione dell'oggetto: il motore li segue a ogni
-  /// operazione, nello stesso passo d'annulla, e trova ciò che ha toccato
-  /// col suo indice invece di scorrere il disegno.
+  /// `next`, con le etichette al centro delle loro forme, i connettori che
+  /// seguono gli oggetti a cui sono agganciati, le punte delle linee che
+  /// tengono il colore del contorno e i filtri degli effetti la regione
+  /// dell'oggetto: il motore li segue a ogni operazione, nello stesso passo
+  /// d'annulla, e trova ciò che ha toccato col suo indice invece di scorrere
+  /// il disegno. Le etichette vengono prima: un'etichetta che va a capo
+  /// diversamente si riscrive al suo posto, prima che le punte aggiungano
+  /// una `defs`.
   const following = (next: SceneEngine): SceneEngine => {
     const find = (id: string): ElementPart | null => next.holder(id);
     next.follow = (model, touched, op) => {
+      const labels = followLabels(model, touched, find, measureText, op);
       const lines = followConnectors(model, touched, find, measureText, op);
       const tips = followTips(model, touched, new NewIds((id) => find(id) !== null), find);
       const regions = followEffects(model, touched, find, measureText);
-      const ops = [lines, tips, regions].filter((each): each is Op => each !== null);
+      const ops = [labels, lines, tips, regions].filter((each): each is Op => each !== null);
       return ops.length === 0 ? null : ops.length === 1 ? ops[0]! : { op: "batch", ops };
     };
     return next;
@@ -2896,6 +2933,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncBoards();
   });
 
+  // Le forme delle raccolte, dal livello Standard: chiuse finché qualcuno non
+  // le apre. Inserire, e trascinare, sono dell'editor.
+  let shapeDrag: ShapeDrag | null = null;
+  const libraryPanel = createLibraryPanel(life, {
+    onInsert: (id) => insertShape(id),
+    onDrag: (id, event) => startShapeDrag(id, event),
+    onLeave: () => surface.focus({ preventScroll: true }),
+    slop: DRAG_PX,
+  });
+  libraryPanel.element.hidden = true;
+  relabels.push(() => libraryPanel.relabel());
+
   // Gli attributi dell'oggetto scelto, dal livello Esperto: chiusi finché
   // qualcuno non li apre, sotto l'albero se è aperto anche quello.
   const inspector = createInspector(life, {
@@ -2903,9 +2952,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const change = attributeOps(settledSubject(subject), key, value, newIds());
       return changeObject("draw.action.attribute", change.ops, change.id);
     },
-    onRename: (subject, next) => changeObject("draw.action.rename", renameOps(settledSubject(subject), next), next),
+    onRename: (subject, next) => changeObject("draw.action.rename", renameOps(settledSubject(subject), next, engine.model), next),
     taken: (id) => engine.holder(id) !== null,
     cited: (id) => cited(id),
+    held: (id) => engine.model !== null && heldNamer(engine.model, id),
     announce: (text) => announce(text),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
@@ -3044,6 +3094,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const boardsButton = button(viewGroup, "draw-button", () => t("draw.boards"), "draw-boards", () => showBoards(boardsPanel.element.hidden));
   boardsButton.setAttribute("aria-expanded", "false");
   boardsButton.setAttribute("aria-controls", boardsPanel.element.id);
+  // Le forme, dal livello Standard.
+  const libraryButton = button(viewGroup, "draw-button", () => t("draw.library"), "draw-library", () => showLibrary(libraryPanel.element.hidden));
+  libraryButton.setAttribute("aria-expanded", "false");
+  libraryButton.setAttribute("aria-controls", libraryPanel.element.id);
   const objectsButton = button(viewGroup, "draw-button", () => t("draw.objects"), "outline", () => showObjects(tree.element.hidden));
   objectsButton.setAttribute("aria-expanded", "false");
   objectsButton.setAttribute("aria-controls", tree.element.id);
@@ -3284,8 +3338,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   textHint.id = identifier("draw-text-hint");
   textInput.setAttribute("aria-describedby", textHint.id);
   textLayer.append(textInput, textHint);
-  /// Il nome del campo: un testo nuovo, o uno che c'è.
-  const labelText = (): void => textInput.setAttribute("aria-label", t(typing !== null && typing.key !== null ? "draw.text.change" : "draw.text.new"));
+  /// Il nome del campo: l'etichetta di una forma, un testo nuovo, o uno che
+  /// c'è.
+  const labelText = (): void =>
+    textInput.setAttribute("aria-label", t(typing?.label != null ? "draw.label.field" : typing !== null && typing.key !== null ? "draw.text.change" : "draw.text.new"));
   relabels.push(() => {
     textHint.textContent = t("draw.text.hint", { key: modifierName("Mod") ?? "Ctrl" });
     labelText();
@@ -3596,7 +3652,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const dock = document.createElement("div");
   dock.className = "draw-dock";
   dock.hidden = true;
-  dock.append(boardsPanel.element, tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
+  dock.append(boardsPanel.element, libraryPanel.element, tree.element, panel.element, inspector.element, historyPanel.element, accessPanel.element);
   const body = document.createElement("div");
   body.className = "draw-body";
   body.append(stage, dock);
@@ -4848,6 +4904,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       // I nomi con un prefisso sono dati di FubDraw: non si disegnano.
       for (const [name, value] of Object.entries(each.attrs)) if (!name.includes(":")) shape.setAttribute(name, value);
       for (const child of each.children ?? []) shape.append(build(child));
+      // Il testo di una riga, come in un `tspan`.
+      if (each.text !== undefined && each.text !== null) shape.textContent = each.text;
       return shape;
     };
     if (defs.length > 0) {
@@ -5306,6 +5364,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     boardsPanel.update({ boards: rows, current, editable: canEdit, canAdd: rows.length < MAX_BOARDS, paged });
   }
 
+  /// Apre o chiude le forme; aperte, il fuoco va al campo di ricerca. Un
+  /// trascinamento in corso finisce.
+  function showLibrary(open: boolean): void {
+    if (open && !has("library")) return;
+    if (!open && libraryPanel.element.contains(document.activeElement)) surface.focus({ preventScroll: true });
+    if (!open) cancelShapeDrag();
+    libraryPanel.element.hidden = !open;
+    libraryButton.setAttribute("aria-expanded", String(open));
+    syncDock();
+    if (open) {
+      libraryPanel.update({ editable: editable() });
+      libraryPanel.focus();
+    }
+  }
+
   /// Apre o chiude la verifica dell'accessibilità; aperta, il fuoco ci va.
   /// Chiusa, dimentica ciò che ha letto.
   function showAccess(open: boolean): void {
@@ -5758,7 +5831,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function syncDock(): void {
     const nested = nestedNow();
     dock.hidden =
-      boardsPanel.element.hidden && tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
+      boardsPanel.element.hidden && libraryPanel.element.hidden && tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
     dock.toggleAttribute("data-wide", nested ? !panel.element.hidden : !inspector.element.hidden);
     // Il dock occupa un lato del foglio: con lui che cambia, cambia la sua misura.
     rereadSize();
@@ -6978,7 +7051,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Canc, coi nodi, elimina i nodi: il pulsante dell'oggetto non lo dice.
     if (noding) deleteButton.removeAttribute("aria-keyshortcuts");
     else deleteButton.setAttribute("aria-keyshortcuts", "Delete");
-    textButton.hidden = !has("text") || units.length !== 1 || units[0]!.look === null;
+    textButton.hidden = !has("text") || units.length !== 1 || (units[0]!.look === null && !labelHost(units[0]!));
     for (const control of [duplicateButton, groupButton, ungroupButton, orderButton, alignButton]) control.hidden = !has("arrange");
     groupButton.disabled = units.length < 2;
     ungroupButton.disabled = !units.some(isGroup);
@@ -7110,6 +7183,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     boardsButton.hidden = !has("board");
     if (boardsButton.hidden && !boardsPanel.element.hidden) showBoards(false);
     syncBoards();
+    libraryButton.hidden = !has("library");
+    if (libraryButton.hidden && !libraryPanel.element.hidden) showLibrary(false);
+    libraryPanel.update({ editable: canEdit });
     accessButton.hidden = !has("accessibility");
     if (accessButton.hidden && !accessPanel.element.hidden) showAccess(false);
     syncAccess();
@@ -8140,6 +8216,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       return { lines, spacings };
     };
+    // Una forma tirata dal pannello mostra a che cosa si è agganciata.
+    if (shapeDrag?.box != null) return movedView(guidesFor(shapeDrag, []), shapeDrag.box);
     const g = current;
     if (g?.kind === "select" && g.mode === "move") {
       const box = geometryOf(g.units);
@@ -9096,8 +9174,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Due tocchi sullo stesso testo lo aprono, su un gruppo o un collegamento
     // lo isolano, e sul vuoto escono dal gruppo isolato.
     const still = g.from !== null && g.end !== null && Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale <= DRAG_PX[g.pointer];
+    // Il vuoto dentro una forma chiusa senza riempimento conta come la forma:
+    // due tocchi ne aprono l'etichetta, come in draw.io.
+    const inside = g.mode === "marquee" && still && !shift ? labelHostAt(g.from!) : null;
     const tap = g.mode === "pending" && g.release === null && !shift && g.hit !== null && g.from !== null
       ? { key: g.hit, time, at: g.from }
+      : inside !== null ? { key: inside.key, time, at: g.from! }
       : g.mode === "marquee" && still && !shift && isolation !== null ? { key: "", time, at: g.from! } : null;
     const previous = lastTap;
     lastTap = tap;
@@ -9117,6 +9199,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (unit !== null && unit.look !== null && has("text") && editable()) {
         lastTap = null;
         editText(unit);
+        return;
+      }
+      // Due tocchi su una forma chiusa ci scrivono dentro, come in Visio e
+      // in PowerPoint; su un gruppo fatto di una forma e della sua etichetta
+      // cambiano l'etichetta, invece di isolarlo.
+      if (unit !== null && editLabel(unit)) {
+        lastTap = null;
         return;
       }
       // Due tocchi su un'immagine la ritagliano, come in Illustrator.
@@ -12680,6 +12769,161 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
   };
 
+  // --- Le forme delle raccolte ------------------------------------------------
+  //
+  // Una forma del pannello entra nel disegno in un passo solo, che porta il
+  // nome della forma: con un clic, o con Invio, al centro di ciò che si
+  // vede; trascinata fuori dal pannello, dove la si lascia. Mentre la si
+  // tira il foglio la mostra com'è, alla sua misura e al zoom di adesso, col
+  // centro sotto il puntatore e agganciata come un oggetto spostato (la
+  // griglia e le guide, e Ctrl o ⌘ la lascia libera). Rilasciata fuori dal
+  // foglio, o con Esc, non lascia traccia. Il puntatore lo tiene il riquadro
+  // del pannello: i suoi eventi arrivano al documento, e il trascinamento
+  // del browser, che nell'app prende i file, non c'entra.
+
+  /// Il punto dello schermo è sul foglio, e non sotto un pannello.
+  const onSheet = (clientX: number, clientY: number): boolean => {
+    const rect = surface.getBoundingClientRect();
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return false;
+    const top = surface.ownerDocument.elementFromPoint?.(clientX, clientY) ?? null;
+    return top === null || !dock.contains(top);
+  };
+
+  /// Scrive la forma `shape` nel riquadro `box` della scena, di `to`, in un
+  /// passo: scelta, e detta. Lo stile è quello delle forme che si
+  /// disegnano. Falso se il documento non l'ha accettata.
+  const placeShape = (shape: LibraryShape, to: Destination, ids: NewIds, box: Bounds): boolean => {
+    const pen = styles.pen;
+    const elem = libraryElem(shape, boxIn(box, to.inverse), { color: drawnPaint(pen.color, pen), width: pen.width }, t(shape.name), ids);
+    const ops: Op[] = [...to.prelude, addOp(to, elem)];
+    const half = pen.width / 2;
+    const page = grownPage({ min: [box.min[0] - half, box.min[1] - half], max: [box.max[0] + half, box.max[1] + half] });
+    if (page !== null) ops.push({ op: "page", viewBox: page });
+    if (commit(shape.name, asGesture(ops)) === null) return false;
+    // Una forma nuova si sceglie e si muove: con lo strumento Selezione.
+    if (tool !== "select") setTool("select");
+    select([elem.attrs.id!]);
+    announce(`${t("draw.shapes.inserted", { name: t(shape.name) })} ${objects()}`);
+    return true;
+  };
+
+  /// Inserisce la forma `id` al centro di ciò che si vede; con la griglia, il
+  /// suo angolo in alto a sinistra va sull'incrocio più vicino.
+  function insertShape(id: string): void {
+    const shape = libraryShape(id);
+    if (shape === null || !editable()) return;
+    settleCrop();
+    const ids = newIds();
+    const to = target(ids);
+    if (to === null) return;
+    const [x, y] = snapped(shapeBox(shape, toScene(camera, viewCenter())).min);
+    placeShape(shape, to, ids, { min: [x, y], max: [x + shape.size[0], y + shape.size[1]] });
+  }
+
+  /// La forma tirata, e dove andrebbe con il puntatore dove l'evento dice: il
+  /// riquadro nella scena e il livello che la riceve; `null` fuori dal
+  /// foglio, o dove niente la riceve.
+  const dragPlace = (drag: ShapeDrag, event: PointerEvent): { readonly box: Bounds; readonly to: Destination } | null => {
+    drag.over = onSheet(event.clientX, event.clientY);
+    if (!drag.over) return null;
+    const to = destinationNow();
+    if (to === null) return null;
+    const raw = shapeBox(drag.shape, sceneAt(event.clientX, event.clientY));
+    const [dx, dy] = snappedDelta(0, 0, raw.min, raw, () => guidesFor(drag, []), drag.pointer);
+    return { box: translated(raw, dx, dy)!, to };
+  };
+
+  /// Mostra la forma tirata dove andrebbe, e il cursore che dice se si può
+  /// lasciare.
+  const showShapeDrag = (drag: ShapeDrag, event: PointerEvent): void => {
+    readModifiers(event);
+    const place = dragPlace(drag, event);
+    drag.box = place === null ? null : place.box;
+    root.dataset.libraryDrop = place === null ? "none" : "copy";
+    if (place === null) {
+      showShape(null, IDENTITY);
+    } else {
+      const pen = styles.pen;
+      const elem = libraryElem(drag.shape, boxIn(place.box, place.to.inverse), { color: drawnPaint(pen.color, pen), width: pen.width }, "", new NewIds(() => false));
+      showShape(forPreview(elem), place.to.matrix);
+    }
+    // Le guide seguono la forma.
+    if (guidesOn() || guiding) showHandles();
+  };
+
+  /// Finisce il trascinamento, senza scrivere: toglie la forma mostrata e il
+  /// cursore.
+  const endShapeDrag = (): void => {
+    if (shapeDrag === null) return;
+    shapeDrag = null;
+    delete root.dataset.libraryDrop;
+    previewLayer.removeAttribute("opacity");
+    showShape(null, IDENTITY);
+    showHandles();
+  };
+
+  /// Esc, un puntatore annullato, o il pannello che si chiude: la forma tirata
+  /// non entra; con `said`, lo si dice.
+  function cancelShapeDrag(said = false): void {
+    if (shapeDrag === null) return;
+    endShapeDrag();
+    if (said) announce(t("draw.shapes.cancelled"));
+  }
+
+  /// Comincia a tirare la forma `id` dal pannello: `event` è il movimento che
+  /// ha superato la soglia.
+  function startShapeDrag(id: string, event: PointerEvent): void {
+    const shape = libraryShape(id);
+    if (shape === null || !editable() || shapeDrag !== null) return;
+    cancelGesture();
+    settleCrop();
+    shapeDrag = { shape, pointerId: event.pointerId, pointer: event.pointerType === "pen" || event.pointerType === "touch" ? event.pointerType : "mouse", over: false, box: null };
+    previewLayer.setAttribute("opacity", "0.75");
+    showShapeDrag(shapeDrag, event);
+  }
+
+  /// Rilascia la forma tirata: sul foglio entra dove sta; fuori no, e lo si
+  /// dice. Dove il livello non riceve, si dice perché.
+  const dropShape = (drag: ShapeDrag, event: PointerEvent): void => {
+    showShapeDrag(drag, event);
+    const { shape, box, over } = drag;
+    endShapeDrag();
+    if (box === null) {
+      if (over) target(newIds());
+      else announce(t("draw.shapes.cancelled"));
+      return;
+    }
+    if (!editable()) return;
+    settleCrop();
+    const ids = newIds();
+    const to = target(ids);
+    // Chi ha lasciato la forma sul foglio continua lì, non nel pannello.
+    if (to !== null && placeShape(shape, to, ids, box)) surface.focus({ preventScroll: true });
+  };
+
+  life.listen(surface.ownerDocument, "pointermove", (event) => {
+    if (shapeDrag !== null && event.pointerId === shapeDrag.pointerId) showShapeDrag(shapeDrag, event);
+  });
+  life.listen(surface.ownerDocument, "pointerup", (event) => {
+    if (shapeDrag !== null && event.pointerId === shapeDrag.pointerId) dropShape(shapeDrag, event);
+  });
+  life.listen(surface.ownerDocument, "pointercancel", (event) => {
+    if (shapeDrag !== null && event.pointerId === shapeDrag.pointerId) cancelShapeDrag(true);
+  });
+  // Esc ferma il trascinamento prima di chiunque altro.
+  life.listen(
+    surface.ownerDocument,
+    "keydown",
+    (event) => {
+      if (shapeDrag === null || event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancelShapeDrag(true);
+    },
+    { capture: true },
+  );
+  life.add(() => cancelShapeDrag());
+
   // --- Le forme dal tratto ---------------------------------------------------
   //
   // Un tratto a penna tenuto fermo alla fine per mezzo secondo diventa la
@@ -14297,9 +14541,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // in un passo di annulla solo.
 
   /// Dove comincia il testo che si scrive: quello che c'è, o uno nuovo dal
-  /// punto del tocco.
-  const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor" | "wrap" | "along"> =>
-    now.look ?? { x: now.at[0], y: now.at[1], anchor: "start", wrap: now.wrap, along: null };
+  /// punto del tocco. Un'etichetta tiene il mezzo delle righe dov'era: la
+  /// prima linea di base sale o scende quanto cambiano le righe.
+  const placeOf = (now: Typing): Pick<TextLook, "x" | "y" | "anchor" | "wrap" | "along"> => {
+    const place = now.look ?? { x: now.at[0], y: now.at[1], anchor: now.label === null ? "start" : "middle", wrap: now.wrap, along: null };
+    if (now.label === null) return place;
+    const rich = field.rich;
+    return { ...place, y: now.label.middle - blockMiddle({ ...rich, attrs: { ...rich.attrs, y: "0" } }) };
+  };
 
   /// Come va a capo il campo del testo che si scrive: su una riga sola sul
   /// tracciato, da sé in un riquadro, o con Invio.
@@ -14390,7 +14639,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Apre il campo su `unit`, un testo che c'è, coi suoi pezzi. Un testo che
   /// un'operazione non sa scrivere intero si apre con le sue righe.
-  const editText = (unit: Unit): void => {
+  /// L'etichetta di una forma resta al centro mentre si scrive, e dopo torna
+  /// scelto `chosen`: la forma, il suo gruppo o l'etichetta stessa.
+  const editText = (unit: Unit, chosen = unit.key): void => {
     const look = unit.look;
     const model = engine.model;
     if (look === null || model === null || !editable() || !has("text")) return;
@@ -14399,13 +14650,68 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const inherited = textInherited(node);
     const file = elem === null ? null : richOf(elem, inherited);
     const plain: Rich = { attrs: {}, inherited, lines: (node.details?.lines ?? [""]).map((line) => richLine({}, line)) };
-    startTyping({ key: unit.key, before: editableRich(file ?? plain), file, look, wrap: null, at: [look.x, look.y], matrix: unit.matrix });
+    const label = file !== null && labelTarget(node) !== null ? { middle: blockMiddle(file), select: chosen, shape: null } : null;
+    startTyping({ key: unit.key, before: editableRich(file ?? plain), file, look, wrap: null, at: [look.x, look.y], matrix: unit.matrix, label });
   };
 
-  /// F2, o «Modifica il testo»: il testo scelto, se è solo.
+  /// Vero se `unit` può avere un'etichetta che si scrive col doppio tocco o
+  /// con F2: una forma chiusa, o un gruppo fatto di una forma e della sua
+  /// etichetta.
+  function labelHost(unit: Unit): boolean {
+    return has("text") && (labelledPair(unit.node) !== null || labelable(unit.node));
+  }
+
+  /// La forma chiusa, o il gruppo fatto di una forma e della sua etichetta,
+  /// più in alto fra quelli che hanno `p` dentro, riempiti o no; `null` se
+  /// non ce n'è.
+  const labelHostAt = (p: Point): Unit | null => {
+    if (!has("text")) return null;
+    const { units } = currentIndex();
+    for (let i = units.length - 1; i >= 0; i--) {
+      const unit = units[i]!;
+      const box = unit.bounds;
+      if (box === null || p[0] < box.min[0] || p[0] > box.max[0] || p[1] < box.min[1] || p[1] > box.max[1] || !labelHost(unit)) continue;
+      const shape = labelledPair(unit.node)?.shape ?? unit.node;
+      const inverse = invert(shape === unit.node ? unit.matrix : compose(unit.matrix, ownMatrix(shape)));
+      if (inverse !== null && insideShape(shape, apply(inverse, p))) return unit;
+    }
+    return null;
+  };
+
+  /// Il doppio tocco o F2 su `unit`, una forma chiusa o un gruppo fatto di
+  /// una forma e della sua etichetta: apre il campo sull'etichetta, o su una
+  /// nuova al centro della forma, larga quanto il suo riquadro del testo, col
+  /// colore e il corpo dello strumento Testo. Vero se l'ha aperto.
+  const editLabel = (unit: Unit): boolean => {
+    const model = engine.model;
+    if (model === null || !editable() || !labelHost(unit)) return false;
+    const label = labelledPair(unit.node)?.label ?? labelIn(unit.node);
+    if (label !== null) {
+      const found = currentIndex().get(keyOfNode(label));
+      if (found === null || found.look === null) return false;
+      editText(found, unit.key);
+      return true;
+    }
+    const place = labelPlace(model, unit);
+    if (place === null) return false;
+    const width = labelWidth(place.frame, textStyle.width);
+    const before: Rich = {
+      attrs: { ...newTextAttrs(), "text-anchor": "middle", [WRAP]: wrapValue(width) },
+      inherited: initialText(),
+      lines: [{ attrs: { dy: "0" }, spans: [] }],
+    };
+    const [cx, cy] = place.frame.centre;
+    const matrix = compose(translate(cx, cy), rotate(place.frame.angle));
+    startTyping({ key: null, before, file: null, look: null, wrap: width, at: [0, 0], matrix, label: { middle: 0, select: unit.key, shape: unit.key } });
+    return true;
+  };
+
+  /// F2, o «Modifica il testo»: il testo scelto, se è solo, o l'etichetta
+  /// della forma scelta.
   function editSelectedText(): void {
     if (!editable() || !has("text")) return;
     const units = selectedUnits();
+    if (units.length === 1 && units[0]!.look === null && editLabel(units[0]!)) return;
     if (units.length !== 1 || units[0]!.look === null) {
       announce(t("draw.text.none"));
       return;
@@ -14429,7 +14735,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const below = baselineOf("normal", "400", TEXT_FAMILY) * textStyle.width;
     const base = snapped(apply(to.matrix, [local[0], local[1] + below]));
     const before: Rich = { attrs: newTextAttrs(), inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
-    startTyping({ key: null, before, file: null, look: null, wrap: null, at: apply(to.inverse, base), matrix: to.matrix });
+    startTyping({ key: null, before, file: null, look: null, wrap: null, at: apply(to.inverse, base), matrix: to.matrix, label: null });
   };
 
   /// Lo strumento Testo trascinato da `from` a `end`: un testo in area
@@ -14446,7 +14752,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // Dalla cima della riga alla sua linea di base, come la mette il campo.
     const drop = size * (LINE_SPACING / 2 + baselineOf("normal", "400", TEXT_FAMILY));
     const before: Rich = { attrs: { ...newTextAttrs(), [WRAP]: wrapValue(width) }, inherited: initialText(), lines: [{ attrs: { dy: "0" }, spans: [] }] };
-    startTyping({ key: null, before, file: null, look: null, wrap: width, at: [Math.min(a[0], b[0]), Math.min(a[1], b[1]) + drop], matrix: to.matrix });
+    startTyping({ key: null, before, file: null, look: null, wrap: width, at: [Math.min(a[0], b[0]), Math.min(a[1], b[1]) + drop], matrix: to.matrix, label: null });
   };
 
   /// Chiude il campo; con `write` scrive ciò che è cambiato, in un passo di
@@ -14471,8 +14777,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const tidy = flowed?.rich ?? tidyRich(draft);
     const lines = tidy.lines.map(lineRuns);
     if (!write || sameRich(draft, now.before) || !editable() || (now.key === null && lines.length === 0)) {
-      if (unit !== null) select([unit.key]);
+      const back = now.label?.select ?? unit?.key ?? null;
+      if (back !== null) select([back]);
       else syncControls();
+      return;
+    }
+    if (now.key === null && now.label !== null) {
+      finishLabel(now.label, tidy, flowed?.overflow === true);
       return;
     }
     if (now.key === null) {
@@ -14507,6 +14818,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       syncControls();
       return;
     }
+    if (lines.length === 0 && now.label !== null) {
+      // Un'etichetta svuotata se ne va, e la forma torna com'era.
+      const group = unit.node.parent === null ? null : currentIndex().get(keyOfNode(unit.node.parent));
+      const removed = unlabelOps(model, unit, group, newIds(), (id) => cited(id));
+      if (commit("draw.action.label_remove", asGesture(removed.ops)) === null) return;
+      select(removed.keys);
+      announce(t("draw.label.removed"));
+      return;
+    }
     if (lines.length === 0) {
       if (commit("draw.action.delete", asGesture(removeOps([unit]))) === null) return;
       select([]);
@@ -14532,11 +14852,36 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     const ops: Op[] = [...plan.finish([id]).ops];
-    const page = grownPage(linesBounds(unit.look ?? now.look!, tidy.lines.map(richLineText), unit.matrix));
+    // L'etichetta di una forma torna al centro nello stesso passo: la pagina
+    // cresce se ne esce da lì.
+    const shape = now.label === null ? null : labelTarget(node);
+    const page = grownPage(shape !== null ? labelExtent(shape, tidy, measureText) : linesBounds(unit.look ?? now.look!, tidy.lines.map(richLineText), unit.matrix));
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.text_edit", asGesture(ops)) === null) return;
-    select([id]);
+    select([now.label?.select ?? id]);
     announce(flowed?.overflow === true ? `${t("draw.text.edited")} ${t("draw.text.overflow")}` : t("draw.text.edited"));
+  }
+
+  /// Scrive l'etichetta nuova `draft` nella forma di `label`, in un passo di
+  /// annulla: in un gruppo nuovo con la forma, o accanto a lei nel suo.
+  function finishLabel(label: TypingLabel, draft: Rich, overflow: boolean): void {
+    const model = engine.model;
+    const shape = label.shape === null ? null : currentIndex().get(label.shape);
+    if (model === null || shape === null) {
+      announce(t("draw.rejected", { reason: t("draw.reason.missing_target") }));
+      syncControls();
+      return;
+    }
+    const made = labelOps(model, shape, draft, measureText, newIds());
+    if (made === null) {
+      announce(t("draw.rejected", { reason: t("draw.reason.invalid") }));
+      select([shape.key]);
+      return;
+    }
+    const page = grownPage(made.extent);
+    if (commit("draw.action.label", asGesture(page === null ? made.ops : [...made.ops, { op: "page", viewBox: page }])) === null) return;
+    select(made.keys);
+    announce(overflow ? `${t("draw.label.added")} ${t("draw.text.overflow")}` : t("draw.label.added"));
   }
 
   // Il fuoco che va altrove conclude il testo. Una finestra dell'editor, come
@@ -15679,9 +16024,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       items.push({ label: t(label), separator: at === 0, disabled: !usable, ...(usable ? {} : { description: t(why) }), run: () => selectSimilar(by) });
     });
     if (has("layers")) {
-      // F2 sul foglio scrive un testo: per lui il tasto non vale.
+      // F2 sul foglio scrive un testo, o l'etichetta di una forma chiusa: per
+      // loro il tasto non vale.
       const lone = units.length === 1;
-      const text = lone && units[0]!.look !== null && has("text");
+      const text = lone && has("text") && (units[0]!.look !== null || labelHost(units[0]!));
       items.push({
         label: t("draw.rename"),
         separator: true,
@@ -19660,7 +20006,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) &&
       (tree.element.contains(event.target) || historyPanel.element.contains(event.target) || boardsPanel.element.contains(event.target));
     const inAccess = event.target instanceof Node && (accessPanel.element.contains(event.target) || describeBar.contains(event.target) || pathsBar.contains(event.target) || traceBar.contains(event.target) || cropBar.contains(event.target));
-    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || treeField || inAccess)) {
+    if (event.target instanceof Node && (inspector.element.contains(event.target) || panel.element.contains(event.target) || libraryPanel.element.contains(event.target) || treeField || inAccess)) {
       const key = event.key.toLowerCase();
       const mod = (event.ctrlKey || event.metaKey) && !event.altKey;
       const field = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
@@ -19863,10 +20209,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       void renameBoard();
     } else if (onSurface && event.key === "F2" && (has("text") || has("layers"))) {
       if (pressed !== null) return;
-      // Un testo si scrive; un altro oggetto, coi livelli, si rinomina.
+      // Un testo si scrive, e così l'etichetta di una forma chiusa; un altro
+      // oggetto, coi livelli, si rinomina.
       const units = selectedUnits();
       const text = units.length === 1 && units[0]!.look !== null;
-      if (has("layers") && editable() && !(text && has("text"))) renameSelection();
+      if (units.length === 1 && !text && editLabel(units[0]!)) {
+        // L'etichetta della forma scelta, nuova o da cambiare.
+      } else if (has("layers") && editable() && !(text && has("text"))) renameSelection();
       else editSelectedText();
     } else if (onSurface && event.key === "Enter") {
       if (pressed !== null) release();

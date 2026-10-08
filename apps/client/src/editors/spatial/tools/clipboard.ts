@@ -32,11 +32,13 @@
 //   `url(#…)`, `href`, gli attributi ARIA, l'inizio e la fine delle
 //   animazioni, i selettori dei fogli di stile. Un foglio di un altro
 //   programma vale solo dentro il suo gruppo (`stylesheet.ts`).
-// - **I connettori.** Un capo agganciato a un oggetto incollato nomina il suo
-//   id nuovo; uno agganciato a ciò che non entra, e un'etichetta senza il suo
-//   connettore, perdono `fub:from`, `fub:to` o `fub:along`, e restano un capo
-//   libero e un testo qualunque (`connector-copies.ts`). Un valore fuori
-//   grammatica resta com'è. La copia scrive l'SVG con gli id di prima.
+// - **I connettori e le etichette.** Un capo agganciato a un oggetto
+//   incollato nomina il suo id nuovo, e così un'etichetta il suo connettore o
+//   la sua forma; un capo agganciato a ciò che non entra, e un'etichetta
+//   senza il suo connettore o la sua forma, perdono `fub:from`, `fub:to`,
+//   `fub:along` o `fub:inside`, e restano un capo libero e un testo qualunque
+//   (`connector-copies.ts`). Un valore fuori grammatica resta com'è. La copia
+//   scrive l'SVG con gli id di prima.
 // - **Byte per byte.** Ciò che non deve cambiare resta come era scritto: fra
 //   due disegni con le stesse unità, da un livello senza trasformazioni a un
 //   altro, un giro di copia e incolla riporta gli stessi byte, id a parte.
@@ -485,8 +487,8 @@ const KEPT: ReadonlySet<number> = new Set();
 interface Rules {
   /// L'id nuovo a cui va un riferimento; `null` se resta.
   readonly rename: (id: string) => string | null;
-  /// Vero nell'incolla: `fub:from`, `fub:to` e `fub:along` seguono gli id
-  /// nuovi, e si tolgono se ciò che nominano non entra. Nella copia gli id
+  /// Vero nell'incolla: `fub:from`, `fub:to`, `fub:along` e `fub:inside`
+  /// seguono gli id nuovi, e si tolgono se ciò che nominano non entra. Nella copia gli id
   /// restano, e con loro i riferimenti.
   readonly relink: boolean;
   /// L'id nuovo di un elemento.
@@ -670,7 +672,7 @@ class Rewriter {
   }
 
   /// Gli indici degli attributi di `element` che si tolgono: `fub:from`,
-  /// `fub:to` e `fub:along` che nominano ciò che non entra.
+  /// `fub:to`, `fub:along` e `fub:inside` che nominano ciò che non entra.
   private dropped(element: ElementNode): ReadonlySet<number> {
     if (!this.rules.relink) return KEPT;
     let out: Set<number> | null = null;

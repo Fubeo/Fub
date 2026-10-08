@@ -66,6 +66,8 @@ export interface InspectorOptions {
   taken(id: string): boolean;
   /// Vero se una parte estranea del disegno cita `id`.
   cited(id: string): boolean;
+  /// Vero se un oggetto bloccato nomina `id`, e una rinomina lo staccherebbe.
+  held(id: string): boolean;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
   /// Esc su un campo senza niente da annullare: il fuoco torna al foglio.
@@ -147,6 +149,7 @@ const ID_PROBLEMS: Readonly<Record<IdProblem, DrawKey>> = {
   reserved: "draw.attributes.id.reserved",
   taken: "draw.attributes.id.taken",
   cited: "draw.attributes.id.cited",
+  held: "draw.attributes.id.held",
 };
 
 /// Un valore come si legge in un campo che non si scrive: tagliato oltre
@@ -519,8 +522,8 @@ export function createInspector(life: Lifetime, options: InspectorOptions): Insp
         showError(line, null);
         return true;
       }
-      const problem = idProblem(subject, next, options.taken, options.cited);
-      if (problem !== null) return fail(t(ID_PROBLEMS[problem], { id: problem === "cited" ? subject.id! : next, max: String(MAX_ID_LENGTH) }));
+      const problem = idProblem(subject, next, options.taken, options.cited, options.held);
+      if (problem !== null) return fail(t(ID_PROBLEMS[problem], { id: problem === "cited" || problem === "held" ? subject.id! : next, max: String(MAX_ID_LENGTH) }));
       line.control.value = line.shown = next;
       const failure = options.onRename(subject, next);
       if (failure !== null) {

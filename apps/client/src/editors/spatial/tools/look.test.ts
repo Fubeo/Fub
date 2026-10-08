@@ -150,6 +150,20 @@ describe("l'aspetto della selezione", () => {
     expect(look(opened).opacity).toEqual({ count: 2, value: 0.5 });
   });
 
+  it("in un gruppo scelto, l'etichetta di una forma tiene il suo colore: il riempimento è quello della forma, il corpo il suo", () => {
+    const label = '<text id="olabel000" fub:inside="oaaaaaaaa" fub:wrap="10" x="0" y="0" font-size="12" text-anchor="middle" fill="#ffffff"><tspan x="0" dy="0">Sì</tspan></text>';
+    const opened = open(doc(`${LAYER}<g id="ogroup000">${RECT("oaaaaaaaa")}${label}</g></g>`));
+    const seen = look(opened);
+    expect(seen.fill).toEqual({ count: 1, value: "#0072b2" });
+    expect(seen.stroke).toEqual({ count: 1, value: "#000000" });
+    expect(seen.size).toEqual({ count: 1, value: 12 });
+    const after = applied(opened, restyled(opened, { fill: "#d55e00" }));
+    expect(after).toContain('<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="#d55e00"');
+    expect(after).toContain('fill="#ffffff"');
+    // Scelta da sola, invece, l'etichetta è un testo come gli altri.
+    expect(lookOf(opened.engine.model!, [opened.reindex().get("olabel000")!]).fill).toEqual({ count: 1, value: "#ffffff" });
+  });
+
   it("legge il testo: carattere, corpo e allineamento", () => {
     const opened = open(doc(`${LAYER}${TEXT("oaaaaaaaa", ["Uno"])}${TEXT("obbbbbbbb", ["Due"], ' font-family="Literata, serif" font-size="32" text-anchor="middle"')}</g>`));
     const seen = look(opened);
