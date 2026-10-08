@@ -163,22 +163,22 @@ programma che tratta male le trasformazioni. Le regole stanno in
   versi. Rotazioni e ribaltamenti restano.
 - **Un tratto a penna** prende rotazioni, ribaltamenti e una scala uguale nei
   due versi, o niente: l'inchiostro si riscrive, la direzione della penna
-  gira con lui, il pennello scala e il tratto si ridisegna. Un tratto che la
-  trasformazione deformerebbe, o il cui inchiostro riscritto sarebbe troppo
-  lungo, la tiene.
+  gira con lui, il pennello scala e il tratto si ridisegna. Un tratto che si
+  deformerebbe, o con l'inchiostro riscritto troppo lungo, la tiene.
 - **Un testo tiene la sua**: le sue righe non si riscrivono.
 - **Il contorno scala con l'oggetto**, spessore e tratteggio, della radice
   del fattore dell'area: una scala di due raddoppia lo spessore. Un contorno
   che viene dal gruppo si scrive sull'oggetto, già scalato; su un'immagine o
   un testo, che non hanno contorno, niente.
-- **Un gruppo o un collegamento passano la loro trasformazione** alle parti,
+- **Un gruppo o un collegamento passano la loro trasformazione** alle parti
   e la tolgono, se tutte la sanno prendere; se no la tengono, e le parti
-  applicano solo la loro. Le parti di un altro programma fermano il
-  passaggio.
-- **Niente che il file non sappia scrivere.** Un oggetto che, scritto,
-  uscirebbe dai numeri del formato, si deformerebbe o perderebbe il
-  contorno, tiene la sua trasformazione com'è; così un percorso con una forma
-  che questa versione non conosce.
+  applicano solo la loro. Le parti di un altro programma la fermano.
+- **Le sfumature vanno con la geometria**, e si vedono dov'erano. Un oggetto
+  con un motivo, un marcatore o una sfumatura del gruppo tiene la sua
+  trasformazione ([Disegni, risorse](drawing-resources.md#i-comandi)).
+- **Niente che il file non sappia scrivere.** Tiene la sua trasformazione un
+  oggetto che, scritto, uscirebbe dai numeri del formato, si deformerebbe o
+  perderebbe il contorno, e un percorso con una forma ignota a questa versione.
 - **È un passo solo**, «Applicazione della trasformazione», e la selezione
   resta quella. Si dice quanti oggetti cambiano e quanti conservano una
   trasformazione; se non c'è niente da applicare, lo si dice.

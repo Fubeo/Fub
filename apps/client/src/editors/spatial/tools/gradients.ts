@@ -30,7 +30,7 @@
 import { formatNumber } from "../number";
 import type { Bounds } from "../scene/geometry";
 import { apply, compose, invert, IDENTITY, translate, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import type { DocumentModel, ElementPart, LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
 import { fraction, length, opacity as parseOpacity, paint, paintReference, transform as parseTransform, trim } from "../scene/values";
@@ -41,7 +41,7 @@ import { geometryBox, type Unit } from "./hit";
 import { paintEachOps, paintParts, type PaintPart, type Restyled } from "./look";
 import type { Measure } from "./measure";
 import { customColor } from "./palette";
-import { gradientOf, homeOf, paintCode, resourcesOf, type Home } from "./resources";
+import { gradientOf, homeOf, paintCode, resourcesOf, usersOf, type Home } from "./resources";
 
 /// Il colore che si cambia: il riempimento o il contorno.
 export type PaintChannel = "fill" | "stroke";
@@ -159,25 +159,6 @@ function sceneMatrix(node: ElementPart, known: Map<ElementPart, Matrix>): Matrix
     known.set(node, matrix);
   }
   return matrix;
-}
-
-/// Quanti elementi di `model` rimandano a ciascun id: un contenitore coi
-/// suoi attributi, un'unità con tutto ciò che contiene.
-function usersOf(model: DocumentModel): Map<string, number> {
-  const out = new Map<string, number>();
-  const count = (ids: readonly string[]): void => {
-    for (const id of new Set(ids)) out.set(id, (out.get(id) ?? 0) + 1);
-  };
-  const visit = (node: ElementPart): void => {
-    if (node.kind === "leaf") {
-      count(node.refs);
-      return;
-    }
-    count(node.facts.refs);
-    for (const child of elementChildren(node)) visit(child);
-  };
-  visit(model.root);
-  return out;
 }
 
 /// Il colore `#rrggbb` minuscolo di un canale sRGB.
@@ -1052,4 +1033,68 @@ export function gradientOps(
     values.set(part.node, `url(#${id}) ${fallback}`);
   }
   return { ...paintEachOps(model, units, channel, values, before, measure, ids), reached };
+}
+
+// ---------------------------------------------------------------------------
+// Coordinate nuove.
+// ---------------------------------------------------------------------------
+
+/// Gli attributi che dicono dove sta una sfumatura: le coordinate, le unità e
+/// la trasformazione.
+const PLACE_ATTRS: readonly string[] = GRADIENT_ATTRS.filter((name) => name !== "spreadMethod");
+
+/// Come segue un oggetto le cui coordinate cambiano, come in «Applica
+/// trasformazione», la risorsa `node` che usa come colore: `same` se si vede
+/// uguale dovunque, come un campione o una sfumatura di un colore solo;
+/// `gradient` per una sfumatura che si legge, e che si riscrive dove si
+/// vedeva; `null` per ogni altra, come un motivo o una sfumatura che rimanda
+/// a un'altra, che resta nelle coordinate di prima.
+export function paintFollows(node: LeafNode): "same" | "gradient" | null {
+  if (node.details?.swatch !== undefined) return "same";
+  if (node.refs.length > 0) return null;
+  const gradient = gradientOf(node);
+  if (gradient === null) return null;
+  return gradient.stops.length < 2 ? "same" : "gradient";
+}
+
+/// Le coordinate della sfumatura `node`, usata da `user`, quando quelle di
+/// `user` diventano quelle che dà `m`: si vede dov'era, nelle coordinate di
+/// chi la usa (`userSpaceOnUse`), con una `gradientTransform` soltanto dove
+/// serve. `null` se non si scrive.
+export function movedPlace(node: LeafNode, user: ElementPart, m: Matrix): Record<string, string> | null {
+  const placed = placeOf(node, IDENTITY, boxOf(user));
+  const coords = placed === null ? null : writtenPlace(placeMapped(placed, m), IDENTITY);
+  return coords === null ? null : { gradientUnits: "userSpaceOnUse", ...coords };
+}
+
+/// Gli attributi che portano la sfumatura `node` nelle coordinate `coords`
+/// di [`movedPlace`]: quelli che cambiano, `null` per quelli da togliere.
+export function placeChanges(node: LeafNode, coords: Readonly<Record<string, string>>): Record<string, string | null> {
+  const written = plainAttributes(node);
+  const out: Record<string, string | null> = {};
+  for (const name of PLACE_ATTRS) {
+    const before = written.get(name) ?? null;
+    const after = coords[name] ?? null;
+    if (!sameAttr(name, before, after)) out[name] = after;
+  }
+  return out;
+}
+
+/// La sfumatura `node` come copia privata con l'id `id` e le coordinate
+/// `coords` di [`movedPlace`]: il resto com'è, con un id nuovo per ogni sua
+/// parte che ne ha uno. `null` se non si scrive.
+export function movedCopy(node: LeafNode, id: string, coords: Readonly<Record<string, string>>, ids: NewIds): Elem | null {
+  const elem = elemOf(node);
+  if (elem === null) return null;
+  const attrs: Record<string, string> = { id, "fub:role": "private" };
+  for (const [name, value] of Object.entries(elem.attrs)) {
+    if (!(name in attrs) && !PLACE_ATTRS.includes(name)) attrs[name] = value;
+  }
+  Object.assign(attrs, coords);
+  const renamed = (each: Elem): Elem => ({
+    ...each,
+    attrs: each.attrs.id === undefined ? each.attrs : { ...each.attrs, id: ids.next("resource") },
+    ...(each.children === undefined ? {} : { children: each.children.map(renamed) }),
+  });
+  return { ...elem, attrs, ...(elem.children === undefined ? {} : { children: elem.children.map(renamed) }) };
 }

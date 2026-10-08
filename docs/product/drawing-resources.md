@@ -54,11 +54,16 @@ nell'esportazione il file è quello che è.
   maschera o un filtro, che valgono per tutto il gruppo, e lo dice; con più
   gruppi separa gli altri e dice quanti ne restano interi. Allo stesso modo
   «Togli il collegamento» lascia un collegamento con un effetto.
-- **«Applica trasformazione»** lascia la trasformazione a un oggetto che usa
-  una risorsa, anche ereditata dal gruppo, e a un gruppo con un ritaglio,
-  una maschera o un filtro: la risorsa vive nelle loro coordinate, e
-  portarla nella geometria cambierebbe ciò che si vede. Gli oggetti dentro
-  il gruppo la applicano ciascuno per sé
+- **«Applica trasformazione»** riscrive le sfumature degli oggetti nelle
+  coordinate nuove, e si vedono dov'erano: una sfumatura soltanto
+  dell'oggetto cambia sul posto, una che usa con altri, o di un altro
+  programma, diventa una copia sua, come quando la si cambia. Un campione,
+  o una sfumatura di un colore solo, si vede uguale dovunque. Lascia invece
+  la trasformazione a un oggetto con un motivo, un marcatore o una sfumatura
+  che eredita dal gruppo, e a un gruppo con un ritaglio, una maschera o un
+  filtro: la risorsa vive nelle loro coordinate, e portarla nella geometria
+  cambierebbe ciò che si vede. Gli oggetti dentro il gruppo la applicano
+  ciascuno per sé
   ([Disegni, livello Esperto](drawing-expert.md#applica-trasformazione)).
 - **Eliminare** un oggetto toglie anche le risorse proprie o condivise che
   nessun altro usa più, nello stesso passo di annulla; quelle scritte da un

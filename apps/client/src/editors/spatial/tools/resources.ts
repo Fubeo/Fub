@@ -11,9 +11,10 @@
 //   FubDraw, restano le stesse. Toglierle quando nessuno le usa più lo fa il
 //   motore.
 // - **Ciò che si vede resta.** Una risorsa vive nelle coordinate di chi la
-//   usa: un oggetto che ne usa una tiene la sua trasformazione invece di
-//   passarla nella geometria, e un gruppo con un ritaglio, una maschera o un
-//   filtro non si separa.
+//   usa: un oggetto che passa la sua trasformazione nella geometria riscrive
+//   le sue sfumature nelle coordinate nuove, e tiene la trasformazione se
+//   usa una risorsa che non si riscrive; un gruppo con un ritaglio, una
+//   maschera o un filtro non si separa.
 
 import { formatNumber } from "../number";
 import type { Bounds } from "../scene/geometry";
@@ -25,7 +26,6 @@ import { formatTransform, type Elem } from "../scene/serialize";
 import { fraction, length, opacity, paint, paintReference, reference, transform as parseTransform, trim, urlIds, type Paint, type Rgb } from "../scene/values";
 import { NS_NONE, NS_SVG, valueOf, type ElementNode, type XmlDocument } from "../scene/xml";
 import type { NewIds } from "./edit";
-import type { Inherited } from "./outline";
 import { renameUrls } from "./stylesheet";
 
 /// Le risorse modificabili di `model`, per id: i figli delle `defs` della
@@ -84,15 +84,23 @@ export function holdsEffect(attrs: ReadonlyMap<string, string>): boolean {
   });
 }
 
-/// Vero se `node` usa una risorsa, sua o ereditata da `from`: una
-/// trasformazione passata nella sua geometria lo cambierebbe a vederlo,
-/// perché la risorsa resta nelle coordinate di prima.
-export function usesResources(node: ElementPart, from: Inherited): boolean {
-  if (node.facts.refs.length > 0) return true;
-  return ["fill", "stroke"].some((name) => {
-    const value = from.get(name);
-    return value !== undefined && paintReference(value) !== null;
-  });
+/// Quanti elementi di `model` rimandano a ciascun id: un contenitore coi
+/// suoi attributi, un'unità con tutto ciò che contiene.
+export function usersOf(model: DocumentModel): Map<string, number> {
+  const out = new Map<string, number>();
+  const count = (ids: readonly string[]): void => {
+    for (const id of new Set(ids)) out.set(id, (out.get(id) ?? 0) + 1);
+  };
+  const visit = (node: ElementPart): void => {
+    if (node.kind === "leaf") {
+      count(node.refs);
+      return;
+    }
+    count(node.facts.refs);
+    for (const child of elementChildren(node)) visit(child);
+  };
+  visit(model.root);
+  return out;
 }
 
 // ---------------------------------------------------------------------------

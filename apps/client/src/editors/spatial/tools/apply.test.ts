@@ -12,6 +12,7 @@ import { apply, toRadians, type Matrix } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import { applyOps, type Applied } from "./apply";
 import { gesture, NewIds } from "./edit";
+import { paintedParts, type GradientPlace, type PaintChannel } from "./gradients";
 import type { SceneIndex } from "./hit";
 import { polygonalAttrs, polygonalPath, readPolygonal, type PolygonalShape } from "../scene/parametric";
 import { arrowPath } from "./shapes";
@@ -393,23 +394,139 @@ describe("«Applica trasformazione» nei gruppi", () => {
   });
 });
 
+/// Dove si vede, nella scena, la sfumatura di `channel` di ogni parte del
+/// disegno; `null` per una parte senza.
+function shading(opened: Opened, index: SceneIndex, channel: PaintChannel): Array<GradientPlace | null> {
+  return paintedParts(opened.engine.model!, index.units, channel).map((part) => part.gradient?.place ?? null);
+}
+
+/// Verifica che le sfumature `after` si vedano dove `before`, entro
+/// `tolerance`: per una lineare conta la direzione delle righe di uguale
+/// colore, non quanto `across` dista.
+function samePlaces(after: ReadonlyArray<GradientPlace | null>, before: ReadonlyArray<GradientPlace | null>, tolerance = 0.02): void {
+  expect(after.length).toBe(before.length);
+  after.forEach((place, at) => {
+    const was = before[at]!;
+    expect(place?.kind).toBe(was?.kind);
+    if (place === null || was === null) return;
+    const near = (p: readonly number[], q: readonly number[]): void => p.forEach((value, i) => expect(Math.abs(value - q[i]!)).toBeLessThanOrEqual(tolerance));
+    if (place.kind === "linear" && was.kind === "linear") {
+      near([...place.start, ...place.end], [...was.start, ...was.end]);
+      const turn = (p: GradientPlace & { kind: "linear" }): number => Math.atan2(p.across[1] - p.start[1], p.across[0] - p.start[0]);
+      expect(Math.abs(turn(place) - turn(was))).toBeLessThan(1e-3);
+    } else if (place.kind === "radial" && was.kind === "radial") {
+      near([...place.center, ...place.a, ...place.b, ...place.focus], [...was.center, ...was.a, ...was.b, ...was.focus]);
+    }
+  });
+}
+
+describe("«Applica trasformazione» con le sfumature", () => {
+  const LINEAR =
+    '<linearGradient id="rlinear01" fub:role="private" x1="0" y1="5" x2="10" y2="5" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#ffffff"/></linearGradient>';
+  const RADIAL =
+    '<radialGradient id="rradial01" fub:role="private" cx="5" cy="5" r="5" fx="7" fy="5" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e69f00"/><stop offset="1" stop-color="#000000"/></radialGradient>';
+
+  /// Applica e scrive, verificando che le sfumature si vedano dov'erano e
+  /// gli oggetti stiano dove stavano.
+  function shaded(defs: string, source: string, keys?: readonly string[]): { text: string; change: Applied } {
+    const opened = open(doc(`<defs id="fub-defs">${defs}</defs>${LAYER}${source}</g>`));
+    const fills = shading(opened, opened.index, "fill");
+    const strokes = shading(opened, opened.index, "stroke");
+    const change = applied(opened, keys);
+    const text = written(opened, change);
+    const after = opened.reindex();
+    samePlaces(shading(opened, after, "fill"), fills);
+    samePlaces(shading(opened, after, "stroke"), strokes);
+    sameLook(opened.index, after);
+    return { text, change };
+  }
+
+  it("riscrive sul posto la sfumatura che è soltanto sua, senza trasformazione dove non serve", () => {
+    const { text, change } = shaded(
+      LINEAR + RADIAL,
+      '<path id="p" d="M0 0 L10 0 L10 10 Z" fill="url(#rlinear01) #80b9d9" transform="rotate(90 5 5)"/>' +
+        '<rect id="r" x="0" y="0" width="10" height="10" fill="none" stroke="url(#rradial01)" transform="translate(10 20) scale(2 1)"/>',
+    );
+    expect(text).toContain('<linearGradient id="rlinear01" fub:role="private" x1="5" y1="0" x2="5" y2="10" gradientUnits="userSpaceOnUse">');
+    expect(text).toMatch(/<path id="p" d="[^"]+" fill="url\(#rlinear01\) #80b9d9"\/>/);
+    expect(text).toContain('<radialGradient id="rradial01" fub:role="private" cx="20" cy="25" r="10" fx="24" fy="25" gradientUnits="userSpaceOnUse" gradientTransform="');
+    expect(text).toContain('<rect id="r" x="10" y="20" width="20" height="10" fill="none" stroke="url(#rradial01)" stroke-width="1.41"/>');
+    expect(change).toMatchObject({ changed: 2, kept: 0 });
+  });
+
+  it("porta una sfumatura che usano il riempimento e il contorno una volta sola", () => {
+    const { text } = shaded(LINEAR, '<path id="p" d="M0 0 L10 0 L10 10 Z" fill="url(#rlinear01)" stroke="url(#rlinear01)" transform="translate(5 5)"/>');
+    expect(text).toContain('x1="5" y1="10" x2="15" y2="10"');
+    expect(text).toContain('<path id="p" d="M5 5 L15 5 L15 15 Z" fill="url(#rlinear01)" stroke="url(#rlinear01)"/>');
+  });
+
+  it("dà una copia sua a chi usa una sfumatura con altri, o di un altro programma", () => {
+    const FOREIGN = '<linearGradient id="rforeign1" x2="1"><stop offset="0" stop-color="#009e73"/><stop offset="1" stop-color="#f0e442"/></linearGradient>';
+    const { text, change } = shaded(
+      LINEAR + FOREIGN,
+      '<rect id="a" x="0" y="0" width="10" height="10" fill="url(#rlinear01) #80b9d9" transform="translate(5 0)"/>' +
+        '<rect id="b" x="0" y="20" width="10" height="10" fill="url(#rlinear01)"/>' +
+        '<path id="c" d="M0 0 L10 0 L10 10 Z" fill="url(#rforeign1)" transform="rotate(90)"/>',
+      ["a", "c"],
+    );
+    // L'originale resta a chi lo usa ancora, e quella dell'altro programma
+    // resta com'era.
+    expect(text).toContain(LINEAR.replace("</linearGradient>", ""));
+    expect(text).toContain(FOREIGN.replace("</linearGradient>", ""));
+    expect(text).toContain('<rect id="b" x="0" y="20" width="10" height="10" fill="url(#rlinear01)"/>');
+    const copies = [...text.matchAll(/<linearGradient id="(r[^"]+)" fub:role="private"([^>]*)>/g)].filter((match) => match[1] !== "rlinear01");
+    expect(copies).toHaveLength(2);
+    const [first, second] = copies as [RegExpMatchArray, RegExpMatchArray];
+    expect(first[2]).toBe(' x1="5" y1="5" x2="15" y2="5" gradientUnits="userSpaceOnUse"');
+    expect(text).toContain(`<rect id="a" x="5" y="0" width="10" height="10" fill="url(#${first[1]}) #80b9d9"/>`);
+    // Nelle unità del riquadro, la copia passa a quelle di chi la usa.
+    expect(second[2]).toBe(' x1="0" y1="0" x2="0" y2="10" gradientUnits="userSpaceOnUse"');
+    expect(text).toMatch(new RegExp(`<path id="c" d="[^"]+" fill="url\\(#${second[1]}\\)"/>`));
+    expect(change).toMatchObject({ changed: 2, kept: 0 });
+  });
+
+  it("non cambia un campione o una sfumatura di un colore solo, che si vedono uguali dovunque", () => {
+    const SWATCH = '<linearGradient id="rswatch01" fub:role="swatch" fub:name="Blu"><stop offset="0" stop-color="#0072b2"/></linearGradient>';
+    const ONE = '<linearGradient id="rsingle01" fub:role="private" x2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#d55e00"/></linearGradient>';
+    const { text, change } = shaded(
+      SWATCH + ONE,
+      '<rect id="a" x="0" y="0" width="10" height="10" fill="url(#rswatch01)" stroke="url(#rsingle01)" transform="translate(5 0)"/>' +
+        '<g id="g" fill="url(#rswatch01)" transform="translate(0 5)"><rect id="s" x="0" y="0" width="10" height="10"/></g>',
+    );
+    expect(text).toContain(SWATCH);
+    expect(text).toContain(ONE);
+    expect(text).toContain('<rect id="a" x="5" y="0" width="10" height="10" fill="url(#rswatch01)" stroke="url(#rsingle01)"/>');
+    expect(text).toContain('<g id="g" fill="url(#rswatch01)"><rect id="s" x="0" y="5" width="10" height="10"/></g>');
+    expect(change).toMatchObject({ changed: 2, kept: 0 });
+  });
+});
+
 describe("«Applica trasformazione» con le risorse", () => {
   const DEFS =
     '<defs id="fub-defs"><linearGradient id="rgggggggg" x1="0" x2="10" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient>' +
+    '<pattern id="rpppppppp" width="4" height="4" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="2" height="2" fill="#000000"/></pattern>' +
+    '<marker id="rmmmmmmmm" markerWidth="4" markerHeight="4" refX="2" refY="2"><circle cx="2" cy="2" r="2"/></marker>' +
     '<clipPath id="rcccccccc"><circle cx="5" cy="5" r="5"/></clipPath></defs>';
 
-  it("tiene la trasformazione di chi usa una risorsa, sua o ereditata", () => {
+  it("tiene la trasformazione di chi usa un'altra risorsa, o una sfumatura che eredita", () => {
     const opened = open(
       doc(
-        `${DEFS}${LAYER}<rect id="r" x="0" y="0" width="10" height="10" fill="url(#rgggggggg)" transform="translate(5 0)"/>` +
+        `${DEFS}${LAYER}<rect id="r" x="0" y="0" width="10" height="10" fill="url(#rpppppppp)" transform="translate(5 0)"/>` +
           '<g id="g" stroke="url(#rgggggggg)"><rect id="s" x="0" y="0" width="10" height="10" fill="none" transform="scale(2)"/></g>' +
+          '<g id="f" fill="url(#rgggggggg)" transform="translate(5 0)"><rect id="u" x="0" y="0" width="10" height="10"/></g>' +
+          '<path id="m" d="M0 0 L10 0" stroke="#000000" marker-end="url(#rmmmmmmmm)" transform="translate(5 0)"/>' +
           '<rect id="t" x="0" y="0" width="10" height="10" transform="translate(5 0)"/></g>',
       ),
     );
-    const text = written(opened, applied(opened));
-    expect(text).toContain('<rect id="r" x="0" y="0" width="10" height="10" fill="url(#rgggggggg)" transform="translate(5 0)"/>');
+    const change = applied(opened);
+    const text = written(opened, change);
+    expect(text).toContain('<rect id="r" x="0" y="0" width="10" height="10" fill="url(#rpppppppp)" transform="translate(5 0)"/>');
     expect(text).toContain('<rect id="s" x="0" y="0" width="10" height="10" fill="none" transform="scale(2)"/>');
+    // Il gruppo passa la sua trasformazione, che l'oggetto tiene.
+    expect(text).toContain('<g id="f" fill="url(#rgggggggg)"><rect id="u" x="0" y="0" width="10" height="10" transform="matrix(1 0 0 1 5 0)"/></g>');
+    expect(text).toContain('<path id="m" d="M0 0 L10 0" stroke="#000000" marker-end="url(#rmmmmmmmm)" transform="translate(5 0)"/>');
     expect(text).toContain('<rect id="t" x="5" y="0" width="10" height="10"/>');
+    expect(change).toMatchObject({ changed: 2, kept: 4 });
   });
 
   it("non passa ai figli la trasformazione di un gruppo con un ritaglio", () => {
