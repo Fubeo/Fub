@@ -506,6 +506,7 @@ devono verificare renderebbe il test circolare.
 | 77 | `set-part-not-resource` | `set` con `part` su un oggetto: rifiuto `invalid-elem` |
 | 78 | `add-connector` | un connettore a gomito agganciato a due rettangoli: `fub:shape`, `fub:geom`, `fub:from` e `fub:to` vanno subito dopo l'id, prima di `d`, in quest'ordine; l'inversa lo toglie |
 | 79 | `set-connector-free` | un `batch` stacca un capo: `set` cambia `fub:geom` e `d` e toglie `fub:from` con `null`; l'inversa lo rimette al suo posto e il testo torna a quello di prima byte per byte, anche su un motore aperto dal testo di dopo |
+| 80 | `add-label` | l'etichetta di un rettangolo nel suo gruppo, dopo di lui: `fub:inside` e `fub:wrap` vanno subito dopo l'id, prima di `x` e `y`, in quest'ordine; l'inversa la toglie |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

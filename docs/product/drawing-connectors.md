@@ -147,6 +147,8 @@ Il comando è un passo di annulla, anche se fa più connettori.
   tabella degli attributi mostra il `d` del connettore, e dice lo stesso.
 - **Le punte** si danno come a ogni linea ([Disegni, punte delle
   linee](drawing-tips.md)); con «Inverti» passano all'altro capo.
+- **Un gruppo fatto di una forma e della sua etichetta** si aggancia col
+  contorno della forma ([Disegni, etichette nelle forme](drawing-labels.md)).
 
 ## In Lettura e nell'export
 

@@ -23,6 +23,11 @@ Le sezioni del formato si citano come «formato della scena, §N».
 - **Un oggetto:** il primo `title` è il suo nome, nell'albero degli oggetti e
   per lo screen reader; il `desc` aggiunge una descrizione (formato della
   scena, §4).
+- **Una forma con un'etichetta:** si chiama con le parole della sua
+  etichetta, il testo che si vede, e il `title`, se c'è, prende il posto del
+  tipo («Decisione «Controlla l'ordine»»). Il gruppo che tiene soltanto loro
+  due, senza un `title` suo, si chiama come la forma
+  ([etichette](scene-format-labels.md), §7).
 - **Un'immagine:** il `title` è la sua descrizione, ciò che lo screen reader
   dice al posto dei pixel. FubDraw scrive lì la descrizione chiesta
   all'inserimento o dal pannello.
