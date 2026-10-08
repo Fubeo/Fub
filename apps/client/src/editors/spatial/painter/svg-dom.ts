@@ -57,7 +57,7 @@ import type { Bounds } from "../scene/geometry";
 import type { Elem } from "../scene/serialize";
 import { toScene, viewMatrix, viewTransform, type View } from "../view";
 import type { FontSheets } from "../picture";
-import { paintReference, reference, trim } from "../scene/values";
+import { blendStyle, paintReference, reference, trim } from "../scene/values";
 import {
   DEF_ATTRIBUTES,
   DEF_CHILDREN,
@@ -1234,12 +1234,34 @@ function setPainted(el: SVGElement, attrs: readonly PaintAttr[], previous: reado
     // La scena porta solo nomi dipinti; il controllo resta qui perché è il
     // DOM a non doverne ricevere altri.
     if (!PAINTED_ATTRIBUTES.has(name)) continue;
+    if (name === "style") {
+      next.add(name);
+      setBlend(el, value);
+      continue;
+    }
     const live = liveValue(prefix, name, value);
     if (live === null) continue;
     next.add(name);
     if (el.getAttribute(name) !== live) el.setAttribute(name, live);
   }
-  for (const [name] of previous) if (!next.has(name)) el.removeAttribute(name);
+  for (const [name] of previous) {
+    if (next.has(name)) continue;
+    if (name === "style") setBlend(el, null);
+    else el.removeAttribute(name);
+  }
+}
+
+/// La fusione e l'isolamento dello `style` del formato, `null` per nessuno,
+/// come proprietà dello stile in linea di `el`: il painter vi mette anche
+/// l'attenuazione e ciò che nasconde, e l'attributo intero li cancellerebbe.
+function setBlend(el: SVGElement, value: string | null): void {
+  const style = value === null ? null : blendStyle(value, true);
+  const blend = style?.blend ?? null;
+  const isolate = style?.isolate ?? null;
+  if (blend === null) el.style.removeProperty("mix-blend-mode");
+  else el.style.setProperty("mix-blend-mode", blend);
+  if (isolate === null) el.style.removeProperty("isolation");
+  else el.style.setProperty("isolation", isolate ? "isolate" : "auto");
 }
 
 function setCommon(el: SVGElement, id: string | null, space: string | null): void {

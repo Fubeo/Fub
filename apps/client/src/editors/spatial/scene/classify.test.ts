@@ -96,6 +96,31 @@ describe("la classificazione (§4)", () => {
     expect(first('<rect xmlns:s="http://www.w3.org/2000/svg" s:fill="red"/>')).toBeNull();
   });
 
+  it("lo style dice soltanto la fusione e, su un contenitore, l'isolamento", () => {
+    for (const body of [
+      '<rect width="1" height="1" style="mix-blend-mode: multiply"/>',
+      '<text style="mix-blend-mode: screen"><tspan>a</tspan></text>',
+      '<image href="a.png" style="mix-blend-mode: luminosity"/>',
+      '<g style="isolation: isolate"></g>',
+      '<g style="mix-blend-mode: difference; isolation: isolate"></g>',
+      '<a href="Note.md" style="isolation: auto"></a>',
+    ]) {
+      expect(first(body), body).not.toBeNull();
+    }
+    for (const body of [
+      // L'isolamento vale soltanto su un contenitore.
+      '<rect width="1" height="1" style="isolation: isolate"/>',
+      // I browser ignorano gli attributi di presentazione omonimi.
+      '<rect width="1" height="1" mix-blend-mode="multiply"/>',
+      '<g isolation="isolate"></g>',
+      '<rect width="1" height="1" style="mix-blend-mode: plus-lighter"/>',
+      '<rect width="1" height="1" style="mix-blend-mode: multiply; opacity: 0.5"/>',
+      '<text><tspan style="mix-blend-mode: multiply">a</tspan></text>',
+    ]) {
+      expect(first(body), body).toBeNull();
+    }
+  });
+
   it("gli attributi di geometria appartengono al loro tag", () => {
     expect(first('<circle r="1"/>')).toBe("circle");
     expect(first('<ellipse r="1"/>')).toBeNull();

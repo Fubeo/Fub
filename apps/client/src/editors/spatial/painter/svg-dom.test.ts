@@ -213,6 +213,45 @@ describe("il documento vivo", () => {
     expect(piece.textContent).toBe("b  c");
   });
 
+  it("dà la fusione e l'isolamento allo stile in linea, accanto all'anteprima", async () => {
+    const engine = SceneEngine.open(doc(
+      `${LAYER}<g id="g" style="isolation: isolate"><rect id="a" width="4" height="4" style="mix-blend-mode: multiply"/></g>`
+        + '<rect id="b" width="2" height="2"/></g>',
+    ));
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(engine, builder));
+    await decoded();
+    const node = (id: string): SVGElement => host.querySelector(`[data-scene-id="${id}"]`)!;
+    expect(node("a").style.getPropertyValue("mix-blend-mode")).toBe("multiply");
+    expect(node("g").style.getPropertyValue("isolation")).toBe("isolate");
+    expect(node("b").getAttribute("style")).toBeNull();
+    // L'anteprima sbiadisce e torna senza toccare la fusione.
+    const [paintA] = builder.paintsOf(engine.holder("a")!);
+    painter.setDraft({ faded: new Set([paintA!]) });
+    expect(node("a").style.opacity).toBe("0.25");
+    expect(node("a").style.getPropertyValue("mix-blend-mode")).toBe("multiply");
+    painter.setDraft(null);
+    expect(node("a").style.opacity).toBe("");
+    expect(node("a").style.getPropertyValue("mix-blend-mode")).toBe("multiply");
+    // La fusione cambiata non tocca l'attenuazione del gruppo isolato.
+    painter.setFocus([engine.holder("l1")!, engine.holder("g")!]);
+    expect(engine.apply({ op: "set", id: "b", attrs: { style: "mix-blend-mode: screen" } }).outcome).toBe("applied");
+    painter.update(sceneOf(engine, builder));
+    expect(node("b").style.getPropertyValue("mix-blend-mode")).toBe("screen");
+    expect(node("b").style.opacity).toBe("0.4");
+    painter.setFocus(null);
+    expect(node("b").style.opacity).toBe("");
+    expect(node("b").style.getPropertyValue("mix-blend-mode")).toBe("screen");
+    // Tolto lo style, se ne vanno.
+    expect(engine.apply({ op: "set", id: "b", attrs: { style: null } }).outcome).toBe("applied");
+    expect(engine.apply({ op: "set", id: "g", attrs: { style: null } }).outcome).toBe("applied");
+    painter.update(sceneOf(engine, builder));
+    expect(node("b").style.getPropertyValue("mix-blend-mode")).toBe("");
+    expect(node("g").style.getPropertyValue("isolation")).toBe("");
+    painter.dispose();
+  });
+
   it("riusa i nodi di ciò che non cambia", async () => {
     const engine = SceneEngine.open(HOSTILE);
     const builder = new PaintBuilder();

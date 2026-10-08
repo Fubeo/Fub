@@ -97,7 +97,7 @@ Radice di un documento nuovo:
 
 - riempimento e contorno: `fill`, `fill-opacity`, `stroke`, `stroke-width`,
   `stroke-opacity`, `stroke-linecap`, `stroke-linejoin`, `stroke-dasharray`;
-- visibilità e trasformazione: `opacity`, `display`, `transform`;
+- visibilità, [fusione](scene-format-effects.md) e trasformazione: `opacity`, `style`, `display`, `transform`;
 - testo: `font-family`, `font-size`, `font-weight`, `font-style`, `letter-spacing`,
   `text-decoration`, `text-anchor`, e `dy` sui `tspan` ([testo](scene-format-text.md));
 - identità: `id`, più gli attributi `fub:*` di questa pagina;
@@ -346,7 +346,7 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
       `fub:shape`, `fub:geom`, `fub:wrap`, `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
-      stroke-linejoin stroke-dasharray opacity display font-family font-size font-weight
+      stroke-linejoin stroke-dasharray opacity style display font-family font-size font-weight
       font-style letter-spacing text-decoration text-anchor preserveAspectRatio`;
    5. `transform`, poi `href`;
    6. gli attributi `fub:*` sconosciuti e quelli di altri namespace,

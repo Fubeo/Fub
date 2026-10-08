@@ -15,7 +15,9 @@
 // toglie i tratteggi all'export, `ripiego` toglie le risorse alla Lettura,
 // che mostra allora i colori di ripiego, `carta` toglie le carte delle
 // tavole all'export, `ritaglio` mostra nella Lettura il disegno intero al
-// posto della sua tavola, come un embed che non la ritagliasse.
+// posto della sua tavola, come un embed che non la ritagliasse, `fusione`
+// toglie le fusioni all'export, `sfocatura` vi sfoca gli effetti un decimo
+// di meno.
 //
 // `?wrap=check` prova invece gli a capo dei testi in area contro il browser
 // (`wrap-check.ts`), e ne mette gli esiti in `data-wrap`; `?wrap=zwnj` li
@@ -98,7 +100,11 @@ async function main(): Promise<void> {
     ? text.replace(/ ?stroke-dasharray(="[^"]*"|:[^;"]*;?)/g, "")
     : variant === "carta"
       ? text.replace(/<rect [^>]*fub:role="paper"[^>]*\/>/g, "")
-      : text;
+      : variant === "fusione"
+        ? text.replace(/ style="mix-blend-mode: [^"]*"/g, "")
+        : variant === "sfocatura"
+          ? text.replace(/stdDeviation="([^"]*)"/g, (_, value: string) => `stdDeviation="${Number(value) * 0.9}"`)
+          : text;
   const png = await rasterize(await selfContained(out, async () => null, 0));
   if (png === null) throw new Error(`il PNG di ${found.id} non si fa`);
   await picture("export", png);

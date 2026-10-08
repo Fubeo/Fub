@@ -23,6 +23,8 @@ import {
   type TransformId,
 } from "./properties";
 import { lengthUnits, PERCENT_UNITS } from "./quantity";
+import { defaultEffect } from "./effects";
+import type { EffectsPanelView } from "./effects-panel";
 import type { GradientPanelView } from "./gradient-panel";
 import type { PaintSample } from "./resources";
 import type { ColorsView } from "./swatches-panel";
@@ -53,6 +55,8 @@ let state: {
   colors: ColorsView | null;
   /// La sezione «Sfumatura», se c'è.
   gradient: GradientPanelView | null;
+  /// La sezione «Effetti», se c'è.
+  effects: EffectsPanelView | null;
   dash: string | null;
   anchor: string | null;
   bold: boolean | null;
@@ -189,6 +193,7 @@ function view(): PropertiesView {
     ...(state.recent === null ? {} : { recent: state.recent }),
     ...(state.colors === null ? {} : { colors: state.colors }),
     ...(state.gradient === null ? {} : { gradient: state.gradient }),
+    ...(state.effects === null ? {} : { effects: state.effects }),
   };
 }
 
@@ -255,6 +260,9 @@ function mount(): Properties {
       onPreview: (target, change) => calls.push(`preview ${target} ${JSON.stringify(change)}`),
       onStop: (index) => calls.push(`stop ${index}`),
     },
+    effects: {
+      onChange: (change, label) => (calls.push(`effects ${JSON.stringify(change)} ${label}`), null),
+    },
     onTarget: (target) => calls.push(`target ${target}`),
     announce: (text) => announced.push(text),
     onLeave: () => calls.push("leave"),
@@ -306,6 +314,7 @@ beforeEach(() => {
     recent: null,
     colors: null,
     gradient: null,
+    effects: null,
     dash: "solid",
     anchor: "start",
     bold: null,
@@ -828,6 +837,103 @@ describe("la sezione «Sfumatura»", () => {
     expect([input.selectionStart, input.selectionEnd]).toEqual([0, 7]);
     expect(section("gradient").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
     expect(calls).toEqual(["section gradient open"]);
+  });
+});
+
+describe("la sezione «Effetti»", () => {
+  const EFFECTS: EffectsPanelView = {
+    key: "oaaaaaaaa",
+    count: 1,
+    body: { kind: "list", effects: [defaultEffect("shadow")] },
+    refusal: null,
+    full: false,
+    blurred: false,
+    unit: "pt",
+    swatches: [],
+  };
+  const COLORS: ColorsView = {
+    swatches: [],
+    used: [{ color: "#000000", uses: 2 }],
+    hidden: 0,
+    recent: [],
+    targets: ["fill", "stroke"],
+    current: { fill: "#0072b2", stroke: "#000000" },
+    drawing: "#000000",
+    drawingSwatch: null,
+  };
+  const GRADIENT: GradientPanelView = {
+    key: "oaaaaaaaa",
+    channels: { fill: { count: 1, gradients: 0, kind: "color", look: null, angle: null } },
+    stop: null,
+    expert: false,
+    swatches: [],
+  };
+  const visibleSections = (): Array<string | undefined> =>
+    [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+  const menuItems = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")];
+
+  afterEach(() => closeContextMenu());
+
+  it("non c'è senza gli effetti nella vista, e c'è dopo la sfumatura e prima dei colori", () => {
+    state.gradient = GRADIENT;
+    state.colors = COLORS;
+    mount();
+    expect(section("effects").hidden).toBe(true);
+    expect(visibleSections()).toEqual(["place", "look", "gradient", "colors", "text", "document", "view"]);
+    state.effects = EFFECTS;
+    panel.update(view());
+    expect(visibleSections()).toEqual(["place", "look", "gradient", "effects", "colors", "text", "document", "view"]);
+    expect(toggle("effects").textContent).toBe("Effetti");
+    state.effects = null;
+    panel.update(view());
+    expect(section("effects").hidden).toBe(true);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("«Aggiungi effetto» sta nell'intestazione, e le righe nel corpo della sezione", () => {
+    state.effects = EFFECTS;
+    mount();
+    const add = section("effects").querySelector<HTMLButtonElement>(".draw-properties-heading > .draw-effects-add")!;
+    expect(add.getAttribute("aria-label")).toBe("Aggiungi effetto");
+    expect(add.getAttribute("aria-haspopup")).toBe("menu");
+    expect(section("effects").querySelector(".draw-properties-body .draw-effects-list [role=listitem]")).not.toBeNull();
+    expect(section("effects").querySelectorAll(".draw-properties-body .draw-effects-add")).toHaveLength(0);
+    // Un pulsante preso col puntatore non prende il fuoco, nemmeno questo.
+    const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    add.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(true);
+  });
+
+  it("aggiungere un effetto va all'editor, e apre la sezione se è chiusa", () => {
+    closed = ["effects"];
+    state.effects = EFFECTS;
+    mount();
+    expect(section("effects").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
+    section("effects").querySelector<HTMLButtonElement>(".draw-effects-add")!.click();
+    expect(menuItems().map((item) => item.textContent)).toEqual(["Ombra esterna", "Ombra interna", "Bagliore esterno", "Bagliore interno", "Sfocatura"]);
+    menuItems()[2]!.click();
+    expect(section("effects").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(false);
+    expect(calls).toEqual(["section effects open", `effects ${JSON.stringify({ kind: "add", effect: defaultEffect("glow") })} draw.action.effect_add.glow`]);
+    expect(announced).toEqual(["Aggiunto: Bagliore esterno."]);
+  });
+
+  it("si riscrive nella lingua di adesso con il pannello", () => {
+    state.effects = EFFECTS;
+    mount();
+    expect(section("effects").querySelector(".draw-effect-title")!.textContent).toBe("Ombra esterna");
+    panel.relabel();
+    expect(toggle("effects").textContent).toBe("Effetti");
+  });
+
+  it("il fuoco va alla sezione, e all'intestazione se non c'è niente da scrivere", () => {
+    state.effects = { ...EFFECTS, body: { kind: "none" } };
+    mount();
+    expect(panel.focusSection("effects")).toBe(true);
+    expect(document.activeElement).toBe(toggle("effects"));
+    state.effects = EFFECTS;
+    panel.update(view());
+    expect(panel.focusSection("effects")).toBe(true);
+    expect(document.activeElement).toBe(section("effects").querySelector(".draw-effect-show"));
   });
 });
 

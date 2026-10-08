@@ -195,6 +195,63 @@ export function keyword(name: string, value: string): boolean {
   return KEYWORDS.get(name)?.includes(trim(value)) ?? false;
 }
 
+/// I modi di fusione di `mix-blend-mode`, quelli di Compositing and Blending.
+export const BLEND_MODES: readonly string[] = [
+  "normal",
+  "multiply",
+  "screen",
+  "overlay",
+  "darken",
+  "lighten",
+  "color-dodge",
+  "color-burn",
+  "hard-light",
+  "soft-light",
+  "difference",
+  "exclusion",
+  "hue",
+  "saturation",
+  "color",
+  "luminosity",
+];
+
+/// Ciò che dice lo `style` del formato: il modo di fusione e, su un
+/// contenitore, se isola la fusione di ciò che contiene.
+export interface BlendStyle {
+  readonly blend: string | null;
+  readonly isolate: boolean | null;
+}
+
+/// Lo `style` che il formato ammette: le dichiarazioni `mix-blend-mode` e,
+/// con `container`, `isolation` (`isolate` o `auto`), ognuna al più una
+/// volta, separate da `;`, con un `;` facoltativo in fondo. I browser
+/// ignorano i due attributi di presentazione omonimi: per questo stanno in
+/// `style`. Nomi e valori in minuscolo; niente `!important`, commenti o
+/// altre proprietà, che lasciano estraneo l'elemento.
+export function blendStyle(value: string, container: boolean): BlendStyle | null {
+  let blend: string | null = null;
+  let isolate: boolean | null = null;
+  const declarations = value.split(";").map(trim);
+  if (declarations[declarations.length - 1] === "") declarations.pop();
+  if (declarations.length === 0) return null;
+  for (const declaration of declarations) {
+    const colon = declaration.indexOf(":");
+    if (colon < 0) return null;
+    const name = trim(declaration.slice(0, colon));
+    const given = trim(declaration.slice(colon + 1));
+    if (name === "mix-blend-mode" && blend === null) {
+      if (!BLEND_MODES.includes(given)) return null;
+      blend = given;
+    } else if (name === "isolation" && container && isolate === null) {
+      if (given !== "isolate" && given !== "auto") return null;
+      isolate = given === "isolate";
+    } else {
+      return null;
+    }
+  }
+  return { blend, isolate };
+}
+
 /// `letter-spacing`: `normal`, che vale 0, o una lunghezza, anche negativa.
 export function letterSpacing(value: string): number | null {
   return trim(value) === "normal" ? 0 : length(value);

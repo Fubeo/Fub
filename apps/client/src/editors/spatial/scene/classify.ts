@@ -31,6 +31,7 @@ import { readVarWidth, type VarWidth } from "./varwidth";
 import type { Span } from "./text";
 import {
   angle,
+  blendStyle,
   dasharray,
   fraction,
   href,
@@ -398,6 +399,9 @@ export function svgAttribute(tag: Tag, name: string, value: string, resolve: Res
       return DRAWN.has(tag) && resourceOrNone(value, "mask", resolve);
     case "filter":
       return DRAWN.has(tag) && resourceOrNone(value, "filter", resolve);
+    // La fusione, e l'isolamento di un contenitore.
+    case "style":
+      return DRAWN.has(tag) && blendStyle(value, tag === "g" || tag === "a") !== null;
     case "fill-opacity":
     case "stroke-opacity":
     case "opacity":

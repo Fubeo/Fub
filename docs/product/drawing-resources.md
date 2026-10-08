@@ -53,7 +53,7 @@ nell'esportazione il file è quello che è.
   freccia](drawing-tips.md), e quelle scritte da un altro programma restano
   in comune.
 - **Separa** (`Ctrl+Maiusc+G`) non separa un gruppo con un ritaglio, una
-  maschera o un filtro, che valgono per tutto il gruppo, e lo dice; con più
+  maschera, degli effetti o un filtro, che valgono per tutto il gruppo, e lo dice; con più
   gruppi separa gli altri e dice quanti ne restano interi. Allo stesso modo
   «Togli il collegamento» lascia un collegamento con un effetto. Un ritaglio
   o una maschera si tolgono con «Rilascia maschera» ([Disegni, ritagli e
@@ -64,8 +64,9 @@ nell'esportazione il file è quello che è.
   programma, diventa una copia sua, come quando la si cambia. Un campione,
   o una sfumatura di un colore solo, si vede uguale dovunque. Lascia invece
   la trasformazione a un oggetto con un motivo, un marcatore o una sfumatura
-  che eredita dal gruppo, e a un gruppo con un ritaglio, una maschera o un
-  filtro: la risorsa vive nelle loro coordinate, e portarla nella geometria
+  che eredita dal gruppo, a un oggetto con degli [effetti](drawing-effects.md),
+  e a un gruppo con un ritaglio, una maschera o un filtro: la risorsa vive
+  nelle loro coordinate, e portarla nella geometria
   cambierebbe ciò che si vede. Un'immagine col suo ritaglio la applica, e il
   ritaglio la segue. Gli oggetti dentro il gruppo la applicano
   ciascuno per sé

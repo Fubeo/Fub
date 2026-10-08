@@ -206,6 +206,74 @@ pub(crate) fn keyword(name: &str, value: &str) -> bool {
     allowed.contains(&value)
 }
 
+/// I modi di fusione che `mix-blend-mode` ammette: quelli di CSS
+/// Compositing and Blending 1, che i browser e `resvg` disegnano allo stesso
+/// modo; `plus-darker` e `plus-lighter` no.
+pub(crate) const BLEND_MODES: [&str; 16] = [
+    "normal",
+    "multiply",
+    "screen",
+    "overlay",
+    "darken",
+    "lighten",
+    "color-dodge",
+    "color-burn",
+    "hard-light",
+    "soft-light",
+    "difference",
+    "exclusion",
+    "hue",
+    "saturation",
+    "color",
+    "luminosity",
+];
+
+/// Ciò che dice lo `style` del formato: il modo di fusione e, su un
+/// contenitore, se isola la fusione di ciò che contiene.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) struct BlendStyle {
+    pub(crate) blend: Option<&'static str>,
+    pub(crate) isolate: Option<bool>,
+}
+
+/// Lo `style` che il formato ammette: le dichiarazioni `mix-blend-mode` e,
+/// con `container`, `isolation` (`isolate` o `auto`), ognuna al più una
+/// volta, separate da `;`, con un `;` facoltativo in fondo. I browser
+/// ignorano i due attributi di presentazione omonimi: per questo stanno in
+/// `style`. Nomi e valori in minuscolo; niente `!important`, commenti o
+/// altre proprietà, che lasciano estraneo l'elemento.
+pub(crate) fn blend_style(value: &str, container: bool) -> Option<BlendStyle> {
+    let mut out = BlendStyle {
+        blend: None,
+        isolate: None,
+    };
+    let mut declarations = value.split(';').map(trim).collect::<Vec<_>>();
+    if declarations.last() == Some(&"") {
+        declarations.pop();
+    }
+    if declarations.is_empty() {
+        return None;
+    }
+    for declaration in declarations {
+        let (name, value) = declaration.split_once(':')?;
+        let value = trim(value);
+        match trim(name) {
+            "mix-blend-mode" if out.blend.is_none() => {
+                out.blend = Some(BLEND_MODES.into_iter().find(|mode| *mode == value)?);
+            }
+            "isolation" if container && out.isolate.is_none() => {
+                out.isolate = Some(match value {
+                    "isolate" => true,
+                    "auto" => false,
+                    _ => return None,
+                });
+            }
+            _ => return None,
+        }
+    }
+    Some(out)
+}
+
 /// `letter-spacing`: `normal`, che vale 0, o una lunghezza, anche negativa.
 pub(crate) fn letter_spacing(value: &str) -> Option<f64> {
     if trim(value) == "normal" {
@@ -836,6 +904,54 @@ mod tests {
             assert_eq!(paint(bad), None, "{bad}");
         }
         assert!(NAMED_COLORS.windows(2).all(|w| w[0].0 < w[1].0));
+    }
+
+    #[test]
+    fn the_style_of_the_format_says_only_the_blend_and_the_isolation() {
+        let multiply = BlendStyle {
+            blend: Some("multiply"),
+            isolate: None,
+        };
+        assert_eq!(
+            blend_style("mix-blend-mode: multiply", false),
+            Some(multiply)
+        );
+        assert_eq!(
+            blend_style(" mix-blend-mode:multiply ; ", false),
+            Some(multiply)
+        );
+        assert_eq!(
+            blend_style("isolation: isolate; mix-blend-mode: screen", true),
+            Some(BlendStyle {
+                blend: Some("screen"),
+                isolate: Some(true),
+            })
+        );
+        assert_eq!(
+            blend_style("isolation: auto", true),
+            Some(BlendStyle {
+                blend: None,
+                isolate: Some(false),
+            })
+        );
+        // Soltanto un contenitore isola.
+        assert_eq!(blend_style("isolation: isolate", false), None);
+        for wrong in [
+            "",
+            ";",
+            "mix-blend-mode",
+            "mix-blend-mode: Multiply",
+            "MIX-BLEND-MODE: multiply",
+            "mix-blend-mode: plus-lighter",
+            "mix-blend-mode: multiply !important",
+            "mix-blend-mode: multiply; mix-blend-mode: screen",
+            "mix-blend-mode: multiply;; isolation: isolate",
+            "mix-blend-mode: /* x */ multiply",
+            "fill: red",
+            "mix-blend-mode: multiply; fill: red",
+        ] {
+            assert_eq!(blend_style(wrong, true), None, "{wrong:?}");
+        }
     }
 
     #[test]

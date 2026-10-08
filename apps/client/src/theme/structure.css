@@ -1072,13 +1072,18 @@ html, body, #app {
 /* FubDraw: gli strati del painter e quello sopra, nell'ordine del documento.
    Uno strato vivo non eredita niente dalla pagina, come un SVG aperto da
    solo: il testo del disegno parte dai valori iniziali, non dal carattere
-   della shell. */
+   della shell. Il painter isola: la fusione di un oggetto attraversa gli
+   strati, come in un SVG solo, e si ferma al disegno, come nell'export,
+   senza toccare lo sfondo dell'editor. */
 .spatial-painter,
 .spatial-overlay {
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
+}
+.spatial-painter {
+  isolation: isolate;
 }
 .spatial-overlay {
   width: 100%;
@@ -1684,6 +1689,30 @@ html, body, #app {
 }
 .draw-arrange[data-gesture] {
   visibility: hidden;
+}
+/* Il campo dell'opacità della barra: il numero, largo quattro cifre e un
+   poco di più per «Misto», e il «%» accanto, alti come i pulsanti. */
+.draw-arrange-field {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 44px;
+}
+.draw-arrange-field[hidden] {
+  display: none;
+}
+.draw-arrange-input {
+  box-sizing: border-box;
+  width: 7ch;
+  min-width: 0;
+  min-height: 44px;
+  padding-block: 0;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.draw-arrange-suffix {
+  flex: none;
+  pointer-events: none;
 }
 /* La barra del gruppo isolato, in basso a sinistra del foglio: il pulsante
    che esce e il percorso dal livello al gruppo. Un percorso lungo va a capo
@@ -2753,6 +2782,112 @@ textarea.draw-properties-input {
 .draw-gradient-remove {
   grid-column: 3;
 }
+/* Gli effetti prendono la riga della sezione: sotto la nota, una riga per
+   effetto, coi comandi sotto quando gli oggetti ne hanno di diversi o un
+   filtro d'altri. L'intestazione della sezione porta, accanto al titolo,
+   il pulsante che aggiunge un effetto: il titolo prende lo spazio, il
+   pulsante la sua misura. Una riga ha tre bersagli da 44 px, l'occhio, il
+   nome e il pulsante che toglie; aperta, mostra i suoi campi in due
+   colonne, e il colore ha la riga intera. */
+.draw-properties-section[data-section="effects"] > .draw-properties-heading {
+  display: flex;
+  align-items: center;
+}
+.draw-properties-section[data-section="effects"] > .draw-properties-heading > .draw-properties-toggle {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.draw-effects {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-effects-add {
+  flex: none;
+}
+.draw-effects-state {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-effects-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-effects-list[hidden],
+.draw-effects-actions[hidden],
+.draw-effect-fields[hidden],
+.draw-effect-chip[hidden] {
+  display: none;
+}
+.draw-effect {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-effect-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.draw-effect-show,
+.draw-effect-remove {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.draw-effect-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  text-align: start;
+}
+.draw-effect-chip {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  forced-color-adjust: none;
+}
+.draw-effect-title {
+  flex: none;
+}
+.draw-effect-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-effect-name > svg {
+  flex: none;
+}
+.draw-effect-name[aria-expanded="false"] > svg {
+  transform: rotate(-90deg);
+}
+.draw-effect-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+}
+.draw-effect-fields > .draw-properties-error {
+  grid-column: 1 / -1;
+}
+.draw-effects-actions {
+  display: flex;
+  flex-direction: column;
+}
 /* Gli attributi, come sezione delle proprietà, scorrono con loro e non
    hanno un titolo loro. */
 .draw-inspector[data-nested] {
@@ -2955,6 +3090,14 @@ textarea.draw-properties-input {
   .draw-gradient-thumb[data-selected] > .draw-gradient-thumb-color {
     outline: 2px solid Highlight;
     outline-offset: 1px;
+  }
+  /* Il campione di un effetto tiene il suo colore, col bordo del testo; la
+     riga aperta ha il bordo dell'evidenza, oltre alla freccia che si volta. */
+  .draw-effect-chip {
+    border-color: CanvasText;
+  }
+  .draw-effect[data-open] {
+    border-color: Highlight;
   }
   .draw-cursor::before,
   .draw-cursor::after {

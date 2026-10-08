@@ -45,6 +45,7 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import { apply } from "../scene/matrix";
 import { MAX_COUNT, MIN_COUNT, type PolygonalShape } from "../scene/parametric";
 import { UNITS, type LengthUnit } from "../scene/rulers";
+import { BLEND_MODES } from "../scene/values";
 import { t, type DrawKey } from "../strings";
 import type { Axis, Edge, Order } from "./arrange";
 import { MIN_BOARD_SIDE, orientationOf, orientedRect, presetOf, presetRect, PRESETS, roundRect, type PresetId, type Rect } from "./boards";
@@ -68,7 +69,7 @@ import {
   type PropertiesView,
   type SegmentState,
 } from "./properties";
-import { ANGLE_UNITS, lengthUnits, PERCENT_UNITS } from "./quantity";
+import { ANGLE_UNITS, evaluate, lengthUnits, PERCENT_UNITS, type QuantityProblem } from "./quantity";
 import { NAME_MAX } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
@@ -97,6 +98,39 @@ export const DASH_LABELS: Readonly<Record<Dash, DrawKey>> = {
   dashed: "draw.outline.dashed",
   dotted: "draw.outline.dotted",
   dashdot: "draw.outline.dashdot",
+};
+
+/// I modi di fusione nei gruppi di Illustrator e Photoshop: il normale; poi
+/// quelli che scuriscono, quelli che schiariscono, quelli che li mescolano
+/// secondo la luce, le differenze, e quelli che cambiano il colore. Ogni
+/// modo di `BLEND_MODES` sta in un gruppo solo.
+export const BLEND_GROUPS: ReadonlyArray<readonly string[]> = [
+  ["normal"],
+  ["darken", "multiply", "color-burn"],
+  ["lighten", "screen", "color-dodge"],
+  ["overlay", "soft-light", "hard-light"],
+  ["difference", "exclusion"],
+  ["hue", "saturation", "color", "luminosity"],
+];
+
+/// I nomi dei modi di fusione.
+export const BLEND_LABELS: Readonly<Record<string, DrawKey>> = {
+  normal: "draw.blend.normal",
+  darken: "draw.blend.darken",
+  multiply: "draw.blend.multiply",
+  "color-burn": "draw.blend.color_burn",
+  lighten: "draw.blend.lighten",
+  screen: "draw.blend.screen",
+  "color-dodge": "draw.blend.color_dodge",
+  overlay: "draw.blend.overlay",
+  "soft-light": "draw.blend.soft_light",
+  "hard-light": "draw.blend.hard_light",
+  difference: "draw.blend.difference",
+  exclusion: "draw.blend.exclusion",
+  hue: "draw.blend.hue",
+  saturation: "draw.blend.saturation",
+  color: "draw.blend.color",
+  luminosity: "draw.blend.luminosity",
 };
 
 export const CAP_LABELS: Readonly<Record<Cap, DrawKey>> = {
@@ -220,6 +254,7 @@ export const LOOK_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
   stroke: "draw.action.outline_color",
   strokeWidth: "draw.action.stroke_width",
   opacity: "draw.action.opacity",
+  blend: "draw.action.blend",
   preset: "draw.action.text_style",
   family: "draw.action.font",
   size: "draw.action.font_size",
@@ -234,6 +269,7 @@ export const LOOK_ACTIONS: Readonly<Partial<Record<FieldId, DrawKey>>> = {
 /// Il nome del passo di annulla del campo dell'aspetto `id` scritto con
 /// `value`: per «Enfasi», quello dell'interruttore.
 export function lookAction(id: FieldId, value: number | string | boolean): DrawKey | null {
+  if (id === "isolate") return value === true ? "draw.action.isolate" : "draw.action.unisolate";
   if (id !== "emphasis") return LOOK_ACTIONS[id] ?? null;
   const which = EMPHASIS_IDS.find((each) => typeof value === "string" && value.startsWith(`${each}:`));
   return which === undefined ? null : EMPHASES[which];
@@ -563,6 +599,19 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         max: 100,
       };
     }
+    // La fusione è del livello Esperto; l'isolamento, soltanto di chi è fatto
+    // di gruppi e collegamenti.
+    if (has("blend") && look.blend.count > 0) {
+      fields.blend = {
+        kind: "choice",
+        label: t("draw.properties.blend"),
+        value: look.blend.value,
+        options: BLEND_GROUPS.flatMap((group, at) => group.map((mode, i): ChoiceOption => ({ value: mode, label: t(BLEND_LABELS[mode]!), ...(at > 0 && i === 0 ? { separator: true } : {}) }))),
+      };
+      if (look.isolate.count === look.blend.count) {
+        fields.isolate = { kind: "switch", label: t("draw.properties.isolate"), on: look.isolate.value === true, ...(input.editable ? {} : { disabled: true }) };
+      }
+    }
     if (outline !== null) {
       const dashes: ChoiceOption[] = DASHES.map((dash) => ({ value: dash, label: t(DASH_LABELS[dash]) }));
       // Un tratteggio che non è del menu c'è, col suo valore.
@@ -794,6 +843,26 @@ function colorsView(colors: NonNullable<FieldsInput["colors"]>, selection: Selec
   };
 }
 
+/// Che cosa non va in ciò che si scrive in un campo di numeri.
+const PROBLEMS: Readonly<Record<QuantityProblem, DrawKey>> = {
+  empty: "draw.properties.problem.empty",
+  syntax: "draw.properties.problem.syntax",
+  unit: "draw.properties.problem.unit",
+  relative: "draw.properties.problem.relative",
+  finite: "draw.properties.problem.finite",
+};
+
+/// L'opacità che dice `text`, scritta nel campo della barra «Disponi»: in
+/// percentuale, intera, fra 0 e 100, letta come quella del pannello
+/// (`quantity.ts`: «50», «50%», «40+10»). `current` è il valore di adesso, o
+/// `null` se la selezione ne ha più d'uno. Una stringa dice perché non si
+/// legge.
+export function typedOpacity(text: string, current: number | null): number | string {
+  const out = evaluate(text, { units: PERCENT_UNITS, current, relative: false });
+  if ("problem" in out) return t(PROBLEMS[out.problem], { units: Object.keys(PERCENT_UNITS).join(", ") });
+  return Math.min(100, Math.max(0, Math.round(out.value)));
+}
+
 /// Il cambio dell'aspetto che scrive il campo `id` col valore `value`, nelle
 /// unità del documento `unit`; `null` se il campo non è dell'aspetto, o il
 /// valore non è suo.
@@ -807,6 +876,10 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
       return typeof value === "number" ? { width: fromUnit(value, lookUnit(unit)) } : null;
     case "opacity":
       return typeof value === "number" ? { opacity: value / 100 } : null;
+    case "blend":
+      return typeof value === "string" && BLEND_MODES.includes(value) ? { blend: value } : null;
+    case "isolate":
+      return typeof value === "boolean" ? { isolate: value } : null;
     case "family":
       return typeof value === "string" && value !== "" ? { family: value } : null;
     case "size":

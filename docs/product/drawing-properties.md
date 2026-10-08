@@ -52,11 +52,16 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
 - **Aspetto.** Riempimento e Contorno, con la parte «Colori personalizzati»;
   Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
   Angoli, come il menu «Contorno» di [Disegni, livello
-  Esperto](drawing-expert.md); per linee e tracciati aperti, «Punta d’inizio»
-  e «Punta di fine» ([Disegni, punte delle linee](drawing-tips.md)).
+  Esperto](drawing-expert.md), e la Fusione, con «Isola la fusione» per
+  gruppi e collegamenti ([Disegni, effetti e fusione](drawing-effects.md#la-fusione));
+  per linee e tracciati aperti, «Punta d’inizio» e «Punta di fine»
+  ([Disegni, punte delle linee](drawing-tips.md)).
 - **Sfumatura.** Il tipo, Pieno, Lineare o Radiale, la barra dei punti coi
   campi del punto scelto, le sfumature pronte, «Inverti» e l'Angolo;
   all'Esperto anche «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)).
+- **Effetti**, all'Esperto: le ombre, i bagliori e la sfocatura dell'oggetto,
+  una riga per effetto, con «Aggiungi effetto» nell'intestazione ([Disegni,
+  effetti e fusione](drawing-effects.md#la-sezione-effetti)).
 - **Colori del documento**, anche senza selezione, e allora per prima: i
   campioni, i colori usati e i recenti, da dare agli oggetti scelti o con cui
   disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).

@@ -151,8 +151,8 @@ niente. Col dito l'anteprima sta sopra il dito, che non la copre.
 
 - **Con oggetti scelti**, un clic dà loro l'**aspetto** della forma sotto il
   puntatore, come «Incolla lo stile»: il riempimento, il contorno col suo
-  spessore, il tratteggio, gli estremi e gli angoli, l'opacità dell'oggetto
-  e il carattere ([Disegni, appunti](drawing-clipboard.md#lo-stile)). È un
+  spessore, il tratteggio, gli estremi e gli angoli, l'opacità dell'oggetto,
+  i suoi effetti e il modo di fusione, e il carattere ([Disegni, appunti](drawing-clipboard.md#lo-stile)). È un
   passo solo, «Aspetto preso col contagocce»; una sfumatura propria arriva
   come copia, una per oggetto. L'anteprima mostra un disco col riempimento e
   un anello col contorno, col nome della forma.

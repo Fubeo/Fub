@@ -6,7 +6,8 @@
 import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
-import { lookOf, lookOps, paintText, styleOf, styleOps, type LookChange, type Restyled, type Style } from "./look";
+import { followEffects, type Effect, type Shadow } from "./effects";
+import { lookOf, lookOps, opacityOf, paintText, styleOf, styleOps, type LookChange, type Restyled, type Style } from "./look";
 import { estimate } from "./measure";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
@@ -324,6 +325,8 @@ describe("lo stile copiato e incollato", () => {
       stroke: "#e69f00",
       outline: { width: "4", dashes: "8 6", cap: "round", join: "miter" },
       opacity: 0.5,
+      blend: null,
+      effects: [],
       font: null,
       box: null,
       tips: null,
@@ -334,12 +337,14 @@ describe("lo stile copiato e incollato", () => {
 
   it("copia il colore di un tratto a penna come contorno, e di un testo il carattere", () => {
     const opened = open(doc(`${LAYER}${PEN("oaaaaaaaa")}${TEXT("obbbbbbbb", ["Uno"], ' font-family="Literata, serif" font-size="24" font-weight="bold"')}</g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, font: null, box: null, tips: null, resources: new Map(), swatches: new Map() });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: "#d55e00", outline: null, opacity: 1, blend: null, effects: [], font: null, box: null, tips: null, resources: new Map(), swatches: new Map() });
     expect(copied(opened, "obbbbbbbb")).toEqual({
       fill: "#000000",
       stroke: null,
       outline: null,
       opacity: 1,
+      blend: null,
+      effects: [],
       font: { family: "Literata, serif", size: 24, weight: "bold", style: "normal", spacing: 0, underline: false, strike: false, leading: null },
       box: null,
       tips: null,
@@ -375,6 +380,8 @@ describe("lo stile copiato e incollato", () => {
       stroke,
       outline: null,
       opacity: 1,
+      blend: null,
+      effects: [],
       font: null,
       box: null,
       tips: null,
@@ -399,7 +406,7 @@ describe("lo stile copiato e incollato", () => {
 
   it("di un'immagine copia soltanto l'opacità", () => {
     const opened = open(doc(`${LAYER}<image id="oaaaaaaaa" x="0" y="0" width="10" height="10" href="foto.png" opacity="0.25"/></g>`));
-    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, font: null, box: null, tips: null, resources: new Map(), swatches: new Map() });
+    expect(copied(opened, "oaaaaaaaa")).toEqual({ fill: null, stroke: null, outline: null, opacity: 0.25, blend: null, effects: [], font: null, box: null, tips: null, resources: new Map(), swatches: new Map() });
   });
 
   it("incolla tutto in un passo, e toglie ciò che la parte eredita già", () => {
@@ -735,5 +742,246 @@ describe("lo stile con le punte", () => {
     expect(after.match(/<linearGradient /g)).toHaveLength(1);
     expect(after.match(/<marker /g)).toHaveLength(1);
     expect(used(after, "obbbbbbbb", "end")!.kind).toBe("triangle medium end");
+  });
+});
+
+describe("la fusione", () => {
+  const GROUP = (id: string, extra = "", inner = ""): string => `<g id="${id}"${extra}>${inner || RECT(`${id}r`)}</g>`;
+
+  it("si legge dallo style: comune, mista, e normale se manca; l'isolamento è dei gruppi e dei collegamenti", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#0072b2" style="mix-blend-mode: multiply"')}${RECT("obbbbbbbb")}</g>`));
+    const seen = look(opened);
+    expect(seen.blend).toEqual({ count: 2, value: null });
+    expect(seen.isolate).toEqual({ count: 0, value: null });
+    const same = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#0072b2" style="mix-blend-mode: screen"')}${RECT("obbbbbbbb", ' fill="#d55e00" style="mix-blend-mode:screen"')}</g>`));
+    expect(look(same).blend).toEqual({ count: 2, value: "screen" });
+    const none = open(doc(`${LAYER}${RECT("oaaaaaaaa")}</g>`));
+    expect(look(none).blend).toEqual({ count: 1, value: "normal" });
+    const groups = open(doc(`${LAYER}${GROUP("ogroup001", ' style="mix-blend-mode: multiply; isolation: isolate"')}${GROUP("ogroup002", ' style="isolation: isolate"')}</g>`));
+    expect(look(groups).isolate).toEqual({ count: 2, value: true });
+    expect(look(groups).blend).toEqual({ count: 2, value: null });
+    const mixed = open(doc(`${LAYER}${GROUP("ogroup001", ' style="isolation: isolate"')}${GROUP("ogroup002")}</g>`));
+    expect(look(mixed).isolate).toEqual({ count: 2, value: null });
+  });
+
+  it("scrive lo style come lo vuole il formato, e un annulla lo disfa al byte", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa")}</g>`));
+    const after = applied(opened, restyled(opened, { blend: "multiply" }));
+    expect(after).toContain('stroke-width="2" style="mix-blend-mode: multiply"/>');
+    expect(look(opened).blend).toEqual({ count: 1, value: "multiply" });
+    // Normale toglie l'attributo, e il motore resta com'era.
+    const back = applied(opened, restyled(opened, { blend: "normal" }));
+    expect(back).not.toContain("style=");
+    expect(look(opened).blend).toEqual({ count: 1, value: "normal" });
+    // Cambiare soltanto la fusione rifà lo style con le due metà in ordine.
+    const odd = open(doc(`${LAYER}${GROUP("ogroup001", ' style="isolation:isolate;mix-blend-mode:screen"')}</g>`));
+    expect(applied(odd, restyled(odd, { blend: "overlay" }))).toContain('style="mix-blend-mode: overlay; isolation: isolate"');
+  });
+
+  it("tutti e sedici i modi si scrivono, e si rileggono", () => {
+    const modes = ["normal", "darken", "multiply", "color-burn", "lighten", "screen", "color-dodge", "overlay", "soft-light", "hard-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"];
+    expect(modes).toHaveLength(16);
+    for (const mode of modes) {
+      const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa")}</g>`));
+      // Normale è ciò che l'oggetto già ha: niente da scrivere.
+      if (mode === "normal") {
+        expect(restyled(opened, { blend: mode }).ops).toEqual([]);
+        continue;
+      }
+      const after = applied(opened, restyled(opened, { blend: mode }));
+      expect(look(open(after)).blend).toEqual({ count: 1, value: mode });
+    }
+  });
+
+  it("un modo che il formato non ha non si scrive", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa")}</g>`));
+    expect(restyled(opened, { blend: "plus-lighter" }).ops).toEqual([]);
+    expect(restyled(opened, { blend: "inherit" }).ops).toEqual([]);
+  });
+
+  it("isola un gruppo, tiene la fusione che ha, e toglie l'isolamento senza toccare il resto", () => {
+    const opened = open(doc(`${LAYER}${GROUP("ogroup001", ' style="mix-blend-mode: multiply"')}</g>`));
+    const group = (): ReturnType<typeof look> => lookOf(opened.engine.model!, [opened.reindex().get("ogroup001")!]);
+    const on = applied(opened, lookOps(opened.engine.model!, [opened.reindex().get("ogroup001")!], { isolate: true }, estimate, ids(opened)));
+    expect(on).toContain('<g id="ogroup001" style="mix-blend-mode: multiply; isolation: isolate">');
+    expect(group().isolate).toEqual({ count: 1, value: true });
+    expect(group().blend.value).toBe("multiply");
+    const off = applied(opened, lookOps(opened.engine.model!, [opened.reindex().get("ogroup001")!], { isolate: false }, estimate, ids(opened)));
+    expect(off).toContain('<g id="ogroup001" style="mix-blend-mode: multiply">');
+    // Con un gruppo solo isolato, tolta la riga non resta lo style.
+    const alone = open(doc(`${LAYER}${GROUP("ogroup001", ' style="isolation: isolate"')}</g>`));
+    const bare = applied(alone, lookOps(alone.engine.model!, [alone.reindex().get("ogroup001")!], { isolate: false }, estimate, ids(alone)));
+    expect(bare).toContain('<g id="ogroup001">');
+  });
+
+  it("l'isolamento di un oggetto che non è un gruppo non c'è e non si scrive", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa")}</g>`));
+    expect(restyled(opened, { isolate: true }).ops).toEqual([]);
+    expect(look(opened).isolate).toEqual({ count: 0, value: null });
+  });
+
+  it("dà la fusione a tutti, ognuno col suo style, in un passo", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#0072b2" style="mix-blend-mode: screen"')}${GROUP("ogroup001", ' style="isolation: isolate"')}${RECT("occcccccc")}</g>`));
+    const after = applied(opened, restyled(opened, { blend: "difference" }));
+    expect(after).toContain('<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="#0072b2" style="mix-blend-mode: difference"/>');
+    expect(after).toContain('<g id="ogroup001" style="mix-blend-mode: difference; isolation: isolate">');
+    expect(after).toContain('stroke-width="2" style="mix-blend-mode: difference"/></g></svg>');
+    expect(look(opened).blend).toEqual({ count: 3, value: "difference" });
+  });
+
+  it("l'opacità di opacityOf è quella di lookOf, e la leggono mille oggetti entro un fotogramma", () => {
+    const opened = open(doc(`${LAYER}${RECT("oaaaaaaaa", ' fill="#000000" opacity="0.5"')}${RECT("obbbbbbbb", ' fill="#000000" opacity="0.25"')}${RECT("occcccccc")}</g>`));
+    const model = opened.engine.model!;
+    const units = opened.index.units;
+    expect(opacityOf(model, units)).toEqual(look(opened).opacity);
+    expect(opacityOf(model, units)).toEqual({ count: 3, value: null });
+    expect(opacityOf(model, [])).toEqual({ count: 0, value: null });
+    expect(opacityOf(model, [opened.index.get("oaaaaaaaa")!])).toEqual({ count: 1, value: 0.5 });
+    const rects = Array.from({ length: 1000 }, (_, i) => RECT(`o${String(i).padStart(8, "0")}`, ' fill="#000000" opacity="0.5"')).join("");
+    const many = open(doc(`${LAYER}${rects}</g>`));
+    let warm = Infinity;
+    for (let run = 0; run < 6; run++) {
+      const start = performance.now();
+      opacityOf(many.engine.model!, many.index.units);
+      warm = Math.min(warm, performance.now() - start);
+    }
+    expect(opacityOf(many.engine.model!, many.index.units)).toEqual({ count: 1000, value: 0.5 });
+    expect(warm).toBeLessThan(16);
+  });
+});
+
+describe("la fusione e gli effetti nello stile copiato", () => {
+  const SHADOW: Shadow = { kind: "shadow", dx: 0, dy: 4, blur: 8, color: "#000000", opacity: 0.25, hidden: false };
+
+  /// Il motore di `body` con le regioni degli effetti che seguono gli oggetti, come lo installa l'editor.
+  function sheet(body: string, defs = ""): Opened {
+    const opened = open(doc(`${defs}${LAYER}${body}</g>`));
+    opened.engine.follow = (model, touched) => followEffects(model, touched, (id) => opened.engine.holder(id), estimate);
+    return opened;
+  }
+  const copied = (opened: Opened, key: string): Style | null => styleOf(opened.engine.model!, opened.reindex().get(key)!);
+  const pasted = (opened: Opened, keys: readonly string[], style: Style): Restyled => {
+    const index = opened.reindex();
+    return styleOps(opened.engine.model!, keys.map((key) => index.get(key)!), style, estimate, ids(opened));
+  };
+  /// Lo stato degli effetti di `id`, com'è scritto.
+  const effectOf = (text: string, id: string): string | null => new RegExp(`<[a-z]+ id="${id}"[^>]*? fub:effect="([^"]*)"`).exec(text)?.[1] ?? null;
+
+  /// Un rettangolo con un'ombra, già col suo filtro, e uno senza nulla.
+  function shadowed(): Opened {
+    const opened = sheet(RECT("oaaaaaaaa", ' fill="#0072b2" style="mix-blend-mode: multiply"') + RECT("obbbbbbbb") + RECT("occcccccc"));
+    const given = pasted(opened, ["oaaaaaaaa"], { ...copied(opened, "oaaaaaaaa")!, effects: [SHADOW] });
+    expect(opened.engine.apply(gesture(given.ops)!).outcome).toBe("applied");
+    return opened;
+  }
+
+  it("copia la fusione e gli effetti di ciò che si vede", () => {
+    const opened = shadowed();
+    const style = copied(opened, "oaaaaaaaa")!;
+    expect(style.blend).toBe("multiply");
+    expect(style.effects).toEqual([SHADOW]);
+    expect(copied(opened, "obbbbbbbb")!.blend).toBeNull();
+    expect(copied(opened, "obbbbbbbb")!.effects).toEqual([]);
+  });
+
+  it("incolla fusione ed effetti in un passo solo, e un annulla torna al byte", () => {
+    const opened = shadowed();
+    const style = copied(opened, "oaaaaaaaa")!;
+    const after = applied(opened, pasted(opened, ["obbbbbbbb", "occcccccc"], style));
+    for (const id of ["obbbbbbbb", "occcccccc"]) {
+      expect(effectOf(after, id)).toBe("shadow 0 4 8 #000000 0.25");
+      expect(new RegExp(`<rect id="${id}"[^>]* style="mix-blend-mode: multiply"`).test(after)).toBe(true);
+      expect(new RegExp(`<rect id="${id}"[^>]* filter="url\\(#r[0-9a-z]{8}\\)"`).test(after)).toBe(true);
+    }
+    expect(after.match(/<defs /g)).toHaveLength(1);
+    expect(after.match(/<filter /g)).toHaveLength(3);
+    // Incollato di nuovo, non c'è niente da cambiare.
+    const again = pasted(opened, ["obbbbbbbb"], style);
+    expect(again.changed).toBe(0);
+    expect(again.ops).toEqual([]);
+  });
+
+  it("un stile normale toglie la fusione e gli effetti di chi li ha", () => {
+    const opened = shadowed();
+    const plain = copied(opened, "obbbbbbbb")!;
+    const after = applied(opened, pasted(opened, ["oaaaaaaaa"], plain));
+    expect(after).not.toContain("mix-blend-mode");
+    expect(after).not.toContain("fub:effect");
+    expect(after).not.toContain("<filter");
+  });
+
+  it("un gruppo isolato tiene l'isolamento quando prende un'altra fusione", () => {
+    const opened = sheet(`<g id="ogroup001" style="mix-blend-mode: screen; isolation: isolate">${RECT("oaaaaaaaa")}</g>${RECT("obbbbbbbb", ' fill="#0072b2" style="mix-blend-mode: multiply"')}`);
+    const after = applied(opened, pasted(opened, ["ogroup001"], copied(opened, "obbbbbbbb")!));
+    expect(after).toContain('<g id="ogroup001" style="mix-blend-mode: multiply; isolation: isolate">');
+  });
+
+  it("chi ha un ritaglio prende la fusione ma non gli effetti, e lo stile dice gli effetti degli altri", () => {
+    const clip = '<clipPath id="rclip0000"><rect x="0" y="0" width="5" height="5"/></clipPath>';
+    const opened = sheet(RECT("oaaaaaaaa", ' fill="#0072b2" style="mix-blend-mode: multiply"') + RECT("obbbbbbbb", ' clip-path="url(#rclip0000)"'), `<defs id="fub-defs">${clip}</defs>`);
+    const style: Style = { ...copied(opened, "oaaaaaaaa")!, effects: [SHADOW] };
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], style));
+    expect(effectOf(after, "obbbbbbbb")).toBeNull();
+    expect(after).toMatch(/<rect id="obbbbbbbb"[^>]* style="mix-blend-mode: multiply"/);
+  });
+
+  it("senza effetti nello stile, il filtro di un altro programma resta, e quello di FubDraw se ne va", () => {
+    const other = '<filter id="x" x="0" y="0" width="200" height="200" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="2"/></filter>';
+    const opened = sheet(RECT("oaaaaaaaa", ' filter="url(#x)"') + RECT("obbbbbbbb") + RECT("occcccccc"), `<defs id="fub-defs">${other}</defs>`);
+    // Il filtro dell'altro programma resta dov'è: lo stile di chi lo ha non cambia niente.
+    const own = copied(opened, "oaaaaaaaa")!;
+    expect(own.effects).toBeNull();
+    expect(pasted(opened, ["oaaaaaaaa"], { ...own, effects: [] }).ops).toEqual([]);
+    // Un'ombra a "obbbbbbbb", poi uno stile senza effetti su di lui: se ne va.
+    const plain = { ...copied(opened, "obbbbbbbb")!, effects: [] as readonly Effect[] };
+    const give = pasted(opened, ["obbbbbbbb"], { ...plain, effects: [SHADOW] });
+    expect(opened.engine.apply(gesture(give.ops)!).outcome).toBe("applied");
+    const after = applied(opened, pasted(opened, ["obbbbbbbb"], plain));
+    expect(after).not.toContain("fub:effect");
+    expect(after).toContain('<filter id="x"');
+  });
+
+  it("un oggetto senza id che prende gli effetti e la fusione ne riceve uno solo", () => {
+    const opened = sheet('<rect x="0" y="0" width="10" height="10" fill="#0072b2"/>' + RECT("oaaaaaaaa", ' fill="#0072b2" style="mix-blend-mode: screen"'));
+    const target = opened.reindex().units.find((unit) => unit.key !== "oaaaaaaaa")!;
+    const style: Style = { ...copied(opened, "oaaaaaaaa")!, effects: [SHADOW] };
+    const done = styleOps(opened.engine.model!, [target], style, estimate, ids(opened));
+    const after = applied(opened, done);
+    const rect = /<rect id="([^"]+)"[^>]* style="mix-blend-mode: screen"/.exec(after);
+    expect(rect).not.toBeNull();
+    expect(effectOf(after, rect![1]!)).toBe("shadow 0 4 8 #000000 0.25");
+    expect(after.match(new RegExp(` id="${rect![1]}"`, "g"))).toHaveLength(1);
+    expect(done.keys).toEqual([rect![1]!]);
+  });
+
+  it("un testo senza id, che si riscrive e prende gli effetti, tiene il suo id e il suo posto", () => {
+    const text = '<text x="10" y="40" fill="#000000" font-family="Inter, sans-serif" font-size="32"><tspan x="10" dy="0">Uno</tspan><tspan x="10" dy="40">Due</tspan></text>';
+    const opened = sheet(RECT("oaaaaaaaa", ' fill="#0072b2" style="mix-blend-mode: screen"') + text + RECT("obbbbbbbb"));
+    const target = opened.reindex().units.find((unit) => !["oaaaaaaaa", "obbbbbbbb"].includes(unit.key))!;
+    const font = { family: "Inter, sans-serif", size: 16, weight: "normal", style: "normal", spacing: 0, underline: false, strike: false, leading: null };
+    const style: Style = { ...copied(opened, "oaaaaaaaa")!, effects: [SHADOW], font };
+    const done = styleOps(opened.engine.model!, [target], style, estimate, ids(opened));
+    const after = applied(opened, done);
+    expect(done.keys).toHaveLength(1);
+    const id = done.keys[0]!;
+    expect(after.match(new RegExp(` id="${id}"`, "g"))).toHaveLength(1);
+    expect(after.indexOf('id="oaaaaaaaa"')).toBeLessThan(after.indexOf(`id="${id}"`));
+    expect(after.indexOf(`id="${id}"`)).toBeLessThan(after.indexOf('id="obbbbbbbb"'));
+    expect(effectOf(after, id)).toBe("shadow 0 4 8 #000000 0.25");
+    // Le righe si sono riscritte sul corpo nuovo.
+    expect(after).toContain(`dy="20"`);
+    expect(after.match(/<defs /g)).toHaveLength(1);
+  });
+
+  it("incolla su mille oggetti con gli effetti entro un tempo ragionevole", () => {
+    const rects = Array.from({ length: 1000 }, (_, i) => RECT(`o${String(i).padStart(8, "0")}`)).join("");
+    const opened = sheet(rects);
+    const style: Style = { ...copied(opened, "o00000000")!, blend: "multiply", effects: [SHADOW] };
+    const start = performance.now();
+    const done = styleOps(opened.engine.model!, opened.index.units, style, estimate, ids(opened));
+    const took = performance.now() - start;
+    expect(done.changed).toBe(1000);
+    expect(done.ops.filter((op) => op.op === "add" && "elem" in op && op.elem.tag === "filter")).toHaveLength(1000);
+    expect(took).toBeLessThan(2000);
   });
 });

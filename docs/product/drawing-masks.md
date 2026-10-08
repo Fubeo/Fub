@@ -90,11 +90,12 @@ d’opacità» o «Rilascia maschera».
 Una maschera non si crea, e il comando dice perché, con meno di due oggetti
 scelti; quando quello in cima è un'immagine, un collegamento o un testo su
 tracciato, o un gruppo per un ritaglio; quando è una linea, che non ha area;
-quando porta già un ritaglio, una maschera o un filtro, e per una maschera
-d'opacità motivi o punte, che cambierebbero ciò che mostra; quando il livello
-ha una trasformazione che lo schiaccia; quando l'oggetto in cima sta in un
-gruppo con un ritaglio, una maschera o un filtro, o uno stile del disegno ne
-cambierebbe l'aspetto dentro la maschera. Anche un rilascio si rifiuta, e lo
+quando porta già un ritaglio, una maschera, degli effetti che si vedono o un
+filtro, e per una maschera d'opacità motivi o punte, che cambierebbero ciò che
+mostra; gli effetti nascosti ci vanno, e tornano col rilascio; quando il
+livello ha una trasformazione che lo schiaccia; quando l'oggetto in cima sta in
+un gruppo con un ritaglio, una maschera, degli effetti o un filtro, o uno stile
+del disegno ne cambierebbe l'aspetto dentro la maschera. Anche un rilascio si rifiuta, e lo
 dice, se i pezzi finirebbero fuori posto o uno stile del disegno li farebbe
 vedere diversi. Le voci spente del menu lo dicono prima, con le parole che il
 comando direbbe, e il menu mostra i tasti di «Crea maschera di ritaglio» e di

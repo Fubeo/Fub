@@ -306,6 +306,7 @@ const PRESENTATION_ORDER = [
   "mask",
   "filter",
   "opacity",
+  "style",
   "display",
   "stop-color",
   "stop-opacity",
