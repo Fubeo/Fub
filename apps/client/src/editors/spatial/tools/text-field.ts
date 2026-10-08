@@ -29,7 +29,7 @@
 //   capo, e ciò che si incolla sta sulla riga.
 
 import type { Lifetime } from "../../../ui/lifetime";
-import { length, letterSpacing, nonNegativeLength, trim } from "../scene/values";
+import { length, letterSpacing, nonNegativeLength, paintReference, trim } from "../scene/values";
 import { t, type DrawKey } from "../strings";
 import type { Measure } from "./measure";
 import { customColor } from "./palette";
@@ -224,6 +224,15 @@ function stepForward(text: string, offset: number, unit: "grapheme" | "word"): n
   return text.length;
 }
 
+/// Il colore CSS di un `fill`: il colore, o il ripiego di una risorsa, come
+/// il colore che un campione scrive accanto a sé; vuoto se non ce n'è uno.
+function fieldColor(fill: string): string {
+  const used = paintReference(fill);
+  if (used === null) return customColor(fill) ?? "";
+  const fallback = used.fallback;
+  return fallback === null || fallback === "none" ? "" : `#${fallback.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+}
+
 /// Lo stile CSS di `attrs`, scritto su `style` a `scale` pixel per unità.
 /// Ciò che `attrs` non scrive si toglie, e il campo lo eredita.
 function paintCss(style: CSSStyleDeclaration, attrs: Attrs | null, lines: ReadonlySet<string> | null, scale: number): void {
@@ -241,9 +250,9 @@ function paintCss(style: CSSStyleDeclaration, attrs: Attrs | null, lines: Readon
   const gap = spacing === undefined ? null : letterSpacing(spacing);
   style.letterSpacing = gap === null ? "" : `${gap * scale}px`;
   const fill = read("fill");
-  // Un colore che il campo non sa mostrare, come un gradiente, lascia quello
-  // di chi lo contiene.
-  style.color = fill === undefined ? "" : customColor(fill) ?? "";
+  // Un colore che il campo non sa mostrare, come un gradiente senza
+  // ripiego, lascia quello di chi lo contiene.
+  style.color = fill === undefined ? "" : fieldColor(fill);
   style.textDecorationLine = lines === null || lines.size === 0 ? "" : [...lines].join(" ");
 }
 

@@ -32,6 +32,12 @@ export function cleanName(text: string): string {
   return chars.length <= NAME_MAX ? collapsed : chars.slice(0, NAME_MAX).join("").trimEnd();
 }
 
+/// `name` come si confronta con un altro nome: pulito da [`cleanName`] e
+/// senza maiuscole, come lo dice uno screen reader.
+export function nameKey(name: string): string {
+  return cleanName(name).toLocaleLowerCase();
+}
+
 /// Il testo del primo `title` fra gli `elems`, e dove sta; `null` se non ce
 /// n'è uno.
 function firstTitle(elems: readonly Elem[]): { readonly at: number; readonly elem: Elem } | null {

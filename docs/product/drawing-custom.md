@@ -41,10 +41,12 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Penna, Gomma, Rettangolo, Ellisse, Linea, Freccia | Essenziale | lo strumento, col suo tasto |
 | Lazo | Standard | lo strumento (`Q`) |
 | Tavola | Standard | lo strumento (`F`); il pulsante «Tavole» col suo elenco; `Alt+PagSu` e `Alt+PagGiù`; nel pannello delle proprietà la sezione «Tavola» ([Disegni, tavole](drawing-boards.md)) |
+| Contagocce | Standard | lo strumento (`I`); `I` e `Maiusc+I` sulla riga attiva dell'albero degli oggetti ([Disegni, colori](drawing-colors.md#il-contagocce)) |
 | Evidenziatore | Standard | lo strumento (`H`) |
 | Poligono | Standard | lo strumento (`Y`), per poligoni e stelle; la sezione «Forma» delle proprietà e la maniglia degli angoli arrotondati |
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
-| Colori personalizzati | Standard | «Altro colore…» e il campione in più |
+| Colori personalizzati | Standard | «Altro colore…» e l'anello del colore scelto |
+| Colori del documento | Standard | nel pannello delle proprietà la sezione «Colori del documento», coi campioni, i colori usati e i recenti; disegnare con un campione ([Disegni, colori](drawing-colors.md)) |
 | Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |
 | Duplica, raggruppa, ordina, allinea e distribuisci | Standard | questi comandi della barra «Disponi», coi loro tasti |
 | Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello; nell'albero i nomi, il filtro, le miniature e le righe da trascinare |
@@ -84,9 +86,10 @@ col suo segno, e «Apri come sorgente».
 Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
 basso: chi aveva in mano il suo strumento riprende la penna, o il primo
 strumento che c'è, o la Selezione; chi sceglieva, col Lazo, coi Nodi, col
-Costruttore di forme o con la Tavola, riprende la Selezione; un tracciato di
-Bézier a metà si conclude com'è; un colore a piacere torna al colore di
-partenza; da un gruppo isolato si esce; la vista girata si raddrizza;
+Costruttore di forme o con la Tavola, e chi aveva il Contagocce, riprende la
+Selezione; un tracciato di Bézier a metà si conclude com'è; un colore a
+piacere torna al colore di partenza, e uno che seguiva un campione resta da
+solo; da un gruppo isolato si esce; la vista girata si raddrizza;
 l'elenco delle tavole si chiude; la cronologia si chiude, e la si ritrova
 riaprendola.
 Il disegno non cambia.

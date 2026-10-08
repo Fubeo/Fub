@@ -24,7 +24,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
-use crate::analysis::{Context, Tally};
+use crate::analysis::{Context, Swatches, Tally};
 use crate::brush::{Brush, BrushError};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::parse_path;
@@ -97,13 +97,70 @@ impl Role {
 
 /// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
 /// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
-/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. Senza, la
-/// risorsa resta.
+/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. `swatch`
+/// è un campione del documento, un colore con un nome: resta anche senza
+/// riferimenti, e duplicare chi lo usa lo condivide. Senza, la risorsa resta.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Lifecycle {
     Private,
     Shared,
+    Swatch,
+}
+
+/// Un campione del documento (formato della scena, risorse): il suo nome,
+/// com'è scritto, e il colore, `#rrggbb` minuscolo.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Swatch {
+    pub name: String,
+    pub color: String,
+}
+
+/// Il campione che è `element`, una risorsa modificabile con
+/// `fub:role="swatch"`; `None` se non ha la sua forma, e allora è una risorsa
+/// senza ciclo di vita. Un campione è una `linearGradient` con un nome
+/// `fub:name` che non è vuoto, che di SVG ha soltanto `id` e `gradientUnits`,
+/// e un solo `stop`, con un `stop-color` che è un colore e senza
+/// trasparenza.
+fn swatch_of(doc: &Document<'_>, element: &Element<'_>) -> Option<Swatch> {
+    if !element.is_svg("linearGradient") {
+        return None;
+    }
+    let name = element.value(NS_FUB, "name")?;
+    if trim(name).is_empty() {
+        return None;
+    }
+    if element
+        .attrs
+        .iter()
+        .any(|attr| attr.ns == NS_NONE && attr.local != "id" && attr.local != "gradientUnits")
+    {
+        return None;
+    }
+    let mut color = None;
+    for &child in &element.children {
+        let Some(stop) = doc.element(child).filter(|e| e.is_svg("stop")) else {
+            continue;
+        };
+        if color.is_some() {
+            return None;
+        }
+        let Paint::Color([r, g, b]) = paint(stop.value(NS_NONE, "stop-color").unwrap_or(""))?
+        else {
+            return None;
+        };
+        if stop
+            .value(NS_NONE, "stop-opacity")
+            .is_some_and(|alpha| opacity(alpha) != Some(1.0))
+        {
+            return None;
+        }
+        color = Some(format!("#{r:02x}{g:02x}{b:02x}"));
+    }
+    Some(Swatch {
+        name: name.to_owned(),
+        color: color?,
+    })
 }
 
 /// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
@@ -254,6 +311,9 @@ pub struct ElementItem {
     /// Il ciclo di vita di una risorsa, se `fub:role` lo dice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<Lifecycle>,
+    /// Il nome e il colore di un campione del documento.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub swatch: Option<Swatch>,
     /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
     /// scena, tavole).
     #[serde(rename = "box", skip_serializing_if = "Option::is_none")]
@@ -858,7 +918,17 @@ fn resource_allowed(
     if !attributes {
         return false;
     }
+    // Una sfumatura con uno `stop` o nessuno è un colore pieno, o niente:
+    // le sue coordinate non contano, nemmeno quelle del viewport.
+    let plain = matches!(tag, Tag::LinearGradient | Tag::RadialGradient)
+        && element
+            .children
+            .iter()
+            .filter(|&&child| doc.element(child).is_some_and(|e| e.is_svg("stop")))
+            .count()
+            <= 1;
     if !in_box
+        && !plain
         && required(tag)
             .iter()
             .any(|name| element.value(NS_NONE, name).is_none())
@@ -1115,15 +1185,24 @@ fn primitives_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
     true
 }
 
+/// Le risorse modificabili di un documento: il tipo di ognuna, il `d` dei
+/// tracciati e il colore dei campioni.
+struct Resources {
+    kinds: HashMap<String, ResourceKind>,
+    paths: HashMap<String, String>,
+    swatches: Swatches,
+}
+
 /// L'indice delle risorse modificabili del documento: per ogni id, il tipo
-/// della risorsa (formato della scena, risorse), e il `d` dei tracciati. Prima
-/// le sfumature e i tracciati, che non rimandano a niente, poi le altre, che
-/// nel contenuto possono usare le sfumature. Di due risorse con lo stesso id
-/// vale la prima, in quest'ordine: il documento è comunque in sola lettura
-/// (S003).
-fn resource_index(doc: &Document<'_>) -> (HashMap<String, ResourceKind>, HashMap<String, String>) {
+/// della risorsa (formato della scena, risorse), il `d` dei tracciati e il
+/// colore dei campioni. Prima le sfumature e i tracciati, che non rimandano a
+/// niente, poi le altre, che nel contenuto possono usare le sfumature. Di due
+/// risorse con lo stesso id vale la prima, in quest'ordine: il documento è
+/// comunque in sola lettura (S003).
+fn resource_index(doc: &Document<'_>) -> Resources {
     let mut found = HashMap::new();
     let mut paths = HashMap::new();
+    let mut swatches = HashMap::new();
     let mut others = Vec::new();
     let judge = |found: &mut HashMap<String, ResourceKind>,
                  element: &Element<'_>,
@@ -1162,7 +1241,15 @@ fn resource_index(doc: &Document<'_>) -> (HashMap<String, ResourceKind>, HashMap
             };
             match tag {
                 Tag::LinearGradient | Tag::RadialGradient => {
-                    judge(&mut found, element, tag, &no_resources);
+                    let swatch = (judge(&mut found, element, tag, &no_resources)
+                        && element.value(NS_FUB, "role") == Some("swatch"))
+                    .then(|| swatch_of(doc, element))
+                    .flatten();
+                    if let Some(Paint::Color(rgb)) = swatch.and_then(|swatch| paint(&swatch.color))
+                    {
+                        let id = element.value(NS_NONE, "id").unwrap_or_default();
+                        swatches.insert(id.to_owned(), rgb);
+                    }
                 }
                 Tag::Path => {
                     if judge(&mut found, element, tag, &no_resources) {
@@ -1182,7 +1269,11 @@ fn resource_index(doc: &Document<'_>) -> (HashMap<String, ResourceKind>, HashMap
     for (element, tag) in others {
         judge(&mut found, element, tag, &resolve);
     }
-    (found, paths)
+    Resources {
+        kinds: found,
+        paths,
+        swatches,
+    }
 }
 
 /// Il ruolo di un figlio di un contenitore, o `None` se è estraneo. `place`
@@ -1292,7 +1383,7 @@ fn board_allowed(doc: &Document<'_>, element: &Element<'_>, resolve: Resolve<'_>
 /// la scena legge come tavole, col loro rettangolo. Di due con lo stesso id
 /// vale la prima.
 pub(crate) fn boards(doc: &Document<'_>) -> Vec<(NodeId, [f64; 4])> {
-    let (kinds, _) = resource_index(doc);
+    let kinds = resource_index(doc).kinds;
     let resolve = |id: &str| kinds.get(id).copied();
     let mut seen = HashSet::new();
     let mut found = Vec::new();
@@ -1370,7 +1461,7 @@ struct Pending {
 }
 
 /// Un contenitore in visita.
-struct Frame {
+struct Frame<'s> {
     node: NodeId,
     /// Dove stanno i suoi figli.
     place: Place,
@@ -1378,7 +1469,7 @@ struct Frame {
     next: usize,
     elements: usize,
     pending: Option<Pending>,
-    context: Context,
+    context: Context<'s>,
 }
 
 struct Builder<'d, 'a> {
@@ -1390,6 +1481,8 @@ struct Builder<'d, 'a> {
     keep: bool,
     /// Le risorse modificabili del documento.
     resolve: Resolve<'d>,
+    /// I campioni del documento, col loro colore.
+    swatches: &'d Swatches,
     items: Vec<Item>,
     diagnostics: Vec<Diagnostic>,
     tally: Tally,
@@ -1520,7 +1613,7 @@ impl Builder<'_, '_> {
         tag: Tag,
         role: Role,
         path: Vec<usize>,
-        context: &Context,
+        context: &Context<'_>,
     ) {
         let doc = self.doc;
         let node = &doc.nodes[id];
@@ -1552,6 +1645,9 @@ impl Builder<'_, '_> {
         }
         let text_path = (role == Role::Text)
             .then(|| text_path_of(doc, element))
+            .flatten();
+        let swatch = (role == Role::Resource && element.value(NS_FUB, "role") == Some("swatch"))
+            .then(|| swatch_of(doc, element))
             .flatten();
         let item = ElementItem {
             path,
@@ -1596,9 +1692,11 @@ impl Builder<'_, '_> {
                 .then(|| match element.value(NS_FUB, "role") {
                     Some("private") => Some(Lifecycle::Private),
                     Some("shared") => Some(Lifecycle::Shared),
+                    Some("swatch") => swatch.as_ref().map(|_| Lifecycle::Swatch),
                     _ => None,
                 })
                 .flatten(),
+            swatch,
             board_box: (role == Role::Board).then(|| board_box(element)).flatten(),
             board: (role == Role::Paper)
                 .then(|| element.value(NS_FUB, "board").map(str::to_owned))
@@ -1617,7 +1715,10 @@ impl Builder<'_, '_> {
             next: 0,
             elements: 0,
             pending: None,
-            context: Context::root(doc.element(root).expect("la radice è un elemento")),
+            context: Context::root(
+                doc.element(root).expect("la radice è un elemento"),
+                self.swatches,
+            ),
         }];
         while let Some(frame) = stack.last_mut() {
             let children = doc.children(frame.node);
@@ -1687,14 +1788,19 @@ pub(crate) fn classify_document<'a>(
     map: &Utf16Map<'a>,
     keep: bool,
 ) -> Classified {
-    let (resources, paths) = resource_index(doc);
-    let resolve = |id: &str| resources.get(id).copied();
+    let Resources {
+        kinds,
+        paths,
+        swatches,
+    } = resource_index(doc);
+    let resolve = |id: &str| kinds.get(id).copied();
     let mut builder = Builder {
         doc,
         map,
         lines: Lines::new(doc.source),
         keep,
         resolve: &resolve,
+        swatches: &swatches,
         items: Vec::new(),
         diagnostics: Vec::new(),
         tally: Tally::new(paths),

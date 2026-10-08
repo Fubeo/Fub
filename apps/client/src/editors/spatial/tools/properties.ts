@@ -3,14 +3,18 @@
 // selezione, il documento e la vista. Che cosa mostra lo decide l'editor, e
 // lui scrive ogni cambio; qui c'è come si legge, si scrive e si raggiunge.
 //
-// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Testo,
-//   Disponi, e all'Esperto Trasforma e Attributi; senza selezione Documento
+// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Colori
+//   del documento (`swatches-panel.ts`), Testo, Disponi, e all'Esperto
+//   Trasforma e Attributi; senza selezione i Colori del documento, Documento
 //   e Vista, Forma se lo strumento è il Poligono, e Tavola se è lo strumento
 //   Tavola con una tavola scelta. L'intestazione di una sezione è il
 //   pulsante che la apre e la chiude, e il pannello dice all'editor quali
 //   sono chiuse, che le ricorda.
 // - **Un campo misto dice «Misto»** e non ha valore: scriverlo dà il valore a
 //   tutti gli oggetti scelti, in un passo.
+// - **Un colore si scrive** come codice, come nome (`red`) o col nome di un
+//   campione del documento, o si sceglie dal menu del suo campione; sotto,
+//   il contrasto con la carta, col rapporto e il livello di WCAG.
 // - **I numeri si calcolano** (`quantity.ts`): `120+15`, `25mm`, `50%`. Su e
 //   giù cambiano il valore di 1, con Maiusc di 10, e partono subito: i passi
 //   che si seguono hanno lo stesso nome, e la cronologia li unisce.
@@ -32,13 +36,17 @@ import { identifier } from "../../../ui/a11y";
 import { icon, iconEl, registerIcon } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
+import { contrast, MIN_CONTRAST, MIN_TEXT_CONTRAST, over } from "../scene/analysis";
+import { paint } from "../scene/values";
 import { t, type DrawKey } from "../strings";
+import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
+import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPanelOptions } from "./swatches-panel";
 
 /// Le sezioni, nell'ordine in cui si vedono.
-export type SectionId = "place" | "shape" | "look" | "text" | "arrange" | "transform" | "attributes" | "board" | "document" | "view";
+export type SectionId = "place" | "shape" | "look" | "colors" | "text" | "arrange" | "transform" | "attributes" | "board" | "document" | "view";
 
 export type NumberId =
   | "x"
@@ -112,12 +120,36 @@ export interface NumberState extends FieldBase {
   readonly max?: number;
 }
 
-/// Un colore: `#rrggbb`, `none`, o com'è scritto ciò che non è un colore.
+/// Un colore: `#rrggbb`, `none`, `url(#id)` per una risorsa, o com'è
+/// scritto ciò che non è un colore.
 export interface PaintState extends FieldBase {
   readonly kind: "paint";
   readonly value: string | null;
-  /// Come si mostra `value` se è una sfumatura o un motivo del disegno.
+  /// Come si mostra `value` se è una sfumatura, un motivo o un campione del
+  /// disegno.
   readonly sample?: PaintSample;
+  /// Su che cosa si misura il contrasto del colore; senza, non si misura.
+  readonly contrast?: PaintContrast;
+}
+
+/// Il contrasto di un colore con la carta: il colore della carta, `#rrggbb`;
+/// l'opacità con cui il colore le sta sopra; vero `text` se il colore è di
+/// testi, che chiedono di più. Le soglie sono quelle di WCAG 2.2: per il
+/// testo normale 4,5:1 (AA) e 7:1 (AAA), per quello grande 3:1 e 4,5:1, per
+/// una forma 3:1.
+export interface PaintContrast {
+  readonly paper: string;
+  readonly alpha: number;
+  readonly text: boolean;
+}
+
+/// Un campione del documento, come lo scrive il campo di un colore.
+export interface FieldSwatch {
+  readonly id: string;
+  /// Il nome, già pulito.
+  readonly name: string;
+  /// `#rrggbb` minuscolo.
+  readonly color: string;
 }
 
 export interface ChoiceOption {
@@ -207,6 +239,13 @@ export interface PropertiesView {
   readonly actions: Readonly<Partial<Record<ActionId, ActionState>>>;
   /// Vero se il pannello ospita gli attributi.
   readonly attributes: boolean;
+  /// I campioni del documento, che i campi dei colori scrivono per nome e
+  /// offrono nel menu del loro campione.
+  readonly swatches?: readonly FieldSwatch[];
+  /// I colori scelti di recente, dal più recente, per lo stesso menu.
+  readonly recent?: readonly string[];
+  /// La sezione «Colori del documento»; senza, non c'è.
+  readonly colors?: ColorsView;
 }
 
 export interface PropertiesOptions {
@@ -220,6 +259,8 @@ export interface PropertiesOptions {
   onTransform(values: Readonly<Record<TransformId, number>>): string | null;
   /// Una sezione si apre o si chiude.
   onSection(id: SectionId, open: boolean): void;
+  /// I gesti della sezione «Colori del documento» (`swatches-panel.ts`).
+  readonly colors: Omit<SwatchesPanelOptions, "announce">;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
   /// Esc su un campo senza niente da annullare: il fuoco torna al foglio.
@@ -239,6 +280,8 @@ export interface Properties {
   /// Chiude le sezioni `ids` e apre le altre, come le ricorda l'editor,
   /// senza dirglielo.
   setClosed(ids: readonly SectionId[]): void;
+  /// Il bersaglio scelto in «Applica a» fra i colori del documento.
+  colorTarget(): PaintTarget;
   /// Riscrive i testi nella lingua di adesso: quelli dei campi arrivano con
   /// la vista dopo.
   relabel(): void;
@@ -314,6 +357,7 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "place", label: "draw.properties.selection" },
   { id: "shape", label: "draw.properties.shape" },
   { id: "look", label: "draw.properties.look" },
+  { id: "colors", label: "draw.properties.colors" },
   { id: "text", label: "draw.properties.text" },
   { id: "arrange", label: "draw.properties.arrange" },
   { id: "transform", label: "draw.properties.transform" },
@@ -430,11 +474,12 @@ interface Line {
   /// La sigla dell'unità accanto al numero, e quella che si sente col nome.
   readonly unit: HTMLElement | null;
   readonly spoken: HTMLElement | null;
-  /// Il campione e il selettore di un colore.
+  /// Il campione e il selettore di un colore, e la riga del contrasto.
   readonly chip: HTMLButtonElement | null;
   readonly chipFrame: HTMLElement | null;
   readonly chipColor: HTMLElement | null;
   readonly picker: HTMLInputElement | null;
+  readonly contrast: HTMLElement | null;
   /// I pulsanti di una scelta a pulsanti, per valore.
   readonly segments: Map<string, HTMLButtonElement>;
   state: FieldState | null;
@@ -454,31 +499,98 @@ interface Section {
   open: boolean;
 }
 
-/// Il valore di un colore scritto nel campo: `none`, `#rrggbb`, o `null` se
-/// non è un colore.
-function paintOf(text: string): string | null {
-  const lower = text.trim().toLowerCase();
-  if (lower === "none" || lower === t("draw.properties.none").toLowerCase()) return "none";
-  return customColor(text);
+/// Un colore scritto nel campo: il valore che si scrive nel disegno e il
+/// testo con cui il campo lo mostra.
+interface WrittenPaint {
+  readonly value: string;
+  readonly text: string;
 }
 
-/// Un colore come lo mostra il campo: una sfumatura o un motivo col loro
-/// nome.
+/// Il colore scritto nel campo: `none`, un campione del documento per nome,
+/// senza badare alle maiuscole, o un colore; `null` se non è niente di
+/// questo. Il nome di un campione vale prima del nome di un colore: è del
+/// disegno.
+function paintOf(text: string, swatches: readonly FieldSwatch[]): WrittenPaint | null {
+  const lower = text.trim().toLocaleLowerCase();
+  if (lower === "none" || lower === t("draw.properties.none").toLocaleLowerCase()) return { value: "none", text: t("draw.properties.none") };
+  const name = cleanName(text).toLocaleLowerCase();
+  const swatch = name === "" ? undefined : swatches.find((each) => each.name.toLocaleLowerCase() === name);
+  if (swatch !== undefined) return { value: `url(#${swatch.id}) ${swatch.color}`, text: swatch.name };
+  const code = customColor(text);
+  return code === null ? null : { value: code, text: code };
+}
+
+/// L'id della risorsa che `value` usa, `url(#id)` con o senza ripiego;
+/// `null` se non ne usa una.
+function referenceOf(value: string | null): string | null {
+  const match = value === null ? null : /^url\(#([^)\s]+)\)/.exec(value);
+  return match === null ? null : match[1]!;
+}
+
+/// Vero se `a` e `b` sono lo stesso colore: due usi della stessa risorsa lo
+/// sono, quale che sia il ripiego.
+function samePaint(a: string | null, b: string | null): boolean {
+  const used = referenceOf(a);
+  return used !== null || referenceOf(b) !== null ? used === referenceOf(b) : a === b;
+}
+
+/// Un colore come lo mostra il campo: un campione col suo nome, una
+/// sfumatura o un motivo con quello del tipo.
 function paintShown(value: string | null, sample?: PaintSample): string {
   if (value === null) return "";
+  if (sample?.kind === "swatch") return cleanName(sample.name);
   if (sample !== undefined) return t(`draw.properties.${sample.kind}`);
   return value === "none" ? t("draw.properties.none") : value;
 }
 
+/// Il colore che si vede di `value`, `#rrggbb`: quello di un campione, o il
+/// colore scritto; `null` per il nessuno, il misto e le altre risorse.
+function seenColor(value: string | null, sample?: PaintSample): string | null {
+  if (sample?.kind === "swatch") return sample.color;
+  return value === null || sample !== undefined ? null : customColor(value);
+}
+
 /// La forma del campione di un colore: quella della tavolozza, l'anello di
-/// un colore a piacere, il nessuno, il misto, la sfumatura e il motivo.
+/// un colore a piacere, il nessuno, il misto, la sfumatura e il motivo. Un
+/// campione del documento ha la forma del suo colore.
 function chipShape(value: string | null, sample?: PaintSample): string {
-  if (sample !== undefined) return sample.kind;
+  if (sample !== undefined && sample.kind !== "swatch") return sample.kind;
   if (value === null) return "mixed";
   if (value === "none") return "none";
-  const code = customColor(value);
+  const code = seenColor(value, sample);
   if (code === null) return "mixed";
   return swatchOf(code)?.shape ?? "ring";
+}
+
+/// Le soglie di AAA di WCAG 2.2: il testo normale, e il grande.
+const AAA_TEXT = 7;
+const AAA_LARGE_TEXT = 4.5;
+
+/// Il formato del rapporto di contrasto, nella lingua di adesso.
+let ratioFormat: { readonly language: string; readonly numbers: Intl.NumberFormat } | null = null;
+
+/// Il rapporto di contrasto scritto, in centesimi per difetto: un 4,499 non
+/// si legge 4,5, che passerebbe.
+function ratioText(ratio: number): string {
+  const language = resolvedLanguage();
+  if (ratioFormat?.language !== language) {
+    ratioFormat = { language, numbers: new Intl.NumberFormat(language, { maximumFractionDigits: 2, useGrouping: false }) };
+  }
+  return ratioFormat.numbers.format(Math.floor(ratio * 100) / 100);
+}
+
+/// Il contrasto del colore `code` con la carta di `against`, a parole: per
+/// un testo il livello del testo normale e di quello grande, per una forma
+/// se basta. `null` se la carta non si sa.
+function contrastText(code: string, against: PaintContrast): string | null {
+  const color = paint(code);
+  const paper = paint(against.paper);
+  if (color === null || color === "none" || paper === null || paper === "none") return null;
+  const ratio = contrast(over(color, against.alpha, paper), paper);
+  const shown = ratioText(ratio);
+  if (!against.text) return t(ratio >= MIN_CONTRAST ? "draw.properties.contrast.shape" : "draw.properties.contrast.shape_low", { ratio: shown });
+  const grade = (aa: number, aaa: number): string => (ratio >= aaa ? "AAA" : ratio >= aa ? "AA" : t("draw.properties.contrast.fail"));
+  return t("draw.properties.contrast.text", { ratio: shown, normal: grade(MIN_TEXT_CONTRAST, AAA_TEXT), large: grade(MIN_CONTRAST, AAA_LARGE_TEXT) });
 }
 
 export function createProperties(life: Lifetime, options: PropertiesOptions): Properties {
@@ -554,6 +666,11 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   }
 
   const attributes = sections.get("attributes")!.body;
+
+  // --- I colori del documento ---------------------------------------------------
+
+  const colors = createSwatchesPanel(life, { ...options.colors, announce: (text) => options.announce(text) });
+  sections.get("colors")!.body.append(colors.element);
 
   // --- Le barre di pulsanti ---------------------------------------------------
 
@@ -692,6 +809,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     let chipFrame: HTMLElement | null = null;
     let chipColor: HTMLElement | null = null;
     let picker: HTMLInputElement | null = null;
+    let contrast: HTMLElement | null = null;
     const segments = new Map<string, HTMLButtonElement>();
     switch (spec.kind) {
       case "number": {
@@ -731,7 +849,11 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         const row = document.createElement("div");
         row.className = "draw-properties-paint";
         row.append(chip, input, picker);
-        root.append(name, row, note, error);
+        contrast = document.createElement("p");
+        contrast.className = "draw-properties-note draw-properties-contrast";
+        contrast.id = identifier("draw-properties-contrast");
+        contrast.hidden = true;
+        root.append(name, row, note, contrast, error);
         control = input;
         break;
       }
@@ -805,7 +927,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       }
     }
-    return { spec, root, name, note, error, control, unit, spoken, chip, chipFrame, chipColor, picker, segments, state: null, shown: "", options: "" };
+    return { spec, root, name, note, error, control, unit, spoken, chip, chipFrame, chipColor, picker, contrast, segments, state: null, shown: "", options: "" };
   };
 
   // Un campo entra nella sua sezione la prima volta che ha di che mostrarsi:
@@ -822,6 +944,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       life.listen(picker, "input", () => {
         (line.control as HTMLInputElement).value = picker.value;
         showChip(line, picker.value);
+        showContrast(line, picker.value);
         showError(line, null);
       });
       life.listen(picker, "change", () => commitPaint(line, picker.value, true));
@@ -850,9 +973,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   // --- Mostrare ---------------------------------------------------------------
 
-  /// Chi descrive il campo: la nota e l'errore che si vedono.
+  /// Chi descrive il campo: la nota, il contrasto e l'errore che si vedono.
   const describe = (line: Line): void => {
-    const ids = [line.note, line.error].filter((part) => !part.hidden).map((part) => part.id);
+    const ids = [line.note, line.contrast, line.error].filter((part): part is HTMLElement => part !== null && !part.hidden).map((part) => part.id);
     if (ids.length === 0) line.control.removeAttribute("aria-describedby");
     else line.control.setAttribute("aria-describedby", ids.join(" "));
   };
@@ -891,13 +1014,36 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   function showChip(line: Line, value: string | null, sample?: PaintSample): void {
     if (line.chipFrame === null || line.chipColor === null) return;
     line.chipFrame.dataset.shape = chipShape(value, sample);
-    const code = value === null ? null : customColor(value);
+    const code = seenColor(value, sample);
     if (code === null) line.chipColor.style.removeProperty("--swatch");
     else line.chipColor.style.setProperty("--swatch", code);
     const image = sample?.image ?? null;
     if (image === null) line.chipColor.style.removeProperty("--swatch-image");
     else line.chipColor.style.setProperty("--swatch-image", image);
   }
+
+  /// Il contrasto con la carta del colore `value` di `line`, se si misura:
+  /// un colore, o un campione; non il nessuno, il misto o un'altra risorsa.
+  function showContrast(line: Line, value: string | null, sample?: PaintSample): void {
+    if (line.contrast === null) return;
+    const against = (line.state as PaintState | null)?.contrast;
+    const code = seenColor(value, sample);
+    const text = against === undefined || code === null ? null : contrastText(code, against);
+    line.contrast.hidden = text === null;
+    if (line.contrast.textContent !== (text ?? "")) line.contrast.textContent = text ?? "";
+    describe(line);
+  }
+
+  /// I campioni del documento che i campi conoscono.
+  const fieldSwatches = (): readonly FieldSwatch[] => view.swatches ?? [];
+
+  /// Come si mostra `value`, un colore scritto nel campo: un campione del
+  /// documento col suo nome.
+  const sampleOf = (value: string | null): PaintSample | undefined => {
+    const id = referenceOf(value);
+    const swatch = id === null ? undefined : fieldSwatches().find((each) => each.id === id);
+    return swatch === undefined ? undefined : { kind: "swatch", image: null, name: swatch.name, color: swatch.color };
+  };
 
   /// Vero se il campo di testo di `line` ha un valore scritto a metà da
   /// tenere: ha il fuoco, o un errore che non si è corretto.
@@ -949,11 +1095,15 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const input = line.control as HTMLInputElement;
     line.name.textContent = state.label;
     input.placeholder = state.value === null ? t("draw.properties.mixed") : "";
+    // Lo stato prima di tutto: il contrasto si misura su quello nuovo.
+    line.state = state;
     showText(line, paintShown(state.value, state.sample), fresh);
-    const written = keeps(line, false) ? paintOf(input.value) ?? state.value : state.value;
-    showChip(line, written, written === state.value ? state.sample : undefined);
+    const written = keeps(line, false) ? (paintOf(input.value, fieldSwatches())?.value ?? state.value) : state.value;
+    const sample = samePaint(written, state.value) ? state.sample : sampleOf(written);
+    showChip(line, written, sample);
+    showContrast(line, written, sample);
     nameButtons(line, state.label);
-    line.picker!.value = (state.value === null ? null : customColor(state.value)) ?? "#000000";
+    line.picker!.value = seenColor(state.value, state.sample) ?? "#000000";
     const off = !view.editable || state.disabled === true;
     input.readOnly = off;
     line.chip!.disabled = off;
@@ -1197,27 +1347,38 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     send(line, value, text, true);
   };
 
+  /// Riporta il campo del colore `line` a ciò che mostra il disegno.
+  const revertPaint = (line: Line, state: PaintState): void => {
+    (line.control as HTMLInputElement).value = line.shown;
+    showError(line, null);
+    showChip(line, state.value, state.sample);
+    showContrast(line, state.value, state.sample);
+  };
+
   /// Scrive il colore `text` in `line`, se è cambiato.
   function commitPaint(line: Line, text: string, loud: boolean): boolean {
     const state = line.state as PaintState | null;
     if (state === null || !view.editable || state.disabled === true) return true;
-    const input = line.control as HTMLInputElement;
     if (text === line.shown) {
-      input.value = line.shown;
-      showError(line, null);
-      showChip(line, state.value, state.sample);
+      revertPaint(line, state);
       return true;
     }
-    const value = paintOf(text);
-    if (value === null) return fail(line, t("draw.properties.problem.paint"), loud);
-    if (value === state.value) {
-      input.value = line.shown;
-      showError(line, null);
-      showChip(line, state.value, state.sample);
+    const written = paintOf(text, fieldSwatches());
+    if (written === null) return fail(line, t(fieldSwatches().length > 0 ? "draw.properties.problem.paint.swatch" : "draw.properties.problem.paint"), loud);
+    return commitValue(line, written, loud);
+  }
+
+  /// Scrive in `line` il colore `written`, se è cambiato: lo stesso
+  /// campione, anche con un altro ripiego, non cambia.
+  function commitValue(line: Line, written: WrittenPaint, loud: boolean): boolean {
+    const state = line.state as PaintState | null;
+    if (state === null || !view.editable || state.disabled === true) return true;
+    if (samePaint(written.value, state.value)) {
+      revertPaint(line, state);
       return true;
     }
-    input.value = text;
-    return send(line, value, paintShown(value), loud);
+    (line.control as HTMLInputElement).value = written.text;
+    return send(line, written.value, written.text, loud);
   }
 
   /// Scrive il testo di `line`, di più righe o di una, se è cambiato.
@@ -1281,24 +1442,37 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     else showError(line, null);
   }
 
-  /// Il menu del campione: nessuno e i colori della tavolozza, ciascuno col
-  /// suo nome; quello di adesso è segnato.
+  /// Il menu del campione: nessuno, i campioni del documento, i colori della
+  /// tavolozza e i recenti che non ne sono, ciascuno col suo nome; quello di
+  /// adesso è segnato.
   function openSwatches(line: Line): void {
     const state = line.state;
     const chip = line.chip!;
     if (state === null || state.kind !== "paint" || !view.editable) return;
-    const item = (label: string, value: string, swatches: readonly string[] | null): MenuItem => ({
+    const item = (label: string, written: WrittenPaint, color: string | null, extra: Partial<MenuItem> = {}): MenuItem => ({
       label,
       choice: "radio",
-      checked: state.value === value,
-      ...(swatches === null ? {} : { swatches }),
-      run: () => commitPaint(line, paintShown(value), true),
+      checked: samePaint(state.value, written.value),
+      ...(color === null ? {} : { swatches: [color] }),
+      ...extra,
+      run: () => commitValue(line, written, true),
     });
-    const items: MenuItem[] = [
-      item(t("draw.properties.none"), "none", null),
-      ...PALETTE.map((swatch) => item(t(swatch.label), swatch.color, [swatch.color])),
+    const none = t("draw.properties.none");
+    const groups: MenuItem[][] = [
+      fieldSwatches().map((swatch) =>
+        item(swatch.name, { value: `url(#${swatch.id}) ${swatch.color}`, text: swatch.name }, swatch.color, {
+          description: t("draw.colors.menu.swatch_note", { code: swatch.color }),
+        }),
+      ),
+      PALETTE.map((swatch) => item(t(swatch.label), { value: swatch.color, text: swatch.color }, swatch.color)),
+      (view.recent ?? []).filter((code) => swatchOf(code) === null).map((code) => item(code, { value: code, text: code }, code)),
     ];
-    items[1]!.separator = true;
+    const items: MenuItem[] = [item(none, { value: "none", text: none }, null)];
+    for (const group of groups) {
+      if (group.length === 0) continue;
+      group[0]!.separator = true;
+      items.push(...group);
+    }
     const box = chip.getBoundingClientRect();
     chip.setAttribute("aria-expanded", "true");
     showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
@@ -1350,9 +1524,12 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (event.key === "Escape" && plain && !event.shiftKey) {
       const control = line !== null && writes(line) ? (line.control as HTMLInputElement | HTMLTextAreaElement) : null;
       if (control !== null && control.value !== line!.shown) {
-        control.value = line!.shown;
-        showError(line!, null);
-        if (line!.spec.kind === "paint") showChip(line!, (line!.state as PaintState).value, (line!.state as PaintState).sample);
+        if (line!.spec.kind === "paint") {
+          revertPaint(line!, line!.state as PaintState);
+        } else {
+          control.value = line!.shown;
+          showError(line!, null);
+        }
       } else {
         options.onLeave();
       }
@@ -1382,13 +1559,17 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     event.stopPropagation();
   });
 
+  // Mentre si scrive un colore, il campione e il contrasto lo seguono; uno
+  // che non si legge lascia quelli di adesso.
   life.listen(element, "input", (event) => {
     const line = lineOf(event.target);
     if (line !== null && line.spec.kind === "paint") {
-      const value = paintOf((line.control as HTMLInputElement).value);
+      const written = paintOf((line.control as HTMLInputElement).value, fieldSwatches());
       const state = line.state as PaintState;
-      if (value === null) showChip(line, state.value, state.sample);
-      else showChip(line, value);
+      const value = written?.value ?? state.value;
+      const sample = written === null || samePaint(value, state.value) ? state.sample : sampleOf(value);
+      showChip(line, value, sample);
+      showContrast(line, value, sample);
     }
   });
 
@@ -1439,6 +1620,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       nameButtons(line, line.state?.label ?? t(key));
     }
     applyButton.textContent = t("draw.properties.apply");
+    colors.relabel();
   };
 
   const update = (next: PropertiesView): void => {
@@ -1477,6 +1659,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       applyButton.hidden = !shown.has("transform");
       applyButton.disabled = !next.editable;
       if (next.attributes) shown.add("attributes");
+      if (next.colors !== undefined) {
+        shown.add("colors");
+        colors.update(next.colors, next.editable);
+      }
       for (const section of sections.values()) section.root.hidden = !shown.has(section.id);
     } finally {
       rendering = false;
@@ -1526,6 +1712,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         showOpen(section);
       }
     },
+    colorTarget: () => colors.target(),
     relabel,
   };
 }

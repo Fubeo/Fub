@@ -48,6 +48,11 @@
 // - **Bloccare e nascondere da qui.** Ctrl o ⌘ con Maiusc e L blocca o
 //   sblocca la riga attiva, con H la nasconde o la mostra; col puntatore, i
 //   segni accanto al nome.
+// - **Il contagocce sulla riga**, quando l'editor lo offre: I prende
+//   dall'oggetto della riga attiva l'aspetto per gli oggetti scelti, e
+//   Maiusc con I il solo colore, senza puntatore. Ctrl o ⌘ con le frecce
+//   portano alla riga da cui prendere senza cambiare la selezione. Quando
+//   l'editor non lo offre, I passa all'editor, che sceglie lo strumento.
 // - **Mai il solo colore.** Una riga scelta ha il segno di spunta; un livello
 //   o un gruppo aperto o chiuso, la sua freccia; un oggetto bloccato o
 //   nascosto, il suo segno, e il nome lo dice a parole; un oggetto che non si
@@ -192,6 +197,9 @@ export interface ObjectTreeOptions {
   /// Alt e una freccia non hanno dove portare la voce `key`: è già davanti a
   /// tutto (`front`), o dietro.
   onEdge?(key: string, front: boolean): void;
+  /// I sulla voce `key`: il contagocce ne prende l'aspetto, o con Maiusc
+  /// (`colorOnly`) il colore. Falso se adesso non c'è, e il tasto passa.
+  onEyedropper?(key: string, colorOnly: boolean): boolean;
 }
 
 export interface ObjectTree {
@@ -1397,6 +1405,12 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
       case "H":
         if (!mod || !event.shiftKey || event.altKey || row === undefined || !row.entry.toggles || options.onToggle === undefined) return;
         options.onToggle(row.entry.key, event.key.toLowerCase() === "l" ? "lock" : "hide");
+        break;
+      case "i":
+      case "I":
+        // Maiusc, non la lettera grande: col blocco delle maiuscole I resta
+        // l'aspetto.
+        if (mod || event.altKey || row === undefined || options.onEyedropper?.(row.entry.key, event.shiftKey) !== true) return;
         break;
       default:
         return;

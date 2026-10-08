@@ -142,6 +142,29 @@ describe("scrivere", () => {
   });
 });
 
+describe("il colore di un pezzo", () => {
+  it("un campione si mostra col colore che scrive accanto a sé; un gradiente senza ripiego lascia quello di chi lo contiene", () => {
+    mount({
+      ...TWO,
+      lines: [
+        richLine({ x: "10", dy: "0" }, [
+          "Un ",
+          { text: "campione", attrs: { fill: "url(#rs) #0072b2" } },
+          " e ",
+          { text: "un gradiente", attrs: { fill: "url(#rg)" } },
+          " o ",
+          { text: "niente", attrs: { fill: "url(#rg) none" } },
+        ]),
+      ],
+    });
+    const pieces = [...rows()[0]!.querySelectorAll<HTMLElement>(".draw-text-piece")];
+    expect(pieces.map((piece) => piece.textContent)).toEqual(["campione", "un gradiente", "niente"]);
+    expect(pieces[0]!.style.color).toMatch(/^(#0072b2|rgb\(0, 114, 178\))$/);
+    expect(pieces[1]!.style.color).toBe("");
+    expect(pieces[2]!.style.color).toBe("");
+  });
+});
+
 describe("formattare", () => {
   it("Ctrl+B su una scelta accende il grassetto e lo dice; senza scelta vale per ciò che si scriverà", () => {
     mount(TWO);

@@ -1,23 +1,24 @@
 # Formato della scena, risorse
 
-> **Ambito:** le risorse di un disegno: sfumature, motivi, marcatori,
-> ritagli, maschere, filtri e i tracciati che i testi seguono; dove stanno, come si leggono e si scrivono,
-> come gli oggetti le usano e come le operazioni tengono veri i riferimenti.
-> Versione 1.
+> **Ambito:** le risorse di un disegno: sfumature, campioni, motivi,
+> marcatori, ritagli, maschere, filtri e i tracciati che i testi seguono;
+> dove stanno, come si leggono e si scrivono, come gli oggetti le usano e
+> come le operazioni tengono veri i riferimenti. Versione 1.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; i
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
 > scrittura in `scene/serialize.ts`, le operazioni in `scene/engine.ts`, con
-> i vettori di prova da 50 a 59, 63 e 64 ([operazioni sulla
+> i vettori di prova da 50 a 59, 63, 64, 76 e 77 ([operazioni sulla
 > scena](scene-operations.md), §9), e il disegno in `painter/paint.ts`.
 
 Una parte del [formato della scena](scene-format.md), §4. Una risorsa è un
 elemento che non si disegna da solo e che gli oggetti usano per riferimento:
-una sfumatura nel riempimento, una punta di freccia alla fine di una linea,
-un ritaglio, una maschera, un filtro, il tracciato che un testo segue. Che cosa ne fa l'editor sta in
-[Disegni, risorse](../product/drawing-resources.md). Le sezioni del formato
-si citano come «formato della scena, §N»; quelle di questa pagina col solo
-numero.
+una sfumatura nel riempimento, un colore con un nome, una punta di freccia
+alla fine di una linea, un ritaglio, una maschera, un filtro, il tracciato
+che un testo segue. Che cosa ne fa l'editor sta in [Disegni,
+risorse](../product/drawing-resources.md) e, per i campioni, in [Disegni,
+colori](../product/drawing-colors.md). Le sezioni del formato si citano come
+«formato della scena, §N»; quelle di questa pagina col solo numero.
 
 ```xml
 <defs id="fub-defs">
@@ -81,6 +82,22 @@ riempie del colore dopo il riferimento.
   nella grammatica del formato, anche vuoto, e nessun altro attributo SVG o
   `xlink`; un `transform` o un `fill` lo rendono estraneo, e con lui il
   testo. Non si disegna da solo: dice soltanto dove scorre il testo.
+- **Il campione** è un colore del documento con un nome: una
+  `linearGradient` con `fub:role="swatch"` (§7) e il nome in `fub:name`, non
+  vuoto; di SVG soltanto `id` e `gradientUnits`, e un solo `stop`, con uno
+  `stop-color` che è un colore, non `none`, e senza `stop-opacity` o con 1.
+  Può avere un `title` e gli attributi di altri namespace, come
+  `inkscape:swatch`. Ogni lettore di SVG lo disegna come il suo colore.
+  FubDraw lo scrive in `userSpaceOnUse`, così colora anche una linea
+  orizzontale, il cui riquadro è alto zero e in `objectBoundingBox` non si
+  dipingerebbe:
+
+  ```xml
+  <linearGradient id="r7k2m9q4x" fub:role="swatch" fub:name="Blu mare" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>
+  ```
+
+  Con `fub:role="swatch"` e un'altra forma è una risorsa senza ciclo di
+  vita, come senza `fub:role`.
 
 ## 3. I valori
 
@@ -98,7 +115,9 @@ riempie del colore dopo il riferimento.
   coordinata che, mancando, SVG prenderebbe in percentuale della finestra:
   `x2` della lineare; `cx`, `cy` e `r` della radiale; `x y width height` di
   maschera e filtro. Altrimenti la risorsa è estranea, perché la finestra di
-  chi la disegna non è sempre quella del file.
+  chi la disegna non è sempre quella del file. Una sfumatura con un solo
+  `stop`, o nessuno, è un colore pieno, o niente: le sue coordinate non
+  contano, e non ne va scritta nessuna.
 - **`offset`:** un numero o una percentuale, che SVG porta fra 0 e 1; se
   manca vale 0. **`stop-color`** e **`flood-color`:** un colore del formato
   della scena, §4, non `none`. **`stop-opacity`** e **`flood-opacity`:**
@@ -171,7 +190,7 @@ le esportazioni di Mermaid usano.
   testi, immagini, gruppi, collegamenti e livelli, non sulle righe e sui
   pezzi di un testo, il cui riquadro i lettori non misurano tutti allo
   stesso modo. FubDraw scrive sempre il ripiego, un colore: lo disegna chi
-  non sa disegnare la risorsa.
+  non sa disegnare la risorsa. Il ripiego di un campione è il suo colore.
 - **`marker-start`, `marker-mid`, `marker-end`:** `none` o `url(#id)` di un
   `marker`, su `path`, `line`, `polyline` e `polygon`, dove i browser li
   disegnano. Su ogni altro elemento rendono estraneo l'elemento.
@@ -193,9 +212,10 @@ le esportazioni di Mermaid usano.
   `xlink`, o un `href="#id"` su un elemento SVG che non è un collegamento,
   rimanda a un id che il documento non ha. Uno per id e per attributo,
   sull'elemento che lo scrive, anche estraneo; si disegna senza la risorsa.
-- **Il controllo di accessibilità** non misura un testo o un tratto che
-  usa una risorsa, o che sta in un contenitore con un ritaglio, una maschera
-  o un filtro: i colori che si vedono non si sanno, e S009 tace
+- **Il controllo di accessibilità** legge un campione come il suo colore,
+  qualunque sia il ripiego. Non misura un testo o un tratto che usa un'altra
+  risorsa, o che sta in un contenitore con un ritaglio, una maschera o un
+  filtro: i colori che si vedono non si sanno, e S009 tace
   ([accessibilità](scene-format-accessibility.md)).
 
 ## 7. Il ciclo di vita
@@ -206,6 +226,13 @@ le esportazioni di Mermaid usano.
   ultimo riferimento, e duplicare l'oggetto la copia con un id nuovo.
 - **`shared`:** è di chi usa la stessa cosa, come un marcatore. Se ne va con
   il suo ultimo riferimento, e duplicare la condivide.
+- **`swatch`:** un campione (§2), un colore del documento. Resta anche
+  quando nessuno lo usa, e duplicare chi lo usa lo condivide. Un campione
+  eliminato che qualcuno usa ancora, e che FubDraw non riscrive, diventa
+  `shared` e perde il nome: se ne va col suo ultimo riferimento. Nell'SVG
+  pulito dell'[export](scene-format-export.md) un campione usato resta una
+  sfumatura di un colore, senza ruolo e senza nome, e uno che nessuno usa se
+  ne va.
 - **Senza `fub:role`, o con un altro valore:** non è di FubDraw. Resta anche
   quando nessuno la usa, e duplicare la condivide.
 - **La `fub-defs`** che resta senza figli se ne va con l'ultima risorsa: un
@@ -258,7 +285,7 @@ non cambiano mai natura per un'operazione su un altro elemento.
   rimaste sole per questo, e infine la `fub-defs` vuota. Una risorsa che era
   già senza riferimenti resta: la raccolta tocca soltanto ciò che
   l'operazione ha lasciato solo. Un riferimento conta da qualunque elemento,
-  anche estraneo, e da un foglio di stile.
+  anche estraneo, e da un foglio di stile. I campioni non si raccolgono.
 - **La raccolta fa parte dell'operazione:** quella in avanti che il motore
   restituisce, e che la sessione rimanda, è un `batch` con l'operazione e
   poi i `remove`, con l'etichetta dell'operazione; l'inversa rimette prima
@@ -288,6 +315,10 @@ riscritture.
   per byte: per questo la versione resta 1.
 - **Un lettore che conosce le risorse ma non i tracciati** vede estranei il
   `path` nella `defs` e il testo che lo segue, e li conserva byte per byte.
+- **Un lettore che non conosce i campioni** vede estraneo un campione in
+  `userSpaceOnUse` senza `x2`, come FubDraw lo scrive, e con lui chi lo usa,
+  e li conserva byte per byte; un campione senza `gradientUnits` lo legge
+  come una risorsa senza ciclo di vita.
 - **`symbol` e `use`** restano estranei. Entreranno nel formato
   con gli strumenti che li creano e li spostano: così la superficie non
   incontra un oggetto modificabile che non sa misurare.

@@ -23,7 +23,7 @@
 import { BrushError, parseBrush } from "../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
 import { InkError } from "../ink/sample";
-import { Context, isContainer, Tally, type Role, type Stroke, type Tool } from "./analysis";
+import { Context, isContainer, Tally, type Role, type Stroke, type Swatches, type Tool } from "./analysis";
 import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
 import { parsePath } from "./geometry";
 import { readPolygonal, type Polygonal } from "./parametric";
@@ -56,6 +56,7 @@ import {
   urlIds,
   viewBox,
   wrapWidth,
+  type Rgb,
 } from "./values";
 import { isSvg, NS_FUB, NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "./xml";
 
@@ -131,6 +132,8 @@ export interface ElementItem extends Span {
   readonly textPath?: string;
   /// Come vive una risorsa, da `fub:role` (formato della scena, risorse).
   readonly lifecycle?: Lifecycle;
+  /// Il nome e il colore di un campione del documento.
+  readonly swatch?: SwatchFacts;
   /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
   /// scena, tavole).
   readonly box?: readonly [number, number, number, number];
@@ -225,9 +228,42 @@ export function resourceKind(tag: string): ResourceKind | null {
 
 /// Come vive una risorsa, da `fub:role` (formato della scena, risorse):
 /// `private` è di un oggetto e duplicarlo la copia, `shared` è di chi usa la
-/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. Senza, la
-/// risorsa resta.
-export type Lifecycle = "private" | "shared";
+/// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. `swatch`
+/// è un campione del documento, un colore con un nome: resta anche senza
+/// riferimenti, e duplicare chi lo usa lo condivide. Senza, la risorsa resta.
+export type Lifecycle = "private" | "shared" | "swatch";
+
+/// Un campione del documento (formato della scena, risorse): il suo nome,
+/// com'è scritto, e il colore, `#rrggbb` minuscolo.
+export interface SwatchFacts {
+  readonly name: string;
+  readonly color: string;
+}
+
+/// Il campione che è `element`, una risorsa modificabile con
+/// `fub:role="swatch"`; `null` se non ha la sua forma, e allora è una risorsa
+/// senza ciclo di vita. Un campione è una `linearGradient` con un nome
+/// `fub:name` che non è vuoto, che di SVG ha soltanto `id` e `gradientUnits`,
+/// e un solo `stop`, con un `stop-color` che è un colore e senza
+/// trasparenza.
+export function swatchOf(doc: XmlDocument, element: ElementNode): SwatchFacts | null {
+  if (!isSvg(element, "linearGradient")) return null;
+  const name = valueOf(element, NS_FUB, "name");
+  if (name === undefined || trim(name) === "") return null;
+  if (element.attrs.some((attr) => attr.ns === NS_NONE && attr.local !== "id" && attr.local !== "gradientUnits")) return null;
+  let color: string | null = null;
+  for (const child of element.children) {
+    const stop = doc.element(child);
+    if (stop === null || !isSvg(stop, "stop")) continue;
+    if (color !== null) return null;
+    const value = paint(valueOf(stop, NS_NONE, "stop-color") ?? "");
+    if (value === null || value === "none") return null;
+    const alpha = valueOf(stop, NS_NONE, "stop-opacity");
+    if (alpha !== undefined && opacity(alpha) !== 1) return null;
+    color = `#${value.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+  }
+  return color === null ? null : { name, color };
+}
 
 /// Il tipo della risorsa modificabile che porta `id`, o `null` se nessuna
 /// risorsa modificabile lo porta.
@@ -713,7 +749,14 @@ function resourceAllowed(doc: XmlDocument, element: ElementNode, tag: ResourceTa
     return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
   });
   if (!attributes) return false;
-  if (!box && REQUIRED[tag]?.some((name) => valueOf(element, NS_NONE, name) === undefined)) return false;
+  // Una sfumatura con uno `stop` o nessuno è un colore pieno, o niente: le
+  // sue coordinate non contano, nemmeno quelle del viewport.
+  const stops = element.children.filter((child) => {
+    const stop = doc.element(child);
+    return stop !== null && isSvg(stop, "stop");
+  }).length;
+  const plain = (tag === "linearGradient" || tag === "radialGradient") && stops <= 1;
+  if (!box && !plain && REQUIRED[tag]?.some((name) => valueOf(element, NS_NONE, name) === undefined)) return false;
   switch (tag) {
     case "linearGradient":
     case "radialGradient":
@@ -948,16 +991,18 @@ export function resourceIndex(doc: XmlDocument): Map<string, ResourceKind> {
   return indexResources(doc).kinds;
 }
 
-/// Le risorse modificabili di un documento: il tipo di ognuna, e il `d` dei
-/// tracciati.
+/// Le risorse modificabili di un documento: il tipo di ognuna, il `d` dei
+/// tracciati e il colore dei campioni.
 interface Resources {
   readonly kinds: Map<string, ResourceKind>;
   readonly paths: Map<string, string>;
+  readonly swatches: Map<string, Rgb>;
 }
 
 function indexResources(doc: XmlDocument): Resources {
   const kinds = new Map<string, ResourceKind>();
   const paths = new Map<string, string>();
+  const swatches = new Map<string, Rgb>();
   const others: Array<[ElementNode, ResourceTag]> = [];
   const judge = (element: ElementNode, tag: ResourceTag | "path", resolve: Resolve): void => {
     const id = valueOf(element, NS_NONE, "id");
@@ -965,6 +1010,9 @@ function indexResources(doc: XmlDocument): Resources {
     if (tag === "path" ? !pathResourceAllowed(doc, element) : !resourceAllowed(doc, element, tag, resolve)) return;
     kinds.set(id, resourceKind(tag)!);
     if (tag === "path") paths.set(id, valueOf(element, NS_NONE, "d")!);
+    const swatch = valueOf(element, NS_FUB, "role") === "swatch" ? swatchOf(doc, element) : null;
+    const color = swatch === null ? null : paint(swatch.color);
+    if (color !== null && color !== "none") swatches.set(id, color);
   };
   for (const child of doc.children(doc.root)) {
     const defs = doc.element(child);
@@ -979,7 +1027,7 @@ function indexResources(doc: XmlDocument): Resources {
   }
   const first: Resolve = (id) => kinds.get(id) ?? null;
   for (const [element, tag] of others) judge(element, tag, first);
-  return { kinds, paths };
+  return { kinds, paths, swatches };
 }
 
 /// Le sfumature modificabili fra i figli di `parent`, per un `add` di più
@@ -1148,6 +1196,7 @@ export interface Details {
   readonly wrap?: number;
   readonly textPath?: string;
   readonly lifecycle?: Lifecycle;
+  readonly swatch?: SwatchFacts;
   readonly box?: readonly [number, number, number, number];
   readonly board?: string;
 }
@@ -1222,6 +1271,13 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
   if (role === "resource") {
     const lifecycle = valueOf(element, NS_FUB, "role");
     if (lifecycle === "private" || lifecycle === "shared") details.lifecycle = lifecycle;
+    if (lifecycle === "swatch") {
+      const swatch = swatchOf(doc, element);
+      if (swatch !== null) {
+        details.lifecycle = "swatch";
+        details.swatch = swatch;
+      }
+    }
     const title = firstTitle(doc, element);
     if (title !== null) details.title = title;
   } else if (role === "board") {
@@ -1303,6 +1359,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.wrap !== undefined) item.wrap = details.wrap;
   if (details.textPath !== undefined) item.textPath = details.textPath;
   if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
+  if (details.swatch !== undefined) item.swatch = details.swatch;
   if (details.box !== undefined) item.box = details.box;
   if (details.board !== undefined) item.board = details.board;
   return item;
@@ -1353,6 +1410,8 @@ class Builder {
     private readonly resolve: Resolve,
     /// Il `d` dei tracciati delle risorse, per id.
     paths: ReadonlyMap<string, string>,
+    /// I campioni del documento, col loro colore.
+    private readonly swatches: Swatches,
   ) {
     this.tally = new Tally(paths);
   }
@@ -1418,7 +1477,7 @@ class Builder {
   walk(root: NodeId): void {
     const doc = this.doc;
     const stack: Frame[] = [
-      { node: root, place: "root", path: [], next: 0, elements: 0, pending: null, context: Context.root(doc.element(root)!) },
+      { node: root, place: "root", path: [], next: 0, elements: 0, pending: null, context: Context.root(doc.element(root)!, this.swatches) },
     ];
     while (stack.length > 0) {
       const frame = stack[stack.length - 1]!;
@@ -1462,7 +1521,7 @@ class Builder {
 /// serve solo il suo riepilogo.
 export function classifyDocument(doc: XmlDocument, keep: boolean): Classified {
   const resources = indexResources(doc);
-  const builder = new Builder(doc, keep, (id) => resources.kinds.get(id) ?? null, resources.paths);
+  const builder = new Builder(doc, keep, (id) => resources.kinds.get(id) ?? null, resources.paths, resources.swatches);
   let pending: Pending | null = null;
   // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.
   let next = 0;

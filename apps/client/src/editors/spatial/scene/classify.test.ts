@@ -795,9 +795,13 @@ describe("le risorse", () => {
     expect(resource('<linearGradient id="r1" gradientUnits="userSpaceOnUse" x1="0" x2="10mm"/>')).toBe("resource");
     expect(resource('<linearGradient id="r1" gradientUnits="userSpaceOnUse" x1="0" x2="10%"/>')).toBeNull();
     // Nello spazio d'uso, ciò che mancando sarebbe in percentuale del
-    // viewport va scritto.
-    expect(resource('<linearGradient id="r1" gradientUnits="userSpaceOnUse"/>')).toBeNull();
-    expect(resource('<radialGradient id="r1" gradientUnits="userSpaceOnUse" cx="0" cy="0"/>')).toBeNull();
+    // viewport va scritto, se c'è una sfumatura: con uno `stop` o nessuno è un
+    // colore pieno, o niente, e le coordinate non contano.
+    expect(resource('<linearGradient id="r1" gradientUnits="userSpaceOnUse"><stop offset="0"/><stop offset="1"/></linearGradient>')).toBeNull();
+    expect(resource('<linearGradient id="r1" gradientUnits="userSpaceOnUse"><stop stop-color="#000"/></linearGradient>')).toBe("resource");
+    expect(resource('<linearGradient id="r1" gradientUnits="userSpaceOnUse"/>')).toBe("resource");
+    expect(resource('<radialGradient id="r1" gradientUnits="userSpaceOnUse"><stop/></radialGradient>')).toBe("resource");
+    expect(resource('<radialGradient id="r1" gradientUnits="userSpaceOnUse" cx="0" cy="0"><stop/><stop/></radialGradient>')).toBeNull();
     expect(resource('<radialGradient id="r1" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="5"/>')).toBe("resource");
     expect(resource('<filter id="r1" filterUnits="userSpaceOnUse" x="0" y="0" width="10"/>')).toBeNull();
     expect(resource('<filter id="r1" filterUnits="userSpaceOnUse" x="0" y="0" width="10" height="10"/>')).toBe("resource");

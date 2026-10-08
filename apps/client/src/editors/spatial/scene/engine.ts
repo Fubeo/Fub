@@ -214,6 +214,7 @@ function sameSets(a: Op, b: Op): boolean {
     const keys = Object.keys(a.attrs);
     return (
       a.id === b.id &&
+      (a.part ?? []).join() === (b.part ?? []).join() &&
       keys.length === Object.keys(b.attrs).length &&
       keys.every((key) => Object.prototype.hasOwnProperty.call(b.attrs, key))
     );
@@ -523,6 +524,17 @@ function changed(changes: ReadonlyMap<string, Change>): (attrs: OutAttr[]) => Ou
     }
     return out;
   };
+}
+
+/// Gli elementi il cui contenuto è testo, come li scrive `elementToOut`.
+const TEXT_HOLDERS: readonly string[] = ["title", "desc", "tspan", "textPath"];
+
+/// `out` con la parte al percorso `part`, indici dei figli elemento, data da
+/// `change`.
+function withPart(out: OutElement, part: readonly number[], change: (inner: OutElement) => OutElement): OutElement {
+  if (part.length === 0) return change(out);
+  const [index, ...rest] = part;
+  return { ...out, children: out.children.map((child, i) => (i === index ? withPart(child, rest, change) : child)) };
 }
 
 /// Il motore di un documento aperto.
@@ -1032,8 +1044,8 @@ export class SceneEngine {
   /// La raccolta, alla fine di ogni operazione applicata (§2): le risorse
   /// `private` e `shared` a cui l'operazione ha tolto l'ultimo riferimento se
   /// ne vanno, poi quelle rimaste sole per questo, e infine la `defs` di
-  /// FubDraw rimasta vuota. Restituisce i `remove` fatti, in ordine, e le
-  /// loro inverse.
+  /// FubDraw rimasta vuota. Un campione resta, come una risorsa senza ciclo
+  /// di vita. Restituisce i `remove` fatti, in ordine, e le loro inverse.
   private collect(): { removes: Op[]; restores: Op[] } {
     const removes: Op[] = [];
     const restores: Op[] = [];
@@ -1045,8 +1057,10 @@ export class SceneEngine {
     for (let lost = this.t.orphans(); lost.length > 0; lost = this.t.orphans()) {
       for (const id of lost) {
         const node = this.t.element(id);
-        // Una risorsa senza ciclo di vita resta anche sola.
-        if (node !== null && node.details?.lifecycle !== undefined) drop(node);
+        // Una risorsa senza ciclo di vita resta anche sola, e così un
+        // campione.
+        const lifecycle = node?.details?.lifecycle;
+        if (node !== null && (lifecycle === "private" || lifecycle === "shared")) drop(node);
       }
     }
     for (const defs of [...this.emptied]) {
@@ -1745,9 +1759,13 @@ export class SceneEngine {
 
   private set(op: Record<string, unknown>): Op {
     if (typeof op.id !== "string" || !isRecord(op.attrs)) reject("invalid-elem", "set non valido");
-    if (op.id === ROOT) return this.setRoot(op.attrs);
+    if (op.id === ROOT) {
+      if (op.part !== undefined) reject("invalid-elem", "part vale soltanto su una risorsa");
+      return this.setRoot(op.attrs);
+    }
     const node = this.target(op.id);
     this.guard(node, true, true);
+    if (op.part !== undefined) return this.setPart(node, op.id, op.part, op.attrs);
     this.sheet(node);
     const { fragment, element, scope } = this.reread(node);
     const doc = fragment.doc;
@@ -1819,6 +1837,52 @@ export class SceneEngine {
     // Un gruppo cambia anche come si vedono i suoi figli.
     this.touch(node);
     return { op: "set", id: op.id, attrs: previous };
+  }
+
+  /// `set` su una parte della risorsa `node`, come il punto di una
+  /// sfumatura: `part` sono gli indici dei figli elemento dalla risorsa in
+  /// giù. La risorsa si riscrive intera in forma canonica, come con un `set`
+  /// suo, e deve restare modificabile (§2).
+  private setPart(node: ElementPart, id: string, part: unknown, attrs: Record<string, unknown>): Op {
+    if (roleOf(node) !== "resource") reject("invalid-elem", "part vale soltanto su una risorsa");
+    if (!Array.isArray(part) || part.length === 0 || part.length > MAX_NESTING || !part.every((i) => Number.isSafeInteger(i) && i >= 0)) {
+      reject("invalid-elem", "part non valido");
+    }
+    const path = part as number[];
+    const read = this.reread(node);
+    const doc = read.fragment.doc;
+    let element = read.element;
+    let scope = read.scope;
+    for (const index of path) {
+      // Il contenuto di un titolo o di una riga è testo, non parti.
+      const inner = TEXT_HOLDERS.some((tag) => isSvg(element, tag)) ? [] : element.children.filter((child) => doc.element(child) !== null);
+      const child = inner[index];
+      if (child === undefined) reject("missing-target", `nessuna parte ${JSON.stringify(path)} in ${id}`);
+      element = doc.element(child)!;
+      const declarations = declarationsOf(element);
+      if (declarations.length > 0) scope = scope.declare(declarations);
+    }
+    const changes = new Map<string, Change>();
+    for (const [key, value] of Object.entries(attrs)) {
+      if (value !== null && typeof value !== "string") reject("invalid-elem", `valore non valido per ${key}`);
+      const name = elemGuard(() => attributeName(key, scope));
+      if (name.uri === "" && name.local === "id") reject("invalid-elem", "l'id di una parte non cambia");
+      if (value !== null) this.checkValue(element.local, name.uri, name.local, value);
+      const expanded = `${name.uri} ${name.local}`;
+      if (changes.has(expanded)) reject("invalid-elem", `attributo ripetuto: ${key}`);
+      changes.set(expanded, { key, ...name, value });
+    }
+    const target = element;
+    const previous: Record<string, string | null> = {};
+    for (const change of changes.values()) {
+      previous[change.key] = target.attrs.find((a) => doc.namespaces[a.ns] === change.uri && a.local === change.local)?.value ?? null;
+    }
+    const edit = changed(changes);
+    const built = this.rewriteLeaf(node, (out) => withPart(out, path, (inner) => ({ ...inner, attrs: canonicalOrder(edit(attributesOf(doc, target))) })));
+    const problem = this.problem(built);
+    if (problem !== null) reject("invalid-elem", problem);
+    this.touch(node);
+    return { op: "set", id, part: [...path], attrs: previous };
   }
 
   /// `set` sulla radice: soltanto l'unità e le guide del documento, coi

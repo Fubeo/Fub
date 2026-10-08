@@ -574,6 +574,7 @@ describe("una scorciatoia come si preme", () => {
     expect(displayBinding("Mod-k d", "other")).toBe("Ctrl+K D");
     expect(displayBinding("Alt-F10", "other")).toBe("Alt+F10");
     expect(displayBinding("Shift-F2", "mac")).toBe("⇧F2");
+    expect(displayBinding("Shift-Space", "other")).toBe("Shift+Space");
     expect(displayBinding("Mod-o || Mod-k o", "other")).toBe("Ctrl+O");
     expect(displayBinding(null, "other")).toBe("");
     // Un modificatore da solo è quel tasto, tenuto.

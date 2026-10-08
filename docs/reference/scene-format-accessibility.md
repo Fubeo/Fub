@@ -66,6 +66,10 @@ mano libera, che sono sottili. I colori si compongono in sRGB, come nei
 browser, coi canali arrotondati a interi. Il contrasto è quello di WCAG 2,
 fra il colore dell'oggetto composto sul fondo e il fondo.
 
+Un `fill` che rimanda a un [campione](scene-format-resources.md#2-le-risorse)
+vale il colore del campione, qualunque sia il ripiego: nella carta, nelle
+forme del fondo e nell'oggetto. Ogni altra risorsa dà un colore ignoto.
+
 ## 4. I controlli
 
 | Codice | Gravità | Che cosa guarda |

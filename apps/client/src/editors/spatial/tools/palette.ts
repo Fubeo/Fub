@@ -81,6 +81,10 @@ export const HIGHLIGHTER_OPACITY = "0.4";
 /// non cambia quello della penna.
 export const COVER_COLOR = "#000000";
 
+/// Quanti colori scelti di recente si ricordano: quelli che offrono la
+/// sezione «Colori del documento» e, i primi tre, il menu radiale.
+export const RECENT_COLORS = 8;
+
 /// Il campione di un colore scritto nel file, se è della tavolozza.
 export function swatchOf(color: string): Swatch | null {
   const lower = color.toLowerCase();

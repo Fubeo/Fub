@@ -2572,6 +2572,43 @@ textarea.draw-properties-input {
 .draw-properties-bar[hidden] {
   display: none;
 }
+/* I colori del documento prendono la riga della sezione: «Applica a», le
+   tre griglie e il modulo, uno sotto l'altro. I colori vanno a capo, e
+   ognuno è un pulsante di 44 px col numero degli oggetti sotto il colore. */
+.draw-swatches {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-swatches-target,
+.draw-swatches-group,
+.draw-swatches-form,
+.draw-swatches-form-row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-swatches-heading,
+.draw-swatches-form-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-swatches-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+.draw-swatches-chip {
+  flex-direction: column;
+}
+.draw-swatches-count {
+  font-variant-numeric: tabular-nums;
+}
+.draw-swatches-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 /* Un colore misto è un tondo a righe, che non è un colore della tavolozza:
    la pelle dà i colori della tessera. */
 .draw-swatch-frame[data-shape="mixed"],

@@ -1058,6 +1058,59 @@ describe("le risorse", () => {
     rejects(PRIVATE, { op: "set", id: G, attrs: { spreadMethod: "sideways" } }, "invalid-elem");
   });
 
+  it("set con part cambia una parte della risorsa: il punto di un campione, in un passo", () => {
+    const S = "r5e6f7g8h";
+    const swatch = (color: string): string[] => [
+      `    <linearGradient id="${S}" fub:role="swatch" fub:name="Blu" gradientUnits="userSpaceOnUse">`,
+      "      <title>Il blu del titolo</title>",
+      `      <stop stop-color="${color}"/>`,
+      "    </linearGradient>",
+    ];
+    // Chi lo usa sta anche in un livello bloccato: la risorsa no.
+    const source = lf(ROOT, TITLE, DEFS, ...swatch("#0072b2"), END_DEFS, PAPER, L1, user("o2b3c4d5e", S), END_G, L2_LOCKED, user("o3c4d5e6f", S), END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "set", id: S, part: [1], attrs: { "stop-color": "#d55e00" } });
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, ...swatch("#d55e00"), END_DEFS, PAPER, L1, user("o2b3c4d5e", S), END_G, L2_LOCKED, user("o3c4d5e6f", S), END_G, END));
+    expect(out.inverse).toEqual({ op: "set", id: S, part: [1], attrs: { "stop-color": "#0072b2" } });
+    expect(out.touched).toEqual([S]);
+    expect(engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(source);
+    expect(applied(engine.undo(out.undo)).text).toBe(source);
+
+    // Due cambi della stessa parte, uno dopo l'altro, sono un passo solo;
+    // di due parti diverse no.
+    const again = SceneEngine.open(source);
+    const first = apply(again, { op: "set", id: S, part: [1], attrs: { "stop-color": "#d55e00" } });
+    const second = apply(again, { op: "set", id: S, part: [1], attrs: { "stop-color": "#cc79a7" } });
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(merged.inverse).toEqual({ op: "set", id: S, part: [1], attrs: { "stop-color": "#0072b2" } });
+    expect(applied(again.undo(merged)).text).toBe(source);
+    // Le parti contano anche il titolo, il cui contenuto è testo.
+    rejects(source, { op: "set", id: S, part: [0], attrs: { "stop-color": "#d55e00" } }, "invalid-elem");
+    rejects(source, { op: "set", id: S, part: [0, 0], attrs: { "stop-color": "#d55e00" } }, "missing-target");
+    const third = SceneEngine.open(source);
+    const one = apply(third, { op: "set", id: S, part: [1], attrs: { "stop-color": "#d55e00" } });
+    const other = apply(third, { op: "set", id: S, attrs: { "fub:name": "Arancio" } });
+    expect(mergeUndo(one.undo, other.undo)).toBeNull();
+  });
+
+  it("set con part vale soltanto su una parte che c'è di una risorsa, e la lascia modificabile", () => {
+    rejects(PRIVATE, { op: "set", id: G, part: [2], attrs: { offset: "0.5" } }, "missing-target");
+    rejects(PRIVATE, { op: "set", id: G, part: [0, 0], attrs: { offset: "0.5" } }, "missing-target");
+    rejects(PRIVATE, { op: "set", id: "o2b3c4d5e", part: [0], attrs: { fill: "#000000" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: "#root", part: [0], attrs: { "fub:units": "mm" } }, "invalid-elem");
+    for (const part of [[], [-1], [0.5], ["0"], 0, null]) rejects(PRIVATE, { op: "set", id: G, part, attrs: { offset: "0.5" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { id: "r0a0b0c0d" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { "stop-color": "none" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { href: "#altro" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { offset: "0.5", "offset ": "0.6" } }, "invalid-elem");
+    const engine = SceneEngine.open(PRIVATE);
+    const out = apply(engine, { op: "set", id: G, part: [1], attrs: { offset: "0.5", "stop-opacity": "0.25" } });
+    expect(out.text).toBe(PRIVATE.replace('<stop offset="1" stop-color="#56b4e9"/>', '<stop offset="0.5" stop-color="#56b4e9" stop-opacity="0.25"/>'));
+    expect(out.inverse).toEqual({ op: "set", id: G, part: [1], attrs: { offset: "1", "stop-opacity": null } });
+    expect(parseWireOp({ op: "set", id: G, part: [1], attrs: { offset: "0.5" } })).toEqual({ op: { op: "set", id: G, part: [1], attrs: { offset: "0.5" } } });
+  });
+
   it("set su chi usa un ritaglio e un filtro lo lascia modificabile", () => {
     const C = "r2b3c4d5e";
     const F = "r3c4d5e6f";

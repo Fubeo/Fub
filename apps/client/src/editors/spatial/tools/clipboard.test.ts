@@ -440,6 +440,63 @@ describe("le risorse negli appunti", () => {
     expect(rawOf(node(same, again.keys[0]!))).toContain('fill="url(#og1111111)"');
   });
 
+  it("un campione resta quello del disegno con lo stesso id, o con lo stesso nome e colore; se no arriva con un nome libero", () => {
+    const swatch = (id: string, name: string, color: string): string =>
+      `<linearGradient id="${id}" fub:role="swatch" fub:name="${name}" gradientUnits="userSpaceOnUse"><stop stop-color="${color}"/></linearGradient>`;
+    const source = open(
+      doc(
+        `<defs id="fub-defs">${swatch("rs1s1s1s1", "Blu mare", "#0072b2")}${swatch("rs2s2s2s2", "Vermiglio", "#d55e00")}</defs>` +
+          `${LAYER}<rect id="oaaaaaaaa" x="0" y="0" width="5" height="5" fill="url(#rs1s1s1s1) #0072b2" stroke="url(#rs2s2s2s2) #d55e00"/></g>`,
+      ),
+    );
+    const svg = copy(source, ["oaaaaaaaa"]);
+    const uses = 'fill="url(#rs1s1s1s1) #0072b2" stroke="url(#rs2s2s2s2) #d55e00"';
+    // Nello stesso disegno restano gli stessi.
+    const same = paste(source, svg);
+    expect(source.engine.text.match(/<linearGradient/g)).toHaveLength(2);
+    expect(rawOf(node(source, same.keys[0]!))).toContain(uses);
+    // Con lo stesso id resta quello del disegno, col suo nome e il suo
+    // colore, che chi lo usa prende come ripiego.
+    const recolored = open(doc(`<defs id="fub-defs">${swatch("rs1s1s1s1", "Blu mare", "#56b4e9")}${swatch("rs2s2s2s2", "Arancio", "#d55e00")}</defs>${LAYER}</g>`));
+    const kept = paste(recolored, svg);
+    expect(recolored.engine.text.match(/<linearGradient/g)).toHaveLength(2);
+    expect(rawOf(node(recolored, kept.keys[0]!))).toContain(uses.replace("#0072b2", "#56b4e9"));
+    // In un altro disegno vale il campione con lo stesso nome, senza
+    // maiuscole, e lo stesso colore; con lo stesso nome e un altro colore
+    // arriva il suo, col primo nome libero.
+    const other = open(doc(`<defs id="fub-defs">${swatch("rt1t1t1t1", "blu MARE", "#0072b2")}${swatch("rt2t2t2t2", "Vermiglio", "#e69f00")}</defs>${LAYER}</g>`));
+    const there = paste(other, svg);
+    const resources = elementChildren(node(other, "fub-defs") as ContainerNode);
+    expect(resources).toHaveLength(3);
+    const arrived = resources[2]!.facts.id!;
+    expect(rawOf(resources[2]!)).toBe(swatch(arrived, "Vermiglio 2", "#d55e00"));
+    expect(rawOf(node(other, there.keys[0]!))).toContain(`fill="url(#rt1t1t1t1) #0072b2" stroke="url(#${arrived}) #d55e00"`);
+  });
+
+  it("un campione col nome di un colore arriva con un altro nome, e due uguali diventano uno", () => {
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 20 10">',
+      "  <defs>",
+      '    <linearGradient id="a" fub:role="swatch" fub:name="#00ff00"><stop stop-color="#00ff00"/></linearGradient>',
+      '    <linearGradient id="b" fub:role="swatch" fub:name="Prato"><stop stop-color="#00aa00"/></linearGradient>',
+      '    <linearGradient id="c" fub:role="swatch" fub:name=" PRATO "><stop stop-color="#00AA00"/></linearGradient>',
+      "  </defs>",
+      '  <rect x="0" y="0" width="5" height="5" fill="url(#a) #00ff00"/>',
+      '  <rect x="10" y="0" width="5" height="5" fill="url(#b) #00aa00" stroke="url(#c) #00aa00"/>',
+      "</svg>",
+    ].join("\n");
+    const target = open(doc(`<defs id="fub-defs"/>${LAYER}</g>`));
+    const out = paste(target, svg);
+    const resources = elementChildren(node(target, "fub-defs") as ContainerNode);
+    expect(resources.map((resource) => anonymous(rawOf(resource)))).toEqual([
+      '<linearGradient id="ID" fub:role="swatch" fub:name="#00ff00 2"><stop stop-color="#00ff00"/></linearGradient>',
+      '<linearGradient id="ID" fub:role="swatch" fub:name="Prato"><stop stop-color="#00aa00"/></linearGradient>',
+    ]);
+    const [green, meadow] = resources.map((resource) => resource.facts.id!);
+    expect(rawOf(node(target, out.keys[0]!))).toContain(`fill="url(#${green}) #00ff00"`);
+    expect(rawOf(node(target, out.keys[1]!))).toContain(`fill="url(#${meadow}) #00aa00" stroke="url(#${meadow}) #00aa00"`);
+  });
+
   it("da un altro programma porta le risorse usate, prima di ciò che le usa, e lascia le altre", () => {
     const svg = [
       '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 10 10">',

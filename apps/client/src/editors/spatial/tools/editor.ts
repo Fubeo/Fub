@@ -145,9 +145,9 @@ import type { ElementItem, Item } from "../scene/classify";
 import { MAX_VALUE_BYTES, ROOT, type Op, type Reason } from "../scene/ops";
 import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from "../scene/rulers";
 import { pathData, type Elem } from "../scene/serialize";
-import { href as parseHref } from "../scene/values";
+import { paintReference, href as parseHref } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
-import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
+import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone, type SamplePaint } from "../painter/overlay";
 import { PaintBuilder, resourcesFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
 import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
@@ -238,9 +238,23 @@ import {
   UNIT_NAMES,
   type SelectionFacts,
 } from "./fields";
-import { framedText, initialText, lookOf as selectionLook, lookOps, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
+import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
+import {
+  documentColors,
+  documentSwatches,
+  linkSwatchOps,
+  newSwatchOps,
+  paperColor,
+  recolorSwatchOps,
+  removeSwatchOps,
+  renameSwatchOps,
+  swatchPaint,
+  unitsShowing,
+  type DocumentColors,
+  type SwatchChange,
+} from "./swatches";
 import {
   angleOf,
   directionCursor,
@@ -379,7 +393,7 @@ import {
   zoomAt,
   type View,
 } from "../view";
-import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
+import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type ForeignBlock, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
 import { createBoardsPanel, type BoardRow } from "./boards-panel";
@@ -406,6 +420,7 @@ import {
   type Encoded,
   type ImageCodec,
 } from "./images";
+import { colorSeen, imagePixel, pixelColor, shownPaint, sightAt, sightStyle, styleColor, type Beneath, type ImageSight, type ShapeSight, type Shown } from "./eyedropper";
 import {
   addLayerOps,
   canShiftLayer,
@@ -437,6 +452,7 @@ import {
   HIGHLIGHTER_WIDTHS,
   isLight,
   PALETTE,
+  RECENT_COLORS,
   swatchOf,
   WIDTHS,
   type Width,
@@ -571,6 +587,12 @@ export interface DrawEditorOptions {
   readonly grid?: Grid;
   /// Chi disegna ha cambiato la griglia, dal menu o coi tasti.
   readonly onGridChange?: (grid: Grid) => void;
+  /// I colori scelti di recente, `#rrggbb`, dal più recente (default
+  /// nessuno).
+  readonly colors?: readonly string[];
+  /// Chi disegna ha scelto un colore: i colori recenti di adesso, dal più
+  /// recente.
+  readonly onColorsChange?: (colors: readonly string[]) => void;
   readonly links?: DrawLinks;
   readonly place?: DrawPlace;
   readonly onChange?: (change: DrawChange) => void;
@@ -641,6 +663,9 @@ export interface DrawEditor {
   /// Un'altra griglia, da chi monta l'editor: non si annuncia e non torna a
   /// `onGridChange`. Un passo fuori dai limiti lascia quello di prima.
   setGrid(grid: Grid): void;
+  /// Altri colori recenti, da chi monta l'editor: non tornano a
+  /// `onColorsChange`.
+  setRecentColors(colors: readonly string[]): void;
   select(keys: readonly string[]): void;
   deleteSelection(): void;
   undo(): void;
@@ -667,6 +692,10 @@ export const DRAW_SCALE_LIMITS: ScaleLimits = { min: 0.1, max: 32 };
 /// Quanto lontano dal tratto un tocco prende ancora l'oggetto, in pixel: il
 /// dito copre più della penna.
 const HIT_PX: Readonly<Record<InkPointerType, number>> = { pen: 6, mouse: 4, touch: 12 };
+
+/// Quante immagini il contagocce tiene aperte: quella sotto il puntatore, e
+/// quelle che lascia vedere dove è trasparente.
+const DROPPER_IMAGES = 3;
 
 /// Il raggio della gomma, in pixel.
 const ERASER_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 8, touch: 16 };
@@ -722,7 +751,7 @@ const TAP_SLOP_PX = 12;
 /// contestuale che il sistema gli manda dietro, in millisecondi.
 const RADIAL_ECHO_MS = 500;
 
-/// Quanti strumenti e colori di prima l'editor ricorda per il menu radiale.
+/// Quanti strumenti di prima l'editor ricorda per il menu radiale.
 const RECENT_MAX = 6;
 
 /// Gli strumenti che il menu radiale offre quando chi disegna ne ha usati
@@ -1024,6 +1053,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   // Un foglio coi suoi segni di taglio: i bordi che continuano oltre gli
   // angoli.
   "draw-board": ["M2 6h20", "M2 18h20", "M6 2v20", "M18 2v20"],
+  // Una pipetta: la punta in basso a sinistra, il bulbo in alto a destra.
+  "draw-eyedropper": ["M13 9L5.5 16.5 4 20l3.5-1.5L15 11", "M11.5 7.5l5 5", "M12.5 8.5l4-4a2.1 2.1 0 0 1 3 3l-4 4"],
   "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
   "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
@@ -1112,6 +1143,19 @@ function straight(samples: readonly InkSample[]): InkSample[] {
   return out;
 }
 
+/// I colori di un disegno che non se ne contano: per la sezione chiusa,
+/// che non li mostra.
+const NO_COLORS: DocumentColors = { swatches: [], used: [], hidden: 0 };
+
+/// Il colore e lo spessore con cui disegna uno strumento.
+interface DrawStyle {
+  /// `#rrggbb`.
+  color: string;
+  width: number;
+  /// Il campione da cui viene il colore, che gli oggetti nuovi usano.
+  swatch: string | null;
+}
+
 /// Come un comando che sposta gli elementi senza cambiarli tiene lo stile
 /// che si vede (vedi `styled.ts`).
 interface Styled {
@@ -1147,6 +1191,7 @@ type Gesture =
   | TextGesture
   | GuideGesture
   | BoardGesture
+  | DropperGesture
   | NoteGesture
   | RefusedGesture;
 
@@ -1653,6 +1698,48 @@ interface BoardGesture extends GestureBase {
   rect: Rect | null;
 }
 
+/// Il colore di un pixel che il contagocce vede: il colore; `clear` dove
+/// l'immagine non si vede, trasparente o fuori da ciò che il riquadro
+/// mostra; `reading` mentre la si apre; o perché non si legge.
+type PixelSeen = { readonly color: string } | "clear" | "reading" | DrawKey;
+
+/// Ciò che il contagocce vede in un punto: una forma; il pixel di
+/// un'immagine; un blocco estraneo, che non si legge.
+type Dropped =
+  | { readonly kind: "shape"; readonly sight: ShapeSight }
+  | { readonly kind: "image"; readonly sight: ImageSight; readonly pixel: Exclude<PixelSeen, "clear"> }
+  | { readonly kind: "foreign" };
+
+/// Il contagocce sopra un punto della scena, senza premere: dove, con quale
+/// puntatore, se è il cursore della tastiera, e ciò che vede nella scena
+/// `index`.
+interface DropperHover {
+  readonly index: SceneIndex;
+  readonly at: Point;
+  readonly pointer: InkPointerType;
+  readonly keyboard: boolean;
+  readonly seen: Dropped | null;
+}
+
+/// Un gesto del contagocce: prende dove si rilascia, e finché si preme
+/// l'anteprima segue il puntatore.
+interface DropperGesture extends GestureBase {
+  readonly kind: "dropper";
+  at: Point | null;
+  seen: Dropped | null;
+}
+
+/// Un'immagine che il contagocce legge, del disegno aperto per `loaded`:
+/// aperta (`decoded`), o perché non si legge (`reason`); `ready` finisce
+/// quando si sa. Una chiusa non serve più.
+interface DropperImage {
+  readonly loaded: number;
+  decoded: Decoded | null;
+  reason: DrawKey | null;
+  ready: Promise<void>;
+  closed: boolean;
+}
+
 function scaleOf(m: Matrix): number {
   return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 }
@@ -1925,24 +2012,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let tool: ToolId = startTool(tools, profile);
   /// Il colore e lo spessore di chi scrive: la penna, le forme e le note li
   /// condividono, l'evidenziatore e la copertura hanno i loro.
-  const styles: Record<Tool | "cover", { color: string; width: number }> = {
-    pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH },
-    highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH },
-    cover: { color: COVER_COLOR, width: DEFAULT_WIDTH },
+  const styles: Record<Tool | "cover", DrawStyle> = {
+    pen: { color: DEFAULT_COLOR, width: DEFAULT_WIDTH, swatch: null },
+    highlighter: { color: HIGHLIGHTER_COLOR, width: HIGHLIGHTER_WIDTH, swatch: null },
+    cover: { color: COVER_COLOR, width: DEFAULT_WIDTH, swatch: null },
   };
-  /// Il testo ha il colore della penna e il corpo suo, che la barra mostra
-  /// al posto dello spessore.
-  const textStyle = {
+  /// Il testo ha il colore della penna, col suo campione, e il corpo suo,
+  /// che la barra mostra al posto dello spessore.
+  const textStyle: DrawStyle = {
     get color(): string {
       return styles.pen.color;
     },
     set color(value: string) {
       styles.pen.color = value;
     },
+    get swatch(): string | null {
+      return styles.pen.swatch;
+    },
+    set swatch(value: string | null) {
+      styles.pen.swatch = value;
+    },
     width: TEXT_SIZE,
   };
-  const style = (): { color: string; width: number } =>
-    tool === "text" ? textStyle : styles[tool === "highlighter" || tool === "cover" ? tool : "pen"];
+  const style = (): DrawStyle => (tool === "text" ? textStyle : styles[tool === "highlighter" || tool === "cover" ? tool : "pen"]);
   /// Come disegna lo strumento Poligono: poligono o stella, i lati, le punte,
   /// il rapporto interno e il raggio degli angoli. Vale finché l'editor vive,
   /// come il colore; lo cambiano i tasti mentre si disegna e il pannello
@@ -1960,10 +2052,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const widthsNow = (): readonly Width[] => (tool === "highlighter" ? HIGHLIGHTER_WIDTHS : tool === "text" ? TEXT_SIZES : WIDTHS);
   /// L'ultimo colore scelto a piacere: un campione in più nella barra.
   let custom: string | null = null;
-  /// Gli strumenti e i colori di prima, il più recente per primo: le voci
-  /// del menu radiale.
+  /// Gli strumenti di prima, il più recente per primo: le voci del menu
+  /// radiale.
   let recentTools: ToolId[] = [];
-  let recentColors: string[] = [];
+  /// I colori scelti di recente, il più recente per primo, quello di adesso
+  /// compreso: della sezione «Colori del documento» e, senza quello di
+  /// adesso, del menu radiale. Li ricorda chi monta l'editor.
+  let recentColors: readonly string[] = (options.colors ?? []).slice(0, RECENT_COLORS);
   let selection: string[] = [];
   let camera: View = { scale: 1, angle: 0, tx: 0, ty: 0 };
   /// Il formato della percentuale di zoom, nella lingua di adesso.
@@ -2075,6 +2170,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// cursore della tastiera: la linea della forma e i suoi punti si vedono
   /// prima di toccarla. Vale per la scena in cui lo si è trovato.
   let widthHover: { readonly index: SceneIndex; readonly spot: WidthSpot } | null = null;
+  /// Ciò che il contagocce vede sotto il puntatore che passa, o sotto il
+  /// cursore della tastiera: l'anteprima di ciò che prenderebbe.
+  let dropperHover: DropperHover | null = null;
   /// Il punto del profilo scelto con lo Spessore: il percorso della sua
   /// linea nel modello, e il suo indice. Canc lo toglie, Invio ne apre le
   /// misure.
@@ -2365,6 +2463,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     },
     onMove: (keys, drop) => moveRows(keys, drop),
     onEdge: (key, front) => announce(t(outlineNow().byKey.get(key)?.item.role === "layer" ? (front ? "draw.layer.edge.top" : "draw.layer.edge.bottom") : front ? "draw.move.edge.front" : "draw.move.edge.back")),
+    onEyedropper: (key, colorOnly) => dropFromRow(key, colorOnly),
   });
   tree.element.hidden = true;
   relabels.push(() => tree.relabel());
@@ -2472,6 +2571,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const closed = grid.closed.filter((each) => each !== id);
       changeGrid({ ...grid, closed: open ? closed : [...closed, id] });
     },
+    colors: {
+      onApply: (choice, target) => applyColor(choice.value, choice.color, choice.name, target),
+      onCreate: (name, color, link) => createSwatch(name, color, link),
+      onLink: (id) => linkSwatch(id),
+      onRename: (id, name) => renameSwatch(id, name),
+      onRecolor: (id, color) => recolorSwatch(id, color),
+      onDelete: (id) => deleteSwatch(id),
+      onSelect: (value) => selectShowing(value),
+    },
     announce: (text) => announce(text),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
@@ -2489,7 +2597,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly kept: unknown;
     readonly polygon: PolygonTool | null;
     readonly board: Board | null;
+    readonly drawing: string;
+    readonly recent: readonly string[];
   } | null = null;
+  /// I colori del documento contati per la scena `index`: si ricontano
+  /// soltanto quando il disegno cambia.
+  let colorsCounted: { readonly index: SceneIndex; readonly colors: DocumentColors } | null = null;
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
   let ratioLock: { readonly keys: string; readonly on: boolean } | null = null;
@@ -4043,6 +4156,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...regionHandles());
     handles.push(...cutHandles());
     handles.push(...widthHandles());
+    handles.push(...dropperHandles());
     handles.push(...pathsHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
@@ -5136,6 +5250,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // tavola scelta dallo strumento Tavola.
     const polygonNow = tool === "polygon" ? polygonTool : null;
     const boardNow = tool === "board" ? (chosenSheet()?.board ?? null) : null;
+    // Il colore con cui si disegna, col campione da cui viene.
+    const drawing = `${style().color} ${style().swatch ?? ""}`;
     const last = panelShown;
     if (
       last !== null &&
@@ -5148,13 +5264,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last.ratio === ratioLock &&
       last.kept === kept &&
       last.polygon === polygonNow &&
-      last.board === boardNow
+      last.board === boardNow &&
+      last.drawing === drawing &&
+      last.recent === recentColors
     ) {
       return;
     }
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow };
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors };
     const list = boardsNow();
-    const units = selection.length === 0 || engine.model === null ? [] : selectedUnits();
+    const model = engine.model;
+    const units = selection.length === 0 || model === null ? [] : selectedUnits();
     panel.update(
       propertiesView({
         features,
@@ -5170,8 +5289,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           boardNow === null
             ? null
             : { id: boardNow.id, name: boardNow.name, rect: boardNow.rect, index: list.indexOf(boardNow) + 1, count: list.length },
+        swatches: model === null ? [] : documentSwatches(model),
+        recent: recentColors,
+        paper: model === null ? null : paperColor(model),
+        // I colori si contano soltanto con la loro sezione aperta.
+        colors:
+          model === null || !has("swatches")
+            ? null
+            : {
+                document: grid.closed.includes("colors") ? (colorsCounted?.colors ?? NO_COLORS) : colorsNow(),
+                drawing: style().color,
+                swatch: style().swatch,
+              },
       }),
     );
+  }
+
+  /// I colori del documento, contati, per la scena di adesso.
+  function colorsNow(): DocumentColors {
+    const index = currentIndex();
+    if (colorsCounted?.index !== index) colorsCounted = { index, colors: documentColors(engine.model!) };
+    return colorsCounted.colors;
   }
 
   /// Invio e Ctrl+Maiusc+X con gli attributi nel pannello: il fuoco va alla
@@ -5305,6 +5443,117 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const outlined = outlineOps(model, units, change, newIds());
     return changeFromPanel("dash" in change ? "draw.action.dash" : "cap" in change ? "draw.action.cap" : "draw.action.join", outlined.ops, outlined.keys);
   };
+
+  // --- I colori del documento ------------------------------------------------
+
+  /// Il campione `id` del disegno di adesso, se c'è.
+  const swatchNamed = (id: string): { readonly id: string; readonly name: string; readonly color: string } | null => {
+    const model = engine.model;
+    return (model === null ? undefined : documentSwatches(model).find((each) => each.id === id)) ?? null;
+  };
+
+  /// Quanti elementi mostrano il campione `id`, nel disegno di adesso.
+  const swatchUses = (id: string): number => colorsNow().swatches.find((each) => each.id === id)?.uses ?? 0;
+
+  /// `said`, e quanti oggetti tengono il colore scritto, se ce ne sono.
+  const withKept = (said: string, change: SwatchChange): string =>
+    change.kept === 0 ? said : `${said} ${plural(change.kept, "draw.colors.kept.one", "draw.colors.kept.other")}`;
+
+  /// Un colore dalla sezione «Colori del documento»: `value` si scrive,
+  /// `color` è il suo `#rrggbb` e `name` come si dice. Va al bersaglio
+  /// `target` della selezione o, con `null`, a ciò che si disegna.
+  function applyColor(value: string, color: string, name: string, target: "fill" | "stroke" | null): string | null {
+    if (target === null) {
+      setColor(color, { swatch: paintReference(value)?.id ?? null });
+      announce(t("draw.announce.color", { color: name }));
+      return null;
+    }
+    const outcome = styleFromPanel(target, value);
+    if (outcome === null) {
+      if (paintReference(value) === null) rememberColors(color);
+      announce(t("draw.colors.applied", { target: t(target === "fill" ? "draw.properties.fill" : "draw.properties.stroke"), name }));
+    }
+    panelShown = null;
+    syncProperties();
+    return outcome;
+  }
+
+  /// Il campione nuovo `name` del colore `color`; con `link`, chi usa
+  /// `color` scritto passa a lui.
+  function createSwatch(name: string, color: string, link: boolean): string | null {
+    const model = engine.model;
+    if (model === null) return null;
+    const made = newSwatchOps(model, color, name, link, selectedUnits(), newIds());
+    const outcome = changeFromPanel(link ? "draw.action.swatch_make" : "draw.action.swatch_new", made.ops, made.keys);
+    if (outcome !== null) return outcome;
+    const uses = link ? swatchUses(made.id) : 0;
+    announce(withKept(uses === 0 ? t("draw.colors.created", { name }) : plural(uses, "draw.colors.created.one", "draw.colors.created.other", { name }), made));
+    return null;
+  }
+
+  /// Chi usa scritto il colore del campione `id` passa a lui.
+  function linkSwatch(id: string): string | null {
+    const model = engine.model;
+    const swatch = swatchNamed(id);
+    if (model === null || swatch === null) return null;
+    const linked = linkSwatchOps(model, id, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_link", linked.ops, linked.keys);
+    if (outcome !== null) return outcome;
+    const { name } = swatch;
+    announce(withKept(linked.ops.length === 0 ? t("draw.colors.linked.none", { name }) : plural(swatchUses(id), "draw.colors.linked.one", "draw.colors.linked.other", { name }), linked));
+    return null;
+  }
+
+  function renameSwatch(id: string, name: string): string | null {
+    const model = engine.model;
+    if (model === null) return null;
+    const renamed = renameSwatchOps(model, id, name, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_rename", renamed.ops, renamed.keys);
+    if (outcome === null && renamed.ops.length > 0) announce(t("draw.colors.renamed", { name }));
+    return outcome;
+  }
+
+  /// Il colore nuovo `color` del campione `id`, per chi lo usa e, se viene
+  /// da lui, per ciò che si disegna.
+  function recolorSwatch(id: string, color: string): string | null {
+    const model = engine.model;
+    const swatch = swatchNamed(id);
+    if (model === null || swatch === null) return null;
+    const recolored = recolorSwatchOps(model, id, color, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_recolor", recolored.ops, recolored.keys);
+    if (outcome !== null) return outcome;
+    announce(t("draw.colors.recolored", { name: swatch.name, color: colorName(color) }));
+    return null;
+  }
+
+  /// Toglie il campione `id`: chi lo usa torna al suo colore, scritto.
+  function deleteSwatch(id: string): string | null {
+    const model = engine.model;
+    const swatch = swatchNamed(id);
+    if (model === null || swatch === null) return null;
+    const removed = removeSwatchOps(model, id, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.swatch_delete", removed.ops, removed.keys);
+    if (outcome !== null) return outcome;
+    const { name } = swatch;
+    announce(removed.kept === 0 ? t("draw.colors.deleted", { name }) : plural(removed.kept, "draw.colors.deleted.kept.one", "draw.colors.deleted.kept.other", { name }));
+    return null;
+  }
+
+  /// Sceglie gli oggetti che si scelgono e che mostrano `value`, un colore
+  /// `#rrggbb` o un campione `url(#id)`, come «Scegli simili».
+  function selectShowing(value: string): string | null {
+    const model = engine.model;
+    if (model === null) return null;
+    const units = unitsShowing(model, currentIndex(), value);
+    if (units.length === 0) {
+      announce(t("draw.colors.selected.none"));
+      return null;
+    }
+    cancelGesture();
+    select(units.map((unit) => unit.key));
+    announceSelection();
+    return null;
+  }
 
   /// Un campo di «Forma»: cambia i poligoni, le stelle e i rettangoli
   /// scelti, o senza selezione lo strumento Poligono.
@@ -5449,6 +5698,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         break;
       default:
         outcome = styleFromPanel(id, value);
+        // Un colore scritto nel riempimento o nel contorno entra fra i
+        // recenti; un campione no, perché ha la sua griglia.
+        if (outcome === null && (id === "fill" || id === "stroke") && typeof value === "string") {
+          const code = paintReference(value) === null ? customColor(value) : null;
+          if (code !== null) rememberColors(code);
+        }
     }
     panelShown = null;
     syncProperties();
@@ -5813,6 +6068,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncArrange();
   };
 
+  /// Il valore con cui un oggetto nuovo scrive `color`, il colore dello
+  /// strumento: il campione da cui il colore viene, se il disegno lo ha
+  /// ancora di quel colore, così che l'oggetto lo segua; se no il colore.
+  function drawnPaint(color: string): string {
+    const { swatch } = style();
+    const model = engine.model;
+    if (swatch === null || model === null || style().color !== color) return color;
+    const found = documentSwatches(model).find((each) => each.id === swatch);
+    return found?.color === color ? swatchPaint(found) : color;
+  }
+
+  /// Il colore di uno strumento che viene da un campione lo segue: ne
+  /// prende il colore quando cambia, anche annullando, e lo lascia quando il
+  /// campione se ne va.
+  function followSwatches(): void {
+    const linked = Object.values(styles).filter((each) => each.swatch !== null);
+    if (linked.length === 0) return;
+    const swatches = engine.model === null ? [] : documentSwatches(engine.model);
+    for (const each of linked) {
+      const swatch = swatches.find((one) => one.id === each.swatch);
+      if (swatch === undefined) each.swatch = null;
+      else each.color = swatch.color;
+    }
+  }
+
   /// Porta la superficie alla scena del motore.
   const refresh = (): void => {
     scene = builder.build(paintSource());
@@ -5838,6 +6118,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       chosen = layer === null ? null : { key: keyOf(layer), at: layer.path[0]! };
     }
     showTyping();
+    followSwatches();
     syncControls();
     if (hotGuide !== null && (scene.root.guides?.[hotGuide] === undefined || scene.root.guides[hotGuide]!.locked)) hotGuide = null;
     showGuideLines();
@@ -6279,12 +6560,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       cancelGesture();
       tool = toolAfter(tools, tool, profile);
     }
-    // Senza i colori a piacere la barra non ha un campione per uno di loro:
-    // chi lo usava riparte dai colori di partenza, che la barra mostra.
+    // Senza i colori del documento il colore non segue più un campione; senza
+    // i colori a piacere la barra non ha un campione per uno di loro: chi lo
+    // usava riparte dai colori di partenza, che la barra mostra.
+    if (!has("swatches")) for (const each of Object.values(styles)) each.swatch = null;
     if (!has("colors")) {
-      if (swatchOf(styles.pen.color) === null) styles.pen.color = DEFAULT_COLOR;
-      if (swatchOf(styles.highlighter.color) === null) styles.highlighter.color = HIGHLIGHTER_COLOR;
-      if (swatchOf(styles.cover.color) === null) styles.cover.color = COVER_COLOR;
+      const starts: Readonly<Record<Tool | "cover", string>> = { pen: DEFAULT_COLOR, highlighter: HIGHLIGHTER_COLOR, cover: COVER_COLOR };
+      for (const [name, each] of Object.entries(styles) as Array<[Tool | "cover", DrawStyle]>) {
+        if (swatchOf(each.color) !== null) continue;
+        each.color = starts[name];
+        each.swatch = null;
+      }
     }
     showSurfaceHint();
     showGrid();
@@ -6309,9 +6595,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (live.textContent !== before) finished = (live.textContent ?? "").trim();
       recentTools = [tool, ...recentTools.filter((each) => each !== tool && each !== id)].slice(0, RECENT_MAX);
       forgetBuilder();
-      // Il punto scelto dello Spessore è dello strumento.
+      // Il punto scelto dello Spessore è dello strumento, e le immagini
+      // aperte del contagocce.
       widthPicked = null;
       widthHover = null;
+      dropperHover = null;
+      dropPixels();
     }
     tool = id;
     // Lo strumento Tavola sceglie le tavole, non gli oggetti: la selezione si
@@ -6326,25 +6615,50 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showPage();
     showHandles();
     showGrip(null);
+    // Il contagocce mostra subito che cosa vede sotto il puntatore.
+    if (id === "eyedropper" && pointerAt !== null) hoverDropper(pointerAt.at, pointerAt.pointer);
     const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi; col
     // Costruttore, su quante regioni lavora; con lo strumento Tavola, quale
-    // tavola è scelta.
+    // tavola è scelta; col contagocce, dove va ciò che prende.
     const sheet = id === "board" ? chosenSheet() : null;
-    const target = id === "nodes" ? targetText() : id === "builder" ? builderText() : sheet !== null ? sheetText(sheet) : "";
+    const target =
+      id === "nodes" ? targetText() : id === "builder" ? builderText() : id === "eyedropper" ? dropperFor() : sheet !== null ? sheetText(sheet) : "";
     announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
-  function setColor(value: string): void {
+  /// Mette `codes`, colori `#rrggbb` appena scelti, il primo come il più
+  /// recente, davanti ai colori recenti, e lo dice a chi monta l'editor. I
+  /// recenti sono colori scritti: un campione ha la sua griglia, e da un
+  /// recente si scriverebbe staccato da lui.
+  function rememberColors(...codes: string[]): void {
+    const next = [...codes, ...recentColors].filter((each, at, all) => all.indexOf(each) === at).slice(0, RECENT_COLORS);
+    if (next.length === recentColors.length && next.every((each, at) => each === recentColors[at])) return;
+    recentColors = next;
+    options.onColorsChange?.(recentColors);
+  }
+
+  /// Il colore dello strumento di adesso, `value` come lo legge
+  /// `customColor`. Un colore fuori dalla tavolozza chiede i colori
+  /// personalizzati, tranne quello che viene dai colori del documento
+  /// (`from`), che li offrono già; `from.swatch` è il campione da cui viene,
+  /// che gli oggetti nuovi usano. Anche il colore di prima resta fra i
+  /// recenti, per il menu radiale.
+  function setColor(value: string, from: { readonly swatch: string | null } | null = null): void {
     const code = customColor(value);
     if (code === null) return;
     if (swatchOf(code) === null) {
-      if (!has("colors")) return;
+      if (!has("colors") && from === null) return;
       custom = code;
     }
-    const before = style().color;
-    if (before !== code) recentColors = [before, ...recentColors.filter((each) => each !== before && each !== code)].slice(0, RECENT_MAX);
+    const before = style();
+    const swatch = from?.swatch ?? null;
+    const written: string[] = [];
+    if (swatch === null) written.push(code);
+    if (before.swatch === null) written.push(before.color);
+    rememberColors(...written);
     style().color = code;
+    style().swatch = swatch;
     syncControls();
     // Mentre si scrive, il colore va a ciò che è scelto nel campo, o a ciò
     // che si scriverà; e così il tracciato della penna.
@@ -7133,6 +7447,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return { ...base, kind: "lasso", points: [], base: [...selection], mode: shift ? "add" : alt ? "remove" : "replace", dragging: false };
       case "board":
         return { ...base, kind: "board", from: null, end: null, mode: "pending", plan: "draw", sheet: null, grip: null, carried: [], source: null, rect: null };
+      case "eyedropper":
+        // L'anteprima del gesto prende il posto di quella che passava.
+        dropperHover = null;
+        return { ...base, kind: "dropper", at: null, seen: null };
       case "nodes":
         resolveNodes();
         return {
@@ -7203,7 +7521,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const shapeOf = (g: ShapeGesture, id: string, to: Destination): Elem | null => {
     const ends = shapeEnds(g, to);
     if (ends === null) return null;
-    return shapeElem(g.tool, id, ends[0], ends[1], { color: g.color, width: g.width }, minimumFor(to), { ...polygonTool, straight: shift });
+    return shapeElem(g.tool, id, ends[0], ends[1], { color: drawnPaint(g.color), width: g.width }, minimumFor(to), { ...polygonTool, straight: shift });
   };
 
   const drawShape = (g: ShapeGesture): void => {
@@ -9158,6 +9476,412 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (writeWidthLine(now, shape, now.point, "draw.action.width")) announce(t("draw.width.changed", widthWords(now, shape, now.point)));
   }
 
+  // --- Il contagocce -----------------------------------------------------------
+
+  /// I blocchi estranei del disegno di adesso, per la scena in cui li si è
+  /// trovati: il contagocce li vede, ma non li legge.
+  let foreignCache: { readonly index: SceneIndex; readonly blocks: readonly ForeignBlock[] } | null = null;
+  const foreignNow = (): readonly ForeignBlock[] => {
+    const index = currentIndex();
+    const model = engine.model;
+    if (model === null) return [];
+    if (foreignCache?.index !== index) foreignCache = { index, blocks: indexer.foreignBlocks(model) };
+    return foreignCache.blocks;
+  };
+
+  /// Le immagini che il contagocce legge, per `href`, dalla meno recente:
+  /// restano aperte finché lo strumento è quello, al più
+  /// [`DROPPER_IMAGES`].
+  const dropperImages = new Map<string, DropperImage>();
+
+  const closeImage = (image: DropperImage): void => {
+    image.closed = true;
+    image.decoded?.close();
+    image.decoded = null;
+  };
+
+  /// Chiude le immagini del contagocce.
+  const dropPixels = (): void => {
+    for (const image of dropperImages.values()) closeImage(image);
+    dropperImages.clear();
+  };
+  life.add(dropPixels);
+
+  /// L'immagine `href` per il contagocce: aperta, che si apre adesso, o
+  /// perché non si legge.
+  const dropperImage = (href: string): DropperImage => {
+    const known = dropperImages.get(href);
+    dropperImages.delete(href);
+    if (known !== undefined && known.loaded === loads) {
+      dropperImages.set(href, known);
+      return known;
+    }
+    if (known !== undefined) closeImage(known);
+    const image: DropperImage = { loaded: loads, decoded: null, reason: null, ready: Promise.resolve(), closed: false };
+    const kind = parseHref(href).kind;
+    if (kind === "remote") image.reason = "draw.eyedropper.remote";
+    else if (codec === null || (kind !== "vault" && kind !== "data")) image.reason = "draw.image.unreadable";
+    else image.ready = openPixels(image, href, kind);
+    dropperImages.set(href, image);
+    for (const [key, old] of dropperImages) {
+      if (dropperImages.size <= DROPPER_IMAGES) break;
+      closeImage(old);
+      dropperImages.delete(key);
+    }
+    return image;
+  };
+
+  /// Apre per il contagocce l'immagine `href`, del vault o scritta nel
+  /// disegno, in `image`; poi l'anteprima si rifà.
+  async function openPixels(image: DropperImage, href: string, kind: "vault" | "data"): Promise<void> {
+    const port = options.images;
+    const blob = kind === "data" ? dataBlob(href) : port === undefined ? null : await port.read(href).catch(() => null);
+    const decoded = blob === null || image.closed || codec === null ? null : await codec.decode(blob).catch(() => null);
+    if (image.closed || disposed) {
+      decoded?.close();
+      return;
+    }
+    if (decoded === null || decoded.pixels === undefined) {
+      decoded?.close();
+      // Un file del vault che non si apre forse non c'è più.
+      image.reason = blob === null && kind === "vault" ? "draw.image.gone" : "draw.image.unreadable";
+    } else {
+      image.decoded = decoded;
+    }
+    refreshDropper();
+  }
+
+  /// Il colore del pixel che `sight` vede.
+  const pixelAt = (sight: ImageSight): PixelSeen => {
+    const image = dropperImage(sight.source.href);
+    if (image.reason !== null) return image.reason;
+    const decoded = image.decoded;
+    if (decoded === null) return "reading";
+    const at = imagePixel(sight, [decoded.width, decoded.height]);
+    if (at === null) return "clear";
+    const data = decoded.pixels?.({ x: at[0], y: at[1], width: 1, height: 1 }, 1)?.data;
+    if (data === undefined) return "draw.image.unreadable";
+    const color = pixelColor(data);
+    return color === null ? "clear" : { color };
+  };
+
+  /// Ciò che il contagocce vede nel punto `p` della scena, col puntatore
+  /// `pointer`; dove un'immagine è trasparente, o il suo riquadro non la
+  /// mostra, ciò che le sta sotto.
+  const dropperAt = (p: Point, pointer: InkPointerType): Dropped | null => {
+    const units = seenUnits();
+    const blocks = foreignNow();
+    const tolerance = HIT_PX[pointer] / camera.scale;
+    let under: Beneath | null = null;
+    for (;;) {
+      const sight = sightAt(units, blocks, p, tolerance, under);
+      if (sight === null) return null;
+      if (sight.kind === "foreign") return { kind: "foreign" };
+      if (sight.kind === "shape") return { kind: "shape", sight };
+      const pixel = pixelAt(sight);
+      if (pixel !== "clear") return { kind: "image", sight, pixel };
+      under = { unit: sight.unit, leaf: sight.sampled.leaf };
+    }
+  };
+
+  /// Il nome a parole della forma `leaf`, anche dentro un gruppo, come
+  /// nell'albero: il colore il contagocce lo dice a parte.
+  const sightName = (leaf: LeafNode): string => nameOfNode(leaf);
+
+  /// Il nome a parole di ciò da cui il contagocce prende l'aspetto, una forma
+  /// o un oggetto, come nell'albero ma senza lo stato e le parti: «Aspetto
+  /// di Rettangolo», anche se è bloccato.
+  const lookName = (node: ElementPart): string => {
+    const outlined = outlineNow().byKey.get(keyOfNode(node));
+    return outlined === undefined ? tagName(node) : describe(outlined, { state: false });
+  };
+
+  /// Il nome breve di un colore, per l'anteprima: quello della tavolozza, o
+  /// il codice.
+  const shortColor = (code: string): string => {
+    const swatch = swatchOf(code);
+    return swatch === null ? code : t(swatch.label);
+  };
+
+  /// Come si dice il colore `shown`.
+  const shownName = (shown: Shown): string => {
+    switch (shown.kind) {
+      case "color":
+        return colorName(shown.code);
+      case "swatch":
+        return shown.name;
+      case "gradient":
+        return t("draw.eyedropper.gradient", { color: colorName(shown.code) });
+      case "pattern":
+        return t("draw.eyedropper.pattern.name");
+      case "none":
+        return t("draw.eyedropper.none.name");
+    }
+  };
+
+  /// Il nome breve del colore `shown`, per l'anteprima.
+  const shownLabel = (shown: Shown): string => {
+    switch (shown.kind) {
+      case "color":
+      case "gradient":
+        return shortColor(shown.code);
+      case "swatch":
+        return shown.name;
+      case "pattern":
+        return t("draw.eyedropper.label.pattern");
+      case "none":
+        return t("draw.eyedropper.label.none");
+    }
+  };
+
+  /// Come l'anteprima mostra il colore `shown`: di una sfumatura, il colore
+  /// nel punto.
+  const samplePaint = (shown: Shown): SamplePaint => (shown.kind === "none" || shown.kind === "pattern" ? shown.kind : { color: shown.code });
+
+  /// Ciò che il contagocce vede, a parole: la forma e il colore nel punto
+  /// `p`.
+  const dropperText = (seen: Dropped, p: Point): string => {
+    if (seen.kind === "foreign") return t("draw.eyedropper.cursor.foreign");
+    const name = sightName(seen.sight.sampled.leaf);
+    if (seen.kind === "image") {
+      const pixel = seen.pixel;
+      if (typeof pixel === "object") return t("draw.eyedropper.cursor", { name, color: colorName(pixel.color) });
+      return t(pixel === "reading" ? "draw.eyedropper.cursor.reading" : "draw.eyedropper.cursor.unreadable", { name });
+    }
+    const color = colorSeen(engine.model!, seen.sight, p);
+    return color === null ? name : t("draw.eyedropper.cursor", { name, color: shownName(color.shown) });
+  };
+
+  /// Vero se il contagocce prende l'aspetto: ci sono oggetti scelti, e
+  /// Maiusc non chiede il solo colore.
+  const takesLook = (): boolean => !shift && selectedUnits().length > 0;
+
+  /// Il contagocce sopra il foglio, o mentre si preme: il contorno tenue
+  /// della forma da cui prende e, accanto al punto, ciò che prende. Per gli
+  /// oggetti scelti l'aspetto, col nome della forma: il riempimento nel
+  /// disco e il contorno nell'anello attorno, vuoti se la forma non li dà;
+  /// con Maiusc, da un'immagine o senza selezione il colore, col suo nome.
+  const dropperHandles = (): OverlayHandle[] => {
+    const model = engine.model;
+    if (tool !== "eyedropper" || model === null) return [];
+    const g = current?.kind === "dropper" ? current : null;
+    // Dopo un passo la scena è un'altra, e forse anche ciò che si vede.
+    if (g === null && dropperHover !== null && dropperHover.index !== currentIndex()) {
+      dropperHover = { ...dropperHover, index: currentIndex(), seen: dropperAt(dropperHover.at, dropperHover.pointer) };
+    }
+    const spot = g === null ? dropperHover : g.at === null ? null : { at: g.at, pointer: g.pointer, seen: g.seen };
+    if (spot === null || spot.seen === null) return [];
+    const { at, pointer, seen } = spot;
+    const sample = (fill: SamplePaint | null, text: string, ring: SamplePaint | null = null): OverlayHandle => ({
+      kind: "sample",
+      x: at[0],
+      y: at[1],
+      fill,
+      text,
+      ...(ring === null ? {} : { ring }),
+      ...(pointer === "touch" ? { lifted: true } : {}),
+    });
+    if (seen.kind === "foreign") return [sample(null, t("draw.eyedropper.label.foreign"))];
+    const { sampled } = seen.sight;
+    const out: OverlayHandle[] = [{ kind: "outline", segments: sampled.segments, matrix: sampled.matrix, hint: true }];
+    if (seen.kind === "image") {
+      const pixel = seen.pixel;
+      if (typeof pixel === "object") out.push(sample({ color: pixel.color }, shortColor(pixel.color)));
+      else out.push(sample(null, t(pixel === "reading" ? "draw.eyedropper.label.reading" : "draw.eyedropper.label.unreadable")));
+      return out;
+    }
+    if (takesLook()) {
+      const style = sightStyle(model, seen.sight);
+      const paint = (value: string | null): SamplePaint | null => {
+        const shown = value === null ? null : shownPaint(model, seen.sight, at, value);
+        return shown === null ? null : samplePaint(shown);
+      };
+      out.push(style === null ? sample(null, t("draw.eyedropper.label.unreadable")) : sample(paint(style.fill), sightName(sampled.leaf), paint(style.stroke)));
+      return out;
+    }
+    const color = colorSeen(model, seen.sight, at);
+    out.push(color === null ? sample(null, t("draw.eyedropper.label.unreadable")) : sample(samplePaint(color.shown), shownLabel(color.shown)));
+    return out;
+  };
+
+  /// Il puntatore, o il cursore della tastiera (`keyboard`), passa sopra `p`
+  /// senza premere: col contagocce si vede che cosa prenderebbe. Il dito
+  /// non passa: tocca.
+  const hoverDropper = (p: Point | null, pointer: InkPointerType, keyboard = false): void => {
+    let next: DropperHover | null = null;
+    if (p !== null && pointer !== "touch" && tool === "eyedropper" && has("eyedropper") && editable()) {
+      next = { index: currentIndex(), at: p, pointer, keyboard, seen: dropperAt(p, pointer) };
+    }
+    if (next === null && dropperHover === null) return;
+    dropperHover = next;
+    showHandles();
+  };
+
+  /// Un'immagine si è aperta: l'anteprima del contagocce si rifà, e la
+  /// tastiera sente il colore appena lo si legge.
+  const refreshDropper = (): void => {
+    const g = current?.kind === "dropper" ? current : null;
+    if (g !== null && g.at !== null) g.seen = dropperAt(g.at, g.pointer);
+    const hovered = dropperHover;
+    if (hovered !== null) dropperHover = { ...hovered, index: currentIndex(), seen: dropperAt(hovered.at, hovered.pointer) };
+    if (g === null && hovered === null) return;
+    showHandles();
+    if (g === null && hovered !== null && hovered.keyboard && hovered.at === cursor) announceCursor();
+  };
+
+  /// Il gesto del contagocce arriva a `p`: l'anteprima lo segue, anche
+  /// sotto un dito.
+  const dropperMove = (g: DropperGesture, p: Point): void => {
+    g.at = p;
+    g.seen = dropperAt(p, g.pointer);
+    showHandles();
+  };
+
+  /// Dove va ciò che il contagocce prende, a parole: agli oggetti scelti, o
+  /// a ciò che si disegna.
+  const dropperFor = (): string => {
+    const count = selectedUnits().length;
+    return count === 0 ? t("draw.eyedropper.for.drawing") : plural(count, "draw.eyedropper.for.one", "draw.eyedropper.for.other");
+  };
+
+  /// Il bersaglio del colore negli oggetti scelti `units`: quello scelto in
+  /// «Applica a», se lo hanno, o quello che hanno; `null` se non hanno né
+  /// riempimento né contorno.
+  const dropperTarget = (model: DocumentModel, units: readonly Unit[]): "fill" | "stroke" | null => {
+    const look = selectionLook(model, units);
+    const targets = (["fill", "stroke"] as const).filter((each) => look[each].count > 0);
+    const chosen = panel.colorTarget();
+    return targets.includes(chosen) ? chosen : (targets[0] ?? null);
+  };
+
+  /// Il contagocce prende nel punto `p`, col puntatore `pointer`: per gli
+  /// oggetti scelti l'aspetto della forma che vede; con `colorOnly`, da
+  /// un'immagine o senza selezione, il colore. Un'immagine che si apre
+  /// adesso si aspetta.
+  async function takeAt(p: Point, pointer: InkPointerType, colorOnly: boolean): Promise<void> {
+    if (!has("eyedropper") || !editable()) return;
+    const loaded = loads;
+    let seen = dropperAt(p, pointer);
+    for (let waits = 0; seen?.kind === "image" && seen.pixel === "reading" && waits <= DROPPER_IMAGES; waits++) {
+      await dropperImage(seen.sight.source.href).ready;
+      if (disposed || loads !== loaded || !editable()) return;
+      seen = dropperAt(p, pointer);
+    }
+    give(seen, p, colorOnly);
+  }
+
+  /// Dà ciò che il contagocce vede nel punto `p`, `seen`.
+  function give(seen: Dropped | null, p: Point, colorOnly: boolean): void {
+    const model = engine.model;
+    if (model === null) return;
+    if (seen === null) {
+      announce(t("draw.eyedropper.nothing"));
+      return;
+    }
+    if (seen.kind === "foreign") {
+      announce(t("draw.eyedropper.foreign"));
+      return;
+    }
+    if (seen.kind === "image") {
+      const pixel = seen.pixel;
+      if (typeof pixel === "object") giveColor(pixel.color, { kind: "color", code: pixel.color });
+      else announce(t(pixel === "reading" ? "draw.image.unreadable" : pixel));
+      return;
+    }
+    const units = selectedUnits();
+    if (units.length > 0 && !colorOnly) {
+      giveLook(seen.sight, units);
+      return;
+    }
+    const color = colorSeen(model, seen.sight, p);
+    const shown = color?.shown;
+    if (color === null || shown === undefined || shown.kind === "none") announce(t("draw.eyedropper.no_color"));
+    else giveColor(color.value, shown);
+  }
+
+  /// Dà agli oggetti scelti `units` l'aspetto della forma di `sight`, in un
+  /// passo.
+  function giveLook(sight: ShapeSight, units: readonly Unit[]): void {
+    const model = engine.model!;
+    const name = lookName(sight.sampled.leaf);
+    const style = sightStyle(model, sight);
+    if (style === null) {
+      announce(t("draw.eyedropper.no_style", { name }));
+      return;
+    }
+    cancelGesture();
+    const restyled = styleOps(model, units, style, measureText, newIds());
+    if (arrange("draw.action.eyedropper", restyled) === null) return;
+    announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+  }
+
+  /// Dà il colore `value`, come lo scrive il file, che si mostra come
+  /// `shown`: agli oggetti scelti, al riempimento o al contorno come dice
+  /// «Applica a»; senza selezione, a ciò che si disegna.
+  function giveColor(value: string, shown: Exclude<Shown, { readonly kind: "none" }>): void {
+    const model = engine.model!;
+    const units = selectedUnits();
+    const name = shownName(shown);
+    if (units.length === 0) {
+      if (shown.kind === "pattern") {
+        announce(t("draw.eyedropper.pattern"));
+        return;
+      }
+      setColor(shown.code, { swatch: shown.kind === "swatch" ? shown.id : null });
+      announce(t("draw.announce.color", { color: name }));
+      return;
+    }
+    const target = dropperTarget(model, units);
+    if (target === null) {
+      announce(t("draw.eyedropper.no_target"));
+      return;
+    }
+    const outcome = styleFromPanel(target, value);
+    if (outcome !== null) {
+      announce(outcome);
+      return;
+    }
+    if (shown.kind === "color" || shown.kind === "gradient") rememberColors(shown.code);
+    announce(t("draw.colors.applied", { target: t(target === "fill" ? "draw.properties.fill" : "draw.properties.stroke"), name }));
+    panelShown = null;
+    syncProperties();
+  }
+
+  /// Il contagocce sulla riga `key` dell'albero, senza puntatore: agli
+  /// oggetti scelti l'aspetto del suo oggetto, anche bloccato o nascosto,
+  /// come «Copia lo stile»; con `colorOnly`, o senza selezione, il suo
+  /// colore. Falso se il contagocce non c'è: il tasto sceglie lo strumento.
+  function dropFromRow(key: string, colorOnly: boolean): boolean {
+    if (!has("eyedropper")) return false;
+    const model = engine.model;
+    const outlined = outlineNow().byKey.get(key);
+    if (model === null || outlined === undefined || !editable()) return true;
+    if (outlined.item.role === "layer") {
+      announce(t("draw.eyedropper.row.layer"));
+      return true;
+    }
+    const node = nodeOf(model, outlined.item);
+    const name = lookName(node);
+    const style = nodeStyle(model, node);
+    if (style === null) {
+      announce(t("draw.eyedropper.no_style", { name }));
+      return true;
+    }
+    const units = selectedUnits();
+    if (units.length > 0 && !colorOnly) {
+      cancelGesture();
+      const restyled = styleOps(model, units, style, measureText, newIds());
+      if (arrange("draw.action.eyedropper", restyled) === null) return true;
+      announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+      return true;
+    }
+    const color = styleColor(model, style);
+    if (color === "gradient") announce(units.length > 0 ? `${t("draw.eyedropper.row.gradient")} ${t("draw.eyedropper.row.whole")}` : t("draw.eyedropper.row.gradient"));
+    else if (color === null || color.shown.kind === "none") announce(t(outlined.item.role === "image" ? "draw.eyedropper.row.image" : "draw.eyedropper.no_color"));
+    else giveColor(color.value, color.shown);
+    return true;
+  }
+
   // --- I gesti dei nodi --------------------------------------------------------
 
   /// Quanti nodi ha il tracciato.
@@ -9731,7 +10455,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     for (const point of outline) bounds.include(apply(to.matrix, point));
     const id = g.ids.next("object");
     const at = new Date(performance.timeOrigin + g.began).toISOString();
-    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, g.color, brush, ink, at, g.tool))];
+    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, drawnPaint(g.color), brush, ink, at, g.tool))];
     const page = grownPage(bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });
     return commit(g.tool === "highlighter" ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) === null ? null : { id, to };
@@ -9884,7 +10608,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           return;
         }
         const highlight = tool === "highlighter";
-        const elem = strokeElem(ids.next("object"), color, brush, ink, new Date().toISOString(), tool);
+        const elem = strokeElem(ids.next("object"), drawnPaint(color), brush, ink, new Date().toISOString(), tool);
         placeNew(to, elem, highlight ? "draw.action.highlight" : "draw.action.stroke", highlight ? "draw.added.highlight" : "draw.added.stroke", true);
         return;
       }
@@ -9899,7 +10623,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         const flat = tool === "line" || tool === "arrow";
         const from = apply(to.inverse, [cx - half, flat ? cy : cy - half / 2]);
         const end = apply(to.inverse, [cx + half, flat ? cy : cy + half / 2]);
-        const elem = shapeElem(tool, ids.next("object"), from, end, { color, width }, 0);
+        const elem = shapeElem(tool, ids.next("object"), from, end, { color: drawnPaint(color), width }, 0);
         if (elem !== null) placeNew(to, elem, toolLabel(tool), ADDED[tool], true);
         return;
       }
@@ -10207,7 +10931,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         id,
         d: pathData(writeNodes([sub])),
         fill: "none",
-        stroke: color,
+        stroke: drawnPaint(color),
         "stroke-width": formatNumber(width, 2),
         // Un tracciato chiuso non ha capi.
         ...(closed ? {} : { "stroke-linecap": "round" }),
@@ -10746,8 +11470,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       // Sopra una maniglia della cornice o una guida, il cursore dice che
       // cosa fa; con lo strumento Nodi, la forma sotto mostra i suoi nodi,
-      // col Costruttore la regione sotto si accende, e con le Forbici si
-      // vede dove tagliano.
+      // col Costruttore la regione sotto si accende, con le Forbici si vede
+      // dove tagliano e col contagocce che cosa prende.
       if (current === null && pressed === null) {
         hoverGrip(event);
         hoverGuide(event);
@@ -10755,6 +11479,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hoverRegion(event.buttons === 0 ? point : null, pointer);
         hoverCut(event.buttons === 0 ? point : null, pointer);
         hoverWidth(event.buttons === 0 ? point : null, pointer);
+        hoverDropper(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -10861,6 +11586,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     hoverRegion(null, "mouse");
     hoverCut(null, "mouse");
     hoverWidth(null, "mouse");
+    hoverDropper(null, "mouse");
     if (hover !== null) {
       hover = null;
       showBezier();
@@ -10976,6 +11702,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "note":
           g.at ??= toPoint(samples[0]!);
           break;
+        case "dropper":
+          dropperMove(g, toPoint(samples[samples.length - 1]!));
+          break;
         case "refused":
           break;
       }
@@ -11060,6 +11789,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           current = null;
           noteAt(g.at, g.pointer);
           return;
+        case "dropper": {
+          current = null;
+          const at = g.at;
+          // Il puntatore resta sopra il foglio: l'anteprima torna a seguirlo.
+          if (at !== null && g.pointer !== "touch") dropperHover = { index: currentIndex(), at, pointer: g.pointer, keyboard: g.stroke < 0, seen: g.seen };
+          showHandles();
+          // Maiusc conta quando si rilascia.
+          if (at !== null) void takeAt(at, g.pointer, shift);
+          return;
+        }
         case "refused":
           current = null;
           return;
@@ -11114,7 +11853,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Gli attributi di un testo nuovo: il colore e la dimensione dello
   /// strumento.
-  const newTextAttrs = (): Record<string, string> => ({ fill: textStyle.color, "font-family": TEXT_FAMILY, "font-size": formatNumber(textStyle.width, 2) });
+  const newTextAttrs = (): Record<string, string> => ({ fill: drawnPaint(textStyle.color), "font-family": TEXT_FAMILY, "font-size": formatNumber(textStyle.width, 2) });
 
   /// Il contesto con cui il browser misura un carattere; `null` dove non sa.
   let probe: CanvasRenderingContext2D | null | undefined;
@@ -11398,7 +12137,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Dove è il cursore, e che cosa c'è sotto: con la penna di Bézier, il
   /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato;
-  /// con la Curvatura anche un punto in mezzo, che un tocco cambia.
+  /// con la Curvatura anche un punto in mezzo, che un tocco cambia; col
+  /// contagocce la forma e il colore.
   const announceCursor = (): void => {
     const p = cursorPoint();
     const at = t("draw.cursor.at", { x: coordText(p[0]), y: coordText(p[1]) });
@@ -11422,6 +12162,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const found = widthSpotAt(p, "mouse");
       if (typeof found !== "string") {
         announce(`${at}: ${widthSpotText(found)}`);
+        return;
+      }
+    }
+    if (pressed === null && tool === "eyedropper" && has("eyedropper")) {
+      const hovered = dropperHover;
+      const seen = hovered !== null && hovered.at === p && hovered.index === currentIndex() ? hovered.seen : dropperAt(p, "mouse");
+      if (seen !== null) {
+        announce(`${at}: ${dropperText(seen, p)}`);
         return;
       }
     }
@@ -11461,6 +12209,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (pressed === null) {
       hoverCut(next, "mouse");
       hoverWidth(next, "mouse");
+      hoverDropper(next, "mouse", true);
     }
     announceCursor();
   };
@@ -14283,7 +15032,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Con l'aggancio vanno di riga in riga della griglia, cinque con Maiusc.
   /// Con lo strumento Nodi spostano i nodi scelti, e senza il cursore: mai
   /// l'oggetto. Con la penna di Bézier muovono sempre il cursore, che mette
-  /// i nodi.
+  /// i nodi, e così col contagocce, che prende da ciò che gli sta sotto.
   ///
   /// Sul foglio girato il cursore libero va dove la freccia punta sullo
   /// schermo, come il puntatore; il resto va lungo l'asse del disegno che si
@@ -14301,7 +15050,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return true;
     }
     if (tool === "board" && pressed === null && selection.length === 0 && editable() && nudgeBoard(x, y, grow, fine, event.shiftKey)) return true;
-    if (tool !== "nodes" && tool !== "bezier" && pressed === null && selection.length > 0 && editable()) {
+    if (tool !== "nodes" && tool !== "bezier" && tool !== "eyedropper" && pressed === null && selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       const [gx, gy] = [x === 0 ? 0 : grow, y === 0 ? 0 : grow];
       if (gridOn()) {
@@ -14714,6 +15463,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti del contagocce, se le parti `at` lo offrono.
+  const eyedropperKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("eyedropper")
+      ? [
+          {
+            title: t("draw.tool.eyedropper"),
+            rows: [
+              [ARROW_KEYS, t("draw.keys.eyedropper.cursor")],
+              ["Space", t("draw.keys.eyedropper.take")],
+              ["Shift-Space", t("draw.keys.eyedropper.color")],
+              ["i", t("draw.keys.eyedropper.row")],
+              ["Shift-i", t("draw.keys.eyedropper.row.color")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti del menu Tracciato, se le parti `at` lo offrono.
   const pathKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("path") ? [{ title: t("draw.path"), rows: [["Mod-j", t("draw.keys.join")]] }] : [];
@@ -14921,6 +15687,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...bezierKeys(at),
     ...textKeys(at),
     ...boardKeys(at),
+    ...eyedropperKeys(at),
     ...gridKeys(at),
     ...guidesKeys(at),
     ...rulersKeys(at),
@@ -15707,6 +16474,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (current?.kind === "board" && current.mode !== "pending") boardUpdate(current);
     else if (hover !== null && drawing() !== null) showBezier();
     else if (current?.kind === "builder" || (current === null && regionHover >= 0)) showHandles();
+    // Col contagocce Maiusc passa dall'aspetto al colore.
+    else if (current?.kind === "dropper" || (current === null && dropperHover !== null)) showHandles();
     else if (current === null && (alt || measured)) showHandles();
   };
 
@@ -15911,6 +16680,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (event.repeat) {
         // Tenuto giù: un tasto, un passo.
       } else if (pressed === null && tool === "text") openText(cursorPoint(), "mouse");
+      // Il contagocce prende subito; con Maiusc il solo colore.
+      else if (pressed === null && tool === "eyedropper") void takeAt(cursorPoint(), "mouse", event.shiftKey);
       else if (builderKeysOn()) pickRegion();
       else if (pressed === null) press(event.timeStamp);
       else release();
@@ -16088,6 +16859,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (grid.panel !== null && has("properties") && grid.panel === panel.element.hidden) showPanel(grid.panel, false, false);
       syncProperties();
     },
+    setRecentColors(colors) {
+      if (disposed) return;
+      recentColors = colors.slice(0, RECENT_COLORS);
+      syncProperties();
+    },
     setEngine(next) {
       if (disposed) return;
       if (next.model === null) throw new Error("documento in sola lettura: non si monta nell'editor");
@@ -16117,6 +16893,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       isolation = null;
       cursor = null;
       cursorMark.hidden = true;
+      // I campioni erano del documento di prima: il colore resta, da solo.
+      for (const each of Object.values(styles)) each.swatch = null;
       refresh();
       placed = false;
       fit();
@@ -16126,7 +16904,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     adopt,
     setLevel,
     setTool,
-    setColor,
+    setColor: (color) => setColor(color),
     setWidth,
     select,
     deleteSelection,

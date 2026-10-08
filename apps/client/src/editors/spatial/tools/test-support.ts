@@ -9,7 +9,7 @@ import type { ContainerNode } from "../scene/model";
 import { SourceText } from "../scene/text";
 import { parseXml, SVG_NS } from "../scene/xml";
 import { Cascade, renders, SILENT, type CascadeNode, type World } from "./cascade";
-import { SceneIndexer, type SceneIndex, type Unit } from "./hit";
+import { SceneIndexer, type ForeignBlock, type SceneIndex, type Unit } from "./hit";
 import { readDeclarations, readSheets, type StyleAttr } from "./selectors";
 
 export const LAYER = '<g id="l1" fub:layer="Livello 1">';
@@ -32,6 +32,8 @@ export interface Opened {
   links(): Unit[];
   /// Il riquadro della miniatura dell'elemento di id `id`, adesso.
   frame(id: string): Bounds | null;
+  /// I blocchi estranei che si vedono fuori dagli oggetti, adesso.
+  foreign(): ForeignBlock[];
 }
 
 export function open(source: string): Opened {
@@ -68,7 +70,11 @@ export function open(source: string): Opened {
     if (node === null) throw new Error(`nessun elemento ${id}`);
     return indexer.frameOf(engine.model!, node);
   };
-  return { engine, index: reindex(), reindex, seen, opens, extent, links, movable, frame };
+  const foreign = (): ForeignBlock[] => {
+    builder.build(engine);
+    return indexer.foreignBlocks(engine.model!);
+  };
+  return { engine, index: reindex(), reindex, seen, opens, extent, links, movable, frame, foreign };
 }
 
 /// Le proprietà che [`appearance`] guarda, oltre a trasformazione e opacità.

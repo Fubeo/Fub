@@ -38,8 +38,8 @@ nell'esportazione il file è quello che è.
 ## Il pannello delle proprietà
 
 - **Un riempimento o un contorno con una risorsa** si legge «Sfumatura» o
-  «Motivo». Il campione accanto mostra i punti della sfumatura, da sinistra a
-  destra o dal centro, o una scacchiera per un motivo.
+  «Motivo». Il pulsante del colore accanto mostra i punti della sfumatura, da
+  sinistra a destra o dal centro, o una scacchiera per un motivo.
 - **Scrivere un colore** e confermarlo mette il colore al posto della
   risorsa, in un passo di annulla; `Esc` prima di confermare torna alla
   risorsa, e `Invio` senza aver cambiato niente non fa niente.
@@ -64,8 +64,9 @@ nell'esportazione il file è quello che è.
   nessun altro usa più, nello stesso passo di annulla; quelle scritte da un
   altro programma restano.
 - **Più oggetti con la stessa risorsa propria** possono nascere da Separa,
-  da «Incolla lo stile», dal costruttore di forme o dalle forbici: la usano
-  insieme, e resta finché uno di loro la usa.
+  dal costruttore di forme o dalle forbici: la usano insieme, e resta finché
+  uno di loro la usa. «Incolla lo stile» e il contagocce danno invece a ogni
+  oggetto la sua copia.
 
 ## Copiare e incollare
 
@@ -78,6 +79,12 @@ nell'esportazione il file è quello che è.
   un altro programma, si riusa se il disegno ne ha già una con lo stesso
   nome e lo stesso contenuto, altrimenti arriva con un nome nuovo: così un
   giro di copia e incolla nello stesso disegno non raddoppia le risorse.
+- **Un campione** si riusa se il disegno ha lo stesso, con lo stesso nome
+  nel file, anche se intanto ha cambiato colore o nome; o un campione che si
+  chiama allo stesso modo, con le maiuscole a parte, e ha lo stesso colore.
+  Chi lo usa ne prende il colore come ripiego. Altrimenti arriva, e se il suo
+  nome è già preso, o si legge come un colore, prende il primo libero,
+  «Vermiglio 2» ([Disegni, colori](drawing-colors.md#fra-disegni)).
 - **Le risorse estranee** che ciò che entra usa arrivano anch'esse fra
   quelle del disegno, e restano estranee con chi le usa.
 - **Un SVG con un foglio di stile** tiene le sue risorse nel suo gruppo, come

@@ -12,6 +12,7 @@ import { closeContextMenu } from "../../../ui/menu";
 import { decodeInk, inkLength, inkPoint } from "../ink/codec";
 import { polygonalAttrs, readPolygonal } from "../scene/parametric";
 import { SceneEngine } from "../scene/engine";
+import type { Op } from "../scene/ops";
 import { readScene } from "../scene/read";
 import { doc } from "../scene/test-support";
 import { createDrawEditor, type DrawChange, type DrawEditor, type DrawEditorOptions, type DrawImages, type DrawPlace } from "./editor";
@@ -361,7 +362,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -3427,6 +3428,752 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
   });
 });
 
+describe("i colori del documento, dal livello Standard", () => {
+  const A = "o1a2b3c4d";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  /// Il campione «Blu marca», che il riempimento di A usa; B e C hanno il
+  /// colore scritto, C proprio quello del campione.
+  const SWATCHED = doc(
+    '<defs id="fub-defs"><linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient></defs>' +
+      `${LAYER}<rect id="${A}" x="60" y="60" width="20" height="20" fill="url(#rs) #0072b2" stroke="#000000" stroke-width="2"/>` +
+      `<rect id="${B}" x="10" y="20" width="10" height="10" fill="#d55e00"/><rect id="${C}" x="30" y="20" width="10" height="10" fill="#0072b2"/></g>`,
+  );
+  const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
+  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="colors"]')!;
+  const group = (kind: string): HTMLElement => section().querySelector<HTMLElement>(`.draw-swatches-group[data-group="${kind}"]`)!;
+  const chips = (kind: string): HTMLButtonElement[] => [...group(kind).querySelectorAll<HTMLButtonElement>(".draw-swatches-chip")];
+  const chip = (kind: string, key: string): HTMLButtonElement => group(kind).querySelector<HTMLButtonElement>(`.draw-swatches-chip[data-key="${key}"]`)!;
+  const keys = (kind: string): string[] => chips(kind).map((each) => each.dataset.key!);
+  const labels = (kind: string): string[] => chips(kind).map((each) => each.getAttribute("aria-label")!);
+  /// I colori detti «di adesso», con la loro griglia.
+  const current = (): string[] =>
+    [...section().querySelectorAll<HTMLElement>('.draw-swatches-chip[aria-current="true"]')].map(
+      (each) => `${each.closest<HTMLElement>(".draw-swatches-group")!.dataset.group} ${each.dataset.key}`,
+    );
+  const addButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>(".draw-swatches-add")!;
+  const targetButton = (target: string): HTMLButtonElement => section().querySelector<HTMLButtonElement>(`.draw-swatches-target [data-target="${target}"]`)!;
+  const form = (): HTMLElement => section().querySelector<HTMLElement>(".draw-swatches-form")!;
+  const formTitle = (): string => form().querySelector(".draw-swatches-form-title")!.textContent!;
+  const nameInput = (): HTMLInputElement => form().querySelectorAll<HTMLInputElement>('input[type="text"]')[0]!;
+  const colorInput = (): HTMLInputElement => form().querySelectorAll<HTMLInputElement>('input[type="text"]')[1]!;
+  const shiftClick = (target: HTMLElement): void => {
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: true }));
+  };
+  /// Il menu di un colore, col clic destro, e una sua voce.
+  const menuOf = (kind: string, key: string): void => {
+    chip(kind, key).dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
+  };
+  const item = (label: string): HTMLButtonElement => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((entry) => entry.querySelector(".menu-label")!.textContent === label)!;
+  };
+  /// Il rettangolo `id` com'è scritto adesso.
+  const rect = (id: string): string => new RegExp(`<rect id="${id}"[^>]*/>`).exec(editor.engine.text)![0];
+  /// Il colore dei tratti della penna e del contorno dei rettangoli nuovi,
+  /// nell'ordine del file.
+  const inked = (): string[] => [...editor.engine.text.matchAll(/fub:tool="pen"[^>]*? fill="([^"]*)"/g)].map((match) => match[1]!);
+  const outlined = (): string[] =>
+    [...editor.engine.text.matchAll(new RegExp(`<rect id="(?!(?:${A}|${B}|${C})")[^"]*"[^>]*? stroke="([^"]*)"`, "g"))].map((match) => match[1]!);
+  /// Il colore che la barra dà per scelto.
+  const checked = (): string | null => host.querySelector('[role="toolbar"] .draw-color[aria-checked="true"]')?.getAttribute("aria-label") ?? null;
+
+  afterEach(() => {
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("mostra i campioni, i colori scritti e i recenti, contati, e il colore di adesso", () => {
+    mount(SWATCHED, { level: "standard", colors: ["#e69f00"] });
+    panelButton().click();
+    expect(section().hidden).toBe(false);
+    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 1 oggetto"]);
+    expect(keys("used")).toEqual(["#000000", "#d55e00", "#0072b2"]);
+    expect(labels("used")).toEqual(["Nero, usato da 1 oggetto", "Vermiglio, usato da 1 oggetto", "Blu, usato da 1 oggetto"]);
+    expect(keys("recent")).toEqual(["#e69f00"]);
+    // Senza selezione il colore di adesso è quello con cui si disegna.
+    expect(current()).toEqual(["used #000000"]);
+    expect(formatIssues(checkAccessibility(section()))).toBe("");
+    // Con una selezione, quello del riempimento; «Applica a» sceglie il
+    // contorno.
+    editor.select([A]);
+    expect(current()).toEqual(["swatches rs"]);
+    targetButton("stroke").click();
+    expect(current()).toEqual(["used #000000"]);
+    expect(formatIssues(checkAccessibility(section()))).toBe("");
+  });
+
+  it("un clic dà il colore al riempimento della selezione e Maiusc al contorno; un campione si scrive col suo colore", () => {
+    const remembered: (readonly string[])[] = [];
+    mount(SWATCHED, { level: "standard", onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([B]);
+    key("Enter");
+    chip("swatches", "rs").click();
+    expect(rect(B)).toBe(`<rect id="${B}" x="10" y="20" width="10" height="10" fill="url(#rs) #0072b2"/>`);
+    expect(spoken()).toBe("Riempimento: Blu marca.");
+    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 2 oggetti"]);
+    expect(current()).toEqual(["swatches rs"]);
+    // Un campione non è un colore recente: ha la sua griglia.
+    expect(remembered).toEqual([]);
+    shiftClick(chip("used", "#000000"));
+    expect(rect(B)).toContain('stroke="#000000"');
+    expect(spoken()).toBe("Contorno: Nero.");
+    expect(remembered).toEqual([["#000000"]]);
+    expect(keys("recent")).toEqual(["#000000"]);
+    editor.undo();
+    expect(rect(B)).not.toContain("stroke=");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Riempimento.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("«Nuovo campione…» fa un campione del colore della selezione, e il fuoco va a lui", () => {
+    mount(SWATCHED, { level: "standard" });
+    editor.select([B]);
+    key("Enter");
+    addButton().click();
+    expect(formTitle()).toBe("Nuovo campione");
+    // Un colore della tavolozza dà il suo nome al campione.
+    expect(nameInput().value).toBe("Vermiglio");
+    expect(colorInput().value).toBe("#d55e00");
+    expect(document.activeElement).toBe(nameInput());
+    key("Enter", {}, nameInput());
+    const made = /<linearGradient id="([a-z0-9]+)" fub:role="swatch" fub:name="Vermiglio" gradientUnits="userSpaceOnUse">\s*<stop stop-color="#d55e00"\/>\s*<\/linearGradient>/.exec(
+      editor.engine.text,
+    );
+    expect(made).not.toBeNull();
+    // Nuovo, il campione non prende chi ha il colore scritto.
+    expect(rect(B)).toContain('fill="#d55e00"');
+    expect(spoken()).toBe("Campione «Vermiglio» creato.");
+    expect(form().hidden).toBe(true);
+    expect(keys("swatches")).toEqual(["rs", made![1]]);
+    expect(document.activeElement).toBe(chip("swatches", made![1]!));
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nuovo campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("«Rendi campione…» dal menu di un colore scritto: chi lo usa passa al campione", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    menuOf("used", "#d55e00");
+    item("Rendi campione…").click();
+    expect(formTitle()).toBe("Rendi campione #d55e00");
+    typeIn(nameInput(), "Accento");
+    key("Enter", {}, nameInput());
+    const id = /<linearGradient id="([a-z0-9]+)" fub:role="swatch" fub:name="Accento"/.exec(editor.engine.text)![1]!;
+    expect(rect(B)).toBe(`<rect id="${B}" x="10" y="20" width="10" height="10" fill="url(#${id}) #d55e00"/>`);
+    expect(spoken()).toBe("Campione «Accento» creato: lo usa 1 oggetto.");
+    expect(keys("used")).toEqual(["#000000", "#0072b2"]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Colore reso campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("«Usa il campione» porta al campione chi ha il suo colore scritto", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    menuOf("used", "#0072b2");
+    item("Usa il campione «Blu marca»").click();
+    expect(rect(C)).toBe(`<rect id="${C}" x="30" y="20" width="10" height="10" fill="url(#rs) #0072b2"/>`);
+    expect(spoken()).toBe("Ora «Blu marca» lo usano 2 oggetti.");
+    expect(keys("used")).toEqual(["#000000", "#d55e00"]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Oggetti passati a un campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("F2 rinomina un campione, e «Cambia colore…» lo cambia per chi lo usa", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").focus();
+    key("F2", {}, chip("swatches", "rs"));
+    expect(formTitle()).toBe("Rinomina «Blu marca»");
+    expect(nameInput().value).toBe("Blu marca");
+    typeIn(nameInput(), "Blu scuro");
+    key("Enter", {}, nameInput());
+    expect(editor.engine.text).toContain('fub:name="Blu scuro"');
+    expect(spoken()).toBe("Il campione ora si chiama «Blu scuro».");
+    expect(document.activeElement).toBe(chip("swatches", "rs"));
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nome di un campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+
+    menuOf("swatches", "rs");
+    item("Cambia colore…").click();
+    expect(formTitle()).toBe("Cambia il colore di «Blu marca»");
+    expect(document.activeElement).toBe(colorInput());
+    typeIn(colorInput(), "#56b4e9");
+    key("Enter", {}, colorInput());
+    expect(editor.engine.text).toContain('<stop stop-color="#56b4e9"/>');
+    expect(rect(A)).toContain('fill="url(#rs) #56b4e9"');
+    // Chi ha il colore di prima scritto lo tiene: non usa il campione.
+    expect(rect(C)).toContain('fill="#0072b2"');
+    expect(spoken()).toBe("«Blu marca» ora è Azzurro.");
+    expect(labels("swatches")).toEqual(["Blu marca, campione #56b4e9, usato da 1 oggetto"]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Colore di un campione.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("Canc elimina un campione: chi lo usava tiene il suo colore, scritto, e il fuoco resta nella griglia", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").focus();
+    key("Delete", {}, chip("swatches", "rs"));
+    expect(editor.engine.text).not.toContain("linearGradient");
+    expect(rect(A)).toContain('fill="#0072b2"');
+    expect(spoken()).toBe("Campione «Blu marca» eliminato: chi lo usava tiene il suo colore.");
+    expect(keys("swatches")).toEqual([]);
+    expect(document.activeElement).toBe(addButton());
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Campione eliminato.");
+    expect(editor.engine.text).toBe(SWATCHED);
+  });
+
+  it("il menu di un colore sceglie gli oggetti che lo mostrano, se si possono scegliere", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    menuOf("swatches", "rs");
+    item("Scegli gli oggetti con questo campione").click();
+    expect(editor.selection).toEqual([A]);
+    expect(spoken()).toBe("1 oggetto scelto.");
+    menuOf("used", "#0072b2");
+    item("Scegli gli oggetti con questo colore").click();
+    expect(editor.selection).toEqual([C]);
+    editor.dispose();
+
+    mount(
+      doc(
+        `${LAYER}<rect id="${A}" x="0" y="0" width="5" height="5" fill="#000000"/></g>` +
+          `<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="${B}" x="10" y="0" width="5" height="5" fill="#009e73"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    editor.select([A]);
+    key("Enter");
+    menuOf("used", "#009e73");
+    item("Scegli gli oggetti con questo colore").click();
+    expect(spoken()).toBe("Nessun oggetto che si può scegliere mostra questo colore.");
+    expect(editor.selection).toEqual([A]);
+  });
+
+  it("senza selezione un campione è il colore con cui si disegna: gli oggetti nuovi lo usano e lo seguono", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").click();
+    expect(spoken()).toBe("Colore: Blu marca.");
+    expect(current()).toEqual(["swatches rs"]);
+    expect(checked()).toBe("Blu");
+    drag([[100, 100], [140, 120]]);
+    editor.setTool("rect");
+    drag([[100, 20], [130, 50]]);
+    expect(editor.selection).toEqual([]);
+    expect(inked()).toEqual(["url(#rs) #0072b2"]);
+    expect(outlined()).toEqual(["url(#rs) #0072b2"]);
+    expect(labels("swatches")).toEqual(["Blu marca, campione #0072b2, usato da 3 oggetti"]);
+
+    // Il campione cambia colore, e ciò che si disegna con lui; anche
+    // annullando.
+    menuOf("swatches", "rs");
+    item("Cambia colore…").click();
+    typeIn(colorInput(), "#009e73");
+    key("Enter", {}, colorInput());
+    expect(checked()).toBe("Verde");
+    expect(current()).toEqual(["swatches rs"]);
+    // Annullare sceglie gli oggetti che tornano come prima.
+    editor.undo();
+    expect(checked()).toBe("Blu");
+    editor.select([]);
+    expect(current()).toEqual(["swatches rs"]);
+
+    // Un colore della barra lascia il campione.
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] .draw-color[aria-label="Vermiglio"]')!.click();
+    expect(current()).toEqual(["used #d55e00", "recent #d55e00"]);
+    drag([[140, 20], [170, 50]]);
+    expect(outlined()).toEqual(["url(#rs) #0072b2", "#d55e00"]);
+
+    // Se il campione se ne va, ciò che si disegna tiene il suo colore,
+    // scritto.
+    chip("swatches", "rs").click();
+    chip("swatches", "rs").focus();
+    key("Delete", {}, chip("swatches", "rs"));
+    expect(current()).toEqual(["used #0072b2"]);
+    drag([[180, 20], [210, 50]]);
+    expect(outlined()).toEqual(["#0072b2", "#d55e00", "#0072b2"]);
+  });
+
+  it("il colore lascia il campione con un disegno nuovo, o senza «Colori del documento»; e lì la sezione non c'è", () => {
+    mount(SWATCHED, { level: "standard" });
+    panelButton().click();
+    chip("swatches", "rs").click();
+    editor.setLevel("custom", ["pen", "properties", "colors"]);
+    expect(section().hidden).toBe(true);
+    editor.setLevel("standard");
+    expect(section().hidden).toBe(false);
+    expect(current()).toEqual(["used #0072b2"]);
+    drag([[100, 100], [140, 120]]);
+    expect(inked()).toEqual(["#0072b2"]);
+
+    chip("swatches", "rs").click();
+    editor.setEngine(SceneEngine.open(SOURCE));
+    expect(keys("swatches")).toEqual([]);
+    drag([[100, 100], [140, 120]]);
+    expect(inked()).toEqual(["#0072b2"]);
+  });
+
+  it("i colori scritti entrano fra i recenti, che chi monta l'editor ricorda; i campioni no", () => {
+    const remembered: (readonly string[])[] = [];
+    mount(SWATCHED, { level: "standard", colors: ["#cc79a7"], onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([B]);
+    key("Enter");
+    expect(keys("recent")).toEqual(["#cc79a7"]);
+    enter(propertyInput("fill"), "#e69f00");
+    expect(remembered).toEqual([["#e69f00", "#cc79a7"]]);
+    expect(keys("recent")).toEqual(["#e69f00", "#cc79a7"]);
+    // Il campione scritto per nome nel campo non è un recente.
+    enter(propertyInput("fill"), "blu marca");
+    expect(rect(B)).toContain('fill="url(#rs) #0072b2"');
+    expect(remembered).toHaveLength(1);
+    // Un recente si dà come gli altri colori.
+    chip("recent", "#cc79a7").click();
+    expect(rect(B)).toContain('fill="#cc79a7"');
+    expect(remembered[1]).toEqual(["#cc79a7", "#e69f00"]);
+    // I recenti di un'altra finestra, da chi monta l'editor, non gli
+    // tornano indietro.
+    editor.setRecentColors(["#56b4e9", "#3a7bd5"]);
+    expect(keys("recent")).toEqual(["#56b4e9", "#3a7bd5"]);
+    expect(labels("recent")).toEqual(["Azzurro", "#3a7bd5"]);
+    expect(remembered).toHaveLength(2);
+  });
+
+  it("in sola lettura la sezione mostra i colori, e un gesto dice perché non cambia nulla", () => {
+    mount(SWATCHED, { level: "standard" });
+    editor.select([B]);
+    key("Enter");
+    editor.setReadOnly(true);
+    chip("swatches", "rs").click();
+    expect(spoken()).toBe("Modifica non applicata: il disegno è in sola lettura.");
+    expect(addButton().getAttribute("aria-disabled")).toBe("true");
+    expect(changes).toEqual([]);
+  });
+});
+
+describe("il contagocce, dal livello Standard", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  const D = "od4d4d4d4";
+  const G = "og5g5g5g5";
+  const P = "op8p8p8p8";
+  const IMAGE = "oi9i9i9i9";
+  const UNDER = "ou0u0u0u0";
+  /// A, da vestire, in alto a sinistra; B, arancione col contorno vermiglio
+  /// tratteggiato e mezzo trasparente, sotto il cursore che parte dal mezzo
+  /// di un foglio di 400 × 300; C col campione «Blu marca»; P col motivo; un
+  /// gruppo di due forme; D in un livello bloccato, sotto gli altri; e la
+  /// parte di un altro programma.
+  const A_RECT = `<rect id="${A}" x="10" y="10" width="40" height="40" fill="#000000" stroke="#000000" stroke-width="2"/>`;
+  const B_RECT = `<rect id="${B}" x="230" y="130" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`;
+  const LOOKS = doc(
+    '<defs id="fub-defs"><linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>' +
+      '<pattern id="rpppppppp" width="0.5" height="0.5"><rect x="0" y="0" width="0.25" height="0.25" fill="#000000"/></pattern></defs>' +
+      `<g id="l2" fub:layer="Sfondo" fub:locked="true"><rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/></g>` +
+      `${LAYER}${A_RECT}${B_RECT}` +
+      `<rect id="${C}" x="100" y="10" width="40" height="40" fill="url(#rs) #0072b2"/>` +
+      `<rect id="${P}" x="10" y="200" width="40" height="40" fill="url(#rpppppppp) #000000"/>` +
+      `<g id="${G}"><rect id="oh6h6h6h6" x="100" y="200" width="40" height="40" fill="#009e73"/><rect id="oj7j7j7j7" x="140" y="200" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/></g>` +
+      '<rect class="estraneo" x="300" y="10" width="40" height="40" fill="#f0e442"/></g>',
+  );
+  /// Un'immagine di 40 × 20 pixel, la metà sinistra rossa e la destra
+  /// trasparente, larga il doppio sopra un quadrato verde.
+  const PICTURE = doc(
+    `${LAYER}${A_RECT}<rect id="${UNDER}" x="200" y="100" width="100" height="100" fill="#009e73"/>` +
+      `<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="data:image/png;base64,iVBORw0KGgo="/></g>`,
+  );
+
+  /// Un codec coi pixel dell'immagine di `PICTURE`: quelli che legge, e le
+  /// immagini che chiude.
+  function pixelCodec(): ImageCodec & { rects: string[]; closed: number } {
+    const fake = {
+      rects: [] as string[],
+      closed: 0,
+      async decode(): Promise<Decoded | null> {
+        return {
+          width: 40,
+          height: 20,
+          opaque: () => false,
+          encode: async () => null,
+          pixels(rect: { x: number; y: number; width: number; height: number }, most: number) {
+            fake.rects.push(`${rect.x} ${rect.y} ${rect.width} ${rect.height} ${most}`);
+            const data = new Uint8ClampedArray(rect.width * rect.height * 4);
+            for (let at = 0; at < data.length; at += 4) if (rect.x < 20) data.set([255, 0, 0, 255], at);
+            return { width: rect.width, height: rect.height, data } as ImageData;
+          },
+          close() {
+            fake.closed++;
+          },
+        };
+      },
+    };
+    return fake;
+  }
+
+  const rect = (id: string): string => new RegExp(`<rect id="${id}"[^>]*/>`).exec(editor.engine.text)![0];
+  /// Un clic nel punto `x`, `y` del foglio, che è anche quello della scena.
+  const click = (x: number, y: number, init: Init = {}): void => drag([[x, y], [x, y]], init);
+  const hover = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const dropper = (source = LOOKS, options: DrawEditorOptions = {}): void => {
+    mount(source, { level: "standard", ...options });
+    size(400, 300);
+  };
+  const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
+  const targetButton = (target: string): HTMLButtonElement =>
+    properties().querySelector<HTMLButtonElement>(`.draw-properties-section[data-section="colors"] .draw-swatches-target [data-target="${target}"]`)!;
+  /// Il colore che la barra dà per scelto.
+  const checked = (): string | null => host.querySelector('[role="toolbar"] .draw-color[aria-checked="true"]')?.getAttribute("aria-label") ?? null;
+  /// Il contorno dei rettangoli nuovi, nell'ordine del file.
+  const outlined = (): string[] =>
+    [...editor.engine.text.matchAll(/<rect id="(?!o[a-z]\d[a-z]\d[a-z]\d[a-z]\d")[^"]*"[^>]*? stroke="([^"]*)"/g)].map((match) => match[1]!);
+
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it("è uno strumento dello Standard, col tasto I, e dice dove va ciò che prende", () => {
+    mount(LOOKS);
+    key("i");
+    expect(editor.tool).toBe("pen");
+    editor.setLevel("standard");
+    key("i");
+    expect(editor.tool).toBe("eyedropper");
+    expect(spoken()).toBe("Strumento: Contagocce. Il colore che prendi è quello con cui disegni.");
+    const control = host.querySelector<HTMLButtonElement>('[data-tool="eyedropper"]')!;
+    expect(control.title).toBe("Contagocce (I)");
+    expect(document.getElementById(control.getAttribute("aria-describedby")!)?.textContent).toContain("Maiusc");
+    editor.setTool("select");
+    editor.select([A, C]);
+    key("i");
+    expect(spoken()).toBe("Strumento: Contagocce. Ciò che prendi va ai 2 oggetti scelti.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("un clic dà agli oggetti scelti l'aspetto della forma sotto il puntatore, in un passo", () => {
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    click(250, 150);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`);
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    expect(changes).toHaveLength(1);
+    // Il contagocce non sceglie e non sposta: la selezione resta, e la forma
+    // da cui prende non cambia.
+    expect(editor.selection).toEqual([A]);
+    expect(rect(B)).toBe(B_RECT);
+    editor.undo();
+    expect(editor.engine.text).toBe(LOOKS);
+    expect(spoken()).toBe("Annullato: Aspetto preso col contagocce.");
+    // Dentro un gruppo, la forma sotto il puntatore; da un livello bloccato
+    // si legge senza cambiarlo.
+    click(160, 220);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/>`);
+    click(320, 220);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#56b4e9"/>`);
+    expect(rect(D)).toBe(`<rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/>`);
+    // Lo stesso aspetto di nuovo non cambia niente.
+    click(320, 220);
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(changes).toHaveLength(4);
+  });
+
+  it("con Maiusc dà il solo colore sotto il puntatore, al riempimento o al contorno come dice «Applica a»; un campione resta un campione", () => {
+    const remembered: (readonly string[])[] = [];
+    dropper(LOOKS, { onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    click(250, 150, { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Riempimento: Arancione.");
+    // Sul contorno, il colore del contorno.
+    click(231, 150, { shiftKey: true });
+    expect(rect(A)).toContain('fill="#d55e00"');
+    expect(spoken()).toBe("Riempimento: Vermiglio.");
+    expect(remembered).toEqual([["#e69f00"], ["#d55e00", "#e69f00"]]);
+    panelButton().click();
+    targetButton("stroke").click();
+    click(120, 30, { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#d55e00" stroke="url(#rs) #0072b2" stroke-width="2"/>`);
+    expect(spoken()).toBe("Contorno: Blu marca.");
+    // Un campione non è un colore recente; un motivo si dà come gli altri.
+    expect(remembered).toHaveLength(2);
+    click(30, 220, { shiftKey: true });
+    expect(rect(A)).toContain('stroke="url(#rpppppppp) #000000"');
+    expect(spoken()).toBe("Contorno: un motivo.");
+    expect(changes).toHaveLength(4);
+  });
+
+  it("senza selezione prende il colore con cui si disegna, anche un campione; un motivo no", () => {
+    const remembered: (readonly string[])[] = [];
+    dropper(LOOKS, { onColorsChange: (colors) => remembered.push(colors) });
+    editor.setTool("eyedropper");
+    click(250, 150);
+    expect(spoken()).toBe("Colore: Arancione.");
+    expect(checked()).toBe("Arancione");
+    expect(remembered).toEqual([["#e69f00", "#000000"]]);
+    editor.setTool("rect");
+    drag([[300, 60], [350, 90]]);
+    editor.setTool("eyedropper");
+    click(120, 30);
+    expect(spoken()).toBe("Colore: Blu marca.");
+    editor.setTool("rect");
+    drag([[300, 100], [350, 120]]);
+    expect(outlined()).toEqual(["#e69f00", "url(#rs) #0072b2"]);
+    editor.setTool("eyedropper");
+    click(30, 220);
+    expect(spoken()).toBe("Un motivo non è un colore con cui disegnare: scegli prima gli oggetti a cui darlo.");
+    click(380, 120);
+    expect(spoken()).toBe("Qui non c’è niente da prendere: tocca un oggetto o un’immagine.");
+    click(320, 30);
+    expect(spoken()).toBe("Questa parte viene da un altro programma: FubDraw la mostra, ma non ne prende il colore.");
+    // Soltanto i due rettangoli nuovi.
+    expect(changes).toHaveLength(2);
+  });
+
+  it("da un'immagine prende il colore del pixel, e dove è trasparente guarda sotto", async () => {
+    const codec = pixelCodec();
+    dropper(PICTURE, { imageCodec: codec });
+    editor.setTool("eyedropper");
+    click(210, 110);
+    await settle();
+    expect(spoken()).toBe("Colore: Personalizzato #ff0000.");
+    // Un pixel solo, quello sotto il puntatore: per l'anteprima e per ciò
+    // che prende.
+    expect([...new Set(codec.rects)]).toEqual(["5 5 1 1 1"]);
+    click(270, 110);
+    expect(spoken()).toBe("Colore: Verde.");
+    editor.select([A]);
+    click(210, 110);
+    expect(rect(A)).toContain('fill="#ff0000"');
+    expect(spoken()).toBe("Riempimento: Personalizzato #ff0000.");
+    // Un'immagine aperta per il contagocce si chiude con lo strumento.
+    expect(codec.closed).toBe(0);
+    editor.setTool("select");
+    expect(codec.closed).toBe(1);
+  });
+
+  it("dalla tastiera, sopra un'immagine il cursore dice il colore appena l'ha letto", async () => {
+    const layer = recording();
+    dropper(PICTURE, { imageCodec: pixelCodec() });
+    editor.setTool("eyedropper");
+    key("ArrowUp", { shiftKey: true });
+    expect(spoken()).toBe("x 200, y 100: Immagine, lettura dei pixel…");
+    layer.frame();
+    expect(layer.texts()).toEqual(["Lettura…"]);
+    await settle();
+    expect(spoken()).toBe("x 200, y 100: Immagine, Personalizzato #ff0000");
+    layer.frame();
+    expect(layer.texts()).toEqual(["#ff0000"]);
+  });
+
+  it("un'immagine dal web non si legge, e lo dice", () => {
+    dropper(doc(`${LAYER}<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="https://example.com/a.png"/></g>`), { imageCodec: pixelCodec() });
+    editor.setTool("eyedropper");
+    click(210, 110);
+    expect(spoken()).toBe("Il colore di un’immagine dal web non si legge: mettila nel vault, e prendilo da quella.");
+    expect(changes).toEqual([]);
+  });
+
+  it("dalla tastiera: le frecce portano il cursore anche con una selezione, e dice che cosa c'è sotto; Spazio prende l'aspetto, Maiusc+Spazio il colore", () => {
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    key("ArrowRight", { shiftKey: true });
+    expect(spoken()).toBe("x 250, y 150: Rettangolo, Arancione");
+    expect(rect(A)).toBe(A_RECT);
+    key(" ");
+    expect(rect(A)).toContain('fill="#e69f00" stroke="#d55e00"');
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    editor.undo();
+    key(" ", { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Riempimento: Arancione.");
+    key("ArrowUp", { shiftKey: true });
+    key("ArrowUp", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    expect(spoken()).toBe("x 300, y 50: una parte di un altro programma, che il contagocce non legge");
+  });
+
+  it("accanto al puntatore mostra ciò che prende, col suo nome; Maiusc passa al colore, e un dito lo vede sopra di sé", () => {
+    const layer = recording();
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    hover(250, 150);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Rettangolo"]);
+    key("Shift", { shiftKey: true });
+    layer.frame();
+    expect(layer.texts()).toEqual(["Arancione"]);
+    surface().dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+    hover(120, 30);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Rettangolo"]);
+    editor.select([]);
+    hover(120, 30);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Blu marca"]);
+    hover(320, 30);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Non si prende"]);
+    hover(380, 120);
+    layer.frame();
+    expect(layer.texts()).toEqual([]);
+    // Il dito non passa sopra: l'anteprima c'è mentre tocca, e poi sparisce.
+    const TOUCH = { pointerId: 7, pointerType: "touch" } as const;
+    surface().dispatchEvent(pointer("pointerdown", { ...TOUCH, button: 0, buttons: 1, pressure: 0.5, clientX: 380, clientY: 120, timeStamp: (clock += 8) }));
+    surface().dispatchEvent(pointer("pointermove", { ...TOUCH, button: -1, buttons: 1, pressure: 0.5, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    layer.frame();
+    expect(layer.texts()).toEqual(["Arancione"]);
+    surface().dispatchEvent(pointer("pointerup", { ...TOUCH, button: 0, buttons: 0, pressure: 0, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    layer.frame();
+    expect(layer.texts()).toEqual([]);
+    expect(spoken()).toBe("Colore: Arancione.");
+  });
+
+  it("Esc a metà non prende niente", () => {
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    key("Escape");
+    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    expect(editor.engine.text).toBe(LOOKS);
+    expect(changes).toEqual([]);
+  });
+
+  /// Le righe dell'albero: A da vestire e B, come sopra; K bloccato e N
+  /// nascosto, senza riempimento; R con una sfumatura sua; un'immagine; il
+  /// gruppo; e D nel livello bloccato.
+  const K = "ok1k1k1k1";
+  const N = "on2n2n2n2";
+  const R = "or3r3r3r3";
+  const ROWS = doc(
+    '<defs id="fub-defs"><linearGradient id="r1a1a1a1a" fub:role="private" x2="1"><stop offset="0" stop-color="#0072b2"/><stop offset="1" stop-color="#e69f00"/></linearGradient></defs>' +
+      `<g id="l2" fub:layer="Sfondo" fub:locked="true"><rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/></g>` +
+      `${LAYER}${A_RECT}${B_RECT}` +
+      `<rect id="${K}" x="100" y="10" width="40" height="40" fill="#009e73" fub:locked="true"/>` +
+      `<rect id="${N}" x="160" y="10" width="40" height="40" fill="none" stroke="#cc79a7" stroke-width="3" display="none"/>` +
+      `<rect id="${R}" x="10" y="200" width="40" height="40" fill="url(#r1a1a1a1a) #0072b2"/>` +
+      `<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="data:image/png;base64,iVBORw0KGgo="/>` +
+      `<g id="${G}"><rect id="oh6h6h6h6" x="100" y="200" width="40" height="40" fill="#009e73"/><rect id="oj7j7j7j7" x="140" y="200" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/></g></g>`,
+  );
+  const objectsTree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
+  const inTree = (name: string, init: KeyboardEventInit = {}): KeyboardEvent => key(name, init, objectsTree());
+  /// Apre l'albero, se è chiuso, e porta la riga attiva a `id` con Ctrl e le
+  /// frecce, senza cambiare la selezione.
+  const reach = (id: string): void => {
+    if (objectsTree().closest<HTMLElement>(".draw-objects")!.hidden) host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    objectsTree().focus();
+    const keys = (): (string | undefined)[] => [...objectsTree().querySelectorAll<HTMLElement>('[role="treeitem"]')].map((row) => row.dataset.key);
+    const at = (): number => keys().indexOf(document.getElementById(objectsTree().getAttribute("aria-activedescendant") ?? "")?.dataset.key);
+    for (let step = 0; step < 20 && at() !== keys().indexOf(id); step++) inTree(at() < keys().indexOf(id) ? "ArrowDown" : "ArrowUp", { ctrlKey: true });
+    expect(keys()[at()]).toBe(id);
+  };
+
+  it("dall'albero, I dà agli oggetti scelti l'aspetto dell'oggetto della riga, anche bloccato o nascosto, e non cambia strumento", () => {
+    dropper(ROWS);
+    editor.select([A]);
+    const tool = editor.tool;
+    reach(B);
+    expect(inTree("i").defaultPrevented).toBe(true);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`);
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    expect(editor.tool).toBe(tool);
+    expect(editor.selection).toEqual([A]);
+    expect(document.activeElement).toBe(objectsTree());
+    editor.undo();
+    expect(editor.engine.text).toBe(ROWS);
+    // Bloccato o nascosto si legge senza cambiarlo. Col blocco delle
+    // maiuscole la lettera è grande, ed è sempre l'aspetto.
+    reach(K);
+    inTree("I");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#009e73"/>`);
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    reach(N);
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="none" stroke="#cc79a7" stroke-width="3"/>`);
+    expect(rect(N)).toContain('display="none"');
+    reach(D);
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#56b4e9"/>`);
+    // Un gruppo dà quello della sua prima parte; una sua parte, il suo.
+    reach(G);
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#009e73"/>`);
+    expect(spoken()).toBe("Aspetto di Gruppo dato a 1 oggetto.");
+    inTree("ArrowRight");
+    reach("oj7j7j7j7");
+    inTree("i");
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/>`);
+    // Una sfumatura viene intera, in una copia che resta di A.
+    reach(R);
+    inTree("i");
+    expect(rect(A)).toMatch(new RegExp(`^<rect id="${A}" x="10" y="10" width="40" height="40" fill="url\\(#r[a-z0-9]+\\) #0072b2"/>$`));
+    expect(rect(A)).not.toContain("r1a1a1a1a");
+    expect(editor.engine.text.match(/<linearGradient /g)).toHaveLength(2);
+    // Un livello non ha un aspetto; l'oggetto stesso non cambia niente.
+    reach("l1");
+    inTree("i");
+    expect(spoken()).toBe("Un livello non ha un aspetto da prendere: il contagocce prende da un oggetto.");
+    reach(A);
+    inTree("i");
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(editor.selection).toEqual([A]);
+  });
+
+  it("dall'albero, Maiusc con I dà il colore della riga, il riempimento o il contorno se non riempie; senza selezione è quello con cui si disegna", () => {
+    const remembered: (readonly string[])[] = [];
+    dropper(ROWS, { onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([A]);
+    reach(B);
+    expect(inTree("I", { shiftKey: true }).defaultPrevented).toBe(true);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Riempimento: Arancione.");
+    expect(remembered).toEqual([["#e69f00"]]);
+    // Senza riempimento il contorno, anche nascosto; al contorno, come dice
+    // «Applica a».
+    panelButton().click();
+    targetButton("stroke").click();
+    reach(N);
+    inTree("I", { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#cc79a7" stroke-width="2"/>`);
+    expect(spoken()).toBe("Contorno: Porpora.");
+    // Una sfumatura ha un colore per punto, e un'immagine anche: sul foglio.
+    reach(R);
+    inTree("I", { shiftKey: true });
+    expect(spoken()).toBe("Una sfumatura ha un colore in ogni punto: prendine uno col contagocce sul foglio. Senza Maiusc, I dà l’aspetto intero, sfumatura compresa.");
+    reach(IMAGE);
+    inTree("I", { shiftKey: true });
+    expect(spoken()).toBe("Il colore di un’immagine è quello di un punto: prendilo col contagocce sul foglio.");
+    expect(changes).toHaveLength(2);
+    // Senza selezione, il colore con cui si disegna.
+    editor.select([]);
+    reach(K);
+    inTree("i");
+    expect(spoken()).toBe("Colore: Verde.");
+    expect(checked()).toBe("Verde");
+    reach(R);
+    inTree("i");
+    expect(spoken()).toBe("Una sfumatura ha un colore in ogni punto: prendine uno col contagocce sul foglio.");
+    expect(changes).toHaveLength(2);
+    // Senza il contagocce il tasto passa all'editor.
+    editor.setLevel("essential");
+    expect(inTree("i").defaultPrevented).toBe(false);
+  });
+});
+
 describe("la barra accanto alla selezione, dal livello Standard", () => {
   const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
   const spot = (): readonly number[] => /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(bar().style.transform)!.slice(1).map(Number);
@@ -3771,6 +4518,7 @@ describe("da tastiera", () => {
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
+      "Contagocce · dal livello Standard",
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
@@ -3792,7 +4540,7 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
     // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
@@ -3826,25 +4574,32 @@ describe("da tastiera", () => {
       ["Shift", "Tenuto all’inizio del trascinamento: disegna una tavola anche dentro un’altra"],
       ["Alt", "Tenuto mentre si sposta una tavola: ne lascia una copia dove la si posa, con ciò che ci sta sopra"],
     ]);
-    expect(tables[9]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[10]!.rows).toEqual([
+    expect(tables[9]!.rows).toEqual([
+      ["←↑→↓", "Muovono il cursore, anche con oggetti scelti, e dicono che cosa c’è sotto"],
+      ["Space", "Dà agli oggetti scelti l’aspetto di ciò che è sotto il cursore; senza selezione, ne prende il colore per disegnare"],
+      ["Shift+Space", "Prende soltanto il colore sotto il cursore"],
+      ["I", "Nell’albero degli oggetti, dà agli oggetti scelti l’aspetto della riga; senza selezione, ne prende il colore per disegnare"],
+      ["Shift+I", "Nell’albero degli oggetti, prende soltanto il colore della riga"],
+    ]);
+    expect(tables[10]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[11]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
     // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
-    expect(tables[13]!.rows).toEqual([
+    expect(tables[14]!.rows).toEqual([
       ["4", "Ruota la vista a sinistra"],
       ["6", "Ruota la vista a destra"],
       ["5", "Raddrizza la vista"],
       ["Shift+F10", "Apre il menu radiale: strumenti, colori, annulla"],
     ]);
     // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[14]!.rows).toEqual([
+    expect(tables[15]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
     // L'elenco delle tavole e la cronologia, tutti dallo Standard.
-    expect(tables[15]!.rows).toEqual([
+    expect(tables[16]!.rows).toEqual([
       ["↑ o ↓ o Home o End", "Nell’elenco delle tavole, la tavola prima o dopo, la prima o l’ultima"],
       ["Enter o Space", "Nell’elenco delle tavole, porta alla tavola"],
       ["F2", "Nell’elenco delle tavole, cambia il nome della tavola"],
@@ -3854,7 +4609,7 @@ describe("da tastiera", () => {
       ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
       ["Esc", "Dall’elenco delle tavole torna al foglio"],
     ]);
-    expect(tables[16]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
+    expect(tables[17]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -5490,7 +6245,7 @@ describe("trasformare con i numeri, dal livello Esperto", () => {
   const SHAPES = doc(`${LAYER}${RECT_A}${RECT_B}</g>`);
 
   const transform = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Trasforma…"]')!;
-  const apply = (): HTMLButtonElement => properties().querySelector<HTMLButtonElement>(".draw-properties-apply")!;
+  const apply = (): HTMLButtonElement => properties().querySelector<HTMLButtonElement>('[data-section="transform"] .draw-properties-apply')!;
   /// Senza il pannello delle proprietà, «Trasforma…» apre una finestra.
   const DIALOG: DrawEditorOptions = { level: "custom", custom: ["rect", "transform"] };
 
@@ -9669,6 +10424,7 @@ describe("il livello Personalizzato", () => {
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
+      "Contagocce · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
@@ -9687,8 +10443,8 @@ describe("il livello Personalizzato", () => {
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[17]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[18]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });
@@ -10103,6 +10859,64 @@ describe("gli appunti", () => {
     editor.undo();
     expect(editor.engine.text).toBe(PAIR);
   });
+
+  /// Il campione `name` di colore `color`, con l'id `id`.
+  const swatch = (id: string, name: string, color: string): string =>
+    `<linearGradient id="${id}" fub:role="swatch" fub:name="${name}" gradientUnits="userSpaceOnUse"><stop stop-color="${color}"/></linearGradient>`;
+
+  it("lo stile incollato in un altro disegno usa il campione con lo stesso nome e colore, o il colore del campione", () => {
+    const A = "oa1a1a1a1";
+    const B = "ob2b2b2b2";
+    mount(
+      doc(
+        `<defs id="fub-defs">${swatch("rs1s1s1s1", "Blu mare", "#0072b2")}${swatch("rs2s2s2s2", "Vermiglio", "#d55e00")}</defs>` +
+          `${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #0072b2" stroke="url(#rs2s2s2s2) #d55e00" stroke-width="4"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    editor.select([A]);
+    key("c", { ctrlKey: true, altKey: true });
+    editor.dispose();
+    // Qui «blu mare» ha lo stesso colore, e «Vermiglio» un altro.
+    const OTHER = doc(
+      `<defs id="fub-defs">${swatch("rt1t1t1t1", "blu mare", "#0072b2")}${swatch("rt2t2t2t2", "Vermiglio", "#e69f00")}</defs>` +
+        `${LAYER}<rect id="${B}" x="50" y="10" width="20" height="20" fill="#000000"/></g>`,
+    );
+    mount(OTHER, { level: "standard" });
+    editor.select([B]);
+    key("v", { ctrlKey: true, altKey: true });
+    expect(spoken()).toBe("Stile incollato su 1 oggetto.");
+    expect(rects()[0]).toBe(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="url(#rt1t1t1t1) #0072b2" stroke="#d55e00" stroke-width="4"/>`);
+    expect(changes).toHaveLength(1);
+    editor.undo();
+    expect(editor.engine.text).toBe(OTHER);
+  });
+
+  it("lo stile incollato dopo che il campione ha cambiato colore lo usa col colore di adesso", () => {
+    const A = "oa1a1a1a1";
+    const B = "ob2b2b2b2";
+    mount(
+      doc(
+        `<defs id="fub-defs">${swatch("rs1s1s1s1", "Blu mare", "#0072b2")}</defs>` +
+          `${LAYER}<rect id="${A}" x="10" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #0072b2"/>` +
+          `<rect id="${B}" x="50" y="10" width="20" height="20" fill="#000000"/></g>`,
+      ),
+      { level: "standard" },
+    );
+    editor.select([A]);
+    key("c", { ctrlKey: true, altKey: true });
+    const recolor: Op = {
+      op: "batch",
+      ops: [
+        { op: "set", id: "rs1s1s1s1", part: [0], attrs: { "stop-color": "#56b4e9" } },
+        { op: "set", id: A, attrs: { fill: "url(#rs1s1s1s1) #56b4e9" } },
+      ],
+    };
+    expect(editor.perform("draw.action.swatch_recolor", recolor)).toBe(true);
+    editor.select([B]);
+    key("v", { ctrlKey: true, altKey: true });
+    expect(rects()[1]).toBe(`<rect id="${B}" x="50" y="10" width="20" height="20" fill="url(#rs1s1s1s1) #56b4e9"/>`);
+  });
 });
 
 describe("la fine", () => {
@@ -10433,6 +11247,23 @@ describe("il menu radiale, dal livello Standard", () => {
     // tornarci.
     expect(voices().slice(1, 4)).toEqual(["ne Selezione", "e Gomma", "se Evidenziatore"]);
     expect(voices().slice(5)).toEqual(["sw Colore: Verde", "w Colore: Nero", "nw Colore: Vermiglio"]);
+  });
+
+  it("i colori a sinistra sono i recenti che chi monta l'editor ricorda, senza quello di adesso", () => {
+    /// Le voci a sinistra, quelle dei colori.
+    const colors = (): string[] => voices().filter((each) => /^(sw|w|nw) /.test(each));
+    mount(SOURCE, { level: "standard", colors: ["#3a7bd5", "#000000", "#cc79a7", "#56b4e9"] });
+    size(200, 100);
+    surface().focus();
+    rightClick(100, 50);
+    expect(colors()).toEqual(["sw Colore: Azzurro", "w Colore: Personalizzato #3a7bd5", "nw Colore: Porpora"]);
+    voice("Colore: Personalizzato #3a7bd5").click();
+    expect(spoken()).toBe("Colore: Personalizzato #3a7bd5.");
+    // Senza i colori a piacere la penna torna al nero, e a sinistra restano
+    // i recenti della tavolozza.
+    editor.setLevel("custom", ["pen", "gestures"]);
+    rightClick(100, 50);
+    expect(colors()).toEqual(["sw Colore: Blu", "w Colore: Porpora", "nw Colore: Azzurro"]);
   });
 
   it("tenuto premuto segue il puntatore: lasciato verso una voce la sceglie, e non disegna", () => {

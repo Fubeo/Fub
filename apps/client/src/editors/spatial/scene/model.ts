@@ -644,6 +644,13 @@ export function pathOf(node: ElementPart): number[] {
   return path.reverse();
 }
 
+/// Ciò che dice se `node` è cambiato, per chi legge un nodo una volta sola:
+/// un'unità che un'operazione cambia è un nodo nuovo, mentre un contenitore
+/// riscrive sul posto il suo tag d'apertura.
+export function writtenOf(node: ElementPart): string {
+  return node.kind === "container" ? node.head : node.raw;
+}
+
 /// Il nome con cui un bersaglio indica il tag: il nome locale per gli
 /// elementi SVG, il nome scritto per gli altri.
 export function tagName(node: ElementPart): string {

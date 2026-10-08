@@ -20,8 +20,8 @@ use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::{parse_path, rect_path, BoundsBuilder, Matrix};
 use crate::text::{Span, Utf16Map};
 use crate::values::{
-    href, href_id, is_javascript, keyword, length, non_negative_length, opacity, paint, points,
-    transform, trim, url_text, wrap_width, Href, Paint, Rgb,
+    href, href_id, is_javascript, keyword, length, non_negative_length, opacity, paint,
+    paint_reference, points, transform, trim, url_text, wrap_width, Href, Paint, Rgb,
 };
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XHTML, NS_XLINK};
 use crate::Status;
@@ -152,9 +152,13 @@ pub struct Summary {
     pub bbox: Option<BBox>,
 }
 
+/// I campioni del documento, per id: il colore di ciascuno (formato della
+/// scena, risorse).
+pub(crate) type Swatches = HashMap<String, Rgb>;
+
 /// Quello che un contenitore modificabile trasmette ai figli.
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct Context {
+pub(crate) struct Context<'s> {
     /// Dalle coordinate locali a quelle della radice.
     matrix: Matrix,
     /// Un antenato ha `display="none"`.
@@ -174,23 +178,27 @@ pub(crate) struct Context {
     /// Un antenato, o l'elemento, ha un ritaglio, una maschera o un filtro
     /// (formato della scena, risorse): i colori che si vedono non si sanno.
     effect: bool,
+    /// I campioni del documento, che danno il colore a chi li usa.
+    swatches: &'s Swatches,
 }
 
 /// Gli attributi che cambiano ciò che si vede di un elemento oltre il suo
 /// colore (formato della scena, risorse).
 const EFFECTS: [&str; 3] = ["clip-path", "mask", "filter"];
 
-impl Context {
+impl<'s> Context<'s> {
     /// Il contesto dei figli della radice. Della radice contano solo `fill` e
     /// `fill-opacity`, che si ereditano: le coordinate della radice sono
     /// quelle in cui si misura, e il resto vale anche per la carta.
-    pub fn root(root: &Element<'_>) -> Context {
+    pub fn root(root: &Element<'_>, swatches: &'s Swatches) -> Context<'s> {
         Context {
             matrix: Matrix::IDENTITY,
             hidden: false,
             fill: root
                 .value(NS_NONE, "fill")
-                .map_or(Some(Paint::Color([0, 0, 0])), paint),
+                .map_or(Some(Paint::Color([0, 0, 0])), |fill| {
+                    fill_value(fill, swatches)
+                }),
             fill_opacity: root
                 .value(NS_NONE, "fill-opacity")
                 .map_or(Some(1.0), opacity),
@@ -200,12 +208,13 @@ impl Context {
                 .map_or(Some(DEFAULT_FONT_SIZE), non_negative_length),
             bold: root.value(NS_NONE, "font-weight").is_some_and(bold),
             effect: false,
+            swatches,
         }
     }
 
     /// Il contesto di `element`, un elemento modificabile: i suoi valori
     /// rispettano già §4.
-    pub fn child(&self, element: &Element<'_>) -> Context {
+    pub fn child(&self, element: &Element<'_>) -> Context<'s> {
         let mut context = *self;
         let value = |name: &str| element.value(NS_NONE, name);
         if let Some(m) = value("transform").and_then(transform) {
@@ -215,7 +224,7 @@ impl Context {
             context.hidden = true;
         }
         if let Some(fill) = value("fill") {
-            context.fill = paint(fill);
+            context.fill = fill_value(fill, self.swatches);
         }
         if let Some(alpha) = value("fill-opacity") {
             context.fill_opacity = opacity(alpha);
@@ -240,7 +249,7 @@ impl Context {
 
     /// Il contesto di una riga di `text`, un `tspan`: come [`Context::child`],
     /// ma senza `transform`, che SVG non applica a un `tspan`.
-    pub fn line(&self, tspan: &Element<'_>) -> Context {
+    pub fn line(&self, tspan: &Element<'_>) -> Context<'s> {
         Context {
             matrix: self.matrix,
             ..self.child(tspan)
@@ -360,7 +369,7 @@ impl Tally {
         doc: &Document<'_>,
         element: &Element<'_>,
         role: Role,
-        context: &Context,
+        context: &Context<'_>,
         span: Span,
         stroke: Option<&Stroke>,
     ) {
@@ -538,8 +547,18 @@ fn bold(weight: &str) -> bool {
     keyword("font-weight", weight) && matches!(trim(weight), "bold" | "700" | "800" | "900")
 }
 
+/// Un `fill` come lo legge §4. Un campione del documento vale il suo
+/// colore, quale che sia il ripiego scritto accanto: è il colore che si vede
+/// (formato della scena, risorse). Le altre risorse non si sanno.
+fn fill_value(value: &str, swatches: &Swatches) -> Option<Paint> {
+    match paint_reference(value) {
+        Some(used) => swatches.get(used.id).map(|&rgb| Paint::Color(rgb)),
+        None => paint(value),
+    }
+}
+
 /// Il colore della carta sul bianco della superficie; `None` se non si sa.
-fn paper_color(context: &Context) -> Option<Rgb> {
+fn paper_color(context: &Context<'_>) -> Option<Rgb> {
     if context.hidden {
         return Some(WHITE);
     }

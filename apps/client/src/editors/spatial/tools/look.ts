@@ -48,26 +48,41 @@
 //   il contorno col suo spessore, tratteggio, estremi e angoli, l'opacità e
 //   il carattere di un oggetto vanno sugli oggetti scelti in un passo, a
 //   ciascuna parte ciò che ha. Si copia ciò che si vede, anche se viene dal
-//   gruppo che lo contiene.
+//   gruppo che lo contiene. Il contagocce prende lo stesso, dalla forma
+//   sotto il puntatore o dall'oggetto di una riga dell'albero, anche
+//   bloccato o nascosto: leggerlo non lo cambia.
+// - **Lo stile vale anche in un altro disegno**: un campione che lì non c'è
+//   lascia il posto a quello con lo stesso nome e lo stesso colore, o al
+//   suo colore; un'altra risorsa che manca, al colore di ripiego. Un
+//   campione che c'è porta come ripiego il suo colore di adesso.
+// - **Una risorsa privata resta di un oggetto solo** (formato della scena,
+//   risorse): un colore che ne usa una, preso da un altro oggetto, ne porta
+//   una copia, com'era quando lo stile si è copiato; e una sfumatura nelle
+//   coordinate di chi la usa si adatta al riquadro di chi la riceve, come
+//   stava in quello dell'altro.
 // - **Mille oggetti scelti** si leggono entro un fotogramma: gli attributi di
 //   un nodo e ciò che un contenitore passa ai figli si leggono una volta
 //   sola, finché un'operazione non li cambia.
 
 import { formatNumber } from "../number";
 import type { Role } from "../scene/analysis";
-import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import type { SwatchFacts } from "../scene/classify";
+import type { Bounds } from "../scene/geometry";
+import type { Matrix } from "../scene/matrix";
+import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { spineOf, WIDTH_CAPS, WIDTH_JOINS, type WidthCap, type WidthJoin } from "../scene/varwidth";
-import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim } from "../scene/values";
+import { keyword, length, letterSpacing, nonNegativeLength, opacity as parseOpacity, paintReference, textDecoration, trim, type PaintReference } from "../scene/values";
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
-import type { Unit } from "./hit";
+import { geometryBox, type Unit } from "./hit";
 import type { Measure } from "./measure";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
+import { nameKey } from "./naming";
 import { customColor } from "./palette";
 import { profileWidth, scaledProfile, widthAttrs } from "./profile";
-import { paintSample, resourcesOf, type PaintSample } from "./resources";
+import { paintCode, paintSample, privateResources, ResourceCopies, resourcesOf, type PaintSample } from "./resources";
 import { arrowPath } from "./shapes";
 import {
   anchorsOf,
@@ -164,14 +179,14 @@ const INITIAL: Inherited = new Map([
 ]);
 
 /// I ruoli che hanno un riempimento.
-const FILLED: ReadonlySet<Role> = new Set(["ngon", "star", "path", "rect", "ellipse", "circle", "polyline", "polygon", "text"]);
+export const FILLED: ReadonlySet<Role> = new Set(["ngon", "star", "path", "rect", "ellipse", "circle", "polyline", "polygon", "text"]);
 
 /// I ruoli che hanno un contorno, come in `outline.ts`.
-const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
+export const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
 
 /// I ruoli tutti riempimento che si vedono come una linea: il loro colore è
 /// quello del contorno.
-const INKED: ReadonlySet<Role> = new Set(["stroke", "width"]);
+export const INKED: ReadonlySet<Role> = new Set(["stroke", "width"]);
 
 /// I ruoli che passano tutto ai figli.
 const CONTAINERS: ReadonlySet<Role> = new Set(["group", "link"]);
@@ -184,29 +199,29 @@ const OPACITY_PLACES = 4;
 // Leggere.
 // ---------------------------------------------------------------------------
 
-const owns = new WeakMap<ElementPart, ReadonlyMap<string, string>>();
+const owns = new WeakMap<ElementPart, { readonly written: string; readonly own: ReadonlyMap<string, string> }>();
 
-/// Gli attributi senza namespace di `node`, letti una volta: un nodo che
-/// un'operazione cambia è un nodo nuovo.
+/// Gli attributi senza namespace di `node`, letti una volta finché non
+/// cambiano.
 function ownOf(node: ElementPart): ReadonlyMap<string, string> {
-  let own = owns.get(node);
-  if (own === undefined) {
-    own = plainAttributes(node);
-    owns.set(node, own);
-  }
+  const known = owns.get(node);
+  const written = writtenOf(node);
+  if (known !== undefined && known.written === written) return known.own;
+  const own = plainAttributes(node);
+  owns.set(node, { written, own });
   return own;
 }
 
-const passes = new WeakMap<ElementPart, { readonly from: Inherited; readonly out: Inherited }>();
+const passes = new WeakMap<ElementPart, { readonly from: Inherited; readonly own: ReadonlyMap<string, string>; readonly out: Inherited }>();
 
 /// Ciò che i figli di `node` ereditano. Un contenitore che resta lo stesso
-/// nodo sotto un genitore cambiato si rilegge, perché eredita altro.
+/// nodo si rilegge se cambia il suo tag, o se il genitore gli passa altro.
 function passedBy(node: ElementPart | null): Inherited {
   if (node === null) return INITIAL;
   const from = passedBy(node.parent);
-  const known = passes.get(node);
-  if (known !== undefined && known.from === from) return known.out;
   const own = ownOf(node);
+  const known = passes.get(node);
+  if (known !== undefined && known.from === from && known.own === own) return known.out;
   let out: Map<string, string> | null = null;
   for (const name of INITIAL.keys()) {
     const value = own.get(name);
@@ -215,7 +230,7 @@ function passedBy(node: ElementPart | null): Inherited {
     out.set(name, value);
   }
   const passed = out ?? from;
-  passes.set(node, { from, out: passed });
+  passes.set(node, { from, own, out: passed });
   return passed;
 }
 
@@ -521,11 +536,17 @@ class Changes {
   private readonly texts = new Map<ElementPart, { readonly part: Part; readonly before: Rich; now: Rich }>();
   private replaced = 0;
   private overflow = false;
+  private copies: ResourceCopies | null = null;
+  private resources: Map<string, LeafNode> | null = null;
 
   constructor(
     private readonly plan: Plan,
     private readonly model: DocumentModel,
     private readonly measure: Measure,
+    /// Le risorse private di uno stile copiato, com'erano.
+    private readonly kept: ReadonlyMap<string, Elem> = new Map(),
+    /// I campioni di uno stile copiato, per id.
+    private readonly swatches: ReadonlyMap<string, SwatchFacts> = new Map(),
   ) {}
 
   of(part: Part): Record<string, string | null> {
@@ -551,6 +572,55 @@ class Changes {
     } else if (own === undefined || !same(own, value)) {
       this.of(part)[name] = value;
     }
+  }
+
+  /// Il colore `value` in `name`, `fill` o `stroke`, su `part`: di un testo
+  /// intero. Una risorsa privata di un altro oggetto, il cui riquadro è
+  /// `box`, diventa una copia di `part`: una sfumatura nelle coordinate di
+  /// chi la usa passa dall'uno all'altro.
+  paint(part: Part, name: string, value: string, box: Bounds | null): void {
+    // Ciò che la parte vede già resta suo.
+    const written = samePaint(value, seen(part, name)) ? value : this.copied(part, value, box);
+    if (written === null) return;
+    if (part.role === "text" && name === "fill") this.textWrite(part, name, written);
+    else this.write(part, name, written, samePaint);
+  }
+
+  /// `value` per `part`, con le copie delle risorse private che usa; `null`
+  /// se una copia non si sa scrivere. Un campione porta come ripiego il suo
+  /// colore di adesso. Una risorsa che il disegno non ha, perché lo stile
+  /// viene da un altro disegno o lei se n'è andata, lascia il posto a ciò
+  /// che dice [`elsewhere`].
+  private copied(part: Part, value: string, box: Bounds | null): string | null {
+    const used = paintReference(value);
+    if (used === null) return value;
+    if (!this.kept.has(used.id)) {
+      this.resources ??= resourcesOf(this.model);
+      const there = this.resources.get(used.id);
+      const swatch = there?.details?.swatch;
+      if (swatch !== undefined) return `url(#${used.id}) ${swatch.color}`;
+      if (there === undefined) return this.elsewhere(used);
+    }
+    this.copies ??= new ResourceCopies(this.model, this.plan.ids, elemOf, this.kept);
+    return this.copies.paint(value, part.node, () => {
+      const elem = box === null ? null : elemOf(part.node);
+      const target = elem === null ? null : geometryBox(elem);
+      return target === null ? null : boxFit(box!, target);
+    });
+  }
+
+  /// Il colore al posto di `used`, una risorsa che il disegno non ha: il
+  /// suo campione con lo stesso nome e lo stesso colore, se lei era un
+  /// campione e il disegno ne ha uno così, o il colore che si vedeva.
+  private elsewhere(used: PaintReference): string {
+    const swatch = this.swatches.get(used.id);
+    if (swatch === undefined) return used.fallback === null ? "none" : paintCode(used.fallback);
+    const key = nameKey(swatch.name);
+    for (const [id, node] of this.resources!) {
+      const other = node.details?.swatch;
+      if (other !== undefined && other.color === swatch.color && nameKey(other.name) === key) return `url(#${id}) ${other.color}`;
+    }
+    return swatch.color;
   }
 
   /// L'opacità `value` sull'oggetto scelto `part`: senza attributo se è
@@ -665,6 +735,8 @@ class Changes {
 
   /// Le operazioni, con le chiavi di `units` dopo.
   finish(units: readonly Unit[]): Restyled {
+    // Le copie delle risorse prima di chi le usa.
+    if (this.copies !== null) this.plan.ops.push(...this.copies.ops());
     this.finishTexts();
     for (const [node, attrs] of this.attrs) {
       if (Object.keys(attrs).length === 0) continue;
@@ -675,6 +747,15 @@ class Changes {
     const changed = [...this.attrs.values()].filter((attrs) => Object.keys(attrs).length > 0).length + this.replaced;
     return { ...this.plan.finish(keys), changed, overflow: this.overflow };
   }
+}
+
+/// La trasformazione che porta il riquadro `from` su `to`: un lato nullo
+/// dell'uno o dell'altro non si scala.
+function boxFit(from: Bounds, to: Bounds): Matrix {
+  const scale = (a: number, b: number): number => (a > 0 && b > 0 ? b / a : 1);
+  const sx = scale(from.max[0] - from.min[0], to.max[0] - to.min[0]);
+  const sy = scale(from.max[1] - from.min[1], to.max[1] - to.min[1]);
+  return [sx, 0, 0, sy, to.min[0] - sx * from.min[0], to.min[1] - sy * from.min[1]];
 }
 
 /// Il testo `rich` di `part` col valore di `name` scritto corto: senza, se il
@@ -698,12 +779,9 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
   const parts = partsOf(model, units);
 
   if ("fill" in change) {
-    for (const part of parts.fills) {
-      if (part.role === "text") changes.textWrite(part, "fill", change.fill);
-      else changes.write(part, "fill", change.fill, samePaint);
-    }
+    for (const part of parts.fills) changes.paint(part, "fill", change.fill, null);
   } else if ("stroke" in change) {
-    for (const part of parts.strokes) changes.write(part, INKED.has(part.role) ? "fill" : "stroke", change.stroke, samePaint);
+    for (const part of parts.strokes) changes.paint(part, INKED.has(part.role) ? "fill" : "stroke", change.stroke, null);
   } else if ("width" in change) {
     const width = place(change.width);
     for (const part of parts.widths) changes.widthTo(part, change.width);
@@ -810,15 +888,26 @@ export interface Style {
   /// L'opacità dell'oggetto scelto, da 0 a 1.
   readonly opacity: number;
   readonly font: StyleFont | null;
+  /// Il riquadro della geometria della parte copiata, nelle sue coordinate:
+  /// una sfumatura nelle coordinate di chi la usa passa da lui a quello di
+  /// chi la riceve. `null` senza colori, o se non si misura.
+  readonly box: Bounds | null;
+  /// Le risorse private che usano i colori, com'erano, per id.
+  readonly resources: ReadonlyMap<string, Elem>;
+  /// I campioni che usano i colori, col nome e il colore, per id: in un
+  /// altro disegno vale il campione con lo stesso nome e lo stesso colore.
+  readonly swatches: ReadonlyMap<string, SwatchFacts>;
 }
 
-/// La prima parte di `units` che ha un aspetto suo, nell'ordine del
-/// documento: una forma, un tratto a penna, un testo o un'immagine.
-function firstPart(model: DocumentModel, unit: Unit): Part | null {
+/// La prima parte di `from` che ha un aspetto suo, nell'ordine del
+/// documento: una forma, un tratto a penna, un testo o un'immagine; `from`
+/// stesso, se lo è. Una parte bloccata dentro di lui non conta; `from`
+/// bloccato sì, perché leggerlo non lo cambia.
+function firstPart(from: ElementPart): Part | null {
   let found: Part | null = null;
   const visit = (node: ElementPart, inherited: Inherited): void => {
     const role = node.details?.role;
-    if (found !== null || role === undefined || node.details?.locked === true) return;
+    if (found !== null || role === undefined || (node !== from && node.details?.locked === true)) return;
     if (CONTAINERS.has(role)) {
       if (node.kind !== "container") return;
       const inner = passedBy(node);
@@ -827,23 +916,40 @@ function firstPart(model: DocumentModel, unit: Unit): Part | null {
     }
     if (FILLED.has(role) || OUTLINED.has(role) || INKED.has(role) || role === "image") found = { node, role, own: ownOf(node), inherited };
   };
-  const [node] = nodesOf(model, [unit]);
-  visit(node!, passedBy(node!.parent));
+  visit(from, passedBy(from.parent));
   return found;
 }
 
-/// Lo stile di `unit`: quello della sua prima parte, con l'opacità
-/// dell'oggetto stesso. `null` se non ha parti che si possano copiare.
-export function styleOf(model: DocumentModel, unit: Unit): Style | null {
-  const part = firstPart(model, unit);
-  if (part === null) return null;
+/// Lo stile di `unit`: quello di `leaf`, una sua forma, o della sua prima
+/// parte, con l'opacità dell'oggetto stesso. `null` se non ha parti che si
+/// possano copiare.
+export function styleOf(model: DocumentModel, unit: Unit, leaf: LeafNode | null = null): Style | null {
   const [node] = nodesOf(model, [unit]);
-  const written = ownOf(node!).get("opacity");
+  return styleFrom(model, node!, leaf ?? node!);
+}
+
+/// Lo stile del nodo `node` del disegno, un oggetto o una parte di un
+/// oggetto, come [`styleOf`]: anche bloccato o nascosto, che si legge
+/// senza cambiarlo.
+export function nodeStyle(model: DocumentModel, node: ElementPart): Style | null {
+  return styleFrom(model, node, node);
+}
+
+/// Lo stile della prima parte di `from`, con l'opacità di `node`, l'oggetto
+/// che la contiene.
+function styleFrom(model: DocumentModel, node: ElementPart, from: ElementPart): Style | null {
+  const part = firstPart(from);
+  if (part === null) return null;
+  const written = ownOf(node).get("opacity");
   const opacity = written === undefined ? 1 : (parseOpacity(written) ?? 1);
   const size = part.role === "text" ? sizeOf(part) : null;
+  const fill = FILLED.has(part.role) ? seen(part, "fill") : null;
+  const stroke = OUTLINED.has(part.role) ? seen(part, "stroke") : INKED.has(part.role) ? seen(part, "fill") : null;
+  const paints = [fill, stroke].filter((value): value is string => value !== null);
+  const elem = paints.some((value) => paintReference(value) !== null) ? elemOf(part.node) : null;
   return {
-    fill: FILLED.has(part.role) ? seen(part, "fill") : null,
-    stroke: OUTLINED.has(part.role) ? seen(part, "stroke") : INKED.has(part.role) ? seen(part, "fill") : null,
+    fill,
+    stroke,
     outline: OUTLINED.has(part.role)
       ? { width: seen(part, "stroke-width"), dashes: seen(part, "stroke-dasharray"), cap: seen(part, "stroke-linecap"), join: seen(part, "stroke-linejoin") }
       : part.role === "width" && part.node.details?.varwidth !== undefined
@@ -851,7 +957,23 @@ export function styleOf(model: DocumentModel, unit: Unit): Style | null {
         : null,
     opacity,
     font: part.role === "text" && size !== null ? fontOf(part, size) : null,
+    box: elem === null ? null : geometryBox(elem),
+    resources: privateResources(model, paints, elemOf),
+    swatches: swatchesOf(model, paints),
   };
+}
+
+/// I campioni del disegno che usano i colori `values`, per id.
+function swatchesOf(model: DocumentModel, values: readonly string[]): Map<string, SwatchFacts> {
+  const out = new Map<string, SwatchFacts>();
+  const ids = values.flatMap((value) => paintReference(value)?.id ?? []);
+  if (ids.length === 0) return out;
+  const resources = resourcesOf(model);
+  for (const id of ids) {
+    const swatch = resources.get(id)?.details?.swatch;
+    if (swatch !== undefined) out.set(id, swatch);
+  }
+  return out;
 }
 
 /// Il carattere del testo `part`, come lo vede il suo primo carattere.
@@ -884,24 +1006,24 @@ const shown = (...values: Array<string | null>): string | null => values.find((v
 /// si vede dello stile, il riempimento per il testo, il contorno per il
 /// tratto. La selezione resta la stessa.
 export function styleOps(model: DocumentModel, units: readonly Unit[], style: Style, measure: Measure, ids: NewIds): Restyled {
-  const changes = new Changes(new Plan(model, ids), model, measure);
+  const changes = new Changes(new Plan(model, ids), model, measure, style.resources, style.swatches);
   const parts = partsOf(model, units);
   for (const part of parts.chosen) changes.opacity(part, style.opacity);
   for (const part of parts.fills) {
     const value = part.role === "text" ? shown(style.fill, style.stroke) : style.fill;
-    if (value !== null) changes.write(part, "fill", value, samePaint);
+    if (value !== null) changes.paint(part, "fill", value, style.box);
   }
   for (const part of parts.strokes) {
     if (INKED.has(part.role)) {
       const value = shown(style.stroke, style.fill);
-      if (value !== null) changes.write(part, "fill", value, samePaint);
+      if (value !== null) changes.paint(part, "fill", value, style.box);
       // Una linea a spessore variabile prende lo spessore, gli estremi e gli
       // angoli, e il suo profilo resta.
       const width = style.outline === null ? null : nonNegativeLength(style.outline.width);
       if (part.role === "width" && parts.widths.includes(part) && width !== null && width > 0) changes.widthTo(part, width, style.outline!);
       continue;
     }
-    if (style.stroke !== null) changes.write(part, "stroke", style.stroke, samePaint);
+    if (style.stroke !== null) changes.paint(part, "stroke", style.stroke, style.box);
     const outline = style.outline;
     if (outline === null) continue;
     changes.write(part, "stroke-width", outline.width, sameLength);

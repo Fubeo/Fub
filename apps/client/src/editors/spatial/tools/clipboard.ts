@@ -19,8 +19,12 @@
 // - **Le risorse** dei `defs` della radice che ciò che entra usa vanno nella
 //   `defs` del disegno, prima di chi le usa (`resources.ts`): una privata
 //   come copia, una condivisa o che non è di FubDraw resta quella del
-//   disegno se è la stessa, con lo stesso id. Ciò che nessuno usa resta
-//   fuori. Con un foglio di stile, che può rimandarvi, restano dove sono.
+//   disegno se è la stessa, con lo stesso id. Un campione resta quello del
+//   disegno con lo stesso id, o diventa quello con lo stesso nome e lo
+//   stesso colore, e chi lo usa ne prende il colore di adesso come
+//   ripiego; se arriva con un nome già preso, prende il primo libero
+//   (`swatches.ts`). Ciò che nessuno usa resta fuori. Con un foglio di
+//   stile, che può rimandarvi, restano dove sono.
 // - **Id nuovi.** Ogni id cambia, e i riferimenti interni lo seguono:
 //   `url(#…)`, `href`, gli attributi ARIA, l'inizio e la fine delle
 //   animazioni, i selettori dei fogli di stile. Un foglio di un altro
@@ -35,7 +39,7 @@
 import { formatNumber, formatShortest } from "../number";
 import { NON_RENDERING } from "../painter/paint";
 import { isContainer, type Role } from "../scene/analysis";
-import { classifyChild, firstTitle, resourceIndex, resourceKind, svgAttribute, type Place, type Resolve, type ResourceKind, type Tag } from "../scene/classify";
+import { classifyChild, firstTitle, resourceIndex, resourceKind, svgAttribute, swatchOf, type Place, type Resolve, type ResourceKind, type SwatchFacts, type Tag } from "../scene/classify";
 import { reindent } from "../scene/engine";
 import type { Bounds } from "../scene/geometry";
 import { compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
@@ -54,7 +58,7 @@ import {
   type OutAttr,
 } from "../scene/serialize";
 import { SourceText, utf8Length } from "../scene/text";
-import { href as hrefKind, length, numberList, scanNumber, transform as parseTransform, trim, urlIds, viewBoxMatrix } from "../scene/values";
+import { href as hrefKind, length, numberList, paintReference, scanNumber, transform as parseTransform, trim, urlIds, viewBoxMatrix } from "../scene/values";
 import {
   FUB_NS,
   isSvg,
@@ -73,11 +77,14 @@ import {
   type NodeId,
   type XmlDocument,
 } from "../scene/xml";
+import { t } from "../strings";
 import { INHERITED, plainAttributes } from "./arrange";
 import { mappedBounds, transformValue, type Destination, type NewIds } from "./edit";
+import { cleanName, nameKey } from "./naming";
 import { inheritedBy, INITIAL } from "./place";
-import { homeOf, resourceHome, resourcesOf } from "./resources";
+import { homeOf, paintCode, resourceHome, resourcesOf } from "./resources";
 import { renameUrls, restyle } from "./stylesheet";
+import { freshSwatchName, swatchNameProblem } from "./swatches";
 
 /// Il tipo di un SVG negli appunti.
 export const SVG_TYPE = "image/svg+xml";
@@ -467,6 +474,11 @@ interface Rules {
   readonly rename: (id: string) => string | null;
   /// L'id nuovo di un elemento.
   readonly ids: ReadonlyMap<NodeId, string>;
+  /// Il nome nuovo di un campione, per elemento.
+  readonly named: ReadonlyMap<NodeId, string>;
+  /// Il colore dei campioni del disegno a cui va un riferimento, per id: il
+  /// ripiego di chi li usa.
+  readonly colors: ReadonlyMap<string, string>;
   /// I fogli di stile: l'id del gruppo che li chiude, `null` per rinominare
   /// soltanto, `undefined` se restano come sono.
   readonly sheets: string | null | undefined;
@@ -634,7 +646,9 @@ class Rewriter {
   private value(id: NodeId, element: ElementNode, attr: Attr): string {
     const { rename } = this.rules;
     if (attr.ns === NS_NONE && attr.local === "id") return this.rules.ids.get(id) ?? attr.value;
+    if (attr.ns === NS_FUB && attr.local === "name") return this.rules.named.get(id) ?? attr.value;
     let next = /url\(/i.test(attr.value) ? renameUrls(attr.value, rename) : attr.value;
+    if (attr.ns === NS_NONE && (attr.local === "fill" || attr.local === "stroke")) next = this.fallback(next);
     const fragment = /^#(.+)$/.exec(next);
     if (fragment !== null && (attr.local === "href" || (attr.ns !== NS_NONE && attr.ns !== NS_XML))) {
       next = `#${rename(fragment[1]!) ?? fragment[1]!}`;
@@ -649,6 +663,15 @@ class Rewriter {
       next = this.rules.href(next) ?? next;
     }
     return next;
+  }
+
+  /// Un colore che rimanda a un campione del disegno, col colore del
+  /// campione come ripiego se ne scrive un altro.
+  private fallback(value: string): string {
+    const used = paintReference(value);
+    if (used === null || used.fallback === null) return value;
+    const color = this.rules.colors.get(used.id);
+    return color === undefined || paintCode(used.fallback) === color ? value : `url(#${used.id}) ${color}`;
   }
 
   /// I prefissi dei nomi di `element` e dei suoi attributi.
@@ -730,7 +753,7 @@ export function copySvg(input: CopyInput): string | null {
   const scope = known === null ? rootScope.declare([[fub, FUB_NS]]) : rootScope;
   const index = resourceIndex(doc);
   const resolve: Resolve = (id) => index.get(id) ?? null;
-  const rewriter = new Rewriter(doc, { rename: () => null, ids: new Map(), sheets: undefined, href: () => null, resolve, written: resolve });
+  const rewriter = new Rewriter(doc, { rename: () => null, ids: new Map(), named: new Map(), colors: new Map(), sheets: undefined, href: () => null, resolve, written: resolve });
 
   try {
     const pieces: string[] = [];
@@ -1008,6 +1031,12 @@ interface Lift {
   /// Le `defs` e tutto ciò che hanno dentro: i loro id li decide il
   /// trasloco.
   readonly decided: ReadonlySet<NodeId>;
+  /// Il nome nuovo di un campione che arriva con un nome già preso, o che
+  /// si legge come un colore, per elemento.
+  readonly named: ReadonlyMap<NodeId, string>;
+  /// Il colore dei campioni del disegno che ciò che entra usa al posto dei
+  /// suoi, per id.
+  readonly colors: ReadonlyMap<string, string>;
   /// Quali id saranno risorse del disegno, con gli id dell'SVG e con quelli
   /// riscritti.
   readonly resolve: Resolve;
@@ -1024,10 +1053,13 @@ function compact(text: string): string {
 /// radice `tops`; i nomi nuovi vanno in `names` e `renamed`. Una risorsa
 /// privata ha sempre una copia, con id nuovi; una condivisa, o che non è di
 /// FubDraw, resta quella del disegno se ha lo stesso id, lo stesso testo e
-/// usa le stesse. Ciò che nessuno usa resta fuori. Niente trasloco se l'SVG
-/// ha fogli di stile, che possono rimandare alle risorse, o se il disegno
-/// supererebbe il limite delle risorse, o senza `allowed`: allora resta
-/// tutto com'era.
+/// usa le stesse. Un campione resta quello del disegno con lo stesso id, o
+/// diventa il campione del disegno, o uno che arriva prima, con lo stesso
+/// nome, senza maiuscole, e lo stesso colore; se arriva, con un nome già
+/// preso o che si legge come un colore, prende il primo nome libero. Ciò
+/// che nessuno usa resta fuori. Niente trasloco se l'SVG ha fogli di stile,
+/// che possono rimandare alle risorse, o se il disegno supererebbe il
+/// limite delle risorse, o senza `allowed`: allora resta tutto com'era.
 function liftOf(
   doc: XmlDocument,
   tops: readonly NodeId[],
@@ -1045,7 +1077,7 @@ function liftOf(
     const node = byId.has(id) ? undefined : resources.get(id);
     return node === undefined ? null : resourceKind(node.facts.local);
   };
-  const none: Lift = { defs: new Set(), moved: [], decided: new Set(), resolve: outside, written: outside };
+  const none: Lift = { defs: new Set(), moved: [], decided: new Set(), named: new Map(), colors: new Map(), resolve: outside, written: outside };
   const defs = new Set(tops.filter((top) => classifyChild(doc, top, "root", 1)?.[1] === "defs"));
   if (!allowed || defs.size === 0 || doc.nodes.some((node) => node.kind === "element" && isSvg(node, "style"))) return none;
   const index = resourceIndex(doc);
@@ -1083,6 +1115,15 @@ function liftOf(
   };
   for (const top of tops) if (!defs.has(top)) visit(refsIn(top));
 
+  // I campioni del disegno, e poi quelli che arrivano con l'id che avranno.
+  const swatches: Array<{ readonly id: string; readonly name: string; readonly color: string }> = [];
+  for (const [id, node] of resources) {
+    const swatch = node.details?.swatch;
+    if (swatch !== undefined) swatches.push({ id, ...swatch });
+  }
+  const named = new Map<NodeId, string>();
+  const colors = new Map<string, string>();
+
   // Gli id, prima ciò che si usa e poi chi lo usa.
   const local = new Map<string, string>();
   const fresh = new Map<NodeId, string>();
@@ -1093,9 +1134,22 @@ function liftOf(
     const element = doc.element(child)!;
     const id = valueOf(element, NS_NONE, "id") ?? "";
     const kind = byId.get(id) === child ? index.get(id) : undefined;
+    let arriving: SwatchFacts | null = null;
     if (kind !== undefined) {
       kinds.set(id, kind);
       const there = resources.get(id);
+      const swatch = valueOf(element, NS_FUB, "role") === "swatch" ? swatchOf(doc, element) : null;
+      if (swatch !== null) {
+        const key = nameKey(swatch.name);
+        const own = there?.details?.swatch;
+        const kept = own !== undefined ? { id, ...own } : swatches.find((other) => other.color === swatch.color && nameKey(other.name) === key);
+        if (kept !== undefined) {
+          local.set(id, kept.id);
+          colors.set(kept.id, kept.color);
+          continue;
+        }
+        arriving = swatch;
+      }
       const same =
         there !== undefined &&
         valueOf(element, NS_FUB, "role") !== "private" &&
@@ -1116,6 +1170,12 @@ function liftOf(
       fresh.set(at, next);
       if (!local.has(value)) local.set(value, next);
     }
+    if (arriving !== null) {
+      const clean = cleanName(arriving.name);
+      const name = swatchNameProblem(swatches, clean) === null ? arriving.name : freshSwatchName(swatches, clean === "" ? t("draw.colors.form.default") : clean);
+      if (name !== arriving.name) named.set(child, name);
+      swatches.push({ id: fresh.get(child)!, name, color: arriving.color });
+    }
   }
   if (resources.size + copies > MAX_RESOURCES) return none;
   for (const [from, to] of local) if (!names.has(from)) names.set(from, to);
@@ -1126,6 +1186,8 @@ function liftOf(
     defs,
     moved: out,
     decided,
+    named,
+    colors,
     resolve: (id) => kinds.get(id) ?? outside(id),
     written: (id) => written.get(id) ?? outside(id),
   };
@@ -1231,6 +1293,8 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   const rewriter = new Rewriter(doc, {
     rename: (id) => names.get(id) ?? null,
     ids: renamed,
+    named: lift.named,
+    colors: lift.colors,
     sheets: wrap ? sheetScope : null,
     href: target.href,
     resolve: lift.resolve,

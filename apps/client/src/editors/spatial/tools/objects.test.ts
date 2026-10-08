@@ -327,6 +327,40 @@ describe("dentro i gruppi", () => {
     expect(rows().map((row) => row.dataset.key)).toEqual(["l1", "h", "g", "c", "i", "a"]);
     expect(formatIssues(checkAccessibility(host))).toBe("");
   });
+
+  it("I dà al contagocce la riga attiva, Maiusc il solo colore; il tasto passa se non c'è, o con Ctrl e Alt", () => {
+    const dropped: string[] = [];
+    let offered = true;
+    mount(NESTED, ["a"], {
+      onEyedropper: (key, colorOnly) => {
+        if (offered) dropped.push(`${colorOnly ? "color" : "look"} ${key}`);
+        return offered;
+      },
+    });
+    let outside = 0;
+    host.addEventListener("keydown", () => outside++);
+    tree.focus();
+    expect(active()?.dataset.key).toBe("a");
+    // Ctrl e le frecce portano alla riga da cui prendere, e la selezione
+    // resta.
+    key("ArrowUp", { ctrlKey: true });
+    key("ArrowUp", { ctrlKey: true });
+    expect(active()?.dataset.key).toBe("c");
+    expect(key("i").defaultPrevented).toBe(true);
+    // Col blocco delle maiuscole la lettera è grande, senza Maiusc.
+    key("I");
+    key("I", { shiftKey: true });
+    expect(dropped).toEqual(["look c", "look c", "color c"]);
+    expect(chosen).toEqual([]);
+    expect(outside).toBe(0);
+    // Ctrl+I e Alt+I sono dell'editor, e così I quando il contagocce non c'è.
+    expect(key("i", { ctrlKey: true }).defaultPrevented).toBe(false);
+    expect(key("i", { altKey: true }).defaultPrevented).toBe(false);
+    offered = false;
+    expect(key("i").defaultPrevented).toBe(false);
+    expect(dropped).toHaveLength(3);
+    expect(outside).toBe(3);
+  });
 });
 
 describe("tante righe", () => {

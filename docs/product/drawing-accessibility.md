@@ -30,8 +30,9 @@ un'icona e una parola, «Avviso» o «Nota», mai il solo colore.
 - **«Un testo si legge poco»** e **«Un tratto si vede poco»** (nota): il
   contrasto fra l'oggetto e ciò che ha sotto, la carta e le forme piene, è
   sotto 4,5:1 per un testo e sotto 3:1 per un testo grande, da 24 px o da
-  18,67 px in grassetto, e per un tratto a penna. La correzione mostra il
-  campione del colore e il contrasto che avrà: tiene la tinta e la saturazione
+  18,67 px in grassetto, e per un tratto a penna; un oggetto che usa un
+  [campione](drawing-colors.md) conta col colore del campione. La correzione
+  mostra il colore e il contrasto che avrà: tiene la tinta e la saturazione
   e cambia la luminosità quanto basta, verso il più scuro o il più chiaro, dove
   serve meno. Un testo giallo `#f0e442` sulla carta bianca, a 1,32:1, riceve
   **«Usa #81780a (4,54:1)»**: un ocra, non un nero. Per un oggetto quasi

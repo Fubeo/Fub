@@ -1,10 +1,10 @@
 // Il corpus del banco di fedeltà: scene piccole che insieme toccano ogni
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
 // dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, le
-// risorse di ogni tipo, le tavole con le loro carte, e gli estranei tipici
-// di Inkscape, Illustrator e Mermaid. Ogni scena è un disegno intero, grande
-// quanto la sua resa; quella che mostra una tavola sola è più grande, e la
-// sua tavola è grande quanto la resa.
+// risorse di ogni tipo, i campioni, le tavole con le loro carte, e gli
+// estranei tipici di Inkscape, Illustrator e Mermaid. Ogni scena è un
+// disegno intero, grande quanto la sua resa; quella che mostra una tavola
+// sola è più grande, e la sua tavola è grande quanto la resa.
 
 /// La misura di ogni scena, in pixel CSS.
 export const FIDELITY_SIZE = { width: 240, height: 160 } as const;
@@ -134,6 +134,23 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<rect id="o4" x="140" y="68" width="84" height="56" fill="url(#r3) #2f855a" clip-path="url(#r5)"/>'
       + '<rect id="o5" x="10" y="108" width="110" height="40" fill="#c53030" mask="url(#r7)"/>'
       + '<text id="o6" x="140" y="148" font-family="Inter" font-size="18" font-weight="700" fill="url(#r1) #2b6cb0" filter="url(#r9)"><tspan x="140" dy="0">Risorse</tspan></text></g>'),
+  },
+  {
+    // I campioni: un riempimento, un contorno, una linea orizzontale, il cui
+    // riquadro è alto zero, un riempimento ereditato da un gruppo, un testo,
+    // e in un livello bloccato un oggetto col ripiego di prima, che dipinge
+    // comunque il colore del campione.
+    id: "campioni",
+    text: scene('<defs id="fub-defs">'
+      + '<linearGradient id="s1" fub:role="swatch" fub:name="Blu mare" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>'
+      + '<linearGradient id="s2" fub:role="swatch" fub:name="Vermiglio" gradientUnits="userSpaceOnUse"><stop stop-color="#d55e00"/></linearGradient>'
+      + '<linearGradient id="s3" fub:role="swatch" fub:name="Prato" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#009e73"/></linearGradient>'
+      + `</defs>${LAYER}`
+      + '<rect id="o1" x="12" y="12" width="96" height="56" rx="8" fill="url(#s1) #0072b2" stroke="url(#s2) #d55e00" stroke-width="4"/>'
+      + '<line id="o2" x1="124" y1="20" x2="228" y2="20" stroke="url(#s2) #d55e00" stroke-width="6"/>'
+      + '<g id="g1" fill="url(#s3) #009e73"><circle id="o3" cx="146" cy="52" r="16"/><rect id="o4" x="174" y="36" width="50" height="32"/></g>'
+      + '<text id="o5" x="12" y="104" font-family="Inter" font-size="22" font-weight="700" fill="url(#s1) #0072b2"><tspan x="12" dy="0">Campioni</tspan></text></g>'
+      + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="o6" x="140" y="92" width="84" height="56" fill="url(#s3) #cc79a7"/></g>'),
   },
   {
     // Tre tavole: due con la carta, bianca e azzurra, una senza, che mostra

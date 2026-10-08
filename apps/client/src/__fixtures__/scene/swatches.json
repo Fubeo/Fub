@@ -1,0 +1,665 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        3201
+      ],
+      "utf16": [
+        0,
+        3201
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            211
+          ],
+          "utf16": [
+            0,
+            211
+          ]
+        },
+        "close": {
+          "bytes": [
+            3195,
+            3201
+          ],
+          "utf16": [
+            3195,
+            3201
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        214,
+        237
+      ],
+      "utf16": [
+        214,
+        237
+      ],
+      "indent": "  ",
+      "text": "Campioni"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        240,
+        2149
+      ],
+      "utf16": [
+        240,
+        2149
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            240,
+            260
+          ],
+          "utf16": [
+            240,
+            260
+          ]
+        },
+        "close": {
+          "bytes": [
+            2142,
+            2149
+          ],
+          "utf16": [
+            2142,
+            2149
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000001",
+      "bytes": [
+        265,
+        422
+      ],
+      "utf16": [
+        265,
+        422
+      ],
+      "indent": "    ",
+      "lifecycle": "swatch",
+      "swatch": {
+        "name": "Blu mare",
+        "color": "#0072b2"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        1
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000002",
+      "bytes": [
+        427,
+        585
+      ],
+      "utf16": [
+        427,
+        585
+      ],
+      "indent": "    ",
+      "lifecycle": "swatch",
+      "swatch": {
+        "name": "Vermiglio",
+        "color": "#d55e00"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000003",
+      "bytes": [
+        590,
+        815
+      ],
+      "utf16": [
+        590,
+        815
+      ],
+      "indent": "    ",
+      "title": "Il verde del bosco",
+      "lifecycle": "swatch",
+      "swatch": {
+        "name": "Verde & bosco",
+        "color": "#008000"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        3
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000004",
+      "bytes": [
+        820,
+        998
+      ],
+      "utf16": [
+        820,
+        998
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        4
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000005",
+      "bytes": [
+        1003,
+        1138
+      ],
+      "utf16": [
+        1003,
+        1138
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        5
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000006",
+      "bytes": [
+        1143,
+        1284
+      ],
+      "utf16": [
+        1143,
+        1284
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        6
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000007",
+      "bytes": [
+        1289,
+        1408
+      ],
+      "utf16": [
+        1289,
+        1408
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        7
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000008",
+      "bytes": [
+        1413,
+        1519
+      ],
+      "utf16": [
+        1413,
+        1519
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        8
+      ],
+      "tag": "radialGradient",
+      "role": "resource",
+      "id": "r00000009",
+      "bytes": [
+        1524,
+        1647
+      ],
+      "utf16": [
+        1524,
+        1647
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        9
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r0000000a",
+      "bytes": [
+        1652,
+        1772
+      ],
+      "utf16": [
+        1652,
+        1772
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        10
+      ],
+      "tag": "pattern",
+      "role": "resource",
+      "id": "r0000000b",
+      "bytes": [
+        1777,
+        1979
+      ],
+      "utf16": [
+        1777,
+        1979
+      ],
+      "indent": "    ",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        11
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r0000000c",
+      "bytes": [
+        1984,
+        2139
+      ],
+      "utf16": [
+        1984,
+        2139
+      ],
+      "indent": "    ",
+      "lifecycle": "swatch",
+      "swatch": {
+        "name": "Giallo",
+        "color": "#f0e442"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        2152,
+        2243
+      ],
+      "utf16": [
+        2152,
+        2243
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        2246,
+        3194
+      ],
+      "utf16": [
+        2246,
+        3194
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2246,
+            2286
+          ],
+          "utf16": [
+            2246,
+            2286
+          ]
+        },
+        "close": {
+          "bytes": [
+            3190,
+            3194
+          ],
+          "utf16": [
+            3190,
+            3194
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000001",
+      "bytes": [
+        2291,
+        2433
+      ],
+      "utf16": [
+        2291,
+        2433
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "line",
+      "role": "line",
+      "id": "o00000002",
+      "bytes": [
+        2438,
+        2545
+      ],
+      "utf16": [
+        2438,
+        2545
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000003",
+      "bytes": [
+        2550,
+        2721
+      ],
+      "utf16": [
+        2550,
+        2721
+      ],
+      "indent": "    ",
+      "lines": [
+        "Bosco rosso"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000004",
+      "bytes": [
+        2726,
+        2819
+      ],
+      "utf16": [
+        2726,
+        2819
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000005",
+      "bytes": [
+        2824,
+        2918
+      ],
+      "utf16": [
+        2824,
+        2918
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000006",
+      "bytes": [
+        2923,
+        3044
+      ],
+      "utf16": [
+        2923,
+        3044
+      ],
+      "indent": "    ",
+      "lines": [
+        "Sul blu"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000007",
+      "bytes": [
+        3049,
+        3187
+      ],
+      "utf16": [
+        3049,
+        3187
+      ],
+      "indent": "    ",
+      "lines": [
+        "Giallo"
+      ]
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Campioni",
+      "bytes": [
+        214,
+        237
+      ],
+      "utf16": [
+        214,
+        237
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Bosco rosso",
+        "bytes": [
+          2550,
+          2721
+        ],
+        "utf16": [
+          2550,
+          2721
+        ]
+      },
+      {
+        "text": "Sul blu",
+        "bytes": [
+          2923,
+          3044
+        ],
+        "utf16": [
+          2923,
+          3044
+        ]
+      },
+      {
+        "text": "Giallo",
+        "bytes": [
+          3049,
+          3187
+        ],
+        "utf16": [
+          3049,
+          3187
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": [],
+    "boards": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "boards": [],
+    "counts": {
+      "strokes": 0,
+      "shapes": 4,
+      "texts": 3,
+      "images": 0,
+      "links": 0,
+      "foreign": 0
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 40.0,
+      "y": 40.0,
+      "width": 600.0,
+      "height": 360.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S009",
+      "severity": "info",
+      "bytes": [
+        2923,
+        3044
+      ],
+      "utf16": [
+        2923,
+        3044
+      ],
+      "detail": "4.04"
+    },
+    {
+      "code": "S009",
+      "severity": "info",
+      "bytes": [
+        3049,
+        3187
+      ],
+      "utf16": [
+        3049,
+        3187
+      ],
+      "detail": "1.32"
+    }
+  ]
+}

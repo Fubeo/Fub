@@ -11,7 +11,9 @@ import {
   type ActionState,
   type FieldId,
   type FieldState,
+  type FieldSwatch,
   type NumberState,
+  type PaintContrast,
   type Properties,
   type PropertiesView,
   type SectionId,
@@ -19,6 +21,7 @@ import {
 } from "./properties";
 import { lengthUnits, PERCENT_UNITS } from "./quantity";
 import type { PaintSample } from "./resources";
+import type { ColorsView } from "./swatches-panel";
 
 let host: HTMLElement;
 let life: Lifetime;
@@ -36,6 +39,13 @@ let state: {
   opacity: number;
   fill: string | null;
   sample: PaintSample | null;
+  /// Il contrasto del riempimento con la carta, se si misura.
+  contrast: PaintContrast | null;
+  /// I campioni del documento e i colori recenti, se il pannello li sa.
+  swatches: FieldSwatch[] | null;
+  recent: string[] | null;
+  /// La sezione «Colori del documento», se c'è.
+  colors: ColorsView | null;
   dash: string | null;
   anchor: string | null;
   bold: boolean | null;
@@ -67,7 +77,13 @@ function view(): PropertiesView {
     width: { ...length(state.width, "Larghezza"), min: 0.01 },
     ratio: { kind: "press", label: "Mantieni le proporzioni", on: state.ratio },
     opacity: { kind: "number", label: "Opacità", value: state.opacity, unit: "%", units: PERCENT_UNITS, relative: false, places: 0, min: 0, max: 100 },
-    fill: { kind: "paint", label: "Riempimento", value: state.fill, ...(state.sample === null ? {} : { sample: state.sample }) },
+    fill: {
+      kind: "paint",
+      label: "Riempimento",
+      value: state.fill,
+      ...(state.sample === null ? {} : { sample: state.sample }),
+      ...(state.contrast === null ? {} : { contrast: state.contrast }),
+    },
     dash: {
       kind: "choice",
       label: "Tratteggio",
@@ -110,7 +126,25 @@ function view(): PropertiesView {
     });
   }
   const shown = state.only === null ? fields : Object.fromEntries(state.only.map((id) => [id, fields[id]]));
-  return { key: state.key, subject: "Rettangolo", editable: state.editable, fields: shown, actions: state.actions, attributes: false };
+  return {
+    key: state.key,
+    subject: "Rettangolo",
+    editable: state.editable,
+    fields: shown,
+    actions: state.actions,
+    attributes: false,
+    ...(state.swatches === null ? {} : { swatches: state.swatches }),
+    ...(state.recent === null ? {} : { recent: state.recent }),
+    ...(state.colors === null ? {} : { colors: state.colors }),
+  };
+}
+
+/// Come il pannello mostra il colore `value`: un campione del documento col
+/// suo nome e il suo colore.
+function sampleOf(value: string): PaintSample | null {
+  const id = /^url\(#([^)\s]+)\)/.exec(value)?.[1];
+  const swatch = state.swatches?.find((each) => each.id === id);
+  return swatch === undefined ? null : { kind: "swatch", image: null, name: swatch.name, color: swatch.color };
 }
 
 /// Un cambio come l'editor lo scrive: il valore, e il pannello che lo segue.
@@ -120,7 +154,10 @@ function change(id: FieldId, value: number | string | boolean): string | null {
   if (id === "x") state.x = value as number;
   else if (id === "width") state.width = value as number;
   else if (id === "opacity") state.opacity = value as number;
-  else if (id === "fill") state.fill = value as string;
+  else if (id === "fill") {
+    state.fill = value as string;
+    state.sample = sampleOf(value as string);
+  }
   else if (id === "dash") state.dash = value as string;
   else if (id === "anchor") state.anchor = value as string;
   else if (id === "emphasis") {
@@ -145,6 +182,15 @@ function mount(): Properties {
       return refusal;
     },
     onSection: (id, open) => calls.push(`section ${id} ${open ? "open" : "closed"}`),
+    colors: {
+      onApply: (choice, target) => (calls.push(`apply ${choice.value} ${target ?? "drawing"}`), null),
+      onCreate: (name, color, link) => (calls.push(`create ${name} ${color} ${link}`), null),
+      onLink: (id) => (calls.push(`link ${id}`), null),
+      onRename: (id, name) => (calls.push(`rename ${id} ${name}`), null),
+      onRecolor: (id, color) => (calls.push(`recolor ${id} ${color}`), null),
+      onDelete: (id) => (calls.push(`delete ${id}`), null),
+      onSelect: (value) => (calls.push(`select ${value}`), null),
+    },
     announce: (text) => announced.push(text),
     onLeave: () => calls.push("leave"),
   });
@@ -190,6 +236,10 @@ beforeEach(() => {
     opacity: 100,
     fill: "#0072b2",
     sample: null,
+    contrast: null,
+    swatches: null,
+    recent: null,
+    colors: null,
     dash: "solid",
     anchor: "start",
     bold: null,
@@ -462,6 +512,184 @@ describe("i colori", () => {
   });
 });
 
+describe("i campioni del documento nei colori", () => {
+  const BRAND: FieldSwatch = { id: "ra", name: "Blu marca", color: "#0072b2" };
+  const PAPER: FieldSwatch = { id: "rb", name: "Fondo", color: "#f5f5dc" };
+
+  beforeEach(() => {
+    state.swatches = [BRAND, PAPER];
+    state.fill = "url(#ra) #0072b2";
+    state.sample = sampleOf(state.fill);
+  });
+
+  const chipOf = (): HTMLElement => field("fill").querySelector<HTMLElement>(".draw-swatch-frame")!;
+  const colorOf = (): string => field("fill").querySelector<HTMLElement>(".draw-swatch")!.style.getPropertyValue("--swatch");
+
+  it("un campione si vede col suo nome, la forma e il colore del suo colore", () => {
+    mount();
+    expect(input("fill").value).toBe("Blu marca");
+    expect([chipOf().dataset.shape, colorOf()]).toEqual(["square", "#0072b2"]);
+    expect(field("fill").querySelector<HTMLInputElement>(".draw-properties-picker")!.value).toBe("#0072b2");
+  });
+
+  it("si scrive col suo nome, senza badare alle maiuscole; il codice scrive il colore, staccato dal campione", () => {
+    mount();
+    const fill = input("fill");
+    // Lo stesso campione non cambia niente.
+    write(fill, "BLU MARCA");
+    press(fill, "Enter");
+    expect(calls).toEqual([]);
+    expect(fill.value).toBe("Blu marca");
+    // Mentre si scrive, il campione segue.
+    write(fill, "fondo");
+    expect([chipOf().dataset.shape, colorOf()]).toEqual(["ring", "#f5f5dc"]);
+    press(fill, "Enter");
+    expect(calls).toEqual(["fill=url(#rb) #f5f5dc"]);
+    expect(fill.value).toBe("Fondo");
+    write(fill, "#f5f5dc");
+    press(fill, "Enter");
+    expect(calls).toEqual(["fill=url(#rb) #f5f5dc", "fill=#f5f5dc"]);
+    expect(fill.value).toBe("#f5f5dc");
+  });
+
+  it("il nome di un campione vale prima del nome di un colore", () => {
+    state.swatches = [BRAND, { id: "rc", name: "Red", color: "#e30613" }];
+    mount();
+    write(input("fill"), "red");
+    press(input("fill"), "Enter");
+    expect(calls).toEqual(["fill=url(#rc) #e30613"]);
+  });
+
+  it("ciò che non è niente lo dice, coi campioni fra ciò che si può scrivere", () => {
+    mount();
+    write(input("fill"), "rossiccio");
+    press(input("fill"), "Enter");
+    expect(calls).toEqual([]);
+    expect(error("fill").textContent).toBe("Scrivi un colore: un codice come #0072b2, un nome come red, il nome di un campione, o «nessuno».");
+    // Esc torna al campione, col suo colore.
+    press(input("fill"), "Escape");
+    expect(input("fill").value).toBe("Blu marca");
+    expect([chipOf().dataset.shape, colorOf()]).toEqual(["square", "#0072b2"]);
+  });
+
+  it("il menu ha nessuno, i campioni col loro codice, la tavolozza e i recenti che non ne sono", () => {
+    state.recent = ["#3a7bd5", "#0072b2"];
+    mount();
+    field("fill").querySelector<HTMLButtonElement>(".draw-properties-chip")!.click();
+    const items = [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")];
+    expect(items.map((item) => item.querySelector(".menu-label")!.textContent)).toEqual([
+      "Nessuno",
+      "Blu marca",
+      "Fondo",
+      "Nero",
+      "Blu",
+      "Vermiglio",
+      "Verde",
+      "Porpora",
+      "Arancione",
+      "Azzurro",
+      "Giallo",
+      "#3a7bd5",
+    ]);
+    expect(items[1]!.querySelector(".menu-description")!.textContent).toBe("Campione #0072b2");
+    // Il campione di adesso, non il blu scritto, che ha lo stesso colore.
+    expect(items.filter((item) => item.getAttribute("aria-checked") === "true")).toEqual([items[1]]);
+    items[2]!.click();
+    expect(calls).toEqual(["fill=url(#rb) #f5f5dc"]);
+  });
+});
+
+describe("il contrasto con la carta", () => {
+  const line = (): HTMLElement => field("fill").querySelector<HTMLElement>(".draw-properties-contrast")!;
+
+  it("per una forma dice il rapporto e se basta; il campo lo ha fra le sue descrizioni", () => {
+    state.fill = "#000000";
+    state.contrast = { paper: "#ffffff", alpha: 1, text: false };
+    mount();
+    expect(line().hidden).toBe(false);
+    expect(line().textContent).toBe("Contrasto con la carta 21:1: basta per una forma, che chiede 3:1.");
+    expect(input("fill").getAttribute("aria-describedby")!.split(" ")).toContain(line().id);
+    // Mentre si scrive segue il colore; uno che non si legge lascia quello
+    // di adesso.
+    write(input("fill"), "#ffffff");
+    expect(line().textContent).toBe("Contrasto con la carta 1:1: poco per una forma, che chiede 3:1.");
+    write(input("fill"), "boh");
+    expect(line().textContent).toBe("Contrasto con la carta 21:1: basta per una forma, che chiede 3:1.");
+  });
+
+  it("per un testo dice il livello del testo normale e del grande, per difetto", () => {
+    state.fill = "#767676";
+    state.contrast = { paper: "#ffffff", alpha: 1, text: true };
+    mount();
+    expect(line().textContent).toBe("Contrasto con la carta 4,54:1. Testo normale: AA; testo grande: AAA.");
+    write(input("fill"), "#000000");
+    expect(line().textContent).toBe("Contrasto con la carta 21:1. Testo normale: AAA; testo grande: AAA.");
+    write(input("fill"), "#ffffff");
+    expect(line().textContent).toBe("Contrasto con la carta 1:1. Testo normale: insufficiente; testo grande: insufficiente.");
+  });
+
+  it("conta l'opacità, e un campione col suo colore; non il nessuno né il misto", () => {
+    state.fill = "#000000";
+    state.contrast = { paper: "#ffffff", alpha: 0, text: false };
+    mount();
+    expect(line().textContent).toBe("Contrasto con la carta 1:1: poco per una forma, che chiede 3:1.");
+    state.swatches = [{ id: "ra", name: "Notte", color: "#000000" }];
+    state.fill = "url(#ra) #000000";
+    state.sample = sampleOf(state.fill);
+    state.contrast = { paper: "#ffffff", alpha: 1, text: false };
+    panel.update(view());
+    expect(line().textContent).toBe("Contrasto con la carta 21:1: basta per una forma, che chiede 3:1.");
+    state.fill = "none";
+    state.sample = null;
+    panel.update(view());
+    expect(line().hidden).toBe(true);
+    expect(input("fill").hasAttribute("aria-describedby")).toBe(false);
+    state.fill = null;
+    panel.update(view());
+    expect(line().hidden).toBe(true);
+  });
+
+  it("senza la carta non si misura", () => {
+    mount();
+    expect(line().hidden).toBe(true);
+  });
+});
+
+describe("la sezione «Colori del documento»", () => {
+  const COLORS: ColorsView = {
+    swatches: [{ id: "ra", name: "Blu marca", color: "#0072b2", uses: 3 }],
+    used: [{ color: "#000000", uses: 2 }],
+    hidden: 0,
+    recent: [],
+    targets: ["fill"],
+    current: { fill: "#0072b2" },
+    drawing: "#000000",
+    drawingSwatch: null,
+  };
+
+  it("c'è quando il livello la offre, dopo l'aspetto, e i suoi gesti vanno all'editor", () => {
+    mount();
+    expect(section("colors").hidden).toBe(true);
+    state.colors = COLORS;
+    panel.update(view());
+    const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+    expect(visible).toEqual(["place", "look", "colors", "text", "document", "view"]);
+    expect(toggle("colors").textContent).toBe("Colori del documento");
+    expect(section("colors").querySelector(".draw-swatches")).not.toBeNull();
+    section("colors").querySelector<HTMLButtonElement>('.draw-swatches-chip[data-key="ra"]')!.click();
+    expect(calls).toEqual(["apply url(#ra) #0072b2 fill"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("si chiude come le altre, e lo dice all'editor", () => {
+    state.colors = COLORS;
+    mount();
+    toggle("colors").click();
+    expect(calls).toEqual(["section colors closed"]);
+    expect(section("colors").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
+  });
+});
+
 describe("le scelte e i pulsanti", () => {
   it("una scelta parte quando si fa", () => {
     mount();
@@ -578,7 +806,7 @@ describe("«Trasforma»", () => {
     expect(input("turn").value).toBe("15");
     press(input("turn"), "ArrowUp");
     expect(input("turn").value).toBe("16");
-    host.querySelector<HTMLButtonElement>(".draw-properties-apply")!.click();
+    host.querySelector<HTMLButtonElement>('[data-section="transform"] .draw-properties-apply')!.click();
     expect(calls).toEqual(["transform 15 150 100 0 0", "transform 16 150 100 0 0"]);
   });
 
@@ -586,7 +814,7 @@ describe("«Trasforma»", () => {
     state.transform = true;
     mount();
     write(input("skewY"), "10mm");
-    host.querySelector<HTMLButtonElement>(".draw-properties-apply")!.click();
+    host.querySelector<HTMLButtonElement>('[data-section="transform"] .draw-properties-apply')!.click();
     expect(calls).toEqual([]);
     expect(error("skewY").hidden).toBe(false);
     expect(document.activeElement).toBe(input("skewY"));

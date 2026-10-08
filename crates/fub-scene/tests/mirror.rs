@@ -25,6 +25,10 @@
 //!   ogni tipo di risorsa, private e condivise, e gli oggetti che le usano coi
 //!   riempimenti, i marcatori, i ritagli, le maschere e i filtri; una risorsa
 //!   estranea, un riferimento del tipo sbagliato e uno a un id che manca;
+//! - `swatches`: un disegno coi campioni del documento (formato della scena,
+//!   risorse): come li scrive FubDraw e come li scrive Inkscape, uno che
+//!   nessuno usa, uno nel contenuto di un motivo, e una sfumatura per ogni
+//!   modo di dirsi campione senza esserlo;
 //! - `text`: un disegno col testo in area e su tracciato (formato della scena,
 //!   testo): due paragrafi in una cornice, con le righe che vanno a capo fra
 //!   le parole e dentro una parola, una larghezza che non si legge, due testi
@@ -53,7 +57,9 @@ use std::path::PathBuf;
 
 use common::check_lossless;
 use fub_scene::ink::INK_MAX_SAMPLES;
-use fub_scene::{read, Ink, Item, Role, Sample, Scale, Scene, FUB_NS, MAX_ELEMENTS, SVG_NS};
+use fub_scene::{
+    read, Ink, Item, Lifecycle, Role, Sample, Scale, Scene, Swatch, FUB_NS, MAX_ELEMENTS, SVG_NS,
+};
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
@@ -1002,6 +1008,206 @@ fn resources() -> String {
     document(&root, "\n")
 }
 
+/// Un campione del documento come lo scrive FubDraw.
+fn swatch(id: &str, name: &str, color: &str) -> El {
+    El::new("linearGradient")
+        .a("id", id)
+        .a("fub:role", "swatch")
+        .a("fub:name", name)
+        .a("gradientUnits", "userSpaceOnUse")
+        .child(El::new("stop").a("stop-color", color))
+}
+
+fn swatches() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(swatch("r00000001", "Blu mare", "#0072b2"))
+        // Un campione che nessuno usa resta.
+        .child(swatch("r00000002", "Vermiglio", "#d55e00"))
+        // Come lo scrive Inkscape: l'`offset`, l'opacità piena, un titolo,
+        // un attributo suo e un colore col nome.
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000003")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Verde & bosco")
+                .a("inkscape:swatch", "solid")
+                .child(El::new("title").text("Il verde del bosco"))
+                .child(
+                    El::new("stop")
+                        .a("offset", 0)
+                        .a("stop-color", "green")
+                        .a("stop-opacity", 1),
+                ),
+        )
+        // Sfumature che si dicono campioni e non lo sono: risorse senza
+        // ciclo di vita. Due `stop`, le coordinate, la trasparenza, un nome
+        // vuoto, nessun nome, una sfumatura radiale, un `stop` senza colore.
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000004")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Due")
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#000000"))
+                .child(El::new("stop").a("offset", 1).a("stop-color", "#ffffff")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000005")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Coordinate")
+                .a("x2", 1)
+                .child(El::new("stop").a("stop-color", "#009e73")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000006")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Velo")
+                .child(
+                    El::new("stop")
+                        .a("stop-color", "#56b4e9")
+                        .a("stop-opacity", "0.5"),
+                ),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000007")
+                .a("fub:role", "swatch")
+                .a("fub:name", " ")
+                .child(El::new("stop").a("stop-color", "#e69f00")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000008")
+                .a("fub:role", "swatch")
+                .child(El::new("stop").a("stop-color", "#f0e442")),
+        )
+        .child(
+            El::new("radialGradient")
+                .a("id", "r00000009")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Tondo")
+                .child(El::new("stop").a("stop-color", "#cc79a7")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r0000000a")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Senza colore")
+                .child(El::new("stop").a("offset", 0)),
+        )
+        // Un motivo che usa un campione nel suo contenuto.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000b")
+                .a("fub:role", "shared")
+                .a("x", 0)
+                .a("y", 0)
+                .a("width", 20)
+                .a("height", 20)
+                .a("patternUnits", "userSpaceOnUse")
+                .child(
+                    El::new("rect")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 10)
+                        .a("height", 10)
+                        .a("fill", "url(#r00000001) #0072b2"),
+                ),
+        )
+        // Un campione chiaro, per il contrasto (S009).
+        .child(swatch("r0000000c", "Giallo", "#f0e442"));
+    let root = svg(800, 600)
+        .a(
+            "xmlns:inkscape",
+            "http://www.inkscape.org/namespaces/inkscape",
+        )
+        .child(El::new("title").text("Campioni"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000001")
+                        .a("x", 40)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r00000001) #0072b2")
+                        .a("stroke", "url(#r00000003) #008000")
+                        .a("stroke-width", 4),
+                )
+                // Una linea orizzontale: il suo riquadro non ha altezza, e il
+                // campione si vede lo stesso.
+                .child(
+                    El::new("line")
+                        .a("id", "o00000002")
+                        .a("x1", 40)
+                        .a("y1", 220)
+                        .a("x2", 400)
+                        .a("y2", 220)
+                        .a("stroke", "url(#r00000001) #0072b2")
+                        .a("stroke-width", 6),
+                )
+                .child(
+                    El::new("text")
+                        .a("id", "o00000003")
+                        .a("x", 40)
+                        .a("y", 320)
+                        .a("fill", "url(#r00000003) #008000")
+                        .a("font-size", 32)
+                        .child(
+                            El::new("tspan")
+                                .a("x", 40)
+                                .a("dy", 0)
+                                .markup(r##"Bosco <tspan fill="#d55e00">rosso</tspan>"##),
+                        ),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000004")
+                        .a("x", 440)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r0000000b) #0072b2"),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000005")
+                        .a("x", 440)
+                        .a("y", 200)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r00000004) #808080"),
+                )
+                // Il nero sul blu del campione, che S009 legge come fondo.
+                .child(
+                    El::new("text")
+                        .a("id", "o00000006")
+                        .a("x", 60)
+                        .a("y", 120)
+                        .a("fill", "#000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 60).a("dy", 0).text("Sul blu")),
+                )
+                // Un ripiego rimasto indietro: si vede il giallo del campione,
+                // e S009 misura quello.
+                .child(
+                    El::new("text")
+                        .a("id", "o00000007")
+                        .a("x", 440)
+                        .a("y", 400)
+                        .a("fill", "url(#r0000000c) #000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 440).a("dy", 0).text("Giallo")),
+                ),
+        );
+    document(&root, "\n")
+}
+
 fn text() -> String {
     let defs = El::new("defs")
         .a("id", "fub-defs")
@@ -1317,6 +1523,62 @@ fn resources_are_read_with_their_users() {
     assert_eq!(codes, [S002, S002, S014]);
     let broken = scene.diagnostics.iter().find(|d| d.code == S014).unwrap();
     assert_eq!(broken.detail.as_deref(), Some("fill #r0000000z"));
+}
+
+#[test]
+fn swatches_are_read_with_their_names_and_colors() {
+    let scene = fixture("swatches", &swatches());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    let swatch = |at: usize| {
+        let item = element(&[1, at]).unwrap();
+        assert_eq!(item.role, Role::Resource, "{at}");
+        (item.lifecycle, item.swatch.clone())
+    };
+    let named = |name: &str, color: &str| {
+        (
+            Some(Lifecycle::Swatch),
+            Some(Swatch {
+                name: name.to_owned(),
+                color: color.to_owned(),
+            }),
+        )
+    };
+    assert_eq!(swatch(0), named("Blu mare", "#0072b2"));
+    assert_eq!(swatch(1), named("Vermiglio", "#d55e00"));
+    assert_eq!(swatch(2), named("Verde & bosco", "#008000"));
+    // Le sfumature che non hanno la forma di un campione sono risorse senza
+    // ciclo di vita.
+    for at in 3..10 {
+        assert_eq!(swatch(at), (None, None), "{at}");
+    }
+    assert_eq!(
+        element(&[1, 10]).and_then(|e| e.lifecycle),
+        Some(Lifecycle::Shared)
+    );
+    // Chi usa un campione è modificabile, anche la linea senza altezza.
+    for at in 0..5 {
+        assert!(element(&[3, at]).is_some(), "{at}");
+    }
+    // S009 legge il colore del campione: il blu sotto il nero, e il giallo
+    // del testo anche col ripiego nero rimasto indietro.
+    let contrasts: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    assert_eq!(
+        contrasts,
+        [
+            (fub_scene::Code::S009, Some("4.04")),
+            (fub_scene::Code::S009, Some("1.32"))
+        ]
+    );
 }
 
 #[test]
@@ -1897,6 +2159,7 @@ fn the_folder_holds_only_what_this_test_writes() {
         "crlf-bom",
         "doctype",
         "resources",
+        "swatches",
         "text",
         "boards",
     ]
