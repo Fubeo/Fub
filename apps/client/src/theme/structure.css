@@ -2360,6 +2360,9 @@ html, body, #app {
   width: 1em;
   height: 1em;
 }
+.draw-access-detail > .draw-access-swatch {
+  vertical-align: middle;
+}
 .draw-access-describe {
   box-sizing: border-box;
   flex: 1 1 12rem;
@@ -2689,11 +2692,14 @@ textarea.draw-properties-input {
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
   background-size: 6px 6px;
 }
-/* Una sfumatura e un motivo del disegno: un quadrato dagli angoli tondi,
-   che non è una forma della tavolozza. I punti della sfumatura e la
-   scacchiera del motivo li dipinge la pelle. */
+/* Una sfumatura, una campitura e un motivo del disegno: un quadrato dagli
+   angoli tondi, che non è una forma della tavolozza. I punti della
+   sfumatura, le righe della campitura e la scacchiera del motivo li dipinge
+   la pelle. */
 .draw-swatch-frame[data-shape="gradient"],
 .draw-swatch-frame[data-shape="gradient"] > .draw-swatch,
+.draw-swatch-frame[data-shape="hatch"],
+.draw-swatch-frame[data-shape="hatch"] > .draw-swatch,
 .draw-swatch-frame[data-shape="pattern"],
 .draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
   clip-path: inset(6% round 4px);
@@ -2781,6 +2787,27 @@ textarea.draw-properties-input {
 }
 .draw-gradient-remove {
   grid-column: 3;
+}
+/* La campitura prende la riga della sezione: la nota, il menu del tipo e,
+   quando c'è una campitura da regolare, i suoi campi in due colonne, con
+   i colori, il nome e i comandi di un motivo del documento sulla riga
+   intera. */
+.draw-hatch {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-hatch-fields,
+.draw-hatch-motif {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+}
+.draw-hatch-fields > .draw-properties-error,
+.draw-hatch-motif > .draw-properties-error,
+.draw-hatch-motif > .draw-button {
+  grid-column: 1 / -1;
 }
 /* Gli effetti prendono la riga della sezione: sotto la nota, una riga per
    effetto, coi comandi sotto quando gli oggetti ne hanno di diversi o un

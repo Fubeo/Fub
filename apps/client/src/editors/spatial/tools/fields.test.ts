@@ -81,6 +81,7 @@ const input = (parts: Partial<FieldsInput> & { readonly level?: Level } = {}): F
     paper: "#ffffff",
     colors: null,
     gradient: null,
+    hatch: null,
     ...rest,
   };
 };

@@ -52,11 +52,13 @@ sceglie anche nell'altra.
 
 - **Tipo**: Pieno, Lineare o Radiale. Da un colore pieno, Lineare e Radiale
   ne fanno la dissolvenza, dal colore pieno al trasparente; da un campione,
-  dal suo colore; senza colore, o da un motivo, una sfumatura dal bianco al
-  nero. Una lineare nasce da sinistra a destra a metà altezza, una radiale
-  nel cerchio o nell'ellisse dentro il riquadro dell'oggetto. Cambiare tipo
-  tiene il posto: il mezzo della linea diventa il centro, e viceversa.
-  Pieno torna al colore del primo punto, e la sfumatura se ne va.
+  dal suo colore; da una [campitura](drawing-patterns.md), dal suo fondo, o
+  dal colore delle righe se non ne ha; da un motivo, dal suo colore di
+  ripiego; senza colore, una sfumatura dal bianco al nero. Una lineare
+  nasce da sinistra a destra a metà altezza, una radiale nel cerchio o
+  nell'ellisse dentro il riquadro dell'oggetto. Cambiare tipo tiene il
+  posto: il mezzo della linea diventa il centro, e viceversa. Pieno torna
+  al colore del primo punto, e la sfumatura se ne va.
 - **La barra dei punti** mostra la sfumatura su una scacchiera, che fa
   vedere la trasparenza, coi punti sotto. Un clic sulla barra aggiunge un
   punto del colore che si vede lì; un punto si trascina lungo la barra e,

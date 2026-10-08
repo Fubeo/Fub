@@ -33,13 +33,14 @@ import { apply, compose, invert, IDENTITY, translate, type Matrix, type Point } 
 import type { DocumentModel, ElementPart, LeafNode } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
-import { fraction, length, opacity as parseOpacity, paint, paintReference, transform as parseTransform, trim } from "../scene/values";
+import { fraction, length, opacity as parseOpacity, paint, paintReference, transform as parseTransform, trim, type Paint } from "../scene/values";
 import type { DrawKey } from "../strings";
 import { elemOf, plainAttributes } from "./arrange";
 import type { NewIds } from "./edit";
 import { geometryBox, type Unit } from "./hit";
 import { paintEachOps, paintParts, type PaintPart, type Restyled } from "./look";
 import type { Measure } from "./measure";
+import { hatchOf } from "./hatches";
 import { customColor } from "./palette";
 import { gradientOf, homeOf, paintCode, resourcesOf, usersOf, type Home } from "./resources";
 
@@ -98,6 +99,10 @@ export interface Painted extends PaintPart {
   /// Il colore pieno che mostra, `#rrggbb` minuscolo: il suo o quello di un
   /// campione; `null` per una sfumatura, un motivo o nessun colore.
   readonly solid: string | null;
+  /// Il colore da cui ne nasce una, `#rrggbb` minuscolo: quello pieno, il
+  /// fondo di una campitura o, senza fondo, il colore delle sue righe, il
+  /// ripiego di un motivo; `null` per una sfumatura o nessun colore.
+  readonly base: string | null;
 }
 
 /// Una sfumatura come la usa una parte.
@@ -215,8 +220,14 @@ export function paintedParts(model: DocumentModel, units: readonly Unit[], chann
     const used = paintReference(part.value);
     const node = used === null ? undefined : resources.get(used.id);
     const read = node === undefined ? null : lookOf(node);
-    if (used === null) return { ...part, matrix, box, gradient: null, solid: customColor(part.value) };
-    if (node === undefined || read === null) return { ...part, matrix, box, gradient: null, solid: node?.details?.swatch?.color ?? null };
+    if (used === null) {
+      const solid = customColor(part.value);
+      return { ...part, matrix, box, gradient: null, solid, base: solid };
+    }
+    if (node === undefined || read === null) {
+      const solid = node?.details?.swatch?.color ?? null;
+      return { ...part, matrix, box, gradient: null, solid, base: solid ?? patternBase(node, used.fallback) };
+    }
     const other = part.own.get(part.name === "fill" ? "stroke" : "fill");
     let own = node.details?.lifecycle === "private" && paintReference(part.own.get(part.name) ?? "")?.id === used.id && (other === undefined || paintReference(other)?.id !== used.id);
     if (own) {
@@ -224,8 +235,18 @@ export function paintedParts(model: DocumentModel, units: readonly Unit[], chann
       own = users.get(used.id) === 1;
     }
     const placed = read.look.stops.length < 2 ? defaultPlace(read.look.kind, matrix, box) : placeOf(node, matrix, box);
-    return { ...part, matrix, box, gradient: { id: used.id, look: read.look, place: placed, parts: read.parts, own }, solid: null };
+    return { ...part, matrix, box, gradient: { id: used.id, look: read.look, place: placed, parts: read.parts, own }, solid: null, base: null };
   });
+}
+
+/// Il colore da cui nasce una sfumatura per chi mostra la risorsa `node`,
+/// che non è un colore, col ripiego `fallback`: il fondo di una campitura,
+/// il colore che l'oggetto aveva, o il colore delle righe se non ne ha uno;
+/// il ripiego, il colore medio di un motivo; `null` per nessuno.
+function patternBase(node: LeafNode | undefined, fallback: Paint | null): string | null {
+  const hatch = node === undefined ? null : hatchOf(node);
+  if (hatch !== null) return hatch.background ?? hatch.color;
+  return fallback === null || fallback === "none" ? null : paintCode(fallback);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +263,10 @@ export interface GradientView {
   /// per nessun colore, un motivo o una sfumatura che non si legge; `null`
   /// se misto.
   readonly kind: GradientKind | "color" | "other" | null;
+  /// Vero se una parte senza sfumatura ha un colore da cui ne nasce una:
+  /// Lineare e Radiale ne fanno la dissolvenza, e non una sfumatura dal
+  /// bianco al nero.
+  readonly based: boolean;
   /// La sfumatura comune a parte dove sta; `null` se misto, o senza.
   readonly look: GradientLook | null;
   /// L'angolo comune della linea, o del primo raggio di una radiale, delle
@@ -261,7 +286,7 @@ export function sameLook(a: GradientLook, b: GradientLook): boolean {
 
 /// Le sfumature di `painted`.
 export function gradientView(painted: readonly Painted[]): GradientView {
-  if (painted.length === 0) return { count: 0, gradients: 0, kind: null, look: null, angle: null };
+  if (painted.length === 0) return { count: 0, gradients: 0, kind: null, based: false, look: null, angle: null };
   const first = painted[0]!.gradient;
   const kinds = new Set(painted.map((part) => part.gradient?.look.kind ?? (part.solid === null ? "other" : "color")));
   const kind = kinds.size === 1 ? [...kinds][0]! : null;
@@ -272,7 +297,8 @@ export function gradientView(painted: readonly Painted[]): GradientView {
     return placed === null ? null : Math.round(placeAngle(placed) * 100) / 100;
   });
   const angle = angles.length > 0 && angles.every((each) => each !== null && each === angles[0]) ? angles[0]! : null;
-  return { count: painted.length, gradients: shaded.length, kind, look, angle };
+  const based = painted.some((part) => part.gradient === null && part.base !== null);
+  return { count: painted.length, gradients: shaded.length, kind, based, look, angle };
 }
 
 /// Una sfumatura sul foglio: le parti che la mostrano uguale e nello stesso
@@ -709,18 +735,8 @@ export type GradientChange =
 /// `place` `null` le coordinate restano quelle che sono.
 type Next = { readonly color: string } | { readonly look: GradientLook; readonly place: GradientPlace | null };
 
-/// Il colore di `part` da cui nasce una sfumatura: il suo, quello di un
-/// campione, il ripiego di un motivo; `null` per nessuno.
-function baseColor(part: Painted, resources: ReadonlyMap<string, LeafNode>): string | null {
-  const used = paintReference(part.value);
-  if (used === null) return customColor(part.value);
-  const swatch = resources.get(used.id)?.details?.swatch;
-  if (swatch !== undefined) return swatch.color;
-  return used.fallback === null || used.fallback === "none" ? null : paintCode(used.fallback);
-}
-
 /// Ciò che `part` diventa con `change`; `null` se resta com'è.
-function nextOf(part: Painted, change: GradientChange, resources: ReadonlyMap<string, LeafNode>): Next | null {
+function nextOf(part: Painted, change: GradientChange): Next | null {
   const used = part.gradient;
   const fresh = (kind: GradientKind, stops: readonly GradientStop[]): Next | null => {
     const placed = defaultPlace(kind, part.matrix, part.box);
@@ -728,7 +744,7 @@ function nextOf(part: Painted, change: GradientChange, resources: ReadonlyMap<st
   };
   if ("kind" in change) {
     if (change.kind === "color") return used === null ? null : { color: used.look.stops[0]!.color };
-    if (used === null) return fresh(change.kind, fadeOf(baseColor(part, resources)));
+    if (used === null) return fresh(change.kind, fadeOf(part.base));
     if (used.look.kind === change.kind) return null;
     const placed = (used.place === null ? null : placeAs(used.place, change.kind)) ?? defaultPlace(change.kind, part.matrix, part.box);
     return placed === null ? null : { look: { ...used.look, kind: change.kind }, place: placed };
@@ -741,12 +757,12 @@ function nextOf(part: Painted, change: GradientChange, resources: ReadonlyMap<st
   if ("spread" in change) return used === null ? null : { look: { ...used.look, spread: change.spread }, place: used.place };
   if ("angle" in change) return used === null || used.place === null ? null : { look: used.look, place: placeTurned(used.place, change.angle) };
   if ("fade" in change) {
-    const stops = fadeOf(used === null ? baseColor(part, resources) : used.look.stops[0]!.color);
+    const stops = fadeOf(used === null ? part.base : used.look.stops[0]!.color);
     return used === null ? fresh("linear", stops) : { look: { ...used.look, stops }, place: used.place };
   }
   if ("reverse" in change) return used === null ? null : { look: { ...used.look, stops: reversedStops(used.look.stops) }, place: used.place };
   const kind = change.place.kind;
-  const look = change.look ?? used?.look ?? { kind, stops: fadeOf(baseColor(part, resources)), spread: "pad" as const };
+  const look = change.look ?? used?.look ?? { kind, stops: fadeOf(part.base), spread: "pad" as const };
   return { look: { kind, stops: sortedStops(look.stops), spread: look.spread }, place: change.place };
 }
 
@@ -935,7 +951,7 @@ type Plan =
 /// Ciò che `part` mostra con `change`; `null` se resta com'è, o se la
 /// sfumatura non ci sta.
 function planOf(part: Painted, change: GradientChange, resources: ReadonlyMap<string, LeafNode>): Plan | null {
-  const next = nextOf(part, change, resources);
+  const next = nextOf(part, change);
   if (next === null || "color" in next) return next;
   const used = part.gradient;
   const node = used === null ? undefined : resources.get(used.id);

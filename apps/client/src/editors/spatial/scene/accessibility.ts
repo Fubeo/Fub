@@ -1,6 +1,7 @@
 // I controlli di §12 su come il disegno si legge: S009, il contrasto fra un
 // tratto a penna o un testo e ciò che ha sotto; S012, un'immagine senza
-// descrizione; S013, un testo troppo piccolo a grandezza naturale.
+// descrizione; S013, un testo troppo piccolo a grandezza naturale; S017, due
+// colori usati come codice che si distinguono soltanto per la tinta.
 //
 // È `accessibility.rs` di `fub-scene`, con le stesse operazioni nello stesso
 // ordine: i due lati devono trovare le stesse diagnostiche con gli stessi
@@ -28,11 +29,49 @@
 //   tratto ha per gran parte della sua lunghezza: un tratto che attraversa
 //   un riquadro scuro non si legge male per questo.
 //
-// In più di Rust, [`Legibility.measures`] dice che cosa S009 e S013 hanno
-// misurato: il colore, il fondo e la soglia del punto peggiore, e quanto la
-// matrice ingrandisce un testo. Servono all'editor per proporre un colore
-// che si legga o un corpo abbastanza grande; la diagnostica resta quella dei
-// due lati.
+// S017 guarda le stesse figure dipinte, quelle che coprono la carta, e dice
+// dove un disegno affida un significato al colore soltanto (WCAG 1.4.1, uso
+// del colore): due colori con meno di 3:1 fra loro (WCAG 1.4.11) non si
+// distinguono più per chi non vede la tinta, e non si capisce quale area va
+// con quale voce della legenda.
+//
+// - **le aree** sono le forme piene modificabili di cui il colore si sa, un
+//   colore semplice o un campione del documento, con un'opacità totale sopra
+//   0. Non contano i tratti a penna e l'evidenziatore, che sono sottili, né i
+//   testi, le immagini, la carta, le tavole, i livelli e i gruppi in sé. Una
+//   sfumatura, un motivo (e quindi una campitura), un colore che decide una
+//   risorsa e ogni colore sotto `clip-path`, `mask` o `filter`, dell'elemento
+//   o di un contenitore, non si sanno, come per S009. Una figura il cui
+//   riquadro nella radice non ha larghezza o non ha altezza non è un'area, e
+//   una nascosta (`display="none"`, anche di un contenitore) non si guarda
+//   affatto;
+// - **il colore di un'area** è il suo colore con la sua opacità totale (il
+//   `fill-opacity` e le `opacity` dei gruppi, composte come per S009)
+//   composto sulla carta, o sul bianco senza carta, in sRGB e coi canali
+//   arrotondati a interi. Sulla carta soltanto, e non sulle figure sotto: il
+//   codice è il colore che l'autore ha scelto, non quello di ciò che per
+//   caso copre. Se la carta non si sa, un'area non opaca non ha colore che si
+//   sappia, come un fondo ignoto per S009;
+// - **i colori di codice** sono i colori composti che hanno almeno due aree:
+//   una fetta e la sua voce di legenda, due riquadri della stessa categoria.
+//   Un colore usato una volta è un ornamento, non un codice. Con più di 12
+//   colori di codice S017 tace: è un'illustrazione o un'immagine ricalcata,
+//   non un codice;
+// - **una coppia confusa** è fatta di due colori di codice con un contrasto
+//   di WCAG sotto [`MIN_CONTRAST`] (3:1, la stessa soglia di S009 per un
+//   tratto);
+// - **una S017 per ogni colore di codice** che ha almeno un compagno confuso,
+//   sulla prima area del documento con quel colore. Il dettaglio è
+//   `#rrggbb #rrggbb r.rr`: il colore, il compagno col contrasto più basso (a
+//   parità, quello la cui prima area viene prima nel documento) e quel
+//   contrasto, troncato ai centesimi come per S009.
+//
+// In più di Rust, [`Legibility.measures`] dice che cosa S009, S013 e S017
+// hanno misurato: il colore, il fondo e la soglia del punto peggiore, quanto
+// la matrice ingrandisce un testo, e di un colore confuso tutte le aree che
+// lo portano. Servono all'editor per proporre un colore che si legga, un
+// corpo abbastanza grande o una campitura che distingua le aree; la
+// diagnostica resta quella dei due lati.
 
 import {
   collapse,
@@ -73,6 +112,10 @@ import { isSvg, NS_NONE, valueOf, type ElementNode, type NodeId, type XmlDocumen
 /// In quanti punti del contorno si misura un tratto a penna.
 const STROKE_PROBES = 16;
 
+/// Con più colori di codice di così S017 tace: è un'illustrazione, non un
+/// codice.
+const MAX_CODES = 12;
+
 /// Quanto sopra la linea di base si guarda una riga, in grandezze dei
 /// caratteri.
 const LINE_PROBE = 0.35;
@@ -104,10 +147,24 @@ export interface Smallness {
   readonly line: boolean;
 }
 
+/// Ciò che S017 ha misurato per un colore di codice confuso con un altro.
+export interface Confusion {
+  /// La prima area col colore, dove sta la diagnostica.
+  readonly span: Span;
+  /// Il colore delle aree, composto sulla carta.
+  readonly color: Rgb;
+  /// Il compagno con cui contrasta di meno, e quanto.
+  readonly partner: Rgb;
+  readonly ratio: number;
+  /// Tutte le aree col colore, in ordine di documento: la prima è `span`.
+  readonly areas: readonly Span[];
+}
+
 /// Ciò che i controlli hanno misurato, per le correzioni dell'editor.
 export interface Measures {
   readonly contrasts: readonly Contrast[];
   readonly sizes: readonly Smallness[];
+  readonly confusions: readonly Confusion[];
 }
 
 /// Una figura dipinta: dove sta e di che colore.
@@ -125,7 +182,15 @@ class Painted {
     /// Il colore con la sua opacità totale; `null` se non si sa, come per
     /// un'immagine.
     readonly paint: Color | null,
+    /// L'elemento che ha dipinto la figura.
+    readonly span: Span,
   ) {}
+
+  /// Vero se il riquadro nella radice ha larghezza e altezza.
+  get hasArea(): boolean {
+    const { min, max } = this.bounds;
+    return max[0] > min[0] && max[1] > min[1];
+  }
 
   /// Vero se la figura copre il punto `p` della radice.
   covers(p: Point): boolean {
@@ -134,6 +199,13 @@ class Painted {
     this.polygons ??= flatten(this.segments, this.matrix);
     return winding(this.polygons, p) !== 0;
   }
+}
+
+/// Un colore composto sulla carta che hanno delle aree (S017).
+interface Tint {
+  readonly color: Rgb;
+  /// Le aree col colore, in ordine di documento.
+  readonly areas: Span[];
 }
 
 /// Una riga di testo da misurare.
@@ -173,6 +245,7 @@ export class Legibility {
   private readonly found: Diagnostic[] = [];
   private readonly contrasts: Contrast[] = [];
   private readonly sizes: Smallness[] = [];
+  private readonly confusions: Confusion[] = [];
 
   constructor(
     /// Il `d` dei tracciati delle risorse, per id (formato della scena,
@@ -180,9 +253,10 @@ export class Legibility {
     private readonly paths: ReadonlyMap<string, string> = new Map(),
   ) {}
 
-  /// Ciò che S009 e S013 hanno misurato; S009 dopo [`Legibility.finish`].
+  /// Ciò che S009, S013 e S017 hanno misurato; S009 e S017 dopo
+  /// [`Legibility.finish`].
   get measures(): Measures {
-    return { contrasts: this.contrasts, sizes: this.sizes };
+    return { contrasts: this.contrasts, sizes: this.sizes, confusions: this.confusions };
   }
 
   /// Guarda un elemento modificabile visibile. `context` è quello
@@ -211,7 +285,7 @@ export class Legibility {
         return;
       case "image":
         if (!decorative(element) && !described(doc, element)) this.found.push(diagnostic("S012", span));
-        this.paint(rectPath(at("x"), at("y"), at("width"), at("height"), 0, 0), m, null);
+        this.paint(rectPath(at("x"), at("y"), at("width"), at("height"), 0, 0), m, null, span);
         return;
       case "rect": {
         const [rx, ry] = radii(element);
@@ -244,19 +318,19 @@ export class Legibility {
     }
     const fill = context.fillPaint();
     // Un riempimento ignoto copre come un'immagine.
-    if (fill === null) this.paint(shape, m, null);
-    else if (fill !== "none" && fill[1] > 0) this.paint(shape, m, fill);
+    if (fill === null) this.paint(shape, m, null, span);
+    else if (fill !== "none" && fill[1] > 0) this.paint(shape, m, fill, span);
   }
 
   private check(span: Span, subject: Subject): void {
     this.checks.push({ span, subject, under: this.painted.length });
   }
 
-  private paint(segments: Segment[], matrix: Matrix, paint: Color | null): void {
+  private paint(segments: Segment[], matrix: Matrix, paint: Color | null, span: Span): void {
     const bounds = new BoundsBuilder();
     bounds.path(segments, matrix);
     const box = bounds.finish();
-    if (box !== null) this.painted.push(new Painted(segments, matrix, box, paint));
+    if (box !== null) this.painted.push(new Painted(segments, matrix, box, paint, span));
   }
 
   /// Le righe di un testo, con S013 se la più piccola sta sotto
@@ -347,8 +421,8 @@ export class Legibility {
   }
 
   /// Chiude i controlli: S009 per ogni oggetto che contrasta poco col suo
-  /// fondo, poi S012 e S013. `paper` è il colore della carta, `null` se non si
-  /// sa.
+  /// fondo, S017 per ogni colore di codice confuso con un altro, poi S012 e
+  /// S013. `paper` è il colore della carta, `null` se non si sa.
   finish(paper: Rgb | null, diagnostics: Diagnostic[]): void {
     for (const check of this.checks) {
       const backdrop = (p: Point): Rgb | null => this.backdrop(paper, check.under, p);
@@ -384,7 +458,49 @@ export class Legibility {
         this.contrasts.push(worst.measured);
       }
     }
+    this.confused(paper, diagnostics);
     diagnostics.push(...this.found);
+  }
+
+  /// S017: i colori di codice che si distinguono da un altro soltanto per la
+  /// tinta. Le aree si guardano in ordine di documento, come sono dipinte.
+  private confused(paper: Rgb | null, diagnostics: Diagnostic[]): void {
+    // I colori composti delle aree, in ordine di prima comparsa, con le loro
+    // aree.
+    const tints: Tint[] = [];
+    const seen = new Map<number, Tint>();
+    for (const painted of this.painted) {
+      if (painted.paint === null || !painted.hasArea) continue;
+      const [rgb, alpha] = painted.paint;
+      // Una figura opaca ha il suo colore anche su una carta ignota.
+      let color: Rgb;
+      if (alpha >= 1) color = rgb;
+      else if (paper !== null) color = over(rgb, alpha, paper);
+      else continue;
+      const id = (color[0] << 16) | (color[1] << 8) | color[2];
+      let tint = seen.get(id);
+      if (tint === undefined) {
+        tint = { color, areas: [] };
+        seen.set(id, tint);
+        tints.push(tint);
+      }
+      tint.areas.push(painted.span);
+    }
+    const codes = tints.filter((tint) => tint.areas.length >= 2);
+    if (codes.length > MAX_CODES) return;
+    for (const tint of codes) {
+      // Il compagno col contrasto più basso, e a parità il primo.
+      let worst: { readonly other: Tint; readonly ratio: number } | null = null;
+      for (const other of codes) {
+        if (other === tint) continue;
+        const ratio = contrast(tint.color, other.color);
+        if (ratio < MIN_CONTRAST && (worst === null || ratio < worst.ratio)) worst = { other, ratio };
+      }
+      if (worst === null) continue;
+      const first = tint.areas[0]!;
+      diagnostics.push(diagnostic("S017", first, `${hex(tint.color)} ${hex(worst.other.color)} ${shown(worst.ratio)}`));
+      this.confusions.push({ span: first, color: tint.color, partner: worst.other.color, ratio: worst.ratio, areas: tint.areas });
+    }
   }
 
   /// Il colore sotto il punto `p` della radice, con le prime `under` figure
@@ -402,6 +518,11 @@ export class Legibility {
     }
     return color;
   }
+}
+
+/// Un colore come lo scrive il file: `#rrggbb`, in minuscolo.
+function hex(rgb: Rgb): string {
+  return `#${rgb.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /// Un numero del dettaglio, troncato ai centesimi e non arrotondato: un

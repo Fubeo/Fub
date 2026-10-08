@@ -4248,6 +4248,18 @@ describe("lo strumento Sfumatura, dal livello Standard", () => {
     expect(spoken()).toBe("Sfumatura lineare tracciata: angolo 45°, lunga 63,6.");
   });
 
+  it("su un oggetto campito nasce dal fondo della campitura, come dal pannello", () => {
+    const hatched = doc(
+      '<defs id="fub-defs"><pattern id="rh" fub:role="private" fub:pattern="lines -45 8 1.5 #000000 #e69f00" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(-45)"><rect width="8" height="8" fill="#e69f00"/><rect y="3.25" width="8" height="1.5" fill="#000000"/></pattern></defs>' +
+        `${LAYER}<rect id="${B}" x="0" y="150" width="100" height="100" fill="url(#rh) #bb8100"/></g>`,
+    );
+    shading([B], hatched);
+    drag([[20, 200], [50, 200], [80, 200]]);
+    expect(shade(B)).toContain('<stop offset="0" stop-color="#e69f00"/><stop offset="1" stop-color="#e69f00" stop-opacity="0"/>');
+    // La campitura che nessuno usa più se ne va.
+    expect(editor.engine.text).not.toContain("<pattern");
+  });
+
   it("radiale se lo sono già tutte quelle degli oggetti scelti, col centro dove parte", () => {
     shading([C]);
     drag([[280, 180], [290, 180], [300, 180]]);
@@ -13593,6 +13605,124 @@ describe("«Maschera», dal livello Esperto", () => {
   });
 });
 
+describe("la verifica propone le campiture", () => {
+  const button = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Accessibilità"]')!;
+  const panel = (): HTMLElement => host.querySelector<HTMLElement>(".draw-access")!;
+  const rows = (): HTMLElement[] => [...panel().querySelectorAll<HTMLElement>(".draw-access-problem")];
+  /// I colori confusi di ogni riga, dall'alto: il suo e quello accanto.
+  const confused = (): string[] => rows().map((row) => [...row.querySelectorAll<HTMLElement>(".draw-access-swatch")].map((chip) => chip.style.background).join(" "));
+  const fixes = (): HTMLButtonElement[] => rows().map((row) => row.querySelector<HTMLButtonElement>('[data-action="fix"]')!);
+
+  const rect = (id: string, x: number, fill: string): string => `<rect id="${id}" x="${x}" y="0" width="20" height="20" fill="${fill}"/>`;
+  const BLUE = "#a6cee3";
+  const GREEN = "#b2df8a";
+  const YELLOW = "#f0e442";
+  /// Due coppie di quadrati, azzurro e verde chiaro, ciascun colore su due
+  /// aree: si distinguono soltanto per la tinta.
+  const CODE = doc(
+    `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("oc3c3c3c3", 60, BLUE)}${rect("od4d4d4d4", 90, GREEN)}</g>`,
+  );
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it("«Dai una campitura» dà una campitura a tutte le aree del colore, in un passo; le righe se ne vanno e un annulla riporta il file", () => {
+    mount(CODE, { level: "standard" });
+    button().click();
+    expect(rows().map((row) => row.querySelector(".draw-access-what")!.textContent)).toEqual([
+      "Nota: Due colori si distinguono solo per la tinta",
+      "Nota: Due colori si distinguono solo per la tinta",
+    ]);
+    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`]);
+    expect(rows()[0]!.querySelector(".draw-access-detail")!.textContent).toContain("hanno un contrasto di 1,1:1, ne servono almeno 3:1");
+    expect(fixes().map((fix) => [fix.textContent, fix.getAttribute("aria-label")])).toEqual([
+      ["Dai una campitura", `Dai una campitura alle 2 aree di colore ${BLUE}`],
+      ["Dai una campitura", `Dai una campitura alle 2 aree di colore ${GREEN}`],
+    ]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+
+    fixes()[0]!.click();
+    // Un passo solo, con il suo nome.
+    expect(changes).toHaveLength(1);
+    expect(spoken()).toBe("Campitura diagonale su 2 aree.");
+    const text = editor.engine.text;
+    // Le due aree azzurre hanno una campitura sul loro colore, righe nere;
+    // le verdi no.
+    expect(text.match(/<pattern [^>]*fub:pattern="lines -45 [\d.]+ [\d.]+ #000000 #a6cee3"/g)).toHaveLength(2);
+    expect([...text.matchAll(/<rect id="(o[^"]+)"[^>]* fill="([^"]+)"\/>/g)].map((found) => [found[1], found[2]!.startsWith("url(#r") ? "campitura" : found[2]])).toEqual([
+      ["oa1a1a1a1", "campitura"],
+      ["ob2b2b2b2", GREEN],
+      ["oc3c3c3c3", "campitura"],
+      ["od4d4d4d4", GREEN],
+    ]);
+    // L'azzurro non è più un colore di codice: il verde non ha più chi lo
+    // confonda, e le due righe se ne vanno insieme.
+    expect(rows()).toHaveLength(0);
+    expect(panel().querySelector(".draw-access-count")!.textContent).toBe("nessun problema");
+
+    key("z", { ctrlKey: true });
+    expect(spoken()).toBe("Annullato: Dai una campitura.");
+    expect(editor.engine.text).toBe(CODE);
+    vi.advanceTimersByTime(250);
+    expect(rows()).toHaveLength(2);
+  });
+
+  it("un colore dopo l'altro: ogni campitura è diversa dalle già date", () => {
+    const CODES = doc(
+      `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("oc3c3c3c3", 60, YELLOW)}` +
+        `${rect("od4d4d4d4", 90, BLUE)}${rect("oe5e5e5e5", 120, GREEN)}${rect("of6f6f6f6", 150, YELLOW)}</g>`,
+    );
+    mount(CODES, { level: "standard" });
+    button().click();
+    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`, `${YELLOW} ${GREEN}`]);
+    fixes()[0]!.click();
+    expect(spoken()).toBe("Campitura diagonale su 2 aree.");
+    // Il verde e il giallo restano confusi fra loro.
+    expect(confused()).toEqual([`${GREEN} ${YELLOW}`, `${YELLOW} ${GREEN}`]);
+    fixes()[0]!.click();
+    expect(spoken()).toBe("Campitura puntinata su 2 aree.");
+    expect(rows()).toHaveLength(0);
+    expect(changes).toHaveLength(2);
+    key("z", { ctrlKey: true });
+    expect(spoken()).toBe("Annullato: Dai una campitura.");
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(CODES);
+  });
+
+  it("un'area che non si sceglie resta com'è: la campitura va alle altre", () => {
+    const LOCKED = doc(
+      `<title>Prova</title>${LAYER}${rect("oa1a1a1a1", 0, BLUE)}${rect("ob2b2b2b2", 30, GREEN)}${rect("od4d4d4d4", 90, GREEN)}</g>` +
+        `<g id="l2" fub:layer="Bloccato" fub:locked="true">${rect("oc3c3c3c3", 60, BLUE)}</g>`,
+    );
+    mount(LOCKED, { level: "standard" });
+    button().click();
+    expect(confused()).toEqual([`${BLUE} ${GREEN}`, `${GREEN} ${BLUE}`]);
+    fixes()[0]!.click();
+    expect(spoken()).toBe("Campitura diagonale su un’area.");
+    expect(editor.engine.text).toContain(`<rect id="oc3c3c3c3" x="60" y="0" width="20" height="20" fill="${BLUE}"/>`);
+    expect(editor.engine.text).not.toContain(`<rect id="oa1a1a1a1" x="0" y="0" width="20" height="20" fill="${BLUE}"/>`);
+    // Un solo azzurro resta fra le aree: non fa più un codice.
+    expect(rows()).toHaveLength(0);
+    key("z", { ctrlKey: true });
+    expect(editor.engine.text).toBe(LOCKED);
+  });
+
+  it("in sola lettura la campitura non si propone", () => {
+    mount(CODE, { level: "standard" });
+    button().click();
+    editor.setReadOnly(true);
+    expect(rows()).toHaveLength(2);
+    expect(rows().map((row) => row.querySelector('[data-action="fix"]'))).toEqual([null, null]);
+    expect(changes).toEqual([]);
+  });
+});
+
 describe("gli effetti, dal livello Esperto", () => {
   /// `source` su una pagina larga, che contiene tutto: la pagina che cresce
   /// per ciò che esce non è l'argomento.
@@ -13657,12 +13787,13 @@ describe("gli effetti, dal livello Esperto", () => {
     expect(changes).toEqual([]);
   });
 
-  it("c'è dopo «Sfumatura» e prima di «Colori del documento»", () => {
+  it("c'è dopo «Campitura» e prima di «Colori del documento»", () => {
     mount(SHAPES, { level: "expert" });
     openProperties();
     editor.select(["r"]);
     const order = [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
-    expect(order.indexOf("effects")).toBe(order.indexOf("gradient") + 1);
+    expect(order.indexOf("hatch")).toBe(order.indexOf("gradient") + 1);
+    expect(order.indexOf("effects")).toBe(order.indexOf("hatch") + 1);
     expect(order.indexOf("colors")).toBe(order.indexOf("effects") + 1);
   });
 
@@ -14133,5 +14264,502 @@ describe("gli effetti, dal livello Esperto", () => {
     expect(editor.engine.text).toBe(shaded);
     expect(changes).toHaveLength(count);
     expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+});
+
+describe("la campitura", () => {
+  const DEFS = (inner: string): string => `<defs id="fub-defs">${inner}</defs>`;
+  const BLUE = doc(`${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/></g>`);
+  /// Due rettangoli e un gruppo con una parte bloccata.
+  const PARTS = doc(
+    `${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>`
+      + `<rect id="s" x="80" y="20" width="40" height="30" fill="#d55e00"/>`
+      + `<g id="og" fill="#009e73"><rect id="oa" x="20" y="80" width="40" height="30"/>`
+      + `<rect id="ob" x="80" y="80" width="40" height="30" fill="#cc79a7" fub:locked="true"/></g>`
+      + `<line id="l" x1="0" y1="150" x2="100" y2="150" stroke="#000000" stroke-width="2"/></g>`,
+  );
+  /// Un motivo del documento, e un oggetto bloccato che lo usa.
+  const MOTIF = '<pattern id="rm" fub:role="swatch" fub:name="Pois" patternUnits="userSpaceOnUse" width="10" height="10"><rect width="10" height="5" fill="#ff0000"/><rect y="5" width="10" height="5" fill="#0000ff"/></pattern>';
+
+  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
+  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="hatch"]')!;
+  const kindButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>(".draw-properties-menu")!;
+  const hatchField = (id: string): HTMLInputElement => section().querySelector<HTMLInputElement>(`.draw-properties-field[data-field="hatch-${id}"] input[type="text"]`)!;
+  const fieldsGroup = (): HTMLElement => section().querySelector<HTMLElement>(".draw-hatch-fields")!;
+  const motifGroup = (): HTMLElement => section().querySelector<HTMLElement>(".draw-hatch-motif")!;
+  const deleteButton = (): HTMLButtonElement => motifGroup().querySelector<HTMLButtonElement>("button")!;
+  const visible = (): Array<string | undefined> =>
+    [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+  /// Le voci del menu aperto per ultimo.
+  const menuItems = (): HTMLButtonElement[] => {
+    const menus = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...menus[menus.length - 1]!.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const entry = (label: string): HTMLButtonElement => menuItems().find((each) => labelOf(each) === label)!;
+  /// Sceglie dal menu del tipo la voce `label`.
+  function choose(label: string): void {
+    kindButton().click();
+    entry(label).click();
+  }
+  /// Il pulsante «Motivo dalla selezione» della barra della selezione.
+  const motifButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Motivo dalla selezione"]')!;
+  /// La campitura privata che il testo ha, e quante.
+  const patterns = (text = editor.engine.text): string[] => text.match(/<pattern [\s\S]*?<\/pattern>/g) ?? [];
+  const patternOf = (id: string, text = editor.engine.text): string | null => new RegExp(`<[a-z]+ id="${id}"[^>]*? fill="url\\(#([^)]+)\\)`).exec(text)?.[1] ?? null;
+  const closeMenus = (): void => {
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  };
+  afterEach(closeMenus);
+
+  it("c'è dal livello Standard, dopo «Sfumatura» e prima degli effetti; con «Campiture» fuori dal Personalizzato non c'è", () => {
+    mount(PARTS, { level: "standard" });
+    openProperties();
+    expect(section().hidden).toBe(true);
+    editor.select(["r"]);
+    expect(section().hidden).toBe(false);
+    expect(section().querySelector("h3")!.textContent).toBe("Campitura");
+    expect(kindButton().textContent).toBe("Nessuna");
+    expect(fieldsGroup().hidden).toBe(true);
+    expect(visible().indexOf("hatch")).toBe(visible().indexOf("gradient") + 1);
+    editor.setLevel("expert");
+    expect(visible().slice(visible().indexOf("gradient"), visible().indexOf("gradient") + 3)).toEqual(["gradient", "hatch", "effects"]);
+    // Una linea senza riempimento non ha la sezione.
+    editor.select(["l"]);
+    expect(section().hidden).toBe(true);
+    editor.select([]);
+    expect(section().hidden).toBe(true);
+    // Nel Personalizzato si vede con la sua parte.
+    editor.setLevel("custom", ["rect", "properties"]);
+    editor.select(["r"]);
+    expect(section().hidden).toBe(true);
+    editor.setLevel("custom", ["rect", "properties", "hatches"]);
+    editor.select(["r"]);
+    expect(section().hidden).toBe(false);
+    expect(changes).toEqual([]);
+  });
+
+  it("una campitura pronta scrive la campitura privata e il riempimento col ripiego, in un solo passo che annulla al byte", () => {
+    mount(BLUE, { level: "standard" });
+    openProperties();
+    editor.select(["r"]);
+    const before = editor.engine.text;
+    kindButton().click();
+    expect(kindButton().getAttribute("aria-expanded")).toBe("true");
+    expect(menuItems().map(labelOf)).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata"]);
+    expect(menuItems().map((each) => each.getAttribute("aria-checked"))).toEqual(["true", "false", "false", "false", "false", "false"]);
+    entry("Diagonale").click();
+    expect(changes).toHaveLength(1);
+    const after = editor.engine.text;
+    const id = patternOf("r")!;
+    expect(id).toMatch(/^r[0-9a-z]{8}$/);
+    expect(after).toContain(
+      `  <defs id="fub-defs">
+    <pattern id="${id}" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)" fub:pattern="lines -45 8 1.5 #ffffff #0072b2">
+      <rect width="8" height="8" fill="#0072b2"/>
+      <rect y="3.25" width="8" height="1.5" fill="#ffffff"/>
+    </pattern>
+  </defs><g id="l1" fub:layer="Livello 1"><rect id="r" x="20" y="20" width="40" height="30" fill="url(#${id}) #308cc0"/></g></svg>`,
+    );
+    expect(patterns()).toHaveLength(1);
+    expect(editor.selection).toEqual(["r"]);
+    expect(spoken()).toContain("Campitura «Diagonale» su 1 oggetto.");
+    // Il pannello segue: la scelta, i campi e le loro unità.
+    expect(kindButton().textContent).toBe("Diagonale");
+    expect(kindButton().getAttribute("aria-expanded")).toBe("false");
+    expect(fieldsGroup().hidden).toBe(false);
+    expect(["color", "background", "spacing", "width", "angle"].map((name) => hatchField(name).value)).toEqual(["#ffffff", "#0072b2", "8", "1,5", "-45"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Un passo solo, col suo nome, e al byte.
+    editor.undo();
+    expect(editor.engine.text).toBe(before);
+    expect(spoken()).toBe("Annullato: Campitura.");
+    expect(kindButton().textContent).toBe("Nessuna");
+    expect(editor.selection).toEqual(["r"]);
+    editor.redo();
+    expect(editor.engine.text).toBe(after);
+    expect(kindButton().textContent).toBe("Diagonale");
+  });
+
+  it("scegliere la campitura che c'è già non scrive niente", () => {
+    mount(BLUE, { level: "standard" });
+    openProperties();
+    editor.select(["r"]);
+    choose("Diagonale");
+    const count = changes.length;
+    const said = spoken();
+    choose("Diagonale");
+    expect(changes).toHaveLength(count);
+    expect(spoken()).toBe(said);
+    expect(kindButton().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("il passo cambia sul posto, con `set`: la campitura è la stessa, e un colpo di freccia dopo l'altro si annulla insieme", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(BLUE, { level: "standard" });
+    openProperties();
+    editor.select(["r"]);
+    choose("Diagonale");
+    const first = editor.engine.text;
+    const id = patternOf("r")!;
+    now.mockReturnValue(MERGE_MS + 1);
+    enter(hatchField("spacing"), "12");
+    expect(patterns()).toHaveLength(1);
+    expect(patternOf("r")).toBe(id);
+    expect(editor.engine.text).toContain(`<pattern id="${id}" fub:role="private" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)" fub:pattern="lines -45 12 1.5 #ffffff #0072b2">`);
+    expect(hatchField("spacing").value).toBe("12");
+    const typed = editor.engine.text;
+    now.mockReturnValue(2 * MERGE_MS + 2);
+    hatchField("spacing").focus();
+    key("ArrowUp", {}, hatchField("spacing"));
+    key("ArrowUp", {}, hatchField("spacing"));
+    expect(editor.engine.text).toContain('fub:pattern="lines -45 14 1.5 #ffffff #0072b2"');
+    expect(patterns()).toHaveLength(1);
+    expect(document.activeElement).toBe(hatchField("spacing"));
+    // I due colpi si annullano insieme; il numero scritto, a parte.
+    editor.undo();
+    expect(editor.engine.text).toBe(typed);
+    expect(spoken()).toBe("Annullato: Passo della campitura.");
+    editor.undo();
+    expect(editor.engine.text).toBe(first);
+    expect(spoken()).toBe("Annullato: Passo della campitura.");
+  });
+
+  it("ogni genere di cambio ha il suo nome nella cronologia", () => {
+    let time = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => time);
+    mount(BLUE, { level: "standard" });
+    openProperties();
+    editor.select(["r"]);
+    choose("Puntinata");
+    const wanted: Array<[() => void, string]> = [
+      [() => enter(hatchField("width"), "4"), "Annullato: Diametro dei puntini."],
+      [() => enter(hatchField("angle"), "20"), "Annullato: Angolo della campitura."],
+      [() => enter(hatchField("color"), "#ffff00"), "Annullato: Colore della campitura."],
+      [() => enter(hatchField("background"), "nessuno"), "Annullato: Fondo della campitura."],
+    ];
+    const texts = [editor.engine.text];
+    for (const [change] of wanted) {
+      time += 10 * MERGE_MS;
+      change();
+      texts.push(editor.engine.text);
+    }
+    for (let at = wanted.length - 1; at >= 0; at -= 1) {
+      editor.undo();
+      expect(spoken()).toBe(wanted[at]![1]);
+      expect(editor.engine.text).toBe(texts[at]);
+    }
+  });
+
+  it("«Nessuna» torna al colore del fondo, e un annulla riporta la campitura", () => {
+    mount(BLUE, { level: "standard" });
+    openProperties();
+    editor.select(["r"]);
+    choose("Incrociata");
+    const hatched = editor.engine.text;
+    choose("Nessuna");
+    expect(patterns()).toEqual([]);
+    expect(editor.engine.text).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>');
+    expect(spoken()).toContain("Campitura tolta da 1 oggetto.");
+    expect(kindButton().textContent).toBe("Nessuna");
+    expect(fieldsGroup().hidden).toBe(true);
+    editor.undo();
+    expect(editor.engine.text).toBe(hatched);
+    expect(spoken()).toBe("Annullato: Togli la campitura.");
+    expect(kindButton().textContent).toBe("Incrociata");
+  });
+
+  it("un gruppo la dà alle sue parti, e una parte bloccata resta com'è", () => {
+    mount(PARTS, { level: "standard" });
+    openProperties();
+    editor.select(["og"]);
+    expect(kindButton().textContent).toBe("Nessuna");
+    choose("Orizzontale");
+    const text = editor.engine.text;
+    expect(patterns()).toHaveLength(1);
+    expect(text).toMatch(/<rect id="oa" x="20" y="80" width="40" height="30" fill="url\(#r[0-9a-z]{8}\) #[0-9a-f]{6}"\/>/);
+    expect(text).toContain('<rect id="ob" x="80" y="80" width="40" height="30" fill="#cc79a7" fub:locked="true"/>');
+    expect(text).toContain('<g id="og" fill="#009e73">');
+    expect(spoken()).toContain("Campitura «Orizzontale» su 1 oggetto.");
+    editor.undo();
+    expect(patterns()).toEqual([]);
+  });
+
+  it("più oggetti: una scelta li cambia tutti, e i campi non toccano chi non ha una campitura", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(0);
+    mount(PARTS, { level: "standard" });
+    openProperties();
+    editor.select(["r", "s"]);
+    choose("Diagonale");
+    expect(patterns()).toHaveLength(2);
+    expect(spoken()).toContain("Campitura «Diagonale» su 2 oggetti.");
+    expect(kindButton().textContent).toBe("Diagonale");
+    enter(hatchField("angle"), "30");
+    expect(editor.engine.text.match(/rotate\(30\)/g)).toHaveLength(2);
+    const turned = editor.engine.text;
+    // Con un oggetto senza campitura i campi cambiano soltanto le altre.
+    editor.select(["r", "s", "oa"]);
+    expect(kindButton().textContent).toBe("Misto");
+    expect(section().querySelector(".draw-hatch > .draw-properties-note")!.textContent).toBe("I campi cambiano la campitura di 2 oggetti: gli altri restano come sono.");
+    // Un altro passo, a tempo debito: due passi di seguito si unirebbero.
+    now.mockReturnValue(10 * MERGE_MS);
+    enter(hatchField("angle"), "10");
+    expect(editor.engine.text.match(/rotate\(10\)/g)).toHaveLength(2);
+    expect(editor.engine.text).toContain('<rect id="oa" x="20" y="80" width="40" height="30"/>');
+    editor.undo();
+    expect(editor.engine.text).toBe(turned);
+  });
+
+  it("in sola lettura la campitura si guarda e basta", () => {
+    mount(BLUE, { level: "standard" });
+    openProperties();
+    editor.select(["r"]);
+    choose("Diagonale");
+    const shown = editor.engine.text;
+    const count = changes.length;
+    editor.setReadOnly(true);
+    expect(kindButton().getAttribute("aria-disabled")).toBe("true");
+    expect(hatchField("spacing").readOnly).toBe(true);
+    kindButton().click();
+    expect(spoken()).toContain("sola lettura");
+    expect(kindButton().getAttribute("aria-expanded")).toBe("false");
+    key("ArrowUp", {}, hatchField("spacing"));
+    expect(editor.engine.text).toBe(shown);
+    expect(changes).toHaveLength(count);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  describe("i motivi del documento, dal livello Esperto", () => {
+    it("«Motivo dalla selezione» fa il motivo col suo nome, in un passo; gli oggetti e la selezione restano", () => {
+      const now = vi.spyOn(performance, "now").mockReturnValue(0);
+      mount(BLUE, { level: "expert" });
+      editor.select(["r"]);
+      const before = editor.engine.text;
+      expect(motifButton().hidden).toBe(false);
+      motifButton().click();
+      expect(changes).toHaveLength(1);
+      const after = editor.engine.text;
+      expect(after).toContain('fub:role="swatch" fub:name="Motivo"');
+      expect(after).toMatch(/<pattern id="r[0-9a-z]{8}" fub:role="swatch" fub:name="Motivo" x="20" y="20" width="40" height="30" patternUnits="userSpaceOnUse">/);
+      expect(after).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/>');
+      expect(editor.selection).toEqual(["r"]);
+      expect(spoken()).toBe("Motivo «Motivo» creato: lo trovi nel menu della campitura.");
+      // Un altro prende il primo nome libero.
+      now.mockReturnValue(10 * MERGE_MS);
+      motifButton().click();
+      expect(editor.engine.text).toContain('fub:name="Motivo 2"');
+      expect(spoken()).toBe("Motivo «Motivo 2» creato: lo trovi nel menu della campitura.");
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Motivo dalla selezione.");
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      expect(editor.selection).toEqual(["r"]);
+      editor.redo();
+      expect(editor.engine.text).toBe(after);
+    });
+
+    it("sotto l'Esperto il comando non c'è, né nel menu della selezione né nel menu della campitura", () => {
+      mount(BLUE, { level: "standard" });
+      openProperties();
+      editor.select(["r"]);
+      expect(motifButton().hidden).toBe(true);
+      host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!.click();
+      expect(menuItems().map(labelOf)).not.toContain("Motivo dalla selezione");
+      closeMenus();
+      kindButton().click();
+      expect(menuItems().map(labelOf)).not.toContain("Motivo dalla selezione");
+      expect(changes).toEqual([]);
+    });
+
+    it("sta anche nel menu della selezione, spento senza oggetti, e nel menu della campitura", () => {
+      mount(BLUE, { level: "expert" });
+      openProperties();
+      const selectionMenu = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!;
+      selectionMenu().click();
+      expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBe("true");
+      expect(entry("Motivo dalla selezione").querySelector(".menu-description")!.textContent).toBe("Nessun oggetto scelto.");
+      closeMenus();
+      editor.select(["r"]);
+      selectionMenu().click();
+      expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBeNull();
+      entry("Motivo dalla selezione").click();
+      expect(changes).toHaveLength(1);
+      expect(editor.engine.text).toContain('fub:name="Motivo"');
+      expect(editor.selection).toEqual(["r"]);
+      // Il menu della campitura ha il motivo nuovo e, in fondo, il comando.
+      kindButton().click();
+      expect(menuItems().map(labelOf)).toEqual(["Nessuna", "Diagonale", "Incrociata", "Orizzontale", "Puntinata", "Quadrettata", "Motivo", "Motivo dalla selezione"]);
+      entry("Motivo dalla selezione").click();
+      expect(editor.engine.text).toContain('fub:name="Motivo 2"');
+      expect(formatIssues(checkAccessibility(host))).toBe("");
+    });
+
+    it("un motivo si dà a un altro oggetto dal menu, col suo colore medio per ripiego", () => {
+      mount(PARTS, { level: "expert" });
+      openProperties();
+      editor.select(["r"]);
+      motifButton().click();
+      editor.select(["s"]);
+      expect(kindButton().textContent).toBe("Nessuna");
+      choose("Motivo");
+      expect(editor.engine.text).toMatch(/<rect id="s" x="80" y="20" width="40" height="30" fill="url\(#r[0-9a-z]{8}\) #[0-9a-f]{6}"\/>/);
+      expect(spoken()).toContain("Motivo «Motivo» su 1 oggetto.");
+      expect(kindButton().textContent).toBe("Motivo");
+      // Il motivo scelto ha il suo nome e il pulsante che lo elimina; i campi della campitura no.
+      expect(fieldsGroup().hidden).toBe(true);
+      expect(motifGroup().hidden).toBe(false);
+      expect(hatchField("name").value).toBe("Motivo");
+      expect(deleteButton().textContent).toBe("Elimina motivo");
+      expect(formatIssues(checkAccessibility(host))).toBe("");
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Campitura.");
+    });
+
+    it("un motivo si rinomina dal suo nome, in un passo, e un nome già preso non va", () => {
+      mount(doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/><rect id="s" x="80" y="20" width="40" height="30" fill="#d55e00"/></g>`), { level: "expert" });
+      openProperties();
+      editor.select(["r"]);
+      expect(kindButton().textContent).toBe("Pois");
+      expect(hatchField("name").value).toBe("Pois");
+      const before = editor.engine.text;
+      enter(hatchField("name"), "  Quadri   rossi ");
+      expect(changes).toHaveLength(1);
+      expect(editor.engine.text).toContain('<pattern id="rm" fub:role="swatch" fub:name="Quadri rossi"');
+      expect(spoken()).toBe("Il motivo ora si chiama «Quadri rossi».");
+      expect(kindButton().textContent).toBe("Quadri rossi");
+      expect(hatchField("name").value).toBe("Quadri rossi");
+      expect(document.activeElement).toBe(hatchField("name"));
+      // Un nome vuoto, o che si legge come un colore, non va.
+      enter(hatchField("name"), "");
+      expect(hatchField("name").getAttribute("aria-invalid")).toBe("true");
+      expect(motifGroup().querySelector(".draw-properties-error")!.textContent).toBe("Scrivi un nome.");
+      enter(hatchField("name"), "#ff0000");
+      expect(motifGroup().querySelector(".draw-properties-error")!.textContent).toBe("«#ff0000» si legge come un colore, non come un nome: scegline un altro.");
+      expect(changes).toHaveLength(1);
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      expect(spoken()).toBe("Annullato: Rinomina il motivo.");
+    });
+
+    it("un nome di un campione del documento non va ai motivi", () => {
+      const swatch = '<linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>';
+      mount(doc(`${DEFS(MOTIF + swatch)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/></g>`), { level: "expert" });
+      openProperties();
+      editor.select(["r"]);
+      enter(hatchField("name"), "blu marca");
+      expect(changes).toEqual([]);
+      expect(hatchField("name").getAttribute("aria-invalid")).toBe("true");
+      expect(motifGroup().querySelector(".draw-properties-error")!.textContent).toBe("C’è già un campione o un motivo «blu marca»: scegline un altro.");
+    });
+
+    it("«Elimina motivo» lo toglie: chi lo usava torna a un colore pieno, in un passo; il fuoco resta nella sezione", () => {
+      mount(doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/><rect id="s" x="80" y="20" width="40" height="30" fill="url(#rm) #800080"/></g>`), { level: "expert" });
+      openProperties();
+      editor.select(["r", "s"]);
+      const before = editor.engine.text;
+      deleteButton().focus();
+      deleteButton().click();
+      expect(changes).toHaveLength(1);
+      expect(editor.engine.text).not.toContain("<pattern");
+      expect(editor.engine.text).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#800080"/>');
+      expect(editor.engine.text).toContain('<rect id="s" x="80" y="20" width="40" height="30" fill="#800080"/>');
+      expect(spoken()).toBe("Motivo «Pois» eliminato: chi lo usava torna a un colore pieno.");
+      expect(motifGroup().hidden).toBe(true);
+      expect(section().contains(document.activeElement)).toBe(true);
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      expect(spoken()).toBe("Annullato: Elimina il motivo.");
+      expect(kindButton().textContent).toBe("Pois");
+    });
+
+    it("chi lo usa e non si può cambiare lo tiene: si dice quanti sono", () => {
+      mount(
+        doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/><rect id="k" x="80" y="20" width="40" height="30" fill="url(#rm) #800080" fub:locked="true"/></g>`),
+        { level: "expert" },
+      );
+      openProperties();
+      editor.select(["r"]);
+      deleteButton().click();
+      expect(editor.engine.text).toContain('<pattern id="rm" fub:role="shared"');
+      expect(editor.engine.text).toContain('<rect id="r" x="20" y="20" width="40" height="30" fill="#800080"/>');
+      expect(spoken()).toBe("1 oggetto che non si può cambiare usa ancora «Pois»: il motivo resta fra le risorse, senza nome.");
+    });
+
+    it("il nome e il pulsante non ci sono sotto l'Esperto", () => {
+      mount(doc(`${DEFS(MOTIF)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="url(#rm) #800080"/></g>`), { level: "standard" });
+      openProperties();
+      editor.select(["r"]);
+      expect(kindButton().textContent).toBe("Pois");
+      expect(motifGroup().hidden).toBe(true);
+    });
+
+    describe("i rifiuti", () => {
+      const PNG_HREF = "data:image/png;base64,iVBORw0KGgo=";
+      const refusal = (source: string, keys: string[]): string => {
+        mount(source, { level: "expert" });
+        openProperties();
+        editor.select(keys);
+        const before = editor.engine.text;
+        // Dal pulsante, e a voce; il file non cambia.
+        motifButton().click();
+        expect(changes).toEqual([]);
+        expect(editor.engine.text).toBe(before);
+        const said = spoken();
+        // Dal menu della selezione la voce è spenta, e dice lo stesso.
+        host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!.click();
+        expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBe("true");
+        expect(entry("Motivo dalla selezione").querySelector(".menu-description")!.textContent).toBe(said);
+        closeMenus();
+        return said;
+      };
+      const clip = '<clipPath id="rc" fub:role="private"><rect x="20" y="20" width="10" height="10"/></clipPath>';
+
+      it("niente da disegnare", () => {
+        expect(refusal(doc(`${LAYER}<rect id="z" x="20" y="20" width="0" height="30" fill="#0072b2"/></g>`), ["z"])).toBe(
+          "Gli oggetti scelti non disegnano niente: per un motivo serve qualcosa da ripetere.",
+        );
+      });
+
+      it("un'immagine, un collegamento o un testo su tracciato", () => {
+        expect(refusal(doc(`${LAYER}<image id="i" x="20" y="20" width="20" height="20" href="${PNG_HREF}"/></g>`), ["i"])).toBe(
+          "Un’immagine, un collegamento o un testo su tracciato non stanno in un motivo.",
+        );
+      });
+
+      it("ritagli, maschere, effetti, punte, altri motivi", () => {
+        expect(refusal(doc(`${DEFS(clip)}${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2" clip-path="url(#rc)"/></g>`), ["r"])).toBe(
+          "Un oggetto scelto porta ritagli, maschere, effetti, filtri, punte, una campitura, un altro motivo o un tratto che FubDraw non sa ridisegnare: in un motivo cambierebbero ciò che mostra.",
+        );
+      });
+
+      it("un contenitore con un ritaglio, una maschera, degli effetti, o nascosto", () => {
+        expect(refusal(doc(`${DEFS(clip)}${LAYER}<g id="og" clip-path="url(#rc)"><rect id="oa" x="20" y="20" width="40" height="30" fill="#0072b2"/></g></g>`), ["oa"])).toBe(
+          "Un oggetto scelto sta in un gruppo con un ritaglio, una maschera, degli effetti, o nascosto: nel motivo si vedrebbe diverso.",
+        );
+      });
+
+      it("un foglio di stile che li farebbe vedere diversi", () => {
+        expect(refusal(doc(`<style>pattern rect{fill:#ff0000}</style>${LAYER}<rect id="r" x="20" y="20" width="40" height="30" fill="#0072b2"/></g>`), ["r"])).toBe(
+          "Nel disegno c’è uno stile che, dentro il motivo, cambierebbe l’aspetto degli oggetti scelti: FubDraw non sa riscriverlo com’era.",
+        );
+      });
+    });
+
+    it("in sola lettura il comando dice che non si può, e il menu della selezione lo mostra spento", () => {
+      mount(BLUE, { level: "expert" });
+      openProperties();
+      editor.select(["r"]);
+      editor.setReadOnly(true);
+      motifButton().click();
+      expect(changes).toEqual([]);
+      expect(spoken()).toBe("Modifica non applicata: il disegno è in sola lettura.");
+      host.querySelector<HTMLButtonElement>('[aria-label="Selezione avanzata"]')!.click();
+      expect(entry("Motivo dalla selezione").getAttribute("aria-disabled")).toBe("true");
+      expect(entry("Motivo dalla selezione").querySelector(".menu-description")!.textContent).toBe("Modifica non applicata: il disegno è in sola lettura.");
+      closeMenus();
+      kindButton().focus();
+      key("ArrowDown", {}, kindButton());
+      expect(kindButton().getAttribute("aria-expanded")).toBe("false");
+    });
   });
 });

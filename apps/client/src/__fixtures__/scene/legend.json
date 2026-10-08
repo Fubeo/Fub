@@ -1,0 +1,675 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        2706
+      ],
+      "utf16": [
+        0,
+        2706
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            150
+          ],
+          "utf16": [
+            0,
+            150
+          ]
+        },
+        "close": {
+          "bytes": [
+            2700,
+            2706
+          ],
+          "utf16": [
+            2700,
+            2706
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        153,
+        175
+      ],
+      "utf16": [
+        153,
+        175
+      ],
+      "indent": "  ",
+      "text": "Legenda"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        178,
+        712
+      ],
+      "utf16": [
+        178,
+        712
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            178,
+            198
+          ],
+          "utf16": [
+            178,
+            198
+          ]
+        },
+        "close": {
+          "bytes": [
+            705,
+            712
+          ],
+          "utf16": [
+            705,
+            712
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000001",
+      "bytes": [
+        203,
+        364
+      ],
+      "utf16": [
+        203,
+        364
+      ],
+      "indent": "    ",
+      "lifecycle": "swatch",
+      "swatch": {
+        "name": "Verde chiaro",
+        "color": "#b2df8a"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        1
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000002",
+      "bytes": [
+        369,
+        561
+      ],
+      "utf16": [
+        369,
+        561
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2
+      ],
+      "tag": "clipPath",
+      "role": "resource",
+      "id": "r00000003",
+      "bytes": [
+        566,
+        702
+      ],
+      "utf16": [
+        566,
+        702
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        715,
+        806
+      ],
+      "utf16": [
+        715,
+        806
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        809,
+        2699
+      ],
+      "utf16": [
+        809,
+        2699
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            809,
+            849
+          ],
+          "utf16": [
+            809,
+            849
+          ]
+        },
+        "close": {
+          "bytes": [
+            2695,
+            2699
+          ],
+          "utf16": [
+            2695,
+            2699
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000001",
+      "bytes": [
+        854,
+        944
+      ],
+      "utf16": [
+        854,
+        944
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000002",
+      "bytes": [
+        949,
+        1024
+      ],
+      "utf16": [
+        949,
+        1024
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000003",
+      "bytes": [
+        1029,
+        1104
+      ],
+      "utf16": [
+        1029,
+        1104
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000004",
+      "bytes": [
+        1109,
+        1184
+      ],
+      "utf16": [
+        1109,
+        1184
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000005",
+      "bytes": [
+        1189,
+        1395
+      ],
+      "utf16": [
+        1189,
+        1395
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            1189,
+            1221
+          ],
+          "utf16": [
+            1189,
+            1221
+          ]
+        },
+        "close": {
+          "bytes": [
+            1391,
+            1395
+          ],
+          "utf16": [
+            1391,
+            1395
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000006",
+      "bytes": [
+        1228,
+        1303
+      ],
+      "utf16": [
+        1228,
+        1303
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000007",
+      "bytes": [
+        1310,
+        1386
+      ],
+      "utf16": [
+        1310,
+        1386
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000008",
+      "bytes": [
+        1400,
+        1475
+      ],
+      "utf16": [
+        1400,
+        1475
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000009",
+      "bytes": [
+        1480,
+        1556
+      ],
+      "utf16": [
+        1480,
+        1556
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        7
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000a",
+      "bytes": [
+        1561,
+        1653
+      ],
+      "utf16": [
+        1561,
+        1653
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        8
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000b",
+      "bytes": [
+        1658,
+        1750
+      ],
+      "utf16": [
+        1658,
+        1750
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        9
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000c",
+      "bytes": [
+        1755,
+        1859
+      ],
+      "utf16": [
+        1755,
+        1859
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        10
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000d",
+      "bytes": [
+        1864,
+        1968
+      ],
+      "utf16": [
+        1864,
+        1968
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        11
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000e",
+      "bytes": [
+        1973,
+        2048
+      ],
+      "utf16": [
+        1973,
+        2048
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        12
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000f",
+      "bytes": [
+        2053,
+        2128
+      ],
+      "utf16": [
+        2053,
+        2128
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        13
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000010",
+      "bytes": [
+        2133,
+        2410
+      ],
+      "utf16": [
+        2133,
+        2410
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": true,
+        "samples": 3,
+        "duration": 16
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        14
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000011",
+      "bytes": [
+        2415,
+        2692
+      ],
+      "utf16": [
+        2415,
+        2692
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": true,
+        "samples": 3,
+        "duration": 16
+      }
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Legenda",
+      "bytes": [
+        153,
+        175
+      ],
+      "utf16": [
+        153,
+        175
+      ]
+    },
+    "desc": null,
+    "texts": [],
+    "links": [],
+    "embeds": [],
+    "boards": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "boards": [],
+    "counts": {
+      "strokes": 2,
+      "shapes": 14,
+      "texts": 0,
+      "images": 0,
+      "links": 0,
+      "foreign": 0
+    },
+    "ink": {
+      "samples": 6,
+      "duration": 32
+    },
+    "bbox": {
+      "x": 40.0,
+      "y": 40.0,
+      "width": 620.0,
+      "height": 300.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S017",
+      "severity": "info",
+      "bytes": [
+        854,
+        944
+      ],
+      "utf16": [
+        854,
+        944
+      ],
+      "detail": "#b2df8a #a6cee3 1.10"
+    },
+    {
+      "code": "S017",
+      "severity": "info",
+      "bytes": [
+        949,
+        1024
+      ],
+      "utf16": [
+        949,
+        1024
+      ],
+      "detail": "#a6cee3 #b2df8a 1.10"
+    },
+    {
+      "code": "S017",
+      "severity": "info",
+      "bytes": [
+        1228,
+        1303
+      ],
+      "utf16": [
+        1228,
+        1303
+      ],
+      "detail": "#88b4d2 #a6cee3 1.32"
+    }
+  ]
+}

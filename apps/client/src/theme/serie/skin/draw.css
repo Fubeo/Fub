@@ -766,6 +766,9 @@ button.draw-isolation-crumb:hover {
   border: 1px solid var(--text);
   border-radius: var(--radius-xs);
 }
+.draw-access-detail > .draw-access-swatch {
+  margin-inline-end: var(--space-1);
+}
 .draw-access-describe {
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
@@ -1127,6 +1130,19 @@ button.draw-isolation-crumb:hover {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
 }
+/* La campitura: il menu del tipo, i campi e i comandi del motivo hanno il
+   respiro dei campi delle altre sezioni. */
+.draw-hatch {
+  gap: var(--space-3);
+}
+.draw-hatch-fields,
+.draw-hatch-motif {
+  gap: var(--space-3) var(--space-2);
+}
+.draw-hatch-motif > .draw-button {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
 /* Gli effetti: ogni riga ha il suo filo; l'occhio è nel colore del testo
    quando l'effetto si vede, in grigio e sbarrato quando no, e l'effetto
    nascosto sbiadisce e ha il nome barrato, così lo stato non sta nel solo
@@ -1213,8 +1229,10 @@ button.draw-isolation-crumb:hover {
   background-image: linear-gradient(45deg, var(--text) 25%, var(--bg-elev) 25%, var(--bg-elev) 50%, var(--text) 50%, var(--text) 75%, var(--bg-elev) 75%);
 }
 /* Una sfumatura del disegno: i suoi punti, da sinistra a destra o dal
-   centro, come li scrive il pannello. */
-.draw-swatch-frame[data-shape="gradient"] > .draw-swatch {
+   centro, come li scrive il pannello; una campitura: le sue righe o i suoi
+   puntini, sul suo fondo. */
+.draw-swatch-frame[data-shape="gradient"] > .draw-swatch,
+.draw-swatch-frame[data-shape="hatch"] > .draw-swatch {
   background-image: var(--swatch-image);
 }
 /* Un motivo: una scacchiera del colore del testo. */

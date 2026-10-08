@@ -100,6 +100,7 @@ import { BLEND_MODES, blendStyle, keyword, length, letterSpacing, nonNegativeLen
 import { elemOf, fubAttributes, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import { effectsAttrs, effectsRefusal, effectsState, effectsStates, type Effect } from "./effects";
+import { hatchImage, hatchOf } from "./hatches";
 import { geometryBox, type Unit } from "./hit";
 import type { Measure } from "./measure";
 import { dashOf, dashValue, outlineOf, writtenDashes, type Inherited, type Outline } from "./outline";
@@ -474,7 +475,8 @@ export function lookOf(model: DocumentModel, units: readonly Unit[]): Look {
     if (value === null || !value.startsWith("url(") || samples.has(value)) continue;
     resources ??= resourcesOf(model);
     const sample = paintSample(model, value, resources);
-    if (sample !== null) samples.set(value, sample);
+    const hatch = sample?.kind === "pattern" ? hatchOf(resources.get(paintReference(value)!.id)!) : null;
+    if (sample !== null) samples.set(value, hatch === null ? sample : { kind: "hatch", image: hatchImage(hatch) });
   }
   return {
     fill,

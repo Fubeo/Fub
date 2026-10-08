@@ -1,8 +1,8 @@
 // Il corpus del banco di fedeltà: scene piccole che insieme toccano ogni
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
 // dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, le
-// risorse di ogni tipo, i campioni, le sfumature come le scrive FubDraw, le
-// tavole con le loro carte, e gli estranei tipici di Inkscape, Illustrator e
+// risorse di ogni tipo, i campioni, le sfumature e le campiture come le
+// scrive FubDraw, i motivi, le tavole con le loro carte, e gli estranei tipici di Inkscape, Illustrator e
 // Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa; quella
 // che mostra una tavola sola è più grande, e la sua tavola è grande quanto la
 // resa.
@@ -273,6 +273,31 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<rect id="f9" x="196" y="78" width="32" height="28" fill="#009e73" stroke="#1a202c" stroke-width="2" filter="url(#x6)" fub:effect="shadow -3 4 4 #000000 0.5; glow 3 #56b4e9 1; blur 1"/></g>'
       + '<g id="l2" fub:layer="Sopra">'
       + '<rect id="f10" x="190" y="112" width="44" height="36" fill="#d55e00" style="mix-blend-mode: screen"/></g>'),
+  },
+  {
+    // Le campiture e i motivi come li scrive FubDraw: righe diagonali su un
+    // fondo, righe incrociate senza fondo sopra un'altra forma, puntini,
+    // righe orizzontali in un testo, una quadrettatura su un oggetto girato
+    // e scalato, righe fitte a 30°, e un motivo del documento con una
+    // sfumatura dentro, che riempie un rettangolo arrotondato.
+    id: "campiture",
+    text: scene('<defs id="fub-defs">'
+      + '<pattern id="h1" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)" fub:pattern="lines -45 8 1.5 #000000 #56b4e9"><rect width="8" height="8" fill="#56b4e9"/><rect y="3.25" width="8" height="1.5" fill="#000000"/></pattern>'
+      + '<pattern id="h2" fub:role="private" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)" fub:pattern="cross 45 6 1 #0072b2"><rect y="2.5" width="6" height="1" fill="#0072b2"/><rect x="2.5" width="1" height="6" fill="#0072b2"/></pattern>'
+      + '<pattern id="h3" fub:role="private" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)" fub:pattern="dots 45 10 4 #ffffff #d55e00"><rect width="10" height="10" fill="#d55e00"/><circle cx="5" cy="5" r="2" fill="#ffffff"/></pattern>'
+      + '<pattern id="h4" fub:role="private" width="4" height="4" patternUnits="userSpaceOnUse" fub:pattern="lines 0 4 2 #1a202c #e69f00"><rect width="4" height="4" fill="#e69f00"/><rect y="1" width="4" height="2" fill="#1a202c"/></pattern>'
+      + '<pattern id="h5" fub:role="private" width="12" height="12" patternUnits="userSpaceOnUse" fub:pattern="cross 0 12 0.5 #000000 #ffffff"><rect width="12" height="12" fill="#ffffff"/><rect y="5.75" width="12" height="0.5" fill="#000000"/><rect x="5.75" width="0.5" height="12" fill="#000000"/></pattern>'
+      + '<pattern id="h6" fub:role="private" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(30)" fub:pattern="lines 30 3 0.75 #000000 #f0e442"><rect width="3" height="3" fill="#f0e442"/><rect y="1.125" width="3" height="0.75" fill="#000000"/></pattern>'
+      + '<linearGradient id="g1" fub:role="private" x1="3" y1="0" x2="13" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cc79a7"/><stop offset="1" stop-color="#0072b2"/></linearGradient>'
+      + '<pattern id="m1" fub:role="swatch" fub:name="Pois" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="8" cy="8" r="5" fill="url(#g1) #6676ad"/><rect width="3" height="3" fill="#009e73"/></pattern>'
+      + `</defs>${LAYER}`
+      + '<rect id="k1" x="8" y="8" width="70" height="52" fill="url(#h1) #4692bd"/>'
+      + '<rect id="k2" x="86" y="8" width="70" height="52" fill="#f0e442"/><ellipse id="k3" cx="121" cy="34" rx="30" ry="22" fill="url(#h2) #0072b2"/>'
+      + '<circle id="k4" cx="196" cy="34" r="26" fill="url(#h3) #da7220"/>'
+      + '<text id="k5" x="8" y="106" fill="url(#h4) #806016" font-family="Inter" font-size="40" font-weight="700"><tspan x="8" dy="0">Righe</tspan></text>'
+      + '<rect id="k6" x="0" y="0" width="40" height="24" fill="url(#h5) #eaeaea" stroke="#1a202c" transform="matrix(1.4772 0.2605 -0.2605 1.4772 146 68)"/>'
+      + '<ellipse id="k7" cx="186" cy="138" rx="44" ry="16" fill="url(#h6) #b4ab32"/>'
+      + '<rect id="k8" x="8" y="116" width="120" height="38" rx="6" fill="url(#m1) #5e79a8"/></g>'),
   },
   {
     // Tre tavole: due con la carta, bianca e azzurra, una senza, che mostra

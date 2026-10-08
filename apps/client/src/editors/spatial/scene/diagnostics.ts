@@ -21,7 +21,8 @@ export type Code =
   | "S013"
   | "S014"
   | "S015"
-  | "S016";
+  | "S016"
+  | "S017";
 
 /// La gravità di una diagnostica.
 export type Severity = "error" | "warning" | "info";
@@ -62,6 +63,7 @@ export const CODE_MESSAGES: Readonly<Record<Code, string>> = {
   S014: "riferimento a un id che il documento non ha: si disegna senza la risorsa",
   S015: "una carta che non va con la sua tavola",
   S016: "il nome della tavola è già del disegno o di una tavola prima: un riferimento a quel nome mostra l'altra",
+  S017: "due colori usati come codice si distinguono soltanto per la tinta: il contrasto fra loro è sotto 3:1",
 };
 
 /// Una diagnostica: il codice, la sua gravità, l'elemento o il blocco a cui
@@ -73,7 +75,8 @@ export interface Diagnostic {
   readonly bytes?: readonly [number, number];
   readonly utf16?: readonly [number, number];
   /// Il dettaglio: l'id ripetuto, l'errore dell'inchiostro, il contrasto
-  /// misurato, la grandezza del testo, l'attributo e l'id che manca.
+  /// misurato, la grandezza del testo, l'attributo e l'id che manca, i due
+  /// colori confusi.
   readonly detail?: string;
 }
 

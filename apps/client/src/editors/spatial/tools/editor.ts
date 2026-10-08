@@ -271,6 +271,7 @@ import {
   type PlaceGrip,
 } from "./gradients";
 import type { GradientPanelView } from "./gradient-panel";
+import type { HatchPanelView } from "./hatch-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
 import { resourceHome } from "./resources";
@@ -339,6 +340,7 @@ import { applyOps } from "./apply";
 import { pathOps, replaceElem } from "./topath";
 import type { Join } from "./offset";
 import { holdsShape, holdsStroke, inkPathOps, offsetOps, outlineStrokeOps, simplifyOps, strokeFill } from "./paths";
+import { deleteMotifOps, distinguishOps, documentPatterns, filledParts, hatchOps, hatchView, motifOps, renameMotifOps, type HatchChange, type HatchPreset, type HatchView } from "./patterns";
 import { movedPoint, presetOf, PRESETS, profileWidth, rightOf, SpineMeasure, widthOutline, withoutPoint, withPoint, withWidths, type Preset, type WidthShape } from "./profile";
 import { holdsWidth, profileOps, widthsOf, widthTarget, writeWidth, type NoWidth, type ProfileChange, type WidthTarget } from "./width";
 import type { BooleanKind } from "./boolean";
@@ -893,7 +895,7 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "typeset"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset"];
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -903,6 +905,15 @@ const PANEL_ROOM_REM = 36;
 /// Quanto aspetta la verifica dell'accessibilità, dopo l'ultimo cambio del
 /// disegno, prima di rileggerlo: rileggerlo costa quanto aprirlo.
 const AUDIT_MS = 250;
+
+/// Come si dice, nell'annuncio della verifica, ogni campitura pronta.
+const HATCH_NAMES: Readonly<Record<HatchPreset, DrawKey>> = {
+  diagonal: "draw.access.preset.diagonal",
+  cross: "draw.access.preset.cross",
+  horizontal: "draw.access.preset.horizontal",
+  dots: "draw.access.preset.dots",
+  grid: "draw.access.preset.grid",
+};
 
 /// Il tasto che mostra e nasconde gli attributi, dal livello Esperto: lo
 /// stesso dell'editor XML di Inkscape.
@@ -2845,6 +2856,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       onPreview: (target, change) => previewGradient(target, change),
       onStop: (index) => chooseGradientStop(index),
     },
+    hatch: {
+      onChange: (change, label) => changeHatch(change, label),
+      onMotif: () => motifFromSelection(),
+      motifReason: () => motifReason(),
+      onRename: (id, name) => renameMotif(id, name),
+      onDelete: (id) => deleteMotif(id),
+    },
     effects: {
       onChange: (change, label) => changeEffects(change, label),
     },
@@ -2878,6 +2896,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// I colori del documento contati per la scena `index`: si ricontano
   /// soltanto quando il disegno cambia.
   let colorsCounted: { readonly index: SceneIndex; readonly colors: DocumentColors } | null = null;
+  /// Le campiture degli oggetti scelti `keys` lette per la scena `index`:
+  /// con mille oggetti scelti si rileggono soltanto quando il disegno o la
+  /// selezione cambiano, non a ogni colore recente o cambio di vista.
+  let hatchRead: { readonly index: SceneIndex; readonly keys: string; readonly view: HatchView } | null = null;
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
   let ratioLock: { readonly keys: string; readonly on: boolean } | null = null;
@@ -3072,6 +3094,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto: l'oggetto più in alto ritaglia gli altri, o ne fa
   // la trasparenza, e una maschera si toglie; in un menu.
   const maskButton = arrangeButton("draw.mask", "draw-mask", null, () => openMenu(maskButton, maskItems()));
+  // Dal livello Esperto: gli oggetti scelti diventano un motivo del
+  // documento, che i riempimenti possono usare.
+  const motifButton = arrangeButton("draw.hatch.motif.make", "draw-hatch-pattern", null, () => motifFromSelection());
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
   // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
@@ -5218,6 +5243,28 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (now !== key && selection.includes(key)) select(selection.map((each) => (each === key ? now : each)));
   };
 
+  /// Dà una campitura che le distingue alle aree `keys` di un colore, in un
+  /// passo; quelle che non si scelgono, o che hanno già una campitura, una
+  /// sfumatura o un motivo, restano.
+  function hatchAreas(keys: readonly string[]): void {
+    const model = engine.model;
+    const index = currentIndex();
+    const units = keys.flatMap((key) => {
+      const unit = index.get(key);
+      return unit === null ? [] : [unit];
+    });
+    if (model === null || units.length === 0) return;
+    cancelGesture();
+    const hatched = distinguishOps(model, units, measureText, newIds());
+    if (hatched.ops.length === 0 || hatched.preset === null) return;
+    if (commit("draw.access.action.hatch", asGesture(hatched.ops)) === null) return;
+    // Le aree che ricevono un id cambiano chiave: la selezione le segue.
+    const now = new Map(units.map((unit, at) => [unit.key, hatched.keys[at] ?? unit.key]));
+    if (selection.some((key) => (now.get(key) ?? key) !== key)) select(selection.map((key) => now.get(key) ?? key));
+    syncAccess(true);
+    announce(plural(hatched.reached, "draw.access.fixed.hatch.one", "draw.access.fixed.hatch.other", { preset: t(HATCH_NAMES[hatched.preset]) }));
+  }
+
   /// Corregge `stale`, com'è nel disegno di adesso, in un passo.
   function fixProblem(stale: Problem): void {
     const problem = problemNow(stale.code, stale.key);
@@ -5231,6 +5278,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (fix.kind === "describe" || !editable()) return;
     const rekey = settleCrop();
     const model = engine.model;
+    if (fix.kind === "hatch") {
+      hatchAreas(fix.keys.map(rekey));
+      return;
+    }
     const unit = problem.key === null ? null : currentIndex().get(rekey(problem.key));
     if (model === null || unit === null) return;
     cancelGesture();
@@ -5713,6 +5764,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
                 swatch: style().swatch,
               },
         gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches),
+        hatch: model === null || units.length === 0 || !has("hatches") ? null : hatchSection(model, units, keys, swatches, unit),
       }), effects),
     );
   }
@@ -5720,6 +5772,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// `shown`, con la sezione «Effetti» `effects` se c'è.
   function withEffects(shown: PropertiesView, effects: ReturnType<typeof effectsView>): PropertiesView {
     return effects === null ? shown : { ...shown, effects };
+  }
+
+  /// La sezione «Campitura» per gli oggetti scelti `units`, di chiavi `keys`;
+  /// `null` se nessuna delle loro parti ha un riempimento. C'è dal livello
+  /// Standard, con la parte «Campiture»; i motivi del documento, e il loro
+  /// nome, sono dell'Esperto.
+  function hatchSection(model: DocumentModel, units: readonly Unit[], keys: string, swatches: HatchPanelView["swatches"], unit: LengthUnit): HatchPanelView | null {
+    const index = currentIndex();
+    if (hatchRead?.index !== index || hatchRead.keys !== keys) hatchRead = { index, keys, view: hatchView(filledParts(model, units)) };
+    const shown = hatchRead.view;
+    if (shown.count === 0) return null;
+    return { key: keys, hatch: shown, unit: lookUnit(unit), swatches, motifs: documentPatterns(model), expert: has("motifs") };
   }
 
   /// La sezione «Sfumatura» per gli oggetti scelti `units`, di chiavi
@@ -6046,6 +6110,94 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return blurred ? t("draw.effects.full.blur") : t("draw.effects.full", { max: String(MAX_EFFECTS) });
     }
     return changeFromPanel(label, changed.ops, changed.keys);
+  }
+
+  // --- Le campiture e i motivi -----------------------------------------------
+
+  /// Il cambio `change` delle campiture degli oggetti scelti, dalla sezione
+  /// «Campitura», col nome `label` nella cronologia. Una scelta del menu
+  /// dice a quanti oggetti è arrivata; un campo no, che si legge. `null` se
+  /// è fatto, altrimenti perché no.
+  function changeHatch(change: HatchChange, label: DrawKey): string | null {
+    settleCrop();
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    const changed = hatchOps(model, units, change, measureText, newIds());
+    const chosen = "preset" in change || "none" in change || "pattern" in change;
+    if (changed.ops.length === 0) {
+      if (chosen) announce(t("draw.unchanged"));
+      return null;
+    }
+    const failure = changeFromPanel(label, changed.ops, changed.keys);
+    if (failure !== null || !chosen) return failure;
+    if ("preset" in change) {
+      announce(plural(changed.reached, "draw.hatch.applied.one", "draw.hatch.applied.other", { name: t(`draw.hatch.preset.${change.preset}`) }));
+    } else if ("pattern" in change) {
+      const name = documentPatterns(model).find((each) => each.id === change.pattern)?.name ?? "";
+      announce(plural(changed.reached, "draw.hatch.applied.motif.one", "draw.hatch.applied.motif.other", { name }));
+    } else {
+      announce(plural(changed.reached, "draw.hatch.removed.one", "draw.hatch.removed.other"));
+    }
+    return null;
+  }
+
+  /// Dà il nome `name` al motivo `id` del documento, dalla sezione
+  /// «Campitura». `null` se è fatto, altrimenti perché no.
+  function renameMotif(id: string, name: string): string | null {
+    settleCrop();
+    const model = engine.model;
+    if (model === null) return null;
+    const renamed = renameMotifOps(model, id, name, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.motif_rename", renamed.ops, renamed.keys);
+    if (outcome === null && renamed.ops.length > 0) announce(t("draw.hatch.motif.renamed", { name }));
+    return outcome;
+  }
+
+  /// Elimina il motivo `id` del documento: chi lo usa torna al suo colore, e
+  /// si dice quanti oggetti non si sono potuti cambiare.
+  function deleteMotif(id: string): string | null {
+    settleCrop();
+    const model = engine.model;
+    const motif = model === null ? undefined : documentPatterns(model).find((each) => each.id === id);
+    if (model === null || motif === undefined) return null;
+    const removed = deleteMotifOps(model, id, selectedUnits(), newIds());
+    const outcome = changeFromPanel("draw.action.motif_delete", removed.ops, removed.keys);
+    if (outcome !== null) return outcome;
+    const { name } = motif;
+    announce(removed.kept === 0 ? t("draw.hatch.motif.deleted", { name }) : plural(removed.kept, "draw.hatch.motif.deleted.kept.one", "draw.hatch.motif.deleted.kept.other", { name }));
+    return null;
+  }
+
+  /// Perché «Motivo dalla selezione» non si fa con gli oggetti scelti, a
+  /// parole; `null` se si fa. Si chiede quando un menu si apre, non a ogni
+  /// cambio della selezione: fare il motivo costa quanto copiare gli oggetti.
+  function motifReason(): string | null {
+    if (!editable()) return t("draw.rejected", { reason: t("draw.reason.read_only") });
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return t("draw.selected.none");
+    const made = motifOps(model, units, t("draw.hatch.motif.base"), newIds());
+    return typeof made === "string" ? t(`draw.hatch.motif.refused.${made}`) : null;
+  }
+
+  /// «Motivo dalla selezione», dal livello Esperto: gli oggetti scelti
+  /// diventano un motivo del documento, col primo nome libero, che i
+  /// riempimenti possono usare. Gli oggetti restano, e restano scelti.
+  function motifFromSelection(): void {
+    // In sola lettura il comando c'è e lo dice, invece di non fare niente.
+    if (has("motifs") && !editable()) {
+      announce(t("draw.rejected", { reason: t("draw.reason.read_only") }));
+      return;
+    }
+    const units = arranging("motifs");
+    if (units === null) return;
+    const made = motifOps(engine.model!, units, t("draw.hatch.motif.base"), newIds());
+    if (typeof made === "string") {
+      announce(t(`draw.hatch.motif.refused.${made}`));
+      return;
+    }
+    if (arrange("draw.action.motif_make", made) !== null) announce(t("draw.hatch.motif.made", { name: made.name }));
   }
 
   /// Mostra sul disegno la sfumatura `change` del bersaglio `target` degli
@@ -6612,6 +6764,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     pathButton.hidden = !has("path");
     booleanButton.hidden = !has("boolean");
     maskButton.hidden = !has("masks");
+    motifButton.hidden = !has("motifs");
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
     textPathButton.hidden = !has("typeset") || !units.some((unit) => unit.role === "text");
@@ -10856,10 +11009,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// I punti di una sfumatura che si traccia, come li mostra il foglio:
   /// quelli della prima sfumatura degli oggetti scelti, o la dissolvenza del
-  /// primo colore.
+  /// colore da cui nasce, come dal pannello.
   const drawnStops = (read: GradientRead): readonly GradientStop[] => {
     const shaded = read.painted.find((part) => part.gradient !== null);
-    return shaded !== undefined ? shaded.gradient!.look.stops : fadeOf(read.painted[0]?.solid ?? null);
+    return shaded !== undefined ? shaded.gradient!.look.stops : fadeOf(read.painted[0]?.base ?? null);
   };
 
   /// Attorno a che cosa va, con Maiusc, il capo `grip` di `place` che stava
@@ -14852,6 +15005,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       { label: t("draw.unlock_all"), disabled: !unlockable, ...(canEdit && !unlockable ? { description: t("draw.unlocked.none") } : {}), run: () => unflagAll("locked") },
       { label: t("draw.show_all"), disabled: !showable, ...(canEdit && !showable ? { description: t("draw.shown.none") } : {}), run: () => unflagAll("hidden") },
     );
+    if (has("motifs")) {
+      const reason = motifReason();
+      items.push({ label: t("draw.hatch.motif.make"), separator: true, disabled: reason !== null, ...(reason === null ? {} : { description: reason }), run: () => motifFromSelection() });
+    }
     const single = units.length === 1 && (units[0]!.role === "group" || units[0]!.role === "link");
     items.push({
       label: t("draw.isolate"),

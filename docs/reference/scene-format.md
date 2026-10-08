@@ -516,13 +516,13 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | S014 | avviso | un riferimento a un id che il documento non ha: si disegna senza la [risorsa](scene-format-resources.md) |
 | S015 | info | una carta che non va con la sua [tavola](scene-format-boards.md) |
 | S016 | avviso | il nome di una [tavola](scene-format-boards.md) è già del disegno o di una tavola prima: un riferimento a quel nome mostra l'altra |
+| S017 | info | due colori usati come codice, ciascuno da almeno due aree, si distinguono soltanto per la tinta: fra loro il contrasto è sotto 3:1 |
 
-- **S001, S009, S012, S013:** come si misurano sta in
+- **S001, S009, S012, S013, S017:** come si misurano sta in
   [accessibilità](scene-format-accessibility.md).
 - **S002:** uno per blocco estraneo, con il suo span. La dichiarazione
   `<?xml?>` e il resto del prologo formano un blocco.
-- **S003:** confronta l'attributo `id` senza prefisso di tutti gli elementi,
-  in qualunque namespace, estranei compresi.
+- **S003:** confronta l'`id` senza prefisso di tutti gli elementi, in ogni namespace, estranei compresi.
 - **S010:** solo per un inchiostro valido; uno non valido ha già S004.
 - **S005:** ogni `script`, SVG o XHTML; ogni attributo `on*`, senza badare a
   maiuscole e minuscole; ogni `href` con schema `javascript:`, anche quando lo

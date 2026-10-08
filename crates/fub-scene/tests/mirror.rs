@@ -37,7 +37,12 @@
 //! - `boards`: un disegno con le tavole (formato della scena, tavole): coi
 //!   nomi, senza nome e con un nome già usato, le carte di ogni tavola, e una
 //!   carta per ogni modo di non andare con la sua tavola; un esempio di ogni
-//!   motivo per cui un `view` è estraneo.
+//!   motivo per cui un `view` è estraneo;
+//! - `legend`: un disegno dove il colore fa da codice (S017): su una carta
+//!   colorata, riquadri dello stesso colore che si distinguono soltanto per la
+//!   tinta, scritti in chiaro, con un campione e con un'opacità di gruppo, e
+//!   riquadri dello stesso colore che non contano, perché il loro colore non
+//!   si sa, non hanno area o sono tratti a penna.
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -58,7 +63,8 @@ use std::path::PathBuf;
 use common::check_lossless;
 use fub_scene::ink::INK_MAX_SAMPLES;
 use fub_scene::{
-    read, Ink, Item, Lifecycle, Role, Sample, Scale, Scene, Swatch, FUB_NS, MAX_ELEMENTS, SVG_NS,
+    read, Ink, Item, Lifecycle, Motif, Role, Sample, Scale, Scene, Swatch, FUB_NS, MAX_ELEMENTS,
+    SVG_NS,
 };
 use serde_json::json;
 
@@ -1117,7 +1123,44 @@ fn swatches() -> String {
                 ),
         )
         // Un campione chiaro, per il contrasto (S009).
-        .child(swatch("r0000000c", "Giallo", "#f0e442"));
+        .child(swatch("r0000000c", "Giallo", "#f0e442"))
+        // Un motivo del documento, un `pattern` col suo nome: un campione
+        // anche lui.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000d")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Pois")
+                .a("patternUnits", "userSpaceOnUse")
+                .a("x", 0)
+                .a("y", 0)
+                .a("width", 12)
+                .a("height", 12)
+                .child(
+                    El::new("circle")
+                        .a("cx", 6)
+                        .a("cy", 6)
+                        .a("r", 3)
+                        .a("fill", "#cc79a7"),
+                ),
+        )
+        // Motivi che si dicono campioni senza un nome: risorse senza ciclo
+        // di vita.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000e")
+                .a("fub:role", "swatch")
+                .a("fub:name", " ")
+                .a("width", 10)
+                .a("height", 10),
+        )
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000f")
+                .a("fub:role", "swatch")
+                .a("width", 10)
+                .a("height", 10),
+        );
     let root = svg(800, 600)
         .a(
             "xmlns:inkscape",
@@ -1203,6 +1246,16 @@ fn swatches() -> String {
                         .a("fill", "url(#r0000000c) #000000")
                         .a("font-size", 16)
                         .child(El::new("tspan").a("x", 440).a("dy", 0).text("Giallo")),
+                )
+                // Chi usa il motivo, col suo colore di ripiego.
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000008")
+                        .a("x", 600)
+                        .a("y", 440)
+                        .a("width", 120)
+                        .a("height", 80)
+                        .a("fill", "url(#r0000000d) #e3b4cf"),
                 ),
         );
     document(&root, "\n")
@@ -1389,6 +1442,137 @@ fn boards() -> String {
     document(&root, "\n")
 }
 
+/// Un riquadro pieno per `legend`.
+fn key_tile(id: &str, x: u32, y: u32, height: u32, fill: &str) -> El {
+    El::new("rect")
+        .a("id", id)
+        .a("x", x)
+        .a("y", y)
+        .a("width", 60)
+        .a("height", height)
+        .a("fill", fill)
+}
+
+/// `legend`: riquadri il cui colore fa da codice.
+fn legend() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(swatch("r00000001", "Verde chiaro", "#b2df8a"))
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000002")
+                .a("fub:role", "private")
+                .a("x1", 0)
+                .a("y1", 0)
+                .a("x2", 1)
+                .a("y2", 0)
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#fb9a99"))
+                .child(El::new("stop").a("offset", 1).a("stop-color", "#fdbf6f")),
+        )
+        .child(
+            El::new("clipPath")
+                .a("id", "r00000003")
+                .a("fub:role", "private")
+                .a("clipPathUnits", "objectBoundingBox")
+                .child(
+                    El::new("circle")
+                        .a("cx", "0.5")
+                        .a("cy", "0.5")
+                        .a("r", "0.5"),
+                ),
+        );
+    // Una carta colorata: il colore di un riquadro non opaco si compone su
+    // di lei.
+    let colored = El::new("rect")
+        .a("id", "fub-paper")
+        .a("fub:role", "paper")
+        .a("x", 0)
+        .a("y", 0)
+        .a("width", 800)
+        .a("height", 400)
+        .a("fill", "#f0f0f0");
+    let pen: Vec<Sample> = (0..3)
+        .map(|i| Sample {
+            x: 400.0 + 20.0 * f64::from(i),
+            y: 340.0,
+            p: None,
+            t: 8.0 * f64::from(i),
+            tilt: None,
+        })
+        .collect();
+    let root = svg(800, 400)
+        .child(El::new("title").text("Legenda"))
+        .child(defs)
+        .child(colored)
+        .child(
+            layer("l00000001", "Livello 1")
+                // Il verde chiaro, una volta per campione e una in chiaro, e
+                // il blu chiaro due volte: due codici confusi.
+                .child(key_tile("o00000001", 40, 40, 40, "url(#r00000001) #000000"))
+                .child(key_tile("o00000002", 120, 40, 40, "#a6cee3"))
+                .child(key_tile("o00000003", 200, 40, 40, "#b2df8a"))
+                .child(key_tile("o00000004", 280, 40, 40, "#a6cee3"))
+                // Il blu al 50% sulla carta, in un gruppo: #88b4d2, un terzo
+                // codice, confuso con tutti e due.
+                .child(
+                    El::new("g")
+                        .a("id", "o00000005")
+                        .a("opacity", "0.5")
+                        .child(key_tile("o00000006", 40, 120, 40, "#1f78b4"))
+                        .child(key_tile("o00000007", 120, 120, 40, "#1f78b4")),
+                )
+                // Due riquadri quasi neri: 7:1 col resto, nessuna confusione.
+                .child(key_tile("o00000008", 40, 200, 40, "#1f1f1f"))
+                .child(key_tile("o00000009", 120, 200, 40, "#1f1f1f"))
+                // Ciò che non conta: una sfumatura, un ritaglio, una figura
+                // senza altezza e due tratti a penna. Ognuno, se contasse,
+                // darebbe un colore di codice in più.
+                .child(key_tile(
+                    "o0000000a",
+                    200,
+                    200,
+                    40,
+                    "url(#r00000002) #fb9a99",
+                ))
+                .child(key_tile(
+                    "o0000000b",
+                    280,
+                    200,
+                    40,
+                    "url(#r00000002) #fb9a99",
+                ))
+                .child(
+                    key_tile("o0000000c", 360, 200, 40, "#fdbf6f")
+                        .a("clip-path", "url(#r00000003)"),
+                )
+                .child(
+                    key_tile("o0000000d", 440, 200, 40, "#fdbf6f")
+                        .a("clip-path", "url(#r00000003)"),
+                )
+                .child(key_tile("o0000000e", 520, 200, 0, "#cab2d6"))
+                .child(key_tile("o0000000f", 600, 200, 0, "#cab2d6"))
+                .child(drawn(
+                    "o00000010",
+                    "pen",
+                    "2026-10-01T09:21:00.000Z",
+                    BRUSH,
+                    &pen,
+                    Scale::S10,
+                    "#6a3d9a",
+                ))
+                .child(drawn(
+                    "o00000011",
+                    "pen",
+                    "2026-10-01T09:21:01.000Z",
+                    BRUSH,
+                    &pen,
+                    Scale::S10,
+                    "#6a3d9a",
+                )),
+        );
+    document(&root, "\n")
+}
+
 #[test]
 fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
@@ -1405,8 +1589,10 @@ fn sparse_is_a_complete_drawing() {
     );
     let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
     use fub_scene::Code::*;
-    // L'immagine del vault nel gruppo non ha descrizione: S012.
-    assert_eq!(codes, [S002, S004, S009, S010, S012]);
+    // L'immagine del vault nel gruppo non ha descrizione: S012. Il verde e il
+    // rosa della tavolozza, ciascuno su due forme, si distinguono soltanto
+    // per la tinta: S017 per ognuno.
+    assert_eq!(codes, [S002, S004, S009, S010, S012, S017, S017]);
     assert_eq!(scene.index.links.len(), 1);
     assert_eq!(scene.index.embeds.len(), 1);
     // La riga coi pezzi si legge intera.
@@ -1561,6 +1747,22 @@ fn swatches_are_read_with_their_names_and_colors() {
         element(&[1, 10]).and_then(|e| e.lifecycle),
         Some(Lifecycle::Shared)
     );
+    // Un motivo col suo nome è un campione; senza nome non ha ciclo di vita.
+    let motif = element(&[1, 12]).unwrap();
+    assert_eq!(
+        (motif.lifecycle, motif.swatch.clone(), motif.motif.clone()),
+        (
+            Some(Lifecycle::Swatch),
+            None,
+            Some(Motif {
+                name: "Pois".to_owned()
+            })
+        )
+    );
+    for at in 13..15 {
+        let item = element(&[1, at]).unwrap();
+        assert_eq!((item.lifecycle, item.motif.clone()), (None, None), "{at}");
+    }
     // Chi usa un campione è modificabile, anche la linea senza altezza.
     for at in 0..5 {
         assert!(element(&[3, at]).is_some(), "{at}");
@@ -1692,6 +1894,30 @@ fn boards_are_read_with_their_papers() {
             "free",
             "Storia",
             "Copertina"
+        ]
+    );
+}
+
+#[test]
+fn legend_finds_the_colors_told_apart_only_by_hue() {
+    let scene = fixture("legend", &legend());
+    assert!(scene.editable());
+    // Il verde chiaro (un campione e un colore in chiaro), il blu chiaro e il
+    // blu al 50% sulla carta #f0f0f0: tre codici, ognuno col compagno che
+    // contrasta di meno. Il resto non conta, e il rosa e l'arancio non
+    // compaiono.
+    let found: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    use fub_scene::Code::S017;
+    assert_eq!(
+        found,
+        [
+            (S017, Some("#b2df8a #a6cee3 1.10")),
+            (S017, Some("#a6cee3 #b2df8a 1.10")),
+            (S017, Some("#88b4d2 #a6cee3 1.32")),
         ]
     );
 }
@@ -2162,6 +2388,7 @@ fn the_folder_holds_only_what_this_test_writes() {
         "swatches",
         "text",
         "boards",
+        "legend",
     ]
     .iter()
     .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])

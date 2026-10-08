@@ -11,7 +11,7 @@
 // prova sé stesso: una differenza messa apposta in una strada sola, un
 // colore, un carattere, un corsivo, un tratteggio, le risorse, i campioni,
 // le sfumature, le punte, i ritagli e le maschere, gli effetti e le fusioni
-// che mancano, le carte delle tavole che mancano, una tavola mostrata senza
+// che mancano, una campitura girata di qualche grado, le carte delle tavole che mancano, una tavola mostrata senza
 // ritaglio, deve farlo diventare rosso.
 //
 // # La soglia
@@ -69,6 +69,8 @@ const PLANTED = [
   ["effetti", "ripiego"],
   ["effetti", "fusione"],
   ["effetti", "sfocatura"],
+  ["campiture", "ripiego"],
+  ["campiture", "angolo"],
   ["tavole", "carta"],
   ["tavola-sola", "ritaglio"],
 ];

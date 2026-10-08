@@ -89,6 +89,35 @@ describe("i problemi", () => {
     ]);
   });
 
+  it("due colori di codice che si distinguono soltanto per la tinta: ogni colore ha una campitura per tutte le sue aree", () => {
+    const box = (id: string, x: number, fill: string): string => `<rect id="${id}" x="${x}" y="0" width="10" height="10" fill="${fill}"/>`;
+    // Il blu e il verde chiari, due aree ciascuno, una in un gruppo: la
+    // chiave di ognuna sta nella correzione del suo colore, non soltanto la
+    // prima.
+    const source = doc(
+      `<title>Prova</title>${LAYER}${box("o1a1a1a1a", 0, "#a6cee3")}${box("o2b2b2b2b", 20, "#b2df8a")}` +
+        `<g id="og1g1g1g1">${box("o3c3c3c3c", 40, "#a6cee3")}</g>${box("o4d4d4d4d", 60, "#b2df8a")}</g>`,
+    );
+    const found = problems(source);
+    expect(found.map((problem) => [problem.code, problem.key, problem.role, problem.severity, problem.detail, problem.threshold])).toEqual([
+      ["S017", "o1a1a1a1a", "rect", "info", "#a6cee3 #b2df8a 1.10", 3],
+      ["S017", "o2b2b2b2b", "rect", "info", "#b2df8a #a6cee3 1.10", 3],
+    ]);
+    expect(found.map((problem) => problem.fix)).toEqual([
+      { kind: "hatch", color: "#a6cee3", keys: ["o1a1a1a1a", "o3c3c3c3c"] },
+      { kind: "hatch", color: "#b2df8a", keys: ["o2b2b2b2b", "o4d4d4d4d"] },
+    ]);
+    // Un colore composto con l'opacità è il colore che si vede, sulla carta.
+    const translucent = doc(
+      `<title>Prova</title><rect id="fub-paper" fub:role="paper" width="100" height="100" fill="#f0f0f0"/>${LAYER}` +
+        `<g id="og1g1g1g1" opacity="0.5">${box("o1a1a1a1a", 0, "#1f78b4")}${box("o2b2b2b2b", 20, "#1f78b4")}</g>${box("o3c3c3c3c", 40, "#a6cee3")}${box("o4d4d4d4d", 60, "#a6cee3")}</g>`,
+    );
+    expect(problems(translucent).map((problem) => [problem.detail, problem.fix])).toEqual([
+      ["#88b4d2 #a6cee3 1.32", { kind: "hatch", color: "#88b4d2", keys: ["o1a1a1a1a", "o2b2b2b2b"] }],
+      ["#a6cee3 #88b4d2 1.32", { kind: "hatch", color: "#a6cee3", keys: ["o3c3c3c3c", "o4d4d4d4d"] }],
+    ]);
+  });
+
   it("un disegno che si legge non ha problemi", () => {
     expect(problems(doc(`<title>Prova</title>${LAYER}${label("o1a1a1a1a", 20, "", "Testo")}<image x="0" y="30" width="10" height="10" href="foto.png" aria-hidden="true"/></g>`))).toEqual([]);
   });

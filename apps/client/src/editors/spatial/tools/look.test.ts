@@ -7,8 +7,10 @@ import { describe, expect, it } from "vitest";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
 import { followEffects, type Effect, type Shadow } from "./effects";
+import { hatchOf } from "./hatches";
 import { lookOf, lookOps, opacityOf, paintText, styleOf, styleOps, type LookChange, type Restyled, type Style } from "./look";
 import { estimate } from "./measure";
+import { resourcesOf } from "./resources";
 import { arrowPath } from "./shapes";
 import { LAYER, open, type Opened } from "./test-support";
 import { BLUE, CUSTOM, DEFS, GREEN, MARKER, RED } from "./tip-support";
@@ -489,6 +491,50 @@ describe("lo stile copiato e incollato", () => {
       expect(new Set([b, c, "rgggggggg"]).size).toBe(3);
       // Senza il riquadro di chi la dava, la copia resta com'era.
       expect(after).not.toContain("gradientTransform");
+    });
+  });
+
+  describe("con una campitura o un motivo del documento", () => {
+    const DEFS_HATCH =
+      '<defs id="fub-defs"><pattern id="rhhhhhhhh" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" fub:pattern="lines 0 8 2 #000000 #56b4e9">' +
+      '<rect width="8" height="8" fill="#56b4e9"/><rect y="3" width="8" height="2" fill="#000000"/></pattern>' +
+      '<pattern id="rmmmmmmmm" fub:role="swatch" fub:name="Pois" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r="2" fill="#d55e00"/></pattern></defs>';
+    const SOURCES =
+      '<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10" fill="url(#rhhhhhhhh) #4087af"/><rect id="odddddddd" x="0" y="20" width="10" height="10" fill="url(#rmmmmmmmm) #d55e00"/>';
+    const TARGETS = '<rect id="obbbbbbbb" x="100" y="0" width="20" height="10"/><rect id="occcccccc" x="0" y="50" width="10" height="40"/>';
+    /// Gli id delle campiture di `text`, nell'ordine del file.
+    const hatches = (text: string): string[] => [...text.matchAll(/<pattern id="(\w+)"[^>]* fub:pattern=/g)].map((match) => match[1]!);
+
+    it("la campitura arriva come copia per ciascuno, ancora una campitura, nelle sue coordinate", () => {
+      const opened = open(doc(`${DEFS_HATCH}${LAYER}${SOURCES}${TARGETS}</g>`));
+      const after = applied(opened, pasted(opened, ["obbbbbbbb", "occcccccc"], copied(opened, "oaaaaaaaa")!));
+      const [own, b, c] = hatches(after);
+      expect(own).toBe("rhhhhhhhh");
+      expect(new Set([own, b, c]).size).toBe(3);
+      expect(after).toContain(`<rect id="obbbbbbbb" x="100" y="0" width="20" height="10" fill="url(#${b}) #4087af"/>`);
+      expect(after).toContain(`<rect id="occcccccc" x="0" y="50" width="10" height="40" fill="url(#${c}) #4087af"/>`);
+      // Una campitura non segue il riquadro: si ripete uguale dovunque.
+      const resources = resourcesOf(opened.engine.model!);
+      expect([b, c].map((id) => hatchOf(resources.get(id!)!))).toEqual([0, 1].map(() => hatchOf(resources.get("rhhhhhhhh")!)));
+      expect(after).toContain(
+        `<pattern id="${b}" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" fub:pattern="lines 0 8 2 #000000 #56b4e9">`,
+      );
+    });
+
+    it("e un colore dato a tutti, come il contagocce con Maiusc, la copia allo stesso modo", () => {
+      const opened = open(doc(`${DEFS_HATCH}${LAYER}${SOURCES}${TARGETS}</g>`));
+      const after = applied(opened, lookOps(opened.engine.model!, [opened.index.get("obbbbbbbb")!, opened.index.get("occcccccc")!], { fill: "url(#rhhhhhhhh) #4087af" }, estimate, ids(opened)));
+      expect(new Set(hatches(after)).size).toBe(3);
+    });
+
+    it("il motivo del documento resta lo stesso; in un altro disegno, che non lo ha, lascia il suo ripiego", () => {
+      const opened = open(doc(`${DEFS_HATCH}${LAYER}${SOURCES}${TARGETS}</g>`));
+      const style = copied(opened, "odddddddd")!;
+      const after = applied(opened, pasted(opened, ["obbbbbbbb"], style));
+      expect(after).toContain('<rect id="obbbbbbbb" x="100" y="0" width="20" height="10" fill="url(#rmmmmmmmm) #d55e00"/>');
+      expect(after.match(/<pattern /g)).toHaveLength(2);
+      const other = open(doc(`${LAYER}${TARGETS}</g>`));
+      expect(applied(other, pasted(other, ["obbbbbbbb"], style))).toContain('<rect id="obbbbbbbb" x="100" y="0" width="20" height="10" fill="#d55e00"/>');
     });
   });
 

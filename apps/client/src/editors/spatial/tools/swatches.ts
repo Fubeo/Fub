@@ -22,7 +22,8 @@
 //   sull'oggetto. Un oggetto bloccato, o in un gruppo o in un livello
 //   bloccato, resta com'è, e così un elemento estraneo e un foglio di stile:
 //   cambiano colore col campione che usano, ma tengono il ripiego che
-//   avevano.
+//   avevano. Anche una campitura resta com'è: i suoi colori li dice
+//   `fub:pattern`, e si cambiano nella sua sezione.
 // - **Le righe e le parole di un testo** non usano campioni, perché il
 //   formato non dà loro riferimenti: un testo usa un campione intero, e le
 //   parole che scrivono un colore loro lo tengono.
@@ -42,6 +43,7 @@ import { t } from "../strings";
 import { elemOf, plainAttributes, Plan, readHead, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
+import { hatchOf } from "./hatches";
 import { FILLED, INKED, OUTLINED, paintText } from "./look";
 import { cleanName, NAME_MAX, nameKey } from "./naming";
 import { customColor } from "./palette";
@@ -282,25 +284,26 @@ class Walk {
       }
       const paints = node.facts.uri === SVG_NS ? CONTENT.get(node.facts.local) : undefined;
       const elem = paints === undefined ? null : cachedElem(node);
-      if (elem !== null) this.content(node, elem.children ?? [], [], from, paints!);
+      if (elem !== null) this.content(node, elem.children ?? [], [], from, paints!, hatchOf(node) === null);
     }
   }
 
-  /// Le parti `children` della risorsa `node`, dal percorso `path`.
-  private content(node: LeafNode, children: readonly Elem[], path: readonly number[], from: Paints, paints: boolean): void {
+  /// Le parti `children` della risorsa `node`, dal percorso `path`; `free`
+  /// se un'operazione le può cambiare.
+  private content(node: LeafNode, children: readonly Elem[], path: readonly number[], from: Paints, paints: boolean, free: boolean): void {
     children.forEach((child, index) => {
       if (child.tag === "title" || child.tag === "desc") return;
       const part = [...path, index];
-      const inner = this.written(node, part, (name) => child.attrs[name], true, paints, from);
+      const inner = this.written(node, part, (name) => child.attrs[name], free, paints, from);
       if (child.tag === "g") {
-        this.content(node, child.children ?? [], part, inner, paints);
+        this.content(node, child.children ?? [], part, inner, paints, free);
         return;
       }
       if (!paints) return;
       const element = this.elements++;
-      if (child.tag === "text") this.text(element, node, part, cachedRich(child), inner, true, false);
-      if (CONTENT_FILLED.has(child.tag)) this.show(element, node, part, "fill", inner, true, false);
-      if (CONTENT_OUTLINED.has(child.tag)) this.show(element, node, part, "stroke", inner, true, false);
+      if (child.tag === "text") this.text(element, node, part, cachedRich(child), inner, free, false);
+      if (CONTENT_FILLED.has(child.tag)) this.show(element, node, part, "fill", inner, free, false);
+      if (CONTENT_OUTLINED.has(child.tag)) this.show(element, node, part, "stroke", inner, free, false);
     });
   }
 
@@ -583,6 +586,28 @@ export function removeSwatchOps(model: DocumentModel, id: string, units: readonl
     if (paintReference(site.value)?.id !== id) continue;
     owners.set(site.node, (owners.get(site.node) ?? true) && site.free);
     if (site.free) writes.write(site.node, site.part, site.name, swatch.color);
+  }
+  writes.into(plan);
+  const kept = referrers(model, id).filter((node) => owners.get(node) !== true).length;
+  plan.ops.push(kept === 0 ? { op: "remove", target: id } : { op: "set", id, attrs: { "fub:role": "shared", "fub:name": null } });
+  return finish(plan, units, kept);
+}
+
+/// Le operazioni che eliminano il motivo del documento `id`: chi lo usa
+/// torna al suo ripiego, o a `color` se non ne scrive uno, e il motivo se ne
+/// va. Se lo usa ancora qualcuno che non si riscrive, resta come risorsa
+/// condivisa e senza nome, e `kept` dice quanti sono.
+export function removeMotifOps(model: DocumentModel, id: string, color: string, units: readonly Unit[], ids: NewIds): SwatchChange {
+  const plan = new Plan(model, ids);
+  if (resourcesOf(model).get(id)?.details?.motif === undefined) return finish(plan, units, 0);
+  const walk = new Walk(model);
+  const writes = new Writes();
+  const owners = new Map<ElementPart, boolean>();
+  for (const site of walk.sites) {
+    const used = paintReference(site.value);
+    if (used?.id !== id) continue;
+    owners.set(site.node, (owners.get(site.node) ?? true) && site.free);
+    if (site.free) writes.write(site.node, site.part, site.name, used.fallback === null ? color : (hexOf(used.fallback) ?? "none"));
   }
   writes.into(plan);
   const kept = referrers(model, id).filter((node) => owners.get(node) !== true).length;

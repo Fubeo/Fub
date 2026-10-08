@@ -895,6 +895,66 @@ fn a_cropped_image_and_a_masked_group_come_out_as_they_are_seen() {
 }
 
 #[test]
+fn a_hatch_and_a_motif_come_out_as_they_are_seen() {
+    // Come li scrive FubDraw: un quadrato con righe orizzontali nere alte 4
+    // ogni 8 su un fondo blu, e uno riempito da un motivo del documento, un
+    // quadratino rosso di 10 in una mattonella di 20.
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 160 80" width="160" height="80"><defs id="fub-defs"><pattern id="h1" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" fub:pattern="lines 0 8 4 #000000 #0072b2"><rect width="8" height="8" fill="#0072b2"/><rect y="2" width="8" height="4" fill="#000000"/></pattern><pattern id="m1" fub:role="swatch" fub:name="Quadri" x="80" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><rect x="80" y="0" width="10" height="10" fill="#ff0000" transform="matrix(1 0 0 1 -80 0)"/></pattern></defs><rect id="fub-paper" fub:role="paper" x="0" y="0" width="160" height="80" fill="#ffffff"/><g id="l1" fub:layer="Livello 1"><rect id="o1" x="0" y="0" width="80" height="80" fill="url(#h1) #003959"/><rect id="o2" x="80" y="0" width="80" height="80" fill="url(#m1) #ff0000"/></g></svg>"##;
+    let host = host().with_document("campiture.svg", svg);
+    let one = serde_json::json!({"scale": 1});
+    let report = export(&PngExport, &host, DRAW_PNG, &["campiture.svg"], one).unwrap();
+    assert!(report.log.is_empty(), "{:?}", report.log);
+    let image = decode(&only_artifact(&report).1);
+    let at = |image: &Image, x: u32, y: u32| {
+        let i = ((y * image.width + x) * 4) as usize;
+        image.rgba[i..i + 4].to_vec()
+    };
+    // Le righe si ripetono ogni 8, senza giunte fra una mattonella e l'altra.
+    for y in (0..80).step_by(8) {
+        for x in [0, 37, 79] {
+            assert_eq!(at(&image, x, y), [0, 114, 178, 255], "fondo in {x}, {y}");
+            assert_eq!(
+                at(&image, x, y + 3),
+                [0, 0, 0, 255],
+                "riga in {x}, {}",
+                y + 3
+            );
+            assert_eq!(
+                at(&image, x, y + 7),
+                [0, 114, 178, 255],
+                "fondo in {x}, {}",
+                y + 7
+            );
+        }
+    }
+    // Il motivo mostra il quadratino dov'era, e poi ogni 20.
+    assert_eq!(red_pixels(&image), 16 * 10 * 10);
+    assert_eq!(at(&image, 85, 5), [255, 0, 0, 255]);
+    assert_eq!(at(&image, 125, 65), [255, 0, 0, 255]);
+    assert_eq!(at(&image, 95, 5), [255, 255, 255, 255]);
+    assert_eq!(at(&image, 85, 15), [255, 255, 255, 255]);
+
+    // Il PDF li scrive come motivi a mattonelle.
+    let pdf = pdf_of(&host, "campiture.svg");
+    let text = String::from_utf8_lossy(&pdf);
+    assert_eq!(
+        text.matches("/PatternType 1").count(),
+        2,
+        "due motivi a mattonelle"
+    );
+
+    // L'SVG pulito tiene i motivi, senza i ruoli dell'editor, e si disegna
+    // allo stesso modo.
+    let clean = svg_of(&host, "campiture.svg", serde_json::Value::Null);
+    assert!(clean.contains(r#"<pattern id="h1" width="8""#), "{clean}");
+    assert!(clean.contains(r#"<pattern id="m1" x="80""#), "{clean}");
+    assert!(!clean.contains("fub:"), "{clean}");
+    let drawn = png_of_text(&clean).expect("l'SVG pulito si disegna");
+    assert_eq!(red_pixels(&drawn), 16 * 10 * 10);
+    assert_eq!(at(&drawn, 37, 3), [0, 0, 0, 255]);
+}
+
+#[test]
 fn characters_outside_fubs_fonts_are_noted() {
     let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="40"><text x="10" y="30" font-family="Inter, sans-serif" font-size="20">Acqua 水 Ω</text></svg>"##;
     let host = host().with_document("lingue.svg", svg);

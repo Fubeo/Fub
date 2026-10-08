@@ -5,10 +5,11 @@
 //
 // - **I problemi sono quelli del formato.** S001, il disegno senza titolo;
 //   S009, un testo o un tratto a penna che contrasta poco con ciò che ha
-//   sotto; S012, un'immagine senza descrizione; S013, un testo sotto i 12 px.
-//   È la diagnostica che i due lati danno a chi apre il file (formato della
-//   scena, §12), non una seconda regola: ciò che il pannello dice, lo dice
-//   anche la shell.
+//   sotto; S012, un'immagine senza descrizione; S013, un testo sotto i 12 px;
+//   S017, due colori usati come codice che si distinguono soltanto per la
+//   tinta. È la diagnostica che i due lati danno a chi apre il file (formato
+//   della scena, §12), non una seconda regola: ciò che il pannello dice, lo
+//   dice anche la shell.
 // - **Prima il disegno, poi gli oggetti in ordine di documento**, che è
 //   l'ordine in cui si leggono: chi scorre l'elenco percorre il disegno.
 // - **Il colore più vicino.** Per S009 la correzione tiene la tinta e la
@@ -20,6 +21,11 @@
 //   non si propone niente.
 // - **Il corpo giusto.** Per S013 il corpo che, con la scala dei gruppi che
 //   contengono il testo, arriva a 12 px a grandezza naturale.
+// - **La campitura giusta.** Per S017 la correzione dà una campitura a tutte
+//   le aree di quel colore, non soltanto alla prima: le aree di un colore
+//   sono una legenda, e una campitura a metà non distingue niente. Quale
+//   campitura lo decide `patterns.ts`, che ne sceglie una che nessun'altra
+//   area del disegno usa già.
 // - **Un colore o un corpo di una riga sola** non si correggono dal testo:
 //   lo scrive il suo `tspan`, e il pannello porta soltanto all'oggetto.
 // - **L'ordine di lettura è l'ordine del documento**, quello dell'albero
@@ -27,8 +33,8 @@
 //   cambia anche quale si vede sopra: quando i due si sovrappongono, il
 //   pannello lo dice prima di farlo.
 
-import type { Contrast, Measures, Smallness } from "../scene/accessibility";
-import { contrast, MIN_TEXT_SIZE, over } from "../scene/analysis";
+import type { Confusion, Contrast, Measures, Smallness } from "../scene/accessibility";
+import { contrast, MIN_CONTRAST, MIN_TEXT_SIZE, over } from "../scene/analysis";
 import type { ElementItem } from "../scene/classify";
 import type { Severity } from "../scene/diagnostics";
 import type { Bounds } from "../scene/geometry";
@@ -37,9 +43,9 @@ import type { Rgb } from "../scene/values";
 import { keyOf, type OutlineNode } from "../describe";
 
 /// I codici di §12 che dicono come il disegno si legge.
-export type AuditCode = "S001" | "S009" | "S012" | "S013";
+export type AuditCode = "S001" | "S009" | "S012" | "S013" | "S017";
 
-const AUDITED: ReadonlySet<string> = new Set<AuditCode>(["S001", "S009", "S012", "S013"]);
+const AUDITED: ReadonlySet<string> = new Set<AuditCode>(["S001", "S009", "S012", "S013", "S017"]);
 
 /// La correzione di un problema.
 export type Fix =
@@ -51,7 +57,10 @@ export type Fix =
   /// Una descrizione, o l'immagine dichiarata decorativa.
   | { readonly kind: "describe" }
   /// Il corpo del testo, nelle sue coordinate.
-  | { readonly kind: "size"; readonly size: number };
+  | { readonly kind: "size"; readonly size: number }
+  /// Una campitura per le aree di un colore che si confonde con un altro: il
+  /// colore e le chiavi di tutte le aree che lo portano, la prima compresa.
+  | { readonly kind: "hatch"; readonly color: string; readonly keys: readonly string[] };
 
 /// Un problema del disegno.
 export interface Problem {
@@ -61,9 +70,10 @@ export interface Problem {
   readonly key: string | null;
   /// Il ruolo dell'oggetto, per dire che cosa è; `null` per il disegno.
   readonly role: ElementItem["role"] | null;
-  /// Il dettaglio della diagnostica: il contrasto misurato, il corpo.
+  /// Il dettaglio della diagnostica: il contrasto misurato, il corpo; per
+  /// S017 i due colori e il contrasto fra loro, `#rrggbb #rrggbb r.rr`.
   readonly detail: string | null;
-  /// Il contrasto che basta, per S009.
+  /// Il contrasto che basta, per S009 e S017.
   readonly threshold: number | null;
   readonly fix: Fix | null;
 }
@@ -75,6 +85,7 @@ export function problemsOf(scene: Scene, measures: Measures): Problem[] {
   for (const item of scene.items) if (item.kind === "element") items.set(item.utf16[0], item);
   const contrasts = new Map<number, Contrast>(measures.contrasts.map((measured) => [measured.span.utf16[0], measured]));
   const sizes = new Map<number, Smallness>(measures.sizes.map((measured) => [measured.span.utf16[0], measured]));
+  const confusions = new Map<number, Confusion>(measures.confusions.map((measured) => [measured.span.utf16[0], measured]));
   const found: Array<{ readonly at: number; readonly problem: Problem }> = [];
   for (const diagnostic of scene.diagnostics) {
     if (!AUDITED.has(diagnostic.code)) continue;
@@ -96,6 +107,10 @@ export function problemsOf(scene: Scene, measures: Measures): Problem[] {
       if (color !== null) fix = { kind: "color", color: hex(color.rgb), paint: item.role === "stroke" ? "stroke" : "fill", ratio: color.ratio };
     } else if (code === "S012") {
       fix = { kind: "describe" };
+    } else if (code === "S017") {
+      threshold = MIN_CONTRAST;
+      const measured = confusions.get(at);
+      if (measured !== undefined) fix = { kind: "hatch", color: hex(measured.color), keys: areaKeys(measured, items) };
     } else {
       const measured = sizes.get(at);
       const size = measured === undefined || measured.line ? null : legibleSize(measured.scale);
@@ -106,6 +121,16 @@ export function problemsOf(scene: Scene, measures: Measures): Problem[] {
   // Un oggetto con più problemi li ha in fila, nell'ordine dei codici.
   found.sort((a, b) => a.at - b.at || (a.problem.code < b.problem.code ? -1 : a.problem.code > b.problem.code ? 1 : 0));
   return found.map((each) => each.problem);
+}
+
+/// Le chiavi di tutte le aree di un colore confuso, in ordine di documento.
+function areaKeys(measured: Confusion, items: ReadonlyMap<number, ElementItem>): string[] {
+  const keys: string[] = [];
+  for (const span of measured.areas) {
+    const item = items.get(span.utf16[0]);
+    if (item !== undefined) keys.push(keyOf(item));
+  }
+  return keys;
 }
 
 /// Il colore più vicino a quello misurato, con la stessa tinta e la stessa

@@ -47,6 +47,52 @@ function label(attributes: string, line: string): string {
   return `<text x="20" y="50" ${attributes}><tspan x="20" dy="0">${line}</tspan></text>`;
 }
 
+/// Le risorse dei casi di S017: una sfumatura, un motivo, un ritaglio, un
+/// filtro, una maschera e un campione verde.
+const KEY_RESOURCES =
+  '<defs id="fub-defs">' +
+  '<linearGradient id="r00000001" fub:role="private"><stop offset="0" stop-color="#a6cee3"/><stop offset="1" stop-color="#b2df8a"/></linearGradient>' +
+  '<pattern id="r00000002" fub:role="shared" x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse"><rect x="0" y="0" width="8" height="4" fill="#000000"/></pattern>' +
+  '<clipPath id="r00000003" fub:role="private" clipPathUnits="objectBoundingBox"><circle cx="0.5" cy="0.5" r="0.5"/></clipPath>' +
+  '<filter id="r00000004" fub:role="shared"><feDropShadow dx="0" dy="2" stdDeviation="2"/></filter>' +
+  '<linearGradient id="r00000005" fub:role="swatch" fub:name="Verde" gradientUnits="userSpaceOnUse"><stop stop-color="#b2df8a"/></linearGradient>' +
+  '<mask id="r00000006" fub:role="private" maskContentUnits="objectBoundingBox"><rect x="0" y="0" width="1" height="1" fill="#ffffff"/></mask>' +
+  "</defs>";
+
+/// Un disegno con la carta di colore `paper`, le risorse di S017 e `body` nel
+/// livello.
+function key(paper: string, body: string): string {
+  return titled(
+    `${KEY_RESOURCES}<rect id="fub-paper" fub:role="paper" width="100" height="100" fill="${paper}"/><g fub:layer="A">${body}</g>`,
+  );
+}
+
+/// Un riquadro pieno, con gli attributi dati.
+function tile(x: number, attributes: string): string {
+  return `<rect x="${x}" y="0" width="10" height="10" ${attributes}/>`;
+}
+
+/// Un riquadro pieno del colore `color`.
+function tint(x: number, color: string): string {
+  return tile(x, `fill="${color}"`);
+}
+
+/// Riquadri pieni dei colori dati, uno ogni 20 unità.
+function tints(colors: readonly string[]): string {
+  return colors.map((color, at) => tint(at * 20, color)).join("");
+}
+
+/// Quanti rettangoli modificabili ha `scene`: i casi che non devono contare
+/// come aree lo sono lo stesso, e non mancano per un riferimento rotto.
+function rects(scene: Scene): number {
+  return scene.items.filter((item) => item.kind === "element" && item.role === "rect").length;
+}
+
+/// I dettagli di S017 su `body` sulla carta bianca.
+function confusions(body: string): string[] {
+  return details(load(key("#ffffff", body)), "S017");
+}
+
 describe("la diagnostica (§12)", () => {
   it("S001: un disegno senza titolo", () => {
     // Senza `title`, con un titolo vuoto o di soli spazi e commenti, con il
@@ -492,6 +538,151 @@ describe("la diagnostica (§12)", () => {
     }
   });
 
+  it("S017: due colori di codice che si distinguono soltanto per la tinta", () => {
+    // Il blu e il verde chiari, usati due volte l'uno: due S017, ciascuna sulla
+    // prima area del suo colore, col compagno e il contrasto fra loro.
+    const [blue, green] = ["#a6cee3", "#b2df8a"];
+    const source = key("#ffffff", tint(0, blue) + tint(20, green) + tint(40, blue) + tint(60, green));
+    const scene = load(source);
+    const found = of(scene, "S017");
+    expect(found).toHaveLength(2);
+    expect(found.every((d) => d.severity === "info")).toBe(true);
+    expect(details(scene, "S017")).toEqual(["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]);
+    expect(text(source, spanOf(found[0]!))).toBe(tint(0, blue));
+    expect(text(source, spanOf(found[1]!))).toBe(tint(20, green));
+    // Un colore usato una volta sola è un ornamento: niente.
+    expect(confusions(tints([blue, green, green]))).toEqual([]);
+    expect(confusions(tints([blue, green]))).toEqual([]);
+    // Il blu scuro e il giallo chiaro, due volte l'uno, hanno 3,92:1: si
+    // distinguono anche in grigio.
+    expect(confusions(tints(["#0072b2", "#f0e442", "#0072b2", "#f0e442"]))).toEqual([]);
+    // Il giallo sul bianco ha 1,14:1 col verde chiaro, e il blu scuro ne ha
+    // 3,41: la S017 del giallo nomina il verde, e il blu non c'entra.
+    expect(confusions(tints(["#f0e442", "#b2df8a", "#0072b2", "#f0e442", "#b2df8a", "#0072b2"]))).toEqual([
+      "#f0e442 #b2df8a 1.14",
+      "#b2df8a #f0e442 1.14",
+    ]);
+  });
+
+  it("S017: il compagno è quello col contrasto più basso", () => {
+    // Tre colori di codice, ciascuno due volte. Il verde acqua ha 2,25:1 col
+    // verde chiaro e 2,04:1 col blu chiaro, che viene dopo nel documento: il
+    // compagno è quello col contrasto più basso, non il primo.
+    expect(confusions(tints(["#009e73", "#b2df8a", "#a6cee3", "#009e73", "#b2df8a", "#a6cee3"]))).toEqual([
+      "#009e73 #a6cee3 2.04",
+      "#b2df8a #a6cee3 1.10",
+      "#a6cee3 #b2df8a 1.10",
+    ]);
+  });
+
+  it("S017: il colore si compone con la sua opacità sulla carta soltanto", () => {
+    // Il blu al 50% sulla carta #f0f0f0 è #88b4d2, lo stesso colore di un
+    // riquadro opaco di quel colore e di un gruppo al 50%: tre aree, un
+    // codice. Il contrasto col blu chiaro, usato due volte, è 1,32.
+    const translucent = tile(0, 'fill="#1f78b4" fill-opacity="0.5"');
+    const opaque = tint(20, "#88b4d2");
+    const group = `<g opacity="0.5">${tint(40, "#1f78b4")}</g>`; // dentro il gruppo
+    const body = translucent + opaque + group + tint(60, "#a6cee3") + tint(80, "#a6cee3");
+    const source = key("#f0f0f0", body);
+    const scene = load(source);
+    expect(details(scene, "S017")).toEqual(["#88b4d2 #a6cee3 1.32", "#a6cee3 #88b4d2 1.32"]);
+    expect(text(source, spanOf(of(scene, "S017")[0]!))).toBe(translucent);
+    // Sul bianco la stessa opacità dà #8fbcda: non è più il colore del
+    // riquadro opaco, e ogni colore è usato meno di due volte.
+    expect(confusions(translucent + opaque + tint(60, "#a6cee3") + tint(80, "#b2df8a"))).toEqual([]);
+    // Il colore si compone sulla carta soltanto, non sulle figure che ha
+    // sotto: due riquadri chiari sopra uno scuro restano chiari.
+    const covered = `<rect x="0" y="0" width="200" height="20" fill="#000000"/>${tints(["#a6cee3", "#b2df8a", "#a6cee3", "#b2df8a"])}`;
+    expect(confusions(covered)).toEqual(["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]);
+    // Le opacità si moltiplicano: 0.5 del gruppo per 0.5 del riquadro dà il
+    // 25% di #1f78b4 sul bianco, #c7ddec, il colore del riquadro opaco.
+    const nested = `<g opacity="0.5">${tile(0, 'fill="#1f78b4" fill-opacity="0.5"')}</g>${tint(20, "#c7ddec")}${tint(40, "#a6cee3")}${tint(60, "#a6cee3")}`;
+    expect(confusions(nested)).toEqual(["#c7ddec #a6cee3 1.19", "#a6cee3 #c7ddec 1.19"]);
+    // Una carta che non si sa non dà il colore di un'area non opaca, ma
+    // un'area opaca ha il suo.
+    const unknown = titled(
+      `${KEY_RESOURCES}<rect id="fub-paper" fub:role="paper" width="100" height="100" fill="#f0f0f0" filter="url(#r00000004)"/><g fub:layer="A">` +
+        `${tints(["#a6cee3", "#b2df8a", "#a6cee3", "#b2df8a"])}${tile(100, 'fill="#1f78b4" fill-opacity="0.5"')}${tile(120, 'fill="#1f78b4" fill-opacity="0.5"')}</g>`,
+    );
+    expect(details(load(unknown), "S017")).toEqual(["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]);
+    // Senza carta il disegno sta sul bianco.
+    const bare = titled(tints(["#a6cee3", "#b2df8a", "#a6cee3", "#b2df8a"]));
+    expect(details(load(bare), "S017")).toEqual(["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]);
+  });
+
+  it("S017: contano soltanto le forme piene di cui il colore si sa", () => {
+    const [blue, green] = ["#a6cee3", "#b2df8a"];
+    const pair = tints([green, blue, green]);
+    // Con due riquadri blu, che mancano, si avrebbero due S017: il blu è
+    // usato una volta sola nei casi che seguono.
+    const both = (blues: string): string => pair + blues;
+    // Una campitura, una sfumatura, un colore che decide una risorsa: il
+    // colore non si sa, e ripiegare sul colore scritto accanto sarebbe
+    // sbagliato.
+    const unknown = tile(100, 'fill="url(#r00000002) #a6cee3"') + tile(120, 'fill="url(#r00000001) #a6cee3"');
+    let scene = load(key("#ffffff", both(unknown)));
+    expect(rects(scene)).toBe(5);
+    expect(of(scene, "S017")).toEqual([]);
+    // Un campione del documento ha il colore del campione, quale che sia il
+    // ripiego accanto: due aree verdi chiare come le altre due.
+    const swatches = tile(100, 'fill="url(#r00000005) #000000"') + tile(120, 'fill="url(#r00000005) #ff0000"');
+    expect(confusions(tint(0, blue) + tint(20, blue) + swatches)).toEqual(["#a6cee3 #b2df8a 1.10", "#b2df8a #a6cee3 1.10"]);
+    // Sotto un ritaglio, una maschera o un filtro, dell'elemento o di un
+    // contenitore, i colori che si vedono non si sanno.
+    const effects =
+      tile(100, 'fill="#a6cee3" clip-path="url(#r00000003)"') +
+      `<g clip-path="url(#r00000003)">${tint(120, blue)}</g>` +
+      `<g mask="url(#r00000006)"><g>${tint(140, blue)}</g></g>` +
+      tile(160, 'fill="#a6cee3" filter="url(#r00000004)"');
+    scene = load(key("#ffffff", both(effects)));
+    expect(rects(scene)).toBe(7);
+    expect(of(scene, "S017")).toEqual([]);
+    // Una figura il cui riquadro non ha larghezza o non ha altezza non è
+    // un'area, e nemmeno un tracciato lungo una linea.
+    const flat =
+      '<rect x="100" y="0" width="10" height="0" fill="#a6cee3"/>' +
+      '<rect x="120" y="0" width="0" height="10" fill="#a6cee3"/>' +
+      '<path d="M140 0 L200 0" fill="#a6cee3"/>' +
+      '<ellipse cx="220" cy="5" rx="10" ry="0" fill="#a6cee3"/>';
+    scene = load(key("#ffffff", both(flat)));
+    expect(rects(scene)).toBe(5);
+    expect(of(scene, "S017")).toEqual([]);
+    // Un'area vera della stessa dimensione, invece, conta.
+    expect(confusions(both(tint(100, blue) + tint(120, blue)))).toEqual(["#b2df8a #a6cee3 1.10", "#a6cee3 #b2df8a 1.10"]);
+    // I tratti a penna e l'evidenziatore sono sottili: non sono aree. I
+    // testi e le immagini nemmeno, e una forma senza riempimento o del tutto
+    // trasparente neanche.
+    const others =
+      stroke("pen", 'fill="#a6cee3"') +
+      stroke("pen", 'fill="#a6cee3"') +
+      stroke("highlighter", 'fill="#a6cee3" fill-opacity="0.4"') +
+      label('fill="#a6cee3"', "Uno") +
+      label('fill="#a6cee3"', "Due") +
+      '<image x="0" y="0" width="5" height="5" href="a.png" fill="#a6cee3"/>' +
+      tile(100, 'fill="none"') +
+      tile(120, 'fill="none"') +
+      tile(140, 'fill="#a6cee3" fill-opacity="0"') +
+      tile(160, 'fill="#a6cee3" opacity="0"');
+    expect(confusions(both(others))).toEqual([]);
+    // Una figura nascosta, o dentro un contenitore nascosto, non si guarda.
+    const hidden = tile(100, 'fill="#a6cee3" display="none"') + `<g display="none">${tint(120, blue)}</g>`;
+    scene = load(key("#ffffff", both(hidden)));
+    expect(rects(scene)).toBe(5);
+    expect(of(scene, "S017")).toEqual([]);
+  });
+
+  it("S017: con più di dodici colori di codice tace", () => {
+    // Tredici rosati vicini, due riquadri ciascuno: un'illustrazione, non un
+    // codice. Con dodici, S017 parla.
+    const colors = Array.from({ length: 13 }, (_, k) => `#${(0xc8 + k * 3).toString(16).padStart(2, "0")}c8c8`);
+    const twice = (count: number): string => tints([...colors.slice(0, count), ...colors.slice(0, count)]);
+    expect(confusions(twice(12))).toHaveLength(12);
+    expect(confusions(twice(13))).toEqual([]);
+    // Un colore usato una volta non fa numero: dodici di codice e un
+    // tredicesimo, ornamento, e S017 parla ancora.
+    expect(confusions(twice(12) + tint(1000, colors[12]!))).toHaveLength(12);
+  });
+
   it("ogni codice ha la sua gravità e un messaggio", () => {
     const table: Array<[Code, Severity]> = [
       ["S001", "warning"],
@@ -508,6 +699,7 @@ describe("la diagnostica (§12)", () => {
       ["S012", "warning"],
       ["S013", "info"],
       ["S014", "warning"],
+      ["S017", "info"],
     ];
     for (const [code, severity] of table) {
       expect(severityOf(code), code).toBe(severity);

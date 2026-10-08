@@ -11,7 +11,10 @@ describe("il disegno del banco delle tavole", () => {
     const scene = readScene(fixture.text);
     expect(scene.status).toBe("fubdraw");
     expect(scene.readOnly).toEqual([]);
-    expect(scene.diagnostics).toEqual([]);
+    // Otto inchiostri in aree piene sono un codice di colori, e alcuni si
+    // distinguono soltanto per la tinta: la nota S017 è giusta, e non dice
+    // niente del formato.
+    expect(scene.diagnostics.filter((each) => each.code !== "S017")).toEqual([]);
     expect(scene.items.filter((item) => item.kind === "foreign")).toEqual([]);
     expect(openSource(fixture.text).doc.elements).toBe(fixture.elements);
     expect(fixture.elements).toBeLessThan(MAX_ELEMENTS);

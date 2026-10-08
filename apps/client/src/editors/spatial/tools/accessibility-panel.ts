@@ -10,7 +10,9 @@
 //   all'oggetto: lo sceglie e lo mostra. La correzione si fa in un passo
 //   solo, che si annulla, e il pulsante dice che cosa farà: il colore con il
 //   suo campione e il contrasto che avrà, il corpo in pixel. Mai il solo
-//   colore: la gravità è un'icona e una parola.
+//   colore: la gravità è un'icona e una parola. Due colori che si
+//   distinguono soltanto per la tinta si vedono accanto al testo, e la
+//   correzione dà una campitura a tutte le aree del colore.
 // - **Il fuoco resta dove si lavora.** Dopo una correzione la riga se ne va,
 //   e il fuoco passa alla riga che prende il suo posto, sullo stesso genere
 //   di pulsante: i problemi si correggono uno dopo l'altro con Invio.
@@ -66,7 +68,8 @@ export interface AccessView {
 export interface AccessPanelOptions {
   /// Sceglie l'oggetto `key` e lo mostra.
   onGo(key: string): void;
-  /// Applica la correzione di `problem`: un colore, un corpo, il titolo.
+  /// Applica la correzione di `problem`: un colore, un corpo, il titolo, una
+  /// campitura.
   onFix(problem: Problem): void;
   /// Scrive la descrizione `text` dell'immagine `key`, già pulita.
   onDescribe(key: string, text: string): void;
@@ -101,6 +104,8 @@ function titleOf(problem: Problem): DrawKey {
       return "draw.access.S012";
     case "S013":
       return "draw.access.S013";
+    case "S017":
+      return "draw.access.S017";
   }
 }
 
@@ -197,7 +202,27 @@ export function createAccessPanel(life: Lifetime, options: AccessPanelOptions): 
         return t("draw.access.S012.detail");
       case "S013":
         return t("draw.access.S013.detail", { size: number(measured) });
+      case "S017": {
+        const [color = "", partner = "", ratio = ""] = (problem.detail ?? "").split(" ");
+        return t("draw.access.S017.detail", { color, partner, ratio: number(Number(ratio)), need: number(problem.threshold ?? 3) });
+      }
     }
+  };
+
+  /// I campioni dei due colori confusi di S017, soltanto per gli occhi: il
+  /// testo li dice per esteso.
+  const chipsOf = (problem: Problem): HTMLElement[] => {
+    if (problem.code !== "S017") return [];
+    return (problem.detail ?? "")
+      .split(" ")
+      .slice(0, 2)
+      .map((color) => {
+        const chip = document.createElement("span");
+        chip.className = "draw-access-swatch";
+        chip.style.background = color;
+        chip.setAttribute("aria-hidden", "true");
+        return chip;
+      });
   };
 
   // --- I problemi ---------------------------------------------------------------
@@ -233,6 +258,8 @@ export function createAccessPanel(life: Lifetime, options: AccessPanelOptions): 
       }
       case "size":
         return [button(t("draw.access.fix.size"), "fix", t("draw.access.fix.size.label", { size: number(fix.size) }))];
+      case "hatch":
+        return [button(t("draw.access.fix.hatch"), "fix", plural(fix.keys.length, "draw.access.fix.hatch.label.one", "draw.access.fix.hatch.label.other", { color: fix.color }))];
       case "describe":
         if (problem.key === null) return [];
         if (describing?.key === problem.key) return [describing.field];
@@ -275,7 +302,7 @@ export function createAccessPanel(life: Lifetime, options: AccessPanelOptions): 
     what.append(severity, document.createTextNode(t(titleOf(problem))));
     const detail = document.createElement("span");
     detail.className = "draw-access-detail";
-    detail.textContent = detailOf(problem);
+    detail.append(...chipsOf(problem), document.createTextNode(detailOf(problem)));
     text.append(what, detail);
     const actions = document.createElement("div");
     actions.className = "draw-access-actions";

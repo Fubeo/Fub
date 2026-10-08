@@ -45,6 +45,10 @@ pub enum Code {
     S015,
     /// Il nome di una tavola è già del disegno o di una tavola prima.
     S016,
+    /// Due colori che il disegno usa come codice, ciascuno per almeno due
+    /// aree, si distinguono soltanto per la tinta: il contrasto fra loro è
+    /// sotto 3:1.
+    S017,
 }
 
 /// La gravità di una diagnostica.
@@ -71,7 +75,8 @@ impl Code {
             | Code::S010
             | Code::S011
             | Code::S013
-            | Code::S015 => Severity::Info,
+            | Code::S015
+            | Code::S017 => Severity::Info,
         }
     }
 
@@ -98,6 +103,9 @@ impl Code {
             Code::S016 => {
                 "il nome della tavola è già del disegno o di una tavola prima: un riferimento a quel nome mostra l'altra"
             }
+            Code::S017 => {
+                "due colori usati come codice si distinguono soltanto per la tinta: il contrasto fra loro è sotto 3:1"
+            }
         }
     }
 }
@@ -113,7 +121,7 @@ pub struct Diagnostic {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub span: Option<Span>,
     /// Il dettaglio: l'id ripetuto, l'errore dell'inchiostro, il contrasto
-    /// misurato, la grandezza del testo.
+    /// misurato, la grandezza del testo, i due colori confusi.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
