@@ -42,6 +42,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Lazo | Standard | lo strumento (`Q`) |
 | Tavola | Standard | lo strumento (`F`); il pulsante «Tavole» col suo elenco; `Alt+PagSu` e `Alt+PagGiù`; nel pannello delle proprietà la sezione «Tavola» ([Disegni, tavole](drawing-boards.md)) |
 | Contagocce | Standard | lo strumento (`I`); `I` e `Maiusc+I` sulla riga attiva dell'albero degli oggetti ([Disegni, colori](drawing-colors.md#il-contagocce)) |
+| Sfumatura | Standard | lo strumento (`G`); nel pannello delle proprietà la sezione «Sfumatura», con «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)) |
 | Evidenziatore | Standard | lo strumento (`H`) |
 | Poligono | Standard | lo strumento (`Y`), per poligoni e stelle; la sezione «Forma» delle proprietà e la maniglia degli angoli arrotondati |
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo» |
@@ -86,8 +87,8 @@ col suo segno, e «Apri come sorgente».
 Togliere una parte mentre la si usa fa ciò che fa tornare a un livello più
 basso: chi aveva in mano il suo strumento riprende la penna, o il primo
 strumento che c'è, o la Selezione; chi sceglieva, col Lazo, coi Nodi, col
-Costruttore di forme o con la Tavola, e chi aveva il Contagocce, riprende la
-Selezione; un tracciato di Bézier a metà si conclude com'è; un colore a
+Costruttore di forme o con la Tavola, e chi aveva il Contagocce o la
+Sfumatura, riprende la Selezione; un tracciato di Bézier a metà si conclude com'è; un colore a
 piacere torna al colore di partenza, e uno che seguiva un campione resta da
 solo; da un gruppo isolato si esce; la vista girata si raddrizza;
 l'elenco delle tavole si chiude; la cronologia si chiude, e la si ritrova

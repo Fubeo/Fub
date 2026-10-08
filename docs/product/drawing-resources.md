@@ -39,7 +39,8 @@ nell'esportazione il file è quello che è.
 
 - **Un riempimento o un contorno con una risorsa** si legge «Sfumatura» o
   «Motivo». Il pulsante del colore accanto mostra i punti della sfumatura, da
-  sinistra a destra o dal centro, o una scacchiera per un motivo.
+  sinistra a destra o dal centro, o una scacchiera per un motivo. La sezione
+  «Sfumatura» la cambia ([Disegni, sfumature](drawing-gradients.md)).
 - **Scrivere un colore** e confermarlo mette il colore al posto della
   risorsa, in un passo di annulla; `Esc` prima di confermare torna alla
   risorsa, e `Invio` senza aver cambiato niente non fa niente.
