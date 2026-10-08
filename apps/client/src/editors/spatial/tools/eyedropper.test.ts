@@ -4,7 +4,8 @@
 import { describe, expect, it } from "vitest";
 import type { Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";
-import { imagePixel, paintAt, pixelColor, sightAt, sightStyle, type ImageSight, type ShapeSight, type Sight } from "./eyedropper";
+import type { LeafNode } from "../scene/model";
+import { imagePixel, paintAt, pixelColor, shownPaint, sightAt, sightStyle, type ImageSight, type ShapeSight, type Sight } from "./eyedropper";
 import { LAYER, open, type Opened } from "./test-support";
 
 /// Ciò che si vede nel punto `p` del disegno `opened`.
@@ -63,6 +64,45 @@ describe("dove guarda il contagocce", () => {
     expect(seen(opened, [15, 15])).toBe("sopra/sopra/fill");
     expect(seen(opened, [50, 80])).toBe("sotto/sotto/fill");
   });
+
+  it("sotto un oggetto guarda soltanto ciò che sta sotto di lui, blocchi estranei compresi", () => {
+    const opened = open(
+      doc(
+        `${LAYER}<rect id="fondo" x="0" y="0" width="100" height="100" fill="#0072b2"/>` +
+          '<rect class="a" x="0" y="0" width="40" height="40"/>' +
+          '<rect id="sopra" x="0" y="0" width="100" height="100" fill="#d55e00"/><rect id="cima" x="0" y="0" width="10" height="10" fill="#000000"/></g>',
+      ),
+    );
+    const units = opened.seen();
+    const sopra = units.find((unit) => unit.key === "sopra")!;
+    const under = (p: Point): string | null => {
+      const found = sightAt(units, opened.foreign(), p, 0, { unit: sopra, leaf: sopra.node as LeafNode });
+      return found === null ? null : found.kind === "foreign" ? "estraneo" : found.unit.key;
+    };
+    expect(seen(opened, [60, 60])).toBe("sopra/sopra/fill");
+    expect(under([60, 60])).toBe("fondo");
+    expect(under([20, 20])).toBe("estraneo");
+    // Ciò che sta sopra non conta.
+    expect(under([5, 5])).toBe("estraneo");
+    expect(under([150, 150])).toBeNull();
+  });
+
+  it("sotto una forma di un gruppo guarda prima le forme del gruppo che le stanno sotto", () => {
+    const opened = open(
+      doc(
+        `${LAYER}<rect id="fondo" x="0" y="0" width="100" height="100" fill="#0072b2"/>` +
+          '<g id="g"><rect id="dentro" x="0" y="0" width="50" height="50" fill="#d55e00"/><rect id="coperchio" x="0" y="0" width="100" height="100" fill="#000000"/></g></g>',
+      ),
+    );
+    const found = sight(opened, [20, 20]) as ShapeSight;
+    expect(found.sampled.leaf.facts.id).toBe("coperchio");
+    const under = (p: Point): string | null => {
+      const below = sightAt(opened.seen(), [], p, 0, { unit: found.unit, leaf: found.sampled.leaf });
+      return below?.kind === "shape" ? `${below.unit.key}/${below.sampled.leaf.facts.id}` : null;
+    };
+    expect(under([20, 20])).toBe("g/dentro");
+    expect(under([70, 70])).toBe("fondo/fondo");
+  });
 });
 
 describe("il colore che si vede in un punto", () => {
@@ -99,6 +139,26 @@ describe("il colore che si vede in un punto", () => {
     const at = (fill: string): string | null => colorAt(doc(`${defs}${LAYER}<rect id="r" x="0" y="0" width="10" height="10" fill="${fill}"/></g>`), [5, 5]);
     expect(at("url(#rssssssss) #0072b2")).toBe("url(#rssssssss) #0072b2");
     expect(at("url(#rpppppppp)")).toBe("url(#rpppppppp)");
+  });
+
+  it("si mostra col nome del campione, col colore della sfumatura nel punto, come motivo o come nessuno", () => {
+    const defs =
+      '<defs id="fub-defs"><linearGradient id="rssssssss" fub:role="swatch" fub:name="  Blu   marca " gradientUnits="userSpaceOnUse"><stop stop-color="#0072B2"/></linearGradient>' +
+      '<linearGradient id="rgggggggg"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient>' +
+      '<pattern id="rpppppppp" width="0.5" height="0.5"><rect x="0" y="0" width="0.25" height="0.25" fill="#000000"/></pattern></defs>';
+    const opened = open(doc(`${defs}${LAYER}<rect id="r" x="0" y="0" width="100" height="10" fill="#d55e00"/></g>`));
+    const found = sight(opened, [25, 5]) as ShapeSight;
+    const shown = (value: string): unknown => shownPaint(opened.engine.model!, found, [25, 5], value);
+    expect(shown("#D55E00")).toEqual({ kind: "color", code: "#d55e00" });
+    expect(shown("url(#rssssssss) #0072b2")).toEqual({ kind: "swatch", id: "rssssssss", name: "Blu marca", code: "#0072b2" });
+    expect(shown("url(#rgggggggg)")).toEqual({ kind: "gradient", code: "#bfbfbf" });
+    expect(shown("url(#rpppppppp)")).toEqual({ kind: "pattern" });
+    expect(shown(" none ")).toEqual({ kind: "none" });
+    // Una risorsa che non c'è si mostra col suo ripiego.
+    expect(shown("url(#rmancante) #009e73")).toEqual({ kind: "color", code: "#009e73" });
+    expect(shown("url(#rmancante) none")).toEqual({ kind: "none" });
+    expect(shown("url(#rmancante)")).toBeNull();
+    expect(shown("currentColor")).toBeNull();
   });
 
   it("l'aspetto è quello della forma sotto il puntatore, con l'opacità dell'oggetto", () => {

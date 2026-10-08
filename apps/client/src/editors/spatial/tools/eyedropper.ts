@@ -16,15 +16,17 @@
 //   punto, il contorno dove sta sopra il riempimento: di una sfumatura il
 //   colore in quel punto, di un campione del documento il campione, di un
 //   motivo il motivo, che un colore solo non ce l'ha. Di un'immagine il
-//   colore del pixel, sempre; uno trasparente non dà niente.
+//   colore del pixel, sempre; dove è trasparente, o dove il riquadro non la
+//   mostra, il contagocce guarda ciò che sta sotto.
 
 import type { Bounds } from "../scene/geometry";
 import { apply, invert, type Point } from "../scene/matrix";
-import type { DocumentModel } from "../scene/model";
+import type { DocumentModel, LeafNode } from "../scene/model";
 import { paintReference, trim, viewBoxMatrix } from "../scene/values";
 import { elemOf } from "./arrange";
 import { geometryBox, type ForeignBlock, type Sampled, type Unit } from "./hit";
 import { styleOf, type Style } from "./look";
+import { cleanName } from "./naming";
 import { customColor } from "./palette";
 import { gradientColor, gradientOf, paintCode, resourcesOf } from "./resources";
 import { traceSource, type TraceSource } from "./trace-ops";
@@ -42,17 +44,32 @@ export type Sight =
 export type ShapeSight = Extract<Sight, { readonly kind: "shape" }>;
 export type ImageSight = Extract<Sight, { readonly kind: "image" }>;
 
+/// Una forma di un oggetto: il contagocce guarda sotto di lei dove è
+/// trasparente.
+export interface Beneath {
+  readonly unit: Unit;
+  readonly leaf: LeafNode;
+}
+
 const FOREIGN: Sight = { kind: "foreign" };
 
 /// Ciò che si vede nel punto `p` della scena fra gli oggetti `units` e i
 /// blocchi estranei `blocks`, ciascuno in ordine di documento: il più in
 /// alto che lo copre; altrimenti, il più in alto che ci passa entro
-/// `tolerance`. `null` se non si vede niente.
-export function sightAt(units: readonly Unit[], blocks: readonly ForeignBlock[], p: Point, tolerance: number): Sight | null {
+/// `tolerance`. Con `under`, una forma di uno di `units`, soltanto ciò che
+/// sta sotto di lei: ciò che si vede dove lei è trasparente. `null` se non
+/// si vede niente.
+export function sightAt(units: readonly Unit[], blocks: readonly ForeignBlock[], p: Point, tolerance: number, under: Beneath | null = null): Sight | null {
+  const top = under === null ? units.length : units.findIndex((unit) => unit.key === under.unit.key);
+  const below = under === null ? blocks : blocks.filter((block) => after(under.unit.path, block.path));
   for (const reach of tolerance > 0 ? [0, tolerance] : [0]) {
     let block: ForeignBlock | null = null;
-    for (let i = blocks.length - 1; i >= 0 && block === null; i--) if (blocks[i]!.covers(p, reach)) block = blocks[i]!;
-    for (let i = units.length - 1; i >= 0; i--) {
+    for (let i = below.length - 1; i >= 0 && block === null; i--) if (below[i]!.covers(p, reach)) block = below[i]!;
+    // Prima le forme dello stesso oggetto, che stanno sopra i blocchi
+    // rimasti.
+    const inside = under === null ? null : under.unit.sampleAt(p, reach, under.leaf);
+    if (inside !== null) return sightOf(under!.unit, inside, p);
+    for (let i = top - 1; i >= 0; i--) {
       const unit = units[i]!;
       const sampled = unit.sampleAt(p, reach);
       if (sampled === null) continue;
@@ -91,25 +108,57 @@ export function sightStyle(model: DocumentModel, sight: ShapeSight): Style | nul
 /// `null` se lì non si vede un colore: `none`, o un valore come
 /// `currentColor`.
 export function paintAt(model: DocumentModel, sight: ShapeSight, p: Point, style: Style | null = sightStyle(model, sight)): string | null {
+  const seen = colorSeen(model, sight, p, style);
+  return seen === null || seen.shown.kind === "none" ? null : seen.value;
+}
+
+/// Il colore che si vede nel punto `p` di `sight`: come si mostra, e come
+/// lo scrive [`paintAt`]; `none` per nessun colore. `null` se non si legge.
+export function colorSeen(model: DocumentModel, sight: ShapeSight, p: Point, style: Style | null = sightStyle(model, sight)): { readonly shown: Shown; readonly value: string } | null {
   if (style === null) return null;
   // Un tratto a penna è tutto riempimento, e il suo colore è quello del
   // contorno.
   const value = sight.sampled.on === "stroke" ? style.stroke : (style.fill ?? style.stroke);
-  if (value === null) return null;
+  const shown = value === null ? null : shownPaint(model, sight, p, value);
+  if (shown === null) return null;
+  return { shown, value: shown.kind === "swatch" || shown.kind === "pattern" ? trim(value!) : shown.kind === "none" ? "none" : shown.code };
+}
+
+/// Come si mostra un colore che il contagocce vede: il colore, `#rrggbb`
+/// minuscolo; un campione del documento, col suo nome e il suo colore; una
+/// sfumatura, col colore che ha nel punto; un motivo; nessuno.
+export type Shown =
+  | { readonly kind: "color"; readonly code: string }
+  | { readonly kind: "swatch"; readonly id: string; readonly name: string; readonly code: string }
+  | { readonly kind: "gradient"; readonly code: string }
+  | { readonly kind: "pattern" }
+  | { readonly kind: "none" };
+
+/// Come si mostra `value`, un colore come lo scrive il file, nel punto `p`
+/// della forma di `sight`. Una risorsa che non c'è, o che non si legge, si
+/// mostra col suo ripiego. `null` se non si legge.
+export function shownPaint(model: DocumentModel, sight: ShapeSight, p: Point, value: string): Shown | null {
   const text = trim(value);
+  if (text === "none") return { kind: "none" };
   const used = paintReference(text);
-  if (used === null) return customColor(text);
-  const fallback = used.fallback === null || used.fallback === "none" ? null : paintCode(used.fallback);
+  if (used === null) {
+    const code = customColor(text);
+    return code === null ? null : { kind: "color", code };
+  }
+  const fallback: Shown | null = used.fallback === null ? null : used.fallback === "none" ? { kind: "none" } : { kind: "color", code: paintCode(used.fallback) };
   const node = resourcesOf(model).get(used.id);
   if (node === undefined) return fallback;
-  if (node.details?.lifecycle === "swatch" && node.details.swatch !== undefined) return text;
-  if (node.facts.local === "pattern") return text;
+  const swatch = node.details?.lifecycle === "swatch" ? node.details.swatch : undefined;
+  if (swatch !== undefined) {
+    const code = customColor(swatch.color);
+    return code === null ? fallback : { kind: "swatch", id: used.id, name: cleanName(swatch.name), code };
+  }
+  if (node.facts.local === "pattern") return { kind: "pattern" };
   const gradient = gradientOf(node);
-  if (gradient === null) return fallback;
   const back = invert(sight.sampled.matrix);
-  if (back === null) return fallback;
+  if (gradient === null || back === null) return fallback;
   const color = gradientColor(gradient, apply(back, p), leafBox(sight.sampled));
-  return color === null ? null : paintCode(color);
+  return color === null ? null : { kind: "gradient", code: paintCode(color) };
 }
 
 /// Il riquadro della geometria della forma `sampled`, nelle sue coordinate:

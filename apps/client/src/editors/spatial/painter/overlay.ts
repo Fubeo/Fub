@@ -1,6 +1,7 @@
 // Lo strato sopra la scena: l'inchiostro mentre si scrive, le maniglie
 // della selezione, i nodi del tracciato che si modifica, le linee delle guide
-// e le misure, su un canvas 2D grande quanto la vista.
+// e le misure, l'anteprima del contagocce, su un canvas 2D grande quanto la
+// vista.
 //
 // Non entra mai nel documento: è ciò che la superficie mostra fra un
 // evento e l'operazione che lo registrerà. L'inchiostro in corso si riempie
@@ -78,7 +79,17 @@ export type OverlayHandle =
   | { readonly kind: "cross"; readonly x: number; readonly y: number }
   /// Una misura: la linea fra due punti, con le stanghette ai capi, e la
   /// distanza scritta a metà.
-  | { readonly kind: "measure"; readonly from: Point; readonly to: Point; readonly text: string };
+  | { readonly kind: "measure"; readonly from: Point; readonly to: Point; readonly text: string }
+  /// L'anteprima del contagocce accanto al punto: un disco di ciò che
+  /// prende, vuoto se non c'è un colore da mostrare, con l'anello del
+  /// contorno quando prende l'aspetto, e il suo nome. Sta in alto a destra
+  /// del punto, dove la mano non lo copre, o dall'altra parte vicino a un
+  /// bordo; `lifted`, sotto un dito, più lontano e proprio sopra.
+  | { readonly kind: "sample"; readonly x: number; readonly y: number; readonly fill: SamplePaint | null; readonly ring?: SamplePaint; readonly text: string; readonly lifted?: boolean };
+
+/// Ciò che mostra l'anteprima del contagocce: un colore CSS, nessun colore o
+/// un motivo.
+export type SamplePaint = { readonly color: string } | "none" | "pattern";
 
 /// Come si vede una regione del Costruttore: `plain` col solo bordo, tenue;
 /// `hover` sotto il puntatore, appena colorata; `chosen` scelta, che si
@@ -143,6 +154,19 @@ const LABEL_GAP = 12;
 const CROSS = 3;
 const TICK = 4;
 
+/// L'anteprima del contagocce, in pixel CSS: il diametro del disco, lo
+/// spessore dell'anello del contorno, il bordo di carta attorno, e quanto il
+/// centro sta lontano dal punto in ciascuna direzione, di più sopra un dito,
+/// che copre ciò che tocca; lo spazio fra il disco e il nome, e il lato dei
+/// quadretti di un motivo.
+const SAMPLE = 28;
+const SAMPLE_RING = 6;
+const SAMPLE_HALO = 3;
+const SAMPLE_REACH = 26;
+const SAMPLE_LIFT = 60;
+const SAMPLE_GAP = 6;
+const SAMPLE_CHECK = 5;
+
 /// Monta lo strato dentro `host`, sopra ciò che c'è.
 export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay {
   const life = openLifetime();
@@ -199,25 +223,42 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     return value === "" ? "HighlightText" : value;
   };
 
-  /// Una scritta sotto `x`, `y` sullo schermo, o centrata lì, sul colore
-  /// della linea; nel carattere dell'interfaccia, che lo strato non eredita.
-  const drawLabel = (ctx: CanvasRenderingContext2D, x: number, y: number, text: string, line: string, place: "below" | "center"): void => {
+  /// Il colore del testo, sulla carta.
+  const ink = (): string => {
+    if (typeof matchMedia === "function" && matchMedia("(forced-colors: active)").matches) return "CanvasText";
+    const value = getComputedStyle(canvas).getPropertyValue("--text").trim();
+    return value === "" ? "CanvasText" : value;
+  };
+
+  /// Quanto è larga e alta la scritta `text`, col suo margine; prepara il
+  /// carattere, quello dell'interfaccia, che lo strato non eredita.
+  const labelSize = (ctx: CanvasRenderingContext2D, text: string): [number, number] => {
     const family = getComputedStyle(host).fontFamily;
     ctx.font = `${LABEL_SIZE}px ${family === "" ? "sans-serif" : family}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const w = Math.ceil(ctx.measureText(text).width) + 2 * LABEL_PAD;
-    const h = LABEL_SIZE + 2 * LABEL_PAD;
-    // Dentro la vista, anche vicino a un bordo.
-    const left = Math.max(0, Math.min(Math.round(x - w / 2), width - w));
-    const top = Math.max(0, Math.min(Math.round(place === "below" ? y + LABEL_GAP : y - h / 2), height - h));
+    return [Math.ceil(ctx.measureText(text).width) + 2 * LABEL_PAD, LABEL_SIZE + 2 * LABEL_PAD];
+  };
+
+  /// La scritta `text`, larga `w` e alta `h` come dice `labelSize`, da
+  /// `left`, `top` sullo schermo, dentro la vista anche vicino a un bordo,
+  /// sul colore della linea.
+  const paintLabel = (ctx: CanvasRenderingContext2D, left: number, top: number, w: number, h: number, text: string, line: string): void => {
+    const x = Math.max(0, Math.min(Math.round(left), width - w));
+    const y = Math.max(0, Math.min(Math.round(top), height - h));
     ctx.fillStyle = line;
     ctx.beginPath();
-    if (typeof ctx.roundRect === "function") ctx.roundRect(left, top, w, h, 3);
-    else ctx.rect(left, top, w, h);
+    if (typeof ctx.roundRect === "function") ctx.roundRect(x, y, w, h, 3);
+    else ctx.rect(x, y, w, h);
     ctx.fill();
     ctx.fillStyle = onAccent();
-    ctx.fillText(text, left + w / 2, top + h / 2 + 0.5);
+    ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
+  };
+
+  /// Una scritta sotto `x`, `y` sullo schermo, o centrata lì.
+  const drawLabel = (ctx: CanvasRenderingContext2D, x: number, y: number, text: string, line: string, place: "below" | "center"): void => {
+    const [w, h] = labelSize(ctx, text);
+    paintLabel(ctx, x - w / 2, place === "below" ? y + LABEL_GAP : y - h / 2, w, h, text, line);
   };
 
   /// Un punto della scena sullo schermo, in pixel CSS.
@@ -343,6 +384,103 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
     if (region.tone === "erase") ctx.setLineDash([]);
     ctx.lineWidth = 1;
     ctx.globalAlpha = 1;
+  };
+
+  /// Il cerchio di centro `x`, `y` sullo schermo e raggio `r`, pieno di
+  /// `paint` e con un filo del colore del testo, perché si veda anche un
+  /// colore uguale alla carta: nessun colore è la carta con una riga
+  /// obliqua, un motivo una scacchiera, come nei campioni del pannello;
+  /// `null`, niente da mostrare, la carta sola.
+  const fillPaint = (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, paint: SamplePaint | null, base: string, text: string): void => {
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, 2 * Math.PI);
+    ctx.fillStyle = paint === null || typeof paint === "string" ? base : paint.color;
+    ctx.fill();
+    if (typeof paint === "string") {
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = text;
+      ctx.strokeStyle = text;
+      ctx.beginPath();
+      if (paint === "none") {
+        ctx.lineWidth = 2;
+        ctx.moveTo(x - r, y + r);
+        ctx.lineTo(x + r, y - r);
+        ctx.stroke();
+      } else {
+        const cells = Math.ceil(r / SAMPLE_CHECK);
+        for (let i = -cells; i < cells; i++) {
+          for (let j = -cells; j < cells; j++) if (((i + j) & 1) === 0) ctx.rect(x + i * SAMPLE_CHECK, y + j * SAMPLE_CHECK, SAMPLE_CHECK, SAMPLE_CHECK);
+        }
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = HINT_ALPHA / 2;
+    ctx.strokeStyle = text;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, r - 0.5, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+
+  /// L'anteprima del contagocce, col nome accanto al disco: in alto a
+  /// destra del punto, o sopra un dito, se c'è posto; altrimenti dall'altra
+  /// parte.
+  const drawSample = (ctx: CanvasRenderingContext2D, sample: Extract<OverlayHandle, { kind: "sample" }>, line: string, base: string): void => {
+    const [px, py] = screen(sample.x, sample.y);
+    const r = SAMPLE / 2;
+    const halo = r + SAMPLE_HALO;
+    const [w, h] = labelSize(ctx, sample.text);
+    const reach = sample.lifted === true ? SAMPLE_LIFT : SAMPLE_REACH;
+    const spots: readonly Point[] =
+      sample.lifted === true
+        ? [
+            [px, py - reach],
+            [px - reach, py],
+            [px + reach, py],
+            [px, py + reach],
+          ]
+        : [
+            [px + reach, py - reach],
+            [px - reach, py - reach],
+            [px + reach, py + reach],
+            [px - reach, py + reach],
+          ];
+    // Il nome dalla parte opposta al punto: a sinistra del disco quando il
+    // disco ne sta a sinistra.
+    const labelLeft = ([cx]: Point): number => (cx < px ? cx - halo - SAMPLE_GAP - w : cx + halo + SAMPLE_GAP);
+    const fits = (spot: Point): boolean => {
+      const left = Math.min(spot[0] - halo, labelLeft(spot));
+      const right = Math.max(spot[0] + halo, labelLeft(spot) + w);
+      const rise = Math.max(halo, h / 2);
+      return left >= 0 && right <= width && spot[1] - rise >= 0 && spot[1] + rise <= height;
+    };
+    const spot = spots.find(fits) ?? spots[0]!;
+    const [cx, cy] = spot;
+    ctx.beginPath();
+    ctx.arc(cx, cy, halo, 0, 2 * Math.PI);
+    ctx.fillStyle = base;
+    ctx.fill();
+    ctx.strokeStyle = line;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    const text = ink();
+    if (sample.ring === undefined) {
+      fillPaint(ctx, cx, cy, r, sample.fill, base, text);
+    } else {
+      // L'anello del contorno, poi un filo di carta, che separa due colori
+      // uguali, e il disco del riempimento.
+      fillPaint(ctx, cx, cy, r, sample.ring, base, text);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r - SAMPLE_RING, 0, 2 * Math.PI);
+      ctx.fillStyle = base;
+      ctx.fill();
+      fillPaint(ctx, cx, cy, r - SAMPLE_RING - 1, sample.fill, base, text);
+    }
+    paintLabel(ctx, labelLeft(spot), cy - h / 2, w, h, sample.text, line);
+    ctx.strokeStyle = line;
   };
 
   /// Un nodo in `x`, `y` sullo schermo, largo `size`.
@@ -508,6 +646,8 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         drawLabel(ctx, px, py, handle.text, line, "center");
       }
     }
+    // L'anteprima del contagocce sopra ogni altra cosa.
+    for (const handle of handles) if (handle.kind === "sample") drawSample(ctx, handle, line, fill);
   };
 
   const draw = (): void => {

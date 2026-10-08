@@ -43,7 +43,7 @@ import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
-import { createSwatchesPanel, type ColorsView, type SwatchesPanelOptions } from "./swatches-panel";
+import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPanelOptions } from "./swatches-panel";
 
 /// Le sezioni, nell'ordine in cui si vedono.
 export type SectionId = "place" | "shape" | "look" | "colors" | "text" | "arrange" | "transform" | "attributes" | "board" | "document" | "view";
@@ -280,6 +280,8 @@ export interface Properties {
   /// Chiude le sezioni `ids` e apre le altre, come le ricorda l'editor,
   /// senza dirglielo.
   setClosed(ids: readonly SectionId[]): void;
+  /// Il bersaglio scelto in «Applica a» fra i colori del documento.
+  colorTarget(): PaintTarget;
   /// Riscrive i testi nella lingua di adesso: quelli dei campi arrivano con
   /// la vista dopo.
   relabel(): void;
@@ -1710,6 +1712,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         showOpen(section);
       }
     },
+    colorTarget: () => colors.target(),
     relabel,
   };
 }

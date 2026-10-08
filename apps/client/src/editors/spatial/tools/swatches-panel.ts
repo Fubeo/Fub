@@ -134,6 +134,9 @@ export interface SwatchesPanel {
   /// Mostra `view`; falso `editable` in sola lettura, dove i colori si
   /// guardano e si sceglie chi li usa.
   update(view: ColorsView, editable: boolean): void;
+  /// Il bersaglio scelto in «Applica a», anche se la selezione di adesso
+  /// non l'ha.
+  target(): PaintTarget;
   /// Riscrive i testi nella lingua di adesso.
   relabel(): void;
 }
@@ -961,6 +964,7 @@ export function createSwatchesPanel(life: Lifetime, options: SwatchesPanelOption
       if (!editable && form !== null) closeForm(null);
       paint();
     },
+    target: () => chosen,
     relabel,
   };
 }

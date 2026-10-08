@@ -361,7 +361,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -3758,6 +3758,301 @@ describe("i colori del documento, dal livello Standard", () => {
   });
 });
 
+describe("il contagocce, dal livello Standard", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  const D = "od4d4d4d4";
+  const G = "og5g5g5g5";
+  const P = "op8p8p8p8";
+  const IMAGE = "oi9i9i9i9";
+  const UNDER = "ou0u0u0u0";
+  /// A, da vestire, in alto a sinistra; B, arancione col contorno vermiglio
+  /// tratteggiato e mezzo trasparente, sotto il cursore che parte dal mezzo
+  /// di un foglio di 400 × 300; C col campione «Blu marca»; P col motivo; un
+  /// gruppo di due forme; D in un livello bloccato, sotto gli altri; e la
+  /// parte di un altro programma.
+  const A_RECT = `<rect id="${A}" x="10" y="10" width="40" height="40" fill="#000000" stroke="#000000" stroke-width="2"/>`;
+  const B_RECT = `<rect id="${B}" x="230" y="130" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`;
+  const LOOKS = doc(
+    '<defs id="fub-defs"><linearGradient id="rs" fub:role="swatch" fub:name="Blu marca" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>' +
+      '<pattern id="rpppppppp" width="0.5" height="0.5"><rect x="0" y="0" width="0.25" height="0.25" fill="#000000"/></pattern></defs>' +
+      `<g id="l2" fub:layer="Sfondo" fub:locked="true"><rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/></g>` +
+      `${LAYER}${A_RECT}${B_RECT}` +
+      `<rect id="${C}" x="100" y="10" width="40" height="40" fill="url(#rs) #0072b2"/>` +
+      `<rect id="${P}" x="10" y="200" width="40" height="40" fill="url(#rpppppppp) #000000"/>` +
+      `<g id="${G}"><rect id="oh6h6h6h6" x="100" y="200" width="40" height="40" fill="#009e73"/><rect id="oj7j7j7j7" x="140" y="200" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/></g>` +
+      '<rect class="estraneo" x="300" y="10" width="40" height="40" fill="#f0e442"/></g>',
+  );
+  /// Un'immagine di 40 × 20 pixel, la metà sinistra rossa e la destra
+  /// trasparente, larga il doppio sopra un quadrato verde.
+  const PICTURE = doc(
+    `${LAYER}${A_RECT}<rect id="${UNDER}" x="200" y="100" width="100" height="100" fill="#009e73"/>` +
+      `<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="data:image/png;base64,iVBORw0KGgo="/></g>`,
+  );
+
+  /// Un codec coi pixel dell'immagine di `PICTURE`: quelli che legge, e le
+  /// immagini che chiude.
+  function pixelCodec(): ImageCodec & { rects: string[]; closed: number } {
+    const fake = {
+      rects: [] as string[],
+      closed: 0,
+      async decode(): Promise<Decoded | null> {
+        return {
+          width: 40,
+          height: 20,
+          opaque: () => false,
+          encode: async () => null,
+          pixels(rect: { x: number; y: number; width: number; height: number }, most: number) {
+            fake.rects.push(`${rect.x} ${rect.y} ${rect.width} ${rect.height} ${most}`);
+            const data = new Uint8ClampedArray(rect.width * rect.height * 4);
+            for (let at = 0; at < data.length; at += 4) if (rect.x < 20) data.set([255, 0, 0, 255], at);
+            return { width: rect.width, height: rect.height, data } as ImageData;
+          },
+          close() {
+            fake.closed++;
+          },
+        };
+      },
+    };
+    return fake;
+  }
+
+  const rect = (id: string): string => new RegExp(`<rect id="${id}"[^>]*/>`).exec(editor.engine.text)![0];
+  /// Un clic nel punto `x`, `y` del foglio, che è anche quello della scena.
+  const click = (x: number, y: number, init: Init = {}): void => drag([[x, y], [x, y]], init);
+  const hover = (x: number, y: number, init: Init = {}): void => {
+    surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  };
+  const dropper = (source = LOOKS, options: DrawEditorOptions = {}): void => {
+    mount(source, { level: "standard", ...options });
+    size(400, 300);
+  };
+  const panelButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!;
+  const targetButton = (target: string): HTMLButtonElement =>
+    properties().querySelector<HTMLButtonElement>(`.draw-properties-section[data-section="colors"] .draw-swatches-target [data-target="${target}"]`)!;
+  /// Il colore che la barra dà per scelto.
+  const checked = (): string | null => host.querySelector('[role="toolbar"] .draw-color[aria-checked="true"]')?.getAttribute("aria-label") ?? null;
+  /// Il contorno dei rettangoli nuovi, nell'ordine del file.
+  const outlined = (): string[] =>
+    [...editor.engine.text.matchAll(/<rect id="(?!o[a-z]\d[a-z]\d[a-z]\d[a-z]\d")[^"]*"[^>]*? stroke="([^"]*)"/g)].map((match) => match[1]!);
+
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 6; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  it("è uno strumento dello Standard, col tasto I, e dice dove va ciò che prende", () => {
+    mount(LOOKS);
+    key("i");
+    expect(editor.tool).toBe("pen");
+    editor.setLevel("standard");
+    key("i");
+    expect(editor.tool).toBe("eyedropper");
+    expect(spoken()).toBe("Strumento: Contagocce. Il colore che prendi è quello con cui disegni.");
+    const control = host.querySelector<HTMLButtonElement>('[data-tool="eyedropper"]')!;
+    expect(control.title).toBe("Contagocce (I)");
+    expect(document.getElementById(control.getAttribute("aria-describedby")!)?.textContent).toContain("Maiusc");
+    editor.setTool("select");
+    editor.select([A, C]);
+    key("i");
+    expect(spoken()).toBe("Strumento: Contagocce. Ciò che prendi va ai 2 oggetti scelti.");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("un clic dà agli oggetti scelti l'aspetto della forma sotto il puntatore, in un passo", () => {
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    click(250, 150);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#d55e00" stroke-width="6" stroke-dasharray="4 2" opacity="0.5"/>`);
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    expect(changes).toHaveLength(1);
+    // Il contagocce non sceglie e non sposta: la selezione resta, e la forma
+    // da cui prende non cambia.
+    expect(editor.selection).toEqual([A]);
+    expect(rect(B)).toBe(B_RECT);
+    editor.undo();
+    expect(editor.engine.text).toBe(LOOKS);
+    expect(spoken()).toBe("Annullato: Aspetto preso col contagocce.");
+    // Dentro un gruppo, la forma sotto il puntatore; da un livello bloccato
+    // si legge senza cambiarlo.
+    click(160, 220);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#cc79a7" stroke="#56b4e9" stroke-width="4"/>`);
+    click(320, 220);
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#56b4e9"/>`);
+    expect(rect(D)).toBe(`<rect id="${D}" x="300" y="200" width="40" height="40" fill="#56b4e9"/>`);
+    // Lo stesso aspetto di nuovo non cambia niente.
+    click(320, 220);
+    expect(spoken()).toBe("È già così: niente da cambiare.");
+    expect(changes).toHaveLength(4);
+  });
+
+  it("con Maiusc dà il solo colore sotto il puntatore, al riempimento o al contorno come dice «Applica a»; un campione resta un campione", () => {
+    const remembered: (readonly string[])[] = [];
+    dropper(LOOKS, { onColorsChange: (colors) => remembered.push(colors) });
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    click(250, 150, { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Riempimento: Arancione.");
+    // Sul contorno, il colore del contorno.
+    click(231, 150, { shiftKey: true });
+    expect(rect(A)).toContain('fill="#d55e00"');
+    expect(spoken()).toBe("Riempimento: Vermiglio.");
+    expect(remembered).toEqual([["#e69f00"], ["#d55e00", "#e69f00"]]);
+    panelButton().click();
+    targetButton("stroke").click();
+    click(120, 30, { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#d55e00" stroke="url(#rs) #0072b2" stroke-width="2"/>`);
+    expect(spoken()).toBe("Contorno: Blu marca.");
+    // Un campione non è un colore recente; un motivo si dà come gli altri.
+    expect(remembered).toHaveLength(2);
+    click(30, 220, { shiftKey: true });
+    expect(rect(A)).toContain('stroke="url(#rpppppppp) #000000"');
+    expect(spoken()).toBe("Contorno: un motivo.");
+    expect(changes).toHaveLength(4);
+  });
+
+  it("senza selezione prende il colore con cui si disegna, anche un campione; un motivo no", () => {
+    const remembered: (readonly string[])[] = [];
+    dropper(LOOKS, { onColorsChange: (colors) => remembered.push(colors) });
+    editor.setTool("eyedropper");
+    click(250, 150);
+    expect(spoken()).toBe("Colore: Arancione.");
+    expect(checked()).toBe("Arancione");
+    expect(remembered).toEqual([["#e69f00", "#000000"]]);
+    editor.setTool("rect");
+    drag([[300, 60], [350, 90]]);
+    editor.setTool("eyedropper");
+    click(120, 30);
+    expect(spoken()).toBe("Colore: Blu marca.");
+    editor.setTool("rect");
+    drag([[300, 100], [350, 120]]);
+    expect(outlined()).toEqual(["#e69f00", "url(#rs) #0072b2"]);
+    editor.setTool("eyedropper");
+    click(30, 220);
+    expect(spoken()).toBe("Un motivo non è un colore con cui disegnare: scegli prima gli oggetti a cui darlo.");
+    click(380, 120);
+    expect(spoken()).toBe("Qui non c’è niente da prendere: tocca un oggetto o un’immagine.");
+    click(320, 30);
+    expect(spoken()).toBe("Questa parte viene da un altro programma: FubDraw la mostra, ma non ne prende il colore.");
+    // Soltanto i due rettangoli nuovi.
+    expect(changes).toHaveLength(2);
+  });
+
+  it("da un'immagine prende il colore del pixel, e dove è trasparente guarda sotto", async () => {
+    const codec = pixelCodec();
+    dropper(PICTURE, { imageCodec: codec });
+    editor.setTool("eyedropper");
+    click(210, 110);
+    await settle();
+    expect(spoken()).toBe("Colore: Personalizzato #ff0000.");
+    // Un pixel solo, quello sotto il puntatore: per l'anteprima e per ciò
+    // che prende.
+    expect([...new Set(codec.rects)]).toEqual(["5 5 1 1 1"]);
+    click(270, 110);
+    expect(spoken()).toBe("Colore: Verde.");
+    editor.select([A]);
+    click(210, 110);
+    expect(rect(A)).toContain('fill="#ff0000"');
+    expect(spoken()).toBe("Riempimento: Personalizzato #ff0000.");
+    // Un'immagine aperta per il contagocce si chiude con lo strumento.
+    expect(codec.closed).toBe(0);
+    editor.setTool("select");
+    expect(codec.closed).toBe(1);
+  });
+
+  it("dalla tastiera, sopra un'immagine il cursore dice il colore appena l'ha letto", async () => {
+    const layer = recording();
+    dropper(PICTURE, { imageCodec: pixelCodec() });
+    editor.setTool("eyedropper");
+    key("ArrowUp", { shiftKey: true });
+    expect(spoken()).toBe("x 200, y 100: Immagine, lettura dei pixel…");
+    layer.frame();
+    expect(layer.texts()).toEqual(["Lettura…"]);
+    await settle();
+    expect(spoken()).toBe("x 200, y 100: Immagine, Personalizzato #ff0000");
+    layer.frame();
+    expect(layer.texts()).toEqual(["#ff0000"]);
+  });
+
+  it("un'immagine dal web non si legge, e lo dice", () => {
+    dropper(doc(`${LAYER}<image id="${IMAGE}" x="200" y="100" width="80" height="40" href="https://example.com/a.png"/></g>`), { imageCodec: pixelCodec() });
+    editor.setTool("eyedropper");
+    click(210, 110);
+    expect(spoken()).toBe("Il colore di un’immagine dal web non si legge: mettila nel vault, e prendilo da quella.");
+    expect(changes).toEqual([]);
+  });
+
+  it("dalla tastiera: le frecce portano il cursore anche con una selezione, e dice che cosa c'è sotto; Spazio prende l'aspetto, Maiusc+Spazio il colore", () => {
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    key("ArrowRight", { shiftKey: true });
+    expect(spoken()).toBe("x 250, y 150: Rettangolo, Arancione");
+    expect(rect(A)).toBe(A_RECT);
+    key(" ");
+    expect(rect(A)).toContain('fill="#e69f00" stroke="#d55e00"');
+    expect(spoken()).toBe("Aspetto di Rettangolo dato a 1 oggetto.");
+    editor.undo();
+    key(" ", { shiftKey: true });
+    expect(rect(A)).toBe(`<rect id="${A}" x="10" y="10" width="40" height="40" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Riempimento: Arancione.");
+    key("ArrowUp", { shiftKey: true });
+    key("ArrowUp", { shiftKey: true });
+    key("ArrowRight", { shiftKey: true });
+    expect(spoken()).toBe("x 300, y 50: una parte di un altro programma, che il contagocce non legge");
+  });
+
+  it("accanto al puntatore mostra ciò che prende, col suo nome; Maiusc passa al colore, e un dito lo vede sopra di sé", () => {
+    const layer = recording();
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    hover(250, 150);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Rettangolo"]);
+    key("Shift", { shiftKey: true });
+    layer.frame();
+    expect(layer.texts()).toEqual(["Arancione"]);
+    surface().dispatchEvent(new KeyboardEvent("keyup", { key: "Shift", bubbles: true }));
+    hover(120, 30);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Rettangolo"]);
+    editor.select([]);
+    hover(120, 30);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Blu marca"]);
+    hover(320, 30);
+    layer.frame();
+    expect(layer.texts()).toEqual(["Non si prende"]);
+    hover(380, 120);
+    layer.frame();
+    expect(layer.texts()).toEqual([]);
+    // Il dito non passa sopra: l'anteprima c'è mentre tocca, e poi sparisce.
+    const TOUCH = { pointerId: 7, pointerType: "touch" } as const;
+    surface().dispatchEvent(pointer("pointerdown", { ...TOUCH, button: 0, buttons: 1, pressure: 0.5, clientX: 380, clientY: 120, timeStamp: (clock += 8) }));
+    surface().dispatchEvent(pointer("pointermove", { ...TOUCH, button: -1, buttons: 1, pressure: 0.5, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    layer.frame();
+    expect(layer.texts()).toEqual(["Arancione"]);
+    surface().dispatchEvent(pointer("pointerup", { ...TOUCH, button: 0, buttons: 0, pressure: 0, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    layer.frame();
+    expect(layer.texts()).toEqual([]);
+    expect(spoken()).toBe("Colore: Arancione.");
+  });
+
+  it("Esc a metà non prende niente", () => {
+    dropper();
+    editor.select([A]);
+    editor.setTool("eyedropper");
+    surface().dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    key("Escape");
+    surface().dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 250, clientY: 150, timeStamp: (clock += 8) }));
+    expect(editor.engine.text).toBe(LOOKS);
+    expect(changes).toEqual([]);
+  });
+});
+
 describe("la barra accanto alla selezione, dal livello Standard", () => {
   const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
   const spot = (): readonly number[] => /translate\((-?[\d.]+)px, (-?[\d.]+)px\)/.exec(bar().style.transform)!.slice(1).map(Number);
@@ -4102,6 +4397,7 @@ describe("da tastiera", () => {
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
+      "Contagocce · dal livello Standard",
       "Griglia · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
@@ -4123,7 +4419,7 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
     // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
@@ -4157,25 +4453,30 @@ describe("da tastiera", () => {
       ["Shift", "Tenuto all’inizio del trascinamento: disegna una tavola anche dentro un’altra"],
       ["Alt", "Tenuto mentre si sposta una tavola: ne lascia una copia dove la si posa, con ciò che ci sta sopra"],
     ]);
-    expect(tables[9]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
-    expect(tables[10]!.rows).toEqual([
+    expect(tables[9]!.rows).toEqual([
+      ["←↑→↓", "Muovono il cursore, anche con oggetti scelti, e dicono che cosa c’è sotto"],
+      ["Space", "Dà agli oggetti scelti l’aspetto di ciò che è sotto il cursore; senza selezione, ne prende il colore per disegnare"],
+      ["Shift+Space", "Prende soltanto il colore sotto il cursore"],
+    ]);
+    expect(tables[10]!.rows).toContainEqual(["#", "Mostra o nasconde la griglia"]);
+    expect(tables[11]!.rows).toEqual([
       ["Ctrl", "Tenuto mentre si trascina: posa libero, senza agganciarsi agli altri oggetti"],
       ["Alt", "Tenuto con una selezione: le distanze dall’oggetto sotto il puntatore, o dalla pagina"],
     ]);
     // Lo zoom c'è già; la vista girata e il menu radiale, dallo Standard.
-    expect(tables[13]!.rows).toEqual([
+    expect(tables[14]!.rows).toEqual([
       ["4", "Ruota la vista a sinistra"],
       ["6", "Ruota la vista a destra"],
       ["5", "Raddrizza la vista"],
       ["Shift+F10", "Apre il menu radiale: strumenti, colori, annulla"],
     ]);
     // Copiare e incollare ci sono già; lo stile, dallo Standard.
-    expect(tables[14]!.rows).toEqual([
+    expect(tables[15]!.rows).toEqual([
       ["Ctrl+Alt+C", "Copia lo stile"],
       ["Ctrl+Alt+V", "Incolla lo stile"],
     ]);
     // L'elenco delle tavole e la cronologia, tutti dallo Standard.
-    expect(tables[15]!.rows).toEqual([
+    expect(tables[16]!.rows).toEqual([
       ["↑ o ↓ o Home o End", "Nell’elenco delle tavole, la tavola prima o dopo, la prima o l’ultima"],
       ["Enter o Space", "Nell’elenco delle tavole, porta alla tavola"],
       ["F2", "Nell’elenco delle tavole, cambia il nome della tavola"],
@@ -4185,7 +4486,7 @@ describe("da tastiera", () => {
       ["Shift+F10", "Nell’elenco delle tavole, apre il menu della tavola"],
       ["Esc", "Dall’elenco delle tavole torna al foglio"],
     ]);
-    expect(tables[16]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
+    expect(tables[17]!.rows.map(([keys]) => keys)).toEqual(["Enter o Space", "F2", "Del", "Esc"]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
 
     // Ciò che è elencato non si può fare: il livello resta l'Essenziale.
@@ -10000,6 +10301,7 @@ describe("il livello Personalizzato", () => {
       "Forme dal tratto · dal livello Standard",
       "Testo · dal livello Standard",
       "Tavole · dal livello Standard",
+      "Contagocce · dal livello Standard",
       "Guide intelligenti · dal livello Standard",
       "Righelli e guide · dal livello Standard",
       "Proprietà · dal livello Standard",
@@ -10018,8 +10320,8 @@ describe("il livello Personalizzato", () => {
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
-    expect(tables[17]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[18]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
   });

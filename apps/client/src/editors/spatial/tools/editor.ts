@@ -147,7 +147,7 @@ import { MAX_GUIDES, UNITS, writeGuides, type LengthUnit, type RulerGuide } from
 import { pathData, type Elem } from "../scene/serialize";
 import { paintReference, href as parseHref } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
-import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone } from "../painter/overlay";
+import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone, type SamplePaint } from "../painter/overlay";
 import { PaintBuilder, resourcesFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
 import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
@@ -393,7 +393,7 @@ import {
   zoomAt,
   type View,
 } from "../view";
-import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type LayerInfo, type TextLook, type Unit } from "./hit";
+import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type ForeignBlock, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
 import { createBoardsPanel, type BoardRow } from "./boards-panel";
@@ -420,6 +420,7 @@ import {
   type Encoded,
   type ImageCodec,
 } from "./images";
+import { colorSeen, imagePixel, pixelColor, shownPaint, sightAt, sightStyle, type Beneath, type ImageSight, type ShapeSight, type Shown } from "./eyedropper";
 import {
   addLayerOps,
   canShiftLayer,
@@ -691,6 +692,10 @@ export const DRAW_SCALE_LIMITS: ScaleLimits = { min: 0.1, max: 32 };
 /// Quanto lontano dal tratto un tocco prende ancora l'oggetto, in pixel: il
 /// dito copre più della penna.
 const HIT_PX: Readonly<Record<InkPointerType, number>> = { pen: 6, mouse: 4, touch: 12 };
+
+/// Quante immagini il contagocce tiene aperte: quella sotto il puntatore, e
+/// quelle che lascia vedere dove è trasparente.
+const DROPPER_IMAGES = 3;
 
 /// Il raggio della gomma, in pixel.
 const ERASER_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 8, touch: 16 };
@@ -1048,6 +1053,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   // Un foglio coi suoi segni di taglio: i bordi che continuano oltre gli
   // angoli.
   "draw-board": ["M2 6h20", "M2 18h20", "M6 2v20", "M18 2v20"],
+  // Una pipetta: la punta in basso a sinistra, il bulbo in alto a destra.
+  "draw-eyedropper": ["M13 9L5.5 16.5 4 20l3.5-1.5L15 11", "M11.5 7.5l5 5", "M12.5 8.5l4-4a2.1 2.1 0 0 1 3 3l-4 4"],
   "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
   "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
@@ -1184,6 +1191,7 @@ type Gesture =
   | TextGesture
   | GuideGesture
   | BoardGesture
+  | DropperGesture
   | NoteGesture
   | RefusedGesture;
 
@@ -1690,6 +1698,48 @@ interface BoardGesture extends GestureBase {
   rect: Rect | null;
 }
 
+/// Il colore di un pixel che il contagocce vede: il colore; `clear` dove
+/// l'immagine non si vede, trasparente o fuori da ciò che il riquadro
+/// mostra; `reading` mentre la si apre; o perché non si legge.
+type PixelSeen = { readonly color: string } | "clear" | "reading" | DrawKey;
+
+/// Ciò che il contagocce vede in un punto: una forma; il pixel di
+/// un'immagine; un blocco estraneo, che non si legge.
+type Dropped =
+  | { readonly kind: "shape"; readonly sight: ShapeSight }
+  | { readonly kind: "image"; readonly sight: ImageSight; readonly pixel: Exclude<PixelSeen, "clear"> }
+  | { readonly kind: "foreign" };
+
+/// Il contagocce sopra un punto della scena, senza premere: dove, con quale
+/// puntatore, se è il cursore della tastiera, e ciò che vede nella scena
+/// `index`.
+interface DropperHover {
+  readonly index: SceneIndex;
+  readonly at: Point;
+  readonly pointer: InkPointerType;
+  readonly keyboard: boolean;
+  readonly seen: Dropped | null;
+}
+
+/// Un gesto del contagocce: prende dove si rilascia, e finché si preme
+/// l'anteprima segue il puntatore.
+interface DropperGesture extends GestureBase {
+  readonly kind: "dropper";
+  at: Point | null;
+  seen: Dropped | null;
+}
+
+/// Un'immagine che il contagocce legge, del disegno aperto per `loaded`:
+/// aperta (`decoded`), o perché non si legge (`reason`); `ready` finisce
+/// quando si sa. Una chiusa non serve più.
+interface DropperImage {
+  readonly loaded: number;
+  decoded: Decoded | null;
+  reason: DrawKey | null;
+  ready: Promise<void>;
+  closed: boolean;
+}
+
 function scaleOf(m: Matrix): number {
   return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 }
@@ -2120,6 +2170,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// cursore della tastiera: la linea della forma e i suoi punti si vedono
   /// prima di toccarla. Vale per la scena in cui lo si è trovato.
   let widthHover: { readonly index: SceneIndex; readonly spot: WidthSpot } | null = null;
+  /// Ciò che il contagocce vede sotto il puntatore che passa, o sotto il
+  /// cursore della tastiera: l'anteprima di ciò che prenderebbe.
+  let dropperHover: DropperHover | null = null;
   /// Il punto del profilo scelto con lo Spessore: il percorso della sua
   /// linea nel modello, e il suo indice. Canc lo toglie, Invio ne apre le
   /// misure.
@@ -4102,6 +4155,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...regionHandles());
     handles.push(...cutHandles());
     handles.push(...widthHandles());
+    handles.push(...dropperHandles());
     handles.push(...pathsHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
@@ -6540,9 +6594,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (live.textContent !== before) finished = (live.textContent ?? "").trim();
       recentTools = [tool, ...recentTools.filter((each) => each !== tool && each !== id)].slice(0, RECENT_MAX);
       forgetBuilder();
-      // Il punto scelto dello Spessore è dello strumento.
+      // Il punto scelto dello Spessore è dello strumento, e le immagini
+      // aperte del contagocce.
       widthPicked = null;
       widthHover = null;
+      dropperHover = null;
+      dropPixels();
     }
     tool = id;
     // Lo strumento Tavola sceglie le tavole, non gli oggetti: la selezione si
@@ -6557,12 +6614,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showPage();
     showHandles();
     showGrip(null);
+    // Il contagocce mostra subito che cosa vede sotto il puntatore.
+    if (id === "eyedropper" && pointerAt !== null) hoverDropper(pointerAt.at, pointerAt.pointer);
     const named = t("draw.announce.tool", { tool: t(toolLabel(id)) });
     // Con lo strumento Nodi, anche di che cosa si modificano i nodi; col
     // Costruttore, su quante regioni lavora; con lo strumento Tavola, quale
-    // tavola è scelta.
+    // tavola è scelta; col contagocce, dove va ciò che prende.
     const sheet = id === "board" ? chosenSheet() : null;
-    const target = id === "nodes" ? targetText() : id === "builder" ? builderText() : sheet !== null ? sheetText(sheet) : "";
+    const target =
+      id === "nodes" ? targetText() : id === "builder" ? builderText() : id === "eyedropper" ? dropperFor() : sheet !== null ? sheetText(sheet) : "";
     announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
@@ -7386,6 +7446,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return { ...base, kind: "lasso", points: [], base: [...selection], mode: shift ? "add" : alt ? "remove" : "replace", dragging: false };
       case "board":
         return { ...base, kind: "board", from: null, end: null, mode: "pending", plan: "draw", sheet: null, grip: null, carried: [], source: null, rect: null };
+      case "eyedropper":
+        // L'anteprima del gesto prende il posto di quella che passava.
+        dropperHover = null;
+        return { ...base, kind: "dropper", at: null, seen: null };
       case "nodes":
         resolveNodes();
         return {
@@ -9411,6 +9475,369 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (writeWidthLine(now, shape, now.point, "draw.action.width")) announce(t("draw.width.changed", widthWords(now, shape, now.point)));
   }
 
+  // --- Il contagocce -----------------------------------------------------------
+
+  /// I blocchi estranei del disegno di adesso, per la scena in cui li si è
+  /// trovati: il contagocce li vede, ma non li legge.
+  let foreignCache: { readonly index: SceneIndex; readonly blocks: readonly ForeignBlock[] } | null = null;
+  const foreignNow = (): readonly ForeignBlock[] => {
+    const index = currentIndex();
+    const model = engine.model;
+    if (model === null) return [];
+    if (foreignCache?.index !== index) foreignCache = { index, blocks: indexer.foreignBlocks(model) };
+    return foreignCache.blocks;
+  };
+
+  /// Le immagini che il contagocce legge, per `href`, dalla meno recente:
+  /// restano aperte finché lo strumento è quello, al più
+  /// [`DROPPER_IMAGES`].
+  const dropperImages = new Map<string, DropperImage>();
+
+  const closeImage = (image: DropperImage): void => {
+    image.closed = true;
+    image.decoded?.close();
+    image.decoded = null;
+  };
+
+  /// Chiude le immagini del contagocce.
+  const dropPixels = (): void => {
+    for (const image of dropperImages.values()) closeImage(image);
+    dropperImages.clear();
+  };
+  life.add(dropPixels);
+
+  /// L'immagine `href` per il contagocce: aperta, che si apre adesso, o
+  /// perché non si legge.
+  const dropperImage = (href: string): DropperImage => {
+    const known = dropperImages.get(href);
+    dropperImages.delete(href);
+    if (known !== undefined && known.loaded === loads) {
+      dropperImages.set(href, known);
+      return known;
+    }
+    if (known !== undefined) closeImage(known);
+    const image: DropperImage = { loaded: loads, decoded: null, reason: null, ready: Promise.resolve(), closed: false };
+    const kind = parseHref(href).kind;
+    if (kind === "remote") image.reason = "draw.eyedropper.remote";
+    else if (codec === null || (kind !== "vault" && kind !== "data")) image.reason = "draw.image.unreadable";
+    else image.ready = openPixels(image, href, kind);
+    dropperImages.set(href, image);
+    for (const [key, old] of dropperImages) {
+      if (dropperImages.size <= DROPPER_IMAGES) break;
+      closeImage(old);
+      dropperImages.delete(key);
+    }
+    return image;
+  };
+
+  /// Apre per il contagocce l'immagine `href`, del vault o scritta nel
+  /// disegno, in `image`; poi l'anteprima si rifà.
+  async function openPixels(image: DropperImage, href: string, kind: "vault" | "data"): Promise<void> {
+    const port = options.images;
+    const blob = kind === "data" ? dataBlob(href) : port === undefined ? null : await port.read(href).catch(() => null);
+    const decoded = blob === null || image.closed || codec === null ? null : await codec.decode(blob).catch(() => null);
+    if (image.closed || disposed) {
+      decoded?.close();
+      return;
+    }
+    if (decoded === null || decoded.pixels === undefined) {
+      decoded?.close();
+      // Un file del vault che non si apre forse non c'è più.
+      image.reason = blob === null && kind === "vault" ? "draw.image.gone" : "draw.image.unreadable";
+    } else {
+      image.decoded = decoded;
+    }
+    refreshDropper();
+  }
+
+  /// Il colore del pixel che `sight` vede.
+  const pixelAt = (sight: ImageSight): PixelSeen => {
+    const image = dropperImage(sight.source.href);
+    if (image.reason !== null) return image.reason;
+    const decoded = image.decoded;
+    if (decoded === null) return "reading";
+    const at = imagePixel(sight, [decoded.width, decoded.height]);
+    if (at === null) return "clear";
+    const data = decoded.pixels?.({ x: at[0], y: at[1], width: 1, height: 1 }, 1)?.data;
+    if (data === undefined) return "draw.image.unreadable";
+    const color = pixelColor(data);
+    return color === null ? "clear" : { color };
+  };
+
+  /// Ciò che il contagocce vede nel punto `p` della scena, col puntatore
+  /// `pointer`; dove un'immagine è trasparente, o il suo riquadro non la
+  /// mostra, ciò che le sta sotto.
+  const dropperAt = (p: Point, pointer: InkPointerType): Dropped | null => {
+    const units = seenUnits();
+    const blocks = foreignNow();
+    const tolerance = HIT_PX[pointer] / camera.scale;
+    let under: Beneath | null = null;
+    for (;;) {
+      const sight = sightAt(units, blocks, p, tolerance, under);
+      if (sight === null) return null;
+      if (sight.kind === "foreign") return { kind: "foreign" };
+      if (sight.kind === "shape") return { kind: "shape", sight };
+      const pixel = pixelAt(sight);
+      if (pixel !== "clear") return { kind: "image", sight, pixel };
+      under = { unit: sight.unit, leaf: sight.sampled.leaf };
+    }
+  };
+
+  /// Il nome a parole della forma `leaf`, anche dentro un gruppo, come
+  /// nell'albero: il colore il contagocce lo dice a parte.
+  const sightName = (leaf: LeafNode): string => nameOfNode(leaf);
+
+  /// Il nome breve di un colore, per l'anteprima: quello della tavolozza, o
+  /// il codice.
+  const shortColor = (code: string): string => {
+    const swatch = swatchOf(code);
+    return swatch === null ? code : t(swatch.label);
+  };
+
+  /// Come si dice il colore `shown`.
+  const shownName = (shown: Shown): string => {
+    switch (shown.kind) {
+      case "color":
+        return colorName(shown.code);
+      case "swatch":
+        return shown.name;
+      case "gradient":
+        return t("draw.eyedropper.gradient", { color: colorName(shown.code) });
+      case "pattern":
+        return t("draw.eyedropper.pattern.name");
+      case "none":
+        return t("draw.eyedropper.none.name");
+    }
+  };
+
+  /// Il nome breve del colore `shown`, per l'anteprima.
+  const shownLabel = (shown: Shown): string => {
+    switch (shown.kind) {
+      case "color":
+      case "gradient":
+        return shortColor(shown.code);
+      case "swatch":
+        return shown.name;
+      case "pattern":
+        return t("draw.eyedropper.label.pattern");
+      case "none":
+        return t("draw.eyedropper.label.none");
+    }
+  };
+
+  /// Come l'anteprima mostra il colore `shown`: di una sfumatura, il colore
+  /// nel punto.
+  const samplePaint = (shown: Shown): SamplePaint => (shown.kind === "none" || shown.kind === "pattern" ? shown.kind : { color: shown.code });
+
+  /// Ciò che il contagocce vede, a parole: la forma e il colore nel punto
+  /// `p`.
+  const dropperText = (seen: Dropped, p: Point): string => {
+    if (seen.kind === "foreign") return t("draw.eyedropper.cursor.foreign");
+    const name = sightName(seen.sight.sampled.leaf);
+    if (seen.kind === "image") {
+      const pixel = seen.pixel;
+      if (typeof pixel === "object") return t("draw.eyedropper.cursor", { name, color: colorName(pixel.color) });
+      return t(pixel === "reading" ? "draw.eyedropper.cursor.reading" : "draw.eyedropper.cursor.unreadable", { name });
+    }
+    const color = colorSeen(engine.model!, seen.sight, p);
+    return color === null ? name : t("draw.eyedropper.cursor", { name, color: shownName(color.shown) });
+  };
+
+  /// Vero se il contagocce prende l'aspetto: ci sono oggetti scelti, e
+  /// Maiusc non chiede il solo colore.
+  const takesLook = (): boolean => !shift && selectedUnits().length > 0;
+
+  /// Il contagocce sopra il foglio, o mentre si preme: il contorno tenue
+  /// della forma da cui prende e, accanto al punto, ciò che prende. Per gli
+  /// oggetti scelti l'aspetto, col nome della forma: il riempimento nel
+  /// disco e il contorno nell'anello attorno, vuoti se la forma non li dà;
+  /// con Maiusc, da un'immagine o senza selezione il colore, col suo nome.
+  const dropperHandles = (): OverlayHandle[] => {
+    const model = engine.model;
+    if (tool !== "eyedropper" || model === null) return [];
+    const g = current?.kind === "dropper" ? current : null;
+    // Dopo un passo la scena è un'altra, e forse anche ciò che si vede.
+    if (g === null && dropperHover !== null && dropperHover.index !== currentIndex()) {
+      dropperHover = { ...dropperHover, index: currentIndex(), seen: dropperAt(dropperHover.at, dropperHover.pointer) };
+    }
+    const spot = g === null ? dropperHover : g.at === null ? null : { at: g.at, pointer: g.pointer, seen: g.seen };
+    if (spot === null || spot.seen === null) return [];
+    const { at, pointer, seen } = spot;
+    const sample = (fill: SamplePaint | null, text: string, ring: SamplePaint | null = null): OverlayHandle => ({
+      kind: "sample",
+      x: at[0],
+      y: at[1],
+      fill,
+      text,
+      ...(ring === null ? {} : { ring }),
+      ...(pointer === "touch" ? { lifted: true } : {}),
+    });
+    if (seen.kind === "foreign") return [sample(null, t("draw.eyedropper.label.foreign"))];
+    const { sampled } = seen.sight;
+    const out: OverlayHandle[] = [{ kind: "outline", segments: sampled.segments, matrix: sampled.matrix, hint: true }];
+    if (seen.kind === "image") {
+      const pixel = seen.pixel;
+      if (typeof pixel === "object") out.push(sample({ color: pixel.color }, shortColor(pixel.color)));
+      else out.push(sample(null, t(pixel === "reading" ? "draw.eyedropper.label.reading" : "draw.eyedropper.label.unreadable")));
+      return out;
+    }
+    if (takesLook()) {
+      const style = sightStyle(model, seen.sight);
+      const paint = (value: string | null): SamplePaint | null => {
+        const shown = value === null ? null : shownPaint(model, seen.sight, at, value);
+        return shown === null ? null : samplePaint(shown);
+      };
+      out.push(style === null ? sample(null, t("draw.eyedropper.label.unreadable")) : sample(paint(style.fill), sightName(sampled.leaf), paint(style.stroke)));
+      return out;
+    }
+    const color = colorSeen(model, seen.sight, at);
+    out.push(color === null ? sample(null, t("draw.eyedropper.label.unreadable")) : sample(samplePaint(color.shown), shownLabel(color.shown)));
+    return out;
+  };
+
+  /// Il puntatore, o il cursore della tastiera (`keyboard`), passa sopra `p`
+  /// senza premere: col contagocce si vede che cosa prenderebbe. Il dito
+  /// non passa: tocca.
+  const hoverDropper = (p: Point | null, pointer: InkPointerType, keyboard = false): void => {
+    let next: DropperHover | null = null;
+    if (p !== null && pointer !== "touch" && tool === "eyedropper" && has("eyedropper") && editable()) {
+      next = { index: currentIndex(), at: p, pointer, keyboard, seen: dropperAt(p, pointer) };
+    }
+    if (next === null && dropperHover === null) return;
+    dropperHover = next;
+    showHandles();
+  };
+
+  /// Un'immagine si è aperta: l'anteprima del contagocce si rifà, e la
+  /// tastiera sente il colore appena lo si legge.
+  const refreshDropper = (): void => {
+    const g = current?.kind === "dropper" ? current : null;
+    if (g !== null && g.at !== null) g.seen = dropperAt(g.at, g.pointer);
+    const hovered = dropperHover;
+    if (hovered !== null) dropperHover = { ...hovered, index: currentIndex(), seen: dropperAt(hovered.at, hovered.pointer) };
+    if (g === null && hovered === null) return;
+    showHandles();
+    if (g === null && hovered !== null && hovered.keyboard && hovered.at === cursor) announceCursor();
+  };
+
+  /// Il gesto del contagocce arriva a `p`: l'anteprima lo segue, anche
+  /// sotto un dito.
+  const dropperMove = (g: DropperGesture, p: Point): void => {
+    g.at = p;
+    g.seen = dropperAt(p, g.pointer);
+    showHandles();
+  };
+
+  /// Dove va ciò che il contagocce prende, a parole: agli oggetti scelti, o
+  /// a ciò che si disegna.
+  const dropperFor = (): string => {
+    const count = selectedUnits().length;
+    return count === 0 ? t("draw.eyedropper.for.drawing") : plural(count, "draw.eyedropper.for.one", "draw.eyedropper.for.other");
+  };
+
+  /// Il bersaglio del colore negli oggetti scelti `units`: quello scelto in
+  /// «Applica a», se lo hanno, o quello che hanno; `null` se non hanno né
+  /// riempimento né contorno.
+  const dropperTarget = (model: DocumentModel, units: readonly Unit[]): "fill" | "stroke" | null => {
+    const look = selectionLook(model, units);
+    const targets = (["fill", "stroke"] as const).filter((each) => look[each].count > 0);
+    const chosen = panel.colorTarget();
+    return targets.includes(chosen) ? chosen : (targets[0] ?? null);
+  };
+
+  /// Il contagocce prende nel punto `p`, col puntatore `pointer`: per gli
+  /// oggetti scelti l'aspetto della forma che vede; con `colorOnly`, da
+  /// un'immagine o senza selezione, il colore. Un'immagine che si apre
+  /// adesso si aspetta.
+  async function takeAt(p: Point, pointer: InkPointerType, colorOnly: boolean): Promise<void> {
+    if (!has("eyedropper") || !editable()) return;
+    const loaded = loads;
+    let seen = dropperAt(p, pointer);
+    for (let waits = 0; seen?.kind === "image" && seen.pixel === "reading" && waits <= DROPPER_IMAGES; waits++) {
+      await dropperImage(seen.sight.source.href).ready;
+      if (disposed || loads !== loaded || !editable()) return;
+      seen = dropperAt(p, pointer);
+    }
+    give(seen, p, colorOnly);
+  }
+
+  /// Dà ciò che il contagocce vede nel punto `p`, `seen`.
+  function give(seen: Dropped | null, p: Point, colorOnly: boolean): void {
+    const model = engine.model;
+    if (model === null) return;
+    if (seen === null) {
+      announce(t("draw.eyedropper.nothing"));
+      return;
+    }
+    if (seen.kind === "foreign") {
+      announce(t("draw.eyedropper.foreign"));
+      return;
+    }
+    if (seen.kind === "image") {
+      const pixel = seen.pixel;
+      if (typeof pixel === "object") giveColor(pixel.color, { kind: "color", code: pixel.color });
+      else announce(t(pixel === "reading" ? "draw.image.unreadable" : pixel));
+      return;
+    }
+    const units = selectedUnits();
+    if (units.length > 0 && !colorOnly) {
+      giveLook(seen.sight, units);
+      return;
+    }
+    const color = colorSeen(model, seen.sight, p);
+    const shown = color?.shown;
+    if (color === null || shown === undefined || shown.kind === "none") announce(t("draw.eyedropper.no_color"));
+    else giveColor(color.value, shown);
+  }
+
+  /// Dà agli oggetti scelti `units` l'aspetto della forma di `sight`, in un
+  /// passo.
+  function giveLook(sight: ShapeSight, units: readonly Unit[]): void {
+    const model = engine.model!;
+    const name = sightName(sight.sampled.leaf);
+    const style = sightStyle(model, sight);
+    if (style === null) {
+      announce(t("draw.eyedropper.no_style", { name }));
+      return;
+    }
+    cancelGesture();
+    const restyled = styleOps(model, units, style, measureText, newIds());
+    if (arrange("draw.action.eyedropper", restyled) === null) return;
+    announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+  }
+
+  /// Dà il colore `value`, come lo scrive il file, che si mostra come
+  /// `shown`: agli oggetti scelti, al riempimento o al contorno come dice
+  /// «Applica a»; senza selezione, a ciò che si disegna.
+  function giveColor(value: string, shown: Exclude<Shown, { readonly kind: "none" }>): void {
+    const model = engine.model!;
+    const units = selectedUnits();
+    const name = shownName(shown);
+    if (units.length === 0) {
+      if (shown.kind === "pattern") {
+        announce(t("draw.eyedropper.pattern"));
+        return;
+      }
+      setColor(shown.code, { swatch: shown.kind === "swatch" ? shown.id : null });
+      announce(t("draw.announce.color", { color: name }));
+      return;
+    }
+    const target = dropperTarget(model, units);
+    if (target === null) {
+      announce(t("draw.eyedropper.no_target"));
+      return;
+    }
+    const outcome = styleFromPanel(target, value);
+    if (outcome !== null) {
+      announce(outcome);
+      return;
+    }
+    if (shown.kind === "color" || shown.kind === "gradient") rememberColors(shown.code);
+    announce(t("draw.colors.applied", { target: t(target === "fill" ? "draw.properties.fill" : "draw.properties.stroke"), name }));
+    panelShown = null;
+    syncProperties();
+  }
+
   // --- I gesti dei nodi --------------------------------------------------------
 
   /// Quanti nodi ha il tracciato.
@@ -10999,8 +11426,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
       // Sopra una maniglia della cornice o una guida, il cursore dice che
       // cosa fa; con lo strumento Nodi, la forma sotto mostra i suoi nodi,
-      // col Costruttore la regione sotto si accende, e con le Forbici si
-      // vede dove tagliano.
+      // col Costruttore la regione sotto si accende, con le Forbici si vede
+      // dove tagliano e col contagocce che cosa prende.
       if (current === null && pressed === null) {
         hoverGrip(event);
         hoverGuide(event);
@@ -11008,6 +11435,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hoverRegion(event.buttons === 0 ? point : null, pointer);
         hoverCut(event.buttons === 0 ? point : null, pointer);
         hoverWidth(event.buttons === 0 ? point : null, pointer);
+        hoverDropper(event.buttons === 0 ? point : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -11114,6 +11542,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     hoverRegion(null, "mouse");
     hoverCut(null, "mouse");
     hoverWidth(null, "mouse");
+    hoverDropper(null, "mouse");
     if (hover !== null) {
       hover = null;
       showBezier();
@@ -11229,6 +11658,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "note":
           g.at ??= toPoint(samples[0]!);
           break;
+        case "dropper":
+          dropperMove(g, toPoint(samples[samples.length - 1]!));
+          break;
         case "refused":
           break;
       }
@@ -11313,6 +11745,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           current = null;
           noteAt(g.at, g.pointer);
           return;
+        case "dropper": {
+          current = null;
+          const at = g.at;
+          // Il puntatore resta sopra il foglio: l'anteprima torna a seguirlo.
+          if (at !== null && g.pointer !== "touch") dropperHover = { index: currentIndex(), at, pointer: g.pointer, keyboard: g.stroke < 0, seen: g.seen };
+          showHandles();
+          // Maiusc conta quando si rilascia.
+          if (at !== null) void takeAt(at, g.pointer, shift);
+          return;
+        }
         case "refused":
           current = null;
           return;
@@ -11651,7 +12093,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Dove è il cursore, e che cosa c'è sotto: con la penna di Bézier, il
   /// primo nodo o l'ultimo, se un tocco lì chiude o conclude il tracciato;
-  /// con la Curvatura anche un punto in mezzo, che un tocco cambia.
+  /// con la Curvatura anche un punto in mezzo, che un tocco cambia; col
+  /// contagocce la forma e il colore.
   const announceCursor = (): void => {
     const p = cursorPoint();
     const at = t("draw.cursor.at", { x: coordText(p[0]), y: coordText(p[1]) });
@@ -11675,6 +12118,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const found = widthSpotAt(p, "mouse");
       if (typeof found !== "string") {
         announce(`${at}: ${widthSpotText(found)}`);
+        return;
+      }
+    }
+    if (pressed === null && tool === "eyedropper" && has("eyedropper")) {
+      const hovered = dropperHover;
+      const seen = hovered !== null && hovered.at === p && hovered.index === currentIndex() ? hovered.seen : dropperAt(p, "mouse");
+      if (seen !== null) {
+        announce(`${at}: ${dropperText(seen, p)}`);
         return;
       }
     }
@@ -11714,6 +12165,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (pressed === null) {
       hoverCut(next, "mouse");
       hoverWidth(next, "mouse");
+      hoverDropper(next, "mouse", true);
     }
     announceCursor();
   };
@@ -14536,7 +14988,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Con l'aggancio vanno di riga in riga della griglia, cinque con Maiusc.
   /// Con lo strumento Nodi spostano i nodi scelti, e senza il cursore: mai
   /// l'oggetto. Con la penna di Bézier muovono sempre il cursore, che mette
-  /// i nodi.
+  /// i nodi, e così col contagocce, che prende da ciò che gli sta sotto.
   ///
   /// Sul foglio girato il cursore libero va dove la freccia punta sullo
   /// schermo, come il puntatore; il resto va lungo l'asse del disegno che si
@@ -14554,7 +15006,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return true;
     }
     if (tool === "board" && pressed === null && selection.length === 0 && editable() && nudgeBoard(x, y, grow, fine, event.shiftKey)) return true;
-    if (tool !== "nodes" && tool !== "bezier" && pressed === null && selection.length > 0 && editable()) {
+    if (tool !== "nodes" && tool !== "bezier" && tool !== "eyedropper" && pressed === null && selection.length > 0 && editable()) {
       const step = event.shiftKey ? NUDGE_SHIFT : NUDGE;
       const [gx, gy] = [x === 0 ? 0 : grow, y === 0 ? 0 : grow];
       if (gridOn()) {
@@ -14967,6 +15419,21 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         ]
       : [];
 
+  /// I tasti del contagocce, se le parti `at` lo offrono.
+  const eyedropperKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
+    at.has("eyedropper")
+      ? [
+          {
+            title: t("draw.tool.eyedropper"),
+            rows: [
+              [ARROW_KEYS, t("draw.keys.eyedropper.cursor")],
+              ["Space", t("draw.keys.eyedropper.take")],
+              ["Shift-Space", t("draw.keys.eyedropper.color")],
+            ],
+          },
+        ]
+      : [];
+
   /// I tasti del menu Tracciato, se le parti `at` lo offrono.
   const pathKeys = (at: ReadonlySet<Feature>): KeyGroup[] =>
     at.has("path") ? [{ title: t("draw.path"), rows: [["Mod-j", t("draw.keys.join")]] }] : [];
@@ -15174,6 +15641,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ...bezierKeys(at),
     ...textKeys(at),
     ...boardKeys(at),
+    ...eyedropperKeys(at),
     ...gridKeys(at),
     ...guidesKeys(at),
     ...rulersKeys(at),
@@ -15960,6 +16428,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else if (current?.kind === "board" && current.mode !== "pending") boardUpdate(current);
     else if (hover !== null && drawing() !== null) showBezier();
     else if (current?.kind === "builder" || (current === null && regionHover >= 0)) showHandles();
+    // Col contagocce Maiusc passa dall'aspetto al colore.
+    else if (current?.kind === "dropper" || (current === null && dropperHover !== null)) showHandles();
     else if (current === null && (alt || measured)) showHandles();
   };
 
@@ -16164,6 +16634,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       if (event.repeat) {
         // Tenuto giù: un tasto, un passo.
       } else if (pressed === null && tool === "text") openText(cursorPoint(), "mouse");
+      // Il contagocce prende subito; con Maiusc il solo colore.
+      else if (pressed === null && tool === "eyedropper") void takeAt(cursorPoint(), "mouse", event.shiftKey);
       else if (builderKeysOn()) pickRegion();
       else if (pressed === null) press(event.timeStamp);
       else release();

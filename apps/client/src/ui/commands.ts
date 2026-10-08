@@ -463,6 +463,7 @@ const KEY_NAMES: Record<string, string> = {
   delete: "Del",
   backspace: "⌫",
   " ": "Space",
+  space: "Space",
 };
 
 /// Il nome che si legge di un tasto di `KeyboardEvent.key`, da solo: `←`,

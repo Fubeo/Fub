@@ -39,6 +39,7 @@ export type ToolId =
   | "scissors"
   | "width"
   | "board"
+  | "eyedropper"
   | "pen"
   | "highlighter"
   | "eraser"
@@ -94,6 +95,8 @@ export const TOOLS: readonly ToolSpec[] = [
   // La lettera del Frame di Figma, dove le cornici sono le tavole: quella di
   // Illustrator è la «O» con Maiusc, e qui la «O» è dell'ellisse.
   { id: "board", levels: { vector: "standard" }, group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
+  // La lettera di Illustrator e di Photoshop.
+  { id: "eyedropper", levels: { vector: "standard" }, group: "pick", icon: "draw-eyedropper", label: "draw.tool.eyedropper", description: "draw.tool.eyedropper.hint", shortcut: "i" },
   { id: "pen", levels: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
   { id: "highlighter", levels: { vector: "standard", pdf: "essential" }, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
   { id: "eraser", levels: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },

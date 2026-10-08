@@ -257,11 +257,13 @@ export class Unit {
   /// La forma più in alto dell'oggetto che si vede nel punto `p` della
   /// scena, e che cosa la colora lì: il contorno, che sta sopra, o il
   /// riempimento. Con `tolerance` un punto vicino a un bordo prende il
-  /// contorno della forma, o il riempimento se non ne ha. `null` se nessuna
+  /// contorno della forma, o il riempimento se non ne ha. Con `below`, una
+  /// sua forma, soltanto fra quelle che le stanno sotto. `null` se nessuna
   /// forma lo copre.
-  sampleAt(p: Point, tolerance: number): Sampled | null {
+  sampleAt(p: Point, tolerance: number, below: LeafNode | null = null): Sampled | null {
     if (!near(this.bounds, p, p, tolerance)) return null;
-    for (let i = this.parts.length - 1; i >= 0; i--) {
+    const top = below === null ? this.parts.length : this.parts.findIndex((part) => part.leaf === below);
+    for (let i = top - 1; i >= 0; i--) {
       const part = this.parts[i]!;
       const on = partSample(part, p, tolerance);
       if (on !== null) return { leaf: part.leaf, segments: part.segments, matrix: part.matrix, on };
