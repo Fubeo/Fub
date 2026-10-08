@@ -322,3 +322,85 @@ describe("il selettore di icona", () => {
     expect(tab().defaultPrevented).toBe(false);
   });
 });
+
+describe("un menu aperto da un pulsante", () => {
+  // Il layout in happy-dom non c'è: il pulsante, il menu e la finestra
+  // dicono le misure che il caso vuole.
+  const rect = (left: number, top: number, width: number, height: number): DOMRect =>
+    ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  let size: [number, number] = [0, 0];
+  const saved = ["innerWidth", "innerHeight"].map((name) => [name, Object.getOwnPropertyDescriptor(window, name)] as const);
+  const window_ = (width: number, height: number): void => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
+  };
+  const button = (left: number, top: number): HTMLButtonElement => {
+    const trigger = document.createElement("button");
+    trigger.getBoundingClientRect = () => rect(left, top, 80, 24);
+    document.body.appendChild(trigger);
+    return trigger;
+  };
+  const open = (trigger: HTMLElement): HTMLElement => {
+    showContextMenu(trigger, [{ label: "Una", run: () => {} }]);
+    return document.getElementById("context-menu")!;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.id === "context-menu" ? rect(0, 0, size[0], size[1]) : rect(0, 0, 0, 0);
+    });
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    for (const [name, descriptor] of saved) {
+      if (descriptor === undefined) delete (window as unknown as Record<string, unknown>)[name];
+      else Object.defineProperty(window, name, descriptor);
+    }
+  });
+
+  it("gli si apre sotto, allineato a sinistra, staccato di poco", () => {
+    window_(1024, 768);
+    size = [160, 120];
+    const menu = open(button(100, 200));
+    expect([menu.style.left, menu.style.top, menu.style.maxHeight]).toEqual(["100px", "228px", ""]);
+  });
+
+  it("dove sotto non c'è posto e sopra ce n'è di più, si apre sopra senza coprirlo", () => {
+    window_(1024, 700);
+    size = [160, 200];
+    // Sotto 64 e sopra 588: il menu, alto 200, finisce 4 prima del pulsante.
+    const menu = open(button(100, 600));
+    expect([menu.style.top, menu.style.maxHeight]).toEqual(["396px", ""]);
+  });
+
+  it("più alto del posto, scorre dalla parte dove ce n'è di più", () => {
+    window_(1024, 400);
+    size = [160, 500];
+    // Sotto 214 e sopra 138: sotto, alto quanto il posto.
+    let menu = open(button(100, 150));
+    expect([menu.style.top, menu.style.maxHeight]).toEqual(["178px", "214px"]);
+    // Sotto 64 e sopra 288: sopra, fino al margine della finestra.
+    menu = open(button(100, 300));
+    expect([menu.style.top, menu.style.maxHeight]).toEqual(["8px", "288px"]);
+  });
+
+  it("vicino al bordo destro si allinea al lato destro del pulsante", () => {
+    window_(400, 768);
+    size = [160, 120];
+    const menu = open(button(300, 100));
+    expect(menu.style.left).toBe("220px");
+  });
+
+  it("aperto da un gesto resta dove si è cliccato", () => {
+    window_(1024, 768);
+    size = [160, 120];
+    showContextMenu(clickEvent(), [{ label: "Una", run: () => {} }]);
+    const menu = document.getElementById("context-menu")!;
+    expect([menu.style.left, menu.style.top, menu.style.maxHeight]).toEqual(["10px", "10px", ""]);
+  });
+});

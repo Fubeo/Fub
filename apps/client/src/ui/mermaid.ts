@@ -371,9 +371,8 @@ async function chooseStyle(style: DiagramStyleId): Promise<void> {
 }
 
 function openMenu(trigger: HTMLButtonElement, items: MenuItem[]): void {
-  const box = trigger.getBoundingClientRect();
   trigger.setAttribute("aria-expanded", "true");
-  showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+  showContextMenu(trigger, items, {
     onClose: () => trigger.setAttribute("aria-expanded", "false"),
   });
 }

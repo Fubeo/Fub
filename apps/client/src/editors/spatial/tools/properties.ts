@@ -1607,9 +1607,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       ...(option.separator === true ? { separator: true } : {}),
       run: () => chooseOption(line, option),
     }));
-    const box = button.getBoundingClientRect();
     button.setAttribute("aria-expanded", "true");
-    showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+    showContextMenu(button, items, {
       labelledBy: line.name.id,
       onClose: () => button.setAttribute("aria-expanded", "false"),
     });
@@ -1672,9 +1671,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       group[0]!.separator = true;
       items.push(...group);
     }
-    const box = chip.getBoundingClientRect();
     chip.setAttribute("aria-expanded", "true");
-    showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+    showContextMenu(chip, items, {
       labelledBy: chip.id,
       onClose: () => chip.setAttribute("aria-expanded", "false"),
     });

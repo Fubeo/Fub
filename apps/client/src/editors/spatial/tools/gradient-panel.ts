@@ -1047,11 +1047,7 @@ export function createGradientPanel(life: Lifetime, options: GradientPanelOption
   };
 
   life.listen(presetsButton, "click", (event) => {
-    const box = presetsButton.getBoundingClientRect();
-    const at =
-      event.detail === 0 || (event.clientX === 0 && event.clientY === 0)
-        ? new MouseEvent("contextmenu", { clientX: box.left, clientY: box.bottom + 4, bubbles: true, cancelable: true })
-        : event;
+    const at = event.detail === 0 || (event.clientX === 0 && event.clientY === 0) ? presetsButton : event;
     showContextMenu(at, presetItems(), { labelledBy: presetsButton.id });
   });
 

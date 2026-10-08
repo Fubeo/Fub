@@ -14133,10 +14133,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Apre il menu di un pulsante, sotto il pulsante, col nome del pulsante.
   function openMenu(trigger: HTMLButtonElement, items: MenuItem[]): void {
-    const box = trigger.getBoundingClientRect();
     if (trigger.id === "") trigger.id = identifier("draw-menu-button");
     trigger.setAttribute("aria-expanded", "true");
-    showContextMenu(new MouseEvent("click", { clientX: box.left, clientY: box.bottom + 4 }), items, {
+    showContextMenu(trigger, items, {
       labelledBy: trigger.id,
       onClose: () => trigger.setAttribute("aria-expanded", "false"),
     });
