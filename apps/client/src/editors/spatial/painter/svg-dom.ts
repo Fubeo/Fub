@@ -34,10 +34,11 @@
 //   sbiadisce, e cambia il `d` di un tracciato i cui nodi si spostano, senza
 //   ricrearli e senza toccare la scena; l'operazione scritta
 //   alla fine porta la scena nuova. Un testo che si scrive sul posto si
-//   nasconde allo stesso modo. Uno strato immagine che sta tutto dentro un
-//   gruppo che si sposta segue il gruppo con una trasformazione CSS, e dopo
-//   l'operazione resta dove l'ha portato finché la sua immagine nuova non è
-//   pronta.
+//   nasconde allo stesso modo. Una sfumatura che si cambia si mostra da una
+//   `defs` dell'anteprima, a cui l'oggetto punta nello stile in linea. Uno
+//   strato immagine che sta tutto dentro un gruppo che si sposta segue il
+//   gruppo con una trasformazione CSS, e dopo l'operazione resta dove l'ha
+//   portato finché la sua immagine nuova non è pronta.
 // - **Isolamento:** con un gruppo isolato, `setFocus` attenua tutto ciò che
 //   gli sta fuori, carta esclusa, con l'opacità degli elementi; il disegno
 //   non cambia.
@@ -172,6 +173,11 @@ export interface PainterDraft {
   /// tracciato di un testo mentre lo strumento Nodi ne sposta i nodi. Chi
   /// lo segue lo segue già.
   readonly tracks?: ReadonlyMap<string, string>;
+  /// Il riempimento o il contorno da mostrare al posto di quello dipinto:
+  /// un colore, o una sfumatura, che entra in una `defs` dell'anteprima
+  /// sotto un id suo. Una sfumatura mentre la si cambia; il valore sta
+  /// nello stile in linea, che vale più dei fogli di stile del disegno.
+  readonly paints?: ReadonlyMap<PaintNode, Readonly<Partial<Record<"fill" | "stroke", string | Elem>>>>;
 }
 
 /// Gli attributi che un'anteprima cambia, e che toglierla riporta a com'erano
@@ -418,6 +424,28 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   let standIns: Element[] = [];
   /// Le risorse a cui l'anteprima ha cambiato il `d`, con quello di prima.
   let retraced: Array<readonly [Element, string | null]> = [];
+  /// I pezzi di un testo col loro colore a cui l'anteprima ha dato quello
+  /// del testo, con l'attributo.
+  let repainted: Array<readonly [Element, "fill" | "stroke"]> = [];
+  /// La `defs` delle sfumature dell'anteprima, finché ne mostra.
+  let draftDefs: SVGSVGElement | null = null;
+  let draftIds = 0;
+
+  /// Mette `elem` nella `defs` dell'anteprima, con un id nuovo; `null` se
+  /// non è una risorsa che il painter dipinge.
+  const draftResource = (elem: Elem): SVGElement | null => {
+    const el = defElement(paintDefOf(elem), null, prefix);
+    if (el === null) return null;
+    el.setAttribute("id", `${prefix}draft-${++draftIds}`);
+    if (draftDefs === null) {
+      draftDefs = document.createElementNS(SVG, "svg");
+      draftDefs.setAttribute("class", "spatial-layer spatial-defs");
+      draftDefs.append(document.createElementNS(SVG, "defs"));
+      root.append(draftDefs);
+    }
+    draftDefs.firstElementChild!.append(el);
+    return el;
+  };
   /// I nodi del DOM per nodo della scena, e quelli dei gruppi per
   /// contenitore: ricostruiti solo quando servono.
   let byPaint: { readonly paints: Map<PaintNode, NodeRecord[]>; readonly keys: Map<object, NodeRecord[]> } | null = null;
@@ -458,6 +486,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     else record.el.style.setProperty("opacity", dim);
     record.el.style.removeProperty("visibility");
     record.el.style.removeProperty("stroke");
+    record.el.style.removeProperty("fill");
   };
 
   /// Gli strati immagine che l'anteprima sposta, e quelli che sbiadisce.
@@ -499,6 +528,10 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       else el.setAttribute("d", d);
     }
     retraced = [];
+    for (const [el, name] of repainted) (el as SVGElement).style.removeProperty(name);
+    repainted = [];
+    draftDefs?.remove();
+    draftDefs = null;
     for (const record of carriedImages) {
       record.carried = null;
       frozen.add(record);
@@ -581,6 +614,28 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       for (const record of recordsOf(paint)) {
         record.el.style.setProperty("visibility", "hidden");
         touched.add(record);
+      }
+    }
+    for (const [paint, channels] of draft?.paints ?? []) {
+      const records = recordsOf(paint);
+      if (records.length === 0) continue;
+      for (const name of ["fill", "stroke"] as const) {
+        const value = channels[name];
+        if (value === undefined) continue;
+        const shown = typeof value === "string" ? value : draftResource(value)?.id;
+        if (shown === undefined) continue;
+        const css = typeof value === "string" ? shown : `url(#${shown})`;
+        for (const record of records) {
+          record.el.style.setProperty(name, css);
+          touched.add(record);
+          // I pezzi di un testo col loro colore prendono quello del testo,
+          // come quando il cambio si scrive.
+          if (record.el.localName !== "text") continue;
+          for (const piece of record.el.querySelectorAll<SVGElement>(`[${name}]`)) {
+            piece.style.setProperty(name, css);
+            repainted.push([piece, name]);
+          }
+        }
       }
     }
     for (const [paint, elem] of [...(covers ?? []), ...(draft?.replaced ?? [])]) {
@@ -1213,6 +1268,11 @@ function defElement(def: PaintDef, parent: string | null, prefix: string): SVGEl
     if (node !== null) el.append(node);
   }
   return el;
+}
+
+/// `elem` come una risorsa viva da dipingere.
+function paintDefOf(elem: Elem): PaintDef {
+  return { tag: elem.tag, attrs: Object.entries(elem.attrs), space: null, children: (elem.children ?? []).map(paintDefOf) };
 }
 
 /// L'elemento vivo di `resource`, con l'id vivo sotto `prefix`.

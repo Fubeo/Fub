@@ -96,6 +96,7 @@ function mount(view: ColorsView = viewOf(), editable = true): SwatchesPanel {
       calls.push(`select ${value}`);
       return refusal;
     },
+    onTarget: (target) => calls.push(`target ${target}`),
     announce: (text) => announced.push(text),
   });
   host.append(panel.element);
@@ -310,6 +311,17 @@ describe("«Applica a»", () => {
     key("Home");
     expect(document.activeElement).toBe(targetButton("fill"));
     expect(formatIssues(checkAccessibility(host))).toBe("");
+    // La scelta si dice all'editor, che la porta alla sezione «Sfumatura».
+    expect(calls).toEqual(["target stroke"]);
+  });
+
+  it("segue la scelta fatta nell'altra sezione, senza ridirla", () => {
+    const panel = mount();
+    panel.setTarget("stroke");
+    expect([targetButton("fill").getAttribute("aria-pressed"), targetButton("stroke").getAttribute("aria-pressed")]).toEqual(["false", "true"]);
+    expect(panel.target()).toBe("stroke");
+    click(chip("used", "#3a7bd5"));
+    expect(calls).toEqual(["apply #3a7bd5 #3a7bd5 #3a7bd5 stroke"]);
   });
 
   it("non c'è senza selezione, né con un bersaglio solo, e il suggerimento lo dice", () => {

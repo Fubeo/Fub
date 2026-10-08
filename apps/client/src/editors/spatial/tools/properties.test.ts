@@ -20,6 +20,7 @@ import {
   type TransformId,
 } from "./properties";
 import { lengthUnits, PERCENT_UNITS } from "./quantity";
+import type { GradientPanelView } from "./gradient-panel";
 import type { PaintSample } from "./resources";
 import type { ColorsView } from "./swatches-panel";
 
@@ -46,6 +47,8 @@ let state: {
   recent: string[] | null;
   /// La sezione «Colori del documento», se c'è.
   colors: ColorsView | null;
+  /// La sezione «Sfumatura», se c'è.
+  gradient: GradientPanelView | null;
   dash: string | null;
   anchor: string | null;
   bold: boolean | null;
@@ -136,6 +139,7 @@ function view(): PropertiesView {
     ...(state.swatches === null ? {} : { swatches: state.swatches }),
     ...(state.recent === null ? {} : { recent: state.recent }),
     ...(state.colors === null ? {} : { colors: state.colors }),
+    ...(state.gradient === null ? {} : { gradient: state.gradient }),
   };
 }
 
@@ -191,6 +195,11 @@ function mount(): Properties {
       onDelete: (id) => (calls.push(`delete ${id}`), null),
       onSelect: (value) => (calls.push(`select ${value}`), null),
     },
+    gradient: {
+      onChange: (target, change, label) => (calls.push(`gradient ${target} ${JSON.stringify(change)} ${label}`), null),
+      onPreview: (target, change) => calls.push(`preview ${target} ${JSON.stringify(change)}`),
+      onStop: (index) => calls.push(`stop ${index}`),
+    },
     announce: (text) => announced.push(text),
     onLeave: () => calls.push("leave"),
   });
@@ -240,6 +249,7 @@ beforeEach(() => {
     swatches: null,
     recent: null,
     colors: null,
+    gradient: null,
     dash: "solid",
     anchor: "start",
     bold: null,
@@ -687,6 +697,60 @@ describe("la sezione «Colori del documento»", () => {
     toggle("colors").click();
     expect(calls).toEqual(["section colors closed"]);
     expect(section("colors").querySelector<HTMLElement>(".draw-properties-body")!.hidden).toBe(true);
+  });
+});
+
+describe("la sezione «Sfumatura»", () => {
+  const STOPS = [
+    { offset: 0, color: "#0072b2", opacity: 1 },
+    { offset: 1, color: "#ffffff", opacity: 1 },
+  ];
+  const GRADIENT: GradientPanelView = {
+    key: "oaaaaaaaa",
+    channels: {
+      fill: { count: 1, gradients: 1, kind: "linear", look: { kind: "linear", stops: STOPS, spread: "pad" }, angle: 0 },
+      stroke: { count: 1, gradients: 0, kind: "color", look: null, angle: null },
+    },
+    stop: null,
+    expert: false,
+    swatches: [],
+  };
+  const COLORS: ColorsView = {
+    swatches: [],
+    used: [{ color: "#000000", uses: 2 }],
+    hidden: 0,
+    recent: [],
+    targets: ["fill", "stroke"],
+    current: { fill: "url(#ra)", stroke: "#000000" },
+    drawing: "#000000",
+    drawingSwatch: null,
+  };
+  const pressedTarget = (id: SectionId): string | undefined =>
+    section(id).querySelector<HTMLButtonElement>('[data-target][aria-pressed="true"]')?.dataset.target;
+
+  it("c'è quando l'editor la dà, dopo l'aspetto, e i suoi gesti vanno all'editor", () => {
+    mount();
+    expect(section("gradient").hidden).toBe(true);
+    state.gradient = GRADIENT;
+    panel.update(view());
+    const visible = [...host.querySelectorAll<HTMLElement>(".draw-properties-section")].filter((each) => !each.hidden).map((each) => each.dataset.section);
+    expect(visible).toEqual(["place", "look", "gradient", "text", "document", "view"]);
+    expect(toggle("gradient").textContent).toBe("Sfumatura");
+    section("gradient").querySelector<HTMLButtonElement>('[data-kind="radial"]')!.click();
+    expect(calls).toEqual(['gradient fill {"kind":"radial"} draw.action.gradient_kind', "stop 0"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("«Applica a» è lo stesso nei colori del documento e nella sfumatura", () => {
+    state.gradient = GRADIENT;
+    state.colors = COLORS;
+    mount();
+    expect([pressedTarget("gradient"), pressedTarget("colors")]).toEqual(["fill", "fill"]);
+    section("gradient").querySelector<HTMLButtonElement>('[data-target="stroke"]')!.click();
+    expect([pressedTarget("gradient"), pressedTarget("colors")]).toEqual(["stroke", "stroke"]);
+    expect(panel.colorTarget()).toBe("stroke");
+    section("colors").querySelector<HTMLButtonElement>('[data-target="fill"]')!.click();
+    expect([pressedTarget("gradient"), pressedTarget("colors")]).toEqual(["fill", "fill"]);
   });
 });
 

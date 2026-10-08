@@ -833,6 +833,58 @@ export function lookOps(model: DocumentModel, units: readonly Unit[], change: Lo
   return changes.finish(units);
 }
 
+/// Una parte della selezione che mostra un riempimento o un contorno, come la
+/// cambia il pannello.
+export interface PaintPart {
+  readonly node: ElementPart;
+  readonly role: Role;
+  /// L'attributo che scrive il colore: `fill` per un riempimento e per il
+  /// contorno di un tratto a penna o di una linea a spessore variabile,
+  /// `stroke` per gli altri contorni.
+  readonly name: "fill" | "stroke";
+  /// Il colore che vede, suo o ereditato, com'è scritto.
+  readonly value: string;
+  /// I suoi attributi senza namespace.
+  readonly own: ReadonlyMap<string, string>;
+}
+
+/// Le parti di `units` che mostrano `channel`, il riempimento o il contorno,
+/// nell'ordine in cui le cambia [`lookOps`]: un gruppo passa alle sue, e una
+/// parte bloccata dentro di lui resta fuori.
+export function paintParts(model: DocumentModel, units: readonly Unit[], channel: "fill" | "stroke"): PaintPart[] {
+  const parts = partsOf(model, units);
+  return (channel === "fill" ? parts.fills : parts.strokes).map((part) => {
+    const name = channel === "stroke" && INKED.has(part.role) ? "fill" : channel;
+    return { node: part.node, role: part.role, name, value: seen(part, name), own: part.own };
+  });
+}
+
+/// Le operazioni che danno a ogni parte di `values`, fra quelle di `units`
+/// che mostrano `channel`, il suo colore, a un testo intero, dopo `before`:
+/// le risorse che i colori usano, già pronte. Un colore si scrive com'è,
+/// ripiego compreso. La selezione resta la stessa.
+export function paintEachOps(
+  model: DocumentModel,
+  units: readonly Unit[],
+  channel: "fill" | "stroke",
+  values: ReadonlyMap<ElementPart, string>,
+  before: readonly Op[],
+  measure: Measure,
+  ids: NewIds,
+): Restyled {
+  const plan = new Plan(model, ids);
+  plan.ops.push(...before);
+  const changes = new Changes(plan, model, measure);
+  const parts = partsOf(model, units);
+  for (const part of channel === "fill" ? parts.fills : parts.strokes) {
+    const value = values.get(part.node);
+    if (value === undefined) continue;
+    const name = channel === "stroke" && INKED.has(part.role) ? "fill" : channel;
+    if (part.role !== "text" || name !== "fill" || !changes.text(part, (rich) => restyleWhole(rich, name, value))) changes.write(part, name, value, sameText);
+  }
+  return changes.finish(units);
+}
+
 /// Il testo in area `unit` col riquadro largo `width`, fermo il bordo
 /// `fixed`, come lo scriverebbe [`lookOps`]: l'anteprima della cornice che
 /// lo allarga o lo stringe, e se una riga supera il riquadro. `null` se

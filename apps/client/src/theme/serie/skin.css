@@ -3042,6 +3042,77 @@ button.draw-isolation-crumb:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
+/* La sfumatura: la barra e i colori dei punti su una scacchiera chiara,
+   che fa vedere la trasparenza come la vede la carta. Ogni punto ha un
+   bordo del fondo del pannello, che lo stacca dai vicini, e un filo grigio;
+   il punto scelto ha il filo e la punta nel colore del testo. Un punto
+   trascinato via dalla barra, che lasciato si toglie, sbiadisce. */
+.draw-gradient {
+  gap: var(--space-4);
+}
+.draw-gradient-target,
+.draw-gradient-row,
+.draw-gradient-stops {
+  gap: var(--space-1);
+}
+.draw-gradient-target .draw-button,
+.draw-gradient-row .draw-button {
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+/* Il bianco della scacchiera è uno strato dell'immagine, non il colore di
+   fondo: senza la sfumatura o il colore che il pannello scrive la
+   dichiarazione non vale, e non resta un fondo bianco da solo. */
+.draw-gradient-strip,
+.draw-gradient-thumb-color {
+  background-position: 0 0, 0 0, 4px 4px, 0 0;
+  background-size: 100% 100%, 8px 8px, 8px 8px, 100% 100%;
+}
+.draw-gradient-strip {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background-image:
+    var(--gradient-image),
+    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
+    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
+    linear-gradient(#ffffff, #ffffff);
+}
+.draw-gradient-thumb-color {
+  border: 2px solid var(--bg-elev);
+  border-radius: var(--radius-xs);
+  background-image:
+    linear-gradient(var(--stop), var(--stop)),
+    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
+    linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
+    linear-gradient(#ffffff, #ffffff);
+  box-shadow: 0 0 0 1px var(--muted);
+}
+.draw-gradient-thumb::before {
+  border-bottom-color: var(--muted);
+}
+.draw-gradient-thumb[data-selected]::before {
+  border-bottom-color: var(--text);
+}
+.draw-gradient-thumb[data-selected] > .draw-gradient-thumb-color {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.draw-gradient-thumb[data-torn] {
+  opacity: 0.4;
+}
+.draw-gradient-bar:not([data-readonly]) > .draw-gradient-strip {
+  cursor: copy;
+}
+.draw-gradient-bar:not([data-readonly]) > .draw-gradient-thumb {
+  cursor: grab;
+}
+.draw-gradient-fields {
+  gap: var(--space-3) var(--space-2);
+}
+.draw-gradient-stop-title {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
 /* Un colore misto: righe del colore del testo, che non sono un colore. */
 .draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
   background-image: linear-gradient(45deg, var(--text) 25%, var(--bg-elev) 25%, var(--bg-elev) 50%, var(--text) 50%, var(--text) 75%, var(--bg-elev) 75%);

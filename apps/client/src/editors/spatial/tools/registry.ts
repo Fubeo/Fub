@@ -40,6 +40,7 @@ export type ToolId =
   | "width"
   | "board"
   | "eyedropper"
+  | "gradient"
   | "pen"
   | "highlighter"
   | "eraser"
@@ -97,6 +98,10 @@ export const TOOLS: readonly ToolSpec[] = [
   { id: "board", levels: { vector: "standard" }, group: "pick", icon: "draw-board", label: "draw.tool.board", description: "draw.tool.board.hint", shortcut: "f" },
   // La lettera di Illustrator e di Photoshop.
   { id: "eyedropper", levels: { vector: "standard" }, group: "pick", icon: "draw-eyedropper", label: "draw.tool.eyedropper", description: "draw.tool.eyedropper.hint", shortcut: "i" },
+  // La lettera di Illustrator. Lo strumento porta con sé la sezione
+  // «Sfumatura» del pannello delle proprietà: nel Personalizzato si
+  // scelgono insieme.
+  { id: "gradient", levels: { vector: "standard" }, group: "pick", icon: "draw-gradient", label: "draw.tool.gradient", description: "draw.tool.gradient.hint", shortcut: "g" },
   { id: "pen", levels: BOTH, group: "ink", icon: "draw-pen", label: "draw.tool.pen", description: "draw.tool.pen.hint", shortcut: "p" },
   { id: "highlighter", levels: { vector: "standard", pdf: "essential" }, group: "ink", icon: "draw-highlighter", label: "draw.tool.highlighter", description: "draw.tool.highlighter.hint", shortcut: "h" },
   { id: "eraser", levels: BOTH, group: "ink", icon: "draw-eraser", label: "draw.tool.eraser", description: "draw.tool.eraser.hint", shortcut: "e" },

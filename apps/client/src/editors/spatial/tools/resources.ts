@@ -138,11 +138,13 @@ function gradientImage(node: LeafNode, head: string): string | null {
 }
 
 /// Un punto di una sfumatura: dove sta, fra 0 e 1, il colore e la sua
-/// opacità.
-interface Stop {
+/// opacità, e il suo posto fra i figli elemento della sfumatura, per un
+/// `set` con `part`.
+export interface Stop {
   readonly offset: number;
   readonly color: Rgb;
   readonly alpha: number;
+  readonly index: number;
 }
 
 /// L'elemento della sfumatura `node`, nel suo frammento, e i suoi punti:
@@ -155,14 +157,17 @@ function readGradient(node: LeafNode): { readonly doc: XmlDocument; readonly ele
   const element = doc.element(fragment.id)!;
   const stops: Stop[] = [];
   let last = 0;
+  let index = -1;
   for (const child of element.children) {
     const stop = doc.element(child);
-    if (stop === null || stop.ns !== NS_SVG || stop.local !== "stop") continue;
+    if (stop === null) continue;
+    index++;
+    if (stop.ns !== NS_SVG || stop.local !== "stop") continue;
     const color = paint(valueOf(stop, NS_NONE, "stop-color") ?? "black");
     if (color === null || color === "none") return null;
     const alpha = opacity(valueOf(stop, NS_NONE, "stop-opacity") ?? "1") ?? 1;
     last = Math.max(last, Math.min(1, Math.max(0, fraction(valueOf(stop, NS_NONE, "offset") ?? "0") ?? 0)));
-    stops.push({ offset: last, color, alpha });
+    stops.push({ offset: last, color, alpha, index });
   }
   return stops.length === 0 ? null : { doc, element, stops };
 }

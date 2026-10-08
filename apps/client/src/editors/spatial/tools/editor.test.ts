@@ -362,7 +362,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Sfumatura", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -4540,7 +4540,7 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
     // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
@@ -10443,7 +10443,7 @@ describe("il livello Personalizzato", () => {
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
     expect(tables[18]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();

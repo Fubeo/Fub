@@ -277,7 +277,7 @@ describe("le parti del Personalizzato nel pannello", () => {
       set.querySelector("legend")!.textContent,
       set.querySelectorAll("input[type=checkbox]").length,
     ]);
-    expect(levels).toEqual([["Essenziale", 6], ["Standard", 23], ["Esperto", 13]]);
+    expect(levels).toEqual([["Essenziale", 6], ["Standard", 24], ["Esperto", 13]]);
     const checked = [...group.querySelectorAll<HTMLInputElement>("input:checked")].map((input) => input.closest("label")!.textContent);
     expect(checked).toEqual(["Penna", "Testo", "Operazioni booleane"]);
 

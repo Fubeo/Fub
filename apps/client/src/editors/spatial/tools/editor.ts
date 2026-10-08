@@ -239,6 +239,8 @@ import {
   type SelectionFacts,
 } from "./fields";
 import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
+import { gradientOps, gradientPreview, gradientView, paintedParts, type GradientChange, type GradientView, type PaintChannel } from "./gradients";
+import type { GradientPanelView } from "./gradient-panel";
 import { rasterize } from "./png";
 import { createProperties, type ActionId, type FieldId, type SectionId, type TransformId } from "./properties";
 import {
@@ -1055,6 +1057,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-board": ["M2 6h20", "M2 18h20", "M6 2v20", "M18 2v20"],
   // Una pipetta: la punta in basso a sinistra, il bulbo in alto a destra.
   "draw-eyedropper": ["M13 9L5.5 16.5 4 20l3.5-1.5L15 11", "M11.5 7.5l5 5", "M12.5 8.5l4-4a2.1 2.1 0 0 1 3 3l-4 4"],
+  // Un riquadro che scurisce verso destra, con righe sempre più fitte.
+  "draw-gradient": ["M3 5h18v14H3z", "M11 5v14", "M15 5v14", "M18 5v14"],
   "draw-text": ["M5 7V4h14v3", "M12 4v16", "M9 20h6"],
   "draw-image": ["M3 5h18v14H3z", "M3 17l5-5 5 5", "M11 15l4-4 6 6", "M14.5 8.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0"],
   "draw-text-edit": ["M3 6V4h11v2", "M8.5 4v15", "M6 19h5", "M18 8v12", "M16 8h4", "M16 20h4"],
@@ -2580,6 +2584,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       onDelete: (id) => deleteSwatch(id),
       onSelect: (value) => selectShowing(value),
     },
+    gradient: {
+      onChange: (target, change, label) => changeGradient(target, change, label),
+      onPreview: (target, change) => previewGradient(target, change),
+      onStop: (index) => chooseGradientStop(index),
+    },
     announce: (text) => announce(text),
     onLeave: () => surface.focus({ preventScroll: true }),
   });
@@ -2599,6 +2608,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly board: Board | null;
     readonly drawing: string;
     readonly recent: readonly string[];
+    readonly stop: unknown;
   } | null = null;
   /// I colori del documento contati per la scena `index`: si ricontano
   /// soltanto quando il disegno cambia.
@@ -2606,6 +2616,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il lucchetto delle proporzioni, come l'ha lasciato chi l'ha toccato,
   /// per la selezione di chiavi `keys`.
   let ratioLock: { readonly keys: string; readonly on: boolean } | null = null;
+  /// Il punto scelto della sfumatura comune del bersaglio `target`, per la
+  /// selezione di chiavi `keys`: lo stesso nel pannello e, con lo strumento
+  /// Sfumatura, sul foglio.
+  let gradientStop: { readonly keys: string; readonly target: PaintChannel; readonly index: number } | null = null;
+  /// Vero mentre la sezione «Sfumatura» mostra sul disegno un cambio che non
+  /// ha ancora scritto.
+  let gradientShown = false;
   relabels.push(() => {
     panel.relabel();
     panelShown = null;
@@ -4297,6 +4314,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     overlay.setInk(INK_KEY, null);
     showShape(null, [1, 0, 0, 1, 0, 0]);
     painter.setDraft(null);
+    gradientShown = false;
     showGuideLines();
     showHandles();
     overlay.flush();
@@ -5266,14 +5284,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last.polygon === polygonNow &&
       last.board === boardNow &&
       last.drawing === drawing &&
-      last.recent === recentColors
+      last.recent === recentColors &&
+      last.stop === gradientStop
     ) {
       return;
     }
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors };
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors, stop: gradientStop };
     const list = boardsNow();
     const model = engine.model;
     const units = selection.length === 0 || model === null ? [] : selectedUnits();
+    const swatches = model === null ? [] : documentSwatches(model);
     panel.update(
       propertiesView({
         features,
@@ -5289,7 +5309,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           boardNow === null
             ? null
             : { id: boardNow.id, name: boardNow.name, rect: boardNow.rect, index: list.indexOf(boardNow) + 1, count: list.length },
-        swatches: model === null ? [] : documentSwatches(model),
+        swatches,
         recent: recentColors,
         paper: model === null ? null : paperColor(model),
         // I colori si contano soltanto con la loro sezione aperta.
@@ -5301,8 +5321,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
                 drawing: style().color,
                 swatch: style().swatch,
               },
+        gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches),
       }),
     );
+  }
+
+  /// La sezione «Sfumatura» per gli oggetti scelti `units`, di chiavi
+  /// `keys`; `null` se non hanno né riempimento né contorno.
+  function gradientSection(model: DocumentModel, units: readonly Unit[], keys: string, swatches: GradientPanelView["swatches"]): GradientPanelView | null {
+    const channels: Partial<Record<PaintChannel, GradientView>> = {};
+    for (const target of ["fill", "stroke"] as const) {
+      const shown = gradientView(paintedParts(model, units, target));
+      if (shown.count > 0) channels[target] = shown;
+    }
+    const chosen = panel.colorTarget();
+    const target = channels[chosen] !== undefined ? chosen : channels.fill !== undefined ? "fill" : channels.stroke !== undefined ? "stroke" : null;
+    if (target === null) return null;
+    return {
+      key: keys,
+      channels,
+      stop: gradientStop !== null && gradientStop.keys === keys && gradientStop.target === target ? gradientStop.index : null,
+      // Nel Personalizzato non c'è un livello: chi ha scelto lo strumento
+      // Sfumatura ha anche «Oltre i capi», che altrimenti non avrebbe mai.
+      expert: level === "expert" || level === "custom",
+      swatches,
+    };
   }
 
   /// I colori del documento, contati, per la scena di adesso.
@@ -5553,6 +5596,50 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     select(units.map((unit) => unit.key));
     announceSelection();
     return null;
+  }
+
+  // --- Le sfumature ----------------------------------------------------------
+
+  /// La sfumatura `change` per il bersaglio `target` degli oggetti scelti,
+  /// dalla sezione «Sfumatura», col nome `label` nella cronologia.
+  function changeGradient(target: PaintChannel, change: GradientChange, label: DrawKey): string | null {
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    previewGradient(target, null);
+    const changed = gradientOps(model, units, target, change, measureText, newIds());
+    // Un cambio che non arriva a nessuno è di oggetti senza una misura su
+    // cui stendere la sfumatura.
+    if (changed.reached === 0) return t("draw.gradient.no_place");
+    return changeFromPanel(label, changed.ops, changed.keys);
+  }
+
+  /// Mostra sul disegno la sfumatura `change` del bersaglio `target` degli
+  /// oggetti scelti, senza scriverla; `null` toglie ciò che mostrava.
+  function previewGradient(target: PaintChannel, change: GradientChange | null): void {
+    const model = engine.model;
+    if (change === null || model === null) {
+      if (!gradientShown) return;
+      gradientShown = false;
+      painter.setDraft(null);
+      return;
+    }
+    const paints = new Map<PaintNode, Partial<Record<PaintChannel, string | Elem>>>();
+    for (const [node, shown] of gradientPreview(model, selectedUnits(), target, change)) {
+      for (const paint of builder.paintsOf(node)) paints.set(paint, { [shown.name]: shown.value });
+    }
+    gradientShown = paints.size > 0;
+    painter.setDraft(gradientShown ? { paints } : null);
+  }
+
+  /// Il punto `index` della sfumatura comune diventa quello scelto, nel
+  /// pannello e sul foglio; `null` il primo.
+  function chooseGradientStop(index: number | null): void {
+    const model = engine.model;
+    const units = selectedUnits();
+    const target = model === null || units.length === 0 ? null : dropperTarget(model, units);
+    gradientStop = index === null || target === null ? null : { keys: selection.join("\n"), target, index };
+    syncProperties();
   }
 
   /// Un campo di «Forma»: cambia i poligoni, le stelle e i rettangoli
@@ -7477,6 +7564,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "text":
         // Il tocco che ha concluso un testo non ne apre un altro.
         return closedTyping ? { ...base, kind: "refused" } : { ...base, kind: "text", from: null, end: null, dragging: false };
+      case "gradient":
+        return { ...base, kind: "refused" };
     }
   };
 
