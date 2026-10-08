@@ -364,12 +364,12 @@ così com'è.
   registrano.
 - **Fusione:** due voci consecutive con lo stesso nome, fatte di `set` sulle
   stesse chiavi degli stessi elementi, e delle stesse parti, o di due `batch`
-  di quei `set` nello stesso ordine, a meno di 500 ms l'una dall'altra e senza altri cambiamenti
-  in mezzo, diventano una voce sola: resta la prima inversa e l'ultima
-  operazione in avanti, e l'undo resta esatto. Così una serie di piccoli
-  spostamenti, o tre colori provati di fila, si annullano in un passo. Dopo
-  un annulla o un ripeti la voce in cima non si fonde più, e nemmeno una
-  voce che ha tolto delle risorse.
+  di quei `set` nello stesso ordine, a meno di 500 ms l'una dall'altra e
+  senza altri cambiamenti in mezzo, diventano una voce sola: resta la prima
+  inversa e l'ultima operazione in avanti, e l'undo resta esatto. Così una
+  serie di piccoli spostamenti, o tre colori provati di fila, si annullano in
+  un passo. Dopo un annulla o un ripeti la voce in cima non si fonde più, e
+  nemmeno una voce che ha tolto delle risorse.
 - **Selezione:** dopo annulla o ripeti, la selezione sono gli oggetti che il
   passo ha toccato e che ci sono ancora; dopo un salto, quelli dell'ultimo
   passo del salto.

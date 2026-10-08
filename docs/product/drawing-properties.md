@@ -8,10 +8,10 @@
 Dal livello Standard il [disegno](drawing.md) ha accanto al foglio il
 pannello delle proprietà. Con una selezione dice com'è fatta e come si vede,
 in campi che si scrivono: posizione e misure, colori e contorno, il testo,
-come disporla. Senza selezione dice com'è fatto il disegno: la pagina,
-l'unità di misura, la descrizione e come si vede il foglio. Il pannello sta
-con l'albero degli oggetti, sotto di lui, e prende più altezza; su un
-riquadro stretto, come gli altri pannelli, va sotto il foglio
+come disporla. Senza selezione dice com'è fatto il disegno: i suoi colori,
+la pagina, l'unità di misura, la descrizione e come si vede il foglio. Il
+pannello sta con l'albero degli oggetti, sotto di lui, e prende più altezza;
+su un riquadro stretto, come gli altri pannelli, va sotto il foglio
 (`apps/client/src/editors/spatial/tools/properties.ts`, i campi in
 `apps/client/src/editors/spatial/tools/fields.ts`).
 
@@ -53,6 +53,9 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
   Angoli, come il menu «Contorno» di [Disegni, livello
   Esperto](drawing-expert.md).
+- **Colori del documento**, anche senza selezione, e allora per prima: i
+  campioni, i colori usati e i recenti, da dare agli oggetti scelti o con cui
+  disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).
 - **Testo.** Stile, Carattere, fra Inter, Literata e JetBrains Mono,
   Dimensione, Peso, l'Enfasi (grassetto, corsivo, sottolineato e barrato),
   Interlinea, Spaziatura e Allineamento, per tutto il testo anche quando le
@@ -97,9 +100,11 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   testo sono in punti, come nei programmi di disegno e d'impaginazione, e in
   pixel in un documento in pixel. Le rotazioni sono in gradi, l'opacità e le
   scale in percentuale.
-- **Un colore** si scrive come codice, `#0072b2`, come nome, `red`, o
-  «nessuno». Il campione accanto al campo apre la tavolozza; il selettore del
-  sistema, dopo, sceglie un colore qualunque.
+- **Un colore** si scrive come codice, `#0072b2`, come nome, `red`, col nome
+  di un campione del documento, o «nessuno». Il pulsante del colore accanto
+  al campo apre la tavolozza; il selettore del sistema, dopo, sceglie un
+  colore qualunque. Sotto, il contrasto con la carta ([Disegni,
+  colori](drawing-colors.md#il-campo-del-colore-e-il-contrasto)).
 - **Un campo misto dice «Misto»**: gli oggetti scelti hanno valori diversi.
   Scriverlo dà il valore a tutti, in un passo solo.
 - **Un valore che non va non parte.** Resta scritto, il campo è segnato e

@@ -43,8 +43,8 @@ stesso punto», rimette gli oggetti alle coordinate da cui vengono. Un incolla
 
 Ogni oggetto incollato ha un id nuovo, e i riferimenti interni lo seguono: un
 gradiente, un `use`, gli attributi ARIA, i selettori di un foglio di stile.
-Le sfumature, i motivi e le altre risorse che usa entrano fra quelle del
-disegno, e quelle che il disegno ha già si riusano ([Disegni,
+Le sfumature, i motivi, i campioni e le altre risorse che usa entrano fra
+quelle del disegno, e quelle che il disegno ha già si riusano ([Disegni,
 risorse](drawing-resources.md#copiare-e-incollare)). Fra due disegni con le
 stesse unità un giro di copia e incolla riporta gli stessi byte, id a parte
 e con le risorse al loro posto, e un livello copiato torna come un gruppo
@@ -118,10 +118,14 @@ tipografia](drawing-typography.md)). Ogni parte prende ciò che ha: una
 linea non riceve un riempimento. Un testo e un tratto a penna hanno un colore
 solo, e prendono quello che si vede dell'oggetto copiato; una freccia ridisegna
 la sua punta col contorno nuovo. Gli oggetti bloccati dentro un gruppo restano
-come sono.
+come sono. Una sfumatura propria arriva come copia, una per oggetto, e se
+segue il riquadro dell'oggetto si adatta a quello di chi la riceve.
 
-Lo stile copiato vale per tutti i disegni aperti, finché se ne copia un altro;
-senza, «Incolla lo stile» dice come copiarlo.
+Lo stile copiato vale per tutti i disegni aperti, finché se ne copia un altro,
+anche dopo che l'oggetto da cui viene se n'è andato; senza, «Incolla lo
+stile» dice come copiarlo. In un altro disegno un campione che lì non c'è
+lascia il posto a quello con lo stesso nome e lo stesso colore, o al suo
+colore ([Disegni, colori](drawing-colors.md#fra-disegni)).
 
 ## Chi monta l'editor
 

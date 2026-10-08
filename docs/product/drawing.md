@@ -52,7 +52,7 @@ si apre, e costruito soltanto allora.
 Il livello Essenziale ha sette strumenti, ciascuno con un tasto: selezione
 (`V`), penna (`P`), gomma per oggetto (`E`), rettangolo (`R`), ellisse (`O`),
 linea (`L`) e freccia (`A`). I colori sono gli otto della tavolozza di
-Okabe–Ito, ognuno con una forma nel suo campione, così non si distinguono solo
+Okabe–Ito, ognuno con una forma nel suo pulsante, così non si distinguono solo
 dal colore; gli spessori sono tre. Il campo «Che cosa hai disegnato?» scrive il
 titolo del disegno.
 
@@ -90,6 +90,8 @@ Lo Standard aggiunge:
   simili, i gruppi isolati, gli oggetti bloccati e nascosti ([Disegni, selezione](drawing-selection.md));
 - la **Tavola** (`F`), dopo il Lazo, e l'elenco **«Tavole»**: le pagine del
   disegno, ognuna col suo nome e la sua carta ([Disegni, tavole](drawing-boards.md));
+- il **Contagocce** (`I`), dopo la Tavola, e nelle «Proprietà» i **colori del
+  documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
@@ -99,9 +101,8 @@ Lo Standard aggiunge:
 - il **Poligono** (`Y`), dopo la freccia: poligoni regolari e stelle che si
   cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md));
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
-  tre cifre o senza `#`, oppure il selettore del sistema accanto. Il colore
-  scelto resta come campione in più, un anello che ha per nome il suo codice;
-  se sulla carta bianca sta sotto il contrasto 3:1, il nome lo dice;
+  tre cifre o senza `#`, o il selettore del sistema. Il colore resta come un
+  anello in più col codice per nome, che dice se sul bianco sta sotto il 3:1;
 - **«Immagine dal vault…»** (`Ctrl+I`), nel gruppo «Inserisci»: un'immagine
   che è già nel vault ([Disegni, immagini](drawing-images.md));
 - **«Copia lo stile»** e **«Incolla lo stile»** (`Ctrl+Alt+C`, `Ctrl+Alt+V`),
@@ -119,8 +120,8 @@ Lo Standard aggiunge:
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
 chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
-il Lazo o la Tavola la Selezione, un colore a piacere torna al colore di
-partenza e la vista girata si raddrizza.
+il Lazo, la Tavola o il Contagocce la Selezione, un colore a piacere torna al
+colore di partenza e la vista girata si raddrizza.
 
 ## Disporre
 
@@ -443,7 +444,6 @@ toccate, anche quando il file mescola CRLF e LF.
 
 Gli oggetti scelti sono, per la shell, gli intervalli del file che li
 contengono: le funzioni che lavorano sulla selezione ricevono il testo dei
-loro elementi. Un rimando a un punto del file, per esempio da un risultato di
-ricerca, sceglie l'oggetto che lo contiene e lo porta in vista; un punto fuori
-dagli oggetti, come il titolo, lo dice con un avviso. In Lettura non c'è
-selezione.
+loro elementi. Un rimando a un punto del file, come quello di una ricerca,
+sceglie l'oggetto che lo contiene e lo porta in vista; un punto fuori dagli
+oggetti, come il titolo, lo dice con un avviso. In Lettura non c'è selezione.
