@@ -391,6 +391,95 @@ fn same_pdf(expected: &[u8], actual: &[u8]) -> Result<(), String> {
     same_tokens(&tokens(expected), &tokens(actual), 0)
 }
 
+fn is_word(token: &Token, word: &str) -> bool {
+    matches!(token, Token::Word(found) if found == word.as_bytes())
+}
+
+/// I token di `source`, che sono numeri e parole: un percorso, un operatore.
+fn operators(source: &str) -> Vec<Token> {
+    tokens(source.as_bytes())
+}
+
+/// I token dell'oggetto `number` del PDF `pdf`, da dopo `number 0 obj` a prima
+/// di `endobj`: il dizionario, e il flusso se c'è.
+fn object(pdf: &[Token], number: usize) -> &[Token] {
+    let start = pdf
+        .windows(3)
+        .position(|w| {
+            matches!(&w[0], Token::Number(n) if *n == number as f64)
+                && w[1] == Token::Number(0.0)
+                && is_word(&w[2], "obj")
+        })
+        .unwrap_or_else(|| panic!("nessun oggetto {number}"))
+        + 3;
+    let end = pdf[start..]
+        .iter()
+        .position(|t| is_word(t, "endobj"))
+        .expect("la fine dell'oggetto")
+        + start;
+    &pdf[start..end]
+}
+
+/// L'oggetto a cui `tokens` dà il nome `name` (`/gs1`, `/xo0`, `/G`) con un
+/// riferimento: `name 12 0 R`.
+fn reference(tokens: &[Token], name: &str) -> usize {
+    tokens
+        .windows(4)
+        .find_map(|w| match (&w[0], &w[1], &w[2], &w[3]) {
+            (t, Token::Number(n), Token::Number(_), r) if is_word(t, name) && is_word(r, "R") => {
+                Some(*n as usize)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("nessun riferimento {name}"))
+}
+
+/// Il flusso di contenuto, già decompresso e letto per token, di `object`.
+fn content_of(object: &[Token]) -> Vec<Token> {
+    object
+        .iter()
+        .find_map(|t| match t {
+            Token::Stream(data) => Some(tokens(data)),
+            _ => None,
+        })
+        .expect("un flusso")
+}
+
+/// I `q` che il flusso `content` ha aperto e non ancora chiuso prima del token `at`.
+fn saved_before(content: &[Token], at: usize) -> Vec<usize> {
+    let mut open = Vec::new();
+    for (i, token) in content[..at].iter().enumerate() {
+        if is_word(token, "q") {
+            open.push(i);
+        } else if is_word(token, "Q") {
+            open.pop();
+        }
+    }
+    open
+}
+
+/// Gli stati grafici (`/gs1 gs`) in vigore al token `at`: quelli impostati in
+/// un `q` ancora aperto.
+fn states_at(content: &[Token], at: usize) -> Vec<String> {
+    let mut frames: Vec<Vec<String>> = vec![Vec::new()];
+    for (i, token) in content[..at].iter().enumerate() {
+        if is_word(token, "q") {
+            frames.push(Vec::new());
+        } else if is_word(token, "Q") {
+            frames.pop();
+        } else if let (true, Some(Token::Word(name))) = (
+            is_word(token, "gs"),
+            i.checked_sub(1).and_then(|before| content.get(before)),
+        ) {
+            frames
+                .last_mut()
+                .expect("un livello")
+                .push(String::from_utf8_lossy(name).into_owned());
+        }
+    }
+    frames.concat()
+}
+
 // ---------------------------------------------------------------------------
 // Le baseline
 // ---------------------------------------------------------------------------
@@ -658,6 +747,151 @@ fn a_webp_image_reaches_both_formats() {
     let pdf = only_artifact(&report).1;
     let pdf = String::from_utf8_lossy(&pdf);
     assert!(pdf.contains("/Subtype /Image"), "{pdf}");
+}
+
+#[test]
+fn a_cropped_image_and_a_masked_group_come_out_as_they_are_seen() {
+    // Come li scrive FubDraw: un'immagine rossa di 80 × 80 ritagliata a
+    // 40 × 20 da un `clipPath` suo, e un quadrato verde con una maschera
+    // d'opacità che lo sfuma da pieno, a sinistra, a vuoto, a destra.
+    let svg = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 160 80" width="160" height="80"><defs id="fub-defs"><clipPath id="c1" fub:role="private"><rect x="20" y="30" width="40" height="20"/></clipPath><linearGradient id="g1" fub:role="private" x1="80" y1="0" x2="160" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient><mask id="m1" fub:role="private" x="80" y="0" width="80" height="80" maskUnits="userSpaceOnUse"><rect x="80" y="0" width="80" height="80" fill="url(#g1) #808080"/></mask></defs><rect id="fub-paper" fub:role="paper" x="0" y="0" width="160" height="80" fill="#ffffff"/><g id="l1" fub:layer="Livello 1"><image id="o1" x="0" y="0" width="80" height="80" preserveAspectRatio="none" image-rendering="optimizeSpeed" clip-path="url(#c1)" href="data:image/png;base64,{}"/><g id="g2" mask="url(#m1)"><rect id="o2" x="80" y="0" width="80" height="80" fill="#009e73"/></g></g></svg>"##,
+        base64(&red_png())
+    );
+    let host = host().with_document("ritagli.svg", &svg);
+    let one = serde_json::json!({"scale": 1});
+    let report = export(&PngExport, &host, DRAW_PNG, &["ritagli.svg"], one).unwrap();
+    assert!(report.log.is_empty(), "{:?}", report.log);
+    let image = decode(&only_artifact(&report).1);
+    let at = |image: &Image, x: u32, y: u32| {
+        let i = ((y * image.width + x) * 4) as usize;
+        image.rgba[i..i + 4].to_vec()
+    };
+    // Dell'immagine resta il ritaglio, e il resto è carta.
+    assert_eq!(red_pixels(&image), 40 * 20);
+    assert_eq!(at(&image, 40, 40), [255, 0, 0, 255]);
+    assert_eq!(at(&image, 10, 10), [255, 255, 255, 255]);
+    assert_eq!(at(&image, 70, 70), [255, 255, 255, 255]);
+    // Il verde è pieno dove la maschera è bianca e sparisce dove è nera.
+    let full = at(&image, 81, 40);
+    assert!(full[0] < 30 && full[1] > 140, "{full:?}");
+    let gone = at(&image, 158, 40);
+    assert!(gone.iter().all(|&c| c > 240), "{gone:?}");
+
+    // Il PDF ha il ritaglio prima dell'immagine, e la maschera come maschera
+    // morbida dello stato grafico con cui si disegna il quadrato verde.
+    let pdf = pdf_of(&host, "ritagli.svg");
+    assert!(String::from_utf8_lossy(&pdf).contains("/SMask"));
+    let pdf = tokens(&pdf);
+    let page = pdf
+        .iter()
+        .find_map(|t| match t {
+            Token::Stream(data)
+                if data.is_ascii() && String::from_utf8_lossy(data).contains("20 30 m") =>
+            {
+                Some(tokens(data))
+            }
+            _ => None,
+        })
+        .expect("il contenuto del disegno");
+    let dos: Vec<usize> = page
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| is_word(t, "Do"))
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(dos.len(), 2, "l'immagine e il quadrato: {page:?}");
+    let (image_do, green_do) = (dos[0], dos[1]);
+    let name_before = |at: usize| match &page[at - 1] {
+        Token::Word(name) => String::from_utf8_lossy(name).into_owned(),
+        other => panic!("un nome prima di Do, non {other:?}"),
+    };
+
+    // Il ritaglio dell'immagine: il percorso del rettangolo di 20 per 30, la
+    // regola `W n`, e solo dopo l'immagine, dentro lo stesso `q`.
+    let path = operators("20 30 m 60 30 l 60 50 l 20 50 l h W n");
+    let clip = page
+        .windows(path.len())
+        .position(|w| w == path.as_slice())
+        .expect("il ritaglio dell'immagine");
+    assert!(
+        clip + path.len() <= image_do,
+        "il ritaglio precede l'immagine"
+    );
+    let block = *saved_before(&page, clip)
+        .last()
+        .expect("il ritaglio sta in un q");
+    assert!(
+        saved_before(&page, image_do).contains(&block),
+        "l'immagine è nel ritaglio"
+    );
+    assert!(
+        !saved_before(&page, green_do).contains(&block),
+        "il quadrato no"
+    );
+    let drawn = object(&pdf, reference(&pdf, &name_before(image_do)));
+    assert!(drawn
+        .windows(2)
+        .any(|w| is_word(&w[0], "/Subtype") && is_word(&w[1], "/Image")));
+    assert!(
+        states_at(&page, image_do)
+            .iter()
+            .all(|state| !object(&pdf, reference(&pdf, state))
+                .iter()
+                .any(|t| is_word(t, "/SMask"))),
+        "l'immagine non ha una maschera morbida"
+    );
+
+    // Il quadrato verde: la form con il suo riempimento, disegnata con lo
+    // stato grafico che ha la maschera morbida, di luminosità, il cui gruppo
+    // ritaglia alla regione della maschera.
+    let square = object(&pdf, reference(&pdf, &name_before(green_do)));
+    let fill = content_of(square);
+    let rect = operators("80 0 m 160 0 l 160 80 l 80 80 l h f");
+    assert!(
+        fill.windows(rect.len()).any(|w| w == rect.as_slice()),
+        "{fill:?}"
+    );
+    let scn = fill
+        .iter()
+        .position(|t| is_word(t, "scn"))
+        .expect("un colore");
+    let channels: Vec<f64> = fill[scn - 3..scn]
+        .iter()
+        .map(|t| match t {
+            Token::Number(n) => *n,
+            other => panic!("un canale, non {other:?}"),
+        })
+        .collect();
+    for (found, wanted) in channels.iter().zip([0.0, 158.0 / 255.0, 115.0 / 255.0]) {
+        assert!((found - wanted).abs() < 0.01, "{channels:?}");
+    }
+    let masks: Vec<&[Token]> = states_at(&page, green_do)
+        .iter()
+        .map(|state| object(&pdf, reference(&pdf, state)))
+        .filter(|state| state.iter().any(|t| is_word(t, "/SMask")))
+        .collect();
+    assert_eq!(masks.len(), 1, "una sola maschera morbida per il quadrato");
+    assert!(masks[0].iter().any(|t| is_word(t, "/Luminosity")));
+    let region = operators("80 0 80 80 re h W n");
+    let group = content_of(object(&pdf, reference(masks[0], "/G")));
+    assert!(
+        group.starts_with(&[Token::Word(b"q".to_vec())])
+            && group.windows(region.len()).any(|w| w == region.as_slice()),
+        "{group:?}"
+    );
+
+    // L'SVG pulito tiene le risorse, senza i ruoli dell'editor, e si
+    // disegna allo stesso modo.
+    let clean = svg_of(&host, "ritagli.svg", serde_json::Value::Null);
+    assert!(clean.contains(r#"<clipPath id="c1"><rect"#), "{clean}");
+    assert!(clean.contains(r#"<mask id="m1" x="80""#), "{clean}");
+    assert!(clean.contains(r#"clip-path="url(#c1)""#), "{clean}");
+    assert!(clean.contains(r#"mask="url(#m1)""#), "{clean}");
+    assert!(!clean.contains("fub:"), "{clean}");
+    let drawn = png_of_text(&clean).expect("l'SVG pulito si disegna");
+    assert_eq!(red_pixels(&drawn), 40 * 20);
+    assert_eq!(at(&drawn, 81, 40), full);
 }
 
 #[test]
