@@ -3,6 +3,7 @@
 // un annulla disfa al byte.
 
 import { describe, expect, it } from "vitest";
+import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import type { Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
@@ -544,5 +545,18 @@ describe("i punti", () => {
         { offset: 0.5, color: "#ffffff", opacity: 1 },
       ]),
     ).toBe("#808080");
+  });
+});
+
+describe("il banco di fedeltà", () => {
+  it("ha le sfumature come le scrive l'editor: sue, che si leggono, col loro ripiego", () => {
+    const opened = open(FIDELITY.find((scene) => scene.id === "sfumature")!.text);
+    const parts = [...painted(opened), ...painted(opened, "stroke")].filter((part) => part.value.startsWith("url("));
+    expect(parts.map((part) => part.gradient?.id).sort()).toEqual(["g1", "g2", "g3", "g4", "g5", "g6", "g7"]);
+    for (const part of parts) {
+      expect(part.gradient!.own).toBe(true);
+      expect(part.gradient!.place).not.toBeNull();
+      expect(part.value).toBe(`url(#${part.gradient!.id}) ${averageColor(part.gradient!.look.stops)}`);
+    }
   });
 });

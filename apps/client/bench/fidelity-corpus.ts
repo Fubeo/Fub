@@ -1,10 +1,11 @@
 // Il corpus del banco di fedeltà: scene piccole che insieme toccano ogni
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
 // dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, le
-// risorse di ogni tipo, i campioni, le tavole con le loro carte, e gli
-// estranei tipici di Inkscape, Illustrator e Mermaid. Ogni scena è un
-// disegno intero, grande quanto la sua resa; quella che mostra una tavola
-// sola è più grande, e la sua tavola è grande quanto la resa.
+// risorse di ogni tipo, i campioni, le sfumature come le scrive FubDraw, le
+// tavole con le loro carte, e gli estranei tipici di Inkscape, Illustrator e
+// Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa; quella
+// che mostra una tavola sola è più grande, e la sua tavola è grande quanto la
+// resa.
 
 /// La misura di ogni scena, in pixel CSS.
 export const FIDELITY_SIZE = { width: 240, height: 160 } as const;
@@ -151,6 +152,38 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<g id="g1" fill="url(#s3) #009e73"><circle id="o3" cx="146" cy="52" r="16"/><rect id="o4" x="174" y="36" width="50" height="32"/></g>'
       + '<text id="o5" x="12" y="104" font-family="Inter" font-size="22" font-weight="700" fill="url(#s1) #0072b2"><tspan x="12" dy="0">Campioni</tspan></text></g>'
       + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="o6" x="140" y="92" width="84" height="56" fill="url(#s3) #cc79a7"/></g>'),
+  },
+  {
+    // Le sfumature come le scrive FubDraw, nelle coordinate di chi le usa:
+    // una lineare con un punto trasparente, una radiale col fuoco che si
+    // ripete a specchio, una ellittica che ricomincia, una nel contorno, una
+    // inclinata da uno scorrimento, come la scrive «Applica trasformazione»,
+    // una che un gruppo ruotato porta con sé, e una su una linea
+    // orizzontale, il cui riquadro è alto zero.
+    id: "sfumature",
+    text: scene('<defs id="fub-defs">'
+      + '<linearGradient id="g1" fub:role="private" x1="12" y1="0" x2="108" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0072b2"/>'
+      + '<stop offset="0.5" stop-color="#f0e442" stop-opacity="0.4"/><stop offset="1" stop-color="#d55e00"/></linearGradient>'
+      + '<radialGradient id="g2" fub:role="private" cx="146" cy="36" r="12" fx="140" fy="30" gradientUnits="userSpaceOnUse" spreadMethod="reflect">'
+      + '<stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cc79a7"/></radialGradient>'
+      + '<radialGradient id="g3" fub:role="private" cx="204" cy="36" r="14" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1 0 0 0.5 0 18)" spreadMethod="repeat">'
+      + '<stop offset="0" stop-color="#009e73"/><stop offset="1" stop-color="#56b4e9"/></radialGradient>'
+      + '<linearGradient id="g4" fub:role="private" x1="0" y1="84" x2="0" y2="140" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#e69f00"/>'
+      + '<stop offset="1" stop-color="#0072b2"/></linearGradient>'
+      + '<linearGradient id="g5" fub:role="private" x1="128" y1="0" x2="168" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1 0 0.5 1 -42 0)">'
+      + '<stop offset="0" stop-color="#009e73"/><stop offset="1" stop-color="#f0e442"/></linearGradient>'
+      + '<linearGradient id="g6" fub:role="private" x1="0" y1="88" x2="0" y2="136" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cc79a7"/>'
+      + '<stop offset="1" stop-color="#0072b2"/></linearGradient>'
+      + '<linearGradient id="g7" fub:role="private" x1="12" y1="0" x2="228" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#0072b2"/>'
+      + '<stop offset="0.33" stop-color="#e69f00"/><stop offset="0.66" stop-color="#009e73"/><stop offset="1" stop-color="#cc79a7"/></linearGradient>'
+      + `</defs>${LAYER}`
+      + '<rect id="o1" x="12" y="12" width="96" height="48" rx="8" fill="url(#g1) #a49d4f"/>'
+      + '<circle id="o2" cx="146" cy="36" r="24" fill="url(#g2) #e6bcd3"/>'
+      + '<ellipse id="o3" cx="204" cy="36" rx="28" ry="24" fill="url(#g3) #2ba9ae"/>'
+      + '<line id="o4" x1="12" y1="72" x2="228" y2="72" stroke="url(#g7) #6f9160" stroke-width="4"/>'
+      + '<polyline id="o5" points="16,140 48,84 80,140 112,84" fill="none" stroke="url(#g4) #738959" stroke-width="10" stroke-linejoin="round"/>'
+      + '<path id="o6" d="M 128 84 L 168 84 L 192 132 L 152 132 Z" fill="url(#g5) #78c15b"/>'
+      + '<g id="o7" transform="rotate(-20 214 112)"><rect id="o8" x="196" y="88" width="36" height="48" fill="url(#g6) #6676ad"/></g></g>'),
   },
   {
     // Tre tavole: due con la carta, bianca e azzurra, una senza, che mostra
