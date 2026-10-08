@@ -121,7 +121,7 @@ describe("ordine degli attributi (§7, punto 2)", () => {
   });
 
   it("ogni gruppo nell'ordine della specifica", () => {
-    const fub = ["layer", "role", "tool", "shape", "geom", "wrap", "join", "locked", "at", "brush"].map((n) => `fub:${n}`);
+    const fub = ["layer", "role", "name", "marker", "board", "tool", "shape", "geom", "wrap", "join", "locked", "at", "brush"].map((n) => `fub:${n}`);
     const geometry = ["x", "y", "dx", "dy", "cx", "cy", "r", "fx", "fy", "width", "height", "rx", "ry", "x1", "y1", "x2", "y2", "points", "d", "startOffset"];
     const resource = ["offset", "refX", "refY", "markerWidth", "markerHeight", "orient", "viewBox"];
     const units = [
@@ -174,6 +174,14 @@ describe("ordine degli attributi (§7, punto 2)", () => {
     const all = ["id", ...fub, ...geometry, ...resource, ...units, ...primitives, ...presentation, "transform", "href"];
     const shuffled = [...all].reverse().map((name) => attr(name));
     expect(canonicalOrder(shuffled).map((a) => a.name)).toEqual(all);
+  });
+
+  it("fub:marker, il nome di una punta, sta dopo fub:name e prima di fub:board e fub:tool", () => {
+    const input = ["refX", "fub:tool", "fub:marker", "markerWidth", "fub:board", "fub:name", "fub:role", "orient", "id"].map((name) => attr(name));
+    expect(canonicalOrder(input).map((a) => a.name)).toEqual(["id", "fub:role", "fub:name", "fub:marker", "fub:board", "fub:tool", "refX", "markerWidth", "orient"]);
+    // Così lo scrive un `add`, qualunque sia l'ordine in cui lo si descrive.
+    const marker: Elem = { tag: "marker", attrs: { orient: "auto", "fub:marker": "vee small end", refX: "1", "fub:role": "shared", id: "r1" } };
+    expect(written(marker)).toBe('<marker id="r1" fub:role="shared" fub:marker="vee small end" refX="1" orient="auto"/>');
   });
 
   it("la radice: dichiarazioni, versione, viewBox, width, height, poi gli altri", () => {

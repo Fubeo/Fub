@@ -121,9 +121,9 @@ import {
 /// Un'operazione applicata.
 export interface Applied {
   readonly outcome: "applied";
-  /// L'operazione come si è applicata: quella chiesta, oppure, se la
-  /// raccolta ha tolto delle risorse, un `batch` con lei e poi i `remove`
-  /// della raccolta (§2).
+  /// L'operazione come si è applicata: quella chiesta, oppure, se qualcosa
+  /// la segue ([`Follow`]) o la raccolta ha tolto delle risorse, un `batch`
+  /// con lei, poi ciò che la segue e i `remove` della raccolta (§2).
   readonly forward: Op;
   /// L'inversa, calcolata sulla scena di prima (§2).
   readonly inverse: Op;
@@ -138,6 +138,13 @@ export interface Applied {
   /// L'undo di questa operazione.
   readonly undo: Undo;
 }
+
+/// Ciò che segue ogni operazione applicata, nello stesso passo: le
+/// operazioni che l'editor aggiunge a quella chiesta, viste la scena di dopo
+/// e gli id che ha toccato, come le punte di una linea che tengono il suo
+/// colore. `null` se non c'è niente da aggiungere. Il passo resta col nome
+/// dell'operazione chiesta: quello di un `batch` che segue non conta.
+export type Follow = (model: DocumentModel, touched: ReadonlySet<string>) => Op | null;
 
 /// Un'operazione rifiutata: la scena resta com'era.
 export interface Rejected {
@@ -568,6 +575,10 @@ export class SceneEngine {
   /// Vero mentre `undoAll` applica la sua fila: il testo si scrive una volta,
   /// alla fine.
   private quiet = false;
+  /// Ciò che segue ogni operazione applicata, nello stesso passo e nello
+  /// stesso undo; `null` per niente. Un'inversa non ha seguito: porta già
+  /// l'inversa di ciò che aveva seguito l'operazione.
+  follow: Follow | null = null;
 
   /// Che cosa è la risorsa modificabile che porta `id` nella scena corrente:
   /// ogni elemento scritto si legge con le risorse che ci sono (formato della
@@ -655,10 +666,15 @@ export class SceneEngine {
     let inverse: Op;
     try {
       inverse = this.run(op);
+      const followed = this.inverse ? null : this.followed(tree);
+      if (followed !== null) {
+        forward = chain([op, followed.op]);
+        inverse = chain([followed.inverse, inverse]);
+      }
       const { removes, restores } = this.collect();
       if (!this.inverse) this.checkBoards(boards);
       if (removes.length > 0) {
-        forward = chain([op, ...removes]);
+        forward = chain([forward, ...removes]);
         inverse = chain([...restores.reverse(), inverse]);
       }
     } catch (error) {
@@ -670,6 +686,41 @@ export class SceneEngine {
         : { outcome: "rejected", reason: error.reason, detail: error.detail, index: first };
     }
     return this.commit(tree.take(mark), forward, inverse, [...this.touched], this.duplicate, null);
+  }
+
+  /// Ciò che segue l'operazione appena applicata, applicato anche lui, con
+  /// la sua inversa; `null` se non c'è niente. Un seguito che il motore
+  /// rifiuta, o che non si sa calcolare, non c'è: l'operazione chiesta resta
+  /// com'era prima che qualcosa la seguisse, con ciò che ha toccato.
+  private followed(tree: Tree): { readonly op: Op; readonly inverse: Op } | null {
+    const follow = this.follow;
+    if (follow === null) return null;
+    let op: Op | null;
+    try {
+      op = follow(tree.model, this.touched);
+    } catch {
+      return null;
+    }
+    if (op === null) return null;
+    if (op.op === "batch" && op.label !== undefined) op = { op: "batch", ops: op.ops };
+    const mark = tree.mark();
+    const { touched, duplicate, emptied, boards, papers } = this;
+    this.touched = new Set(touched);
+    this.emptied = new Set(emptied);
+    this.boards = new Set(boards);
+    this.papers = new Set(papers);
+    try {
+      return { op, inverse: this.run(op) };
+    } catch (error) {
+      tree.rollback(mark);
+      if (!(error instanceof Rejection)) throw error;
+      this.touched = touched;
+      this.duplicate = duplicate;
+      this.emptied = emptied;
+      this.boards = boards;
+      this.papers = papers;
+      return null;
+    }
   }
 
   /// Annulla l'operazione di `undo`: esattamente, se la scena è quella che

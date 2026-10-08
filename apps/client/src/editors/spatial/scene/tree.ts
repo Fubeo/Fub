@@ -199,11 +199,16 @@ export class Tree {
     return this.log.splice(mark);
   }
 
-  /// Disfa le modifiche dopo `mark`, senza registrarle.
+  /// Disfa le modifiche dopo `mark`, senza registrarle. Gli id che restano
+  /// senza riferimenti perché si disfa non li ha persi nessuna operazione:
+  /// per [`Tree.orphans`] non contano.
   rollback(mark: number): void {
+    const lost = this.lost;
+    this.lost = new Set();
     const entries = this.take(mark);
     this.undo(entries);
     this.log.length = mark;
+    this.lost = lost;
   }
 
   /// Disfa `entries`, dall'ultima alla prima, registrando ciò che fa: è
