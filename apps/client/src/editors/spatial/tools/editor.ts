@@ -220,6 +220,7 @@ import {
   type CopyNames,
   type Rect,
 } from "./boards";
+import { orderChanges } from "./order-changes";
 import { CAPS, DASHES, JOINS, lookOf as outlineLook, outlineOps, outlinesOf, widthLinesOf, type OutlineChange } from "./outline";
 import { boundsAfter, MAX_SCALE_PERCENT, MAX_SKEW, numericMatrix, numericOps } from "./transform";
 import { barSpot, type ScreenBox } from "./bar";
@@ -919,6 +920,17 @@ const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", 
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
 /// foglio (`structure.css`).
 const PANEL_ROOM_REM = 36;
+
+/// Ciò che il pannello legge dagli oggetti scelti: i fatti della selezione e
+/// le sfumature dei suoi riempimenti e contorni. Si leggono la prima volta
+/// che servono, e restano finché non cambiano scena, scelta, livello,
+/// lucchetto delle proporzioni o cornice tenuta (`syncProperties`): con
+/// centinaia di oggetti scelti, aprire una sezione o cambiare un colore
+/// recente non li rilegge.
+interface PanelReading {
+  facts?: SelectionFacts;
+  channels?: Partial<Record<PaintChannel, GradientView>>;
+}
 
 /// Quanto aspetta la verifica dell'accessibilità, dopo l'ultimo cambio del
 /// disegno, prima di rileggerlo: rileggerlo costa quanto aprirlo.
@@ -2965,6 +2977,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly drawing: string;
     readonly recent: readonly string[];
     readonly stop: unknown;
+    /// Ciò che il pannello ha letto dagli oggetti scelti, da riusare finché
+    /// non cambia ciò da cui dipende (vedi `syncProperties`).
+    readonly reading: PanelReading;
   } | null = null;
   /// I colori del documento contati per la scena `index`: si ricontano
   /// soltanto quando il disegno cambia.
@@ -3874,13 +3889,46 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncBoards();
   };
 
+  /// Quanti giri di `readFirst` sono aperti, e la misura del foglio che
+  /// hanno letto; `null` se va riletta.
+  let rounds = 0;
+  let surfaceBox: { readonly w: number; readonly h: number } | null = null;
+
+  const readSurface = (): { readonly w: number; readonly h: number } => ({ w: surface.clientWidth, h: surface.clientHeight });
+
+  /// La misura del foglio in pixel: quella letta all'inizio del giro, se ce
+  /// n'è uno, o quella di adesso.
+  const surfaceSize = (): { readonly w: number; readonly h: number } => (rounds === 0 ? readSurface() : (surfaceBox ??= readSurface()));
+
+  /// Esegue `run` dopo aver letto la misura del foglio, prima di scrivere
+  /// qualcosa nella pagina: chi la chiede nel giro non la rilegge. Leggere
+  /// il layout dopo aver toccato il DOM costringe il browser a rifarlo
+  /// subito, una volta per ogni lettura; letto prima, a layout pulito, non
+  /// costa niente. Un giro dentro un altro è quello di fuori. Chi cambia la
+  /// misura del foglio mentre il giro dura lo dice con `rereadSize`.
+  const readFirst = <T,>(run: () => T): T => {
+    if (rounds++ === 0) surfaceBox = readSurface();
+    try {
+      return run();
+    } finally {
+      if (--rounds === 0) surfaceBox = null;
+    }
+  };
+
+  /// La misura del foglio può essere cambiata: la prossima richiesta, anche
+  /// dentro un giro, la rilegge.
+  const rereadSize = (): void => {
+    surfaceBox = null;
+  };
+
   /// La griglia sullo schermo, se il livello la offre e la si vuole vedere.
   const showGrid = (): void => {
     const shown = has("grid") && grid.shown;
     gridMark.style.display = shown ? "" : "none";
     if (!shown) return;
     gridMark.toggleAttribute("data-slanted", camera.angle % 90 !== 0);
-    const lines = gridLines(camera, surface.clientWidth, surface.clientHeight, stepNow());
+    const size = surfaceSize();
+    const lines = gridLines(camera, size.w, size.h, stepNow());
     gridMinor.setAttribute("d", lines.minor);
     gridMajor.setAttribute("d", lines.major);
   };
@@ -3921,7 +3969,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // righelli seguono la cornice.
     showHandles();
     // Il fondo del foglio rende la parte della pagina che si vede.
-    folio?.view?.(next, surface.clientWidth, surface.clientHeight);
+    const size = surfaceSize();
+    folio?.view?.(next, size.w, size.h);
   };
   /// Il formato delle coordinate dette a voce, nella lingua di adesso.
   let coordinates: Intl.NumberFormat | null = null;
@@ -4044,7 +4093,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// in alto e a sinistra, e ciò che si inquadra va accanto a loro.
   const viewArea = (): { readonly x: number; readonly y: number; readonly w: number; readonly h: number } => {
     const inset = rulersShown() ? RULER_PX : 0;
-    return { x: inset, y: inset, w: Math.max(0, surface.clientWidth - inset), h: Math.max(0, surface.clientHeight - inset) };
+    const size = surfaceSize();
+    return { x: inset, y: inset, w: Math.max(0, size.w - inset), h: Math.max(0, size.h - inset) };
   };
 
   /// Dove sta il punto `p` del foglio rispetto ai righelli: su quello in
@@ -4071,10 +4121,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       rulers.show(null);
       return;
     }
+    const size = surfaceSize();
     rulers.show({
       camera,
-      width: surface.clientWidth,
-      height: surface.clientHeight,
+      width: size.w,
+      height: size.h,
       unit: docUnit(),
       page: rulerPage(),
       selection: selectionBand,
@@ -4092,10 +4143,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       guideLines.show(null);
       return;
     }
+    const size = surfaceSize();
     guideLines.show({
       camera,
-      width: surface.clientWidth,
-      height: surface.clientHeight,
+      width: size.w,
+      height: size.h,
       guides,
       hot: g === null ? hotGuide : null,
       hidden: g?.index ?? null,
@@ -4598,7 +4650,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Le cornici della selezione, i nodi del tracciato che si modifica, e il
   /// riquadro di un trascinamento sul vuoto.
-  const showHandles = (): void => {
+  const showHandles = (): void => readFirst(placeHandles);
+
+  const placeHandles = (): void => {
     if (resolveNodes()) syncArrange();
     const handles: OverlayHandle[] = [];
     const move = current?.kind === "select" && current.mode === "move" ? current : null;
@@ -5706,6 +5760,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     dock.hidden =
       boardsPanel.element.hidden && tree.element.hidden && panel.element.hidden && (nested || inspector.element.hidden) && historyPanel.element.hidden && accessPanel.element.hidden;
     dock.toggleAttribute("data-wide", nested ? !panel.element.hidden : !inspector.element.hidden);
+    // Il dock occupa un lato del foglio: con lui che cambia, cambia la sua misura.
+    rereadSize();
   }
 
   /// Mette gli attributi nel pannello delle proprietà, come una sua sezione,
@@ -5777,6 +5833,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const index = currentIndex();
     const outlines = outlinesOf(model, units);
     const widths = widthLinesOf(model, units);
+    // Quali ordini spostano qualcosa lo dice come stanno gli oggetti fra i
+    // vicini: non servono le operazioni di ciascuno.
+    const changes = has("arrange") ? orderChanges(index, units) : new Set<Order>();
     return {
       keys: selection.join("\n"),
       subject: units.length === 1 ? labelOf(units[0]!) : plural(units.length, "draw.describe.parts.one", "draw.describe.parts.other"),
@@ -5787,7 +5846,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       outline: outlines.length === 0 && widths.length === 0 ? null : outlineLook(outlines, widths),
       alignable: alignReference(units) !== null,
       drawn: drawn(units),
-      orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => orderOps(model, index, units, order, newIds()).ops.length > 0) : []),
+      orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => changes.has(order)) : []),
       shape: shapeFacts(model, units),
       tips: has("tips") ? tipsLookOf(model, units) : null,
     };
@@ -5827,7 +5886,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     ) {
       return;
     }
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors, stop: gradientStop };
+    // Che cosa dicono gli oggetti scelti dipende dalla scena, da quali sono,
+    // dal livello, dal lucchetto delle proporzioni e dalla cornice tenuta: se
+    // sono gli stessi dell'ultima volta, e `panelShown` non è stato azzerato
+    // (un cambio di lingua, un colore applicato), la lettura è ancora quella.
+    const reading: PanelReading =
+      last !== null && last.index === index && last.keys === keys && last.features === features && last.ratio === ratioLock && last.kept === kept
+        ? last.reading
+        : {};
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors, stop: gradientStop, reading };
     const list = boardsNow();
     const model = engine.model;
     const units = selection.length === 0 || model === null ? [] : selectedUnits();
@@ -5843,7 +5910,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         features,
         unit,
         editable: canEdit,
-        selection: units.length === 0 ? null : selectionFacts(units),
+        selection: units.length === 0 ? null : (reading.facts ??= selectionFacts(units)),
         document: { page: scene.root.page, boards: list.length > 0, desc: rootText("desc") },
         grid,
         bar: BAR_FEATURES.some(has),
@@ -5865,7 +5932,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
                 drawing: style().color,
                 swatch: style().swatch,
               },
-        gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches),
+        gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches, reading),
         hatch: model === null || units.length === 0 || !has("hatches") ? null : hatchSection(model, units, keys, swatches, unit),
         connector: model === null || units.length === 0 || !has("connector") ? null : connectorSection(model, units, keys),
       }), effects),
@@ -5901,12 +5968,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// La sezione «Sfumatura» per gli oggetti scelti `units`, di chiavi
   /// `keys`; `null` se non hanno né riempimento né contorno.
-  function gradientSection(model: DocumentModel, units: readonly Unit[], keys: string, swatches: GradientPanelView["swatches"]): GradientPanelView | null {
-    const channels: Partial<Record<PaintChannel, GradientView>> = {};
-    for (const target of ["fill", "stroke"] as const) {
-      const shown = gradientView(paintedParts(model, units, target));
-      if (shown.count > 0) channels[target] = shown;
+  function gradientSection(model: DocumentModel, units: readonly Unit[], keys: string, swatches: GradientPanelView["swatches"], reading: PanelReading): GradientPanelView | null {
+    // Le sfumature degli oggetti scelti si leggono una volta per lettura; il
+    // bersaglio, il punto scelto e il livello cambiano senza rileggerle.
+    if (reading.channels === undefined) {
+      const found: Partial<Record<PaintChannel, GradientView>> = {};
+      for (const target of ["fill", "stroke"] as const) {
+        const shown = gradientView(paintedParts(model, units, target));
+        if (shown.count > 0) found[target] = shown;
+      }
+      reading.channels = found;
     }
+    const channels = reading.channels;
     const chosen = panel.colorTarget();
     const target = channels[chosen] !== undefined ? chosen : channels.fill !== undefined ? "fill" : channels.stroke !== undefined ? "stroke" : null;
     if (target === null) return null;
@@ -6592,10 +6665,40 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     };
   };
 
+  /// Quanti giri di `holdingBar` sono aperti, e se la barra è stata chiesta
+  /// mentre duravano.
+  let barHeld = 0;
+  let barDue = false;
+
+  /// Esegue `run` mettendo la barra a posto una volta sola, alla fine: chi
+  /// la chiede prima, con la selezione e le cornici a metà strada, la
+  /// metterebbe dove non resta.
+  const holdingBar = <T,>(run: () => T): T => {
+    barHeld++;
+    try {
+      return run();
+    } finally {
+      if (--barHeld === 0 && barDue) {
+        barDue = false;
+        placeBar();
+      }
+    }
+  };
+
+  /// Un giro solo per `run`: la misura del foglio si legge una volta prima di
+  /// scrivere, e la barra si mette una volta a cose fatte (con la misura già
+  /// letta, perciò il giro della misura è quello di fuori). È ciò che serve a
+  /// un passo che cambia scelta, cornici e controlli insieme.
+  const oneRound = <T,>(run: () => T): T => readFirst(() => holdingBar(run));
+
   /// La barra della selezione accanto alla selezione, se chi disegna la
   /// vuole lì (`bar.ts`): sotto la cornice, o sopra se sotto non c'è posto.
   /// Durante un gesto non si vede, perché non copra ciò che si muove.
   function placeBar(): void {
+    if (barHeld > 0) {
+      barDue = true;
+      return;
+    }
     const beside = grid.bar && !arrangeBar.hidden;
     arrangeBar.toggleAttribute("data-beside", beside);
     arrangeBar.toggleAttribute("data-gesture", beside && (current !== null || pressed !== null));
@@ -6884,7 +6987,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const single = units.length === 1 && isLink(units[0]!) ? units[0]! : null;
     shownLink = single === null ? null : { target: linkTarget(nodeOf(engine.model!, single)) };
     linkButton.hidden = !has("links") || options.links === undefined;
-    linkButton.disabled = shownLink === null && units.length > 0 && holdsLinks(engine.model!, units);
+    // Cercare i collegamenti fra gli oggetti scelti costa: se il pulsante non
+    // c'è, non serve sapere se si spegne.
+    linkButton.disabled = !linkButton.hidden && shownLink === null && units.length > 0 && holdsLinks(engine.model!, units);
     nameArrange(linkButton, linkText(), "Mod-k");
     openLinkButton.hidden = options.links === undefined || (shownLink?.target ?? null) === null;
     nameArrange(openLinkButton, openLinkText(), "Alt-Enter");
@@ -6931,7 +7036,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     else surface.focus({ preventScroll: true });
   };
 
-  const syncControls = (): void => {
+  const syncControls = (): void => readFirst(syncEverything);
+
+  const syncEverything = (): void => {
     const canEdit = editable();
     const now = style();
     root.toggleAttribute("data-readonly", !canEdit);
@@ -7046,7 +7153,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   }
 
   /// Porta la superficie alla scena del motore.
-  const refresh = (): void => {
+  const refresh = (): void => oneRound(refreshScene);
+
+  const refreshScene = (): void => {
     scene = builder.build(paintSource());
     painter.setDraft(null);
     painter.update(scene);
@@ -7098,13 +7207,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// sua ragione, a parole.
   const attempt = (label: DrawKey, op: Op | null): Applied | string | null => {
     if (op === null || !editable()) return null;
-    const outcome = engine.apply(withSheet(op));
+    // La misura del foglio si legge prima che il passo tocchi il disegno: dopo
+    // le scritture costerebbe una rimisura ogni volta.
+    const outcome = oneRound(() => {
+      const applied = engine.apply(withSheet(op));
+      if (applied.outcome === "rejected") return applied;
+      history.record(label, applied);
+      refresh();
+      return applied;
+    });
     if (outcome.outcome === "rejected") {
       clearPreviews();
       return t(REASONS[outcome.reason]);
     }
-    history.record(label, outcome);
-    refresh();
     emit(outcome, "input");
     return outcome;
   };
@@ -7120,7 +7235,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// La superficie dopo un annulla, un ripeti o un salto nella cronologia:
   /// la scena nuova, e la selezione che segue ciò che l'ultimo passo ha
   /// toccato e che c'è ancora, e così il livello corrente.
-  const landed = (ids: readonly string[]): void => {
+  const landed = (ids: readonly string[]): void => oneRound(() => landOn(ids));
+
+  const landOn = (ids: readonly string[]): void => {
     refresh();
     // Con lo strumento Tavola si sceglie la tavola toccata, non gli oggetti.
     const board = tool === "board" ? boardsNow().find((each) => ids.includes(each.id)) : undefined;
@@ -7326,10 +7443,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (page !== null) ops.push({ op: "page", viewBox: page });
     const hooked = hookedIn(units);
     if (commit("draw.action.move", asGesture(ops)) === null) return;
-    selection = inOrder(moved.keys);
-    if (frame !== null && frame.matrix !== IDENTITY) kept = { index: currentIndex(), keys: selection.join("\n"), frame: movedFrame(frame, translate(dx, dy)) };
-    syncControls();
-    showHandles();
+    const keys = inOrder(moved.keys);
+    // Con le stesse chiavi di prima e senza una cornice da ricordare, la
+    // scena nuova ha già rimesso a posto controlli e cornici: rifarlo
+    // sarebbe lo stesso lavoro due volte.
+    const settled = keys.join("\n") === selection.join("\n") && (frame === null || frame.matrix === IDENTITY);
+    selection = keys;
+    if (!settled) {
+      if (frame !== null && frame.matrix !== IDENTITY) kept = { index: currentIndex(), keys: selection.join("\n"), frame: movedFrame(frame, translate(dx, dy)) };
+      syncAll();
+    }
     announce(noted(noted(plural(units.length, "draw.moved.one", "draw.moved.other"), note), detachedNote(hooked)));
   };
 
@@ -7338,8 +7461,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // percorso che si avevano in mano seguono ciò che il ritaglio ha scritto.
     if (cropping !== null && !(keys.length === 1 && keys[0] === cropping.key)) keys = keys.map(settleCrop());
     selection = inOrder(keys);
-    syncControls();
-    showHandles();
+    syncAll();
+  }
+
+  /// I controlli e le cornici dopo un cambio di scelta, in un giro solo: la
+  /// misura del foglio si legge una volta e la barra si mette alla fine.
+  function syncAll(): void {
+    oneRound(() => {
+      syncControls();
+      showHandles();
+    });
   }
 
   // --- Il gruppo isolato -----------------------------------------------------
@@ -7927,7 +8058,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (guideCache !== null && guideCache.owner === owner && guideCache.index === index && guideCache.view === camera) return guideCache.guides;
     const targets: GuideTarget[] = [];
     if (smartOn()) {
-      const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
+      const size = surfaceSize();
+      const view = size.w > 0 && size.h > 0 ? viewBounds() : null;
       targets.push(...seenTargets(new Set(skip), openedBy(skip), view));
       // Con le tavole, ognuna fa da pagina.
       const list = boardsNow();
@@ -8871,7 +9003,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return slanted === null ? currentIndex().within(boxAround(from, end)) : currentIndex().inside(slanted.corners);
   };
 
-  const selectUpdate = (g: SelectGesture): void => {
+  const selectUpdate = (g: SelectGesture): void => readFirst(() => updateSelect(g));
+
+  const updateSelect = (g: SelectGesture): void => {
     if (g.from === null || g.end === null) return;
     if (g.mode === "pending") {
       const distance = Math.hypot(g.end[0] - g.from[0], g.end[1] - g.from[1]) * camera.scale;
@@ -9086,7 +9220,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (cached !== null && cached.owner === g && cached.index === index && cached.view === camera && cached.copying === copying) return cached.guides;
     const targets: GuideTarget[] = [];
     if (smartOn()) {
-      const view = surface.clientWidth > 0 && surface.clientHeight > 0 ? viewBounds() : null;
+      const size = surfaceSize();
+      const view = size.w > 0 && size.h > 0 ? viewBounds() : null;
       // La copia si allinea anche alla tavola da cui viene, che resta, e a
       // ciò che porta.
       targets.push(...seenTargets(new Set(copying ? [] : g.carried.map((unit) => unit.key)), [], view));
