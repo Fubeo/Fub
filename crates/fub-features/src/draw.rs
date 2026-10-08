@@ -1495,7 +1495,7 @@ fn write_pdf(
             Ok(tree) => tree,
             Err(reason) => return Ok(Outcome::Failed(reason)),
         };
-        let (chunk, root) = match svg2pdf::to_chunk(&tree, svg2pdf::ConversionOptions::default()) {
+        let (chunk, root) = match svg2pdf::to_chunk(&tree, pdf::options(&tree, CSS_DPI)) {
             Ok(converted) => converted,
             Err(error) => return failed(error.to_string()),
         };
@@ -1538,6 +1538,8 @@ mod pdf {
 
     use std::collections::{BTreeMap, VecDeque};
 
+    use resvg::usvg::{Group, Node, Transform, Tree};
+
     /// Il lato più lungo di una pagina in unità PDF: oltre, i lettori la
     /// tagliano, e la pagina dichiara un'unità più grande (`UserUnit`).
     const PAGE_MAX: f64 = 14_400.0;
@@ -1546,6 +1548,80 @@ mod pdf {
     /// Quanto possono annidarsi dizionari e array: `pdf-writer` ne scrive
     /// pochi livelli, e un pezzo che ne avesse di più non è suo.
     const DEPTH_MAX: usize = 64;
+    /// La risoluzione, in punti per pollice sulla pagina, degli effetti che
+    /// il PDF non sa disegnare, come le ombre e le sfocature: `svg2pdf` li
+    /// dipinge in un'immagine, e 300 è quella della stampa.
+    const EFFECTS_DPI: f32 = 300.0;
+    /// I pixel più grandi di un effetto dipinto: 4096 × 4096, 64 MB in
+    /// memoria. Se a [`EFFECTS_DPI`] un effetto ne avesse di più, la pagina
+    /// li dipinge tutti a una risoluzione più bassa, e l'export si fa.
+    const EFFECT_PIXELS_MAX: f32 = 16_777_216.0;
+
+    /// Le opzioni di `svg2pdf` per `tree`, che ha `units_per_inch` unità per
+    /// pollice: 96 un disegno, 72 le annotazioni di un PDF. `svg2pdf` dipinge
+    /// ogni gruppo con un filtro in un'immagine grande quanto la regione del
+    /// filtro, nelle coordinate di chi lo contiene, per `raster_scale`; una
+    /// scala sola vale per tutta la pagina, e si sceglie perché ogni effetto
+    /// abbia almeno [`EFFECTS_DPI`], anche dentro un gruppo ingrandito, finché
+    /// il più grande sta in [`EFFECT_PIXELS_MAX`].
+    pub(super) fn options(tree: &Tree, units_per_inch: f32) -> svg2pdf::ConversionOptions {
+        let base = EFFECTS_DPI / units_per_inch;
+        let mut effects = Effects::default();
+        effects.visit(tree.root(), Transform::default());
+        let wanted = if effects.magnified > 0.0 {
+            base * effects.magnified
+        } else {
+            base
+        };
+        let largest = effects.area * wanted * wanted;
+        svg2pdf::ConversionOptions {
+            raster_scale: if largest > EFFECT_PIXELS_MAX {
+                (EFFECT_PIXELS_MAX / effects.area).sqrt()
+            } else {
+                wanted
+            },
+            ..svg2pdf::ConversionOptions::default()
+        }
+    }
+
+    /// Ciò che conta dei filtri di un albero per la scala delle immagini.
+    #[derive(Default)]
+    struct Effects {
+        /// Quanto chi contiene un filtro lo ingrandisce sulla pagina, al
+        /// più: 0 senza filtri.
+        magnified: f32,
+        /// L'area più grande di una regione di filtro, nelle coordinate in
+        /// cui `svg2pdf` la dipinge.
+        area: f32,
+    }
+
+    impl Effects {
+        /// Visita `group`, che sta in coordinate che `outer` porta sulla
+        /// pagina. Un filtro dentro un filtro si dipinge col primo, e conta
+        /// soltanto per eccesso.
+        fn visit(&mut self, group: &Group, outer: Transform) {
+            if !group.filters().is_empty() {
+                if let Some(region) = group.layer_bounding_box().transform(group.transform()) {
+                    self.area = self.area.max(region.width() * region.height());
+                }
+                self.magnified = self.magnified.max(stretch(outer));
+            }
+            let inner = outer.pre_concat(group.transform());
+            for node in group.children() {
+                if let Node::Group(child) = node {
+                    self.visit(child, inner);
+                }
+            }
+        }
+    }
+
+    /// Quanto `transform` allunga al più un segmento: la più lunga delle
+    /// immagini dei due assi, che per una rotazione e una scala è esatta.
+    fn stretch(transform: Transform) -> f32 {
+        let x = transform.sx.hypot(transform.ky);
+        let y = transform.kx.hypot(transform.sy);
+        x.max(y)
+    }
 
     /// Un valore PDF. I numeri, i nomi e le stringhe restano i byte scritti,
     /// perché si riscrivono tali e quali.
@@ -2568,5 +2644,99 @@ mod tests {
             text.contains("/Title <FEFF004300690074007400E00020002800310029>"),
             "{text}"
         );
+    }
+
+    /// Le misure delle immagini che `svg2pdf` dipinge per gli effetti di
+    /// `svg`, che ha `units_per_inch` unità per pollice: `/Width` e
+    /// `/Height` di ogni immagine, e della sua trasparenza.
+    fn painted(svg: &str, units_per_inch: f32) -> Vec<(u32, u32)> {
+        let tree = Tree::from_str(svg, &usvg::Options::default()).unwrap();
+        let (chunk, _) = svg2pdf::to_chunk(&tree, pdf::options(&tree, units_per_inch)).unwrap();
+        let text = String::from_utf8_lossy(chunk.as_bytes());
+        let read = |key: &str| -> Vec<u32> {
+            text.match_indices(key)
+                .map(|(at, _)| {
+                    let digits = text[at + key.len()..]
+                        .split(|c: char| !c.is_ascii_digit())
+                        .next()
+                        .unwrap();
+                    digits.parse().unwrap()
+                })
+                .collect()
+        };
+        read("/Width ").into_iter().zip(read("/Height ")).collect()
+    }
+
+    /// Un disegno con un'ombra la cui regione è di 96 × 48 unità, dentro
+    /// `wrap` (`{}` è il posto dell'oggetto).
+    fn shadowed(size: f32, wrap: &str) -> String {
+        let object =
+            r##"<rect x="20" y="20" width="60" height="20" fill="#336699" filter="url(#f)"/>"##;
+        format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}"><filter id="f" filterUnits="userSpaceOnUse" x="10" y="10" width="96" height="48" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="2"/></filter>{}</svg>"##,
+            wrap.replace("{}", object)
+        )
+    }
+
+    #[test]
+    fn effects_are_painted_at_300_dpi_on_the_page() {
+        // 96 pixel CSS sono un pollice: 300 pixel dipinti.
+        let plain = painted(&shadowed(400.0, "{}"), CSS_DPI);
+        assert!(!plain.is_empty());
+        assert!(plain.iter().all(|&size| size == (300, 150)), "{plain:?}");
+
+        // Un gruppo che ingrandisce due volte: la regione, nelle coordinate
+        // del gruppo, si dipinge col doppio dei pixel.
+        let doubled = painted(
+            &shadowed(400.0, r#"<g transform="scale(2)">{}</g>"#),
+            CSS_DPI,
+        );
+        assert!(
+            doubled.iter().all(|&size| size == (600, 300)),
+            "{doubled:?}"
+        );
+
+        // Una rotazione non ingrandisce.
+        let turned = painted(
+            &shadowed(400.0, r#"<g transform="rotate(90 200 200)">{}</g>"#),
+            CSS_DPI,
+        );
+        assert!(turned.iter().all(|&size| size == (300, 150)), "{turned:?}");
+
+        // Le annotazioni di un PDF sono in punti: 72 per pollice.
+        let svg =
+            shadowed(400.0, "{}").replace(r#"width="96" height="48""#, r#"width="72" height="36""#);
+        let points = painted(&svg, 72.0);
+        assert!(points.iter().all(|&size| size == (300, 150)), "{points:?}");
+    }
+
+    #[test]
+    fn blending_stays_vector_in_the_pdf() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><g style="isolation: isolate"><rect width="60" height="60" fill="#56b4e9"/><circle cx="60" cy="60" r="30" fill="#e69f00" style="mix-blend-mode: multiply"/></g></svg>"##;
+        let tree = Tree::from_str(svg, &usvg::Options::default()).unwrap();
+        let (chunk, _) = svg2pdf::to_chunk(&tree, pdf::options(&tree, CSS_DPI)).unwrap();
+        let text = String::from_utf8_lossy(chunk.as_bytes());
+        assert!(text.contains("/BM /Multiply"), "{text}");
+        // Nessuna immagine: la fusione non si dipinge.
+        assert!(!text.contains("/Subtype /Image"), "{text}");
+    }
+
+    #[test]
+    fn a_huge_effect_lowers_the_resolution_and_the_export_still_happens() {
+        let options = |svg: &str| {
+            let tree = Tree::from_str(svg, &usvg::Options::default()).unwrap();
+            pdf::options(&tree, CSS_DPI).raster_scale
+        };
+        // Senza effetti la scala non conta, e resta quella dei 300 dpi.
+        let none = r#"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>"#;
+        assert_eq!(options(none), 300.0 / 96.0);
+        // Una regione di 20 000 × 20 000 unità avrebbe 3,9 miliardi di
+        // pixel: si dipinge con 4096 × 4096.
+        let huge = shadowed(20_000.0, "{}").replace(
+            r#"width="96" height="48""#,
+            r#"width="20000" height="20000""#,
+        );
+        let scale = options(&huge);
+        assert!((20_000.0 * scale - 4096.0).abs() < 0.01, "{scale}");
     }
 }

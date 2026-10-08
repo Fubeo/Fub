@@ -14,10 +14,13 @@ use super::copy::Copier;
 use super::geometry::Matrix;
 use crate::draw::pdf;
 
+/// Le unità delle annotazioni sono i punti della pagina, 72 per pollice.
+const POINTS_PER_INCH: f32 = 72.0;
+
 /// Converte `tree` e ne copia gli oggetti in `into`: il risultato è lo
 /// XObject della radice, un quadrato di lato 1 con il disegno dentro.
 pub(super) fn convert(tree: &Tree, into: &mut Document) -> Result<ObjectId, String> {
-    let (chunk, root) = svg2pdf::to_chunk(tree, svg2pdf::ConversionOptions::default())
+    let (chunk, root) = svg2pdf::to_chunk(tree, pdf::options(tree, POINTS_PER_INCH))
         .map_err(|error| format!("the annotations could not be converted to PDF: {error}"))?;
     let root = u32::try_from(root.get()).map_err(|_| "invalid root object".to_string())?;
     let mut objects = pdf::canonical(pdf::parse(chunk.as_bytes())?, root, 2)?;

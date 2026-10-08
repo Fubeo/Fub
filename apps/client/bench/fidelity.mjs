@@ -10,9 +10,9 @@
 // sempre un errore, qualunque sia il sistema. Prima del corpus il banco
 // prova sé stesso: una differenza messa apposta in una strada sola, un
 // colore, un carattere, un corsivo, un tratteggio, le risorse, i campioni,
-// le sfumature, le punte, i ritagli e le maschere che mancano, le carte
-// delle tavole che mancano, una tavola mostrata senza ritaglio, deve farlo
-// diventare rosso.
+// le sfumature, le punte, i ritagli e le maschere, gli effetti e le fusioni
+// che mancano, le carte delle tavole che mancano, una tavola mostrata senza
+// ritaglio, deve farlo diventare rosso.
 //
 // # La soglia
 //
@@ -23,6 +23,14 @@
 // Chromium le tre strade danno oggi gli stessi pixel su ogni scena, e la più
 // piccola delle differenze messe apposta, il tratteggio tolto, ne cambia il
 // 3%: lo 0,2% sta largo fra le due, e lascia posto a un altro browser.
+//
+// Le sfocature degli effetti hanno una soglia di colore loro, più stretta.
+// Una sfocatura sbagliata cambia di poco molti pixel, e la soglia di colore
+// di `pixelmatch`, 0,1, li lascia passare: con le sfocature di un decimo più
+// corte la scena «effetti» cambierebbe lo 0,008% dei pixel. Con 0,02 ne
+// cambia il 2,4%, e con un ventesimo lo 0,5%, mentre le tre strade, che
+// sfocano ciascuna da sé, danno in Chromium ancora gli stessi pixel. La
+// differenza messa apposta `sfocatura` lo prova.
 //
 // # Gli a capo
 //
@@ -44,6 +52,9 @@ import { openStage, OUTPUT } from "./stage.mjs";
 /// cambiare (vedi sopra).
 const THRESHOLD = 0.1;
 const LIMIT = 0.002;
+/// La soglia di colore delle scene con le sfocature (vedi sopra).
+const BLUR_THRESHOLD = 0.02;
+const BLURRED = new Set(["effetti"]);
 /// Le differenze messe apposta, ciascuna su una scena che la mostra.
 const PLANTED = [
   ["forme", "colore"],
@@ -55,6 +66,9 @@ const PLANTED = [
   ["sfumature", "ripiego"],
   ["punte", "ripiego"],
   ["ritagli", "ripiego"],
+  ["effetti", "ripiego"],
+  ["effetti", "fusione"],
+  ["effetti", "sfocatura"],
   ["tavole", "carta"],
   ["tavola-sola", "ritaglio"],
 ];
@@ -76,7 +90,7 @@ try {
     for (const road of ROADS) {
       const { width, height } = shots.surface;
       const diff = new PNG({ width, height });
-      const count = pixelmatch(shots.surface.data, shots[road].data, diff.data, width, height, { threshold: THRESHOLD });
+      const count = pixelmatch(shots.surface.data, shots[road].data, diff.data, width, height, { threshold: BLURRED.has(scene) ? BLUR_THRESHOLD : THRESHOLD });
       result[road] = { share: count / (width * height), diff, shots };
     }
     return result;

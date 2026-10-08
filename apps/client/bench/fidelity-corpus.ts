@@ -249,6 +249,32 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<ellipse id="o9" cx="180" cy="139" rx="60" ry="22" fill="#56b4e9" stroke="#1a202c" stroke-width="4"/></g>'),
   },
   {
+    // Gli effetti e le fusioni come li scrive FubDraw: un'ombra esterna,
+    // un'ombra interna, un bagliore esterno su un testo, un bagliore interno
+    // con un'ombra, un'immagine sfocata, e tre effetti con la sfocatura su
+    // tutto; in un gruppo isolato un cerchio che moltiplica, e in un livello
+    // sopra un rettangolo che scherma ciò che c'è sotto, e il vuoto.
+    id: "effetti",
+    text: scene('<defs id="fub-defs">'
+      + '<filter id="x1" fub:role="private" x="6" y="8" width="78" height="62" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" result="b1" stdDeviation="3"/><feOffset dx="3" dy="5" in="b1" result="o1"/><feFlood flood-color="#000000" flood-opacity="0.5"/><feComposite in2="o1" result="e1" operator="in"/><feMerge><feMergeNode in="e1"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
+      + '<filter id="x2" fub:role="private" x="73" y="-1" width="90" height="74" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feColorMatrix in="SourceAlpha" result="a1" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1 1"/><feGaussianBlur in="a1" result="b1" stdDeviation="3"/><feOffset dx="2" dy="4" in="b1" result="o1"/><feFlood flood-color="#000000" flood-opacity="0.6"/><feComposite in2="o1" operator="in"/><feComposite in2="SourceAlpha" result="e1" operator="in"/><feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="e1"/></feMerge></filter>'
+      + '<filter id="x3" fub:role="private" x="136" y="2.5" width="110.4" height="67.5" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" result="b1" stdDeviation="3"/><feFlood flood-color="#e69f00" flood-opacity="0.9"/><feComposite in2="b1" result="e1" operator="in"/><feMerge><feMergeNode in="e1"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
+      + '<filter id="x4" fub:role="private" x="-6" y="68" width="92" height="86" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feColorMatrix in="SourceAlpha" result="a1" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1 1"/><feGaussianBlur in="a1" result="b1" stdDeviation="4"/><feFlood flood-color="#ffffff" flood-opacity="0.9"/><feComposite in2="b1" operator="in"/><feComposite in2="SourceAlpha" result="e1" operator="in"/><feGaussianBlur in="SourceAlpha" result="b2" stdDeviation="2"/><feOffset dx="0" dy="2" in="b2" result="o2"/><feFlood flood-color="#1a202c" flood-opacity="0.4"/><feComposite in2="o2" result="e2" operator="in"/><feMerge><feMergeNode in="e2"/><feMergeNode in="SourceGraphic"/><feMergeNode in="e1"/></feMerge></filter>'
+      + '<filter id="x5" fub:role="private" x="79" y="83" width="54" height="54" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="1"/></filter>'
+      + '<filter id="x6" fub:role="private" x="179.5" y="66" width="60.5" height="57.5" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" result="b1" stdDeviation="2"/><feOffset dx="-3" dy="4" in="b1" result="o1"/><feFlood flood-color="#000000" flood-opacity="0.5"/><feComposite in2="o1" result="e1" operator="in"/><feGaussianBlur in="SourceAlpha" result="b2" stdDeviation="1.5"/><feFlood flood-color="#56b4e9" flood-opacity="1"/><feComposite in2="b2" result="e2" operator="in"/><feMerge><feMergeNode in="e1"/><feMergeNode in="e2"/><feMergeNode in="SourceGraphic"/></feMerge><feGaussianBlur stdDeviation="0.5"/></filter>'
+      + '</defs><g id="l1" fub:layer="Livello 1">'
+      + '<rect id="f1" x="14" y="14" width="56" height="40" rx="6" fill="#0072b2" filter="url(#x1)" fub:effect="shadow 3 5 6 #000000 0.5"/>'
+      + '<ellipse id="f2" cx="118" cy="36" rx="30" ry="22" fill="#f0e442" filter="url(#x2)" fub:effect="inner-shadow 2 4 6 #000000 0.6"/>'
+      + '<text id="f3" x="160" y="46" fill="#1a202c" filter="url(#x3)" font-family="Inter" font-size="26" font-weight="700" fub:effect="glow 6 #e69f00 0.9"><tspan x="160" dy="0">Luce</tspan></text>'
+      + '<polygon id="f4" points="40,82 49,104 72,104 54,118 61,140 40,127 19,140 26,118 8,104 31,104" fill="#cc79a7" filter="url(#x4)" fub:effect="inner-glow 8 #ffffff 0.9; shadow 0 2 4 #1a202c 0.4"/>'
+      + `<image id="f5" x="84" y="88" width="44" height="44" filter="url(#x5)" href="${CHECKER}" fub:effect="blur 2"/>`
+      + '<g id="f6" style="isolation: isolate">'
+      + '<rect id="f7" x="140" y="86" width="44" height="44" fill="#56b4e9"/><circle id="f8" cx="180" cy="120" r="22" fill="#e69f00" style="mix-blend-mode: multiply"/></g>'
+      + '<rect id="f9" x="196" y="78" width="32" height="28" fill="#009e73" stroke="#1a202c" stroke-width="2" filter="url(#x6)" fub:effect="shadow -3 4 4 #000000 0.5; glow 3 #56b4e9 1; blur 1"/></g>'
+      + '<g id="l2" fub:layer="Sopra">'
+      + '<rect id="f10" x="190" y="112" width="44" height="36" fill="#d55e00" style="mix-blend-mode: screen"/></g>'),
+  },
+  {
     // Tre tavole: due con la carta, bianca e azzurra, una senza, che mostra
     // il fondo. Le forme stanno sulle tavole, il testo su quella senza carta,
     // e un rettangolo passa sopra lo spazio fra le prime due.
