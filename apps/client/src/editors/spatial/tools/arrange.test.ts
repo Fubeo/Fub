@@ -10,6 +10,7 @@ import { alignOps, boundsOf, distributeOps, duplicateOps, elemOf, groupOps, isLi
 import { gesture, NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { LAYER, open, type Opened } from "./test-support";
+import { attrOf } from "./tip-support";
 
 const ids = (opened: Opened): NewIds => new NewIds((id) => opened.engine.holder(id) !== null);
 
@@ -479,5 +480,128 @@ describe("allineare e distribuire", () => {
   it("con meno di tre oggetti non distribuisce", () => {
     const opened = open(SOURCE);
     expect(distributeOps(opened.index.units.slice(0, 2), "y", ids(opened)).ops).toEqual([]);
+  });
+});
+
+describe("duplicare i connettori", () => {
+  const ENDS = ' fub:from="oaaaaaaaa right" fub:to="obbbbbbbb left"';
+  /// Un connettore dritto fra due rettangoli messi l'uno accanto all'altro.
+  const CONNECTOR = (id: string, ends = ENDS): string =>
+    `<path id="${id}" fub:shape="connector" fub:geom="straight 10 5 40 5"${ends} d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2"/>`;
+  /// Un'etichetta del connettore `occcccccc`, a metà della linea.
+  const LABEL = (id: string, along = "occcccccc 0.5000 4.00"): string =>
+    `<text id="${id}" fub:along="${along}" x="0" y="0" text-anchor="middle" transform="matrix(1 0 0 1 25 1)"><tspan x="0" dy="0">sì</tspan></text>`;
+  const PAIR = `${RECT("oaaaaaaaa", 0)}${RECT("obbbbbbbb", 40)}`;
+  const source = (...parts: string[]): Opened => open(doc(`${LAYER}${PAIR}${parts.join("")}</g>`));
+
+  /// Duplica gli oggetti `wanted`, e dà gli id delle copie nell'ordine del disegno.
+  function duplicated(opened: Opened, ...wanted: string[]): string[] {
+    const arranged = duplicateOps(opened.engine.model!, units(opened, ...wanted), 24, 24, ids(opened))!;
+    applied(opened, arranged);
+    return [...arranged.keys];
+  }
+
+  it("il connettore copiato con i suoi due oggetti punta alle copie, e tiene i punti d'aggancio", () => {
+    const opened = source(CONNECTOR("occcccccc"));
+    const [a, b, c] = duplicated(opened, "oaaaaaaaa", "obbbbbbbb", "occcccccc") as [string, string, string];
+    expect(attrOf(opened, c, "fub:from")).toBe(`${a} right`);
+    expect(attrOf(opened, c, "fub:to")).toBe(`${b} left`);
+    // La geometria resta quella dell'originale: la ricalcola il seguito dei connettori.
+    expect(attrOf(opened, c, "fub:geom")).toBe("straight 10 5 40 5");
+    expect(attrOf(opened, c, "d")).toBe("M10 5 L40 5");
+    expect(attrOf(opened, c, "transform")).toBe("matrix(1 0 0 1 24 24)");
+    // L'originale non cambia.
+    expect(attrOf(opened, "occcccccc", "fub:from")).toBe("oaaaaaaaa right");
+    expect(attrOf(opened, "occcccccc", "fub:to")).toBe("obbbbbbbb left");
+  });
+
+  it("con un solo dei due oggetti, un capo è alla copia e l'altro è libero", () => {
+    const opened = source(CONNECTOR("occcccccc"));
+    const [a, c] = duplicated(opened, "oaaaaaaaa", "occcccccc") as [string, string];
+    expect(attrOf(opened, c, "fub:from")).toBe(`${a} right`);
+    expect(attrOf(opened, c, "fub:to")).toBeNull();
+    const second = source(CONNECTOR("occcccccc"));
+    const [b, d] = duplicated(second, "obbbbbbbb", "occcccccc") as [string, string];
+    expect(attrOf(second, d, "fub:from")).toBeNull();
+    expect(attrOf(second, d, "fub:to")).toBe(`${b} left`);
+    // Le copie restano connettori: la forma e la geometria ci sono ancora.
+    expect(attrOf(second, d, "fub:shape")).toBe("connector");
+    expect(attrOf(second, d, "fub:geom")).toBe("straight 10 5 40 5");
+  });
+
+  it("il connettore da solo ha i due capi liberi, e l'originale resta agganciato", () => {
+    const opened = source(CONNECTOR("occcccccc"));
+    const [c] = duplicated(opened, "occcccccc") as [string];
+    expect(attrOf(opened, c, "fub:from")).toBeNull();
+    expect(attrOf(opened, c, "fub:to")).toBeNull();
+    expect(attrOf(opened, c, "fub:shape")).toBe("connector");
+    expect(attrOf(opened, "occcccccc", "fub:from")).toBe("oaaaaaaaa right");
+    expect(opened.engine.text.match(/fub:from="/g)).toHaveLength(1);
+  });
+
+  it("copiando gli oggetti senza il connettore, quello che c'è resta agganciato agli originali", () => {
+    const opened = source(CONNECTOR("occcccccc"));
+    duplicated(opened, "oaaaaaaaa", "obbbbbbbb");
+    expect(opened.engine.text.match(/fub:from="oaaaaaaaa right"/g)).toHaveLength(1);
+    expect(opened.engine.text.match(/fub:to="obbbbbbbb left"/g)).toHaveLength(1);
+  });
+
+  it("un gruppo copiato porta i suoi oggetti e il connettore che li unisce", () => {
+    const opened = open(doc(`${LAYER}<g id="ogggggggg">${PAIR}${CONNECTOR("occcccccc")}${LABEL("odddddddd")}</g></g>`));
+    const [group] = duplicated(opened, "ogggggggg") as [string];
+    const text = rawOf(opened.engine.holder(group)!);
+    const found = [...text.matchAll(/<(rect|path|text) id="([^"]+)"/g)].map((match) => match[2]!);
+    const [a, b, c, label] = found as [string, string, string, string];
+    expect(new Set([a, b, c, label, "oaaaaaaaa", "obbbbbbbb", "occcccccc", "odddddddd"]).size).toBe(8);
+    expect(attrOf(opened, c, "fub:from")).toBe(`${a} right`);
+    expect(attrOf(opened, c, "fub:to")).toBe(`${b} left`);
+    expect(attrOf(opened, label, "fub:along")).toBe(`${c} 0.5000 4.00`);
+  });
+
+  it("un connettore in un gruppo, con gli oggetti fuori, segue le copie se si copia tutto", () => {
+    const opened = open(doc(`${LAYER}${PAIR}<g id="ogggggggg">${CONNECTOR("occcccccc")}</g></g>`));
+    const [a, b, group] = duplicated(opened, "oaaaaaaaa", "obbbbbbbb", "ogggggggg") as [string, string, string];
+    const connector = /<path id="([^"]+)"/.exec(rawOf(opened.engine.holder(group)!))![1]!;
+    expect(connector).not.toBe("occcccccc");
+    expect(attrOf(opened, connector, "fub:from")).toBe(`${a} right`);
+    expect(attrOf(opened, connector, "fub:to")).toBe(`${b} left`);
+    // Il gruppo copiato da solo libera i capi: gli oggetti non sono copiati.
+    const alone = open(doc(`${LAYER}${PAIR}<g id="ogggggggg">${CONNECTOR("occcccccc")}</g></g>`));
+    const [only] = duplicated(alone, "ogggggggg") as [string];
+    const free = /<path id="([^"]+)"/.exec(rawOf(alone.engine.holder(only)!))![1]!;
+    expect(attrOf(alone, free, "fub:from")).toBeNull();
+    expect(attrOf(alone, free, "fub:to")).toBeNull();
+  });
+
+  it("l'etichetta copiata con il suo connettore lo nomina, e tiene `t` e la distanza com'erano scritti", () => {
+    const opened = source(CONNECTOR("occcccccc"), LABEL("odddddddd"));
+    const [, , c, label] = duplicated(opened, "oaaaaaaaa", "obbbbbbbb", "occcccccc", "odddddddd") as [string, string, string, string];
+    expect(attrOf(opened, label, "fub:along")).toBe(`${c} 0.5000 4.00`);
+    expect(attrOf(opened, "odddddddd", "fub:along")).toBe("occcccccc 0.5000 4.00");
+  });
+
+  it("l'etichetta copiata senza il suo connettore è un testo qualunque, col suo posto", () => {
+    const opened = source(CONNECTOR("occcccccc"), LABEL("odddddddd"));
+    const [label] = duplicated(opened, "odddddddd") as [string];
+    expect(attrOf(opened, label, "fub:along")).toBeNull();
+    expect(attrOf(opened, label, "transform")).toBe("matrix(1 0 0 1 49 25)");
+    expect(attrOf(opened, "odddddddd", "fub:along")).toBe("occcccccc 0.5000 4.00");
+  });
+
+  it("un valore fuori grammatica resta com'è", () => {
+    const opened = source(
+      CONNECTOR("occcccccc", ' fub:from="oaaaaaaaa sopra" fub:to="obbbbbbbb"'),
+      LABEL("odddddddd", "occcccccc 2 4"),
+    );
+    const [, , c, label] = duplicated(opened, "oaaaaaaaa", "obbbbbbbb", "occcccccc", "odddddddd") as [string, string, string, string];
+    expect(attrOf(opened, c, "fub:from")).toBe("oaaaaaaaa sopra");
+    expect(attrOf(opened, c, "fub:to")).toBe("obbbbbbbb");
+    expect(attrOf(opened, label, "fub:along")).toBe("occcccccc 2 4");
+  });
+
+  it("l'id nominato che l'oggetto non ha non diventa quello di una copia", () => {
+    const opened = source(CONNECTOR("occcccccc", ' fub:from="onessuno1 top" fub:to="obbbbbbbb left"'));
+    const [, c] = duplicated(opened, "obbbbbbbb", "occcccccc") as [string, string];
+    expect(attrOf(opened, c, "fub:from")).toBeNull();
   });
 });

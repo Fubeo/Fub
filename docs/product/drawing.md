@@ -101,8 +101,8 @@ Lo Standard aggiunge:
   e spessori suoi, 8, 16 e 24 unità, e la penna ritrova i propri quando torna;
 - le **forme dal tratto**: un tratto a penna tenuto fermo alla fine diventa
   una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md));
-- il **Poligono** (`Y`), dopo la freccia: poligoni regolari e stelle che si
-  cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md));
+- il **Connettore** (`X`), dopo la freccia: una linea che unisce due oggetti e li segue ([Disegni, connettori](drawing-connectors.md));
+- il **Poligono** (`Y`), dopo il Connettore: poligoni regolari e stelle che si cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md));
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
   tre cifre o senza `#`, o il selettore del sistema. Il colore resta come un
   anello in più col codice per nome, che dice se sul bianco sta sotto il 3:1;
@@ -122,9 +122,9 @@ Lo Standard aggiunge:
   con la sua correzione, e l'ordine di lettura ([Disegni, accessibilità](drawing-accessibility.md)).
 
 Tornati all'Essenziale, ciò che lo Standard aggiunge sparisce dalla barra:
-chi aveva in mano l'evidenziatore o il Poligono riprende la penna, chi aveva
-il Lazo, la Tavola, il Contagocce o la Sfumatura la Selezione, un colore a
-piacere torna al colore di partenza e la vista girata si raddrizza.
+chi aveva in mano l'evidenziatore, il Connettore o il Poligono riprende la penna,
+chi aveva il Lazo, la Tavola, il Contagocce o la Sfumatura la Selezione, un
+colore a piacere torna al colore di partenza e la vista girata si raddrizza.
 
 ## Disporre
 

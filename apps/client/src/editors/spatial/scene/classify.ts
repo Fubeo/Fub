@@ -25,6 +25,7 @@ import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "..
 import { InkError } from "../ink/sample";
 import { Context, isContainer, Tally, type Role, type Stroke, type Swatches, type Tool } from "./analysis";
 import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
+import { readConnectorEnd, readConnectorGeom, readLabelPlace, type ConnectorEnd, type ConnectorGeom, type LabelPlace } from "./connectors";
 import { parsePath } from "./geometry";
 import { readPolygonal, type Polygonal } from "./parametric";
 import { readVarWidth, type VarWidth } from "./varwidth";
@@ -87,6 +88,14 @@ export interface RootItem extends Span {
   readonly tags: Tags;
 }
 
+/// Un connettore letto: il percorso di `fub:geom` e i due capi, `null` per
+/// un capo libero o scritto fuori dalla grammatica.
+export interface ConnectorFacts {
+  readonly geom: ConnectorGeom;
+  readonly from: ConnectorEnd | null;
+  readonly to: ConnectorEnd | null;
+}
+
 /// Un elemento modificabile.
 export interface ElementItem extends Span {
   readonly kind: "element";
@@ -112,6 +121,9 @@ export interface ElementItem extends Span {
   readonly stroke?: Stroke;
   /// `x1 y1 x2 y2` di una freccia.
   readonly arrow?: readonly [number, number, number, number];
+  /// Il percorso e gli agganci di un connettore (formato della scena,
+  /// connettori).
+  readonly connector?: ConnectorFacts;
   /// La geometria di un poligono regolare o di una stella: `fub:geom` letto.
   readonly polygonal?: Polygonal;
   /// La geometria di un contorno a spessore variabile: `fub:geom` letto.
@@ -131,6 +143,9 @@ export interface ElementItem extends Span {
   readonly wrap?: number;
   /// L'id del tracciato che un testo segue (formato della scena, testo).
   readonly textPath?: string;
+  /// Il connettore di cui un testo è l'etichetta, e dove sta: `fub:along`
+  /// letto (formato della scena, connettori).
+  readonly along?: LabelPlace;
   /// Come vive una risorsa, da `fub:role` (formato della scena, risorse).
   readonly lifecycle?: Lifecycle;
   /// Il nome e il colore di un campione del documento.
@@ -1167,6 +1182,7 @@ function pathRole(element: ElementNode): Role {
   // tracciato: la geometria si legge da `d` (§6).
   const shape = valueOf(element, NS_FUB, "shape");
   if (shape === "arrow" && arrowGeometry(element) !== null) return "arrow";
+  if (shape === "connector" && connectorGeometry(element) !== null) return "connector";
   if (polygonalGeometry(element) !== null) return shape === "star" ? "star" : "ngon";
   if (widthGeometry(element) !== null) return "width";
   return "path";
@@ -1184,6 +1200,18 @@ function polygonalGeometry(element: ElementNode): Polygonal | null {
 function widthGeometry(element: ElementNode): VarWidth | null {
   const geom = valueOf(element, NS_FUB, "geom");
   return geom === undefined || valueOf(element, NS_FUB, "shape") !== "width" ? null : readVarWidth(geom);
+}
+
+/// `fub:geom` di un connettore, se si legge.
+function connectorGeometry(element: ElementNode): ConnectorGeom | null {
+  const geom = valueOf(element, NS_FUB, "geom");
+  return geom === undefined ? null : readConnectorGeom(geom);
+}
+
+/// Un capo di un connettore, `fub:from` o `fub:to`, se si legge.
+function connectorEnd(element: ElementNode, name: "from" | "to"): ConnectorEnd | null {
+  const value = valueOf(element, NS_FUB, name);
+  return value === undefined ? null : readConnectorEnd(value);
 }
 
 /// `fub:geom` di una freccia: quattro numeri SVG.
@@ -1207,6 +1235,7 @@ export interface Details {
   readonly hidden?: true;
   readonly stroke?: Stroke;
   readonly arrow?: readonly [number, number, number, number];
+  readonly connector?: ConnectorFacts;
   readonly polygonal?: Polygonal;
   readonly varwidth?: VarWidth;
   /// Il nome di un'unità, come [`ElementItem.title`]. Quello di un
@@ -1217,6 +1246,7 @@ export interface Details {
   readonly lines?: readonly string[];
   readonly wrap?: number;
   readonly textPath?: string;
+  readonly along?: LabelPlace;
   readonly lifecycle?: Lifecycle;
   readonly swatch?: SwatchFacts;
   readonly motif?: MotifFacts;
@@ -1332,6 +1362,10 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     const arrow = arrowGeometry(element);
     if (arrow !== null) details.arrow = arrow;
   }
+  if (role === "connector") {
+    const geom = connectorGeometry(element);
+    if (geom !== null) details.connector = { geom, from: connectorEnd(element, "from"), to: connectorEnd(element, "to") };
+  }
   if (role === "ngon" || role === "star") {
     const polygonal = polygonalGeometry(element);
     if (polygonal !== null) details.polygonal = polygonal;
@@ -1357,6 +1391,9 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
       const width = wrap === undefined ? null : wrapWidth(wrap);
       if (width !== null) details.wrap = width;
     }
+    const along = valueOf(element, NS_FUB, "along");
+    const place = along === undefined ? null : readLabelPlace(along);
+    if (place !== null) details.along = place;
   }
   return { details, problems };
 }
@@ -1378,6 +1415,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.hidden !== undefined) item.hidden = details.hidden;
   if (details.stroke !== undefined) item.stroke = details.stroke;
   if (details.arrow !== undefined) item.arrow = details.arrow;
+  if (details.connector !== undefined) item.connector = details.connector;
   if (details.polygonal !== undefined) item.polygonal = details.polygonal;
   if (details.varwidth !== undefined) item.varwidth = details.varwidth;
   if (details.title !== undefined) item.title = details.title;
@@ -1385,6 +1423,7 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.lines !== undefined) item.lines = details.lines;
   if (details.wrap !== undefined) item.wrap = details.wrap;
   if (details.textPath !== undefined) item.textPath = details.textPath;
+  if (details.along !== undefined) item.along = details.along;
   if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
   if (details.swatch !== undefined) item.swatch = details.swatch;
   if (details.motif !== undefined) item.motif = details.motif;

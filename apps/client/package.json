@@ -19,6 +19,7 @@
     "bench:a11y": "node bench/a11y.mjs",
     "bench:fidelity": "node bench/fidelity.mjs",
     "bench:boards": "node bench/boards.mjs",
+    "bench:connectors": "node bench/connectors.mjs",
     "theme:generate": "node theme/generate.mjs",
     "theme:verify": "node theme/generate.mjs --verify"
   },

@@ -23,18 +23,23 @@
 //   passo; le risorse private che usa le ha copiate anche lui, e quelle
 //   condivise le condivide. Un oggetto con parti estranee non si duplica,
 //   perché un'operazione non le sa scrivere.
+// - **I connettori seguono le copie.** Un connettore copiato con gli oggetti
+//   a cui è agganciato, e un'etichetta con il suo connettore, nominano le
+//   copie; senza, il capo è libero e l'etichetta un testo qualunque
+//   (`connector-copies.ts`).
 // - **Allineare e distribuire** spostano soltanto, sui riquadri che si vedono,
 //   contorno compreso; gli spostamenti si arrotondano come quelli a mano.
 
 import type { Bounds } from "../scene/geometry";
 import type { IdKind } from "../scene/ids";
 import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
-import { declarationsOf, elementChildren, parseFragment, pathOf, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
-import { ROOT, type Op, type Pos, type Target } from "../scene/ops";
+import { declarationsOf, elementChildren, HEADS, parseFragment, pathOf, scopeKey, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Head } from "../scene/model";
+import { ROOT, type AddOp, type Op, type Pos, type Target } from "../scene/ops";
 import { NamespaceScope, type Elem, type Run } from "../scene/serialize";
 import { href as parseHref, opacity as parseOpacity, transform as parseTransform } from "../scene/values";
 import { FUB_NS, NS_SVG, SVG_NS, XLINK_NS, XML_URI, type ElementNode, type XmlDocument } from "../scene/xml";
 import { formatNumber } from "../number";
+import { relinkCopies } from "./connector-copies";
 import { moveOps, movedMatrix, roundDelta, transformValue, type Moved, type NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { holdsEffect, ResourceCopies } from "./resources";
@@ -141,12 +146,20 @@ function sameMatrix(a: Matrix, b: Matrix): boolean {
 // ---------------------------------------------------------------------------
 
 /// Il tag d'apertura di `node` letto da solo, nello scope del genitore; la
-/// radice non ne ha.
-export function readHead(node: ElementPart): { readonly doc: XmlDocument; readonly element: ElementNode } | null {
+/// radice non ne ha. Chi lo riceve non lo cambia. I tag già letti stanno in
+/// [`HEADS`]: chi li chiede due volte per lo stesso testo, e nello stesso
+/// scope, non li rilegge. Un connettore che segue ne chiede tre, e
+/// un'operazione su duecento oggetti ne chiede migliaia.
+export function readHead(node: ElementPart): Head {
   const raw = node.kind === "leaf" ? node.raw : node.tail === null ? node.head : `${node.head}</${node.facts.name}>`;
-  const fragment = parseFragment(raw, node.parent === null ? NamespaceScope.EMPTY : scopeOf(node.parent));
-  if (fragment === null) return null;
-  return { doc: fragment.doc, element: fragment.doc.element(fragment.id)! };
+  const scope = node.parent === null ? NamespaceScope.EMPTY : scopeOf(node.parent);
+  const key = scopeKey(scope);
+  const known = HEADS.get(node);
+  if (known !== undefined && known.raw === raw && known.scope === key) return known.head;
+  const fragment = parseFragment(raw, scope);
+  const head: Head = fragment === null ? null : { doc: fragment.doc, element: fragment.doc.element(fragment.id)! };
+  HEADS.set(node, { raw, scope: key, head });
+  return head;
 }
 
 /// Il nome di un attributo come lo scrive un'operazione; `null` se non ha un
@@ -275,12 +288,18 @@ function elemIn(node: ElementPart, scope: NamespaceScope): Elem | null {
 }
 
 /// `elem` con id nuovi, che il motore chiede a ogni elemento aggiunto: solo
-/// titoli, descrizioni e righe di testo possono restare senza.
-export function renamed(elem: Elem, ids: NewIds): Elem {
+/// titoli, descrizioni e righe di testo possono restare senza. Con `made`,
+/// l'id che ciascuno aveva e quello che prende, anche nei discendenti, perché
+/// chi nomina un oggetto per id possa seguirne la copia.
+export function renamed(elem: Elem, ids: NewIds, made?: Map<string, string>): Elem {
   const attrs = { ...elem.attrs };
-  if (attrs.id !== undefined || !TEXT_TAGS.has(elem.tag)) attrs.id = ids.next("object");
+  if (attrs.id !== undefined || !TEXT_TAGS.has(elem.tag)) {
+    const id = ids.next("object");
+    if (attrs.id !== undefined) made?.set(attrs.id, id);
+    attrs.id = id;
+  }
   const out: { tag: string; attrs: Record<string, string>; children?: Elem[]; text?: string | null; runs?: readonly Run[] } = { tag: elem.tag, attrs };
-  if (elem.children !== undefined) out.children = elem.children.map((child) => renamed(child, ids));
+  if (elem.children !== undefined) out.children = elem.children.map((child) => renamed(child, ids, made));
   if (elem.text !== undefined) out.text = elem.text;
   if (elem.runs !== undefined) out.runs = elem.runs;
   return out;
@@ -294,8 +313,9 @@ export function renamed(elem: Elem, ids: NewIds): Elem {
 /// livello, subito sopra l'originale più in alto, nell'ordine degli
 /// originali. Le risorse private che usano si copiano con `copies`: un
 /// comando che copia anche altro gli passa le sue, e le loro operazioni
-/// escono qui tutte insieme, prima degli oggetti. `null` se un oggetto ha
-/// parti che non si copiano.
+/// escono qui tutte insieme, prima degli oggetti. I connettori e le etichette
+/// copiati nominano le copie degli oggetti copiati con loro; senza di essi
+/// restano liberi. `null` se un oggetto ha parti che non si copiano.
 export function duplicateOps(
   model: DocumentModel,
   units: readonly Unit[],
@@ -305,7 +325,9 @@ export function duplicateOps(
   copies: ResourceCopies = new ResourceCopies(model, ids, elemOf),
 ): Arranged | null {
   const plan = new Plan(model, ids);
-  const adds: Op[] = [];
+  const adds: AddOp[] = [];
+  /// L'id degli oggetti copiati e quello delle loro copie.
+  const made = new Map<string, string>();
   const byParent = new Map<string, Unit[]>();
   for (const unit of units) {
     const list = byParent.get(parentKey(unit));
@@ -319,7 +341,7 @@ export function duplicateOps(
     let after = plan.idOf(top);
     for (const unit of list) {
       const elem = elemOf(nodeOf(model, unit));
-      const copy = elem === null ? null : copies.adopt(renamed(elem, ids));
+      const copy = elem === null ? null : copies.adopt(renamed(elem, ids, made));
       if (copy === null) return null;
       const moved = movedMatrix(unit, dx, dy) ?? unit.transform;
       const value = transformValue(moved);
@@ -331,8 +353,10 @@ export function duplicateOps(
       keys.push(after);
     }
   }
-  // Le risorse prima di chi le usa.
-  plan.ops.push(...copies.ops(), ...adds);
+  // Le risorse prima di chi le usa. I connettori nominano le copie solo ora,
+  // che ognuna ha il suo id.
+  const linked = relinkCopies(adds.map((add) => add.elem), made);
+  plan.ops.push(...copies.ops(), ...adds.map((add, at): AddOp => ({ ...add, elem: linked[at]! })));
   return plan.finish(keys);
 }
 

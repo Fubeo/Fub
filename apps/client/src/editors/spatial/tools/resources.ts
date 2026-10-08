@@ -332,6 +332,11 @@ export function paintCode(color: Paint): string {
   return color === "none" ? "none" : `#${color.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
 }
 
+/// Il valore che usa il campione `swatch`, col suo colore come ripiego.
+export function swatchPaint(swatch: { readonly id: string; readonly color: string }): string {
+  return `url(#${swatch.id}) ${swatch.color}`;
+}
+
 // ---------------------------------------------------------------------------
 // Le copie.
 // ---------------------------------------------------------------------------

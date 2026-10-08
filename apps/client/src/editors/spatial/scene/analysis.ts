@@ -75,7 +75,8 @@ export const DEFAULT_FONT_SIZE = 16;
 /// Che cosa rappresenta un elemento modificabile (§4). `ngon` e `star` sono il
 /// poligono regolare e la stella sintetici, un `path` con `fub:shape` (§6);
 /// `polygon` è l'elemento `polygon`. `width` è il contorno a spessore
-/// variabile, sintetico anche lui.
+/// variabile, sintetico anche lui, e `connector` la linea che unisce due
+/// oggetti (formato della scena, connettori).
 export type Role =
   | "title"
   | "desc"
@@ -85,6 +86,7 @@ export type Role =
   | "link"
   | "stroke"
   | "arrow"
+  | "connector"
   | "ngon"
   | "star"
   | "width"
@@ -166,8 +168,8 @@ export interface Index {
 /// Quanti oggetti modificabili ha la scena, per tipo.
 export interface Counts {
   strokes: number;
-  /// Frecce, poligoni regolari, stelle, tracciati, rettangoli, ellissi,
-  /// cerchi, linee, polilinee e poligoni; la carta no.
+  /// Frecce, connettori, poligoni regolari, stelle, tracciati, rettangoli,
+  /// ellissi, cerchi, linee, polilinee e poligoni; la carta no.
   shapes: number;
   texts: number;
   images: number;
@@ -518,6 +520,7 @@ export class Tally {
         }
         break;
       case "arrow":
+      case "connector":
       case "ngon":
       case "star":
       case "width":
@@ -675,6 +678,7 @@ function bounds(
   switch (role) {
     case "stroke":
     case "arrow":
+    case "connector":
     case "ngon":
     case "star":
     case "width":

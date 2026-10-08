@@ -26,6 +26,10 @@ use serde::Serialize;
 
 use crate::analysis::{Context, Swatches, Tally};
 use crate::brush::{Brush, BrushError};
+use crate::connectors::{
+    read_connector_end, read_connector_geom, read_label_place, ConnectorEnd, ConnectorGeom,
+    LabelPlace,
+};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::parse_path;
 use crate::ink::{Ink, InkError};
@@ -61,6 +65,9 @@ pub enum Role {
     Stroke,
     /// Un `path` con `fub:shape="arrow"` e un `fub:geom` di quattro numeri (§6).
     Arrow,
+    /// Un `path` con `fub:shape="connector"` e un `fub:geom` che si legge: la
+    /// linea che unisce due oggetti (formato della scena, connettori).
+    Connector,
     /// Un `path` con `fub:shape="polygon"` e un `fub:geom` che si legge: il
     /// poligono regolare sintetico (§6). `Polygon` è l'elemento `polygon`.
     Ngon,
@@ -268,6 +275,15 @@ pub struct RootItem {
     pub tags: Tags,
 }
 
+/// Un connettore letto: il percorso di `fub:geom` e i due capi, `null` per
+/// un capo libero o scritto fuori dalla grammatica.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ConnectorFacts {
+    pub geom: ConnectorGeom,
+    pub from: Option<ConnectorEnd>,
+    pub to: Option<ConnectorEnd>,
+}
+
 /// Un elemento modificabile.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -302,6 +318,10 @@ pub struct ElementItem {
     /// `x1 y1 x2 y2` di una freccia.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arrow: Option<[f64; 4]>,
+    /// Il percorso e gli agganci di un connettore (formato della scena,
+    /// connettori).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connector: Option<ConnectorFacts>,
     /// La geometria di un poligono regolare o di una stella: `fub:geom` letto.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub polygonal: Option<Polygonal>,
@@ -329,6 +349,10 @@ pub struct ElementItem {
     /// L'id del tracciato che un testo segue (formato della scena, testo).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text_path: Option<String>,
+    /// Il connettore di cui un testo è l'etichetta, e dove sta: `fub:along`
+    /// letto (formato della scena, connettori).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub along: Option<LabelPlace>,
     /// Il ciclo di vita di una risorsa, se `fub:role` lo dice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle: Option<Lifecycle>,
@@ -1446,7 +1470,8 @@ pub(crate) fn board_box(element: &Element<'_>) -> Option<[f64; 4]> {
         .filter(|b| b[2] > 0.0 && b[3] > 0.0)
 }
 
-/// Il ruolo di un `path`: tratto, freccia o tracciato.
+/// Il ruolo di un `path`: tratto, freccia, connettore, forma sintetica o
+/// tracciato.
 fn path_role(element: &Element<'_>) -> Role {
     if matches!(element.value(NS_FUB, "tool"), Some("pen" | "highlighter")) {
         return Role::Stroke;
@@ -1455,6 +1480,7 @@ fn path_role(element: &Element<'_>) -> Role {
     // tracciato: la geometria si legge da `d` (§6).
     match element.value(NS_FUB, "shape") {
         Some("arrow") if arrow_geometry(element).is_some() => Role::Arrow,
+        Some("connector") if connector_geometry(element).is_some() => Role::Connector,
         Some("polygon") if polygonal_geometry(element).is_some() => Role::Ngon,
         Some("star") if polygonal_geometry(element).is_some() => Role::Star,
         Some("width") if width_geometry(element).is_some() => Role::Width,
@@ -1466,6 +1492,16 @@ fn path_role(element: &Element<'_>) -> Role {
 fn arrow_geometry(element: &Element<'_>) -> Option<[f64; 4]> {
     let numbers = number_list(element.value(NS_FUB, "geom")?)?;
     <[f64; 4]>::try_from(numbers.as_slice()).ok()
+}
+
+/// `fub:geom` di un connettore, se si legge.
+fn connector_geometry(element: &Element<'_>) -> Option<ConnectorGeom> {
+    read_connector_geom(element.value(NS_FUB, "geom")?)
+}
+
+/// Un capo di un connettore, `fub:from` o `fub:to`, se si legge.
+fn connector_end(element: &Element<'_>, name: &str) -> Option<ConnectorEnd> {
+    read_connector_end(element.value(NS_FUB, name)?)
 }
 
 /// `fub:geom` di un poligono regolare o di una stella, se si legge.
@@ -1696,6 +1732,14 @@ impl Builder<'_, '_> {
             arrow: (role == Role::Arrow)
                 .then(|| arrow_geometry(element))
                 .flatten(),
+            connector: (role == Role::Connector)
+                .then(|| connector_geometry(element))
+                .flatten()
+                .map(|geom| ConnectorFacts {
+                    geom,
+                    from: connector_end(element, "from"),
+                    to: connector_end(element, "to"),
+                }),
             polygonal: matches!(role, Role::Ngon | Role::Star)
                 .then(|| polygonal_geometry(element))
                 .flatten(),
@@ -1717,6 +1761,9 @@ impl Builder<'_, '_> {
                 .then(|| element.value(NS_FUB, "wrap").and_then(wrap_width))
                 .flatten(),
             text_path: text_path.and_then(|(_, path)| text_path_target(path)),
+            along: (role == Role::Text)
+                .then(|| element.value(NS_FUB, "along").and_then(read_label_place))
+                .flatten(),
             lifecycle: (role == Role::Resource)
                 .then(|| match element.value(NS_FUB, "role") {
                     Some("private") => Some(Lifecycle::Private),

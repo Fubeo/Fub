@@ -3,14 +3,14 @@
 // selezione, il documento e la vista. Che cosa mostra lo decide l'editor, e
 // lui scrive ogni cambio; qui c'è come si legge, si scrive e si raggiunge.
 //
-// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Sfumatura
-//   (`gradient-panel.ts`), Campitura (`hatch-panel.ts`), Effetti
-//   (`effects-panel.ts`), Colori del documento (`swatches-panel.ts`), Testo,
-//   Disponi, e all'Esperto Trasforma e Attributi; senza selezione i Colori del
-//   documento, Documento e Vista, Forma se lo strumento è il Poligono, e Tavola
-//   se è lo strumento Tavola con una tavola scelta. L'intestazione di una
-//   sezione è il pulsante che la apre e la chiude, e il pannello dice
-//   all'editor quali sono chiuse, che le ricorda.
+// - **Sezioni che si chiudono.** Posizione e misure, Forma, Aspetto, Connettore
+//   (`connector-panel.ts`), Sfumatura (`gradient-panel.ts`), Campitura
+//   (`hatch-panel.ts`), Effetti (`effects-panel.ts`), Colori del documento
+//   (`swatches-panel.ts`), Testo, Disponi, e all'Esperto Trasforma e Attributi;
+//   senza selezione i Colori del documento, Documento e Vista, Forma se lo
+//   strumento è il Poligono, e Tavola se è lo strumento Tavola con una tavola
+//   scelta. L'intestazione di una sezione è il pulsante che la apre e la
+//   chiude, e il pannello dice all'editor quali sono chiuse, che le ricorda.
 // - **Un campo misto dice «Misto»** e non ha valore: scriverlo dà il valore a
 //   tutti gli oggetti scelti, in un passo.
 // - **Un colore si scrive** come codice, come nome (`red`) o col nome di un
@@ -49,6 +49,7 @@ import { cleanName } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
+import { createConnectorPanel, type ConnectorPanelOptions, type ConnectorPanelView } from "./connector-panel";
 import { createEffectsPanel, type EffectsPanelOptions, type EffectsPanelView } from "./effects-panel";
 import { createGradientPanel, type GradientPanelOptions, type GradientPanelView } from "./gradient-panel";
 import { createHatchPanel, type HatchPanelOptions, type HatchPanelView } from "./hatch-panel";
@@ -59,6 +60,7 @@ export type SectionId =
   | "place"
   | "shape"
   | "look"
+  | "connector"
   | "gradient"
   | "hatch"
   | "effects"
@@ -305,6 +307,8 @@ export interface PropertiesView {
   readonly recent?: readonly string[];
   /// La sezione «Colori del documento»; senza, non c'è.
   readonly colors?: ColorsView;
+  /// La sezione «Connettore»; senza, non c'è.
+  readonly connector?: ConnectorPanelView;
   /// La sezione «Sfumatura»; senza, non c'è.
   readonly gradient?: GradientPanelView;
   /// La sezione «Campitura»; senza, non c'è.
@@ -326,6 +330,8 @@ export interface PropertiesOptions {
   onSection(id: SectionId, open: boolean): void;
   /// I gesti della sezione «Colori del documento» (`swatches-panel.ts`).
   readonly colors: Omit<SwatchesPanelOptions, "announce" | "onTarget">;
+  /// I gesti della sezione «Connettore» (`connector-panel.ts`).
+  readonly connector: Omit<ConnectorPanelOptions, "announce">;
   /// I gesti della sezione «Sfumatura» (`gradient-panel.ts`).
   readonly gradient: Omit<GradientPanelOptions, "announce" | "onTarget">;
   /// I gesti della sezione «Campitura» (`hatch-panel.ts`).
@@ -438,6 +444,7 @@ const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey 
   { id: "place", label: "draw.properties.selection" },
   { id: "shape", label: "draw.properties.shape" },
   { id: "look", label: "draw.properties.look" },
+  { id: "connector", label: "draw.properties.connector" },
   { id: "gradient", label: "draw.properties.gradient" },
   { id: "hatch", label: "draw.properties.hatch" },
   { id: "effects", label: "draw.properties.effects" },
@@ -801,6 +808,14 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     announce: (text) => options.announce(text),
   });
   sections.get("gradient")!.body.append(gradient.element);
+
+  // --- Il connettore --------------------------------------------------------------
+
+  const connector = createConnectorPanel(life, {
+    ...options.connector,
+    announce: (text) => options.announce(text),
+  });
+  sections.get("connector")!.body.append(connector.element);
 
   // --- La campitura ---------------------------------------------------------------
 
@@ -1860,6 +1875,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     }
     applyButton.textContent = t("draw.properties.apply");
     colors.relabel();
+    connector.relabel();
     gradient.relabel();
     hatch.relabel();
     effects.relabel();
@@ -1904,6 +1920,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
       if (next.colors !== undefined) {
         shown.add("colors");
         colors.update(next.colors, next.editable);
+      }
+      if (next.connector !== undefined) {
+        shown.add("connector");
+        connector.update(next.connector, next.editable);
       }
       if (next.gradient !== undefined) {
         shown.add("gradient");

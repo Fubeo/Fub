@@ -78,7 +78,7 @@ Radice di un documento nuovo:
 | Elemento | Geometria | Uso |
 |---|---|---|
 | `path` con `fub:tool` `pen` o `highlighter` | `d`, `fub:ink`, `fub:brush` | tratto a mano libera: contorno pieno, `fill` senza `stroke` (§5) |
-| `path` con `fub:shape` | `d`, `fub:geom` | forma sintetica: freccia, poligono regolare, stella, spessore variabile (§6) |
+| `path` con `fub:shape` | `d`, `fub:geom` | forma sintetica: freccia, connettore, poligono regolare, stella, spessore variabile (§6) |
 | `path` | `d` | tracciato vettoriale |
 | `rect` | `x y width height rx ry` | rettangolo |
 | `ellipse` | `cx cy rx ry` | ellisse |
@@ -307,13 +307,13 @@ dell'orologio di chi possiede il documento, corretta con lo scarto stimato.
 
 Una forma sintetica è un `path` con `fub:shape` e `fub:geom`; `d` si rigenera
 dalla geometria. Poligono regolare e stella: [poligoni e stelle](scene-format-shapes.md);
-il contorno che si allarga e si stringe: [spessore variabile](scene-format-width.md).
+il contorno che si allarga e si stringe: [spessore variabile](scene-format-width.md);
+la linea che unisce due oggetti e li segue: [connettori](scene-format-connectors.md).
 
-- **Freccia:** `fub:shape="arrow"`, `fub:geom="x1 y1 x2 y2"`. `d` contiene
-  l'asta e la punta aperta: `M x1 y1 L x2 y2 M hx1 hy1 L x2 y2 L hx2 hy2`.
-  Attributi: `fill="none"`, `stroke-linecap="round"`,
-  `stroke-linejoin="round"`. La punta è lunga 3 × `stroke-width` + 6 unità, e
-  ogni lato forma 30° con l'asta.
+- **Freccia:** `fub:shape="arrow"`, `fub:geom="x1 y1 x2 y2"`. `d` contiene l'asta e la
+  punta aperta: `M x1 y1 L x2 y2 M hx1 hy1 L x2 y2 L hx2 hy2`. Attributi: `fill="none"`,
+  `stroke-linecap="round"`, `stroke-linejoin="round"`. La punta è lunga
+  3 × `stroke-width` + 6 unità, e ogni lato forma 30° con l'asta.
 - **Forma sconosciuta:** un `fub:shape` sconosciuto, o un `fub:geom` fuori
   dalla grammatica della sua forma, come una freccia senza quattro numeri SVG,
   è un tracciato normale: la geometria si legge da `d`, gli attributi restano.
@@ -342,8 +342,8 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    sta sulla stessa riga del tag, coi pezzi della riga.
 2. **Ordine degli attributi:**
    1. `id`;
-   2. `fub:layer`, `fub:role`, `fub:name`, `fub:marker`, `fub:board`, `fub:tool`,
-      `fub:shape`, `fub:geom`, `fub:wrap`, `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
+   2. `fub:layer`, `fub:role`, `fub:name`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`,
+      `fub:geom`, `fub:from`, `fub:to`, `fub:along`, `fub:wrap`, `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
       stroke-linejoin stroke-dasharray opacity style display font-family font-size font-weight

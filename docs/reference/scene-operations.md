@@ -504,6 +504,8 @@ devono verificare renderebbe il test circolare.
 | 75 | `add-page-group` | la prima annotazione di una pagina nasce in un `batch` col suo gruppo `p0003`, dopo `p0001` e prima di `p0005` |
 | 76 | `set-swatch-stop` | un `batch` cambia col `part` il punto di un campione e il ripiego di chi lo usa; chi sta in un livello bloccato tiene il suo |
 | 77 | `set-part-not-resource` | `set` con `part` su un oggetto: rifiuto `invalid-elem` |
+| 78 | `add-connector` | un connettore a gomito agganciato a due rettangoli: `fub:shape`, `fub:geom`, `fub:from` e `fub:to` vanno subito dopo l'id, prima di `d`, in quest'ordine; l'inversa lo toglie |
+| 79 | `set-connector-free` | un `batch` stacca un capo: `set` cambia `fub:geom` e `d` e toglie `fub:from` con `null`; l'inversa lo rimette al suo posto e il testo torna a quello di prima byte per byte, anche su un motore aperto dal testo di dopo |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

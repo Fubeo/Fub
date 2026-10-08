@@ -635,7 +635,7 @@ export function flatten(segments: readonly Segment[], m: Matrix): Point[][] {
 /// testo): i sottotracciati uno dopo l'altro, con le curve e gli archi in
 /// [`CURVE_STEPS`] corde come in [`flatten`], e `Z` che torna all'inizio del
 /// sottotracciato. Gli spostamenti non sono corde.
-function chords(segments: readonly Segment[]): Array<[Point, Point]> {
+export function chords(segments: readonly Segment[]): Array<[Point, Point]> {
   const out: Array<[Point, Point]> = [];
   let current: Point = [0, 0];
   let start: Point = [0, 0];

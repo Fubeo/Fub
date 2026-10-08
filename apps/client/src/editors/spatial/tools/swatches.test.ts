@@ -8,6 +8,7 @@ import { doc, HEAD } from "../scene/test-support";
 import { gesture, NewIds } from "./edit";
 import { NAME_MAX } from "./naming";
 import { widthAttrs } from "./profile";
+import { swatchPaint } from "./resources";
 import { arrowPath } from "./shapes";
 import {
   documentColors,
@@ -18,7 +19,6 @@ import {
   removeSwatchOps,
   renameSwatchOps,
   swatchNameProblem,
-  swatchPaint,
   unitsShowing,
   USED_MAX,
   type DocumentSwatch,

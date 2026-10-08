@@ -43,10 +43,13 @@ import {
   layout,
   materialize,
   parseFragment,
+  parseFragments,
   parseSequence,
   pathOf,
   placeOf,
   rawOf,
+  rememberHead,
+  scopeKey,
   scopeOf,
   tagName,
   tidy,
@@ -144,7 +147,42 @@ export interface Applied {
 /// e gli id che ha toccato, come le punte di una linea che tengono il suo
 /// colore. `null` se non c'è niente da aggiungere. Il passo resta col nome
 /// dell'operazione chiesta: quello di un `batch` che segue non conta.
-export type Follow = (model: DocumentModel, touched: ReadonlySet<string>) => Op | null;
+///
+/// Il motore lo chiede a giri, fino a [`FOLLOW_ROUNDS`]. Al primo `touched`
+/// è tutto ciò che l'operazione ha toccato; a ogni giro dopo, soltanto ciò
+/// che il giro prima ha toccato in più. `op` è l'operazione chiesta a
+/// `apply`, la stessa a ogni giro: dice che cosa ha fatto chi ha chiamato,
+/// per esempio quali oggetti ha spostato, anche quando `touched` ormai ne
+/// elenca altri. Un seguito che non guarda `op` può non dichiararlo.
+export type Follow = (model: DocumentModel, touched: ReadonlySet<string>, op: Op) => Op | null;
+
+/// Quanti giri di seguito il motore chiede al più: ciò che un giro tocca si
+/// segue a sua volta, come la regione del filtro di un connettore che il
+/// primo giro ha ricalcolato. Oltre, il seguito si ferma anche se avrebbe
+/// altro da dire.
+export const FOLLOW_ROUNDS = 3;
+
+/// Quante operazioni `set` di fila su unità diverse, al meno e al più, un
+/// `batch` applica in un passaggio solo.
+const LEAF_RUN_MIN = 2;
+const LEAF_RUN_MAX = 512;
+
+/// Un tratto di `set` che si applica in un passaggio solo: le unità
+/// bersaglio, come sono scritte, e dove stanno nel loro contenitore.
+interface LeafRun {
+  readonly nodes: ElementPart[];
+  readonly raws: string[];
+  readonly indices: number[];
+}
+
+/// Il rientro di una riga che comincia dopo lo spazio `gap`, che va a capo:
+/// gli spazi e le tabulazioni dopo l'ultimo a capo, come `indentAt`.
+function indentAfterBreak(gap: string): string {
+  let at = Math.max(gap.lastIndexOf("\n"), gap.lastIndexOf("\r")) + 1;
+  const from = at;
+  while (at < gap.length && (gap.charCodeAt(at) === 0x20 || gap.charCodeAt(at) === 0x09)) at++;
+  return gap.slice(from, at);
+}
 
 /// Un'operazione rifiutata: la scena resta com'era.
 export interface Rejected {
@@ -316,6 +354,13 @@ interface Reread {
   readonly element: ElementNode;
   /// Lo scope in vigore dentro l'elemento.
   readonly scope: NamespaceScope;
+}
+
+/// Ciò che si sa di `fragment`, un elemento riletto da solo dentro `outer`.
+function readOf(fragment: Fragment, outer: NamespaceScope): Reread {
+  const element = fragment.doc.element(fragment.id)!;
+  const declarations = declarationsOf(element);
+  return { fragment, element, scope: declarations.length === 0 ? outer : outer.declare(declarations) };
 }
 
 /// Il ruolo di un elemento, `null` se è estraneo.
@@ -576,8 +621,9 @@ export class SceneEngine {
   /// alla fine.
   private quiet = false;
   /// Ciò che segue ogni operazione applicata, nello stesso passo e nello
-  /// stesso undo; `null` per niente. Un'inversa non ha seguito: porta già
-  /// l'inversa di ciò che aveva seguito l'operazione.
+  /// stesso undo, a giri (vedi [`Follow`] e [`FOLLOW_ROUNDS`]); `null` per
+  /// niente. Un'inversa non ha seguito: porta già l'inversa di ciò che aveva
+  /// seguito l'operazione.
   follow: Follow | null = null;
 
   /// Che cosa è la risorsa modificabile che porta `id` nella scena corrente:
@@ -666,10 +712,10 @@ export class SceneEngine {
     let inverse: Op;
     try {
       inverse = this.run(op);
-      const followed = this.inverse ? null : this.followed(tree);
+      const followed = this.inverse ? null : this.followed(tree, op);
       if (followed !== null) {
-        forward = chain([op, followed.op]);
-        inverse = chain([followed.inverse, inverse]);
+        forward = chain([op, ...followed.ops]);
+        inverse = chain([...followed.inverses.reverse(), inverse]);
       }
       const { removes, restores } = this.collect();
       if (!this.inverse) this.checkBoards(boards);
@@ -688,33 +734,64 @@ export class SceneEngine {
     return this.commit(tree.take(mark), forward, inverse, [...this.touched], this.duplicate, null);
   }
 
-  /// Ciò che segue l'operazione appena applicata, applicato anche lui, con
-  /// la sua inversa; `null` se non c'è niente. Un seguito che il motore
-  /// rifiuta, o che non si sa calcolare, non c'è: l'operazione chiesta resta
-  /// com'era prima che qualcosa la seguisse, con ciò che ha toccato.
-  private followed(tree: Tree): { readonly op: Op; readonly inverse: Op } | null {
-    const follow = this.follow;
-    if (follow === null) return null;
+  /// Ciò che segue l'operazione `requested` appena applicata, applicato
+  /// anche lui, a giri: le operazioni dei giri in ordine, e le loro inverse
+  /// nell'ordine in cui si sono applicate; `null` se non c'è niente. Il
+  /// primo giro vede tutto ciò che l'operazione ha toccato, ogni giro dopo
+  /// soltanto ciò che il giro prima ha toccato in più, e ci si ferma al
+  /// giro in cui non c'è niente di nuovo, o a [`FOLLOW_ROUNDS`] giri. Un giro
+  /// che il motore rifiuta, o che non si sa calcolare, non c'è: si tengono i
+  /// giri prima e ci si ferma, con ciò che hanno toccato.
+  private followed(
+    tree: Tree,
+    requested: Op,
+  ): { readonly ops: Op[]; readonly inverses: Op[] } | null {
+    if (this.follow === null) return null;
+    const ops: Op[] = [];
+    const inverses: Op[] = [];
+    let fresh: ReadonlySet<string> = new Set(this.touched);
+    for (let round = 0; round < FOLLOW_ROUNDS && (round === 0 || fresh.size > 0); round++) {
+      const next = this.followRound(tree, requested, fresh);
+      if (next === null) break;
+      ops.push(next.op);
+      inverses.push(next.inverse);
+      fresh = next.touched;
+    }
+    return ops.length === 0 ? null : { ops, inverses };
+  }
+
+  /// Un giro del seguito: ciò che `follow` dice dopo aver visto `touched`,
+  /// applicato con la sua inversa, e gli id che ha toccato in più; `null` se
+  /// non dice niente, se non si sa calcolare o se il motore lo rifiuta, e
+  /// allora il giro non lascia niente nella scena.
+  private followRound(
+    tree: Tree,
+    requested: Op,
+    touched: ReadonlySet<string>,
+  ): { readonly op: Op; readonly inverse: Op; readonly touched: ReadonlySet<string> } | null {
     let op: Op | null;
     try {
-      op = follow(tree.model, this.touched);
+      op = this.follow!(tree.model, touched, requested);
     } catch {
       return null;
     }
     if (op === null) return null;
     if (op.op === "batch" && op.label !== undefined) op = { op: "batch", ops: op.ops };
     const mark = tree.mark();
-    const { touched, duplicate, emptied, boards, papers } = this;
-    this.touched = new Set(touched);
+    const { touched: before, duplicate, emptied, boards, papers } = this;
+    this.touched = new Set(before);
     this.emptied = new Set(emptied);
     this.boards = new Set(boards);
     this.papers = new Set(papers);
     try {
-      return { op, inverse: this.run(op) };
+      const inverse = this.run(op);
+      const added = new Set<string>();
+      for (const id of this.touched) if (!before.has(id)) added.add(id);
+      return { op, inverse, touched: added };
     } catch (error) {
       tree.rollback(mark);
       if (!(error instanceof Rejection)) throw error;
-      this.touched = touched;
+      this.touched = before;
       this.duplicate = duplicate;
       this.emptied = emptied;
       this.boards = boards;
@@ -864,7 +941,23 @@ export class SceneEngine {
       );
     if (!this.inverse && count(ops) > MAX_BATCH) reject("limit", `batch oltre ${MAX_BATCH} operazioni`);
     const inverses: Op[] = [];
+    // Fino a `slow` un'operazione alla volta: un tratto di `set` che non si
+    // è potuto applicare in un passaggio solo.
+    let slow = 0;
     for (let i = 0; i < ops.length; i++) {
+      if (i >= slow) {
+        const run = this.leafRun(ops, i);
+        if (run.nodes.length >= LEAF_RUN_MIN) {
+          const end = i + run.nodes.length;
+          const done = this.setLeaves(ops, i, run);
+          if (done !== null) {
+            for (const each of done) inverses.push(each);
+            i = end - 1;
+            continue;
+          }
+          slow = end;
+        }
+      }
       try {
         inverses.push(this.run(ops[i]));
       } catch (error) {
@@ -874,6 +967,119 @@ export class SceneEngine {
     }
     const inverse: BatchOp = { op: "batch", ops: inverses.reverse() };
     return typeof op.label === "string" ? { ...inverse, label: op.label } : inverse;
+  }
+
+  /// Il tratto di `ops` che comincia in `from` e si applica in un passaggio
+  /// solo: `set` su altrettante unità diverse, modificabili e non risorse,
+  /// ciascuna a capo di una riga (il loro rientro viene dallo spazio che le
+  /// precede, e un `set` sulle altre non lo cambia). Un'operazione che non è
+  /// così, o che sarebbe rifiutata, non ne fa parte, e va da sola.
+  private leafRun(ops: readonly unknown[], from: number): LeafRun {
+    const run: LeafRun = { nodes: [], raws: [], indices: [] };
+    const tree = this.t;
+    if (tree.status === "foreign") return run;
+    const seen = new Set<ElementPart>();
+    for (let at = from; at < ops.length && run.nodes.length < LEAF_RUN_MAX; at++) {
+      const op = ops[at];
+      if (!isRecord(op) || op.op !== "set" || typeof op.id !== "string" || op.id === ROOT || op.part !== undefined || !isRecord(op.attrs)) break;
+      const node = tree.element(op.id);
+      if (node === null || node === tree.model.root || node.kind !== "leaf" || seen.has(node) || roleOf(node) === "resource") break;
+      const parts = node.parent!.parts;
+      const index = parts.indexOf(node);
+      const before = parts[index - 1];
+      if (typeof before !== "string" || (before.indexOf("\n") < 0 && before.indexOf("\r") < 0)) break;
+      seen.add(node);
+      run.nodes.push(node);
+      run.raws.push(node.raw);
+      run.indices.push(index);
+    }
+    return run;
+  }
+
+  /// Applica `ops` da `from`, un tratto `run` di [`SceneEngine.leafRun`], in
+  /// un passaggio solo: le unità si rileggono insieme, si calcolano tutti i
+  /// testi nuovi, e anche questi si leggono insieme, invece di una lettura
+  /// per ogni passo. Il risultato è quello di un'operazione dopo l'altra:
+  /// stesse inverse, stesse modifiche all'albero nello stesso ordine.
+  /// `null` se qualcosa non va, e allora l'albero è com'era e chi chiama
+  /// applica un'operazione alla volta, con gli errori che ne vengono.
+  private setLeaves(ops: readonly unknown[], from: number, run: LeafRun): Op[] | null {
+    const tree = this.t;
+    const mark = tree.mark();
+    let done: Op[] | null;
+    try {
+      done = this.leafPass(ops, from, run);
+    } catch {
+      done = null;
+    }
+    if (done === null) tree.rollback(mark);
+    return done;
+  }
+
+  private leafPass(ops: readonly unknown[], from: number, run: LeafRun): Op[] | null {
+    const { nodes, raws: olds, indices } = run;
+    const parents = new Map<ContainerNode, number[]>();
+    for (let k = 0; k < nodes.length; k++) {
+      const node = nodes[k]!;
+      this.guard(node, true, true);
+      const group = parents.get(node.parent!);
+      if (group === undefined) parents.set(node.parent!, [k]);
+      else group.push(k);
+    }
+    // Le unità come sono scritte, e ciò che ogni `set` ne ricava.
+    const reads: Reread[] = new Array<Reread>(nodes.length);
+    const scopes = new Map<ContainerNode, NamespaceScope>();
+    for (const [parent, which] of parents) {
+      const outer = scopeOf(parent);
+      scopes.set(parent, outer);
+      const fragments = parseFragments(which.map((k) => olds[k]!), outer);
+      if (fragments === null) return null;
+      which.forEach((k, j) => (reads[k] = readOf(fragments[j]!, outer)));
+    }
+    const inverses: Op[] = [];
+    const papers: boolean[] = [];
+    const texts: string[] = new Array<string>(nodes.length);
+    for (let k = 0; k < nodes.length; k++) {
+      const node = nodes[k]!;
+      const op = ops[from + k] as Record<string, unknown>;
+      const read = reads[k]!;
+      const { previous, edit, paper } = this.planSet(node, op.attrs as Record<string, unknown>, read);
+      const before = node.parent!.parts[indices[k]! - 1] as string;
+      texts[k] = this.leafText(node, (out, again) => ({ ...out, attrs: canonicalOrder(edit(attributesOf(again.fragment.doc, again.element))) }), read, indentAfterBreak(before));
+      papers.push(paper);
+      inverses.push({ op: "set", id: op.id as string, attrs: previous });
+    }
+    // Le unità nuove, lette insieme anch'esse.
+    const built: ElementPart[] = new Array<ElementPart>(nodes.length);
+    for (const [parent, which] of parents) {
+      const scope = scopes.get(parent)!;
+      const fragments = parseFragments(which.map((k) => texts[k]!), scope);
+      if (fragments === null) return null;
+      // Chi segue legge le unità appena riscritte, e le trova già lette.
+      const key = this.follow === null ? null : scopeKey(scope);
+      which.forEach((k, j) => {
+        const now = buildFragment(fragments[j]!, parent, this.resolve);
+        built[k] = now;
+        if (key !== null && now.kind === "leaf") rememberHead(now, key, fragments[j]!);
+      });
+    }
+    // Poi, una dopo l'altra, al posto delle vecchie.
+    for (let k = 0; k < nodes.length; k++) {
+      const node = nodes[k]!;
+      const now = built[k]!;
+      // Una risorsa cambia come si leggono le unità che la citano, e quelle
+      // si sono lette tutte prima: la strada lunga.
+      if (roleOf(now) === "resource") return null;
+      const parent = node.parent!;
+      const index = parent.parts[indices[k]!] === node ? indices[k]! : parent.parts.indexOf(node);
+      this.replace(parent, index, index + 1, [now]);
+      this.checkRewritten(now, papers[k]!);
+    }
+    for (const node of nodes) {
+      this.sheet(node);
+      this.touch(node);
+    }
+    return inverses;
   }
 
   // -------------------------------------------------------------------------
@@ -1339,9 +1545,7 @@ export class SceneEngine {
     const outer = node.parent === null ? NamespaceScope.EMPTY : scopeOf(node.parent);
     const fragment = parseFragment(raw, outer);
     if (fragment === null) throw new Error("un elemento del documento non si rilegge da solo");
-    const element = fragment.doc.element(fragment.id)!;
-    const declarations = declarationsOf(element);
-    return { fragment, element, scope: declarations.length === 0 ? outer : outer.declare(declarations) };
+    return readOf(fragment, outer);
   }
 
   /// Cambia il tag d'apertura di un contenitore in `head`, e lo riclassifica
@@ -1390,10 +1594,16 @@ export class SceneEngine {
 
   /// Riscrive un'unità modificabile in forma canonica, al suo rientro, con
   /// ciò che `change` ricava dalla forma scritta.
-  private rewriteLeaf(node: ElementPart, change: (out: OutElement, read: Reread) => OutElement): ElementPart {
-    const read = this.reread(node);
+  private rewriteLeaf(node: ElementPart, change: (out: OutElement, read: Reread) => OutElement, read: Reread = this.reread(node)): ElementPart {
+    return this.replaceLeaf(node, this.leafText(node, change, read));
+  }
+
+  /// Il testo di un'unità riscritta in forma canonica, al suo rientro (o a
+  /// `indent`, se chi chiama lo sa già), con ciò che `change` ricava dalla
+  /// forma scritta, `read`.
+  private leafText(node: ElementPart, change: (out: OutElement, read: Reread) => OutElement, read: Reread, indent?: string): string {
     const out = change(elementToOut(read.fragment.doc, read.fragment.id), read);
-    return this.replaceLeaf(node, this.eolOf(writeElement(out, indentOf(this.t.model, node))));
+    return this.eolOf(writeElement(out, indent ?? indentOf(this.t.model, node)));
   }
 
   /// Il primo problema di un elemento appena scritto: estraneo, o un tratto
@@ -1818,10 +2028,44 @@ export class SceneEngine {
     this.guard(node, true, true);
     if (op.part !== undefined) return this.setPart(node, op.id, op.part, op.attrs);
     this.sheet(node);
-    const { fragment, element, scope } = this.reread(node);
+    const read = this.reread(node);
+    const { previous, edit, paper } = this.planSet(node, op.attrs, read);
+
+    if (node.kind === "container") {
+      // Si riscrive solo il tag, perché i figli non cambiano; un `<g/>` si
+      // riscrive per intero, in forma aperta (§6).
+      if (node.tail === null && isSvg(read.element, "g")) {
+        const indent = indentOf(this.t.model, node);
+        this.rewriteHead(node, edit, false);
+        this.t.splice(node, 0, node.parts.length, [this.eolOf(`\n${indent}`)]);
+      } else {
+        this.rewriteHead(node, edit, node.tail === null);
+      }
+    } else {
+      const built = this.rewriteLeaf(node, (out, again) => ({
+        ...out,
+        attrs: canonicalOrder(edit(attributesOf(again.fragment.doc, again.element))),
+      }), read);
+      this.checkRewritten(built, paper);
+    }
+    // Un gruppo cambia anche come si vedono i suoi figli.
+    this.touch(node);
+    return { op: "set", id: op.id, attrs: previous };
+  }
+
+  /// Ciò che un `set` su `node` chiede e dà, controllato: i valori di prima
+  /// delle chiavi che cambiano (l'inversa), come si riscrivono gli attributi
+  /// e se `node` è una carta. `read` è `node` riletto da solo. Non cambia
+  /// niente.
+  private planSet(
+    node: ElementPart,
+    attrs: Record<string, unknown>,
+    read: Reread,
+  ): { readonly previous: Record<string, string | null>; readonly edit: (attrs: OutAttr[]) => OutAttr[]; readonly paper: boolean } {
+    const { fragment, element, scope } = read;
     const doc = fragment.doc;
     const changes = new Map<string, Change>();
-    for (const [key, value] of Object.entries(op.attrs)) {
+    for (const [key, value] of Object.entries(attrs)) {
       if (value !== null && typeof value !== "string") reject("invalid-elem", `valore non valido per ${key}`);
       const name = elemGuard(() => attributeName(key, scope));
       if (name.uri === "" && name.local === "id") reject("invalid-elem", "l'id cambia solo con ident");
@@ -1865,29 +2109,15 @@ export class SceneEngine {
     const previous: Record<string, string | null> = {};
     for (const change of changes.values()) previous[change.key] = written(change.uri, change.local)?.value ?? null;
     const edit = changed(changes);
+    return { previous, edit, paper };
+  }
 
-    if (node.kind === "container") {
-      // Si riscrive solo il tag, perché i figli non cambiano; un `<g/>` si
-      // riscrive per intero, in forma aperta (§6).
-      if (node.tail === null && isSvg(element, "g")) {
-        const indent = indentOf(this.t.model, node);
-        this.rewriteHead(node, edit, false);
-        this.t.splice(node, 0, node.parts.length, [this.eolOf(`\n${indent}`)]);
-      } else {
-        this.rewriteHead(node, edit, node.tail === null);
-      }
-    } else {
-      const built = this.rewriteLeaf(node, (out, read) => ({
-        ...out,
-        attrs: canonicalOrder(edit(attributesOf(read.fragment.doc, read.element))),
-      }));
-      const problem = this.problem(built);
-      if (problem !== null) reject("invalid-elem", problem);
-      if ((roleOf(built) === "paper") !== paper) reject("invalid-elem", "una carta nasce con add");
-    }
-    // Un gruppo cambia anche come si vedono i suoi figli.
-    this.touch(node);
-    return { op: "set", id: op.id, attrs: previous };
+  /// Un elemento appena riscritto da un `set` deve restare modificabile, e
+  /// una carta resta carta.
+  private checkRewritten(built: ElementPart, paper: boolean): void {
+    const problem = this.problem(built);
+    if (problem !== null) reject("invalid-elem", problem);
+    if ((roleOf(built) === "paper") !== paper) reject("invalid-elem", "una carta nasce con add");
   }
 
   /// `set` su una parte della risorsa `node`, come il punto di una

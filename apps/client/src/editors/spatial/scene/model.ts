@@ -377,6 +377,72 @@ export function parseFragment(raw: string, scope: NamespaceScope): Fragment | nu
   return { doc, id: children[0]! };
 }
 
+/// Quanti frammenti si leggono insieme al più, e di quanti caratteri: il
+/// testo letto resta vivo finché vive uno degli elementi che ne sono stati
+/// tagliati, e un lotto piccolo tiene piccolo anche quel peso.
+const FRAGMENTS_PER_READ = 16;
+const FRAGMENT_CHARS = 16_384;
+
+/// Come [`parseFragment`] per più frammenti dello stesso scope, uno dopo
+/// l'altro e senza altro fra loro, letti insieme: il tag che li avvolge e
+/// l'avvio della lettura si pagano una volta ogni lotto, non una volta ogni
+/// frammento. Ogni frammento dà gli stessi nodi che darebbe da solo, e i
+/// frammenti di un lotto condividono il documento letto.
+///
+/// `null` se anche un solo frammento non è un elemento ben formato da solo,
+/// o se i frammenti letti insieme non si dividono come sono stati dati: chi
+/// chiama li legge allora uno alla volta, e sa quale è il difetto.
+export function parseFragments(raws: readonly string[], scope: NamespaceScope): Fragment[] | null {
+  const open = wrapperOf(scope);
+  const out: Fragment[] = [];
+  let from = 0;
+  while (from < raws.length) {
+    let to = from;
+    let chars = 0;
+    do {
+      chars += raws[to]!.length;
+      to++;
+    } while (to < raws.length && to - from < FRAGMENTS_PER_READ && chars + raws[to]!.length <= FRAGMENT_CHARS);
+    const doc = parseWrapped(open, raws.slice(from, to).join(""));
+    if (doc === null) return null;
+    const children = doc.children(doc.root);
+    if (children.length !== to - from) return null;
+    let at = open.length;
+    for (let i = 0; i < children.length; i++) {
+      const length = raws[from + i]!.length;
+      const element = doc.element(children[i]!);
+      if (element === null || element.start !== at || element.end !== at + length) return null;
+      out.push({ doc, id: children[i]! });
+      at += length;
+    }
+    from = to;
+  }
+  return out;
+}
+
+/// Il tag d'apertura di un elemento letto da solo: il documento letto e
+/// l'elemento in esso. `null` se non si legge.
+export type Head = { readonly doc: XmlDocument; readonly element: ElementNode } | null;
+
+/// I tag d'apertura già letti, per elemento, col testo e lo scope con cui sono
+/// stati letti: chi li chiede due volte per lo stesso testo, e nello stesso
+/// scope, non li rilegge. Li riempie chi li legge ([`readHead`] di `arrange`),
+/// e il motore per le unità che ha appena riscritto e riletto.
+export const HEADS = new WeakMap<ElementPart, { readonly raw: string; readonly scope: string; readonly head: Head }>();
+
+/// Lo scope come chiave di [`HEADS`]: i suoi legami, in ordine.
+export function scopeKey(scope: NamespaceScope): string {
+  return [...scope.entries()].map(([prefix, uri]) => `${prefix ?? ""}=${uri}`).join(" ");
+}
+
+/// `fragment`, da cui è stata costruita l'unità `node` dentro uno scope di
+/// chiave `key`, è anche il suo tag d'apertura letto: chi lo chiede non lo
+/// rilegge. Il documento letto, che è quello di un lotto di frammenti, resta
+/// vivo quanto l'unità.
+export function rememberHead(node: LeafNode, key: string, fragment: Fragment): void {
+  HEADS.set(node, { raw: node.raw, scope: key, head: { doc: fragment.doc, element: fragment.doc.element(fragment.id)! } });
+}
+
 /// Il tag d'apertura dell'elemento che avvolge un frammento: dichiara i
 /// namespace di `scope`.
 function wrapperOf(scope: NamespaceScope): string {

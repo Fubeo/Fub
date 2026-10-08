@@ -1,7 +1,7 @@
 // Il disegno a parole: l'albero degli oggetti dalle voci della scena, e il
 // nome di ciascuno.
 
-import { describe as group, expect, it } from "vitest";
+import { afterEach, describe as group, expect, it, vi } from "vitest";
 import { countObjects, describe, keyOf, linkName, outline, polygonalKind, sceneTargets, type OutlineNode } from "./describe";
 import { readScene } from "./scene/read";
 import { doc, ink } from "./scene/test-support";
@@ -163,5 +163,192 @@ group("l'albero degli oggetti", () => {
     expect(names).toEqual(["Triangolo", "Quadrato", "Pentagono", "Esagono", "Ettagono", "Ottagono", "Ennagono", "Decagono", "Endecagono", "Dodecagono"]);
     expect(polygonalKind({ shape: "polygon", count: 13 })).toBe("Poligono di 13 lati");
     expect(polygonalKind({ shape: "star", count: 4 })).toBe("Stella a 4 punte");
+  });
+});
+
+group("i connettori", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const rect = (id: string, title?: string): string =>
+    `<rect id="${id}" x="0" y="0" width="20" height="10">${title === undefined ? "" : `<title>${title}</title>`}</rect>`;
+  /// Un connettore dritto fra `ends`; un capo che manca è libero.
+  const connector = (id: string, ends: { readonly from?: string; readonly to?: string }, inside = ""): string =>
+    `<path id="${id}" fub:shape="connector" fub:geom="straight 10 10 90 10"` +
+    (ends.from === undefined ? "" : ` fub:from="${ends.from} auto"`) +
+    (ends.to === undefined ? "" : ` fub:to="${ends.to} auto"`) +
+    ` d="M10 10 L90 10" fill="none" stroke="#000000">${inside}</path>`;
+  const label = (id: string, along: string, words: string): string =>
+    `<text id="${id}" fub:along="${along} 0.5 6" x="50" y="4"><tspan x="50" dy="0">${words}</tspan></text>`;
+
+  const nodesOf = (body: string): OutlineNode[] => outline(readScene(doc(body)).items);
+  const spoken = (nodes: readonly OutlineNode[], options = {}): string[] => nodes.map((node) => describe(node, options));
+
+  it("dice da che cosa a che cosa va: tutti e due i capi, solo l'inizio, solo la fine, nessuno", () => {
+    const nodes = nodesOf(
+      rect("o1", "Ingresso") + rect("o2", "Verifica") +
+        connector("c1", { from: "o1", to: "o2" }) +
+        connector("c2", { from: "o1" }) +
+        connector("c3", { to: "o2" }) +
+        connector("c4", {}),
+    );
+    expect(spoken(nodes.slice(2))).toEqual([
+      "Connettore da «Ingresso» a «Verifica»",
+      "Connettore da «Ingresso»",
+      "Connettore verso «Verifica»",
+      "Connettore",
+    ]);
+    expect(nodes.slice(2).map((node) => node.connection)).toEqual([
+      { from: "«Ingresso»", to: "«Verifica»" },
+      { from: "«Ingresso»", to: null },
+      { from: null, to: "«Verifica»" },
+      { from: null, to: null },
+    ]);
+  });
+
+  it("dice un oggetto senza nome col suo tipo, e un gruppo col suo nome o «Gruppo»", () => {
+    const nodes = nodesOf(
+      rect("o1") + rect("o2", "Verifica") +
+        '<g id="g1"><title>Cucina</title><circle id="o3" r="1"/></g>' +
+        '<g id="g2"><circle id="o4" r="1"/></g>' +
+        '<path id="p1" fub:shape="polygon" fub:geom="0 0 10 6 0 0" d="M0 0 L1 0 L1 1 Z"/>' +
+        connector("c1", { from: "o1", to: "o2" }) +
+        connector("c2", { from: "g1", to: "g2" }) +
+        connector("c3", { from: "o3", to: "p1" }),
+    );
+    expect(spoken(nodes.slice(-3))).toEqual([
+      "Connettore da Rettangolo a «Verifica»",
+      "Connettore da «Cucina» a Gruppo",
+      "Connettore da Cerchio a Esagono",
+    ]);
+  });
+
+  it("nomina un oggetto agganciato come lo nomina l'albero: col `title`, o con le parole di un testo", () => {
+    const nodes = nodesOf(
+      '<text id="t1" x="0" y="10"><tspan x="0" dy="0">Cucina</tspan><tspan x="0" dy="1.2">e sala</tspan></text>' +
+        rect("o1", "  Porta   d’ingresso ") +
+        connector("c1", { from: "t1", to: "o1" }),
+    );
+    expect(describe(nodes[2]!)).toBe("Connettore da «Cucina e sala» a «Porta d’ingresso»");
+  });
+
+  it("nomina il connettore dal testo della sua prima etichetta, e il suo `title` vince", () => {
+    const nodes = nodesOf(
+      rect("o1", "Verifica") + rect("o2", "Fine") +
+        connector("c1", { from: "o1", to: "o2" }) + label("t1", "c1", "sì") +
+        connector("c2", { from: "o1", to: "o2" }, "<title>Esito positivo</title>") + label("t2", "c2", "sì") +
+        connector("c3", { from: "o1" }) + label("t3", "c3", "no") + label("t4", "c3", "mai"),
+    );
+    const connectors = nodes.filter((node) => node.item.role === "connector");
+    expect(connectors.map((node) => node.name)).toEqual(["sì", "Esito positivo", "no"]);
+    expect(spoken(connectors)).toEqual([
+      "Connettore «sì» da «Verifica» a «Fine»",
+      "Connettore «Esito positivo» da «Verifica» a «Fine»",
+      "Connettore «no» da «Verifica»",
+    ]);
+    // L'etichetta è un testo come gli altri.
+    expect(describe(nodes.find((node) => node.key === "t1")!)).toBe("Testo «sì»");
+  });
+
+  it("conta la prima etichetta in ordine di documento, anche se sta prima del connettore", () => {
+    const nodes = nodesOf(
+      label("t1", "c1", "primo") + connector("c1", {}) + label("t2", "c1", "secondo") +
+        // Un'etichetta senza parole non dice niente: conta la prima che ne ha.
+        label("t3", "c2", " ") + connector("c2", {}) + label("t4", "c2", "quarto") +
+        // Quella di un connettore che non c'è non nomina nessuno.
+        label("t5", "c9", "sola") + connector("c3", {}),
+    );
+    expect(spoken(nodes.filter((node) => node.item.role === "connector"))).toEqual([
+      "Connettore «primo»",
+      "Connettore «quarto»",
+      "Connettore",
+    ]);
+  });
+
+  it("taglia il nome preso da un'etichetta lunga, e lo dà intero alla Lettura", () => {
+    const long = "parola ".repeat(20).trim();
+    const nodes = nodesOf(rect("o1") + rect("o2") + connector("c1", { from: "o1", to: "o2" }) + label("t1", "c1", long));
+    const connected = nodes.find((node) => node.item.role === "connector")!;
+    expect(Array.from(connected.name!)).toHaveLength(60);
+    expect(connected.name!.endsWith("…")).toBe(true);
+    expect(connected.joined!.label).toBe(long);
+  });
+
+  it("un capo verso ciò che non è un oggetto vale come libero", () => {
+    const nodes = nodesOf(
+      '<defs><linearGradient id="gr1"><stop offset="0" stop-color="#000000"/><stop offset="1" stop-color="#ffffff"/></linearGradient></defs>' +
+        '<rect id="fub-paper" fub:role="paper" width="100" height="100" fill="#ffffff"/>' +
+        '<g id="l1" fub:layer="Disegno">' + rect("o1", "Verifica") + "</g>" +
+        "<foo:bar xmlns:foo=\"urn:foo\" id=\"x1\"/>" +
+        connector("c1", { from: "o1", to: "nonesiste" }) +
+        connector("c2", { from: "o1", to: "gr1" }) +
+        connector("c3", { from: "o1", to: "c1" }) +
+        connector("c4", { from: "l1", to: "o1" }) +
+        connector("c5", { from: "fub-paper", to: "x1" }) +
+        connector("c6", { from: "c6", to: "o1" }),
+    );
+    const connectors = nodes.filter((node) => node.item.role === "connector");
+    expect(spoken(connectors)).toEqual([
+      "Connettore da «Verifica»",
+      "Connettore da «Verifica»",
+      "Connettore da «Verifica»",
+      "Connettore verso «Verifica»",
+      "Connettore",
+      "Connettore verso «Verifica»",
+    ]);
+    expect(connectors.map((node) => node.joined)).toEqual([null, null, null, null, null, null]);
+  });
+
+  it("trova un oggetto in un livello o in un gruppo, per id", () => {
+    const nodes = nodesOf(
+      '<g id="l1" fub:layer="Entrata"><g id="g1">' + rect("o1", "Ingresso") + "</g></g>" +
+        '<g id="l2" fub:layer="Uscita">' + rect("o2", "Verifica") + connector("c1", { from: "o1", to: "o2" }) + "</g>",
+    );
+    expect(describe(nodes[1]!.children[1]!)).toBe("Connettore da «Ingresso» a «Verifica»");
+  });
+
+  it("dà alla Lettura i connettori con tutti e due i capi, coi nomi senza caporali e l'etichetta", () => {
+    const nodes = nodesOf(
+      rect("o1", "Ingresso") + rect("o2") +
+        connector("c1", { from: "o1", to: "o2" }) + label("t1", "c1", "sì") +
+        connector("c2", { from: "o2", to: "o1" }) +
+        connector("c3", { from: "o1" }),
+    );
+    const connectors = nodes.filter((node) => node.item.role === "connector");
+    expect(connectors.map((node) => node.joined)).toEqual([
+      { from: "Ingresso", to: "Rettangolo", label: "sì" },
+      { from: "Rettangolo", to: "Ingresso", label: null },
+      null,
+    ]);
+    expect(nodes.filter((node) => node.item.role !== "connector").map((node) => node.joined)).toEqual([null, null, null]);
+  });
+
+  it("non dà niente agli altri oggetti", () => {
+    for (const node of nodesOf(rect("o1") + label("t1", "o1", "no") + "<g id=\"g1\"><circle r=\"1\"/></g>")) {
+      expect(node.connection).toBeNull();
+      expect(node.joined).toBeNull();
+    }
+  });
+
+  it("parla inglese, e segue la lingua anche in un albero già costruito", () => {
+    const nodes = nodesOf(
+      rect("o1", "Start") + rect("o2", "Check") + rect("o3") +
+        connector("c1", { from: "o1", to: "o2" }) +
+        connector("c2", { from: "o1" }) +
+        connector("c3", { to: "o2" }) +
+        connector("c4", {}) +
+        connector("c5", { from: "o3", to: "o2" }) + label("t1", "c5", "yes"),
+    );
+    const connectors = nodes.filter((node) => node.item.role === "connector");
+    expect(spoken(connectors)[4]).toBe("Connettore «yes» da Rettangolo a «Check»");
+    vi.stubGlobal("navigator", { language: "en-GB" });
+    expect(spoken(connectors)).toEqual([
+      "Connector from “Start” to “Check”",
+      "Connector from “Start”",
+      "Connector to “Check”",
+      "Connector",
+      "Connector “yes” from Rectangle to “Check”",
+    ]);
+    expect(connectors[4]!.joined).toEqual({ from: "Rectangle", to: "Check", label: "yes" });
+    expect(connectors[0]!.connection).toEqual({ from: "“Start”", to: "“Check”" });
   });
 });

@@ -364,7 +364,7 @@ describe("il livello Standard", () => {
     editor.select(["o1a2b3c4d"]);
     editor.setLevel("standard");
     expect(editor.level).toBe("standard");
-    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Sfumatura", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Poligono", "Testo"]);
+    expect(shown(".draw-tool")).toEqual(["Selezione", "Lazo", "Tavola", "Contagocce", "Sfumatura", "Penna", "Evidenziatore", "Gomma", "Rettangolo", "Ellisse", "Linea", "Freccia", "Connettore", "Poligono", "Testo"]);
     expect(shown("button")).toContain("Altro colore…");
     const highlighter = host.querySelector<HTMLButtonElement>('[data-tool="highlighter"]')!;
     expect(highlighter.title).toBe("Evidenziatore (H)");
@@ -834,7 +834,7 @@ describe("i collegamenti a una nota", () => {
     const links = stub();
     mount(ROW, { level: "standard", links });
     editor.select([A, B]);
-    expect(shown()).toEqual(["Duplica", "Raggruppa", "Separa", "Collega a una nota…", "Ordine", "Allinea e distribuisci"]);
+    expect(shown()).toEqual(["Duplica", "Raggruppa", "Separa", "Collega a una nota…", "Ordine", "Allinea e distribuisci", "Collega le forme scelte"]);
     const link = named("Collega a una nota…")!;
     expect(link.title).toBe("Collega a una nota… (Ctrl+K)");
     expect(link.getAttribute("aria-keyshortcuts")).toBe("Control+K");
@@ -4887,7 +4887,7 @@ describe("da tastiera", () => {
       "Attributi · dal livello Esperto",
     ]);
     // Solo ciò che manca: i sette strumenti dell'Essenziale non si ripetono.
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["X", "Connettore"], ["Y", "Poligono"], ["T", "Testo"]]);
     // Dell'albero, il nome, la ricerca e il passo.
     expect(tables[1]!.rows).toEqual([
       ["F2", "Nell’albero cambia il nome della riga; sul foglio, quello dell’oggetto scelto, se non è un testo"],
@@ -6147,9 +6147,11 @@ describe("la selezione avanzata, dal livello Standard", () => {
       ["Nascondi", "true"],
       ["Sblocca tutto", "true"],
       ["Mostra tutto", "true"],
+      ["Collega le forme scelte", "true"],
       ["Isola il gruppo", "true"],
     ]);
     expect(item("Stesso riempimento").querySelector(".menu-description")!.textContent).toBe("Scegli prima degli oggetti.");
+    expect(item("Collega le forme scelte").querySelector(".menu-description")!.textContent).toBe("Scegli almeno due oggetti da unire: i connettori non contano.");
     expect(item("Rinomina").querySelector(".menu-description")!.textContent).toBe("Scegli un oggetto solo per cambiargli il nome.");
     item("Seleziona tutto").click();
     expect(editor.selection).toEqual([A, B, G]);
@@ -8980,7 +8982,7 @@ describe("la penna di Bézier, dal livello Esperto", () => {
     expect(bezierTool().hidden).toBe(false);
     expect(bezierTool().title).toBe("Bézier (B)");
     const tools = [...host.querySelectorAll<HTMLButtonElement>(".draw-tool:not([hidden])")].map((control) => control.dataset.tool);
-    expect(tools.slice(tools.indexOf("arrow"))).toEqual(["arrow", "polygon", "bezier", "text"]);
+    expect(tools.slice(tools.indexOf("arrow"))).toEqual(["arrow", "connector", "polygon", "bezier", "text"]);
     key("b");
     expect(editor.tool).toBe("bezier");
     expect(bezierTool().getAttribute("aria-checked")).toBe("true");
@@ -10801,7 +10803,7 @@ describe("il livello Personalizzato", () => {
       "Curvatura · dal livello Esperto",
       "Attributi · dal livello Esperto",
     ]);
-    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["Y", "Poligono"], ["T", "Testo"]]);
+    expect(tables[0]!.rows).toEqual([["Q", "Lazo"], ["F", "Tavola"], ["I", "Contagocce"], ["G", "Sfumatura"], ["H", "Evidenziatore"], ["X", "Connettore"], ["Y", "Poligono"], ["T", "Testo"]]);
     expect(tables[20]!.rows).toEqual([["M", "Costruttore di forme"], ["C", "Forbici"], ["W", "Spessore"], ["B", "Bézier"]]);
     expect(formatIssues(checkAccessibility(dialog()))).toBe("");
     dialog().querySelector<HTMLButtonElement>(".palette-actions .primary")!.click();
@@ -14760,6 +14762,1082 @@ describe("la campitura", () => {
       kindButton().focus();
       key("ArrowDown", {}, kindButton());
       expect(kindButton().getAttribute("aria-expanded")).toBe("false");
+    });
+  });
+});
+
+describe("il Connettore, dal livello Standard", () => {
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  const G = "og4g4g4g4";
+  const I = "oi5i5i5i5";
+  const J = "oj6j6j6j6";
+  const rect = (id: string, name: string, x: number, y: number, width: number, height: number, fill: string): string =>
+    `<rect id="${id}" x="${x}" y="${y}" width="${width}" height="${height}" fill="${fill}"><title>${name}</title></rect>`;
+  /// Tre rettangoli, Alfa in alto a sinistra, Beta alla sua destra e Gamma
+  /// sotto, e in basso a destra un gruppo di due.
+  const SHAPES = doc(
+    `<title>Prova</title>${LAYER}${rect(A, "Alfa", 40, 60, 60, 40, "#e69f00")}${rect(B, "Beta", 240, 60, 60, 40, "#009e73")}${rect(C, "Gamma", 140, 200, 60, 40, "#56b4e9")}` +
+      `<g id="${G}"><title>Coppia</title>${rect(I, "Dentro", 290, 200, 40, 40, "#d55e00")}${rect(J, "Fuori", 340, 200, 40, 40, "#cc79a7")}</g></g>`,
+  ).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
+
+  // Per i test che guardano i marcatori nel disegno.
+  const scene = (): never => ({ engine: editor.engine }) as never;
+  /// L'elemento `id`, com'è scritto nel testo del disegno.
+  const tag = (id: string): string => new RegExp(`<[a-zA-Z]+ id="${id}"[^>]*>`).exec(editor.engine.text)![0];
+  const attr = (id: string, name: string): string | null => new RegExp(` ${name}="([^"]*)"`).exec(tag(id))?.[1] ?? null;
+  /// Gli id dei connettori del disegno, in ordine di documento.
+  const lines = (): string[] => [...editor.engine.text.matchAll(/<path id="([^"]+)" [^>]*fub:shape="connector"/g)].map((match) => match[1]!);
+  const numbers = (geom: string): number[] => geom.split(" ").slice(1).map(Number);
+  const pointsOf = (id: string): Array<[number, number]> => {
+    const all = numbers(attr(id, "fub:geom")!);
+    return Array.from({ length: all.length / 2 }, (_, i) => [all[2 * i]!, all[2 * i + 1]!]);
+  };
+  /// Il `d` che la geometria `fub:geom` di `id` detta: i punti in fila, o
+  /// la curva.
+  const dictated = (id: string): string => {
+    const geom = attr(id, "fub:geom")!;
+    const points = pointsOf(id).map(([x, y]) => `${x} ${y}`);
+    return geom.startsWith("curved") ? `M${points[0]} C${points.slice(1).join(" ")}` : `M${points[0]} ${points.slice(1).map((each) => `L${each}`).join(" ")}`;
+  };
+  /// Un trascinamento col Connettore in mano, da `from` a `to` passando a
+  /// metà.
+  const link = (from: readonly [number, number], to: readonly [number, number], init: Init = {}): void =>
+    drag([from, [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2], to], init);
+  /// Un tocco, lontano nel tempo dal precedente.
+  const tap = (x: number, y: number, init: Init = {}): void => {
+    clock += 1000;
+    drag([[x, y]], init);
+  };
+  const toolButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('.draw-tool[data-tool="connector"]')!;
+  const connecting = (source = SHAPES, options: DrawEditorOptions = {}): void => {
+    mount(source, { level: "standard", ...options });
+    key("x");
+  };
+
+  it("c'è dal livello Standard, col tasto X dopo la freccia; all'Essenziale no, e chi lo aveva in mano riprende la penna", () => {
+    mount(SHAPES);
+    expect(toolButton().hidden).toBe(true);
+    expect(key("x").defaultPrevented).toBe(false);
+    expect(editor.tool).toBe("pen");
+    editor.setLevel("standard");
+    expect(toolButton().hidden).toBe(false);
+    expect(toolButton().title).toBe("Connettore (X)");
+    expect(toolButton().getAttribute("aria-keyshortcuts")).toBe("X");
+    const tools = [...host.querySelectorAll<HTMLButtonElement>(".draw-tool:not([hidden])")].map((control) => control.dataset.tool);
+    expect(tools.slice(tools.indexOf("arrow"))).toEqual(["arrow", "connector", "polygon", "text"]);
+    key("x");
+    expect(editor.tool).toBe("connector");
+    expect(spoken()).toBe("Strumento: Connettore.");
+    expect(toolButton().getAttribute("aria-checked")).toBe("true");
+    editor.setLevel("essential");
+    expect(toolButton().hidden).toBe(true);
+    expect(editor.tool).toBe("pen");
+    expect(changes).toEqual([]);
+  });
+
+  it("un trascinamento da un oggetto a un altro scrive un connettore a gomito, agganciato a tutti e due, in un passo che si annulla", () => {
+    connecting();
+    // Lontano dai punti d'aggancio, il lato lo sceglie FubDraw.
+    link([60, 90], [155, 225]);
+    const [id] = lines();
+    expect(lines()).toHaveLength(1);
+    expect(attr(id!, "fub:from")).toBe(`${A} auto`);
+    expect(attr(id!, "fub:to")).toBe(`${C} auto`);
+    expect(attr(id!, "fub:geom")).toMatch(/^elbow /);
+    // Un gomito ha almeno una svolta, parte da un lato di Alfa e arriva a uno di Gamma.
+    const points = pointsOf(id!);
+    expect(points.length).toBeGreaterThanOrEqual(3);
+    expect([[70, 60], [100, 80], [70, 100], [40, 80]]).toContainEqual(points[0]);
+    expect([[170, 200], [200, 220], [170, 240], [140, 220]]).toContainEqual(points[points.length - 1]);
+    expect(attr(id!, "d")).toBe(dictated(id!));
+    expect(attr(id!, "fill")).toBe("none");
+    expect(attr(id!, "stroke")).toBe("#000000");
+    // La punta è un triangolo medio alla fine, e il capo d'inizio non ne ha.
+    expect(attr(id!, "marker-start")).toBeNull();
+    expect(tipOf(scene(), id!, "end")).toBe("triangle medium end #000000");
+    expect(markersIn(scene())).toHaveLength(1);
+    // Resta scelto, e lo strumento è ancora il Connettore.
+    expect(editor.selection).toEqual([id]);
+    expect(editor.tool).toBe("connector");
+    expect(spoken()).toBe("Connettore aggiunto da Rettangolo «Alfa» a Rettangolo «Gamma». Il disegno ha 5 oggetti.");
+    expect(changes).toHaveLength(1);
+    const written = editor.engine.text;
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Connettore.");
+    expect(editor.engine.text).toBe(SHAPES);
+    editor.redo();
+    expect(spoken()).toBe("Ripetuto: Connettore.");
+    expect(editor.engine.text).toBe(written);
+  });
+
+  /// Un gesto del puntatore che passa per `steps`: il primo preme, l'ultimo
+  /// alza, ognuno coi suoi modificatori.
+  const sweep = (steps: ReadonlyArray<readonly [number, number, Init?]>): void => {
+    const last = steps.length - 1;
+    steps.forEach(([x, y, init], at) => {
+      const type = at === 0 ? "pointerdown" : at === last ? "pointerup" : "pointermove";
+      surface().dispatchEvent(
+        pointer(type, { ...MOUSE, button: at === 0 || at === last ? 0 : -1, buttons: at === last ? 0 : 1, pressure: at === last ? 0 : 0.5, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }),
+      );
+    });
+  };
+  /// Il puntatore passa sopra `x`, `y` senza premere.
+  const hover = (x: number, y: number, init: Init = {}): void =>
+    void surface().dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 0, clientX: x, clientY: y, timeStamp: (clock += 8), ...init }));
+  const edges = (box: readonly [number, number, number, number]): string[] => {
+    const [x1, y1, x2, y2] = box;
+    return [`${x1},${y1}`, `${x2},${y1}`, `${x2},${y2}`, `${x1},${y2}`];
+  };
+
+  describe("sopra un oggetto", () => {
+    let layer: ReturnType<typeof recording>;
+    beforeEach(() => {
+      layer = recording();
+    });
+    /// I cerchi dell'ultimo disegno, dove stanno e quanto sono larghi: da 3,5
+    /// i punti d'aggancio, da 4,5 quello che il capo prenderebbe.
+    const circles = (): string[] =>
+      layer
+        .calls()
+        .filter(([name]) => name === "arc")
+        .map(([, x, y, radius]) => `${x},${y} r${radius}`)
+        .sort();
+    /// Gli angoli da cui parte un tratto del contorno, dell'ultimo disegno.
+    const outlined = (): string[] =>
+      layer
+        .calls()
+        .filter(([name]) => name === "moveTo")
+        .map(([, x, y]) => `${x},${y}`)
+        .sort();
+    const over = (x: number, y: number, init: Init = {}): void => {
+      hover(x, y, init);
+      layer.frame();
+    };
+
+    it("il Connettore mostra il contorno e i cinque punti d'aggancio, e il punto vicino al puntatore pieno", () => {
+      connecting();
+      over(200, 140);
+      expect(circles()).toEqual([]);
+      expect(outlined()).toEqual([]);
+      over(60, 90);
+      expect(circles()).toEqual(["100,80 r3.5", "40,80 r3.5", "70,100 r3.5", "70,60 r3.5", "70,80 r3.5"]);
+      expect(outlined()).toEqual(edges([40, 60, 100, 100]).sort());
+      // Vicino al punto di destra, è quello che il capo prenderebbe.
+      over(97, 83);
+      expect(circles()).toEqual(["100,80 r4.5", "40,80 r3.5", "70,100 r3.5", "70,60 r3.5", "70,80 r3.5"]);
+      over(200, 140);
+      expect(circles()).toEqual([]);
+      // Gli altri strumenti non li mostrano.
+      editor.setTool("select");
+      over(60, 90);
+      expect(circles()).toEqual([]);
+    });
+
+    it("un gruppo mostra i suoi punti, e con Ctrl o ⌘ quelli dell'oggetto dentro", () => {
+      connecting();
+      over(300, 230);
+      expect(circles()).toEqual(["290,220 r3.5", "335,200 r3.5", "335,220 r3.5", "335,240 r3.5", "380,220 r3.5"]);
+      over(300, 230, { ctrlKey: true });
+      expect(circles()).toEqual(["290,220 r3.5", "310,200 r3.5", "310,220 r3.5", "310,240 r3.5", "330,220 r3.5"]);
+    });
+
+    it("uscendo dal foglio o cambiando strumento i punti spariscono, e scegliendo il Connettore sopra un oggetto si vedono subito", () => {
+      connecting();
+      over(60, 90);
+      expect(circles()).toHaveLength(5);
+      surface().dispatchEvent(new Event("pointerleave"));
+      layer.frame();
+      expect(circles()).toEqual([]);
+      over(60, 90);
+      expect(circles()).toHaveLength(5);
+      editor.setTool("rect");
+      layer.frame();
+      expect(circles()).toEqual([]);
+      editor.setTool("connector");
+      layer.frame();
+      expect(circles()).toHaveLength(5);
+    });
+
+    it("tirando un connettore si vedono i punti dell'oggetto da cui parte e di quello che si tocca", () => {
+      connecting();
+      const target = surface();
+      target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 60, clientY: 90, timeStamp: (clock += 8) }));
+      target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 150, clientY: 90, timeStamp: (clock += 8) }));
+      target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 242, clientY: 82, timeStamp: (clock += 8) }));
+      layer.frame();
+      // Alfa da cui parte, con l'aggancio automatico: nessun punto pieno. Beta,
+      // dove il capo si aggancerebbe a sinistra.
+      expect(circles()).toEqual(
+        ["100,80 r3.5", "40,80 r3.5", "70,100 r3.5", "70,60 r3.5", "70,80 r3.5", "240,80 r4.5", "270,100 r3.5", "270,60 r3.5", "270,80 r3.5", "300,80 r3.5"].sort(),
+      );
+      target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 242, clientY: 82, timeStamp: (clock += 8) }));
+    });
+  });
+
+  it("il capo preso vicino a un punto d'aggancio si aggancia lì, altrove sceglie FubDraw", () => {
+    connecting();
+    link([97, 83], [243, 78]);
+    expect(attr(lines()[0]!, "fub:from")).toBe(`${A} right`);
+    expect(attr(lines()[0]!, "fub:to")).toBe(`${B} left`);
+    // Fra due punti che stanno allo stesso livello il gomito è un tratto solo.
+    expect(attr(lines()[0]!, "fub:geom")).toBe("elbow 100 80 240 80");
+    expect(attr(lines()[0]!, "d")).toBe("M100 80 L240 80");
+    // A 9 pixel dal punto di sinistra di Alfa si aggancia ancora; a 11 no.
+    // (Il connettore nuovo resta scelto, e i suoi capi si prendono: si lascia.)
+    editor.select([]);
+    link([49, 80], [160, 215]);
+    expect(attr(lines()[1]!, "fub:from")).toBe(`${A} left`);
+    editor.select([]);
+    link([51, 80], [160, 215]);
+    expect(attr(lines()[2]!, "fub:from")).toBe(`${A} auto`);
+    expect(attr(lines()[2]!, "fub:to")).toBe(`${C} auto`);
+  });
+
+  it("la soglia dell'aggancio è la stessa sullo schermo a qualunque zoom", () => {
+    connecting();
+    size(400, 300);
+    key("+");
+    key("+");
+    // Al 156 % la scena sta attorno al centro del foglio: il punto sinistro
+    // di Alfa, in 40, 80, è a -50, 40,6 sullo schermo.
+    const onScreen = (x: number, y: number): [number, number] => [200 + (x - 200) * 1.5625, 150 + (y - 150) * 1.5625];
+    const to = onScreen(160, 215);
+    link([-41, 40.625], to);
+    expect(attr(lines()[0]!, "fub:from")).toBe(`${A} left`);
+    editor.select([]);
+    // A 11 pixel, che sulla scena sono 7 unità, no: il limite è di pixel.
+    link([-39, 40.625], to);
+    expect(attr(lines()[1]!, "fub:from")).toBe(`${A} auto`);
+  });
+
+  it("con Ctrl o ⌘ il capo si aggancia all'oggetto dentro un gruppo, senza al gruppo", () => {
+    connecting();
+    link([300, 230], [60, 90]);
+    expect(attr(lines()[0]!, "fub:from")).toBe(`${G} auto`);
+    editor.select([]);
+    link([300, 230], [60, 90], { ctrlKey: true });
+    expect(attr(lines()[1]!, "fub:from")).toBe(`${I} auto`);
+    expect(attr(lines()[1]!, "fub:to")).toBe(`${A} auto`);
+  });
+
+  it("un capo non si aggancia all'oggetto dell'altro capo, né a chi lo contiene o vi sta dentro", () => {
+    connecting();
+    // Da Alfa a un punto di Alfa: l'altro capo resta libero dove cade.
+    link([60, 90], [80, 70]);
+    expect(attr(lines()[0]!, "fub:from")).toBe(`${A} auto`);
+    expect(attr(lines()[0]!, "fub:to")).toBeNull();
+    expect(pointsOf(lines()[0]!)[pointsOf(lines()[0]!).length - 1]).toEqual([80, 70]);
+    expect(spoken()).toBe("Connettore aggiunto da Rettangolo «Alfa». Il disegno ha 5 oggetti.");
+    // Dal gruppo a un oggetto dentro il gruppo.
+    editor.select([]);
+    sweep([[300, 230], [330, 225], [350, 220, { ctrlKey: true }], [352, 220, { ctrlKey: true }]]);
+    expect(attr(lines()[1]!, "fub:from")).toBe(`${G} auto`);
+    expect(attr(lines()[1]!, "fub:to")).toBeNull();
+    // Da un oggetto dentro il gruppo al gruppo.
+    editor.select([]);
+    sweep([[300, 230, { ctrlKey: true }], [330, 225, { ctrlKey: true }], [360, 230], [362, 230]]);
+    expect(attr(lines()[2]!, "fub:from")).toBe(`${I} auto`);
+    expect(attr(lines()[2]!, "fub:to")).toBeNull();
+    // Due fratelli, invece, si uniscono.
+    editor.select([]);
+    link([300, 230], [350, 230], { ctrlKey: true });
+    expect(attr(lines()[3]!, "fub:from")).toBe(`${I} auto`);
+    expect(attr(lines()[3]!, "fub:to")).toBe(`${J} auto`);
+  });
+
+  it("con Ctrl o ⌘ una linea che passa sopra un oggetto in un gruppo non gli toglie l'aggancio", () => {
+    connecting();
+    // Una linea libera, in verticale, sopra il secondo oggetto del gruppo.
+    link([352, 150], [352, 280]);
+    expect(lines()).toHaveLength(1);
+    editor.select([]);
+    link([60, 90], [350, 232], { ctrlKey: true });
+    expect(attr(lines()[1]!, "fub:to")).toBe(`${J} auto`);
+    // Senza Ctrl, il gruppo.
+    editor.select([]);
+    link([60, 90], [350, 232]);
+    expect(attr(lines()[2]!, "fub:to")).toBe(`${G} auto`);
+  });
+
+  it("da un punto vuoto a un altro il connettore è libero, e uno quasi fermo non si scrive", () => {
+    connecting();
+    link([120, 130], [200, 150]);
+    const [id] = lines();
+    expect(attr(id!, "fub:from")).toBeNull();
+    expect(attr(id!, "fub:to")).toBeNull();
+    expect(pointsOf(id!)[0]).toEqual([120, 130]);
+    expect(pointsOf(id!)[pointsOf(id!).length - 1]).toEqual([200, 150]);
+    expect(attr(id!, "d")).toBe(dictated(id!));
+    expect(spoken()).toBe("Connettore aggiunto. Il disegno ha 5 oggetti.");
+    expect(changes).toHaveLength(1);
+    // Oltre la soglia del trascinamento, ma sotto la misura minima.
+    drag([[150, 130], [153.5, 130]]);
+    expect(lines()).toHaveLength(1);
+    expect(changes).toHaveLength(1);
+    // Con un capo solo su un oggetto, la frase dice quale.
+    editor.select([]);
+    link([60, 90], [200, 140]);
+    expect(attr(lines()[1]!, "fub:from")).toBe(`${A} auto`);
+    expect(attr(lines()[1]!, "fub:to")).toBeNull();
+    expect(spoken()).toBe("Connettore aggiunto da Rettangolo «Alfa». Il disegno ha 6 oggetti.");
+    editor.select([]);
+    link([200, 140], [250, 90]);
+    expect(attr(lines()[2]!, "fub:from")).toBeNull();
+    expect(attr(lines()[2]!, "fub:to")).toBe(`${B} auto`);
+    expect(spoken()).toBe("Connettore aggiunto verso Rettangolo «Beta». Il disegno ha 7 oggetti.");
+  });
+
+  it("con la griglia accesa i capi liberi vanno alla griglia, e con Ctrl o ⌘ restano dove sono", () => {
+    const snap: DrawEditorOptions = {
+      grid: { shown: false, snap: true, step: 20, guides: false, steps: {}, rulers: false, rulerGuides: true, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE },
+    };
+    connecting(SHAPES, snap);
+    link([118, 127], [203, 152]);
+    expect(pointsOf(lines()[0]!)[0]).toEqual([120, 120]);
+    expect(pointsOf(lines()[0]!)[pointsOf(lines()[0]!).length - 1]).toEqual([200, 160]);
+    editor.select([]);
+    link([118, 127], [203, 152], { ctrlKey: true });
+    expect(pointsOf(lines()[1]!)[0]).toEqual([118, 127]);
+    expect(pointsOf(lines()[1]!)[pointsOf(lines()[1]!).length - 1]).toEqual([203, 152]);
+    // I capi agganciati a un oggetto non vanno alla griglia.
+    editor.select([]);
+    link([97, 83], [243, 78]);
+    expect(attr(lines()[2]!, "fub:geom")).toBe("elbow 100 80 240 80");
+  });
+
+  it("un tocco sceglie come la Selezione: Maiusc aggiunge e toglie, Ctrl o ⌘ entra nei gruppi, il vuoto toglie", () => {
+    connecting();
+    tap(60, 90);
+    expect(editor.selection).toEqual([A]);
+    tap(260, 80, { shiftKey: true });
+    expect(editor.selection).toEqual([A, B]);
+    tap(60, 90, { shiftKey: true });
+    expect(editor.selection).toEqual([B]);
+    // Il vuoto con Maiusc non toglie niente.
+    tap(200, 140, { shiftKey: true });
+    expect(editor.selection).toEqual([B]);
+    tap(320, 220);
+    expect(editor.selection).toEqual([G]);
+    tap(310, 220, { ctrlKey: true });
+    expect(editor.selection).toEqual([I]);
+    tap(200, 140);
+    expect(editor.selection).toEqual([]);
+    expect(editor.tool).toBe("connector");
+    expect(lines()).toEqual([]);
+    expect(changes).toEqual([]);
+  });
+
+  /// Un connettore da Alfa, a destra, a Beta, a sinistra: resta scelto, e il
+  /// Connettore in mano.
+  const joined = (): string => {
+    link([97, 83], [243, 78]);
+    return lines()[0]!;
+  };
+  /// Come si vede sul foglio l'oggetto `id`.
+  const painted = (id: string): SVGElement => host.querySelector<SVGElement>(`[data-scene-id="${id}"]`)!;
+
+  describe("riagganciare un capo", () => {
+    const ends = (id: string): { first: [number, number]; last: [number, number] } => {
+      const points = pointsOf(id);
+      return { first: points[0]!, last: points[points.length - 1]! };
+    };
+
+    it("un connettore scelto ha ai capi due quadrati, e tirato su un altro oggetto il capo vi si aggancia, in un passo", () => {
+      const layer = recording();
+      connecting();
+      const id = joined();
+      layer.frame();
+      // I quadrati dei nodi: non i cerchi dell'aggancio, che qui non ci sono.
+      const squares = (): string[] =>
+        layer
+          .calls()
+          .filter(([name, , , width, height]) => name === "rect" && width === 8 && height === 8)
+          .map(([, x, y]) => `${x},${y}`);
+      expect(squares()).toEqual(["96.5,76.5", "236.5,76.5"]);
+      const before = editor.engine.text;
+      link([240, 80], [160, 215]);
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(attr(id, "fub:to")).toBe(`${C} auto`);
+      expect(attr(id, "fub:geom")).toMatch(/^elbow /);
+      expect(ends(id).first).toEqual([100, 80]);
+      expect([[170, 200], [200, 220], [170, 240], [140, 220]]).toContainEqual(ends(id).last);
+      expect(attr(id, "d")).toBe(dictated(id));
+      expect(spoken()).toBe("Fine agganciata a Rettangolo «Gamma».");
+      expect(editor.selection).toEqual([id]);
+      expect(changes).toHaveLength(2);
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Aggancio del connettore.");
+      expect(editor.engine.text).toBe(before);
+    });
+
+    it("mentre lo si tira il connettore si vede dove andrebbe", () => {
+      connecting();
+      const id = joined();
+      const resting = painted(id).getAttribute("d");
+      expect(resting).toBe(attr(id, "d"));
+      const target = surface();
+      const at = (type: string, x: number, y: number, held = 1): void =>
+        void target.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons: held, pressure: held === 1 ? 0.5 : 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+      at("pointerdown", 240, 80);
+      at("pointermove", 200, 150);
+      at("pointermove", 160, 215);
+      // Il testo non cambia finché non si lascia, il disegno sì.
+      expect(attr(id, "d")).toBe(resting);
+      expect(painted(id).getAttribute("d")).not.toBe(resting);
+      expect(painted(id).getAttribute("d")).toMatch(/^M100 80 /);
+      at("pointerup", 160, 215, 0);
+      expect(painted(id).getAttribute("d")).toBe(attr(id, "d"));
+      expect(attr(id, "d")).not.toBe(resting);
+    });
+
+    it("tirato nel vuoto il capo si stacca e resta dove si lascia; l'altro capo resta agganciato", () => {
+      connecting();
+      const id = joined();
+      const before = editor.engine.text;
+      link([240, 80], [200, 140]);
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(attr(id, "fub:to")).toBeNull();
+      expect(ends(id).last).toEqual([200, 140]);
+      expect(attr(id, "d")).toBe(dictated(id));
+      expect(spoken()).toBe("Fine staccata: ora è libera.");
+      // Il capo libero si riaggancia come ogni altro; qui l'inizio, prima a Gamma.
+      link([100, 80], [160, 215]);
+      expect(attr(id, "fub:from")).toBe(`${C} auto`);
+      expect(spoken()).toBe("Inizio agganciato a Rettangolo «Gamma».");
+      editor.undo();
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+    });
+
+    it("un capo non si riaggancia all'oggetto dell'altro capo", () => {
+      connecting();
+      const id = joined();
+      // L'inizio, portato su Beta, dove sta la fine: resta libero.
+      link([100, 80], [270, 70]);
+      expect(attr(id, "fub:from")).toBeNull();
+      expect(attr(id, "fub:to")).toBe(`${B} left`);
+      expect(spoken()).toBe("Inizio staccato: ora è libero.");
+    });
+
+    it("un connettore che non è scelto non ha capi da prendere: il gesto ne tira uno nuovo", () => {
+      connecting();
+      joined();
+      editor.select([]);
+      link([240, 80], [160, 215]);
+      expect(lines()).toHaveLength(2);
+    });
+  });
+
+  describe("quando gli oggetti si muovono o se ne vanno", () => {
+    it("il connettore segue l'oggetto spostato col mouse, e un annulla riporta tutto com'era", () => {
+      connecting();
+      const id = joined();
+      const before = editor.engine.text;
+      const resting = attr(id, "d");
+      editor.setTool("select");
+      editor.select([]);
+      const target = surface();
+      const at = (type: string, x: number, y: number, held = 1): void =>
+        void target.dispatchEvent(pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons: held, pressure: held === 1 ? 0.5 : 0, clientX: x, clientY: y, timeStamp: (clock += 8) }));
+      at("pointerdown", 60, 90);
+      at("pointermove", 65, 110);
+      at("pointermove", 60, 130);
+      // Mentre si trascina, la linea segue l'oggetto sul foglio.
+      expect(painted(id).getAttribute("d")).not.toBe(resting);
+      expect(attr(id, "d")).toBe(resting);
+      at("pointerup", 60, 130, 0);
+      expect(editor.engine.text).toContain(`<rect id="${A}" `);
+      expect(attr(A, "transform")).toBe("matrix(1 0 0 1 0 40)");
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(pointsOf(id)[0]).toEqual([100, 120]);
+      expect(attr(id, "d")).toBe(dictated(id));
+      expect(painted(id).getAttribute("d")).toBe(attr(id, "d"));
+      expect(changes).toHaveLength(2);
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      editor.redo();
+      expect(pointsOf(id)[0]).toEqual([100, 120]);
+    });
+
+    it("e quello spostato con le frecce, anche questo in un passo solo", () => {
+      connecting();
+      const id = joined();
+      const before = editor.engine.text;
+      editor.select([B]);
+      key("ArrowDown", { shiftKey: true });
+      expect(attr(B, "transform")).toBe("matrix(1 0 0 1 0 10)");
+      const points = pointsOf(id);
+      expect(points[points.length - 1]).toEqual([240, 90]);
+      expect(attr(id, "d")).toBe(dictated(id));
+      expect(changes).toHaveLength(2);
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+    });
+
+    it("l'oggetto eliminato lascia il connettore con l'ultima geometria e il capo libero, e un annulla ridà tutto", () => {
+      connecting();
+      const id = joined();
+      const before = editor.engine.text;
+      const geom = attr(id, "fub:geom");
+      const d = attr(id, "d");
+      editor.select([B]);
+      key("Delete");
+      expect(editor.engine.text).not.toContain(`id="${B}"`);
+      expect(attr(id, "fub:to")).toBeNull();
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(attr(id, "fub:geom")).toBe(geom);
+      expect(attr(id, "d")).toBe(d);
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      // L'inizio, lo stesso.
+      editor.select([A]);
+      key("Delete");
+      expect(attr(id, "fub:from")).toBeNull();
+      expect(attr(id, "fub:to")).toBe(`${B} left`);
+      expect(attr(id, "d")).toBe(d);
+    });
+  });
+
+  // --- Il pannello delle proprietà ----------------------------------------------
+
+  const openProperties = (): void => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Proprietà"]')!.click();
+  const section = (): HTMLElement => properties().querySelector<HTMLElement>('.draw-properties-section[data-section="connector"]')!;
+  const kindRadio = (kind: string): HTMLButtonElement => section().querySelector<HTMLButtonElement>(`button[data-kind="${kind}"]`)!;
+  const anchorMenu = (end: "from" | "to"): HTMLSelectElement => section().querySelector<HTMLSelectElement>(`[data-field="connector-${end}"] select`)!;
+  const labelArea = (): HTMLTextAreaElement => section().querySelector<HTMLTextAreaElement>('[data-field="connector-label"] textarea')!;
+  const invertButton = (): HTMLButtonElement => section().querySelector<HTMLButtonElement>('[data-field="connector-invert"]')!;
+  const pickAnchor = (end: "from" | "to", value: string): void => {
+    anchorMenu(end).value = value;
+    anchorMenu(end).dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  const writeLabel = (text: string): void => {
+    typeIn(labelArea(), text);
+    key("Enter", {}, labelArea());
+  };
+  /// Le etichette del disegno: l'id, dove stanno lungo il connettore, e il
+  /// `transform` che le porta al loro posto.
+  const labels = (): Array<{ id: string; along: string; transform: string | null }> =>
+    [...editor.engine.text.matchAll(/<text [^>]*>/g)].flatMap(([element]) => {
+      const along = / fub:along="([^"]*)"/.exec(element)?.[1];
+      return along === undefined ? [] : [{ id: / id="([^"]*)"/.exec(element)![1]!, along, transform: / transform="([^"]*)"/.exec(element)?.[1] ?? null }];
+    });
+  /// Un connettore da Alfa a Beta con l'etichetta «Sì», e il pannello aperto.
+  const labelled = (): string => {
+    connecting();
+    const id = joined();
+    openProperties();
+    writeLabel("Sì");
+    return id;
+  };
+
+  describe("le etichette e le copie", () => {
+    const clip = (type: "copy" | "cut" | "paste", data = new DataTransfer()): DataTransfer => {
+      // Con il fuoco in un campo, gli appunti sono del campo.
+      editor.focus();
+      surface().dispatchEvent(new ClipboardEvent(type, { bubbles: true, cancelable: true, clipboardData: data }));
+      return data;
+    };
+    const settle = async (): Promise<void> => {
+      for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    it("un'etichetta scritta nel pannello è un testo che segue il connettore", () => {
+      const id = labelled();
+      expect(labels()).toEqual([{ id: expect.any(String), along: `${id} 0.5 4`, transform: "matrix(1 0 0 1 170 68)" }]);
+      expect(editor.engine.text).toContain("<tspan x=\"0\" dy=\"0\">Sì</tspan>");
+      expect(editor.selection).toEqual([id]);
+    });
+
+    it("eliminare o tagliare il connettore porta via la sua etichetta, e un annulla le ridà", () => {
+      const id = labelled();
+      const before = editor.engine.text;
+      key("Delete");
+      expect(lines()).toEqual([]);
+      expect(labels()).toEqual([]);
+      expect(editor.engine.text).not.toContain("<text");
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      editor.select([id]);
+      const data = clip("cut");
+      expect(data.getData("text/plain")).toContain(`fub:along="${id} 0.5 4"`);
+      expect(labels()).toEqual([]);
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+    });
+
+    it("copiare il connettore copia anche l'etichetta, e incollarlo la lega al connettore nuovo", async () => {
+      const id = labelled();
+      const data = clip("copy");
+      const svg = data.getData("text/plain");
+      expect(svg).toContain(`fub:along="${id} 0.5 4"`);
+      expect(changes).toHaveLength(2);
+      const holding = new DataTransfer();
+      holding.setData("text/plain", svg);
+      clip("paste", holding);
+      await settle();
+      expect(lines()).toHaveLength(2);
+      const copy = lines()[1]!;
+      expect(labels().map((label) => label.along)).toEqual([`${id} 0.5 4`, `${copy} 0.5 4`]);
+      // Gli oggetti a cui era agganciato non sono stati copiati: i capi della copia sono liberi.
+      expect(attr(copy, "fub:from")).toBeNull();
+      expect(attr(copy, "fub:to")).toBeNull();
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+    });
+
+    it("duplicare il connettore da solo lo lascia coi capi liberi e la sua etichetta", () => {
+      const id = labelled();
+      editor.select([id]);
+      key("d", { ctrlKey: true });
+      expect(lines()).toHaveLength(2);
+      const copy = lines()[1]!;
+      expect(labels().map((label) => label.along)).toEqual([`${id} 0.5 4`, `${copy} 0.5 4`]);
+      expect(attr(copy, "fub:from")).toBeNull();
+      expect(attr(copy, "fub:to")).toBeNull();
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(attr(id, "fub:to")).toBe(`${B} left`);
+    });
+
+    it("duplicando gli oggetti insieme al connettore, la copia si aggancia alle copie e la sua etichetta la segue", () => {
+      const id = labelled();
+      const before = editor.engine.text;
+      editor.select([A, B, id]);
+      key("d", { ctrlKey: true });
+      expect(lines()).toHaveLength(2);
+      const copy = lines()[1]!;
+      const [copyA, copyB] = editor.selection.filter((key) => key !== copy && labels().every((label) => label.id !== key));
+      expect(attr(copy, "fub:from")).toBe(`${copyA} right`);
+      expect(attr(copy, "fub:to")).toBe(`${copyB} left`);
+      // L'originale è rimasto agganciato agli originali.
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(attr(id, "fub:to")).toBe(`${B} left`);
+      expect(labels().map((label) => label.along)).toEqual([`${id} 0.5 4`, `${copy} 0.5 4`]);
+      // Muovendo la copia di Beta, segue la copia del connettore e non l'originale.
+      const original = attr(id, "d");
+      editor.select([copyB!]);
+      key("ArrowDown", { shiftKey: true });
+      expect(attr(id, "d")).toBe(original);
+      expect(attr(copy, "d")).toBe(dictated(copy));
+      expect(attr(copy, "d")).not.toBe(original);
+      editor.undo();
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+    });
+  });
+
+  describe("«Collega le forme scelte»", () => {
+    const bar = (): HTMLElement => host.querySelector<HTMLElement>(".draw-arrange")!;
+    const connectButton = (): HTMLButtonElement => bar().querySelector<HTMLButtonElement>('button[aria-label="Collega le forme scelte"]')!;
+    const selectionButton = (): HTMLButtonElement => host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Selezione avanzata"]')!;
+    const menu = (): HTMLButtonElement[] => {
+      const open = document.querySelectorAll<HTMLElement>(".context-menu");
+      return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+    };
+    const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+    const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
+    afterEach(() => {
+      closeContextMenu();
+      for (const open of document.querySelectorAll(".context-menu")) open.remove();
+    });
+
+    it("tre forme scelte si uniscono in fila, da sinistra a destra, con due connettori che restano scelti, in un passo", () => {
+      mount(SHAPES, { level: "standard" });
+      editor.select([A, B, C]);
+      expect(connectButton().hidden).toBe(false);
+      connectButton().click();
+      // I centri sono più distesi in larghezza: Alfa, Gamma e Beta.
+      expect(lines()).toHaveLength(2);
+      const [first, second] = lines();
+      expect([attr(first!, "fub:from"), attr(first!, "fub:to")]).toEqual([`${A} auto`, `${C} auto`]);
+      expect([attr(second!, "fub:from"), attr(second!, "fub:to")]).toEqual([`${C} auto`, `${B} auto`]);
+      for (const id of lines()) {
+        expect(attr(id, "fub:geom")).toMatch(/^elbow /);
+        expect(attr(id, "d")).toBe(dictated(id));
+        expect(tipOf(scene(), id, "end")).toBe("triangle medium end #000000");
+      }
+      expect(markersIn(scene())).toHaveLength(1);
+      expect(editor.selection).toEqual(lines());
+      expect(spoken()).toBe("2 connettori aggiunti. Il disegno ha 6 oggetti.");
+      expect(changes).toHaveLength(1);
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Collega le forme.");
+      expect(editor.engine.text).toBe(SHAPES);
+    });
+
+    it("dal menu della selezione fa lo stesso, e con le forme già unite lo dice senza scrivere niente", () => {
+      mount(SHAPES, { level: "standard" });
+      editor.select([A, B]);
+      selectionButton().click();
+      item("Collega le forme scelte").click();
+      expect(spoken()).toBe("1 connettore aggiunto. Il disegno ha 5 oggetti.");
+      expect(attr(lines()[0]!, "fub:from")).toBe(`${A} auto`);
+      expect(attr(lines()[0]!, "fub:to")).toBe(`${B} auto`);
+      const written = editor.engine.text;
+      editor.select([A, B]);
+      selectionButton().click();
+      item("Collega le forme scelte").click();
+      expect(spoken()).toBe("Le forme scelte sono già unite.");
+      expect(editor.engine.text).toBe(written);
+      expect(changes).toHaveLength(1);
+      expect(editor.selection).toEqual([A, B]);
+    });
+
+    it("una coppia già unita, nell'uno o nell'altro verso, si salta e si dice", () => {
+      connecting();
+      // Da Gamma ad Alfa, a mano.
+      link([160, 225], [60, 90]);
+      editor.setTool("select");
+      editor.select([A, B, C]);
+      connectButton().click();
+      expect(lines()).toHaveLength(2);
+      expect([attr(lines()[1]!, "fub:from"), attr(lines()[1]!, "fub:to")]).toEqual([`${C} auto`, `${B} auto`]);
+      expect(spoken()).toBe("1 connettore aggiunto. 1 coppia era già unita. Il disegno ha 6 oggetti.");
+    });
+
+    it("gli oggetti senza id ne ricevono uno, nello stesso passo", () => {
+      const plain = doc(`${LAYER}<rect x="40" y="60" width="60" height="40" fill="#e69f00"/><rect x="240" y="60" width="60" height="40" fill="#009e73"/></g>`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
+      mount(plain, { level: "standard" });
+      key("a", { ctrlKey: true });
+      expect(editor.selection).toHaveLength(2);
+      connectButton().click();
+      const [id] = lines();
+      const [from, to] = [attr(id!, "fub:from")!.split(" ")[0]!, attr(id!, "fub:to")!.split(" ")[0]!];
+      expect(editor.engine.text).toMatch(new RegExp(`<rect id="${from}" x="40"`));
+      expect(editor.engine.text).toMatch(new RegExp(`<rect id="${to}" x="240"`));
+      expect(changes).toHaveLength(1);
+      editor.undo();
+      expect(editor.engine.text).toBe(plain);
+    });
+
+    it("con meno di due oggetti il pulsante non c'è e la voce del menu è spenta, e dice perché; i connettori non contano", () => {
+      mount(SHAPES, { level: "standard" });
+      editor.select([A]);
+      expect(connectButton().hidden).toBe(true);
+      selectionButton().click();
+      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBe("true");
+      expect(item("Collega le forme scelte").querySelector(".menu-description")!.textContent).toBe("Scegli almeno due oggetti da unire: i connettori non contano.");
+      item("Collega le forme scelte").click();
+      expect(changes).toEqual([]);
+      closeContextMenu();
+      for (const open of document.querySelectorAll(".context-menu")) open.remove();
+      // Un oggetto e un connettore sono ancora uno solo da unire.
+      key("x");
+      link([97, 83], [243, 78]);
+      editor.select([A, lines()[0]!]);
+      expect(connectButton().hidden).toBe(true);
+      selectionButton().click();
+      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBe("true");
+    });
+
+    it("all'Essenziale non c'è, e in sola lettura la voce è spenta e la barra non si vede", () => {
+      mount(SHAPES);
+      editor.select([A, B]);
+      expect(connectButton().hidden).toBe(true);
+      editor.setLevel("standard");
+      expect(connectButton().hidden).toBe(false);
+      selectionButton().click();
+      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBeNull();
+      closeContextMenu();
+      for (const open of document.querySelectorAll(".context-menu")) open.remove();
+      editor.setReadOnly(true);
+      expect(bar().hidden).toBe(true);
+      selectionButton().click();
+      expect(item("Collega le forme scelte").getAttribute("aria-disabled")).toBe("true");
+      item("Collega le forme scelte").click();
+      expect(lines()).toEqual([]);
+      expect(changes).toEqual([]);
+    });
+  });
+
+  describe("la sezione «Connettore» delle proprietà", () => {
+    it("c'è con un connettore scelto e non senza, e dice il suo tipo, gli agganci e l'etichetta", () => {
+      connecting();
+      openProperties();
+      expect(section().hidden).toBe(true);
+      const id = joined();
+      expect(section().hidden).toBe(false);
+      expect(["straight", "elbow", "curved"].map((kind) => kindRadio(kind).getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+      expect([anchorMenu("from").value, anchorMenu("to").value]).toEqual(["right", "left"]);
+      expect(labelArea().value).toBe("");
+      // Un oggetto scelto accanto non cambia la sezione; da solo, la toglie.
+      editor.select([A, id]);
+      expect(section().hidden).toBe(false);
+      editor.select([A]);
+      expect(section().hidden).toBe(true);
+      expect(formatIssues(checkAccessibility(host))).toBe("");
+    });
+
+    it("«Curvo» riscrive il percorso in un passo, e il connettore che si tira dopo è curvo", () => {
+      connecting();
+      const id = joined();
+      openProperties();
+      const before = editor.engine.text;
+      kindRadio("curved").click();
+      expect(attr(id, "fub:geom")).toMatch(/^curved (-?[\d.]+ ){7}-?[\d.]+$/);
+      expect(attr(id, "d")).toBe(dictated(id));
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(attr(id, "fub:to")).toBe(`${B} left`);
+      expect(kindRadio("curved").getAttribute("aria-checked")).toBe("true");
+      expect(spoken()).toBe("1 connettore cambiato.");
+      expect(changes).toHaveLength(2);
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Tipo del connettore.");
+      expect(editor.engine.text).toBe(before);
+      expect(kindRadio("elbow").getAttribute("aria-checked")).toBe("true");
+      editor.redo();
+      expect(attr(id, "fub:geom")).toMatch(/^curved /);
+      // Lo strumento disegna del tipo scelto per ultimo.
+      editor.select([]);
+      link([60, 90], [155, 225]);
+      expect(attr(lines()[1]!, "fub:geom")).toMatch(/^curved (-?[\d.]+ ){7}-?[\d.]+$/);
+      expect(attr(lines()[1]!, "d")).toBe(dictated(lines()[1]!));
+      expect(kindRadio("curved").getAttribute("aria-checked")).toBe("true");
+      // Anche «Collega le forme scelte».
+      editor.select([A, B, C]);
+      host.querySelector<HTMLButtonElement>('.draw-arrange button[aria-label="Collega le forme scelte"]')!.click();
+      expect(attr(lines()[2]!, "fub:geom")).toMatch(/^curved /);
+    });
+
+    it("l'aggancio di un capo cambia il punto in cui il connettore tocca l'oggetto, in un passo", () => {
+      connecting();
+      const id = joined();
+      openProperties();
+      const before = editor.engine.text;
+      pickAnchor("from", "top");
+      expect(attr(id, "fub:from")).toBe(`${A} top`);
+      expect(attr(id, "fub:to")).toBe(`${B} left`);
+      expect(pointsOf(id)[0]).toEqual([70, 60]);
+      expect(attr(id, "d")).toBe(dictated(id));
+      expect(spoken()).toBe("1 connettore cambiato.");
+      expect(anchorMenu("from").value).toBe("top");
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Aggancio del connettore.");
+      expect(editor.engine.text).toBe(before);
+      expect(anchorMenu("from").value).toBe("right");
+      pickAnchor("to", "bottom");
+      expect(attr(id, "fub:to")).toBe(`${B} bottom`);
+      const points = pointsOf(id);
+      expect(points[points.length - 1]).toEqual([270, 100]);
+    });
+
+    it("un capo libero lo dice e non si cambia dal menu", () => {
+      connecting();
+      const id = joined();
+      openProperties();
+      editor.select([B]);
+      key("Delete");
+      editor.select([id]);
+      expect(anchorMenu("to").value).toBe("free");
+      expect(anchorMenu("to").disabled).toBe(true);
+      expect(anchorMenu("from").disabled).toBe(false);
+      expect(section().textContent).toContain("Per agganciarlo, trascina il capo su un oggetto con lo strumento Connettore.");
+      expect(formatIssues(checkAccessibility(host))).toBe("");
+    });
+
+    it("l'etichetta è un testo lungo il connettore: lo segue quando gli oggetti si muovono, e vuota se ne va", () => {
+      const id = labelled();
+      const [label] = labels();
+      expect(label!.transform).toBe("matrix(1 0 0 1 170 68)");
+      const before = editor.engine.text;
+      editor.select([B]);
+      key("ArrowRight", { shiftKey: true });
+      // Il connettore si allunga di 10, e l'etichetta resta a metà.
+      expect(labels()).toEqual([{ id: label!.id, along: `${id} 0.5 4`, transform: "matrix(1 0 0 1 175 68)" }]);
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      // Un testo nuovo cambia le righe dell'etichetta che c'è, e non ne fa un'altra.
+      editor.select([id]);
+      writeLabel("No");
+      expect(labels().map((each) => each.id)).toEqual([label!.id]);
+      expect(editor.engine.text).toContain('<tspan x="0" dy="0">No</tspan>');
+      expect(editor.engine.text).not.toContain(">Sì<");
+      writeLabel("");
+      expect(labels()).toEqual([]);
+      expect(editor.engine.text).not.toContain("<text");
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Etichetta del connettore.");
+      expect(labels()).toHaveLength(1);
+    });
+
+    it("«Inverti» porta la freccia dall'altra parte: la punta di fine resta di fine, e l'etichetta resta dov'è", () => {
+      const id = labelled();
+      const before = editor.engine.text;
+      const first = pointsOf(id)[0]!;
+      const last = pointsOf(id)[pointsOf(id).length - 1]!;
+      const place = labels()[0]!.transform;
+      expect(tipOf(scene(), id, "end")).toBe("triangle medium end #000000");
+      invertButton().click();
+      expect(attr(id, "fub:from")).toBe(`${B} left`);
+      expect(attr(id, "fub:to")).toBe(`${A} right`);
+      expect(pointsOf(id)[0]).toEqual(last);
+      expect(pointsOf(id)[pointsOf(id).length - 1]).toEqual(first);
+      expect(attr(id, "d")).toBe(dictated(id));
+      // La punta non cambia lato: ora indica Alfa.
+      expect(tipOf(scene(), id, "end")).toBe("triangle medium end #000000");
+      expect(attr(id, "marker-start")).toBeNull();
+      expect(markersIn(scene())).toHaveLength(1);
+      expect(labels()[0]!.along).toBe(`${id} 0.5 4`);
+      expect(labels()[0]!.transform).toBe(place);
+      expect(spoken()).toBe("1 connettore cambiato.");
+      editor.undo();
+      expect(spoken()).toBe("Annullato: Inverti il connettore.");
+      expect(editor.engine.text).toBe(before);
+    });
+  });
+
+  it("l'accessibilità resta pulita con lo strumento in mano, i punti d'aggancio in vista e la sezione aperta", () => {
+    const layer = recording();
+    labelled();
+    hover(60, 90);
+    layer.frame();
+    expect(editor.tool).toBe("connector");
+    expect(layer.calls().filter(([name]) => name === "arc")).toHaveLength(5);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    editor.select([A, B]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  describe("il gesto", () => {
+    const press = (type: "pointerdown" | "pointermove" | "pointerup", x: number, y: number): void =>
+      void surface().dispatchEvent(
+        pointer(type, { ...MOUSE, button: type === "pointermove" ? -1 : 0, buttons: type === "pointerup" ? 0 : 1, pressure: type === "pointerup" ? 0 : 0.5, clientX: x, clientY: y, timeStamp: (clock += 8) }),
+      );
+    const preview = (): SVGElement | null => host.querySelector<SVGElement>('.draw-preview path[fill="none"]');
+
+    it("mentre lo si tira il connettore nuovo si vede in anteprima, come sarà scritto", () => {
+      connecting();
+      expect(preview()).toBeNull();
+      press("pointerdown", 60, 90);
+      // Un tocco appena mosso non è ancora un trascinamento.
+      press("pointermove", 61, 90);
+      expect(preview()).toBeNull();
+      press("pointermove", 150, 90);
+      press("pointermove", 243, 78);
+      const shown = preview()!;
+      expect(shown.getAttribute("d")).toBe("M100 80 L240 80");
+      expect(shown.getAttribute("marker-end")).toMatch(/^url\(#draw-preview-tip-\d+\)$/);
+      press("pointerup", 243, 78);
+      expect(preview()).toBeNull();
+      expect(attr(lines()[0]!, "d")).toBe("M100 80 L240 80");
+    });
+
+    it("Esc a metà del gesto lo annulla: niente anteprima e niente connettore", () => {
+      connecting();
+      press("pointerdown", 60, 90);
+      press("pointermove", 150, 90);
+      press("pointermove", 243, 78);
+      expect(preview()).not.toBeNull();
+      key("Escape");
+      expect(preview()).toBeNull();
+      press("pointerup", 243, 78);
+      expect(lines()).toEqual([]);
+      expect(changes).toEqual([]);
+    });
+
+    it("in un livello bloccato non si scrive niente, e si dice perché", () => {
+      const locked = doc(`<title>Prova</title><g id="l1" fub:layer="Livello 1" fub:locked="true">${rect(A, "Alfa", 40, 60, 60, 40, "#e69f00")}</g>`).replace('viewBox="0 0 100 100"', 'viewBox="0 0 400 300"');
+      connecting(locked);
+      link([120, 130], [200, 150]);
+      expect(lines()).toEqual([]);
+      expect(changes).toEqual([]);
+      expect(spoken()).toBe("«Livello 1» è bloccato: sbloccalo, o scegli un altro livello, per disegnare.");
+      expect(preview()).toBeNull();
+    });
+
+    it("un oggetto bloccato non si aggancia, e in sola lettura il gesto non scrive", () => {
+      connecting();
+      editor.select([A]);
+      key("L", { ctrlKey: true, shiftKey: true });
+      editor.select([]);
+      const written = editor.engine.text;
+      link([60, 90], [155, 225]);
+      expect(attr(lines()[0]!, "fub:from")).toBeNull();
+      expect(attr(lines()[0]!, "fub:to")).toBe(`${C} auto`);
+      editor.undo();
+      expect(editor.engine.text).toBe(written);
+      editor.setReadOnly(true);
+      link([60, 90], [155, 225]);
+      expect(lines()).toEqual([]);
+    });
+  });
+
+  describe("più oggetti insieme a un connettore", () => {
+    it("oggetti e connettore scelti insieme si spostano senza cambiare niente fra loro", () => {
+      connecting();
+      const id = joined();
+      const geom = attr(id, "fub:geom");
+      editor.select([A, B, id]);
+      key("ArrowRight", { shiftKey: true });
+      expect(attr(A, "transform")).toBe("matrix(1 0 0 1 10 0)");
+      expect(attr(B, "transform")).toBe("matrix(1 0 0 1 10 0)");
+      expect(attr(id, "transform")).toBe("matrix(1 0 0 1 10 0)");
+      expect(attr(id, "fub:geom")).toBe(geom);
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      expect(attr(id, "fub:to")).toBe(`${B} left`);
+      expect(spoken()).toBe("3 oggetti spostati.");
+    });
+
+    it("un connettore scelto con uno solo dei suoi oggetti si sposta, e il capo dell'altro resta dov'è sul foglio", () => {
+      connecting();
+      const id = joined();
+      editor.select([A, id]);
+      key("ArrowDown", { shiftKey: true });
+      expect(attr(A, "transform")).toBe("matrix(1 0 0 1 0 10)");
+      expect(attr(id, "transform")).toBe("matrix(1 0 0 1 0 10)");
+      // Nel suo riferimento, spostato di 10 in giù: l'inizio sta a destra di
+      // Alfa spostata, la fine a sinistra di Beta, ferma.
+      const points = pointsOf(id);
+      expect([points[0]![0], points[0]![1] + 10]).toEqual([100, 90]);
+      expect([points[points.length - 1]![0], points[points.length - 1]![1] + 10]).toEqual([240, 80]);
+      expect(attr(id, "d")).toBe(dictated(id));
+      // Resta agganciato: niente da dire.
+      expect(spoken()).toBe("2 oggetti spostati.");
+    });
+
+    it("un connettore spostato da solo si stacca dagli oggetti, resta com'è e lo dice", () => {
+      connecting();
+      const id = joined();
+      const geom = attr(id, "fub:geom");
+      editor.select([id]);
+      key("ArrowDown", { shiftKey: true });
+      expect(attr(id, "fub:from")).toBeNull();
+      expect(attr(id, "fub:to")).toBeNull();
+      expect(attr(id, "fub:geom")).toBe(geom);
+      expect(attr(id, "transform")).toBe("matrix(1 0 0 1 0 10)");
+      // Sul foglio non si vede: lo dice l'annuncio.
+      expect(spoken()).toBe("1 oggetto spostato. Il connettore si è staccato: i suoi oggetti non erano fra gli scelti.");
+      editor.undo();
+      expect(attr(id, "fub:from")).toBe(`${A} right`);
+      // Anche spostato dal pannello delle proprietà.
+      openProperties();
+      editor.select([id]);
+      enter(propertyInput("x"), "90");
+      expect(attr(id, "fub:from")).toBeNull();
+      expect(spoken()).toBe("Il connettore si è staccato: i suoi oggetti non erano fra gli scelti.");
+      // E girato da solo, con la sua cornice.
+      editor.undo();
+      key("]");
+      expect(attr(id, "fub:to")).toBeNull();
+      expect(spoken()).toMatch(/ Il connettore si è staccato: i suoi oggetti non erano fra gli scelti\.$/);
+    });
+
+    it("l'oggetto agganciato dentro un gruppo segue il gruppo, e il gruppo eliminato libera il capo", () => {
+      connecting();
+      link([300, 230], [60, 90], { ctrlKey: true });
+      const id = lines()[0]!;
+      expect(attr(id, "fub:from")).toBe(`${I} auto`);
+      const before = editor.engine.text;
+      editor.select([G]);
+      key("ArrowRight", { shiftKey: true });
+      expect(pointsOf(id)[0]).toEqual([300, 220]);
+      expect(attr(id, "d")).toBe(dictated(id));
+      editor.undo();
+      expect(editor.engine.text).toBe(before);
+      editor.select([G]);
+      key("Delete");
+      expect(attr(id, "fub:from")).toBeNull();
+      expect(attr(id, "fub:to")).toBe(`${A} auto`);
     });
   });
 });

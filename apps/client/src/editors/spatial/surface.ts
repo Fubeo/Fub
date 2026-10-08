@@ -11,7 +11,9 @@
 // La Lettura dice anche a parole che cosa c'è: la descrizione del disegno
 // accanto all'immagine, e l'elenco degli oggetti in albero, chiuso finché non
 // lo si apre e costruito soltanto allora (`describe.ts`). I collegamenti, che
-// nell'immagine non si toccano, sono una riga di pulsanti che aprono le note.
+// nell'immagine non si toccano, sono una riga di pulsanti che aprono le note;
+// le connessioni, le linee che uniscono due oggetti, un elenco di «da dove a
+// dove», con l'etichetta della linea.
 //
 // I collegamenti del disegno sono `a` con un `href` relativo al disegno: la
 // shell sceglie la nota e la apre (`onPickLink`, `onOpenPath`), e la
@@ -182,6 +184,15 @@ function linkTargetsIn(nodes: readonly OutlineNode[], out: string[] = []): strin
   return out;
 }
 
+/// I connettori di `nodes` agganciati a due oggetti, nell'ordine del disegno.
+function joinedIn(nodes: readonly OutlineNode[], out: OutlineNode[] = []): OutlineNode[] {
+  for (const node of nodes) {
+    if (node.joined !== null) out.push(node);
+    joinedIn(node.children, out);
+  }
+  return out;
+}
+
 /// Gli oggetti in elenchi annidati, come l'albero dell'editor.
 function objectList(nodes: readonly OutlineNode[]): HTMLUListElement {
   const list = document.createElement("ul");
@@ -232,7 +243,17 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   aboutLinks.setAttribute("aria-labelledby", aboutLinksTitle.id);
   const aboutLinksList = document.createElement("ul");
   aboutLinks.append(aboutLinksTitle, aboutLinksList);
-  about.append(aboutDesc, aboutLinks, aboutObjects);
+  // Le connessioni, che nell'immagine sono linee: da dove a dove, a parole.
+  const aboutConnections = document.createElement("div");
+  aboutConnections.className = "vector-about-connections";
+  aboutConnections.hidden = true;
+  const aboutConnectionsTitle = document.createElement("span");
+  aboutConnectionsTitle.className = "vector-about-connections-title muted";
+  aboutConnectionsTitle.id = identifier("vector-connections");
+  const aboutConnectionsList = document.createElement("ul");
+  aboutConnectionsList.setAttribute("aria-labelledby", aboutConnectionsTitle.id);
+  aboutConnections.append(aboutConnectionsTitle, aboutConnectionsList);
+  about.append(aboutDesc, aboutLinks, aboutConnections, aboutObjects);
   root.append(notice, drawHost, readHost);
   context.parent.append(root);
 
@@ -255,6 +276,10 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// disegnati.
   let linkedText: string | null = null;
   let linkedLanguage: string | null = null;
+  /// Le connessioni della Lettura, e il testo e la lingua di cui sono
+  /// disegnate.
+  let connectedText: string | null = null;
+  let connectedLanguage: string | null = null;
   /// Il livello, le parti del Personalizzato e la griglia dell'editor: quelli
   /// dell'ultima lettura, finché non arriva quella di questa superficie.
   let level = currentLevel();
@@ -430,6 +455,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     aboutSummary.textContent = t("vector.read.objects", { count: countObjects(nodes) });
     aboutObjects.hidden = nodes.length === 0;
     showLinks(nodes);
+    showConnections(nodes);
     if (!aboutObjects.open) {
       aboutObjects.querySelector("ul")?.remove();
       listedText = null;
@@ -461,6 +487,34 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         control.textContent = linkName(target);
         control.title = t("vector.link.open", { note: linkName(target) });
         item.append(control);
+        return item;
+      }),
+    );
+  };
+
+  /// L'elenco delle connessioni, ridisegnato quando cambia il testo o la
+  /// lingua: i connettori agganciati a due oggetti, «Ingresso → Verifica» e,
+  /// se hanno un'etichetta, «Ingresso → Verifica: sì». La freccia non si
+  /// legge: a voce, «da Ingresso a Verifica, sì».
+  const showConnections = (nodes: readonly OutlineNode[]): void => {
+    const language = resolvedLanguage();
+    if (connectedText === text && connectedLanguage === language) return;
+    connectedText = text;
+    connectedLanguage = language;
+    const rows = joinedIn(nodes);
+    aboutConnections.hidden = rows.length === 0;
+    aboutConnectionsTitle.textContent = t("vector.read.connections", { count: rows.length });
+    aboutConnectionsList.replaceChildren(
+      ...rows.map((row) => {
+        const { from, to, label } = row.joined!;
+        const item = document.createElement("li");
+        const shown = document.createElement("span");
+        shown.setAttribute("aria-hidden", "true");
+        shown.textContent = label === null ? t("vector.read.connection", { from, to }) : t("vector.read.connection.labelled", { from, to, label });
+        const spoken = document.createElement("span");
+        spoken.className = "sr-only";
+        spoken.textContent = label === null ? t("vector.read.connection.spoken", { from, to }) : t("vector.read.connection.spoken.labelled", { from, to, label });
+        item.append(shown, spoken);
         return item;
       }),
     );

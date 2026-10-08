@@ -6,7 +6,7 @@
 > dopo e come se ne arrotondano gli angoli, anche di un rettangolo.
 
 Dal [livello Standard](drawing.md#il-livello-standard) la barra di un
-[disegno](drawing.md) ha il **Poligono** (`Y`), dopo la freccia: poligoni
+[disegno](drawing.md) ha il **Poligono** (`Y`), dopo il Connettore: poligoni
 regolari e stelle che restano tali. Un esagono disegnato si fa ottagono,
 stella o forma dagli angoli tondi in un passo, senza ridisegnarlo. Nel file è
 un tracciato che ogni programma disegna uguale.

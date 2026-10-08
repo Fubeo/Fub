@@ -47,7 +47,7 @@ import { hatchOf } from "./hatches";
 import { FILLED, INKED, OUTLINED, paintText } from "./look";
 import { cleanName, NAME_MAX, nameKey } from "./naming";
 import { customColor } from "./palette";
-import { homeOf, resourcesOf } from "./resources";
+import { homeOf, resourcesOf, swatchPaint } from "./resources";
 import { richOf, visibleSpans, type Rich } from "./rich";
 import { allUnits } from "./selecting";
 
@@ -409,11 +409,6 @@ export function unitsShowing(model: DocumentModel, index: SceneIndex, value: str
   const showing = new Set<ElementPart>();
   for (const use of new Walk(model).uses) if (use.object && use.value === value) showing.add(use.node);
   return allUnits(index).filter((unit) => showing.has(unit.node));
-}
-
-/// Il valore che usa il campione `swatch`, col suo colore come ripiego.
-export function swatchPaint(swatch: { readonly id: string; readonly color: string }): string {
-  return `url(#${swatch.id}) ${swatch.color}`;
 }
 
 // ---------------------------------------------------------------------------

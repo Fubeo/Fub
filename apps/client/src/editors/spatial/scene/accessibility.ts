@@ -306,6 +306,7 @@ export class Legibility {
       }
       case "path":
       case "arrow":
+      case "connector":
       case "ngon":
       case "star":
       case "width": {

@@ -214,7 +214,7 @@ const INITIAL: Inherited = new Map([
 export const FILLED: ReadonlySet<Role> = new Set(["ngon", "star", "path", "rect", "ellipse", "circle", "polyline", "polygon", "text"]);
 
 /// I ruoli che hanno un contorno, come in `outline.ts`.
-export const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
+export const OUTLINED: ReadonlySet<Role> = new Set(["arrow", "connector", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon"]);
 
 /// I ruoli tutti riempimento che si vedono come una linea: il loro colore è
 /// quello del contorno.

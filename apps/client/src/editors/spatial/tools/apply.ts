@@ -54,6 +54,7 @@ import { checkBrush, formatBrush, parseBrush } from "../ink/brush";
 import { createInk, decodeInk, encodeInk, INK_MAX_BYTES } from "../ink/codec";
 import { quantizeAzimuth, quantizeCoordinate } from "../ink/sample";
 import { svgAttribute } from "../scene/classify";
+import { connectorAttrs } from "../scene/connectors";
 import { parsePath, type Segment } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, mappedEllipse, toRadians, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
@@ -85,7 +86,7 @@ const ZERO: ReadonlySet<string> = new Set(["x", "y", "cx", "cy", "x1", "y1", "x2
 
 /// I ruoli che SVG disegna con un contorno: un'immagine e un testo non
 /// cambiano il loro.
-const STROKED: ReadonlySet<string> = new Set(["arrow", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "stroke"]);
+const STROKED: ReadonlySet<string> = new Set(["arrow", "connector", "ngon", "star", "path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "stroke"]);
 
 /// Un numero della geometria come lo scrive il file.
 const place = (value: number): string => formatNumber(value, 2);
@@ -336,6 +337,13 @@ function reshape(node: ElementPart, own: ReadonlyMap<string, string>, m: Matrix,
       // La punta si ridisegna dopo, quando lo spessore è deciso.
       const [x1, y1, x2, y2] = details.arrow!;
       attrs["fub:geom"] = [...apply(m, [x1, y1]), ...apply(m, [x2, y2])].map(place).join(" ");
+      return { ...whole(m), attrs };
+    }
+    case "connector": {
+      // I punti passano nelle coordinate nuove, e il `d` ne discende: gli
+      // agganci restano, e il seguito tiene i capi sugli oggetti.
+      const geom = details.connector!.geom;
+      Object.assign(attrs, connectorAttrs({ kind: geom.kind, points: geom.points.map((p) => apply(m, p)) }));
       return { ...whole(m), attrs };
     }
     case "rect":

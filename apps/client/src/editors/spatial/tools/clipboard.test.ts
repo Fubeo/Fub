@@ -789,3 +789,177 @@ describe("le punte negli appunti e nel duplica", () => {
     expect(markersIn(opened)).toEqual(["rc0000001"]);
   });
 });
+
+describe("i connettori negli appunti", () => {
+  const ENDS = ' fub:from="oaaaaaaaa right" fub:to="obbbbbbbb left"';
+  /// Un connettore dritto fra due rettangoli messi l'uno accanto all'altro.
+  const CONNECTOR = (id: string, ends = ENDS): string =>
+    `<path id="${id}" fub:shape="connector" fub:geom="straight 10 5 40 5"${ends} d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2"/>`;
+  /// Un'etichetta del connettore `occcccccc`, a metà della linea.
+  const LABEL = (id: string, along = "occcccccc 0.5000 4.00"): string =>
+    `<text id="${id}" fub:along="${along}" x="0" y="0" text-anchor="middle" transform="matrix(1 0 0 1 25 1)"><tspan x="0" dy="0">sì</tspan></text>`;
+  const RECTS = '<rect id="oaaaaaaaa" x="0" y="0" width="10" height="10"/><rect id="obbbbbbbb" x="40" y="0" width="10" height="10"/>';
+  const ALL = ["oaaaaaaaa", "obbbbbbbb", "occcccccc", "odddddddd"];
+  const source = (ends?: string, along?: string): Opened => open(doc(`${LAYER}${RECTS}${CONNECTOR("occcccccc", ends)}${LABEL("odddddddd", along)}</g>`));
+  /// Un disegno che riceve, con un oggetto che non c'entra.
+  const target = (): Opened => open(TARGET);
+
+  it("copiare scrive i riferimenti com'erano, con gli id di prima", () => {
+    const svg = copy(source(), ALL);
+    expect(svg).toContain('fub:from="oaaaaaaaa right"');
+    expect(svg).toContain('fub:to="obbbbbbbb left"');
+    expect(svg).toContain('fub:along="occcccccc 0.5000 4.00"');
+    // Anche il connettore o l'etichetta da soli: è l'incolla che decide.
+    expect(copy(source(), ["occcccccc"])).toContain('fub:from="oaaaaaaaa right"');
+    expect(copy(source(), ["odddddddd"])).toContain('fub:along="occcccccc 0.5000 4.00"');
+  });
+
+  it("incollati con i loro oggetti nominano le copie, nello stesso disegno e in un altro", () => {
+    for (const opened of [source(), target()]) {
+      const out = paste(opened, copy(source(), ALL));
+      const [a, b, c, label] = out.keys as [string, string, string, string];
+      expect(new Set([a, b, c, label, ...ALL]).size).toBe(8);
+      expect(attrOf(opened, c, "fub:from")).toBe(`${a} right`);
+      expect(attrOf(opened, c, "fub:to")).toBe(`${b} left`);
+      expect(attrOf(opened, label, "fub:along")).toBe(`${c} 0.5000 4.00`);
+      // La geometria e il posto dell'etichetta restano quelli di prima.
+      expect(attrOf(opened, c, "fub:geom")).toBe("straight 10 5 40 5");
+      expect(attrOf(opened, c, "d")).toBe("M10 5 L40 5");
+      expect(attrOf(opened, label, "transform")).toBe("matrix(1 0 0 1 25 1)");
+    }
+  });
+
+  it("nello stesso disegno gli originali restano agganciati fra loro", () => {
+    const opened = source();
+    paste(opened, copy(opened, ALL));
+    expect(attrOf(opened, "occcccccc", "fub:from")).toBe("oaaaaaaaa right");
+    expect(attrOf(opened, "occcccccc", "fub:to")).toBe("obbbbbbbb left");
+    expect(attrOf(opened, "odddddddd", "fub:along")).toBe("occcccccc 0.5000 4.00");
+  });
+
+  it("il connettore da solo ha i due capi liberi, anche dove gli stessi id ci sono", () => {
+    for (const opened of [source(), target(), open(doc(`${LAYER}${RECTS}</g>`))]) {
+      const [c] = paste(opened, copy(source(), ["occcccccc"])).keys as [string];
+      expect(attrOf(opened, c, "fub:from")).toBeNull();
+      expect(attrOf(opened, c, "fub:to")).toBeNull();
+      expect(attrOf(opened, c, "fub:shape")).toBe("connector");
+      expect(attrOf(opened, c, "fub:geom")).toBe("straight 10 5 40 5");
+      expect(rawOf(node(opened, c))).not.toContain("fub:from");
+    }
+  });
+
+  it("con uno solo dei due oggetti, l'altro capo è libero", () => {
+    const opened = source();
+    const [a, c] = paste(opened, copy(opened, ["oaaaaaaaa", "occcccccc"])).keys as [string, string];
+    expect(attrOf(opened, c, "fub:from")).toBe(`${a} right`);
+    expect(attrOf(opened, c, "fub:to")).toBeNull();
+    const other = target();
+    const [b, d] = paste(other, copy(source(), ["obbbbbbbb", "occcccccc"])).keys as [string, string];
+    expect(attrOf(other, d, "fub:from")).toBeNull();
+    expect(attrOf(other, d, "fub:to")).toBe(`${b} left`);
+  });
+
+  it("l'etichetta senza il suo connettore è un testo qualunque, col suo posto", () => {
+    for (const opened of [source(), target()]) {
+      const [label] = paste(opened, copy(source(), ["odddddddd"])).keys as [string];
+      expect(attrOf(opened, label, "fub:along")).toBeNull();
+      expect(attrOf(opened, label, "transform")).toBe("matrix(1 0 0 1 25 1)");
+      expect(rawOf(node(opened, label))).toContain("<tspan");
+    }
+  });
+
+  it("l'etichetta con il connettore, senza gli oggetti, nomina il connettore", () => {
+    const opened = target();
+    const [c, label] = paste(opened, copy(source(), ["occcccccc", "odddddddd"])).keys as [string, string];
+    expect(attrOf(opened, label, "fub:along")).toBe(`${c} 0.5000 4.00`);
+    expect(attrOf(opened, c, "fub:from")).toBeNull();
+    expect(attrOf(opened, c, "fub:to")).toBeNull();
+  });
+
+  it("un valore fuori grammatica resta com'è", () => {
+    const odd = source(' fub:from="oaaaaaaaa sopra" fub:to="obbbbbbbb"', "occcccccc 2 4");
+    const opened = target();
+    const [, , c, label] = paste(opened, copy(odd, ALL)).keys as [string, string, string, string];
+    expect(attrOf(opened, c, "fub:from")).toBe("oaaaaaaaa sopra");
+    expect(attrOf(opened, c, "fub:to")).toBe("obbbbbbbb");
+    expect(attrOf(opened, label, "fub:along")).toBe("occcccccc 2 4");
+  });
+
+  it("gli id nominati che l'SVG non ha non diventano quelli di un oggetto del disegno", () => {
+    // `ozzzzzzzz` è del disegno che riceve, e non fa parte di ciò che si incolla.
+    const odd = source(' fub:from="ozzzzzzzz right" fub:to="obbbbbbbb left"', "ozzzzzzzz 0.5000 4.00");
+    const opened = target();
+    const [b, c, label] = paste(opened, copy(odd, ["obbbbbbbb", "occcccccc", "odddddddd"])).keys as [string, string, string];
+    expect(attrOf(opened, c, "fub:from")).toBeNull();
+    expect(attrOf(opened, c, "fub:to")).toBe(`${b} left`);
+    expect(attrOf(opened, label, "fub:along")).toBeNull();
+  });
+
+  it("un SVG scritto a mano con gli oggetti: i riferimenti seguono gli id nuovi in ogni posto del tag", () => {
+    // I capi sono il primo attributo, uno fra apici singoli, l'ultimo prima di `/>`.
+    const svg = doc(
+      `${LAYER}<g id="ogggggggg">${RECTS}` +
+        '<path fub:from="oaaaaaaaa right" id="occcccccc" fub:shape="connector" fub:geom="straight 10 5 40 5" fub:to=\'obbbbbbbb left\' d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2"/>' +
+        '<path id="oeeeeeeee" fub:shape="connector" fub:geom="straight 10 5 40 5" d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2" fub:from="obbbbbbbb top"/>' +
+        '<path\n    fub:to="oaaaaaaaa left"\n    fub:shape="connector" fub:geom="straight 10 5 40 5"\n    d="M10 5 L40 5" fill="none" stroke="#000000"/>' +
+        "</g></g>",
+    );
+    const opened = target();
+    const [group] = paste(opened, svg).keys as [string];
+    const raw = rawOf(node(opened, group));
+    const [a, b] = [...raw.matchAll(/<rect id="([^"]+)"/g)].map((match) => match[1]!) as [string, string];
+    const paths = [...raw.matchAll(/<path\b[^>]*>/g)].map((match) => match[0]);
+    expect(paths).toHaveLength(3);
+    // Chi nomina oggetti incollati insieme li nomina per i loro id nuovi.
+    expect(paths[0]).toContain(`fub:from="${a} right"`);
+    expect(paths[0]).toContain(`fub:to='${b} left'`);
+    expect(paths[1]).toContain(`fub:from="${b} top"`);
+    expect(paths[2]).toContain(`fub:to="${a} left"`);
+    expect(paths.join("")).not.toContain("oaaaaaaaa");
+    expect(opened.engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+  });
+
+  it("un SVG scritto a mano senza gli oggetti toglie i capi, in ogni posto del tag e anche dove il connettore non ha id", () => {
+    const svg = doc(
+      `${LAYER}` +
+        '<path fub:from="oaaaaaaaa right" fub:shape="connector" fub:geom="straight 10 5 40 5" fub:to=\'obbbbbbbb left\' d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2"/>' +
+        '<path\n    fub:to="oaaaaaaaa left"\n    fub:shape="connector" fub:geom="straight 10 5 40 5"\n    d="M10 5 L40 5" fill="none" stroke="#000000"/>' +
+        '<path id="oeeeeeeee" fub:shape="connector" fub:geom="straight 10 5 40 5" d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2" fub:from="obbbbbbbb top"/>' +
+        "</g>",
+    );
+    const opened = target();
+    const [group] = paste(opened, svg).keys as [string];
+    const raw = rawOf(node(opened, group));
+    const paths = [...raw.matchAll(/<path\b[^>]*>/g)].map((match) => anonymous(match[0]));
+    // Il tag resta com'era scritto, senza i capi e senza gli spazi che li precedevano.
+    expect(paths).toEqual([
+      '<path id="ID" fub:shape="connector" fub:geom="straight 10 5 40 5" d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2"/>',
+      '<path id="ID"\n    fub:shape="connector" fub:geom="straight 10 5 40 5"\n    d="M10 5 L40 5" fill="none" stroke="#000000"/>',
+      '<path id="ID" fub:shape="connector" fub:geom="straight 10 5 40 5" d="M10 5 L40 5" fill="none" stroke="#000000" stroke-width="2"/>',
+    ]);
+    expect(opened.engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+  });
+
+  it("anche un SVG che entra in un gruppo, per un foglio di stile, segue gli id nuovi", () => {
+    const svg = doc(`<style>.nota { fill: #cc0000; }</style>${LAYER}${RECTS}${CONNECTOR("occcccccc")}${LABEL("odddddddd")}</g>`);
+    const opened = target();
+    const [group] = paste(opened, svg).keys as [string];
+    const raw = rawOf(node(opened, group));
+    const found = [...raw.matchAll(/<(rect|path|text) id="([^"]+)"/g)].map((match) => match[2]!);
+    const [a, b, c, label] = found as [string, string, string, string];
+    expect(found).toHaveLength(4);
+    expect(attrOf(opened, c, "fub:from")).toBe(`${a} right`);
+    expect(attrOf(opened, c, "fub:to")).toBe(`${b} left`);
+    expect(attrOf(opened, label, "fub:along")).toBe(`${c} 0.5000 4.00`);
+  });
+
+  it("un giro di copia e incolla riporta gli stessi byte, id e riferimenti a parte", () => {
+    const from = source();
+    const into = open(doc(`${LAYER}</g>`));
+    const out = paste(into, copy(from, ALL));
+    const pasted = out.keys.map((key) => rawOf(node(into, key)));
+    const original = ALL.map((key) => rawOf(node(from, key)));
+    const refs = (text: string): string => anonymous(text).replace(/ fub:(from|to|along)="ID [^"]*"/g, "");
+    expect(pasted.map(refs)).toEqual(original.map(refs));
+  });
+});
