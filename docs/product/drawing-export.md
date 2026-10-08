@@ -86,7 +86,9 @@ tolte, così una tavola nuova parte scelta.
   tengono il percorso, e il log lo dice. Si apre in ogni programma di
   grafica, e si vede come il disegno.
 - **PDF:** vettoriale, le forme e i tratti restano curve, nitide a ogni
-  ingrandimento, e il testo resta testo, che si seleziona. Il disegno e la
+  ingrandimento, e il testo resta testo, che si seleziona; le fusioni
+  restano vettoriali, e gli [effetti](drawing-effects.md#in-lettura-e-nellexport),
+  che il PDF non ha, si dipingono a 300 punti per pollice. Il disegno e la
   selezione sono una pagina; le tavole una pagina per tavola, nell'ordine
   del disegno, ciascuna della sua misura e con un segnalibro col suo nome.
   Il titolo del disegno va fra le proprietà del file.

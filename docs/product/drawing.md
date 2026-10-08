@@ -94,7 +94,7 @@ Lo Standard aggiunge:
   documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
 - la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
   **«Sfumatura»**: lineare o radiale, coi suoi punti ([Disegni, sfumature](drawing-gradients.md));
-- nelle «Proprietà» le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md)), e nella barra «Disponi» **«Ritaglia…»** per le immagini ([Disegni, ritagli e maschere](drawing-masks.md));
+- nelle «Proprietà» le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md)), e nella barra «Disponi» **«Ritaglia…»** per le immagini ([Disegni, ritagli e maschere](drawing-masks.md)) e l'**«Opacità»** ([Disegni, effetti e fusione](drawing-effects.md#lopacità-nella-barra));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
@@ -345,8 +345,8 @@ L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
 strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore,
-«Ricalca immagine», le maschere e il testo in area e su tracciato: [Disegni, livello Esperto](drawing-expert.md), [curve e
-tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [maschere](drawing-masks.md#le-maschere), [tipografia](drawing-typography.md#il-testo-in-area).
+«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione: [Disegni, livello Esperto](drawing-expert.md), [curve e
+tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [maschere](drawing-masks.md#le-maschere), [tipografia](drawing-typography.md#il-testo-in-area), [effetti e fusione](drawing-effects.md).
 
 ## Il livello Personalizzato
 

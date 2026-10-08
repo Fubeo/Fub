@@ -110,9 +110,11 @@ Dal [livello Standard](drawing.md#il-livello-standard), **«Copia lo stile»**
 (`Ctrl+Alt+C` o `⌘⌥C`) prende lo stile del primo oggetto scelto, e **«Incolla
 lo stile»** (`Ctrl+Alt+V` o `⌘⌥V`) lo dà agli oggetti scelti, in un passo; i
 comandi sono anche nel menu della selezione. Lo stile è il riempimento, il
-contorno con spessore, tratteggio, estremi e angoli, l'opacità e, per un
-testo, il carattere del suo primo carattere che si vede: famiglia, corpo,
-peso, corsivo, spaziatura e decorazioni, e l'interlinea di un testo di più
+contorno con spessore, tratteggio, estremi e angoli, l'opacità, gli effetti
+e il modo di fusione, a ogni livello, perché si copia ciò che si vede
+([Disegni, effetti e fusione](drawing-effects.md#con-gli-altri-comandi)) e,
+per un testo, il carattere del suo primo carattere che si vede: famiglia,
+corpo, peso, corsivo, spaziatura e decorazioni, e l'interlinea di un testo di più
 righe, che tutto il testo prende ([Disegni,
 tipografia](drawing-typography.md)). Ogni parte prende ciò che ha: una
 linea non riceve un riempimento. Un testo e un tratto a penna hanno un colore
