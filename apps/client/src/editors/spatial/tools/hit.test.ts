@@ -10,7 +10,7 @@ import { doc } from "../scene/test-support";
 import { strokeElem } from "./edit";
 import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
-import { elementChildren, type ContainerNode } from "../scene/model";
+import { elementChildren, type ContainerNode, type LeafNode } from "../scene/model";
 import { elemBounds, geometryBox, linesBounds, SceneIndexer } from "./hit";
 import { LAYER, open } from "./test-support";
 
@@ -439,6 +439,23 @@ describe("le punte delle linee", () => {
     );
     // Il cerchio sarebbe largo 12; se ne vede il quadrato di 6 della finestra.
     expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 47], max: [63, 53] });
+  });
+
+  it("stanno nel riquadro di una forma che uno strumento sta per scrivere al posto di una linea", () => {
+    const source = doc(`<defs id="fub-defs">${ARROW}</defs>${LAYER}<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/></g>`);
+    const engine = SceneEngine.open(source);
+    const builder = new PaintBuilder();
+    builder.build(engine);
+    const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
+    const leaf = engine.holder("a") as LeafNode;
+    // I nodi la portano a 80: la punta con lei, fino a 81 col contorno.
+    const after = { tag: "path", attrs: { id: "a", d: "M10 50 L80 50", fill: "none", stroke: "#000000", "stroke-width": "2", "marker-end": "url(#m)" } };
+    expect(elemBounds(after, IDENTITY)).toEqual({ min: [9, 49], max: [81, 51] });
+    expect(indexer.writtenBounds(after, IDENTITY, leaf)).toEqual({ min: [9, 46], max: [81, 54] });
+    // Senza punte, o con una che non c'è, è il riquadro di prima.
+    const bare = { d: "M10 50 L80 50", fill: "none", stroke: "#000000", "stroke-width": "2" };
+    expect(indexer.writtenBounds({ tag: "path", attrs: bare }, IDENTITY, leaf)).toEqual({ min: [9, 49], max: [81, 51] });
+    expect(indexer.writtenBounds({ tag: "path", attrs: { ...after.attrs, "marker-end": "url(#nessuno)" } }, IDENTITY, leaf)).toEqual({ min: [9, 49], max: [81, 51] });
   });
 
   it("non contano se il marcatore non disegna niente", () => {

@@ -534,6 +534,26 @@ export class SceneIndexer {
     return new SceneIndex(units, layers, nested);
   }
 
+  /// Il riquadro nella scena di `elem`, la forma che uno strumento scrive al
+  /// posto di `leaf`, come [`elemBounds`], con le punte che nomina, lette
+  /// fra le risorse del documento di `leaf`: come lo avrà la forma scritta.
+  writtenBounds(elem: Elem, matrix: Matrix, leaf: LeafNode): Bounds | null {
+    const bounds = elemBounds(elem, matrix);
+    const attrs: PaintAttr[] = Object.entries(elem.attrs);
+    if (bounds === null || !MARKED.has(elem.tag) || MARKER_PROPERTIES.every(([, name]) => attr(attrs, name) === undefined)) return bounds;
+    const style = styleOf(INITIAL, attrs);
+    const host: Part = { leaf, segments: elemSegments(elem, attrs, style), matrix, frameMatrix: matrix, fill: false, radius: 0, cache: null, flat: null, host: null };
+    const tips: Part[] = [];
+    this.tips(host, attrs, style, tips);
+    const out = new BoundsBuilder();
+    includeInflated(out, bounds, 0);
+    for (const part of tips) {
+      const local = transformedBounds(part.segments, part.matrix);
+      if (local !== null) includeInflated(out, local, part.radius * scaleOf(part.matrix));
+    }
+    return out.finish();
+  }
+
   /// Vero se dentro `container`, un gruppo o un collegamento di `model`, si
   /// sceglie: se sta nel documento, e né lui né chi lo contiene è bloccato o
   /// nascosto.

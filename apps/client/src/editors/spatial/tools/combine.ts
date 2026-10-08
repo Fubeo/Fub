@@ -17,6 +17,9 @@
 //   con id nuovi e i suoi attributi.
 // - **Un risultato vuoto non cambia niente**, e nemmeno una divisione che
 //   non divide: le forme restano, e il comando lo dice.
+// - **Il risultato è una regione**, e non ha punte: né `marker-start` né
+//   `marker-end`, e nemmeno `marker-mid`, anche se la forma più in basso era
+//   una linea che ne aveva.
 
 import { parsePath } from "../scene/geometry";
 import { compose, invert, type Matrix } from "../scene/matrix";
@@ -25,6 +28,7 @@ import { pathData } from "../scene/serialize";
 import { nodeOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import { combine, mapped, type BooleanKind, type Shape } from "./boolean";
 import type { NewIds } from "./edit";
+import { bareAttrs, bareLook } from "./endtips";
 import { shapeSegments, type Unit } from "./hit";
 import { lookOf, rewriteShape } from "./topath";
 
@@ -84,11 +88,14 @@ export function combineOps(model: DocumentModel, units: readonly Unit[], kind: B
   const node = nodes[0]!;
   const id = plan.idOf(node);
   if (!rewriteShape(plan, node, written[0]!)) return { reason: "foreign" };
+  // Una regione non ha punte.
+  const bare = bareAttrs(plainAttributes(node));
+  if (Object.keys(bare).length > 0) plan.ops.push({ op: "set", id, attrs: bare });
   // Gli altri pezzi della divisione, ciascuno sopra il precedente, con gli
-  // attributi della forma più in basso, senza la sua geometria: l'id e il
-  // `d` sono i loro.
+  // attributi della forma più in basso, senza la sua geometria e senza le
+  // punte: l'id e il `d` sono i loro.
   const keys = [id];
-  const look = lookOf(node);
+  const look = bareLook(lookOf(node));
   for (const d of written.slice(1)) {
     const piece = plan.ids.next("object");
     plan.ops.push({ op: "add", parent: plan.parentOf(node), pos: { after: keys[keys.length - 1]! }, elem: { tag: "path", attrs: { ...look, id: piece, d } } });

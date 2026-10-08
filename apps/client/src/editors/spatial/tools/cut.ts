@@ -15,12 +15,19 @@
 //   diventano un nodo solo, altrimenti li unisce una linea. Se alla fine i
 //   due capi si toccano, il tracciato si chiude; uno solo si chiude sempre.
 //   Due capi scelti, anche di due tracciati, si uniscono allo stesso modo.
+// - **Le punte seguono i capi** (`endtips.ts`). Un taglio lascia il primo
+//   vertice del tracciato al pezzo che lo ha ancora, e l'ultimo a quello che
+//   ha ancora lui; un tracciato che si unisce dice quale capo di quale pezzo
+//   è diventato il suo inizio e la sua fine, e uno chiuso non ha né l'uno né
+//   l'altra.
 
 import { pointAt, splitAt, type Curve } from "../scene/curves";
 import type { Segment } from "../scene/geometry";
 import type { Matrix, Point } from "../scene/matrix";
 import { mapped } from "./boolean";
+import { NO_TIPS, type EndTips, type TipSource } from "./endtips";
 import { curveAt, joinNodes, moveNodes, nodeKey, parseKey, readNodes, writeNodes, type Edited, type Link, type NodeKey, type Subpath } from "./nodes";
+import type { TipEnd } from "./tips";
 
 /// Un punto di un tracciato: il segmento `link` del sottotracciato `sub`, al
 /// parametro `t`.
@@ -296,11 +303,75 @@ export function joinEnds(subs: readonly Subpath[], a: NodeKey, b: NodeKey, merge
   return joinNodes(!line && distance(pa, pb) <= merge ? meet(subs, a, b, pa, pb) : subs, new Set([a, b]));
 }
 
+/// Dove stanno le punte di un elemento con i sottotracciati `subs`: i nodi
+/// del suo primo vertice e dell'ultimo, come SVG disegna `marker-start` e
+/// `marker-end`; `null` se non ha nodi. L'ultimo vertice di un sottotracciato
+/// chiuso è il suo primo.
+export function tipKeys(subs: readonly Subpath[]): Readonly<Record<TipEnd, NodeKey>> | null {
+  const tail = subs[subs.length - 1];
+  return tail === undefined ? null : { start: nodeKey(0, 0), end: nodeKey(subs.length - 1, tail.closed ? 0 : tail.nodes.length - 1) };
+}
+
+/// Una punta nei nodi di una modifica: di quale parte è, a quale capo, e il
+/// nodo che quel capo è.
+export interface TipSpot extends TipSource {
+  readonly key: NodeKey;
+}
+
+/// Da quale punta prende la sua ciascun capo di `subs`, dopo una modifica
+/// che ha portato i nodi di `spots` dove dice `moved` (senza, sono gli
+/// stessi): la punta del nodo che è diventato quel capo. Un capo che nessuno
+/// di loro è diventato non ha punta, tranne se la punta del suo stesso capo
+/// ha perso il nodo, tolto dalla modifica: allora il vertice che prende il
+/// suo posto la tiene, come lo disegna SVG.
+export function followEnds(
+  spots: readonly TipSpot[],
+  subs: readonly Subpath[],
+  moved: ReadonlyMap<NodeKey, NodeKey> | null,
+): { readonly start: TipSource | null; readonly end: TipSource | null } {
+  const keys = tipKeys(subs);
+  const pick = (end: TipEnd): TipSource | null => {
+    if (keys === null) return null;
+    const became = spots.find((spot) => (moved === null ? spot.key : moved.get(spot.key)) === keys[end]);
+    if (became !== undefined) return { owner: became.owner, end: became.end };
+    const lost = spots.find((spot) => spot.end === end && moved !== null && !moved.has(spot.key));
+    return lost === undefined ? null : { owner: lost.owner, end: lost.end };
+  };
+  return { start: pick("start"), end: pick("end") };
+}
+
+/// Le punte di un elemento dopo la modifica che porta i nodi di `before` in
+/// `after`, dove `moved` dice dove è finito ogni nodo che resta (senza, i
+/// nodi sono gli stessi): `undefined` se non cambiano. Se l'elemento aveva
+/// un sottotracciato aperto e non ne ha più, le punte se ne vanno: non ha
+/// più capi. La punta di un sottotracciato chiuso che si apre se ne va
+/// anche lei, da qualunque nodo si apra: una forma chiusa non ha capi, e
+/// quelli nuovi non sono suoi, come per le Forbici.
+export function tipsAfter(before: readonly Subpath[], after: readonly Subpath[], moved: ReadonlyMap<NodeKey, NodeKey> | null): EndTips | undefined {
+  if (after.length > 0 && after.every((sub) => sub.closed)) return before.some((sub) => !sub.closed) ? NO_TIPS : undefined;
+  const was = tipKeys(before);
+  if (moved === null || was === null) return undefined;
+  const found = followEnds([{ owner: 0, end: "start", key: was.start }, { owner: 0, end: "end", key: was.end }], after, moved);
+  const opened = (sub: Subpath | undefined, now: Subpath | undefined): boolean => sub?.closed === true && now?.closed === false;
+  const tips: EndTips = {
+    start: opened(before[0], after[0]) ? null : (found.start?.end ?? null),
+    end: opened(before[before.length - 1], after[after.length - 1]) ? null : (found.end?.end ?? null),
+  };
+  return tips.start === "start" && tips.end === "end" ? undefined : tips;
+}
+
 /// Ciò che lascia l'unione dei capi di due tracciati: il primo col
-/// sottotracciato del secondo, e il secondo senza.
+/// sottotracciato del secondo, e il secondo senza; e le punte di ciascuno
+/// dopo: quelle del primo prendono i capi del primo o del secondo (`owner`
+/// 0 e 1), quelle del secondo restano ai capi che non sono passati nel
+/// primo.
 export interface JoinedAcross {
   readonly kept: Edited;
   readonly rest: Edited;
+  readonly tips: {
+    readonly kept: { readonly start: TipSource | null; readonly end: TipSource | null };
+    readonly rest: EndTips;
+  };
 }
 
 /// Unisce il capo `a` del tracciato `first` col capo `b` del tracciato
@@ -319,15 +390,39 @@ export function joinAcross(first: readonly Subpath[], a: NodeKey, second: readon
   second.forEach((each, s) => {
     if (s !== sb) each.nodes.forEach((_, at) => shifted.set(nodeKey(s, at), nodeKey(s < sb ? s : s - 1, at)));
   });
-  return { kept, rest: { subs: second.filter((_, s) => s !== sb), selected: [], changed: 1, moved: shifted } };
+  // Le punte: i capi del primo, e quelli del secondo che stanno nel
+  // sottotracciato passato nel primo, vanno dove li portano i nodi.
+  const spots: TipSpot[] = [];
+  const firstKeys = tipKeys(first);
+  if (firstKeys !== null) for (const end of ["start", "end"] as const) spots.push({ owner: 0, end, key: firstKeys[end] });
+  const secondKeys = tipKeys(second);
+  if (secondKeys !== null) {
+    for (const end of ["start", "end"] as const) {
+      const [s, at] = parseKey(secondKeys[end]);
+      if (s === sb) spots.push({ owner: 1, end, key: nodeKey(first.length, at) });
+    }
+  }
+  const tips = { kept: followEnds(spots, kept.subs, kept.moved), rest: { start: sb === 0 ? null : "start", end: sb === second.length - 1 ? null : "end" } as const };
+  return { kept, rest: { subs: second.filter((_, s) => s !== sb), selected: [], changed: 1, moved: shifted }, tips };
 }
 
-/// Ciò che lascia «Unisci»: il tracciato, se si è chiuso, e quante linee
-/// nuove uniscono capi lontani.
+/// Un capo di uno dei pezzi che «Unisci» unisce: il pezzo, nell'ordine in cui
+/// è dato, e il capo, `start` il suo primo nodo e `end` l'ultimo.
+export interface PieceEnd {
+  readonly piece: number;
+  readonly end: TipEnd;
+}
+
+/// Ciò che lascia «Unisci»: il tracciato, se si è chiuso, quante linee nuove
+/// uniscono capi lontani, e quali capi dei pezzi sono diventati il suo
+/// inizio e la sua fine (`null` se si è chiuso, e non ha né l'uno né
+/// l'altra).
 export interface Joined {
   readonly sub: Subpath;
   readonly closed: boolean;
   readonly lines: number;
+  readonly start: PieceEnd | null;
+  readonly end: PieceEnd | null;
 }
 
 /// I sottotracciati aperti `pieces` in uno solo: ogni volta i due capi più
@@ -341,12 +436,15 @@ export function joinPaths(pieces: readonly Subpath[], merge: number): Joined | n
   // Una linea sola chiusa andrebbe e tornerebbe sulla stessa retta.
   if (pieces.length === 1 && pieces[0]!.links.length === 1 && pieces[0]!.links[0]!.kind === "line") return null;
   let subs: Subpath[] = pieces.slice();
+  // Di ogni sottotracciato, i capi dei pezzi che ne sono l'inizio e la fine.
+  let ends: Array<readonly [PieceEnd, PieceEnd]> = pieces.map((_, piece) => [{ piece, end: "start" }, { piece, end: "end" }] as const);
   let lines = 0;
   const join = (sa: number, ea: number, sb: number, eb: number): void => {
     // L'inizio di uno con la fine dell'altro: quello finisce, questo
     // comincia, e nessuno si percorre al contrario.
     if (sa !== sb && ea === 0 && eb > 0) {
       [subs[sa], subs[sb]] = [subs[sb]!, subs[sa]!];
+      [ends[sa], ends[sb]] = [ends[sb]!, ends[sa]!];
       [ea, eb] = [eb, 0];
     }
     const a = nodeKey(sa, ea);
@@ -357,7 +455,21 @@ export function joinPaths(pieces: readonly Subpath[], merge: number): Joined | n
     if (close) subs = meet(subs, a, b, pa, pb);
     else lines++;
     const joined = joinNodes(subs, new Set([a, b]));
-    if (joined !== null) subs = [...joined.subs];
+    if (joined === null) return;
+    if (sa !== sb) {
+      // Dei quattro capi, i due che restano sono il primo nodo e l'ultimo
+      // del sottotracciato unito.
+      const there: Array<readonly [NodeKey, PieceEnd]> = [
+        [nodeKey(sa, 0), ends[sa]![0]],
+        [nodeKey(sa, subs[sa]!.nodes.length - 1), ends[sa]![1]],
+        [nodeKey(sb, 0), ends[sb]![0]],
+        [nodeKey(sb, subs[sb]!.nodes.length - 1), ends[sb]![1]],
+      ];
+      const became = (key: NodeKey): PieceEnd => there.find(([from]) => joined.moved.get(from) === key)![1];
+      const made = [became(nodeKey(sa, 0)), became(nodeKey(sa, joined.subs[sa]!.nodes.length - 1))] as const;
+      ends = ends.flatMap((each, s) => (s === sb ? [] : [s === sa ? made : each]));
+    }
+    subs = [...joined.subs];
   };
   while (subs.length > 1) {
     let best: [number, number, number, number] | null = null;
@@ -388,8 +500,9 @@ export function joinPaths(pieces: readonly Subpath[], merge: number): Joined | n
   }
   const sub = subs[0]!;
   const last = sub.nodes.length - 1;
-  if (pieces.length > 1 && distance(sub.nodes[0]!, sub.nodes[last]!) > merge) return { sub, closed: false, lines };
-  if (last < 1) return { sub, closed: false, lines };
+  const open: Joined = { sub, closed: false, lines, start: ends[0]![0], end: ends[0]![1] };
+  if (pieces.length > 1 && distance(sub.nodes[0]!, sub.nodes[last]!) > merge) return open;
+  if (last < 1) return open;
   join(0, 0, 0, last);
-  return { sub: subs[0]!, closed: true, lines };
+  return { sub: subs[0]!, closed: true, lines, start: null, end: null };
 }

@@ -22,6 +22,7 @@ import { rasterize } from "./png";
 import { arrowPath } from "./shapes";
 import { inlineTracer } from "./trace-runner";
 import { appearance, LAYER } from "./test-support";
+import { DEFS, MARKER, markersIn, tipOf } from "./tip-support";
 import { DEFAULT_CURVE } from "../pen/pressure";
 import { closeRadial } from "./radial";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
@@ -12321,5 +12322,168 @@ describe("«Esporta»: ciò che il disegno offre", () => {
       naming: null,
       named: 0,
     });
+  });
+});
+
+describe("le punte delle linee, dal livello Standard", () => {
+  const L = "ol1l1l1l1";
+  const LINE = doc(`${LAYER}<line id="${L}" x1="20" y1="40" x2="120" y2="40" stroke="#d55e00" stroke-width="2"/></g>`);
+  const face = (id: string): HTMLButtonElement => property(id).querySelector<HTMLButtonElement>(".draw-properties-menu")!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>("button")];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  /// Apre il menu del campo `id` e ne preme la voce `label`.
+  const pick = (id: string, label: string): void => {
+    face(id).click();
+    menu().find((entry) => labelOf(entry) === label)!.click();
+  };
+  const markers = (): string[] => [...editor.engine.text.matchAll(/<marker [^>]*>/g)].map((match) => match[0]);
+
+  it("dal pannello una punta prende il colore della linea, e lo segue, ogni scelta in un passo col suo nome", () => {
+    mount(LINE, { level: "standard" });
+    editor.select([L]);
+    key("Enter");
+    expect(face("tipEnd").getAttribute("aria-label")).toBe("Punta di fine: Nessuna");
+    pick("tipEnd", "Triangolo");
+    expect(markers()).toEqual([expect.stringContaining('fub:marker="triangle medium end"')]);
+    expect(editor.engine.text).toMatch(/<path d="[^"]+" fill="#d55e00"\/>/);
+    expect(editor.engine.text).toMatch(new RegExp(`<line id="${L}" [^>]*marker-end="url\\(#r\\w+\\)"/>`));
+    expect(face("tipEnd").getAttribute("aria-label")).toBe("Punta di fine: Triangolo, media");
+    pick("tipEnd", "Grande");
+    expect(markers()).toEqual([expect.stringContaining('fub:marker="triangle large end"')]);
+    // Il contorno nuovo ricolora la punta nello stesso passo, e la punta
+    // rossa, che nessuno usa più, se ne va.
+    enter(propertyInput("stroke"), "#0072b2");
+    expect(markers()).toHaveLength(1);
+    expect(editor.engine.text).toMatch(/<path d="[^"]+" fill="#0072b2"\/>/);
+    expect(editor.engine.text).not.toContain("#d55e00");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Colore del contorno.");
+    expect(editor.engine.text).toMatch(/<path d="[^"]+" fill="#d55e00"\/>/);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Misura della punta.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Punta di fine.");
+    expect(editor.engine.text).toBe(LINE);
+  });
+
+  it("«Scambia inizio e fine» porta la punta al capo opposto, e Esc chiude il menu tornando al pulsante", () => {
+    mount(LINE, { level: "standard" });
+    editor.select([L]);
+    key("Enter");
+    pick("tipStart", "Cerchio");
+    pick("tipEnd", "Scambia inizio e fine");
+    expect(markers()).toEqual([expect.stringContaining('fub:marker="circle medium end"')]);
+    expect(editor.engine.text).not.toContain("marker-start");
+    expect(face("tipStart").getAttribute("aria-label")).toBe("Punta d’inizio: Nessuna");
+    expect(face("tipEnd").getAttribute("aria-label")).toBe("Punta di fine: Cerchio, media");
+    face("tipEnd").focus();
+    face("tipEnd").click();
+    expect(face("tipEnd").getAttribute("aria-expanded")).toBe("true");
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(face("tipEnd").getAttribute("aria-expanded")).toBe("false");
+    expect(document.activeElement).toBe(face("tipEnd"));
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Punte scambiate.");
+  });
+});
+
+describe("le punte dei tracciati nei comandi, dal livello Esperto", () => {
+  const MS = MARKER("rs9s9s9s9", "circle", "small", "start");
+  const ME = MARKER("re9e9e9e9", "triangle", "large", "end");
+  const MV = MARKER("rv9v9v9v9", "vee", "medium", "start");
+  const L = "ol9l9l9l9";
+  const B = "ob9b9b9b9";
+  const P = "op9p9p9p9";
+  const STROKE = 'stroke="#d55e00" stroke-width="2"';
+  const LINE = `<line id="${L}" x1="200" y1="20" x2="300" y2="20" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/>`;
+  const tap = (x: number, y: number, init: Init = {}): void => drag([[x, y]], init);
+
+  it("le Forbici: una punta per pezzo", () => {
+    const SRC = doc(DEFS(MS, ME) + LAYER + LINE + "</g>");
+    mount(SRC, { level: "expert" });
+    editor.focus();
+    key("c");
+    tap(250, 21);
+    const [, piece] = editor.selection;
+    expect(editor.engine.text).toContain(`<path id="${L}" d="M200 20 L250 20" ${STROKE} marker-start="url(#rs9s9s9s9)"/>`);
+    expect(editor.engine.text).toContain(`<path id="${piece}" d="M250 20 L300 20" ${STROKE} marker-end="url(#re9e9e9e9)"/>`);
+    expect(markersIn({ engine: editor.engine } as never)).toEqual(["rs9s9s9s9", "re9e9e9e9"]);
+    editor.undo();
+    expect(editor.engine.text).toBe(SRC);
+  });
+
+  it("il Coltello su una forma chiusa con punte: regioni senza punte", () => {
+    const SRC = doc(DEFS(MS, ME) + LAYER + `<path id="${P}" d="M0 0 L100 0 L100 50 L0 50 Z" fill="#d55e00" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/></g>`);
+    mount(SRC, { level: "expert" });
+    editor.focus();
+    key("c");
+    drag([[50, -20], [52, 10], [50, 40], [50, 70]]);
+    expect(editor.selection).toHaveLength(2);
+    expect(editor.engine.text).not.toContain("marker-");
+    expect(editor.engine.text).not.toContain("<marker");
+    editor.undo();
+    expect(editor.engine.text).toBe(SRC);
+  });
+
+  it("i nodi: chiudere toglie le punte", () => {
+    const SRC = doc(DEFS(MS, ME) + LAYER + `<path id="${P}" d="M10 10 L50 10 L50 50" fill="none" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/></g>`);
+    mount(SRC, { level: "expert" });
+    editor.select([P]);
+    editor.focus();
+    key("n");
+    tap(10, 10);
+    tap(50, 50, { shiftKey: true });
+    key("J", { shiftKey: true });
+    expect(spoken()).toBe("Capi uniti: il tracciato ora è chiuso.");
+    expect(editor.engine.text).toContain(`<path id="${P}" d="M10 10 L50 10 L50 50 Z" fill="none" ${STROKE}/>`);
+    expect(editor.engine.text).not.toContain("<marker");
+    editor.undo();
+    expect(editor.engine.text).toBe(SRC);
+  });
+
+  it("Ctrl+J: la punta dell'altro capo, capovolta, e quella che finisce in mezzo se ne va", () => {
+    const SRC = doc(
+      DEFS(MS, ME, MV) + LAYER +
+        `<line id="${L}" x1="0" y1="0" x2="50" y2="0" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/>` +
+        `<path id="${B}" d="M50 50 L50 0.5" fill="none" ${STROKE} marker-start="url(#rv9v9v9v9)"/></g>`,
+    );
+    mount(SRC, { level: "expert" });
+    editor.select([B, L]);
+    editor.focus();
+    key("j", { ctrlKey: true });
+    expect(spoken()).toBe("Tracciati uniti: ora sono uno solo.");
+    expect(editor.engine.text).not.toContain(B);
+    const o = { engine: editor.engine } as never;
+    expect(tipOf(o, L, "start")).toBe("circle small start #d55e00");
+    expect(tipOf(o, L, "end")).toBe("vee medium end #d55e00");
+    expect(markersIn(o)).toHaveLength(2);
+    editor.undo();
+    expect(editor.engine.text).toBe(SRC);
+  });
+  it("i nodi di due forme: la punta del capo che arriva, capovolta; quella dei capi uniti se ne va", () => {
+    const MB = MARKER("rb9b9b9b9", "square", "medium", "end");
+    const SRC = doc(
+      DEFS(MS, ME, MV, MB) + LAYER +
+        `<line id="${L}" x1="0" y1="0" x2="50" y2="0" ${STROKE} marker-start="url(#rs9s9s9s9)" marker-end="url(#re9e9e9e9)"/>` +
+        `<path id="${B}" d="M50 50 L50 0.5" fill="none" ${STROKE} marker-start="url(#rv9v9v9v9)" marker-end="url(#rb9b9b9b9)"/></g>`,
+    );
+    mount(SRC, { level: "expert" });
+    editor.select([L, B]);
+    editor.focus();
+    key("n");
+    drag([[35, -25], [65, -25], [65, 12]]);
+    expect(spoken()).toBe("2 nodi scelti in 2 oggetti.");
+    key("j", { ctrlKey: true });
+    expect(spoken()).toContain("Capi uniti: le due forme ora sono un tracciato solo.");
+    expect(editor.engine.text).not.toContain(B);
+    const o = { engine: editor.engine } as never;
+    expect(tipOf(o, L, "start")).toBe("circle small start #d55e00");
+    expect(tipOf(o, L, "end")).toBe("vee medium end #d55e00");
+    expect(markersIn(o)).toHaveLength(2);
+    editor.undo();
+    expect(editor.engine.text).toBe(SRC);
   });
 });

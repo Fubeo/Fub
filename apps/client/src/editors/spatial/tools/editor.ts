@@ -338,7 +338,8 @@ import { holdsWidth, profileOps, widthsOf, widthTarget, writeWidth, type NoWidth
 import type { BooleanKind } from "./boolean";
 import { combineOps, isShape, type Refused } from "./combine";
 import { crossings, cutAt, joinAcross, joinEnds, mapSubs, nodeSpot, type Spot } from "./cut";
-import { cuttable, dsOf, holdsOpenPath, joinOps, knifePieces, piecesOf, writePieces, type JoinRefused } from "./scissors";
+import { cuttable, dsOf, holdsOpenPath, joinOps, knifePieces, piecesOf, tipsOfCut, writePieces, type JoinRefused } from "./scissors";
+import { pooledTips, type EndTips } from "./endtips";
 import { builderOf, buildOps, type Builder, type BuildRefused } from "./builder";
 import {
   bend,
@@ -1711,6 +1712,9 @@ interface NodeChange {
   readonly kinds: ReadonlyMap<NodeKey, NodeKind>;
   readonly moved?: ReadonlyMap<NodeKey, NodeKey>;
   readonly changed?: number;
+  /// Le punte dei capi della forma dopo, se la modifica porta in lei i capi
+  /// di un'altra; se no le dicono i nodi.
+  readonly tips?: EndTips;
 }
 
 /// Un tocco con lo strumento Nota: dove, nella scena.
@@ -9309,7 +9313,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const plan = new Plan(model, newIds());
     const node = nodeOf(model, { path: pathOf(found.leaf) });
-    const keys = writePieces(plan, node, written);
+    const keys = writePieces(plan, node, written, tipsOfCut(cut));
     if (keys === null) {
       announce(t("draw.nodes.unwritable"));
       return;
@@ -9354,16 +9358,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           if (crossings(nodable.subs, local).length > 0) skipped++;
           continue;
         }
-        const written = knifePieces(nodable.subs, local);
-        if (written === null) continue;
+        const knifed = knifePieces(nodable.subs, local);
+        if (knifed === null) continue;
+        const { pieces: written, tips } = knifed;
         const node = nodeOf(model, { path: pathOf(leaf) });
         // Una forma che non si riscrive si prova prima a parte: le sue
         // operazioni a metà non entrano nel passo delle altre.
-        if (writePieces(new Plan(model, newIds()), node, written) === null) {
+        if (writePieces(new Plan(model, newIds()), node, written, tips) === null) {
           skipped++;
           continue;
         }
-        const keys = writePieces(plan, node, written)!;
+        const keys = writePieces(plan, node, written, tips)!;
         objects++;
         pieces += written.length;
         if (unit.node === leaf) picked.push(...keys);
@@ -15330,7 +15335,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     let refusal: DrawKey | null = null;
     for (const change of changes) {
       const { edit } = change;
-      const rewritten = pathData(writeNodes(change.subs)) === pathData(writeNodes(edit.subs)) ? null : rewrite(edit.nodable, change.subs, change.moved ?? null);
+      const rewritten = pathData(writeNodes(change.subs)) === pathData(writeNodes(edit.subs)) ? null : rewrite(edit.nodable, change.subs, change.moved ?? null, change.tips);
       if (rewritten?.kind === "refused") {
         refusal ??= NODES_REFUSED[rewritten.reason];
         continue;
@@ -15357,7 +15362,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           refusal ??= "draw.nodes.unwritable";
           continue;
         }
-        extent = union(extent, elemBounds(after, edit.matrix));
+        extent = union(extent, node.kind === "leaf" ? indexer.writtenBounds(after, edit.matrix, node) : elemBounds(after, edit.matrix));
         if (rewritten.kind === "set" && rewritten.spine !== undefined) learned.push([rewritten.attrs["fub:ink"]!, rewritten.spine]);
         if (rewritten.kind === "path" && edit.nodable.kind !== "path") conversions++;
       }
@@ -15599,8 +15604,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (joined === null) return "draw.nodes.join.none";
     const { rest } = joined;
     return [
-      changeOf(first, joined.kept),
-      { edit: second, subs: rest.subs, selected: [], kinds: remapped(nodeKinds.get(second.key) ?? NO_KINDS, rest.moved), moved: rest.moved },
+      { ...changeOf(first, joined.kept), tips: pooledTips([plainAttributes(nodeOf(engine.model!, second))], joined.tips.kept) },
+      { edit: second, subs: rest.subs, selected: [], kinds: remapped(nodeKinds.get(second.key) ?? NO_KINDS, rest.moved), moved: rest.moved, tips: joined.tips.rest },
     ];
   };
 
