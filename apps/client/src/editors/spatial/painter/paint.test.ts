@@ -434,6 +434,13 @@ describe("le risorse", () => {
     expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o1", "o2", "o3", "o4", "o5", "o6", "o7"]);
   });
 
+  it("della scena delle punte sono tutte vive, come gli oggetti che le usano", () => {
+    const scene = sceneOf(FIDELITY.find((each) => each.id === "punte")!.text);
+    expect(kinds(scene)).toEqual(["live"]);
+    expect(ids(scene.resources)).toEqual(["s1", "g1", ...Array.from({ length: 14 }, (_, i) => `p${i + 1}`)]);
+    expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o1", "o2", "o3", "o4", "o5", "o6", "g2", "o8"]);
+  });
+
   it("restano gli stessi oggetti finché non cambiano, anche in un motore riaperto", () => {
     const source = doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000"/><rect id="b" width="1" height="1"/></g>`);
     const engine = SceneEngine.open(source);
