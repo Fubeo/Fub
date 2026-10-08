@@ -59,6 +59,9 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
 - **Sfumatura.** Il tipo, Pieno, Lineare o Radiale, la barra dei punti coi
   campi del punto scelto, le sfumature pronte, «Inverti» e l'Angolo;
   all'Esperto anche «Oltre i capi» ([Disegni, sfumature](drawing-gradients.md)).
+- **Campitura.** Il tipo, fra le campiture pronte e, all'Esperto, i motivi
+  del documento, e i campi della campitura: Colore, Fondo, Passo, Spessore
+  e Angolo ([Disegni, campiture e motivi](drawing-patterns.md)).
 - **Effetti**, all'Esperto: le ombre, i bagliori e la sfocatura dell'oggetto,
   una riga per effetto, con «Aggiungi effetto» nell'intestazione ([Disegni,
   effetti e fusione](drawing-effects.md#la-sezione-effetti)).

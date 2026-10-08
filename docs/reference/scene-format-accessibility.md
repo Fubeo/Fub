@@ -2,7 +2,7 @@
 
 > **Ambito:** come un disegno di FubDraw si presenta a chi non lo vede o lo
 > vede male: titoli, descrizioni, immagini decorative, ordine di lettura, e i
-> controlli S001, S009, S012 e S013. Versione 1.
+> controlli S001, S009, S012, S013 e S017. Versione 1.
 > **Fonti autorevoli:** `crates/fub-scene/src/accessibility.rs`,
 > `apps/client/src/editors/spatial/scene/accessibility.ts` e le fixture
 > generate in `apps/client/src/__fixtures__/scene/`, che valgono per tutte e
@@ -78,8 +78,9 @@ forme del fondo e nell'oggetto. Ogni altra risorsa dà un colore ignoto.
 | S009 | info | un testo o un tratto a penna che contrasta poco col suo fondo |
 | S012 | avviso | un'immagine senza descrizione e non decorativa |
 | S013 | info | un testo con una riga sotto i 12 px a grandezza naturale |
+| S017 | info | due colori usati come codice che si distinguono soltanto per la tinta |
 
-S009, S012 e S013 guardano soltanto gli elementi modificabili e visibili, ed
+S009, S012, S013 e S017 guardano soltanto gli elementi modificabili e visibili, ed
 escono con lo span dell'elemento. S001 ha lo span del titolo vuoto, se c'è, e
 vale anche per un file troncato.
 
@@ -113,7 +114,8 @@ vale anche per un file troncato.
 
 La tavolozza di Okabe–Ito, che FubDraw offre di partenza, è leggibile anche da
 chi non distingue alcuni colori; S009 dice quando un colore, suo o no, sparisce
-sul fondo che ha.
+sul fondo che ha, e S017 quando due colori si distinguono soltanto per la
+tinta, che in bianco e nero e per chi non vede le tinte si perde.
 
 ### S012, l'immagine senza descrizione
 
@@ -128,3 +130,29 @@ non c'è, moltiplicato per quanto la matrice del testo allunga il verticale:
 la radice di `c² + d²`, con `c` e `d` della matrice verso la radice. Le righe
 vuote o nascoste non contano. Il testo ha S013 se la sua riga più piccola sta
 sotto i 12 px; il dettaglio è quella grandezza, troncata a due decimali.
+
+### S017, i colori che si distinguono soltanto per la tinta
+
+Un grafico, una mappa o uno schema affidano spesso un significato al colore:
+una fetta e la sua voce di legenda, i riquadri di una categoria. S017 dice
+quando due di quei colori hanno fra loro un contrasto sotto 3:1, la soglia
+di WCAG per le parti di un grafico: chi non vede la tinta non sa quale area
+va con quale voce.
+
+- **Le aree** sono le forme piene modificabili di cui il colore si sa, un
+  colore o un campione, con un'opacità sopra zero e un riquadro con
+  larghezza e altezza. Non contano i tratti a penna, l'evidenziatore, i
+  testi, le immagini, la carta, le tavole e i contenitori. Una sfumatura, un
+  motivo o una campitura, e ogni colore sotto `clip-path`, `mask` o
+  `filter`, suo o di un contenitore, non si sanno, come per S009.
+- **Il colore di un'area** è il suo, con la sua opacità e quella dei gruppi,
+  composto sulla carta, o sul bianco senza carta, coi canali arrotondati.
+  Conta la carta soltanto, non ciò che l'area copre: il codice è il colore
+  scelto. Su una carta che non si sa un'area trasparente non ha colore.
+- **I colori di codice** sono quelli di almeno due aree: un colore usato una
+  volta è un ornamento. Con più di 12 colori di codice il disegno è
+  un'illustrazione, e S017 tace.
+- **Una S017 per colore di codice** che ha con un altro un contrasto sotto
+  3:1, sulla sua prima area in ordine di documento. Il dettaglio è
+  `#rrggbb #rrggbb r.rr`: il colore, il compagno col contrasto più basso (a
+  parità, il primo nel documento) e quel contrasto, troncato come per S009.

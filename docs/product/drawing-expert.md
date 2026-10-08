@@ -174,7 +174,7 @@ programma che tratta male le trasformazioni. Le regole stanno in
   e la tolgono, se tutte la sanno prendere; se no la tengono, e le parti
   applicano solo la loro. Le parti di un altro programma la fermano.
 - **Le sfumature vanno con la geometria**, e si vedono dov'erano. Un oggetto
-  con un motivo, un marcatore o una sfumatura del gruppo tiene la sua
+  con un motivo o una campitura, un marcatore o una sfumatura del gruppo tiene la sua
   trasformazione ([Disegni, risorse](drawing-resources.md#i-comandi)).
 - **Niente che il file non sappia scrivere.** Tiene la sua trasformazione un
   oggetto che, scritto, uscirebbe dai numeri del formato, si deformerebbe o

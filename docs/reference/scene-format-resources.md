@@ -1,7 +1,7 @@
 # Formato della scena, risorse
 
-> **Ambito:** le risorse di un disegno: sfumature, campioni, motivi,
-> marcatori, ritagli, maschere, filtri e i tracciati che i testi seguono;
+> **Ambito:** le risorse di un disegno: sfumature, campioni, motivi e
+> campiture, marcatori, ritagli, maschere, filtri e i tracciati che i testi seguono;
 > dove stanno, come si leggono e si scrivono, come gli oggetti le usano e
 > come le operazioni tengono veri i riferimenti. Versione 1.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
@@ -10,7 +10,8 @@
 > scrittura in `scene/serialize.ts`, le operazioni in `scene/engine.ts`, con
 > i vettori di prova da 50 a 59, 63, 64, 76 e 77 ([operazioni sulla
 > scena](scene-operations.md), §9), il disegno in `painter/paint.ts`, e le
-> punte delle linee in `tools/tips.ts`, coi vertici in `scene/markers.ts`.
+> punte delle linee in `tools/tips.ts`, coi vertici in `scene/markers.ts`;
+> le campiture in `tools/hatches.ts`, i motivi in `tools/patterns.ts`.
 
 Una parte del [formato della scena](scene-format.md), §4. Una risorsa è un
 elemento che non si disegna da solo e che gli oggetti usano per riferimento:
@@ -227,8 +228,9 @@ le esportazioni di Mermaid usano.
   ultimo riferimento, e duplicare l'oggetto la copia con un id nuovo.
 - **`shared`:** è di chi usa la stessa cosa, come un marcatore. Se ne va con
   il suo ultimo riferimento, e duplicare la condivide.
-- **`swatch`:** un campione (§2), un colore del documento. Resta anche
-  quando nessuno lo usa, e duplicare chi lo usa lo condivide. Un campione
+- **`swatch`:** un campione (§2), un colore del documento, o un motivo del
+  documento (§8). Resta anche quando nessuno lo usa, e duplicare chi lo usa
+  lo condivide. Un campione
   eliminato che qualcuno usa ancora, e che FubDraw non riscrive, diventa
   `shared` e perde il nome: se ne va col suo ultimo riferimento. Nell'SVG
   pulito dell'[export](scene-format-export.md) un campione usato resta una
@@ -382,6 +384,61 @@ dell'immagine: quelle di `x y width height`, dopo il suo `transform`
   si può solo stimare, o per parti di un altro programma, il rilascio non si
   fa: i pezzi finirebbero fuori posto. Il rilascio è tutto o niente.
 
+### Le campiture e i motivi
+
+Una campitura che FubDraw scrive è un `pattern` privato con `fub:pattern`,
+sei parole separate da spazi: il genere (`lines`, `cross`, `dots`), l'angolo
+in gradi in senso orario, fra -180 escluso e 180, il passo, lo spessore (il
+diametro, per i puntini), il colore e il fondo, che può mancare. I numeri
+hanno al più due decimali; il passo sta fra 0,5 e 1000, lo spessore fra 0,1
+e il passo; i colori sono `#rrggbb` minuscoli ([Disegni, campiture e
+motivi](../product/drawing-patterns.md)).
+
+```xml
+<pattern id="r3h8k2m5q" fub:role="private" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)" fub:pattern="lines -45 8 1.5 #000000 #56b4e9">
+  <rect width="8" height="8" fill="#56b4e9"/>
+  <rect y="3.25" width="8" height="1.5" fill="#000000"/>
+</pattern>
+```
+
+- **Il contenuto discende da `fub:pattern`:** una mattonella quadrata di
+  lato il passo, in `userSpaceOnUse`, con `patternTransform="rotate(a)"` se
+  l'angolo non è zero; il fondo, un `rect` che la copre; per `lines` un
+  `rect` alto lo spessore a metà altezza, per `cross` anche quello
+  verticale, per `dots` un `circle` nel centro. I numeri del contenuto hanno
+  al più quattro decimali. Come le sfumature, la campitura sta nelle
+  coordinate dell'oggetto e si sposta, gira e scala con lui.
+- **Il ripiego** di chi la usa è il colore delle righe mescolato in sRGB al
+  fondo secondo la parte che le righe coprono: lo spessore sul passo per
+  `lines`, due volte meno l'incrocio per `cross`, il cerchio sul quadrato
+  per `dots`. Senza fondo è il colore delle righe.
+- **Riconoscerla:** è una campitura soltanto un `pattern` privato o
+  condiviso identico, attributi e contenuto, a quello che FubDraw
+  scriverebbe per il suo `fub:pattern`. Ogni altro `pattern`, anche con un
+  `fub:pattern`, è un motivo che si legge, si disegna e resta com'è.
+- **Cambiarla:** con un `set` sul posto, se è privata, la usa soltanto il
+  riempimento scritto di un oggetto, e il genere e il fondo, o la sua
+  assenza, restano; altrimenti l'oggetto ne riceve una nuova, subito dopo,
+  e la raccolta toglie quella che nessuno usa più (§9).
+- **Un motivo del documento** è un `pattern` con `fub:role="swatch"` e il
+  nome in `fub:name`, non vuoto: come un campione resta anche quando nessuno
+  lo usa, e il suo nome è diverso da quelli dei campioni e degli altri
+  motivi. «Motivo dalla selezione» lo scrive in `userSpaceOnUse`, con
+  `x y width height` il riquadro di ciò che gli oggetti disegnano,
+  arrotondato in fuori ai centesimi, e una copia di ciascuno, in ordine di
+  documento, con la trasformazione che la tiene dov'era: un oggetto
+  riempito col motivo mostra gli originali al loro posto, ripetuti. Il
+  contenuto è quello di una maschera d'opacità, senza id, titoli e
+  descrizioni, con lo stile ereditato e l'opacità dei contenitori; le
+  sfumature private entrano in copia, mentre un oggetto con un motivo o una
+  campitura non entra, perché il contenuto usa soltanto sfumature (§5).
+- **Il ripiego di un motivo** è il colore medio del contenuto: i riempimenti
+  pesati sull'area del loro riquadro e sull'opacità; senza, i contorni,
+  pesati sulla diagonale; altrimenti il nero. Eliminarlo riporta chi lo usa
+  al ripiego che scrive, o a quel colore, e lo toglie; se lo usa ancora
+  qualcosa che FubDraw non riscrive diventa `shared` e perde il nome, come
+  un campione (§7).
+
 ## 9. Le operazioni
 
 Le regole che tengono veri i riferimenti
@@ -448,6 +505,9 @@ riscritture.
   `userSpaceOnUse` senza `x2`, come FubDraw lo scrive, e con lui chi lo usa,
   e li conserva byte per byte; un campione senza `gradientUnits` lo legge
   come una risorsa senza ciclo di vita.
+- **Un lettore che non conosce i motivi del documento** legge un motivo
+  come una risorsa senza ciclo di vita: resta, e duplicare chi lo usa lo
+  condivide. Una campitura è un `pattern` privato come gli altri.
 - **`symbol` e `use`** restano estranei. Entreranno nel formato
   con gli strumenti che li creano e li spostano: così la superficie non
   incontra un oggetto modificabile che non sa misurare.

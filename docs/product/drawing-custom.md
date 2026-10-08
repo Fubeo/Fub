@@ -49,6 +49,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Colori personalizzati | Standard | «Altro colore…» e l'anello del colore scelto |
 | Colori del documento | Standard | nel pannello delle proprietà la sezione «Colori del documento», coi campioni, i colori usati e i recenti; disegnare con un campione ([Disegni, colori](drawing-colors.md)) |
 | Punte delle linee | Standard | nel pannello delle proprietà «Punta d’inizio» e «Punta di fine», in «Aspetto» ([Disegni, punte delle linee](drawing-tips.md)) |
+| Campiture | Standard | nel pannello delle proprietà la sezione «Campitura» ([Disegni, campiture e motivi](drawing-patterns.md)) |
 | Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |
 | Duplica, raggruppa, ordina, allinea e distribuisci | Standard | questi comandi della barra «Disponi», coi loro tasti, e il suo campo «Opacità» |
 | Livelli | Standard | il pulsante «Livelli» e «Sposta in un livello»; scegliere oggetti rende corrente il loro livello; nell'albero i nomi, il filtro, le miniature e le righe da trascinare |
@@ -77,6 +78,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Testo in area e su tracciato | Esperto | col Testo, trascinare per il riquadro di un testo in area; il menu «Testo su tracciato»; nelle proprietà «Tipo di testo» e «Larghezza del riquadro»; le maniglie della cornice di un testo in area ne cambiano la larghezza |
 | Ombre, bagliori e sfocatura | Esperto | nelle proprietà la sezione «Effetti» ([Disegni, effetti e fusione](drawing-effects.md)) |
 | Metodi di fusione | Esperto | nelle proprietà «Fusione» e «Isola la fusione», in «Aspetto» |
+| Motivi del documento | Esperto | «Motivo dalla selezione», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nella sezione «Campitura» i motivi del documento, il loro nome ed «Elimina motivo» |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
 bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la

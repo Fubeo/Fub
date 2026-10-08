@@ -45,6 +45,14 @@ un'icona e una parola, «Avviso» o «Nota», mai il solo colore.
 - **«Un testo è molto piccolo»** (nota): a grandezza naturale, con la scala
   dei gruppi che lo contengono, una sua riga sta sotto i 12 px.
   **«Porta a 12 px»** gli dà il corpo che ci arriva.
+- **«Due colori si distinguono solo per la tinta»** (nota): due colori che
+  il disegno usa come codice, ciascuno in almeno due aree piene, come le
+  fette di un grafico e la legenda, hanno fra loro un contrasto sotto 3:1;
+  in bianco e nero, o per chi non vede le tinte, non si sa quali aree vanno
+  insieme. La riga mostra i due colori. **«Dai una campitura»** dà a tutte
+  le aree di quel colore la [campitura](drawing-patterns.md) pronta che il
+  disegno usa meno, sul loro colore, e lo dice: «Campitura diagonale su 3
+  aree.». Le aree bloccate restano.
 
 Il pulsante col nome dell'oggetto, **«Vai a …»**, lo sceglie sul foglio e lo
 mostra.
@@ -55,10 +63,10 @@ all'oggetto.
 
 Ogni correzione è un passo, col nome di annulla e ripeti: «Riempimento»,
 «Colore del contorno», «Dimensione del testo», «Descrivi l’immagine»,
-«Immagine decorativa». Corretto un problema la sua riga se ne va, e il fuoco
-passa alla riga che prende il suo posto, sullo stesso genere di pulsante: i
-problemi si correggono uno dopo l'altro con `Invio`. Quando non ce n'è più
-nessuno, il pannello lo dice.
+«Immagine decorativa», «Dai una campitura». Corretto un problema la sua
+riga se ne va, e il fuoco passa alla riga che prende il suo posto, sullo
+stesso genere di pulsante: i problemi si correggono uno dopo l'altro con
+`Invio`. Quando non ce n'è più nessuno, il pannello lo dice.
 
 ## L'ordine di lettura
 

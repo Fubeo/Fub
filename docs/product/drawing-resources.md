@@ -37,10 +37,13 @@ nell'esportazione il file è quello che è.
 
 ## Il pannello delle proprietà
 
-- **Un riempimento o un contorno con una risorsa** si legge «Sfumatura» o
-  «Motivo». Il pulsante del colore accanto mostra i punti della sfumatura, da
-  sinistra a destra o dal centro, o una scacchiera per un motivo. La sezione
-  «Sfumatura» la cambia ([Disegni, sfumature](drawing-gradients.md)).
+- **Un riempimento o un contorno con una risorsa** si legge «Sfumatura»,
+  «Campitura», il nome di un motivo del documento o «Motivo». Il pulsante del
+  colore accanto mostra i punti della sfumatura, da sinistra a destra o dal
+  centro, le righe della campitura, o una scacchiera per un motivo. Le
+  sezioni «Sfumatura» e «Campitura» li cambiano ([Disegni,
+  sfumature](drawing-gradients.md), [Disegni, campiture e
+  motivi](drawing-patterns.md)).
 - **Scrivere un colore** e confermarlo mette il colore al posto della
   risorsa, in un passo di annulla; `Esc` prima di confermare torna alla
   risorsa, e `Invio` senza aver cambiato niente non fa niente.
