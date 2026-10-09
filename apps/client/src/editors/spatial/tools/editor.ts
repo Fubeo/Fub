@@ -459,6 +459,7 @@ import {
 import { elemBounds, linesBounds, SceneIndex, SceneIndexer, type ForeignBlock, type LayerInfo, type TextLook, type Unit } from "./hit";
 import { History, HISTORY_LIMIT, type Mark, type Replay } from "./history";
 import { createHistoryPanel } from "./history-panel";
+import { createSuggestions, type Suggested, type SuggestionId } from "./suggestions";
 import { createBoardsPanel, type BoardRow } from "./boards-panel";
 import { createLibraryPanel } from "./library-panel";
 import { boxAround as shapeBox, boxIn, forPreview, libraryElem } from "./library-insert";
@@ -669,6 +670,14 @@ export interface DrawEditorOptions {
   /// Chi ricalca i pixel di un'immagine per «Ricalca immagine»: se non è
   /// dato, un worker, o la pagina dove i worker non ci sono.
   readonly tracer?: TracerFactory;
+  /// I suggerimenti brevi: se si mostrano, e quelli già visti. Senza, o
+  /// `null` finché chi monta l'editor non li ha letti, non se ne mostra
+  /// nessuno: senza memoria tornerebbero a ogni disegno.
+  readonly suggestions?: Suggested | null;
+  /// Chi disegna ha spento o riacceso i suggerimenti dalla loro casella.
+  readonly onSuggestionsSwitch?: (on: boolean) => void;
+  /// Un suggerimento è stato mostrato, o non serve più: quelli di adesso.
+  readonly onSuggestedChange?: (seen: readonly string[]) => void;
 }
 
 /// Ciò che la finestra «Esporta» chiede al disegno.
@@ -734,6 +743,10 @@ export interface DrawEditor {
   /// Altri colori recenti, da chi monta l'editor: non tornano a
   /// `onColorsChange`.
   setRecentColors(colors: readonly string[]): void;
+  /// Ciò che chi monta l'editor ricorda dei suggerimenti, letto o cambiato
+  /// altrove: non torna a `onSuggestedChange`, se non con quelli visti qui
+  /// che gli mancavano.
+  setSuggestions(suggested: Suggested | null): void;
   select(keys: readonly string[]): void;
   deleteSelection(): void;
   undo(): void;
@@ -2866,6 +2879,30 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncHistory();
   });
 
+  // I suggerimenti brevi, sotto il foglio: uno alla volta, ognuno una volta
+  // sola, dopo un gesto che somiglia a quello che dicono.
+  const suggestions = createSuggestions(life, {
+    text: (id) => suggestionText(id),
+    onSeen: (seen) => options.onSuggestedChange?.(seen),
+    onSwitch: (on) => options.onSuggestionsSwitch?.(on),
+    onClose: () => surface.focus({ preventScroll: true }),
+  });
+  suggestions.remember(options.suggestions ?? null);
+  relabels.push(() => suggestions.relabel());
+
+  /// Il testo di un suggerimento: quello delle due dita dice anche i tocchi,
+  /// dove annullano e ripetono.
+  const suggestionText = (id: SuggestionId): string => {
+    switch (id) {
+      case "two-fingers":
+        return t(has("gestures") && grid.taps ? "draw.suggestion.two_fingers.taps" : "draw.suggestion.two_fingers");
+      case "hold-shape":
+        return t("draw.suggestion.hold_shape");
+      case "label-shape":
+        return t("draw.suggestion.label_shape");
+    }
+  };
+
   // La verifica dell'accessibilità, dal livello Standard: i problemi del
   // disegno con le loro correzioni, e l'ordine di lettura. Il disegno si
   // rilegge soltanto col pannello aperto. Ciò che ha trovato nel testo
@@ -3660,7 +3697,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   header.append(toolbar);
   if (folio?.controls) header.append(folio.controls);
   header.append(titleField);
-  root.append(header, body, surfaceHint, live);
+  root.append(header, body, suggestions.element, surfaceHint, live);
   host.append(root);
 
   // La carta, la griglia, il painter, poi l'anteprima delle forme, poi lo
@@ -7315,6 +7352,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const landed = (ids: readonly string[]): void => oneRound(() => landOn(ids));
 
   const landOn = (ids: readonly string[]): void => {
+    // Il posto della tavola scelta, prima del passo.
+    const chosenAt = tool === "board" && boardChosen !== null ? boardsNow().findIndex((each) => each.id === boardChosen) : -1;
     refresh();
     // Con lo strumento Tavola si sceglie la tavola toccata, non gli oggetti;
     // se il passo ha tolto quella scelta, quella che le stava prima, o la
@@ -7323,6 +7362,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const board = tool === "board" ? boardsNow().find((each) => ids.includes(each.id)) : undefined;
     if (board !== undefined) {
       boardChosen = board.id;
+      showPage();
+    } else if (chosenAt >= 0 && chosenSheet() === null) {
+      const list = boardsNow();
+      boardChosen = list.length === 0 ? sheetInView() : list[Math.min(Math.max(chosenAt - 1, 0), list.length - 1)]!.id;
       showPage();
     }
     const touched = tool === "board" ? [] : inOrder(ids);
@@ -7355,18 +7398,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// salto: al segno `mark`, se il salto è arrivato al suo punto.
   const whereNow = (mark: Mark | null): string => {
     const at = history.position;
-    // Il posto della tavola scelta, prima del passo.
-    const chosenAt = tool === "board" && boardChosen !== null ? boardsNow().findIndex((each) => each.id === boardChosen) : -1;
     if (mark !== null && mark.at === at) return t("draw.history.where.mark", { name: mark.name });
     if (at === history.start) return t(history.trimmed ? "draw.history.where.start" : "draw.history.where.opened");
     const step = history.steps()[history.done - 1]!;
     return t("draw.history.where.step", { action: t(step.label) });
   };
 
-    } else if (chosenAt >= 0 && chosenSheet() === null) {
-      const list = boardsNow();
-      boardChosen = list.length === 0 ? sheetInView() : list[Math.min(Math.max(chosenAt - 1, 0), list.length - 1)]!.id;
-      showPage();
   /// Va al punto `at` della cronologia in un colpo, dal suo pannello: i
   /// passi in mezzo si annullano o si ripetono insieme, e il documento cambia
   /// una volta sola. Ciò che si sta scrivendo o tracciando si conclude prima,
@@ -7809,6 +7846,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     showGrid();
     showGuideLines();
     syncControls();
+    suggestions.relabel();
     // Il pannello arriva come lo vuole chi disegna.
     if (!hadPanel && has("properties")) showPanelByDefault();
     // I righelli vanno e vengono col livello, e la cornice con loro.
@@ -9507,6 +9545,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     announce(noted(carried.length === 0 ? t("draw.board.moved", args) : plural(carried.length, "draw.board.moved.one", "draw.board.moved.other", args), note));
   };
 
+  /// La pagina di un disegno senza tavole diventa la tavola 1, in un passo
+  /// suo, e la si sceglie: chi annulla la tavola che viene dopo ritrova lei.
+  /// Torna la tavola 1; `null` se non c'è.
+  const pageToBoard = (): Board | null => {
+    const model = engine.model;
+    const page = scene.root.page;
+    if (model === null || page === null) return null;
+    const made = pageBoardOps(model, (n) => t("draw.board.name", { n }), newIds(), page);
+    if (made === "paper") announce(t("draw.board.paper"));
+    if (made === "paper" || made.keys.length === 0 || !writeBoard("draw.action.board_page", made)) return null;
+    return boardById(made.keys[0]!);
+  };
+
   /// Aggiunge una tavola col rettangolo `rect`, in un passo, la sceglie e lo
   /// dice, con `note`; in un disegno senza tavole la pagina diventa prima la
   /// tavola 1, col passo suo. La carta somiglia a quella di `like`, se ne ha
@@ -9555,19 +9606,6 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// se ne apre il nome.
   const newBoard = (): void => {
     const like = currentBoard();
-  /// La pagina di un disegno senza tavole diventa la tavola 1, in un passo
-  /// suo, e la si sceglie: chi annulla la tavola che viene dopo ritrova lei.
-  /// Torna la tavola 1; `null` se non c'è.
-  const pageToBoard = (): Board | null => {
-    const model = engine.model;
-    const page = scene.root.page;
-    if (model === null || page === null) return null;
-    const made = pageBoardOps(model, (n) => t("draw.board.name", { n }), newIds(), page);
-    if (made === "paper") announce(t("draw.board.paper"));
-    if (made === "paper" || made.keys.length === 0 || !writeBoard("draw.action.board_page", made)) return null;
-    return boardById(made.keys[0]!);
-  };
-
     const board = addBoard(nextBoardRect(boardsNow(), scene.root.page, like) ?? looseRect(), "", like);
     if (board === null) return;
     frameBounds(board.box);
@@ -12640,7 +12678,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   const finishInk = (g: InkGesture, stroke: FinishedStroke): void => {
-    if (writeInk(g, stroke.split) !== null) announce(`${t(g.tool === "highlighter" ? "draw.added.highlight" : "draw.added.stroke")} ${objects()}`);
+    if (writeInk(g, stroke.split) === null) return;
+    announce(`${t(g.tool === "highlighter" ? "draw.added.highlight" : "draw.added.stroke")} ${objects()}`);
+    if (!stroke.split) offerAfterInk(g);
+  };
+
+  /// Dopo un tratto: col dito, le due dita che muovono il foglio; dopo uno
+  /// che somiglia a una forma, il tratto tenuto fermo che lo diventa.
+  const offerAfterInk = (g: InkGesture): void => {
+    if (g.pointer === "touch" && suggestions.offer("two-fingers")) return;
+    if (g.holds && shapesOn() && suggestions.wants("hold-shape") && strokeShapeOf(g) !== null) suggestions.offer("hold-shape");
   };
 
   // --- Le note e Invio sul foglio -----------------------------------------------
@@ -12848,6 +12895,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (tool !== "select") setTool("select");
     select([elem.attrs.id!]);
     announce(`${t("draw.shapes.inserted", { name: t(shape.name) })} ${objects()}`);
+    offerLabel();
     return true;
   };
 
@@ -13102,7 +13150,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const ops: Op[] = [...shaped.ops];
     const page = grownPage(shaped.extent);
     if (page !== null) ops.push({ op: "page", viewBox: page });
-    if (commit("draw.action.to_shape", asGesture(ops)) !== null) announce(`${t("draw.shaped.held", { kind: shapeSaid(shape!) })} ${objects()}`);
+    if (commit("draw.action.to_shape", asGesture(ops)) === null) return;
+    announce(`${t("draw.shaped.held", { kind: shapeSaid(shape!) })} ${objects()}`);
+    suggestions.done("hold-shape");
+    offerLabel();
+  };
+
+  /// Dopo una forma nuova, se ce ne sono almeno due senza testo: come si
+  /// scrive dentro una forma.
+  const offerLabel = (): void => {
+    if (!has("text") || !suggestions.wants("label-shape")) return;
+    let empty = 0;
+    for (const unit of currentIndex().units) {
+      if (labelable(unit.node) && labelIn(unit.node) === null && ++empty === 2) {
+        suggestions.offer("label-shape");
+        return;
+      }
+    }
   };
 
   /// La forma del gesto `g` entra nel disegno, e lo si dice, con `note`, a
@@ -13125,7 +13189,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         : polygonTool.shape === "star"
           ? t("draw.added.star", { count: polygonTool.points })
           : t("draw.added.ngon", { kind: polygonSaid() });
-    if (commit(toolLabel(g.tool), asGesture(ops)) !== null) announce(noted(`${added} ${objects()}`, note));
+    if (commit(toolLabel(g.tool), asGesture(ops)) === null) return;
+    announce(noted(`${added} ${objects()}`, note));
+    offerLabel();
   };
 
   // --- Il Connettore ------------------------------------------------------------
@@ -14924,6 +14990,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     }
     const page = grownPage(made.extent);
     if (commit("draw.action.label", asGesture(page === null ? made.ops : [...made.ops, { op: "page", viewBox: page }])) === null) return;
+    suggestions.done("label-shape");
     select(made.keys);
     announce(overflow ? `${t("draw.label.added")} ${t("draw.text.overflow")}` : t("draw.label.added"));
   }
@@ -15184,6 +15251,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         else if (Math.abs(twist.total) >= TWIST_START_DEG) twist.turning = true;
       }
       setCamera(panned(c, next.center.x - pinch.center.x, next.center.y - pinch.center.y));
+      suggestions.done("two-fingers");
     } else {
       endTwist();
     }
@@ -18255,6 +18323,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const changeGrid = (next: Grid): void => {
     const before = grid;
     grid = checkedGrid(next, before);
+    suggestions.relabel();
     showGrid();
     showGuideLines();
     // I righelli, e la cornice che segnano.
@@ -20432,12 +20501,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setGrid(next) {
       if (disposed) return;
       grid = checkedGrid(next, grid);
+      suggestions.relabel();
       showGrid();
       showGuideLines();
       showHandles();
       panel.setClosed(grid.closed as readonly SectionId[]);
       if (grid.panel !== null && has("properties") && grid.panel === panel.element.hidden) showPanel(grid.panel, false, false);
       syncProperties();
+    },
+    setSuggestions(suggested) {
+      if (!disposed) suggestions.remember(suggested);
     },
     setRecentColors(colors) {
       if (disposed) return;
