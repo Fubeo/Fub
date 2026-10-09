@@ -195,12 +195,13 @@ describe("il menu File", () => {
 });
 
 describe("il contestuale di una cartella", () => {
-  it("offre «Nuovo disegno qui…» fra la nota e la cartella, e passa la cartella al modulo", async () => {
+  it("offre «Nuovo disegno qui…» dopo la nota, poi l'importazione e la cartella, e passa la cartella al modulo", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     const labels = openContextMenu(folderRow("note"));
     expect(labels.indexOf("Nuovo disegno qui…")).toBe(labels.indexOf("Nuova nota qui") + 1);
-    expect(labels.indexOf("Nuova cartella")).toBe(labels.indexOf("Nuovo disegno qui…") + 1);
+    expect(labels.indexOf("Importa un disegno qui…")).toBe(labels.indexOf("Nuovo disegno qui…") + 1);
+    expect(labels.indexOf("Nuova cartella")).toBe(labels.indexOf("Importa un disegno qui…") + 1);
     await choose("Nuovo disegno qui…");
     expect(opened).toEqual([{ folder: "note" }]);
   });
@@ -210,6 +211,7 @@ describe("il contestuale di una cartella", () => {
     const labels = openContextMenu(folderRow("note"));
     expect(labels).toContain("Nuova nota qui");
     expect(labels).not.toContain("Nuovo disegno qui…");
+    expect(labels).not.toContain("Importa un disegno qui…");
   });
 
   it("senza un modulo registrato apre la palette sullo stesso comando, con la cartella nel campo, e confermarla crea il disegno lì", async () => {
@@ -291,11 +293,11 @@ describe("il contestuale di una cartella", () => {
 describe("il contestuale del titolo dell'albero", () => {
   const title = (): HTMLElement => document.querySelector<HTMLElement>("#files-title")!;
 
-  it("offre «Nuovo disegno qui…» prima della cartella: nella radice senza cartella, in uno spazio con la sua", async () => {
+  it("offre «Nuovo disegno qui…» e l'importazione prima della cartella: nella radice senza cartella, in uno spazio con la sua", async () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     const labels = openContextMenu(title());
-    expect(labels).toEqual(["Nuovo disegno qui…", "Nuova cartella"]);
+    expect(labels).toEqual(["Nuovo disegno qui…", "Importa un disegno qui…", "Nuova cartella"]);
     await choose("Nuovo disegno qui…");
     expect(opened).toEqual([{}]);
 

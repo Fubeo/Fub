@@ -155,6 +155,10 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // dopo un guasto, il gesto che le dita fanno comunque.
     ("shell.doc.save", Some("Mod-s")),
     ("shell.note.new", Some("Mod-n")),
+    // Fa un disegno nuovo da un file di Excalidraw o di draw.io scelto dal
+    // disco. **Senza accordo**: si fa una volta per file, non mentre si
+    // lavora, e il comando c'è soltanto dove il kernel sa fare disegni.
+    ("shell.draw.import", None),
     ("shell.settings", Some("Mod-,")),
     // I pannelli laterali si mostrano e si nascondono; a finestra stretta
     // aprono il cassetto invece di restare irraggiungibili.

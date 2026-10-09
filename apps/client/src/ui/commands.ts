@@ -42,6 +42,7 @@
 // prima di ogni vault. Da qui in poi la tabella degli accordi arriva generata
 // (`shell-keys.generated.ts`) e questo modulo non distingue più i due registri
 // se non per chi esegue.
+import { IMPORT_ACCEPT, sourceOf } from "../editors/spatial/import/sources";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { settings } from "../host/query";
 import { type Key, t } from "../i18n/strings";
@@ -240,6 +241,72 @@ export function canCreateDrawing(): boolean {
 /// dove nasce ("" è la radice, e non si passa: il campo resta vuoto).
 export function newDrawing(folder = ""): boolean {
   return launchCommand(NEW_DRAWING, folder === "" ? {} : { folder });
+}
+
+// # Le porte di «Importa disegno…»
+//
+// Un file di Excalidraw o di draw.io diventa un disegno nuovo, e l'originale
+// non cambia. Le porte sono quelle di «Nuovo disegno…», più il file stesso nel
+// riquadro dei file, e si mostrano alle stesse condizioni, più una: la shell
+// ha registrato la finestra che importa, che arriva la prima volta che serve.
+
+/// Da dove si importa: un file del vault, per percorso, o uno scelto dal
+/// disco, con la cartella dove nasce il disegno ("" è la radice).
+export type DrawingSource =
+  | { readonly kind: "vault"; readonly path: string }
+  | { readonly kind: "file"; readonly file: File; readonly folder: string };
+
+/// Chi apre la finestra che importa.
+export type DrawingImport = (from: DrawingSource) => void;
+
+let importer: DrawingImport | null = null;
+
+/// Registra la finestra che importa; restituisce chi la toglie.
+export function registerDrawingImport(open: DrawingImport): () => void {
+  importer = open;
+  return () => {
+    if (importer === open) importer = null;
+  };
+}
+
+/// Le porte di «Importa disegno…» si mostrano? Come quelle di «Nuovo
+/// disegno…», e soltanto se c'è chi importa.
+export function canImportDrawing(): boolean {
+  return canCreateDrawing() && importer !== null;
+}
+
+/// Il file `path` del vault si importa? Lo dice il nome: chi lo apre legge
+/// anche il contenuto.
+export function canImportFile(path: string): boolean {
+  return canImportDrawing() && sourceOf(path) !== null;
+}
+
+/// Apre la finestra che importa `from`; falso se non si importa.
+export function importDrawing(from: DrawingSource): boolean {
+  if (importer === null || !canCreateDrawing()) return false;
+  importer(from);
+  return true;
+}
+
+/// Sceglie un file dal disco e lo importa nella cartella `folder`. La scelta
+/// si apre subito, dentro il gesto che la chiede: il browser apre la finestra
+/// dei file soltanto da un clic o da un tasto, e un `await` prima la
+/// perderebbe.
+export function pickDrawingImport(folder = ""): boolean {
+  if (!canImportDrawing()) return false;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = IMPORT_ACCEPT;
+  input.addEventListener(
+    "change",
+    () => {
+      const file = input.files?.[0];
+      if (file !== undefined) importDrawing({ kind: "file", file, folder });
+    },
+    { once: true },
+  );
+  input.click();
+  return true;
 }
 
 /// Gli accordi riconfigurati, letti dalle impostazioni.

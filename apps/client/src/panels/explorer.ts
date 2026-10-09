@@ -35,17 +35,18 @@ import {
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu } from "../ui/menu";
-import { canCreateDrawing, newDrawing, registerShellCommand } from "../ui/commands";
+import { canCreateDrawing, canImportDrawing, canImportFile, importDrawing, newDrawing, pickDrawingImport, registerShellCommand } from "../ui/commands";
 import { showPanel } from "./sidebar";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { canShowFile, focusEditor, openDocument } from "./document";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
-import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
-import { onLanguage, plural, t, type Key } from "../i18n/strings";
+import { nameFault, normalizedName } from "../rules/mirrored";
+import { onLanguage, plural, t } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import type { Lifetime } from "../ui/lifetime";
+import { nameFaultText } from "../ui/name-fault";
 import { setTooltip } from "../ui/tooltip";
 import { mediaKindOfId } from "../editors/media/media-types";
 import type { ResourceKind } from "../host/contract";
@@ -97,6 +98,9 @@ export function mountExplorer(lifetime: Lifetime): void {
     showContextMenu(e, [
       ...(canCreateDrawing()
         ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(state.activeSpace ?? "") }]
+        : []),
+      ...(canImportDrawing()
+        ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(state.activeSpace ?? "") }]
         : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
     ]);
@@ -665,15 +669,21 @@ function fileRow(id: string): HTMLElement {
   name.className = "row-name";
   name.textContent = childName(id);
   row.appendChild(name);
+  // Un file di Excalidraw o di draw.io che Fub non mostra si apre
+  // importandolo: la finestra lo prepara, e niente si scrive prima di
+  // «Importa».
   row.addEventListener("click", () => {
     if (canShowFile(id)) void openDocument(id);
-    else notify(t("explorer.no_viewer", { name: childName(id) }), "info");
+    else if (!(canImportFile(id) && importDrawing({ kind: "vault", path: id }))) notify(t("explorer.no_viewer", { name: childName(id) }), "info");
   });
   // Un allegato si rinomina (l'estensione resta) e si cestina come una nota:
   // il kernel li tratta allo stesso modo, e il cestino li ripristina uguali.
+  // Uno che si importa lo offre per primo, anche quando Fub lo mostra, come
+  // l'SVG o il PNG che draw.io esporta col disegno dentro.
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e, [
+      ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
       { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
       { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
       { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
@@ -898,6 +908,9 @@ function folderMenu(at: MouseEvent, path: string): void {
     // galleria già scelta.
     ...(canCreateDrawing()
       ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(path) }]
+      : []),
+    ...(canImportDrawing()
+      ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(path) }]
       : []),
     { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
     { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
@@ -1275,22 +1288,6 @@ function startRename(row: HTMLElement, id: string, preset?: string): void {
   input.addEventListener("blur", () => void confirm());
 }
 
-/// La frase per ciascun guasto di un nome: la mappa è un `Record` **esaustivo**,
-/// quindi un'etichetta nuova in `NameFault` non compila finché non ha la sua
-/// chiave di catalogo. Un `` `name_fault.${tag}` `` composto a mano avrebbe
-/// compilato sempre, e la chiave mancante sarebbe comparsa a schermo.
-const FAILURE_REASON: Record<NameFault, Key> = {
-  empty: "name_fault.empty",
-  traversal: "name_fault.traversal",
-  machine: "name_fault.machine",
-  control: "name_fault.control",
-  reserved: "name_fault.reserved",
-  device: "name_fault.device",
-  "trailing-dot": "name_fault.trailing_dot",
-  hidden: "name_fault.hidden",
-  "too-long": "name_fault.too_long",
-};
-
 function reportRenameCollision(outcome: RenameResult): boolean {
   if (outcome.kind !== "collision") return false;
   notify(
@@ -1324,7 +1321,7 @@ async function renameDoc(from: string, newPageName: string, typed?: string): Pro
   // deve ricevere perché il nome che l'utente rivede sia quello che c'è.
   const failure = nameFault(to, "new");
   if (failure !== null) {
-    notify(t("explorer.bad_name", { name: newPageName, reason: t(FAILURE_REASON[failure]) }), "info");
+    notify(t("explorer.bad_name", { name: newPageName, reason: nameFaultText(failure) }), "info");
     reopenRename(from, typed ?? newPageName);
     return;
   }

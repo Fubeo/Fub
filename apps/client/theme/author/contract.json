@@ -608,6 +608,22 @@
     "draw-new-vault",
     "draw-new-vault-item",
     "draw-new-vault-name",
+    "draw-import-overlay",
+    "draw-import",
+    "draw-import-form",
+    "draw-import-body",
+    "draw-import-from",
+    "draw-import-preview",
+    "draw-import-image",
+    "draw-import-status",
+    "draw-import-count",
+    "draw-import-report",
+    "draw-import-report-title",
+    "draw-import-report-none",
+    "draw-import-notes",
+    "draw-import-note",
+    "draw-import-fields",
+    "draw-import-field",
     "draw-guides-message",
     "draw-guides-scroll",
     "draw-guides-table",
@@ -1771,6 +1787,34 @@
       ]
     },
     {
+      "name": "import-drawing",
+      "hooks": [
+        "draw-import-overlay",
+        "draw-import",
+        "draw-import-form",
+        "draw-import-body",
+        "draw-import-from",
+        "draw-import-preview",
+        "draw-import-image",
+        "draw-import-status",
+        "draw-import-count",
+        "draw-import-report",
+        "draw-import-report-title",
+        "draw-import-report-none",
+        "draw-import-notes",
+        "draw-import-note",
+        "draw-import-fields",
+        "draw-import-field"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "media-viewer",
       "hooks": [
         "media-surface",
@@ -2409,10 +2453,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 688,
+    "hooks": 704,
     "state_names": 7,
-    "assigned_states": 163,
-    "components": 50,
+    "assigned_states": 168,
+    "components": 51,
     "unassigned_hooks": 0
   }
 }
