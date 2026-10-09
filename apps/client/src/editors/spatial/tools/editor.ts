@@ -199,6 +199,7 @@ import {
 import { attributeOps, cites, heldNamer, renameOps, subjectOf, type Subject } from "./attributes";
 import {
   addBoardOps,
+  pageBoardOps,
   boardAt,
   boardsOf,
   boundsRect,
@@ -7315,7 +7316,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const landOn = (ids: readonly string[]): void => {
     refresh();
-    // Con lo strumento Tavola si sceglie la tavola toccata, non gli oggetti.
+    // Con lo strumento Tavola si sceglie la tavola toccata, non gli oggetti;
+    // se il passo ha tolto quella scelta, quella che le stava prima, o la
+    // pagina quando non ce n'è più: chi annulla la tavola nuova ritrova
+    // quella da cui era partito.
     const board = tool === "board" ? boardsNow().find((each) => ids.includes(each.id)) : undefined;
     if (board !== undefined) {
       boardChosen = board.id;
@@ -7351,12 +7355,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// salto: al segno `mark`, se il salto è arrivato al suo punto.
   const whereNow = (mark: Mark | null): string => {
     const at = history.position;
+    // Il posto della tavola scelta, prima del passo.
+    const chosenAt = tool === "board" && boardChosen !== null ? boardsNow().findIndex((each) => each.id === boardChosen) : -1;
     if (mark !== null && mark.at === at) return t("draw.history.where.mark", { name: mark.name });
     if (at === history.start) return t(history.trimmed ? "draw.history.where.start" : "draw.history.where.opened");
     const step = history.steps()[history.done - 1]!;
     return t("draw.history.where.step", { action: t(step.label) });
   };
 
+    } else if (chosenAt >= 0 && chosenSheet() === null) {
+      const list = boardsNow();
+      boardChosen = list.length === 0 ? sheetInView() : list[Math.min(Math.max(chosenAt - 1, 0), list.length - 1)]!.id;
+      showPage();
   /// Va al punto `at` della cronologia in un colpo, dal suo pannello: i
   /// passi in mezzo si annullano o si ripetono insieme, e il documento cambia
   /// una volta sola. Ciò che si sta scrivendo o tracciando si conclude prima,
@@ -9499,16 +9509,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Aggiunge una tavola col rettangolo `rect`, in un passo, la sceglie e lo
   /// dice, con `note`; in un disegno senza tavole la pagina diventa prima la
-  /// tavola 1. La carta somiglia a quella di `like`, se ne ha una. Torna la
-  /// tavola nuova; `null` se non c'è.
+  /// tavola 1, col passo suo. La carta somiglia a quella di `like`, se ne ha
+  /// una. Torna la tavola nuova; `null` se non c'è.
   const addBoard = (rect: Rect, note = "", like: Board | null = chosenSheet()?.board ?? null): Board | null => {
     const model = engine.model;
     if (model === null || !editable()) return null;
     const before = boardsNow().length;
-    const added = addBoardOps(model, rect, (n) => t("draw.board.name", { n }), newIds(), scene.root.page, like);
+    const nameFor = (n: number): string => t("draw.board.name", { n });
+    let added = addBoardOps(model, rect, nameFor, newIds(), scene.root.page, like);
     if (added === "limit") announce(t("draw.board.limit", { count: before }));
     else if (added === "paper") announce(t("draw.board.paper"));
-    if (typeof added === "string" || !writeBoard("draw.action.board_add", added)) return null;
+    if (typeof added === "string") return null;
+    if (before === 0 && scene.root.page !== null) {
+      // Le prove sono passate sul disegno intero: adesso la pagina, poi la
+      // tavola nuova accanto a lei.
+      if (pageToBoard() === null) return null;
+      const paged = addBoardOps(engine.model!, rect, nameFor, newIds(), scene.root.page, like);
+      if (typeof paged === "string") return null;
+      added = paged;
+    }
+    if (!writeBoard("draw.action.board_add", added)) return null;
     const list = boardsNow();
     const board = boardById(added.keys[0]!);
     if (board === null) return null;
@@ -9535,6 +9555,19 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// se ne apre il nome.
   const newBoard = (): void => {
     const like = currentBoard();
+  /// La pagina di un disegno senza tavole diventa la tavola 1, in un passo
+  /// suo, e la si sceglie: chi annulla la tavola che viene dopo ritrova lei.
+  /// Torna la tavola 1; `null` se non c'è.
+  const pageToBoard = (): Board | null => {
+    const model = engine.model;
+    const page = scene.root.page;
+    if (model === null || page === null) return null;
+    const made = pageBoardOps(model, (n) => t("draw.board.name", { n }), newIds(), page);
+    if (made === "paper") announce(t("draw.board.paper"));
+    if (made === "paper" || made.keys.length === 0 || !writeBoard("draw.action.board_page", made)) return null;
+    return boardById(made.keys[0]!);
+  };
+
     const board = addBoard(nextBoardRect(boardsNow(), scene.root.page, like) ?? looseRect(), "", like);
     if (board === null) return;
     frameBounds(board.box);
@@ -9570,7 +9603,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// tavole, con ciò che ci sta sopra, in un passo: la copia va spostata di
   /// `delta` o, senza, accanto alla sua, dove c'è posto. La si sceglie, la si
   /// porta in vista e lo si dice, con `note`; la pagina diventa prima la
-  /// tavola 1.
+  /// tavola 1, col passo suo.
   const duplicateBoard = (board: Board | null, delta: readonly [number, number] | null = null, note = ""): void => {
     const model = engine.model;
     const page = scene.root.page;
@@ -9580,11 +9613,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const before = boardsNow();
     const [dx, dy] = delta ?? duplicateSpot(before, rect);
     const carried = onBoard(board?.box ?? rectBounds(rect), indexer.movable(model));
-    const copied = duplicateBoardOps(model, board, dx, dy, carried, copyNames, newIds(), page);
+    let copied = duplicateBoardOps(model, board, dx, dy, carried, copyNames, newIds(), page);
     if (copied === "limit") announce(t("draw.board.limit", { count: before.length }));
     else if (copied === "paper") announce(t("draw.board.paper"));
     else if (copied === "content") announce(t("draw.board.content"));
-    if (typeof copied === "string" || !writeBoard("draw.action.board_duplicate", copied)) return;
+    if (typeof copied === "string") return;
+    if (board === null) {
+      // Le prove sono passate sulla pagina: adesso lei diventa la tavola 1,
+      // poi la si duplica come ogni tavola.
+      const first = pageToBoard();
+      if (first === null) return;
+      const paged = engine.model!;
+      const again = duplicateBoardOps(paged, first, dx, dy, onBoard(first.box, indexer.movable(paged)), copyNames, newIds(), scene.root.page);
+      if (typeof again === "string") return;
+      copied = again;
+    }
+    if (!writeBoard("draw.action.board_duplicate", copied)) return;
     const copy = boardById(copied.keys[0]!);
     if (copy === null) return;
     frameBounds(copy.box);
