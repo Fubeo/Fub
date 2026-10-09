@@ -1,3 +1,4 @@
+import { searchForWorkspaceRoot } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
@@ -70,6 +71,15 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    fs: {
+      // I modelli di «Nuovo disegno» stanno nel crate che li distribuisce, e
+      // la galleria ne mostra le anteprime: oltre al client, il server serve
+      // quella cartella e nient'altro del repository.
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+        fileURLToPath(new URL("../../crates/fub-features/templates", import.meta.url)),
+      ],
+    },
   },
   build: {
     target: "es2021",

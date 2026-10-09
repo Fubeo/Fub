@@ -23,7 +23,7 @@
 // `resolveId` risolve prima e confronta dopo: la domanda diventa «questo import,
 // dovunque stia, finisce sul file della cucitura?», che è la domanda vera e non
 // ha una profondità.
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, searchForWorkspaceRoot, type Plugin } from "vite";
 import { fileURLToPath } from "node:url";
 
 const here = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
@@ -90,6 +90,14 @@ export default defineConfig({
     // aperta non deve doverne chiudere una per fotografare l'altra.
     port: 1431,
     strictPort: true,
+    // Come la config di sempre: oltre al client, i modelli di «Nuovo disegno»
+    // nel crate che li distribuisce.
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+        fileURLToPath(new URL("../../crates/fub-features/templates", import.meta.url)),
+      ],
+    },
   },
   build: {
     target: "es2021",
