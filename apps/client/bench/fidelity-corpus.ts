@@ -7,6 +7,8 @@
 // che mostra una tavola sola è più grande, e la sua tavola è grande quanto la
 // resa. Le forme delle raccolte (basi, diagrammi di flusso, fumetti, frecce
 // e fogli di scuola) sono scritte da chi le inserisce nel disegno, non a mano.
+// I modelli di «Nuovo disegno» sono i file che il crate distribuisce, più grandi
+// della resa: ognuno si guarda tutto da una finestra (`view`).
 
 import type { Bounds } from "../src/editors/spatial/scene/geometry";
 import { SceneEngine } from "../src/editors/spatial/scene/engine";
@@ -45,6 +47,11 @@ export interface FidelityScene {
   /// al 100%, la Lettura e l'export sono quelli del suo embed,
   /// `![[disegno#nome]]`. Senza, la scena mostra il disegno intero.
   readonly board?: string;
+  /// La finestra, per un disegno più grande della resa che si guarda tutto,
+  /// rimpicciolito: l'angolo in alto a sinistra e la larghezza, in unità del
+  /// disegno; l'altezza è quella che dà il rapporto della resa. Senza, il
+  /// disegno si guarda al 100%. Non va con `board`.
+  readonly view?: readonly [x: number, y: number, width: number];
 }
 
 /// Gli id delle forme delle raccolte, in fila: la scena è la stessa a ogni
@@ -130,6 +137,32 @@ const FROM_LIBRARY: readonly FidelityScene[] = [
     id: "raccolta-retta",
     text: shelf([["school-number-line", [12, 24, 216, 23]], ["school-number-line", [12, 66, 216, 46]], ["school-number-line", [12, 124, 108, 30]]], "#1a202c"),
   },
+];
+
+/// I file dei modelli di «Nuovo disegno» in italiano, come li distribuisce il
+/// crate: le scene dei modelli sono questi file, non una copia.
+const TEMPLATES = import.meta.glob("../../../crates/fub-features/templates/*.it.svg", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+
+/// Il file del modello `id`, in italiano.
+function template(id: string): string {
+  const text = TEMPLATES[`../../../crates/fub-features/templates/${id}.it.svg`];
+  if (text === undefined) throw new Error(`manca il file del modello ${id}`);
+  return text;
+}
+
+/// I sette modelli con un file, come si aprono: ciascuno è un disegno molto
+/// più grande della resa, e la scena lo guarda tutto da una finestra,
+/// rimpicciolito. Le tre strade devono disegnare le stesse forme, linee e
+/// carte anche così piccole; i fogli e lo storyboard sono carta bianca su
+/// bianco, e la prova è che le tre strade li lasciano così.
+const FROM_TEMPLATES: readonly FidelityScene[] = [
+  { id: "modello-a4-verticale", text: template("a4-portrait"), view: [-445, 0, 1684] },
+  { id: "modello-a4-orizzontale", text: template("a4-landscape"), view: [-30, -20, 1190] },
+  { id: "modello-diapositiva", text: template("slide"), view: [0, -100, 1920] },
+  { id: "modello-diagramma", text: template("diagram"), view: [300, 177, 1000] },
+  { id: "modello-lavagna", text: template("lesson"), view: [0, -100, 1920] },
+  { id: "modello-storyboard", text: template("storyboard"), view: [0, -853, 5920] },
+  { id: "modello-mappa", text: template("concept-map"), view: [200, 100, 1200] },
 ];
 
 export const FIDELITY: readonly FidelityScene[] = [
@@ -460,4 +493,5 @@ export const FIDELITY: readonly FidelityScene[] = [
       + `<text id="o00000008" fub:inside="p1" fub:wrap="49.79" ${LABEL} font-size="12" text-anchor="middle" transform="matrix(1 0 0 1 178 119.3)"><tspan x="0" dy="0">Esito?</tspan></text></g></g>`),
   },
   ...FROM_LIBRARY,
+  ...FROM_TEMPLATES,
 ];

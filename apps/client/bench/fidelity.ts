@@ -8,6 +8,11 @@
 // sulla tavola (`section`), e il foglio la guarda al 100%, col suo angolo in
 // alto a sinistra in quello dell'elemento.
 //
+// Una scena con una finestra (`view`) è un disegno più grande della resa che
+// si guarda tutto, rimpicciolito: il foglio ha la camera sulla finestra, e la
+// Lettura e l'export sono del disegno con la radice sulla finestra, larga
+// quanto la resa (`windowed`). I modelli di «Nuovo disegno» si guardano così.
+//
 // `?variant=` mette apposta una differenza in una strada sola, perché il
 // banco dimostri di vederla: `colore` cambia un colore nella Lettura,
 // `carattere` toglie i caratteri dell'app alla Lettura, `corsivo` le toglie
@@ -17,7 +22,9 @@
 // tavole all'export, `ritaglio` mostra nella Lettura il disegno intero al
 // posto della sua tavola, come un embed che non la ritagliasse, `fusione`
 // toglie le fusioni all'export, `sfocatura` vi sfoca gli effetti un decimo
-// di meno, `angolo` vi gira di 5° le righe diagonali di una campitura.
+// di meno, `angolo` vi gira di 5° le righe diagonali di una campitura,
+// `finestra` mostra nella Lettura il disegno intero al posto della sua
+// finestra.
 //
 // `?wrap=check` prova invece gli a capo dei testi in area contro il browser
 // (`wrap-check.ts`), e ne mette gli esiti in `data-wrap`; `?wrap=zwnj` li
@@ -37,7 +44,7 @@ import { rasterize } from "../src/editors/spatial/tools/png";
 import { browserMeasure, estimate } from "../src/editors/spatial/tools/measure";
 import { ensureTextFont, FONT_FILES } from "../src/editors/spatial/tools/text";
 import { openLifetime } from "../src/ui/lifetime";
-import { FIDELITY } from "./fidelity-corpus";
+import { FIDELITY, FIDELITY_SIZE, type FidelityScene } from "./fidelity-corpus";
 import { wrapCases } from "./wrap-check";
 
 const params = new URLSearchParams(location.search);
@@ -50,6 +57,23 @@ const UPRIGHT: FontSheets = {
   now: () => null,
   load: async (svg) => (await appFonts.load(svg)).split("\n").filter((rule) => !rule.includes("font-style:italic")).join("\n"),
 };
+
+/// Il disegno `text` con la radice sulla finestra di `scene`, come la resa
+/// lo mostra: il `viewBox` è la finestra, la larghezza e l'altezza sono quelle
+/// della resa, e le unità del disegno restano quelle del file.
+function windowed(text: string, view: NonNullable<FidelityScene["view"]>): string {
+  const [x, y, width] = view;
+  const height = (width * FIDELITY_SIZE.height) / FIDELITY_SIZE.width;
+  const open = /^<svg\b[^>]*>/.exec(text)?.[0];
+  if (open === undefined) throw new Error("la scena non comincia con la radice");
+  const set = (tag: string, name: string, value: string): string =>
+    new RegExp(`\\s${name}="[^"]*"`).test(tag) ? tag.replace(new RegExp(`(\\s${name}=)"[^"]*"`), `$1"${value}"`) : tag.replace(/>$/, ` ${name}="${value}">`);
+  let tag = open;
+  tag = set(tag, "viewBox", `${x} ${y} ${width} ${height}`);
+  tag = set(tag, "width", String(FIDELITY_SIZE.width));
+  tag = set(tag, "height", String(FIDELITY_SIZE.height));
+  return tag + text.slice(open.length);
+}
 
 const frame = (): Promise<void> => new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -78,13 +102,23 @@ async function main(): Promise<void> {
   // La tavola che la scena mostra, e il disegno che ne fa il suo embed.
   const engine = SceneEngine.open(found.text);
   const board = found.board === undefined ? null : boardsOf(engine.model!).find((each) => each.name === found.board) ?? null;
-  const text = found.board === undefined ? found.text : section(found.text, found.board);
-  if (text === null || (found.board !== undefined && board === null)) throw new Error(`${found.id} non ha la tavola ${found.board}`);
+  const sectioned = found.board === undefined ? found.text : section(found.text, found.board);
+  if (sectioned === null || (found.board !== undefined && board === null)) throw new Error(`${found.id} non ha la tavola ${found.board}`);
+  const view = found.view;
+  const text = view === undefined ? sectioned : windowed(sectioned, view);
+  const zoom = view === undefined ? 1 : FIDELITY_SIZE.width / view[2];
 
   const host = document.getElementById("surface")!;
   const painter = createSvgPainter(host, openLifetime(), { fonts: appFonts });
-  painter.setView({ scale: 1, angle: 0, tx: -(board?.rect[0] ?? 0), ty: -(board?.rect[1] ?? 0) });
+  painter.setView({ scale: zoom, angle: 0, tx: -(board?.rect[0] ?? view?.[0] ?? 0) * zoom, ty: -(board?.rect[1] ?? view?.[1] ?? 0) * zoom });
   painter.update(new PaintBuilder().build(engine));
+
+  // Un'immagine SVG che porta i caratteri come data URI può disegnarsi, la
+  // prima volta che il browser li legge, col testo ancora invisibile, e
+  // restare così: dalla seconda i caratteri sono pronti. Un testo grande come
+  // quello di una diapositiva lo mostra sempre. La scena si disegna una volta
+  // a vuoto, perché la Lettura e l'export partano dagli stessi caratteri.
+  await rasterize(await selfContained(text, async () => null, 0));
 
   const read = variant === "colore"
     ? text.replace("#2b6cb0", "#4a90d9")
@@ -92,7 +126,9 @@ async function main(): Promise<void> {
       ? text.replace(/<defs id="fub-defs">[\s\S]*?<\/defs>/, "")
       : variant === "ritaglio"
         ? found.text
-        : text;
+        : variant === "finestra"
+          ? sectioned
+          : text;
   const shown = await selfContained(read, async () => null, 0, variant === "carattere" ? NO_FONTS : variant === "corsivo" ? UPRIGHT : appFonts);
   await picture("read", new Blob([shown], { type: "image/svg+xml" }));
 
