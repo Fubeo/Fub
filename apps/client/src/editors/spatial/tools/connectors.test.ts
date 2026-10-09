@@ -169,6 +169,12 @@ describe("il gomito", () => {
     }
   });
 
+  it("fra due oggetti più vicini di due uscite passa in mezzo, senza girare loro attorno", () => {
+    const opened = sheet(`<rect id="a" x="0" y="0" width="120" height="60"/><rect id="b" x="100" y="90" width="100" height="60"/>`);
+    const path = route("elbow", end(opened, "a", "bottom"), end(opened, "b", "top"));
+    expect(path).toEqual([[60, 60], [60, 75], [150, 75], [150, 90]]);
+  });
+
   it("per ogni coppia di lati i tratti sono dritti, fuori dagli oggetti, e al più sei vertici", () => {
     const sides = ["auto", "top", "right", "bottom", "left"] as const;
     const places: ReadonlyArray<readonly [number, number]> = [[400, 0], [400, 300], [0, 300], [-300, -300], [60, 160], [130, 0]];

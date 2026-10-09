@@ -729,13 +729,23 @@ function grid(a: Port, b: Port, from: number, to: number, margin: number, boxes:
   return simplify([a.at, ...points, b.at]);
 }
 
+/// Lo spazio attorno ai due oggetti per il primo gomito: l'uscita intera, o
+/// metà dello spazio fra i due quando sono più vicini di due uscite, così il
+/// gomito passa in mezzo invece di girare loro attorno.
+function marginOf(a: Port, b: Port): number {
+  if (a.box === null || b.box === null) return STUB;
+  const gap = Math.max(b.box.min[0] - a.box.max[0], a.box.min[0] - b.box.max[0], b.box.min[1] - a.box.max[1], a.box.min[1] - b.box.max[1]);
+  return gap > 0 && gap < 2 * STUB ? gap / 2 : STUB;
+}
+
 /// Il gomito fra `a` e `b`: prima attorno ai due oggetti con l'uscita
-/// intera, poi con un'uscita più corta per due oggetti vicini, poi senza
+/// intera, o fra i due se sono vicini, poi con un'uscita più corta, poi senza
 /// guardare gli oggetti; e, se nemmeno così, una Z per la via di mezzo.
 function elbow(a: Port, b: Port): Point[] {
   const from = axisOf(a.dir);
   const to = axisOf(b.dir);
-  const tries: ReadonlyArray<readonly [number, boolean]> = [[STUB, true], [STUB / 4, true], [STUB, false]];
+  const room = marginOf(a, b);
+  const tries: ReadonlyArray<readonly [number, boolean]> = [[room, true], [Math.min(room, STUB / 4), true], [STUB, false]];
   for (const [margin, boxes] of tries) {
     const path = grid(a, b, from, to, margin, boxes);
     if (path !== null && path.length >= 2 && path.length <= 64) return path;
