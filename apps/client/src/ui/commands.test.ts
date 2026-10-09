@@ -20,6 +20,15 @@ import {
   shadowedPrefixes,
   registerShellCommand,
   resetShellCommands,
+  registerCommandForm,
+  registerCommandStarter,
+  openCommandForm,
+  hasCommandForm,
+  hasKernelCommand,
+  launchCommand,
+  resetCommandForms,
+  canCreateDrawing,
+  newDrawing,
   loadKeyOverrides,
   validateKeybinding,
   keyboardPlatform,
@@ -87,6 +96,7 @@ const chord = (over: Partial<Parameters<typeof matchesBinding>[0]> = {}) => ({
 
 beforeEach(async () => {
   resetShellCommands();
+  resetCommandForms();
   state.commandSpecs = [];
   // Gli accordi riconfigurati vivono in una mappa di modulo: un banco che non
   // la svuota erediterebbe quelli del banco precedente.
@@ -274,6 +284,115 @@ describe("i due registri sono uno solo", () => {
     }
     expect(allCommands()).toHaveLength(1);
     expect(conflicts(allCommands())).toHaveLength(0);
+  });
+});
+
+describe("il modulo proprio di un comando", () => {
+  it("si apre con ciò che chi lo apre sa già", () => {
+    const opened: Record<string, string>[] = [];
+    registerCommandForm("drawing.create", (prefill) => opened.push({ ...prefill }));
+    expect(hasCommandForm("drawing.create")).toBe(true);
+    expect(openCommandForm("drawing.create", { folder: "Schemi" })).toBe(true);
+    expect(openCommandForm("drawing.create")).toBe(true);
+    expect(opened).toEqual([{ folder: "Schemi" }, {}]);
+  });
+
+  it("senza un modulo registrato non apre niente e lo dice", () => {
+    expect(hasCommandForm("drawing.create")).toBe(false);
+    expect(openCommandForm("drawing.create", { folder: "Schemi" })).toBe(false);
+  });
+
+  it("registrare due volte lo stesso id sostituisce, e chi toglie il vecchio non toglie il nuovo", () => {
+    // È ciò che fa un rimontaggio: il modulo nuovo prende il posto del vecchio,
+    // e la funzione di chiusura del vecchio, chiamata dopo, non lo porta via.
+    const calls: string[] = [];
+    const removeOld = registerCommandForm("drawing.create", () => calls.push("vecchio"));
+    const removeNew = registerCommandForm("drawing.create", () => calls.push("nuovo"));
+    removeOld();
+    expect(openCommandForm("drawing.create")).toBe(true);
+    expect(calls).toEqual(["nuovo"]);
+    removeNew();
+    expect(hasCommandForm("drawing.create")).toBe(false);
+    expect(openCommandForm("drawing.create")).toBe(false);
+  });
+
+  it("i moduli non toccano il registro dei comandi: la voce del kernel resta una, senza `run`", () => {
+    state.commandSpecs = [spec({ id: "drawing.create", title: "Nuovo disegno" })];
+    registerCommandForm("drawing.create", () => {});
+    const entries = allCommands().filter((e) => e.id === "drawing.create");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.run).toBeNull();
+    expect(entries[0]!.spec).not.toBeNull();
+  });
+});
+
+describe("la porta di un comando del kernel", () => {
+  it("il kernel lo dichiara o non lo dichiara: un modulo registrato non lo fa esistere", () => {
+    registerCommandForm("drawing.create", () => {});
+    expect(hasKernelCommand("drawing.create")).toBe(false);
+    expect(launchCommand("drawing.create")).toBe(false);
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    expect(hasKernelCommand("drawing.create")).toBe(true);
+  });
+
+  it("apre il modulo proprio, se c'è, con ciò che sa già", () => {
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    const opened: Record<string, string>[] = [];
+    const started: string[] = [];
+    registerCommandForm("drawing.create", (prefill) => opened.push({ ...prefill }));
+    registerCommandStarter((e) => started.push(e.id));
+    expect(launchCommand("drawing.create", { folder: "Schemi" })).toBe(true);
+    expect(opened).toEqual([{ folder: "Schemi" }]);
+    expect(started).toEqual([]);
+  });
+
+  it("senza modulo ripiega sulla palette, sullo stesso comando e con lo stesso prefill", () => {
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    const started: { id: string; prefill: Readonly<Record<string, string>> }[] = [];
+    registerCommandStarter((e, prefill) => started.push({ id: e.id, prefill }));
+    expect(launchCommand("drawing.create", { folder: "Schemi" })).toBe(true);
+    expect(started).toEqual([{ id: "drawing.create", prefill: { folder: "Schemi" } }]);
+  });
+
+  it("se la shell non ha detto come far partire la palette, dice di no", () => {
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    const remove = registerCommandStarter(() => {});
+    remove();
+    expect(launchCommand("drawing.create")).toBe(false);
+  });
+});
+
+describe("le porte di «Nuovo disegno…»", () => {
+  it("si mostrano soltanto se il kernel dichiara il comando", () => {
+    expect(canCreateDrawing()).toBe(false);
+    expect(newDrawing("Schemi")).toBe(false);
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    expect(canCreateDrawing()).toBe(true);
+    // Un altro comando con un nome simile non basta.
+    state.commandSpecs = [spec({ id: "note.create" }), spec({ id: "drawing.delete" })];
+    expect(canCreateDrawing()).toBe(false);
+  });
+
+  it("aprono il modulo proprio con la cartella, e la radice non la passano", () => {
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    const opened: Record<string, string>[] = [];
+    registerCommandForm("drawing.create", (prefill) => opened.push({ ...prefill }));
+    expect(newDrawing("Scienze/Fisica")).toBe(true);
+    expect(newDrawing("")).toBe(true);
+    expect(newDrawing()).toBe(true);
+    expect(opened).toEqual([{ folder: "Scienze/Fisica" }, {}, {}]);
+  });
+
+  it("senza modulo ripiegano sulla palette dello stesso comando, con la cartella nel campo", () => {
+    state.commandSpecs = [spec({ id: "drawing.create" })];
+    const started: { id: string; prefill: Readonly<Record<string, string>> }[] = [];
+    registerCommandStarter((e, prefill) => started.push({ id: e.id, prefill }));
+    expect(newDrawing("Scienze")).toBe(true);
+    expect(newDrawing()).toBe(true);
+    expect(started).toEqual([
+      { id: "drawing.create", prefill: { folder: "Scienze" } },
+      { id: "drawing.create", prefill: {} },
+    ]);
   });
 });
 

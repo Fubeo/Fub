@@ -130,6 +130,118 @@ export function resetShellCommands(): void {
   shell.clear();
 }
 
+// # Il modulo proprio di un comando del kernel
+//
+// Un comando del kernel arriva alla palette con la sua spec, e la palette ne
+// disegna il modulo generico: un campo per parametro. Per quasi tutti basta. Per
+// qualcuno no: «Nuovo disegno» sceglie fra dei modelli che si guardano, e un
+// elenco a discesa non lo dice. Il comando non cambia — è lo stesso del kernel,
+// con gli stessi parametri e lo stesso esito — cambia **chi chiede gli
+// argomenti**: un modulo che chi conosce il comando registra qui.
+//
+// È un registro e non un `run` sulla voce del kernel, perché `run` direbbe che
+// il comando è della shell: la voce comparirebbe due volte nelle impostazioni
+// delle scorciatoie e la palette salterebbe il giro del kernel. Qui la voce
+// resta quella di prima; si sceglie soltanto con quale modulo si compila.
+
+/// Il modulo proprio di un comando, al posto di quello generico della palette.
+/// Riceve ciò che chi lo apre sa già (la cartella dove si crea, per esempio),
+/// come testo per nome di parametro.
+export type CommandForm = (prefill: Readonly<Record<string, string>>) => void;
+
+/// I moduli registrati, per id di comando. Una mappa come quella dei comandi
+/// di shell: registrare due volte lo stesso id è ciò che fa un rimontaggio, e
+/// la seconda registrazione sostituisce la prima.
+const forms = new Map<string, CommandForm>();
+
+/// Registra il modulo di `id`; restituisce chi lo toglie. Chi toglie un modulo
+/// già sostituito da un altro non toglie quello nuovo.
+export function registerCommandForm(id: string, open: CommandForm): () => void {
+  forms.set(id, open);
+  return () => {
+    if (forms.get(id) === open) forms.delete(id);
+  };
+}
+
+/// Apre il modulo di `id`, se ce n'è uno registrato: vero se l'ha aperto.
+export function openCommandForm(id: string, prefill: Readonly<Record<string, string>> = {}): boolean {
+  const open = forms.get(id);
+  if (open === undefined) return false;
+  open(prefill);
+  return true;
+}
+
+/// Il comando `id` ha un modulo proprio?
+export function hasCommandForm(id: string): boolean {
+  return forms.has(id);
+}
+
+/// Solo per i banchi, come `resetShellCommands`.
+export function resetCommandForms(): void {
+  forms.clear();
+}
+
+/// Il kernel dichiara il comando `id`? È la domanda con cui una porta di
+/// creazione sa se mostrarsi: la shell non sa se una feature è accesa, vede
+/// soltanto i comandi che il kernel elenca.
+export function hasKernelCommand(id: string): boolean {
+  return state.commandSpecs.some((spec) => spec.id === id);
+}
+
+/// Come la shell fa partire un comando dalla palette: la mette chi ha la
+/// palette (`startCommand`), perché i pannelli non la importano.
+type CommandStarter = (entry: CommandEntry, prefill: Readonly<Record<string, string>>) => void;
+
+let starter: CommandStarter | null = null;
+
+/// Dice come far partire un comando dalla palette; restituisce chi lo toglie.
+export function registerCommandStarter(start: CommandStarter): () => void {
+  starter = start;
+  return () => {
+    if (starter === start) starter = null;
+  };
+}
+
+/// La porta di un comando del kernel per i pannelli: il modulo proprio se
+/// c'è, altrimenti la palette su quel comando, con ciò che si sa già nei campi
+/// che il comando ha. Falso se il kernel non dichiara il comando — un modulo
+/// registrato non lo fa esistere — o se la shell non ha detto come far partire
+/// la palette.
+export function launchCommand(id: string, prefill: Readonly<Record<string, string>> = {}): boolean {
+  if (!hasKernelCommand(id)) return false;
+  if (openCommandForm(id, prefill)) return true;
+  const entry = allCommands().find((candidate) => candidate.id === id);
+  if (entry === undefined || starter === null) return false;
+  starter(entry, prefill);
+  return true;
+}
+
+// # Le porte di «Nuovo disegno…»
+//
+// Il menu dell'app, il menu di una cartella, il riquadro vuoto e la shell
+// mobile offrono lo stesso gesto, e lo offrono alle stesse condizioni: il
+// comando del kernel c'è (la feature `draw` è accesa) e qualcuno sa farlo
+// partire. Le due domande stanno qui, così le porte non si ripetono e nessuna
+// ne dimentica una.
+
+/// L'id del comando del kernel che fa nascere un disegno.
+export const NEW_DRAWING = "drawing.create";
+
+/// Le porte di «Nuovo disegno…» si mostrano? Soltanto se il kernel dichiara il
+/// comando: con la feature `draw` spenta un `.svg` non è nemmeno un disegno, e
+/// una voce che non può riuscire è peggio di una voce che manca. Si legge a ogni
+/// apertura di un menu e a ogni cambio dell'elenco (`on("commands")`).
+export function canCreateDrawing(): boolean {
+  return hasKernelCommand(NEW_DRAWING);
+}
+
+/// Apre «Nuovo disegno…»: il modulo proprio del comando, la galleria, o la
+/// palette sul comando se nessuno ne ha registrato uno. `folder` è la cartella
+/// dove nasce ("" è la radice, e non si passa: il campo resta vuoto).
+export function newDrawing(folder = ""): boolean {
+  return launchCommand(NEW_DRAWING, folder === "" ? {} : { folder });
+}
+
 /// Gli accordi riconfigurati, letti dalle impostazioni.
 ///
 /// La mappa è chiave d'impostazione → valore, e non id di comando → accordo:
