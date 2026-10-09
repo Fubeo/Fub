@@ -239,10 +239,12 @@ import {
   SHAPE_ACTIONS,
   shapeChange,
   sheetChange,
+  TEXT_PRESETS,
   tipChange,
   typedOpacity,
   UNIT_NAMES,
   type SelectionFacts,
+  type StyleFacts,
 } from "./fields";
 import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, opacityOf, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import {
@@ -277,7 +279,28 @@ import type { GradientPanelView } from "./gradient-panel";
 import type { HatchPanelView } from "./hatch-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
-import { paintCode, resourceHome, swatchPaint } from "./resources";
+import { paintCode, resourceHome, resourcesOf, swatchPaint } from "./resources";
+import {
+  applyStyleOps,
+  deleteStyleOps,
+  deleteStyleProblem,
+  differingFollowers,
+  documentStyles,
+  freshStyleName,
+  newStyleOps,
+  renameStyleOps,
+  revertStyleOps,
+  styleNameProblem,
+  updateStyleOps,
+  styleRow,
+  styleSample,
+  styleUpdatable,
+  unlinkStyleOps,
+  type DocumentStyle,
+  type Preset as StylePreset,
+  type StyleChange,
+  type StyleKind,
+} from "./styles";
 import { createProperties, type ActionId, type FieldId, type PropertiesView, type SectionId, type TransformId } from "./properties";
 import {
   documentColors,
@@ -5960,7 +5983,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       orders: new Set(has("arrange") ? ORDERS.map(({ order }) => order).filter((order) => changes.has(order)) : []),
       shape: shapeFacts(model, units),
       tips: has("tips") ? tipsLookOf(model, units) : null,
+      styles: has("styles") ? styleFactsOf(model, units) : null,
     };
+  };
+
+  /// Le due righe «Stile» per gli oggetti scelti `units`: che cosa seguono,
+  /// gli stili del documento con la loro anteprima, e che cosa si può fare.
+  const styleFactsOf = (model: DocumentModel, units: readonly Unit[]): NonNullable<SelectionFacts["styles"]> => {
+    const all = documentStyles(model);
+    let resources: ReturnType<typeof resourcesOf> | null = null;
+    const facts = (kind: StyleKind): StyleFacts | null => {
+      const row = styleRow(model, units, kind, all, measureText);
+      if (row === null) return null;
+      resources ??= resourcesOf(model);
+      const shown = resources;
+      return {
+        row,
+        styles: all.filter((style) => style.kind === kind).map((style) => ({ id: style.id, name: style.name, followers: style.followers, sample: styleSample(model, style, shown) })),
+        updatable: row.style !== null && styleUpdatable(model, units, row.style),
+        undeletable: row.style === null ? null : deleteStyleProblem(model, row.style),
+        fresh: freshStyleName(all, kind, t(kind === "text" ? "draw.styles.text" : "draw.styles.graphic")),
+      };
+    };
+    return { graphic: facts("graphic"), text: facts("text") };
   };
 
   /// Porta il pannello, se è aperto, al disegno e alla selezione di adesso.
@@ -6253,6 +6298,126 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const outlined = outlineOps(model, units, change, newIds());
     return changeFromPanel("dash" in change ? "draw.action.dash" : "cap" in change ? "draw.action.cap" : "draw.action.join", outlined.ops, outlined.keys);
   };
+
+  // --- Gli stili del documento ----------------------------------------------
+
+  /// `said`, e quanti oggetti restano com'erano perché bloccati, se ce ne
+  /// sono.
+  const withStyleKept = (said: string, change: StyleChange): string =>
+    change.kept === 0 ? said : `${said} ${plural(change.kept, "draw.styles.kept.one", "draw.styles.kept.other")}`;
+
+  /// Che cosa non va nel nome `name` di uno stile di tipo `kind`; `null` se
+  /// va. `except` è lo stile che si rinomina.
+  const styleNameFailure = (all: readonly DocumentStyle[], kind: StyleKind, name: string, except: string | null = null): string | null => {
+    const problem = styleNameProblem(all, kind, name, except);
+    if (problem === null) return null;
+    if (problem === "empty") return t("draw.colors.problem.empty");
+    return t(problem === "taken" ? "draw.styles.problem.taken" : "draw.colors.problem.reads_color", { name });
+  };
+
+  /// Un comando della riga «Stile» di tipo `kind`: `style:<id>` dà lo
+  /// stile alla selezione, `preset:<id>` fa uno stile di serie e lo dà,
+  /// `new:<nome>` fa uno stile dalla selezione; `update`, `revert`,
+  /// `unlink`, `rename:<nome>` e `delete` lavorano sullo stile che la
+  /// selezione segue. `null` se è fatto, altrimenti perché no.
+  function styleCommand(kind: StyleKind, value: string): string | null {
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    const all = documentStyles(model);
+    const colon = value.indexOf(":");
+    const verb = colon < 0 ? value : value.slice(0, colon);
+    const rest = colon < 0 ? "" : value.slice(colon + 1);
+    const current = styleRow(model, units, kind, all, measureText)?.style ?? null;
+    switch (verb) {
+      case "style": {
+        const style = all.find((each) => each.id === rest && each.kind === kind);
+        return style === undefined ? null : applyStyle(model, units, style);
+      }
+      case "preset": {
+        const preset = TEXT_PRESETS.find((each) => each.id === rest);
+        if (kind !== "text" || preset === undefined) return null;
+        const name = t(preset.label);
+        // Uno stile con quel nome c'è già: si dà lui.
+        const named = all.find((each) => each.kind === kind && styleNameProblem([each], kind, name) === "taken");
+        return named === undefined ? makeStyle(model, units, kind, name, all, { size: preset.size, weight: preset.weight }) : applyStyle(model, units, named);
+      }
+      case "new":
+        return makeStyle(model, units, kind, cleanName(rest), all, null);
+      case "update": {
+        if (current === null) return null;
+        const updated = updateStyleOps(model, units, current, measureText, newIds());
+        if (updated === null) return t("draw.styles.problem.empty_look");
+        if (updated.ops.length === 0) {
+          announce(t("draw.styles.updated.same", { name: current.name }));
+          return null;
+        }
+        const outcome = changeFromPanel("draw.action.style_update", updated.ops, updated.keys);
+        if (outcome !== null) return outcome;
+        const after = engine.model === null ? undefined : documentStyles(engine.model).find((each) => each.id === current.id);
+        const differing = after === undefined ? 0 : differingFollowers(engine.model!, after, measureText);
+        const said = plural(after?.followers ?? 0, "draw.styles.updated.one", "draw.styles.updated.other", { name: current.name });
+        announce(withStyleKept(differing === 0 ? said : `${said} ${plural(differing, "draw.styles.updated.differing.one", "draw.styles.updated.differing.other")}`, updated));
+        return null;
+      }
+      case "revert": {
+        if (current === null) return null;
+        const reverted = revertStyleOps(model, units, current, measureText, newIds());
+        const outcome = changeFromPanel("draw.action.style_revert", reverted.ops, reverted.keys);
+        if (outcome === null) announce(withStyleKept(plural(reverted.changed, "draw.styles.reverted.one", "draw.styles.reverted.other", { name: current.name }), reverted));
+        return outcome;
+      }
+      case "unlink": {
+        const unlinked = unlinkStyleOps(model, units, kind, all, newIds());
+        const outcome = changeFromPanel("draw.action.style_unlink", unlinked.ops, unlinked.keys);
+        if (outcome === null) announce(withStyleKept(plural(unlinked.changed, "draw.styles.unlinked.one", "draw.styles.unlinked.other"), unlinked));
+        return outcome;
+      }
+      case "rename": {
+        if (current === null) return null;
+        const name = cleanName(rest);
+        const failure = styleNameFailure(all, kind, name, current.id);
+        if (failure !== null) return failure;
+        const renamed = renameStyleOps(model, current, name, units, newIds());
+        const outcome = changeFromPanel("draw.action.style_rename", renamed.ops, renamed.keys);
+        if (outcome === null && renamed.ops.length > 0) announce(t("draw.styles.renamed", { name }));
+        return outcome;
+      }
+      case "delete": {
+        if (current === null) return null;
+        const removed = deleteStyleOps(model, current, units, newIds());
+        if (removed === null) return t("draw.styles.refused.locked");
+        const outcome = changeFromPanel("draw.action.style_delete", removed.ops, removed.keys);
+        if (outcome === null) {
+          const { name } = current;
+          announce(removed.changed === 0 ? t("draw.styles.deleted", { name }) : plural(removed.changed, "draw.styles.deleted.one", "draw.styles.deleted.other", { name }));
+        }
+        return outcome;
+      }
+      default:
+        return null;
+    }
+  }
+
+  /// Dà lo stile `style` agli oggetti scelti `units`.
+  function applyStyle(model: DocumentModel, units: readonly Unit[], style: DocumentStyle): string | null {
+    const applied = applyStyleOps(model, units, style, measureText, newIds());
+    const outcome = changeFromPanel("draw.action.style_apply", applied.ops, applied.keys);
+    if (outcome === null) announce(withStyleKept(plural(applied.changed, "draw.styles.applied.one", "draw.styles.applied.other", { name: style.name }), applied));
+    return outcome;
+  }
+
+  /// Fa lo stile `name` di tipo `kind` dalla selezione `units`, col corpo e
+  /// il peso di `preset` se c'è, e lo fa seguire agli oggetti scelti.
+  function makeStyle(model: DocumentModel, units: readonly Unit[], kind: StyleKind, name: string, all: readonly DocumentStyle[], preset: StylePreset | null): string | null {
+    const failure = styleNameFailure(all, kind, name);
+    if (failure !== null) return failure;
+    const made = newStyleOps(model, units, kind, name, measureText, newIds(), preset);
+    if (made === null) return t("draw.styles.problem.empty_look");
+    const outcome = changeFromPanel("draw.action.style_new", made.ops, made.keys);
+    if (outcome === null) announce(withStyleKept(plural(made.changed, "draw.styles.created.one", "draw.styles.created.other", { name }), made));
+    return outcome;
+  }
 
   // --- I colori del documento ------------------------------------------------
 
@@ -6708,6 +6873,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "inner":
       case "corner":
         outcome = shapeFromPanel(id, value);
+        break;
+      case "lookStyle":
+      case "textStyle":
+        outcome = styleCommand(id === "textStyle" ? "text" : "graphic", String(value));
         break;
       default:
         outcome = styleFromPanel(id, value);

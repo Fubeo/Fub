@@ -99,6 +99,11 @@ nell'esportazione il file è quello che è.
   Chi lo usa ne prende il colore come ripiego. Altrimenti arriva, e se il suo
   nome è già preso, o si legge come un colore, prende il primo libero,
   «Vermiglio 2» ([Disegni, colori](drawing-colors.md#fra-disegni)).
+- **Uno stile** si riusa se il disegno ha lo stesso, con lo stesso nome nel
+  file e lo stesso tipo; o uno del suo tipo che si chiama allo stesso modo,
+  con le maiuscole a parte, e ha lo stesso aspetto, anche con le sue
+  sfumature. Altrimenti arriva con le sue, e con un nome già preso prende il
+  primo libero ([Disegni, stili](drawing-styles.md#appunti-e-duplica)).
 - **Le risorse estranee** che ciò che entra usa arrivano anch'esse fra
   quelle del disegno, e restano estranee con chi le usa.
 - **Un SVG con un foglio di stile** tiene le sue risorse nel suo gruppo, come

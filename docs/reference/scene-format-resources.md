@@ -236,6 +236,9 @@ le esportazioni di Mermaid usano.
   pulito dell'[export](scene-format-export.md) un campione usato resta una
   sfumatura di un colore, senza ruolo e senza nome, e uno che nessuno usa se
   ne va.
+- **`style`:** uno [stile](scene-format-styles.md), un `text` o una
+  `polyline` che gli oggetti seguono. Non si raccoglie mai, e le risorse
+  private che usa sono sue.
 - **Senza `fub:role`, o con un altro valore:** non è di FubDraw. Resta anche
   quando nessuno la usa, e duplicare la condivide.
 - **La `fub-defs`** che resta senza figli se ne va con l'ultima risorsa: un
@@ -469,7 +472,8 @@ non cambiano mai natura per un'operazione su un altro elemento.
   rimaste sole per questo, e infine la `fub-defs` vuota. Una risorsa che era
   già senza riferimenti resta: la raccolta tocca soltanto ciò che
   l'operazione ha lasciato solo. Un riferimento conta da qualunque elemento,
-  anche estraneo, e da un foglio di stile. I campioni non si raccolgono.
+  anche estraneo, e da un foglio di stile. I campioni e gli stili non si
+  raccolgono.
 - **La raccolta fa parte dell'operazione,** come il seguito delle punte
   (§8): quella in avanti che il motore restituisce, e che la sessione
   rimanda, è un `batch` con l'operazione, il seguito e poi i `remove`, con

@@ -282,6 +282,24 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="o6" x="140" y="92" width="84" height="56" fill="url(#s3) #cc79a7"/></g>'),
   },
   {
+    // Gli stili: un prototipo di testo e uno grafico con la sua sfumatura
+    // privata stanno nella `defs`, e nessuna strada li disegna. Chi li segue
+    // si disegna dai suoi attributi: un titolo, un riquadro con la sua copia
+    // della sfumatura, uno con un contorno più spesso, una differenza, e una
+    // linea, che dello stile prende soltanto il contorno.
+    id: "stili",
+    text: scene('<defs id="fub-defs">'
+      + '<linearGradient id="rgrad0000" fub:role="private" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff4d6"/><stop offset="1" stop-color="#f6ad55"/></linearGradient>'
+      + '<linearGradient id="rgrad0001" fub:role="private" x1="12" y1="0" x2="112" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff4d6"/><stop offset="1" stop-color="#f6ad55"/></linearGradient>'
+      + '<text id="rtitolo00" fub:role="style" fub:name="Titolo" fill="#1a202c" font-family="Inter, sans-serif" font-size="22" font-weight="700"/>'
+      + '<polyline id="ravviso00" fub:role="style" fub:name="Avviso" points="0,0 100,0 100,100" fill="url(#rgrad0000) #fff4d6" stroke="#e69f00" stroke-width="3" stroke-linejoin="round"/>'
+      + `</defs>${LAYER}`
+      + '<text id="o1" fub:style="rtitolo00" x="12" y="30" fill="#1a202c" font-family="Inter, sans-serif" font-size="22" font-weight="700"><tspan x="12" dy="0">Stili</tspan></text>'
+      + '<rect id="o2" fub:style="ravviso00" x="12" y="44" width="100" height="56" rx="6" fill="url(#rgrad0001) #fff4d6" stroke="#e69f00" stroke-width="3" stroke-linejoin="round"/>'
+      + '<rect id="o3" fub:style="ravviso00" x="128" y="44" width="100" height="56" rx="6" fill="#fff4d6" stroke="#e69f00" stroke-width="8" stroke-linejoin="round"/>'
+      + '<line id="o4" fub:style="ravviso00" x1="12" y1="128" x2="228" y2="128" stroke="#e69f00" stroke-width="3" stroke-linejoin="round"/></g>'),
+  },
+  {
     // Le sfumature come le scrive FubDraw, nelle coordinate di chi le usa:
     // una lineare con un punto trasparente, una radiale col fuoco che si
     // ripete a specchio, una ellittica che ricomincia, una nel contorno, una

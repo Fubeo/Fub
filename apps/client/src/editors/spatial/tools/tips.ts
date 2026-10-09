@@ -814,6 +814,23 @@ export function tipsStyleOf(model: DocumentModel, node: ElementPart): TipsStyle 
   return { start: styled("start"), end: styled("end") };
 }
 
+/// Le punte che dice `node`, uno stile grafico, capo per capo: quella della
+/// raccolta che nomina, `none` per un capo che dice `none`, e `null`, così
+/// chi lo segue tiene la sua, per un capo che non scrive o che nomina un
+/// marcatore che non è della raccolta.
+export function protoTips(model: DocumentModel, node: ElementPart): TipsStyle {
+  const reader = new Reader(model);
+  const own = ownOf(node);
+  const styled = (end: TipEnd): EndStyle => {
+    const value = own.get(markerName(end));
+    if (value === undefined) return null;
+    const state = reader.state(own, end);
+    if (state.kind === "tip") return { shape: state.info.tip.shape, size: state.info.tip.size };
+    return state.kind === "none" && trim(value) === "none" ? "none" : null;
+  };
+  return { start: styled("start"), end: styled("end") };
+}
+
 /// Le punte che un comando dà a più parti, in un `Plan`: i marcatori giusti,
 /// riusati se il disegno li ha e aggiunti una volta sola se no.
 export class Tipper {

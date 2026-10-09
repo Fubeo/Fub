@@ -208,7 +208,28 @@ export function gradientOf(node: LeafNode): Gradient | null {
   if (local !== "linearGradient" && local !== "radialGradient") return null;
   const read = readGradient(node);
   if (read === null) return null;
-  const at = (name: string): string | null => valueOf(read.element, NS_NONE, name)?.trim() ?? null;
+  return gradientFrom(local, (name) => valueOf(read.element, NS_NONE, name)?.trim() ?? null, read.stops);
+}
+
+/// La sfumatura `elem`, come la scrive un'operazione, letta come
+/// [`gradientOf`]; `null` se non è una sfumatura o non si legge.
+export function gradientOfElem(elem: Elem): Gradient | null {
+  if (elem.tag !== "linearGradient" && elem.tag !== "radialGradient") return null;
+  const stops: Stop[] = [];
+  let last = 0;
+  for (const [index, stop] of (elem.children ?? []).entries()) {
+    if (stop.tag !== "stop") continue;
+    const color = paint(stop.attrs["stop-color"] ?? "black");
+    if (color === null || color === "none") return null;
+    const alpha = opacity(stop.attrs["stop-opacity"] ?? "1") ?? 1;
+    last = Math.max(last, Math.min(1, Math.max(0, fraction(stop.attrs.offset ?? "0") ?? 0)));
+    stops.push({ offset: last, color, alpha, index });
+  }
+  return stops.length === 0 ? null : gradientFrom(elem.tag, (name) => elem.attrs[name]?.trim() ?? null, stops);
+}
+
+/// La sfumatura `local` coi punti `stops`, e gli attributi che legge `at`.
+function gradientFrom(local: "linearGradient" | "radialGradient", at: (name: string) => string | null, stops: readonly Stop[]): Gradient | null {
   const inBox = at("gradientUnits") !== "userSpaceOnUse";
   // Nel riquadro un numero o una percentuale, nelle coordinate di chi la usa
   // una lunghezza.
@@ -234,7 +255,7 @@ export function gradientOf(node: LeafNode): Gradient | null {
     if (fx === null || fy === null) return null;
     coords.push(fx, fy);
   }
-  return { kind: local === "linearGradient" ? "linear" : "radial", coords: coords as number[], inBox, transform: matrix, spread, stops: read.stops };
+  return { kind: local === "linearGradient" ? "linear" : "radial", coords: coords as number[], inBox, transform: matrix, spread, stops };
 }
 
 /// Il colore di `gradient` nel punto `p`, nelle coordinate di chi la usa, il
@@ -248,6 +269,14 @@ export function gradientColor(gradient: Gradient, p: Point, box: Bounds | null):
 /// Il colore di `gradient` nel punto `p`, come [`gradientColor`], con
 /// l'opacità dei punti in quel punto, fra 0 e 1: si mescola come i colori.
 export function gradientPaint(gradient: Gradient, p: Point, box: Bounds | null): { readonly color: Rgb; readonly alpha: number } | null {
+  const t = gradientAt(gradient, p, box);
+  return t === null ? null : stopPaint(gradient.stops, spreadOf(t, gradient.spread));
+}
+
+/// Dove sta il punto `p` lungo `gradient`, prima che la sfumatura continui
+/// oltre i suoi capi, come in [`gradientColor`]; `null` se lì non si
+/// disegna.
+function gradientAt(gradient: Gradient, p: Point, box: Bounds | null): number | null {
   let space = gradient.transform;
   if (gradient.inBox) {
     if (box === null) return null;
@@ -259,8 +288,51 @@ export function gradientPaint(gradient: Gradient, p: Point, box: Bounds | null):
   const back = invert(space);
   if (back === null) return null;
   const [x, y] = apply(back, p);
-  const t = gradient.kind === "linear" ? linearAt(gradient.coords, x, y) : radialAt(gradient.coords, x, y);
-  return stopPaint(gradient.stops, spreadOf(t, gradient.spread));
+  return gradient.kind === "linear" ? linearAt(gradient.coords, x, y) : radialAt(gradient.coords, x, y);
+}
+
+/// Vero se `a` e `b` si vedono uguali su chi le usa, il cui riquadro è
+/// `box`: gli stessi punti e lo stesso modo di continuare oltre i capi, e in
+/// ogni punto del riquadro lo stesso posto lungo la sfumatura, a meno di un
+/// millesimo. Due scritture diverse della stessa sfumatura, come le
+/// coordinate riscritte o una `gradientTransform`, sono uguali.
+export function sameGradient(a: Gradient, b: Gradient, box: Bounds): boolean {
+  if (a.kind !== b.kind || a.spread !== b.spread || a.stops.length !== b.stops.length) return false;
+  const stops = a.stops.every((stop, at) => {
+    const other = b.stops[at]!;
+    return Math.abs(stop.offset - other.offset) < 1e-4 && stop.color.every((value, k) => value === other.color[k]) && Math.abs(stop.alpha - other.alpha) < 1e-3;
+  });
+  if (!stops) return false;
+  // Una lineare cambia lungo il piano come una funzione affine: bastano gli
+  // angoli. Una radiale no: una griglia.
+  const steps = a.kind === "linear" ? 1 : 4;
+  const [x0, y0] = box.min;
+  const [x1, y1] = box.max;
+  for (let i = 0; i <= steps; i++) {
+    for (let j = 0; j <= steps; j++) {
+      const p: Point = [x0 + ((x1 - x0) * i) / steps, y0 + ((y1 - y0) * j) / steps];
+      const s = gradientAt(a, p, box);
+      const t = gradientAt(b, p, box);
+      if (s === null || t === null) {
+        if (s !== t) return false;
+        continue;
+      }
+      if (Math.abs(spreadOf(s, a.spread) - spreadOf(t, b.spread)) > 1e-3) return false;
+    }
+  }
+  return true;
+}
+
+/// Vero se `a` e `b` sono la stessa risorsa a meno degli id, suoi e delle
+/// sue parti: stesso tag, stessi attributi in qualunque ordine, stessi
+/// figli.
+export function sameResource(a: Elem, b: Elem): boolean {
+  if (a.tag !== b.tag || (a.text ?? null) !== (b.text ?? null)) return false;
+  const names = Object.keys(a.attrs).filter((name) => name !== "id");
+  if (names.length !== Object.keys(b.attrs).filter((name) => name !== "id").length || names.some((name) => a.attrs[name] !== b.attrs[name])) return false;
+  const inside = a.children ?? [];
+  const other = b.children ?? [];
+  return inside.length === other.length && inside.every((child, at) => sameResource(child, other[at]!));
 }
 
 /// Dove sta `(x, y)` lungo la sfumatura lineare `x1 y1 x2 y2`: 0 sulla
@@ -392,6 +464,35 @@ export class ResourceCopies {
     }
   }
 
+  /// Vero se `current`, il colore che un oggetto mostra, usa una risorsa
+  /// privata che è già la copia che [`paint`] gli darebbe di `value`, con la
+  /// trasformazione che dà `fit`: una sfumatura che si vede uguale sul
+  /// riquadro dell'oggetto, che dà `box`, o un'altra risorsa uguale a meno
+  /// degli id. Ridare lo stesso aspetto non fa un'altra copia.
+  same(value: string, current: string, fit: () => Matrix | null, box: () => Bounds | null): boolean {
+    const used = paintReference(value);
+    const now = paintReference(current);
+    if (used === null || now === null || used.id === now.id) return false;
+    // Il colore di ripiego è parte del colore.
+    if (renameUrls(trim(value), (id) => (id === used.id ? now.id : null)) !== trim(current)) return false;
+    const source = this.kept.get(used.id) ?? this.privateElem(used.id);
+    const target = this.privateElem(now.id);
+    if (source === null || target === null) return false;
+    const copy = fitted(source, fit);
+    const a = gradientOfElem(copy);
+    const b = gradientOfElem(target);
+    if (a === null && b === null) return sameResource(copy, target);
+    const area = a === null || b === null ? null : box();
+    return area !== null && sameGradient(a!, b!, area);
+  }
+
+  /// La risorsa privata `id` del disegno, come la scrive un'operazione;
+  /// `null` se non c'è o non è privata.
+  private privateElem(id: string): Elem | null {
+    const node = this.resources.get(id);
+    return node === undefined || node.details?.lifecycle !== "private" ? null : this.elemOf(node);
+  }
+
   /// `elem`, con le sue parti, rivolto alle copie delle risorse private che
   /// usa: per riferimento `url(#…)`, o col tracciato di un `textPath`. `null`
   /// se una di loro non si sa scrivere.
@@ -457,9 +558,11 @@ export class ResourceCopies {
   }
 
   /// Le operazioni che aggiungono le copie, da fare prima di chi le usa;
-  /// nessuna se non ce n'è.
-  ops(): Op[] {
-    return this.adds.length === 0 ? [] : [...this.home!.prelude, ...this.adds];
+  /// nessuna se non ce n'è. Con `prelude` falso senza quella che crea la
+  /// `defs` del disegno, se un'altra aggiunta dello stesso passo l'ha già
+  /// fatta.
+  ops(prelude = true): Op[] {
+    return this.adds.length === 0 ? [] : [...(prelude ? this.home!.prelude : []), ...this.adds];
   }
 }
 

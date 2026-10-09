@@ -8,7 +8,7 @@ import type { Elem } from "../scene/serialize";
 import { doc } from "../scene/test-support";
 import { elemOf, plainAttributes } from "./arrange";
 import { NewIds } from "./edit";
-import { gradientColor, gradientOf, holdsEffect, homeOf, paintCode, paintSample, privateResources, resourceHome, resourcesOf, ResourceCopies, usersOf } from "./resources";
+import { gradientColor, gradientOf, gradientOfElem, holdsEffect, homeOf, paintCode, paintSample, privateResources, resourceHome, resourcesOf, ResourceCopies, sameGradient, sameResource, usersOf } from "./resources";
 import { LAYER, open, type Opened } from "./test-support";
 
 const STOP = '<stop offset="0" stop-color="#ffffff"/>';
@@ -274,5 +274,34 @@ describe("le copie delle private", () => {
     const copies = new ResourceCopies(opened.engine.model!, new NewIds(() => false), elemOf);
     expect(copies.adopt(elemOf(node(opened, "oaaaaaaaa"))!)).toEqual(elemOf(node(opened, "oaaaaaaaa")));
     expect(copies.ops()).toEqual([]);
+  });
+});
+
+describe("due sfumature che si vedono uguali", () => {
+  const BOX = { min: [0, 0], max: [10, 10] } as const;
+  const linear = (attrs: Record<string, string>, stops = ["#ffffff", "#000000"]): Elem => ({
+    tag: "linearGradient",
+    attrs,
+    children: stops.map((color, at) => ({ tag: "stop", attrs: { offset: String(at / (stops.length - 1)), "stop-color": color } })),
+  });
+
+  it("lo sono anche scritte in coordinate diverse, sul riquadro dove stanno", () => {
+    const relative = gradientOfElem(linear({ id: "ra", x1: "0", y1: "0", x2: "1", y2: "0" }))!;
+    const absolute = gradientOfElem(linear({ id: "rb", gradientUnits: "userSpaceOnUse", x1: "0", y1: "0", x2: "10", y2: "0" }))!;
+    expect(sameGradient(relative, absolute, BOX)).toBe(true);
+    const shifted = gradientOfElem(linear({ id: "rc", gradientUnits: "userSpaceOnUse", x1: "5", y1: "0", x2: "15", y2: "0" }))!;
+    expect(sameGradient(relative, shifted, BOX)).toBe(false);
+  });
+
+  it("non lo sono con un altro colore o un'altra ripetizione", () => {
+    const a = gradientOfElem(linear({ x1: "0", x2: "1" }))!;
+    expect(sameGradient(a, gradientOfElem(linear({ x1: "0", x2: "1" }, ["#ffffff", "#0072b2"]))!, BOX)).toBe(false);
+    expect(sameGradient(a, gradientOfElem(linear({ x1: "0", x2: "1", spreadMethod: "repeat" }))!, BOX)).toBe(false);
+  });
+
+  it("un'altra risorsa è la stessa a meno degli id", () => {
+    const pattern = (id: string, fill: string): Elem => ({ tag: "pattern", attrs: { id, width: "4", height: "4" }, children: [{ tag: "rect", attrs: { id: `${id}r`, width: "2", height: "2", fill } }] });
+    expect(sameResource(pattern("ra", "#000000"), pattern("rb", "#000000"))).toBe(true);
+    expect(sameResource(pattern("ra", "#000000"), pattern("rb", "#ffffff"))).toBe(false);
   });
 });

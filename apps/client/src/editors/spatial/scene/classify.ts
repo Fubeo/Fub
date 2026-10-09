@@ -40,6 +40,7 @@ import {
   hrefId,
   isWsp,
   keyword,
+  leading,
   length,
   letterSpacing,
   nonNegativeLength,
@@ -161,6 +162,11 @@ export interface ElementItem extends Span {
   readonly swatch?: SwatchFacts;
   /// Il nome di un motivo del documento.
   readonly motif?: MotifFacts;
+  /// Il nome e il tipo di uno stile del documento.
+  readonly style?: StyleFacts;
+  /// Lo stile che un oggetto segue: `fub:style`, com'è scritto, anche se non
+  /// porta a uno stile (formato della scena, stili).
+  readonly follows?: string;
   /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
   /// scena, tavole).
   readonly box?: readonly [number, number, number, number];
@@ -258,8 +264,19 @@ export function resourceKind(tag: string): ResourceKind | null {
 /// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. `swatch`
 /// è un campione del documento, un colore o un motivo con un nome: resta
 /// anche senza riferimenti, e duplicare chi lo usa lo condivide. Senza, la
-/// risorsa resta.
-export type Lifecycle = "private" | "shared" | "swatch";
+/// risorsa resta. `style` è uno stile del documento: resta anche senza chi
+/// lo segue, e le risorse private che usa sono sue.
+export type Lifecycle = "private" | "shared" | "swatch" | "style";
+
+/// Uno stile del documento (formato della scena, stili): il suo nome, com'è
+/// scritto, e il tipo, di testo o grafico.
+export interface StyleFacts {
+  readonly name: string;
+  readonly kind: "text" | "graphic";
+}
+
+/// I punti di uno stile grafico: una spezzata aperta nel riquadro 100 × 100.
+export const STYLE_GRAPHIC_POINTS = "0,0 100,0 100,100";
 
 /// Un campione del documento (formato della scena, risorse): il suo nome,
 /// com'è scritto, e il colore, `#rrggbb` minuscolo.
@@ -306,6 +323,65 @@ export function swatchOf(doc: XmlDocument, element: ElementNode): SwatchFacts | 
     color = `#${value.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
   }
   return color === null ? null : { name, color };
+}
+
+/// Il tipo di uno stile dal tag del suo prototipo: un `text` per lo stile di
+/// testo, una `polyline` per quello grafico.
+export function styleKindOf(tag: string): StyleFacts["kind"] | null {
+  return tag === "text" ? "text" : tag === "polyline" ? "graphic" : null;
+}
+
+/// Gli attributi SVG del prototipo di uno stile di testo: il carattere e il
+/// colore.
+const TEXT_STYLE: ReadonlySet<string> = new Set([
+  "id",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "letter-spacing",
+  "text-decoration",
+  "fill",
+]);
+
+/// Gli attributi SVG del prototipo di uno stile grafico: i suoi punti e
+/// l'aspetto di una spezzata, senza geometria, visibilità o ritagli.
+const GRAPHIC_STYLE: ReadonlySet<string> = new Set([
+  "id",
+  "points",
+  "fill",
+  "fill-opacity",
+  "stroke",
+  "stroke-opacity",
+  "stroke-width",
+  "stroke-dasharray",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "marker-start",
+  "marker-end",
+  "opacity",
+  "style",
+  "filter",
+]);
+
+/// Lo stile del documento che è `element`, una risorsa modificabile con
+/// `fub:role="style"` (formato della scena, stili); `null` se non ha la sua
+/// forma, e allora è estraneo. Lo stile è un prototipo: un `text` o una
+/// `polyline` coi punti di [`STYLE_GRAPHIC_POINTS`], con un nome `fub:name`
+/// che non è vuoto, soltanto gli attributi SVG del suo tipo, un
+/// `fub:leading` valido se è di testo, e per figli soltanto `title` e
+/// `desc`. I valori li giudica la classificazione, come per ogni elemento.
+export function styleOf(doc: XmlDocument, element: ElementNode): StyleFacts | null {
+  const kind = element.ns === NS_SVG ? styleKindOf(element.local) : null;
+  if (kind === null) return null;
+  const name = valueOf(element, NS_FUB, "name");
+  if (name === undefined || trim(name) === "") return null;
+  const allowed = kind === "text" ? TEXT_STYLE : GRAPHIC_STYLE;
+  if (element.attrs.some((attr) => attr.ns === NS_NONE && !allowed.has(attr.local))) return null;
+  if (kind === "graphic" && valueOf(element, NS_NONE, "points") !== STYLE_GRAPHIC_POINTS) return null;
+  const height = kind === "text" ? valueOf(element, NS_FUB, "leading") : undefined;
+  if (height !== undefined && leading(height) === null) return null;
+  return element.children.every((child) => blankOrMeta(doc, child) === true) ? { name, kind } : null;
 }
 
 /// Il tipo della risorsa modificabile che porta `id`, o `null` se nessuna
@@ -830,6 +906,15 @@ function pathResourceAllowed(doc: XmlDocument, element: ElementNode): boolean {
   return attributes && element.children.every((child) => blankOrMeta(doc, child) === true);
 }
 
+/// Vero se `element`, un `text` o una `polyline` con `fub:role="style"` in
+/// una `defs` della radice, è uno stile modificabile (formato della scena,
+/// stili): un id, la forma di [`styleOf`] e gli attributi di §4 per il suo
+/// tag, coi riferimenti risolti da `resolve`.
+function styleAllowed(doc: XmlDocument, element: ElementNode, tag: Tag, resolve: Resolve): boolean {
+  const id = valueOf(element, NS_NONE, "id");
+  return id !== undefined && id !== "" && styleOf(doc, element) !== null && attributesAllowed(element, tag, resolve);
+}
+
 /// Vero se un nodo è spazio, `title` o `desc` ammessi: i figli che ogni
 /// risorsa può avere.
 function blankOrMeta(doc: XmlDocument, child: NodeId): boolean | null {
@@ -1037,19 +1122,32 @@ export function resourceIndex(doc: XmlDocument): Map<string, ResourceKind> {
   return indexResources(doc).kinds;
 }
 
+/// Gli stili del documento, per id: il tipo di ognuno (formato della scena,
+/// stili).
+export type Styles = ReadonlyMap<string, StyleFacts["kind"]>;
+
 /// Le risorse modificabili di un documento: il tipo di ognuna, il `d` dei
-/// tracciati e il colore dei campioni.
+/// tracciati, il colore dei campioni e il tipo degli stili.
 interface Resources {
   readonly kinds: Map<string, ResourceKind>;
   readonly paths: Map<string, string>;
   readonly swatches: Map<string, Rgb>;
+  readonly styles: Map<string, StyleFacts["kind"]>;
+}
+
+/// Gli stili modificabili del documento, per id: di due con lo stesso id, o
+/// di uno stile con l'id di una risorsa, vale il primo, come per le risorse.
+export function styleIndex(doc: XmlDocument): Styles {
+  return indexResources(doc).styles;
 }
 
 function indexResources(doc: XmlDocument): Resources {
   const kinds = new Map<string, ResourceKind>();
   const paths = new Map<string, string>();
   const swatches = new Map<string, Rgb>();
+  const styles = new Map<string, StyleFacts["kind"]>();
   const others: Array<[ElementNode, ResourceTag]> = [];
+  const prototypes: Array<[ElementNode, Tag]> = [];
   const judge = (element: ElementNode, tag: ResourceTag | "path", resolve: Resolve): void => {
     const id = valueOf(element, NS_NONE, "id");
     if (id === undefined || kinds.has(id)) return;
@@ -1066,14 +1164,22 @@ function indexResources(doc: XmlDocument): Resources {
     for (const inner of defs.children) {
       const element = doc.element(inner);
       const tag = element === null ? null : tagOf(element);
-      if (element === null || tag === null || (tag !== "path" && !RESOURCE_TAGS.has(tag))) continue;
+      if (element === null || tag === null) continue;
+      if (styleKindOf(tag) !== null && valueOf(element, NS_FUB, "role") === "style") prototypes.push([element, tag]);
+      if (tag !== "path" && !RESOURCE_TAGS.has(tag)) continue;
       if (tag === "linearGradient" || tag === "radialGradient" || tag === "path") judge(element, tag, NO_RESOURCES);
       else others.push([element, tag as ResourceTag]);
     }
   }
   const first: Resolve = (id) => kinds.get(id) ?? null;
   for (const [element, tag] of others) judge(element, tag, first);
-  return { kinds, paths, swatches };
+  // Gli stili per ultimi: usano ogni altra risorsa, e nessuno li usa.
+  for (const [element, tag] of prototypes) {
+    const id = valueOf(element, NS_NONE, "id");
+    if (id === undefined || kinds.has(id) || styles.has(id) || !styleAllowed(doc, element, tag, first)) continue;
+    styles.set(id, styleKindOf(tag)!);
+  }
+  return { kinds, paths, swatches, styles };
 }
 
 /// Le sfumature modificabili fra i figli di `parent`, per un `add` di più
@@ -1124,7 +1230,12 @@ function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve):
   // Un `path` in una `defs` è il tracciato di un testo (formato della scena,
   // testo).
   if (tag === "path" && place === "defs") return pathResourceAllowed(doc, element) ? [tag, "resource"] : null;
-  // In una `defs` stanno solo risorse, titolo e descrizione.
+  // Un `text` o una `polyline` con `fub:role="style"` in una `defs` è uno
+  // stile (formato della scena, stili).
+  if (place === "defs" && styleKindOf(tag) !== null && valueOf(element, NS_FUB, "role") === "style") {
+    return styleAllowed(doc, element, tag, resolve) ? [tag, "resource"] : null;
+  }
+  // In una `defs` stanno solo risorse, stili, titolo e descrizione.
   if (place === "defs" && tag !== "title" && tag !== "desc") return null;
   // Una tavola è un `view` della radice (formato della scena, tavole).
   if (tag === "view") return place === "root" && boardAllowed(doc, element, resolve) ? [tag, "board"] : null;
@@ -1261,6 +1372,8 @@ export interface Details {
   readonly lifecycle?: Lifecycle;
   readonly swatch?: SwatchFacts;
   readonly motif?: MotifFacts;
+  readonly style?: StyleFacts;
+  readonly follows?: string;
   readonly box?: readonly [number, number, number, number];
   readonly board?: string;
 }
@@ -1312,6 +1425,35 @@ export function readStroke(element: ElementNode): { stroke: Stroke; problems: St
   return { stroke, problems };
 }
 
+/// I ruoli che seguono uno stile con `fub:style` (formato della scena,
+/// stili): il testo uno di testo, gli altri uno grafico. Non i livelli, i
+/// collegamenti, la carta, le tavole e le risorse.
+const FOLLOWERS: ReadonlySet<Role> = new Set<Role>([
+  "group",
+  "stroke",
+  "arrow",
+  "connector",
+  "ngon",
+  "star",
+  "width",
+  "path",
+  "rect",
+  "ellipse",
+  "circle",
+  "line",
+  "polyline",
+  "polygon",
+  "text",
+  "image",
+]);
+
+/// Il tipo di stile che un elemento di ruolo `role` può seguire, o `null`
+/// se non ne segue.
+export function followedKind(role: Role): StyleFacts["kind"] | null {
+  if (!FOLLOWERS.has(role)) return null;
+  return role === "text" ? "text" : "graphic";
+}
+
 /// I dettagli di un elemento modificabile di ruolo `role`, coi problemi del
 /// suo tratto se è un tratto.
 export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { details: Details; problems: StrokeProblem[] } {
@@ -1344,6 +1486,16 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
       } else if (motif !== null) {
         details.lifecycle = "swatch";
         details.motif = motif;
+      }
+    }
+    // Un `text` o una `polyline` con `fub:role="style"` è una risorsa
+    // soltanto con la forma di uno stile; un'altra risorsa con quel ruolo
+    // resta senza ciclo di vita.
+    if (lifecycle === "style") {
+      const style = styleOf(doc, element);
+      if (style !== null) {
+        details.lifecycle = "style";
+        details.style = style;
       }
     }
     const title = firstTitle(doc, element);
@@ -1384,6 +1536,10 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
   if (role === "width") {
     const varwidth = widthGeometry(element);
     if (varwidth !== null) details.varwidth = varwidth;
+  }
+  if (FOLLOWERS.has(role)) {
+    const follows = valueOf(element, NS_FUB, "style");
+    if (follows !== undefined) details.follows = follows;
   }
   if (role === "title" || role === "desc") details.text = characterData(doc, id);
   if (role === "text") {
@@ -1447,6 +1603,8 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.lifecycle !== undefined) item.lifecycle = details.lifecycle;
   if (details.swatch !== undefined) item.swatch = details.swatch;
   if (details.motif !== undefined) item.motif = details.motif;
+  if (details.style !== undefined) item.style = details.style;
+  if (details.follows !== undefined) item.follows = details.follows;
   if (details.box !== undefined) item.box = details.box;
   if (details.board !== undefined) item.board = details.board;
   return item;
@@ -1474,7 +1632,7 @@ interface Frame {
 /// Ciò che la classificazione trova.
 export interface Classified {
   readonly items: Item[];
-  /// S002, S004 e S010.
+  /// S002, S004, S010 e S018.
   readonly diagnostics: Diagnostic[];
   readonly tally: Tally;
 }
@@ -1499,6 +1657,8 @@ class Builder {
     paths: ReadonlyMap<string, string>,
     /// I campioni del documento, col loro colore.
     private readonly swatches: Swatches,
+    /// Gli stili del documento, col loro tipo.
+    private readonly styles: Styles,
   ) {
     this.tally = new Tally(paths);
   }
@@ -1555,6 +1715,9 @@ class Builder {
     const title = isContainer(role) ? firstTitle(doc, element) : null;
     const details = title === null ? described.details : { ...described.details, title };
     for (const [code, detail] of described.problems) this.diagnostics.push(diagnostic(code, span, detail));
+    // S018: segue uno stile che non c'è, o uno dell'altro tipo.
+    const follows = details.follows;
+    if (follows !== undefined && this.styles.get(follows) !== followedKind(role)) this.diagnostics.push(diagnostic("S018", span, follows));
     this.tally.element(doc, element, role, context, span, details.stroke ?? null);
     if (!this.keep) return;
     this.items.push(elementItem(details, path, span, doc.source.indent(element.start), isContainer(role) ? this.tags(id) : null));
@@ -1608,7 +1771,7 @@ class Builder {
 /// serve solo il suo riepilogo.
 export function classifyDocument(doc: XmlDocument, keep: boolean): Classified {
   const resources = indexResources(doc);
-  const builder = new Builder(doc, keep, (id) => resources.kinds.get(id) ?? null, resources.paths, resources.swatches);
+  const builder = new Builder(doc, keep, (id) => resources.kinds.get(id) ?? null, resources.paths, resources.swatches, resources.styles);
   let pending: Pending | null = null;
   // Per il documento la radice è l'elemento 0: l'epilogo comincia da 1.
   let next = 0;

@@ -1210,6 +1210,78 @@ describe("le risorse", () => {
   });
 });
 
+describe("gli stili", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const S = "r5e6f7a8b";
+  const STYLE = `    <polyline id="${S}" fub:role="style" fub:name="Riquadro" points="0,0 100,0 100,100" fill="#0072b2" stroke="#1a1a1a" stroke-width="2"/>`;
+  /// Un rettangolo nel livello che segue lo stile.
+  const follower = (id: string): string => `    <rect id="${id}" fub:style="${S}" x="500" y="100" width="200" height="120" fill="#0072b2" stroke="#1a1a1a" stroke-width="2"/>`;
+  const FOLLOWED = lf(ROOT, TITLE, DEFS, STYLE, END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+  const ALONE = lf(ROOT, TITLE, DEFS, STYLE, END_DEFS, PAPER, L1, R2, END_G, END);
+
+  it("uno stile seguito non si toglie, né con la sua defs, né togliendogli l'id", () => {
+    rejects(FOLLOWED, { op: "remove", target: S }, "in-use");
+    rejects(FOLLOWED, { op: "remove", target: "fub-defs" }, "in-use");
+    rejects(FOLLOWED, { op: "ident", path: [1, 0], tag: "polyline", id: null }, "in-use");
+  });
+
+  it("uno stile che nessuno segue non si raccoglie, e si toglie", () => {
+    const engine = SceneEngine.open(ALONE);
+    expect(apply(engine, { op: "remove", target: "o2b3c4d5e" }).text).toBe(lf(ROOT, TITLE, DEFS, STYLE, END_DEFS, PAPER, L1, END_G, END));
+    const out = apply(SceneEngine.open(ALONE), { op: "remove", target: S });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, END_G, END));
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(ALONE);
+  });
+
+  it("chi comincia a seguire uno stile lo trattiene, chi smette lo lascia", () => {
+    const engine = SceneEngine.open(ALONE);
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "fub:style": S } });
+    expect(engine.apply({ op: "remove", target: S })).toMatchObject({ outcome: "rejected", reason: "in-use" });
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "fub:style": null } });
+    expect(engine.apply({ op: "remove", target: S }).outcome).toBe("applied");
+  });
+
+  it("uno stile nuovo ha l'id di una risorsa, con elem e con raw", () => {
+    const text: Elem = { tag: "text", attrs: { id: "r6f7a8b9c", "fub:role": "style", "fub:name": "Nota", "fub:leading": "1.4", "font-size": "14", fill: "#1a1a1a" } };
+    const engine = SceneEngine.open(FOLLOWED);
+    const out = apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, elem: text });
+    expect(out.text).toBe(
+      lf(ROOT, TITLE, DEFS, STYLE, '    <text id="r6f7a8b9c" fub:role="style" fub:name="Nota" fub:leading="1.4" fill="#1a1a1a" font-size="14"/>', END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END),
+    );
+    expect(engine.scene().find((item) => item.kind === "element" && item.id === "r6f7a8b9c")).toMatchObject({ lifecycle: "style", style: { name: "Nota", kind: "text" } });
+    const raw = '<polyline id="r7a8b9c0d" fub:role="style" fub:name="Avviso" points="0,0 100,0 100,100" stroke="#d55e00"><title>Per gli avvisi</title></polyline>';
+    expect(apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, raw }).text).toContain(raw);
+    rejects(FOLLOWED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...text, attrs: { ...text.attrs, id: "o6f7a8b9c" } } }, "invalid-elem");
+    rejects(FOLLOWED, { op: "add", parent: "fub-defs", pos: { last: true }, raw: raw.replace("r7a8b9c0d", "o7a8b9c0d") }, "invalid-elem");
+  });
+
+  it("uno stile non entra con l'id che un oggetto segue già", () => {
+    const dangling = lf(ROOT, TITLE, DEFS, '    <linearGradient id="r1a2b3c4d"/>', END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+    const elem: Elem = { tag: "polyline", attrs: { id: S, "fub:role": "style", "fub:name": "Riquadro", points: "0,0 100,0 100,100" } };
+    rejects(dangling, { op: "add", parent: "fub-defs", pos: { last: true }, elem }, "duplicate-id");
+  });
+
+  it("fub:style verso una risorsa che non è uno stile non la trattiene", () => {
+    const swatch = '    <linearGradient id="r5e6f7a8b" fub:role="swatch" fub:name="Blu" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>';
+    const wrong = lf(ROOT, TITLE, DEFS, swatch, END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+    expect(apply(SceneEngine.open(wrong), { op: "remove", target: S }).text).toBe(lf(ROOT, TITLE, PAPER, L1, follower("o2b3c4d5e"), END_G, END));
+    expect(apply(SceneEngine.open(wrong), { op: "ident", path: [1, 0], tag: "linearGradient", id: null }).text).toBe(wrong.replace(` id="${S}"`, ""));
+    // Una sfumatura entra anche con l'id che un oggetto segue: chi segue
+    // resta com'era, con S018.
+    const dangling = lf(ROOT, TITLE, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+    const gradient: Elem = { tag: "linearGradient", attrs: { id: S }, children: [{ tag: "stop", attrs: { offset: "0", "stop-color": "#000000" } }] };
+    const out = apply(SceneEngine.open(dangling), {
+      op: "batch",
+      ops: [
+        { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" } } },
+        { op: "add", parent: "fub-defs", pos: { last: true }, elem: gradient },
+      ],
+    });
+    expect(readScene(out.text).diagnostics.map((d) => d.code)).toContain("S018");
+  });
+});
+
 describe("ciò che segue", () => {
   const DEFS = '  <defs id="fub-defs">';
   const END_DEFS = "  </defs>";

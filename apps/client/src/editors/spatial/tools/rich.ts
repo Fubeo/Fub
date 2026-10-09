@@ -27,7 +27,7 @@
 import { formatNumber } from "../number";
 import type { TextLine } from "../scene/ops";
 import type { Elem, Run } from "../scene/serialize";
-import { length, letterSpacing, nonNegativeLength, textDecoration, trim } from "../scene/values";
+import { length, letterSpacing, nonNegativeLength, paint, textDecoration, trim } from "../scene/values";
 import { BLANK_LINE, LINE_SPACING, xmlText } from "./text";
 
 /// Gli attributi di un elemento, come li nomina un'operazione.
@@ -440,6 +440,61 @@ export function restyleWhole(rich: Rich, name: string, value: string): Rich {
   };
 }
 
+/// `rich` con `value` in `name`, uno di [`INHERITED`], scritto sul testo,
+/// come lo dà uno stile a un testo che non ha lo stesso valore dappertutto:
+/// le righe e i pezzi che ne scrivono un altro lo tengono, come una parola
+/// in grassetto o in un altro colore, e lasciano soltanto lo stesso valore.
+/// Un corpo nuovo porta con sé le interlinee e le spaziature scritte, come
+/// in [`restyleWhole`].
+export function restyleKeeping(rich: Rich, name: string, value: string): Rich {
+  const keep = (attrs: Attrs | null): Attrs | null => (attrs !== null && sameValue(name, attrs[name], value) ? withAttr(attrs, name, null) : attrs);
+  const next: Rich = {
+    ...rich,
+    attrs: { ...rich.attrs, [name]: value },
+    lines: rich.lines.map((line) => ({ attrs: keep(line.attrs) ?? {}, spans: line.spans.map((span) => ({ text: span.text, attrs: keep(span.attrs) })) })),
+  };
+  const sized = name === "font-size" ? resized(rich, next) : next;
+  return { ...sized, lines: sized.lines.map((line) => ({ attrs: line.attrs, spans: canonicalSpans(line.spans) })) };
+}
+
+/// `after`, che è `before` con altri corpi e le stesse righe e gli stessi
+/// pezzi: ogni spaziatura scritta resta la stessa in volte il corpo su cui
+/// si misura, e ogni interlinea in volte il corpo più grande delle due
+/// righe.
+function resized(before: Rich, after: Rich): Rich {
+  const respace = (attrs: Attrs | null, from: number, to: number): Attrs | null => {
+    const gap = attrs?.["letter-spacing"] === undefined ? null : length(attrs["letter-spacing"]);
+    return gap === null || !(from > 0) || from === to ? attrs : { ...attrs, "letter-spacing": formatNumber((gap / from) * to, 2) };
+  };
+  const spaced: Rich = {
+    ...after,
+    attrs: respace(after.attrs, sizeOf(before.attrs["font-size"] ?? before.inherited["font-size"]), sizeOf(after.attrs["font-size"] ?? after.inherited["font-size"])) ?? {},
+    lines: after.lines.map((line, i) => {
+      const old = before.lines[i]!;
+      return {
+        attrs: respace(line.attrs, sizeIn(before, old, null), sizeIn(after, line, null)) ?? {},
+        spans: line.spans.map((span, k) => ({ text: span.text, attrs: respace(span.attrs, sizeIn(before, old, old.spans[k]!), sizeIn(after, line, span)) })),
+      };
+    }),
+  };
+  return {
+    ...spaced,
+    lines: spaced.lines.map((line, i) => {
+      const leading = leadingOf(before, i);
+      if (leading === null) return line;
+      const size = Math.max(tallestIn(spaced, spaced.lines[i - 1]!), tallestIn(spaced, line));
+      return { attrs: { ...line.attrs, dy: formatNumber(leading * size, 2) }, spans: line.spans };
+    }),
+  };
+}
+
+/// `rich` con la linea `which`, il sottolineato o il barrato, accesa o
+/// spenta sul testo, come la dà uno stile a un testo che non l'ha
+/// dappertutto: le righe e i pezzi che la scrivono la tengono.
+export function emphasizeKeeping(rich: Rich, which: "underline" | "strike", on: boolean): Rich {
+  return { ...rich, attrs: withLine(rich.attrs, LINES[which]!, on) ?? {} };
+}
+
 // ---------------------------------------------------------------------------
 // Il testo intero, come lo legge e lo scrive il pannello.
 // ---------------------------------------------------------------------------
@@ -569,6 +624,12 @@ export function anchorsOf(rich: Rich): string[] {
 function sameValue(name: string, a: string | undefined, b: string): boolean {
   if (a === undefined) return false;
   if (name === "font-weight") return weightOf(a) === weightOf(b);
+  if (name === "fill") {
+    // Lo stesso colore, scritto in un altro modo.
+    const p = paint(a);
+    const q = paint(b);
+    if (p !== null && q !== null) return p === "none" || q === "none" ? p === q : p.every((value, at) => value === q[at]);
+  }
   if (name === "font-size" || name === "letter-spacing") {
     const p = trim(a) === "normal" ? 0 : length(a);
     const q = trim(b) === "normal" ? 0 : length(b);

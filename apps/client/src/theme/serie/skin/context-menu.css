@@ -85,6 +85,16 @@
   width: 7px;
   height: 22px;
 }
+/* L'anteprima di uno stile: «Aa» nel colore del menu se lo stile non ne
+   dice uno, e il quadratino con un filo che lo stacca dal fondo. */
+.menu-sample {
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.menu-sample-box {
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border);
+}
 .context-menu .menu-body {
   display: flex;
   flex: 1;

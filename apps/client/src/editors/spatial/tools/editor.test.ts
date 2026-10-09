@@ -3514,8 +3514,9 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     key("Enter");
     const toggle = (label: string): HTMLButtonElement => property("emphasis").querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
     const opening = (): string => /<text [^>]*>/.exec(editor.engine.text)![0];
-    // Il grassetto di una parola rende misti il peso e lo stile.
-    expect(property("preset").querySelector("select")!.value).toBe("");
+    // Il grassetto di una parola rende misto il peso. Lo stile di serie,
+    // dallo Standard, sta nel menu degli stili di testo.
+    expect(property("preset")).toBeNull();
     expect(property("weight").querySelector("select")!.value).toBe("");
     expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("mixed");
     expect(toggle("Corsivo").getAttribute("aria-pressed")).toBe("false");
@@ -3525,7 +3526,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
     expect(opening()).toContain('font-size="32" font-weight="bold">');
     expect(editor.engine.text).toContain('<tspan x="10" dy="40">Due tre</tspan>');
     expect(toggle("Grassetto").getAttribute("aria-pressed")).toBe("true");
-    choose("preset", "title");
+    enter(propertyInput("size"), "64");
     expect(opening()).toContain('font-size="64" font-weight="bold">');
     // L'interlinea segue il corpo.
     expect(editor.engine.text).toContain('<tspan x="10" dy="80">');
@@ -3544,7 +3545,7 @@ describe("il pannello delle proprietà, dal livello Standard", () => {
       "Annullato: Corsivo.",
       "Annullato: Spaziatura delle lettere.",
       "Annullato: Interlinea.",
-      "Annullato: Stile del testo.",
+      "Annullato: Dimensione del testo.",
       "Annullato: Grassetto.",
     ]);
     expect(editor.engine.text).toBe(TEXT);
@@ -3956,6 +3957,203 @@ describe("i colori del documento, dal livello Standard", () => {
     chip("swatches", "rs").click();
     expect(spoken()).toBe("Modifica non applicata: il disegno è in sola lettura.");
     expect(addButton().getAttribute("aria-disabled")).toBe("true");
+    expect(changes).toEqual([]);
+  });
+});
+
+describe("gli stili del documento, dal livello Standard", () => {
+  const A = "o1a2b3c4d";
+  const B = "ob2b2b2b2";
+  const C = "oc3c3c3c3";
+  const T = "ot4t4t4t4";
+  const BOX = '<polyline id="rbox00000" fub:role="style" fub:name="Riquadro" points="0,0 100,0 100,100" fill="#e69f00" stroke="#000000" stroke-width="2"/>';
+  const TITLE = '<text id="rtitle000" fub:role="style" fub:name="Titolo" fill="#1a1a1a" font-family="Inter, sans-serif" font-size="48" font-weight="600"/>';
+  /// Lo stile «Riquadro», che A segue con un contorno più spesso e C così
+  /// com'è; B non segue niente; il testo T nemmeno.
+  const STYLED = doc(
+    `<defs id="fub-defs">${BOX}${TITLE}</defs>` +
+      `${LAYER}<rect id="${A}" fub:style="rbox00000" x="60" y="60" width="20" height="20" fill="#e69f00" stroke="#000000" stroke-width="4"/>` +
+      `<rect id="${B}" x="10" y="20" width="10" height="10" fill="#0072b2"/>` +
+      `<rect id="${C}" fub:style="rbox00000" x="30" y="20" width="10" height="10" fill="#e69f00" stroke="#000000" stroke-width="2"/>` +
+      `<text id="${T}" x="10" y="140" fill="#000000" font-family="Inter, sans-serif" font-size="32"><tspan x="10" dy="0">Capitolo</tspan></text></g>`,
+  );
+  const face = (id: string): HTMLButtonElement => property(id).querySelector<HTMLButtonElement>(".draw-properties-menu")!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  /// Apre il menu del campo `id` e ne preme la voce `label`.
+  const pick = (id: string, label: string): void => {
+    face(id).click();
+    menu().find((entry) => labelOf(entry) === label)!.click();
+  };
+  const ask = (id: string): HTMLElement => property(id).querySelector<HTMLElement>(".draw-properties-ask")!;
+  const askInput = (id: string): HTMLInputElement => ask(id).querySelector<HTMLInputElement>("input")!;
+  /// L'elemento `id` com'è scritto adesso.
+  const element = (id: string): string => new RegExp(`<[a-z]+ id="${id}"[^>]*>`).exec(editor.engine.text)?.[0] ?? "";
+
+  afterEach(() => {
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("la riga dice lo stile della selezione, e sceglierne uno lo dà, in un passo col suo nome", () => {
+    mount(STYLED, { level: "standard" });
+    editor.select([B]);
+    key("Enter");
+    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Nessuno");
+    face("lookStyle").click();
+    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true"])).toEqual([
+      ["Riquadro", false],
+      ["Nuovo stile dalla selezione…", false],
+      ["Aggiorna lo stile dalla selezione", true],
+      ["Torna allo stile", true],
+      ["Scollega dallo stile", true],
+      ["Rinomina lo stile…", true],
+      ["Elimina lo stile", true],
+    ]);
+    expect(formatIssues(checkAccessibility(document.querySelector<HTMLElement>(".context-menu")!))).toBe("");
+    closeContextMenu();
+    pick("lookStyle", "Riquadro");
+    expect(element(B)).toBe(`<rect id="${B}" fub:style="rbox00000" x="10" y="20" width="10" height="10" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Stile «Riquadro» applicato a 1 oggetto.");
+    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Riquadro");
+    expect(formatIssues(checkAccessibility(properties()))).toBe("");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Stile applicato.");
+    expect(editor.engine.text).toBe(STYLED);
+  });
+
+  it("«Nuovo stile dalla selezione…» chiede il nome nel pannello, e lo stile nuovo lo segue chi era scelto", () => {
+    mount(STYLED, { level: "standard" });
+    editor.select([B]);
+    key("Enter");
+    pick("lookStyle", "Nuovo stile dalla selezione…");
+    expect(ask("lookStyle").hidden).toBe(false);
+    expect(ask("lookStyle").textContent).toContain("Nuovo stile grafico");
+    expect(askInput("lookStyle").value).toBe("Stile grafico 1");
+    expect(document.activeElement).toBe(askInput("lookStyle"));
+    // Un nome che c'è già non va, e il modulo lo dice e resta.
+    enter(askInput("lookStyle"), "riquadro");
+    expect(ask("lookStyle").hidden).toBe(false);
+    expect(askInput("lookStyle").getAttribute("aria-invalid")).toBe("true");
+    expect(ask("lookStyle").textContent).toContain("C’è già uno stile «riquadro» di questo tipo: scegline un altro.");
+    expect(editor.engine.text).toBe(STYLED);
+    enter(askInput("lookStyle"), "Avviso");
+    // Lo stile nuovo dice tutto l'aspetto che si vede, anche ciò che B non
+    // scrive: chi lo segue poi avrà lo stesso aspetto.
+    const made =
+      /<polyline id="([a-z0-9]+)" fub:role="style" fub:name="Avviso" points="0,0 100,0 100,100" fill="#0072b2" stroke="none" stroke-width="1" stroke-linecap="butt" stroke-linejoin="miter" stroke-dasharray="none"\/>/.exec(
+        editor.engine.text,
+      );
+    expect(made).not.toBeNull();
+    expect(element(B)).toBe(`<rect id="${B}" fub:style="${made![1]}" x="10" y="20" width="10" height="10" fill="#0072b2"/>`);
+    expect(spoken()).toBe("Stile «Avviso» creato: lo segue 1 oggetto.");
+    expect(ask("lookStyle").hidden).toBe(true);
+    expect(document.activeElement).toBe(face("lookStyle"));
+    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Avviso");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nuovo stile.");
+    expect(editor.engine.text).toBe(STYLED);
+  });
+
+  it("aggiornare, tornare, rinominare ed eliminare lavorano sullo stile che la selezione segue", () => {
+    mount(STYLED, { level: "standard" });
+    editor.select([A]);
+    key("Enter");
+    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Riquadro, modificato");
+    expect(property("strokeWidth").hasAttribute("data-differs")).toBe(true);
+    expect(property("fill").hasAttribute("data-differs")).toBe(false);
+    expect(property("lookStyle").textContent).toContain("Diverso dallo stile: spessore.");
+    pick("lookStyle", "Aggiorna lo stile dalla selezione");
+    expect(element("rbox00000")).toContain('stroke-width="4"');
+    expect(element(C)).toContain('stroke-width="4"');
+    expect(spoken()).toBe("Stile «Riquadro» aggiornato: lo seguono 2 oggetti.");
+    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Riquadro");
+    expect(property("strokeWidth").hasAttribute("data-differs")).toBe(false);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Stile aggiornato.");
+    expect(editor.engine.text).toBe(STYLED);
+    // Annulla sceglie ciò che il passo ha toccato: C.
+    expect(editor.selection).toEqual([C]);
+    editor.select([A]);
+    pick("lookStyle", "Torna allo stile");
+    expect(element(A)).toContain('stroke-width="2"');
+    expect(spoken()).toBe("1 oggetto torna allo stile «Riquadro».");
+    pick("lookStyle", "Rinomina lo stile…");
+    expect(ask("lookStyle").textContent).toContain("Rinomina «Riquadro»");
+    expect(askInput("lookStyle").value).toBe("Riquadro");
+    enter(askInput("lookStyle"), "Avviso");
+    expect(element("rbox00000")).toContain('fub:name="Avviso"');
+    expect(spoken()).toBe("Lo stile ora si chiama «Avviso».");
+    pick("lookStyle", "Elimina lo stile");
+    expect(editor.engine.text).not.toContain("rbox00000");
+    expect(element(A)).toBe(`<rect id="${A}" x="60" y="60" width="20" height="20" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("Stile «Avviso» eliminato: 2 oggetti che lo seguivano tengono il loro aspetto.");
+    expect(face("lookStyle").getAttribute("aria-label")).toBe("Stile grafico: Nessuno");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Stile eliminato.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nome di uno stile.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Ritorno allo stile.");
+    expect(editor.engine.text).toBe(STYLED);
+  });
+
+  it("«Scollega dallo stile» lascia l'aspetto, e un testo sceglie fra i suoi stili e quelli di serie", () => {
+    mount(STYLED, { level: "standard" });
+    editor.select([C]);
+    key("Enter");
+    pick("lookStyle", "Scollega dallo stile");
+    expect(element(C)).toBe(`<rect id="${C}" x="30" y="20" width="10" height="10" fill="#e69f00" stroke="#000000" stroke-width="2"/>`);
+    expect(spoken()).toBe("1 oggetto scollegato dallo stile: tiene il suo aspetto.");
+    editor.select([T]);
+    expect(face("textStyle").getAttribute("aria-label")).toBe("Stile di testo: Nessuno");
+    face("textStyle").click();
+    // «Titolo» c'è già nel documento: quello di serie non si offre.
+    expect(menu().map(labelOf).slice(0, 5)).toEqual(["Titolo", "Sottotitolo", "Titoletto", "Testo", "Didascalia"]);
+    closeContextMenu();
+    pick("textStyle", "Sottotitolo");
+    const made = /<text id="([a-z0-9]+)" fub:role="style" fub:name="Sottotitolo" [^>]*\/>/.exec(editor.engine.text);
+    expect(made![0]).toContain('font-size="48"');
+    expect(made![0]).toContain('font-weight="600"');
+    expect(element(T)).toContain(`fub:style="${made![1]}"`);
+    expect(element(T)).toContain('font-size="48"');
+    expect(spoken()).toBe("Stile «Sottotitolo» creato: lo segue 1 oggetto.");
+    pick("textStyle", "Titolo");
+    expect(element(T)).toContain('fub:style="rtitle000"');
+    expect(element(T)).toContain('fill="#1a1a1a"');
+    expect(spoken()).toBe("Stile «Titolo» applicato a 1 oggetto.");
+    editor.undo();
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Nuovo stile.");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Scollegamento dallo stile.");
+    expect(editor.engine.text).toBe(STYLED);
+  });
+
+  it("senza gli stili del documento, lo stile di serie torna un menu che cambia soltanto il corpo e il peso", () => {
+    mount(STYLED, { level: "custom", custom: ["text", "properties"] });
+    editor.select([T]);
+    key("Enter");
+    expect(property("textStyle")).toBeNull();
+    const select = property("preset").querySelector("select")!;
+    select.value = "title";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(element(T)).toBe(`<text id="${T}" x="10" y="140" fill="#000000" font-family="Inter, sans-serif" font-size="64" font-weight="bold">`);
+    expect(editor.engine.text.match(/fub:role="style"/g)).toHaveLength(2);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Stile del testo.");
+    expect(editor.engine.text).toBe(STYLED);
+  });
+
+  it("in sola lettura il menu si apre ma non cambia niente", () => {
+    mount(STYLED, { level: "standard" });
+    editor.select([B]);
+    key("Enter");
+    editor.setReadOnly(true);
+    expect(face("lookStyle").getAttribute("aria-disabled")).toBe("true");
     expect(changes).toEqual([]);
   });
 });

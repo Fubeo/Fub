@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { Role } from "./analysis";
 import { MAX_DEPTH } from "./classify";
-import { at, doc, elements, first, foreign, load, role, text } from "./test-support";
+import { at, doc, elements, findings, first, foreign, load, role, text } from "./test-support";
 import shapes from "../../../__fixtures__/scene-shapes/cases.json";
 import widths from "../../../__fixtures__/scene-width/cases.json";
 
@@ -1005,6 +1005,124 @@ describe("le risorse", () => {
     expect(at(scene, [0, 1])!.lifecycle).toBe("shared");
     expect(at(scene, [0, 2])!.lifecycle).toBeUndefined();
     expect(at(scene, [0, 2])!.role).toBe("resource");
+  });
+});
+
+describe("gli stili", () => {
+  const TEXT =
+    '<text id="r1" fub:role="style" fub:name="Titolo" fub:leading="1.25" font-family="Inter" font-size="24" font-weight="700" font-style="italic" letter-spacing="0.5" text-decoration="underline" fill="#1a1a1a"/>';
+  const GRAPHIC =
+    '<polyline id="r2" fub:role="style" fub:name="Riquadro" points="0,0 100,0 100,100" fill="#e69f00" fill-opacity="0.5" stroke="#1a1a1a" stroke-opacity="0.8" stroke-width="2" stroke-dasharray="4 2" stroke-linecap="round" stroke-linejoin="bevel" opacity="0.9" style="mix-blend-mode: multiply"/>';
+
+  it("uno stile è un text o una polyline con fub:role=style in una defs della radice, col nome e il tipo", () => {
+    const scene = load(doc(`<defs>${TEXT}${GRAPHIC}</defs>`));
+    expect(at(scene, [0, 0])!.role).toBe("resource");
+    expect(at(scene, [0, 0])!.lifecycle).toBe("style");
+    expect(at(scene, [0, 0])!.style).toEqual({ name: "Titolo", kind: "text" });
+    expect(at(scene, [0, 1])!.lifecycle).toBe("style");
+    expect(at(scene, [0, 1])!.style).toEqual({ name: "Riquadro", kind: "graphic" });
+    // I marcatori, il filtro e un riempimento con una sfumatura sono suoi
+    // come di ogni spezzata; il testo prende un colore, none o una sfumatura.
+    const marker = '<marker id="r3" orient="auto"><path d="M0 0 L10 5 L0 10 z"/></marker>';
+    const filter = '<filter id="r4"><feGaussianBlur stdDeviation="2"/></filter>';
+    const gradient = '<linearGradient id="r5" fub:role="private"><stop offset="0" stop-color="#000000"/></linearGradient>';
+    for (const style of [
+      '<polyline id="r6" fub:role="style" fub:name="R" points="0,0 100,0 100,100" marker-start="url(#r3)" marker-end="url(#r3)" filter="url(#r4)" fill="url(#r5) #000000"/>',
+      '<text id="r6" fub:role="style" fub:name="T" fill="url(#r5) #000000"/>',
+      '<text id="r6" fub:role="style" fub:name="T" fill="none"/>',
+      '<text id="r6" fub:role="style" fub:name="T"/>',
+      '<text id="r6" fub:role="style" fub:name="T" fub:leading="0.5"/>',
+      '<text id="r6" fub:role="style" fub:name="T" fub:leading="10"/>',
+      '<text id="r6" fub:role="style" fub:name="T" fub:leading="1.125"/>',
+      '<text id="r6" fub:role="style" fub:name="T">\n  <title>Titolo</title>\n  <desc>Per i capitoli</desc>\n</text>',
+      '<text id="r6" fub:role="style" fub:name="T" fub:nota="x"/>',
+    ]) {
+      const read = load(doc(`<defs>${marker}${filter}${gradient}${style}</defs>`));
+      expect(at(read, [0, 3])?.lifecycle, style).toBe("style");
+    }
+    expect(at(load(doc(`<defs><text id="r1" fub:role="style" fub:name="T"><title>Titolo</title></text></defs>`)), [0, 0])!.title).toBe("Titolo");
+  });
+
+  it("uno stile senza la sua forma è estraneo", () => {
+    for (const style of [
+      '<text id="r1" fub:role="style" font-size="12"/>',
+      '<text id="r1" fub:role="style" fub:name=" "/>',
+      '<text fub:role="style" fub:name="T"/>',
+      '<text id="" fub:role="style" fub:name="T"/>',
+      '<text id="r1" fub:role="style" fub:name="T" x="0"/>',
+      '<text id="r1" fub:role="style" fub:name="T" stroke="#000000"/>',
+      '<text id="r1" fub:role="style" fub:name="T" opacity="0.5"/>',
+      '<text id="r1" fub:role="style" fub:name="T"><tspan>Testo</tspan></text>',
+      '<text id="r1" fub:role="style" fub:name="T" fub:leading="0.4"/>',
+      '<text id="r1" fub:role="style" fub:name="T" fub:leading="10.5"/>',
+      '<text id="r1" fub:role="style" fub:name="T" fub:leading="1.2345"/>',
+      '<text id="r1" fub:role="style" fub:name="T" fub:leading="1e0"/>',
+      '<text id="r1" fub:role="style" fub:name="T" fub:leading=".5"/>',
+      '<text id="r1" fub:role="style" fub:name="T" fub:leading=""/>',
+      '<text id="r1" fub:role="style" fub:name="T" font-weight="pesante"/>',
+      '<text id="r1" fub:role="style" fub:name="T" fill="url(#r9) #000000"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R" points="0,0 100,0"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R" points="0 0 100 0 100 100"/>',
+      '<polyline id="r1" fub:role="style" points="0,0 100,0 100,100"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R" points="0,0 100,0 100,100" transform="scale(2)"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R" points="0,0 100,0 100,100" font-size="12"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R" points="0,0 100,0 100,100" display="none"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R" points="0,0 100,0 100,100" stroke-width="largo"/>',
+      '<polyline id="r1" fub:role="style" fub:name="R" points="0,0 100,0 100,100"><rect/></polyline>',
+    ]) {
+      expect(role(load(doc(`<defs>${style}</defs>`)), [0, 0]), style).toBeNull();
+    }
+    // Fuori da una defs della radice fub:role non fa uno stile: una spezzata
+    // fra gli oggetti resta una spezzata.
+    expect(first('<polyline fub:role="style" fub:name="R" points="0,0 100,0 100,100"/>')).toBe("polyline");
+  });
+
+  it("un'altra risorsa con fub:role=style resta senza ciclo di vita", () => {
+    const scene = load(doc('<defs><linearGradient id="r1" fub:role="style" fub:name="R"><stop offset="0" stop-color="#000000"/></linearGradient></defs>'));
+    expect(at(scene, [0, 0])!.role).toBe("resource");
+    expect(at(scene, [0, 0])!.lifecycle).toBeUndefined();
+    expect(at(scene, [0, 0])!.style).toBeUndefined();
+  });
+
+  it("chi segue uno stile lo dice con fub:style, e uno stile che non c'è o dell'altro tipo è S018", () => {
+    const swatch = '<linearGradient id="r3" fub:role="swatch" fub:name="Blu"><stop stop-color="#0072b2"/></linearGradient>';
+    const broken = '<polyline id="r4" fub:role="style" fub:name="Rotto" points="0,0"/>';
+    const scene = load(
+      doc(
+        `<defs>${TEXT}${GRAPHIC}${swatch}${broken}</defs>` +
+          '<g id="l1" fub:layer="Livello 1" fub:style="r2">' +
+          '<rect id="o1" fub:style="r2" width="10" height="10"/>' +
+          '<text id="o2" fub:style="r1"><tspan>Titolo</tspan></text>' +
+          '<g id="o3" fub:style="r2"><circle id="o4" r="5"/></g>' +
+          '<rect id="o5" fub:style="r1" width="10" height="10"/>' +
+          '<text id="o6" fub:style="r2"><tspan>Nota</tspan></text>' +
+          '<circle id="o7" fub:style="r9" r="5"/>' +
+          '<line id="o8" fub:style="r3" x2="10"/>' +
+          '<ellipse id="o9" fub:style="r4" rx="5" ry="5"/>' +
+          '<a id="oa" href="nota.md" fub:style="r9"><rect id="ob" width="1" height="1"/></a>' +
+          '<rect id="oc" fub:style="r9" width="-1" height="1"/>' +
+          "</g>",
+      ),
+    );
+    expect(at(scene, [1, 0])!.follows).toBe("r2");
+    expect(at(scene, [1, 1])!.follows).toBe("r1");
+    expect(at(scene, [1, 2])!.follows).toBe("r2");
+    expect(at(scene, [1, 3])!.follows).toBe("r1");
+    // Un livello o un collegamento non seguono uno stile: fub:style resta
+    // com'è e non dice niente; un estraneo non segue niente.
+    expect(at(scene, [1])!.follows).toBeUndefined();
+    expect(at(scene, [1, 8])!.follows).toBeUndefined();
+    expect(role(scene, [1, 9])).toBeNull();
+    // Lo stile rotto e il rettangolo estraneo sono S002.
+    expect(findings(scene).filter((d) => d.code === "S002")).toHaveLength(2);
+    expect(findings(scene).filter((d) => d.code !== "S002").map((d) => [d.code, d.detail])).toEqual([
+      ["S018", "r1"],
+      ["S018", "r2"],
+      ["S018", "r9"],
+      ["S018", "r3"],
+      ["S018", "r4"],
+    ]);
   });
 });
 

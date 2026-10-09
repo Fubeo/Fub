@@ -94,7 +94,7 @@ Lo Standard aggiunge:
   documento**: i campioni, i colori usati e i recenti ([Disegni, colori](drawing-colors.md));
 - la **Sfumatura** (`G`), dopo il Contagocce, e nelle «Proprietà» la sezione
   **«Sfumatura»**: lineare o radiale, coi suoi punti ([Disegni, sfumature](drawing-gradients.md)); e la sezione **«Campitura»**: righe e puntini ([Disegni, campiture e motivi](drawing-patterns.md));
-- nelle «Proprietà» le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md)), e nella barra «Disponi» **«Ritaglia…»** per le immagini ([Disegni, ritagli e maschere](drawing-masks.md)) e l'**«Opacità»** ([Disegni, effetti e fusione](drawing-effects.md#lopacità-nella-barra));
+- nelle «Proprietà» gli **stili** di testo e grafici ([Disegni, stili](drawing-styles.md)), le **punte delle linee** ([Disegni, punte delle linee](drawing-tips.md)), e nella barra «Disponi» **«Ritaglia…»** per le immagini ([Disegni, ritagli e maschere](drawing-masks.md)) e l'**«Opacità»** ([Disegni, effetti e fusione](drawing-effects.md#lopacità-nella-barra));
 - l'**evidenziatore** (`H`), dopo la penna: un tratto largo, costante e a
   punte piatte, che lascia vedere ciò che copre, scritto come un tratto a penna
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore

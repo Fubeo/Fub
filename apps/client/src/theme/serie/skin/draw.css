@@ -1037,6 +1037,10 @@ button.draw-isolation-crumb:hover {
   color: var(--text);
   font-size: var(--text-sm);
 }
+/* Il punto di un campo diverso dallo stile, nel colore dell'accento. */
+.draw-properties-field[data-differs] > .draw-properties-label::after {
+  background: var(--accent);
+}
 .draw-properties-number,
 .draw-properties-paint {
   gap: var(--space-2);

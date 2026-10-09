@@ -547,6 +547,96 @@ describe("le risorse negli appunti", () => {
   });
 });
 
+describe("gli stili negli appunti e nel duplica", () => {
+  const BOX = (id: string, name = "Riquadro", fill = "#e69f00"): string =>
+    `<polyline id="${id}" fub:role="style" fub:name="${name}" points="0,0 100,0 100,100" fill="${fill}" stroke="#000000" stroke-width="2"/>`;
+  const TITLE = (id: string, name = "Titolo"): string => `<text id="${id}" fub:role="style" fub:name="${name}" fill="#1a1a1a" font-size="48" font-weight="600"/>`;
+  const RECT = (id: string, style: string, extra = ""): string =>
+    `<rect id="${id}" fub:style="${style}" x="0" y="0" width="5" height="5" fill="#e69f00" stroke="#000000" stroke-width="2"${extra}/>`;
+  /// Il rettangolo `oaaaaaaaa` che segue «Riquadro», e lo stile «Titolo»
+  /// che nessuno copiato segue.
+  const SOURCE_STYLED = doc(`<defs id="fub-defs">${BOX("rbox00000")}${TITLE("rtitle000")}</defs>${LAYER}${RECT("oaaaaaaaa", "rbox00000")}</g>`);
+  /// Gli stili del disegno, come sono scritti.
+  const styles = (opened: Opened): string[] => elementChildren(node(opened, "fub-defs") as ContainerNode).map(rawOf);
+  const follows = (opened: Opened, key: string): string | null => /fub:style="([^"]*)"/.exec(rawOf(node(opened, key)))?.[1] ?? null;
+
+  it("la copia porta gli stili che gli oggetti seguono, e soltanto loro", () => {
+    const svg = copy(open(SOURCE_STYLED), ["oaaaaaaaa"]);
+    expect(svg).toContain(`<defs>\n    ${BOX("rbox00000")}\n  </defs>`);
+    expect(svg).not.toContain("rtitle000");
+    expect(svg).toContain(RECT("oaaaaaaaa", "rbox00000"));
+  });
+
+  it("nello stesso disegno chi entra segue lo stesso stile, e nessuno stile si duplica", () => {
+    const opened = open(SOURCE_STYLED);
+    const out = paste(opened, copy(opened, ["oaaaaaaaa"]));
+    expect(follows(opened, out.keys[0]!)).toBe("rbox00000");
+    expect(styles(opened)).toEqual([BOX("rbox00000"), TITLE("rtitle000")]);
+  });
+
+  it("in un altro disegno vale lo stile con lo stesso nome, tipo e aspetto; se no arriva, con un nome libero nel suo tipo", () => {
+    const svg = copy(open(SOURCE_STYLED), ["oaaaaaaaa"]);
+    // Senza stili, lo stile arriva col suo nome e un id nuovo.
+    const bare = open(doc(`<defs id="fub-defs"/>${LAYER}</g>`));
+    const first = paste(bare, svg).keys[0]!;
+    expect(styles(bare).map(anonymous)).toEqual([BOX("ID")]);
+    expect(follows(bare, first)).toBe(elementChildren(node(bare, "fub-defs") as ContainerNode)[0]!.facts.id);
+    // Incollato di nuovo, è lo stesso.
+    paste(bare, svg);
+    expect(styles(bare)).toHaveLength(1);
+    // Lo stesso nome, senza maiuscole, e lo stesso aspetto: quello del disegno.
+    const same = open(doc(`<defs id="fub-defs">${BOX("rmine0000", "RIQUADRO")}</defs>${LAYER}</g>`));
+    expect(follows(same, paste(same, svg).keys[0]!)).toBe("rmine0000");
+    expect(styles(same)).toEqual([BOX("rmine0000", "RIQUADRO")]);
+    // Lo stesso nome con un altro aspetto: arriva col primo nome libero;
+    // uno stile di testo col suo nome non lo prende.
+    const other = open(doc(`<defs id="fub-defs">${BOX("rmine0000", "Riquadro", "#56b4e9")}${TITLE("rtext0000", "Riquadro 2")}</defs>${LAYER}</g>`));
+    const arrived = paste(other, svg).keys[0]!;
+    expect(styles(other).map(anonymous)).toEqual([BOX("ID", "Riquadro", "#56b4e9"), TITLE("ID", "Riquadro 2"), BOX("ID", "Riquadro 2")]);
+    expect(follows(other, arrived)).toBe(elementChildren(node(other, "fub-defs") as ContainerNode)[2]!.facts.id);
+  });
+
+  it("uno stile con una sfumatura privata la porta in copia, ma quello uguale del disegno non porta niente", () => {
+    const gradient = (id: string): string =>
+      `<linearGradient id="${id}" fub:role="private" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/></linearGradient>`;
+    const source = open(doc(`<defs id="fub-defs">${gradient("rgrad0000")}${BOX("rbox00000", "Alba", "url(#rgrad0000)")}</defs>${LAYER}${RECT("oaaaaaaaa", "rbox00000", ' fill-opacity="0.5"')}</g>`));
+    const svg = copy(source, ["oaaaaaaaa"]);
+    expect(svg).toContain(gradient("rgrad0000"));
+    const bare = open(doc(`<defs id="fub-defs"/>${LAYER}</g>`));
+    paste(bare, svg);
+    const [copied, style] = elementChildren(node(bare, "fub-defs") as ContainerNode);
+    expect(rawOf(copied!)).toBe(gradient(copied!.facts.id!));
+    expect(rawOf(style!)).toBe(BOX(style!.facts.id!, "Alba", `url(#${copied!.facts.id!})`));
+    // Lo stesso stile, con la sua sfumatura dal suo id: nessuna copia.
+    const same = open(doc(`<defs id="fub-defs">${gradient("rmygrad00")}${BOX("rmine0000", "Alba", "url(#rmygrad00)")}</defs>${LAYER}</g>`));
+    const key = paste(same, svg).keys[0]!;
+    expect(follows(same, key)).toBe("rmine0000");
+    expect(elementChildren(node(same, "fub-defs") as ContainerNode)).toHaveLength(2);
+  });
+
+  it("chi segue uno stile che non entra e che il disegno non ha lo lascia", () => {
+    const svg = [
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 20 10">',
+      `  ${RECT("oaaaaaaaa", "rbox00000")}`,
+      `  ${RECT("obbbbbbbb", "rmissing0")}`,
+      "</svg>",
+    ].join("\n");
+    const opened = open(SOURCE_STYLED);
+    const out = paste(opened, svg);
+    expect(follows(opened, out.keys[0]!)).toBe("rbox00000");
+    expect(follows(opened, out.keys[1]!)).toBeNull();
+    expect(readScene(opened.engine.text).diagnostics.map((each) => each.code)).not.toContain("S018");
+  });
+
+  it("duplicare un oggetto lo fa seguire lo stesso stile", () => {
+    const opened = open(SOURCE_STYLED);
+    const made = duplicateOps(opened.engine.model!, [opened.index.get("oaaaaaaaa")!], 10, 10, newIds(opened))!;
+    applied(opened, made.ops);
+    expect(follows(opened, made.keys[0]!)).toBe("rbox00000");
+    expect(styles(opened)).toEqual([BOX("rbox00000"), TITLE("rtitle000")]);
+  });
+});
+
 describe("readPaste", () => {
   it("dice perché un testo non si incolla", () => {
     expect(readPaste("<svg")).toBe("malformed");

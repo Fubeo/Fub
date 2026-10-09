@@ -5,7 +5,22 @@
 import { describe, expect, it } from "vitest";
 import { BLEND_MODES } from "../scene/values";
 import type { LengthUnit } from "../scene/rulers";
-import { BLEND_GROUPS, BLEND_LABELS, lookAction, lookChange, outlineChange, propertiesView, shapeChange, sheetChange, tipChange, typedOpacity, type BoardFacts, type FieldsInput, type SelectionFacts } from "./fields";
+import {
+  BLEND_GROUPS,
+  BLEND_LABELS,
+  lookAction,
+  lookChange,
+  outlineChange,
+  propertiesView,
+  shapeChange,
+  sheetChange,
+  tipChange,
+  typedOpacity,
+  type BoardFacts,
+  type FieldsInput,
+  type SelectionFacts,
+  type StyleFacts,
+} from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
 import type { Look } from "./look";
@@ -13,6 +28,7 @@ import { NAME_MAX } from "./naming";
 import type { ChoiceState, MenuChoiceState, NumberState, SegmentState, SwitchState, TogglesState } from "./properties";
 import { featuresFor, type Level } from "./registry";
 import type { ShapeFacts } from "./reshape";
+import type { DocumentStyle, StyleField, StyleRow } from "./styles";
 import { fieldMin, fromUnit } from "./rulers";
 import type { EndLook, TipsLook } from "./tips";
 
@@ -668,8 +684,10 @@ describe("il testo", () => {
   });
 
   it("lo stile è quello che ha il corpo e il peso del testo, su misura altrimenti, e niente se sono misti", () => {
+    // Senza gli stili del documento: con loro, gli stili di serie stanno
+    // nel menu dello stile di testo.
     const preset = (size: number | null, weight: number | null): ChoiceState =>
-      propertiesView(input({ selection: selection({ look: look({ size: { count: 1, value: size }, weight: { count: 1, value: weight } }) }) })).fields.preset as ChoiceState;
+      propertiesView(input({ level: "essential", selection: selection({ look: look({ size: { count: 1, value: size }, weight: { count: 1, value: weight } }) }) })).fields.preset as ChoiceState;
     expect(preset(64, 700)).toMatchObject({ label: "Stile", value: "title" });
     expect(preset(64, 700).options.map((option) => option.label)).toEqual(["Titolo", "Sottotitolo", "Titoletto", "Testo", "Didascalia"]);
     expect(preset(32, 400).value).toBe("body");
@@ -870,5 +888,108 @@ describe("dal valore al cambio", () => {
     expect(tipChange("tipStart", true)).toBeNull();
     expect(tipChange("dash", "triangle")).toBeNull();
     expect(tipChange("fill", "swap")).toBeNull();
+  });
+});
+
+describe("gli stili del documento", () => {
+  const menu = (state: unknown): MenuChoiceState => state as MenuChoiceState;
+  const RIQUADRO = { id: "rbox00000", name: "Riquadro", kind: "graphic", followers: 2 } as unknown as DocumentStyle;
+  const TITOLO = { id: "rtitle000", name: "titolo", kind: "text", followers: 0 } as unknown as DocumentStyle;
+  const SAMPLE = { text: "", css: { background: "rgb(230 159 0)" } };
+  const row = (parts: Partial<StyleRow> = {}): StyleRow => ({
+    kind: "graphic",
+    count: 1,
+    style: RIQUADRO,
+    mixed: false,
+    following: 1,
+    differs: new Set<StyleField>(),
+    differing: 0,
+    fixed: 0,
+    ...parts,
+  });
+  const facts = (parts: Partial<StyleFacts> = {}): StyleFacts => ({
+    row: row(),
+    styles: [{ id: RIQUADRO.id, name: RIQUADRO.name, followers: 2, sample: SAMPLE }],
+    updatable: true,
+    undeletable: null,
+    fresh: "Stile grafico 1",
+    ...parts,
+  });
+  /// Una selezione con un riempimento, un corpo e le righe «Stile» `styles`.
+  const styled = (styles: SelectionFacts["styles"]): SelectionFacts =>
+    selection({ look: look({ fill: { count: 1, value: "#e69f00" }, width: { count: 1, value: 2 }, size: { count: 1, value: 32 }, weight: { count: 1, value: 400 } }), styles });
+
+  it("ci sono dallo Standard, in testa all'aspetto e al testo, e prendono il posto dello stile di serie", () => {
+    const styles = { graphic: facts(), text: facts({ row: row({ kind: "text", style: null, following: 0 }), styles: [], fresh: "Stile di testo 1" }) };
+    const view = propertiesView(input({ selection: styled(styles) }));
+    expect(view.fields.lookStyle).toMatchObject({ kind: "menu", label: "Stile grafico", value: "style:rbox00000", summary: "Riquadro" });
+    expect(view.fields.textStyle).toMatchObject({ kind: "menu", label: "Stile di testo", value: null, summary: "Nessuno" });
+    expect("preset" in view.fields).toBe(false);
+    const essential = propertiesView(input({ level: "essential", selection: styled(styles) }));
+    expect(["lookStyle", "textStyle"].some((id) => id in essential.fields)).toBe(false);
+    expect("preset" in essential.fields).toBe(true);
+    // Una selezione che non ne può seguire uno non ha la riga.
+    expect("lookStyle" in propertiesView(input({ selection: styled({ graphic: null, text: null }) })).fields).toBe(false);
+  });
+
+  it("dice lo stile, modificato, misto o nessuno", () => {
+    const summary = (styles: StyleFacts): string | undefined => menu(propertiesView(input({ selection: styled({ graphic: styles, text: null }) })).fields.lookStyle).summary;
+    expect(summary(facts())).toBe("Riquadro");
+    expect(summary(facts({ row: row({ differing: 1, differs: new Set<StyleField>(["width"]) }) }))).toBe("Riquadro, modificato");
+    expect(summary(facts({ row: row({ style: null, mixed: true, following: 1 }) }))).toBe("Misto");
+    expect(summary(facts({ row: row({ style: null, following: 0 }) }))).toBe("Nessuno");
+  });
+
+  it("nel menu gli stili con l'anteprima e chi li segue, poi i comandi, spenti col perché", () => {
+    const state = menu(propertiesView(input({ selection: styled({ graphic: facts({ updatable: false, undeletable: "locked" }), text: null }) })).fields.lookStyle);
+    expect(state.options.map((option) => [option.value, option.disabled === true])).toEqual([
+      ["style:rbox00000", false],
+      ["new", false],
+      ["update", true],
+      ["revert", true],
+      ["unlink", false],
+      ["rename", false],
+      ["delete", true],
+    ]);
+    expect(state.options[0]).toMatchObject({ label: "Riquadro", checked: true, sample: SAMPLE, note: "Lo seguono 2 oggetti" });
+    expect(state.options[1]).toMatchObject({ separator: true, ask: { title: "Nuovo stile grafico", value: "Stile grafico 1", submit: "Crea" } });
+    expect(state.options[2]!.note).toBe("Lo stile è già come la selezione.");
+    expect(state.options[3]!.note).toBe("La selezione è già come lo stile.");
+    expect(state.options[5]).toMatchObject({ ask: { title: "Rinomina «Riquadro»", value: "Riquadro", submit: "Rinomina" } });
+    expect(state.options[6]).toMatchObject({ danger: true, note: "Un oggetto che lo segue sta in un livello o in un gruppo bloccato." });
+    // Senza uno stile seguito da tutti, i comandi sullo stile dicono perché.
+    const mixed = menu(propertiesView(input({ selection: styled({ graphic: facts({ row: row({ style: null, mixed: true }) }), text: null }) })).fields.lookStyle);
+    expect(mixed.options.filter((option) => option.disabled === true).map((option) => [option.value, option.note])).toEqual([
+      ["update", "La selezione segue stili diversi."],
+      ["revert", "La selezione segue stili diversi."],
+      ["rename", "La selezione segue stili diversi."],
+      ["delete", "La selezione segue stili diversi."],
+    ]);
+    const none = menu(propertiesView(input({ selection: styled({ graphic: facts({ row: row({ style: null, following: 0 }), styles: [] }), text: null }) })).fields.lookStyle);
+    expect(none.options[0]).toMatchObject({ value: "new", separator: false });
+    expect(none.options.find((option) => option.value === "unlink")!.note).toBe("La selezione non segue uno stile.");
+  });
+
+  it("per il testo offre gli stili di serie che il documento non ha ancora", () => {
+    const text = facts({ row: row({ kind: "text", style: TITOLO }), styles: [{ id: TITOLO.id, name: TITOLO.name, followers: 0, sample: { text: "Aa", css: {} } }], fresh: "Stile di testo 1" });
+    const state = menu(propertiesView(input({ selection: styled({ graphic: null, text }) })).fields.textStyle);
+    // «titolo» c'è già, a meno delle maiuscole.
+    expect(state.options.slice(0, 5).map((option) => option.value)).toEqual(["style:rtitle000", "preset:subtitle", "preset:heading", "preset:body", "preset:caption"]);
+    expect(state.options[0]!.note).toBe("Nessun oggetto lo segue");
+    expect(state.options[1]).toMatchObject({ label: "Sottotitolo", action: true, sample: { text: "Aa", css: { "font-weight": "600" } } });
+    expect(state.options[5]).toMatchObject({ value: "new", ask: { title: "Nuovo stile di testo" } });
+  });
+
+  it("segna i campi diversi dallo stile, e la riga li nomina", () => {
+    const graphic = facts({ row: row({ differing: 1, differs: new Set<StyleField>(["width", "fill", "effects"]) }) });
+    const view = propertiesView(input({ selection: styled({ graphic, text: null }) }));
+    expect(view.fields.strokeWidth!.differs).toBe("Diverso dallo stile «Riquadro»");
+    expect(view.fields.fill!.differs).toBe("Diverso dallo stile «Riquadro»");
+    expect(view.fields.size!.differs).toBeUndefined();
+    expect(view.fields.lookStyle!.note).toBe("Diverso dallo stile: riempimento, spessore e effetti.");
+    // Senza uno stile seguito da tutti non c'è niente da segnare.
+    const mixed = propertiesView(input({ selection: styled({ graphic: facts({ row: row({ style: null, mixed: true, differs: new Set<StyleField>(["width"]) }) }), text: null }) }));
+    expect(mixed.fields.strokeWidth!.differs).toBeUndefined();
+    expect(mixed.fields.lookStyle!.note).toBeUndefined();
   });
 });

@@ -49,6 +49,9 @@ pub enum Code {
     /// aree, si distinguono soltanto per la tinta: il contrasto fra loro è
     /// sotto 3:1.
     S017,
+    /// Un oggetto segue con `fub:style` uno stile che non c'è, o uno
+    /// dell'altro tipo: si disegna dai suoi attributi.
+    S018,
 }
 
 /// La gravità di una diagnostica.
@@ -65,9 +68,13 @@ impl Code {
     pub fn severity(self) -> Severity {
         match self {
             Code::S003 | Code::S004 => Severity::Error,
-            Code::S001 | Code::S005 | Code::S006 | Code::S012 | Code::S014 | Code::S016 => {
-                Severity::Warning
-            }
+            Code::S001
+            | Code::S005
+            | Code::S006
+            | Code::S012
+            | Code::S014
+            | Code::S016
+            | Code::S018 => Severity::Warning,
             Code::S002
             | Code::S007
             | Code::S008
@@ -106,6 +113,7 @@ impl Code {
             Code::S017 => {
                 "due colori usati come codice si distinguono soltanto per la tinta: il contrasto fra loro è sotto 3:1"
             }
+            Code::S018 => "segue uno stile che non c'è: si disegna dai suoi attributi",
         }
     }
 }
@@ -121,7 +129,8 @@ pub struct Diagnostic {
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub span: Option<Span>,
     /// Il dettaglio: l'id ripetuto, l'errore dell'inchiostro, il contrasto
-    /// misurato, la grandezza del testo, i due colori confusi.
+    /// misurato, la grandezza del testo, i due colori confusi, lo stile che un
+    /// oggetto segue.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }

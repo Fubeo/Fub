@@ -41,11 +41,11 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import { identifier } from "../../../ui/a11y";
 import { icon, iconEl, registerIcon } from "../../../ui/icons";
 import type { Lifetime } from "../../../ui/lifetime";
-import { closeContextMenu, showContextMenu, type MenuItem } from "../../../ui/menu";
+import { closeContextMenu, showContextMenu, type MenuItem, type MenuSample } from "../../../ui/menu";
 import { contrast, MIN_CONTRAST, MIN_TEXT_CONTRAST, over } from "../scene/analysis";
 import { paint } from "../scene/values";
 import { t, type DrawKey } from "../strings";
-import { cleanName } from "./naming";
+import { cleanName, NAME_MAX } from "./naming";
 import { customColor, PALETTE, swatchOf } from "./palette";
 import { evaluate, type QuantityProblem } from "./quantity";
 import type { PaintSample } from "./resources";
@@ -101,8 +101,9 @@ export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 
 export type PaintId = "fill" | "stroke";
 export type ChoiceId = "dash" | "cap" | "join" | "blend" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
-/// I campi a menu: le punte delle linee, all'inizio e alla fine.
-export type MenuId = "tipStart" | "tipEnd";
+/// I campi a menu: gli stili del disegno, grafico e di testo, e le punte
+/// delle linee, all'inizio e alla fine.
+export type MenuId = "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar" | "isolate";
 export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
 
@@ -127,6 +128,9 @@ interface FieldBase {
   readonly note?: string;
   /// C'è, ma adesso non si cambia.
   readonly disabled?: boolean;
+  /// Il valore è diverso da quello dello stile che la selezione segue: un
+  /// punto accanto al nome, e questa frase per chi ascolta.
+  readonly differs?: string;
 }
 
 /// Un numero, nell'unità del campo.
@@ -210,6 +214,27 @@ export interface MenuOption {
   /// Un comando e non una scelta fra le altre: non ha uno stato da segnare,
   /// e si dà ogni volta che lo si sceglie.
   readonly action?: boolean;
+  /// Una riga sotto il nome: che cosa fa la voce, o perché adesso non si
+  /// sceglie.
+  readonly note?: string;
+  /// L'anteprima al posto dell'icona, come quella di uno stile.
+  readonly sample?: MenuSample;
+  /// Un comando distruttivo, come eliminare uno stile.
+  readonly danger?: boolean;
+  /// Un comando che chiede un nome prima di partire.
+  readonly ask?: MenuAsk;
+}
+
+/// Un nome da chiedere per una voce di un campo a menu, in un modulo sotto
+/// il campo: ciò che si scrive parte come `valore:nome`, e il campo dice
+/// perché non va, se non va.
+export interface MenuAsk {
+  /// Il titolo del modulo, come «Nuovo stile grafico».
+  readonly title: string;
+  /// Il nome proposto, già scritto e scelto.
+  readonly value: string;
+  /// Il pulsante che conferma, come «Crea».
+  readonly submit: string;
 }
 
 /// Una scelta da un menu: un pulsante che dice quella di adesso e apre le
@@ -393,6 +418,7 @@ const SPECS: readonly Spec[] = [
   { id: "count", kind: "number", section: "shape", column: "1" },
   { id: "inner", kind: "number", section: "shape", column: "2" },
   { id: "corner", kind: "number", section: "shape", column: "1" },
+  { id: "lookStyle", kind: "menu", section: "look", column: "all" },
   { id: "fill", kind: "paint", section: "look", column: "all" },
   { id: "stroke", kind: "paint", section: "look", column: "all" },
   { id: "strokeWidth", kind: "number", section: "look", column: "1" },
@@ -404,6 +430,7 @@ const SPECS: readonly Spec[] = [
   { id: "join", kind: "choice", section: "look", column: "2" },
   { id: "tipStart", kind: "menu", section: "look", column: "all" },
   { id: "tipEnd", kind: "menu", section: "look", column: "all" },
+  { id: "textStyle", kind: "menu", section: "text", column: "all" },
   { id: "preset", kind: "choice", section: "text", column: "all" },
   { id: "family", kind: "choice", section: "text", column: "all" },
   { id: "size", kind: "number", section: "text", column: "1" },
@@ -581,6 +608,11 @@ interface Line {
   readonly name: HTMLElement;
   readonly note: HTMLElement;
   readonly error: HTMLElement;
+  /// La frase che dice, a chi ascolta, che il valore è diverso dallo stile.
+  readonly differs: HTMLElement;
+  /// Il modulo di una voce che chiede un nome, quando c'è stato bisogno di
+  /// farlo.
+  ask: AskForm | null;
   /// Il controllo che prende il fuoco e che il nome nomina.
   readonly control: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | HTMLButtonElement | HTMLElement;
   /// La sigla dell'unità accanto al numero, e quella che si sente col nome.
@@ -604,6 +636,19 @@ interface Line {
   /// Le voci della scelta disegnate, per non rifarle a ogni aggiornamento; di
   /// un campo a menu, l'icona del pulsante.
   options: string;
+}
+
+/// Il modulo sotto un campo a menu che chiede un nome: per quale voce, se è
+/// aperto.
+interface AskForm {
+  readonly root: HTMLElement;
+  readonly title: HTMLElement;
+  readonly input: HTMLInputElement;
+  readonly label: HTMLLabelElement;
+  readonly error: HTMLElement;
+  readonly submit: HTMLButtonElement;
+  readonly cancel: HTMLButtonElement;
+  option: string | null;
 }
 
 interface Section {
@@ -928,12 +973,16 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   const lines = new Map<FieldId, Line>();
 
   /// Il nome e la nota di un campo, e l'errore.
-  const parts = (spec: Spec): { root: HTMLElement; note: HTMLElement; error: HTMLElement } => {
+  const parts = (spec: Spec): { root: HTMLElement; note: HTMLElement; error: HTMLElement; differs: HTMLElement } => {
     const root = document.createElement("div");
     root.className = "draw-properties-field";
     root.dataset.field = spec.id;
     root.dataset.column = spec.column;
     root.hidden = true;
+    const differs = document.createElement("span");
+    differs.className = "sr-only";
+    differs.id = identifier("draw-properties-differs");
+    differs.hidden = true;
     const note = document.createElement("p");
     note.className = "draw-properties-note";
     note.id = identifier("draw-properties-note");
@@ -942,7 +991,8 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     error.className = "draw-properties-error";
     error.id = identifier("draw-properties-error");
     error.hidden = true;
-    return { root, note, error };
+    root.append(differs);
+    return { root, note, error, differs };
   };
 
   const textInput = (): HTMLInputElement => {
@@ -965,7 +1015,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
   };
 
   const createLine = (spec: Spec): Line => {
-    const { root, note, error } = parts(spec);
+    const { root, note, error, differs } = parts(spec);
     let name: HTMLElement;
     let control: Line["control"];
     let unit: HTMLElement | null = null;
@@ -1119,7 +1169,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
         break;
       }
     }
-    return { spec, root, name, note, error, control, unit, spoken, chip, chipFrame, chipColor, picker, contrast, segments, picture, caption, state: null, shown: "", options: "" };
+    return { spec, root, name, note, error, differs, ask: null, control, unit, spoken, chip, chipFrame, chipColor, picker, contrast, segments, picture, caption, state: null, shown: "", options: "" };
   };
 
   // Un campo entra nella sua sezione la prima volta che ha di che mostrarsi:
@@ -1169,7 +1219,7 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
 
   /// Chi descrive il campo: la nota, il contrasto e l'errore che si vedono.
   const describe = (line: Line): void => {
-    const ids = [line.note, line.contrast, line.error].filter((part): part is HTMLElement => part !== null && !part.hidden).map((part) => part.id);
+    const ids = [line.differs, line.note, line.contrast, line.error].filter((part): part is HTMLElement => part !== null && !part.hidden).map((part) => part.id);
     if (ids.length === 0) line.control.removeAttribute("aria-describedby");
     else line.control.setAttribute("aria-describedby", ids.join(" "));
   };
@@ -1330,18 +1380,35 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     select.disabled = !view.editable || state.disabled === true;
   };
 
+  /// L'anteprima di una voce sul pulsante del campo, come nel menu.
+  const sampleEl = (sample: MenuSample): HTMLElement => {
+    const out = document.createElement("span");
+    out.className = sample.text === "" ? "menu-sample menu-sample-box" : "menu-sample";
+    out.textContent = sample.text;
+    for (const [name, value] of Object.entries(sample.css)) out.style.setProperty(name, value);
+    return out;
+  };
+
   const paintMenu = (line: Line, state: MenuChoiceState): void => {
     const button = line.control as HTMLButtonElement;
     line.name.textContent = state.label;
     const current = state.value === null ? undefined : state.options.find((option) => option.value === state.value);
     const summary = state.summary ?? current?.label ?? t("draw.properties.mixed");
     line.caption!.textContent = summary;
-    // La figura è quella della voce di adesso; una scelta mista non ne ha.
-    const drawn = current?.icon ?? "";
+    // La figura è quella della voce di adesso, l'icona o l'anteprima; una
+    // scelta mista non ne ha.
+    const drawn = current?.sample !== undefined ? JSON.stringify(current.sample) : (current?.icon ?? "");
     if (drawn !== line.options) {
-      const glyph = drawn === "" ? null : iconEl(drawn);
+      const glyph = current?.sample !== undefined ? sampleEl(current.sample) : drawn === "" ? null : iconEl(drawn);
       line.picture!.replaceChildren(...(glyph === null ? [] : [glyph]));
       line.options = drawn;
+    }
+    // Il modulo di una voce che non c'è più, o che non si sceglie più, si
+    // chiude.
+    const asked = line.ask?.option ?? null;
+    if (asked !== null) {
+      const option = state.options.find((each) => each.value === asked);
+      if (option?.ask === undefined || option.disabled === true || !view.editable || state.disabled === true) closeAsk(line, false);
     }
     const spoken = t("draw.properties.menu_name", { label: state.label, value: summary });
     button.setAttribute("aria-label", spoken);
@@ -1471,6 +1538,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const note = state.note ?? "";
     line.note.hidden = note === "";
     line.note.textContent = note;
+    const differs = state.differs ?? "";
+    line.differs.hidden = differs === "";
+    line.differs.textContent = differs;
+    line.root.toggleAttribute("data-differs", differs !== "");
     describe(line);
   };
 
@@ -1655,6 +1726,9 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     const items: MenuItem[] = state.options.map((option) => ({
       label: option.label,
       ...(option.icon === undefined ? {} : { icon: option.icon }),
+      ...(option.sample === undefined ? {} : { sample: option.sample }),
+      ...(option.note === undefined ? {} : { description: option.note }),
+      ...(option.danger === true ? { danger: true } : {}),
       ...(option.action === true ? {} : { choice: "radio" as const, checked: option.checked === true }),
       ...(option.checked === true ? { selected: true } : {}),
       ...(option.disabled === true ? { disabled: true } : {}),
@@ -1677,9 +1751,119 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     if (state === null || state.kind !== "menu" || !view.editable || state.disabled === true) return;
     const now = state.options.find((each) => each.value === option.value);
     if (now === undefined || now.disabled === true || (now.action !== true && now.checked === true)) return;
+    if (now.ask !== undefined) return openAsk(line, now.value, now.ask);
     const failure = options.onChange(line.spec.id, now.value);
     if (failure !== null) fail(line, failure, true);
     else showError(line, null);
+  }
+
+  /// Il modulo di `line` che chiede un nome, fatto la prima volta che
+  /// serve: il titolo, il nome, che cosa non va, e i due pulsanti.
+  const askFormOf = (line: Line): AskForm => {
+    if (line.ask !== null) return line.ask;
+    const root = document.createElement("div");
+    root.className = "draw-swatches-form draw-properties-ask";
+    root.setAttribute("role", "group");
+    root.hidden = true;
+    const title = document.createElement("p");
+    title.className = "draw-swatches-form-title";
+    title.id = identifier("draw-properties-ask");
+    root.setAttribute("aria-labelledby", title.id);
+    const input = textInput();
+    input.maxLength = NAME_MAX;
+    input.spellcheck = true;
+    input.setAttribute("autocapitalize", "sentences");
+    const label = labelFor(input);
+    const row = document.createElement("div");
+    row.className = "draw-swatches-form-row";
+    row.append(label, input);
+    const error = document.createElement("p");
+    error.className = "draw-properties-error";
+    error.id = identifier("draw-properties-error");
+    error.hidden = true;
+    const actions = document.createElement("div");
+    actions.className = "draw-swatches-form-actions";
+    const submit = document.createElement("button");
+    submit.type = "button";
+    submit.className = "draw-button draw-properties-apply";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "draw-button draw-properties-apply";
+    actions.append(submit, cancel);
+    root.append(title, row, error, actions);
+    // Sotto il pulsante del campo, prima della sua nota.
+    line.root.insertBefore(root, line.note);
+    const form: AskForm = { root, title, input, label, error, submit, cancel, option: null };
+    line.ask = form;
+    life.listen(root, "keydown", (event) => {
+      const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+      if (event.key === "Escape" && plain) closeAsk(line, true);
+      else if (event.key === "Enter" && plain && event.target === input) submitAsk(line);
+      else return;
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    life.listen(submit, "click", () => submitAsk(line));
+    life.listen(cancel, "click", () => closeAsk(line, true));
+    life.listen(input, "input", () => showAskError(form, null));
+    return form;
+  };
+
+  /// Dice nel modulo che cosa non va nel nome.
+  const showAskError = (form: AskForm, text: string | null): void => {
+    form.error.hidden = text === null;
+    form.error.textContent = text ?? "";
+    if (text === null) {
+      form.input.removeAttribute("aria-invalid");
+      form.input.removeAttribute("aria-describedby");
+    } else {
+      form.input.setAttribute("aria-invalid", "true");
+      form.input.setAttribute("aria-describedby", form.error.id);
+    }
+  };
+
+  /// Apre sotto `line` il modulo della voce `value`, col nome proposto
+  /// scritto e scelto.
+  function openAsk(line: Line, value: string, ask: MenuAsk): void {
+    const form = askFormOf(line);
+    form.option = value;
+    form.title.textContent = ask.title;
+    form.label.textContent = t("draw.properties.ask_name");
+    form.submit.textContent = ask.submit;
+    form.cancel.textContent = t("draw.properties.ask_cancel");
+    form.input.value = ask.value;
+    showAskError(form, null);
+    showError(line, null);
+    form.root.hidden = false;
+    form.input.focus({ preventScroll: true });
+    form.input.select();
+    form.root.scrollIntoView?.({ block: "nearest" });
+  }
+
+  /// Chiude il modulo di `line`; il fuoco torna al pulsante del campo se
+  /// `back`, o se era nel modulo.
+  function closeAsk(line: Line, back: boolean): void {
+    const form = line.ask;
+    if (form === null || form.option === null) return;
+    const inside = form.root.contains(document.activeElement);
+    form.option = null;
+    form.root.hidden = true;
+    showAskError(form, null);
+    if ((back || inside) && !line.root.hidden) line.control.focus({ preventScroll: true });
+  }
+
+  /// Manda il nome scritto nel modulo di `line` con la sua voce. Se il
+  /// disegno non lo accetta, il modulo resta aperto e dice perché.
+  function submitAsk(line: Line): void {
+    const form = line.ask;
+    const state = line.state;
+    if (form === null || form.option === null || state === null || state.kind !== "menu") return;
+    const value = form.option;
+    const failure = options.onChange(line.spec.id, `${value}:${cleanName(form.input.value)}`);
+    if (failure === null) return closeAsk(line, true);
+    showAskError(form, failure);
+    options.announce(failure);
+    form.input.focus({ preventScroll: true });
   }
 
   /// Un interruttore della fila: si accende se era spento o misto, e si
@@ -1943,8 +2127,10 @@ export function createProperties(life: Lifetime, options: PropertiesOptions): Pr
     }
     for (const sync of roves) sync();
     // Il fuoco in un campo che se n'è andato resta nel pannello: alla sua
-    // sezione, se c'è ancora.
-    if (lost !== null && (lost as HTMLElement).closest("[hidden]") !== null) {
+    // sezione, se c'è ancora. Dal modulo di un campo a menu, che chiudendosi
+    // lo ha già dato al pulsante del campo, resta lì.
+    const asked = lost !== null && document.activeElement !== lost && (lost as HTMLElement).closest(".draw-properties-ask") !== null;
+    if (lost !== null && !asked && (lost as HTMLElement).closest("[hidden]") !== null) {
       const section = [...sections.values()].find((each) => each.root.contains(lost));
       if (section !== undefined && !section.root.hidden) section.toggle.focus({ preventScroll: true });
       else element.focus({ preventScroll: true });

@@ -23,7 +23,7 @@ import { pf1 } from "../ink/pf1";
 import { InkError } from "../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer, len } from "./analysis";
-import { classifyChild, describe, isResourceTag, NO_RESOURCES, resourceKind, type Details, type Item, type Place, type Resolve } from "./classify";
+import { classifyChild, describe, isResourceTag, NO_RESOURCES, resourceKind, styleKindOf, type Details, type Item, type Place, type Resolve } from "./classify";
 import { sceneOperation } from "./diff";
 import { DEFS_ID, isNewId, pageId, type IdKind } from "./ids";
 import { positive } from "./annotations";
@@ -416,17 +416,18 @@ const ID_NAMES: Readonly<Record<IdKind, string>> = {
 };
 
 /// Vero se un elemento di tag `tag` è una risorsa: un `path` lo è come figlio
-/// di una `defs` (`inDefs`), il tracciato di un testo.
-function isResource(tag: string, inDefs: boolean): boolean {
-  return isResourceTag(tag) || (inDefs && tag === "path");
+/// di una `defs` (`inDefs`), il tracciato di un testo, e un `text` o una
+/// `polyline` con `fub:role` uguale a `role` `style`, uno stile.
+function isResource(tag: string, inDefs: boolean, role: string | undefined): boolean {
+  return isResourceTag(tag) || (inDefs && (tag === "path" || (role === "style" && styleKindOf(tag) !== null)));
 }
 
 /// Controlla l'id di un elemento nuovo (§4): ogni elemento ne ha uno nella
 /// forma degli id nuovi, tranne `title`, `desc`, `tspan` e `textPath`. Una
 /// risorsa l'ha nella forma delle risorse e una `defs` è quella di FubDraw;
 /// ciò che sta dentro una risorsa può non averlo, e se l'ha è nella forma
-/// delle risorse. `inDefs` dice se l'elemento è figlio di una `defs`;
-/// `sheet` se è una tavola o la carta di una tavola (formato della scena,
+/// delle risorse. `inDefs` dice se l'elemento è figlio di una `defs`, `role`
+/// il suo `fub:role`; `sheet` se è una tavola o la carta di una tavola (formato della scena,
 /// tavole); `page` il numero del gruppo di una pagina annotata, che ha l'id
 /// dal suo numero (`annotation-format.md`, §3).
 function checkNewId(
@@ -435,6 +436,7 @@ function checkNewId(
   layer: boolean,
   inResource: boolean,
   inDefs: boolean,
+  role: string | undefined,
   sheet: "board" | "paper" | null = null,
   page: number | null = null,
 ): void {
@@ -450,7 +452,7 @@ function checkNewId(
     if (id !== DEFS_ID) reject("invalid-elem", `una defs nuova ha l'id ${DEFS_ID}: ${JSON.stringify(id)}`);
     return;
   }
-  const kind: IdKind = inResource || isResource(tag, inDefs) ? "resource" : layer ? "layer" : (sheet ?? "object");
+  const kind: IdKind = inResource || isResource(tag, inDefs, role) ? "resource" : layer ? "layer" : (sheet ?? "object");
   if (!isNewId(id, kind)) reject("invalid-elem", `id non valido per ${ID_NAMES[kind]}: ${JSON.stringify(id)}`);
 }
 
@@ -1262,19 +1264,26 @@ export class SceneEngine {
   // -------------------------------------------------------------------------
 
   /// Gli id delle risorse modificabili che `node` è o contiene: una risorsa,
-  /// o i figli di una `defs`.
-  private resourcesIn(node: ElementPart): string[] {
+  /// o i figli di una `defs`; con `styles`, soltanto degli stili.
+  private resourcesIn(node: ElementPart, styles = false): string[] {
     const nodes = node.kind === "container" && roleOf(node) === "defs" ? elementChildren(node) : [node];
     const out: string[] = [];
-    for (const child of nodes) if (roleOf(child) === "resource" && child.facts.id !== null) out.push(child.facts.id);
+    for (const child of nodes) {
+      if (roleOf(child) !== "resource" || child.facts.id === null) continue;
+      if (!styles || child.details?.lifecycle === "style") out.push(child.facts.id);
+    }
     return out;
   }
 
   /// Il primo id di una risorsa modificabile che `node` è o contiene a cui
-  /// rimanda qualcosa fuori da `node`; `null` se nessuno.
+  /// rimanda qualcosa fuori da `node`, o di uno stile che qualcuno segue;
+  /// `null` se nessuno. Chi segue uno stile non sta mai in una `defs`, e
+  /// `fub:style` verso una risorsa che non è uno stile non la trattiene.
   private usedOutside(node: ElementPart): string | null {
     const ids = this.resourcesIn(node);
     if (ids.length === 0) return null;
+    const followed = this.resourcesIn(node, true).find((id) => this.t.followers(id) > 0);
+    if (followed !== undefined) return followed;
     // I rimandi da dentro `node`, contati come li conta l'albero.
     const inside = new Map<string, number>();
     const count = (part: ElementPart): void => {
@@ -1287,11 +1296,13 @@ export class SceneEngine {
   }
 
   /// I controlli sulle risorse che entrano con `nodes` (§2): nessuna ha un
-  /// id a cui il documento rimanda già, perché chi rimanda cambierebbe
-  /// natura, e se `limit` il documento non ne riceve oltre il limite.
+  /// id a cui il documento rimanda già, e nessuno stile un id che qualcuno
+  /// segue, perché chi rimanda o segue cambierebbe natura, e se `limit` il
+  /// documento non ne riceve oltre il limite.
   private checkResources(nodes: readonly ElementPart[], limit: boolean): void {
     const ids = nodes.flatMap((node) => this.resourcesIn(node));
-    const used = ids.find((id) => this.t.referrers(id) > 0);
+    const styles = nodes.flatMap((node) => this.resourcesIn(node, true));
+    const used = ids.find((id) => this.t.referrers(id) > 0) ?? styles.find((id) => this.t.followers(id) > 0);
     if (used !== undefined) reject("duplicate-id", `il documento rimanda già a ${used}`);
     if (limit && ids.length > 0 && this.t.resources + ids.length > MAX_RESOURCES) {
       reject("limit", `il documento supererebbe ${MAX_RESOURCES} risorse`);
@@ -1302,7 +1313,7 @@ export class SceneEngine {
   /// `private` e `shared` a cui l'operazione ha tolto l'ultimo riferimento se
   /// ne vanno, poi quelle rimaste sole per questo, e infine la `defs` di
   /// FubDraw rimasta vuota. Un campione resta, come una risorsa senza ciclo
-  /// di vita. Restituisce i `remove` fatti, in ordine, e le loro inverse.
+  /// di vita, e così uno stile. Restituisce i `remove` fatti, in ordine, e le loro inverse.
   private collect(): { removes: Op[]; restores: Op[] } {
     const removes: Op[] = [];
     const restores: Op[] = [];
@@ -1315,7 +1326,7 @@ export class SceneEngine {
       for (const id of lost) {
         const node = this.t.element(id);
         // Una risorsa senza ciclo di vita resta anche sola, e così un
-        // campione.
+        // campione e uno stile.
         const lifecycle = node?.details?.lifecycle;
         if (node !== null && (lifecycle === "private" || lifecycle === "shared")) drop(node);
       }
@@ -1663,7 +1674,7 @@ export class SceneEngine {
       // Il gruppo di una pagina annotata ha l'id dal numero.
       const page = tag === "g" && top && underRoot ? positive(get(FUB_NS, "page")) : null;
       const id = get("", "id");
-      checkNewId(tag, id, layer, inResource, inDefs, sheet, page);
+      checkNewId(tag, id, layer, inResource, inDefs, get(FUB_NS, "role"), sheet, page);
       if (id !== undefined) {
         if (ids.has(id) || (!top && this.t.has(id))) reject("duplicate-id", `id già usato: ${id}`);
         ids.add(id);
@@ -1677,7 +1688,7 @@ export class SceneEngine {
       const out: { -readonly [K in keyof Elem]: Elem[K] } = { tag, attrs };
       if (value.children !== undefined) {
         if (!Array.isArray(value.children)) reject("invalid-elem", `figli non validi su ${tag}`);
-        const inside = inResource || isResource(tag, inDefs);
+        const inside = inResource || isResource(tag, inDefs, get(FUB_NS, "role"));
         const defs = tag === "defs" && top && underRoot;
         out.children = value.children.map((child) => visit(child, false, inside, defs));
       }
@@ -1850,7 +1861,7 @@ export class SceneEngine {
       if (layer && !(top && underRoot)) reject("invalid-elem", "un livello sta solo sotto la radice");
       // Il gruppo di una pagina annotata ha l'id dal numero.
       const page = tag === "g" && top && underRoot ? positive(valueOf(element, NS_FUB, "page")) : null;
-      checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource, inDefs, sheet, page);
+      checkNewId(tag, valueOf(element, NS_NONE, "id"), layer, inResource, inDefs, valueOf(element, NS_FUB, "role"), sheet, page);
       const tool = valueOf(element, NS_FUB, "tool");
       if (tag !== "path" || (tool !== "pen" && tool !== "highlighter")) return;
       const d = this.stroke(valueOf(element, NS_FUB, "ink"), valueOf(element, NS_FUB, "brush"));
@@ -2356,8 +2367,10 @@ export class SceneEngine {
     this.guard(node, true);
     this.sheet(node);
     const old = node.facts.id;
-    // Senza id una risorsa è estranea, e chi la usa con lei (§2).
-    if (id === null && roleOf(node) === "resource" && this.t.referrers(old!) > 0) reject("in-use", `qualcosa usa ${old}`);
+    // Senza id una risorsa è estranea, e chi la usa con lei (§2); uno stile
+    // lo è, e chi lo segue non lo segue più.
+    const followers = node.details?.lifecycle === "style" ? this.t.followers(old!) : 0;
+    if (id === null && roleOf(node) === "resource" && this.t.referrers(old!) + followers > 0) reject("in-use", `qualcosa usa ${old}`);
     if (id !== null) {
       // Ogni id che il formato ammette, non solo quelli che FubDraw genera:
       // un id si cambia togliendolo e dandone un altro, e l'undo rimette

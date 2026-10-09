@@ -76,6 +76,10 @@ let state: {
   transform: boolean;
   /// Le punte delle due estremità, se i campi a menu ci sono.
   tips: { start: TipLook; end: TipLook } | null;
+  /// La riga «Stile» dell'aspetto, se c'è.
+  styleMenu: MenuChoiceState | null;
+  /// Che il riempimento è diverso dallo stile, se lo è.
+  differs: string | null;
   only: FieldId[] | null;
 };
 
@@ -141,6 +145,7 @@ function view(): PropertiesView {
       value: state.fill,
       ...(state.sample === null ? {} : { sample: state.sample }),
       ...(state.contrast === null ? {} : { contrast: state.contrast }),
+      ...(state.differs === null ? {} : { differs: state.differs }),
     },
     dash: {
       kind: "choice",
@@ -176,6 +181,7 @@ function view(): PropertiesView {
     fields.tipStart = tipMenu("start", state.tips.start);
     fields.tipEnd = tipMenu("end", state.tips.end);
   }
+  if (state.styleMenu !== null) fields.lookStyle = state.styleMenu;
   if (state.name !== null) fields.boardName = { kind: "line", label: "Nome", value: state.name, max: 20 };
   if (state.transform) {
     const draft = (label: string, value: number, unit: string): NumberState => ({ kind: "number", label, value, unit, units: { [unit]: 1 }, relative: false, places: 2 });
@@ -346,6 +352,8 @@ beforeEach(() => {
     actions: {},
     transform: false,
     tips: null,
+    styleMenu: null,
+    differs: null,
     only: null,
   };
 });
@@ -1666,6 +1674,144 @@ describe("un campo a menu", () => {
       expect(svg!.querySelectorAll("path").length, name).toBeGreaterThan(0);
     }
     expect(iconNames().filter((name) => name.startsWith("draw-tip")).sort()).toEqual([...wanted].sort());
+  });
+});
+
+describe("la riga «Stile»", () => {
+  const button = (): HTMLButtonElement => field("lookStyle").querySelector<HTMLButtonElement>(".draw-properties-menu")!;
+  const items = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>("#context-menu [role^='menuitem']")];
+  const item = (label: string): HTMLElement => items().find((each) => each.querySelector(".menu-label")!.textContent === label)!;
+  const form = (): HTMLElement => field("lookStyle").querySelector<HTMLElement>(".draw-properties-ask")!;
+  const nameInput = (): HTMLInputElement => form().querySelector<HTMLInputElement>("input")!;
+  const formButtons = (): HTMLButtonElement[] => [...form().querySelectorAll<HTMLButtonElement>(".draw-swatches-form-actions button")];
+  const RIQUADRO = { text: "", css: { background: "rgb(230 159 0)", "border-style": "dashed" } };
+
+  beforeEach(() => {
+    state.styleMenu = {
+      kind: "menu",
+      label: "Stile grafico",
+      value: "style:rbox00000",
+      summary: "Riquadro, modificato",
+      note: "Diverso dallo stile: riempimento.",
+      options: [
+        { value: "style:rbox00000", label: "Riquadro", checked: true, sample: RIQUADRO, note: "Lo seguono 2 oggetti" },
+        { value: "style:rnota0000", label: "Nota", sample: { text: "", css: { background: "rgb(0 114 178)" } }, note: "Nessun oggetto lo segue" },
+        { value: "new", label: "Nuovo stile dalla selezione…", action: true, separator: true, ask: { title: "Nuovo stile grafico", value: "Stile grafico 1", submit: "Crea" } },
+        { value: "update", label: "Aggiorna lo stile dalla selezione", action: true, disabled: true, note: "Lo stile è già come la selezione." },
+        { value: "revert", label: "Torna allo stile", action: true },
+        { value: "delete", label: "Elimina lo stile", action: true, danger: true },
+      ],
+    };
+    state.differs = "Diverso dallo stile «Riquadro»";
+  });
+
+  afterEach(() => closeContextMenu());
+
+  it("sta in testa all'aspetto, dice lo stile con la sua anteprima e la nota delle differenze", () => {
+    mount();
+    const order = [...section("look").querySelectorAll<HTMLElement>(".draw-properties-field")].map((each) => each.dataset.field);
+    expect(order[0]).toBe("lookStyle");
+    expect(button().querySelector(".draw-properties-menu-text")!.textContent).toBe("Riquadro, modificato");
+    expect(button().getAttribute("aria-label")).toBe("Stile grafico: Riquadro, modificato");
+    const sample = button().querySelector<HTMLElement>(".draw-properties-menu-picture .menu-sample")!;
+    expect(sample.classList.contains("menu-sample-box")).toBe(true);
+    expect(sample.style.borderStyle).toBe("dashed");
+    const note = field("lookStyle").querySelector<HTMLElement>(".draw-properties-note")!;
+    expect(note.textContent).toBe("Diverso dallo stile: riempimento.");
+    expect(button().getAttribute("aria-describedby")).toBe(note.id);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+  });
+
+  it("segna il campo diverso dallo stile con un punto, e lo dice a chi ascolta", () => {
+    mount();
+    expect(field("fill").hasAttribute("data-differs")).toBe(true);
+    const said = field("fill").querySelector<HTMLElement>(".sr-only[id^='draw-properties-differs']")!;
+    expect(said.hidden).toBe(false);
+    expect(said.textContent).toBe("Diverso dallo stile «Riquadro»");
+    expect(input("fill").getAttribute("aria-describedby")!.split(" ")).toContain(said.id);
+    expect(field("opacity").hasAttribute("data-differs")).toBe(false);
+    state.differs = null;
+    panel.update(view());
+    expect(field("fill").hasAttribute("data-differs")).toBe(false);
+    expect(said.hidden).toBe(true);
+    expect(input("fill").hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  it("nel menu ogni stile ha la sua anteprima e una riga; i comandi spenti dicono perché, ed eliminare si distingue", () => {
+    mount();
+    button().click();
+    const box = item("Riquadro");
+    expect(box.getAttribute("role")).toBe("menuitemradio");
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(box.querySelector(".menu-icon .menu-sample")).not.toBeNull();
+    expect(box.querySelector(".menu-description")!.textContent).toBe("Lo seguono 2 oggetti");
+    const update = item("Aggiorna lo stile dalla selezione");
+    expect(update.getAttribute("aria-disabled")).toBe("true");
+    expect(update.querySelector(".menu-description")!.textContent).toBe("Lo stile è già come la selezione.");
+    expect(item("Elimina lo stile").classList.contains("danger")).toBe(true);
+    // I comandi tengono il posto della figura, perché i nomi stiano allineati.
+    expect(item("Torna allo stile").querySelector(".menu-icon")!.childElementCount).toBe(0);
+    item("Nota").click();
+    expect(calls).toEqual(["lookStyle=style:rnota0000"]);
+    button().click();
+    item("Torna allo stile").click();
+    expect(calls).toEqual(["lookStyle=style:rnota0000", "lookStyle=revert"]);
+  });
+
+  it("una voce che chiede un nome apre un modulo sotto il campo, col nome proposto scelto; Esc lo chiude", () => {
+    mount();
+    button().click();
+    item("Nuovo stile dalla selezione…").click();
+    expect(calls).toEqual([]);
+    expect(form().hidden).toBe(false);
+    expect(form().getAttribute("role")).toBe("group");
+    expect(document.getElementById(form().getAttribute("aria-labelledby")!)!.textContent).toBe("Nuovo stile grafico");
+    expect(document.activeElement).toBe(nameInput());
+    expect(nameInput().value).toBe("Stile grafico 1");
+    expect([nameInput().selectionStart, nameInput().selectionEnd]).toEqual([0, "Stile grafico 1".length]);
+    expect(formButtons().map((each) => each.textContent)).toEqual(["Crea", "Annulla"]);
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    const escape = press(nameInput(), "Escape");
+    expect(escape.defaultPrevented).toBe(true);
+    expect(form().hidden).toBe(true);
+    expect(document.activeElement).toBe(button());
+    expect(calls).toEqual([]);
+  });
+
+  it("Invio manda il nome pulito con la sua voce; se il disegno non lo accetta il modulo resta e dice perché", () => {
+    mount();
+    button().click();
+    item("Nuovo stile dalla selezione…").click();
+    refusal = "C’è già uno stile «Riquadro» di questo tipo: scegline un altro.";
+    write(nameInput(), "  Riquadro  ");
+    press(nameInput(), "Enter");
+    expect(calls).toEqual(["lookStyle=new:Riquadro"]);
+    expect(form().hidden).toBe(false);
+    const problem = form().querySelector<HTMLElement>(".draw-properties-error")!;
+    expect(problem.hidden).toBe(false);
+    expect(problem.textContent).toBe(refusal);
+    expect(nameInput().getAttribute("aria-invalid")).toBe("true");
+    expect(nameInput().getAttribute("aria-describedby")).toBe(problem.id);
+    expect(announced).toEqual([refusal]);
+    // Scrivere toglie l'errore; «Crea» manda di nuovo, e il fuoco torna al pulsante.
+    refusal = null;
+    write(nameInput(), "Riquadro grande");
+    expect(problem.hidden).toBe(true);
+    formButtons()[0]!.click();
+    expect(calls).toEqual(["lookStyle=new:Riquadro", "lookStyle=new:Riquadro grande"]);
+    expect(form().hidden).toBe(true);
+    expect(document.activeElement).toBe(button());
+  });
+
+  it("il modulo si chiude se la sua voce non si sceglie più, come in un documento che si legge soltanto", () => {
+    mount();
+    button().click();
+    item("Nuovo stile dalla selezione…").click();
+    state.editable = false;
+    panel.update(view());
+    expect(form().hidden).toBe(true);
+    expect(document.activeElement).toBe(button());
+    expect(calls).toEqual([]);
   });
 });
 

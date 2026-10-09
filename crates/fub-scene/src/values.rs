@@ -553,6 +553,24 @@ pub(crate) fn wrap_width(value: &str) -> Option<f64> {
     number(value).filter(|n| *n > 0.0)
 }
 
+/// L'interlinea di uno stile di testo, `fub:leading` (formato della scena,
+/// stili): in volte il corpo, da 0,5 a 10, in cifre con al più tre decimali,
+/// senza segno, esponente o spazi.
+pub(crate) fn leading(value: &str) -> Option<f64> {
+    let (whole, decimals) = value.split_once('.').unwrap_or((value, ""));
+    let digits = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    if whole.is_empty()
+        || !digits(whole)
+        || !digits(decimals)
+        || decimals.len() > 3
+        || (value.contains('.') && decimals.is_empty())
+    {
+        return None;
+    }
+    let n: f64 = value.parse().ok()?;
+    (0.5..=10.0).contains(&n).then_some(n)
+}
+
 /// `startOffset` di un `textPath`: una lunghezza in unità utente, o con
 /// `true` una frazione della lunghezza del tracciato.
 pub(crate) fn start_offset(value: &str) -> Option<(f64, bool)> {
