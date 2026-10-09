@@ -566,6 +566,8 @@
     "menu-description",
     "menu-check",
     "menu-icon",
+    "menu-sample",
+    "menu-sample-box",
     "palette-scope",
     "palette-desc",
     "palette-help",
@@ -1647,7 +1649,9 @@
         "menu-body",
         "menu-description",
         "menu-check",
-        "menu-icon"
+        "menu-icon",
+        "menu-sample",
+        "menu-sample-box"
       ],
       "states": [
         "rest",
@@ -2405,7 +2409,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 686,
+    "hooks": 688,
     "state_names": 7,
     "assigned_states": 163,
     "components": 50,

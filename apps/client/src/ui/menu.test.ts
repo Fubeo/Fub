@@ -259,6 +259,26 @@ describe("le voci con un'icona", () => {
     expect(known!.querySelector(".menu-icon svg")).not.toBeNull();
   });
 
+  it("un'anteprima sta al posto dell'icona, nascosta, coi suoi caratteri o il suo quadratino", () => {
+    showContextMenu(clickEvent(), [
+      { label: "Titolo", sample: { text: "Aa", css: { "font-weight": "700", color: "rgb(0 114 178)" } }, run: () => {} },
+      { label: "Riquadro", sample: { text: "", css: { background: "rgb(230 159 0)", "border-style": "dashed" } }, run: () => {} },
+      { label: "Nuovo stile…", icon: "questa-icona-non-esiste", run: () => {} },
+    ]);
+    const [text, box, command] = [...document.querySelectorAll<HTMLButtonElement>("#context-menu button")];
+    const sample = text!.querySelector<HTMLElement>(".menu-icon .menu-sample")!;
+    expect(sample.closest(".menu-icon")!.getAttribute("aria-hidden")).toBe("true");
+    expect(sample.textContent).toBe("Aa");
+    expect(sample.style.fontWeight).toBe("700");
+    expect(sample.classList.contains("menu-sample-box")).toBe(false);
+    const square = box!.querySelector<HTMLElement>(".menu-sample")!;
+    expect(square.classList.contains("menu-sample-box")).toBe(true);
+    expect(square.style.borderStyle).toBe("dashed");
+    // Il nome accessibile resta il nome, e chi non ha anteprima ne tiene il posto.
+    expect(text!.querySelector(".menu-label")!.textContent).toBe("Titolo");
+    expect(command!.querySelector(".menu-icon")!.childElementCount).toBe(0);
+  });
+
   it("una voce a scelta con l'icona tiene il suo stato, col segno in fondo", () => {
     const run = vi.fn();
     showContextMenu(clickEvent(), [

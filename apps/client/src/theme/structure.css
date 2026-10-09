@@ -2760,6 +2760,39 @@ textarea.draw-properties-input {
   width: 24px;
   height: 24px;
 }
+/* L'anteprima di uno stile, nel menu e sul pulsante del campo: «Aa» nei
+   caratteri dello stile, o un quadratino col suo riempimento e il suo
+   contorno, al posto di un'icona. Tiene i colori dello stile anche coi
+   colori forzati, perché è ciò che mostra. */
+.menu-sample {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  line-height: 1;
+  white-space: nowrap;
+  forced-color-adjust: none;
+}
+.menu-sample-box {
+  width: 18px;
+  height: 18px;
+  margin: 3px;
+  border: 0 solid transparent;
+}
+/* Un campo diverso dallo stile che la selezione segue: un punto dopo il
+   nome. La frase che lo dice sta nel campo, per chi ascolta. */
+.draw-properties-field[data-differs] > .draw-properties-label::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
 .draw-properties-menu-text {
   flex: 1;
   min-width: 0;
@@ -3261,6 +3294,16 @@ textarea.draw-properties-input {
   .draw-width-bar,
   .draw-swatch-frame {
     background: CanvasText;
+  }
+  /* Il punto di un campo diverso dallo stile è un fondo, e i fondi si
+     forzano: prende il colore dell'evidenza. L'anteprima di uno stile ha
+     un filo del colore del testo. */
+  .draw-properties-field[data-differs] > .draw-properties-label::after {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+  .menu-sample-box {
+    outline: 1px solid CanvasText;
   }
   /* Il pulsante di un campo a menu aperto: il fondo della pelle si forza,
      e il menu ha il fuoco; l'anello dice di chi è il menu. */

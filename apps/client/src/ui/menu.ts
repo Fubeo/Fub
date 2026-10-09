@@ -33,11 +33,22 @@ export interface MenuItem {
   /// disegna niente. Se anche una sola voce del menu ha la sua figura, le
   /// altre ne tengono il posto vuoto, perché i nomi stiano allineati.
   icon?: string;
+  /// Un'anteprima al posto dell'icona: la voce è un aspetto con un nome,
+  /// come uno stile del disegno. Decorativa come l'icona.
+  sample?: MenuSample;
   /// La voce è una scelta: una fra alternative (`radio`) o un interruttore
   /// (`checkbox`), con il suo stato in `checked`.
   choice?: "radio" | "checkbox";
   checked?: boolean;
   run: () => void;
+}
+
+/// L'anteprima di una voce: un testo breve, come «Aa», o niente per un
+/// quadratino; e le proprietà CSS che la disegnano, come i caratteri o il
+/// riempimento e il contorno.
+export interface MenuSample {
+  readonly text: string;
+  readonly css: Readonly<Record<string, string>>;
 }
 
 export interface ContextMenuOptions {
@@ -89,7 +100,7 @@ export function showContextMenu(
   menu.style.top = `${y}px`;
   const buttons: HTMLButtonElement[] = [];
   const usable: MenuItem[] = [];
-  const pictured = items.some((item) => item.icon !== undefined && icon(item.icon) !== "");
+  const pictured = items.some((item) => item.sample !== undefined || (item.icon !== undefined && icon(item.icon) !== ""));
   for (const item of items) {
     if (item.separator && menu.childElementCount > 0) {
       const rule = document.createElement("div");
@@ -113,12 +124,19 @@ export function showContextMenu(
       }
       b.append(strip);
     }
-    const glyph = item.icon === undefined ? null : iconEl(item.icon);
+    const glyph = item.sample !== undefined || item.icon === undefined ? null : iconEl(item.icon);
     if (glyph !== null || pictured) {
       const picture = document.createElement("span");
       picture.className = "menu-icon";
       picture.setAttribute("aria-hidden", "true");
       if (glyph !== null) picture.append(glyph);
+      if (item.sample !== undefined) {
+        const sample = document.createElement("span");
+        sample.className = item.sample.text === "" ? "menu-sample menu-sample-box" : "menu-sample";
+        sample.textContent = item.sample.text;
+        for (const [name, value] of Object.entries(item.sample.css)) sample.style.setProperty(name, value);
+        picture.append(sample);
+      }
       b.append(picture);
     }
     const label = document.createElement("span");

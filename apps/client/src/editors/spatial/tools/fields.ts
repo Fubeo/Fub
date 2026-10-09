@@ -42,11 +42,12 @@
 //   ne ha.
 
 import { resolvedLanguage } from "../../../i18n/strings";
+import type { MenuSample } from "../../../ui/menu";
 import { apply } from "../scene/matrix";
 import { MAX_COUNT, MIN_COUNT, type PolygonalShape } from "../scene/parametric";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { BLEND_MODES } from "../scene/values";
-import { t, type DrawKey } from "../strings";
+import { plural, t, type DrawKey } from "../strings";
 import type { Axis, Edge, Order } from "./arrange";
 import { MIN_BOARD_SIDE, orientationOf, orientedRect, presetOf, presetRect, PRESETS, roundRect, type PresetId, type Rect } from "./boards";
 import { angleOf, frameSize, MIN_SIZE, scales, type Frame } from "./frame";
@@ -70,10 +71,11 @@ import {
   type SegmentState,
 } from "./properties";
 import { ANGLE_UNITS, evaluate, lengthUnits, PERCENT_UNITS, type QuantityProblem } from "./quantity";
-import { NAME_MAX } from "./naming";
+import { NAME_MAX, nameKey } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
 import type { ShapeChange, ShapeFacts } from "./reshape";
+import type { StyleField, StyleKind, StyleRow } from "./styles";
 import type { ConnectorPanelView } from "./connector-panel";
 import type { GradientPanelView } from "./gradient-panel";
 import type { HatchPanelView } from "./hatch-panel";
@@ -307,6 +309,25 @@ export interface SelectionFacts {
   readonly shape: ShapeFacts | null;
   /// Le punte delle linee scelte; senza, o `null`, non ce n'è da mostrare.
   readonly tips?: TipsLook | null;
+  /// Le due righe «Stile», se il livello offre gli stili: ciascuna `null`
+  /// se nessun oggetto scelto può seguire uno stile di quel tipo.
+  readonly styles?: { readonly graphic: StyleFacts | null; readonly text: StyleFacts | null } | null;
+}
+
+/// Una riga «Stile» del pannello, come la legge l'editor.
+export interface StyleFacts {
+  /// Che cosa segue la selezione.
+  readonly row: StyleRow;
+  /// Gli stili del documento di quel tipo, nell'ordine del documento, con
+  /// quanti oggetti li seguono e l'anteprima del menu.
+  readonly styles: ReadonlyArray<{ readonly id: string; readonly name: string; readonly followers: number; readonly sample: MenuSample }>;
+  /// Vero se aggiornare dalla selezione lo stile che segue lo cambierebbe.
+  readonly updatable: boolean;
+  /// Perché lo stile che la selezione segue non si può eliminare; `null`
+  /// se si può.
+  readonly undeletable: "locked" | null;
+  /// Il nome proposto per uno stile nuovo: «Stile grafico 1».
+  readonly fresh: string;
 }
 
 /// Il disegno, quando non c'è niente di scelto.
@@ -534,6 +555,135 @@ function tipField(end: TipEnd, tips: TipsLook): MenuChoiceState {
   return { kind: "menu", label: t(end === "start" ? "draw.properties.tip_start" : "draw.properties.tip_end"), value: look.shape, summary, options };
 }
 
+/// Il campo di ogni campo di uno stile, dove il pannello segna che la
+/// selezione ne è diversa; gli effetti sono una sezione, e lo dice la riga
+/// «Stile».
+const STYLE_FIELD_IDS: Readonly<Record<StyleField, FieldId | null>> = {
+  fill: "fill",
+  stroke: "stroke",
+  width: "strokeWidth",
+  dashes: "dash",
+  cap: "cap",
+  join: "join",
+  tipStart: "tipStart",
+  tipEnd: "tipEnd",
+  opacity: "opacity",
+  blend: "blend",
+  effects: null,
+  family: "family",
+  size: "size",
+  weight: "weight",
+  italic: "emphasis",
+  underline: "emphasis",
+  strike: "emphasis",
+  spacing: "spacing",
+  leading: "leading",
+};
+
+/// I nomi dei campi di uno stile, come li dice la riga «Stile».
+const STYLE_FIELD_LABELS: Readonly<Record<StyleField, DrawKey>> = {
+  fill: "draw.properties.fill",
+  stroke: "draw.properties.stroke",
+  width: "draw.properties.stroke_width",
+  dashes: "draw.properties.dash",
+  cap: "draw.properties.cap",
+  join: "draw.properties.join",
+  tipStart: "draw.properties.tip_start",
+  tipEnd: "draw.properties.tip_end",
+  opacity: "draw.properties.opacity",
+  blend: "draw.properties.blend",
+  effects: "draw.properties.effects",
+  family: "draw.properties.family",
+  size: "draw.properties.size",
+  weight: "draw.properties.weight",
+  italic: "draw.text.italic",
+  underline: "draw.text.underline",
+  strike: "draw.text.strike",
+  spacing: "draw.properties.spacing",
+  leading: "draw.properties.leading",
+};
+
+/// L'ordine in cui la riga «Stile» nomina i campi diversi.
+const STYLE_FIELD_ORDER = Object.keys(STYLE_FIELD_LABELS) as StyleField[];
+
+/// Il campo della riga «Stile» di tipo `kind`: sul pulsante lo stile che
+/// la selezione segue, «modificato» se qualcuno ne è diverso, «Misto» o
+/// «Nessuno»; nel menu gli stili del documento con la loro anteprima, per
+/// il testo gli stili di serie che il documento non ha ancora, e i comandi,
+/// ciascuno spento col perché quando non vale.
+function styleField(kind: StyleKind, facts: StyleFacts, presets: boolean): MenuChoiceState {
+  const { row } = facts;
+  const current = row.style;
+  const options: MenuOption[] = facts.styles.map((style) => ({
+    value: `style:${style.id}`,
+    label: style.name,
+    sample: style.sample,
+    checked: current?.id === style.id,
+    note: style.followers === 0 ? t("draw.styles.followers.none") : plural(style.followers, "draw.styles.followers.one", "draw.styles.followers.other"),
+  }));
+  if (presets) {
+    // Uno stile di serie diventa uno stile del documento la prima volta che
+    // lo si sceglie: col suo nome, se il documento non ne ha già uno.
+    const taken = new Set(facts.styles.map((style) => nameKey(style.name)));
+    for (const preset of TEXT_PRESETS) {
+      const label = t(preset.label);
+      if (taken.has(nameKey(label))) continue;
+      options.push({ value: `preset:${preset.id}`, label, sample: { text: "Aa", css: { "font-weight": String(preset.weight) } }, note: t("draw.styles.preset_note"), action: true });
+    }
+  }
+  // Perché un comando sullo stile seguito non vale: la selezione ne segue
+  // più d'uno, o nessuno.
+  const unfollowed = t(row.mixed && row.following > 0 ? "draw.styles.why.mixed" : "draw.styles.why.none");
+  const off = (reason: string | null): Partial<MenuOption> => (reason === null ? {} : { disabled: true, note: reason });
+  const commands: MenuOption[] = [
+    {
+      value: "new",
+      label: t("draw.styles.new"),
+      action: true,
+      ask: { title: t(kind === "text" ? "draw.styles.form.new_text" : "draw.styles.form.new_graphic"), value: facts.fresh, submit: t("draw.styles.form.create") },
+    },
+    { value: "update", label: t("draw.styles.update"), action: true, ...off(current === null ? unfollowed : facts.updatable ? null : t("draw.styles.why.current")) },
+    { value: "revert", label: t("draw.styles.revert"), action: true, ...off(current === null ? unfollowed : row.differing > 0 ? null : t("draw.styles.why.same")) },
+    { value: "unlink", label: t("draw.styles.unlink"), action: true, ...off(row.following > 0 ? null : t("draw.styles.why.none")) },
+    {
+      value: "rename",
+      label: t("draw.styles.rename"),
+      action: true,
+      ...(current === null ? {} : { ask: { title: t("draw.styles.form.rename", { name: current.name }), value: current.name, submit: t("draw.styles.form.apply") } }),
+      ...off(current === null ? unfollowed : null),
+    },
+    { value: "delete", label: t("draw.styles.delete"), action: true, danger: true, ...off(current === null ? unfollowed : facts.undeletable === null ? null : t("draw.styles.why.locked")) },
+  ];
+  commands[0] = { ...commands[0]!, separator: options.length > 0 };
+  options.push(...commands);
+  const summary = current === null ? t(row.mixed ? "draw.properties.mixed" : "draw.styles.none") : row.differing > 0 ? t("draw.styles.modified", { name: current.name }) : current.name;
+  const differs = STYLE_FIELD_ORDER.filter((field) => row.differs.has(field)).map((field) => t(STYLE_FIELD_LABELS[field]).toLocaleLowerCase(resolvedLanguage()));
+  return {
+    kind: "menu",
+    label: t(kind === "text" ? "draw.styles.text" : "draw.styles.graphic"),
+    value: current === null ? null : `style:${current.id}`,
+    summary,
+    options,
+    ...(current !== null && differs.length > 0
+      ? { note: t("draw.styles.differs_note", { fields: new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(differs) }) }
+      : {}),
+  };
+}
+
+/// Segna i campi in cui la selezione è diversa dallo stile della riga
+/// `facts`: il punto, e la frase per chi ascolta. Un campo che due stili
+/// segnano, come il colore di un testo e di una forma, dice il primo.
+function markDiffers(fields: Partial<Record<FieldId, FieldState>>, facts: StyleFacts | null): void {
+  const style = facts?.row.style ?? null;
+  if (facts === null || style === null) return;
+  const said = t("draw.styles.differs", { name: style.name });
+  for (const field of facts.row.differs) {
+    const id = STYLE_FIELD_IDS[field];
+    const state = id === null ? undefined : fields[id];
+    if (id !== null && state !== undefined && state.differs === undefined) fields[id] = { ...state, differs: said };
+  }
+}
+
 /// Il nome di un carattere: la famiglia prima del ripiego.
 const familyName = (family: string): string => family.split(",")[0]!.trim();
 
@@ -639,7 +789,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     }
 
     // --- Testo ---
-    if (look.size.count > 0) {
+    if (look.size.count > 0 && !has("styles")) {
       const { size, weight } = look;
       const preset = size.value === null || weight.value === null ? undefined : TEXT_PRESETS.find((each) => Math.abs(each.size - size.value!) < 1e-6 && each.weight === weight.value);
       const presets: ChoiceOption[] = TEXT_PRESETS.map((each) => ({ value: each.id, label: t(each.label) }));
@@ -723,6 +873,15 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         ...lengthField(t("draw.properties.text_frame"), wrap ?? 0, unit, true, { min: fieldMin(Math.min(wrap ?? MIN_SIZE, MIN_SIZE), unit) }),
         value: wrap === null ? null : toUnit(wrap, unit),
       };
+    }
+
+    // --- Gli stili, in testa ad «Aspetto» e a «Testo» ---
+    const styles = has("styles") ? (selection.styles ?? null) : null;
+    if (styles !== null) {
+      if (styles.graphic !== null) fields.lookStyle = styleField("graphic", styles.graphic, false);
+      if (styles.text !== null) fields.textStyle = styleField("text", styles.text, true);
+      markDiffers(fields, styles.graphic);
+      markDiffers(fields, styles.text);
     }
 
     // --- Disponi ---
