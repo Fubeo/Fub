@@ -1,0 +1,148 @@
+File: drawio-educational.xml
+Oggetti: 141 (forme 119, testi 22, linee 0, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: nessuna
+
+Livello «Livello 1»
+  Gruppo, 140 oggetti
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «#»
+    Rettangolo
+    Testo «Time / Period»
+    Rettangolo
+    Testo «Monday»
+    Rettangolo
+    Testo «Tuesday»
+    Rettangolo
+    Testo «Wednesday»
+    Rettangolo
+    Testo «Thursday»
+    Rettangolo
+    Testo «Friday»
+    Rettangolo
+    Testo «Saturday»
+    Rettangolo
+    Testo «Sunday»
+    Rettangolo
+    Testo «1»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «2»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «3»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «4»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «5»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «6»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «7»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «8»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «9»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «10»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «11»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Testo «12»
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+    Rettangolo
+  Testo «Weekly timetable»

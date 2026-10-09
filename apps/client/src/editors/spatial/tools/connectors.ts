@@ -794,10 +794,11 @@ export function labelNormal([dx, dy]: Point): Point {
 }
 
 /// Quanto `box` arriva dal suo centro lungo la normale `n`.
-const reachAlong = (n: Point, box: LabelBox): number => (Math.abs(n[0]) * box.width) / 2 + (Math.abs(n[1]) * box.height) / 2;
+const reachAlong = (n: Point, box: Pick<LabelBox, "width" | "height">): number => (Math.abs(n[0]) * box.width) / 2 + (Math.abs(n[1]) * box.height) / 2;
 
-/// Dove va il centro dell'etichetta `box` messa a `place` lungo `track`.
-function centreAt(track: Track, place: LabelPlace, box: LabelBox): Point | null {
+/// Dove va il centro dell'etichetta `box`, larga e alta così, messa a
+/// `place` lungo `track`.
+export function labelCentre(track: Track, place: LabelPlace, box: Pick<LabelBox, "width" | "height">): Point | null {
   const at = track.at(place.t * track.length);
   if (at === null) return null;
   const n = labelNormal(at.direction);
@@ -835,7 +836,7 @@ function placedLabel(label: ElementPart, place: LabelPlace, segments: readonly S
   const box = labelBox(label, router);
   const track = new Track(segments);
   if (box === null || !(track.length > 0)) return undefined;
-  const centre = centreAt(track, place, box);
+  const centre = labelCentre(track, place, box);
   return centre === null ? undefined : movedLabel(label, [centre[0] - box.centre[0], centre[1] - box.centre[1]], router);
 }
 

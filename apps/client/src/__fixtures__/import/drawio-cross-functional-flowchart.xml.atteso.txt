@@ -1,0 +1,72 @@
+File: drawio-cross-functional-flowchart.xml
+Oggetti: 52 (forme 31, testi 0, linee 21, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: nessuna
+
+Livello «Livello 1»
+  Gruppo, 24 oggetti
+    Rettangolo
+    Rettangolo «Pool»
+    Testo «Pool»
+    Gruppo, 6 oggetti
+      Rettangolo
+      Rettangolo «Lane 1»
+      Testo «Lane 1»
+      Rettangolo
+      Rettangolo
+      Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da «Rombo» a Rettangolo
+    Connettore da «Rombo» a Rettangolo
+    Connettore da «Rombo» a Rettangolo
+    Connettore da «Rombo» a Rettangolo
+    Connettore da «Rombo» a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Connettore da Rettangolo a Rettangolo
+    Gruppo, 4 oggetti
+      Rettangolo
+      Rettangolo «Lane 2»
+      Testo «Lane 2»
+      Rettangolo
+    Gruppo, 7 oggetti
+      Rettangolo
+      Rettangolo «Lane 3»
+      Testo «Lane 3»
+      Rettangolo
+      Tracciato «Rombo»
+      Rettangolo
+      Connettore da Rettangolo a «Rombo»
+    Gruppo, 11 oggetti
+      Rettangolo
+      Rettangolo «Lane 4»
+      Testo «Lane 4»
+      Rettangolo
+      Tracciato «Rombo»
+      Rettangolo
+      Rettangolo
+      Tracciato «Rombo»
+      Connettore da Rettangolo a «Rombo»
+      Connettore da «Rombo» a Rettangolo
+      Connettore da Rettangolo a «Rombo»
+    Gruppo, 9 oggetti
+      Rettangolo
+      Rettangolo «Lane 5»
+      Testo «Lane 5»
+      Rettangolo
+      Rettangolo
+      Rettangolo
+      Rettangolo
+      Connettore da Rettangolo a Rettangolo
+      Connettore da Rettangolo a Rettangolo
+    Gruppo, 4 oggetti
+      Rettangolo
+      Rettangolo «Lane 6»
+      Testo «Lane 6»
+      Rettangolo

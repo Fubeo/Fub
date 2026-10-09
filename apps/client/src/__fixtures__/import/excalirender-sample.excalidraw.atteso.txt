@@ -1,0 +1,12 @@
+File: excalirender-sample.excalidraw
+Oggetti: 6 (forme 3, testi 1, linee 2, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×1 (Virgil); rough ×5
+
+Livello «Livello 1»
+  Rettangolo
+  Ellisse
+  Tracciato «Rombo»
+  Testo «Hello, Excalidraw! This is a test.»
+  Connettore
+  Tracciato

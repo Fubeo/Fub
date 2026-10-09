@@ -1,0 +1,25 @@
+File: drawio-orgchart.xml
+Oggetti: 13 (forme 6, testi 4, linee 3, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: link ×8 (https://www.draw.io); image ×4 (https://cdn3.iconfinder.com/data/icons/user-avatars-1/512/users-3-128.png)
+
+Livello «Livello 1»
+  Gruppo, 10 oggetti
+    Rettangolo
+    Rettangolo «Orgchart»
+    Testo «Orgchart»
+    Gruppo, 2 oggetti
+      Rettangolo «Tessa Miller CFO Email»
+      Testo «Tessa Miller CFO Email»
+    Connettore da «Tessa Miller CFO Email» a «Edward Morrison Brand Manager Email»
+    Gruppo, 2 oggetti
+      Rettangolo «Edward Morrison Brand Manager Email»
+      Testo «Edward Morrison Brand Manager Email»
+    Connettore da «Tessa Miller CFO Email» a «Evan Valet HR Director Email»
+    Gruppo, 2 oggetti
+      Rettangolo «Evan Valet HR Director Email»
+      Testo «Evan Valet HR Director Email»
+    Connettore da «Tessa Miller CFO Email» a «Alison Donovan System Admin Email»
+    Gruppo, 2 oggetti
+      Rettangolo «Alison Donovan System Admin Email»
+      Testo «Alison Donovan System Admin Email»
