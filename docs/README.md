@@ -41,6 +41,7 @@ flowchart LR
 - [Disegni, righelli e guide](product/drawing-rulers.md)
 - [Disegni, proprietà](product/drawing-properties.md)
 - [Disegni, colori](product/drawing-colors.md)
+- [Disegni, stili](product/drawing-styles.md)
 - [Disegni, sfumature](product/drawing-gradients.md)
 - [Disegni, campiture e motivi](product/drawing-patterns.md)
 - [Disegni, punte delle linee](product/drawing-tips.md)

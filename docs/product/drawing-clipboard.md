@@ -45,7 +45,8 @@ Ogni oggetto incollato ha un id nuovo, e i riferimenti interni lo seguono: un
 gradiente, un `use`, gli attributi ARIA, i selettori di un foglio di stile.
 Le sfumature, i motivi, i campioni e le altre risorse che usa entrano fra
 quelle del disegno, e quelle che il disegno ha già si riusano ([Disegni,
-risorse](drawing-resources.md#copiare-e-incollare)). Fra due disegni con le
+risorse](drawing-resources.md#copiare-e-incollare)); così gli stili che gli
+oggetti seguono ([Disegni, stili](drawing-styles.md#appunti-e-duplica)). Fra due disegni con le
 stesse unità un giro di copia e incolla riporta gli stessi byte, id a parte
 e con le risorse al loro posto, e un livello copiato torna come un gruppo
 col nome del livello. Le immagini e i collegamenti del vault copiati da un disegno
@@ -127,7 +128,9 @@ Lo stile copiato vale per tutti i disegni aperti, finché se ne copia un altro,
 anche dopo che l'oggetto da cui viene se n'è andato; senza, «Incolla lo
 stile» dice come copiarlo. In un altro disegno un campione che lì non c'è
 lascia il posto a quello con lo stesso nome e lo stesso colore, o al suo
-colore ([Disegni, colori](drawing-colors.md#fra-disegni)).
+colore ([Disegni, colori](drawing-colors.md#fra-disegni)). Lo stile copiato è
+l'aspetto, non uno stile del documento: chi lo riceve continua a seguire lo
+stile che seguiva ([Disegni, stili](drawing-styles.md)).
 
 ## Chi monta l'editor
 

@@ -46,6 +46,12 @@ lo leggono e lo danno fra due oggetti. Non si disegna, perché sta in una
 scritti i suoi attributi, e un altro programma vede lo stesso disegno senza
 sapere che gli stili ci sono.
 
+Uno stile dice soltanto ciò che scrive: un attributo che manca lascia a chi
+lo segue il suo valore. Uno stile grafico dice sempre l'opacità, la fusione
+e gli effetti, come un oggetto: senza attributo sono piena, normale e
+nessuno. Un filtro che non è fatto di effetti di FubDraw non dice gli
+effetti.
+
 Ogni stile ha:
 
 - **un id** nella forma delle risorse, `r` e otto caratteri, anche quando

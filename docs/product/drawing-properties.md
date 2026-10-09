@@ -52,7 +52,9 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
 - **Connettore**, per i connettori scelti: il Tipo, fra Dritto, A gomito e
   Curvo; l'Aggancio d’inizio e quello di fine; l'Etichetta; e «Inverti», che
   scambia inizio e fine ([Disegni, connettori](drawing-connectors.md)).
-- **Aspetto.** Riempimento e Contorno, con la parte «Colori personalizzati»;
+- **Aspetto.** In testa, con la parte «Stili del documento», lo Stile
+  grafico che gli oggetti seguono ([Disegni, stili](drawing-styles.md)).
+  Riempimento e Contorno, con la parte «Colori personalizzati»;
   Spessore del contorno, Opacità e Tratteggio; all'Esperto anche Estremi e
   Angoli, come il menu «Contorno» di [Disegni, livello
   Esperto](drawing-expert.md), e la Fusione, con «Isola la fusione» per
@@ -71,10 +73,12 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
 - **Colori del documento**, anche senza selezione, e allora per prima: i
   campioni, i colori usati e i recenti, da dare agli oggetti scelti o con cui
   disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).
-- **Testo.** Stile, Carattere, fra Inter, Literata e JetBrains Mono,
-  Dimensione, Peso, l'Enfasi (grassetto, corsivo, sottolineato e barrato),
-  Interlinea, Spaziatura e Allineamento, per tutto il testo anche quando le
-  sue parole sono diverse ([Disegni, tipografia](drawing-typography.md)).
+- **Testo.** Con la parte «Stili del documento» lo Stile di testo, coi suoi
+  stili di serie; senza, lo Stile, un corpo e un peso insieme. Poi
+  Carattere, fra Inter, Literata e JetBrains Mono, Dimensione, Peso,
+  l'Enfasi (grassetto, corsivo, sottolineato e barrato), Interlinea,
+  Spaziatura e Allineamento, per tutto il testo anche quando le sue parole
+  sono diverse ([Disegni, tipografia](drawing-typography.md)).
   Con la parte «Testo in area e su tracciato», dell'Esperto, anche il Tipo
   di testo, da punto o in area, e la Larghezza del riquadro di un testo in
   area ([il testo in area](drawing-typography.md#il-testo-in-area)).

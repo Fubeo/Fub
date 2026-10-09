@@ -49,6 +49,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Testo | Standard | lo strumento (`T`), e cambiare un testo che c'è: due tocchi, `F2`, «Modifica il testo»; gli stessi gesti scrivono l'etichetta di una forma chiusa ([Disegni, etichette nelle forme](drawing-labels.md)) |
 | Colori personalizzati | Standard | «Altro colore…» e l'anello del colore scelto |
 | Colori del documento | Standard | nel pannello delle proprietà la sezione «Colori del documento», coi campioni, i colori usati e i recenti; disegnare con un campione ([Disegni, colori](drawing-colors.md)) |
+| Stili del documento | Standard | nel pannello delle proprietà «Stile grafico» in «Aspetto» e «Stile di testo» in «Testo», col loro menu ([Disegni, stili](drawing-styles.md)) |
 | Punte delle linee | Standard | nel pannello delle proprietà «Punta d’inizio» e «Punta di fine», in «Aspetto» ([Disegni, punte delle linee](drawing-tips.md)) |
 | Campiture | Standard | nel pannello delle proprietà la sezione «Campitura» ([Disegni, campiture e motivi](drawing-patterns.md)) |
 | Seleziona simili, isola i gruppi, blocca e nascondi | Standard | il menu «Selezione avanzata», anche col tasto destro e `Maiusc+F10`; il clic con `Ctrl` dentro i gruppi e i gruppi nell'albero; isolare un gruppo; bloccare e nascondere gli oggetti, coi segni dell'albero |

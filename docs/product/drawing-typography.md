@@ -74,7 +74,9 @@ righe e ai pezzi; ogni cambio è un passo di annulla col suo nome. Mentre si
 scrive, toccare il pannello conclude prima il campo.
 
 - **Stile**: un corpo e un peso insieme, sulle misure della barra. Un testo
-  che non è di nessuno stile è «Su misura».
+  che non è di nessuno stile è «Su misura». Con la parte «Stili del
+  documento» questi stili di serie stanno nel menu dello Stile di testo, e
+  sceglierne uno lo aggiunge al documento ([Disegni, stili](drawing-styles.md#il-menu)).
 
   | Stile | Corpo | Peso |
   |---|---|---|
