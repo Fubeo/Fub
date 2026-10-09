@@ -617,6 +617,181 @@
   }
 }
 
+/* La galleria di «Nuovo disegno»: in alto il nome e la cartella affiancati;
+   sotto, in una griglia che si stringe, una scheda per modello — l'anteprima
+   sopra, il pulsante di scelta col nome, la riga che dice a che cosa serve —
+   e «Dal vault», righe con lo stesso pulsante. Il corpo scorre e le azioni
+   restano in vista. L'anteprima sta in un riquadro grigio di altezza fissa,
+   così le schede non si muovono quando le immagini arrivano; la carta del
+   modello è bianca in ogni tema, e dove un modello ha più tavole lo spazio
+   fra l'una e l'altra lascia vedere il riquadro. Sul telefono la
+   finestra prende lo schermo. Le colonne delle griglie, il ritaglio
+   dell'immagine e l'avviso vuoto sono geometria che nessun tema cambia:
+   stanno nella struttura (`structure.css`). */
+.modale .palette-box.draw-new {
+  width: min(960px, 94vw);
+  max-height: 86vh;
+  overflow: hidden;
+}
+.modale .draw-new-form {
+  flex: 1;
+  min-height: 0;
+}
+.modale .draw-new-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-2);
+  overflow: auto;
+}
+.modale .draw-new-fields {
+  display: grid;
+  gap: var(--space-4);
+}
+.modale .draw-new-field input {
+  min-height: 44px;
+}
+.modale .draw-new-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modale .draw-new-group-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.modale .draw-new-group-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.modale .draw-new-cards {
+  display: grid;
+  gap: var(--space-4);
+}
+.modale .palette-form .draw-new-card,
+.modale .palette-form .draw-new-vault-item {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  font-weight: normal;
+  cursor: pointer;
+}
+.modale .palette-form .draw-new-card {
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+.modale .palette-form .draw-new-card:hover,
+.modale .palette-form .draw-new-vault-item:hover {
+  border-color: var(--accent);
+}
+.modale .palette-form .draw-new-card[data-selected],
+.modale .palette-form .draw-new-vault-item[data-selected] {
+  border-color: var(--accent);
+  background: var(--bg-active);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.modale .draw-new-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 7.5rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--doc-fill);
+  overflow: hidden;
+}
+.modale .draw-new-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 0 0 1px var(--doc-rule-soft), 0 6px 14px -8px rgb(0 0 0 / 45%);
+}
+.modale .draw-new-blank {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  aspect-ratio: 8 / 5;
+  border: 1px solid var(--doc-rule);
+  background-color: rgb(255 255 255);
+  box-shadow: 0 6px 14px -8px rgb(0 0 0 / 45%);
+}
+.modale .draw-new-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.modale .draw-new-card input,
+.modale .draw-new-vault-item input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  padding: 0;
+}
+.modale .draw-new-card-name {
+  min-width: 0;
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+}
+.modale .draw-new-card-note {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.modale .draw-new-vault {
+  display: grid;
+  gap: var(--space-2) var(--space-4);
+}
+.modale .palette-form .draw-new-vault-item {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+.modale .draw-new-vault-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.modale .draw-new .palette-actions {
+  flex: none;
+}
+.modale .draw-new .palette-actions button {
+  min-height: 44px;
+}
+@media (max-width: 760px) {
+  .modale.draw-new-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+  .modale .palette-box.draw-new {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+  .modale .draw-new-cards {
+    gap: var(--space-3);
+  }
+  .modale .draw-new-preview {
+    height: 6rem;
+  }
+}
+
 .modale .palette-actions .keys-show-all {
   margin-inline-end: auto;
 }

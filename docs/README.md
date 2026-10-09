@@ -33,6 +33,7 @@ flowchart LR
 - [Vault e file](product/vault-and-files.md)
 - [Editor e anteprima](product/editor-and-preview.md)
 - [Disegni](product/drawing.md)
+- [Disegni, modelli e suggerimenti](product/drawing-new.md)
 - [Disegni, trasformare](product/drawing-transform.md)
 - [Disegni, selezione](product/drawing-selection.md)
 - [Disegni, pannello dei livelli](product/drawing-layers.md)

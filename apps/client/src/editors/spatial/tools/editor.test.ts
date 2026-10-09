@@ -12266,8 +12266,24 @@ describe("le tavole, dal livello Standard", () => {
     drag([[200, 20], [250, 50], [300, 90]]);
     expect(spoken()).toBe("La pagina è diventata Tavola 1; Tavola 2 aggiunta, 100 × 70.");
     expect(names()).toEqual([["Tavola 1", false], ["Tavola 2", true]]);
+    // Due passi: la pagina che diventa la tavola 1, poi la tavola nuova.
+    // Annullata questa, resta la tavola 1, ed è lei la scelta.
+    expect(changes).toHaveLength(2);
     editor.undo();
+    expect(spoken()).toBe("Annullato: Nuova tavola.");
+    expect(names()).toEqual([["Tavola 1", true]]);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Prima tavola dalla pagina.");
     expect(editor.engine.text).toBe(SOURCE);
+    key("d", { ctrlKey: true });
+    expect(spoken()).toBe("La pagina è diventata Tavola 1. Tavola 1 copia aggiunta a x 180, y 0, con 1 oggetto.");
+    editor.undo();
+    editor.undo();
+    editor.redo();
+    expect(spoken()).toBe("Ripetuto: Prima tavola dalla pagina.");
+    expect(names()).toEqual([["Tavola 1", true]]);
+    editor.redo();
+    expect(names()).toEqual([["Tavola 1", false], ["Tavola 1 copia", true]]);
   });
 
   it("con Alt, spostare una tavola ne lascia una copia dove la si posa, con ciò che le sta sopra", () => {
@@ -12331,8 +12347,13 @@ describe("le tavole, dal livello Standard", () => {
     key("d", { ctrlKey: true });
     expect(spoken()).toBe("La pagina è diventata Tavola 1. Tavola 1 copia aggiunta a x 180, y 0, con 1 oggetto.");
     expect(names()).toEqual([["Tavola 1", false], ["Tavola 1 copia", true]]);
+    // Annullata la copia, resta la tavola 1, scelta; poi la pagina.
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Copia di una tavola.");
+    expect(names()).toEqual([["Tavola 1", true]]);
     editor.undo();
     expect(editor.engine.text).toBe(SOURCE);
+    expect(spoken()).toBe("Annullato: Prima tavola dalla pagina.");
   });
 
   it("il pulsante Tavole apre l'elenco, che segna la tavola di adesso e porta alle altre", () => {

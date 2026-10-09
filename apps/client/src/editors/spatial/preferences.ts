@@ -16,6 +16,10 @@
 // - **I colori recenti** sono uno stato della vista come la griglia: quelli
 //   scelti per ultimi, in qualunque disegno, che la sezione «Colori del
 //   documento» e il menu radiale offrono in ogni disegno che si apre dopo.
+// - **I suggerimenti brevi** si accendono con l'impostazione della macchina
+//   `draw.suggestions`, che la loro casella scrive; quelli già visti sono uno
+//   stato della vista, così nessuno torna in un altro disegno. Una superficie
+//   che ne mostra uno lo dice alle altre aperte.
 //
 // L'ultima lettura resta qui: una superficie nuova parte da lì, e la lettura
 // che fa la conferma o la corregge, senza che la barra cambi sotto gli occhi
@@ -32,6 +36,7 @@ import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
 import { DEFAULT_GRID, validClosed, validStep, validSteps, type Grid } from "./tools/grid";
 import { RECENT_COLORS } from "./tools/palette";
 import { CUSTOM_DEFAULT, isLevel, type Level } from "./tools/registry";
+import type { Suggested } from "./tools/suggestions";
 
 /// Il bundle che dichiara il livello.
 const DRAW_BUNDLE = "fub.draw";
@@ -54,6 +59,13 @@ export const EXPORT_MEMORIES = 100;
 
 /// La chiave dello stato di vista che ricorda i colori recenti.
 export const COLORS_KEY = "draw.colors";
+
+/// L'impostazione della macchina che accende i suggerimenti brevi.
+export const SUGGESTIONS_KEY = "draw.suggestions";
+
+/// La chiave dello stato di vista che ricorda i suggerimenti già visti, o
+/// che non servono più.
+export const SUGGESTED_KEY = "draw.suggested";
 
 /// Il livello di partenza, quando l'impostazione non dice niente.
 const DEFAULT_LEVEL: Level = "essential";
@@ -79,6 +91,14 @@ let lastColors: readonly string[] = [];
 /// Le scritture dei colori recenti in fila, e quante ne sono partite.
 let coloring: Promise<void> = Promise.resolve();
 let colorSaves = 0;
+/// I suggerimenti dell'ultima lettura o dell'ultima scelta: `null` prima
+/// della prima lettura riuscita.
+let lastSuggested: Suggested | null = null;
+/// Le scritture dei suggerimenti visti in fila, e quante ne sono partite.
+let suggesting: Promise<void> = Promise.resolve();
+let suggestedSaves = 0;
+/// Le superfici aperte che seguono i suggerimenti.
+const suggestedWatchers = new Set<(suggested: Suggested) => void>();
 
 /// Il livello dell'ultima lettura.
 export function currentLevel(): Level {
@@ -301,4 +321,98 @@ export function saveExportMemory(doc: string, memory: ExportMemory): Promise<voi
     })
     .catch(() => undefined);
   return exporting;
+}
+
+/// I suggerimenti dell'ultima lettura o dell'ultima scelta: `null` prima
+/// della prima lettura riuscita.
+export function currentSuggested(): Suggested | null {
+  return lastSuggested;
+}
+
+/// `value` come suggerimenti visti: i nomi del suo elenco, una volta sola;
+/// ciò che non è un nome non conta. Un nome che l'editor non conosce resta,
+/// per una versione più nuova.
+export function suggestedOf(value: unknown): readonly string[] {
+  const seen = typeof value === "object" && value !== null ? (value as Record<string, unknown>).seen : undefined;
+  if (!Array.isArray(seen)) return [];
+  return [...new Set((seen as unknown[]).filter((item): item is string => typeof item === "string"))];
+}
+
+/// Legge l'impostazione e i suggerimenti visti, dopo le scritture in corso.
+/// Un'impostazione che non si legge vale come l'ultima, o accesa; uno stato
+/// di vista che non si legge lascia gli ultimi visti, e prima della prima
+/// lettura riuscita dà `null`: senza memoria un suggerimento tornerebbe in
+/// ogni disegno.
+async function readSuggested(): Promise<Suggested | null> {
+  await suggesting;
+  const ticket = suggestedSaves;
+  let on = lastSuggested?.on ?? true;
+  try {
+    const value = (await settings(DRAW_BUNDLE)).find((entry) => entry.spec.key === SUGGESTIONS_KEY)?.value;
+    if (typeof value === "boolean") on = value;
+  } catch {
+    // Senza le impostazioni, vale l'ultima lettura.
+  }
+  let seen: readonly string[] | null = lastSuggested?.seen ?? null;
+  try {
+    const read = suggestedOf(await api.viewState<unknown>(SUGGESTED_KEY));
+    // Uno visto mentre si leggeva è più recente di ciò che si è letto.
+    seen = ticket === suggestedSaves ? read : (lastSuggested?.seen ?? read);
+  } catch {
+    // Lo stato di vista che non si legge lascia gli ultimi visti.
+  }
+  if (seen === null) return null;
+  lastSuggested = { on, seen };
+  return lastSuggested;
+}
+
+/// Legge i suggerimenti adesso e a ogni cambio dell'impostazione, e li dà a
+/// `apply`, come ciò che un'altra superficie aperta ha visto; una lettura
+/// superata da una più recente non arriva. Torna la funzione che smette.
+export function watchSuggested(apply: (suggested: Suggested | null) => void): () => void {
+  let generation = 0;
+  let stopped = false;
+  const read = (): void => {
+    const ticket = ++generation;
+    void readSuggested().then((suggested) => {
+      if (!stopped && ticket === generation) apply(suggested);
+    });
+  };
+  suggestedWatchers.add(apply);
+  const stop = onEvent("setting_changed", (event) => {
+    if (event.key === SUGGESTIONS_KEY) read();
+  });
+  read();
+  return () => {
+    stopped = true;
+    suggestedWatchers.delete(apply);
+    stop();
+  };
+}
+
+/// Ricorda i suggerimenti visti `seen` per i disegni che si aprono dopo, e
+/// lo dice alle superfici aperte. Le scritture vanno in fila; una che non
+/// riesce non dice niente: un suggerimento tornerà una volta di più.
+export function saveSuggested(seen: readonly string[]): void {
+  const suggested: Suggested = { on: lastSuggested?.on ?? true, seen };
+  lastSuggested = suggested;
+  suggestedSaves += 1;
+  suggesting = suggesting.then(() => api.setViewState(SUGGESTED_KEY, { seen })).catch(() => undefined);
+  for (const watcher of [...suggestedWatchers]) watcher(suggested);
+}
+
+/// Accende o spegne i suggerimenti, dalla loro casella: scrive
+/// l'impostazione, e le superfici aperte la rileggono col suo cambio. Una
+/// scrittura che non riesce lo dice, e la casella torna com'era.
+export function switchSuggestions(on: boolean): void {
+  if (lastSuggested !== null) lastSuggested = { ...lastSuggested, on };
+  void Promise.resolve()
+    .then(() => api.setSetting(SUGGESTIONS_KEY, on))
+    .catch((error: unknown) => {
+      notify(t("vector.suggestions.save_failed", { reason: errorText(error) }), "guasto");
+      if (lastSuggested === null) return;
+      const back: Suggested = { ...lastSuggested, on: !on };
+      lastSuggested = back;
+      for (const watcher of [...suggestedWatchers]) watcher(back);
+    });
 }

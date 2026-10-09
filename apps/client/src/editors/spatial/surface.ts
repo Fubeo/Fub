@@ -29,7 +29,8 @@
 // Il livello dell'editor è l'impostazione del vault `draw.level`, con le parti
 // del Personalizzato in `draw.custom`, e la griglia l'ultima scelta su questa
 // macchina (`preferences.ts`): la superficie li legge quando nasce, segue il
-// livello finché vive, e ricorda la griglia che chi disegna sceglie.
+// livello finché vive, e ricorda la griglia che chi disegna sceglie. Così i
+// suggerimenti brevi: se si mostrano, e quelli già visti.
 //
 // In Disegno il documento può non essere modificabile, e la modalità del
 // riquadro non cambia per questo (`docs/product/drawing.md`):
@@ -58,13 +59,17 @@ import {
   currentGrid,
   currentLevel,
   currentRecentColors,
+  currentSuggested,
   readExportMemory,
   readGrid,
   readRecentColors,
   saveExportMemory,
   saveGrid,
   saveRecentColors,
+  saveSuggested,
+  switchSuggestions,
   watchLevel,
+  watchSuggested,
 } from "./preferences";
 import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
@@ -291,6 +296,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   /// I colori recenti, come la griglia.
   let colors = currentRecentColors();
   let colorsChosen = false;
+  /// I suggerimenti, come il livello.
+  let suggested = currentSuggested();
 
   // --- I collegamenti -------------------------------------------------------
 
@@ -377,6 +384,9 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         colorsChosen = true;
         saveRecentColors(next);
       },
+      suggestions: suggested,
+      onSuggestionsSwitch: (on) => switchSuggestions(on),
+      onSuggestedChange: (seen) => saveSuggested(seen),
       links,
       ...(images === undefined ? {} : { images }),
       place,
@@ -677,6 +687,10 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     colors = next;
     editor?.setRecentColors(next);
   });
+  life.add(watchSuggested((next) => {
+    suggested = next;
+    editor?.setSuggestions(next);
+  }));
 
   // --- Le selezioni ---------------------------------------------------------
 

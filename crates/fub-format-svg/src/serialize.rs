@@ -1,5 +1,6 @@
 //! I documenti nuovi: un disegno con radice, titolo, carta e «Livello 1»
-//! (§2, §9), e le annotazioni di un PDF con radice e titolo.
+//! (§2, §9), e le annotazioni di un PDF con radice e titolo; e il titolo di un
+//! disegno che già c'è, [`retitle`], per chi lo copia da un modello.
 //!
 //! È generazione, non round-trip, come vuole il contratto: un documento che
 //! esiste lo modifica la superficie con patch sulla sorgente, e il modello di
@@ -9,7 +10,7 @@
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::path::{relative_ref, resolve_against};
 use fub_abi::{Fnv1a, FormatError};
-use fub_scene::{FUB_NS, SUPPORTED_VERSION, SVG_NS};
+use fub_scene::{Item, Scene, FUB_NS, SUPPORTED_VERSION, SVG_NS};
 
 use crate::escape;
 use crate::links::attribute_value;
@@ -125,6 +126,176 @@ pub(crate) fn new_annotations(model: &DocumentModel) -> Result<String, FormatErr
         )));
     }
     Ok(source)
+}
+
+/// Il disegno `source` con `title` per titolo: la copia di un modello, o di
+/// un disegno del vault, che nasce con il proprio nome come un disegno vuoto.
+///
+/// Del documento cambia soltanto il titolo, e il resto resta byte per byte:
+/// la dichiarazione XML, il doctype e i commenti prima della radice, gli
+/// attributi, le fine riga e il BOM. Se la radice ha un `<title>` con del
+/// testo se ne sostituisce il testo, e gli attributi dell'elemento restano; se
+/// manca o è vuoto, il titolo nuovo entra come **primo figlio** della radice,
+/// con il rientro del figlio che segue, e un `<title>` vuoto in testa ne
+/// prende il posto. Il titolo si scrive come lo legge l'indice (una riga sola,
+/// spazi ridotti a uno, niente caratteri che XML 1.0 non ammette) ed è
+/// escapato: un nome come `Mari & Monti` non apre un tag.
+///
+/// Si rilegge prima di restituirlo, come un disegno nuovo: la sorgente deve
+/// essere una scena FubDraw modificabile, e il risultato deve esserlo ancora,
+/// con quel titolo e gli stessi livelli, tavole e oggetti. Una sorgente che
+/// non lo è (un SVG scritto da un altro programma, un file troncato, una
+/// radice con un prefisso di namespace dove il titolo non entrerebbe) è un
+/// errore, e non una copia sbagliata.
+pub fn retitle(source: &str, title: &str) -> Result<String, FormatError> {
+    let title = plain(title);
+    if title.is_empty() {
+        return Err(FormatError::Serialize("il titolo è vuoto".into()));
+    }
+    let before = fub_scene::read(source)
+        .map_err(|error| FormatError::Serialize(format!("il disegno non si legge: {error}")))?;
+    if !before.editable() {
+        return Err(FormatError::Serialize(
+            "non è una scena FubDraw che si possa modificare".into(),
+        ));
+    }
+    let text = escape::text(&title);
+    let written = match &before.index.title {
+        Some(excerpt) => replace_title_text(source, excerpt.span.bytes, &text),
+        None => insert_title(source, &before, &text),
+    }
+    .ok_or_else(|| {
+        FormatError::Serialize("la radice del disegno non ha la forma di una scena FubDraw".into())
+    })?;
+
+    let after = fub_scene::read(&written)
+        .map_err(|error| FormatError::Serialize(format!("il disegno non si rilegge: {error}")))?;
+    let read_title = after.index.title.as_ref().map(|t| t.text.as_str());
+    if !after.editable()
+        || read_title != Some(title.as_str())
+        || after.summary.layers != before.summary.layers
+        || after.summary.boards != before.summary.boards
+        || !same_objects(&before.summary.counts, &after.summary.counts)
+    {
+        return Err(FormatError::Serialize(format!(
+            "il disegno con il titolo «{title}» non si rilegge come è stato scritto"
+        )));
+    }
+    Ok(written)
+}
+
+/// Gli oggetti della scena sono gli stessi. I blocchi estranei possono
+/// calare: un `<title>` con un commento o un `CDATA` dentro ne contava uno, e
+/// con il testo nuovo non c'è più.
+fn same_objects(before: &fub_scene::Counts, after: &fub_scene::Counts) -> bool {
+    after.strokes == before.strokes
+        && after.shapes == before.shapes
+        && after.texts == before.texts
+        && after.images == before.images
+        && after.links == before.links
+        && after.foreign <= before.foreign
+}
+
+/// Gli spazi di XML: i soli che il parser non conta come testo.
+const XML_SPACE: [char; 4] = [' ', '\t', '\r', '\n'];
+
+/// Dove finisce il tag di apertura che comincia in `element`: l'indice dopo il
+/// `>`, saltando quelli dentro i valori fra virgolette.
+fn open_tag_end(element: &str) -> Option<usize> {
+    let mut quote = None;
+    for (at, c) in element.char_indices() {
+        match (quote, c) {
+            (Some(open), c) if c == open => quote = None,
+            (Some(_), _) => {}
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '>') => return Some(at + 1),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// `source` con il testo del `<title>` che sta in `bytes` sostituito da `text`.
+fn replace_title_text(source: &str, bytes: [usize; 2], text: &str) -> Option<String> {
+    let [from, to] = bytes;
+    let element = source.get(from..to)?;
+    let open = open_tag_end(element)?;
+    if element[..open].ends_with("/>") {
+        return None;
+    }
+    let close = element.rfind("</")?;
+    if close < open {
+        return None;
+    }
+    Some(format!(
+        "{}{text}{}",
+        &source[..from + open],
+        &source[from + close..]
+    ))
+}
+
+/// Quanto è lungo, in testa a `rest`, un `<title>` senza testo: `<title/>` o
+/// `<title></title>`, anche con gli spazi in mezzo.
+fn empty_title_len(rest: &str) -> Option<usize> {
+    let after = rest.strip_prefix("<title")?;
+    if !after.starts_with(|c: char| XML_SPACE.contains(&c) || c == '>' || c == '/') {
+        return None;
+    }
+    let open = open_tag_end(rest)?;
+    if rest[..open].ends_with("/>") {
+        return Some(open);
+    }
+    let close = rest[open..].find("</title>")?;
+    rest[open..open + close]
+        .trim_matches(XML_SPACE)
+        .is_empty()
+        .then_some(open + close + "</title>".len())
+}
+
+/// `source` con un `<title>` nuovo come primo figlio della radice.
+fn insert_title(source: &str, scene: &Scene, text: &str) -> Option<String> {
+    let [start, _] = scene.items.iter().find_map(|item| match item {
+        Item::Root(root) => Some(root.span.bytes),
+        _ => None,
+    })?;
+    let tag = source.get(start..)?;
+    // La radice senza prefisso: è il solo caso in cui un `<title>` senza
+    // prefisso sta nel namespace di SVG, che la rilettura poi verifica.
+    let name = tag.strip_prefix("<svg")?;
+    if !name.starts_with(|c: char| XML_SPACE.contains(&c) || c == '>' || c == '/') {
+        return None;
+    }
+    let open_end = start + open_tag_end(tag)?;
+    let eol = if source.contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    if source[..open_end].ends_with("/>") {
+        // Una radice senza figli: si apre per dare posto al titolo.
+        let head = source[..open_end - 2].trim_end_matches(XML_SPACE);
+        return Some(format!(
+            "{head}>{eol}  <title>{text}</title>{eol}</svg>{}",
+            &source[open_end..]
+        ));
+    }
+    let rest = &source[open_end..];
+    let content = rest.trim_start_matches(XML_SPACE);
+    let gap = &rest[..rest.len() - content.len()];
+    if let Some(empty) = empty_title_len(content) {
+        return Some(format!(
+            "{}{gap}<title>{text}</title>{}",
+            &source[..open_end],
+            &content[empty..]
+        ));
+    }
+    // Il rientro del primo figlio, se sta a capo; altrimenti il titolo si
+    // attacca al tag.
+    let indent = if gap.contains('\n') { gap } else { "" };
+    Some(format!(
+        "{}{indent}<title>{text}</title>{rest}",
+        &source[..open_end]
+    ))
 }
 
 /// Il titolo di un documento nuovo: il primo heading di livello 1 del

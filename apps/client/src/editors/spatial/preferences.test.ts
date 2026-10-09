@@ -499,3 +499,144 @@ describe("le scelte di «Esporta» ricordate", () => {
     broken();
   });
 });
+
+describe("i suggerimenti ricordati", () => {
+  const SUGGESTED_KEY = "draw.suggested";
+
+  /// L'interruttore della macchina come lo dichiara `fub.draw`, col valore
+  /// `value`.
+  function suggestionsEntry(value: boolean): SettingEntry {
+    return {
+      spec: {
+        key: "draw.suggestions",
+        label: "Suggerimenti brevi",
+        description: "",
+        group: "Disegni",
+        scope: "machine",
+        kind: { kind: "toggle", default: true },
+        program_writable: false,
+      },
+      value,
+      source: value ? "default" : "machine",
+    } as SettingEntry;
+  }
+
+  it("si leggono dall'impostazione e dallo stato di vista: nomi una volta sola, e senza impostazione accesi", async () => {
+    const host = createFakeHost({ settings: [suggestionsEntry(false)] });
+    const { currentSuggested, suggestedOf, watchSuggested } = await boot(host);
+    expect(currentSuggested(), "prima di leggere").toBeNull();
+    await host.module.api.setViewState(SUGGESTED_KEY, { seen: ["two-fingers", 7, "two-fingers", "domani"] });
+    const applied: unknown[] = [];
+    const stop = watchSuggested((suggested) => applied.push(suggested));
+    await settle();
+    expect(applied).toEqual([{ on: false, seen: ["two-fingers", "domani"] }]);
+    expect(currentSuggested()).toEqual({ on: false, seen: ["two-fingers", "domani"] });
+    stop();
+    for (const broken of [null, "rotto", [], { seen: "two-fingers" }, { visti: ["two-fingers"] }]) {
+      expect(suggestedOf(broken), JSON.stringify(broken)).toEqual([]);
+    }
+
+    const bare = await boot(createFakeHost({ settings: [OTHER] }));
+    const fresh: unknown[] = [];
+    bare.watchSuggested((suggested) => fresh.push(suggested));
+    await settle();
+    expect(fresh).toEqual([{ on: true, seen: [] }]);
+  });
+
+  it("uno stato di vista che non si legge, la prima volta, non dà memoria: i suggerimenti non tornerebbero a ogni disegno", async () => {
+    const host = createFakeHost({ settings: [suggestionsEntry(true)] });
+    const { watchSuggested } = await boot(host);
+    const broken = host.fault("viewState");
+    const applied: unknown[] = [];
+    watchSuggested((suggested) => applied.push(suggested));
+    await settle();
+    expect(applied).toEqual([null]);
+    broken();
+  });
+
+  it("segue l'interruttore, e ciò che un'altra superficie ha visto le arriva subito", async () => {
+    const host = createFakeHost({ settings: [suggestionsEntry(true), OTHER] });
+    const { saveSuggested, watchSuggested } = await boot(host);
+    const one: unknown[] = [];
+    const two: unknown[] = [];
+    const stopOne = watchSuggested((suggested) => one.push(suggested));
+    watchSuggested((suggested) => two.push(suggested));
+    await settle();
+    expect(one).toEqual([{ on: true, seen: [] }]);
+
+    await host.module.api.setSetting("editor.line_numbers", false);
+    await settle();
+    expect(settingsReads(host), "un'altra impostazione non fa rileggere").toHaveLength(2);
+
+    saveSuggested(["hold-shape"]);
+    expect(one[one.length - 1]).toEqual({ on: true, seen: ["hold-shape"] });
+    expect(two[two.length - 1]).toEqual({ on: true, seen: ["hold-shape"] });
+    await settle();
+    expect(await host.module.api.viewState(SUGGESTED_KEY)).toEqual({ seen: ["hold-shape"] });
+
+    await host.module.api.setSetting("draw.suggestions", false);
+    await settle();
+    expect(one[one.length - 1]).toEqual({ on: false, seen: ["hold-shape"] });
+    expect(two[two.length - 1]).toEqual({ on: false, seen: ["hold-shape"] });
+
+    stopOne();
+    const count = one.length;
+    saveSuggested(["hold-shape", "label-shape"]);
+    await host.module.api.setSetting("draw.suggestions", true);
+    await settle();
+    expect(one, "dopo stop").toHaveLength(count);
+    expect(two[two.length - 1]).toEqual({ on: true, seen: ["hold-shape", "label-shape"] });
+  });
+
+  it("uno visto mentre si legge vale più di ciò che si è letto, e la lettura aspetta le scritture", async () => {
+    const host = createFakeHost({ settings: [suggestionsEntry(true)] });
+    const { saveSuggested, watchSuggested } = await boot(host);
+    const applied: unknown[] = [];
+    watchSuggested((suggested) => applied.push(suggested));
+    await settle();
+
+    const release = host.throttle("setViewState");
+    saveSuggested(["two-fingers"]);
+    await host.module.api.setSetting("draw.suggestions", true);
+    await settle();
+    expect(host.atGate("viewState"), "la lettura aspetta la scrittura").toHaveLength(1);
+    release();
+    await settle();
+    expect(applied[applied.length - 1]).toEqual({ on: true, seen: ["two-fingers"] });
+
+    const slow = host.throttle("viewState");
+    await host.module.api.setSetting("draw.suggestions", true);
+    await settle();
+    saveSuggested(["two-fingers", "label-shape"]);
+    slow();
+    await settle();
+    expect(applied[applied.length - 1]).toEqual({ on: true, seen: ["two-fingers", "label-shape"] });
+  });
+
+  it("la casella scrive l'interruttore; una scrittura che non riesce lo dice e torna com'era", async () => {
+    const host = createFakeHost({ settings: [suggestionsEntry(true)] });
+    const { currentSuggested, switchSuggestions, watchSuggested } = await boot(host);
+    const applied: unknown[] = [];
+    watchSuggested((suggested) => applied.push(suggested));
+    await settle();
+
+    switchSuggestions(false);
+    expect(currentSuggested()).toEqual({ on: false, seen: [] });
+    await settle();
+    expect(host.atGate("setSetting").map((call) => call.args)).toEqual([["draw.suggestions", false]]);
+    expect(applied[applied.length - 1]).toEqual({ on: false, seen: [] });
+
+    // Un host che non la conosce rifiuta la scrittura.
+    const bare = await boot(createFakeHost({ settings: [OTHER] }));
+    bare.clearHistory();
+    const back: unknown[] = [];
+    bare.watchSuggested((suggested) => back.push(suggested));
+    await settle();
+    bare.switchSuggestions(false);
+    expect(bare.currentSuggested()).toEqual({ on: false, seen: [] });
+    await settle();
+    expect(bare.recentNotices().map((notice) => notice.text)).toEqual([expect.stringMatching(/^Non riesco a cambiare i suggerimenti dei disegni: .+/)]);
+    expect(back[back.length - 1], "la casella torna accesa").toEqual({ on: true, seen: [] });
+    expect(bare.currentSuggested()).toEqual({ on: true, seen: [] });
+  });
+});

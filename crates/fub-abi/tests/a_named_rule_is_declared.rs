@@ -521,6 +521,15 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/draw/templates.rs::of",
+            (
+                Family::AsciiCase,
+                "sceglie la lingua dei file di un modello di disegno dalla parte di lingua di un \
+                 tag BCP 47, come `text.rs::template`: è ASCII per la grammatica del tag, ed `EN` \
+                 ed `en` sono la stessa lingua.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/path_policy.rs::is_dos_device",
             (
                 Family::AsciiCase,

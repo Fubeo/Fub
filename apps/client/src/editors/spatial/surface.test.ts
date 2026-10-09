@@ -749,17 +749,20 @@ describe("il livello e la griglia", () => {
     const surface = mountFresh(parent);
     await settle();
     expect(tools(parent)).not.toContain("highlighter");
+    // Quando nasce legge il livello e i suggerimenti; poi un cambio del
+    // livello lo rilegge una volta.
+    const born = reads(host);
 
     await host.module.api.setSetting("draw.level", "standard");
     await settle();
     expect(tools(parent)).toContain("highlighter");
-    expect(reads(host)).toBe(2);
+    expect(reads(host)).toBe(born + 1);
 
     surface.destroy();
     mounted = [];
     await host.module.api.setSetting("draw.level", "essential");
     await settle();
-    expect(reads(host), "una superficie distrutta non rilegge").toBe(2);
+    expect(reads(host), "una superficie distrutta non rilegge").toBe(born + 1);
   });
 
   it("i colori recenti vengono dallo stato di vista, si ricordano scelti, e una superficie nuova parte da lì", async () => {

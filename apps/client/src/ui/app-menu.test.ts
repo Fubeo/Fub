@@ -139,3 +139,65 @@ describe("il menu Vista e le view principali", () => {
     teardown();
   });
 });
+
+describe("il menu File e le creazioni", () => {
+  afterEach(() => {
+    closeContextMenu();
+    document.body.replaceChildren();
+  });
+
+  function mountWith(creations: MenuHost["creations"]): () => void {
+    document.body.replaceChildren();
+    const menubar = document.createElement("nav");
+    menubar.id = "app-menu";
+    document.body.append(menubar);
+    return mountAppMenu({ run: () => {}, creations });
+  }
+
+  function fileMenuLabels(): string[] {
+    document.querySelector<HTMLButtonElement>("#app-menu-0")!.click();
+    return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].map(
+      (item) => item.textContent ?? "",
+    );
+  }
+
+  it("mette «Nuovo disegno…» subito dopo «Nuova nota», e lo esegue", () => {
+    const opened: string[] = [];
+    const teardown = mountWith(() => [{ label: "Nuovo disegno…", run: () => opened.push("disegno") }]);
+    const labels = fileMenuLabels();
+    expect(labels.indexOf("Nuovo disegno…")).toBe(labels.indexOf("Nuova nota") + 1);
+    const item = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
+      .find((entry) => entry.textContent === "Nuovo disegno…")!;
+    item.click();
+    expect(opened).toEqual(["disegno"]);
+    // Il menu si è chiuso: la voce non lascia il menu aperto sotto la galleria.
+    expect(document.querySelector("#app-menu-0")!.getAttribute("aria-expanded")).toBe("false");
+    teardown();
+  });
+
+  it("senza creazioni la voce non c'è, e il resto del menu File è quello di prima", () => {
+    const without = mountWith(undefined);
+    const bare = fileMenuLabels();
+    expect(bare).not.toContain("Nuovo disegno…");
+    expect(bare.indexOf("Nuova nota")).toBe(0);
+    expect(bare[1]).not.toBe("");
+    without();
+
+    const empty = mountWith(() => []);
+    expect(fileMenuLabels()).toEqual(bare);
+    empty();
+  });
+
+  it("legge l'elenco a ogni apertura: il comando che arriva dopo compare, quello che se ne va sparisce", () => {
+    let declared = false;
+    const teardown = mountWith(() => (declared ? [{ label: "Nuovo disegno…", run: () => {} }] : []));
+    expect(fileMenuLabels()).not.toContain("Nuovo disegno…");
+    closeContextMenu();
+    declared = true;
+    expect(fileMenuLabels()).toContain("Nuovo disegno…");
+    closeContextMenu();
+    declared = false;
+    expect(fileMenuLabels()).not.toContain("Nuovo disegno…");
+    teardown();
+  });
+});

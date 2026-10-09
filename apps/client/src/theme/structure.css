@@ -1789,6 +1789,77 @@ html, body, #app {
   flex: none;
   min-height: 44px;
 }
+/* Il suggerimento breve, sotto il foglio: una riga dell'editor, non un
+   riquadro sopra il disegno, e il foglio si accorcia per lei. La lampadina,
+   il testo che va a capo, la casella e la croce; stretto, la casella va
+   sotto il testo. */
+.draw-suggestions {
+  flex: none;
+}
+.draw-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.draw-suggestion-icon {
+  flex: none;
+}
+.draw-suggestion-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-suggestion-off {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+.draw-suggestion-close {
+  flex: none;
+}
+/* La galleria di «Nuovo disegno» (`draw-new-*`): la geometria che nessun tema
+   cambia. Il nome e la cartella affiancati, le schede e i disegni del vault in
+   griglie che si stringono, l'anteprima ritagliata nel suo riquadro; l'avviso
+   c'è sempre, perché chi legge con una voce lo senta quando il testo arriva, e
+   vuoto non occupa posto. Sul telefono una colonna sola per i campi, due per le
+   schede, e le azioni stanno sopra la barra di sistema. Colori, bordi, spazi e
+   il riquadro stanno nella pelle. */
+.draw-new-fields {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.draw-new-cards {
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+}
+.draw-new-vault {
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+.draw-new-image {
+  object-fit: contain;
+}
+.draw-new-alert:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 760px) {
+  .draw-new-fields,
+  .draw-new-vault {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .draw-new-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .modale .palette-box.draw-new {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
 /* La descrizione di un'immagine appena entrata: in fondo al foglio, al
    centro; sopra la barra del gruppo isolato quando c'è. */
 .draw-describe {
@@ -3319,6 +3390,17 @@ textarea.draw-properties-input {
   }
   .draw-radial-center[data-pointing]::after {
     border-bottom-color: Highlight !important;
+  }
+  /* La galleria di «Nuovo disegno»: la scheda scelta ha l'anello
+     dell'evidenza, oltre al pulsante di scelta; la carta bianca del modello
+     vuoto tiene il suo bordo del testo. */
+  .draw-new-card[data-selected],
+  .draw-new-vault-item[data-selected] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .draw-new-blank {
+    border-color: CanvasText;
   }
 }
 .base-search { min-width: 8rem; flex: 1; }

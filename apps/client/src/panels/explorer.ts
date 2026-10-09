@@ -35,7 +35,7 @@ import {
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu } from "../ui/menu";
-import { registerShellCommand } from "../ui/commands";
+import { canCreateDrawing, newDrawing, registerShellCommand } from "../ui/commands";
 import { showPanel } from "./sidebar";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { canShowFile, focusEditor, openDocument } from "./document";
@@ -90,10 +90,14 @@ let lastSignature = "";
 export function mountExplorer(lifetime: Lifetime): void {
   lifetime.listen($("#new-note"), "click", () => void newNote());
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
-  // spazio attivo): il suo contestuale crea una cartella lì.
+  // spazio attivo): il suo contestuale crea lì un disegno, se il kernel sa
+  // farli, e una cartella.
   lifetime.listen(filesTitleEl, "contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e, [
+      ...(canCreateDrawing()
+        ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(state.activeSpace ?? "") }]
+        : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
     ]);
   });
@@ -149,6 +153,12 @@ export function mountExplorer(lifetime: Lifetime): void {
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
   // icone, pin e ordine non passano dal kernel.
   lifetime.add(on("organization", renderFileList));
+  // L'elenco dei comandi arriva dopo l'apertura del vault: un albero vuoto
+  // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
+  // ne va. Un albero con delle note non ha niente da ridisegnare.
+  lifetime.add(on("commands", () => {
+    if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
+  }));
   lifetime.add(on("active-doc", markActive));
 
   // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
@@ -321,6 +331,16 @@ function renderFileList(): void {
     create.textContent = t("commands.note.new");
     create.addEventListener("click", () => void newNote());
     li.append(text, create);
+    // Il primo gesto può anche essere un disegno, se il kernel sa farli.
+    if (canCreateDrawing()) {
+      const draw = document.createElement("button");
+      draw.type = "button";
+      draw.className = "link-button";
+      draw.textContent = t("explorer.empty.new_drawing");
+      draw.addEventListener("click", () => void newDrawing(state.activeSpace ?? ""));
+      // Uno spazio fra i due, che vanno a capo insieme se non ci stanno.
+      li.append(document.createTextNode(" "), draw);
+    }
     fileListEl.append(li);
   }
 
@@ -874,6 +894,11 @@ function folderMenu(at: MouseEvent, path: string): void {
   const reorder = reorderActions(path);
   showContextMenu(at, [
     { label: t("explorer.new_note_here"), run: () => void newNote(path) },
+    // Accanto alla nota, se il kernel sa fare disegni: la cartella arriva alla
+    // galleria già scelta.
+    ...(canCreateDrawing()
+      ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(path) }]
+      : []),
     { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
     { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
     { label: t("explorer.as_space"), run: () => addSpace(path) },

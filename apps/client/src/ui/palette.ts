@@ -29,7 +29,7 @@ import { errorText } from "../host/errors";
 import { stableIdentifier, trapFocus } from "./a11y";
 import type { Tone } from "./notify";
 import { type Key, t } from "../i18n/strings";
-import { allCommands, displayBinding, loadKeyOverrides, type CommandEntry } from "./commands";
+import { allCommands, displayBinding, hasCommandForm, loadKeyOverrides, openCommandForm, type CommandEntry } from "./commands";
 import { enterSurface, exitSurface } from "./motion";
 import { readState, setCommandSpecs, writeState } from "../state/store";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
@@ -717,12 +717,28 @@ export function closeSlashPalette(owner: HTMLElement): void {
 /// passi dopo sono gli stessi della palette — parametri se ce ne sono, piano se
 /// il raggio lo merita: una scorciatoia non è un permesso di saltare il
 /// consenso.
-export function startCommand(entry: CommandEntry, host: PaletteHost) {
+///
+/// `prefill` è ciò che chi lo lancia sa già, come testo per nome di parametro
+/// (la cartella dove si crea, per esempio): lo riceve il modulo proprio del
+/// comando, se ne ha uno, e altrimenti riempie i campi del modulo generico.
+export function startCommand(entry: CommandEntry, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   if (entry.run) {
     runShellCommand(entry, host);
     return;
   }
-  start(entry, openOverlay(), host);
+  if (openOwnForm(entry, prefill)) return;
+  start(entry, openOverlay(), host, prefill);
+}
+
+/// Il comando ha un modulo proprio? Allora la palette si chiude, se era
+/// aperta, e il modulo si apre al posto del suo: vero se è andata così. La
+/// palette si chiude **prima**, perché il fuoco torna a chi l'aveva e il modulo
+/// lo prende da lì; l'esito lo consegna il modulo, con `deliverOutcome`, che
+/// ricorda anche il comando fra i recenti.
+function openOwnForm(entry: CommandEntry, prefill: Readonly<Record<string, string>>): boolean {
+  if (entry.spec === null || !hasCommandForm(entry.spec.id)) return false;
+  closeCommandPalette();
+  return openCommandForm(entry.spec.id, prefill);
 }
 
 /// Un comando di shell che fallisce lo dice: il suo `run` è spesso asincrono,
@@ -934,7 +950,7 @@ function chooseSpecs(
 
 /// Passo 2: i parametri, se il comando ne dichiara. Se non ne dichiara, si va
 /// dritti all'esecuzione — la palette non inventa domande che nessuno ha fatto.
-function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
+function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   // Un comando di shell si fa e basta: non ha parametri da chiedere né un piano
   // da mostrare, perché non tocca il vault.
   if (entry.run) {
@@ -943,15 +959,16 @@ function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
     runShellCommand(entry, host);
     return;
   }
+  if (openOwnForm(entry, prefill)) return;
   const spec = entry.spec!;
   if (spec.params.length === 0) {
     void execute(spec, {}, box, host);
     return;
   }
-  renderForm(spec, box, host);
+  renderForm(spec, box, host, prefill);
 }
 
-function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
+function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   box.innerHTML = "";
   const title = document.createElement("div");
   title.className = "palette-heading";
@@ -996,6 +1013,10 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
     name.textContent = param.required ? t("palette.required", { title: param.title }) : param.title;
     label.appendChild(name);
     const field = fieldFor(param, datalist.id);
+    // Ciò che chi ha aperto il modulo sa già: i campi di testo e le scelte lo
+    // prendono se è un loro valore.
+    const known = prefill[param.name];
+    if (known !== undefined && !(field instanceof HTMLInputElement && field.type === "checkbox")) field.value = known;
     fields.set(param.name, field);
     label.appendChild(field);
     if (param.description) {
@@ -1183,7 +1204,11 @@ function showLayer(
   apply.focus();
 }
 
-async function deliverOutcome(
+/// Consegna l'esito di un comando come lo fa la palette: l'avviso (di un colore
+/// che dice se è andato a metà), il comando fra i recenti, l'effetto alla shell.
+/// Lo usa anche un modulo proprio di un comando (`registerCommandForm`), così il
+/// risultato si tratta ovunque nello stesso modo.
+export async function deliverOutcome(
   outcome: CommandOutcome,
   host: Pick<PaletteHost, "onEffect" | "notify">,
   id?: string,

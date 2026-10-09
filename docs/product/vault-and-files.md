@@ -133,9 +133,14 @@ nome senza estensione riceve `.svg`, e uno con l'estensione di un altro formato
 non è un disegno. Un nome semplice nasce nella cartella `folder`, se è data,
 altrimenti nella radice; un path esplicito conserva la propria cartella. Un nome
 occupato è un errore e mai una sovrascrittura, e prima di scrivere il nome passa
-la regola dei nomi nuovi. Il file lo scrive il provider dei disegni, con il nome
-per titolo e «Livello 1». La prova a vuoto fa gli stessi controlli e non scrive;
-l'annullamento manda il disegno nel cestino.
+la regola dei nomi nuovi. Senza `template`, o con `blank`, il file lo scrive il
+provider dei disegni, con il nome per titolo e «Livello 1». Con un altro
+`template` è il file di quel modello, nella lingua di chi lo crea; con `from` è
+la copia di un disegno del vault, e un modello e `from` insieme sono un errore.
+In tutti e due i casi il `title` della radice diventa il nome. La finestra che
+offre i modelli è in [Disegni, modelli e suggerimenti](drawing-new.md). La prova
+a vuoto fa gli stessi controlli e non scrive; l'annullamento manda il disegno nel
+cestino.
 
 «Annota il PDF» (`pdf.annotate`, con la feature `draw`) apre le annotazioni di
 un PDF del vault: il file `X.pdf.fubann` accanto a `X.pdf`, con il nome intero

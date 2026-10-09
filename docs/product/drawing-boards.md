@@ -22,6 +22,10 @@ tavole](../reference/scene-format-boards.md); i comandi sono in
 - **La prima tavola nasce dalla pagina.** In un disegno senza tavole la
   pagina diventa la tavola 1, con la sua carta, e la tavola nuova viene dopo
   di lei: «La pagina è diventata Tavola 1; Tavola 2 aggiunta, 100 × 70.».
+  Sono due passi di annulla, «Prima tavola dalla pagina» e poi «Nuova
+  tavola»: chi annulla la tavola nuova ritrova la tavola 1, ed è lei la
+  scelta; un altro annulla riporta la pagina. Così anche «Duplica» sulla
+  pagina.
   Eliminare l'ultima tavola fa il contrario: il disegno torna una pagina
   sola, grande quanto lei e allargata quanto serve a coprire tutto il
   disegno. Una pagina con più di una carta, o con una carta senza id, non
@@ -262,10 +266,12 @@ che si vedono: mille tavole scorrono come dieci. Il banco delle tavole
 e vuole a ogni passo l'annuncio giusto e il passo dipinto entro 50 ms.
 
 Ogni comando è un passo di annulla, col suo nome nella
-[cronologia](drawing-history.md): «Nuova tavola», «Spostamento di una
-tavola», «Misure di una tavola», «Tavola eliminata», «Nome di una tavola»,
-«Ordine delle tavole» e «Copia di una tavola». Con lo strumento Tavola,
-annullare e ripetere scelgono la tavola che il passo ha toccato, se c'è.
+[cronologia](drawing-history.md): «Prima tavola dalla pagina», «Nuova
+tavola», «Spostamento di una tavola», «Misure di una tavola», «Tavola
+eliminata», «Nome di una tavola», «Ordine delle tavole» e «Copia di una
+tavola». Con lo strumento Tavola, annullare e ripetere scelgono la tavola che
+il passo ha toccato, se c'è; se il passo toglie la tavola scelta, scelgono
+quella che le stava prima, o la pagina quando non ne resta nessuna.
 
 In un documento in sola lettura le tavole si guardano e ci si va, con
 `Alt+PagSu`, `Alt+PagGiù` e con l'elenco, ma non cambiano; nell'elenco gli

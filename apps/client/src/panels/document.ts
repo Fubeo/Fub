@@ -118,7 +118,7 @@ import { createNote, loadCommandSpecs } from "../state/vault";
 import { $ } from "../ui/dom";
 import { showContextMenu } from "../ui/menu";
 import { confirm } from "../host/dialog";
-import { allCommands, ariaBinding, displayBinding, registerShellCommand } from "../ui/commands";
+import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing, registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "../state/slash";
@@ -460,6 +460,13 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   // componente acceso o spento — ogni riquadro ridisegna la sua.
   lifetime.add(on("commands", () => {
     for (const pane of panes.values()) pane.formatBar.update(state.commandSpecs);
+    // Il riquadro vuoto offre «Nuovo disegno…» quando il kernel ha il comando,
+    // e l'elenco arriva dopo che il vault è già aperto.
+    for (const id of layoutPanes()) {
+      const pane = panes.get(id);
+      const current = paneState(id);
+      if (pane && current) drawEmptyPane(pane, current.tabs.length === 0);
+    }
   }));
   // Una finestra documento a parte non apre niente da sé: i link e i tag che
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
@@ -1512,28 +1519,48 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
   drawTabOverflow(r, tabs, active);
 }
 
-/// Lo stato vuoto del riquadro: due gesti con le loro scorciatoie. Si
-/// ridisegna a ogni giro perché segue lingua e accordi riconfigurati.
+/// Lo stato vuoto del riquadro: i gesti con le loro scorciatoie, e «Nuovo
+/// disegno…» se il kernel sa farli. Si ridisegna a ogni giro perché segue
+/// lingua, accordi riconfigurati e l'elenco dei comandi del kernel, che arriva
+/// dopo l'apertura del vault.
 function drawEmptyPane(r: Pane, empty: boolean): void {
   r.emptyEl.hidden = !empty || state.vaultRoot === "";
   if (r.emptyEl.hidden) return;
   const chord = (id: string): string =>
     displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null);
+  /// Un gesto del comando di shell `id`, col nome `label` e la sua scorciatoia.
+  const shellGesture = (id: string, label: "commands.note.new" | "pane.empty.open") => {
+    const keys = chord(id);
+    return {
+      text: keys ? `${t(label)} (${keys})` : t(label),
+      run: () => allCommands().find((candidate) => candidate.id === id)?.run?.(),
+    };
+  };
+  const gestures = [
+    shellGesture("shell.note.new", "commands.note.new"),
+    // La porta di un disegno, fra la nota nuova e l'apertura: due creazioni
+    // vicine. Senza il comando del kernel non c'è, e non lascia un buco.
+    ...(canCreateDrawing() ? [{ text: t("pane.empty.new_drawing"), run: () => void newDrawing() }] : []),
+    shellGesture("shell.switcher", "pane.empty.open"),
+  ];
+  // Se i gesti sono gli stessi non si tocca niente: chi ha il fuoco su un
+  // bottone non lo perde per un elenco di comandi che è arrivato uguale.
+  const signature = JSON.stringify([t("pane.empty.title"), gestures.map((gesture) => gesture.text)]);
+  if (r.emptyEl.dataset.gestures === signature) return;
+  r.emptyEl.dataset.gestures = signature;
   const title = document.createElement("p");
   title.className = "pane-empty-title";
   title.textContent = t("pane.empty.title");
   const actions = document.createElement("div");
   actions.className = "pane-empty-actions";
-  for (const [id, label] of [["shell.note.new", "commands.note.new"], ["shell.switcher", "pane.empty.open"]] as const) {
+  for (const gesture of gestures) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "link-button";
-    const keys = chord(id);
-    button.textContent = keys ? `${t(label)} (${keys})` : t(label);
+    button.textContent = gesture.text;
     button.addEventListener("click", () => {
       focusPane(r.id);
-      const entry = allCommands().find((candidate) => candidate.id === id);
-      entry?.run?.();
+      gesture.run();
     });
     actions.append(button);
   }

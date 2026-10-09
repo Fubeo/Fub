@@ -11,7 +11,10 @@ const fake = vi.hoisted(() => ({
 vi.mock("../host/ipc", () => ({ api: fake }));
 vi.mock("../host/query", () => ({ settings: fake.settings }));
 
-import { closeCommandPalette, openCommandPalette } from "./palette";
+import { drawingCreateSpec } from "../host/fake";
+import { allCommands, registerCommandForm, resetCommandForms, type CommandEntry } from "./commands";
+import { state } from "../state/store";
+import { closeCommandPalette, deliverOutcome, openCommandPalette, startCommand } from "./palette";
 
 function command(id: string, title: string): CommandSpec {
   return {
@@ -60,9 +63,12 @@ beforeEach(() => {
   fake.invokeCommand.mockResolvedValue({ notify: null, effect: { kind: "done" }, undo: null, partial: null });
   host.onEffect.mockReset();
   host.notify.mockReset();
+  resetCommandForms();
+  state.commandSpecs = [];
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   closeCommandPalette();
   vi.runAllTimers();
   document.body.innerHTML = "";
@@ -195,5 +201,110 @@ describe("combobox della palette", () => {
 
     expect(document.getElementById("command-palette")).toBeNull();
     expect(document.activeElement).toBe(opener);
+  });
+});
+
+describe("il modulo proprio di un comando", () => {
+  /// La voce di `drawing.create` come la vede la tastiera.
+  function creation(): CommandEntry {
+    state.commandSpecs = [drawingCreateSpec()];
+    return allCommands().find((entry) => entry.id === "drawing.create")!;
+  }
+
+  it("Invio su un comando che ha un modulo chiude la palette e apre il modulo, senza invocare niente", async () => {
+    const opened: Record<string, string>[] = [];
+    registerCommandForm("drawing.create", (prefill) => opened.push({ ...prefill }));
+    const { input } = await openPalette([drawingCreateSpec(), command("cmd.alpha", "Alpha")]);
+    input.value = "nuovo disegno";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    vi.runAllTimers();
+    await Promise.resolve();
+
+    expect(opened).toEqual([{}]);
+    expect(document.getElementById("command-palette")).toBeNull();
+    expect(fake.invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("una scorciatoia lo apre senza passare dalla palette, col prefill di chi lo lancia", () => {
+    const opened: Record<string, string>[] = [];
+    registerCommandForm("drawing.create", (prefill) => opened.push({ ...prefill }));
+    startCommand(creation(), host, { folder: "Schemi" });
+
+    expect(opened).toEqual([{ folder: "Schemi" }]);
+    expect(document.getElementById("command-palette")).toBeNull();
+    expect(fake.invokeCommand).not.toHaveBeenCalled();
+  });
+
+  it("se la palette era aperta, la chiude e apre il modulo una volta sola", async () => {
+    await openPalette([drawingCreateSpec()]);
+    expect(document.getElementById("command-palette")).not.toBeNull();
+    const opened: Record<string, string>[] = [];
+    registerCommandForm("drawing.create", (prefill) => opened.push({ ...prefill }));
+    startCommand(creation(), host);
+    vi.runAllTimers();
+    expect(opened).toEqual([{}]);
+    expect(document.getElementById("command-palette")).toBeNull();
+  });
+
+  it("senza un modulo registrato il comando passa dal modulo generico, e il prefill riempie i campi", async () => {
+    // happy-dom non mette `Option` fra i globali, e il modulo generico lo usa
+    // per le scelte.
+    vi.stubGlobal(
+      "Option",
+      function (text: string, value: string) {
+        const option = document.createElement("option");
+        option.textContent = text;
+        option.value = value;
+        return option;
+      },
+    );
+    startCommand(creation(), host, { folder: "Schemi", template: "slide" });
+    const overlay = document.getElementById("command-palette")!;
+    const fields = [...overlay.querySelectorAll<HTMLInputElement | HTMLSelectElement>("form input, form select")];
+    const byLabel = (title: string) =>
+      fields.find((field) => field.closest("label")?.querySelector(".palette-label")?.textContent === title)!;
+    expect(byLabel("Cartella").value).toBe("Schemi");
+    expect(byLabel("Modello").value).toBe("slide");
+    expect(byLabel("Nome").value).toBe("");
+    expect(fake.invokeCommand).not.toHaveBeenCalled();
+
+    overlay.querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await vi.waitFor(() =>
+      expect(fake.invokeCommand).toHaveBeenCalledWith(
+        "drawing.create",
+        expect.objectContaining({ folder: "Schemi", template: "slide" }),
+        "apply",
+      ),
+    );
+  });
+
+  it("un comando di shell non ha moduli: parte com'è", () => {
+    const run = vi.fn();
+    registerCommandForm("shell.qualcosa", () => {
+      throw new Error("un comando di shell non ha un modulo");
+    });
+    startCommand(
+      { id: "shell.qualcosa", title: "Qualcosa", description: "", layer: "global", binding: null, declared: null, spec: null, run },
+      host,
+    );
+    expect(run).toHaveBeenCalledOnce();
+  });
+});
+
+describe("consegnare l'esito di un comando", () => {
+  it("avvisa, ricorda il comando e passa l'effetto alla shell: lo stesso giro della palette", async () => {
+    const effect = { kind: "navigate" as const, doc: "Schemi/Disegno.svg" };
+    await deliverOutcome({ notify: "Creato", effect, undo: null, partial: null }, host, "drawing.create");
+    expect(host.notify).toHaveBeenCalledWith("Creato", "info");
+    expect(host.onEffect).toHaveBeenCalledWith(effect);
+  });
+
+  it("un esito a metà si avvisa col tono del guasto", async () => {
+    await deliverOutcome(
+      { notify: "Creato a metà", effect: { kind: "done" }, undo: null, partial: { done: 1, total: 2 } as never },
+      host,
+    );
+    expect(host.notify).toHaveBeenCalledWith("Creato a metà", "guasto");
   });
 });

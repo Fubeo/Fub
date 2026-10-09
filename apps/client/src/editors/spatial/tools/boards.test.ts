@@ -21,6 +21,7 @@ import {
   nextBoardRect,
   orientationOf,
   orientedRect,
+  pageBoardOps,
   pageRect,
   presetOf,
   presetRect,
@@ -156,6 +157,32 @@ describe("aggiungere una tavola", () => {
     expect(pageOf(opened)).toEqual({ x: 0, y: 0, width: 912, height: 200 });
     expect(opened.engine.text).toMatch(new RegExp(`<rect id="${boards[1]!.paper!.facts.id}" fub:role="paper" fub:board="${boards[1]!.id}" x="480" y="0" width="400" height="200" fill="#ffffff"/>`));
     expect(readScene(opened.engine.text).summary.boards).toEqual(["Tavola 1", "Tavola 2"]);
+  });
+
+  it("la pagina da sola diventa la tavola 1, la sua carta con lei, e la tavola nuova dopo dà lo stesso disegno", () => {
+    const opened = open(PLAIN);
+    const page = pageOf(opened)!;
+    const together = open(PLAIN);
+    const once = addBoardOps(together.engine.model!, nextBoardRect([], page)!, nameFor, ids(together), page);
+    const first = pageBoardOps(opened.engine.model!, nameFor, ids(opened), page);
+    if (typeof first === "string") throw new Error(first);
+    const boards = applied(opened, first);
+    expect(boards.map((each) => [each.name, each.rect, each.paper?.facts.id])).toEqual([["Tavola 1", [0, 0, 400, 200], "fub-paper"]]);
+    expect(first.keys).toEqual([boards[0]!.id]);
+    // La pagina non cambia: copre già la tavola.
+    expect(pageOf(opened)).toEqual({ x: 0, y: 0, width: 400, height: 200 });
+    // Già con tavole, niente da fare.
+    expect(pageBoardOps(opened.engine.model!, nameFor, ids(opened), pageOf(opened)!)).toEqual({ ops: [], keys: [] });
+    // Poi la tavola nuova: le stesse tavole, carte e pagina del passo unico.
+    applied(opened, addBoardOps(opened.engine.model!, nextBoardRect(boardsNow(opened), pageOf(opened))!, nameFor, ids(opened), pageOf(opened)));
+    applied(together, once);
+    const shape = (text: string): string => text.replace(/\b([bc])[0-9a-z]{8}\b/g, "$1•");
+    expect(shape(opened.engine.text)).toBe(shape(together.engine.text));
+  });
+
+  it("una pagina con due carte non diventa una tavola da sola", () => {
+    const opened = open(drawing([PAPER, '<rect id="fub-paper-2" fub:role="paper" x="0" y="0" width="400" height="200"/>', LAYER()]));
+    expect(pageBoardOps(opened.engine.model!, nameFor, ids(opened), pageOf(opened)!)).toBe("paper");
   });
 
   it("la carta della pagina che non ne aveva la geometria la prende con la tavola", () => {

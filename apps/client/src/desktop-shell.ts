@@ -28,11 +28,16 @@ import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
+  canCreateDrawing,
   conflictMessage,
   displayBinding,
   keybindingKey,
   loadKeyOverrides,
   mountKeyOverrides,
+  NEW_DRAWING,
+  newDrawing,
+  registerCommandForm,
+  registerCommandStarter,
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
@@ -973,6 +978,8 @@ async function init(): Promise<Teardown> {
       label: t("palette.open_view", { title: spec.title }),
       run: () => openPrimaryView(spec.id),
     })),
+    // «Nuovo disegno…» accanto a «Nuova nota», se il kernel ha il comando.
+    creations: () => canCreateDrawing() ? [{ label: t("menu.file.new_drawing"), run: () => void newDrawing() }] : [],
   }));
   refreshTitlebarShortcuts();
   pageWindowLifetime.add(onLanguage(refreshTitlebarShortcuts));
@@ -999,6 +1006,23 @@ async function init(): Promise<Teardown> {
   // sa `ui/keyboard.ts`, che è il posto in cui una sequenza a metà ha un tempo
   // e una via d'uscita (§18.2).
   mountKeyboard(pageWindowLifetime, (entry) => startCommand(entry, paletteHost));
+  // Le porte di creazione dei pannelli (menu di una cartella, riquadro vuoto)
+  // non importano la palette: quando un comando non ha un modulo proprio, la
+  // fanno partire da qui.
+  pageWindowLifetime.add(registerCommandStarter((entry, prefill) => startCommand(entry, paletteHost, prefill)));
+  // «Nuovo disegno» si compila guardando i modelli: la galleria sostituisce il
+  // modulo generico della palette, e il suo codice arriva la prima volta che
+  // serve. Vale anche per la shell mobile, che parte da questa.
+  pageWindowLifetime.add(
+    registerCommandForm(NEW_DRAWING, (prefill) => {
+      void import("./editors/spatial/templates/gallery")
+        .then((module) => module.openGallery(prefill, paletteHost))
+        .catch((error: unknown) => {
+          const command = state.commandSpecs.find((spec) => spec.id === NEW_DRAWING)?.title ?? NEW_DRAWING;
+          notify(t("commands.failed", { command, reason: errorText(error) }), "guasto");
+        });
+    }),
+  );
 
   listenForFailures(pageWindowLifetime);
   // Un rifiuto che nessuno ha raccolto è un guasto che nessuno vedrebbe: la

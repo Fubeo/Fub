@@ -9,8 +9,8 @@
 Con la feature `draw` dell'host un file `.svg` ha il formato `svg` e si apre
 come disegno: il profilo `vector` della famiglia `canvas`
 (`apps/client/src/editors/spatial/surface.ts`). Senza la feature il file resta
-testo con l'anteprima accanto, come descrive
-[Editor e anteprima](editor-and-preview.md).
+testo con l'anteprima accanto ([Editor e anteprima](editor-and-preview.md)).
+Un disegno nuovo nasce vuoto o da un modello: [Nuovo disegno](drawing-new.md).
 
 Il codice dell'editor si scarica la prima volta che un disegno si apre, e non
 pesa su chi non ne apre. Se non arriva, il riquadro lo dice, e «Apri come

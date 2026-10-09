@@ -400,6 +400,20 @@ export function addBoardOps(
   return plan.finish([id]);
 }
 
+/// Le operazioni che fanno della pagina `page` di un disegno senza tavole la
+/// tavola 1, col nome `nameFor(1)`, e nient'altro: è il primo dei due passi
+/// con cui l'editor aggiunge o duplica una tavola su una pagina, così chi
+/// annulla la tavola nuova ritrova la tavola 1. La chiave che torna è l'id
+/// della tavola; nessuna operazione se il disegno ha già tavole.
+export function pageBoardOps(model: DocumentModel, nameFor: (n: number) => string, ids: NewIds, page: Page): Arranged | "paper" {
+  if (boardsOf(model).length > 0) return { ops: [], keys: [] };
+  const first = pageBoard(model, page, freshBoardName([], nameFor), ids);
+  if (first === "paper") return "paper";
+  const plan = new Plan(model, ids);
+  plan.ops.push(...first.ops);
+  return plan.finish([first.id]);
+}
+
 /// Ciò che la pagina deve coprire quando una tavola arriva al rettangolo
 /// `rect` con gli oggetti di `carried`, spostati di (`dx`, `dy`) con lei.
 function coverOf(rect: Rect, carried: readonly Unit[], dx: number, dy: number): Bounds {
