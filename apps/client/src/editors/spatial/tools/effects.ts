@@ -700,7 +700,12 @@ export function holdsFilters(node: ElementPart): boolean {
 /// niente.
 export function regionOf(model: DocumentModel, node: ElementPart, effects: readonly Effect[], measure: Measure): RegionWrite | null {
   const box = bareBox(model, node, inheritedBy(node), measure);
-  if (box === null || box === "unknown") return null;
+  return box === null || box === "unknown" ? null : boxRegion(box, effects);
+}
+
+/// La regione del filtro che disegna `effects` su ciò che occupa `box`,
+/// scritta: quella di uno stile, il cui riquadro è 100 × 100.
+export function boxRegion(box: Bounds, effects: readonly Effect[]): RegionWrite {
   const reach = regionReach(effects);
   const margin = { left: reach.left + REGION_MARGIN, top: reach.top + REGION_MARGIN, right: reach.right + REGION_MARGIN, bottom: reach.bottom + REGION_MARGIN };
   return writeRegion(grown(box, margin));

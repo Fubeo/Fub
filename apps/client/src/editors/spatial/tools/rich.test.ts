@@ -3,11 +3,13 @@ import {
   anchorsOf,
   emphasisIn,
   emphasisOf,
+  emphasizeKeeping,
   emphasizeWhole,
   leadingOf,
   lineRuns,
   newLeading,
   replaceRange,
+  restyleKeeping,
   restyleWhole,
   richChange,
   richElem,
@@ -230,5 +232,32 @@ describe("il testo come lo scrive il file", () => {
       attrs: { id: "o1", "font-size": "20", fill: "#0072b2" },
       children: [old.children![0], { tag: "textPath", attrs: { href: "#r1", startOffset: "50%" }, runs: ["Sul ", { text: "colle", attrs: BOLD }, "!"] }],
     });
+  });
+});
+
+describe("uno stile dato a un testo", () => {
+  it("scrive il valore sul testo, e le parole che ne hanno un altro lo tengono", () => {
+    const styled = restyleKeeping(TWO, "fill", "#d55e00");
+    expect(styled.attrs.fill).toBe("#d55e00");
+    expect(lineRuns(styled.lines[1]!)).toEqual(["in ", { text: "pioggia", attrs: { ...BLUE, ...BOLD } }]);
+  });
+
+  it("toglie il valore uguale a chi lo scriveva", () => {
+    const blue = restyleKeeping(TWO, "fill", "#0072B2");
+    expect(lineRuns(blue.lines[1]!)).toEqual(["in ", { text: "pioggia", attrs: BOLD }]);
+  });
+
+  it("un corpo nuovo porta con sé l'interlinea e la spaziatura scritte", () => {
+    const spaced: Rich = { ...TWO, attrs: { ...TWO.attrs, "letter-spacing": "2" } };
+    const big = restyleKeeping(spaced, "font-size", "40");
+    expect(big.attrs["font-size"]).toBe("40");
+    expect(big.attrs["letter-spacing"]).toBe("4");
+    expect(big.lines[1]!.attrs.dy).toBe("50");
+  });
+
+  it("il sottolineato si accende sul testo, e le righe e le parole restano come sono", () => {
+    const under = emphasizeKeeping(TWO, "underline", true);
+    expect(under.attrs["text-decoration"]).toBe("underline");
+    expect(under.lines).toBe(TWO.lines);
   });
 });
