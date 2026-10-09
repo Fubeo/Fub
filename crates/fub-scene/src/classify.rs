@@ -37,7 +37,7 @@ use crate::labels::read_inside;
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
-    angle, blend_style, dasharray, fraction, href, href_id, is_wsp, keyword, length,
+    angle, blend_style, dasharray, fraction, href, href_id, is_wsp, keyword, leading, length,
     letter_spacing, non_negative_length, number, number_list, one_or_two, opacity, paint,
     paint_reference, points, preserve_aspect_ratio, reference, start_offset, text_decoration,
     transform, trim, view_box, wrap_width, Href, Paint,
@@ -108,13 +108,174 @@ impl Role {
 /// stessa cosa; tutte e due se ne vanno col loro ultimo riferimento. `swatch`
 /// è un campione del documento, un colore o un motivo con un nome: resta
 /// anche senza riferimenti, e duplicare chi lo usa lo condivide. Senza, la
-/// risorsa resta.
+/// risorsa resta. `style` è uno stile del documento: resta anche senza chi lo
+/// segue, e le risorse private che usa sono sue.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Lifecycle {
     Private,
     Shared,
     Swatch,
+    Style,
+}
+
+/// Il tipo di uno stile del documento (formato della scena, stili).
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StyleKind {
+    /// Un `text`: il carattere e il colore di un testo.
+    Text,
+    /// Una `polyline`: l'aspetto di una forma.
+    Graphic,
+}
+
+impl StyleKind {
+    /// Il tipo di stile del prototipo di tag `tag`.
+    fn of(tag: Tag) -> Option<StyleKind> {
+        match tag {
+            Tag::Text => Some(StyleKind::Text),
+            Tag::Polyline => Some(StyleKind::Graphic),
+            _ => None,
+        }
+    }
+
+    /// Il tipo di stile che un elemento di ruolo `role` può seguire, o `None`
+    /// se non ne segue: il testo uno di testo, le forme, i tratti, le
+    /// immagini e i gruppi uno grafico. Non i livelli, i collegamenti, la
+    /// carta, le tavole e le risorse.
+    pub fn followed_by(role: Role) -> Option<StyleKind> {
+        match role {
+            Role::Text => Some(StyleKind::Text),
+            Role::Group
+            | Role::Stroke
+            | Role::Arrow
+            | Role::Connector
+            | Role::Ngon
+            | Role::Star
+            | Role::Width
+            | Role::Path
+            | Role::Rect
+            | Role::Ellipse
+            | Role::Circle
+            | Role::Line
+            | Role::Polyline
+            | Role::Polygon
+            | Role::Image => Some(StyleKind::Graphic),
+            _ => None,
+        }
+    }
+}
+
+/// Uno stile del documento (formato della scena, stili): il suo nome, com'è
+/// scritto, e il tipo.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct StyleFacts {
+    pub name: String,
+    pub kind: StyleKind,
+}
+
+/// I punti di uno stile grafico: una spezzata aperta nel riquadro 100 × 100.
+pub const STYLE_GRAPHIC_POINTS: &str = "0,0 100,0 100,100";
+
+/// Gli attributi SVG del prototipo di uno stile di testo: il carattere e il
+/// colore.
+const TEXT_STYLE: [&str; 8] = [
+    "id",
+    "font-family",
+    "font-size",
+    "font-weight",
+    "font-style",
+    "letter-spacing",
+    "text-decoration",
+    "fill",
+];
+
+/// Gli attributi SVG del prototipo di uno stile grafico: i suoi punti e
+/// l'aspetto di una spezzata, senza geometria, visibilità o ritagli.
+const GRAPHIC_STYLE: [&str; 15] = [
+    "id",
+    "points",
+    "fill",
+    "fill-opacity",
+    "stroke",
+    "stroke-opacity",
+    "stroke-width",
+    "stroke-dasharray",
+    "stroke-linecap",
+    "stroke-linejoin",
+    "marker-start",
+    "marker-end",
+    "opacity",
+    "style",
+    "filter",
+];
+
+/// Lo stile del documento che è `element`, una risorsa modificabile con
+/// `fub:role="style"` (formato della scena, stili); `None` se non ha la sua
+/// forma, e allora è estraneo. Lo stile è un prototipo: un `text` o una
+/// `polyline` coi punti di [`STYLE_GRAPHIC_POINTS`], con un nome `fub:name`
+/// che non è vuoto, soltanto gli attributi SVG del suo tipo, un
+/// `fub:leading` valido se è di testo, e per figli soltanto `title` e
+/// `desc`. I valori li giudica la classificazione, come per ogni elemento.
+fn style_of(doc: &Document<'_>, element: &Element<'_>) -> Option<StyleFacts> {
+    let kind = StyleKind::of(Tag::of(element)?)?;
+    let name = element.value(NS_FUB, "name")?;
+    if trim(name).is_empty() {
+        return None;
+    }
+    let allowed: &[&str] = match kind {
+        StyleKind::Text => &TEXT_STYLE,
+        StyleKind::Graphic => &GRAPHIC_STYLE,
+    };
+    if element
+        .attrs
+        .iter()
+        .any(|attr| attr.ns == NS_NONE && !allowed.contains(&attr.local))
+    {
+        return None;
+    }
+    if kind == StyleKind::Graphic && element.value(NS_NONE, "points") != Some(STYLE_GRAPHIC_POINTS)
+    {
+        return None;
+    }
+    if kind == StyleKind::Text
+        && element
+            .value(NS_FUB, "leading")
+            .is_some_and(|value| leading(value).is_none())
+    {
+        return None;
+    }
+    element
+        .children
+        .iter()
+        .all(|&child| blank_or_meta(doc, child) == Some(true))
+        .then(|| StyleFacts {
+            name: name.to_owned(),
+            kind,
+        })
+}
+
+/// Vero se `element`, un `text` o una `polyline` con `fub:role="style"` in
+/// una `defs` della radice, è uno stile modificabile (formato della scena,
+/// stili): un id, la forma di [`style_of`] e gli attributi di §4 per il suo
+/// tag, coi riferimenti risolti da `resolve`.
+fn style_allowed(
+    doc: &Document<'_>,
+    element: &Element<'_>,
+    tag: Tag,
+    resolve: Resolve<'_>,
+) -> bool {
+    element
+        .value(NS_NONE, "id")
+        .is_some_and(|id| !id.is_empty())
+        && style_of(doc, element).is_some()
+        && attributes_allowed(element, tag, resolve, false)
+}
+
+/// Vero se `element`, figlio di una `defs` della radice, si dice uno stile:
+/// un `text` o una `polyline` con `fub:role="style"`.
+fn claims_style(element: &Element<'_>, tag: Tag) -> bool {
+    StyleKind::of(tag).is_some() && element.value(NS_FUB, "role") == Some("style")
 }
 
 /// Un campione del documento (formato della scena, risorse): il suo nome,
@@ -373,6 +534,13 @@ pub struct ElementItem {
     /// Il nome di un motivo del documento.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub motif: Option<Motif>,
+    /// Il nome e il tipo di uno stile del documento.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<StyleFacts>,
+    /// Lo stile che un oggetto segue: `fub:style`, com'è scritto, anche se
+    /// non porta a uno stile (formato della scena, stili).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub follows: Option<String>,
     /// Il rettangolo di una tavola, `x y w h` del suo `viewBox` (formato della
     /// scena, tavole).
     #[serde(rename = "box", skip_serializing_if = "Option::is_none")]
@@ -1262,24 +1430,28 @@ fn primitives_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
 }
 
 /// Le risorse modificabili di un documento: il tipo di ognuna, il `d` dei
-/// tracciati e il colore dei campioni.
+/// tracciati, il colore dei campioni e il tipo degli stili.
 struct Resources {
     kinds: HashMap<String, ResourceKind>,
     paths: HashMap<String, String>,
     swatches: Swatches,
+    styles: HashMap<String, StyleKind>,
 }
 
 /// L'indice delle risorse modificabili del documento: per ogni id, il tipo
 /// della risorsa (formato della scena, risorse), il `d` dei tracciati e il
 /// colore dei campioni. Prima le sfumature e i tracciati, che non rimandano a
-/// niente, poi le altre, che nel contenuto possono usare le sfumature. Di due
-/// risorse con lo stesso id vale la prima, in quest'ordine: il documento è
-/// comunque in sola lettura (S003).
+/// niente, poi le altre, che nel contenuto possono usare le sfumature, e per
+/// ultimi gli stili, che possono usare tutte le altre. Di due risorse con lo
+/// stesso id vale la prima, in quest'ordine: il documento è comunque in sola
+/// lettura (S003).
 fn resource_index(doc: &Document<'_>) -> Resources {
     let mut found = HashMap::new();
     let mut paths = HashMap::new();
     let mut swatches = HashMap::new();
+    let mut styles = HashMap::new();
     let mut others = Vec::new();
+    let mut prototypes = Vec::new();
     let judge = |found: &mut HashMap<String, ResourceKind>,
                  element: &Element<'_>,
                  tag: Tag,
@@ -1310,11 +1482,15 @@ fn resource_index(doc: &Document<'_>) -> Resources {
             let Some(element) = doc.element(inner) else {
                 continue;
             };
-            let Some(tag) =
-                Tag::of(element).filter(|&tag| tag == Tag::Path || tag.resource_kind().is_some())
-            else {
+            let Some(tag) = Tag::of(element) else {
                 continue;
             };
+            if claims_style(element, tag) {
+                prototypes.push((element, tag));
+            }
+            if tag != Tag::Path && tag.resource_kind().is_none() {
+                continue;
+            }
             match tag {
                 Tag::LinearGradient | Tag::RadialGradient => {
                     let swatch = (judge(&mut found, element, tag, &no_resources)
@@ -1345,10 +1521,28 @@ fn resource_index(doc: &Document<'_>) -> Resources {
     for (element, tag) in others {
         judge(&mut found, element, tag, &resolve);
     }
+    // Gli stili per ultimi: usano ogni altra risorsa, e nessuno li usa.
+    let resolve = |id: &str| found.get(id).copied();
+    for (element, tag) in prototypes {
+        let Some(id) = element.value(NS_NONE, "id") else {
+            continue;
+        };
+        if found.contains_key(id)
+            || styles.contains_key(id)
+            || !style_allowed(doc, element, tag, &resolve)
+        {
+            continue;
+        }
+        styles.insert(
+            id.to_owned(),
+            StyleKind::of(tag).expect("un prototipo ha un tipo"),
+        );
+    }
     Resources {
         kinds: found,
         paths,
         swatches,
+        styles,
     }
 }
 
@@ -1376,7 +1570,12 @@ fn classify(
     if tag == Tag::Path && place == Place::Defs {
         return path_resource_allowed(doc, element).then_some((tag, Role::Resource));
     }
-    // In una `defs` stanno solo risorse, titolo e descrizione.
+    // Un `text` o una `polyline` con `fub:role="style"` in una `defs` è uno
+    // stile (formato della scena, stili).
+    if place == Place::Defs && claims_style(element, tag) {
+        return style_allowed(doc, element, tag, resolve).then_some((tag, Role::Resource));
+    }
+    // In una `defs` stanno solo risorse, stili, titolo e descrizione.
     if place == Place::Defs && !matches!(tag, Tag::Title | Tag::Desc) {
         return None;
     }
@@ -1571,6 +1770,8 @@ struct Builder<'d, 'a> {
     resolve: Resolve<'d>,
     /// I campioni del documento, col loro colore.
     swatches: &'d Swatches,
+    /// Gli stili del documento, col loro tipo.
+    styles: &'d HashMap<String, StyleKind>,
     items: Vec<Item>,
     diagnostics: Vec<Diagnostic>,
     tally: Tally,
@@ -1579,7 +1780,7 @@ struct Builder<'d, 'a> {
 /// Ciò che la classificazione trova.
 pub(crate) struct Classified {
     pub items: Vec<Item>,
-    /// S002, S004 e S010.
+    /// S002, S004, S010 e S018.
     pub diagnostics: Vec<Diagnostic>,
     pub tally: Tally,
 }
@@ -1726,6 +1927,20 @@ impl Builder<'_, '_> {
             Role::Title | Role::Desc | Role::Paper | Role::Defs | Role::Resource | Role::Board
         );
         let named = object || matches!(role, Role::Defs | Role::Resource | Role::Board);
+        let followed = StyleKind::followed_by(role);
+        let follows = followed
+            .and_then(|_| element.value(NS_FUB, "style"))
+            .map(str::to_owned);
+        // S018: segue uno stile che non c'è, o uno dell'altro tipo.
+        if let Some(target) = &follows {
+            if self.styles.get(target.as_str()).copied() != followed {
+                self.diagnostics.push(Diagnostic::new(
+                    Code::S018,
+                    Some(span),
+                    Some(target.clone()),
+                ));
+            }
+        }
         self.tally
             .element(doc, element, role, context, span, stroke.as_ref());
         if !self.keep {
@@ -1739,6 +1954,12 @@ impl Builder<'_, '_> {
             .flatten();
         let motif = (role == Role::Resource && element.value(NS_FUB, "role") == Some("swatch"))
             .then(|| motif_of(element))
+            .flatten();
+        // Un `text` o una `polyline` con `fub:role="style"` è una risorsa
+        // soltanto con la forma di uno stile; un'altra risorsa con quel ruolo
+        // resta senza ciclo di vita.
+        let style = (role == Role::Resource && element.value(NS_FUB, "role") == Some("style"))
+            .then(|| style_of(doc, element))
             .flatten();
         let item = ElementItem {
             path,
@@ -1803,11 +2024,14 @@ impl Builder<'_, '_> {
                     Some("swatch") => {
                         (swatch.is_some() || motif.is_some()).then_some(Lifecycle::Swatch)
                     }
+                    Some("style") => style.is_some().then_some(Lifecycle::Style),
                     _ => None,
                 })
                 .flatten(),
             swatch,
             motif,
+            style,
+            follows,
             board_box: (role == Role::Board).then(|| board_box(element)).flatten(),
             board: (role == Role::Paper)
                 .then(|| element.value(NS_FUB, "board").map(str::to_owned))
@@ -1903,6 +2127,7 @@ pub(crate) fn classify_document<'a>(
         kinds,
         paths,
         swatches,
+        styles,
     } = resource_index(doc);
     let resolve = |id: &str| kinds.get(id).copied();
     let mut builder = Builder {
@@ -1912,6 +2137,7 @@ pub(crate) fn classify_document<'a>(
         keep,
         resolve: &resolve,
         swatches: &swatches,
+        styles: &styles,
         items: Vec::new(),
         diagnostics: Vec::new(),
         tally: Tally::new(paths),

@@ -45,7 +45,7 @@
   {
     "name": "prolog-and-epilog",
     "description": "BOM, dichiarazione XML, commenti e istruzioni prima e dopo la radice: resta la radice e un a capo",
-    "input": "\ufeff<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- prima -->\n<?xml-stylesheet href=\"a.css\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">\n  <!-- dentro -->\n  <?fub nota?>\n  <rect width=\"10\" height=\"10\"/><!-- attaccato -->\n</svg>\n<!-- dopo -->\n\n",
+    "input": "﻿<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!-- prima -->\n<?xml-stylesheet href=\"a.css\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 10 10\">\n  <!-- dentro -->\n  <?fub nota?>\n  <rect width=\"10\" height=\"10\"/><!-- attaccato -->\n</svg>\n<!-- dopo -->\n\n",
     "scope": {
       "kind": "drawing"
     },
@@ -260,6 +260,17 @@
     },
     "expect": {
       "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" width=\"200\" height=\"100\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#0072b2\"/></linearGradient>\n  </defs>\n  <g id=\"l1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"80\" height=\"40\" fill=\"url(#r1) #0072b2\"/>\n    <line id=\"o2\" x1=\"10\" y1=\"70\" x2=\"190\" y2=\"70\" stroke=\"url(#r1) #0072b2\" stroke-width=\"4\"/>\n  </g>\n</svg>\n"
+    }
+  },
+  {
+    "name": "styles",
+    "description": "gli stili se ne vanno, con fub:style di chi li segue e con le loro risorse private; un campione che uno stile usa resta se lo usa anche un oggetto",
+    "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 200 100\" width=\"200\" height=\"100\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1\" fub:role=\"swatch\" fub:name=\"Blu mare\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#0072b2\"/></linearGradient>\n    <linearGradient id=\"r3\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"100\" y2=\"0\"><stop offset=\"0\" stop-color=\"#0072b2\"/><stop offset=\"1\" stop-color=\"#56b4e9\"/></linearGradient>\n    <polyline id=\"r4\" fub:role=\"style\" fub:name=\"Riquadro\" points=\"0,0 100,0 100,100\" fill=\"url(#r3) #0072b2\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n    <text id=\"r5\" fub:role=\"style\" fub:name=\"Nota\" fub:leading=\"1.4\" font-family=\"sans-serif\" font-size=\"14\" fill=\"url(#r1) #0072b2\"/>\n  </defs>\n  <g id=\"l1\" fub:layer=\"Livello 1\">\n    <rect id=\"o1\" fub:style=\"r4\" x=\"10\" y=\"10\" width=\"80\" height=\"40\" fill=\"#e69f00\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n    <text id=\"o2\" fub:style=\"r5\" x=\"10\" y=\"80\" font-family=\"sans-serif\" font-size=\"14\" fill=\"url(#r1) #0072b2\">Nota</text>\n  </g>\n</svg>\n",
+    "scope": {
+      "kind": "drawing"
+    },
+    "expect": {
+      "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 100\" width=\"200\" height=\"100\">\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1\" gradientUnits=\"userSpaceOnUse\"><stop stop-color=\"#0072b2\"/></linearGradient>\n  </defs>\n  <g id=\"l1\">\n    <rect id=\"o1\" x=\"10\" y=\"10\" width=\"80\" height=\"40\" fill=\"#e69f00\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n    <text id=\"o2\" x=\"10\" y=\"80\" font-family=\"sans-serif\" font-size=\"14\" fill=\"url(#r1) #0072b2\">Nota</text>\n  </g>\n</svg>\n"
     }
   }
 ]

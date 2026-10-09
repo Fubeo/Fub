@@ -511,6 +511,15 @@ export function wrapWidth(value: string): number | null {
   return n !== null && n > 0 ? n : null;
 }
 
+/// L'interlinea di uno stile di testo, `fub:leading` (formato della scena,
+/// stili): in volte il corpo, da 0,5 a 10, in cifre con al più tre decimali,
+/// senza segno, esponente o spazi.
+export function leading(value: string): number | null {
+  if (!/^[0-9]+(\.[0-9]{1,3})?$/.test(value)) return null;
+  const n = Number(value);
+  return n >= 0.5 && n <= 10 ? n : null;
+}
+
 /// Dove comincia un testo sul suo tracciato, `startOffset`: una lunghezza in
 /// unità utente o, con `share`, una frazione della lunghezza del tracciato.
 export interface StartOffset {

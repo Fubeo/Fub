@@ -60,6 +60,10 @@ export class Tree {
   /// Per ogni id, quanti elementi vi rimandano: un contenitore col suo tag,
   /// un'unità con tutto ciò che contiene (formato della scena, risorse).
   private readonly refs = new Map<string, number>();
+  /// Per ogni id, quanti oggetti seguono lo stile che lo porta con
+  /// `fub:style` (formato della scena, stili): non è un riferimento di SVG, e
+  /// non tiene viva una risorsa.
+  private readonly follows = new Map<string, number>();
   /// Gli id che hanno perso il loro ultimo riferimento dall'ultimo
   /// [`Tree.orphans`]: la raccolta delle risorse comincia da qui.
   private lost = new Set<string>();
@@ -102,6 +106,11 @@ export class Tree {
     return this.refs.get(id) ?? 0;
   }
 
+  /// Quanti oggetti seguono lo stile `id`, anche se `id` non è uno stile.
+  followers(id: string): number {
+    return this.follows.get(id) ?? 0;
+  }
+
   /// Gli id rimasti senza riferimenti dall'ultima chiamata, nell'ordine in
   /// cui li hanno persi, e ricomincia a contarli. Un id che nel frattempo ha
   /// ritrovato un riferimento non c'è.
@@ -115,11 +124,13 @@ export class Tree {
     if (node.kind === "leaf") {
       for (const id of node.ids) this.indexId(id, node, add);
       this.count(node.refs, add);
+      this.follow(node.details, add);
       if (node.details?.role === "resource") this.resourceCount += add ? 1 : -1;
       return;
     }
     if (node.facts.id !== null) this.indexId(node.facts.id, node, add);
     this.count(node.facts.refs, add);
+    this.follow(node.details, add);
     for (const part of node.parts) if (typeof part !== "string" && part.kind !== "other") this.index(part, add);
   }
 
@@ -134,6 +145,15 @@ export class Tree {
       this.refs.delete(id);
       this.lost.add(id);
     }
+  }
+
+  /// Conta, o sconta, chi segue lo stile di `details`.
+  private follow(details: Details | null, add: boolean): void {
+    const id = details?.follows;
+    if (id === undefined) return;
+    const now = (this.follows.get(id) ?? 0) + (add ? 1 : -1);
+    if (now > 0) this.follows.set(id, now);
+    else this.follows.delete(id);
   }
 
   private indexId(id: string, node: ElementPart, add: boolean): void {
@@ -175,6 +195,8 @@ export class Tree {
     if (before.facts.id !== null && this.ids.get(before.facts.id) === node) this.ids.delete(before.facts.id);
     this.count(before.facts.refs, false);
     this.count(state.facts.refs, true);
+    this.follow(before.details, false);
+    this.follow(state.details, true);
     node.head = state.head;
     node.tail = state.tail;
     node.facts = state.facts;

@@ -90,7 +90,7 @@ Radice di un documento nuovo:
 | `g` | — | livello o gruppo |
 | `a` | `href` | collegamento a un documento del vault |
 | `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto; il primo `title` di un oggetto è il suo nome |
-| `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere, filtri e i tracciati dei testi |
+| `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere, filtri e i tracciati dei testi, e gli [stili](scene-format-styles.md) |
 | `view` della radice con `fub:role="board"` | `viewBox` | una [tavola](scene-format-boards.md), col nome nel suo `title` |
 
 **Attributi di presentazione ammessi:**
@@ -100,7 +100,7 @@ Radice di un documento nuovo:
 - visibilità, [fusione](scene-format-effects.md) e trasformazione: `opacity`, `style`, `display`, `transform`;
 - testo: `font-family`, `font-size`, `font-weight`, `font-style`, `letter-spacing`,
   `text-decoration`, `text-anchor`, e `dy` sui `tspan` ([testo](scene-format-text.md));
-- identità: `id`, più gli attributi `fub:*` di questa pagina;
+- identità: `id`, più gli attributi `fub:*` di questa pagina, e `fub:style`, lo [stile](scene-format-styles.md) che un oggetto segue;
 - accessibilità: `aria-hidden` su `image`, `true` o `false`; con `true`
   l'immagine è decorativa ([accessibilità](scene-format-accessibility.md)).
 
@@ -342,8 +342,8 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    sta sulla stessa riga del tag, coi pezzi della riga.
 2. **Ordine degli attributi:**
    1. `id`;
-   2. `fub:layer`, `fub:role`, `fub:name`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
-      `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:locked`, `fub:at`, `fub:brush`;
+   2. `fub:layer`, `fub:role`, `fub:name`, `fub:style`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
+      `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap
       stroke-linejoin stroke-dasharray opacity style display font-family font-size font-weight
@@ -517,6 +517,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
 | S015 | info | una carta che non va con la sua [tavola](scene-format-boards.md) |
 | S016 | avviso | il nome di una [tavola](scene-format-boards.md) è già del disegno o di una tavola prima: un riferimento a quel nome mostra l'altra |
 | S017 | info | due colori usati come codice, ciascuno da almeno due aree, si distinguono soltanto per la tinta: fra loro il contrasto è sotto 3:1 |
+| S018 | avviso | un oggetto segue uno [stile](scene-format-styles.md) che non c'è, o uno dell'altro tipo: si disegna dai suoi attributi |
 
 - **S001, S009, S012, S013, S017:** come si misurano sta in
   [accessibilità](scene-format-accessibility.md).
@@ -524,9 +525,8 @@ descrizione e riepilogo, con `truncated: true` (§11).
   `<?xml?>` e il resto del prologo formano un blocco.
 - **S003:** confronta l'`id` senza prefisso di tutti gli elementi, in ogni namespace, estranei compresi.
 - **S010:** solo per un inchiostro valido; uno non valido ha già S004.
-- **S005:** ogni `script`, SVG o XHTML; ogni attributo `on*`, senza badare a
-  maiuscole e minuscole; ogni `href` con schema `javascript:`, anche quando lo
-  imposta un `set` o un `animate`.
+- **S005:** ogni `script`, SVG o XHTML; ogni attributo `on*`, senza badare a maiuscole e minuscole;
+  ogni `href` con schema `javascript:`, anche quando lo imposta un `set` o un `animate`.
 - **S006:** la dimensione decodificata del data URI, su ogni `image`, anche estranea.
 
 ## 13. Esempio completo

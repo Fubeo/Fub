@@ -195,6 +195,9 @@ Altri dettagli:
   raccoglie il tracciato `private` e la `fub-defs` rimasta vuota: in avanti è
   un `batch` col `remove` del testo, poi del tracciato e della `fub-defs`, e
   l'inversa li rimette.
+- **Uno [stile](scene-format-styles.md)** è una risorsa che non si raccoglie
+  mai: toglierlo, o togliergli l'id con `ident`, mentre un oggetto lo segue
+  con `fub:style` è `in-use`, e le sue risorse private se ne vanno con lui.
 - **`set` sulla radice:** con `id` uguale a `#root` cambia soltanto l'unità e
   le guide del documento, `fub:units` e `fub:guides`, coi valori nella loro
   grammatica ([unità e guide](scene-format-rulers.md)). Ogni altro attributo
@@ -226,7 +229,7 @@ Altri dettagli:
 | `missing-parent` | il genitore non esiste o non è un livello o un gruppo modificabile |
 | `missing-anchor` | l'`after` non esiste, non è figlio del genitore, o è l'elemento stesso |
 | `duplicate-id` | `add` con un id già presente e un elemento diverso (§8), o di una risorsa con un id a cui il documento rimanda già |
-| `in-use` | `remove` di una risorsa, o di una `defs` che ne contiene, a cui rimanda qualcosa fuori da ciò che si toglie; `ident` che toglie l'id a una risorsa usata |
+| `in-use` | `remove` di una risorsa, o di una `defs` che ne contiene, a cui rimanda qualcosa fuori da ciò che si toglie o che un oggetto fuori segue come stile; `ident` che toglie l'id a una risorsa usata o seguita |
 | `invalid-elem` | tag, attributo o valore fuori dal formato, oppure `fub:ink` non conforme |
 | `locked` | il bersaglio o il genitore stanno in un elemento bloccato (`fub:locked="true"`), oppure il bersaglio è la carta della pagina, che cambia solo con `page` |
 | `foreign` | `set`, `text` o `add` dentro un nodo estraneo |
@@ -507,6 +510,9 @@ devono verificare renderebbe il test circolare.
 | 78 | `add-connector` | un connettore a gomito agganciato a due rettangoli: `fub:shape`, `fub:geom`, `fub:from` e `fub:to` vanno subito dopo l'id, prima di `d`, in quest'ordine; l'inversa lo toglie |
 | 79 | `set-connector-free` | un `batch` stacca un capo: `set` cambia `fub:geom` e `d` e toglie `fub:from` con `null`; l'inversa lo rimette al suo posto e il testo torna a quello di prima byte per byte, anche su un motore aperto dal testo di dopo |
 | 80 | `add-label` | l'etichetta di un rettangolo nel suo gruppo, dopo di lui: `fub:inside` e `fub:wrap` vanno subito dopo l'id, prima di `x` e `y`, in quest'ordine; l'inversa la toglie |
+| 81 | `remove-style-in-use` | togliere uno [stile](scene-format-styles.md) che un oggetto segue: rifiuto `in-use` |
+| 82 | `collect-keeps-style` | togliere l'ultimo oggetto che segue uno stile lascia lo stile e la sua sfumatura privata |
+| 83 | `remove-style-collects-private` | un `batch` toglie `fub:style` da chi segue e poi lo stile: la raccolta toglie anche la sua sfumatura privata e la `fub-defs` rimasta vuota |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le
