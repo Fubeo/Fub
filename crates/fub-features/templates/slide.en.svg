@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <title>16:9 slide</title>
+  <rect id="fub-paper" fub:role="paper" fub:board="bslide001" x="0" y="0" width="1920" height="1080" fill="#ffffff"/>
+  <view id="bslide001" fub:role="board" viewBox="0 0 1920 1080">
+    <title>Slide 1</title>
+  </view>
+  <g id="llivello1" fub:layer="Layer 1">
+    <line id="osegno001" x1="166" y1="380" x2="326" y2="380" stroke="#0072b2" stroke-width="12" stroke-linecap="round"/>
+    <text id="otitolo01" fub:wrap="1600" x="160" y="500" fill="#000000" font-family="Inter, sans-serif" font-size="96" font-weight="bold">
+      <tspan x="160" dy="0">Slide title</tspan>
+    </text>
+    <text id="osottot01" fub:wrap="1600" x="160" y="600" fill="#000000" font-family="Inter, sans-serif" font-size="48">
+      <tspan x="160" dy="0">A subtitle that says what it is about</tspan>
+    </text>
+  </g>
+</svg>
