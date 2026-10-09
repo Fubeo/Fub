@@ -23,9 +23,14 @@
 //   disegno con lo stesso id, o diventa quello con lo stesso nome e lo
 //   stesso colore, e chi lo usa ne prende il colore di adesso come
 //   ripiego; se arriva con un nome già preso, prende il primo libero
-//   (`swatches.ts`). Una punta delle linee (`tips.ts`) uguale a una del
-//   disegno, a parte l'id, è quella del disegno: una linea con le punte
-//   rientra con le sue, senza marcatori doppi, anche da un altro disegno.
+//   (`swatches.ts`). Uno stile che gli oggetti seguono viaggia con loro: è
+//   quello del disegno con lo stesso id e lo stesso tipo, o quello del suo
+//   tipo con lo stesso nome e lo stesso aspetto; se no arriva, e con un
+//   nome già preso prende il primo libero (`styles.ts`). Chi segue uno
+//   stile che non entra e che il disegno non ha lo lascia. Una punta delle
+//   linee (`tips.ts`) uguale a una del disegno, a parte l'id, è quella del
+//   disegno: una linea con le punte rientra con le sue, senza marcatori
+//   doppi, anche da un altro disegno.
 //   Ciò che nessuno usa resta fuori. Con un foglio di stile, che può
 //   rimandarvi, restano dove sono.
 // - **Id nuovi.** Ogni id cambia, e i riferimenti interni lo seguono:
@@ -49,7 +54,22 @@
 import { formatNumber, formatShortest } from "../number";
 import { NON_RENDERING } from "../painter/paint";
 import { isContainer, type Role } from "../scene/analysis";
-import { classifyChild, firstTitle, resourceIndex, resourceKind, svgAttribute, swatchOf, type Place, type Resolve, type ResourceKind, type SwatchFacts, type Tag } from "../scene/classify";
+import {
+  classifyChild,
+  firstTitle,
+  resourceIndex,
+  resourceKind,
+  styleIndex,
+  styleOf,
+  svgAttribute,
+  swatchOf,
+  type Place,
+  type Resolve,
+  type ResourceKind,
+  type StyleFacts,
+  type SwatchFacts,
+  type Tag,
+} from "../scene/classify";
 import { reindent } from "../scene/engine";
 import type { Bounds } from "../scene/geometry";
 import { compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
@@ -94,6 +114,7 @@ import { mappedBounds, transformValue, type Destination, type NewIds } from "./e
 import { cleanName, nameKey } from "./naming";
 import { inheritedBy, INITIAL } from "./place";
 import { homeOf, paintCode, resourceHome, resourcesOf } from "./resources";
+import { arrivingStyleName, styleNameProblem, type NamedStyle } from "./styles";
 import { renameUrls, restyle } from "./stylesheet";
 import { freshSwatchName, swatchNameProblem } from "./swatches";
 import { markerTip } from "./tips";
@@ -416,6 +437,8 @@ function referencesOf(doc: XmlDocument, element: ElementNode): string[] {
     if (/url\(/i.test(attr.value)) urls(attr.value);
     const fragment = /^#(.+)$/.exec(attr.value);
     if (fragment !== null && (attr.local === "href" || (attr.ns !== NS_NONE && attr.ns !== NS_XML))) out.push(fragment[1]!);
+    // Lo stile che un oggetto segue, per id.
+    else if (attr.ns === NS_FUB && attr.local === "style" && attr.value !== "") out.push(attr.value);
   }
   if (isSvg(element, "style")) urls(sheetText(doc, element)?.[0] ?? "");
   return out;
@@ -498,6 +521,9 @@ interface Rules {
   /// Il colore dei campioni del disegno a cui va un riferimento, per id: il
   /// ripiego di chi li usa.
   readonly colors: ReadonlyMap<string, string>;
+  /// Vero se il disegno che riceve ha lo stile `id`: nell'incolla, chi segue
+  /// uno stile che non entra e che il disegno non ha lascia `fub:style`.
+  readonly styled: (id: string) => boolean;
   /// I fogli di stile: l'id del gruppo che li chiude, `null` per rinominare
   /// soltanto, `undefined` se restano come sono.
   readonly sheets: string | null | undefined;
@@ -672,12 +698,16 @@ class Rewriter {
   }
 
   /// Gli indici degli attributi di `element` che si tolgono: `fub:from`,
-  /// `fub:to`, `fub:along` e `fub:inside` che nominano ciò che non entra.
+  /// `fub:to`, `fub:along` e `fub:inside` che nominano ciò che non entra, e
+  /// `fub:style` di uno stile che non entra e che il disegno non ha.
   private dropped(element: ElementNode): ReadonlySet<number> {
     if (!this.rules.relink) return KEPT;
     let out: Set<number> | null = null;
     element.attrs.forEach((attr, index) => {
-      if (attr.ns === NS_FUB && isLinkName(attr.local) && relinked(attr.local, attr.value, this.rules.rename) === null) (out ??= new Set()).add(index);
+      if (attr.ns !== NS_FUB) return;
+      if (isLinkName(attr.local) ? relinked(attr.local, attr.value, this.rules.rename) === null : attr.local === "style" && this.rules.rename(attr.value) === null && !this.rules.styled(attr.value)) {
+        (out ??= new Set()).add(index);
+      }
     });
     return out ?? KEPT;
   }
@@ -695,6 +725,7 @@ class Rewriter {
     if (attr.ns === NS_NONE && attr.local === "id") return this.rules.ids.get(id) ?? attr.value;
     if (attr.ns === NS_FUB && attr.local === "name") return this.rules.named.get(id) ?? attr.value;
     if (this.rules.relink && attr.ns === NS_FUB && isLinkName(attr.local)) return relinked(attr.local, attr.value, rename) ?? attr.value;
+    if (attr.ns === NS_FUB && attr.local === "style") return rename(attr.value) ?? attr.value;
     let next = /url\(/i.test(attr.value) ? renameUrls(attr.value, rename) : attr.value;
     if (attr.ns === NS_NONE && (attr.local === "fill" || attr.local === "stroke")) next = this.fallback(next);
     const fragment = /^#(.+)$/.exec(next);
@@ -801,7 +832,7 @@ export function copySvg(input: CopyInput): string | null {
   const scope = known === null ? rootScope.declare([[fub, FUB_NS]]) : rootScope;
   const index = resourceIndex(doc);
   const resolve: Resolve = (id) => index.get(id) ?? null;
-  const rewriter = new Rewriter(doc, { rename: () => null, relink: false, ids: new Map(), named: new Map(), colors: new Map(), sheets: undefined, href: () => null, resolve, written: resolve });
+  const rewriter = new Rewriter(doc, { rename: () => null, relink: false, ids: new Map(), named: new Map(), colors: new Map(), styled: () => true, sheets: undefined, href: () => null, resolve, written: resolve });
 
   try {
     const pieces: string[] = [];
@@ -1079,12 +1110,14 @@ interface Lift {
   /// Le `defs` e tutto ciò che hanno dentro: i loro id li decide il
   /// trasloco.
   readonly decided: ReadonlySet<NodeId>;
-  /// Il nome nuovo di un campione che arriva con un nome già preso, o che
-  /// si legge come un colore, per elemento.
+  /// Il nome nuovo di un campione o di uno stile che arriva con un nome già
+  /// preso, o che si legge come un colore, per elemento.
   readonly named: ReadonlyMap<NodeId, string>;
   /// Il colore dei campioni del disegno che ciò che entra usa al posto dei
   /// suoi, per id.
   readonly colors: ReadonlyMap<string, string>;
+  /// Vero se il disegno ha lo stile `id`.
+  readonly styled: (id: string) => boolean;
   /// Quali id saranno risorse del disegno, con gli id dell'SVG e con quelli
   /// riscritti.
   readonly resolve: Resolve;
@@ -1104,6 +1137,19 @@ function withoutId(text: string): string {
   return compact(text).replace(/^(<[^\s>]+)\s+id="[^"]*"/, "$1");
 }
 
+/// Il testo compatto di uno stile senza id né nome, con ogni `url(#…)` al
+/// posto del testo senza id di ciò a cui rimanda, letto da `refText`: due
+/// stili con lo stesso testo così hanno lo stesso aspetto, anche quando le
+/// loro sfumature private hanno id diversi.
+function styleText(text: string, refText: (id: string) => string | undefined): string {
+  return compact(text)
+    .replace(/\s(?:id|fub:name)="[^"]*"/g, "")
+    .replace(/url\(#([^)\s]+)\)/g, (whole, ref: string) => {
+      const to = refText(ref);
+      return to === undefined ? whole : `url(${withoutId(to)})`;
+    });
+}
+
 /// Il trasloco delle risorse di `doc` nel disegno `model`, per i figli della
 /// radice `tops`; i nomi nuovi vanno in `names` e `renamed`. Una risorsa
 /// privata ha sempre una copia, con id nuovi; una condivisa, o che non è di
@@ -1111,8 +1157,10 @@ function withoutId(text: string): string {
 /// usa le stesse. Un campione resta quello del disegno con lo stesso id, o
 /// diventa il campione del disegno, o uno che arriva prima, con lo stesso
 /// nome, senza maiuscole, e lo stesso colore; se arriva, con un nome già
-/// preso o che si legge come un colore, prende il primo nome libero. Ciò
-/// che nessuno usa resta fuori. Niente trasloco se l'SVG ha fogli di stile,
+/// preso o che si legge come un colore, prende il primo nome libero. Uno
+/// stile allo stesso modo, col suo tipo e il suo aspetto al posto del
+/// colore: quello del disegno non porta niente con sé. Ciò che nessuno usa
+/// resta fuori. Niente trasloco se l'SVG ha fogli di stile,
 /// che possono rimandare alle risorse, o se il disegno supererebbe il
 /// limite delle risorse, o senza `allowed`: allora resta tutto com'era.
 function liftOf(
@@ -1132,7 +1180,8 @@ function liftOf(
     const node = byId.has(id) ? undefined : resources.get(id);
     return node === undefined ? null : resourceKind(node.facts.local);
   };
-  const none: Lift = { defs: new Set(), moved: [], decided: new Set(), named: new Map(), colors: new Map(), resolve: outside, written: outside };
+  const styled = (id: string): boolean => resources.get(id)?.details?.style !== undefined;
+  const none: Lift = { defs: new Set(), moved: [], decided: new Set(), named: new Map(), colors: new Map(), styled, resolve: outside, written: outside };
   const defs = new Set(tops.filter((top) => classifyChild(doc, top, "root", 1)?.[1] === "defs"));
   if (!allowed || defs.size === 0 || doc.nodes.some((node) => node.kind === "element" && isSvg(node, "style"))) return none;
   const index = resourceIndex(doc);
@@ -1148,6 +1197,37 @@ function liftOf(
       at = parent;
     }
   };
+  // Gli stili del disegno, e poi quelli che arrivano con l'id che avranno.
+  const styleKinds = styleIndex(doc);
+  const styles: NamedStyle[] = [];
+  for (const [id, node] of resources) {
+    const style = node.details?.style;
+    if (style !== undefined) styles.push({ id, name: style.name, kind: style.kind });
+  }
+  const textOf = (at: NodeId | undefined): string | undefined => {
+    const element = at === undefined ? null : doc.element(at);
+    return element === null ? undefined : doc.source.text.slice(element.start, element.end);
+  };
+  /// Lo stile del disegno che è lo stile `child` dell'SVG: quello con lo
+  /// stesso id e lo stesso tipo, o uno del suo tipo con lo stesso nome,
+  /// senza maiuscole, e lo stesso aspetto; `null` se arriva.
+  const styleThere = (child: NodeId): string | null => {
+    const element = doc.element(child)!;
+    const id = valueOf(element, NS_NONE, "id") ?? "";
+    const kind = byId.get(id) === child ? styleKinds.get(id) : undefined;
+    if (kind === undefined) return null;
+    if (resources.get(id)?.details?.style?.kind === kind) return id;
+    const key = nameKey(valueOf(element, NS_FUB, "name") ?? "");
+    let text: string | null = null;
+    for (const other of styles) {
+      if (other.kind !== kind || nameKey(other.name) !== key) continue;
+      text ??= styleText(textOf(child)!, (ref) => textOf(byId.get(ref)));
+      if (styleText(resources.get(other.id)!.raw, (ref) => resources.get(ref)?.raw) === text) return other.id;
+    }
+    return null;
+  };
+  // Gli stili che restano quelli del disegno, con l'id dell'SVG.
+  const keptStyles = new Map<string, string>();
   const moved: NodeId[] = [];
   const seen = new Set<NodeId>();
   // In profondità e senza ricorsione: una catena di rimandi può essere
@@ -1165,6 +1245,12 @@ function liftOf(
       const child = holder === undefined ? null : movedOf(holder);
       if (child === null || seen.has(child)) continue;
       seen.add(child);
+      // Uno stile che il disegno ha già non entra, e nemmeno ciò che usa.
+      const there = styleThere(child);
+      if (there !== null) {
+        keptStyles.set(valueOf(doc.element(child)!, NS_NONE, "id")!, there);
+        continue;
+      }
       stack.push({ refs: refsIn(child), at: 0, child });
     }
   };
@@ -1204,6 +1290,8 @@ function liftOf(
     const id = valueOf(element, NS_NONE, "id") ?? "";
     const kind = byId.get(id) === child ? index.get(id) : undefined;
     let arriving: SwatchFacts | null = null;
+    const style = byId.get(id) === child && styleKinds.has(id) ? styleOf(doc, element) : null;
+    if (style !== null) copies++;
     if (kind !== undefined) {
       kinds.set(id, kind);
       const there = resources.get(id);
@@ -1255,8 +1343,14 @@ function liftOf(
       if (name !== arriving.name) named.set(child, name);
       swatches.push({ id: fresh.get(child)!, name, color: arriving.color });
     }
+    if (style !== null) {
+      const name = arrivingStyle(styles, style);
+      if (name !== style.name) named.set(child, name);
+      styles.push({ id: fresh.get(child)!, name, kind: style.kind });
+    }
   }
   if (resources.size + copies > MAX_RESOURCES) return none;
+  for (const [from, to] of keptStyles) local.set(from, to);
   for (const [from, to] of local) if (!names.has(from)) names.set(from, to);
   for (const [at, to] of fresh) renamed.set(at, to);
   const written = new Map<string, ResourceKind>();
@@ -1267,9 +1361,18 @@ function liftOf(
     decided,
     named,
     colors,
+    styled,
     resolve: (id) => kinds.get(id) ?? outside(id),
     written: (id) => written.get(id) ?? outside(id),
   };
+}
+
+/// Il nome di uno stile `style` che arriva fra gli stili `styles`: il suo se
+/// è libero nel suo tipo, se no il primo libero.
+function arrivingStyle(styles: readonly NamedStyle[], style: StyleFacts): string {
+  const clean = cleanName(style.name);
+  if (styleNameProblem(styles, style.kind, clean) === null) return style.name;
+  return arrivingStyleName(styles, style.kind, clean === "" ? t(style.kind === "text" ? "draw.styles.text" : "draw.styles.graphic") : clean);
 }
 
 /// Gli `add` di un incolla: testi fratelli uniti in sequenze, finché il loro
@@ -1375,6 +1478,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     ids: renamed,
     named: lift.named,
     colors: lift.colors,
+    styled: lift.styled,
     sheets: wrap ? sheetScope : null,
     href: target.href,
     resolve: lift.resolve,
