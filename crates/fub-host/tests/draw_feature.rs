@@ -11,6 +11,9 @@
 //! MIME; accesa, il provider `fubann` lo rivendica e il PDF accanto prende un
 //! backlink.
 //!
+//! Accesa, il vault ha anche le impostazioni dell'editor dei disegni; spenta,
+//! le chiavi non ci sono.
+//!
 //! Lo stesso file si compila nei due giri della CI: `cargo test --workspace`
 //! prova il ramo spento, `cargo test -p fub-host --features draw` quello acceso.
 
@@ -18,6 +21,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
+use fub_abi::settings::SettingValue;
 use fub_abi::traits::{EntryKind, IndexQuery, IndexResult, Page};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
 
@@ -152,4 +156,116 @@ fn annotations_are_a_document_only_with_the_draw_feature() {
     }
 
     assert_eq!(ws.read_source(&annotations).unwrap(), ANNOTATIONS);
+}
+
+#[test]
+fn the_drawing_settings_exist_only_with_the_draw_feature() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    std::fs::write(root.join("schizzo.svg"), DRAWING).unwrap();
+    let mut mounted = mounted(&root);
+    let ws = &mut mounted.workspace;
+
+    #[cfg(not(feature = "draw"))]
+    {
+        for key in [
+            "draw.level",
+            "draw.custom",
+            "draw.templates",
+            "draw.suggestions",
+        ] {
+            assert!(ws.setting(key).is_err(), "{key}");
+        }
+        assert!(ws
+            .set_setting("draw.suggestions", SettingValue::Toggle(false))
+            .is_err());
+    }
+
+    #[cfg(feature = "draw")]
+    {
+        use fub_abi::settings::SettingScope;
+        let text = |value: &str| SettingValue::Text(value.into());
+        let Ok(IndexResult::Settings(entries)) = ws.query_index(IndexQuery::Settings {
+            plugin: Some(fub_features::DRAW_ID.into()),
+        }) else {
+            panic!("le impostazioni dei disegni rispondono")
+        };
+        // Il bundle porta anche le chiavi sintetiche dei permessi e delle
+        // scorciatoie: qui contano le sue.
+        let keys: Vec<_> = entries
+            .iter()
+            .map(|entry| entry.spec.key.as_str())
+            .filter(|key| key.starts_with("draw."))
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                "draw.level",
+                "draw.custom",
+                "draw.templates",
+                "draw.suggestions"
+            ]
+        );
+        let entry = |key: &str| entries.iter().find(|entry| entry.spec.key == key).unwrap();
+        // I valori di serie.
+        assert_eq!(entry("draw.level").value, text("essential"));
+        assert_eq!(
+            entry("draw.custom").value,
+            SettingValue::List(
+                ["pen", "eraser", "rect", "ellipse", "line", "arrow"]
+                    .map(String::from)
+                    .to_vec()
+            )
+        );
+        assert_eq!(entry("draw.templates").value, text("Templates"));
+        assert_eq!(entry("draw.suggestions").value, SettingValue::Toggle(true));
+        // Il vault le porta con sé, la macchina i suggerimenti.
+        assert_eq!(entry("draw.level").spec.scope, SettingScope::Vault);
+        assert_eq!(entry("draw.templates").spec.scope, SettingScope::Vault);
+        assert_eq!(entry("draw.suggestions").spec.scope, SettingScope::Machine);
+
+        // La casella «Non mostrare più suggerimenti» scrive la chiave.
+        ws.set_setting("draw.suggestions", SettingValue::Toggle(false))
+            .expect("i suggerimenti si spengono dall'interfaccia");
+        assert_eq!(
+            ws.setting("draw.suggestions").unwrap(),
+            SettingValue::Toggle(false)
+        );
+        ws.set_setting("draw.suggestions", SettingValue::Toggle(true))
+            .expect("e si riaccendono");
+        assert_eq!(
+            ws.setting("draw.suggestions").unwrap(),
+            SettingValue::Toggle(true)
+        );
+        assert!(ws.set_setting("draw.suggestions", text("no")).is_err());
+
+        // Il livello ha i quattro nomi dell'editor, e nessun altro.
+        for level in ["standard", "expert", "custom", "essential"] {
+            ws.set_setting("draw.level", text(level))
+                .unwrap_or_else(|error| panic!("{level}: {error:?}"));
+            assert_eq!(ws.setting("draw.level").unwrap(), text(level));
+        }
+        assert!(ws.set_setting("draw.level", text("master")).is_err());
+        assert_eq!(ws.setting("draw.level").unwrap(), text("essential"));
+
+        // Le parti del Personalizzato sono un elenco, e la cartella un testo.
+        let parts = SettingValue::List(vec!["pen".into(), "text".into()]);
+        ws.set_setting("draw.custom", parts.clone()).unwrap();
+        assert_eq!(ws.setting("draw.custom").unwrap(), parts);
+        ws.set_setting("draw.templates", text("Modelli")).unwrap();
+        assert_eq!(ws.setting("draw.templates").unwrap(), text("Modelli"));
+
+        let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
+        for key in ["draw.level", "draw.custom", "draw.templates"] {
+            assert!(written.contains(&format!("\"{key}\"")), "{key}: {written}");
+        }
+        // I suggerimenti sono della macchina: non entrano nel file del vault.
+        assert!(!written.contains("draw.suggestions"), "{written}");
+    }
+
+    // Le impostazioni non toccano i disegni.
+    assert_eq!(
+        std::fs::read_to_string(root.join("schizzo.svg")).unwrap(),
+        DRAWING
+    );
 }

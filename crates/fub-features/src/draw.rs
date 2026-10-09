@@ -1,8 +1,9 @@
-//! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno
-//! e l'export in PNG, JPEG, SVG e PDF.
+//! I disegni nel vault (bundle `fub.draw`): il comando che ne fa nascere uno,
+//! l'export in PNG, JPEG, SVG e PDF, e le impostazioni dell'editor.
 //!
 //! Il comando «Nuovo disegno» è nel modulo [`create`]: un disegno nasce vuoto
-//! dal provider del formato, con un nome libero, e si apre. Il comando «Annota
+//! dal provider del formato, da un modello distribuito con Fub o da un disegno
+//! del vault, con un nome libero, e si apre. Il comando «Annota
 //! il PDF» è nel modulo [`annotate`]: apre le annotazioni di un PDF, il file
 //! `.pdf.fubann` accanto, e le fa nascere dal provider `fubann` se non ci sono.
 //!
@@ -70,6 +71,14 @@
 //! all'altro. Il modulo [`pdf`] rilegge il pezzo prodotto da `svg2pdf`, ordina
 //! le chiavi dei dizionari e rinumera gli oggetti nell'ordine in cui si
 //! raggiungono dalla radice: lo stesso albero dà sempre lo stesso file.
+//!
+//! # Le impostazioni
+//!
+//! [`settings`] dichiara quattro chiavi, nel gruppo «Disegni»: il livello
+//! d'interfaccia dell'editor e le parti del Personalizzato, la cartella dei
+//! modelli del vault e i suggerimenti brevi. Le prime due le legge l'editor,
+//! che le segue dal vivo; la terza la legge la galleria di «Nuovo disegno»; la
+//! quarta la scrive la casella «Non mostrare più suggerimenti».
 
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -82,12 +91,14 @@ use fub_abi::error::PluginError;
 use fub_abi::model::{Block, DocId, Inline, LinkTarget};
 use fub_abi::rules::media::mime_of;
 use fub_abi::rules::path::strip_ext;
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::traits::{FolderScope, IndexQuery, IndexResult, ReadApi};
 use fub_abi::transfer::{
     ArtifactHandle, ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget,
     TransferNote, PLUGIN_EXPORT_LIMIT,
 };
+use fub_abi::ui::UiOption;
 use fub_format_svg::FORMAT_ID;
 use fub_scene::export::{
     clean, embed_images, measure, Board, DeriveError, Scope, Size, Source, AREA_MAX, SIDE_MAX,
@@ -102,6 +113,7 @@ mod annotate;
 mod annotated;
 mod choice;
 mod create;
+mod templates;
 
 pub use annotate::PDF_ANNOTATE;
 pub use annotated::{AnnotatedPdfExport, RedactedPdfExport, DRAW_ANNOTATED_PDF, DRAW_REDACTED_PDF};
@@ -123,6 +135,26 @@ pub const DRAW_SVG: &str = "draw.svg";
 /// La destinazione PDF: un file vettoriale per disegno, una pagina per tavola.
 pub const DRAW_PDF: &str = "draw.pdf";
 
+/// L'impostazione del livello d'interfaccia dell'editor: quali strumenti offre.
+pub const DRAW_LEVEL_KEY: &str = "draw.level";
+/// I valori del livello, dal più semplice: il primo è quello di serie. Sono i
+/// nomi che l'editor conosce (`Level` in `tools/registry.ts`), e il test del
+/// client `editors/spatial/draw-settings-mirror.test.ts` li confronta.
+pub const DRAW_LEVELS: [&str; 4] = ["essential", "standard", "expert", "custom"];
+/// L'impostazione delle parti del livello Personalizzato: un elenco di nomi.
+pub const DRAW_CUSTOM_KEY: &str = "draw.custom";
+/// Le parti del Personalizzato quando nessuno le ha scelte: quelle
+/// dell'Essenziale, nell'ordine della barra. La fonte è `CUSTOM_DEFAULT` in
+/// `apps/client/src/editors/spatial/tools/registry.ts`, e lo stesso test del
+/// client, che legge questo file, confronta le due.
+pub const DRAW_CUSTOM_DEFAULT: [&str; 6] = ["pen", "eraser", "rect", "ellipse", "line", "arrow"];
+/// L'impostazione della cartella dei modelli del vault.
+pub const DRAW_TEMPLATES_KEY: &str = "draw.templates";
+/// La cartella dei modelli quando nessuno ha scelto: `Templates`, nella radice.
+pub const DRAW_TEMPLATES_DEFAULT: &str = "Templates";
+/// L'impostazione dei suggerimenti brevi dell'editor.
+pub const DRAW_SUGGESTIONS_KEY: &str = "draw.suggestions";
+
 /// La densità di riferimento dei pixel CSS: 96 per pollice.
 const CSS_DPI: f32 = 96.0;
 /// La qualità del JPEG, da 1 a 100: a 90 i bordi dei tratti restano puliti, e
@@ -137,10 +169,92 @@ const E_TARGET: &str = "e_target";
 const E_NO_DRAWINGS: &str = "e_no_drawings";
 const E_NONE_EXPORTED: &str = "e_none_exported";
 const E_WRITE: &str = "e_write";
+const S_GROUP: &str = "s_group";
+const S_LEVEL: &str = "s_level";
+const S_LEVEL_DESC: &str = "s_level_desc";
+const S_ESSENTIAL: &str = "s_essential";
+const S_STANDARD: &str = "s_standard";
+const S_EXPERT: &str = "s_expert";
+const S_CUSTOM_LEVEL: &str = "s_custom_level";
+const S_CUSTOM: &str = "s_custom";
+const S_CUSTOM_DESC: &str = "s_custom_desc";
+const S_TEMPLATES: &str = "s_templates";
+const S_TEMPLATES_DESC: &str = "s_templates_desc";
+const S_SUGGESTIONS: &str = "s_suggestions";
+const S_SUGGESTIONS_DESC: &str = "s_suggestions_desc";
 
-/// Le stringhe del componente: quelle del comando, e dell'export i soli
-/// errori, perché le note del log sono testo semplice come quelle degli altri
-/// export.
+/// Lo schema delle impostazioni dei disegni.
+///
+/// - **Il livello** e **le parti del Personalizzato** sono del **vault**,
+///   perché le sceglie chi prepara il vault: chi insegna e lo lascia
+///   all'Essenziale per una classe lo lascia su ogni macchina che apre quel
+///   vault. **Non** `program_writable`: un componente che alzasse il livello da
+///   sé metterebbe davanti a chi disegna strumenti che nessuno ha scelto di
+///   dargli. Cambiare livello non tocca i disegni: filtra soltanto ciò che
+///   l'editor offre. La griglia qui non c'è: è uno stato della vista, e lo
+///   ricorda la macchina, senza riscrivere il file del vault a ogni `#`.
+///   `draw.custom` è un elenco, e il pannello delle Impostazioni lo mostra con
+///   il campo dell'editor, che conosce le parti.
+/// - **La cartella dei modelli** è del vault: i modelli sono disegni del
+///   vault, e viaggiano con lui. `program_writable`, come le cartelle delle
+///   giornaliere: è un profilo di vault reversibile, e non tocca la privacy.
+/// - **I suggerimenti** sono della **macchina**: spegnerli è una preferenza di
+///   chi usa l'editor, non del vault. La scrive la casella «Non mostrare più
+///   suggerimenti», quindi dall'interfaccia; non `program_writable`.
+pub fn settings() -> Vec<SettingSpec> {
+    let [essential, standard, expert, custom] = DRAW_LEVELS;
+    vec![
+        SettingSpec::new(
+            DRAW_LEVEL_KEY,
+            Text::key(S_LEVEL),
+            SettingKind::Choice {
+                default: essential.into(),
+                options: vec![
+                    UiOption::new(essential, Text::key(S_ESSENTIAL)),
+                    UiOption::new(standard, Text::key(S_STANDARD)),
+                    UiOption::new(expert, Text::key(S_EXPERT)),
+                    UiOption::new(custom, Text::key(S_CUSTOM_LEVEL)),
+                ],
+            },
+        )
+        .describing(Text::key(S_LEVEL_DESC))
+        .grouped(Text::key(S_GROUP)),
+        SettingSpec::new(
+            DRAW_CUSTOM_KEY,
+            Text::key(S_CUSTOM),
+            SettingKind::List {
+                default: DRAW_CUSTOM_DEFAULT
+                    .iter()
+                    .map(|part| (*part).into())
+                    .collect(),
+            },
+        )
+        .describing(Text::key(S_CUSTOM_DESC))
+        .grouped(Text::key(S_GROUP)),
+        SettingSpec::new(
+            DRAW_TEMPLATES_KEY,
+            Text::key(S_TEMPLATES),
+            SettingKind::Text {
+                default: DRAW_TEMPLATES_DEFAULT.into(),
+            },
+        )
+        .describing(Text::key(S_TEMPLATES_DESC))
+        .grouped(Text::key(S_GROUP))
+        .program_writable(),
+        SettingSpec::new(
+            DRAW_SUGGESTIONS_KEY,
+            Text::key(S_SUGGESTIONS),
+            SettingKind::Toggle { default: true },
+        )
+        .describing(Text::key(S_SUGGESTIONS_DESC))
+        .grouped(Text::key(S_GROUP))
+        .for_machine(),
+    ]
+}
+
+/// Le stringhe del componente: quelle del comando, delle impostazioni, e
+/// dell'export i soli errori, perché le note del log sono testo semplice come
+/// quelle degli altri export.
 pub fn catalog() -> Vec<StringCatalog> {
     vec![
         choice::in_italian(annotated::in_italian(annotate::in_italian(
@@ -152,7 +266,43 @@ pub fn catalog() -> Vec<StringCatalog> {
             E_NONE_EXPORTED,
             "Non ho esportato nessun disegno: «{doc}» non è riuscito ({reason}).",
         )
-        .with(E_WRITE, "Non ho scritto «{path}»: {reason}"),
+        .with(E_WRITE, "Non ho scritto «{path}»: {reason}")
+        .with(S_GROUP, "Disegni")
+        .with(S_LEVEL, "Livello d'interfaccia")
+        .with(
+            S_LEVEL_DESC,
+            "Quali strumenti offre l'editor dei disegni. L'Essenziale ha gli \
+             strumenti di base, uno per tasto; lo Standard ne aggiunge altri; \
+             l'Esperto mostra anche il file sotto il disegno; il Personalizzato \
+             ha le parti scelte in «Parti del Personalizzato». Cambiare livello \
+             non modifica i disegni, e vale subito anche per quelli aperti.",
+        )
+        .with(S_ESSENTIAL, "Essenziale")
+        .with(S_STANDARD, "Standard")
+        .with(S_EXPERT, "Esperto")
+        .with(S_CUSTOM_LEVEL, "Personalizzato")
+        .with(S_CUSTOM, "Parti del Personalizzato")
+        .with(
+            S_CUSTOM_DESC,
+            "Le parti dell'editor che il livello Personalizzato offre, una per \
+             una. Valgono soltanto con quel livello, e si possono preparare \
+             anche con un altro scelto.",
+        )
+        .with(S_TEMPLATES, "Cartella dei modelli")
+        .with(
+            S_TEMPLATES_DESC,
+            "La cartella del vault con i disegni che «Nuovo disegno» offre come \
+             modelli, sotto «Dal vault». Se non c'è, il vault non ha modelli \
+             suoi: quelli di Fub restano.",
+        )
+        .with(S_SUGGESTIONS, "Suggerimenti brevi")
+        .with(
+            S_SUGGESTIONS_DESC,
+            "Mostra nell'editor dei disegni brevi suggerimenti su ciò che si può \
+             fare in quel momento. Si spengono anche dalla casella «Non mostrare \
+             più suggerimenti» che accompagna ognuno, e valgono per questa \
+             macchina.",
+        ),
         choice::in_english(annotated::in_english(annotate::in_english(
             create::in_english(StringCatalog::new("en")),
         )))
@@ -162,7 +312,41 @@ pub fn catalog() -> Vec<StringCatalog> {
             E_NONE_EXPORTED,
             "No drawing was exported: «{doc}» failed ({reason}).",
         )
-        .with(E_WRITE, "Could not write «{path}»: {reason}"),
+        .with(E_WRITE, "Could not write «{path}»: {reason}")
+        .with(S_GROUP, "Drawings")
+        .with(S_LEVEL, "Interface level")
+        .with(
+            S_LEVEL_DESC,
+            "Which tools the drawing editor offers. Essential has the basic \
+             tools, one key each; Standard adds more; Expert also shows the file \
+             under the drawing; Custom has the parts chosen in «Custom level \
+             parts». Changing the level does not modify drawings, and takes \
+             effect at once, open ones included.",
+        )
+        .with(S_ESSENTIAL, "Essential")
+        .with(S_STANDARD, "Standard")
+        .with(S_EXPERT, "Expert")
+        .with(S_CUSTOM_LEVEL, "Custom")
+        .with(S_CUSTOM, "Custom level parts")
+        .with(
+            S_CUSTOM_DESC,
+            "The editor parts the Custom level offers, one by one. They only \
+             apply with that level, and can be prepared while another is chosen.",
+        )
+        .with(S_TEMPLATES, "Templates folder")
+        .with(
+            S_TEMPLATES_DESC,
+            "The vault folder with the drawings that «New drawing» offers as \
+             templates, under «From the vault». If it does not exist, the \
+             vault has no templates of its own: Fub's stay.",
+        )
+        .with(S_SUGGESTIONS, "Short tips")
+        .with(
+            S_SUGGESTIONS_DESC,
+            "Shows short tips in the drawing editor about what can be done at \
+             that moment. They also turn off from the «Don’t show tips again» box \
+             that comes with each one, and apply to this machine.",
+        ),
     ]
 }
 
@@ -2387,6 +2571,137 @@ mod pdf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un testo come lo legge chi guarda, nella lingua data.
+    fn said(text: &Text, language: &str) -> String {
+        let catalogs = catalog();
+        let locale = fub_abi::locale::Locale {
+            language: language.to_string(),
+            ..fub_abi::locale::Locale::default()
+        };
+        fub_abi::text::Strings::new(&catalogs, "it", &locale).render(text)
+    }
+
+    #[test]
+    fn the_settings_are_four_in_one_group_with_their_defaults() {
+        use fub_abi::settings::{SettingScope, SettingValue};
+        let specs = settings();
+        let keys: Vec<_> = specs.iter().map(|spec| spec.key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "draw.level",
+                "draw.custom",
+                "draw.templates",
+                "draw.suggestions"
+            ]
+        );
+        assert_eq!(
+            keys,
+            [
+                DRAW_LEVEL_KEY,
+                DRAW_CUSTOM_KEY,
+                DRAW_TEMPLATES_KEY,
+                DRAW_SUGGESTIONS_KEY
+            ]
+        );
+        // Il vault, tranne i suggerimenti, che sono di chi usa la macchina.
+        let scopes: Vec<_> = specs.iter().map(|spec| spec.scope).collect();
+        assert_eq!(
+            scopes,
+            [
+                SettingScope::Vault,
+                SettingScope::Vault,
+                SettingScope::Vault,
+                SettingScope::Machine
+            ]
+        );
+        // Un componente non alza il livello, non sceglie le parti e non spegne
+        // i suggerimenti da sé: soltanto la cartella dei modelli è di tutti.
+        let writable: Vec<_> = specs.iter().map(|spec| spec.program_writable).collect();
+        assert_eq!(writable, [false, false, true, false]);
+
+        let defaults: Vec<_> = specs.iter().map(|spec| spec.kind.default_value()).collect();
+        assert_eq!(
+            defaults,
+            [
+                SettingValue::Text("essential".into()),
+                SettingValue::List(
+                    ["pen", "eraser", "rect", "ellipse", "line", "arrow"]
+                        .map(String::from)
+                        .to_vec()
+                ),
+                SettingValue::Text("Templates".into()),
+                SettingValue::Toggle(true),
+            ]
+        );
+        let SettingKind::Choice { options, .. } = &specs[0].kind else {
+            panic!("il livello è una scelta")
+        };
+        let levels: Vec<_> = options.iter().map(|option| option.value.as_str()).collect();
+        assert_eq!(levels, DRAW_LEVELS);
+        assert_eq!(levels, ["essential", "standard", "expert", "custom"]);
+        let labels = |language| -> Vec<String> {
+            options
+                .iter()
+                .map(|option| said(&option.label, language))
+                .collect()
+        };
+        assert_eq!(
+            labels("it"),
+            ["Essenziale", "Standard", "Esperto", "Personalizzato"]
+        );
+        assert_eq!(labels("en"), ["Essential", "Standard", "Expert", "Custom"]);
+
+        // Tutte nel gruppo «Disegni», con etichetta e descrizione scritte in
+        // entrambe le lingue (una chiave senza voce si leggerebbe nuda).
+        for spec in &specs {
+            for (language, group) in [("it", "Disegni"), ("en", "Drawings")] {
+                assert_eq!(said(&spec.group, language), group, "{}", spec.key);
+                for text in [&spec.label, &spec.description] {
+                    let line = said(text, language);
+                    assert!(
+                        !line.is_empty() && !line.starts_with("s_"),
+                        "{} in {language}: «{line}»",
+                        spec.key
+                    );
+                }
+            }
+        }
+        assert_eq!(said(&specs[0].label, "it"), "Livello d'interfaccia");
+        assert_eq!(said(&specs[1].label, "it"), "Parti del Personalizzato");
+        assert_eq!(said(&specs[2].label, "it"), "Cartella dei modelli");
+        // L'interruttore dei suggerimenti parla come l'editor: stessa parola
+        // nell'etichetta e nella descrizione, e il nome della casella è
+        // quello che l'editor mostra (apostrofo tipografico nell'inglese).
+        assert_eq!(said(&specs[3].label, "it"), "Suggerimenti brevi");
+        assert_eq!(said(&specs[3].label, "en"), "Short tips");
+        let it = said(&specs[3].description, "it");
+        let en = said(&specs[3].description, "en");
+        assert!(it.contains("suggerimenti"), "{it}");
+        assert!(it.contains("«Non mostrare più suggerimenti»"), "{it}");
+        assert!(en.contains("tips"), "{en}");
+        assert!(en.contains("«Don’t show tips again»"), "{en}");
+        assert!(!en.to_lowercase().contains("hint"), "{en}");
+    }
+
+    #[test]
+    fn the_suggestions_toggle_takes_a_toggle_and_nothing_else() {
+        use fub_abi::settings::SettingValue;
+        let specs = settings();
+        let kind = &specs[3].kind;
+        assert!(kind.rejects(&SettingValue::Toggle(false)).is_none());
+        assert!(kind.rejects(&SettingValue::Toggle(true)).is_none());
+        assert!(kind.rejects(&SettingValue::Text("no".into())).is_some());
+        // Il livello ammette i quattro nomi e nessun altro.
+        let level = &specs[0].kind;
+        for name in DRAW_LEVELS {
+            assert!(level.rejects(&SettingValue::Text(name.into())).is_none());
+        }
+        assert!(level
+            .rejects(&SettingValue::Text("master".into()))
+            .is_some());
+    }
 
     #[test]
     fn the_font_database_holds_fubs_faces_and_nothing_else() {
