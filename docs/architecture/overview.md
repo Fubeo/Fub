@@ -115,11 +115,12 @@ scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
 `default`. La stessa feature accende in `fub-features` l'export dei disegni in
 PNG, JPEG, SVG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati,
 e il comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
-provider: per questo anche `features --> svg` è un arco facoltativo, come
-`features --> base` per le basi. Con la stessa feature `fub-features` usa
-`fub-scene` per derivare dal disegno le tavole o la selezione da esportare, e
-per leggere le annotazioni dei PDF, da esportare nel PDF annotato e nel PDF
-redatto: anche `features --> scene` è facoltativo.
+provider, o parte da un modello o da un disegno del vault e ne cambia il solo
+titolo con `retitle`: per questo anche `features --> svg` è un arco
+facoltativo, come `features --> base` per le basi. Con la stessa feature
+`fub-features` usa `fub-scene` per derivare dal disegno le tavole o la
+selezione da esportare, e per leggere le annotazioni dei PDF, da esportare nel
+PDF annotato e nel PDF redatto: anche `features --> scene` è facoltativo.
 
 ## Flusso di un comando
 
