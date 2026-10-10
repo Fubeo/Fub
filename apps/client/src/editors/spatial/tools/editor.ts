@@ -149,7 +149,7 @@ import { pathData, type Elem } from "../scene/serialize";
 import { paint as parsePaint, paintReference, href as parseHref, transform as parseTransform } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
 import { createOverlay, HANDLE_REACH_PX, type NodeShape, type OverlayHandle, type RegionTone, type SamplePaint } from "../painter/overlay";
-import { PaintBuilder, resourcesFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
+import { PaintBuilder, resourcesFor, symbolsFor, type HeadInfo, type Page, type PaintNode, type PaintScene, type PaintSource } from "../painter/paint";
 import { createSvgPainter, miniaturePicture, paintMiniature, shapeCount, type MiniatureBox } from "../painter/svg-dom";
 import {
   addOp,
@@ -5128,18 +5128,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (layer && box === null) return null;
     const frame = box === null ? "" : `|${box.x} ${box.y} ${box.width} ${box.height}`;
     const chain = [root.attrs, ...heads.map((head) => head.attrs)];
-    const used = resourcesFor(paints, chain, scene.resources);
+    const symbols = symbolsFor(paints, scene.symbols);
+    const used = resourcesFor([...paints, ...symbols], chain, scene.resources);
     const serials = (list: readonly object[]): string => list.map((paint) => builder.serialOf(paint)).join(" ");
     return {
-      key: `${builder.serialOf(root)}|${heads.map((head) => head.head + (head.tail ?? "")).join("")}|${serials(paints)}|${serials(used)}${frame}`,
+      key: `${builder.serialOf(root)}|${heads.map((head) => head.head + (head.tail ?? "")).join("")}|${serials(paints)}|${serials(used)}|${serials(symbols)}${frame}`,
       draw: (owner) => {
-        const count = shapeCount(paints, THUMB_PICTURE_SHAPES);
+        // Il contenuto dei simboli conta: un'istanza ne disegna tutte le forme.
+        const count = shapeCount([...paints, ...symbols], THUMB_PICTURE_SHAPES);
         if (count > THUMB_PICTURE_SHAPES) return null;
         const framed = box ?? miniatureBox(indexer.frameOf(model, node));
         if (framed === null) return null;
         const live = count <= THUMB_LIVE_SHAPES;
         const resolve = live && images !== undefined ? (href: string, life: Lifetime) => images.url(href, life) : undefined;
-        const svg = paintMiniature(paints, chain, framed, owner, resolve, used, drawingFonts.live);
+        const svg = paintMiniature(paints, chain, framed, owner, resolve, used, drawingFonts.live, symbols);
         return live ? svg : miniaturePicture(svg, owner);
       },
     };

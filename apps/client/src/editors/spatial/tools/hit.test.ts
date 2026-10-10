@@ -654,6 +654,127 @@ describe("un blocco estraneo dentro un oggetto", () => {
   });
 });
 
+describe("le istanze dei simboli", () => {
+  const SYMBOLS = doc(
+    '<defs id="fub-defs"><symbol id="r1" overflow="visible"><title>Presa</title><rect id="o1" x="0" y="0" width="10" height="10"/>'
+      + '<g id="og" transform="translate(20 0)"><circle id="o2" cx="0" cy="5" r="5"/></g></symbol>'
+      + '<symbol id="r2" overflow="visible"><use id="o3" href="#r1"/><rect id="o4" x="0" y="20" width="5" height="5"/>'
+      + '<a id="o5" href="uno.md"><rect x="40" y="0" width="5" height="5"/></a></symbol></defs>'
+      + `${LAYER}<use id="i1" transform="translate(100 0)" href="#r1"/><use id="i2" transform="matrix(2 0 0 2 0 100)" href="#r1"/>`
+      + '<g id="g" transform="translate(200 200)"><use id="i3" href="#r2"/></g><use id="i4" href="#r1" display="none"/></g>',
+  );
+  const leaf = (opened: ReturnType<typeof open>, id: string): LeafNode => opened.engine.holder(id) as LeafNode;
+
+  it("si toccano dove si vede il contenuto del simbolo, portato dalla loro trasformazione", () => {
+    const { index } = open(SYMBOLS);
+    expect(index.units.map((unit) => unit.key)).toEqual(["i1", "i2", "g"]);
+    expect(index.get("i1")?.bounds).toEqual({ min: [100, 0], max: [125, 10] });
+    expect(index.get("i2")?.bounds).toEqual({ min: [0, 100], max: [50, 120] });
+    expect(index.at([105, 5], 0)?.key).toBe("i1");
+    expect(index.at([119, 5], 0)?.key).toBe("i1");
+    // Fra il quadrato e il cerchio non c'è niente.
+    expect(index.at([113, 5], 0)).toBeNull();
+    expect(index.at([10, 110], 0)?.key).toBe("i2");
+    expect(index.at([42, 108], 0)?.key).toBe("i2");
+  });
+
+  it("anche attraverso le istanze del contenuto", () => {
+    const { index } = open(SYMBOLS);
+    const g = index.get("g")!;
+    expect(index.deepAt([205, 205], 0)?.key).toBe("i3");
+    expect(index.deepAt([202, 222], 0)?.key).toBe("i3");
+    expect(g.bounds).toEqual({ min: [200, 200], max: [245, 225] });
+    // Il contenuto non si sceglie da fuori.
+    expect(index.children(g).map((unit) => unit.key)).toEqual(["i3"]);
+    for (const key of ["o1", "og", "o2", "o3", "o4", "r1"]) expect(index.get(key), key).toBeNull();
+  });
+
+  it("per chi cambia una forma sono una forma sola, ma si vede che cosa c'è sotto il punto", () => {
+    const opened = open(SYMBOLS);
+    const i3 = opened.index.get("i3")!;
+    expect(i3.shapes().map(({ leaf, matrix }) => [leaf.facts.id, matrix])).toEqual([["i3", [1, 0, 0, 1, 200, 200]]]);
+    expect(i3.shapeAt([205, 205], 0)?.facts.id).toBe("i3");
+    expect(i3.shapeAt([215, 215], 0)).toBeNull();
+    expect(i3.sampleAt([205, 205], 0)?.leaf.facts.id).toBe("o1");
+    expect(i3.sampleAt([220, 205], 0)?.matrix).toEqual([1, 0, 0, 1, 220, 200]);
+  });
+
+  it("seguono il simbolo quando cambia", () => {
+    const opened = open(SYMBOLS);
+    expect(opened.engine.apply({ op: "set", id: "o1", attrs: { width: "30" } }).outcome).toBe("applied");
+    let index = opened.reindex();
+    expect(index.get("i1")?.bounds).toEqual({ min: [100, 0], max: [130, 10] });
+    expect(index.get("g")?.bounds).toEqual({ min: [200, 200], max: [245, 225] });
+    expect(opened.engine.apply({ op: "set", id: "o1", attrs: { width: "60" } }).outcome).toBe("applied");
+    index = opened.reindex();
+    expect(index.get("g")?.bounds).toEqual({ min: [200, 200], max: [260, 225] });
+    // Anche la miniatura, attraverso un altro simbolo.
+    expect(opened.frame("i3")).toEqual({ min: [200, 200], max: [260, 225] });
+  });
+
+  it("con troppe forme, un'istanza si tocca nel riquadro del suo simbolo", () => {
+    const rects = Array.from({ length: 70 }, (_, i) => `<rect x="${2 * i}" y="0" width="1" height="1"/>`).join("");
+    const rows = Array.from({ length: 70 }, (_, i) => `<use href="#r5" transform="translate(0 ${2 * i})"/>`).join("");
+    const { index } = open(doc(
+      `<defs id="fub-defs"><symbol id="r5" overflow="visible">${rects}</symbol><symbol id="r6" overflow="visible">${rows}</symbol></defs>`
+        + `${LAYER}<use id="i" href="#r6"/></g>`,
+    ));
+    const unit = index.get("i")!;
+    expect(unit.bounds).toEqual({ min: [0, 0], max: [139, 139] });
+    // Le prime righe si toccano dove disegnano, le ultime nel loro riquadro.
+    expect(unit.hits([0.5, 0.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 0.5], 0)).toBe(false);
+    expect(unit.hits([1.5, 138.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 137.5], 0)).toBe(false);
+  });
+
+  it("isolato un simbolo da un'istanza, il contenuto si sceglie dov'è in lei", () => {
+    const opened = open(SYMBOLS);
+    const i1 = leaf(opened, "i1");
+    const r1 = container(opened, "r1");
+    expect(opened.opens(r1)).toBe(false);
+    expect(opened.opens(r1, [i1])).toBe(true);
+    expect(opened.opens(r1, [leaf(opened, "i4")])).toBe(false);
+    const index = opened.reindex(r1, [i1]);
+    expect(index.units.map((unit) => [unit.key, unit.bounds])).toEqual([
+      ["o1", { min: [100, 0], max: [110, 10] }],
+      ["og", { min: [115, 0], max: [125, 10] }],
+    ]);
+    expect(index.units[0]!.path).toEqual([0, 0, 1]);
+    expect(index.get("o2")?.bounds).toEqual({ min: [115, 0], max: [125, 10] });
+    expect(index.get("i1")).toBeNull();
+    expect(index.at([105, 5], 0)?.key).toBe("o1");
+    // Il simbolo, come oggetto, riceve ciò che si disegna nelle coordinate
+    // dell'istanza.
+    const scope = index.scope()!;
+    expect([scope.key, scope.role, scope.matrix]).toEqual(["r1", "symbol", [1, 0, 0, 1, 100, 0]]);
+    // Da un'altra istanza, il contenuto sta in lei.
+    expect(opened.reindex(r1, [leaf(opened, "i2")]).get("o1")?.bounds).toEqual({ min: [0, 100], max: [20, 120] });
+    // Un gruppo del contenuto si isola anche lui, dalla stessa istanza.
+    expect(opened.opens(container(opened, "og"), [i1])).toBe(true);
+    expect(opened.reindex(container(opened, "og"), [i1]).units.map((unit) => [unit.key, unit.bounds])).toEqual([["o2", { min: [115, 0], max: [125, 10] }]]);
+    expect(opened.reindex(container(opened, "og"), [i1]).scope()?.matrix).toEqual([1, 0, 0, 1, 120, 0]);
+  });
+
+  it("isolato un simbolo dentro un altro, il contenuto passa da tutte e due le istanze", () => {
+    const opened = open(SYMBOLS);
+    const through = [leaf(opened, "i3"), leaf(opened, "o3")];
+    const index = opened.reindex(container(opened, "r1"), through);
+    expect(index.get("o1")?.bounds).toEqual({ min: [200, 200], max: [210, 210] });
+    expect(opened.opens(container(opened, "r1"), [leaf(opened, "o3")])).toBe(false);
+    // Bloccata l'istanza, non si entra più.
+    expect(opened.engine.apply({ op: "set", id: "i3", attrs: { "fub:locked": "true" } }).outcome).toBe("applied");
+    expect(opened.opens(container(opened, "r2"), [leaf(opened, "i3")])).toBe(false);
+  });
+
+  it("le guide vedono il contenuto del simbolo che si modifica, e i collegamenti si aprono da ogni istanza", () => {
+    const opened = open(SYMBOLS);
+    const i1 = leaf(opened, "i1");
+    expect(opened.seen(new Set(), [i1]).map((unit) => unit.key)).toEqual(["o1", "og", "i2", "g"]);
+    expect(opened.links().map((unit) => [unit.key, unit.bounds])).toEqual([["o5", { min: [240, 200], max: [245, 205] }]]);
+  });
+});
+
 describe("sulle pagine di un PDF", () => {
   it("gli oggetti sono solo quelli dei gruppi della pagina, trattati come livelli", () => {
     const engine = SceneEngine.open(

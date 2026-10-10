@@ -39,6 +39,13 @@
 // usa. Ci entrano anche per gli elementi vivi che un'immagine unisce e per
 // i contenitori che la racchiudono, che possono avere un ritaglio, una
 // maschera o un filtro.
+//
+// I simboli modificabili (formato della scena, simboli) non sono strati
+// nemmeno loro: la scena li porta a parte, come gruppi col loro contenuto
+// vivo, e il painter li mette nella `defs` viva, dove le istanze, `use`
+// vivi, li trovano. Un simbolo che contiene qualcosa di estraneo che si vede
+// non si dipinge vivo, perché quel pezzo non entra nel documento vivo: le
+// sue istanze stanno negli strati immagine, col simbolo intero nei `defs`.
 
 import type { Role } from "../scene/analysis";
 import { svgAttribute, textPathTarget } from "../scene/classify";
@@ -81,8 +88,9 @@ export const MAX_DEFS_CHARS = 8 * 1024 * 1024;
 /// Un attributo dipinto: nome senza namespace e valore.
 export type PaintAttr = readonly [name: string, value: string];
 
-/// I tag che un painter crea per una forma.
-export type ShapeTag = "path" | "rect" | "ellipse" | "circle" | "line" | "polyline" | "polygon" | "text" | "image";
+/// I tag che un painter crea per una forma: anche un'istanza di un simbolo,
+/// un `use`, che si disegna come un elemento solo.
+export type ShapeTag = "path" | "rect" | "ellipse" | "circle" | "line" | "polyline" | "polygon" | "text" | "image" | "use";
 
 /// Da dove viene un'immagine modificabile.
 export type ImageSource =
@@ -138,10 +146,14 @@ export interface PaintShape {
   readonly runs?: readonly TextRun[];
   /// La sorgente di un'`image`; assente se non ha un `href`.
   readonly image?: ImageSource;
+  /// L'id del simbolo di un'istanza, che il painter riscrive nel suo.
+  readonly symbol?: string;
 }
 
 /// Un livello, un gruppo o un collegamento: un `g`. Un collegamento non
-/// diventa un `<a>` vivo, che porterebbe la webview altrove.
+/// diventa un `<a>` vivo, che porterebbe la webview altrove. Un simbolo è un
+/// gruppo di ruolo `symbol`, che il painter mette nella sua `defs` viva come
+/// `symbol`.
 export interface PaintGroup {
   readonly kind: "group";
   /// Lo stesso oggetto finché il contenitore è lo stesso nel modello: il
@@ -244,6 +256,9 @@ export interface PaintScene {
   /// Le risorse modificabili, in ordine di documento: lo stesso oggetto
   /// finché nessuna cambia.
   readonly resources: readonly PaintResource[];
+  /// I simboli modificabili che si dipingono vivi, in ordine di documento,
+  /// col loro contenuto: lo stesso oggetto finché nessuno cambia.
+  readonly symbols: readonly PaintGroup[];
 }
 
 /// Il documento da cui si disegna: il motore delle operazioni lo è.
@@ -446,7 +461,7 @@ export const NON_RENDERING: ReadonlySet<string> = new Set([
   "view",
 ]);
 
-const SHAPE_TAGS: ReadonlySet<string> = new Set<ShapeTag>(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "text", "image"]);
+const SHAPE_TAGS: ReadonlySet<string> = new Set<ShapeTag>(["path", "rect", "ellipse", "circle", "line", "polyline", "polygon", "text", "image", "use"]);
 
 /// Il segnaposto di un'immagine che non si carica: un riquadro tratteggiato
 /// che riempie il posto dell'immagine. Senza `viewBox` né dimensioni non ha
@@ -550,6 +565,9 @@ function shapeOf(leaf: LeafNode, scope: NamespaceScope): PaintShape | null {
       else if (target.kind === "vault") shape.image = { kind: "vault", path: target.url };
       else shape.image = { kind: "remote" };
     }
+  } else if (tag === "use") {
+    // La classificazione ha già trovato il simbolo.
+    shape.symbol = details.symbol!;
   }
   return shape;
 }
@@ -626,6 +644,31 @@ export function resourcesFor(
     visit(resource);
   }
   return resources.filter((resource) => used.has(resource));
+}
+
+/// I simboli di `symbols` che servono a disegnare `nodes`: quelli delle loro
+/// istanze, e a cascata quelli delle istanze del loro contenuto.
+/// Nell'ordine di `symbols`. Le risorse del contenuto le dà
+/// [`resourcesFor`], coi simboli fra i nodi.
+export function symbolsFor(nodes: readonly PaintNode[], symbols: readonly PaintGroup[]): PaintGroup[] {
+  if (symbols.length === 0) return [];
+  const byId = new Map<string, PaintGroup>();
+  for (const symbol of symbols) if (symbol.id !== null && !byId.has(symbol.id)) byId.set(symbol.id, symbol);
+  const used = new Set<PaintGroup>();
+  // Una catena di simboli può essere lunga quanto il file: niente ricorsione.
+  const pending: PaintNode[] = [...nodes];
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    if (node.kind === "group") {
+      pending.push(...node.children);
+      continue;
+    }
+    const symbol = node.symbol === undefined ? undefined : byId.get(node.symbol);
+    if (symbol === undefined || used.has(symbol)) continue;
+    used.add(symbol);
+    pending.push(symbol);
+  }
+  return symbols.filter((symbol) => used.has(symbol));
 }
 
 /// Il tag di un contenitore, letto: attributi dipinti, `xml:space`,
@@ -733,7 +776,8 @@ function num(value: number): string {
 
 /// Chi visita il documento in ordine: contenitori modificabili, elementi
 /// modificabili e sequenze estranee (`parts[from..to)` di `owner`, spazi
-/// interni compresi).
+/// interni compresi). Un'istanza di un simbolo che il painter non dipinge
+/// vivo sta nelle sequenze estranee, che la mostrano col suo simbolo.
 interface Visitor {
   /// `index` è la posizione del nodo nella sequenza del suo contenitore.
   open(node: ContainerNode, index: number): void;
@@ -742,7 +786,9 @@ interface Visitor {
   run(owner: ContainerNode, from: number, to: number): void;
 }
 
-function visit(container: ContainerNode, visitor: Visitor): void {
+function visit(container: ContainerNode, visitor: Visitor, foreign: ReadonlySet<string>): void {
+  const live = (part: SceneNode): part is ContainerNode | LeafNode =>
+    editable(part) && !(part.kind === "leaf" && part.details!.role === "instance" && foreign.has(part.details!.symbol!));
   const parts = container.parts;
   let i = 0;
   while (i < parts.length) {
@@ -753,12 +799,12 @@ function visit(container: ContainerNode, visitor: Visitor): void {
     }
     if (part.kind === "container") {
       visitor.open(part, i);
-      visit(part, visitor);
+      visit(part, visitor, foreign);
       visitor.close(part);
       i++;
       continue;
     }
-    if (part.kind === "leaf" && part.details !== null) {
+    if (live(part)) {
       visitor.element(part, i);
       i++;
       continue;
@@ -768,12 +814,51 @@ function visit(container: ContainerNode, visitor: Visitor): void {
     for (; j < parts.length; j++) {
       const next = parts[j]!;
       if (typeof next === "string") continue;
-      if (editable(next)) break;
+      if (live(next)) break;
       last = j;
     }
     visitor.run(container, i, last + 1);
     i = last + 1;
   }
+}
+
+/// Gli id dei simboli di `model` che il painter non dipinge vivi: quelli il
+/// cui contenuto ha qualcosa di estraneo che si vede, che nel documento
+/// vivo non entra, e a cascata quelli che ne usano uno. Le loro istanze si
+/// disegnano negli strati immagine, col simbolo intero.
+function foreignSymbols(model: DocumentModel): ReadonlySet<string> {
+  const foreign = new Set<string>();
+  const usedBy = new Map<string, string[]>();
+  const scan = (container: ContainerNode, symbol: string): void => {
+    for (const part of container.parts) {
+      if (typeof part === "string") continue;
+      if (part.kind === "container") scan(part, symbol);
+      else if (part.kind === "leaf" && part.details !== null) {
+        if (part.details.role !== "instance") continue;
+        const target = part.details.symbol!;
+        const users = usedBy.get(target);
+        if (users === undefined) usedBy.set(target, [symbol]);
+        else users.push(symbol);
+      } else if (renders(part)) {
+        foreign.add(symbol);
+      }
+    }
+  };
+  for (const defs of model.root.parts) {
+    if (typeof defs === "string" || defs.kind !== "container" || defs.details?.role !== "defs") continue;
+    for (const symbol of defs.parts) {
+      if (typeof symbol !== "string" && symbol.kind === "container" && symbol.details?.role === "symbol") scan(symbol, symbol.facts.id!);
+    }
+  }
+  const pending = [...foreign];
+  while (pending.length > 0) {
+    for (const user of usedBy.get(pending.pop()!) ?? []) {
+      if (foreign.has(user)) continue;
+      foreign.add(user);
+      pending.push(user);
+    }
+  }
+  return foreign;
 }
 
 /// Vero se la sequenza `parts[from..to)` disegna qualcosa.
@@ -830,6 +915,12 @@ export class PaintBuilder {
   private lives: LiveLayer[] = [];
   private images = new Map<string, ImageLayer>();
   private rootCache: { head: string; tail: string | null; prolog: readonly Part[]; root: PaintRoot; image: ImageRoot; prologText: string } | null = null;
+  private foreign: ReadonlySet<string> = new Set();
+
+  /// L'ultima scena costruita; `null` prima della prima.
+  get built(): PaintScene | null {
+    return this.lastScene;
+  }
 
   /// La scena del documento di `source`, che non è in sola lettura: un
   /// documento in sola lettura si disegna con [`wholeDocumentLayer`].
@@ -841,9 +932,10 @@ export class PaintBuilder {
       this.resourcesByText = this.resourceIndex();
     }
     const root = this.rootOf(model);
+    this.foreign = foreignSymbols(model);
     const plan = this.plan(model);
-    const run = new BuildRun(this, source, model, plan, root.image, root.prologText);
-    visit(model.root, run);
+    const run = new BuildRun(this, source, model, plan, root.image, root.prologText, this.foreign);
+    visit(model.root, run, this.foreign);
     const layers = run.finish();
     this.groups = run.nextGroups;
     this.lives = run.nextLives;
@@ -853,7 +945,9 @@ export class PaintBuilder {
     this.lastModel = model;
     const previous = this.lastScene?.resources;
     const resources = previous !== undefined && shallowEqual(previous, run.resources) ? previous : run.resources;
-    const scene = { root: root.root, layers, resources };
+    const before = this.lastScene?.symbols;
+    const symbols = before !== undefined && shallowEqual(before, run.symbols) ? before : run.symbols;
+    const scene = { root: root.root, layers, resources, symbols };
     this.lastScene = scene;
     return scene;
   }
@@ -870,6 +964,7 @@ export class PaintBuilder {
       this.index(index, node);
     };
     for (const layer of this.lastScene.layers) if (layer.kind === "live") for (const node of layer.nodes) add(node);
+    for (const symbol of this.lastScene.symbols) add(symbol);
     return index;
   }
 
@@ -957,6 +1052,12 @@ export class PaintBuilder {
       this.resourceOf.set(leaf, resource);
     }
     return resource;
+  }
+
+  /// Vero se l'ultima scena dipinge vivo `symbol`, un simbolo del suo
+  /// modello: se nel suo contenuto, a cascata, niente di estraneo si vede.
+  drawsLive(symbol: ContainerNode): boolean {
+    return symbol.facts.id !== null && !this.foreign.has(symbol.facts.id);
   }
 
   /// Vero se ciò che `container` contiene non si vede: un contenitore
@@ -1101,7 +1202,7 @@ export class PaintBuilder {
   /// immagine non superino [`MAX_IMAGE_LAYERS`].
   private plan(model: DocumentModel): ReadonlySet<number> {
     const survey = new Survey(this);
-    visit(model.root, survey);
+    visit(model.root, survey, this.foreign);
     const excess = survey.runs - MAX_IMAGE_LAYERS;
     if (excess <= 0) return new Set();
     // Si uniscono i tratti con meno elementi vivi in mezzo; a parità, i
@@ -1162,21 +1263,25 @@ class Survey implements Visitor {
   readonly between: number[] = [];
   private hidden = 0;
   private count = 0;
+  /// Quanti contenitori aperti dentro un simbolo, lui compreso.
+  private symbol = 0;
 
   constructor(private readonly builder: PaintBuilder) {}
 
   open(node: ContainerNode): void {
     if (this.builder.conceals(node)) this.hidden++;
+    if (this.symbol > 0 || node.details?.role === "symbol") this.symbol++;
   }
 
   close(node: ContainerNode): void {
     if (this.builder.conceals(node)) this.hidden--;
+    if (this.symbol > 0) this.symbol--;
   }
 
   element(node: LeafNode): void {
-    // Una risorsa non è una forma viva: un'immagine che la unisce non toglie
-    // niente agli strati vivi.
-    if (node.details!.role !== "resource") this.count++;
+    // Una risorsa e il contenuto di un simbolo non sono forme vive: un'immagine
+    // che li unisce non toglie niente agli strati vivi.
+    if (node.details!.role !== "resource" && this.symbol === 0) this.count++;
   }
 
   run(owner: ContainerNode, from: number, to: number): void {
@@ -1215,6 +1320,11 @@ class BuildRun implements Visitor {
   readonly nextImages = new Map<string, ImageLayer>();
   /// Le risorse modificabili, in ordine di documento.
   readonly resources: PaintResource[] = [];
+  /// I simboli modificabili, in ordine di documento.
+  readonly symbols: PaintGroup[] = [];
+  /// Il simbolo che si legge e i contenitori aperti dentro di lui: il suo
+  /// contenuto sta nel simbolo, e non entra negli strati vivi.
+  private readonly symbolChain: Draft[] = [];
   private readonly layers: Array<PaintLayer | null> = [];
   private readonly chain: ContainerNode[] = [];
   private hidden = 0;
@@ -1237,12 +1347,18 @@ class BuildRun implements Visitor {
     private readonly merge: ReadonlySet<number>,
     private readonly root: ImageRoot,
     private readonly prolog: string,
+    private readonly foreign: ReadonlySet<string>,
   ) {}
 
   open(node: ContainerNode, index: number): void {
     const info = this.builder.headInfo(node);
     if (this.builder.conceals(node)) this.hidden++;
     this.chain.push(node);
+    if (this.symbolChain.length > 0 || node.details?.role === "symbol") {
+      const draft: Draft = { container: node, children: [] };
+      this.symbolChain[this.symbolChain.length - 1]?.children.push(draft);
+      this.symbolChain.push(draft);
+    }
     const image = this.image;
     if (image !== null) {
       image.pieces.push(node.head);
@@ -1255,6 +1371,16 @@ class BuildRun implements Visitor {
   close(node: ContainerNode): void {
     if (this.builder.conceals(node)) this.hidden--;
     this.chain.pop();
+    const draft = this.symbolChain[this.symbolChain.length - 1];
+    if (draft !== undefined && draft.container === node) {
+      this.symbolChain.pop();
+      // Un simbolo che non si dipinge vivo non entra nella scena, ma il suo
+      // gruppo resta per chi lo cerca con `paintsOf`.
+      if (this.symbolChain.length === 0) {
+        const group = this.finishNode(draft) as PaintGroup;
+        if (!this.foreign.has(node.facts.id!)) this.symbols.push(group);
+      }
+    }
     if (this.liveChain.length > this.chain.length) this.liveChain.length = this.chain.length;
     const image = this.image;
     if (image === null) return;
@@ -1264,9 +1390,14 @@ class BuildRun implements Visitor {
 
   element(node: LeafNode, index: number): void {
     // Una risorsa è viva anche dentro un'immagine che la unisce, e non è
-    // mai una forma.
+    // mai una forma; così il contenuto di un simbolo, che sta nel simbolo.
     const resource = node.details!.role === "resource";
     if (resource) this.resources.push(this.builder.resource(node));
+    const symbol = this.symbolChain[this.symbolChain.length - 1];
+    if (symbol !== undefined) {
+      const shape = this.builder.shape(node);
+      if (shape !== null) symbol.children.push(shape);
+    }
     const image = this.image;
     if (image !== null) {
       image.pieces.push(this.builder.imageRaw(node));
@@ -1275,7 +1406,7 @@ class BuildRun implements Visitor {
       image.end = { owner: node.parent!, index };
       return;
     }
-    if (resource) return;
+    if (resource || symbol !== undefined) return;
     const shape = this.builder.shape(node);
     if (shape === null) return;
     this.liveParent().push(shape);

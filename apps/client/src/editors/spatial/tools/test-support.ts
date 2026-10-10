@@ -5,7 +5,7 @@ import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
 import type { Bounds } from "../scene/geometry";
 import { compose } from "../scene/matrix";
-import type { ContainerNode } from "../scene/model";
+import type { ContainerNode, LeafNode } from "../scene/model";
 import { SourceText } from "../scene/text";
 import { parseXml, SVG_NS } from "../scene/xml";
 import { Cascade, renders, SILENT, type CascadeNode, type World } from "./cascade";
@@ -18,12 +18,14 @@ export interface Opened {
   readonly engine: SceneEngine;
   readonly index: SceneIndex;
   /// L'indice di adesso, dopo le operazioni applicate al motore; con
-  /// `scope`, quello del gruppo isolato.
-  reindex(scope?: ContainerNode | null): SceneIndex;
-  /// Gli oggetti che si vedono adesso, coi figli dei contenitori `open`.
-  seen(open?: ReadonlySet<ContainerNode>): Unit[];
+  /// `scope`, quello del gruppo isolato, e dei simboli in cui si entra dalle
+  /// istanze `through`.
+  reindex(scope?: ContainerNode | null, through?: readonly LeafNode[]): SceneIndex;
+  /// Gli oggetti che si vedono adesso, coi figli dei contenitori `open` e
+  /// il contenuto dei simboli delle istanze `through`.
+  seen(open?: ReadonlySet<ContainerNode>, through?: readonly LeafNode[]): Unit[];
   /// Vero se adesso dentro `container` si sceglie.
-  opens(container: ContainerNode): boolean;
+  opens(container: ContainerNode, through?: readonly LeafNode[]): boolean;
   /// Il riquadro di tutto il disegno di adesso.
   extent(): Bounds | null;
   /// Gli oggetti che una tavola porta con sé, adesso.
@@ -40,17 +42,17 @@ export function open(source: string): Opened {
   const engine = SceneEngine.open(source);
   const builder = new PaintBuilder();
   const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
-  const reindex = (scope: ContainerNode | null = null): SceneIndex => {
+  const reindex = (scope: ContainerNode | null = null, through?: readonly LeafNode[]): SceneIndex => {
     builder.build(engine);
-    return indexer.index(engine.model!, scope);
+    return indexer.index(engine.model!, scope, through);
   };
-  const seen = (open?: ReadonlySet<ContainerNode>): Unit[] => {
+  const seen = (open?: ReadonlySet<ContainerNode>, through?: readonly LeafNode[]): Unit[] => {
     builder.build(engine);
-    return indexer.seen(engine.model!, open);
+    return indexer.seen(engine.model!, open, through);
   };
-  const opens = (container: ContainerNode): boolean => {
+  const opens = (container: ContainerNode, through?: readonly LeafNode[]): boolean => {
     builder.build(engine);
-    return indexer.opens(engine.model!, container);
+    return indexer.opens(engine.model!, container, through);
   };
   const extent = (): Bounds | null => {
     builder.build(engine);

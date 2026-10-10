@@ -9,7 +9,7 @@ import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode, type ElementPart } from "../scene/model";
 import type { Elem } from "../scene/serialize";
 import { doc, HEAD } from "../scene/test-support";
-import { IMAGE_PLACEHOLDER, PaintBuilder, resourcesFor, wholeDocumentLayer, type PaintScene, type PaintShape } from "./paint";
+import { IMAGE_PLACEHOLDER, PaintBuilder, resourcesFor, symbolsFor, wholeDocumentLayer, type PaintScene, type PaintShape } from "./paint";
 import { createSvgPainter, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
 import { createOverlay } from "./overlay";
 
@@ -854,13 +854,13 @@ describe("lo smontaggio", () => {
   it("mostra un documento intero come un'immagine sola", async () => {
     const painter = createSvgPainter(host, owner);
     const layer = wholeDocumentLayer('<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script><rect width="9" height="9"/></svg>')!;
-    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [], symbols: [] });
     await decoded();
     expect(host.querySelectorAll("rect, script")).toHaveLength(0);
     const text = await blobs.get(host.querySelector("img")!.getAttribute("src")!)!.text();
     expect(text).toContain("<script>x()</script>");
     expect(text).not.toContain("background:none");
-    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [], symbols: [] });
     expect(urls).toBe(1);
   });
 });
@@ -1096,6 +1096,7 @@ describe("le risorse vive", () => {
           ],
         },
       ],
+      symbols: [],
     };
     painter.update(scene);
     const root = painterRoot();
@@ -1222,5 +1223,125 @@ describe("le risorse vive", () => {
     // Senza risorse, nessuna defs.
     const plain = paintMiniature(builder.paintsOf(engine.holder("b")!), chain, { x: 0, y: 0, width: 10, height: 1 }, owner);
     expect(plain.querySelector("defs")).toBeNull();
+  });
+});
+
+describe("i simboli vivi", () => {
+  const DEFS = '<defs id="fub-defs">'
+    + '<linearGradient id="g1" x2="1"><stop offset="0" stop-color="#0072b2"/></linearGradient>'
+    + '<symbol id="r1" overflow="visible"><title>Presa</title><circle id="o1" r="20" fill="url(#g1) #0072b2"/>'
+    + '<g id="o2" transform="rotate(45)"><line id="o3" x1="-8" y1="0" x2="8" y2="0" stroke="#000000"/></g>'
+    + '<image id="o7" href="presa.png" width="4" height="4"/></symbol>'
+    + '<symbol id="r2" overflow="visible"><rect id="o4" width="60" height="40"/><use id="o5" transform="translate(30 20)" href="#r1"/></symbol>'
+    + '</defs>';
+  const SOURCE = doc(`${DEFS}${LAYER}<use id="i1" transform="translate(10 20)" href="#r2"/><use id="i2" href="#r1"/></g>`);
+
+  const prefixOf = (): string => host.querySelector("defs > linearGradient")!.id.slice(0, -"g1".length);
+
+  it("stanno in una seconda defs come symbol, e un'istanza è un use verso l'id vivo", () => {
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(SceneEngine.open(SOURCE), new PaintBuilder()));
+    const prefix = prefixOf();
+    const [resources, symbols] = [...host.querySelector(".spatial-defs")!.children];
+    expect([resources!.localName, symbols!.localName]).toEqual(["defs", "defs"]);
+    expect([...symbols!.children].map((el) => [el.localName, el.id, el.getAttribute("overflow"), el.getAttribute("data-scene-id")])).toEqual([
+      ["symbol", `${prefix}r1`, "visible", "r1"],
+      ["symbol", `${prefix}r2`, "visible", "r2"],
+    ]);
+    const at = (id: string): Element => host.querySelector(`[data-scene-id="${id}"]`)!;
+    // Il contenuto è vivo come quello di uno strato, coi riferimenti riscritti.
+    expect(at("o1").closest("symbol")).toBe(symbols!.firstElementChild);
+    expect(at("o1").getAttribute("fill")).toBe(`url(#${prefix}g1) #0072b2`);
+    expect([at("o2").localName, at("o2").getAttribute("transform"), at("o3").parentElement]).toEqual(["g", "rotate(45)", at("o2")]);
+    expect([at("o5").localName, at("o5").getAttribute("href"), at("o5").getAttribute("transform")]).toEqual(["use", `#${prefix}r1`, "translate(30 20)"]);
+    expect(symbols!.querySelectorAll("title")).toHaveLength(0);
+    // Le istanze stanno negli strati vivi.
+    expect([at("i1").localName, at("i1").getAttribute("href"), at("i1").getAttribute("transform")]).toEqual(["use", `#${prefix}r2`, "translate(10 20)"]);
+    expect(at("i2").getAttribute("href")).toBe(`#${prefix}r1`);
+    expect(at("i1").closest(".spatial-defs")).toBeNull();
+  });
+
+  it("si riconciliano per identità, e la defs esce con l'ultimo simbolo", () => {
+    const asked: string[] = [];
+    const lives: Lifetime[] = [];
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner, {
+      images: async (path, life) => {
+        asked.push(path);
+        lives.push(life);
+        return "fub-asset://lease/1";
+      },
+    });
+    const engine = SceneEngine.open(SOURCE);
+    painter.update(builder.build(engine));
+    const at = (id: string): Element => host.querySelector(`[data-scene-id="${id}"]`)!;
+    const before = ["r1", "r2", "o1", "o2", "o3", "o4", "i1"].map(at);
+    expect(asked).toEqual(["presa.png"]);
+    // Cambia un pezzo del contenuto: il resto, il simbolo e le istanze restano.
+    expect(engine.apply({ op: "set", id: "o1", attrs: { fill: "#ff0000" } }).outcome).toBe("applied");
+    painter.update(builder.build(engine));
+    const after = ["r1", "r2", "o1", "o2", "o3", "o4", "i1"].map(at);
+    expect(after[2]).not.toBe(before[2]);
+    expect(after[2]!.getAttribute("fill")).toBe("#ff0000");
+    for (const i of [0, 1, 3, 4, 5, 6]) expect(after[i], String(i)).toBe(before[i]);
+    expect(lives[0]!.closed).toBe(false);
+    // Senza simboli né risorse la defs se ne va, e l'immagine del contenuto
+    // con lei.
+    painter.update(builder.build(SceneEngine.open(doc(`${LAYER}<rect id="a" width="5" height="5"/></g>`))));
+    expect(host.querySelector(".spatial-defs")).toBeNull();
+    expect(lives[0]!.closed).toBe(true);
+    // Con soli simboli la defs torna.
+    painter.update(builder.build(SceneEngine.open(doc('<defs id="fub-defs"><symbol id="r9" overflow="visible"><rect id="o9" width="1" height="1"/></symbol></defs>'))));
+    expect(host.querySelector(".spatial-defs symbol")!.getAttribute("data-scene-id")).toBe("r9");
+    painter.dispose();
+    expect(host.querySelector("symbol")).toBeNull();
+  });
+
+  it("mostrano l'anteprima del contenuto in ogni istanza", () => {
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    const engine = SceneEngine.open(SOURCE);
+    painter.update(builder.build(engine));
+    const [paint] = builder.paintsOf(engine.holder("o4")!);
+    painter.setDraft({ transforms: new Map([[paint!, "translate(5 0)"]]) });
+    expect(host.querySelector('[data-scene-id="o4"]')!.getAttribute("transform")).toBe("translate(5 0)");
+    painter.setDraft(null);
+    expect(host.querySelector('[data-scene-id="o4"]')!.hasAttribute("transform")).toBe(false);
+  });
+
+  it("attenuano le altre istanze, non quella da cui si modifica il simbolo", () => {
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    const engine = SceneEngine.open(SOURCE);
+    painter.update(builder.build(engine));
+    const [instance] = builder.paintsOf(engine.holder("i1")!);
+    painter.setFocus([engine.holder("l1")!, instance!]);
+    const node = (id: string): SVGElement => host.querySelector(`[data-scene-id="${id}"]`)!;
+    expect(node("i1").style.opacity).toBe("");
+    expect(node("i2").style.opacity).toBe("0.4");
+    // Il contenuto del simbolo non si attenua: si vede com'è nell'istanza.
+    expect(node("o4").style.opacity).toBe("");
+    painter.setFocus(null);
+    expect(node("i2").style.opacity).toBe("");
+  });
+
+  it("vanno nelle miniature delle istanze, coi simboli che usano e un prefisso loro", () => {
+    const engine = SceneEngine.open(SOURCE);
+    const builder = new PaintBuilder();
+    const scene = builder.build(engine);
+    const chain = [scene.root.attrs, builder.headInfo(engine.holder("l1") as ContainerNode).attrs];
+    const paints = builder.paintsOf(engine.holder("i1")!);
+    const symbols = symbolsFor(paints, scene.symbols);
+    const used = resourcesFor([...paints, ...symbols], chain, scene.resources);
+    const svg = paintMiniature(paints, chain, { x: 0, y: 0, width: 80, height: 60 }, owner, undefined, used, undefined, symbols);
+    const defs = svg.querySelector("defs")!;
+    const ids = [...defs.children].map((el) => el.id);
+    const prefix = ids[0]!.slice(0, -"g1".length);
+    expect(prefix).toMatch(/^fubthumb\d+-$/);
+    expect(ids).toEqual(["g1", "r1", "r2"].map((id) => prefix + id));
+    expect(defs.querySelector("symbol")!.getAttribute("overflow")).toBe("visible");
+    const use = [...svg.querySelectorAll("use")].find((el) => el.closest("defs") === null)!;
+    expect(use.getAttribute("href")).toBe(`#${prefix}r2`);
+    expect(svg.querySelectorAll("[data-scene-id]")).toHaveLength(0);
   });
 });

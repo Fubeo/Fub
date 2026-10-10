@@ -18,6 +18,11 @@
 //   risorse, e un riferimento non trova mai un elemento della shell. Una
 //   risorsa che la scena ripete è lo stesso nodo; una che cambia si rifà, e
 //   il browser ridisegna chi la usa.
+// - **Simboli vivi:** stanno in una seconda `defs` dello stesso `svg`, come
+//   `symbol` con l'id vivo e `overflow="visible"`, e il loro contenuto si
+//   crea e si riconcilia come quello di uno strato vivo. Un'istanza è un
+//   `use` vivo verso l'id vivo del suo simbolo: il browser la disegna col
+//   contenuto, e un'anteprima sul contenuto si vede in ogni istanza.
 // - **Strati immagine:** un `<img>` da blob, disegnato per il rettangolo della
 //   vista più un margine. Mentre la camera si muove l'immagine segue con una
 //   trasformazione CSS; quando si ferma si ridisegna alla nuova scala e al
@@ -41,12 +46,13 @@
 //   portato finché la sua immagine nuova non è pronta.
 // - **Isolamento:** con un gruppo isolato, `setFocus` attenua tutto ciò che
 //   gli sta fuori, carta esclusa, con l'opacità degli elementi; il disegno
-//   non cambia.
+//   non cambia. Con un simbolo isolato resta com'è l'istanza da cui lo si
+//   modifica, e le altre si attenuano.
 //
 // - **Miniature:** `paintMiniature` disegna alcuni nodi della scena in un
 //   `svg` a sé, con gli stessi elementi e gli stessi attributi, dentro gli
-//   stili di chi li contiene, e con le risorse che usano, sotto un prefisso
-//   suo: l'albero degli oggetti le mostra accanto ai nomi.
+//   stili di chi li contiene, e con le risorse e i simboli che usano, sotto
+//   un prefisso suo: l'albero degli oggetti le mostra accanto ai nomi.
 //
 // Tutto ciò che il painter apre (timer, osservatori, lease) appartiene alla
 // sua vita, e la vita di chi lo monta la chiude.
@@ -373,6 +379,12 @@ interface DefsRecord {
   /// L'elemento di ogni risorsa che la `defs` mostra.
   nodes: Map<PaintResource, SVGElement>;
   rootAttrs: readonly PaintAttr[];
+  /// La `defs` dei simboli, dopo quella delle risorse: il contenuto di un
+  /// simbolo eredita dall'istanza, non dalla radice.
+  readonly symbolDefs: SVGDefsElement;
+  symbols: readonly PaintGroup[];
+  /// I nodi dei simboli, riconciliati come quelli di uno strato vivo.
+  symbolRecords: NodeRecord[];
 }
 
 /// Monta un painter dentro `host`.
@@ -417,9 +429,10 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   };
 
   const createGroup = (group: PaintGroup): NodeRecord => {
-    const el = document.createElementNS(SVG, "g");
+    const el = document.createElementNS(SVG, group.role === "symbol" ? "symbol" : "g");
     setPainted(el, group.attrs, [], dom);
     setCommon(el, group.id, group.space);
+    if (group.role === "symbol") setSymbol(el, group.id!, dom);
     const record: NodeRecord = { paint: group, el, life: null, children: [] };
     record.children = reconcile(el, [], group.children);
     return record;
@@ -429,6 +442,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     const previous = record.paint as PaintGroup;
     setPainted(record.el, group.attrs, previous.attrs, dom);
     if (group.id !== previous.id || group.space !== previous.space) setCommon(record.el, group.id, group.space);
+    if (group.role === "symbol" && group.id !== previous.id) setSymbol(record.el, group.id!, dom);
     const children = reconcile(record.el, record.children, group.children);
     return { paint: group, el: record.el, life: null, children };
   };
@@ -543,6 +557,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       for (const child of record.children) add(child);
     };
     for (const layer of layers) if (layer.kind === "live") for (const record of layer.children) add(record);
+    // Il contenuto dei simboli: un'anteprima lì si vede in ogni istanza.
+    for (const record of defs?.symbolRecords ?? []) add(record);
     byPaint = index;
     return index;
   };
@@ -860,6 +876,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
         const paint = record.paint;
         if (paint.kind === "group" && paint.key === chain[depth]) {
           if (depth + 1 < chain.length) visit(record.children, depth + 1);
+        } else if (paint === chain[depth] && depth === chain.length - 1) {
+          // L'istanza da cui si modifica il simbolo isolato.
         } else if (paint.role !== "paper") {
           dim(record.el, paint.attrs.find(([name]) => name === "opacity")?.[1]);
         }
@@ -911,13 +929,20 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     for (const child of record.children) disposeNode(child);
   };
 
+  const disposeDefs = (record: DefsRecord): void => {
+    record.el.remove();
+    for (const child of record.symbolRecords) disposeNode(child);
+  };
+
   // --- risorse ---------------------------------------------------------------
 
-  /// Porta la `defs` viva a `resources`: una risorsa che resta è lo stesso
-  /// nodo, una nuova o cambiata si crea. Senza risorse la `defs` esce.
-  const updateDefs = (resources: readonly PaintResource[], rootAttrs: readonly PaintAttr[]): void => {
-    if (resources.length === 0) {
-      defs?.el.remove();
+  /// Porta la `defs` viva a `resources` e a `symbols`: una risorsa che
+  /// resta è lo stesso nodo, una nuova o cambiata si crea, e i simboli si
+  /// riconciliano come uno strato vivo. Senza risorse né simboli la `defs`
+  /// esce.
+  const updateDefs = (resources: readonly PaintResource[], symbols: readonly PaintGroup[], rootAttrs: readonly PaintAttr[]): void => {
+    if (resources.length === 0 && symbols.length === 0) {
+      if (defs !== null) disposeDefs(defs);
       defs = null;
       return;
     }
@@ -925,9 +950,14 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       const el = document.createElementNS(SVG, "svg");
       el.setAttribute("class", "spatial-layer spatial-defs");
       const element = document.createElementNS(SVG, "defs");
-      el.append(element);
-      defs = { el, defs: element, resources: [], nodes: new Map(), rootAttrs: [] };
+      const symbolDefs = document.createElementNS(SVG, "defs");
+      el.append(element, symbolDefs);
+      defs = { el, defs: element, resources: [], nodes: new Map(), rootAttrs: [], symbolDefs, symbols: [], symbolRecords: [] };
       setRootFamily(element, [], dom);
+    }
+    if (symbols !== defs.symbols) {
+      defs.symbolRecords = reconcile(defs.symbolDefs, defs.symbolRecords, symbols);
+      defs.symbols = symbols;
     }
     if (rootAttrs !== defs.rootAttrs) {
       setPainted(defs.defs, rootAttrs, defs.rootAttrs, dom);
@@ -1165,7 +1195,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     const generations = new Map<ImageRecord, number>();
     for (const record of frozen) generations.set(record, record.generation);
     const rootAttrs = scene.root.attrs;
-    updateDefs(scene.resources, rootAttrs);
+    updateDefs(scene.resources, scene.symbols, rootAttrs);
     const lives = layers.filter((r): r is LiveRecord => r.kind === "live");
     const images = layers.filter((r): r is ImageRecord => r.kind === "image");
     const used = new Set<LayerRecord>();
@@ -1270,6 +1300,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     byPaint = null;
     for (const record of layers) disposeLayer(record);
     layers = [];
+    if (defs !== null) disposeDefs(defs);
     defs = null;
     root.remove();
     life.close();
@@ -1332,6 +1363,13 @@ function setBlend(el: SVGElement, value: string | null): void {
   else el.style.setProperty("mix-blend-mode", blend);
   if (isolate === null) el.style.removeProperty("isolation");
   else el.style.setProperty("isolation", isolate ? "isolate" : "auto");
+}
+
+/// L'id vivo del simbolo `id` su `el`, e il suo `overflow`: il formato lo
+/// chiede, e il contenuto si vede anche fuori dal riquadro dell'istanza.
+function setSymbol(el: SVGElement, id: string, dom: LiveDom): void {
+  el.setAttribute("id", liveId(dom.prefix, id));
+  el.setAttribute("overflow", "visible");
 }
 
 function setCommon(el: SVGElement, id: string | null, space: string | null): void {
@@ -1413,6 +1451,8 @@ function shapeElement(
       el.append(span);
     }
   }
+  // Un'istanza rimanda al simbolo vivo, come un `url(#…)`.
+  if (shape.symbol !== undefined) el.setAttribute("href", `#${liveId(dom.prefix, shape.symbol)}`);
   const image = shape.image;
   if (image !== undefined) {
     if (image.kind === "data") {
@@ -1498,7 +1538,8 @@ const MINIATURE_MARGIN = 0.06;
 /// la scena. Le immagini del vault le chiede a `resolve` nella vita `life`.
 /// Le risorse `resources`, quelle che i nodi usano ([`resourcesFor`]),
 /// stanno in una `defs` dentro il primo `g`, che porta gli attributi della
-/// radice, con un prefisso della miniatura. Le famiglie vive sono quelle di
+/// radice, con un prefisso della miniatura; con loro i simboli `symbols`,
+/// quelli delle istanze ([`symbolsFor`]). Le famiglie vive sono quelle di
 /// `family`: di partenza, le sole famiglie di Fub.
 export function paintMiniature(
   nodes: readonly PaintNode[],
@@ -1508,6 +1549,7 @@ export function paintMiniature(
   resolve?: PainterOptions["images"],
   resources: readonly PaintResource[] = [],
   family: (value: string) => string = fubLiveFamily,
+  symbols: readonly PaintGroup[] = [],
 ): SVGSVGElement {
   const visible = (attrs: readonly PaintAttr[]): readonly PaintAttr[] => attrs.filter(([name]) => !HIDING.has(name));
   const dom: LiveDom = { prefix: `fubthumb${++miniatures}-`, family };
@@ -1518,7 +1560,7 @@ export function paintMiniature(
   svg.setAttribute("focusable", "false");
   setFamily(svg, "", dom);
   let parent: SVGElement = svg;
-  const defs = resources.length === 0 ? null : document.createElementNS(SVG, "defs");
+  const defs = resources.length === 0 && symbols.length === 0 ? null : document.createElementNS(SVG, "defs");
   for (const resource of resources) {
     const el = resourceElement(resource, dom);
     if (el !== null) defs!.append(el);
@@ -1538,12 +1580,14 @@ export function paintMiniature(
       if (top) for (const name of HIDING) el.removeAttribute(name);
       return el;
     }
-    const el = document.createElementNS(SVG, "g");
+    const el = document.createElementNS(SVG, node.role === "symbol" ? "symbol" : "g");
     setPainted(el, top ? visible(node.attrs) : node.attrs, [], dom);
     setCommon(el, null, node.space);
+    if (node.role === "symbol") setSymbol(el, node.id!, dom);
     for (const child of node.children) el.append(copy(child, false));
     return el;
   };
+  for (const symbol of symbols) defs!.append(copy(symbol, false));
   for (const node of nodes) parent.append(copy(node, true));
   return svg;
 }

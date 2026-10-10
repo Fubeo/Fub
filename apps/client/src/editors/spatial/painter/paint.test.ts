@@ -14,6 +14,7 @@ import {
   MAX_IMAGE_LAYERS,
   PaintBuilder,
   resourcesFor,
+  symbolsFor,
   wholeDocumentLayer,
   type ImageLayer,
   type LiveLayer,
@@ -517,6 +518,93 @@ describe("le risorse", () => {
     const merged = sceneOf(doc(`${body}</g>`)).layers.filter((layer): layer is ImageLayer => layer.kind === "image" && layer.body.includes('<rect id="r'));
     expect(merged.length).toBeGreaterThan(0);
     for (const layer of merged) expect(layer.body.slice(0, layer.body.indexOf("</defs>"))).toContain('<linearGradient id="g1"');
+  });
+});
+
+/// Due simboli, uno dentro l'altro, e una sfumatura che il contenuto usa.
+const SYMBOLS = '<defs id="fub-defs">'
+  + '<linearGradient id="g1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0072b2"/></linearGradient>'
+  + '<symbol id="r1" overflow="visible"><title>Presa</title><circle id="o1" r="20" fill="url(#g1) #0072b2"/>'
+  + '<g id="o2" transform="rotate(45)"><line id="o3" x1="-8" y1="0" x2="8" y2="0" stroke="#000000"/></g></symbol>'
+  + '<symbol id="r2" overflow="visible"><rect id="o4" width="60" height="40" fill="#ffffff"/>'
+  + '<use id="o5" transform="translate(30 20)" href="#r1"/></symbol>'
+  + '<symbol id="r3" overflow="visible"><rect id="o6" width="1" height="1"/></symbol>'
+  + '</defs>';
+
+describe("i simboli", () => {
+  it("stanno nella scena col loro contenuto vivo, e non sono strati; un'istanza è un use", () => {
+    const scene = sceneOf(doc(`${SYMBOLS}${LAYER}<use id="i1" transform="translate(10 20)" href="#r2"/><rect id="a" width="1" height="1"/></g>`));
+    expect(kinds(scene)).toEqual(["live"]);
+    const [layer] = live(scene, 0).nodes as [PaintGroup];
+    const [instance, rect] = layer.children as [PaintShape, PaintShape];
+    expect(instance).toMatchObject({ kind: "shape", tag: "use", role: "instance", id: "i1", symbol: "r2" });
+    expect(instance.attrs).toEqual([["transform", "translate(10 20)"]]);
+    expect(rect.id).toBe("a");
+    expect(scene.symbols.map((symbol) => [symbol.role, symbol.id])).toEqual([["symbol", "r1"], ["symbol", "r2"], ["symbol", "r3"]]);
+    const [r1, r2] = scene.symbols as [PaintGroup, PaintGroup];
+    expect(r1.attrs).toEqual([]);
+    expect(r1.children.map((child) => [child.kind, child.id])).toEqual([["shape", "o1"], ["group", "o2"]]);
+    expect(((r1.children[1] as PaintGroup).children[0] as PaintShape).tag).toBe("line");
+    expect(r2.children[1]).toMatchObject({ tag: "use", symbol: "r1" });
+    expect(ids(scene.resources)).toEqual(["g1"]);
+  });
+
+  it("restano gli stessi oggetti finché non cambiano, anche in un motore riaperto", () => {
+    const source = doc(`${SYMBOLS}${LAYER}<use id="i1" href="#r1"/><use id="i2" transform="translate(50 0)" href="#r1"/></g>`);
+    const engine = SceneEngine.open(source);
+    const builder = new PaintBuilder();
+    const first = builder.build(engine);
+    expect(builder.build(engine).symbols).toBe(first.symbols);
+    expect(sceneOf(source, builder).symbols).toEqual(first.symbols);
+    const content = (scene: PaintScene): unknown[] => scene.symbols.flatMap((symbol) => symbol.children.filter((child) => child.kind === "shape"));
+    for (const [i, shape] of content(sceneOf(source, builder)).entries()) expect(shape).toBe(content(first)[i]);
+
+    // Cambiare il contenuto rifà il simbolo, e le istanze restano le stesse.
+    const opened = SceneEngine.open(source);
+    const again = new PaintBuilder();
+    const before = again.build(opened);
+    expect(opened.apply({ op: "set", id: "o1", attrs: { fill: "#ff0000" } }).outcome).toBe("applied");
+    const after = again.build(opened);
+    expect(after.symbols[0]).not.toBe(before.symbols[0]);
+    expect(after.symbols[0]!.key).toBe(before.symbols[0]!.key);
+    expect(after.symbols[1]).toBe(before.symbols[1]);
+    expect(after.layers[0]).toBe(before.layers[0]);
+  });
+
+  it("non contano fra gli elementi vivi quando gli strati immagine si uniscono", () => {
+    const foreign = '<foreignObject width="1" height="1"/>';
+    let body = SYMBOLS + LAYER;
+    for (let i = 0; i <= MAX_IMAGE_LAYERS; i++) body += `${foreign}<rect id="v${i}" width="1" height="1"/>`;
+    const scene = sceneOf(doc(`${body}</g>`));
+    expect(scene.layers.filter((layer) => layer.kind === "image")).toHaveLength(MAX_IMAGE_LAYERS);
+    expect(scene.symbols).toHaveLength(3);
+  });
+
+  it("con qualcosa di estraneo che si vede non si dipingono vivi: le istanze stanno negli strati immagine", () => {
+    const defs = '<defs id="fub-defs">'
+      + '<symbol id="r1" overflow="visible"><circle id="o1" r="5"/><foreignObject width="4" height="4"/></symbol>'
+      + '<symbol id="r2" overflow="visible"><use id="o2" href="#r1"/></symbol>'
+      + '<symbol id="r3" overflow="visible"><rect id="o3" width="1" height="1"/></symbol>'
+      + '</defs>';
+    const scene = sceneOf(doc(`${defs}${LAYER}<rect id="a" width="1" height="1"/><use id="i1" href="#r2"/><use id="i2" href="#r3"/></g>`));
+    expect(kinds(scene)).toEqual(["live", "image", "live"]);
+    expect(ids(scene.symbols.map((symbol) => ({ id: symbol.id! })))).toEqual(["r3"]);
+    // L'istanza porta nei defs il suo simbolo intero, e quello che lui usa.
+    const body = image(scene, 1).body;
+    expect(body).toContain('<use id="i1" href="#r2"/>');
+    expect(body).toContain('<symbol id="r2" overflow="visible"><use id="o2" href="#r1"/></symbol>');
+    expect(body).toContain('<foreignObject width="4" height="4"/>');
+    expect((live(scene, 2).nodes[0] as PaintGroup).children[0]).toMatchObject({ tag: "use", symbol: "r3" });
+  });
+
+  it("si trovano dalle istanze, a cascata, con le risorse del loro contenuto", () => {
+    const scene = sceneOf(doc(`${SYMBOLS}${LAYER}<use id="i1" href="#r2"/><use id="i2" href="#r1"/></g>`));
+    const [i1, i2] = (live(scene, 0).nodes[0] as PaintGroup).children as [PaintShape, PaintShape];
+    expect(symbolsFor([i1], scene.symbols).map((symbol) => symbol.id)).toEqual(["r1", "r2"]);
+    expect(symbolsFor([i2], scene.symbols).map((symbol) => symbol.id)).toEqual(["r1"]);
+    expect(symbolsFor([], scene.symbols)).toEqual([]);
+    const used = symbolsFor([i1], scene.symbols);
+    expect(ids(resourcesFor([i1, ...used], [], scene.resources))).toEqual(["g1"]);
   });
 });
 
