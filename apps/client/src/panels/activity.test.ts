@@ -238,6 +238,49 @@ describe("export artifacts from completed transfer jobs", () => {
     save.mockRestore();
     query.mockRestore();
   });
+
+  it("offers Print for a PDF only: the system viewer opens it, and the bytes stay to be saved", async () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    let opened: () => void = () => {};
+    const print = vi.spyOn(api, "printArtifact")
+      .mockImplementationOnce(() => new Promise((resolve) => { opened = () => resolve({ status: "opened" }); }))
+      .mockResolvedValueOnce({ status: "no_viewer" })
+      .mockResolvedValueOnce({ status: "unwritable", reason: "No space left on device" })
+      .mockRejectedValueOnce({ kind: "bad_args", message: "invalid artifact media type" });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(notice({ type: "job_done", id: "11", job: ARTIFACT_JOB, result: { Ok: { artifacts: [
+      { path: "disegni/Casa.pdf", media_type: "application/pdf", content: { kind: "bytes", value: [37, 80, 68, 70] } },
+      { path: "disegni/Casa.png", media_type: "image/png", content: { kind: "bytes", value: [1] } },
+    ], log: [] } } }));
+    document.getElementById("activity-button")!.click();
+    const list = () => document.getElementById("activity-list")!;
+    const buttons = (label: string) => [...list().querySelectorAll<HTMLButtonElement>("button")].filter((button) => button.textContent === label);
+    expect(buttons("Stampa…"), "soltanto il PDF").toHaveLength(1);
+    expect(buttons("Salva…")).toHaveLength(2);
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Apro il PDF nel lettore del sistema…"));
+    expect(buttons("Stampa…")[0]!.disabled).toBe(true);
+    expect(buttons("Salva…")[0]!.disabled, "niente salvataggio mentre si apre").toBe(true);
+    expect(print).toHaveBeenCalledWith("Casa.pdf", "application/pdf", [37, 80, 68, 70]);
+    opened();
+    await vi.waitFor(() => expect(list().textContent).toContain("Aperto nel lettore di PDF del sistema: stampalo da lì."));
+    expect(buttons("Salva…")[0]!.disabled, "i byte restano").toBe(false);
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Nessun programma del sistema apre i PDF: salvalo e stampalo da un lettore di PDF."));
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Il PDF da stampare non si scrive nella cartella temporanea: No space left on device"));
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Non aperto per la stampa: invalid artifact media type"));
+    expect(buttons("Stampa…")[0]!.disabled).toBe(false);
+    lifetime.close();
+    print.mockRestore();
+    query.mockRestore();
+  });
 });
 
 describe("the notes of an export report", () => {

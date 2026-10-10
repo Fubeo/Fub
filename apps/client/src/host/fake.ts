@@ -72,7 +72,7 @@ import type {
   ViewSpec,
   KnownVault,
 } from "./contract";
-import type { SaveArtifactOutcome } from "./ipc";
+import type { PrintArtifactOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
@@ -163,6 +163,7 @@ export interface Options {
   draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -863,6 +864,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.saveArtifact
           ? gate("saveArtifact", [suggestedName, mediaType, bytes], options.saveArtifact(suggestedName, mediaType, bytes))
           : unavailable("saveArtifact", [suggestedName, mediaType, bytes]),
+      printArtifact: (suggestedName, mediaType, bytes) =>
+        options.printArtifact
+          ? gate("printArtifact", [suggestedName, mediaType, bytes], options.printArtifact(suggestedName, mediaType, bytes))
+          : unavailable("printArtifact", [suggestedName, mediaType, bytes]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
       openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
         if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");

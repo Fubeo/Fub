@@ -119,6 +119,8 @@ export interface PluginBudgetSnapshot {
 export interface PluginLimitedMode { enabled: boolean; reason?: string }
 export interface CatalogUpdateOutcome { plugin: InstalledPluginInfo; diagnostics: PluginError[] }
 export type SaveArtifactOutcome = { status: "saved"; path: string } | { status: "cancelled" };
+/** How «Print…» went: opened in the system PDF program, no such program, or not written. */
+export type PrintArtifactOutcome = { status: "opened" } | { status: "no_viewer" } | { status: "unwritable"; reason: string };
 
 
 export const api = {
@@ -176,6 +178,9 @@ export const api = {
   /** Native picker owns the destination. Never accept a destination path from JS. */
   saveArtifact: (suggestedName: string, mediaType: string, bytes: readonly number[]) =>
     invoke<SaveArtifactOutcome>("save_artifact", { suggestedName, mediaType, bytes }),
+  /** A PDF goes to the program the system opens PDFs with, and is printed from there. */
+  printArtifact: (suggestedName: string, mediaType: string, bytes: readonly number[]) =>
+    invoke<PrintArtifactOutcome>("print_artifact", { suggestedName, mediaType, bytes }),
   listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
   openGrid: (surface: string, source: string, revision: string) =>
     invoke<GridSession>("open_grid", { surface, source, revision }),

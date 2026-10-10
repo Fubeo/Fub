@@ -43,6 +43,7 @@ commands.allow = [
   "viewer_open",
   "viewer_save",
   "save_artifact",
+  "print_artifact",
   "list_themes",
   "plugin_budget_snapshot",
   "plugin_limited_mode",

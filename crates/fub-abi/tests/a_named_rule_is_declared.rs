@@ -449,6 +449,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-app/src/print.rs::file_name",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: riconosce l'estensione `.pdf` anche scritta \
+                 `.PDF`, per non aggiungerne una seconda al file temporaneo che «Stampa…» passa al \
+                 lettore dei PDF. I sistemi scelgono quel lettore dall'estensione senza badare alle \
+                 maiuscole, e l'alfabeto di un'estensione è ASCII.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/edit.rs::matches_bytes",
             (
                 Family::AsciiCase,
