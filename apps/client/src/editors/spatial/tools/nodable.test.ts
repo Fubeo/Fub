@@ -119,6 +119,12 @@ describe("i nodi di ogni forma", () => {
     expect(nodable(o, "in").kind).toBe("shape");
   });
 
+  it("non ci sono in una copia: le forme sono quelle del suo originale", () => {
+    const o = open(doc(`${LAYER}<g id="p" fub:repeat="grid 2 1 20 0"><rect id="a" x="0" y="0" width="5" height="5"/><use id="c" transform="translate(20 0)" href="#a"/></g></g>`));
+    expect(nodableOf(o.engine.holder("c")!)).toBe("copy");
+    expect(nodable(o, "a").kind).toBe("shape");
+  });
+
   it("non ci sono in una parte di un altro programma, che resta com'è", () => {
     const o = opened('<g id="g"><path id="f" style="fill:none;stroke:#000000" d="M0 0 L10 0"/><rect id="k" class="box" x="0" y="0" width="5" height="5"/></g>');
     expect(nodableOf(o.engine.holder("f")!)).toBe("foreign");

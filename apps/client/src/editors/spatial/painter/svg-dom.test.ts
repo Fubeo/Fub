@@ -854,13 +854,13 @@ describe("lo smontaggio", () => {
   it("mostra un documento intero come un'immagine sola", async () => {
     const painter = createSvgPainter(host, owner);
     const layer = wholeDocumentLayer('<svg xmlns="http://www.w3.org/2000/svg"><script>x()</script><rect width="9" height="9"/></svg>')!;
-    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [], symbols: [] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [], symbols: [], originals: new Set() });
     await decoded();
     expect(host.querySelectorAll("rect, script")).toHaveLength(0);
     const text = await blobs.get(host.querySelector("img")!.getAttribute("src")!)!.text();
     expect(text).toContain("<script>x()</script>");
     expect(text).not.toContain("background:none");
-    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [], symbols: [] });
+    painter.update({ root: { attrs: [], page: null, units: "px", guides: [] }, layers: [layer], resources: [], symbols: [], originals: new Set() });
     expect(urls).toBe(1);
   });
 });
@@ -1097,6 +1097,7 @@ describe("le risorse vive", () => {
         },
       ],
       symbols: [],
+      originals: new Set(),
     };
     painter.update(scene);
     const root = painterRoot();
@@ -1342,6 +1343,84 @@ describe("i simboli vivi", () => {
     expect(defs.querySelector("symbol")!.getAttribute("overflow")).toBe("visible");
     const use = [...svg.querySelectorAll("use")].find((el) => el.closest("defs") === null)!;
     expect(use.getAttribute("href")).toBe(`#${prefix}r2`);
+    expect(svg.querySelectorAll("[data-scene-id]")).toHaveLength(0);
+  });
+});
+
+describe("le copie vive", () => {
+  const ROW = '<g id="p1" fub:repeat="grid 3 1 20 0"><rect id="a" width="10" height="10"/>'
+    + '<use id="c1" transform="translate(20 0)" href="#a"/><use id="c2" transform="translate(40 0)" href="#a"/></g>';
+  const SOURCE = doc(`${LAYER}${ROW}<rect id="b" width="1" height="1"/></g>`);
+  const at = (id: string): Element => host.querySelector(`[data-scene-id="${id}"]`)!;
+
+  it("sono use verso l'id vivo dell'originale, l'unico che ne ha uno", () => {
+    const painter = createSvgPainter(host, owner);
+    painter.update(sceneOf(SceneEngine.open(SOURCE), new PaintBuilder()));
+    const live = at("a").id;
+    expect(live).toMatch(/^fubdraw\d+-a$/);
+    expect([at("c1").localName, at("c1").getAttribute("href"), at("c1").getAttribute("transform")]).toEqual(["use", `#${live}`, "translate(20 0)"]);
+    expect(at("c2").getAttribute("href")).toBe(`#${live}`);
+    for (const id of ["l1", "p1", "c1", "c2", "b"]) expect(at(id).hasAttribute("id"), id).toBe(false);
+  });
+
+  it("l'id vivo arriva e se ne va con le copie, anche su un nodo che resta", () => {
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    const engine = SceneEngine.open(doc(`${LAYER}<g id="p1" fub:repeat="grid 2 1 20 0"><rect id="a" width="10" height="10"/></g></g>`));
+    painter.update(builder.build(engine));
+    const rect = at("a");
+    expect(rect.hasAttribute("id")).toBe(false);
+    const copy = { op: "add", parent: "p1", pos: { last: true }, elem: { tag: "use", attrs: { id: "o1a2b3c4d", transform: "translate(20 0)", href: "#a" } } } as const;
+    expect(engine.apply(copy).outcome).toBe("applied");
+    painter.update(builder.build(engine));
+    expect(at("a")).toBe(rect);
+    expect(rect.id).toMatch(/^fubdraw\d+-a$/);
+    expect(at("o1a2b3c4d").getAttribute("href")).toBe(`#${rect.id}`);
+    // Un originale che cambia si rifà, e ha subito il suo id vivo.
+    expect(engine.apply({ op: "set", id: "a", attrs: { fill: "#ff0000" } }).outcome).toBe("applied");
+    painter.update(builder.build(engine));
+    expect(at("a")).not.toBe(rect);
+    expect(at("a").id).toBe(rect.id);
+    const changed = at("a");
+    expect(engine.apply({ op: "remove", target: "o1a2b3c4d" }).outcome).toBe("applied");
+    painter.update(builder.build(engine));
+    expect(at("a")).toBe(changed);
+    expect(changed.hasAttribute("id")).toBe(false);
+  });
+
+  it("un gruppo può essere l'originale", () => {
+    const painter = createSvgPainter(host, owner);
+    const source = doc(`${LAYER}<g id="p1" fub:repeat="radial 4 0 0"><g id="o1"><rect id="a" width="10" height="10"/></g>`
+      + '<use id="c1" transform="matrix(0 1 -1 0 0 0)" href="#o1"/></g></g>');
+    painter.update(sceneOf(SceneEngine.open(source), new PaintBuilder()));
+    expect(at("o1").localName).toBe("g");
+    expect(at("c1").getAttribute("href")).toBe(`#${at("o1").id}`);
+    expect(at("a").hasAttribute("id")).toBe(false);
+  });
+
+  it("seguono l'originale nell'anteprima", () => {
+    const builder = new PaintBuilder();
+    const painter = createSvgPainter(host, owner);
+    const engine = SceneEngine.open(SOURCE);
+    painter.update(builder.build(engine));
+    const [paint] = builder.paintsOf(engine.holder("a")!);
+    painter.setDraft({ transforms: new Map([[paint!, "translate(5 0)"]]) });
+    // Il browser disegna ogni copia dall'originale com'è adesso.
+    expect(at("a").getAttribute("transform")).toBe("translate(5 0)");
+    expect(at("c1").getAttribute("href")).toBe(`#${at("a").id}`);
+    painter.setDraft(null);
+    expect(at("a").hasAttribute("transform")).toBe(false);
+  });
+
+  it("vanno nelle miniature con l'originale, sotto il prefisso della miniatura", () => {
+    const engine = SceneEngine.open(SOURCE);
+    const builder = new PaintBuilder();
+    const scene = builder.build(engine);
+    const chain = [scene.root.attrs, builder.headInfo(engine.holder("l1") as ContainerNode).attrs];
+    const svg = paintMiniature(builder.paintsOf(engine.holder("p1")!), chain, { x: 0, y: 0, width: 50, height: 10 }, owner);
+    const rect = svg.querySelector("rect")!;
+    expect(rect.id).toMatch(/^fubthumb\d+-a$/);
+    expect([...svg.querySelectorAll("use")].map((use) => use.getAttribute("href"))).toEqual([`#${rect.id}`, `#${rect.id}`]);
     expect(svg.querySelectorAll("[data-scene-id]")).toHaveLength(0);
   });
 });

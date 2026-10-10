@@ -616,6 +616,61 @@ describe("i simboli", () => {
   });
 });
 
+describe("le ripetizioni", () => {
+  const ROW = '<g id="p1" fub:repeat="grid 3 1 20 0"><rect id="a" width="10" height="10"/>'
+    + '<use id="c1" transform="translate(20 0)" href="#a"/><use id="c2" transform="translate(40 0)" href="#a"/></g>';
+
+  it("le copie sono use verso l'originale, che la scena dice", () => {
+    const scene = sceneOf(doc(`${LAYER}${ROW}<rect id="b" width="1" height="1"/></g>`));
+    expect(kinds(scene)).toEqual(["live"]);
+    const [layer] = live(scene, 0).nodes as [PaintGroup];
+    const [group, other] = layer.children as [PaintGroup, PaintShape];
+    expect(group).toMatchObject({ kind: "group", role: "group", id: "p1" });
+    const [original, c1, c2] = group.children as [PaintShape, PaintShape, PaintShape];
+    expect(original).toMatchObject({ tag: "rect", role: "rect", id: "a" });
+    expect(original.original).toBeUndefined();
+    expect(c1).toMatchObject({ kind: "shape", tag: "use", role: "copy", id: "c1", original: "a" });
+    expect(c1.symbol).toBeUndefined();
+    expect(c1.attrs).toEqual([["transform", "translate(20 0)"]]);
+    expect(c2.original).toBe("a");
+    expect(other.id).toBe("b");
+    expect([...scene.originals]).toEqual(["a"]);
+    expect(sceneOf(doc(`${LAYER}<rect id="b" width="1" height="1"/></g>`)).originals.size).toBe(0);
+  });
+
+  it("gli originali restano lo stesso oggetto finché non cambiano", () => {
+    const engine = SceneEngine.open(doc(`${LAYER}${ROW}</g>`));
+    const builder = new PaintBuilder();
+    const first = builder.build(engine);
+    expect(engine.apply({ op: "set", id: "a", attrs: { fill: "#ff0000" } }).outcome).toBe("applied");
+    expect(builder.build(engine).originals).toBe(first.originals);
+    expect(engine.apply({ op: "batch", ops: [{ op: "remove", target: "c1" }, { op: "remove", target: "c2" }] }).outcome).toBe("applied");
+    const bare = builder.build(engine);
+    expect(bare.originals).not.toBe(first.originals);
+    expect(bare.originals.size).toBe(0);
+  });
+
+  it("dentro un simbolo le copie stanno nel suo contenuto, e l'originale fra gli originali", () => {
+    const defs = `<defs id="fub-defs"><symbol id="r1" overflow="visible">${ROW}</symbol></defs>`;
+    const scene = sceneOf(doc(`${defs}${LAYER}<use id="i1" href="#r1"/></g>`));
+    const [symbol] = scene.symbols as [PaintGroup];
+    const [group] = symbol.children as [PaintGroup];
+    expect((group.children[1] as PaintShape).original).toBe("a");
+    expect([...scene.originals]).toEqual(["a"]);
+  });
+
+  it("una copia unita a uno strato immagine porta l'originale nei suoi defs", () => {
+    const foreign = '<foreignObject width="1" height="1"/>';
+    let body = LAYER + ROW;
+    for (let i = 0; i <= MAX_IMAGE_LAYERS; i++) body += `${foreign}<rect id="v${i}" width="1" height="1"/>`;
+    const whole = sceneOf(doc(`${body}</g>`));
+    expect(whole.originals.size).toBe(1);
+    const merged = sceneOf(doc(`${LAYER}${foreign}<g id="p1" fub:repeat="grid 2 1 20 0"><rect id="a" width="10" height="10"/>${foreign}<use id="c1" transform="translate(20 0)" href="#a"/></g></g>`));
+    expect(kinds(merged)).toEqual(["image", "live", "image", "live"]);
+    expect([...merged.originals]).toEqual(["a"]);
+  });
+});
+
 describe("un documento intero come immagine", () => {
   it("tiene il prologo tranne la dichiarazione XML e ricostruisce la radice", () => {
     const text = '﻿<?xml version="1.0" encoding="ISO-8859-1"?>\n<!DOCTYPE svg [<!ENTITY e "x">]>\n'

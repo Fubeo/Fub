@@ -184,6 +184,16 @@ export function originalsIn(container: ContainerNode): Set<string> {
   return out;
 }
 
+/// L'originale della copia `node`, suo fratello; `null` se `node` non è una
+/// copia, o se non lo trova.
+export function originalOf(node: ElementPart): ElementPart | null {
+  const id = node.details?.role === "copy" ? node.details.original : undefined;
+  const parent = node.parent;
+  if (id === undefined || parent === null) return null;
+  for (const child of elementChildren(parent)) if (child.facts.id === id && child.details?.role !== "copy") return child;
+  return null;
+}
+
 /// `resolve` per un figlio nuovo di `container`: in una ripetizione, con gli
 /// originali che ha già.
 export function childResolve(container: ContainerNode, resolve: Resolve): Resolve {

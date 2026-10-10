@@ -42,6 +42,12 @@
 // simbolo, così un file con simboli annidati non costa all'indice più del
 // disegno che mostra.
 //
+// Una copia in una ripetizione si tocca dove si vede l'originale, portato
+// dalla sua trasformazione, e come un'istanza è una forma sola che non ha
+// nodi. Non è un oggetto: nella ripetizione isolata non si sceglie, e un
+// clic dove si vede dà il suo originale. Oltre [`MAX_INSTANCE_PARTS`] forme
+// nell'oggetto, una copia si tocca nel riquadro dell'originale.
+//
 // Di un oggetto ritagliato o mascherato conta ciò che si vede: le forme
 // disegnate, tagliate dai ritagli e dalle maschere che le riguardano, cioè
 // quelli dell'oggetto e di ciò che contiene, quelli del gruppo in cui lo si
@@ -58,7 +64,7 @@ import { BoundsBuilder, fmin, parsePath, rectPath, Track, type Bounds, type Segm
 import { arcCenter, onEllipse } from "../scene/curves";
 import { markerFit, markerMatrix, placed, vertices, type MarkerFit, type MarkerPlace, type Vertex } from "../scene/markers";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren, parseFragment, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Fragment, type LeafNode } from "../scene/model";
+import { elementChildren, originalOf, parseFragment, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Fragment, type LeafNode } from "../scene/model";
 import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { fraction, length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, reference, startOffset, transform as parseTransform } from "../scene/values";
@@ -153,13 +159,14 @@ interface Part extends Solid {
   /// compresi; `null` se nessuno, e allora si vede tutta.
   readonly regions: readonly Region[] | null;
   /// Per una forma del contenuto di un simbolo, l'istanza dell'oggetto
-  /// attraverso cui si vede; `null` per le altre.
+  /// attraverso cui si vede, e per una dell'originale di una copia la copia;
+  /// `null` per le altre.
   readonly via: Via | null;
 }
 
 /// L'istanza di un simbolo attraverso cui si tocca una forma del suo
-/// contenuto: la più esterna nell'oggetto, con la matrice dalle sue
-/// coordinate a quelle della scena.
+/// contenuto, o la copia attraverso cui si tocca l'originale: la più esterna
+/// nell'oggetto, con la matrice dalle sue coordinate a quelle della scena.
 interface Via {
   readonly leaf: LeafNode;
   readonly matrix: Matrix;
@@ -440,6 +447,11 @@ interface Nested {
   /// Il contenitore isolato come oggetto; `null` senza, o se lì non si
   /// sceglie.
   scopeUnit(): Unit | null;
+  /// Il contenitore isolato; `null` senza.
+  readonly scope: ContainerNode | null;
+  /// Le copie fra i figli di `container`, se è una ripetizione dove si
+  /// sceglie, come oggetti: non si scelgono, ma dicono dove si vedono.
+  copiesOf(container: ContainerNode): Unit[];
 }
 
 /// L'indice degli oggetti di una scena, in ordine di documento: l'ultimo è
@@ -505,27 +517,43 @@ export class SceneIndex {
     return unit;
   }
 
-  /// L'oggetto più in alto sotto `p`.
+  /// L'oggetto più in alto sotto `p`. In una ripetizione isolata, una copia
+  /// che sta sopra dà il suo originale.
   at(p: Point, tolerance: number): Unit | null {
-    for (let i = this.units.length - 1; i >= 0; i--) {
-      const unit = this.units[i]!;
-      if (unit.hits(p, tolerance)) return unit;
-    }
-    return null;
+    let found: Unit | null = null;
+    for (let i = this.units.length - 1; i >= 0 && found === null; i--) if (this.units[i]!.hits(p, tolerance)) found = this.units[i]!;
+    const scope = this.nested?.scope ?? null;
+    return scope === null ? found : this.throughCopies(scope, p, tolerance, found);
   }
 
   /// L'oggetto più dentro sotto `p`: in quello più in alto, il figlio più in
   /// alto che `p` tocca, e così via finché non ci sono figli da scegliere.
+  /// In una ripetizione una copia dà il suo originale.
   deepAt(p: Point, tolerance: number): Unit | null {
     let unit = this.at(p, tolerance);
     while (unit !== null) {
       const children = this.children(unit);
       let inner: Unit | null = null;
       for (let i = children.length - 1; i >= 0 && inner === null; i--) if (children[i]!.hits(p, tolerance)) inner = children[i]!;
+      if (unit.node.kind === "container") inner = this.throughCopies(unit.node, p, tolerance, inner);
       if (inner === null) return unit;
       unit = inner;
     }
     return null;
+  }
+
+  /// L'originale della copia più in alto di `container` che `p` tocca, se
+  /// sta sopra `found`, un figlio di `container`; altrimenti `found`.
+  private throughCopies(container: ContainerNode, p: Point, tolerance: number, found: Unit | null): Unit | null {
+    const copies = this.nested?.copiesOf(container) ?? [];
+    for (let i = copies.length - 1; i >= 0; i--) {
+      const copy = copies[i]!;
+      if (found !== null && !later(copy.path, found.path)) break;
+      if (!copy.hits(p, tolerance)) continue;
+      const original = this.get(copy.node.details!.original!);
+      return original !== null && original.node.parent === container ? original : found;
+    }
+    return found;
   }
 
   /// Gli oggetti che il segmento da `a` a `b` tocca, in ordine di documento.
@@ -591,6 +619,8 @@ export class SceneIndexer {
   /// Il contenuto dei simboli, per gruppo dipinto: il gruppo cambia quando
   /// cambia il contenuto.
   private symbolInfos = new WeakMap<PaintNode, SymbolInfo>();
+  /// Il riquadro degli originali delle copie, per nodo dipinto.
+  private originalBoxes = new WeakMap<PaintNode, Bounds | null>();
   /// Quanti simboli si stanno attraversando, uno dentro l'altro.
   private depth = 0;
   /// Mentre si misura un simbolo, quelli che il suo contenuto usa.
@@ -964,6 +994,10 @@ export class SceneIndexer {
         this.instance(node, matrix, frame, style, regions, out, via ?? { leaf: node, matrix });
         return;
       }
+      if (node.details!.role === "copy") {
+        this.copy(node, matrix, frame, style, regions, out, via ?? { leaf: node, matrix });
+        return;
+      }
       const shape = this.builder.shape(node)!;
       const part = this.part(node, shape, matrix, frame, style, regions, via);
       out.push(part);
@@ -1010,6 +1044,41 @@ export class SceneIndexer {
     } finally {
       this.depth--;
     }
+  }
+
+  /// Le forme di una copia: il suo originale nelle sue coordinate, `matrix`
+  /// e `frame`, con la sua trasformazione, il suo stile e i suoi ritagli,
+  /// come lo disegna un `use`. Oltre [`MAX_INSTANCE_PARTS`] forme
+  /// nell'oggetto, il riquadro dell'originale.
+  private copy(leaf: LeafNode, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[], via: Via): void {
+    const original = originalOf(leaf);
+    const attrs = original === null ? null : this.attrsOf(original);
+    if (attrs === null || hidden(attrs)) return;
+    const own = transformOf(attrs);
+    const inner = styleOf(style, attrs);
+    const at = compose(matrix, own);
+    const atFrame = compose(frame, own);
+    const below = this.regionsBelow(original!, attrs, at, atFrame, inner, regions);
+    if (out.length < MAX_INSTANCE_PARTS) {
+      this.collect(original!, at, atFrame, inner, below, out, via);
+      return;
+    }
+    const box = this.originalBox(original!, inner);
+    if (box === null) return;
+    const segments = rectPath(box.min[0], box.min[1], box.max[0] - box.min[0], box.max[1] - box.min[1], 0, 0);
+    out.push({ leaf, segments, matrix: at, frameMatrix: atFrame, fill: true, radius: 0, cache: null, flat: null, host: null, regions: below, via });
+  }
+
+  /// Il riquadro della geometria dell'originale `node`, misurato una volta
+  /// per ciò che il painter ne disegna. Lo stile è quello della prima copia
+  /// che lo chiede: conta soltanto per i testi.
+  private originalBox(node: ElementPart, style: Style): Bounds | null {
+    const [paint] = this.builder.paintsOf(node);
+    const known = paint === undefined ? undefined : this.originalBoxes.get(paint);
+    if (known !== undefined) return known;
+    const box = this.objectBox(node, style);
+    if (paint !== undefined) this.originalBoxes.set(paint, box);
+    return box;
   }
 
   /// Quante forme dà il contenuto di `symbol`, a cascata, e il riquadro
@@ -1117,6 +1186,12 @@ export class SceneIndexer {
         const symbol = this.symbolNode(node, node.details!.symbol!);
         const box = symbol === null || this.depth >= MAX_SYMBOL_DEPTH ? null : this.symbolInfo(symbol, style).box;
         if (box !== null) out.path(rectPath(box.min[0], box.min[1], box.max[0] - box.min[0], box.max[1] - box.min[1], 0, 0), matrix);
+        return;
+      }
+      if (node.details!.role === "copy") {
+        const original = originalOf(node);
+        const attrs = original === null ? null : this.attrsOf(original);
+        if (attrs !== null && !hidden(attrs)) this.addGeometry(original!, compose(matrix, transformOf(attrs)), styleOf(style, attrs), out);
         return;
       }
       out.path(this.part(node, this.builder.shape(node)!, matrix, matrix, style, null).segments, matrix);
@@ -1314,7 +1389,7 @@ class Lookup implements Nested {
 
   constructor(
     private readonly model: DocumentModel,
-    private readonly scope: ContainerNode | null,
+    readonly scope: ContainerNode | null,
     /// Le istanze da cui si entra nei simboli, dalla più esterna.
     private readonly through: readonly LeafNode[],
     private readonly rootStyle: Style,
@@ -1349,6 +1424,18 @@ class Lookup implements Nested {
     const out: Unit[] = [];
     childLoop(container, (child, index) => {
       if (pickable(child) && child.details!.locked !== true) push(out, this.make(child, [...context.path, index], context.layer, context.matrix, context.style, context.clips));
+    });
+    return out;
+  }
+
+  copiesOf(container: ContainerNode): Unit[] {
+    if (container.details?.repeat === undefined) return [];
+    if (this.scope !== null && container !== this.scope && !within(container, this.scope)) return [];
+    const context = this.contextOf(container);
+    if (context === null) return [];
+    const out: Unit[] = [];
+    childLoop(container, (child, index) => {
+      if (child.details?.role === "copy" && child.details.locked !== true) push(out, this.make(child, [...context.path, index], context.layer, context.matrix, context.style, context.clips));
     });
     return out;
   }
@@ -1450,14 +1537,20 @@ class Lookup implements Nested {
 }
 
 /// Vero se `node` è un oggetto, nel posto dove sta: non la carta, il titolo,
-/// la descrizione, un livello, le risorse con la loro `defs` o un blocco
-/// estraneo.
+/// la descrizione, un livello, le risorse con la loro `defs`, una copia in
+/// una ripetizione o un blocco estraneo.
 function pickable(node: ElementPart): boolean {
   const role = node.details?.role;
   return role !== undefined && !NOT_PICKABLE.has(role);
 }
 
-const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "board", "title", "desc", "layer", "defs", "resource"]);
+const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "board", "title", "desc", "layer", "defs", "resource", "copy"]);
+
+/// Vero se il percorso `a` viene dopo `b` nel documento: sta più in alto.
+function later(a: readonly number[], b: readonly number[]): boolean {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i]! > b[i]!;
+  return a.length > b.length;
+}
 
 /// Il percorso di `symbol` nel documento: la sua `defs` fra i figli della
 /// radice, e lui fra quelli della `defs`.

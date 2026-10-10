@@ -122,7 +122,7 @@ function group(attrs: PaintAttr[], children: PaintNode[]): PaintNode {
 }
 
 function scene(nodes: PaintNode[], rootAttrs: PaintAttr[] = [], resources: PaintResource[] = []): PaintScene {
-  return { root: { attrs: rootAttrs, page: null, units: "px", guides: null }, layers: [{ kind: "live", nodes }], resources, symbols: [] } as unknown as PaintScene;
+  return { root: { attrs: rootAttrs, page: null, units: "px", guides: null }, layers: [{ kind: "live", nodes }], resources, symbols: [], originals: new Set() } as unknown as PaintScene;
 }
 
 const written = (family: string, weight = "400", style = "normal") => ({ family, weight, style });

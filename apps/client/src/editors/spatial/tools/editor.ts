@@ -21991,6 +21991,7 @@ const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
   empty: "draw.nodes.empty",
   stroke: "draw.nodes.stroke_fixed",
   instance: "draw.nodes.instance",
+  copy: "draw.nodes.copy",
   foreign: "draw.nodes.foreign",
   other: "draw.nodes.no_path",
 };

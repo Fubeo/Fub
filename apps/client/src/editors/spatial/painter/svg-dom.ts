@@ -23,6 +23,9 @@
 //   crea e si riconcilia come quello di uno strato vivo. Un'istanza è un
 //   `use` vivo verso l'id vivo del suo simbolo: il browser la disegna col
 //   contenuto, e un'anteprima sul contenuto si vede in ogni istanza.
+// - **Copie vive:** una copia in una ripetizione è un `use` vivo verso
+//   l'originale, che solo per questo ha l'id vivo. Le copie seguono
+//   l'originale anche nell'anteprima: si sposta, e loro con lui.
 // - **Strati immagine:** un `<img>` da blob, disegnato per il rettangolo della
 //   vista più un margine. Mentre la camera si muove l'immagine segue con una
 //   trasformazione CSS; quando si ferma si ridisegna alla nuova scala e al
@@ -405,6 +408,15 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   let layers: LayerRecord[] = [];
   let defs: DefsRecord | null = null;
   let disposed = false;
+  /// Gli originali delle copie vive, e gli elementi a cui il painter ha dato
+  /// il loro id vivo.
+  let originals: ReadonlySet<string> = new Set();
+  const anchors = new Set<SVGElement>();
+  const anchor = (el: SVGElement, id: string | null): void => {
+    if (id === null || !originals.has(id)) return;
+    el.setAttribute("id", liveId(dom.prefix, id));
+    anchors.add(el);
+  };
 
   let settleTimer: ReturnType<typeof setTimeout> | null = null;
   const clearSettle = (): void => {
@@ -425,6 +437,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const createShape = (shape: PaintShape): NodeRecord => {
     const { el, life: imageLife } = shapeElement(shape, shape.id, dom, options.images, null);
+    anchor(el, shape.id);
     return { paint: shape, el, life: imageLife, children: [] };
   };
 
@@ -433,6 +446,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     setPainted(el, group.attrs, [], dom);
     setCommon(el, group.id, group.space);
     if (group.role === "symbol") setSymbol(el, group.id!, dom);
+    else anchor(el, group.id);
     const record: NodeRecord = { paint: group, el, life: null, children: [] };
     record.children = reconcile(el, [], group.children);
     return record;
@@ -449,6 +463,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   const disposeNode = (record: NodeRecord): void => {
     record.life?.close();
+    anchors.delete(record.el);
     for (const child of record.children) disposeNode(child);
   };
 
@@ -1195,6 +1210,8 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     const generations = new Map<ImageRecord, number>();
     for (const record of frozen) generations.set(record, record.generation);
     const rootAttrs = scene.root.attrs;
+    const anchored = originals;
+    originals = scene.originals;
     updateDefs(scene.resources, scene.symbols, rootAttrs);
     const lives = layers.filter((r): r is LiveRecord => r.kind === "live");
     const images = layers.filter((r): r is ImageRecord => r.kind === "image");
@@ -1240,6 +1257,9 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     }
     for (const record of layers) if (!used.has(record)) disposeLayer(record);
     layers = out as LayerRecord[];
+    // Ciò che si crea ha già l'id vivo; se gli originali cambiano, lo
+    // riceve o lo perde anche ciò che resta.
+    if (originals !== anchored) reanchor();
     // Le risorse prima degli strati, come nel file.
     place(root, [...(defs === null ? [] : [defs.el]), ...layers.map((record) => record.el)]);
     applyFocus();
@@ -1248,6 +1268,21 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     // finché la nuova non la sostituisce; gli altri tornano al loro posto.
     for (const [record, generation] of generations) {
       if (frozen.delete(record) && record.generation === generation) carry(record, null);
+    }
+  };
+
+  /// Gli id vivi degli originali di `originals` su tutti i nodi, e su nessun
+  /// altro.
+  const reanchor = (): void => {
+    for (const el of anchors) {
+      const id = el.getAttribute("data-scene-id");
+      if (id !== null && originals.has(id)) continue;
+      el.removeAttribute("id");
+      anchors.delete(el);
+    }
+    if (originals.size === 0) return;
+    for (const records of indexRecords().paints.values()) {
+      for (const record of records) if (record.paint.role !== "symbol") anchor(record.el, record.paint.id);
     }
   };
 
@@ -1298,6 +1333,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     focus = null;
     dimmed.clear();
     byPaint = null;
+    anchors.clear();
     for (const record of layers) disposeLayer(record);
     layers = [];
     if (defs !== null) disposeDefs(defs);
@@ -1451,8 +1487,10 @@ function shapeElement(
       el.append(span);
     }
   }
-  // Un'istanza rimanda al simbolo vivo, come un `url(#…)`.
-  if (shape.symbol !== undefined) el.setAttribute("href", `#${liveId(dom.prefix, shape.symbol)}`);
+  // Un'istanza rimanda al simbolo vivo, una copia all'originale, come un
+  // `url(#…)`.
+  const target = shape.symbol ?? shape.original;
+  if (target !== undefined) el.setAttribute("href", `#${liveId(dom.prefix, target)}`);
   const image = shape.image;
   if (image !== undefined) {
     if (image.kind === "data") {
@@ -1574,16 +1612,29 @@ export function paintMiniature(
     parent = g;
   }
   if (parent === svg && defs !== null) svg.append(defs);
+  // Gli originali delle copie hanno l'id vivo della miniatura.
+  const originals = new Set<string>();
+  const scan = (node: PaintNode): void => {
+    if (node.kind === "group") node.children.forEach(scan);
+    else if (node.original !== undefined) originals.add(node.original);
+  };
+  nodes.forEach(scan);
+  symbols.forEach(scan);
+  const anchor = (el: SVGElement, id: string | null): void => {
+    if (id !== null && originals.has(id)) el.setAttribute("id", liveId(dom.prefix, id));
+  };
   const copy = (node: PaintNode, top: boolean): SVGElement => {
     if (node.kind === "shape") {
       const { el } = shapeElement(node, null, dom, resolve, life);
       if (top) for (const name of HIDING) el.removeAttribute(name);
+      anchor(el, node.id);
       return el;
     }
     const el = document.createElementNS(SVG, node.role === "symbol" ? "symbol" : "g");
     setPainted(el, top ? visible(node.attrs) : node.attrs, [], dom);
     setCommon(el, null, node.space);
     if (node.role === "symbol") setSymbol(el, node.id!, dom);
+    else anchor(el, node.id);
     for (const child of node.children) el.append(copy(child, false));
     return el;
   };

@@ -32,7 +32,7 @@ import { formatNumber, roundHalfUp } from "../number";
 import { connectorAttrs, connectorPath, connectorSegments, writeConnectorEnd, writeConnectorGeom, writeLabelPlace, type Anchor, type ConnectorEnd, type ConnectorKind, type LabelPlace } from "../scene/connectors";
 import { BoundsBuilder, chords, Track, type Bounds, type Segment } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { elementChildren, originalOf, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { length } from "../scene/values";
@@ -209,6 +209,12 @@ function localOf(node: ElementPart, measure: Measure, own: (node: ElementPart) =
     if (++visits > MAX_VISITS) return;
     if (part.kind === "container") {
       for (const child of elementChildren(part)) if (outlined(child)) visit(child, compose(m, own(child)));
+      return;
+    }
+    if (part.details?.role === "copy") {
+      // Il contorno di una copia è quello del suo originale, portato da lei.
+      const original = originalOf(part);
+      if (original !== null && outlined(original)) visit(original, compose(m, own(original)));
       return;
     }
     if (part.details?.role === "instance") {
