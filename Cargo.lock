@@ -1959,6 +1959,7 @@ dependencies = [
  "image",
  "imagesize",
  "jiff",
+ "kurbo 0.13.1",
  "lopdf",
  "png 0.18.1",
  "regex",
@@ -1967,10 +1968,13 @@ dependencies = [
  "serde_json",
  "serde_yaml_ng",
  "sha2 0.10.9",
+ "skrifa 0.42.1",
  "svg2pdf",
  "tantivy",
  "tempfile",
  "tracing",
+ "write-fonts",
+ "wuff",
 ]
 
 [[package]]
@@ -8049,6 +8053,17 @@ dependencies = [
  "windows-core 0.61.2",
  "windows-version",
  "x11-dl",
+]
+
+[[package]]
+name = "wuff"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "200a7b806377b65f1ff9a985874332f15357c87e5dd7855f35f06dade95b8b3d"
+dependencies = [
+ "brotli-decompressor",
+ "bytes",
+ "flate2",
 ]
 
 [[package]]

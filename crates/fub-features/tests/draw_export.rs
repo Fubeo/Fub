@@ -974,7 +974,7 @@ fn characters_outside_fubs_fonts_are_noted() {
         let note = report
             .log
             .iter()
-            .find(|note| note.message.contains("outside Fub's fonts"))
+            .find(|note| note.message.contains("outside the drawing's fonts"))
             .unwrap_or_else(|| panic!("{:?}", report.log));
         assert_eq!(note.level, NoteLevel::Warning);
         assert_eq!(note.entry.as_deref(), Some("lingue.svg"));
