@@ -18,6 +18,7 @@ import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
 import type { DrawingImagePort } from "../canvas/surface";
 import type { VaultFontPort } from "../spatial/fonts/vault";
+import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
 import type { SyntaxForm } from "../../host/contract";
 import {
   DocumentSurfaceRegistry,
@@ -47,6 +48,9 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   /// I file di caratteri del vault, che i testi dei disegni possono usare:
   /// elencati e letti dalla shell.
   readonly drawingFonts?: VaultFontPort;
+  /// Le librerie di simboli del vault: la cartella, i file e il loro testo,
+  /// dalla shell.
+  readonly drawingSymbols?: SymbolLibraryPort;
   readonly renderCanvasMarkdown?: (
     nodeId: string,
     text: string,
@@ -288,6 +292,7 @@ export function createDocumentSurfaceRegistry(
           onPickDrawingLink: options.onPickDrawingLink,
           drawingImages: options.drawingImages,
           drawingFonts: options.drawingFonts,
+          drawingSymbols: options.drawingSymbols,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,

@@ -172,6 +172,7 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             "draw.level",
             "draw.custom",
             "draw.templates",
+            "draw.symbols",
             "draw.suggestions",
         ] {
             assert!(ws.setting(key).is_err(), "{key}");
@@ -203,6 +204,7 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
                 "draw.level",
                 "draw.custom",
                 "draw.templates",
+                "draw.symbols",
                 "draw.suggestions"
             ]
         );
@@ -218,10 +220,12 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
             )
         );
         assert_eq!(entry("draw.templates").value, text("Templates"));
+        assert_eq!(entry("draw.symbols").value, text("Symbols"));
         assert_eq!(entry("draw.suggestions").value, SettingValue::Toggle(true));
         // Il vault le porta con sé, la macchina i suggerimenti.
         assert_eq!(entry("draw.level").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.templates").spec.scope, SettingScope::Vault);
+        assert_eq!(entry("draw.symbols").spec.scope, SettingScope::Vault);
         assert_eq!(entry("draw.suggestions").spec.scope, SettingScope::Machine);
 
         // La casella «Non mostrare più suggerimenti» scrive la chiave.
@@ -254,9 +258,16 @@ fn the_drawing_settings_exist_only_with_the_draw_feature() {
         assert_eq!(ws.setting("draw.custom").unwrap(), parts);
         ws.set_setting("draw.templates", text("Modelli")).unwrap();
         assert_eq!(ws.setting("draw.templates").unwrap(), text("Modelli"));
+        ws.set_setting("draw.symbols", text("Simboli")).unwrap();
+        assert_eq!(ws.setting("draw.symbols").unwrap(), text("Simboli"));
 
         let written = std::fs::read_to_string(root.join(".fub").join("settings.json")).unwrap();
-        for key in ["draw.level", "draw.custom", "draw.templates"] {
+        for key in [
+            "draw.level",
+            "draw.custom",
+            "draw.templates",
+            "draw.symbols",
+        ] {
             assert!(written.contains(&format!("\"{key}\"")), "{key}: {written}");
         }
         // I suggerimenti sono della macchina: non entrano nel file del vault.

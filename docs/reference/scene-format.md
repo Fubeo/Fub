@@ -87,10 +87,11 @@ Radice di un documento nuovo:
 | `polyline`, `polygon` | `points` | letti e modificati |
 | `text` con figli `tspan`, o con un `textPath` | `x y`; ogni riga è un `tspan` con `x` e `dy`, e i suoi [pezzi](scene-format-text.md); `fub:wrap` per il [testo in area](scene-format-text.md#4-il-testo-in-area); un solo `textPath` per il [testo su tracciato](scene-format-text.md#5-il-testo-su-tracciato); `fub:inside` per l'[etichetta di una forma](scene-format-labels.md) | testo |
 | `image` | `x y width height href preserveAspectRatio` | immagine incorporata o del vault |
+| `use` | `href`, `transform` | un'istanza di un [simbolo](scene-format-symbols.md) |
 | `g` | — | livello o gruppo |
 | `a` | `href` | collegamento a un documento del vault |
 | `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto; il primo `title` di un oggetto è il suo nome |
-| `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere, filtri e i tracciati dei testi, e gli [stili](scene-format-styles.md) |
+| `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere, filtri e i tracciati dei testi, gli [stili](scene-format-styles.md) e i [simboli](scene-format-symbols.md) |
 | `view` della radice con `fub:role="board"` | `viewBox` | una [tavola](scene-format-boards.md), col nome nel suo `title` |
 
 **Attributi di presentazione ammessi:**
@@ -148,15 +149,14 @@ Radice di un documento nuovo:
   ([testo](scene-format-text.md), §9). Altri valori sono ammessi in lettura.
 - **`href` di `a`:** percorso di un documento del vault con la regola dei link
   di Fub (`resolve_against` in `crates/fub-abi/src/rules/path.rs`): relativo
-  alla cartella del disegno, oppure dalla radice del vault se comincia con
-  `/`. Niente schemi.
+  alla cartella del disegno, oppure dalla radice del vault se comincia con `/`. Niente schemi.
 - **`href` di `image`:** data URI di un'immagine raster (`image/png`,
   `image/jpeg`, `image/webp`, `image/gif`), oppure un percorso di un'immagine
   del vault, con la regola di `href` di `a`, che la superficie mostra con la
   risoluzione dei media della shell. Un'immagine remota non si carica mai: al
   suo posto c'è un segnaposto.
-- **`xlink:href`:** equivale a `href` su `image`, `a` e `textPath` ([testo](scene-format-text.md)).
-  Con tutti e due vale `href`, come in SVG 2; un `textPath` ne vuole uno solo.
+- **`xlink:href`:** equivale a `href` su `image`, `a`, `textPath` ([testo](scene-format-text.md)) e `use`.
+  Con tutti e due vale `href`, come in SVG 2; un `textPath` e un `use` ne vogliono uno solo.
 
 ### Regola di classificazione
 
@@ -164,7 +164,7 @@ Un elemento è **modificabile** se il suo tag è in tabella, se tutti i suoi att
 e valori rientrano in questa sezione, e se nessun valore contiene `url(`, se non
 un riferimento a una [risorsa](scene-format-resources.md) modificabile.
 
-- Per `g`, `a` e la `defs` della radice la regola vale per ogni figlio da sé: un
+- Per `g`, `a`, la `defs` della radice e un simbolo la regola vale per ogni figlio da sé: un
   livello con un figlio estraneo resta modificabile e contiene un blocco estraneo.
 - Per gli altri elementi l'elemento è un'unità con i suoi figli. Un `text` è
   modificabile solo coi figli `tspan` ammessi, o un `textPath` ([testo](scene-format-text.md)).

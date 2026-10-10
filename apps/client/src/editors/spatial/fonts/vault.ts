@@ -135,22 +135,38 @@ const ROOT_FONT: TextFont = { family: "", weight: 400, style: "normal" };
 interface Walked {
   readonly context: string;
   readonly fonts: readonly TextFont[];
+  /// Le istanze dei simboli che il nodo contiene, col carattere che danno al
+  /// contenuto: i caratteri del simbolo si leggono a parte, perché il
+  /// simbolo cambia senza che cambi l'istanza.
+  readonly uses: readonly SymbolUse[];
+}
+
+interface SymbolUse {
+  readonly symbol: string;
+  readonly font: TextFont;
 }
 
 /// I caratteri dei nodi già visti, col carattere che ereditavano: un gruppo
 /// che non è cambiato non si rilegge.
 const walked = new WeakMap<object, Walked>();
 
-/// I caratteri dei pezzi di testo di `node`. Anche gli spazi fra le righe
-/// si scrivono, col carattere del testo.
-function fontsOfNode(node: PaintNode, parent: TextFont): readonly TextFont[] {
+/// I caratteri dei pezzi di testo di `node`, e le istanze che contiene.
+/// Anche gli spazi fra le righe si scrivono, col carattere del testo.
+function fontsOfNode(node: PaintNode, parent: TextFont): Walked {
   const context = keyOf(parent);
   const known = walked.get(node);
-  if (known !== undefined && known.context === context) return known.fonts;
+  if (known !== undefined && known.context === context) return known;
   const font = inherit(parent, node.attrs);
   const out: TextFont[] = [];
+  const uses: SymbolUse[] = [];
   if (node.kind === "group") {
-    for (const child of node.children) out.push(...fontsOfNode(child, font));
+    for (const child of node.children) {
+      const inner = fontsOfNode(child, font);
+      out.push(...inner.fonts);
+      uses.push(...inner.uses);
+    }
+  } else if (node.symbol !== undefined) {
+    uses.push({ symbol: node.symbol, font });
   } else if (node.tag === "text") {
     for (const run of node.runs ?? []) {
       if (run.kind === "space") {
@@ -163,8 +179,9 @@ function fontsOfNode(node: PaintNode, parent: TextFont): readonly TextFont[] {
       for (const part of parts ?? []) if (typeof part !== "string" && part.text !== "") out.push(inherit(line, part.attrs));
     }
   }
-  walked.set(node, { context, fonts: out });
-  return out;
+  const result = { context, fonts: out, uses };
+  walked.set(node, result);
+  return result;
 }
 
 function fontsOfDef(def: PaintDef, parent: TextFont, out: TextFont[]): void {
@@ -181,21 +198,49 @@ function fontsOfDef(def: PaintDef, parent: TextFont, out: TextFont[]): void {
 
 /// I caratteri che i testi di `scene` chiedono, ciascuno una volta, in
 /// ordine di documento: quelli degli strati, vivi o immagine, poi quelli
+/// dei simboli, col carattere che ogni istanza dà al contenuto, poi quelli
 /// delle risorse.
 export function sceneFonts(scene: PaintScene): TextFont[] {
   const root = inherit(ROOT_FONT, scene.root.attrs);
   const context = keyOf(root);
   const all: TextFont[] = [];
+  const pending: SymbolUse[] = [];
   for (const layer of scene.layers) {
-    if (layer.kind === "live") for (const node of layer.nodes) all.push(...fontsOfNode(node, root));
-    else all.push(...layerFonts(layer));
+    if (layer.kind !== "live") {
+      all.push(...layerFonts(layer));
+      continue;
+    }
+    for (const node of layer.nodes) {
+      const walk = fontsOfNode(node, root);
+      all.push(...walk.fonts);
+      pending.push(...walk.uses);
+    }
+  }
+  if (pending.length > 0) {
+    const symbols = new Map<string, PaintNode>();
+    for (const symbol of scene.symbols) if (symbol.id !== null && !symbols.has(symbol.id)) symbols.set(symbol.id, symbol);
+    // Ogni simbolo una volta per carattere ereditato, nell'ordine in cui
+    // le istanze lo incontrano; una catena di simboli può essere lunga
+    // quanto il file, e non si ricorre.
+    const done = new Set<string>();
+    const stack = pending.reverse();
+    while (stack.length > 0) {
+      const use = stack.pop()!;
+      const key = `${use.symbol}\u0000${keyOf(use.font)}`;
+      const symbol = symbols.get(use.symbol);
+      if (symbol === undefined || done.has(key)) continue;
+      done.add(key);
+      const walk = fontsOfNode(symbol, use.font);
+      all.push(...walk.fonts);
+      for (let i = walk.uses.length - 1; i >= 0; i--) stack.push(walk.uses[i]!);
+    }
   }
   for (const resource of scene.resources) {
     let known = walked.get(resource);
     if (known === undefined || known.context !== context) {
       const fonts: TextFont[] = [];
       fontsOfDef(resource, root, fonts);
-      known = { context, fonts };
+      known = { context, fonts, uses: [] };
       walked.set(resource, known);
     }
     all.push(...known.fonts);

@@ -23,7 +23,7 @@ import { pf1 } from "../ink/pf1";
 import { InkError } from "../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer, len } from "./analysis";
-import { classifyChild, describe, isResourceTag, NO_RESOURCES, resourceKind, styleKindOf, type Details, type Item, type Place, type Resolve } from "./classify";
+import { classifyChild, describe, isResourceTag, NO_RESOURCES, resourceKind, styleKindOf, withArrivingSymbols, type Details, type Item, type Place, type Resolve } from "./classify";
 import { sceneOperation } from "./diff";
 import { DEFS_ID, isNewId, pageId, type IdKind } from "./ids";
 import { positive } from "./annotations";
@@ -416,10 +416,11 @@ const ID_NAMES: Readonly<Record<IdKind, string>> = {
 };
 
 /// Vero se un elemento di tag `tag` è una risorsa: un `path` lo è come figlio
-/// di una `defs` (`inDefs`), il tracciato di un testo, e un `text` o una
-/// `polyline` con `fub:role` uguale a `role` `style`, uno stile.
+/// di una `defs` (`inDefs`), il tracciato di un testo, un `text` o una
+/// `polyline` con `fub:role` uguale a `role` `style`, uno stile, e un
+/// `symbol` un simbolo.
 function isResource(tag: string, inDefs: boolean, role: string | undefined): boolean {
-  return isResourceTag(tag) || (inDefs && (tag === "path" || (role === "style" && styleKindOf(tag) !== null)));
+  return isResourceTag(tag) || (inDefs && (tag === "path" || tag === "symbol" || (role === "style" && styleKindOf(tag) !== null)));
 }
 
 /// Controlla l'id di un elemento nuovo (§4): ogni elemento ne ha uno nella
@@ -503,6 +504,9 @@ export function reindent(raw: string, scope: NamespaceScope, place: Place, depth
   const fragment = parseFragment(raw, scope);
   if (fragment === null) return raw;
   const { doc } = fragment;
+  // Un simbolo che si sposta in una `defs`, anche con la sua, è ancora un
+  // simbolo.
+  resolve = withArrivingSymbols(doc, [fragment.id], place, resolve);
   const base = doc.element(fragment.id)!.start;
   const ranges: Array<readonly [number, number]> = [];
   const stack: Array<readonly [NodeId, Place, number]> = [[fragment.id, place, depth]];
@@ -591,6 +595,19 @@ function withPart(out: OutElement, part: readonly number[], change: (inner: OutE
   return { ...out, children: out.children.map((child, i) => (i === index ? withPart(child, rest, change) : child)) };
 }
 
+/// Gli id a cui rimanda `node` con ciò che contiene, come li conta l'albero.
+function refsWithin(node: ElementPart): Set<string> {
+  const out = new Set<string>();
+  const stack: ElementPart[] = [node];
+  while (stack.length > 0) {
+    const at = stack.pop()!;
+    for (const id of at.kind === "leaf" ? at.refs : at.facts.refs) out.add(id);
+    if (at.kind !== "container") continue;
+    for (const part of at.parts) if (typeof part !== "string" && part.kind !== "other") stack.push(part);
+  }
+  return out;
+}
+
 /// Il motore di un documento aperto.
 export class SceneEngine {
   private readonly tree: Tree | null;
@@ -633,7 +650,9 @@ export class SceneEngine {
   /// scena, risorse).
   private readonly resolve: Resolve = (id) => {
     const node = this.tree === null ? null : this.tree.element(id);
-    return node !== null && roleOf(node) === "resource" ? resourceKind(node.facts.local) : null;
+    if (node === null) return null;
+    const role = roleOf(node);
+    return role === "resource" ? resourceKind(node.facts.local) : role === "symbol" ? "symbol" : null;
   };
 
   private constructor(source: string) {
@@ -719,6 +738,7 @@ export class SceneEngine {
         forward = chain([op, ...followed.ops]);
         inverse = chain([...followed.inverses.reverse(), inverse]);
       }
+      this.checkSymbols(mark);
       const { removes, restores } = this.collect();
       if (!this.inverse) this.checkBoards(boards);
       if (removes.length > 0) {
@@ -1260,16 +1280,67 @@ export class SceneEngine {
   }
 
   // -------------------------------------------------------------------------
+  // I simboli (formato della scena, simboli).
+  // -------------------------------------------------------------------------
+
+  /// Nessun simbolo che l'operazione ha cambiato, da `mark` in poi, contiene
+  /// sé stesso, nemmeno attraverso altri simboli: il lettore lo direbbe
+  /// estraneo, con tutte le sue istanze.
+  private checkSymbols(mark: number): void {
+    const symbols = new Set<ContainerNode>();
+    const owner = (node: ElementPart): void => {
+      for (let at: ElementPart | null = node; at !== null; at = at.parent) {
+        if (at.kind !== "container" || roleOf(at) !== "symbol") continue;
+        symbols.add(at);
+        return;
+      }
+    };
+    for (const entry of this.t.since(mark)) {
+      if (entry.kind === "head") owner(entry.node);
+      if (entry.kind !== "splice") continue;
+      owner(entry.owner);
+      for (const part of entry.inserted) if (typeof part !== "string" && part.kind === "container" && roleOf(part) === "symbol") symbols.add(part);
+    }
+    for (const symbol of symbols) {
+      if (symbol.details !== null && this.t.element(symbol.facts.id!) === symbol && this.reaches(symbol)) {
+        reject("cycle", `il simbolo ${symbol.facts.id!} conterrebbe sé stesso`);
+      }
+    }
+  }
+
+  /// Vero se dal contenuto di `symbol` si arriva a `symbol` attraverso i
+  /// rimandi ai simboli.
+  private reaches(symbol: ContainerNode): boolean {
+    const seen = new Set<ContainerNode>();
+    const pending: ContainerNode[] = [symbol];
+    while (pending.length > 0) {
+      const at = pending.pop()!;
+      for (const id of refsWithin(at)) {
+        const target = this.t.element(id);
+        if (target === null || target.kind !== "container" || roleOf(target) !== "symbol") continue;
+        if (target === symbol) return true;
+        if (!seen.has(target)) {
+          seen.add(target);
+          pending.push(target);
+        }
+      }
+    }
+    return false;
+  }
+
+  // -------------------------------------------------------------------------
   // Le risorse del disegno (formato della scena, risorse).
   // -------------------------------------------------------------------------
 
-  /// Gli id delle risorse modificabili che `node` è o contiene: una risorsa,
-  /// o i figli di una `defs`; con `styles`, soltanto degli stili.
+  /// Gli id delle risorse modificabili che `node` è o contiene: una risorsa
+  /// o un simbolo, o i figli di una `defs`; con `styles`, soltanto degli
+  /// stili.
   private resourcesIn(node: ElementPart, styles = false): string[] {
     const nodes = node.kind === "container" && roleOf(node) === "defs" ? elementChildren(node) : [node];
     const out: string[] = [];
     for (const child of nodes) {
-      if (roleOf(child) !== "resource" || child.facts.id === null) continue;
+      const role = roleOf(child);
+      if ((role !== "resource" && role !== "symbol") || child.facts.id === null) continue;
       if (!styles || child.details?.lifecycle === "style") out.push(child.facts.id);
     }
     return out;
@@ -1688,7 +1759,8 @@ export class SceneEngine {
       const out: { -readonly [K in keyof Elem]: Elem[K] } = { tag, attrs };
       if (value.children !== undefined) {
         if (!Array.isArray(value.children)) reject("invalid-elem", `figli non validi su ${tag}`);
-        const inside = inResource || isResource(tag, inDefs, get(FUB_NS, "role"));
+        // Il contenuto di un simbolo sono oggetti, ognuno col suo id.
+        const inside = inResource || (tag !== "symbol" && isResource(tag, inDefs, get(FUB_NS, "role")));
         const defs = tag === "defs" && top && underRoot;
         out.children = value.children.map((child) => visit(child, false, inside, defs));
       }
@@ -2370,7 +2442,8 @@ export class SceneEngine {
     // Senza id una risorsa è estranea, e chi la usa con lei (§2); uno stile
     // lo è, e chi lo segue non lo segue più.
     const followers = node.details?.lifecycle === "style" ? this.t.followers(old!) : 0;
-    if (id === null && roleOf(node) === "resource" && this.t.referrers(old!) + followers > 0) reject("in-use", `qualcosa usa ${old}`);
+    const resource = roleOf(node) === "resource" || roleOf(node) === "symbol";
+    if (id === null && resource && this.t.referrers(old!) + followers > 0) reject("in-use", `qualcosa usa ${old}`);
     if (id !== null) {
       // Ogni id che il formato ammette, non solo quelli che FubDraw genera:
       // un id si cambia togliendolo e dandone un altro, e l'undo rimette

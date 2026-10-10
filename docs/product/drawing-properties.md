@@ -49,6 +49,8 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
 - **Forma**, per poligoni, stelle e rettangoli: Tipo, Lati o Punte, Raggio
   interno di una stella e Raggio degli angoli; senza selezione, col Poligono
   in mano, quelli dello strumento ([Disegni, poligoni e stelle](drawing-shapes.md)).
+  In testa, con la parte «Simboli», il Simbolo delle istanze scelte
+  ([Disegni, simboli](drawing-symbols.md#la-riga-simbolo)).
 - **Connettore**, per i connettori scelti: il Tipo, fra Dritto, A gomito e
   Curvo; l'Aggancio d’inizio e quello di fine; l'Etichetta; e «Inverti», che
   scambia inizio e fine ([Disegni, connettori](drawing-connectors.md)).

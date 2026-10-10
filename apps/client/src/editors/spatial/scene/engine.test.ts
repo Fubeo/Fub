@@ -1282,6 +1282,170 @@ describe("gli stili", () => {
   });
 });
 
+describe("i simboli", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const Y = "r5e6f7a8b";
+  const Z = "r6f7a8b9c";
+  /// Un simbolo nella `defs` con `body` dentro.
+  const symbol = (id: string, ...body: string[]): string[] => [`    <symbol id="${id}" overflow="visible">`, ...body, "    </symbol>"];
+  const BULB = '      <circle id="o9a8b7c6d" cx="0" cy="0" r="20" fill="#f0e442"/>';
+  /// Un'istanza di `of` nel livello.
+  const instance = (id: string, of = Y): string => `    <use id="${id}" transform="translate(200 150)" href="#${of}"/>`;
+  const USED = lf(ROOT, TITLE, DEFS, ...symbol(Y, "      <title>Lampadina</title>", BULB), END_DEFS, PAPER, L1, instance("o2b3c4d5e"), END_G, END);
+  const ALONE = lf(ROOT, TITLE, DEFS, ...symbol(Y, "      <title>Lampadina</title>", BULB), END_DEFS, PAPER, L1, R2, END_G, END);
+  const roleOf = (engine: SceneEngine, id: string): string | undefined => {
+    const item = engine.scene().find((each) => each.kind === "element" && each.id === id);
+    return item?.kind === "element" ? item.role : undefined;
+  };
+
+  it("un simbolo usato non si toglie, né con la sua defs, né togliendogli l'id", () => {
+    rejects(USED, { op: "remove", target: Y }, "in-use");
+    rejects(USED, { op: "remove", target: "fub-defs" }, "in-use");
+    rejects(USED, { op: "ident", path: [1, 0], tag: "symbol", id: null }, "in-use");
+  });
+
+  it("un simbolo che nessuno usa non si raccoglie, e si toglie; l'undo lo rimette", () => {
+    const engine = SceneEngine.open(USED);
+    expect(apply(engine, { op: "remove", target: "o2b3c4d5e" }).text).toBe(
+      lf(ROOT, TITLE, DEFS, ...symbol(Y, "      <title>Lampadina</title>", BULB), END_DEFS, PAPER, L1, END_G, END),
+    );
+    const out = apply(SceneEngine.open(ALONE), { op: "remove", target: Y });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, END_G, END));
+    const back = SceneEngine.open(out.text);
+    expect(applied(back.apply(out.inverse)).text).toBe(ALONE);
+    expect(roleOf(back, Y)).toBe("symbol");
+    expect(roleOf(back, "o9a8b7c6d")).toBe("circle");
+  });
+
+  it("chi usa e il simbolo si tolgono insieme, in un batch, e tornano insieme", () => {
+    const engine = SceneEngine.open(USED);
+    const out = apply(engine, { op: "batch", ops: [{ op: "remove", target: "o2b3c4d5e" }, { op: "remove", target: Y }] });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    const back = SceneEngine.open(out.text);
+    expect(applied(back.apply(out.inverse)).text).toBe(USED);
+    expect(roleOf(back, "o2b3c4d5e")).toBe("instance");
+  });
+
+  it("un simbolo nuovo ha l'id di una risorsa e il suo contenuto quelli degli oggetti, con elem e con raw", () => {
+    const rect: Elem = { tag: "rect", attrs: { id: "o7a8b9c0d", width: "10", height: "10", fill: "#0072b2" } };
+    const elem: Elem = { tag: "symbol", attrs: { id: Z, overflow: "visible" }, children: [{ tag: "title", attrs: {}, text: "Quadro" }, rect] };
+    const engine = SceneEngine.open(USED);
+    const out = apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, elem });
+    expect(out.text).toBe(
+      lf(
+        ROOT,
+        TITLE,
+        DEFS,
+        ...symbol(Y, "      <title>Lampadina</title>", BULB),
+        ...symbol(Z, "      <title>Quadro</title>", '      <rect id="o7a8b9c0d" width="10" height="10" fill="#0072b2"/>'),
+        END_DEFS,
+        PAPER,
+        L1,
+        instance("o2b3c4d5e"),
+        END_G,
+        END,
+      ),
+    );
+    expect(roleOf(engine, Z)).toBe("symbol");
+    expect(roleOf(engine, "o7a8b9c0d")).toBe("rect");
+    const raw = `<symbol id="r7a8b9c0d" overflow="visible"><use id="o8b9c0d1e" href="#${Y}"/></symbol>`;
+    apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, raw });
+    expect(roleOf(engine, "r7a8b9c0d")).toBe("symbol");
+    expect(roleOf(engine, "o8b9c0d1e")).toBe("instance");
+    rejects(USED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...elem, attrs: { ...elem.attrs, id: "o6f7a8b9c" } } }, "invalid-elem");
+    rejects(USED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...elem, children: [{ ...rect, attrs: { ...rect.attrs, id: "r7a8b9c0d" } }] } }, "invalid-elem");
+    rejects(USED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...elem, children: [{ ...rect, attrs: { width: "10", height: "10" } }] } }, "invalid-elem");
+    // Fuori da una defs un simbolo è estraneo.
+    rejects(USED, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem }, "invalid-elem");
+  });
+
+  it("un simbolo scrive l'origine dalla libreria subito dopo l'id, e overflow dopo la presentazione", () => {
+    const source = "Simboli/Impianti.svg#r00000004 0123456789abcdef";
+    const rect: Elem = { tag: "rect", attrs: { id: "o7a8b9c0d", width: "10", height: "10" } };
+    const elem: Elem = { tag: "symbol", attrs: { overflow: "visible", "fub:source": source, id: Z }, children: [rect] };
+    const out = apply(SceneEngine.open(ALONE), { op: "add", parent: "fub-defs", pos: { last: true }, elem });
+    expect(out.text).toContain(`    <symbol id="${Z}" fub:source="${source}" overflow="visible">\n      <rect id="o7a8b9c0d" width="10" height="10"/>\n    </symbol>\n`);
+  });
+
+  it("in un batch il simbolo viene prima delle sue istanze", () => {
+    const PLAIN = lf(ROOT, TITLE, PAPER, L1, R2, END_G, END);
+    const elem: Elem = { tag: "symbol", attrs: { id: Y, overflow: "visible" }, children: [{ tag: "circle", attrs: { id: "o9a8b7c6d", cx: "0", cy: "0", r: "20", fill: "#f0e442" } }] };
+    const add: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [elem] } };
+    const use: Op = { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "use", attrs: { id: "o1b2c3d4e", href: `#${Y}`, transform: "translate(200 150)" } } };
+    expect(SceneEngine.open(PLAIN).apply({ op: "batch", ops: [use, add] })).toMatchObject({ outcome: "rejected", index: 0, reason: "invalid-elem" });
+    const engine = SceneEngine.open(PLAIN);
+    expect(apply(engine, { op: "batch", ops: [add, use] }).text).toBe(lf(ROOT, TITLE, DEFS, ...symbol(Y, BULB), END_DEFS, PAPER, L1, R2, instance("o1b2c3d4e"), END_G, END));
+    expect(roleOf(engine, "o1b2c3d4e")).toBe("instance");
+  });
+
+  it("un simbolo non contiene mai sé stesso, nemmeno attraverso un altro", () => {
+    const self: Op = { op: "add", parent: Y, pos: { last: true }, elem: { tag: "use", attrs: { id: "o1b2c3d4e", href: `#${Y}` } } };
+    rejects(USED, self, "cycle");
+    rejects(USED, { op: "move", target: "o2b3c4d5e", parent: Y, pos: { last: true } }, "cycle");
+    // A usa B, e B non può usare A: né con una nuova istanza, né cambiando
+    // quella che ha, né spostandoci dentro un'istanza di A.
+    const TWO = lf(
+      ROOT,
+      TITLE,
+      DEFS,
+      ...symbol(Y, BULB),
+      ...symbol(Z, '      <use id="o3c4d5e6f" href="#r5e6f7a8b"/>', '      <use id="o4d5e6f7a" href="#r5e6f7a8b"/>'),
+      END_DEFS,
+      PAPER,
+      L1,
+      instance("o2b3c4d5e", Z),
+      END_G,
+      END,
+    );
+    rejects(TWO, { op: "add", parent: Y, pos: { last: true }, elem: { tag: "use", attrs: { id: "o1b2c3d4e", href: `#${Z}` } } }, "cycle");
+    rejects(TWO, { op: "set", id: "o3c4d5e6f", attrs: { href: `#${Z}` } }, "cycle");
+    rejects(TWO, { op: "move", target: "o2b3c4d5e", parent: Y, pos: { last: true } }, "cycle");
+    // Un'istanza di B dentro A, se B non usa più A, va bene.
+    const engine = SceneEngine.open(TWO);
+    apply(engine, {
+      op: "batch",
+      ops: [
+        { op: "remove", target: "o3c4d5e6f" },
+        { op: "remove", target: "o4d5e6f7a" },
+        { op: "move", target: "o2b3c4d5e", parent: Y, pos: { last: true } },
+      ],
+    });
+    expect(roleOf(engine, "o2b3c4d5e")).toBe("instance");
+  });
+
+  it("il contenuto di un simbolo si modifica come quello di un gruppo, e le istanze restano", () => {
+    const engine = SceneEngine.open(USED);
+    expect(apply(engine, { op: "set", id: "o9a8b7c6d", attrs: { fill: "#e69f00" } }).text).toBe(USED.replace('fill="#f0e442"', 'fill="#e69f00"'));
+    const out = apply(engine, { op: "add", parent: Y, pos: { last: true }, elem: R4_ELEM });
+    expect(out.text).toContain(`${BULB.replace("#f0e442", "#e69f00")}\n      <rect id="o4d5e6f7g" x="10" y="20" width="30" height="40"/>\n    </symbol>`);
+    expect(roleOf(engine, "o2b3c4d5e")).toBe("instance");
+    // Un'istanza si sposta e si trasforma come un oggetto.
+    expect(apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { transform: "translate(10 20) rotate(45)" } }).text).toContain('transform="translate(10 20) rotate(45)"');
+    rejects(USED, { op: "set", id: "o2b3c4d5e", attrs: { x: "10" } }, "invalid-elem");
+    rejects(USED, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#000000" } }, "invalid-elem");
+  });
+
+  it("un simbolo si sposta soltanto fra le defs della radice, e chi lo usa resta un'istanza", () => {
+    const other = ['  <defs id="defs2">', "  </defs>"];
+    const source = lf(ROOT, TITLE, DEFS, ...symbol(Y, BULB), END_DEFS, ...other, PAPER, L1, instance("o2b3c4d5e"), END_G, END);
+    rejects(source, { op: "move", target: Y, parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    const engine = SceneEngine.open(source);
+    const moved = apply(engine, { op: "move", target: Y, parent: "defs2", pos: { last: true } });
+    expect(moved.text).toBe(lf(ROOT, TITLE, '  <defs id="defs2">', ...symbol(Y, BULB), "  </defs>", PAPER, L1, instance("o2b3c4d5e"), END_G, END));
+    expect(roleOf(engine, Y)).toBe("symbol");
+    expect(roleOf(engine, "o2b3c4d5e")).toBe("instance");
+    const back = SceneEngine.open(moved.text);
+    expect(applied(back.apply(moved.inverse)).text).toBe(source);
+    expect(roleOf(back, Y)).toBe("symbol");
+  });
+
+  it("i simboli contano fra le risorse", () => {
+    const many = lf(ROOT, TITLE, DEFS, ...Array.from({ length: MAX_RESOURCES }, (_, k) => `    <symbol id="r${k.toString(16).padStart(8, "0")}" overflow="visible"/>`), END_DEFS, PAPER, L1, R2, END_G, END);
+    rejects(many, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { tag: "symbol", attrs: { id: Y, overflow: "visible" } } }, "limit");
+  });
+});
+
 describe("ciò che segue", () => {
   const DEFS = '  <defs id="fub-defs">';
   const END_DEFS = "  </defs>";

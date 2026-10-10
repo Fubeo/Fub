@@ -294,7 +294,7 @@ pub(crate) struct Bounds {
 /// Un accumulatore di [`Bounds`]. I punti non finiti si scartano: vengono da
 /// valori enormi moltiplicati fra loro, e un rettangolo infinito non dice
 /// niente.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct BoundsBuilder {
     bounds: Option<Bounds>,
 }

@@ -434,6 +434,7 @@ button.draw-isolation-crumb:hover {
 .draw-history,
 .draw-boards,
 .draw-library,
+.draw-symbols,
 .draw-access {
   gap: var(--space-2);
   padding: var(--space-2) 0;
@@ -775,6 +776,113 @@ button.draw-isolation-crumb:hover {
 }
 .draw-library-preview {
   color: var(--text);
+}
+
+/* I simboli: come le forme. Il riquadro ha un filo e, sotto il puntatore,
+   il fondo del passaggio; l'anteprima sta su un fondo chiaro come il foglio,
+   perché un simbolo ha i suoi colori. Il segno nell'angolo è una pastiglia:
+   il numero delle istanze in tinta tenue, la spunta e l'aggiornamento nel
+   colore della scelta, e sempre col loro segno. Un simbolo senza anteprima
+   ha al suo posto un riquadro tratteggiato. In sola lettura i riquadri
+   sbiadiscono e restano raggiungibili. */
+.draw-symbols-header,
+.draw-symbols-find,
+.draw-symbols-heading,
+.draw-symbols-note,
+.draw-symbols-empty,
+.draw-symbols-footer {
+  padding: 0 var(--space-4);
+}
+.draw-symbols-header {
+  gap: var(--space-1) var(--space-3);
+}
+.draw-symbols-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-symbols-count,
+.draw-symbols-note,
+.draw-symbols-empty,
+.draw-symbols-footer {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.draw-symbols-search {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.draw-symbols-group {
+  gap: var(--space-1);
+  padding-bottom: var(--space-3);
+}
+.draw-symbols-heading {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.draw-symbols-grid {
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+}
+.draw-symbols-tile {
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  transition:
+    background var(--duration-fast) var(--ease),
+    box-shadow var(--duration-fast) var(--ease),
+    transform var(--duration-fast) var(--ease);
+}
+.draw-symbols-tile:hover:not([aria-disabled="true"]) {
+  background: var(--overlay-hover);
+}
+.draw-symbols-tile[data-lifted] {
+  z-index: 1;
+  border-color: var(--accent);
+  background: var(--overlay-hover);
+  box-shadow: var(--shadow-md);
+  transform: scale(1.1);
+}
+.draw-symbols-tile[aria-disabled="true"] {
+  opacity: 0.4;
+}
+.draw-symbols-frame {
+  padding: var(--space-1);
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: #ffffff;
+  color: #000000;
+}
+.draw-symbols-tile[data-picture="none"] .draw-symbols-frame {
+  border: 1px dashed var(--border);
+  background: transparent;
+}
+.draw-symbols-name {
+  font-size: var(--text-xs);
+  line-height: 1.25;
+}
+.draw-symbols-badge {
+  min-width: 1.25rem;
+  margin: calc(var(--space-1) * -1);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25rem;
+}
+.draw-symbols-tile[data-present] .draw-symbols-badge,
+.draw-symbols-tile[data-stale] .draw-symbols-badge {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
 }
 
 /* La verifica dell'accessibilità: la gravità è un segno e una parola, mai

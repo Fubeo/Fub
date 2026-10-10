@@ -5,7 +5,7 @@
 // stelle stanno in `__fixtures__/scene-shapes/cases.json`, per tutti e due.
 
 import { describe, expect, it } from "vitest";
-import type { Role } from "./analysis";
+import type { Role, Summary } from "./analysis";
 import { MAX_DEPTH } from "./classify";
 import { at, doc, elements, findings, first, foreign, load, role, text } from "./test-support";
 import shapes from "../../../__fixtures__/scene-shapes/cases.json";
@@ -1271,5 +1271,156 @@ describe("il testo in area e su tracciato", () => {
   it("il riquadro di un testo su tracciato è quello del suo tracciato", () => {
     const scene = load(doc(`<defs><path id="r1" d="M10 20 L60 20 L60 70"/></defs><text transform="translate(5 5)"><textPath href="#r1">a</textPath></text>`));
     expect(scene.summary.bbox).toEqual({ x: 15, y: 25, width: 50, height: 50 });
+  });
+});
+
+describe("i simboli", () => {
+  /// Un simbolo `id` con `body` dentro.
+  const symbol = (id: string, body = "", attrs = ""): string => `<symbol id="${id}" overflow="visible"${attrs}>${body}</symbol>`;
+  const RECT = '<rect width="10" height="10" fill="#000000"/>';
+
+  it("un simbolo è un symbol con id e overflow=visible in una defs della radice, coi figli giudicati uno per uno", () => {
+    const scene = load(doc(`<defs>${symbol("s1", `<title>Lampadina</title>${RECT}<switch/>`, ' fub:source="Simboli/Casa.svg#s1 0123456789abcdef"')}</defs>`));
+    expect(role(scene, [0, 0])).toBe("symbol");
+    expect(role(scene, [0, 0, 0])).toBe("title");
+    expect(role(scene, [0, 0, 1])).toBe("rect");
+    expect(role(scene, [0, 0, 2])).toBeNull();
+    expect(at(scene, [0, 0])!.title).toBe("Lampadina");
+    expect(at(scene, [0, 0])!.source).toBe("Simboli/Casa.svg#s1 0123456789abcdef");
+    expect(at(scene, [0, 0])!.tags).toBeDefined();
+    const one = (body: string): Role | null => role(load(doc(`<defs>${body}</defs>`)), [0, 0]);
+    expect(one('<symbol id="s1" overflow=" visible "/>')).toBe("symbol");
+    expect(one('<symbol id="s1" overflow="visible" fub:nota="x"/>')).toBe("symbol");
+    for (const body of [
+      '<symbol id="s1"/>',
+      '<symbol id="s1" overflow="hidden"/>',
+      '<symbol id="" overflow="visible"/>',
+      '<symbol overflow="visible"/>',
+      '<symbol id="s1" overflow="visible" viewBox="0 0 10 10"/>',
+      '<symbol id="s1" overflow="visible" x="0"/>',
+      '<symbol id="s1" overflow="visible" transform="scale(2)"/>',
+      '<symbol id="s1" overflow="visible" fill="#000000"/>',
+      '<symbol id="s1" overflow="visible" xlink:href="#s1"/>',
+    ]) {
+      expect(one(body), body).toBeNull();
+    }
+    // Fuori da una defs della radice è estraneo.
+    expect(first(symbol("s1", RECT))).toBeNull();
+    expect(role(load(doc(`<g>${symbol("s1", RECT)}</g>`)), [0, 0])).toBeNull();
+    expect(role(load(doc(`<g><defs>${symbol("s1", RECT)}</defs></g>`)), [0, 0])).toBeNull();
+  });
+
+  it("un simbolo che contiene sé stesso è estraneo, anche attraverso altri simboli", () => {
+    const roles = (defs: string): Array<Role | null> => {
+      const scene = load(doc(`<defs>${defs}</defs>`));
+      return [0, 1, 2].map((k) => (at(scene, [0, k]) ?? null)?.role ?? null);
+    };
+    // Una catena senza cicli, scritta in qualunque ordine.
+    expect(roles(symbol("s1", '<use href="#s2"/>') + symbol("s2", '<use href="#s3"/>') + symbol("s3", RECT))).toEqual(["symbol", "symbol", "symbol"]);
+    // Sé stesso, e due a vicenda; chi usa uno di loro resta, la sua istanza
+    // no.
+    expect(roles(symbol("s1", '<use href="#s1"/>'))).toEqual([null, null, null]);
+    const scene = load(doc(`<defs>${symbol("s1", '<use href="#s2"/>')}${symbol("s2", '<g><use xlink:href="#s1"/></g>')}${symbol("s3", `${RECT}<use href="#s1"/>`)}</defs>`));
+    expect(role(scene, [0, 0])).toBeNull();
+    expect(role(scene, [0, 1])).toBeNull();
+    expect(role(scene, [0, 2])).toBe("symbol");
+    expect(role(scene, [0, 2, 0])).toBe("rect");
+    expect(role(scene, [0, 2, 1])).toBeNull();
+    // Anche un riferimento che non è un'istanza fa il ciclo.
+    expect(roles(symbol("s1", '<rect width="10" height="10" fill="url(#s2) #000000"/>') + symbol("s2", '<use href="#s1"/>'))).toEqual([null, null, null]);
+  });
+
+  it("una catena lunga di simboli si legge senza ricorsione", () => {
+    const length = 3000;
+    const defs = Array.from({ length }, (_, k) => symbol(`s${k}`, k + 1 < length ? `<use href="#s${k + 1}" transform="translate(1 0)"/>` : RECT)).join("");
+    const scene = load(doc(`<defs>${defs}</defs><use href="#s0"/>`));
+    expect(role(scene, [0, length - 1])).toBe("symbol");
+    expect(role(scene, [1])).toBe("instance");
+    expect(scene.summary.bbox).toEqual({ x: length - 1, y: 0, width: 10, height: 10 });
+  });
+
+  it("un id già preso da una risorsa resta della risorsa", () => {
+    const scene = load(doc(`<defs><linearGradient id="s1"><stop offset="0" stop-color="#000000"/></linearGradient>${symbol("s1", RECT)}</defs><use href="#s1"/>`));
+    expect(role(scene, [0, 0])).toBe("resource");
+    expect(role(scene, [0, 1])).toBeNull();
+    expect(role(scene, [1])).toBeNull();
+    expect(findings(scene).map((d) => d.code)).toContain("S003");
+  });
+
+  it("un'istanza è un use verso un simbolo, coi suoi attributi e soltanto titoli e descrizioni", () => {
+    const RESOURCES =
+      '<clipPath id="c1"><rect width="5" height="5"/></clipPath><mask id="m1"><rect width="5" height="5" fill="#ffffff"/></mask><filter id="f1"><feGaussianBlur stdDeviation="1"/></filter>';
+    const instance = (use: string): Role | null => role(load(doc(`<defs>${RESOURCES}${symbol("s1", RECT)}</defs>${use}`)), [1]);
+    for (const use of [
+      '<use href="#s1"/>',
+      '<use xlink:href="#s1"/>',
+      '<use id="o1" href="#s1" transform="translate(10 20) rotate(30)" opacity="0.5" display="none" style="mix-blend-mode: multiply"/>',
+      '<use href="#s1" clip-path="url(#c1)" mask="url(#m1)" filter="url(#f1)"/>',
+      '<use href="#s1" fub:nota="x">\n  <title>Lampada</title>\n  <desc>In cucina</desc>\n</use>',
+    ]) {
+      expect(instance(use), use).toBe("instance");
+    }
+    for (const use of [
+      "<use/>",
+      '<use x="10" href="#s1"/>',
+      '<use width="10" href="#s1"/>',
+      '<use fill="#ff0000" href="#s1"/>',
+      '<use stroke="#ff0000" href="#s1"/>',
+      '<use font-size="12" href="#s1"/>',
+      '<use style="isolation: isolate" href="#s1"/>',
+      '<use href="#s1" xlink:href="#s1"/>',
+      '<use href="#c1"/>',
+      '<use href="#s9"/>',
+      '<use href="s1"/>',
+      '<use href="Simboli.svg#s1"/>',
+      '<use href="#s1" clip-path="url(#m1)"/>',
+      `<use href="#s1">${RECT}</use>`,
+      '<use href="#s1">testo</use>',
+    ]) {
+      expect(instance(use), use).toBeNull();
+    }
+    // Il simbolo dell'istanza, da `href` o da `xlink:href`.
+    const scene = load(doc(`<defs>${symbol("s1", RECT)}</defs><use href="#s1"/><a href="note.md"><use xlink:href="#s1"/></a>`));
+    expect(at(scene, [1])!.symbol).toBe("s1");
+    expect(at(scene, [2, 0])!.symbol).toBe("s1");
+    expect(at(scene, [2, 0])!.role).toBe("instance");
+    // In una defs un'istanza è estranea.
+    expect(role(load(doc(`<defs>${symbol("s1", RECT)}<use href="#s1"/></defs>`)), [0, 1])).toBeNull();
+  });
+
+  it("il riquadro di un'istanza è quello del suo simbolo, e il simbolo si conta una volta", () => {
+    const summary = (body: string): Summary => load(doc(body)).summary;
+    const scene = load(doc(`<use href="#s1" transform="translate(100 50) scale(2)"/><defs>${symbol("s1", RECT)}</defs>`));
+    expect(scene.summary.bbox).toEqual({ x: 100, y: 50, width: 20, height: 20 });
+    // Il contenuto del simbolo nelle sue coordinate non conta, e nemmeno
+    // un'istanza nascosta o di un simbolo vuoto.
+    expect(summary(`<defs>${symbol("s1", RECT)}${symbol("s2")}</defs>`).bbox).toBeNull();
+    expect(summary(`<defs>${symbol("s1", RECT)}</defs><use href="#s1" display="none"/><g display="none"><use href="#s1"/></g>`).bbox).toBeNull();
+    expect(summary(`<defs>${symbol("s2")}</defs><use href="#s2"/>`).bbox).toBeNull();
+    // Un simbolo dentro un altro, ruotato.
+    expect(summary(`<defs>${symbol("s1", RECT)}${symbol("s2", '<use href="#s1" transform="rotate(90)"/>')}</defs><use href="#s2" transform="translate(50 50)"/>`).bbox).toEqual({
+      x: 40,
+      y: 50,
+      width: 10,
+      height: 10,
+    });
+    const counts = summary(`<defs>${symbol("s1", `${RECT}<text x="0" y="0"><tspan x="0" dy="0">a</tspan></text>`)}</defs><use href="#s1"/><use href="#s1"/>`).counts;
+    expect([counts.shapes, counts.texts]).toEqual([1, 1]);
+  });
+
+  it("il contenuto di un simbolo non si confronta col fondo, e un'istanza copre come un'immagine", () => {
+    const codes = (body: string): string[] => findings(load(doc(body))).map((d) => d.code);
+    const WHITE = (x: number, y: number, size = 16): string => `<text x="${x}" y="${y}" font-size="${size}" fill="#ffffff"><tspan x="${x}" dy="0">Luce</tspan></text>`;
+    // Un testo bianco sul bianco della carta: S009.
+    expect(codes(WHITE(10, 10))).toEqual(["S009"]);
+    // Nel simbolo no, ma un testo troppo piccolo resta.
+    expect(codes(`<defs>${symbol("s1", WHITE(10, 10))}</defs>`)).toEqual([]);
+    expect(codes(`<defs>${symbol("s1", WHITE(10, 10, 6))}</defs>`)).toEqual(["S013"]);
+    // Sopra un'istanza il fondo non si sa; accanto sì.
+    const icon = `<defs>${symbol("s1", '<rect width="40" height="40" fill="#0072b2"/>')}</defs><use href="#s1" transform="translate(0 0)"/>`;
+    expect(codes(`${icon}${WHITE(10, 20)}`)).toEqual([]);
+    expect(codes(`${icon}${WHITE(60, 20)}`)).toEqual(["S009"]);
+    // Un'istanza dopo il testo non gli sta sotto.
+    expect(codes(`<defs>${symbol("s1", '<rect width="40" height="40" fill="#0072b2"/>')}</defs>${WHITE(10, 20)}<use href="#s1"/>`)).toEqual(["S009"]);
   });
 });

@@ -24,7 +24,9 @@
 // toglie le fusioni all'export, `sfocatura` vi sfoca gli effetti un decimo
 // di meno, `angolo` vi gira di 5° le righe diagonali di una campitura,
 // `finestra` mostra nella Lettura il disegno intero al posto della sua
-// finestra, `vault` toglie alla Lettura i caratteri del vault.
+// finestra, `vault` toglie alla Lettura i caratteri del vault, `taglio`
+// toglie ai simboli dell'export `overflow="visible"`, e il browser li taglia
+// al riquadro dell'istanza.
 //
 // Una scena coi caratteri del vault (`vault`) li ha da una porta del banco:
 // la famiglia «Banco» coi file variabili di JetBrains Mono che l'app
@@ -192,7 +194,9 @@ async function main(): Promise<void> {
           ? text.replace(/stdDeviation="([^"]*)"/g, (_, value: string) => `stdDeviation="${Number(value) * 0.9}"`)
           : variant === "angolo"
             ? text.replace('patternTransform="rotate(-45)"', 'patternTransform="rotate(-40)"')
-            : text;
+            : variant === "taglio"
+              ? text.replace(/ overflow="visible"/g, "")
+              : text;
   const png = await rasterize(await selfContained(out, async () => null, 0, fonts));
   if (png === null) throw new Error(`il PNG di ${found.id} non si fa`);
   await picture("export", png);

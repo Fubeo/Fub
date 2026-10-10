@@ -101,9 +101,9 @@ export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 
 export type PaintId = "fill" | "stroke";
 export type ChoiceId = "dash" | "cap" | "join" | "blend" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
-/// I campi a menu: gli stili del disegno, grafico e di testo, e le punte
-/// delle linee, all'inizio e alla fine.
-export type MenuId = "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
+/// I campi a menu: il simbolo delle istanze, gli stili del disegno, grafico
+/// e di testo, e le punte delle linee, all'inizio e alla fine.
+export type MenuId = "symbol" | "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar" | "isolate";
 export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
 
@@ -414,6 +414,7 @@ const SPECS: readonly Spec[] = [
   { id: "height", kind: "number", section: "place", column: "2" },
   { id: "ratio", kind: "press", section: "place", column: "3" },
   { id: "rotation", kind: "number", section: "place", column: "1" },
+  { id: "symbol", kind: "menu", section: "shape", column: "all" },
   { id: "shape", kind: "segment", section: "shape", column: "all" },
   { id: "count", kind: "number", section: "shape", column: "1" },
   { id: "inner", kind: "number", section: "shape", column: "2" },

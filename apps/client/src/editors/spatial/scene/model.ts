@@ -24,6 +24,7 @@ import {
   describe,
   elementItem,
   localGradients,
+  withArrivingSymbols,
   NO_RESOURCES,
   referencesOf,
   resourceIndex,
@@ -114,8 +115,8 @@ export interface LeafNode extends Placed {
   readonly openLength: number;
 }
 
-/// La radice, un livello, un gruppo o un collegamento: i figli si
-/// classificano uno per uno.
+/// La radice, un livello, un gruppo, un collegamento, una `defs` o un
+/// simbolo: i figli si classificano uno per uno.
 export interface ContainerNode extends Placed {
   readonly kind: "container";
   /// Il tag d'apertura; l'elemento intero se è autochiuso.
@@ -496,13 +497,16 @@ export function parseSequence(raw: string, scope: NamespaceScope): Sequence | nu
 
 /// I pezzi di una sequenza letta, come figli di `parent`, coi riferimenti
 /// risolti da `resolve`. In una `defs` le sfumature della sequenza valgono
-/// anche per le risorse che le seguono.
+/// anche per le risorse che le seguono, e i suoi simboli per tutta la
+/// sequenza; nella radice valgono i simboli delle sue `defs`.
 export function buildSequence(sequence: Sequence, parent: ContainerNode, resolve: Resolve = NO_RESOURCES): Part[] {
   let inner = resolve;
-  if (placeOf(parent) === "defs") {
+  const place = placeOf(parent);
+  if (place === "defs") {
     const local = localGradients(sequence.doc, sequence.id);
     if (local.size > 0) inner = (id) => local.get(id) ?? resolve(id);
   }
+  inner = withArrivingSymbols(sequence.doc, sequence.doc.children(sequence.id), place, inner);
   const parts = new Builder(sequence.doc, inner).parts(sequence.id, parent);
   const adopt = (container: ContainerNode): void => {
     for (const part of container.parts) {
@@ -522,7 +526,9 @@ export function buildSequence(sequence: Sequence, parent: ContainerNode, resolve
 /// Il nodo di un frammento letto, come figlio di `parent`, coi riferimenti
 /// risolti da `resolve`.
 export function buildFragment(fragment: Fragment, parent: ContainerNode, resolve: Resolve = NO_RESOURCES): ElementPart {
-  const node = new Builder(fragment.doc, resolve).element(fragment.id, parent);
+  // Un simbolo che entra in una `defs`, anche con la sua, è un simbolo da sé.
+  const inner = withArrivingSymbols(fragment.doc, [fragment.id], placeOf(parent), resolve);
+  const node = new Builder(fragment.doc, inner).element(fragment.id, parent);
   const adopt = (container: ContainerNode): void => {
     for (const part of container.parts) {
       if (typeof part === "string") continue;
@@ -780,7 +786,7 @@ export function isSvgElement(node: ElementPart, local: string): boolean {
 
 /// Il testo del primo `title` fra i figli di `container`, come lo legge la
 /// lettura intera; `null` se non ne ha. Un `title` estraneo si rilegge.
-function titleOf(container: ContainerNode): string | null {
+export function titleOf(container: ContainerNode): string | null {
   for (const part of container.parts) {
     if (typeof part === "string" || part.kind === "other" || !isSvgElement(part, "title")) continue;
     if (part.details?.text !== undefined) return part.details.text;

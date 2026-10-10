@@ -245,6 +245,28 @@
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* «Aggiorna dalla libreria»: il simbolo prima e dopo, sullo stesso fondo
+   chiaro dei riquadri del pannello, col nome sotto in tinta tenue. */
+.modale .draw-symbol-update-message {
+  margin: 0;
+}
+.modale .draw-symbol-update-pair {
+  gap: var(--space-3);
+}
+.modale .draw-symbol-update-side {
+  gap: var(--space-1);
+}
+.modale .draw-symbol-update-frame {
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: #000000;
+}
+.modale .draw-symbol-update-caption {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 /* La finestra «Guide»: le righe in una tabella che scorre, coi titoli delle
    colonne fermi in cima; sotto, i pulsanti che aggiungono una guida o le
    tolgono tutte, sempre in vista. Ogni comando misura almeno 44 px. */

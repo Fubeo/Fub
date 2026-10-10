@@ -14,6 +14,13 @@
 // forma il cui colore non si sa. Come per la carta, il CSS e i blocchi
 // estranei non contano, e nemmeno i tratti a mano libera, che sono sottili.
 //
+// Un simbolo (formato della scena, simboli) si guarda una volta, nelle sue
+// coordinate: il suo contenuto non sta dove si vede, quindi non dipinge e non
+// si confronta col fondo, ma un'immagine senza descrizione (S012) e un testo
+// troppo piccolo nelle coordinate del simbolo (S013) restano. Un'istanza
+// copre ciò che ha sotto col riquadro del suo simbolo, come un'immagine: il
+// fondo che dà non si sa.
+//
 // Dove si guarda:
 //
 // - **un testo**, una volta per riga: nel punto d'inizio del `tspan`, alzato
@@ -167,6 +174,10 @@ export interface Measures {
   readonly confusions: readonly Confusion[];
 }
 
+/// Il rettangolo che non contiene niente: il posto di un'istanza finché il
+/// riquadro del suo simbolo non si sa.
+const NOWHERE: Bounds = { min: [Infinity, Infinity], max: [-Infinity, -Infinity] };
+
 /// Una figura dipinta: dove sta e di che colore.
 class Painted {
   /// I poligoni nella radice, calcolati alla prima domanda.
@@ -240,6 +251,9 @@ interface Check {
 /// I controlli su come il disegno si legge, durante la classificazione.
 export class Legibility {
   private readonly painted: Painted[] = [];
+  /// Le istanze dipinte: il loro posto fra le figure, il simbolo e la
+  /// matrice. Il riquadro del simbolo si sa alla fine.
+  private readonly instances: Array<readonly [number, string, Matrix]> = [];
   private readonly checks: Check[] = [];
   /// S012 e S013, che non dipendono dal fondo.
   private readonly found: Diagnostic[] = [];
@@ -271,10 +285,13 @@ export class Legibility {
   ): void {
     const m = context.matrix;
     const at = (name: string): number => len(element, name) ?? 0;
+    // Il contenuto di un simbolo non sta dove si vede: non dipinge e non si
+    // confronta col fondo.
+    const inSymbol = context.symbol !== null;
     let shape: Segment[];
     switch (role) {
       case "stroke": {
-        if (stroke !== null && stroke.tool === "pen") {
+        if (stroke !== null && stroke.tool === "pen" && !inSymbol) {
           const color = context.fill();
           if (color !== null) this.check(span, { kind: "pen", color, probes: outlineProbes(element, m) });
         }
@@ -285,7 +302,7 @@ export class Legibility {
         return;
       case "image":
         if (!decorative(element) && !described(doc, element)) this.found.push(diagnostic("S012", span));
-        this.paint(rectPath(at("x"), at("y"), at("width"), at("height"), 0, 0), m, null, span);
+        if (!inSymbol) this.paint(rectPath(at("x"), at("y"), at("width"), at("height"), 0, 0), m, null, span);
         return;
       case "rect": {
         const [rx, ry] = radii(element);
@@ -317,10 +334,20 @@ export class Legibility {
       default:
         return;
     }
+    if (inSymbol) return;
     const fill = context.fillPaint();
     // Un riempimento ignoto copre come un'immagine.
     if (fill === null) this.paint(shape, m, null, span);
     else if (fill !== "none" && fill[1] > 0) this.paint(shape, m, fill, span);
+  }
+
+  /// Guarda un'istanza visibile fuori dai simboli, del simbolo `symbol` con
+  /// la matrice `matrix`: copre ciò che ha sotto col riquadro del simbolo,
+  /// come un'immagine, perché il contenuto del simbolo non si guarda in ogni
+  /// istanza.
+  instance(symbol: string, matrix: Matrix, span: Span): void {
+    this.instances.push([this.painted.length, symbol, matrix]);
+    this.painted.push(new Painted([], matrix, NOWHERE, null, span));
   }
 
   private check(span: Span, subject: Subject): void {
@@ -392,7 +419,7 @@ export class Legibility {
       this.found.push(diagnostic("S013", span, shown(smallest)));
       this.sizes.push({ span, scale, line: ownSize });
     }
-    if (lines.length > 0) this.check(span, { kind: "text", lines });
+    if (lines.length > 0 && context.symbol === null) this.check(span, { kind: "text", lines });
   }
 
   /// Le righe di un testo, ognuna col punto dove comincia e la direzione in
@@ -423,8 +450,18 @@ export class Legibility {
 
   /// Chiude i controlli: S009 per ogni oggetto che contrasta poco col suo
   /// fondo, S017 per ogni colore di codice confuso con un altro, poi S012 e
-  /// S013. `paper` è il colore della carta, `null` se non si sa.
-  finish(paper: Rgb | null, diagnostics: Diagnostic[]): void {
+  /// S013. `paper` è il colore della carta, `null` se non si sa; `boxes` il
+  /// riquadro di ogni simbolo, nelle sue coordinate.
+  finish(paper: Rgb | null, boxes: ReadonlyMap<string, Bounds | null>, diagnostics: Diagnostic[]): void {
+    for (const [at, symbol, m] of this.instances) {
+      const box = boxes.get(symbol) ?? null;
+      if (box === null) continue;
+      const shape = rectPath(box.min[0], box.min[1], box.max[0] - box.min[0], box.max[1] - box.min[1], 0, 0);
+      const bounds = new BoundsBuilder();
+      bounds.path(shape, m);
+      const covered = bounds.finish();
+      if (covered !== null) this.painted[at] = new Painted(shape, m, covered, null, this.painted[at]!.span);
+    }
     for (const check of this.checks) {
       const backdrop = (p: Point): Rgb | null => this.backdrop(paper, check.under, p);
       let worst: { readonly ratio: number; readonly measured: Contrast } | null = null;

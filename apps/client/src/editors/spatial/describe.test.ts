@@ -357,6 +357,29 @@ group("i connettori", () => {
     expect(nodes[2]!.kind).toBeNull();
   });
 
+  it("un'istanza si chiama come il suo simbolo, e col suo titolo il simbolo dice che cos'è", () => {
+    const nodes = nodesOf(
+      // L'istanza viene prima della `defs`: il nome c'è lo stesso.
+      '<use id="o1" href="#s1"/>' +
+        '<defs><symbol id="s1" overflow="visible"><title>Presa</title><circle id="o9" r="2"/></symbol>' +
+        '<symbol id="s2" overflow="visible"><rect id="o8" width="2" height="2"/></symbol></defs>' +
+        '<use id="o2" href="#s1"><title>Cucina</title></use>' +
+        '<use id="o3" href="#s1"><title>Presa</title></use>' +
+        '<use id="o4" href="#s2"/>' +
+        connector("c1", { from: "o2", to: "o1" }),
+    );
+    // Il contenuto dei simboli non sta nell'albero: non è sul foglio.
+    expect(labels(nodes)).toEqual([
+      "Istanza di simbolo «Presa»",
+      "Presa «Cucina»",
+      "Istanza di simbolo «Presa»",
+      "Istanza di simbolo",
+      "Connettore da «Cucina» a «Presa»",
+    ]);
+    expect(nodes[1]!.kind).toBe("Presa");
+    expect(nodes[2]!.kind).toBeNull();
+  });
+
   it("il gruppo con un titolo suo lo tiene, e una forma con l'etichetta vuota non cambia nome", () => {
     const nodes = nodesOf(
       '<g id="g1"><title>Passo uno</title>' + shaped("o1", "Decisione") + inside("t1", "o1", "Sì") + "</g>" +

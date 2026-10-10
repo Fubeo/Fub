@@ -4160,6 +4160,216 @@ describe("gli stili del documento, dal livello Standard", () => {
   });
 });
 
+describe("i simboli, dall'Esperto", () => {
+  const S = "os1s1s1s1";
+  const P = "op2p2p2p2";
+  const I = "oi1i1i1i1";
+  const J = "oj2j2j2j2";
+  const A = "oa1a1a1a1";
+  const B = "ob2b2b2b2";
+  /// La «Presa», un quadrato blu attorno all'origine, e il «Punto»; due
+  /// istanze della presa in alto e due rettangoli sotto.
+  const SYMBOLS = doc(
+    '<title>Prova</title><defs id="fub-defs"><symbol id="rpresa000" overflow="visible"><title>Presa</title>' +
+      `<rect id="${S}" x="-10" y="-10" width="20" height="20" fill="#0072b2"/></symbol>` +
+      `<symbol id="rpunto000" overflow="visible"><title>Punto</title><circle id="${P}" r="5" fill="#000000"/></symbol></defs>` +
+      `${LAYER}<use id="${I}" transform="translate(20 20)" href="#rpresa000"/><use id="${J}" transform="translate(80 20)" href="#rpresa000"/>` +
+      `<rect id="${A}" x="10" y="60" width="20" height="20" fill="#d55e00"/><rect id="${B}" x="50" y="60" width="20" height="20" fill="#000000"/></g>`,
+  );
+  const barButton = (label: string): HTMLButtonElement => host.querySelector<HTMLButtonElement>(`.draw-arrange button[aria-label="${label}"]`)!;
+  const menu = (): HTMLButtonElement[] => {
+    const open = document.querySelectorAll<HTMLElement>(".context-menu");
+    return [...open[open.length - 1]!.querySelectorAll<HTMLButtonElement>('[role="menuitem"], [role="menuitemradio"]')];
+  };
+  const labelOf = (entry: HTMLElement): string => entry.querySelector(".menu-label")!.textContent ?? "";
+  const item = (label: string): HTMLButtonElement => menu().find((entry) => labelOf(entry) === label)!;
+  const rightClick = (x: number, y: number): void => {
+    surface().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
+  };
+  const isolation = (): HTMLElement => host.querySelector<HTMLElement>(".draw-isolation")!;
+  const crumbs = (): string[] => [...isolation().querySelectorAll(".draw-isolation-crumb")].map((crumb) => crumb.textContent ?? "");
+  const painted = (id: string): SVGElement => host.querySelector<SVGElement>(`[data-scene-id="${id}"]`)!;
+  const doubleTap = (x: number, y: number): void => {
+    clock += 1000;
+    drag([[x, y]]);
+    drag([[x, y]]);
+  };
+  const face = (id: string): HTMLButtonElement => property(id).querySelector<HTMLButtonElement>(".draw-properties-menu")!;
+  const pick = (id: string, label: string): void => {
+    face(id).click();
+    menu().find((entry) => labelOf(entry) === label)!.click();
+  };
+  const askInput = (id: string): HTMLInputElement => property(id).querySelector<HTMLInputElement>(".draw-properties-ask input")!;
+  const element = (id: string): string => new RegExp(`<[a-z]+ id="${id}"[^>]*>`).exec(editor.engine.text)?.[0] ?? "";
+
+  afterEach(() => {
+    closeContextMenu();
+    for (const open of document.querySelectorAll(".context-menu")) open.remove();
+  });
+
+  it("«Crea simbolo» mette gli oggetti scelti in un simbolo nuovo, e un'istanza al loro posto, in un passo", () => {
+    mount(SYMBOLS, { level: "standard" });
+    editor.select([A, B]);
+    expect(barButton("Crea simbolo").hidden).toBe(true);
+    editor.setLevel("expert");
+    expect(barButton("Crea simbolo").hidden).toBe(false);
+    expect(barButton("Scollega dal simbolo").hidden).toBe(true);
+    barButton("Crea simbolo").click();
+    const made = /<symbol id="(r[a-z0-9]{8})" overflow="visible">\s*<title>Simbolo<\/title>/.exec(editor.engine.text);
+    expect(made).not.toBeNull();
+    const instance = editor.selection[0]!;
+    expect(editor.selection).toHaveLength(1);
+    expect(element(instance)).toBe(`<use id="${instance}" transform="matrix(1 0 0 1 40 70)" href="#${made![1]}"/>`);
+    expect(spoken()).toBe("Simbolo «Simbolo» creato: al posto degli oggetti scelti c’è una sua istanza.");
+    expect(barButton("Scollega dal simbolo").hidden).toBe(false);
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Simbolo dalla selezione.");
+    expect(editor.engine.text).toBe(SYMBOLS);
+  });
+
+  it("due tocchi su un'istanza aprono il suo simbolo dove sta: cambiarlo cambia tutte le istanze, Esc torna all'istanza", () => {
+    mount(SYMBOLS, { level: "expert" });
+    editor.setTool("select");
+    doubleTap(20, 20);
+    expect(editor.selection).toEqual([S]);
+    expect(spoken()).toBe("Simbolo «Presa»: cambiarlo cambia tutte le sue istanze. Si sceglie solo qui dentro; Esc esce. Rettangolo, Blu, 1 di 1.");
+    expect(isolation().hidden).toBe(false);
+    expect(isolation().getAttribute("aria-label")).toBe("Simbolo in modifica");
+    expect(isolation().querySelector("button.draw-button")!.getAttribute("aria-label")).toBe("Esci dal simbolo");
+    expect(crumbs()).toEqual(["Livello «Livello 1»", "Simbolo «Presa»"]);
+    // L'altra istanza e il resto si attenuano; quella in cui si è no.
+    expect(painted(J).style.opacity).toBe("0.4");
+    expect(painted(A).style.opacity).toBe("0.4");
+    expect(painted(I).style.opacity).toBe("");
+    expect(formatIssues(checkAccessibility(host))).toBe("");
+    // Si sposta il quadrato nelle coordinate del simbolo: tutte e due le
+    // istanze lo mostrano spostato.
+    clock += 1000;
+    drag([[20, 20], [25, 20], [30, 20]]);
+    expect(element(S)).toBe(`<rect id="${S}" x="-10" y="-10" width="20" height="20" fill="#0072b2" transform="matrix(1 0 0 1 10 0)"/>`);
+    expect(editor.selection).toEqual([S]);
+    key("Escape");
+    expect(editor.selection).toEqual([I]);
+    expect(spoken()).toBe("Fuori dal simbolo: si sceglie in tutto il disegno.");
+    expect(isolation().hidden).toBe(true);
+    expect(painted(J).style.opacity).toBe("");
+    editor.undo();
+    expect(editor.engine.text).toBe(SYMBOLS);
+  });
+
+  it("un'istanza si sposta, si ridimensiona e si gira come un oggetto, col suo `transform`", () => {
+    mount(SYMBOLS, { level: "expert" });
+    editor.setTool("select");
+    clock += 1000;
+    drag([[80, 20], [85, 25], [90, 30]]);
+    expect(editor.selection).toEqual([J]);
+    expect(element(J)).toBe(`<use id="${J}" transform="matrix(1 0 0 1 90 30)" href="#rpresa000"/>`);
+    key("Enter");
+    enter(propertyInput("width"), "40");
+    // Il riquadro resta dove comincia, a sinistra.
+    expect(element(J)).toBe(`<use id="${J}" transform="matrix(2 0 0 1 100 30)" href="#rpresa000"/>`);
+    enter(propertyInput("rotation"), "90");
+    // Gira attorno al centro, che resta.
+    expect(element(J)).toBe(`<use id="${J}" transform="matrix(0 2 -1 0 100 30)" href="#rpresa000"/>`);
+    // Il simbolo non cambia: soltanto l'istanza.
+    expect(editor.engine.text).toContain(`<rect id="${S}" x="-10" y="-10" width="20" height="20" fill="#0072b2"/>`);
+  });
+
+  it("dal menu: «Modifica simbolo» con un'istanza sola, e ciò che si disegna dentro entra nel simbolo", () => {
+    mount(SYMBOLS, { level: "expert" });
+    editor.setTool("select");
+    rightClick(80, 20);
+    expect(editor.selection).toEqual([J]);
+    const entries = menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled")]);
+    expect(entries).toContainEqual(["Crea simbolo", null]);
+    expect(entries).toContainEqual(["Scollega dal simbolo", null]);
+    expect(entries).toContainEqual(["Modifica simbolo", null]);
+    expect(entries.map(([label]) => label)).not.toContain("Isola il gruppo");
+    item("Modifica simbolo").click();
+    expect(crumbs()).toEqual(["Livello «Livello 1»", "Simbolo «Presa»"]);
+    rightClick(80, 20);
+    expect(menu().map(labelOf)).toContain("Esci dal simbolo");
+    closeContextMenu();
+    // Un rettangolo tirato da (90, 30) a (100, 40) sta nel simbolo, nelle
+    // sue coordinate.
+    editor.setTool("rect");
+    drag([[90, 30], [95, 35], [100, 40]]);
+    expect(editor.engine.text).toMatch(new RegExp(`<rect id="${S}"[^>]*/>\\s*<rect id="o[a-z0-9]{8}" x="10" y="10" width="10" height="10"[^>]*/>\\s*</symbol>`));
+    expect(isolation().hidden).toBe(false);
+    editor.undo();
+    expect(editor.engine.text).toBe(SYMBOLS);
+  });
+
+  it("la riga «Simbolo» del pannello scambia il simbolo, lo rinomina e scollega l'istanza", () => {
+    mount(SYMBOLS, { level: "expert" });
+    editor.select([I]);
+    key("Enter");
+    expect(face("symbol").getAttribute("aria-label")).toBe("Simbolo: Presa");
+    face("symbol").click();
+    expect(menu().map((entry) => [labelOf(entry), entry.getAttribute("aria-disabled") === "true"])).toEqual([
+      ["Presa", false],
+      ["Punto", false],
+      ["Modifica simbolo", false],
+      ["Rinomina simbolo…", false],
+      ["Scollega dal simbolo", false],
+    ]);
+    expect(formatIssues(checkAccessibility(document.querySelector<HTMLElement>(".context-menu")!))).toBe("");
+    closeContextMenu();
+    pick("symbol", "Punto");
+    expect(element(I)).toBe(`<use id="${I}" transform="translate(20 20)" href="#rpunto000"/>`);
+    expect(spoken()).toBe("1 istanza ora mostra «Punto».");
+    expect(face("symbol").getAttribute("aria-label")).toBe("Simbolo: Punto");
+    editor.undo();
+    expect(spoken()).toBe("Annullato: Scambio del simbolo.");
+    // Un nome che un altro simbolo ha già non va.
+    pick("symbol", "Rinomina simbolo…");
+    expect(askInput("symbol").value).toBe("Presa");
+    enter(askInput("symbol"), "punto");
+    expect(askInput("symbol").getAttribute("aria-invalid")).toBe("true");
+    expect(property("symbol").textContent).toContain("C’è già un simbolo «punto»: scegline un altro.");
+    enter(askInput("symbol"), "Presa doppia");
+    expect(editor.engine.text).toContain("<title>Presa doppia</title>");
+    expect(spoken()).toBe("Il simbolo ora si chiama «Presa doppia».");
+    expect(editor.selection).toEqual([I]);
+    expect(face("symbol").getAttribute("aria-label")).toBe("Simbolo: Presa doppia");
+    editor.undo();
+    pick("symbol", "Scollega dal simbolo");
+    const group = editor.selection[0]!;
+    expect(element(group)).toBe(`<g id="${group}" transform="translate(20 20)">`);
+    expect(editor.engine.text).toMatch(new RegExp(`<g id="${group}" transform="translate\\(20 20\\)">\\s*<title>Presa</title>\\s*<rect id="o[a-z0-9]{8}" x="-10" y="-10" width="20" height="20" fill="#0072b2"/>\\s*</g>`));
+    expect(spoken()).toBe("1 istanza scollegata: ora è un gruppo, che si modifica da solo.");
+    expect(property("symbol").hidden).toBe(true);
+    editor.undo();
+    expect(editor.engine.text).toBe(SYMBOLS);
+  });
+
+  it("un'istanza si chiama col nome del suo simbolo, e ciò che sta nel simbolo col suo", () => {
+    mount(SYMBOLS, { level: "expert" });
+    key("Tab");
+    key("Home");
+    expect(editor.selection).toEqual([I]);
+    expect(spoken()).toBe("Istanza di simbolo «Presa», 1 di 4.");
+    // L'albero mostra il disegno; mentre si modifica il simbolo, il suo
+    // contenuto, che si sceglie anche da lì.
+    host.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Oggetti"]')!.click();
+    const tree = (): HTMLElement => host.querySelector<HTMLElement>('[role="tree"]')!;
+    const rows = (): [string | undefined, string | null][] =>
+      [...tree().querySelectorAll<HTMLElement>('[role="treeitem"]')].map((row) => [row.dataset.key, row.querySelector(".draw-object-label")!.textContent]);
+    expect(rows()).toEqual([
+      ["l1", "Livello «Livello 1», corrente"],
+      [B, "Rettangolo, Nero"],
+      [A, "Rettangolo, Vermiglio"],
+      [J, "Istanza di simbolo «Presa»"],
+      [I, "Istanza di simbolo «Presa»"],
+    ]);
+    key("Enter", { ctrlKey: true });
+    expect(rows()).toEqual([[S, "Rettangolo, Blu"]]);
+    expect(tree().querySelector('[aria-selected="true"]')!.getAttribute("data-key")).toBe(S);
+    key("Escape");
+    expect(rows()).toHaveLength(5);
+  });
+});
+
 describe("il contagocce, dal livello Standard", () => {
   const A = "oa1a1a1a1";
   const B = "ob2b2b2b2";
@@ -6447,7 +6657,7 @@ describe("la selezione avanzata, dal livello Standard", () => {
     editor.setTool("select");
     editor.select([A]);
     key("Enter", { ctrlKey: true });
-    expect(spoken()).toBe("Scegli un gruppo solo, o un collegamento, per isolarlo.");
+    expect(spoken()).toBe("Scegli un gruppo solo, un collegamento o un’istanza di un simbolo, per isolarlo.");
     expect(isolation().hidden).toBe(true);
     editor.select([G]);
     key("Enter", { ctrlKey: true });

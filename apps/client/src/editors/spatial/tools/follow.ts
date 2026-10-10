@@ -3,7 +3,7 @@
 // nominato, e le matrici della scena lette una volta.
 
 import { compose, IDENTITY, type Matrix } from "../scene/matrix";
-import type { ElementPart } from "../scene/model";
+import { elementChildren, type ContainerNode, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { transform as parseTransform } from "../scene/values";
 import { plainAttributes } from "./arrange";
@@ -104,7 +104,9 @@ export class Changes {
 }
 
 /// Gli oggetti toccati da un'operazione, coi loro id: quelli che ci sono
-/// ancora e gli id di quelli tolti.
+/// ancora e gli id di quelli tolti. Ciò che cambia nel contenuto di un
+/// simbolo cambia le sue istanze, anche attraverso altri simboli: chi le
+/// segue le segue.
 export function touchedBy(touched: ReadonlySet<string>, find: (id: string) => ElementPart | null): { readonly changes: Changes; readonly removed: ReadonlySet<string> } {
   const removed = new Set<string>();
   const hit = new Set<ElementPart>();
@@ -113,5 +115,47 @@ export function touchedBy(touched: ReadonlySet<string>, find: (id: string) => El
     if (node === null) removed.add(id);
     else hit.add(node);
   }
+  for (const instance of instancesOf(hit)) hit.add(instance);
   return { changes: new Changes(hit), removed };
+}
+
+/// Le istanze dei simboli in cui sta qualcosa di `nodes`, o che lo sono, a
+/// cascata: un'istanza nel contenuto di un altro simbolo cambia anche lui.
+function instancesOf(nodes: ReadonlySet<ElementPart>): ElementPart[] {
+  const changed: string[] = [];
+  let root: ElementPart | null = null;
+  for (const node of nodes) {
+    for (let at: ElementPart | null = node; at !== null; at = at.parent) {
+      if (at.details?.role === "symbol" && at.facts.id !== null) changed.push(at.facts.id);
+      if (at.parent === null) root = at;
+    }
+  }
+  if (changed.length === 0 || root === null || root.kind !== "container") return [];
+  // Le istanze di ogni simbolo, e il simbolo in cui ciascuna sta.
+  const users = new Map<string, Array<{ readonly instance: ElementPart; readonly within: string | null }>>();
+  const visit = (container: ContainerNode, within: string | null): void => {
+    for (const child of elementChildren(container)) {
+      const details = child.details;
+      if (details === null) continue;
+      if (child.kind === "container") visit(child, details.role === "symbol" ? child.facts.id : within);
+      else if (details.role === "instance") {
+        const list = users.get(details.symbol!);
+        if (list === undefined) users.set(details.symbol!, [{ instance: child, within }]);
+        else list.push({ instance: child, within });
+      }
+    }
+  };
+  visit(root, null);
+  const out: ElementPart[] = [];
+  const seen = new Set<string>();
+  while (changed.length > 0) {
+    const id = changed.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const { instance, within } of users.get(id) ?? []) {
+      out.push(instance);
+      if (within !== null) changed.push(within);
+    }
+  }
+  return out;
 }

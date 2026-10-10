@@ -84,6 +84,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Metodi di fusione | Esperto | nelle proprietà «Fusione» e «Isola la fusione», in «Aspetto» |
 | Motivi del documento | Esperto | «Motivo dalla selezione», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nella sezione «Campitura» i motivi del documento, il loro nome ed «Elimina motivo» |
 | Pagina di stampa del PDF | Esperto | nella finestra «Esporta», per il PDF, il gruppo «Pagina»: la carta, i margini, l'abbondanza e i segni ([Disegni, esportare](drawing-export.md#per-la-stampa)); senza, il PDF è grande quanto il disegno |
+| Simboli | Esperto | «Crea simbolo» e «Scollega dal simbolo», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nelle proprietà la riga «Simbolo»; il pulsante «Simboli» e il suo pannello, coi simboli del disegno e le librerie del vault ([Disegni, simboli](drawing-symbols.md)); senza, le istanze si vedono e si scelgono come ogni oggetto, e il loro simbolo si modifica dove si isola un gruppo |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
 bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la

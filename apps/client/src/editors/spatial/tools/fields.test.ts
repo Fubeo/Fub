@@ -21,6 +21,7 @@ import {
   type FontFacts,
   type SelectionFacts,
   type StyleFacts,
+  type SymbolFacts,
 } from "./fields";
 import type { Frame } from "./frame";
 import { DEFAULT_GRID } from "./grid";
@@ -1052,5 +1053,56 @@ describe("gli stili del documento", () => {
     const mixed = propertiesView(input({ selection: styled({ graphic: facts({ row: row({ style: null, mixed: true, differs: new Set<StyleField>(["width"]) }) }), text: null }) }));
     expect(mixed.fields.strokeWidth!.differs).toBeUndefined();
     expect(mixed.fields.lookStyle!.note).toBeUndefined();
+  });
+});
+
+describe("la riga «Simbolo»", () => {
+  const menu = (state: unknown): MenuChoiceState => state as MenuChoiceState;
+  const facts = (parts: Partial<SymbolFacts> = {}): SymbolFacts => ({
+    current: "r1",
+    symbols: [
+      { id: "r1", name: "Presa", instances: 3, cycle: false },
+      { id: "r2", name: "", instances: 1, cycle: false },
+      { id: "r3", name: "Quadro", instances: 0, cycle: true },
+    ],
+    single: true,
+    ...parts,
+  });
+  const view = (symbols: SymbolFacts, level: Level = "expert") =>
+    propertiesView(input({ level, selection: selection({ subject: "Istanza di simbolo «Presa»", symbols }) }));
+
+  it("c'è dall'Esperto, con un'istanza fra gli oggetti scelti, e dice il suo simbolo", () => {
+    expect(view(facts()).fields.symbol).toMatchObject({ kind: "menu", label: "Simbolo", value: "symbol:r1", summary: "Presa" });
+    expect("symbol" in view(facts(), "standard").fields).toBe(false);
+    expect("symbol" in propertiesView(input({ level: "expert", selection: selection() })).fields).toBe(false);
+    expect(view(facts({ current: null })).fields.symbol).toMatchObject({ value: null, summary: "Misto" });
+    expect(view(facts({ current: "r2" })).fields.symbol).toMatchObject({ summary: "Simbolo senza nome" });
+  });
+
+  it("nel menu i simboli con le loro istanze, poi i comandi, spenti col perché", () => {
+    const state = menu(view(facts()).fields.symbol);
+    expect(state.options.map((option) => [option.value, option.disabled === true])).toEqual([
+      ["symbol:r1", false],
+      ["symbol:r2", false],
+      ["symbol:r3", true],
+      ["edit", false],
+      ["rename", false],
+      ["detach", false],
+    ]);
+    expect(state.options[0]).toMatchObject({ label: "Presa", checked: true, note: "3 istanze" });
+    expect(state.options[1]).toMatchObject({ label: "Simbolo senza nome", checked: false, note: "1 istanza" });
+    expect(state.options[2]).toMatchObject({ label: "Quadro", note: "Conterrebbe sé stesso." });
+    expect(state.options[3]).toMatchObject({ label: "Modifica simbolo", action: true, separator: true });
+    expect(state.options[4]).toMatchObject({ ask: { title: "Rinomina «Presa»", value: "Presa", submit: "Rinomina" } });
+    // Più istanze, di simboli diversi.
+    const mixed = menu(view(facts({ current: null, single: false })).fields.symbol);
+    expect(mixed.options.filter((option) => option.disabled === true).map((option) => [option.value, option.note])).toEqual([
+      ["symbol:r3", "Conterrebbe sé stesso."],
+      ["edit", "Scegli un’istanza sola per modificarne il simbolo."],
+      ["rename", "Le istanze scelte sono di simboli diversi."],
+    ]);
+    // Il simbolo che le istanze hanno già resta scelto anche se non
+    // potrebbero averlo: non c'è niente da cambiare.
+    expect(menu(view(facts({ current: "r3" })).fields.symbol).options[2]).toMatchObject({ checked: true, note: "Nessuna istanza" });
   });
 });

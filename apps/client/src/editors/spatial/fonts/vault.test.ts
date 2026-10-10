@@ -122,7 +122,7 @@ function group(attrs: PaintAttr[], children: PaintNode[]): PaintNode {
 }
 
 function scene(nodes: PaintNode[], rootAttrs: PaintAttr[] = [], resources: PaintResource[] = []): PaintScene {
-  return { root: { attrs: rootAttrs, page: null, units: "px", guides: null }, layers: [{ kind: "live", nodes }], resources } as unknown as PaintScene;
+  return { root: { attrs: rootAttrs, page: null, units: "px", guides: null }, layers: [{ kind: "live", nodes }], resources, symbols: [] } as unknown as PaintScene;
 }
 
 const written = (family: string, weight = "400", style = "normal") => ({ family, weight, style });
@@ -159,6 +159,22 @@ describe("i caratteri di una scena", () => {
   it("legge il testo delle risorse", () => {
     const resource = { id: "m", tag: "mask", attrs: [], space: null, children: [{ tag: "text", attrs: [["font-family", "Roboto"]], space: null, children: ["M"] }] } as unknown as PaintResource;
     expect(sceneFonts(scene([], [], [resource]))).toEqual([{ family: "Roboto", weight: 400, style: "normal" }]);
+  });
+
+  it("legge il contenuto dei simboli col carattere che ogni istanza gli dà, una volta per carattere", () => {
+    const use = (attrs: PaintAttr[], symbol: string): PaintShape =>
+      ({ kind: "shape", tag: "use", role: "instance", id: null, attrs, space: null, symbol }) as unknown as PaintShape;
+    const r1 = { ...(group([], [text([], [line("Presa")])]) as object), role: "symbol", id: "r1" } as unknown as PaintNode;
+    const r2 = { ...(group([], [use([], "r1")]) as object), role: "symbol", id: "r2" } as unknown as PaintNode;
+    const painted = {
+      ...scene([group([["font-family", "Roboto"]], [use([], "r2"), use([["font-weight", "700"]], "r1")]), use([], "r1"), use([], "r1")]),
+      symbols: [r1, r2],
+    } as PaintScene;
+    expect(sceneFonts(painted)).toEqual([
+      { family: "Roboto", weight: 400, style: "normal" },
+      { family: "Roboto", weight: 700, style: "normal" },
+      { family: "", weight: 400, style: "normal" },
+    ]);
   });
 
   it("legge i pesi e gli stili come la misura", () => {

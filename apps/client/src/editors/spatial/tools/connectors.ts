@@ -9,8 +9,9 @@
 //   dell'oggetto verso il punto d'aggancio esce dal contorno disegnato, le
 //   corde della sua geometria, più mezzo spessore del contorno: una linea
 //   verso un cerchio o un triangolo ne tocca il bordo, non il riquadro. Un
-//   gruppo ha il contorno dei suoi oggetti visibili; un contorno di troppe
-//   corde, o che il raggio non incontra, è il riquadro.
+//   gruppo ha il contorno dei suoi oggetti visibili, un'istanza quello del
+//   contenuto del suo simbolo; un contorno di troppe corde, o che il raggio
+//   non incontra, è il riquadro.
 // - **Il gomito** è il percorso più corto su una griglia di righe e colonne
 //   che passano per le uscite dei due capi, per i bordi dei due oggetti
 //   allargati dell'uscita e per le vie di mezzo: nessun tratto entra nei due
@@ -20,7 +21,9 @@
 //   operazione, i connettori di ciò che è cambiato si ricalcolano nello
 //   stesso passo e nello stesso annulla, e le loro etichette con loro.
 //   Spostare un connettore da solo ne stacca i capi; togliere un oggetto
-//   stacca il capo che vi era agganciato. Un connettore o un'etichetta in un
+//   stacca il capo che vi era agganciato. Cambiare il contenuto di un
+//   simbolo cambia le sue istanze, e i connettori agganciati a loro le
+//   seguono. Un connettore o un'etichetta in un
 //   livello o in un gruppo bloccato non si riscrivono, come vuole il motore.
 
 import type { Role } from "../scene/analysis";
@@ -52,6 +55,13 @@ const BEND = 2 * STUB;
 /// Le corde oltre le quali il contorno di un oggetto è il suo riquadro: un
 /// gruppo di mille tracciati non rallenta un trascinamento.
 const MAX_CHORDS = 4000;
+
+/// Gli elementi oltre i quali il contorno di un oggetto, attraverso le
+/// istanze dei simboli che contiene, non si legge più.
+const MAX_VISITS = 20_000;
+
+/// Quanti simboli uno dentro l'altro attraversa un contorno.
+const MAX_SYMBOL_DEPTH = 64;
 
 /// La distanza di partenza fra un'etichetta e la sua linea.
 export const LABEL_GAP = 4;
@@ -89,6 +99,7 @@ const ATTACHABLE: ReadonlySet<Role> = new Set<Role>([
   "polygon",
   "text",
   "image",
+  "instance",
 ]);
 
 /// Vero se un capo si aggancia a `node`: un oggetto, non un livello, la
@@ -191,9 +202,22 @@ function localOf(node: ElementPart, measure: Measure, own: (node: ElementPart) =
   const out: Chord[] = [];
   let full = true;
   let reach = 0;
+  // Le istanze dei simboli si attraversano, fino a un limite di elementi.
+  let visits = 0;
+  let depth = 0;
   const visit = (part: ElementPart, m: Matrix): void => {
+    if (++visits > MAX_VISITS) return;
     if (part.kind === "container") {
       for (const child of elementChildren(part)) if (outlined(child)) visit(child, compose(m, own(child)));
+      return;
+    }
+    if (part.details?.role === "instance") {
+      // Il contorno di un'istanza è quello del contenuto del suo simbolo.
+      const symbol = depth < MAX_SYMBOL_DEPTH ? symbolOf(part) : null;
+      if (symbol === null) return;
+      depth++;
+      visit(symbol, m);
+      depth--;
       return;
     }
     const found = leafChords(part, measure);
@@ -216,6 +240,21 @@ function localOf(node: ElementPart, measure: Measure, own: (node: ElementPart) =
   visit(node, IDENTITY);
   const box = frame.finish();
   return box === null ? null : { chords: full ? out : null, frame: box, reach };
+}
+
+/// Il simbolo di cui `instance` è un'istanza, fra i figli delle `defs` della
+/// radice; `null` se non c'è.
+function symbolOf(instance: ElementPart): ContainerNode | null {
+  let root = instance.parent;
+  while (root !== null && root.parent !== null) root = root.parent;
+  if (root === null) return null;
+  for (const defs of elementChildren(root)) {
+    if (defs.kind !== "container" || defs.details?.role !== "defs") continue;
+    for (const child of elementChildren(defs)) {
+      if (child.kind === "container" && child.details?.role === "symbol" && child.facts.id === instance.details!.symbol) return child;
+    }
+  }
+  return null;
 }
 
 /// Il contorno di un oggetto nella scena, come lo usano i capi.

@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 600" width="800" height="600" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>I simboli</title>
+  <defs id="fub-defs">
+    <symbol id="r00000001" overflow="visible">
+      <title>Lampadina</title>
+      <circle id="o00000001" cx="0" cy="0" r="20" fill="url(#r00000002) #f0e442"/>
+      <rect id="o00000002" x="-8" y="18" width="16" height="12" fill="#999999"/>
+      <text id="o00000003" x="-6" y="2" font-size="6" fill="#ffffff">
+        <tspan x="-6" dy="0">ON</tspan>
+      </text>
+    </symbol>
+    <linearGradient id="r00000002" fub:role="private" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0e442"/>
+      <stop offset="1" stop-color="#e69f00"/>
+    </linearGradient>
+    <symbol id="r00000003" overflow="visible" fub:source="Simboli/Impianti.svg#r00000004 0123456789abcdef">
+      <title>Quadro</title>
+      <rect id="o00000004" x="0" y="0" width="80" height="60" fill="#0072b2"/>
+      <use id="o00000005" href="#r00000001" transform="translate(40 30) scale(0.5)"/>
+      <switch>
+        <rect width="10" height="10"/>
+      </switch>
+    </symbol>
+    <symbol id="r00000005" overflow="visible">
+      <use id="o00000006" href="#r00000005"/>
+    </symbol>
+    <symbol id="r00000006" overflow="visible">
+      <use id="o00000007" href="#r00000007"/>
+    </symbol>
+    <symbol id="r00000007" overflow="visible">
+      <use id="o00000008" href="#r00000006"/>
+    </symbol>
+    <symbol id="r00000008">
+      <rect width="10" height="10"/>
+    </symbol>
+    <symbol id="r00000009" overflow="visible" viewBox="0 0 10 10">
+      <rect width="10" height="10"/>
+    </symbol>
+    <symbol id="r0000000a" overflow="visible">
+      <circle id="o00000009" cx="0" cy="0" r="5" fill="#009e73"/>
+      <use id="o0000000a" href="#r00000006"/>
+    </symbol>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <use id="o00000010" href="#r00000001" transform="translate(200 150)"/>
+    <use id="o00000011" xlink:href="#r00000003" transform="translate(400 100) rotate(30)" opacity="0.8">
+      <title>Quadro principale</title>
+    </use>
+    <text id="o00000012" x="190" y="152" font-size="16" fill="#ffffff">
+      <tspan x="190" dy="0">Luce</tspan>
+    </text>
+    <g id="o00000013" display="none">
+      <use id="o00000014" href="#r00000001" transform="translate(5000 5000)"/>
+    </g>
+    <use id="o00000015" href="#r0000000a" transform="translate(600 400)"/>
+    <use id="o00000016" href="#r00000001" x="10"/>
+    <use id="o00000017" href="#r00000001" fill="#ff0000"/>
+    <use id="o00000018" href="#r00000005"/>
+    <use id="o00000019" href="#r00000002"/>
+    <use id="o0000001a" href="#r00000001" xlink:href="#r00000001"/>
+    <use id="o0000001b" href="#r00000001">
+      <rect width="10" height="10"/>
+    </use>
+    <use id="o0000001c" href="#r0000000z"/>
+    <symbol id="r0000000b" overflow="visible">
+      <rect width="10" height="10"/>
+    </symbol>
+  </g>
+</svg>

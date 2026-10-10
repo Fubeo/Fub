@@ -1084,3 +1084,77 @@ describe("le etichette nelle forme negli appunti", () => {
     expect(attrOf(opened, label, "fub:wrap")).toBe("28");
   });
 });
+
+describe("i simboli negli appunti", () => {
+  /// Una presa che usa una sfumatura privata e un punto, un altro simbolo, e
+  /// una sua istanza.
+  const PRESA =
+    '<defs id="fub-defs"><symbol id="rpresa000" overflow="visible"><title>Presa</title>' +
+    '<rect id="osssssss1" x="-10" y="-10" width="20" height="20" fill="url(#rgrad0000)"/><use id="oinner001" href="#rpunto000"/></symbol>' +
+    '<symbol id="rpunto000" overflow="visible"><title>Punto</title><circle id="oppppppp1" r="5" fill="#000000"/></symbol>' +
+    '<linearGradient id="rgrad0000" fub:role="private"><stop offset="0" stop-color="#ffffff"/></linearGradient></defs>';
+  const source = (): Opened => open(doc(`${PRESA}${LAYER}<use id="oiiiiiii1" transform="translate(20 20)" href="#rpresa000"/></g>`));
+  /// I simboli del disegno, nell'ordine: il nome e l'id.
+  const symbolsOf = (opened: Opened): Array<[string, string]> =>
+    [...opened.engine.text.matchAll(/<symbol id="([^"]+)"[^>]*>\s*<title>([^<]*)<\/title>/g)].map((match) => [match[2]!, match[1]!]);
+  const hrefOf = (opened: Opened, id: string): string => attrOf(opened, id, "href")!;
+
+  it("nello stesso disegno l'istanza incollata è del simbolo che c'era, e niente si copia", () => {
+    const opened = source();
+    const out = paste(opened, copy(opened, ["oiiiiiii1"]));
+    expect(out.ops).toHaveLength(1);
+    expect(hrefOf(opened, out.keys[0]!)).toBe("#rpresa000");
+    expect(symbolsOf(opened)).toEqual([
+      ["Presa", "rpresa000"],
+      ["Punto", "rpunto000"],
+    ]);
+  });
+
+  it("in un altro disegno il simbolo arriva con ciò che usa, e il contenuto ha id da oggetto", () => {
+    const opened = open(TARGET);
+    const text = copy(source(), ["oiiiiiii1"]);
+    const [instance] = paste(opened, text).keys as [string];
+    const arrived = symbolsOf(opened);
+    expect(arrived.map(([name]) => name)).toEqual(["Punto", "Presa"]);
+    const [[, punto], [, presa]] = arrived as [[string, string], [string, string]];
+    expect(hrefOf(opened, instance)).toBe(`#${presa}`);
+    const content = rawOf(node(opened, presa));
+    expect(content).toMatch(new RegExp(`<rect id="o[0-9a-z]{8}" x="-10" y="-10" width="20" height="20" fill="url\\(#r[0-9a-z]{8}\\)"/><use id="o[0-9a-z]{8}" href="#${punto}"/>`));
+    expect(rawOf(node(opened, punto))).toMatch(/<circle id="o[0-9a-z]{8}" r="5"/);
+    // Una seconda volta, il disegno ha già i simboli, uguali a parte gli id.
+    const again = paste(opened, text);
+    expect(again.ops).toHaveLength(1);
+    expect(hrefOf(opened, again.keys[0]!)).toBe(`#${presa}`);
+    expect(symbolsOf(opened)).toHaveLength(2);
+  });
+
+  it("un simbolo diverso col nome di uno del disegno arriva col primo nome libero", () => {
+    const other =
+      '<defs id="fub-defs"><symbol id="raltra000" overflow="visible"><title>presa</title><rect id="oaltro001" width="5" height="5"/></symbol>' +
+      '<symbol id="rpunto000" overflow="visible"><title>Punto</title><circle id="oppppppp1" r="6" fill="#000000"/></symbol></defs>';
+    const opened = open(doc(`${other}${LAYER}<rect id="ozzzzzzzz" x="0" y="0" width="5" height="5"/></g>`));
+    const [instance] = paste(opened, copy(source(), ["oiiiiiii1"])).keys as [string];
+    expect(symbolsOf(opened).map(([name]) => name)).toEqual(["presa", "Punto", "Punto 2", "Presa 2"]);
+    const presa = symbolsOf(opened)[3]![1];
+    expect(hrefOf(opened, instance)).toBe(`#${presa}`);
+    // Il punto del disegno ha lo stesso id, ma non è lo stesso: la presa usa
+    // il suo.
+    expect(rawOf(node(opened, presa))).not.toContain('href="#rpunto000"');
+  });
+
+  it("un simbolo troppo grande per un'operazione entra a pezzi", { timeout: 60_000 }, () => {
+    // Circa 5 MiB: più di quanto sta in un `add`.
+    const d = Array.from({ length: 30 }, (_, i) => `L ${i * 10} ${(i % 2) * 10}`).join(" ");
+    const count = 18_000;
+    const paths = Array.from({ length: count }, (_, i) => `\n      <path id="o${i.toString(36).padStart(8, "0")}" d="M 0 0 ${d}"/>`).join("");
+    const big = open(doc(`\n  <defs id="fub-defs">\n    <symbol id="rgrande00" overflow="visible">\n      <title>Grande</title>${paths}\n    </symbol>\n  </defs>\n  ${LAYER}\n    <use id="oiiiiiii1" href="#rgrande00"/>\n  </g>\n`));
+    const opened = open(TARGET);
+    const out = paste(opened, copy(big, ["oiiiiiii1"]));
+    expect(out.ops.length).toBeGreaterThan(3);
+    for (const op of out.ops) expect(JSON.stringify(op).length).toBeLessThanOrEqual(MAX_OP_BYTES);
+    const [[name, id]] = symbolsOf(opened) as [[string, string]];
+    expect(name).toBe("Grande");
+    expect(elementChildren(node(opened, id) as ContainerNode)).toHaveLength(count + 1);
+    expect(hrefOf(opened, out.keys[0]!)).toBe(`#${id}`);
+  });
+});

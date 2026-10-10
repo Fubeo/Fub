@@ -13,7 +13,7 @@
 
 import { Legibility, type Measures } from "./accessibility";
 import { diagnostic, type Diagnostic } from "./diagnostics";
-import { BoundsBuilder, fmax, fmin, parsePath, rectPath } from "./geometry";
+import { BoundsBuilder, fmax, fmin, parsePath, rectPath, type Bounds } from "./geometry";
 import { apply, compose, IDENTITY, type Matrix, type Point } from "./matrix";
 import type { Span } from "./text";
 import {
@@ -106,11 +106,22 @@ export type Role =
   /// risorse).
   | "resource"
   /// Una tavola: un `view` della radice (formato della scena, tavole).
-  | "board";
+  | "board"
+  /// Un simbolo: un `symbol` di una `defs` della radice, coi figli giudicati
+  /// uno per uno come in un gruppo (formato della scena, simboli).
+  | "symbol"
+  /// Un'istanza di un simbolo: un `use` che lo mostra dove sta.
+  | "instance";
+
+/// L'id a cui rimanda un `use`: in SVG 2 `href` vince su `xlink:href`.
+export function useTarget(element: ElementNode): string | null {
+  const value = valueOf(element, NS_NONE, "href") ?? valueOf(element, NS_XLINK, "href");
+  return value === undefined ? null : hrefId(value);
+}
 
 /// Vero per i ruoli i cui figli si classificano uno per uno.
 export function isContainer(role: Role): boolean {
-  return role === "layer" || role === "group" || role === "link" || role === "defs";
+  return role === "layer" || role === "group" || role === "link" || role === "defs" || role === "symbol";
 }
 
 /// Lo strumento di un tratto.
@@ -250,6 +261,9 @@ export class Context {
     private readonly effect: boolean,
     /// I campioni del documento, che danno il colore a chi li usa.
     private readonly swatches: Swatches,
+    /// Il simbolo di cui l'elemento è il contenuto, nelle sue coordinate;
+    /// `null` fuori dai simboli (formato della scena, simboli).
+    readonly symbol: string | null = null,
   ) {}
 
   /// Il contesto dei figli della radice. Della radice contano solo `fill` e
@@ -313,6 +327,24 @@ export class Context {
       weight === undefined ? this.bold : bold(weight),
       this.effect || effect,
       this.swatches,
+      this.symbol,
+    );
+  }
+
+  /// Il contesto del contenuto del simbolo `symbol`, che ha questo: le sue
+  /// coordinate sono quelle del simbolo.
+  within(symbol: string): Context {
+    return new Context(
+      this.matrix,
+      this.hidden,
+      this.fillValue,
+      this.fillOpacity,
+      this.opacity,
+      this.fontSize,
+      this.bold,
+      this.effect,
+      this.swatches,
+      symbol,
     );
   }
 
@@ -330,6 +362,7 @@ export class Context {
       line.bold,
       line.effect,
       this.swatches,
+      this.symbol,
     );
   }
 
@@ -413,6 +446,22 @@ export function hundredths(v: number): number {
   return Math.floor(v * 100 + 0.5);
 }
 
+/// Ciò che si conta di un simbolo: il riquadro del suo contenuto, nelle
+/// sue coordinate, e le istanze che contiene, col simbolo e la matrice.
+interface SymbolTally {
+  readonly bounds: BoundsBuilder;
+  readonly instances: Array<readonly [string, Matrix]>;
+}
+
+/// Aggiunge a `out` i quattro angoli di `box` trasformati da `m`.
+function includeBox(out: BoundsBuilder, box: Bounds | null, m: Matrix): void {
+  if (box === null) return;
+  out.include(apply(m, [box.min[0], box.min[1]]));
+  out.include(apply(m, [box.max[0], box.min[1]]));
+  out.include(apply(m, [box.max[0], box.max[1]]));
+  out.include(apply(m, [box.min[0], box.max[1]]));
+}
+
 /// Una tavola com'è scritta (formato della scena, tavole).
 interface Board {
   readonly id: string;
@@ -463,6 +512,13 @@ export class Tally {
   /// Il `d` dei tracciati delle risorse, per id: il riquadro di un testo su
   /// tracciato è quello del tracciato (formato della scena, testo).
   private readonly paths: ReadonlyMap<string, string>;
+  /// Per ogni simbolo, il riquadro del suo contenuto nelle sue coordinate e
+  /// le istanze che contiene; il riquadro di un'istanza si sa alla fine,
+  /// quando si sa quello del suo simbolo (formato della scena, simboli).
+  private readonly symbols = new Map<string, SymbolTally>();
+  /// Ciò che si conta fuori dai simboli: il riquadro del disegno e le
+  /// istanze.
+  private readonly whole: SymbolTally = { bounds: this.bounds, instances: [] };
 
   constructor(paths: ReadonlyMap<string, string> = new Map()) {
     this.paths = paths;
@@ -485,11 +541,21 @@ export class Tally {
     stroke: Stroke | null,
   ): void {
     switch (role) {
-      // Le risorse non si disegnano da sole: contano gli oggetti che le
-      // usano (formato della scena, risorse).
+      // Le risorse e i simboli non si disegnano da soli: contano gli oggetti
+      // che li usano (formato della scena, risorse e simboli).
       case "defs":
       case "resource":
+      case "symbol":
         return;
+      // Un'istanza ha il riquadro del suo simbolo, che si sa alla fine; il
+      // contenuto del simbolo si conta e si controlla una volta sola.
+      case "instance": {
+        if (context.hidden) return;
+        const symbol = useTarget(element)!;
+        this.tallyOf(context.symbol).instances.push([symbol, context.matrix]);
+        if (context.symbol === null) this.legibility.instance(symbol, context.matrix, span);
+        return;
+      }
       case "layer":
         this.layers.push(valueOf(element, NS_FUB, "layer") ?? "");
         break;
@@ -546,9 +612,53 @@ export class Tally {
         break;
     }
     if (!context.hidden) {
-      bounds(doc, element, role, context.matrix, this.bounds, this.paths);
+      bounds(doc, element, role, context.matrix, this.tallyOf(context.symbol).bounds, this.paths);
       this.legibility.element(doc, element, role, context, span, stroke);
     }
+  }
+
+  /// Ciò che si conta del simbolo `symbol`, o fuori dai simboli con
+  /// `null`.
+  private tallyOf(symbol: string | null): SymbolTally {
+    if (symbol === null) return this.whole;
+    let tally = this.symbols.get(symbol);
+    if (tally === undefined) {
+      tally = { bounds: new BoundsBuilder(), instances: [] };
+      this.symbols.set(symbol, tally);
+    }
+    return tally;
+  }
+
+  /// Il riquadro del contenuto di ogni simbolo che il documento conta,
+  /// nelle sue coordinate, con quello delle istanze che contiene: dai
+  /// simboli più interni, senza ricorsione.
+  private symbolBoxes(): Map<string, Bounds | null> {
+    const boxes = new Map<string, Bounds | null>();
+    const entered = new Set<string>();
+    for (const start of this.symbols.keys()) {
+      const stack: Array<[string, boolean]> = [[start, false]];
+      while (stack.length > 0) {
+        const [id, ready] = stack.pop()!;
+        if (boxes.has(id)) continue;
+        const tally = this.symbols.get(id);
+        if (tally === undefined) {
+          boxes.set(id, null);
+          continue;
+        }
+        if (!ready) {
+          if (entered.has(id)) continue;
+          entered.add(id);
+          stack.push([id, true]);
+          for (const [inner] of tally.instances) if (!boxes.has(inner) && !entered.has(inner)) stack.push([inner, false]);
+          continue;
+        }
+        const out = new BoundsBuilder();
+        includeBox(out, tally.bounds.finish(), IDENTITY);
+        for (const [inner, m] of tally.instances) includeBox(out, boxes.get(inner) ?? null, m);
+        boxes.set(id, out.finish());
+      }
+    }
+    return boxes;
   }
 
   /// Ciò che i controlli su come il disegno si legge hanno misurato, dopo
@@ -591,9 +701,12 @@ export class Tally {
   /// Chiude il conteggio: il riepilogo, più i controlli su come il disegno si
   /// legge.
   finish(foreign: boolean, version: number | null, diagnostics: Diagnostic[]): Summary {
+    // Il riquadro di un'istanza è quello del suo simbolo, che si sa adesso.
+    const boxes = this.whole.instances.length > 0 ? this.symbolBoxes() : new Map<string, Bounds | null>();
     // Senza carta il disegno sta sul bianco della superficie (§12).
-    this.legibility.finish(this.paper === undefined ? WHITE : this.paper, diagnostics);
+    this.legibility.finish(this.paper === undefined ? WHITE : this.paper, boxes, diagnostics);
     this.checkPapers(diagnostics);
+    for (const [symbol, m] of this.whole.instances) includeBox(this.bounds, boxes.get(symbol) ?? null, m);
     const b = this.bounds.finish();
     let bbox: BBox | null = null;
     if (b !== null) {

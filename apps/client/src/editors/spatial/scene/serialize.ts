@@ -93,10 +93,10 @@ const OWNERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 
 /// Gli elementi i cui figli sono elementi qualunque, fra quelli che non
 /// stanno solo dentro un altro: dove vanno lo giudica la classificazione.
-const OPEN_PARENTS: ReadonlySet<string> = new Set(["g", "a", "defs", "pattern", "marker", "clipPath", "mask"]);
+const OPEN_PARENTS: ReadonlySet<string> = new Set(["g", "a", "defs", "symbol", "pattern", "marker", "clipPath", "mask"]);
 
-/// I tag di §4, delle risorse e delle tavole (formato della scena, risorse e
-/// tavole).
+/// I tag di §4, delle risorse, delle tavole e dei simboli (formato della
+/// scena, risorse, tavole e simboli).
 export const SCENE_TAGS: ReadonlySet<string> = new Set([
   "title",
   "desc",
@@ -114,7 +114,9 @@ export const SCENE_TAGS: ReadonlySet<string> = new Set([
   "tspan",
   "textPath",
   "image",
+  "use",
   "defs",
+  "symbol",
   "linearGradient",
   "radialGradient",
   "stop",
@@ -228,7 +230,7 @@ export function escapeText(value: string): string {
 // Ordine degli attributi.
 // ---------------------------------------------------------------------------
 
-const FUB_ORDER = ["layer", "role", "name", "style", "marker", "board", "tool", "shape", "geom", "from", "to", "along", "inside", "wrap", "join", "leading", "locked", "at", "brush"];
+const FUB_ORDER = ["layer", "role", "name", "source", "style", "marker", "board", "tool", "shape", "geom", "from", "to", "along", "inside", "wrap", "join", "leading", "locked", "at", "brush"];
 const GEOMETRY_ORDER = [
   "x",
   "y",
@@ -308,6 +310,8 @@ const PRESENTATION_ORDER = [
   "opacity",
   "style",
   "display",
+  // Di un simbolo (formato della scena, simboli).
+  "overflow",
   "stop-color",
   "stop-opacity",
   "flood-color",

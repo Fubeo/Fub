@@ -345,7 +345,7 @@ L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
 strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore,
-«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento: [Disegni, livello Esperto](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [curve e
+«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault: [Disegni, livello Esperto](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [curve e
 tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [maschere](drawing-masks.md#le-maschere), [tipografia](drawing-typography.md#il-testo-in-area), [effetti e fusione](drawing-effects.md).
 
 ## Il livello Personalizzato

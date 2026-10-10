@@ -33,6 +33,15 @@
 // la forma che li usa: si toccano come il suo contorno e stanno nei riquadri
 // col contorno, ma non nella geometria che la griglia aggancia.
 //
+// Un'istanza di un simbolo si tocca dove si vede il contenuto del simbolo,
+// portato dalla sua trasformazione, anche attraverso le istanze che il
+// contenuto ha a sua volta. Le forme del contenuto non si modificano da lì:
+// per gli strumenti che cambiano una forma l'istanza è una forma sola, che
+// non ha nodi. Un oggetto tocca al più [`MAX_INSTANCE_PARTS`] forme
+// attraverso le istanze: oltre, un'istanza si tocca nel riquadro del suo
+// simbolo, così un file con simboli annidati non costa all'indice più del
+// disegno che mostra.
+//
 // Di un oggetto ritagliato o mascherato conta ciò che si vede: le forme
 // disegnate, tagliate dai ritagli e dalle maschere che le riguardano, cioè
 // quelli dell'oggetto e di ciò che contiene, quelli del gruppo in cui lo si
@@ -54,7 +63,7 @@ import type { Target } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { fraction, length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, reference, startOffset, transform as parseTransform } from "../scene/values";
 import { NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
-import type { PaintAttr, PaintBuilder, PaintDef, PaintNode, PaintResource, PaintShape, TextPiece, TextRun } from "../painter/paint";
+import type { PaintAttr, PaintBuilder, PaintDef, PaintNode, PaintResource, PaintScene, PaintShape, TextPiece, TextRun } from "../painter/paint";
 import {
   Clip,
   clipSegment,
@@ -81,6 +90,15 @@ export const FLATNESS = 0.05;
 /// Il limite di pezzi per una curva: oltre, una curva enorme costerebbe più
 /// di quanto il puntatore possa distinguere.
 const MAX_STEPS = 256;
+
+/// Quante forme al più tocca un oggetto attraverso le istanze dei simboli:
+/// oltre, un'istanza si tocca nel riquadro del suo simbolo. Cento istanze di
+/// un simbolo con cento istanze sarebbero diecimila forme.
+export const MAX_INSTANCE_PARTS = 4096;
+
+/// Quanti simboli uno dentro l'altro si attraversano: più dentro, un'istanza
+/// non si tocca. Una catena così lunga non è un disegno.
+const MAX_SYMBOL_DEPTH = 64;
 
 /// Un livello del documento, per chi deve scegliere dove scrivere.
 export interface LayerInfo {
@@ -134,6 +152,30 @@ interface Part extends Solid {
   /// I ritagli e le maschere che la tagliano, quelli di chi la contiene
   /// compresi; `null` se nessuno, e allora si vede tutta.
   readonly regions: readonly Region[] | null;
+  /// Per una forma del contenuto di un simbolo, l'istanza dell'oggetto
+  /// attraverso cui si vede; `null` per le altre.
+  readonly via: Via | null;
+}
+
+/// L'istanza di un simbolo attraverso cui si tocca una forma del suo
+/// contenuto: la più esterna nell'oggetto, con la matrice dalle sue
+/// coordinate a quelle della scena.
+interface Via {
+  readonly leaf: LeafNode;
+  readonly matrix: Matrix;
+}
+
+/// Il contenuto di un simbolo, misurato una volta: quante forme dà, a
+/// cascata, e il riquadro della sua geometria nelle sue coordinate.
+interface SymbolInfo {
+  readonly parts: number;
+  readonly box: Bounds | null;
+  /// I simboli che il contenuto usa, a cascata, col gruppo che li dipingeva
+  /// quando si è misurato: se uno cambia, si misura di nuovo.
+  readonly uses: ReadonlyMap<ContainerNode, PaintNode | undefined>;
+  /// Per un simbolo che non si dipinge vivo, la scena in cui si è misurato:
+  /// il suo gruppo non segue ciò che ha di estraneo. `null` per uno vivo.
+  readonly scene: PaintScene | null;
 }
 
 /// Ciò che si vede di un oggetto in un punto: la forma, la sua geometria e
@@ -272,9 +314,17 @@ export class Unit {
 
   /// Le forme che disegnano l'oggetto, in ordine di documento: l'elemento,
   /// e la matrice dalle sue coordinate a quelle della scena. I marcatori non
-  /// ci sono: stanno con la forma che li usa.
+  /// ci sono: stanno con la forma che li usa. Un'istanza di un simbolo è una
+  /// forma sola: il contenuto si cambia nel simbolo.
   shapes(): Array<{ readonly leaf: LeafNode; readonly matrix: Matrix }> {
-    return this.parts.filter((part) => part.host === null).map((part) => ({ leaf: part.leaf, matrix: part.matrix }));
+    const out: Array<{ readonly leaf: LeafNode; readonly matrix: Matrix }> = [];
+    for (const part of this.parts) {
+      if (part.host !== null) continue;
+      const via = part.via;
+      if (via === null) out.push({ leaf: part.leaf, matrix: part.matrix });
+      else if (out[out.length - 1]?.leaf !== via.leaf) out.push({ leaf: via.leaf, matrix: via.matrix });
+    }
+    return out;
   }
 
   /// Vero se il punto `p` della scena tocca l'oggetto, con una tolleranza
@@ -285,11 +335,14 @@ export class Unit {
     return this.parts.some((part) => partHits(part, p, tolerance));
   }
 
-  /// La forma più in alto dell'oggetto che il punto `p` della scena tocca;
-  /// `null` se nessuna.
+  /// La forma più in alto dell'oggetto che il punto `p` della scena tocca:
+  /// per il contenuto di un simbolo, la sua istanza. `null` se nessuna.
   shapeAt(p: Point, tolerance: number): LeafNode | null {
     if (!near(this.bounds, p, p, tolerance)) return null;
-    for (let i = this.parts.length - 1; i >= 0; i--) if (partHits(this.parts[i]!, p, tolerance)) return this.parts[i]!.leaf;
+    for (let i = this.parts.length - 1; i >= 0; i--) {
+      const part = this.parts[i]!;
+      if (partHits(part, p, tolerance)) return part.via?.leaf ?? part.leaf;
+    }
     return null;
   }
 
@@ -384,6 +437,9 @@ interface Nested {
   resolve(key: string): Unit | null;
   /// Gli oggetti che si scelgono fra i figli di `container`.
   childrenOf(container: ContainerNode): Unit[];
+  /// Il contenitore isolato come oggetto; `null` senza, o se lì non si
+  /// sceglie.
+  scopeUnit(): Unit | null;
 }
 
 /// L'indice degli oggetti di una scena, in ordine di documento: l'ultimo è
@@ -394,6 +450,8 @@ export class SceneIndex {
   private readonly byKey: Map<string, Unit | null>;
   private readonly top: ReadonlySet<Unit>;
 
+  private scoped: Unit | null | undefined;
+
   constructor(
     readonly units: readonly Unit[],
     readonly layers: readonly LayerInfo[],
@@ -401,6 +459,14 @@ export class SceneIndex {
   ) {
     this.byKey = new Map(units.map((unit) => [unit.key, unit]));
     this.top = new Set(units);
+  }
+
+  /// Il gruppo, il collegamento o il simbolo isolato come oggetto, che
+  /// riceve ciò che si disegna: per un simbolo, nelle coordinate
+  /// dell'istanza da cui lo si modifica. `null` senza isolamento.
+  scope(): Unit | null {
+    if (this.scoped === undefined) this.scoped = this.nested?.scopeUnit() ?? null;
+    return this.scoped;
   }
 
   /// L'oggetto di chiave `key`, anche dentro un gruppo; `null` se non si
@@ -522,6 +588,13 @@ export class SceneIndexer {
   private tracks = new WeakMap<PaintResource, Track | null>();
   private markers = new WeakMap<PaintResource, MarkerLook | null>();
   private looks = new WeakMap<PaintResource, ClipLook | null>();
+  /// Il contenuto dei simboli, per gruppo dipinto: il gruppo cambia quando
+  /// cambia il contenuto.
+  private symbolInfos = new WeakMap<PaintNode, SymbolInfo>();
+  /// Quanti simboli si stanno attraversando, uno dentro l'altro.
+  private depth = 0;
+  /// Mentre si misura un simbolo, quelli che il suo contenuto usa.
+  private reached: Map<ContainerNode, PaintNode | undefined> | null = null;
   private readonly foreign: ForeignShapes;
 
   /// `holder` trova gli elementi a cui i blocchi estranei rimandano; senza,
@@ -541,12 +614,18 @@ export class SceneIndexer {
   /// L'indice di `model`, che il `PaintBuilder` ha appena disegnato. Con
   /// `scope`, un gruppo o un collegamento isolato, gli oggetti sono i suoi
   /// figli, e fuori non si sceglie niente.
-  index(model: DocumentModel, scope: ContainerNode | null = null): SceneIndex {
+  ///
+  /// `through` sono le istanze da cui si entra nei simboli, dalla più
+  /// esterna: il contenuto di un simbolo sta nelle coordinate dell'istanza,
+  /// con lo stile e i ritagli che lei gli dà. Così si isola un simbolo, o un
+  /// gruppo del suo contenuto.
+  index(model: DocumentModel, scope: ContainerNode | null = null, through: readonly LeafNode[] = []): SceneIndex {
     const units: Unit[] = [];
     const layers: LayerInfo[] = [];
     const nested = new Lookup(
       model,
       scope,
+      through,
       this.rootStyle(model),
       (node) => this.attrsOf(node),
       (node, path, layer, parent, style, clips) => this.unit(node, path, layer, parent, style, clips),
@@ -573,7 +652,7 @@ export class SceneIndexer {
     const attrs: PaintAttr[] = Object.entries(elem.attrs);
     if (bounds === null || !MARKED.has(elem.tag) || MARKER_PROPERTIES.every(([, name]) => attr(attrs, name) === undefined)) return bounds;
     const style = styleOf(INITIAL, attrs);
-    const host: Part = { leaf, segments: elemSegments(elem, attrs, style), matrix, frameMatrix: matrix, fill: false, radius: 0, cache: null, flat: null, host: null, regions: null };
+    const host: Part = { leaf, segments: elemSegments(elem, attrs, style), matrix, frameMatrix: matrix, fill: false, radius: 0, cache: null, flat: null, host: null, regions: null, via: null };
     const tips: Part[] = [];
     this.tips(host, attrs, style, tips);
     const out = new BoundsBuilder();
@@ -585,34 +664,45 @@ export class SceneIndexer {
     return out.finish();
   }
 
-  /// Vero se dentro `container`, un gruppo o un collegamento di `model`, si
-  /// sceglie: se sta nel documento, e né lui né chi lo contiene è bloccato o
-  /// nascosto.
-  opens(model: DocumentModel, container: ContainerNode): boolean {
+  /// Vero se dentro `container`, un gruppo, un collegamento o un simbolo di
+  /// `model`, si sceglie: se sta nel documento, e né lui né chi lo contiene
+  /// è bloccato o nascosto. In un simbolo si entra soltanto da un'istanza di
+  /// `through`, come per [`index`], che si veda e non sia bloccata.
+  opens(model: DocumentModel, container: ContainerNode, through: readonly LeafNode[] = []): boolean {
     const role = container.details?.role;
-    if (role !== "group" && role !== "link") return false;
-    return new Lookup(model, null, this.rootStyle(model), (node) => this.attrsOf(node), () => null, (_node, _attrs, _matrix, _style, outer) => outer, this.pagesOf(model)).contextOf(container) !== null;
+    if (role !== "group" && role !== "link" && role !== "symbol") return false;
+    return new Lookup(model, null, through, this.rootStyle(model), (node) => this.attrsOf(node), () => null, (_node, _attrs, _matrix, _style, outer) => outer, this.pagesOf(model)).contextOf(container) !== null;
   }
 
   /// I collegamenti di `model` che si vedono, a ogni profondità: anche
   /// quelli dentro un gruppo, e quelli dei livelli bloccati che l'indice non
   /// tocca, perché un collegamento si apre anche lì. La chiave di uno dentro
   /// un gruppo non è una chiave della selezione.
+  ///
+  /// Un collegamento nel contenuto di un simbolo si apre da ogni istanza, e
+  /// c'è una volta per istanza, fino a [`MAX_INSTANCE_PARTS`] collegamenti.
   links(model: DocumentModel): Unit[] {
     const units: Unit[] = [];
+    const linked = new Map<ContainerNode, boolean>();
+    let depth = 0;
     const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null): void => {
-      if (node.details === null) return;
+      if (node.details === null || units.length >= MAX_INSTANCE_PARTS) return;
       if (node.details.role === "link") {
         push(units, this.unit(node, path, layer, parent, style, clips));
         return;
       }
-      if (node.kind !== "container") return;
+      const symbol = node.details.role === "instance" ? this.symbolNode(node, node.details.symbol!) : null;
+      if (node.kind !== "container" && (symbol === null || depth >= MAX_SYMBOL_DEPTH || !hasLink(symbol, linked))) return;
       const attrs = this.attrsOf(node);
       if (attrs === null || hidden(attrs)) return;
       const matrix = compose(parent, transformOf(attrs));
       const inner = styleOf(style, attrs);
       const below = this.clipsOf(node, attrs, matrix, inner, clips);
-      childLoop(node, (child, index) => visit(child, [...path, index], layer, matrix, inner, below));
+      const container = symbol ?? (node as ContainerNode);
+      const at = symbol === null ? path : symbolPath(symbol);
+      if (symbol !== null) depth++;
+      childLoop(container, (child, index) => visit(child, [...at, index], layer, matrix, inner, below));
+      if (symbol !== null) depth--;
     };
     this.walk(model, (layer) => !layer.hidden, [], visit);
     return units;
@@ -621,11 +711,13 @@ export class SceneIndexer {
   /// Gli oggetti di `model` che si vedono, anche quelli bloccati che
   /// l'indice non tocca: ciò su cui le guide intelligenti si allineano. Dei
   /// contenitori `open`, il gruppo isolato e quelli da cui si sposta un
-  /// oggetto, i figli uno per uno al posto del tutto.
-  seen(model: DocumentModel, open: ReadonlySet<ContainerNode> = new Set()): Unit[] {
+  /// oggetto, i figli uno per uno al posto del tutto; delle istanze di
+  /// `through`, da cui si modifica un simbolo, il suo contenuto.
+  seen(model: DocumentModel, open: ReadonlySet<ContainerNode> = new Set(), through: readonly LeafNode[] = []): Unit[] {
     const units: Unit[] = [];
     const visit = (node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null): void => {
-      if (node.kind !== "container" || !open.has(node)) {
+      const entered = node.kind === "leaf" && through.includes(node) ? this.symbolNode(node, node.details!.symbol!) : null;
+      if (entered === null && (node.kind !== "container" || !open.has(node))) {
         push(units, this.unit(node, path, layer, parent, style, clips));
         return;
       }
@@ -634,8 +726,10 @@ export class SceneIndexer {
       const matrix = compose(parent, transformOf(attrs));
       const inner = styleOf(style, attrs);
       const below = this.clipsOf(node, attrs, matrix, inner, clips);
-      childLoop(node, (child, index) => {
-        if (pickable(child)) visit(child, [...path, index], layer, matrix, inner, below);
+      const container = entered ?? (node as ContainerNode);
+      const at = entered === null ? path : symbolPath(entered);
+      childLoop(container, (child, index) => {
+        if (pickable(child)) visit(child, [...at, index], layer, matrix, inner, below);
       });
     };
     this.walk(model, (layer) => !layer.hidden, [], visit);
@@ -861,17 +955,29 @@ export class SceneIndexer {
   /// Le forme di `node` e dei suoi discendenti visibili. `matrix` porta le
   /// coordinate di `node` nella scena, `frame` in quelle dell'oggetto;
   /// `regions` sono i ritagli e le maschere che lo tagliano, i suoi compresi.
-  private collect(node: ElementPart, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[]): void {
+  ///
+  /// Le forme del contenuto di un simbolo, attraverso un'istanza, hanno in
+  /// `via` la più esterna.
+  private collect(node: ElementPart, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[], via: Via | null = null): void {
     if (node.kind === "leaf") {
+      if (node.details!.role === "instance") {
+        this.instance(node, matrix, frame, style, regions, out, via ?? { leaf: node, matrix });
+        return;
+      }
       const shape = this.builder.shape(node)!;
-      const part = this.part(node, shape, matrix, frame, style, regions);
+      const part = this.part(node, shape, matrix, frame, style, regions, via);
       out.push(part);
       if (MARKED.has(shape.tag)) this.tips(part, shape.attrs, style, out);
       return;
     }
-    childLoop(node, (child) => {
+    this.children(node, matrix, frame, style, regions, out, via);
+  }
+
+  /// Le forme dei figli visibili di `container`, come [`collect`].
+  private children(container: ContainerNode, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[], via: Via | null): void {
+    childLoop(container, (child) => {
       if (child.kind === "leaf" && child.details === null) {
-        this.estimate(child, matrix, frame, style, regions, out);
+        this.estimate(child, matrix, frame, style, regions, out, via);
         return;
       }
       const childAttrs = this.attrsOf(child);
@@ -880,8 +986,66 @@ export class SceneIndexer {
       const childMatrix = compose(matrix, own);
       const childFrame = compose(frame, own);
       const inner = styleOf(style, childAttrs);
-      this.collect(child, childMatrix, childFrame, inner, this.regionsBelow(child, childAttrs, childMatrix, childFrame, inner, regions), out);
+      this.collect(child, childMatrix, childFrame, inner, this.regionsBelow(child, childAttrs, childMatrix, childFrame, inner, regions), out, via);
     });
+  }
+
+  /// Le forme di un'istanza: il contenuto del suo simbolo nelle sue
+  /// coordinate, `matrix` e `frame`, con lo stile che lei trasmette. Oltre
+  /// [`MAX_INSTANCE_PARTS`] forme nell'oggetto, il riquadro del simbolo.
+  private instance(leaf: LeafNode, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[], via: Via): void {
+    const symbol = this.symbolNode(leaf, leaf.details!.symbol!);
+    if (symbol === null || this.depth >= MAX_SYMBOL_DEPTH) return;
+    const info = this.symbolInfo(symbol, style);
+    if (out.length + info.parts > MAX_INSTANCE_PARTS) {
+      const box = info.box;
+      if (box === null) return;
+      const segments = rectPath(box.min[0], box.min[1], box.max[0] - box.min[0], box.max[1] - box.min[1], 0, 0);
+      out.push({ leaf, segments, matrix, frameMatrix: frame, fill: true, radius: 0, cache: null, flat: null, host: null, regions, via });
+      return;
+    }
+    this.depth++;
+    try {
+      this.children(symbol, matrix, frame, style, regions, out, via);
+    } finally {
+      this.depth--;
+    }
+  }
+
+  /// Quante forme dà il contenuto di `symbol`, a cascata, e il riquadro
+  /// della sua geometria, senza contorni né marcatori: si misurano una volta
+  /// per contenuto. Lo stile è quello della prima istanza che lo chiede:
+  /// conta soltanto per i testi.
+  private symbolInfo(symbol: ContainerNode, style: Style): SymbolInfo {
+    const [paint] = this.builder.paintsOf(symbol);
+    const outer = this.reached;
+    const known = paint === undefined ? undefined : this.symbolInfos.get(paint);
+    if (known !== undefined && (known.scene === null || known.scene === this.builder.built) && [...known.uses].every(([node, group]) => this.builder.paintsOf(node)[0] === group)) {
+      if (outer !== null) for (const [node, group] of known.uses) outer.set(node, group);
+      outer?.set(symbol, paint);
+      return known;
+    }
+    const parts: Part[] = [];
+    const uses = new Map<ContainerNode, PaintNode | undefined>();
+    this.reached = uses;
+    this.depth++;
+    try {
+      this.children(symbol, IDENTITY, IDENTITY, style, null, parts, null);
+    } finally {
+      this.depth--;
+      this.reached = outer;
+    }
+    const box = new BoundsBuilder();
+    for (const part of parts) {
+      if (part.host !== null) continue;
+      const bounds = transformedBounds(part.segments, part.matrix);
+      if (bounds !== null) includeInflated(box, bounds, 0);
+    }
+    const info: SymbolInfo = { parts: parts.length, box: box.finish(), uses, scene: this.builder.drawsLive(symbol) ? null : this.builder.built };
+    if (paint !== undefined) this.symbolInfos.set(paint, info);
+    if (outer !== null) for (const [node, group] of uses) outer.set(node, group);
+    outer?.set(symbol, paint);
+    return info;
   }
 
   /// I ritagli e le maschere di `node`, un elemento con gli attributi dipinti
@@ -948,6 +1112,13 @@ export class SceneIndexer {
 
   private addGeometry(node: ElementPart, matrix: Matrix, style: Style, out: BoundsBuilder): void {
     if (node.kind === "leaf") {
+      if (node.details!.role === "instance") {
+        // Il riquadro del simbolo, che si misura una volta.
+        const symbol = this.symbolNode(node, node.details!.symbol!);
+        const box = symbol === null || this.depth >= MAX_SYMBOL_DEPTH ? null : this.symbolInfo(symbol, style).box;
+        if (box !== null) out.path(rectPath(box.min[0], box.min[1], box.max[0] - box.min[0], box.max[1] - box.min[1], 0, 0), matrix);
+        return;
+      }
       out.path(this.part(node, this.builder.shape(node)!, matrix, matrix, style, null).segments, matrix);
       return;
     }
@@ -976,7 +1147,7 @@ export class SceneIndexer {
     return look;
   }
 
-  private part(leaf: LeafNode, shape: PaintShape, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null): Part {
+  private part(leaf: LeafNode, shape: PaintShape, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, via: Via | null = null): Part {
     let cache = this.cache.get(shape) ?? null;
     let segments: readonly Segment[];
     if (shape.tag === "text") {
@@ -997,7 +1168,7 @@ export class SceneIndexer {
     // riquadro.
     const fill = tag === "line" ? false : tag === "text" || tag === "image" ? true : style.fill;
     const radius = style.stroke && tag !== "text" && tag !== "image" ? style.strokeWidth / 2 : 0;
-    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null, host: null, regions };
+    return { leaf, segments, matrix, frameMatrix: frame, fill, radius, cache, flat: null, host: null, regions, via };
   }
 
   /// I marcatori di `host`, una forma con gli attributi `attrs` e lo stile
@@ -1026,6 +1197,7 @@ export class SceneIndexer {
             flat: null,
             host,
             regions: host.regions,
+            via: host.via,
           });
         }
       }
@@ -1073,23 +1245,22 @@ export class SceneIndexer {
   /// La risorsa di id `id` nelle `defs` della radice del documento di
   /// `from`; `null` se non c'è.
   private resourceNode(from: ElementPart, id: string): LeafNode | null {
-    let root = from.parent;
-    while (root !== null && root.parent !== null) root = root.parent;
-    if (root === null) return null;
-    for (const defs of elementChildren(root)) {
-      if (defs.kind !== "container" || defs.details?.role !== "defs") continue;
-      for (const child of elementChildren(defs)) {
-        if (child.kind === "leaf" && child.details?.role === "resource" && child.facts.id === id) return child;
-      }
-    }
-    return null;
+    const found = defsChild(from, id, (child) => child.kind === "leaf" && child.details?.role === "resource");
+    return found === null ? null : (found as LeafNode);
+  }
+
+  /// Il simbolo di id `id` del documento di `from`; `null` se non c'è.
+  private symbolNode(from: ElementPart, id: string): ContainerNode | null {
+    const isSymbol = (node: ElementPart): boolean => node.kind === "container" && node.details?.role === "symbol";
+    const node = this.holder === null ? defsChild(from, id, isSymbol) : this.holder(id);
+    return node !== null && isSymbol(node) ? (node as ContainerNode) : null;
   }
 
   /// Le forme stimate del blocco estraneo `leaf`, figlio di un contenitore
   /// che `matrix` porta nella scena e `frame` nelle coordinate dell'oggetto,
   /// tagliate dalle regioni del contenitore. Il ritaglio e la maschera che il
   /// blocco scrive per sé non si leggono: è una stima.
-  private estimate(leaf: LeafNode, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[]): void {
+  private estimate(leaf: LeafNode, matrix: Matrix, frame: Matrix, style: Style, regions: readonly Region[] | null, out: Part[], via: Via | null = null): void {
     for (const shape of this.foreign.shapes(leaf, style)) {
       out.push({
         leaf,
@@ -1102,6 +1273,7 @@ export class SceneIndexer {
         flat: null,
         host: null,
         regions,
+        via,
       });
     }
   }
@@ -1143,6 +1315,8 @@ class Lookup implements Nested {
   constructor(
     private readonly model: DocumentModel,
     private readonly scope: ContainerNode | null,
+    /// Le istanze da cui si entra nei simboli, dalla più esterna.
+    private readonly through: readonly LeafNode[],
     private readonly rootStyle: Style,
     private readonly attrsOf: (node: ElementPart) => readonly PaintAttr[] | null,
     private readonly make: MakeUnit,
@@ -1168,7 +1342,7 @@ class Lookup implements Nested {
 
   childrenOf(container: ContainerNode): Unit[] {
     const role = container.details?.role;
-    if (role !== "group" && role !== "link") return [];
+    if (role !== "group" && role !== "link" && role !== "symbol") return [];
     if (this.scope !== null && container !== this.scope && !within(container, this.scope)) return [];
     const context = this.contextOf(container);
     if (context === null) return [];
@@ -1177,6 +1351,22 @@ class Lookup implements Nested {
       if (pickable(child) && child.details!.locked !== true) push(out, this.make(child, [...context.path, index], context.layer, context.matrix, context.style, context.clips));
     });
     return out;
+  }
+
+  scopeUnit(): Unit | null {
+    const scope = this.scope;
+    const parent = scope?.parent ?? null;
+    if (scope === null || parent === null) return null;
+    if (scope.details?.role === "symbol") {
+      // Il simbolo ha le coordinate, lo stile e i ritagli che l'istanza dà
+      // al suo contenuto, e nessuna trasformazione sua.
+      const context = this.contextOf(scope);
+      return context === null ? null : this.make(scope, [...context.path], context.layer, context.matrix, context.style, context.clips);
+    }
+    const context = this.contextOf(parent);
+    const index = elementChildren(parent).indexOf(scope);
+    if (context === null || index < 0 || this.contextOf(scope) === null) return null;
+    return this.make(scope, [...context.path, index], context.layer, context.matrix, context.style, context.clips);
   }
 
   /// Dove stanno i figli di `container`; `null` se lì non si sceglie: se il
@@ -1196,6 +1386,7 @@ class Lookup implements Nested {
     const parent = container.parent;
     const details = container.details;
     if (parent === null || details === null || details.locked === true) return null;
+    if (details.role === "symbol") return this.symbolContext(container);
     // Sulle pagine di un PDF i gruppi della pagina fanno da livelli, e gli
     // altri figli della radice non ci sono.
     const page = this.pages !== null && parent === this.model.root;
@@ -1215,6 +1406,21 @@ class Lookup implements Nested {
       style,
       clips: this.addClips(container, attrs, matrix, style, outer.clips),
     };
+  }
+
+  /// Dove sta il contenuto di `symbol`: dove lo mette la sua istanza fra
+  /// quelle da cui si entra, che si sceglie dove sta. `null` senza.
+  private symbolContext(symbol: ContainerNode): Context | null {
+    const instance = this.through.find((each) => each.details?.role === "instance" && each.details.symbol === symbol.facts.id);
+    const parent = instance?.parent ?? null;
+    if (instance === undefined || parent === null || instance.details!.locked === true || elementChildren(parent).indexOf(instance) < 0) return null;
+    if (this.pages !== null && parent === this.model.root) return null;
+    const outer = this.contextOf(parent);
+    const attrs = this.attrsOf(instance);
+    if (outer === null || attrs === null || hidden(attrs)) return null;
+    const matrix = compose(outer.matrix, transformOf(attrs));
+    const style = styleOf(outer.style, attrs);
+    return { path: symbolPath(symbol), layer: outer.layer, matrix, style, clips: this.addClips(instance, attrs, matrix, style, outer.clips) };
   }
 
   private byPath(text: string): ElementPart | null {
@@ -1252,6 +1458,48 @@ function pickable(node: ElementPart): boolean {
 }
 
 const NOT_PICKABLE: ReadonlySet<string> = new Set(["paper", "board", "title", "desc", "layer", "defs", "resource"]);
+
+/// Il percorso di `symbol` nel documento: la sua `defs` fra i figli della
+/// radice, e lui fra quelli della `defs`.
+function symbolPath(symbol: ContainerNode): number[] {
+  const defs = symbol.parent!;
+  return [elementChildren(defs.parent!).indexOf(defs), elementChildren(defs).indexOf(symbol)];
+}
+
+/// Vero se nel contenuto di `symbol`, anche attraverso le istanze di altri
+/// simboli, c'è un collegamento; `known` ricorda i simboli già visti.
+function hasLink(symbol: ContainerNode, known: Map<ContainerNode, boolean>): boolean {
+  const seen = known.get(symbol);
+  if (seen !== undefined) return seen;
+  // Un ciclo non c'è, ma un documento rotto non deve girare per sempre.
+  known.set(symbol, false);
+  let found = false;
+  const visit = (container: ContainerNode): void => childLoop(container, (child) => {
+    if (found || child.details === null) return;
+    if (child.details.role === "link") found = true;
+    else if (child.kind === "container") visit(child);
+    else if (child.details.role === "instance") {
+      const target = defsChild(child, child.details.symbol!, (node) => node.kind === "container" && node.details?.role === "symbol");
+      if (target !== null && hasLink(target as ContainerNode, known)) found = true;
+    }
+  });
+  visit(symbol);
+  known.set(symbol, found);
+  return found;
+}
+
+/// Il figlio di una `defs` della radice del documento di `from` con l'id
+/// `id` che `fits` accetta; `null` se non c'è.
+function defsChild(from: ElementPart, id: string, fits: (node: ElementPart) => boolean): ElementPart | null {
+  let root = from.parent;
+  while (root !== null && root.parent !== null) root = root.parent;
+  if (root === null) return null;
+  for (const defs of elementChildren(root)) {
+    if (defs.kind !== "container" || defs.details?.role !== "defs") continue;
+    for (const child of elementChildren(defs)) if (child.facts.id === id && fits(child)) return child;
+  }
+  return null;
+}
 
 /// Vero se `node` sta dentro `container`, a qualunque profondità.
 function within(node: ElementPart, container: ContainerNode): boolean {

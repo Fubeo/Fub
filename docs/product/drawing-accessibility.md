@@ -36,7 +36,9 @@ un'icona e una parola, «Avviso» o «Nota», mai il solo colore.
   e cambia la luminosità quanto basta, verso il più scuro o il più chiaro, dove
   serve meno. Un testo giallo `#f0e442` sulla carta bianca, a 1,32:1, riceve
   **«Usa #81780a (4,54:1)»**: un ocra, non un nero. Per un oggetto quasi
-  trasparente nessuna luminosità basta, e non si propone niente.
+  trasparente nessuna luminosità basta, e non si propone niente. Dentro un
+  [simbolo](drawing-symbols.md#accessibilità) il contrasto non si misura,
+  perché ogni istanza ha sotto un fondo diverso.
 - **«Un’immagine non ha una descrizione»** (avviso): chi non la vede non sa
   che cosa mostra. **«Descrivi…»** apre il campo nella riga: `Invio` scrive la
   descrizione, che diventa il titolo dell'immagine; `Esc` lascia com'era, e

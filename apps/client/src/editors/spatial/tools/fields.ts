@@ -314,6 +314,21 @@ export interface SelectionFacts {
   /// Le due righe «Stile», se il livello offre gli stili: ciascuna `null`
   /// se nessun oggetto scelto può seguire uno stile di quel tipo.
   readonly styles?: { readonly graphic: StyleFacts | null; readonly text: StyleFacts | null } | null;
+  /// La riga «Simbolo», se il livello offre i simboli; senza, o `null`, non
+  /// c'è un'istanza fra gli oggetti scelti.
+  readonly symbols?: SymbolFacts | null;
+}
+
+/// La riga «Simbolo» del pannello, come la legge l'editor.
+export interface SymbolFacts {
+  /// Il simbolo delle istanze scelte; `null` se sono di simboli diversi.
+  readonly current: string | null;
+  /// I simboli del documento, nell'ordine del documento, con quante istanze
+  /// ha ciascuno, e vero se le istanze scelte non lo possono avere perché
+  /// conterrebbe sé stesso.
+  readonly symbols: ReadonlyArray<{ readonly id: string; readonly name: string; readonly instances: number; readonly cycle: boolean }>;
+  /// Vero se è scelta un'istanza sola: il suo simbolo si modifica.
+  readonly single: boolean;
 }
 
 /// Una riga «Stile» del pannello, come la legge l'editor.
@@ -686,6 +701,47 @@ function styleField(kind: StyleKind, facts: StyleFacts, presets: boolean): MenuC
   };
 }
 
+/// Il nome di un simbolo nel menu: il suo, o «Simbolo senza nome».
+export function symbolLabel(name: string): string {
+  const clean = name.replace(/\s+/g, " ").trim();
+  return clean === "" ? t("draw.isolation.symbol.unnamed") : clean;
+}
+
+/// Il campo della riga «Simbolo»: sul pulsante il simbolo delle istanze
+/// scelte, o «Misto»; nel menu i simboli del documento, da dare alle
+/// istanze scelte, con quante istanze ha ciascuno, e i comandi, ciascuno
+/// spento col perché quando non vale.
+function symbolField(facts: SymbolFacts): MenuChoiceState {
+  const options: MenuOption[] = facts.symbols.map((symbol) => ({
+    value: `symbol:${symbol.id}`,
+    label: symbolLabel(symbol.name),
+    checked: facts.current === symbol.id,
+    ...(symbol.cycle && facts.current !== symbol.id
+      ? { disabled: true, note: t("draw.symbols.why.cycle") }
+      : { note: symbol.instances === 0 ? t("draw.symbols.instances.none") : plural(symbol.instances, "draw.symbols.instances.one", "draw.symbols.instances.other") }),
+  }));
+  const current = facts.symbols.find((symbol) => symbol.id === facts.current) ?? null;
+  const off = (reason: string | null): Partial<MenuOption> => (reason === null ? {} : { disabled: true, note: reason });
+  options.push(
+    { value: "edit", label: t("draw.symbol.edit"), action: true, separator: options.length > 0, ...off(facts.single ? null : t("draw.symbol.edit.none")) },
+    {
+      value: "rename",
+      label: t("draw.symbols.rename"),
+      action: true,
+      ...(current === null ? {} : { ask: { title: t("draw.styles.form.rename", { name: symbolLabel(current.name) }), value: current.name, submit: t("draw.styles.form.apply") } }),
+      ...off(current === null ? t("draw.symbols.why.mixed") : null),
+    },
+    { value: "detach", label: t("draw.symbol.detach"), action: true },
+  );
+  return {
+    kind: "menu",
+    label: t("draw.properties.symbol"),
+    value: current === null ? null : `symbol:${current.id}`,
+    summary: current === null ? t("draw.properties.mixed") : symbolLabel(current.name),
+    options,
+  };
+}
+
 /// Segna i campi in cui la selezione è diversa dallo stile della riga
 /// `facts`: il punto, e la frase per chi ascolta. Un campo che due stili
 /// segnano, come il colore di un testo e di una forma, dice il primo.
@@ -781,7 +837,10 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       fields.rotation = degreesField(t("draw.properties.rotation"), angleOf(frame.matrix));
     }
 
-    // --- Forma, con lo strumento che la disegna ---
+    // --- Forma: il simbolo delle istanze, e quella dello strumento che la
+    // disegna ---
+    const symbols = has("symbols") ? (selection.symbols ?? null) : null;
+    if (symbols !== null) fields.symbol = symbolField(symbols);
     if (has("polygon") && selection.shape !== null) shapeFields(fields, selection.shape, unit, null);
 
     // --- Aspetto ---

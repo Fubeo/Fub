@@ -74,7 +74,7 @@ function sessionsWith(text: string): DocumentSessionCollection {
 }
 
 describe("i vettori delle operazioni", () => {
-  it("ci sono gli 83 vettori di §9, in ordine", () => {
+  it("ci sono gli 88 vettori di §9, in ordine", () => {
     expect(vectors.map((v) => v.name)).toEqual([
       "add-first-stroke",
       "add-last-in-layer",
@@ -159,6 +159,11 @@ describe("i vettori delle operazioni", () => {
       "remove-style-in-use",
       "collect-keeps-style",
       "remove-style-collects-private",
+      "add-symbol-instance",
+      "remove-symbol-in-use",
+      "symbol-cycle",
+      "remove-instance-keeps-symbol",
+      "move-into-symbol",
     ]);
   });
 
