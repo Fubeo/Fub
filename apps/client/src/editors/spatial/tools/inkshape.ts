@@ -140,12 +140,41 @@ export function inkShapeOps(model: DocumentModel, index: SceneIndex, units: read
   return { ...plan.finish(keys), changed, refused, extent: drawn ? extent.finish() : null };
 }
 
+/// Un tratto appena disegnato e la forma che prende il suo posto, nelle
+/// coordinate del suo livello.
+export interface HeldShape {
+  readonly unit: Unit;
+  readonly shape: Recognized;
+}
+
 /// Le operazioni che mettono la forma `shape` al posto del tratto `unit`
-/// appena disegnato, nelle coordinate del suo livello. `null` se la forma
-/// non si disegna.
-export function heldShapeOps(model: DocumentModel, unit: Unit, shape: Recognized, ids: NewIds): (InkShaped & { readonly elem: Elem }) | null {
+/// appena disegnato, nelle coordinate del suo livello, e quelle di `copies`
+/// al posto delle sue copie in simmetria. `null` se la forma non si
+/// disegna; una copia la cui forma non si disegna resta inchiostro, e
+/// `refused` la conta.
+export function heldShapeOps(model: DocumentModel, unit: Unit, shape: Recognized, ids: NewIds, copies: readonly HeldShape[] = []): (InkShaped & { readonly elem: Elem }) | null {
   const plan = new Plan(model, ids);
   const elem = strokeShapeElem(unit.node, shape, IDENTITY);
   if (elem === null || !replaceElem(plan, unit.node, elem)) return null;
-  return { ...plan.finish([unit.key]), changed: 1, refused: 0, extent: placedBounds(elem, unit.parent), elem };
+  const extent = new BoundsBuilder();
+  let drawn = false;
+  const include = (bounds: Bounds | null): void => {
+    if (bounds === null) return;
+    extent.include(bounds.min);
+    extent.include(bounds.max);
+    drawn = true;
+  };
+  include(placedBounds(elem, unit.parent));
+  let changed = 1;
+  let refused = 0;
+  for (const copy of copies) {
+    const copied = strokeShapeElem(copy.unit.node, copy.shape, IDENTITY);
+    if (copied === null || !replaceElem(plan, copy.unit.node, copied)) {
+      refused++;
+      continue;
+    }
+    changed++;
+    include(placedBounds(copied, copy.unit.parent));
+  }
+  return { ...plan.finish([unit.key]), changed, refused, extent: drawn ? extent.finish() : null, elem };
 }

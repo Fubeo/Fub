@@ -78,6 +78,7 @@ import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
 import { REPEAT_KINDS, type RepeatEdit, type RepeatKind, type RepeatView } from "./repeat-ops";
 import type { ShapeChange, ShapeFacts } from "./reshape";
+import { MAX_SLICES, MIN_SLICES, SYMMETRY_KINDS, type PenSymmetry, type SymmetryKind } from "./symmetry";
 import type { StyleField, StyleKind, StyleRow } from "./styles";
 import type { ConnectorPanelView } from "./connector-panel";
 import type { GradientPanelView } from "./gradient-panel";
@@ -469,6 +470,10 @@ export interface FieldsInput {
   /// La tavola scelta dallo strumento Tavola, se è lo strumento di adesso:
   /// senza selezione il pannello la mostra.
   readonly board: BoardFacts | null;
+  /// La simmetria della penna, col centro, se la penna o l'evidenziatore
+  /// sono lo strumento di adesso e il livello la offre: senza selezione il
+  /// pannello la mostra.
+  readonly symmetry?: (PenSymmetry & { readonly center: readonly [number, number] }) | null;
   /// I campioni del documento, che i campi dei colori scrivono per nome.
   readonly swatches: readonly FieldSwatch[];
   /// I colori scelti di recente, dal più recente.
@@ -755,6 +760,37 @@ function symbolField(facts: SymbolFacts): MenuChoiceState {
     summary: current === null ? t("draw.properties.mixed") : symbolLabel(current.name),
     options,
   };
+}
+
+const SYMMETRY_LABELS: Readonly<Record<SymmetryKind, DrawKey>> = {
+  none: "draw.symmetry.none",
+  vertical: "draw.symmetry.vertical",
+  horizontal: "draw.symmetry.horizontal",
+  radial: "draw.symmetry.radial",
+};
+
+/// I campi di «Simmetria» della penna, con le lunghezze in `unit`: il tipo,
+/// con «Rimetti al centro» nel suo menu; gli spicchi e lo specchio di una
+/// radiale; il centro.
+function symmetryFields(fields: Partial<Record<FieldId, FieldState>>, symmetry: PenSymmetry & { readonly center: readonly [number, number] }, unit: LengthUnit): void {
+  const on = symmetry.kind !== "none";
+  fields.symmetry = {
+    kind: "menu",
+    label: t("draw.properties.symmetry.kind"),
+    value: symmetry.kind,
+    summary: t(SYMMETRY_LABELS[symmetry.kind]),
+    options: [
+      ...SYMMETRY_KINDS.map((kind): MenuOption => ({ value: kind, label: t(SYMMETRY_LABELS[kind]), checked: kind === symmetry.kind })),
+      ...(on ? [{ value: "center", label: t("draw.symmetry.recenter"), action: true, separator: true }] : []),
+    ],
+  };
+  if (!on) return;
+  if (symmetry.kind === "radial") {
+    fields.symmetrySlices = countField(t("draw.properties.symmetry.slices"), symmetry.slices, MIN_SLICES, MAX_SLICES);
+    fields.symmetryMirror = { kind: "switch", label: t("draw.properties.symmetry.mirror"), on: symmetry.mirror };
+  }
+  fields.symmetryX = lengthField(t("draw.properties.symmetry.center_x"), symmetry.center[0], unit, false);
+  fields.symmetryY = lengthField(t("draw.properties.symmetry.center_y"), symmetry.center[1], unit, false);
 }
 
 const REPEAT_KIND_LABELS: Readonly<Record<RepeatKind, DrawKey>> = {
@@ -1126,6 +1162,10 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     // --- Forma, dello strumento ---
     if (input.tool !== null) shapeFields(fields, input.tool, unit, t("draw.properties.shape_tool"));
 
+    // --- Simmetria, della penna ---
+    const symmetry = has("symmetry") ? (input.symmetry ?? null) : null;
+    if (symmetry !== null) symmetryFields(fields, symmetry, unit);
+
     // --- Tavola, dello strumento ---
     const board = input.board;
     if (board !== null) {
@@ -1178,7 +1218,7 @@ export function propertiesView(input: FieldsInput): PropertiesView {
         ? `selection\n${unit}\n${selection.keys}`
         : board !== null
           ? `board\n${unit}\n${board.id}`
-          : `document\n${unit}${input.tool === null ? "" : `\n${input.tool.shape.value}`}`,
+          : `document\n${unit}${input.tool === null ? "" : `\n${input.tool.shape.value}`}${input.symmetry === undefined || input.symmetry === null ? "" : `\n${input.symmetry.kind}`}`,
     subject:
       selection !== null ? selection.subject : board !== null ? t("draw.properties.board_subject", { index: board.index, count: board.count }) : t("draw.properties.drawing"),
     editable: input.editable,

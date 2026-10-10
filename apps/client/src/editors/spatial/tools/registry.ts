@@ -152,6 +152,7 @@ export type Feature =
   | "guides"
   | "rulers"
   | "recognize"
+  | "symmetry"
   | "gestures"
   | "links"
   | "images"
@@ -209,6 +210,9 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "guides", level: "standard", label: "draw.feature.guides" },
   { id: "rulers", level: "standard", label: "draw.feature.rulers" },
   { id: "recognize", level: "standard", label: "draw.feature.recognize" },
+  // La simmetria della penna è una sezione del pannello delle proprietà,
+  // con la penna e l'evidenziatore: nel Personalizzato si vede con lui.
+  { id: "symmetry", level: "standard", label: "draw.feature.symmetry" },
   { id: "gestures", level: "standard", label: "draw.feature.gestures" },
   { id: "links", level: "standard", label: "draw.feature.links" },
   { id: "images", level: "standard", label: "draw.feature.images" },

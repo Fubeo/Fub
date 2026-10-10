@@ -340,8 +340,8 @@ describe("la sezione «Ripetizione» del pannello", () => {
     const section = properties().querySelector<HTMLElement>('.draw-properties-section[data-section="repeat"]')!;
     expect(section.hidden).toBe(false);
     expect(section.querySelector(".draw-properties-toggle-text")!.textContent).toBe("Ripetizione");
-    // Dopo «Forma» e prima di «Aspetto».
-    const order = [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].map((each) => each.dataset.section);
+    // Dopo «Forma» e prima di «Aspetto», fra le sezioni di una selezione.
+    const order = [...properties().querySelectorAll<HTMLElement>(".draw-properties-section")].map((each) => each.dataset.section).filter((id) => id !== "symmetry");
     expect(order.indexOf("repeat")).toBe(order.indexOf("shape") + 1);
     expect(repeatRows()).toEqual(["Radiale", "Volte: 4", "Raggio (px): 90", "Centro X (px): 200", "Centro Y (px): 200"]);
     enter(propertyInput("repeatCount"), "6");
