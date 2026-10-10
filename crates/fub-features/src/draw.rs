@@ -23,11 +23,11 @@
 //! Le annotazioni di un PDF hanno due export loro, nel modulo [`annotated`]:
 //! il PDF annotato, cioè l'originale con le annotazioni sopra, e il PDF
 //! redatto, dove ciò che le coperture nascondono non c'è più. Il disegno di
-//! ogni pagina passa dalle stesse opzioni di `usvg` e dagli stessi caratteri
-//! dei disegni, senza le immagini del vault, che l'editor delle annotazioni
+//! ogni pagina passa dalle stesse opzioni di `usvg` e dai caratteri di Fub,
+//! senza le immagini e i caratteri del vault, che l'editor delle annotazioni
 //! non mostra.
 //!
-//! # Niente oltre al documento e alle sue immagini
+//! # Niente oltre al documento, alle sue immagini e ai suoi caratteri
 //!
 //! Un SVG può nominare altre risorse: un'immagine per path (`foto/mare.png`),
 //! per URL o per `file:`, un `<use>` che punta a un altro file, un `@import` in
@@ -51,18 +51,20 @@
 //! - `resources_dir` è `None`. `usvg` non risolve `<use>` verso altri file e
 //!   non segue `@import` né `@font-face`, e `roxmltree` non espande le entità
 //!   esterne di una DTD.
-//! - I caratteri sono soltanto quelli di Fub, incorporati nel binario
-//!   ([`fonts`]): niente caratteri di sistema, quindi lo stesso disegno esce
-//!   uguale su ogni macchina. Il database si costruisce soltanto da quei byte.
-//!   `fontdb` saprebbe leggere anche dal disco, perché `svg2pdf` lo prende con
-//!   le feature di serie e le feature di Cargo si sommano, ma nessuno glielo
+//! - I caratteri sono quelli di Fub, incorporati nel binario ([`FACES`] e i
+//!   file variabili da cui si fissano gli altri pesi), e quelli del vault, che
+//!   dà l'host come le immagini ([`typefaces`]): niente caratteri di sistema,
+//!   quindi lo stesso disegno, con lo stesso vault, esce uguale su ogni
+//!   macchina. Il database si costruisce soltanto da quei byte. `fontdb`
+//!   saprebbe leggere anche dal disco, perché `svg2pdf` lo prende con le
+//!   feature di serie e le feature di Cargo si sommano, ma nessuno glielo
 //!   chiede: `resvg` è compilato senza `system-fonts`, e il database non passa
 //!   mai da `load_system_fonts`.
 //!
 //! È la regola con cui la webview mostra un SVG dentro un `<img>`, dove la rete
-//! e i file del computer non si caricano, con le immagini del vault in più: del
-//! disegno fanno parte quanto quelle incorporate. E i caratteri, qui, sono
-//! quelli veri.
+//! e i file del computer non si caricano, con le immagini e i caratteri del
+//! vault in più: del disegno fanno parte quanto quelle incorporate. E i
+//! caratteri, qui, sono quelli veri.
 //!
 //! # Lo stesso disegno, gli stessi byte
 //!
@@ -116,16 +118,21 @@ mod annotate;
 mod annotated;
 mod choice;
 mod create;
+mod fonts;
+mod index;
 mod templates;
+mod typefaces;
 
 pub use annotate::PDF_ANNOTATE;
 pub use annotated::{AnnotatedPdfExport, RedactedPdfExport, DRAW_ANNOTATED_PDF, DRAW_REDACTED_PDF};
 pub use create::{DrawCommands, DRAWING_CREATE};
+pub use index::DrawIndex;
 
 use choice::{
     board_label, print_setup, raster_size, Choice, Names, Part, EXPORTED_SUFFIX, E_BOARD, E_OBJECT,
     E_ONE_DRAWING,
 };
+use typefaces::{Typefaces, VaultFonts};
 
 /// Id del componente.
 pub const DRAW_ID: &str = "fub.draw";
@@ -645,6 +652,8 @@ fn export_drawings(
     // Ciò che l'export tiene ancora, per le immagini che l'SVG pulito porta
     // dentro: passa da un disegno all'altro.
     let mut room = PLUGIN_EXPORT_LIMIT;
+    // I caratteri del vault, letti una volta per tutti i disegni.
+    let vault_fonts = VaultFonts::default();
     for (doc, path) in drawings.iter().zip(artifact_names(
         &drawings,
         format.extension(),
@@ -671,7 +680,7 @@ fn export_drawings(
                 continue;
             }
         };
-        let mut drawing = Drawing::new(host, doc, room);
+        let mut drawing = Drawing::new(host, &vault_fonts, doc, room);
         let mut done = 0usize;
         for file in &files {
             match write(&mut drawing, file, out, &mut report)? {
@@ -897,8 +906,10 @@ struct Drawing<'h> {
     doc: DocId,
     title: String,
     images: VaultImages<'h>,
+    /// I caratteri che le sue pagine nominano, di Fub e del vault.
+    typefaces: Typefaces<'h>,
     refused: Refused,
-    /// I caratteri che i caratteri di Fub non hanno.
+    /// I caratteri che nessuno dei suoi caratteri ha.
     missing: BTreeSet<char>,
     /// Vero se il PDF ha chiesto l'abbondanza e il disegno intero non dice
     /// la sua misura, quindi non ne ha.
@@ -911,11 +922,12 @@ struct Drawing<'h> {
 }
 
 impl<'h> Drawing<'h> {
-    fn new(host: &'h dyn ReadApi, doc: &DocId, room: usize) -> Self {
+    fn new(host: &'h dyn ReadApi, vault_fonts: &'h VaultFonts, doc: &DocId, room: usize) -> Self {
         Drawing {
             doc: doc.clone(),
             title: title(host, doc),
             images: VaultImages::new(host, doc),
+            typefaces: Typefaces::new(Some((host, vault_fonts))),
             refused: Refused::default(),
             missing: BTreeSet::new(),
             unbled: false,
@@ -927,8 +939,11 @@ impl<'h> Drawing<'h> {
     /// non si legge non ferma gli altri.
     fn tree(&mut self, text: &[u8]) -> Result<Tree, String> {
         let refused = Arc::new(Mutex::new(Refused::default()));
-        let tree = Tree::from_data(text, &options(&refused, Some(&self.images)))
-            .map_err(|error| format!("not a readable SVG drawing: {error}"))?;
+        let tree = Tree::from_data(
+            text,
+            &options(&refused, Some(&self.images), &self.typefaces),
+        )
+        .map_err(|error| format!("not a readable SVG drawing: {error}"))?;
         self.refused.merge(std::mem::take(&mut *lock(&refused)));
         self.missing.extend(missing_glyphs(&tree));
         Ok(tree)
@@ -960,7 +975,7 @@ impl<'h> Drawing<'h> {
     }
 
     /// Le note di un disegno esportato: ciò che è rimasto fuori, i caratteri
-    /// che i caratteri di Fub non hanno e l'abbondanza che non c'è.
+    /// che non ci sono e quelli che mancano, e l'abbondanza che non c'è.
     fn notes(&self, report: &mut ExportReport) {
         let refused = &self.refused;
         let embedded = (refused.embedded > 0).then(|| {
@@ -986,7 +1001,8 @@ impl<'h> Drawing<'h> {
                 embedded,
                 glyphs_note(&self.missing),
                 self.unbled.then(|| UNBLED_NOTE.to_string()),
-            ]);
+            ])
+            .chain(self.typefaces.notes().into_iter().map(Some));
         for message in notes.flatten() {
             report
                 .log
@@ -1068,14 +1084,14 @@ fn vault_note(why: LeftOut, images: &BTreeSet<String>) -> Option<String> {
 const UNBLED_NOTE: &str =
     "the drawing has neither a viewBox nor a width and height, so its PDF has no bleed";
 
-/// La nota dei caratteri che i caratteri di Fub non hanno.
+/// La nota dei caratteri che nessuno dei caratteri del disegno ha.
 fn glyphs_note(missing: &BTreeSet<char>) -> Option<String> {
     if missing.is_empty() {
         return None;
     }
     let chars: String = missing.iter().collect();
     Some(format!(
-        "characters outside Fub's fonts are drawn as a placeholder box: {chars}"
+        "characters outside the drawing's fonts are drawn as a placeholder box: {chars}"
     ))
 }
 
@@ -1148,9 +1164,11 @@ fn lock(refused: &Mutex<Refused>) -> MutexGuard<'_, Refused> {
 /// Le opzioni di `usvg` per un documento. Sono il confine di questo modulo:
 /// vedi la documentazione in testa al file. `vault` sono le immagini del vault
 /// che il documento può nominare; senza, ogni riferimento resta fuori.
+/// `typefaces` sceglie i caratteri del testo ([`typefaces`]).
 fn options<'a>(
     refused: &Arc<Mutex<Refused>>,
     vault: Option<&'a VaultImages<'a>>,
+    typefaces: &'a Typefaces<'a>,
 ) -> usvg::Options<'a> {
     let embedded = Arc::clone(refused);
     let external = Arc::clone(refused);
@@ -1180,7 +1198,8 @@ fn options<'a>(
                 }
             }),
         },
-        fontdb: Arc::clone(fonts()),
+        fontdb: Arc::clone(fub_fonts()),
+        font_resolver: typefaces.resolver(),
         ..usvg::Options::default()
     }
 }
@@ -1394,15 +1413,17 @@ const SERIF: &str = "Literata";
 const SANS: &str = "Inter";
 const MONO: &str = "JetBrains Mono";
 
-/// I caratteri di Fub, nei due pesi che un disegno usa, 400 e 700, in tondo
-/// e in corsivo.
+/// I caratteri di Fub al 400 e al 700, il peso del testo e quello del
+/// grassetto, in tondo e in corsivo.
 ///
 /// Sono gli stessi tre che l'app distribuisce (Inter, Literata e JetBrains
 /// Mono, i file variabili latin di `@fontsource-variable` 5.3.0, il tondo
 /// `*-latin-wght-normal.woff2` e il corsivo `*-latin-wght-italic.woff2`)
 /// fissati in istanze statiche: `usvg` 0.45 non sa scegliere un punto
 /// dell'asse `wght` di un carattere variabile, e con il file variabile ogni
-/// peso uscirebbe come il peso di serie del file. Le istanze sono
+/// peso uscirebbe come il peso di serie del file. Gli altri pesi li fissa
+/// l'export stesso dai file variabili, quando servono ([`typefaces`]). Le
+/// istanze sono
 /// riproducibili: fontTools 4.66.1, `font =
 /// instancer.instantiateVariableFont(font, {"wght": 400 | 700},
 /// updateFontNames=True)` sul file caricato con `recalcTimestamp=False`, che
@@ -1424,9 +1445,11 @@ const FACES: [&[u8]; 12] = [
     include_bytes!("../fonts/jetbrains-mono-italic-700.ttf"),
 ];
 
-/// Il database dei caratteri, costruito una volta per processo e soltanto dai
-/// byte qui sopra: nessuna chiamata a `load_system_fonts`, nessun file.
-fn fonts() -> &'static Arc<fontdb::Database> {
+/// Il database dei caratteri di serie, costruito una volta per processo e
+/// soltanto dai byte qui sopra: nessuna chiamata a `load_system_fonts`,
+/// nessun file. Ogni albero ne ha una copia, a cui aggiunge i caratteri che
+/// fissa ([`typefaces`]).
+fn fub_fonts() -> &'static Arc<fontdb::Database> {
     static FONTS: OnceLock<Arc<fontdb::Database>> = OnceLock::new();
     FONTS.get_or_init(|| {
         let mut db = fontdb::Database::new();
@@ -1754,7 +1777,15 @@ fn write_pdf(
         let setup = Setup { bleed, ..*setup };
         let sheet = print::layout(trim[0], trim[1], &setup);
         let units_per_inch = CSS_DPI / sheet.scale as f32;
-        let (chunk, root) = match svg2pdf::to_chunk(&tree, pdf::options(&tree, units_per_inch)) {
+        let mut options = pdf::options(&tree, units_per_inch);
+        // Il testo di un carattere che non si lascia incorporare va a
+        // tracciati, con quello di tutta la pagina.
+        let outlined = typefaces::restricted(&tree);
+        if !outlined.is_empty() {
+            options.embed_text = false;
+            drawing.typefaces.outlined(outlined);
+        }
+        let (chunk, root) = match svg2pdf::to_chunk(&tree, options) {
             Ok(converted) => converted,
             Err(error) => return failed(error.to_string()),
         };
@@ -2974,7 +3005,7 @@ mod tests {
 
     #[test]
     fn the_font_database_holds_fubs_faces_and_nothing_else() {
-        let db = fonts();
+        let db = fub_fonts();
         assert_eq!(db.len(), FACES.len());
         let mut families = BTreeSet::new();
         for face in db.faces() {

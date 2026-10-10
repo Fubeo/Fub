@@ -123,14 +123,15 @@ export const FONT_RANGE =
 let registered = false;
 
 /// Registra i caratteri coi nomi che il file del disegno scrive, una volta
-/// sola: ciascuno si scarica quando un testo lo usa. Dove il browser non sa
+/// sola: ciascuno si scarica quando un testo lo usa. Ogni lettera che il file
+/// ha vale, come nell'export: nessun `unicode-range`. Dove il browser non sa
 /// registrare un carattere, il testo usa il ripiego.
 export function ensureTextFont(): void {
   if (registered || typeof FontFace === "undefined" || typeof document === "undefined" || document.fonts === undefined) return;
   registered = true;
   for (const [family, url, weight, style] of FONT_FILES) {
     try {
-      document.fonts.add(new FontFace(family, `url("${url}") format("woff2")`, { style, weight, display: "swap", unicodeRange: FONT_RANGE }));
+      document.fonts.add(new FontFace(family, `url("${url}") format("woff2")`, { style, weight, display: "swap" }));
     } catch {
       // Un carattere che non si registra lascia il ripiego.
     }

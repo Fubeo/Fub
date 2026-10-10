@@ -75,7 +75,9 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   disegnare ([Disegni, colori](drawing-colors.md#la-sezione-colori-del-documento)).
 - **Testo.** Con la parte «Stili del documento» lo Stile di testo, coi suoi
   stili di serie; senza, lo Stile, un corpo e un peso insieme. Poi
-  Carattere, fra Inter, Literata e JetBrains Mono, Dimensione, Peso,
+  Carattere, fra Inter, Literata e JetBrains Mono e, con la parte «Caratteri
+  del vault» dell'Esperto, i [caratteri del vault](drawing-fonts.md), con
+  sotto il carattere usato quando uno non si carica; Dimensione, Peso,
   l'Enfasi (grassetto, corsivo, sottolineato e barrato), Interlinea,
   Spaziatura e Allineamento, per tutto il testo anche quando le sue parole
   sono diverse ([Disegni, tipografia](drawing-typography.md)).

@@ -540,6 +540,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/draw/fonts.rs::same_family",
+            (
+                Family::AsciiCase,
+                "confronta i nomi di famiglia di un carattere come i browser, che seguono la \
+                 risoluzione del CSSWG del 2019: maiuscole e minuscole contano soltanto fuori \
+                 dall'ASCII. L'export deve trovare la famiglia che la superficie dell'editor \
+                 trova, e piegare in full-Unicode ne troverebbe di più.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/path_policy.rs::is_dos_device",
             (
                 Family::AsciiCase,

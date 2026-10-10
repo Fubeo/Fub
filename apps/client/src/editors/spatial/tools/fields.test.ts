@@ -18,6 +18,7 @@ import {
   typedOpacity,
   type BoardFacts,
   type FieldsInput,
+  type FontFacts,
   type SelectionFacts,
   type StyleFacts,
 } from "./fields";
@@ -670,6 +671,66 @@ describe("il testo", () => {
     expect(families("")[0]).toEqual({ value: "", label: "Predefinito" });
     expect(families("Comic Sans MS, cursive").slice(-1)).toEqual([{ value: "Comic Sans MS, cursive", label: "Comic Sans MS" }]);
     expect(families(null)).toHaveLength(3);
+  });
+
+  it("dall'Esperto ha le famiglie del vault, ciascuna col suo ripiego, dopo quelle di Fub", () => {
+    const fonts: FontFacts = {
+      families: [
+        { name: "Caslon", generic: "serif" },
+        { name: "Noto Sans JP", generic: "sans-serif" },
+        { name: 'Un "nome"', generic: "sans-serif" },
+        { name: "a\\b", generic: "monospace" },
+      ],
+      notes: { missing: [], unreadable: [], over: [], failed: [] },
+      shown: () => "Inter",
+    };
+    const families = (level: Level, value: string): ChoiceState["options"] => options(propertiesView(input({ level, fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family);
+    expect(families("expert", "Inter, sans-serif").slice(3)).toEqual([
+      { value: "Caslon, serif", label: "Caslon", separator: true },
+      { value: '"Noto Sans JP", sans-serif', label: "Noto Sans JP" },
+      { value: `'Un "nome"', sans-serif`, label: 'Un "nome"' },
+    ]);
+    // Allo Standard il menu non le offre, ma un testo che ne usa una la
+    // mostra col suo nome.
+    expect(families("standard", "Inter, sans-serif")).toHaveLength(3);
+    expect(families("standard", '"Noto Sans JP", sans-serif').slice(3)).toEqual([{ value: '"Noto Sans JP", sans-serif', label: "Noto Sans JP" }]);
+    expect(families("expert", '"Noto Sans JP", sans-serif')).toHaveLength(6);
+  });
+
+  it("riconosce il carattere di un testo scritto in un altro modo, e non lo ripete nel menu", () => {
+    const fonts: FontFacts = {
+      families: [{ name: "Liberation Serif", generic: "serif" }],
+      notes: { missing: [], unreadable: [], over: [], failed: [] },
+      shown: () => "Liberation Serif",
+    };
+    const field = (value: string): ChoiceState => propertiesView(input({ level: "expert", fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family as ChoiceState;
+    for (const written of ["Liberation Serif, serif", "'liberation serif', Georgia, serif", '"Liberation Serif"']) {
+      expect(field(written).value).toBe('"Liberation Serif", serif');
+      expect(field(written).options.map((option) => option.label)).toEqual(["Inter", "Literata", "JetBrains Mono", "Liberation Serif"]);
+    }
+    expect(field("inter").value).toBe("Inter, sans-serif");
+    expect(field("inter").options).toHaveLength(4);
+    // Un'altra famiglia, o una generica sola, resta col suo nome.
+    expect(field("Liberation Sans, sans-serif").options.slice(-1)).toEqual([{ value: "Liberation Sans, sans-serif", label: "Liberation Sans" }]);
+    expect(field("serif")).toMatchObject({ value: "serif" });
+    expect(field("serif").options.slice(-1)).toEqual([{ value: "serif", label: "serif" }]);
+  });
+
+  it("dice sotto il carattere la famiglia che manca, è oltre il tetto o non si carica, e con quale si vede", () => {
+    const note = (value: string, notes: Partial<FontFacts["notes"]>): string | undefined => {
+      const fonts: FontFacts = { families: [], notes: { missing: [], unreadable: [], over: [], failed: [], ...notes }, shown: (each) => (each.startsWith("Roboto") ? "Roboto" : "Inter") };
+      return (propertiesView(input({ fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family as ChoiceState).note;
+    };
+    expect(note("Arial, sans-serif", { missing: ["arial"] })).toBe("Arial non è fra i caratteri del vault: il testo usa Inter.");
+    expect(note("Arial, Roboto, sans-serif", { missing: ["Arial"] })).toBe("Arial non è fra i caratteri del vault: il testo usa Inter.");
+    expect(note("Arial, sans-serif", { missing: ["Arial"], unreadable: ["Caratteri/rotto.ttf", "b.otf", "c.woff2", "d.ttf"] })).toBe(
+      "Arial non è fra i caratteri che il vault sa leggere: il testo usa Inter. Non si leggono: rotto.ttf, b.otf, c.woff2 e un altro.",
+    );
+    expect(note("Arial, sans-serif", { missing: ["Arial"], unreadable: ["a.ttf", "b.otf"] })).toContain("Non si leggono: a.ttf e b.otf.");
+    expect(note("Grande, serif", { over: ["Grande"] })).toBe("Grande supera i 64 MiB di caratteri di un disegno: il testo usa Inter.");
+    expect(note("Rotto, serif", { failed: ["Rotto"] })).toBe("Rotto non si carica: il testo usa Inter.");
+    expect(note("Roboto, sans-serif", { missing: ["Arial"] })).toBeUndefined();
+    expect(note("Inter, sans-serif", { missing: ["Inter"] })).toBeUndefined();
   });
 
   it("il corpo è in punti come lo spessore, e l'allineamento ha le sue icone", () => {

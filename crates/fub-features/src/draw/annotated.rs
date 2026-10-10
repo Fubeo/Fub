@@ -51,6 +51,7 @@ use lopdf::{Document, LoadOptions, ObjectId};
 use resvg::usvg::Tree;
 use sha2::{Digest, Sha256};
 
+use super::typefaces::Typefaces;
 use super::{
     check_target, external_note, glyphs_note, heading, lock, missing_glyphs, options, Refused,
     CHUNK,
@@ -704,6 +705,8 @@ struct Pages {
     embedded: Vec<u32>,
     /// I caratteri che i caratteri di Fub non hanno.
     missing: BTreeSet<char>,
+    /// I caratteri delle pagine: quelli di Fub, a ogni peso.
+    fonts: Typefaces<'static>,
     /// Le note che non si vedono.
     hidden: usize,
     /// Le pagine annotate, con o senza disegno.
@@ -721,6 +724,7 @@ impl Pages {
             external: BTreeSet::new(),
             embedded: Vec::new(),
             missing: BTreeSet::new(),
+            fonts: Typefaces::new(None),
             hidden: 0,
             annotated: sheets.numbers().len(),
         }
@@ -740,13 +744,19 @@ impl Pages {
                 format!("page {number} could not be drawn: {error}"),
             )
         };
-        let tree =
-            Tree::from_str(&sheets.svg(number, size), &options(&refused, None)).map_err(broken)?;
+        let tree = Tree::from_str(
+            &sheets.svg(number, size),
+            &options(&refused, None, &self.fonts),
+        )
+        .map_err(broken)?;
         // La copia marcata si legge e non si disegna: ciò che il suo
         // risolutore rifiuta l'ha già contato quello del disegno.
         let scratch = Arc::new(Mutex::new(Refused::default()));
-        let marked = Tree::from_str(&sheets.marked(number, size), &options(&scratch, None))
-            .map_err(broken)?;
+        let marked = Tree::from_str(
+            &sheets.marked(number, size),
+            &options(&scratch, None, &self.fonts),
+        )
+        .map_err(broken)?;
         let reading = read_marks(sheets, number, &marked);
 
         let refused = std::mem::take(&mut *lock(&refused));
@@ -830,6 +840,7 @@ impl Pages {
         if let Some(message) = glyphs_note(&self.missing) {
             notes.push(Note::warning(message));
         }
+        notes.extend(self.fonts.notes().into_iter().map(Note::warning));
     }
 }
 

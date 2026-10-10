@@ -24,7 +24,12 @@
 // toglie le fusioni all'export, `sfocatura` vi sfoca gli effetti un decimo
 // di meno, `angolo` vi gira di 5° le righe diagonali di una campitura,
 // `finestra` mostra nella Lettura il disegno intero al posto della sua
-// finestra.
+// finestra, `vault` toglie alla Lettura i caratteri del vault.
+//
+// Una scena coi caratteri del vault (`vault`) li ha da una porta del banco:
+// la famiglia «Banco» coi file variabili di JetBrains Mono che l'app
+// distribuisce, il tondo e il corsivo, come se il vault li avesse con
+// quel nome. Il foglio li registra, la Lettura e l'export li portano dentro.
 //
 // `?wrap=check` prova invece gli a capo dei testi in area contro il browser
 // (`wrap-check.ts`), e ne mette gli esiti in `data-wrap`; `?wrap=zwnj` li
@@ -37,7 +42,9 @@
 import "../src/theme/structure.css";
 import { PaintBuilder } from "../src/editors/spatial/painter/paint";
 import { createSvgPainter } from "../src/editors/spatial/painter/svg-dom";
-import { appFonts, section, selfContained, type FontSheets } from "../src/editors/spatial/picture";
+import { DrawingFonts, markupFonts, VaultFonts, type VaultFontPort } from "../src/editors/spatial/fonts/vault";
+import type { FaceInfo } from "../src/editors/spatial/fonts/faces";
+import { appFonts, fontSheets, section, selfContained, type FontSheets } from "../src/editors/spatial/picture";
 import { SceneEngine } from "../src/editors/spatial/scene/engine";
 import { boardsOf } from "../src/editors/spatial/tools/boards";
 import { rasterize } from "../src/editors/spatial/tools/png";
@@ -57,6 +64,42 @@ const UPRIGHT: FontSheets = {
   now: () => null,
   load: async (svg) => (await appFonts.load(svg)).split("\n").filter((rule) => !rule.includes("font-style:italic")).join("\n"),
 };
+
+/// I file della famiglia «Banco» del banco: le facce che l'host direbbe se si
+/// chiamassero così.
+const BANCO: readonly { readonly id: string; readonly url: string; readonly style: "normal" | "italic" }[] = [
+  { id: "Caratteri/Banco.woff2", url: "/fonts/jetbrains-mono-latin-wght-normal.woff2", style: "normal" },
+  { id: "Caratteri/Banco-Italic.woff2", url: "/fonts/jetbrains-mono-latin-wght-italic.woff2", style: "italic" },
+];
+
+/// I caratteri del vault del banco. L'istanza di una faccia è il file
+/// stesso: il browser lo fissa nel peso della faccia registrata, come
+/// l'istanza dell'host, e le tre strade lo leggono uguale.
+async function benchVault(): Promise<DrawingFonts> {
+  const bytes = await Promise.all(BANCO.map(async (file) => new Uint8Array(await (await fetch(file.url)).arrayBuffer())));
+  const face = (style: "normal" | "italic"): FaceInfo => ({
+    index: 0,
+    family: "Banco",
+    names: ["Banco"],
+    generic: "monospace",
+    weight: [100, 800],
+    stretch: [100, 100],
+    styles: [{ style, fixed: [] }],
+    axes: [{ tag: "wght", min: 100, default: 400, max: 800 }],
+  });
+  const port: VaultFontPort = {
+    files: async () => BANCO.map((file, i) => ({ id: file.id, size: bytes[i]!.length, mtime: 1 })),
+    read: async (id) => bytes[BANCO.findIndex((file) => file.id === id)] ?? null,
+    ask: async (query) => {
+      const { kind, data } = query as { kind: string; data: string };
+      if (kind === "font_instance") return { data };
+      const raw = atob(data);
+      const i = bytes.findIndex((each) => each.length === raw.length && each.every((byte, k) => byte === raw.charCodeAt(k)));
+      return { faces: [face(BANCO[i]!.style)] };
+    },
+  };
+  return new DrawingFonts(new VaultFonts(port));
+}
 
 /// Il disegno `text` con la radice sulla finestra di `scene`, come la resa
 /// lo mostra: il `viewBox` è la finestra, la larghezza e l'altezza sono quelle
@@ -97,7 +140,14 @@ async function main(): Promise<void> {
     return;
   }
   if (found === undefined) return;
-  await appFonts.load(found.text);
+  const vault = found.vault === true ? await benchVault() : null;
+  const fonts = vault === null ? appFonts : fontSheets(vault);
+  if (vault !== null) {
+    const { fonts: wanted } = markupFonts(found.text);
+    vault.useFonts(wanted);
+    await vault.ready(wanted);
+  }
+  await fonts.load(found.text);
 
   // La tavola che la scena mostra, e il disegno che ne fa il suo embed.
   const engine = SceneEngine.open(found.text);
@@ -109,7 +159,7 @@ async function main(): Promise<void> {
   const zoom = view === undefined ? 1 : FIDELITY_SIZE.width / view[2];
 
   const host = document.getElementById("surface")!;
-  const painter = createSvgPainter(host, openLifetime(), { fonts: appFonts });
+  const painter = createSvgPainter(host, openLifetime(), { fonts, ...(vault === null ? {} : { families: vault }) });
   painter.setView({ scale: zoom, angle: 0, tx: -(board?.rect[0] ?? view?.[0] ?? 0) * zoom, ty: -(board?.rect[1] ?? view?.[1] ?? 0) * zoom });
   painter.update(new PaintBuilder().build(engine));
 
@@ -118,7 +168,7 @@ async function main(): Promise<void> {
   // restare così: dalla seconda i caratteri sono pronti. Un testo grande come
   // quello di una diapositiva lo mostra sempre. La scena si disegna una volta
   // a vuoto, perché la Lettura e l'export partano dagli stessi caratteri.
-  await rasterize(await selfContained(text, async () => null, 0));
+  await rasterize(await selfContained(text, async () => null, 0, fonts));
 
   const read = variant === "colore"
     ? text.replace("#2b6cb0", "#4a90d9")
@@ -129,7 +179,7 @@ async function main(): Promise<void> {
         : variant === "finestra"
           ? sectioned
           : text;
-  const shown = await selfContained(read, async () => null, 0, variant === "carattere" ? NO_FONTS : variant === "corsivo" ? UPRIGHT : appFonts);
+  const shown = await selfContained(read, async () => null, 0, variant === "carattere" ? NO_FONTS : variant === "corsivo" ? UPRIGHT : variant === "vault" ? appFonts : fonts);
   await picture("read", new Blob([shown], { type: "image/svg+xml" }));
 
   const out = variant === "tratteggio"
@@ -143,7 +193,7 @@ async function main(): Promise<void> {
           : variant === "angolo"
             ? text.replace('patternTransform="rotate(-45)"', 'patternTransform="rotate(-40)"')
             : text;
-  const png = await rasterize(await selfContained(out, async () => null, 0));
+  const png = await rasterize(await selfContained(out, async () => null, 0, fonts));
   if (png === null) throw new Error(`il PNG di ${found.id} non si fa`);
   await picture("export", png);
 

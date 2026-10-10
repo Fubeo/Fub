@@ -12,7 +12,7 @@
 // colore, un carattere, un corsivo, un tratteggio, le risorse, i campioni,
 // le sfumature, le punte, i ritagli e le maschere, gli effetti e le fusioni
 // che mancano, una campitura girata di qualche grado, le carte delle tavole che mancano, una tavola mostrata senza
-// ritaglio, un disegno mostrato senza la sua finestra, deve farlo diventare rosso.
+// ritaglio, un disegno mostrato senza la sua finestra, i caratteri del vault che mancano, deve farlo diventare rosso.
 //
 // # La soglia
 //
@@ -74,6 +74,7 @@ const PLANTED = [
   ["tavole", "carta"],
   ["tavola-sola", "ritaglio"],
   ["modello-diagramma", "finestra"],
+  ["caratteri-vault", "vault"],
 ];
 const ROADS = ["read", "export"];
 const out = join(OUTPUT, "fidelity");

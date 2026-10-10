@@ -182,13 +182,14 @@ export function wrapSpans(spans: readonly Span[], width: number, fontOf: (span: 
 }
 
 /// Il carattere con cui si vede il tratto `span` della riga `line` di
-/// `rich`.
+/// `rich`; senza `font-family`, la famiglia vuota, che come nell'export è
+/// Literata.
 export function fontIn(rich: Rich, line: RichLine, span: Span | null): Font {
   const seen = (name: string): string | undefined => seenIn(rich, line, span, name);
   const size = seen("font-size");
   const spacing = seen("letter-spacing");
   return {
-    family: seen("font-family") ?? "sans-serif",
+    family: seen("font-family") ?? "",
     size: (size === undefined ? null : nonNegativeLength(size)) ?? 16,
     weight: seen("font-weight") ?? "normal",
     style: seen("font-style") ?? "normal",

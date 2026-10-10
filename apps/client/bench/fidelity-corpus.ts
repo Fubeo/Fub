@@ -1,6 +1,6 @@
 // Il corpus del banco di fedeltà: scene piccole che insieme toccano ogni
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
-// dell'app, in tondo e in corsivo, coi pezzi di riga, un'immagine, le
+// dell'app, in tondo e in corsivo, coi pezzi di riga, una famiglia del vault, un'immagine, le
 // risorse di ogni tipo, i campioni, le sfumature e le campiture come le
 // scrive FubDraw, i motivi, le tavole con le loro carte, e gli estranei tipici di Inkscape, Illustrator e
 // Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa; quella
@@ -52,6 +52,9 @@ export interface FidelityScene {
   /// disegno; l'altezza è quella che dà il rapporto della resa. Senza, il
   /// disegno si guarda al 100%. Non va con `board`.
   readonly view?: readonly [x: number, y: number, width: number];
+  /// Se la scena usa i caratteri del vault del banco, la famiglia «Banco»
+  /// (`fidelity.ts`).
+  readonly vault?: true;
 }
 
 /// Gli id delle forme delle raccolte, in fila: la scena è la stessa a ogni
@@ -196,6 +199,17 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<tspan x="12" dy="26" font-style="italic" letter-spacing="1.5">in <tspan font-weight="600" text-decoration="underline">pioggia</tspan></tspan></text>'
       + '<text id="t6" x="12" y="100" fill="#c53030" font-family="Literata, serif" font-size="22" font-style="italic" text-decoration="line-through">Literata corsiva</text>'
       + '<text id="t7" x="228" y="140" fill="#2f855a" font-family="JetBrains Mono, monospace" font-size="16" font-weight="300" font-style="italic" letter-spacing="-0.5" text-anchor="end">{ corsivo: 1 }</text></g>'),
+  },
+  {
+    // Una famiglia del vault, in tondo, in grassetto, a 600 in corsivo e
+    // leggera in un pezzo. Dove mancasse, il testo sarebbe in Literata.
+    id: "caratteri-vault",
+    vault: true,
+    text: scene(`${LAYER}<text id="t40" x="12" y="34" font-family="Banco, serif" font-size="20" fill="#1a202c">Banco, così</text>`
+      + '<text id="t41" x="12" y="66" font-family="Banco, serif" font-size="18" font-weight="700" fill="#2b6cb0">Grassetto 0123</text>'
+      + '<text id="t42" x="12" y="100" font-family="Banco, serif" font-size="18" font-weight="600" font-style="italic" fill="#c53030">Corsivo àèìòù</text>'
+      + '<text id="t43" x="228" y="140" fill="#2f855a" font-family="Banco, serif" font-size="16" text-anchor="end">'
+      + '<tspan x="228" dy="0">un <tspan font-weight="300">filo</tspan> sottile</tspan></text></g>'),
   },
   {
     // Un testo in area allineato a sinistra, con un pezzo e una parola

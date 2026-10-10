@@ -225,8 +225,12 @@ del vault resta l'originale.
 - **Gli stessi byte** escono a ogni export, in tutti e quattro i formati:
   nessuno porta date, e l'ordine interno del PDF non cambia.
 - **Le risorse** sono quelle del formato della scena, §9: immagini raster in
-  data URI e del vault, queste fino a 64 MiB per disegno, e caratteri di Fub;
-  il resto resta fuori, e il log lo nomina.
+  data URI e del vault, queste fino a 64 MiB per disegno, e caratteri di Fub
+  e del vault, fino a 64 MiB fissati per disegno ([testo](scene-format-text.md),
+  §9); il resto resta fuori, e il log lo nomina. Il PDF incorpora di un
+  carattere i soli glifi che usa; uno la cui licenza (`fsType`) non lo lascia
+  incorporare disegna il suo testo a tracciati, e il log lo dice. L'SVG
+  pulito nomina i caratteri e non li porta con sé.
 
 ## 6. I nomi dei file
 

@@ -26,6 +26,12 @@
 // l'`<img>` non carica niente da fuori, entrano nell'immagine coi loro byte
 // (`read-images.ts`).
 //
+// I file di caratteri del vault sono caratteri che i testi del disegno
+// possono nominare: la shell li elenca e li legge (`vaultFonts`), e sul
+// foglio, in Lettura e nell'anteprima dell'export valgono come nell'export
+// (`fonts/vault.ts`). Un carattere che il disegno non può caricare lo dice un
+// avviso, una volta per famiglia.
+//
 // Il livello dell'editor è l'impostazione del vault `draw.level`, con le parti
 // del Personalizzato in `draw.custom`, e la griglia l'ultima scelta su questa
 // macchina (`preferences.ts`): la superficie li legge quando nasce, segue il
@@ -53,6 +59,8 @@ import type { EditorChange } from "../core/text-operation";
 import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
 import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
+import { familyKey } from "./fonts/faces";
+import { DrawingFonts, markupFonts, vaultFontsOf, type FontNotes, type VaultFontPort } from "./fonts/vault";
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import {
   currentCustom,
@@ -80,7 +88,7 @@ import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, ty
 import { exportDialog } from "./tools/export-dialog";
 import { featuresFor } from "./tools/registry";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
-import { appFonts, picture, type FontSheets } from "./picture";
+import { fontSheets, picture, type FontSheets } from "./picture";
 
 type VectorMode = "draw" | "read";
 
@@ -99,6 +107,8 @@ export interface VectorSurfaceOptions {
   /// I caratteri dell'app per la Lettura, che da un `img` non li caricherebbe;
   /// di partenza quelli dell'app stessa.
   fonts?: FontSheets;
+  /// I caratteri del vault, che la shell elenca e legge.
+  vaultFonts?: VaultFontPort;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -365,6 +375,22 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     if (control instanceof HTMLButtonElement && control.dataset.href !== undefined) openLink(control.dataset.href);
   });
 
+  // --- I caratteri che mancano ----------------------------------------------
+
+  /// Le famiglie che il disegno ha già detto di non poter caricare.
+  const saidFonts = new Set<string>();
+
+  /// Dice, una volta per famiglia, le famiglie del vault che i testi del
+  /// disegno nominano e che non si caricano: non ci sono, superano il tetto
+  /// o il browser non le legge. I testi usano altri caratteri, come l'export.
+  function sayFonts(notes: FontNotes): void {
+    const fresh = [...notes.missing, ...notes.over, ...notes.failed].filter((name) => !saidFonts.has(familyKey(name)));
+    if (fresh.length === 0) return;
+    for (const name of fresh) saidFonts.add(familyKey(name));
+    const families = new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(fresh);
+    notify(t("vector.fonts.missing", { name: drawingName(), families }), "info");
+  }
+
   // --- L'editor -------------------------------------------------------------
 
   const mountEditor = (engine: SceneEngine): DrawEditor => {
@@ -389,6 +415,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       onSuggestedChange: (seen) => saveSuggested(seen),
       links,
       ...(images === undefined ? {} : { images }),
+      ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
+      onFontNotes: sayFonts,
       place,
       onChange: (change) => {
         text = change.text;
@@ -540,7 +568,20 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   const imageSources = (): Map<string, string> => new Map([...readImages].map(([path, entry]) => [path, entry.uri]));
 
-  const fonts = options.fonts ?? appFonts;
+  /// I caratteri del vault della Lettura e dell'anteprima dell'export, che
+  /// le loro immagini portano nel foglio (`picture.ts`).
+  const readingFonts = new DrawingFonts(options.vaultFonts === undefined ? null : vaultFontsOf(options.vaultFonts));
+  life.add(() => readingFonts.dispose());
+  const fonts = options.fonts ?? fontSheets(readingFonts);
+  life.add(readingFonts.watch(() => {
+    sayFonts(readingFonts.fontNotes());
+    // Le facce arrivate, o cambiate nel vault: l'immagine si ridisegna.
+    const shown = shownText;
+    if (shown === null || view === null) return;
+    const refs = imageRefs(shown);
+    if (fonts.now(shown) !== null) display(shownPicture(shown, refs));
+    else void readFonts(shown, refs);
+  }));
 
   /// Ciò che l'immagine mostra di `shown`: coi caratteri che nomina, se già
   /// letti, e con le immagini lette.
@@ -621,6 +662,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const kept = new Set(refs.map((ref) => ref.path));
     for (const path of [...readImages.keys()]) if (!kept.has(path)) readImages.delete(path);
     shownText = text;
+    readingFonts.useFonts(markupFonts(text).fonts);
     display(shownPicture(text, refs));
     showAbout();
     void readFonts(text, refs);
@@ -734,6 +776,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       if (life.closed || shownEngine() === null) return null;
       const base = text;
       const offer = exportOffer();
+      readingFonts.useFonts(markupFonts(offer.text).fonts);
       const choice = await exportDialog({
         name: drawingName(),
         text: offer.text,
@@ -741,6 +784,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         named: offer.named,
         memory,
         fonts,
+        fontNotes: readingFonts,
         print: featuresFor(level, custom).has("print"),
         ...(imagePort === undefined ? {} : { read: (path: string, limit: number) => imagePort.read(path, limit) }),
       });

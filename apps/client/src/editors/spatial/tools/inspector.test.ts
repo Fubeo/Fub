@@ -229,6 +229,19 @@ describe("scrivere un valore", () => {
     expect(control("fill").value).toBe("#ff0000");
   });
 
+  it("il carattere offre anche le famiglie del vault che l'editor dà", () => {
+    mount(doc(`${LAYER}<text id="oaaaaaaaa" x="0" y="10" font-family="Inter, sans-serif"><tspan x="0" dy="0">Ciao</tspan></text></g>`));
+    const families = (): string[] => [...row("font-family").querySelector("select")!.options].map((option) => option.value);
+    expect(families()).toEqual(["Inter, sans-serif", "Literata, serif", "JetBrains Mono, monospace"]);
+    inspector.update({ ...view(), families: ['"Noto Sans JP", sans-serif'] });
+    expect(families()).toEqual(["Inter, sans-serif", "Literata, serif", "JetBrains Mono, monospace", '"Noto Sans JP", sans-serif']);
+    choose(row("font-family").querySelector("select")!, '"Noto Sans JP", sans-serif');
+    expect(calls).toEqual(['set font-family="Noto Sans JP", sans-serif']);
+    expect(opened.engine.text).toContain("Noto Sans JP");
+    // Senza le famiglie del vault, il valore scritto resta fra le scelte.
+    expect(families()).toEqual(["Inter, sans-serif", "Literata, serif", "JetBrains Mono, monospace", '"Noto Sans JP", sans-serif']);
+  });
+
   it("lasciando il campo il valore parte, e una scelta parte quando si fa", () => {
     mount();
     write(control("width"), "12.345");

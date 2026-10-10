@@ -421,7 +421,8 @@ const START: Inherited = {
   stroke: false,
   strokeWidth: 1,
   miter: true,
-  font: { family: "sans-serif", size: 16, weight: "normal", style: "normal", spacing: 0 },
+  // Senza `font-family` l'export scrive in Literata, come la famiglia vuota.
+  font: { family: "", size: 16, weight: "normal", style: "normal", spacing: 0 },
   anchor: "start",
 };
 

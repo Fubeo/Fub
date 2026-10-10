@@ -84,6 +84,8 @@ import type { DocumentColors } from "./swatches";
 import { FIELD_PLACES, fieldMin, fromUnit, toUnit } from "./rulers";
 import { MIN_RATIO } from "./shapes";
 import { TEXT_FAMILIES, TEXT_SIZE } from "./text";
+import { parseFamilies, sameFamily, vaultNames, writtenFamily, type Generic } from "../fonts/faces";
+import type { FontNotes } from "../fonts/vault";
 import { TIP_SHAPES, TIP_SIZES, type EndLook, type TipChange, type TipEnd, type TipShape, type TipSize, type TipsLook } from "./tips";
 import { MAX_SCALE_PERCENT, MAX_SKEW } from "./transform";
 
@@ -407,6 +409,16 @@ function orientationField(label: string, rect: Rect): SegmentState {
   };
 }
 
+/// I caratteri del disegno, come li dice il campo «Carattere».
+export interface FontFacts {
+  /// Le famiglie del vault, con la generica da scrivere dopo, per il menu.
+  readonly families: readonly { readonly name: string; readonly generic: Generic }[];
+  /// Ciò che il disegno dice dei suoi caratteri.
+  readonly notes: FontNotes;
+  /// La famiglia con cui si vede un testo di `value`.
+  shown(value: string): string;
+}
+
 export interface FieldsInput {
   /// Le parti che il livello offre.
   readonly features: ReadonlySet<Feature>;
@@ -446,6 +458,10 @@ export interface FieldsInput {
   /// La sezione «Campitura», com'è già pronta, se il livello la offre e la
   /// selezione ha un riempimento.
   readonly hatch: HatchPanelView | null;
+  /// I caratteri del disegno: le famiglie del vault, che il menu
+  /// «Carattere» offre se il livello ha i caratteri del vault, e ciò che
+  /// manca. Senza, le sole famiglie di Fub.
+  readonly fonts?: FontFacts;
 }
 
 /// Un campo di una lunghezza, `value` in unità della scena, mostrata in
@@ -684,8 +700,60 @@ function markDiffers(fields: Partial<Record<FieldId, FieldState>>, facts: StyleF
   }
 }
 
-/// Il nome di un carattere: la famiglia prima del ripiego.
-const familyName = (family: string): string => family.split(",")[0]!.trim();
+/// Il nome di un carattere: la famiglia prima del ripiego, o il valore com'è
+/// se non si legge.
+function familyLabel(family: string): string {
+  const first = parseFamilies(family)?.[0];
+  return first === undefined ? family : "name" in first ? first.name : first.generic;
+}
+
+/// Se `a` e `b` nominano per prima la stessa famiglia, magari con altre
+/// virgolette, altre maiuscole o un altro ripiego: lo stesso carattere.
+function sameFirstFamily(a: string, b: string): boolean {
+  const first = parseFamilies(a)?.[0];
+  const other = parseFamilies(b)?.[0];
+  return first !== undefined && other !== undefined && "name" in first && "name" in other && sameFamily(first.name, other.name);
+}
+
+/// Le voci del menu «Carattere» per le famiglie del vault `families`:
+/// ciascuna col suo ripiego, soltanto quelle che il file sa scrivere.
+export function vaultFamilyOptions(families: readonly { readonly name: string; readonly generic: Generic }[]): ChoiceOption[] {
+  const options: ChoiceOption[] = [];
+  for (const { name, generic } of families) {
+    const written = writtenFamily(name);
+    if (written !== null) options.push({ value: `${written}, ${generic}`, label: name });
+  }
+  return options;
+}
+
+/// I file di caratteri che il vault non legge, per nome: i primi tre, e
+/// quanti altri.
+function unreadableFiles(files: readonly string[]): string {
+  const names = files.slice(0, 3).map((id) => id.slice(id.lastIndexOf("/") + 1));
+  const rest = files.length - names.length;
+  if (rest > 0) names.push(plural(rest, "draw.properties.family.more.one", "draw.properties.family.more.other"));
+  return new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(names);
+}
+
+/// La riga sotto il campo «Carattere» per `family`: la prima delle sue
+/// famiglie del vault che manca, è oltre il tetto del disegno o non si
+/// carica, e la famiglia con cui il testo si vede. `undefined` se ogni sua
+/// famiglia c'è.
+function familyNote(family: string, fonts: FontFacts): string | undefined {
+  const { notes } = fonts;
+  const listed = (list: readonly string[], name: string): boolean => list.some((each) => sameFamily(each, name));
+  for (const name of vaultNames(family)) {
+    const values = { family: name, used: fonts.shown(family) };
+    if (listed(notes.over, name)) return t("draw.properties.family.over", values);
+    if (listed(notes.failed, name)) return t("draw.properties.family.failed", values);
+    if (listed(notes.missing, name)) {
+      return notes.unreadable.length > 0
+        ? t("draw.properties.family.unreadable", { ...values, files: unreadableFiles(notes.unreadable) })
+        : t("draw.properties.family.missing", values);
+    }
+  }
+  return undefined;
+}
 
 /// Ciò che il pannello mostra.
 export function propertiesView(input: FieldsInput): PropertiesView {
@@ -800,13 +868,25 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       fields.preset = { kind: "choice", label: t("draw.properties.preset"), value: mixed ? null : (preset?.id ?? "custom"), options: presets };
     }
     if (look.family.count > 0) {
-      const families: ChoiceOption[] = TEXT_FAMILIES.map((family) => ({ value: family, label: familyName(family) }));
+      const families: ChoiceOption[] = TEXT_FAMILIES.map((family) => ({ value: family, label: familyLabel(family) }));
       const current = look.family.value;
-      // Un carattere che non è dei tre c'è, col suo nome; uno che nessuno
-      // scrive è quello di serie.
+      // Le famiglie del vault, dopo quelle di Fub.
+      if (has("fonts")) {
+        vaultFamilyOptions(input.fonts?.families ?? []).forEach((option, i) => families.push(i === 0 ? { ...option, separator: true } : option));
+      }
+      // Un carattere che nessuno scrive è quello di serie. Uno scritto in un
+      // altro modo, come `Liberation Serif, serif` senza virgolette, è la voce
+      // della stessa famiglia, che il menu non ripete; uno che non è fra
+      // questi c'è, col suo nome.
+      let value = current;
       if (current === "") families.unshift({ value: "", label: t("draw.properties.family.default") });
-      else if (current !== null && !TEXT_FAMILIES.includes(current)) families.push({ value: current, label: familyName(current) || current });
-      fields.family = { kind: "choice", label: t("draw.properties.family"), value: current, options: families };
+      else if (current !== null) {
+        const same = families.find((each) => each.value === current) ?? families.find((each) => sameFirstFamily(each.value, current));
+        if (same === undefined) families.push({ value: current, label: familyLabel(current) });
+        else value = same.value;
+      }
+      const note = current === null || input.fonts === undefined ? undefined : familyNote(current, input.fonts);
+      fields.family = { kind: "choice", label: t("draw.properties.family"), value, options: families, ...(note === undefined ? {} : { note }) };
     }
     if (look.size.count > 0) {
       fields.size = {

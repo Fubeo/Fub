@@ -1,17 +1,22 @@
 // Il disegno come immagine che si vede da sola. Dentro un `<img>`, da un blob
 // o da un file, il browser non carica niente da fuori: né i caratteri
-// dell'app, né le immagini del vault. Qui i caratteri entrano nella copia del
-// documento che va nell'immagine, in un foglio di stile coi loro file come
-// data URI, solo quelli che un testo nomina, e il corsivo soltanto se un
-// testo è in corsivo: la Lettura, gli strati immagine
-// del foglio, gli embed delle note e il PNG copiato scrivono così con gli
-// stessi caratteri del foglio. Il file non cambia.
+// dell'app, né quelli e le immagini del vault. Qui i caratteri entrano nella
+// copia del documento che va nell'immagine, in un foglio di stile coi loro
+// file come data URI: per ogni testo la prima famiglia di Fub che usa, in
+// tondo o in corsivo come lui, e le facce del vault che il disegno ha già
+// caricato. Lo stesso foglio dà a ogni `font-family` la famiglia che userebbe
+// l'export, come sulla superficie: quelle di Fub al posto delle generiche,
+// Literata dove nessuno la dice, mai un carattere del sistema. La Lettura,
+// gli strati immagine del foglio, l'anteprima dell'export, gli embed delle
+// note e il PNG copiato scrivono così con gli stessi caratteri del foglio. Il
+// file non cambia.
 //
-// - **Una lettura per sessione.** Ogni file si legge una volta, e chi disegna
-//   subito trova pronti quelli già letti; uno che non si legge si riprova la
-//   volta dopo.
-// - **Un tetto.** I caratteri insieme pesano al più [`MAX_FONT_SHEET_BYTES`]:
-//   tanto in più tiene in memoria ogni immagine che li porta tutti.
+// - **Una lettura per sessione.** Ogni file dell'app si legge una volta, e
+//   chi disegna subito trova pronti quelli già letti; uno che non si legge si
+//   riprova la volta dopo.
+// - **Un tetto.** I caratteri dell'app pesano al più
+//   [`MAX_FONT_SHEET_BYTES`], tanto in più tiene in memoria ogni immagine che
+//   li porta tutti; quelli del vault, al più il tetto del disegno.
 //
 // Una nota può incorporare una sezione sola del disegno, `![[disegno#nome]]`:
 // il titolo è il disegno intero, e una tavola è il disegno ritagliato su di
@@ -22,39 +27,68 @@ import { boardBox } from "./scene/classify";
 import { openSource, ReadError, readScene, type Scene } from "./scene/read";
 import { SourceText } from "./scene/text";
 import { attrOf, isSvg, NS_NONE, parseXml, type ElementNode } from "./scene/xml";
-import { FONT_FILES, FONT_RANGE } from "./tools/text";
+import { cssString, fubLiveFamily, shownFamily } from "./fonts/faces";
+import { markupFonts, type TextFont } from "./fonts/vault";
+import { FONT_FILES } from "./tools/text";
 
-/// Il foglio dei caratteri più grande, coi tre caratteri dell'app in tondo e
-/// in corsivo: misurato sui loro file, 379 KB, con un margine.
+/// I caratteri dell'app nel foglio più grande, i tre in tondo e in corsivo:
+/// misurato sui loro file, 379 KB, con un margine.
 export const MAX_FONT_SHEET_BYTES = 384 * 1024;
 
 /// Chi dà i caratteri a un'immagine: subito, se sono già letti, o quando
 /// arrivano.
 export interface FontSheets {
-  /// Il foglio dei caratteri che `svg` nomina, se sono tutti già letti: `""`
-  /// se non ne nomina; `null` se qualcuno manca ancora.
+  /// Il foglio dei caratteri dei testi di `svg`, se sono tutti già letti:
+  /// `""` se non ha testi; `null` se qualcuno manca ancora.
   now(svg: string): string | null;
-  /// Legge i caratteri che `svg` nomina e dà il loro foglio, senza quelli
+  /// Legge i caratteri dei testi di `svg` e dà il loro foglio, senza quelli
   /// che non si leggono.
   load(svg: string): Promise<string>;
 }
+
+/// Le famiglie di un disegno per le sue immagini: quella che si scrive per
+/// ogni `font-family`, e le facce del vault che i testi chiedono
+/// (`DrawingFonts`).
+export interface PictureFamilies {
+  /// La `font-family` che l'immagine scrive per `value`: nessuna del sistema.
+  picture(value: string): string;
+  /// Le regole `@font-face` delle facce del vault che `fonts` chiedono; con
+  /// `strict`, `null` se qualcuna sta ancora arrivando.
+  faces(fonts: readonly TextFont[], strict: boolean): string | null;
+  /// Si risolve quando le facce di `fonts` sono pronte, o si sa che non ci
+  /// saranno.
+  ready(fonts: readonly TextFont[]): Promise<void>;
+}
+
+/// Senza caratteri del vault: le sole famiglie di Fub.
+export const FUB_PICTURE_FAMILIES: PictureFamilies = {
+  picture: fubLiveFamily,
+  faces: () => "",
+  ready: () => Promise.resolve(),
+};
 
 /// I file dei caratteri in lettura o letti, per indirizzo.
 const fontUris = new Map<string, Promise<string | null>>();
 /// I file dei caratteri già letti, per indirizzo.
 const fontData = new Map<string, string>();
 
-/// I caratteri dell'app che `svg` nomina in un `font-family`; i corsivi, se
-/// un `font-style` chiede il corsivo o l'obliquo.
-function namedFonts(svg: string): typeof FONT_FILES {
-  if (!/font-family/i.test(svg)) return [];
-  const slanted = /font-style\s*[:=]\s*["']?\s*(?:italic|oblique)/i.test(svg);
-  return FONT_FILES.filter(([family, , , style]) =>
-    (style === "normal" || slanted) && new RegExp(`font-family\\s*[:=]\\s*(?:"[^"]*|'[^']*|[^;"'>]*)${family.replace(/ /g, "\\s+")}`, "i").test(svg));
+type FontFile = (typeof FONT_FILES)[number];
+
+/// I file dei caratteri dell'app che servono ai testi `fonts`: per ciascuno,
+/// la prima famiglia di Fub della sua famiglia viva, quella che il testo
+/// trova senza le famiglie del vault, in tondo o in corsivo.
+function fubFiles(fonts: readonly TextFont[]): FontFile[] {
+  const out = new Set<FontFile>();
+  for (const font of fonts) {
+    const family = shownFamily(font.family);
+    const style = font.style === "normal" ? "normal" : "italic";
+    for (const file of FONT_FILES) if (file[0] === family && file[3] === style) out.add(file);
+  }
+  return FONT_FILES.filter((file) => out.has(file));
 }
 
-const fontRule = (family: string, data: string, weight: string, style: string): string =>
-  `@font-face{font-family:"${family}";src:url(${data}) format("woff2");font-weight:${weight};${style === "normal" ? "" : `font-style:${style};`}unicode-range:${FONT_RANGE}}`;
+const fontRule = ([family, url, weight, style]: FontFile): string =>
+  `@font-face{font-family:"${family}";src:url(${fontData.get(url)}) format("woff2");font-weight:${weight};${style === "normal" ? "" : `font-style:${style};`}}`;
 
 /// Il data URI dei byte `blob`, col tipo `type`.
 function blobUri(blob: Blob, type: string): Promise<string | null> {
@@ -75,12 +109,9 @@ export const appFile = (url: string): Promise<Blob | null> =>
     .then((response) => (response.ok ? response.blob() : null))
     .catch(() => null);
 
-/// Il foglio di stile coi caratteri dell'app che `svg` nomina in un
-/// `font-family`, i file come data URI; `""` se non ne nomina. `read`
-/// legge un file dell'app.
-export async function fontFaces(svg: string, read: (url: string) => Promise<Blob | null> = appFile): Promise<string> {
-  const rules: string[] = [];
-  for (const [family, url, weight, style] of namedFonts(svg)) {
+/// Legge i file dell'app di `files` che non sono ancora letti.
+async function readFiles(files: readonly FontFile[], read: (url: string) => Promise<Blob | null>): Promise<void> {
+  for (const [, url] of files) {
     let uri = fontUris.get(url);
     if (uri === undefined) {
       uri = read(url).then((blob) => (blob === null ? null : blobUri(blob, "font/woff2")), () => null);
@@ -93,28 +124,59 @@ export async function fontFaces(svg: string, read: (url: string) => Promise<Blob
       continue;
     }
     fontData.set(url, data);
-    rules.push(fontRule(family, data, weight, style));
   }
-  return rules.join("\n");
 }
 
-/// Il foglio di [`fontFaces`], se i caratteri che `svg` nomina sono tutti già
-/// letti; `null` se qualcuno manca.
-export function fontFacesNow(svg: string): string | null {
-  const rules: string[] = [];
-  for (const [family, url, weight, style] of namedFonts(svg)) {
-    const data = fontData.get(url);
-    if (data === undefined) return null;
-    rules.push(fontRule(family, data, weight, style));
+/// Il foglio dei caratteri dei testi di `svg`. Le regole sulle `font-family`
+/// danno a ogni testo la famiglia che l'export userebbe, con quelle di Fub al
+/// posto delle generiche e Literata dove nessuno la dice, come sulla
+/// superficie; poi i file dell'app e le facce del vault che servono. Nessun
+/// grassetto o corsivo si inventa. Con `strict`, `null` se un file o una
+/// faccia non è ancora pronta; altrimenti senza.
+function sheet(svg: string, families: PictureFamilies, strict: boolean): string | null {
+  const { fonts, families: written } = markupFonts(svg);
+  if (fonts.length === 0) return "";
+  const rules = [`:root{font-synthesis:none}:root:not([font-family]){font-family:${families.picture("")}}`];
+  for (const value of written) rules.push(`[font-family=${cssString(value)}]{font-family:${families.picture(value)}}`);
+  for (const file of fubFiles(fonts)) {
+    if (fontData.has(file[1])) rules.push(fontRule(file));
+    else if (strict) return null;
   }
-  return rules.join("\n");
+  const faces = families.faces(fonts, strict);
+  if (faces === null) return null;
+  rules.push(faces);
+  // I nomi fra virgolette possono avere ciò che il markup legge: dentro lo
+  // stile diventano sequenze di escape dei CSS.
+  return rules.join("").replace(/[<>&]/g, (char) => `\\${char.charCodeAt(0).toString(16)} `);
+}
+
+/// I fogli dei caratteri per le immagini di un disegno con le famiglie
+/// `families`; `read` legge un file dell'app.
+export function fontSheets(families: PictureFamilies = FUB_PICTURE_FAMILIES, read: (url: string) => Promise<Blob | null> = appFile): FontSheets {
+  return {
+    now: (svg) => sheet(svg, families, true),
+    load: async (svg) => {
+      const { fonts } = markupFonts(svg);
+      await Promise.all([readFiles(fubFiles(fonts), read), families.ready(fonts).catch(() => undefined)]);
+      return sheet(svg, families, false) ?? "";
+    },
+  };
+}
+
+/// Il foglio dei caratteri dell'app per i testi di `svg`, i file come data
+/// URI; `""` se non ha testi. `read` legge un file dell'app.
+export function fontFaces(svg: string, read: (url: string) => Promise<Blob | null> = appFile): Promise<string> {
+  return fontSheets(FUB_PICTURE_FAMILIES, read).load(svg);
+}
+
+/// Il foglio di [`fontFaces`], se i file che servono sono già letti; `null`
+/// se qualcuno manca.
+export function fontFacesNow(svg: string): string | null {
+  return sheet(svg, FUB_PICTURE_FAMILIES, true);
 }
 
 /// I caratteri dell'app, letti coi file dell'app.
-export const appFonts: FontSheets = {
-  now: fontFacesNow,
-  load: (svg) => fontFaces(svg, appFile),
-};
+export const appFonts: FontSheets = fontSheets();
 
 /// `svg` con il foglio di stile `css`, che non ha marcatura, come primo
 /// figlio della radice; com'è se `css` è vuoto o se non si legge.

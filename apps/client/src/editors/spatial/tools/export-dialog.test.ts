@@ -301,6 +301,34 @@ describe("exportDialog", () => {
     expect(measure()).toBe("Questa anteprima non si può mostrare.");
     expect(sheet().hidden).toBe(true);
   });
+
+  it("dice i caratteri che il disegno non carica, rifà l'anteprima quando cambiano e smette di seguirli chiudendo", async () => {
+    let notes = { missing: [] as string[], unreadable: [] as string[], over: [] as string[], failed: [] as string[] };
+    const listeners = new Set<() => void>();
+    const load = vi.fn(async () => "");
+    const fontNotes = {
+      fontNotes: () => notes,
+      watch: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    };
+    const answer = open({ fonts: { now: () => "", load }, fontNotes });
+    const fontsHint = (): HTMLElement => dialog().querySelector<HTMLElement>('[id^="draw-export-fonts-"]')!;
+    expect(fontsHint().hidden).toBe(true);
+    expect(fontsHint().getAttribute("aria-live")).toBe("polite");
+    const before = image().src;
+
+    notes = { missing: ["Roboto"], unreadable: [], over: ["Noto Serif"], failed: ["Lobster"] };
+    for (const listener of listeners) listener();
+    expect(fontsHint().hidden).toBe(false);
+    expect(fontsHint().textContent).toBe("Caratteri che il disegno non può caricare: Roboto, Noto Serif e Lobster. Il file li scrive con altri, come l’anteprima.");
+    await vi.waitFor(() => expect(image().src).not.toBe(before));
+
+    button("Annulla").click();
+    await answer;
+    expect(listeners.size).toBe(0);
+  });
 });
 
 describe("la pagina del PDF", () => {

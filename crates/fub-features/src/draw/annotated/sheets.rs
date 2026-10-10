@@ -543,7 +543,9 @@ mod tests {
     /// testo, e le note con lui.
     fn tree(svg: &str) -> Tree {
         let refused = std::sync::Arc::new(std::sync::Mutex::new(crate::draw::Refused::default()));
-        Tree::from_str(svg, &crate::draw::options(&refused, None)).expect("SVG leggibile")
+        let fonts = crate::draw::typefaces::Typefaces::new(None);
+        let tree = Tree::from_str(svg, &crate::draw::options(&refused, None, &fonts));
+        tree.expect("SVG leggibile")
     }
 
     #[test]

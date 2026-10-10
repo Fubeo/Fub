@@ -536,7 +536,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         catalog: draw::catalog,
         view: None,
         commands: Some(|| Box::new(draw::DrawCommands)),
-        index: None,
+        index: Some(|| Box::new(draw::DrawIndex)),
         syntax: None,
         renderers: None,
         exports: Some(draw::exports),

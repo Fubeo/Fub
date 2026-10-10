@@ -209,6 +209,13 @@ describe("i valori", () => {
     expect(canonicalValue(tag, key, input)).toEqual(out !== null && typeof out === "object" ? out : { value: out });
   });
 
+  it("una famiglia del vault si scrive, se il menu dei caratteri la offre", () => {
+    const vault = ['"Noto Sans JP", sans-serif', "Caslon, serif"];
+    expect(canonicalValue("text", "font-family", ' "Noto Sans JP", sans-serif ', vault)).toEqual({ value: '"Noto Sans JP", sans-serif' });
+    expect(canonicalValue("text", "font-family", "Caslon, serif")).toEqual({ problem: "family" });
+    expect(canonicalValue("text", "font-family", "Caslon", vault)).toEqual({ problem: "family" });
+  });
+
   it("un attributo nuovo parte dal valore iniziale di SVG", () => {
     expect(
       ["fill", "stroke", "stroke-width", "opacity", "display", "stroke-linecap", "stroke-linejoin", "font-weight", "font-style", "letter-spacing", "text-decoration", "text-anchor", "font-size", "rx", "transform"].map(initialValue),

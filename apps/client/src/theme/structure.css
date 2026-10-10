@@ -1098,6 +1098,9 @@ html, body, #app {
   overflow: visible;
   color: initial;
   font: initial;
+  /* Come l'export: un grassetto o un corsivo che il carattere non ha non si
+     inventa. */
+  font-synthesis: none;
   letter-spacing: initial;
   word-spacing: initial;
   text-transform: initial;
@@ -1624,6 +1627,7 @@ html, body, #app {
   overflow: hidden;
   background: transparent;
   font-style: normal;
+  font-synthesis: none;
   letter-spacing: normal;
   word-spacing: normal;
   text-indent: 0;

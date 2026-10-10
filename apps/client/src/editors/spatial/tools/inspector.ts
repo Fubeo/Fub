@@ -54,6 +54,9 @@ export interface InspectorView {
   /// Quanti oggetti sono scelti.
   readonly count: number;
   readonly editable: boolean;
+  /// Le famiglie del vault che il menu di `font-family` offre dopo quelle di
+  /// Fub, come le scrive il menu «Carattere».
+  readonly families?: readonly string[];
 }
 
 export interface InspectorOptions {
@@ -252,6 +255,14 @@ export function createInspector(life: Lifetime, options: InspectorOptions): Insp
   element.append(header, empty, scroller);
 
   let view: InspectorView = { subject: null, key: null, label: "", count: 0, editable: false };
+
+  /// Il campo `field` dell'attributo `key`, con le famiglie del vault fra le
+  /// scelte di `font-family`.
+  const withFamilies = (field: Field, key: string): Field => {
+    const families = view.families ?? [];
+    if (field.kind !== "choice" || families.length === 0 || kindOf(key) !== "family") return field;
+    return { kind: "choice", options: [...field.options, ...families.filter((family) => !field.options.includes(family))] };
+  };
   let lines = new Map<string, Line>();
   /// Il nome scelto nell'aggiunta, e i nomi fra cui si sceglie.
   let adding: string | null = null;
@@ -342,7 +353,7 @@ export function createInspector(life: Lifetime, options: InspectorOptions): Insp
     const { subject, editable } = view;
     const readOnly = row !== null && row.note !== null;
     const value = row === null ? (subject?.id ?? "") : readOnly ? shownValue(row.value) : row.value;
-    const field: Field = row === null || readOnly ? { kind: "line" } : row.field;
+    const field: Field = row === null || readOnly ? { kind: "line" } : withFamilies(row.field, row.key);
     const shape = `${readOnly ? "read" : "edit"}|${field.kind}|${field.kind === "choice" ? field.options.join("\u0000") : ""}`;
     line.row = row;
     if (shape !== line.shape) {
@@ -438,7 +449,7 @@ export function createInspector(life: Lifetime, options: InspectorOptions): Insp
   /// Il campo del valore per il nome `key`, col suo valore di partenza.
   const showAddValue = (key: string): void => {
     const value = initialValue(key);
-    const next = controlFor(fieldOf(key), value);
+    const next = controlFor(withFamilies(fieldOf(key), key), value);
     next.className = "draw-inspector-input";
     next.value = value;
     next.setAttribute("aria-label", t("draw.attributes.add.value", { key }));
@@ -479,7 +490,7 @@ export function createInspector(life: Lifetime, options: InspectorOptions): Insp
     const { subject, editable } = view;
     if (subject === null || !editable || adding === null) return;
     const key = adding;
-    const result = canonicalValue(subject.tag, key, addValue.value);
+    const result = canonicalValue(subject.tag, key, addValue.value, view.families);
     if ("problem" in result || result.value === null) {
       const text = t("problem" in result ? VALUE_PROBLEMS[result.problem] : "draw.attributes.problem.identity");
       showAddError(text);
@@ -534,7 +545,7 @@ export function createInspector(life: Lifetime, options: InspectorOptions): Insp
       options.announce(t("draw.attributes.renamed", { id: next }));
       return true;
     }
-    const result = canonicalValue(subject.tag, line.key, draft);
+    const result = canonicalValue(subject.tag, line.key, draft, view.families);
     if ("problem" in result) return fail(t(VALUE_PROBLEMS[result.problem]));
     if (result.value === line.row.value) {
       line.control.value = before;

@@ -41,9 +41,9 @@ il pannello in `apps/client/src/editors/spatial/tools/inspector.ts`.
   contorno su un tratto a penna, che è tutto riempimento, e niente carattere
   su un rettangolo. Il valore parte da quello iniziale di SVG, che non cambia
   niente.
-- **Il carattere di un testo** si sceglie fra Inter, Literata e JetBrains
-  Mono, che Fub porta con sé. Un altro carattere, scritto da un altro
-  programma, resta fra le scelte finché non lo si cambia.
+- **Il carattere di un testo** si sceglie fra Inter, Literata, JetBrains
+  Mono e i [caratteri del vault](drawing-fonts.md). Un altro, scritto da un
+  altro programma, resta fra le scelte finché non lo si cambia.
 - **Ciò che ha un padrone si legge soltanto**, con la ragione accanto: il `d`
   di un tratto, che viene dall'inchiostro, e quello di una freccia, che viene
   dalla sua geometria; gli attributi `fub:*`, che scrive FubDraw; quelli di

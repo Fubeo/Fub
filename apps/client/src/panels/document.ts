@@ -60,6 +60,7 @@ import { WITHOUT_PAGE, notesByName, renderPrint, resolvedReference, settings, va
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "../state/recent";
 import { onEvent } from "../state/kernel";
+import { drawingFonts } from "../state/drawing-fonts";
 import { emit, on, state } from "../state/store";
 import { CASE_KEY, caseOf, toRecover } from "../state/drafts";
 import { syntaxForms, unsavedDrafts } from "../host/query";
@@ -507,6 +508,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       },
       pick: () => pickDrawingImage(),
     },
+    drawingFonts,
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
       openWikilink: (page, heading, block) => openWikilink(page, heading, block),
