@@ -4807,7 +4807,7 @@ button.draw-isolation-crumb:hover {
   flex-direction: column;
   gap: var(--space-2);
   margin: 0;
-  padding-inline-start: var(--space-5);
+  padding-inline-start: var(--space-7);
 }
 .modale .draw-import-note {
   font-size: var(--text-sm);

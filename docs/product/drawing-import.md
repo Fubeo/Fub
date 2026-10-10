@@ -48,8 +48,8 @@ importano lo stesso. Il file più grande che si legge è di 64 MB.
 il file; intanto dice che cosa sta facendo, «Leggo il file…» e poi «Preparo
 il disegno…». Quando il disegno è pronto mostra:
 
-- **da dove viene**: il nome del file e il programma, per esempio «Da
-  «rete.drawio», un disegno di draw.io.»;
+- **da dove viene**: il file, col suo percorso se è nel vault, e il
+  programma, per esempio «Da «schemi/rete.drawio», un disegno di draw.io.»;
 - **l'anteprima**: il disegno com'è venuto, sulla sua pagina, con i caratteri
   dell'app;
 - **quanto c'è**: le forme, i testi, le linee, i tratti a mano libera, le
