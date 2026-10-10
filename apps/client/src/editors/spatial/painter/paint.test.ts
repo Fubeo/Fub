@@ -7,7 +7,8 @@ import RESOURCES from "../../../__fixtures__/scene/resources.svg?raw";
 import { SceneEngine } from "../scene/engine";
 import { doc, HEAD } from "../scene/test-support";
 import { SourceText } from "../scene/text";
-import { NS_NONE, NS_SVG, parseXml, type NodeId } from "../scene/xml";
+import { readRepeat, repeatMatrices } from "../scene/repeat";
+import { NS_FUB, NS_NONE, NS_SVG, parseXml, valueOf, type NodeId } from "../scene/xml";
 import {
   IMAGE_PLACEHOLDER,
   imageDocument,
@@ -458,6 +459,26 @@ describe("le risorse", () => {
     expect(ids(scene.resources)).toEqual(["rgiallo00"]);
     expect(scene.symbols.map((symbol) => symbol.id)).toEqual(["rlampada0", "rquadro00"]);
     expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o7", "o8", "o9", "o10"]);
+  });
+
+  it("della scena delle ripetizioni sono tutte vive, e ogni copia ha la trasformazione della sua regola", () => {
+    const text = FIDELITY.find((each) => each.id === "ripetizioni")!.text;
+    const scene = sceneOf(text);
+    expect(kinds(scene)).toEqual(["live"]);
+    expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o1", "o8", "o15", "o20"]);
+    const parsed = parseXml(new SourceText(text), false);
+    const rules: string[] = [];
+    for (const node of parsed.nodes) {
+      const value = node.kind === "element" ? valueOf(node, NS_FUB, "repeat") : undefined;
+      if (node.kind !== "element" || value === undefined) continue;
+      rules.push(value);
+      const [original, ...copies] = node.children.map((id) => parsed.element(id)).filter((child) => child !== null);
+      const id = valueOf(original!, NS_NONE, "id");
+      const expected = repeatMatrices(readRepeat(value)!).map((m) => `matrix(${m.map((each) => Number(each.toFixed(4))).join(" ")})`);
+      expect(copies.map((copy) => [copy.local, valueOf(copy, NS_NONE, "href"), valueOf(copy, NS_NONE, "transform")])).toEqual(expected.map((transform) => ["use", `#${id}`, transform]));
+    }
+    // Una ripetizione dentro un'altra, e un gruppo girato.
+    expect(rules).toEqual(["radial 6 48 52", "grid 3 2 26 26", "mirror 188 100 208 160", "radial 4 124 120", "grid 2 1 8 8"]);
   });
 
   it("restano gli stessi oggetti finché non cambiano, anche in un motore riaperto", () => {

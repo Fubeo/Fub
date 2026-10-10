@@ -59,6 +59,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Guide intelligenti | Standard | l'aggancio agli altri oggetti e alla pagina, la loro casella in «Pagina e griglia», e le misure con `Alt` |
 | Righelli e guide | Standard | i righelli (`Maiusc+R`), le guide del documento (`\|`), «Guide…» e l'unità del documento |
 | Forme dal tratto | Standard | il tratto a penna tenuto fermo che diventa una forma, la sua casella in «Pagina e griglia», e «Rendi forma» nella barra «Disponi» |
+| Simmetria della penna | Standard | nel pannello delle proprietà, con la penna o l'evidenziatore e niente di scelto, la sezione «Simmetria»: gli assi, la radiale, il centro che si tira, le guide ([Disegni, ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria)); senza, ogni tratto è uno solo |
 | Vista ruotata, gesti e menu radiale | Standard | girare la vista (`4`, `6`, `5`, `Ctrl+Maiusc` con la rotella, due dita) e il pulsante dell'angolo; i tocchi di due e tre dita; il menu radiale (clic destro, tasto della penna, `Maiusc+F10`); «Penna e dita…» in «Pagina e griglia» |
 | Cronologia | Standard | il pulsante «Cronologia» e il suo pannello: i passi, i salti e i segni |
 | Verifica dell'accessibilità | Standard | il pulsante «Accessibilità» e il suo pannello: i problemi con le correzioni e l'ordine di lettura; la descrizione chiesta a ogni immagine che entra |
@@ -85,6 +86,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Motivi del documento | Esperto | «Motivo dalla selezione», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nella sezione «Campitura» i motivi del documento, il loro nome ed «Elimina motivo» |
 | Pagina di stampa del PDF | Esperto | nella finestra «Esporta», per il PDF, il gruppo «Pagina»: la carta, i margini, l'abbondanza e i segni ([Disegni, esportare](drawing-export.md#per-la-stampa)); senza, il PDF è grande quanto il disegno |
 | Simboli | Esperto | «Crea simbolo» e «Scollega dal simbolo», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nelle proprietà la riga «Simbolo»; il pulsante «Simboli» e il suo pannello, coi simboli del disegno e le librerie del vault ([Disegni, simboli](drawing-symbols.md)); senza, le istanze si vedono e si scelgono come ogni oggetto, e il loro simbolo si modifica dove si isola un gruppo |
+| Ripetizioni | Esperto | il menu «Ripeti», nella barra «Disponi», in «Selezione avanzata» e col tasto destro, con «Espandi la ripetizione»; nelle proprietà la sezione «Ripetizione» ([Disegni, ripetizioni e simmetria](drawing-repeats.md)); senza, le ripetizioni si vedono e si scelgono come ogni oggetto, si aprono dove si isola un gruppo e si separano come un gruppo |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
 bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la

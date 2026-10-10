@@ -1,7 +1,7 @@
-// Le ripetizioni nell'editor (Disegni, ripetizioni; formato della scena,
-// ripetizioni): ripetere gli oggetti scelti, cambiare una ripetizione,
-// espanderla, separarla e tenerla vera mentre il disegno cambia. Ogni
-// comando diventa un `batch` solo, come quelli di `arrange.ts`.
+// Le ripetizioni nell'editor (Disegni, ripetizioni e simmetria; formato
+// della scena, ripetizioni): ripetere gli oggetti scelti, cambiare una
+// ripetizione, espanderla, separarla e tenerla vera mentre il disegno cambia.
+// Ogni comando diventa un `batch` solo, come quelli di `arrange.ts`.
 //
 // - **Ripeti** mette l'oggetto scelto in un gruppo nuovo con `fub:repeat`,
 //   al suo posto, e dopo di lui le copie; più oggetti vanno prima in un
