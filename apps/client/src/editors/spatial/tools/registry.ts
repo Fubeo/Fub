@@ -171,6 +171,7 @@ export type Feature =
   | "trace"
   | "masks"
   | "typeset"
+  | "fonts"
   | "effects"
   | "blend"
   | "motifs"
@@ -225,6 +226,10 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "trace", level: "expert", label: "draw.feature.trace" },
   { id: "masks", level: "expert", label: "draw.feature.masks" },
   { id: "typeset", level: "expert", label: "draw.feature.typeset" },
+  // I caratteri del vault sono voci del menu «Carattere», nel pannello delle
+  // proprietà e negli attributi: nel Personalizzato si vedono con loro. Un
+  // disegno che li usa li mostra a ogni livello.
+  { id: "fonts", level: "expert", label: "draw.feature.fonts" },
   // Gli effetti e la fusione sono sezioni e campi del pannello delle
   // proprietà: nel Personalizzato si vedono con lui.
   { id: "effects", level: "expert", label: "draw.feature.effects" },

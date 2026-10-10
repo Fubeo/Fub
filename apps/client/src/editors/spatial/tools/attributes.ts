@@ -375,12 +375,14 @@ export type ValueProblem = "empty" | Kind;
 export type Canonical = { readonly value: string | null } | { readonly problem: ValueProblem };
 
 /// `input`, scritto per l'attributo `key` di un `tag`, come lo scrive il file.
-export function canonicalValue(tag: Tag, key: string, input: string): Canonical {
+/// Un `font-family` è uno di quelli di Fub o delle famiglie del vault
+/// `families`.
+export function canonicalValue(tag: Tag, key: string, input: string, families: readonly string[] = []): Canonical {
   const kind = kindOf(key);
   if (kind === null) throw new Error(`il pannello non scrive ${key}`);
   const text = trim(input);
   if (text === "") return { problem: "empty" };
-  const value = written(kind, key, text);
+  const value = written(kind, key, text, families);
   if (value === undefined) return { problem: kind };
   // Ciò che si scrive deve rileggersi come il formato lo ammette: un numero
   // che arrotondato esce da un float a 32 bit, per esempio, no.
@@ -390,7 +392,7 @@ export function canonicalValue(tag: Tag, key: string, input: string): Canonical 
 
 /// `text` scritto come lo scrive il file; `undefined` se non è del genere
 /// `kind`.
-function written(kind: Kind, key: string, text: string): string | null | undefined {
+function written(kind: Kind, key: string, text: string, families: readonly string[]): string | null | undefined {
   const place = (value: number | null, decimals = 2): string | undefined => (value === null ? undefined : formatNumber(value, decimals));
   switch (kind) {
     case "paint":
@@ -419,7 +421,7 @@ function written(kind: Kind, key: string, text: string): string | null | undefin
       return lines === null ? undefined : lines.length === 0 ? "none" : lines.join(" ");
     }
     case "family":
-      return TEXT_FAMILIES.includes(text) ? text : undefined;
+      return TEXT_FAMILIES.includes(text) || families.includes(text) ? text : undefined;
     case "transform": {
       const m = transform(text);
       return m === null ? undefined : transformValue(m);

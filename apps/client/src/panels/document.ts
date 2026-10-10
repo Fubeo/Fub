@@ -42,7 +42,6 @@ import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
 import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
-import type { VaultFontFile, VaultFontPort } from "../editors/spatial/fonts/vault";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
@@ -61,6 +60,7 @@ import { WITHOUT_PAGE, notesByName, renderPrint, resolvedReference, settings, va
 import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "../state/recent";
 import { onEvent } from "../state/kernel";
+import { drawingFonts } from "../state/drawing-fonts";
 import { emit, on, state } from "../state/store";
 import { CASE_KEY, caseOf, toRecover } from "../state/drafts";
 import { syntaxForms, unsavedDrafts } from "../host/query";
@@ -316,57 +316,6 @@ async function drawingImageId(path: string, from: string): Promise<string | null
   const id = (await resolvedReference({ kind: "path", value: path }, from).catch(() => null))?.doc ?? null;
   return id !== null && mediaKindOfId(id) === "image" ? id : null;
 }
-
-/// Lo spazio dell'indice dove l'host risponde alle domande dei disegni.
-const DRAW_QUERIES = "fub.draw";
-
-/// Gli allegati del vault, fra cui i caratteri dei disegni: l'anagrafe letta
-/// a pagine, tutta, nell'ordine in cui la dà.
-async function drawingFontFiles(): Promise<VaultFontFile[]> {
-  const found: VaultFontFile[] = [];
-  for (let offset = 0; ;) {
-    const page = await vaultEntries({ offset, limit: CANVAS_FILE_CHOICES }, "asset");
-    for (const entry of page.items) found.push({ id: entry.id, size: entry.size, mtime: entry.mtime });
-    offset += page.items.length;
-    if (page.items.length === 0 || offset >= page.total) break;
-  }
-  return found;
-}
-
-/// I caratteri del vault per i disegni: la shell elenca gli allegati, ne
-/// legge i byte, porta all'host le domande sui caratteri e dice quando un
-/// allegato cambia. Una sola per l'app: i disegni ne condividono le facce.
-const drawingFonts: VaultFontPort = {
-  files: drawingFontFiles,
-  read: async (id, limit) => {
-    const port = await openResourcePort(mediaTransport, id);
-    try {
-      return port.descriptor.len > limit ? null : await port.readAll();
-    } finally {
-      await port.close();
-    }
-  },
-  ask: async (query) => {
-    const answer = await api.queryIndex({ kind: "custom", ns: DRAW_QUERIES, query });
-    if (answer.kind !== "custom") throw new Error(`${DRAW_QUERIES} answered a ${answer.kind} result`);
-    return answer.value;
-  },
-  watch: (changed) => {
-    const stops = [
-      onEvent("entry_changed", (e) => changed(e.id)),
-      onEvent("entry_removed", (e) => changed(e.id)),
-      onEvent("entry_renamed", (e) => {
-        changed(e.from);
-        changed(e.to);
-      }),
-      onEvent("vault_opened", () => changed(null)),
-      onEvent("overflow", () => changed(null)),
-    ];
-    return () => {
-      for (const stop of stops) stop();
-    };
-  },
-};
 
 async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
   const configured = (await settings()).find((entry) => entry.spec.key === "files.attachment-folder")?.value;

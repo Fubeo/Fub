@@ -15,12 +15,16 @@
 // conto dell'host (`scene/print.ts`). Sotto, la misura della carta e del
 // disegno, e quanto è ridotto o ingrandito.
 //
+// Sotto l'anteprima, i caratteri che il disegno nomina e non può caricare: il
+// file li scrive con altri, come l'anteprima.
+//
 // Dalla tastiera si usa tutta: Tab va da un gruppo all'altro e le frecce
 // scelgono dentro il gruppo, come in ogni gruppo di pulsanti di scelta;
 // Invio esporta anche da un pulsante di scelta o da una casella; Esc chiude,
 // e il fuoco torna dov'era.
 
 import { resolvedLanguage } from "../../../i18n/strings";
+import type { FontNotes } from "../fonts/vault";
 import { actions, openFrame } from "../../../ui/dialogs";
 import { svgSize } from "../../media/image-view";
 import { picture, type FontSheets } from "../picture";
@@ -81,6 +85,10 @@ export interface ExportDialogOptions {
   readonly named?: number;
   readonly memory: ExportMemory | null;
   readonly fonts: FontSheets;
+  /// Ciò che il disegno dice dei suoi caratteri, e chi avvisa quando cambia:
+  /// la finestra dice quelli che non carica, e rifà l'anteprima quando una
+  /// faccia arriva.
+  readonly fontNotes?: { fontNotes(): FontNotes; watch(listener: () => void): () => void };
   /// Legge un'immagine del vault per l'anteprima, senza leggerla se pesa più
   /// di `limit` byte; senza, le immagini sono segnaposti.
   readonly read?: (path: string, limit: number) => Promise<Blob | null>;
@@ -111,11 +119,14 @@ export function exportDialog(options: ExportDialogOptions): Promise<ExportChoice
   const id = ++dialogs;
   return new Promise((resolve) => {
     let settled = false;
+    /// Smette di seguire i caratteri del disegno.
+    let stopFonts: (() => void) | undefined;
     const urls: string[] = [];
     const settle = (value: ExportChoice | null): void => {
       if (settled) return;
       settled = true;
       observer?.disconnect();
+      stopFonts?.();
       for (const url of urls) URL.revokeObjectURL(url);
       frame.close();
       resolve(value);
@@ -306,6 +317,17 @@ export function exportDialog(options: ExportDialogOptions): Promise<ExportChoice
     measure.className = "draw-export-measure";
     measure.setAttribute("aria-live", "polite");
     preview.append(stage, pager, measure);
+    const fontsHint = hint(preview, `draw-export-fonts-${id}`, "");
+    fontsHint.setAttribute("aria-live", "polite");
+    /// Dice le famiglie che il disegno non carica: non ci sono, superano il
+    /// tetto o il browser non le legge.
+    const sayFonts = (): void => {
+      const notes = options.fontNotes?.fontNotes();
+      const names = notes === undefined ? [] : [...notes.missing, ...notes.over, ...notes.failed];
+      fontsHint.hidden = names.length === 0;
+      fontsHint.textContent = names.length === 0 ? "" : t("draw.export.fonts", { families: new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(names) });
+    };
+    sayFonts();
 
     layout.append(choices, preview);
 
@@ -342,6 +364,12 @@ export function exportDialog(options: ExportDialogOptions): Promise<ExportChoice
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") observer = new ResizeObserver(() => fit());
     observer?.observe(stage);
+    // Una faccia arrivata, o una famiglia che non si carica: la riga e
+    // l'anteprima si rifanno.
+    stopFonts = options.fontNotes?.watch(() => {
+      sayFonts();
+      refresh();
+    });
 
     const derive = (scope: ExportScope, bleed = 0): string => {
       const background = backgroundOf(state);
@@ -557,10 +585,11 @@ export function exportDialog(options: ExportDialogOptions): Promise<ExportChoice
     /// Mostra `text` nell'anteprima, coi caratteri e le immagini che ha.
     const show = async (text: string, mine: number): Promise<void> => {
       const refs = imageRefs(text);
-      display(picture(text, options.fonts.now(text) ?? "", refs, sources));
+      let css = options.fonts.now(text);
+      display(picture(text, css ?? "", refs, sources));
       let changed = false;
-      if (options.fonts.now(text) === null) {
-        await options.fonts.load(text);
+      if (css === null) {
+        css = await options.fonts.load(text);
         changed = true;
       }
       for (const path of new Set(refs.flatMap((ref) => (ref.path === null || sources.has(ref.path) ? [] : [ref.path])))) {
@@ -573,7 +602,7 @@ export function exportDialog(options: ExportDialogOptions): Promise<ExportChoice
         spent += blob!.size;
         changed = true;
       }
-      if (changed && !settled && mine === round) display(picture(text, options.fonts.now(text) ?? "", refs, sources));
+      if (changed && !settled && mine === round) display(picture(text, options.fonts.now(text) ?? css, refs, sources));
     };
 
     const display = (svg: string): void => {

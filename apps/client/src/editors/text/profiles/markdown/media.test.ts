@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LinkTarget } from "../../../../host/contract";
+import type { VaultFontPort } from "../../../spatial/fonts/vault";
 import { openLifetime } from "../../../../ui/lifetime";
 import { embedSize, hydrateVaultMedia, vaultImageSource, type MediaPort } from "./media";
 
@@ -26,6 +27,17 @@ function port(files: Record<string, string>, delay?: Promise<void>) {
 }
 
 const same = <T,>(value: Promise<T>) => value;
+
+/// Il foglio di un disegno con un testo `serif` quando i file dei caratteri
+/// dell'app non si leggono: le sole famiglie, nessuna del sistema.
+const SERIF_SHEET = '<style>:root{font-synthesis:none}:root:not([font-family]){font-family:Literata, Inter, "JetBrains Mono"}[font-family="serif"]{font-family:Literata, Inter, "JetBrains Mono"}</style>';
+/// `svg` col foglio `sheet` dopo l'apertura della radice.
+const sheeted = (svg: string, sheet = SERIF_SHEET): string => svg.replace(/^<svg[^>]*>/, (open) => `${open}${sheet}`);
+
+// I file dei caratteri dell'app non ci sono: happy-dom non ha il server
+// dell'app.
+beforeEach(() => vi.stubGlobal("fetch", async () => new Response(null, { status: 404 })));
+afterEach(() => vi.unstubAllGlobals());
 
 function html(markup: string): HTMLElement {
   const root = document.createElement("div");
@@ -61,7 +73,7 @@ describe("i media del vault dentro una nota", () => {
       const embedded = root.querySelector<HTMLImageElement>(".embed img")!;
       expect(embedded.getAttribute("src")).toBe("blob:disegno-1");
       const shown = await blobs.get("blob:disegno-1")!.text();
-      expect(shown).toBe(DRAWING.replace('href="foto.png"', `href="${PNG_URI}"`));
+      expect(shown).toBe(sheeted(DRAWING.replace('href="foto.png"', `href="${PNG_URI}"`)));
       // L'immagine si risolve dal disegno, non dalla nota.
       expect(asked.some(([target, from]) => target.kind === "path" && target.value === "foto.png" && from === "Disegni/casa.svg")).toBe(true);
       expect(limits).toContain(16 * 1024 * 1024);
@@ -105,14 +117,14 @@ describe("i media del vault dentro una nota", () => {
       const shown = (slot: HTMLElement) => blobs.get(slot.querySelector("img")!.getAttribute("src")!)!.text();
 
       // La tavola: la prima che si chiama così, col suo rettangolo.
-      expect(await shown(cover!)).toBe(`${HEAD} viewBox="0 0 600 400" width="600" height="400">${BODY}`);
+      expect(await shown(cover!)).toBe(sheeted(`${HEAD} viewBox="0 0 600 400" width="600" height="400">${BODY}`));
       expect(cover!.querySelector("img")!.alt).toBe("storia.svg#Copertina");
       expect(cover!.dataset.vaultMedia).toBe("loaded");
       // Il titolo è il disegno intero, prima della tavola che si chiama come
       // lui; senza heading, lo stesso.
-      expect(await shown(titled!)).toBe(DRAWING);
+      expect(await shown(titled!)).toBe(sheeted(DRAWING));
       expect(titled!.querySelector("img")!.alt).toBe("storia.svg#Storia");
-      expect(await shown(whole!)).toBe(DRAWING);
+      expect(await shown(whole!)).toBe(sheeted(DRAWING));
       expect(whole!.querySelector("img")!.alt).toBe("storia.svg");
       // Un nome che non è una sezione non si risolve, come un embed che non
       // si trova: i nomi si confrontano esatti.
@@ -126,6 +138,50 @@ describe("i media del vault dentro una nota", () => {
       expect(blobs.size).toBe(3);
     } finally {
       vi.restoreAllMocks();
+    }
+  });
+
+  it("un disegno porta dentro i caratteri del vault che i suoi testi nominano, e poi li lascia", async () => {
+    const DRAWING = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><text font-family="Roboto, serif">Casa</text><text font-family="Lobster, cursive">Tetto</text></svg>';
+    const FONT = new TextEncoder().encode("font:Roboto");
+    // Il browser registra le facce: happy-dom non sa farlo.
+    const fonts = new Set<object>();
+    vi.stubGlobal("FontFace", class {
+      constructor(readonly family: string) {}
+      async load(): Promise<this> {
+        return this;
+      }
+    });
+    Object.defineProperty(document, "fonts", { configurable: true, value: { add: (face: object) => fonts.add(face), delete: (face: object) => fonts.delete(face) } });
+    const vault: VaultFontPort = {
+      files: async () => [{ id: "Caratteri/Roboto.ttf", size: FONT.length, mtime: 1 }],
+      read: async () => FONT,
+      ask: async () => ({ faces: [{ index: 0, family: "Roboto", names: ["Roboto"], generic: "sans-serif", weight: [400, 400], stretch: [100, 100], styles: [{ style: "normal", fixed: [] }], axes: [] }] }),
+    };
+    const blobs = new Map<string, Blob>();
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      const url = `blob:disegno-${blobs.size + 1}`;
+      blobs.set(url, blob as Blob);
+      return url;
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    try {
+      const root = html('<span class="embed" data-embed-page="casa.svg">casa.svg</span>');
+      const { media } = port({ "casa.svg": "Disegni/casa.svg" });
+      media.read = async () => new Blob([DRAWING], { type: "image/svg+xml" });
+      media.fonts = vault;
+      await hydrateVaultMedia(root, "Note/qui.md", same, openLifetime(), media);
+      const shown = await blobs.get(root.querySelector(".embed img")!.getAttribute("src")!)!.text();
+      // Roboto c'è, coi suoi byte; Lobster no, e il testo usa Literata.
+      expect(shown).toBe(sheeted(DRAWING, '<style>:root{font-synthesis:none}:root:not([font-family]){font-family:Literata, Inter, "JetBrains Mono"}'
+        + '[font-family="Roboto, serif"]{font-family:Roboto, Literata, Inter, "JetBrains Mono"}'
+        + '[font-family="Lobster, cursive"]{font-family:Literata, Inter, "JetBrains Mono"}'
+        + `@font-face{font-family:"Roboto";src:url(data:application/octet-stream;base64,${btoa("font:Roboto")});font-weight:400;font-style:normal}</style>`));
+      // L'immagine è fatta: la faccia non serve più a nessuno.
+      await vi.waitFor(() => expect(fonts.size).toBe(0));
+    } finally {
+      vi.restoreAllMocks();
+      Reflect.deleteProperty(document, "fonts");
     }
   });
 

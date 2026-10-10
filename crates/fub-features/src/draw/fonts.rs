@@ -1,7 +1,8 @@
 //! I caratteri del vault.
 //!
-//! Un file `.ttf`, `.otf`, `.ttc`, `.otc`, `.woff` o `.woff2` del vault è un
-//! carattere che un disegno può usare. Questo modulo ne è l'unica autorità,
+//! Un file `.ttf`, `.otf`, `.woff` o `.woff2` del vault è un carattere che un
+//! disegno può usare; i suoi byte possono anche essere una raccolta di facce,
+//! come quelle che porta un WOFF2. Questo modulo ne è l'unica autorità,
 //! per la superficie dell'editor, che lo interroga dall'indice `fub.draw`, e
 //! per l'export, che lo chiama direttamente:
 //!

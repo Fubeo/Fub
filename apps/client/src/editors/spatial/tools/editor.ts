@@ -121,11 +121,11 @@ import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import type { ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
 import { countObjects, describe, keyOf, linkName, outline, polygonalKind, type OutlineNode } from "../describe";
-import { DrawingFonts, vaultFontsOf, type VaultFontPort } from "../fonts/vault";
+import { DrawingFonts, vaultFontsOf, type FontNotes, type VaultFamily, type VaultFontPort } from "../fonts/vault";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages } from "../read-images";
-import { appFonts, fontFaces, withStyle } from "../picture";
+import { fontSheets, withStyle } from "../picture";
 import type { Ink } from "../ink/codec";
 import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
 import { formatNumber } from "../number";
@@ -244,6 +244,7 @@ import {
   tipChange,
   typedOpacity,
   UNIT_NAMES,
+  vaultFamilyOptions,
   type SelectionFacts,
   type StyleFacts,
 } from "./fields";
@@ -576,7 +577,7 @@ import type { Traced } from "./trace";
 import { imageWindow, traceOps, tracedGroup, traceSource, weightOf, type TraceSource } from "./trace-ops";
 import { inlineTracer, workerTracer, type Tracer, type TracerFactory } from "./trace-runner";
 import { MAX_COLORS, MAX_SHAPES, MIN_COLORS, TRACE_PRESETS, type TracePreset, type TraceSettings } from "./trace-settings";
-import { browserMeasure, estimate, type Measure } from "./measure";
+import { browserMeasure, estimate, type Font, type Measure } from "./measure";
 import { editableRich, JOIN, lineRuns, lineText as richLineText, newLeading, richChange, richElem, richLine, richOf, sameRich, tidyRich, type Rich, type RichChange } from "./rich";
 import { ensureTextFont, LINE_SPACING, TEXT_FAMILY, TEXT_SIZE, TEXT_SIZES } from "./text";
 import { createTextField, LINES_FORM, type FieldForm } from "./text-field";
@@ -674,6 +675,9 @@ export interface DrawEditorOptions {
   /// I caratteri del vault: chi li elenca e li legge. Senza, e nel foglio
   /// delle annotazioni, i testi scrivono con le sole famiglie di Fub.
   readonly vaultFonts?: VaultFontPort;
+  /// Ciò che il disegno dice dei suoi caratteri è cambiato: quelli che non
+  /// carica, e perché.
+  onFontNotes?(notes: FontNotes): void;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
   /// Chi legge e ricodifica le immagini incollate: quello del browser, se
@@ -1064,13 +1068,6 @@ async function sliced<T>(run: Generator<number, T>, progress: (done: number) => 
     if (stop()) return null;
   }
 }
-
-/// I byte di un file dell'app, come li scarica il browser; `null` se non
-/// arrivano.
-const fetchBlob = (url: string): Promise<Blob | null> =>
-  fetch(url)
-    .then((response) => (response.ok ? response.blob() : null))
-    .catch(() => null);
 
 /// Perché un SVG non si incolla, a parole.
 const PASTE_PROBLEMS: Readonly<Record<PasteProblem, DrawKey>> = {
@@ -2183,6 +2180,7 @@ function presentNodes(subs: readonly Subpath[], keys: Iterable<NodeKey>): NodeKe
 
 /// Nessun nodo, e nessun tipo dato.
 const NO_KEYS: ReadonlySet<NodeKey> = new Set();
+const NO_FAMILIES: readonly string[] = [];
 const NO_KINDS: ReadonlyMap<NodeKey, NodeKind> = new Map();
 
 /// I nodi scelti `pick` coi nodi `keys` della forma `shape` in più.
@@ -2405,10 +2403,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// annotazioni, quelle del vault.
   const drawingFonts = new DrawingFonts(options.vaultFonts === undefined || folio !== undefined ? null : vaultFontsOf(options.vaultFonts));
   life.add(() => drawingFonts.dispose());
+  const onFontNotes = options.onFontNotes;
+  if (onFontNotes !== undefined) life.add(drawingFonts.watch(() => onFontNotes(drawingFonts.fontNotes())));
 
-  /// Le larghezze del testo, coi caratteri del disegno dove il browser li sa
+  /// Le larghezze del testo coi caratteri del disegno, dove il browser li sa
   /// misurare.
-  const measureText: Measure = browserMeasure(true, drawingFonts) ?? estimate;
+  const widths: Measure = browserMeasure(true, drawingFonts) ?? estimate;
+  /// I caratteri che le misure di una scrittura trovano ancora in arrivo,
+  /// mentre `withFaces` li raccoglie.
+  let lateFonts: Font[] | null = null;
+  /// Le larghezze del testo, come `widths`; dentro `withFaces` si annota se
+  /// una faccia del vault sta ancora arrivando.
+  const measureText: Measure = (text, font) => {
+    if (lateFonts !== null && !drawingFonts.settled(font)) lateFonts.push(font);
+    return widths(text, font);
+  };
+  /// I caratteri del disegno per le sue immagini: gli strati estranei e il
+  /// PNG copiato.
+  const pictureFonts = fontSheets(drawingFonts);
 
   /// `next`, con le etichette al centro delle loro forme, i connettori che
   /// seguono gli oggetti a cui sono agganciati, le punte delle linee che
@@ -3760,7 +3772,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   surface.append(gridMark);
   const images = options.images;
   const painter = createSvgPainter(surface, life, {
-    fonts: appFonts,
+    fonts: pictureFonts,
     families: drawingFonts,
     ...(images === undefined ? {} : { images: (href: string, owner: Lifetime) => images.url(href, owner) }),
   });
@@ -5817,6 +5829,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly label: string;
     readonly count: number;
     readonly editable: boolean;
+    readonly families: readonly string[];
   } | null = null;
   /// L'oggetto che il pannello ha appena cambiato, con la chiave di prima.
   let carried: { readonly unit: string; readonly key: string | null } | null = null;
@@ -5834,11 +5847,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const key = unit === null ? null : carried !== null ? carried.key : unit.key;
     const label = unit === null ? "" : labelOf(unit);
     const canEdit = editable();
+    const families = has("fonts") ? vaultFamilyValues() : NO_FAMILIES;
     const last = inspectorShown;
-    if (last !== null && last.subject === subject && last.unit === (unit?.key ?? null) && last.key === key && last.label === label && last.count === units.length && last.editable === canEdit) return;
-    inspectorShown = { subject, unit: unit?.key ?? null, key, label, count: units.length, editable: canEdit };
-    inspector.update({ subject, key, label, count: units.length, editable: canEdit });
+    if (last !== null && last.subject === subject && last.unit === (unit?.key ?? null) && last.key === key && last.label === label && last.count === units.length && last.editable === canEdit && last.families === families) return;
+    inspectorShown = { subject, unit: unit?.key ?? null, key, label, count: units.length, editable: canEdit, families };
+    inspector.update({ subject, key, label, count: units.length, editable: canEdit, families });
   }
+
+  /// Le famiglie del vault come le scrive il menu «Carattere», per gli
+  /// attributi: lo stesso elenco finché il catalogo non si rilegge.
+  let familyValues: { readonly from: readonly VaultFamily[]; readonly values: readonly string[] } | null = null;
+  function vaultFamilyValues(): readonly string[] {
+    const from = drawingFonts.families();
+    if (familyValues?.from !== from) familyValues = { from, values: vaultFamilyOptions(from).map((option) => option.value) };
+    return familyValues.values;
+  }
+
+  // Una famiglia del vault che arriva, manca o cambia nel catalogo cambia il
+  // menu «Carattere», la sua riga e il menu degli attributi.
+  life.add(
+    drawingFonts.watch(() => {
+      panelShown = null;
+      syncProperties();
+      syncInspector();
+    }),
+  );
 
   /// L'oggetto di cui il pannello cambia un attributo, com'è dopo che un
   /// ritaglio aperto si è scritto: il suo percorso può essere cambiato.
@@ -6011,7 +6044,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const shown = resources;
       return {
         row,
-        styles: all.filter((style) => style.kind === kind).map((style) => ({ id: style.id, name: style.name, followers: style.followers, sample: styleSample(model, style, shown) })),
+        styles: all.filter((style) => style.kind === kind).map((style) => ({ id: style.id, name: style.name, followers: style.followers, sample: styleSample(model, style, shown, drawingFonts.live) })),
         updatable: row.style !== null && styleUpdatable(model, units, row.style),
         undeletable: row.style === null ? null : deleteStyleProblem(model, row.style),
         fresh: freshStyleName(all, kind, t(kind === "text" ? "draw.styles.text" : "draw.styles.graphic")),
@@ -6073,12 +6106,16 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       model === null || units.length === 0 || !has("effects")
         ? null
         : effectsView({ model, nodes: units.map((each) => nodeOf(model, each)), measure: measureText, key: keys, unit: lookUnit(unit), swatches });
+    const facts = units.length === 0 ? null : (reading.facts ??= selectionFacts(units));
+    // Il menu «Carattere» offre le famiglie del vault dall'Esperto: il
+    // catalogo si legge quando c'è un testo da cambiare.
+    if (has("fonts") && facts !== null && facts.look.family.count > 0) drawingFonts.catalog();
     panel.update(
       withEffects(propertiesView({
         features,
         unit,
         editable: canEdit,
-        selection: units.length === 0 ? null : (reading.facts ??= selectionFacts(units)),
+        selection: facts,
         document: { page: scene.root.page, boards: list.length > 0, desc: rootText("desc") },
         grid,
         bar: BAR_FEATURES.some(has),
@@ -6103,6 +6140,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         gradient: model === null || units.length === 0 || !has("gradient") ? null : gradientSection(model, units, keys, swatches, reading),
         hatch: model === null || units.length === 0 || !has("hatches") ? null : hatchSection(model, units, keys, swatches, unit),
         connector: model === null || units.length === 0 || !has("connector") ? null : connectorSection(model, units, keys),
+        fonts: { families: has("fonts") ? drawingFonts.families() : [], notes: drawingFonts.fontNotes(), shown: drawingFonts.shown },
       }), effects),
     );
   }
@@ -6217,6 +6255,56 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return null;
   };
 
+  /// L'ultima scrittura che aspetta una faccia del vault: una dopo che
+  /// aspetta anche lei prende il suo posto.
+  let facesTurn = 0;
+
+  /// Fa `write`, che misura dei testi per scriverli. Se le sue misure hanno
+  /// trovato una faccia del vault che sta ancora arrivando, `late()` lo dice
+  /// e `write` non scrive niente: quando la faccia arriva, `write` si rifà,
+  /// se il disegno e la selezione sono ancora quelli e nessuna scrittura
+  /// dopo ha preso il suo posto, e `then` riceve ciò che torna. Così il file
+  /// ha gli a capo e le misure del carattere vero, che un disegno aperto non
+  /// rifà.
+  function withFaces<R>(write: (late: () => boolean) => R, then: (result: R) => void = () => undefined): R {
+    const outer = lateFonts;
+    const found: Font[] = [];
+    let said: boolean | null = null;
+    // Le misure dopo la domanda sono quelle della scrittura, che non
+    // aspettano più.
+    const late = (): boolean => {
+      if (said === null) {
+        said = found.length > 0;
+        lateFonts = outer;
+      }
+      return said;
+    };
+    lateFonts = found;
+    let result: R;
+    try {
+      result = write(late);
+    } finally {
+      lateFonts = outer;
+    }
+    if (said !== true) return result;
+    const turn = ++facesTurn;
+    const index = currentIndex();
+    const keys = selection.join("\n");
+    void drawingFonts.ready(found).then(() => {
+      if (disposed || turn !== facesTurn || currentIndex() !== index || selection.join("\n") !== keys) return;
+      then(write(() => false));
+    });
+    return result;
+  }
+
+  /// Ciò che un campo del pannello ha cambiato quando una faccia del vault è
+  /// arrivata: un rifiuto si dice, e il pannello si rinfresca.
+  const panelLater = (outcome: string | null): void => {
+    if (outcome !== null) announce(outcome);
+    panelShown = null;
+    syncProperties();
+  };
+
   /// Più oggetti tengono la cornice `frame`, com'è diventata.
   const keepFrame = (frame: Frame): void => {
     kept = { index: currentIndex(), keys: selection.join("\n"), frame };
@@ -6295,10 +6383,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (model === null || units.length === 0) return null;
     const look = lookChange(id, value, docUnit());
     if (look !== null) {
-      const restyled = lookOps(model, units, look, measureText, newIds());
-      const outcome = changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
-      if (outcome === null && restyled.overflow) announce(t("draw.text.overflow"));
-      return outcome;
+      return withFaces((late) => {
+        const restyled = lookOps(model, units, look, measureText, newIds());
+        if (late()) return null;
+        const outcome = changeFromPanel(lookAction(id, value)!, restyled.ops, restyled.keys);
+        if (outcome === null && restyled.overflow) announce(t("draw.text.overflow"));
+        return outcome;
+      }, panelLater);
     }
     const tip = tipChange(id, value);
     if (tip !== null) {
@@ -6358,26 +6449,32 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         return makeStyle(model, units, kind, cleanName(rest), all, null);
       case "update": {
         if (current === null) return null;
-        const updated = updateStyleOps(model, units, current, measureText, newIds());
-        if (updated === null) return t("draw.styles.problem.empty_look");
-        if (updated.ops.length === 0) {
-          announce(t("draw.styles.updated.same", { name: current.name }));
+        return withFaces((late) => {
+          const updated = updateStyleOps(model, units, current, measureText, newIds());
+          if (late()) return null;
+          if (updated === null) return t("draw.styles.problem.empty_look");
+          if (updated.ops.length === 0) {
+            announce(t("draw.styles.updated.same", { name: current.name }));
+            return null;
+          }
+          const outcome = changeFromPanel("draw.action.style_update", updated.ops, updated.keys);
+          if (outcome !== null) return outcome;
+          const after = engine.model === null ? undefined : documentStyles(engine.model).find((each) => each.id === current.id);
+          const differing = after === undefined ? 0 : differingFollowers(engine.model!, after, measureText);
+          const said = plural(after?.followers ?? 0, "draw.styles.updated.one", "draw.styles.updated.other", { name: current.name });
+          announce(withStyleKept(differing === 0 ? said : `${said} ${plural(differing, "draw.styles.updated.differing.one", "draw.styles.updated.differing.other")}`, updated));
           return null;
-        }
-        const outcome = changeFromPanel("draw.action.style_update", updated.ops, updated.keys);
-        if (outcome !== null) return outcome;
-        const after = engine.model === null ? undefined : documentStyles(engine.model).find((each) => each.id === current.id);
-        const differing = after === undefined ? 0 : differingFollowers(engine.model!, after, measureText);
-        const said = plural(after?.followers ?? 0, "draw.styles.updated.one", "draw.styles.updated.other", { name: current.name });
-        announce(withStyleKept(differing === 0 ? said : `${said} ${plural(differing, "draw.styles.updated.differing.one", "draw.styles.updated.differing.other")}`, updated));
-        return null;
+        }, panelLater);
       }
       case "revert": {
         if (current === null) return null;
-        const reverted = revertStyleOps(model, units, current, measureText, newIds());
-        const outcome = changeFromPanel("draw.action.style_revert", reverted.ops, reverted.keys);
-        if (outcome === null) announce(withStyleKept(plural(reverted.changed, "draw.styles.reverted.one", "draw.styles.reverted.other", { name: current.name }), reverted));
-        return outcome;
+        return withFaces((late) => {
+          const reverted = revertStyleOps(model, units, current, measureText, newIds());
+          if (late()) return null;
+          const outcome = changeFromPanel("draw.action.style_revert", reverted.ops, reverted.keys);
+          if (outcome === null) announce(withStyleKept(plural(reverted.changed, "draw.styles.reverted.one", "draw.styles.reverted.other", { name: current.name }), reverted));
+          return outcome;
+        }, panelLater);
       }
       case "unlink": {
         const unlinked = unlinkStyleOps(model, units, kind, all, newIds());
@@ -6413,10 +6510,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Dà lo stile `style` agli oggetti scelti `units`.
   function applyStyle(model: DocumentModel, units: readonly Unit[], style: DocumentStyle): string | null {
-    const applied = applyStyleOps(model, units, style, measureText, newIds());
-    const outcome = changeFromPanel("draw.action.style_apply", applied.ops, applied.keys);
-    if (outcome === null) announce(withStyleKept(plural(applied.changed, "draw.styles.applied.one", "draw.styles.applied.other", { name: style.name }), applied));
-    return outcome;
+    return withFaces((late) => {
+      const applied = applyStyleOps(model, units, style, measureText, newIds());
+      if (late()) return null;
+      const outcome = changeFromPanel("draw.action.style_apply", applied.ops, applied.keys);
+      if (outcome === null) announce(withStyleKept(plural(applied.changed, "draw.styles.applied.one", "draw.styles.applied.other", { name: style.name }), applied));
+      return outcome;
+    }, panelLater);
   }
 
   /// Fa lo stile `name` di tipo `kind` dalla selezione `units`, col corpo e
@@ -6424,11 +6524,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   function makeStyle(model: DocumentModel, units: readonly Unit[], kind: StyleKind, name: string, all: readonly DocumentStyle[], preset: StylePreset | null): string | null {
     const failure = styleNameFailure(all, kind, name);
     if (failure !== null) return failure;
-    const made = newStyleOps(model, units, kind, name, measureText, newIds(), preset);
-    if (made === null) return t("draw.styles.problem.empty_look");
-    const outcome = changeFromPanel("draw.action.style_new", made.ops, made.keys);
-    if (outcome === null) announce(withStyleKept(plural(made.changed, "draw.styles.created.one", "draw.styles.created.other", { name }), made));
-    return outcome;
+    return withFaces((late) => {
+      const made = newStyleOps(model, units, kind, name, measureText, newIds(), preset);
+      if (late()) return null;
+      if (made === null) return t("draw.styles.problem.empty_look");
+      const outcome = changeFromPanel("draw.action.style_new", made.ops, made.keys);
+      if (outcome === null) announce(withStyleKept(plural(made.changed, "draw.styles.created.one", "draw.styles.created.other", { name }), made));
+      return outcome;
+    }, panelLater);
   }
 
   // --- I colori del documento ------------------------------------------------
@@ -11369,9 +11472,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     cancelGesture();
-    const restyled = styleOps(model, units, style, measureText, newIds());
-    if (arrange("draw.action.eyedropper", restyled) === null) return;
-    announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+    withFaces((late) => {
+      const restyled = styleOps(model, units, style, measureText, newIds());
+      if (late() || arrange("draw.action.eyedropper", restyled) === null) return;
+      announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+    });
   }
 
   /// Dà il colore `value`, come lo scrive il file, che si mostra come
@@ -11429,9 +11534,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const units = selectedUnits();
     if (units.length > 0 && !colorOnly) {
       cancelGesture();
-      const restyled = styleOps(model, units, style, measureText, newIds());
-      if (arrange("draw.action.eyedropper", restyled) === null) return true;
-      announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+      withFaces((late) => {
+        const restyled = styleOps(model, units, style, measureText, newIds());
+        if (late() || arrange("draw.action.eyedropper", restyled) === null) return;
+        announce(`${plural(units.length, "draw.eyedropper.given.one", "draw.eyedropper.given.other", { name })}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
+      });
       return true;
     }
     const color = styleColor(model, style);
@@ -14919,6 +15026,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     finishText();
     cancelGesture();
     typing = next;
+    if (next.look?.family) drawingFonts.prefetch(next.look.family, next.look.weight ?? "normal");
     field.form(formOf(next));
     field.open(next.before);
     labelText();
@@ -19809,7 +19917,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Il PNG di `svg`: le immagini del vault coi loro byte, fino al tetto
-  /// della Lettura, e i caratteri dell'app che un testo nomina.
+  /// della Lettura, e i caratteri dei suoi testi, dell'app e del vault.
   const pngOf = async (svg: string): Promise<Blob | null> => {
     const refs = imageRefs(svg);
     const sources = new Map<string, string>();
@@ -19826,7 +19934,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
     }
     const shown = withImages(svg, refs, sources);
-    return rasterize(withStyle(shown, await fontFaces(shown, fetchBlob)));
+    return rasterize(withStyle(shown, await pictureFonts.load(shown)));
   };
 
   /// Scrive `svg` negli appunti di `data`, come testo e come SVG; poi, dove
@@ -20170,10 +20278,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(t("draw.style.empty", { key: displayBinding(COPY_STYLE_BINDING) }));
       return;
     }
-    const restyled = styleOps(engine.model!, units, copiedStyle, measureText, newIds());
-    if (arrange("draw.action.paste_style", restyled) !== null) {
+    const style = copiedStyle;
+    withFaces((late) => {
+      const restyled = styleOps(engine.model!, units, style, measureText, newIds());
+      if (late() || arrange("draw.action.paste_style", restyled) === null) return;
       announce(`${plural(units.length, "draw.restyled.one", "draw.restyled.other")}${restyled.overflow ? ` ${t("draw.text.overflow")}` : ""}`);
-    }
+    });
   }
 
   // --- Le immagini del vault --------------------------------------------------

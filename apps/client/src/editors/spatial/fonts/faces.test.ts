@@ -9,13 +9,16 @@ import vectors from "../../../__fixtures__/scene-fonts/choose.json";
 import {
   choose,
   cssFamily,
+  cssString,
   familyGeneric,
   fubFamily,
   isFontFile,
   liveFamily,
   parseFamilies,
   sameFamily,
+  shownFamily,
   vaultNames,
+  writtenFamily,
   type FaceInfo,
   type FontRequest,
   type Generic,
@@ -73,6 +76,24 @@ describe("i nomi delle famiglie", () => {
     expect(cssFamily("JetBrains Mono")).toBe('"JetBrains Mono"');
     expect(cssFamily('Un "nome"')).toBe('"Un \\"nome\\""');
   });
+
+  it("si scrivono come stringhe dei CSS dentro un foglio nel markup", () => {
+    expect(cssString("Inter, sans-serif")).toBe('"Inter, sans-serif"');
+    expect(cssString('a"b\\c')).toBe('"a\\"b\\\\c"');
+    expect(cssString("<a>&\n")).toBe('"\\3c a\\3e \\26 \\a "');
+  });
+
+  it("si scrivono in un font-family che il browser e l'export rileggono uguale", () => {
+    expect(writtenFamily("Roboto")).toBe("Roboto");
+    expect(writtenFamily("Roboto Flex")).toBe('"Roboto Flex"');
+    expect(writtenFamily("serif")).toBe('"serif"');
+    expect(writtenFamily("Café")).toBe('"Café"');
+    expect(writtenFamily('Un "nome"')).toBe("'Un \"nome\"'");
+    for (const name of ["", " Roboto", "a\\b", "a\tb", `l'"x"`]) expect(writtenFamily(name), name).toBeNull();
+    for (const name of ["Roboto", "Roboto Flex", "serif", "Café", 'Un "nome"', "Noto 日本語", "1Up"]) {
+      expect(parseFamilies(`${writtenFamily(name)}, sans-serif`), name).toEqual([{ name }, { generic: "sans-serif" }]);
+    }
+  });
 });
 
 describe("font-family come lo legge l'export", () => {
@@ -114,6 +135,15 @@ describe("la famiglia viva", () => {
     expect(liveFamily("Arial, Helvetica")).toBe('Literata, Inter, "JetBrains Mono"');
     expect(liveFamily("Inter, ")).toBe('Literata, Inter, "JetBrains Mono"');
     expect(liveFamily("")).toBe('Literata, Inter, "JetBrains Mono"');
+  });
+
+  it("dice con quale famiglia si vede un testo", () => {
+    expect(shownFamily("Arial, sans-serif")).toBe("Inter");
+    expect(shownFamily("Roboto, monospace")).toBe("JetBrains Mono");
+    expect(shownFamily("")).toBe("Literata");
+    expect(shownFamily("Inter, ")).toBe("Literata");
+    expect(shownFamily("Arial, roboto, serif", (name) => (vault(name) === null ? null : name))).toBe("roboto");
+    expect(shownFamily("Roboto, serif", () => null)).toBe("Literata");
   });
 
   it("dà il nome registrato a una famiglia del vault", () => {

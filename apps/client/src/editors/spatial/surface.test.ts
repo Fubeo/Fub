@@ -46,19 +46,23 @@ const DOCTYPE = `<!DOCTYPE svg>${SOURCE}`;
 
 const MOUSE = { pointerId: 1, pointerType: "mouse" } as const;
 
+/// I caratteri dell'app, già letti e vuoti: happy-dom non ha il server
+/// dell'app da cui leggerli.
+const NO_FONTS = { now: () => "", load: async () => "" };
+
 let parent: HTMLElement;
 let mounted: { surface: EditorSurface; changes: EditorChange[]; selections: { count: number }; parent: HTMLElement }[];
 
 function mount(
   text: string | null = SOURCE,
   at: HTMLElement = parent,
-  shell: Pick<VectorSurfaceOptions, "onOpenPath" | "onPickLink" | "images" | "fonts"> = {},
+  shell: Pick<VectorSurfaceOptions, "onOpenPath" | "onPickLink" | "images" | "fonts" | "vaultFonts"> = {},
 ): { surface: EditorSurface; changes: EditorChange[]; selections: { count: number } } {
   const changes: EditorChange[] = [];
   const selections = { count: 0 };
   const surface = mountVectorSurface(
     { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
-    { onChange: (change) => changes.push(change), onSelectionChange: () => selections.count++, ...shell },
+    { onChange: (change) => changes.push(change), onSelectionChange: () => selections.count++, fonts: NO_FONTS, ...shell },
   );
   if (text !== null) surface.buffer!.setDoc(text);
   const entry = { surface, changes, selections, parent: at };
@@ -708,7 +712,7 @@ async function fresh(host: FakeHost) {
   return (at: HTMLElement, shell: Pick<VectorSurfaceOptions, "images"> = {}): EditorSurface => {
     const surface = mountFresh(
       { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
-      { onChange: () => {}, onSelectionChange: () => {}, ...shell },
+      { onChange: () => {}, onSelectionChange: () => {}, fonts: NO_FONTS, ...shell },
     );
     surface.buffer!.setDoc(SOURCE);
     mounted.push({ surface, changes: [], selections: { count: 0 }, parent: at });
@@ -1127,5 +1131,41 @@ describe("la finestra «Esporta»", () => {
     expect(labels.some((label) => label!.startsWith("La selezione"))).toBe(false);
     cancel();
     expect(await answer).toBeNull();
+  });
+});
+
+describe("i caratteri del vault che mancano", () => {
+  /// Le letture del vault finiscono, e le facce si registrano.
+  const settle = async (): Promise<void> => {
+    for (let i = 0; i < 8; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+  /// Un vault senza file di caratteri.
+  const port = { files: async () => [], read: async () => null, ask: async () => null };
+  const lettered = (family: string): string =>
+    doc(`<title>Casa</title>${LAYER}<text id="t1t1t1t1t" font-family="${family}" x="10" y="20">Casa</text></g>`);
+  const said = (): string[] => recentNotices().map((notice) => notice.text).filter((text) => text.includes("caratteri che non può caricare"));
+
+  it("li dice una volta per famiglia, nel Disegno e in Lettura, e il file non cambia", async () => {
+    clearHistory();
+    const text = lettered("Roboto, serif");
+    const { surface } = mount(text, parent, { vaultFonts: port });
+    await settle();
+    expect(said()).toEqual(["Il disegno «Casa» usa caratteri che non può caricare: Roboto. I testi si vedono con altri caratteri, anche nell’export."]);
+    surface.setMode!("read");
+    await settle();
+    expect(said()).toHaveLength(1);
+    surface.buffer!.syncDoc(lettered("Lobster, ROBOTO, cursive"));
+    await settle();
+    expect(said()).toHaveLength(2);
+    expect(said()[0]).toContain(": Lobster.");
+    expect(surface.buffer!.getDoc()).toBe(lettered("Lobster, ROBOTO, cursive"));
+  });
+
+  it("senza i caratteri del vault non dice niente", async () => {
+    clearHistory();
+    const { surface } = mount(lettered("Roboto, serif"));
+    surface.setMode!("read");
+    await settle();
+    expect(said()).toEqual([]);
   });
 });

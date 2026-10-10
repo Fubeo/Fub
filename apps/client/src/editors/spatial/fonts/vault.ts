@@ -23,8 +23,10 @@
 // - **Le facce che nessun disegno usa più** si tolgono quando un disegno si
 //   chiude.
 
-import type { PaintAttr, PaintDef, PaintNode, PaintScene } from "../painter/paint";
-import { choose, familyGeneric, familyKey, fubLiveFamily, isFontFile, isReserved, liveFamily, MAX_FONT_BYTES, vaultNames, type FaceChoice, type FaceInfo, type FontRequest, type FontStyle, type Generic } from "./faces";
+import type { ImageLayer, PaintAttr, PaintDef, PaintNode, PaintScene } from "../painter/paint";
+import { SourceText } from "../scene/text";
+import { NS_NONE, NS_SVG, parseXml, type XmlDocument } from "../scene/xml";
+import { choose, cssString, familyGeneric, familyKey, fubLiveFamily, isFontFile, isReserved, liveFamily, MAX_FONT_BYTES, shownFamily, vaultNames, type FaceChoice, type FaceInfo, type FontRequest, type FontStyle, type Generic } from "./faces";
 
 /// Le facce che un disegno può caricare, come nell'export: 64 MiB.
 export const FONTS_BUDGET = 64 * 1024 * 1024;
@@ -109,9 +111,10 @@ function styleOf(value: string): FontStyle | null {
   return style === "normal" || style === "italic" || style === "oblique" ? style : null;
 }
 
-/// Ciò che chiede un carattere scritto come lo scrive la misura del testo.
-export function requestOf(font: { readonly weight: string; readonly style: string }): FontRequest {
-  return { weight: weightOf(font.weight) ?? 400, style: styleOf(font.style) ?? "normal", stretch: 100 };
+/// Ciò che chiede un carattere, scritto come lo scrive la misura del testo o
+/// già letto.
+export function requestOf(font: { readonly weight: string | number; readonly style: string }): FontRequest {
+  return { weight: (typeof font.weight === "number" ? font.weight : weightOf(font.weight)) ?? 400, style: styleOf(font.style) ?? "normal", stretch: 100 };
 }
 
 /// `parent` con gli attributi di carattere di `attrs`.
@@ -176,13 +179,17 @@ function fontsOfDef(def: PaintDef, parent: TextFont, out: TextFont[]): void {
   }
 }
 
-/// I caratteri che i testi vivi di `scene` chiedono, ciascuno una volta, in
-/// ordine di documento: quelli degli strati, poi quelli delle risorse.
+/// I caratteri che i testi di `scene` chiedono, ciascuno una volta, in
+/// ordine di documento: quelli degli strati, vivi o immagine, poi quelli
+/// delle risorse.
 export function sceneFonts(scene: PaintScene): TextFont[] {
   const root = inherit(ROOT_FONT, scene.root.attrs);
   const context = keyOf(root);
   const all: TextFont[] = [];
-  for (const layer of scene.layers) if (layer.kind === "live") for (const node of layer.nodes) all.push(...fontsOfNode(node, root));
+  for (const layer of scene.layers) {
+    if (layer.kind === "live") for (const node of layer.nodes) all.push(...fontsOfNode(node, root));
+    else all.push(...layerFonts(layer));
+  }
   for (const resource of scene.resources) {
     let known = walked.get(resource);
     if (known === undefined || known.context !== context) {
@@ -200,6 +207,110 @@ export function sceneFonts(scene: PaintScene): TextFont[] {
     seen.add(key);
     return true;
   });
+}
+
+/// Il testo di uno strato immagine come documento: porta la radice e i
+/// contenitori che racchiudono i suoi blocchi estranei, e quindi tutto ciò
+/// che i loro testi ereditano.
+const layerTexts = new WeakMap<ImageLayer, string>();
+
+export function layerText(layer: ImageLayer): string {
+  let text = layerTexts.get(layer);
+  if (text === undefined) {
+    text = `${layer.prolog}<${layer.root.name}${layer.root.attrs}>${layer.body}`;
+    layerTexts.set(layer, text);
+  }
+  return text;
+}
+
+const layerFontsOf = new WeakMap<ImageLayer, readonly TextFont[]>();
+
+/// I caratteri dei testi di uno strato immagine.
+function layerFonts(layer: ImageLayer): readonly TextFont[] {
+  let fonts = layerFontsOf.get(layer);
+  if (fonts === undefined) {
+    fonts = markupFonts(layerText(layer)).fonts;
+    layerFontsOf.set(layer, fonts);
+  }
+  return fonts;
+}
+
+/// Vero se un testo dello strato immagine `layer` nomina una famiglia che
+/// non è di Fub: quando le facce del vault cambiano si ridisegna.
+export function namesVault(layer: ImageLayer): boolean {
+  return layerFonts(layer).some((font) => vaultNames(font.family).length > 0);
+}
+
+/// I caratteri di un documento SVG scritto: quelli che i suoi testi
+/// chiedono, e i valori di `font-family` dei suoi attributi.
+export interface MarkupFonts {
+  readonly fonts: readonly TextFont[];
+  readonly families: readonly string[];
+}
+
+const NO_MARKUP: MarkupFonts = { fonts: [], families: [] };
+
+/// Quanti caratteri, e quanti valori di `font-family`, al più per documento:
+/// un file ostile non ne fa un foglio senza fine.
+const MAX_MARKUP = 256;
+
+/// Gli ultimi documenti letti: un'immagine si ridisegna spesso con lo stesso
+/// testo.
+const markupRead = new Map<string, MarkupFonts>();
+
+/// Le proprietà di carattere di uno `style`: i valori che contano qui.
+function styleDeclarations(style: string): PaintAttr[] {
+  const out: PaintAttr[] = [];
+  for (const declaration of style.split(";")) {
+    const colon = declaration.indexOf(":");
+    if (colon < 0) continue;
+    const name = declaration.slice(0, colon).trim().toLowerCase();
+    if (name === "font-family" || name === "font-weight" || name === "font-style") out.push([name, declaration.slice(colon + 1).trim()]);
+  }
+  return out;
+}
+
+/// I caratteri dei testi di `svg`, un documento SVG come lo scrive un file:
+/// ereditati come li eredita l'export, dagli attributi e dagli `style` degli
+/// elementi, non dai fogli di stile. Vuoti se `svg` non si legge.
+export function markupFonts(svg: string): MarkupFonts {
+  const known = markupRead.get(svg);
+  if (known !== undefined) return known;
+  let doc: XmlDocument;
+  try {
+    doc = parseXml(new SourceText(svg), false);
+  } catch {
+    return NO_MARKUP;
+  }
+  const fonts = new Map<string, TextFont>();
+  const families = new Set<string>();
+  // Una pila al posto della ricorsione: un documento annidato a fondo non la
+  // esaurisce.
+  const stack: { readonly id: number; readonly parent: TextFont; readonly inText: boolean }[] = [{ id: doc.root, parent: ROOT_FONT, inText: false }];
+  while (stack.length > 0) {
+    const { id, parent, inText } = stack.pop()!;
+    const node = doc.nodes[id]!;
+    if (node.kind === "text" || node.kind === "cdata" || node.kind === "entity-ref") {
+      if (inText && (node.kind === "entity-ref" || node.value !== "") && fonts.size < MAX_MARKUP) fonts.set(keyOf(parent), parent);
+      continue;
+    }
+    if (node.kind !== "element") continue;
+    const attrs: PaintAttr[] = [];
+    for (const attr of node.attrs) {
+      if (attr.ns !== NS_NONE) continue;
+      if (attr.local === "font-family" || attr.local === "font-weight" || attr.local === "font-style") attrs.push([attr.local, attr.value]);
+      if (attr.local === "font-family" && families.size < MAX_MARKUP) families.add(attr.value);
+    }
+    for (const attr of node.attrs) if (attr.ns === NS_NONE && attr.local === "style") attrs.push(...styleDeclarations(attr.value));
+    const font = attrs.length === 0 ? parent : inherit(parent, attrs);
+    const text = inText || (node.ns === NS_SVG && node.local === "text");
+    // In ordine di documento: il primo figlio esce per primo.
+    for (let i = node.children.length - 1; i >= 0; i--) stack.push({ id: node.children[i]!, parent: font, inText: text });
+  }
+  const read: MarkupFonts = { fonts: [...fonts.values()], families: [...families] };
+  if (markupRead.size >= 16) markupRead.delete(markupRead.keys().next().value!);
+  markupRead.set(svg, read);
+  return read;
 }
 
 // --- il catalogo e le facce -----------------------------------------------------------
@@ -234,6 +345,10 @@ type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
 interface SlotRecord extends Writable<Slot> {
   face: object | null;
+  /// I byte registrati, finché un'immagine del disegno non li chiede: allora
+  /// diventano il data URI di `uri`, che resta.
+  data: Uint8Array | null;
+  uri: string | null;
   /// Cresce a ogni nuova scelta: una risposta arrivata tardi non vale più.
   turn: number;
   /// I disegni aperti che usano la faccia.
@@ -241,6 +356,8 @@ interface SlotRecord extends Writable<Slot> {
 }
 
 const fileKey = (file: VaultFontFile): string => `${file.id}\u0000${file.size}\u0000${file.mtime}`;
+
+const slotKey = (name: string, request: FontRequest): string => `${familyKey(name)}\u0000${request.weight}\u0000${request.style}\u0000${request.stretch}`;
 
 /// I byte in base64, a pezzi: `String.fromCharCode` non prende milioni di
 /// argomenti.
@@ -300,6 +417,13 @@ const READS = 4;
 /// una cartella copiata nel vault è un evento per file.
 export const SETTLE_MS = 300;
 
+/// Una famiglia del vault, col nome che dice e la famiglia generica da
+/// scrivere dopo di lei.
+export interface VaultFamily {
+  readonly name: string;
+  readonly generic: Generic;
+}
+
 /// I caratteri del vault di una shell: il catalogo, le facce registrate e chi
 /// li segue. Uno per porta, per tutta la vita dell'app.
 export class VaultFonts {
@@ -315,6 +439,7 @@ export class VaultFonts {
   private readonly listeners = new Set<() => void>();
   private emitting = false;
   private faces = 0;
+  private listed: { readonly files: readonly CatalogFile[] | null; readonly families: readonly VaultFamily[] } | null = null;
 
   constructor(
     private readonly port: VaultFontPort,
@@ -423,8 +548,15 @@ export class VaultFonts {
   }
 
   /// Le famiglie del vault, una volta ciascuna, col nome che dicono e la
-  /// famiglia generica da scrivere dopo, in ordine alfabetico.
-  families(): { readonly name: string; readonly generic: Generic }[] {
+  /// famiglia generica da scrivere dopo, in ordine alfabetico: lo stesso
+  /// elenco finché il catalogo non si rilegge.
+  families(): readonly VaultFamily[] {
+    const files = this.files;
+    if (this.listed?.files !== files) this.listed = { files, families: this.listFamilies() };
+    return this.listed.families;
+  }
+
+  private listFamilies(): VaultFamily[] {
     const lists = (this.files ?? []).map((file) => file.faces ?? []);
     const out = new Map<string, { name: string; generic: Generic }>();
     for (const faces of lists) {
@@ -462,14 +594,34 @@ export class VaultFonts {
   /// La faccia della famiglia `name` per `request`: la chiede, se nessuno
   /// l'ha chiesta.
   want(name: string, request: FontRequest): Slot {
-    const key = `${familyKey(name)}\u0000${request.weight}\u0000${request.style}\u0000${request.stretch}`;
+    const key = slotKey(name, request);
     let slot = this.slots.get(key);
     if (slot === undefined) {
-      slot = { key, name, request, state: "pending", source: null, face: null, bytes: 0, done: Promise.resolve(), turn: 0, users: 0 };
+      slot = { key, name, request, state: "pending", source: null, face: null, data: null, uri: null, bytes: 0, done: Promise.resolve(), turn: 0, users: 0 };
       this.slots.set(key, slot);
       this.resolve(slot);
     }
     return slot;
+  }
+
+  /// La faccia della famiglia `name` per `request`, se qualcuno l'ha già
+  /// chiesta.
+  slotOf(name: string, request: FontRequest): Slot | undefined {
+    return this.slots.get(slotKey(name, request));
+  }
+
+  /// La regola `@font-face` della faccia di `slot` per un'immagine, che non
+  /// vede `document.fonts`: col nome della famiglia com'è scritto, e i byte
+  /// come data URI. `null` se la faccia non è pronta.
+  faceRule(slot: Slot): string | null {
+    const record = this.slots.get(slot.key);
+    if (record === undefined || record.state !== "ready") return null;
+    if (record.uri === null) {
+      if (record.data === null) return null;
+      record.uri = `data:application/octet-stream;base64,${toBase64(record.data)}`;
+      record.data = null;
+    }
+    return `@font-face{font-family:${cssString(record.name)};src:url(${record.uri});font-weight:${record.request.weight};font-style:${record.request.style}}`;
   }
 
   /// Un disegno aperto usa `slot`.
@@ -494,6 +646,8 @@ export class VaultFonts {
         this.registry.remove(slot.face);
         this.faces++;
       }
+      slot.data = null;
+      slot.uri = null;
       this.slots.delete(key);
     }
   }
@@ -508,7 +662,7 @@ export class VaultFonts {
       const files = this.files ?? [];
       const choice = this.has(slot.name) ? choose(files.map((file) => file.faces ?? []), slot.name, slot.request) : null;
       if (choice === null) {
-        this.settle(slot, "absent", null, null, 0);
+        this.settle(slot, "absent", null, null, null);
         return;
       }
       const file = files[choice.file]!;
@@ -522,8 +676,8 @@ export class VaultFonts {
         if (registered !== null) this.registry.remove(registered);
         return slot.done;
       }
-      if (registered === null) this.settle(slot, "failed", null, null, 0);
-      else this.settle(slot, "ready", source, registered, bytes!.length);
+      if (registered === null) this.settle(slot, "failed", null, null, null);
+      else this.settle(slot, "ready", source, registered, bytes);
     })();
   }
 
@@ -542,13 +696,15 @@ export class VaultFonts {
     }
   }
 
-  private settle(slot: SlotRecord, state: SlotState, source: string | null, face: object | null, bytes: number): void {
+  private settle(slot: SlotRecord, state: SlotState, source: string | null, face: object | null, data: Uint8Array | null): void {
     if (slot.face !== null && slot.face !== face) this.registry.remove(slot.face);
     if (slot.face !== face) this.faces++;
     slot.state = state;
     slot.source = source;
     slot.face = face;
-    slot.bytes = bytes;
+    slot.bytes = data?.length ?? 0;
+    slot.data = data;
+    slot.uri = null;
     this.emit();
   }
 
@@ -600,6 +756,8 @@ export interface FontNotes {
 
 export const NO_NOTES: FontNotes = { missing: [], unreadable: [], over: [], failed: [] };
 
+const NO_FAMILIES: readonly VaultFamily[] = [];
+
 /// Un carattere come lo scrive la misura del testo.
 export interface WrittenFont {
   readonly family: string;
@@ -623,7 +781,11 @@ export class DrawingFonts {
   private readonly listeners = new Set<() => void>();
   private readonly unwatch: () => void;
 
-  constructor(private readonly vault: VaultFonts | null) {
+  /// `budget` è il tetto delle facce del disegno, in byte.
+  constructor(
+    private readonly vault: VaultFonts | null,
+    private readonly budget = FONTS_BUDGET,
+  ) {
     this.unwatch = vault === null ? () => undefined : vault.watch(() => this.update());
   }
 
@@ -639,18 +801,41 @@ export class DrawingFonts {
     return live;
   };
 
+  /// La `font-family` che un'immagine del disegno scrive per `value`: come
+  /// la famiglia viva, ma le famiglie del vault col loro nome, che il foglio
+  /// dell'immagine registra (`picture.ts`).
+  readonly picture = (value: string): string => (this.vault === null ? fubLiveFamily(value) : liveFamily(value, this.seen));
+
+  /// La famiglia con cui si vede un testo di `value`, per dirla: una del
+  /// vault col nome scritto.
+  readonly shown = (value: string): string => shownFamily(value, this.seen);
+
+  /// `name`, se è una famiglia del vault che si vede; se no `null`.
+  private readonly seen = (name: string): string | null => (this.vault === null || this.over.has(familyKey(name)) || this.vault.liveName(name) === null ? null : name);
+
+  /// Il menu dei caratteri vuole le famiglie del vault: il catalogo si legge,
+  /// se nessuno l'ha ancora letto.
+  catalog(): void {
+    if (this.vault !== null && !this.vault.loaded) void this.vault.catalog();
+  }
+
   /// I testi del disegno sono quelli di `scene`: le facce che chiedono si
   /// caricano.
   use(scene: PaintScene): void {
+    if (this.vault !== null) this.useFonts(sceneFonts(scene));
+  }
+
+  /// I testi del disegno chiedono `fonts`, in ordine di documento: le facce
+  /// si caricano, e il tetto si conta in quest'ordine.
+  useFonts(fonts: readonly TextFont[]): void {
     if (this.vault === null) return;
-    const fonts = sceneFonts(scene);
     if (fonts.length === this.fonts.length && fonts.every((font, i) => keyOf(font) === keyOf(this.fonts[i]!))) return;
     this.fonts = fonts;
     this.update();
   }
 
   /// Chiede le facce dei testi, conta il tetto e ciò che manca; avvisa se la
-  /// famiglia viva o le note cambiano.
+  /// famiglia viva, le note o le famiglie del vault cambiano.
   private update(): void {
     const vault = this.vault!;
     this.memo.clear();
@@ -675,7 +860,7 @@ export class DrawingFonts {
           if (!held.includes(slot)) held.push(slot);
           if (slot.state === "failed" && !listed(failed, name)) failed.push(name);
           if (slot.state !== "ready" || slot.source === null || counted.has(slot.source) || over.has(key)) continue;
-          if (total + slot.bytes > FONTS_BUDGET) {
+          if (total + slot.bytes > this.budget) {
             over.add(key);
             overNames.push(name);
             continue;
@@ -691,7 +876,10 @@ export class DrawingFonts {
     this.over = over;
     this.notes = { missing, unreadable: missing.length > 0 ? vault.unreadable() : [], over: overNames, failed };
     const live = [...new Set(wanted.flatMap(([, names]) => names.map((name) => `${familyKey(name)}=${over.has(familyKey(name)) ? "" : (vault.liveName(name) ?? "")}`)))];
-    const signature = JSON.stringify([live, this.notes]);
+    // Le famiglie del vault sono quelle del menu: un catalogo che cambia lo
+    // rifà.
+    const families = vault.loaded ? vault.families().map(({ name, generic }) => `${name}\u0000${generic}`) : null;
+    const signature = JSON.stringify([live, this.notes, families]);
     if (signature === this.signature) return;
     this.signature = signature;
     for (const listener of [...this.listeners]) listener();
@@ -699,12 +887,21 @@ export class DrawingFonts {
 
   /// Si risolve quando le facce di `fonts` sono pronte, o quando si sa che
   /// non ci saranno: la misura di dopo le usa.
-  async ready(fonts: readonly WrittenFont[]): Promise<void> {
+  async ready(fonts: readonly (WrittenFont | TextFont)[]): Promise<void> {
     const vault = this.vault;
     if (vault === null || !fonts.some((font) => vaultNames(font.family).length > 0)) return;
     await vault.catalog();
     const slots = fonts.flatMap((font) => vaultNames(font.family).filter((name) => vault.has(name)).map((name) => vault.want(name, requestOf(font))));
     await Promise.all(slots.map((slot) => slot.done));
+  }
+
+  /// Chiede, senza aspettarle, le facce di `family` che un testo che si
+  /// scrive può volere: il suo peso `weight` e il grassetto, diritte e
+  /// corsive. Gli a capo misurati quando il campo si chiude le trovano
+  /// pronte.
+  prefetch(family: string, weight: string): void {
+    if (this.vault === null || vaultNames(family).length === 0) return;
+    void this.ready([weight, "bold"].flatMap((each) => ["normal", "italic"].map((style) => ({ family, weight: each, style }))));
   }
 
   /// Vero se la famiglia viva di `font` non cambierà più: le sue facce del
@@ -719,14 +916,47 @@ export class DrawingFonts {
     return names.every((name) => !vault.has(name) || vault.want(name, request).state !== "pending");
   }
 
+  /// Le regole `@font-face` delle facce del vault che `fonts` chiedono, per
+  /// un'immagine del disegno; con `strict`, `null` se qualcuna sta ancora
+  /// arrivando, altrimenti senza quelle.
+  faces(fonts: readonly TextFont[], strict: boolean): string | null {
+    const vault = this.vault;
+    if (vault === null) return "";
+    const rules: string[] = [];
+    const seen = new Set<string>();
+    for (const font of fonts) {
+      const names = vaultNames(font.family);
+      if (names.length === 0) continue;
+      if (!vault.loaded) {
+        if (strict) return null;
+        continue;
+      }
+      const request = requestOf(font);
+      for (const name of names) {
+        if (!vault.has(name) || this.over.has(familyKey(name))) continue;
+        const slot = vault.slotOf(name, request);
+        if (slot === undefined || slot.state === "pending") {
+          if (strict) return null;
+          continue;
+        }
+        if (seen.has(slot.key)) continue;
+        seen.add(slot.key);
+        const rule = vault.faceRule(slot);
+        if (rule !== null) rules.push(rule);
+      }
+    }
+    return rules.join("");
+  }
+
   /// Cresce ogni volta che una faccia del vault entra o esce.
   epoch(): number {
     return this.vault?.epoch ?? 0;
   }
 
-  /// Le famiglie del vault, per il menu.
-  families(): { readonly name: string; readonly generic: Generic }[] {
-    return this.vault?.families() ?? [];
+  /// Le famiglie del vault, per il menu: lo stesso elenco finché il
+  /// catalogo non si rilegge.
+  families(): readonly VaultFamily[] {
+    return this.vault?.families() ?? NO_FAMILIES;
   }
 
   /// Ciò che manca, è oltre il tetto o non si carica.
@@ -734,8 +964,8 @@ export class DrawingFonts {
     return this.notes;
   }
 
-  /// Chiama `listener` quando la famiglia viva o le note cambiano; torna chi
-  /// smette.
+  /// Chiama `listener` quando la famiglia viva, le note o le famiglie del
+  /// vault cambiano; torna chi smette.
   watch(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

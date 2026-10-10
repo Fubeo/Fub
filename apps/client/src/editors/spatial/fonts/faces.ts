@@ -246,6 +246,26 @@ export function cssFamily(name: string): string {
   return /^[A-Za-z][A-Za-z0-9_-]*$/.test(name) ? name : `"${name.replace(/["\\]/g, "\\$&")}"`;
 }
 
+/// La famiglia `name` scritta in un `font-family` che il browser e l'export
+/// rileggono uguale: com'è, se è una parola, se no fra virgolette. `null` se
+/// nessuna scrittura la rilegge, come un nome con una barra, un carattere di
+/// controllo o le due virgolette.
+export function writtenFamily(name: string): string | null {
+  if (name === "" || name !== familyName({ name }) || /[\\\u0000-\u001f\u007f]/.test(name)) return null;
+  for (const written of [cssFamily(name), `"${name}"`, `'${name}'`]) {
+    const read = parseFamilies(written);
+    if (read !== null && read.length === 1 && "name" in read[0]! && read[0].name === name) return written;
+  }
+  return null;
+}
+
+/// Una stringa dei CSS che si scrive dentro un foglio di stile XML: le
+/// virgolette, la barra e i caratteri che il markup legge sono sequenze di
+/// escape.
+export function cssString(value: string): string {
+  return `"${value.replace(/["\\]/g, "\\$&").replace(/[\u0000-\u001f<>&]/g, (char) => `\\${char.charCodeAt(0).toString(16)} `)}"`;
+}
+
 /// La `font-family` da dare al browser per `value`: le famiglie che l'export
 /// userebbe, nello stesso ordine, e dopo quelle di Fub, come l'export cerca
 /// un carattere che manca. Una famiglia generica è quella di Fub che le
@@ -273,6 +293,23 @@ export function liveFamily(value: string, vault: (name: string) => string | null
   }
   for (const fub of FUB_FAMILIES) add(fub);
   return out.map(cssFamily).join(", ");
+}
+
+/// La famiglia con cui si vede un testo di `value`: la prima della sua
+/// famiglia viva, una del vault col nome scritto. `vault` dà il nome di una
+/// famiglia del vault che si vede, `null` se no; senza, è la prima famiglia
+/// di Fub, quella che un testo trova se le famiglie del vault prima di lei
+/// non ci sono.
+export function shownFamily(value: string, vault: (name: string) => string | null = () => null): string {
+  for (const family of parseFamilies(value) ?? []) {
+    if ("generic" in family) return GENERIC_FAMILY[family.generic];
+    const name = familyName(family);
+    const fub = fubFamily(name);
+    if (fub !== null) return fub;
+    const shown = name === "" ? null : vault(name);
+    if (shown !== null) return shown;
+  }
+  return FUB_FAMILIES[0]!;
 }
 
 /// Le famiglie vive già date dalle sole famiglie di Fub.

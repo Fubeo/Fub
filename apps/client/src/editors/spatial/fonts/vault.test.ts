@@ -3,9 +3,9 @@
 // disegno, il tetto, ciò che manca e le facce che si tolgono.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PaintAttr, PaintNode, PaintResource, PaintScene, PaintShape, TextRun } from "../painter/paint";
+import type { ImageLayer, PaintAttr, PaintNode, PaintResource, PaintScene, PaintShape, TextRun } from "../painter/paint";
 import type { FaceInfo } from "./faces";
-import { DrawingFonts, facesOf, FONTS_BUDGET, requestOf, sceneFonts, SETTLE_MS, VaultFonts, type FaceRegistry, type VaultFontPort } from "./vault";
+import { DrawingFonts, facesOf, FONTS_BUDGET, markupFonts, namesVault, requestOf, sceneFonts, SETTLE_MS, VaultFonts, type FaceRegistry, type VaultFontPort } from "./vault";
 
 // --- le facce finte -------------------------------------------------------------
 
@@ -167,6 +167,59 @@ describe("i caratteri di una scena", () => {
   });
 });
 
+describe("i caratteri di un documento scritto", () => {
+  const SVG = (body: string, attrs = ""): string => `<svg xmlns="http://www.w3.org/2000/svg"${attrs}>${body}</svg>`;
+
+  it("ereditano dagli attributi e dagli style, e dicono i valori di font-family", () => {
+    const read = markupFonts(
+      SVG('<g style="font-weight: bold; FONT-FAMILY: \'Noto Sans\'"><text>a<tspan font-style="italic">b</tspan></text></g><text font-family="Arial" style="font-family: Roboto">c</text><text>&amp;</text>', ' font-family="Inter"'),
+    );
+    expect(read.fonts).toEqual([
+      { family: "'Noto Sans'", weight: 700, style: "normal" },
+      { family: "'Noto Sans'", weight: 700, style: "italic" },
+      { family: "Roboto", weight: 400, style: "normal" },
+      { family: "Inter", weight: 400, style: "normal" },
+    ]);
+    expect(read.families).toEqual(["Inter", "Arial"]);
+  });
+
+  it("contano soltanto i testi di SVG, e niente se il documento non si legge", () => {
+    expect(markupFonts('<svg xmlns="http://www.w3.org/2000/svg"><g font-family="Roboto"><desc>no</desc></g></svg>').fonts).toEqual([]);
+    expect(markupFonts("<svg><text>a</text></svg>").fonts).toEqual([]);
+    expect(markupFonts("<svg")).toEqual({ fonts: [], families: [] });
+  });
+
+  it("hanno un tetto, e leggono un documento annidato a fondo", () => {
+    const many = markupFonts(SVG(Array.from({ length: 300 }, (_, i) => `<text font-family="F${i}">x</text>`).join("")));
+    expect(many.fonts).toHaveLength(256);
+    expect(many.families).toHaveLength(256);
+    const deep = 20_000;
+    const nested = markupFonts(SVG(`${"<g>".repeat(deep)}<text font-family="Roboto">x</text>${"</g>".repeat(deep)}`));
+    expect(nested.fonts).toEqual([{ family: "Roboto", weight: 400, style: "normal" }]);
+  });
+
+  it("di uno strato immagine entrano fra quelli della scena", () => {
+    const layer = (attrs: string, body: string): ImageLayer => ({
+      kind: "image",
+      key: attrs + body,
+      prolog: "",
+      root: { name: "svg", attrs: ` xmlns="http://www.w3.org/2000/svg"${attrs}`, style: null },
+      body: `${body}</svg>`,
+      transparent: false,
+      containers: [],
+    });
+    const foreign = layer(' font-family="Roboto, serif"', "<text>a</text>");
+    const plain = layer("", '<text font-family="Inter">b</text>');
+    const painted = { ...scene([text([["font-family", "Inter"]], [line("c")])]), layers: [{ kind: "live", nodes: [text([["font-family", "Inter"]], [line("c")])] }, foreign, plain] } as unknown as PaintScene;
+    expect(sceneFonts(painted)).toEqual([
+      { family: "Inter", weight: 400, style: "normal" },
+      { family: "Roboto, serif", weight: 400, style: "normal" },
+    ]);
+    expect(namesVault(foreign)).toBe(true);
+    expect(namesVault(plain)).toBe(false);
+  });
+});
+
 describe("le facce dell'host", () => {
   it("si leggono soltanto con la forma attesa", () => {
     expect(facesOf({ faces: [staticFace("Roboto")] })).toEqual([staticFace("Roboto")]);
@@ -320,7 +373,10 @@ describe("i caratteri di un disegno", () => {
   });
 
   it("lasciano ripiegare le famiglie oltre il tetto, nell'ordine del documento", async () => {
-    const size = Math.floor(FONTS_BUDGET / 2) + 1;
+    // Un tetto piccolo per la prova: quello vero è di 64 MiB, come l'export.
+    expect(FONTS_BUDGET).toBe(64 * 1024 * 1024);
+    const budget = 1000;
+    const size = budget / 2 + 1;
     const vault = new VaultFonts(
       fakePort([
         { id: "a.ttf", faces: [staticFace("Alfa")], size },
@@ -328,13 +384,106 @@ describe("i caratteri di un disegno", () => {
       ]).port,
       fakeRegistry().registry,
     );
-    const fonts = new DrawingFonts(vault);
+    const fonts = new DrawingFonts(vault, budget);
     fonts.use(scene([text([["font-family", "Beta"]], [line("b")]), text([["font-family", "Alfa"]], [line("a")]), text([["font-family", "Beta"]], [line("c", [["font-weight", "bold"]])])]));
     await settle();
     await settle();
     expect(fonts.fontNotes().over).toEqual(["Alfa"]);
     expect(fonts.live("Alfa")).toBe('Literata, Inter, "JetBrains Mono"');
     expect(fonts.live("Beta")).toBe('fubdraw-vault-1, Literata, Inter, "JetBrains Mono"');
+  });
+
+  it("danno alle immagini le facce pronte col nome della famiglia, e i byte dentro", async () => {
+    const vault = new VaultFonts(fakePort([{ id: "r.ttf", faces: [staticFace("Roboto"), staticFace("Roboto", 700)] }]).port, fakeRegistry().registry);
+    const fonts = new DrawingFonts(vault);
+    const wanted = [
+      { family: "roboto, sans-serif", weight: 400, style: "normal" as const },
+      { family: "Roboto", weight: 700, style: "normal" as const },
+      { family: "Roboto, serif", weight: 400, style: "normal" as const },
+    ];
+    expect(fonts.faces(wanted, true)).toBeNull();
+    expect(fonts.faces(wanted, false)).toBe("");
+    fonts.useFonts(wanted);
+    expect(fonts.faces(wanted, true)).toBeNull();
+    expect(fonts.picture("Roboto, sans-serif")).toBe('Inter, Literata, "JetBrains Mono"');
+    await settle();
+    const uri = `data:application/octet-stream;base64,${btoa("instance:r.ttf:0:[]")}`;
+    expect(fonts.faces(wanted, true)).toBe(
+      `@font-face{font-family:"roboto";src:url(${uri});font-weight:400;font-style:normal}@font-face{font-family:"Roboto";src:url(${uri});font-weight:700;font-style:normal}`,
+    );
+    expect(fonts.picture("Arial, ROBOTO, serif")).toBe('ROBOTO, Literata, Inter, "JetBrains Mono"');
+    expect(fonts.shown("Arial, ROBOTO, serif")).toBe("ROBOTO");
+    expect(fonts.shown("Arial, serif")).toBe("Literata");
+    expect(new DrawingFonts(null).faces(wanted, true)).toBe("");
+  });
+
+  it("le facce oltre il tetto non entrano nelle immagini, e il testo dice con che cosa si vede", async () => {
+    // Beta pesa pochi byte, Alfa quanto il tetto: dopo Beta non ci sta.
+    const budget = 1000;
+    const vault = new VaultFonts(
+      fakePort([
+        { id: "a.ttf", faces: [staticFace("Alfa")], size: budget },
+        { id: "b.ttf", faces: [staticFace("Beta")] },
+      ]).port,
+      fakeRegistry().registry,
+    );
+    const fonts = new DrawingFonts(vault, budget);
+    const wanted = [
+      { family: "Beta", weight: 400, style: "normal" as const },
+      { family: "Alfa, monospace", weight: 400, style: "normal" as const },
+    ];
+    fonts.useFonts(wanted);
+    await settle();
+    await settle();
+    expect(fonts.faces(wanted, true)).toContain('font-family:"Beta"');
+    expect(fonts.faces(wanted, true)).not.toContain('"Alfa"');
+    expect(fonts.picture("Alfa, monospace")).toBe('"JetBrains Mono", Literata, Inter');
+    expect(fonts.shown("Alfa, monospace")).toBe("JetBrains Mono");
+  });
+
+  it("danno le famiglie del menu, lo stesso elenco finché il catalogo non cambia, e avvisano quando cambiano", async () => {
+    const files: FakeFile[] = [{ id: "r.ttf", faces: [staticFace("Roboto")] }];
+    const fake = fakePort(files);
+    const vault = new VaultFonts(fake.port, fakeRegistry().registry);
+    const fonts = new DrawingFonts(vault);
+    const changes = vi.fn();
+    fonts.watch(changes);
+    expect(fonts.families()).toEqual([]);
+    fonts.catalog();
+    fonts.catalog();
+    await settle();
+    expect(fake.listings()).toBe(1);
+    const first = fonts.families();
+    expect(first).toEqual([{ name: "Roboto", generic: "sans-serif" }]);
+    expect(fonts.families()).toBe(first);
+    expect(changes).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    files.push({ id: "c.otf", faces: [staticFace("Caslon", 400, "normal", "serif")] });
+    fake.change("c.otf");
+    vi.advanceTimersByTime(SETTLE_MS);
+    vi.useRealTimers();
+    await settle();
+    await settle();
+    expect(fonts.families()).toEqual([
+      { name: "Caslon", generic: "serif" },
+      { name: "Roboto", generic: "sans-serif" },
+    ]);
+    expect(changes).toHaveBeenCalledTimes(2);
+  });
+
+  it("chiedono in anticipo il grassetto e il corsivo di un testo che si scrive", async () => {
+    const fake = fakePort([{ id: "r.ttf", faces: [variableFace("Roboto", "sans-serif")] }]);
+    const vault = new VaultFonts(fake.port, fakeRegistry().registry);
+    const fonts = new DrawingFonts(vault);
+    fonts.prefetch("Inter, sans-serif", "normal");
+    await settle();
+    expect(fake.listings()).toBe(0);
+    fonts.prefetch("Roboto, sans-serif", "300");
+    await settle();
+    await settle();
+    for (const [weight, style] of [["300", "normal"], ["300", "italic"], ["bold", "normal"], ["bold", "italic"]] as const) {
+      expect(fonts.settled(written("Roboto", weight, style)), `${weight} ${style}`).toBe(true);
+    }
   });
 
   it("tolgono, quando il disegno si chiude, le facce che nessun altro disegno usa", async () => {

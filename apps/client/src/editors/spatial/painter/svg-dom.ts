@@ -59,6 +59,7 @@ import { toScene, viewMatrix, viewTransform, type View } from "../view";
 import type { FontSheets } from "../picture";
 import { blendStyle, paintReference, reference, trim } from "../scene/values";
 import { fubLiveFamily } from "../fonts/faces";
+import { layerText, namesVault } from "../fonts/vault";
 import {
   DEF_ATTRIBUTES,
   DEF_CHILDREN,
@@ -164,9 +165,9 @@ export interface PainterOptions {
   /// Dopo quanti millisecondi senza movimento gli strati immagine si
   /// ridisegnano alla vista nuova.
   readonly settleMs?: number;
-  /// I caratteri dell'app per gli strati immagine, che da un `img` non li
-  /// caricherebbero. Senza, uno strato immagine scrive coi caratteri del
-  /// sistema.
+  /// I caratteri del disegno per gli strati immagine, che da un `img` non li
+  /// caricherebbero: quelli dell'app e del vault (`picture.ts`). Senza, uno
+  /// strato immagine scrive coi caratteri del sistema.
   readonly fonts?: FontSheets;
   /// I caratteri del disegno: la `font-family` da dare al browser per quella
   /// scritta, e chi avvisa quando cambia. Senza, le sole famiglie di Fub.
@@ -399,7 +400,14 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     settleTimer = null;
   };
   life.add(clearSettle);
-  if (options.families !== undefined) life.add(options.families.watch(() => refreshFamilies(root, dom)));
+  if (options.families !== undefined) {
+    life.add(options.families.watch(() => {
+      refreshFamilies(root, dom);
+      // Gli strati immagine coi testi nelle famiglie del vault si ridisegnano
+      // col foglio nuovo.
+      for (const record of layers) if (record.kind === "image" && namesVault(record.layer)) render(record);
+    }));
+  }
 
   // --- forme ------------------------------------------------------------------
 
@@ -1042,7 +1050,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   const fontsOf = (record: ImageRecord, generation: number): string => {
     const fonts = options.fonts;
     if (fonts === undefined) return "";
-    const named = `${record.layer.root.attrs}${record.layer.body}`;
+    const named = layerText(record.layer);
     const css = fonts.now(named);
     if (css !== null) return css;
     void fonts.load(named).then(() => {

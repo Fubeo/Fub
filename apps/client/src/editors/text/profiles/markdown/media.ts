@@ -13,6 +13,8 @@ import { api } from "../../../../host/ipc";
 import { resolvedReference } from "../../../../host/query";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
 import { openResourcePort, type ResourceTransport } from "../../../media/resource-port";
+import type { VaultFontPort } from "../../../spatial/fonts/vault";
+import { drawingFonts } from "../../../../state/drawing-fonts";
 import type { Lifetime } from "../../../../ui/lifetime";
 import type { Expected } from "../../../../ui/race";
 import { VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
@@ -27,6 +29,9 @@ export interface MediaPort {
   /// I byte del documento `id`, col loro tipo; `null` se pesa più di `limit`
   /// byte, che allora non si leggono. Senza, un disegno si mostra dal file.
   read?(id: string, limit: number): Promise<Blob | null>;
+  /// I caratteri del vault che i testi di un disegno possono nominare;
+  /// senza, i testi usano soltanto quelli dell'app.
+  fonts?: VaultFontPort;
 }
 
 /// I byte dei file del vault, per chi li legge interi.
@@ -52,6 +57,7 @@ const hostPort: MediaPort = {
       await port.close();
     }
   },
+  fonts: drawingFonts,
 };
 
 /// Quanti byte pesa al più un disegno che una nota mostra coi caratteri e le
@@ -62,9 +68,10 @@ export const EMBED_DRAWING_BYTES = 16 * 1024 * 1024;
 export const EMBED_IMAGE_BYTES = 16 * 1024 * 1024;
 
 /// Un disegno del vault come lo mostra la Lettura: dentro un `img` il
-/// browser non carica né i caratteri dell'app né le immagini del vault, e
-/// una copia del disegno li porta dentro, da un blob che vive quanto la resa.
-/// Il file non cambia. `null` per un file che non è un disegno, o che non si
+/// browser non carica né i caratteri dell'app e del vault né le immagini del
+/// vault, e una copia del disegno li porta dentro, da un blob che vive quanto
+/// la resa. Il file non cambia. Un carattere che non si carica non si dice:
+/// lo dice il disegno, quando si apre. `null` per un file che non è un disegno, o che non si
 /// legge: si mostra il file.
 ///
 /// `heading` è la sezione che un embed nomina, `![[disegno#Copertina]]`: il
@@ -81,13 +88,24 @@ async function drawingPicture(port: MediaPort, id: string, life: Lifetime, headi
     if (file === null || life.closed) return null;
     const text = await file.text();
     // Il modulo dei disegni arriva solo con un disegno da mostrare.
-    const { section, selfContained } = await import("../../../spatial/picture");
+    const [{ fontSheets, section, selfContained }, { DrawingFonts, markupFonts, vaultFontsOf }] = await Promise.all([
+      import("../../../spatial/picture"),
+      import("../../../spatial/fonts/vault"),
+    ]);
     const drawing = heading === null ? text : section(text, heading);
     if (drawing === null) return false;
-    const shown = await selfContained(drawing, async (path, limit) => {
-      const target = await port.resolve({ kind: "path", value: path }, id).catch(() => null);
-      return target === null || mediaKindOfId(target) !== "image" ? null : read(target, limit);
-    }, EMBED_IMAGE_BYTES);
+    // Le facce del vault servono finché l'immagine non le porta dentro.
+    const fonts = new DrawingFonts(port.fonts === undefined ? null : vaultFontsOf(port.fonts));
+    let shown: string;
+    try {
+      fonts.useFonts(markupFonts(drawing).fonts);
+      shown = await selfContained(drawing, async (path, limit) => {
+        const target = await port.resolve({ kind: "path", value: path }, id).catch(() => null);
+        return target === null || mediaKindOfId(target) !== "image" ? null : read(target, limit);
+      }, EMBED_IMAGE_BYTES, fontSheets(fonts));
+    } finally {
+      fonts.dispose();
+    }
     if (life.closed) return null;
     const url = URL.createObjectURL(new Blob([shown], { type: "image/svg+xml" }));
     life.add(() => URL.revokeObjectURL(url));

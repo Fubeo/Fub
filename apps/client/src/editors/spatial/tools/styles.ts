@@ -31,6 +31,7 @@
 // - **I nomi** seguono le regole dei campioni, fra gli stili dello stesso
 //   tipo: uno stile di testo e uno grafico possono chiamarsi uguali.
 
+import { fubLiveFamily } from "../fonts/faces";
 import { formatNumber } from "../number";
 import { followedKind, STYLE_GRAPHIC_POINTS } from "../scene/classify";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
@@ -226,8 +227,9 @@ export interface StyleSample {
 /// piccolo, e un contorno di dieci punti lo riempirebbe.
 const SAMPLE_BORDER = 3;
 
-/// L'anteprima dello stile `style`; `resources` sono le risorse di `model`.
-export function styleSample(model: DocumentModel, style: DocumentStyle, resources: ReadonlyMap<string, LeafNode> = resourcesOf(model)): StyleSample {
+/// L'anteprima dello stile `style`; `resources` sono le risorse di `model`,
+/// e `live` dà la `font-family` con cui il foglio scrive una famiglia.
+export function styleSample(model: DocumentModel, style: DocumentStyle, resources: ReadonlyMap<string, LeafNode> = resourcesOf(model), live: (value: string) => string = fubLiveFamily): StyleSample {
   const look = protoOf(model, style.node);
   const css: Record<string, string> = {};
   if (look === null) return { text: style.kind === "text" ? "Aa" : "", css };
@@ -236,7 +238,7 @@ export function styleSample(model: DocumentModel, style: DocumentStyle, resource
   if (style.kind === "text") {
     const font = look.style.font!;
     if (fill !== null) css.color = fill.color;
-    if (said.has("family") && font.family !== "") css["font-family"] = font.family;
+    if (said.has("family") && font.family !== "") css["font-family"] = live(font.family);
     if (said.has("weight")) css["font-weight"] = String(weightOf(font.weight));
     if (said.has("italic") && font.style !== "" && font.style !== "normal") css["font-style"] = font.style;
     const lines = [said.has("underline") && font.underline ? "underline" : null, said.has("strike") && font.strike ? "line-through" : null].filter((line) => line !== null);
