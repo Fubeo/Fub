@@ -12,7 +12,10 @@
 //! - `suffix`: la parola fra parentesi nel nome del file della selezione, di
 //!   serie `selection`, e in quello dell'SVG del disegno intero, di serie
 //!   `exported`, con le regole del PDF annotato;
-//! - `scale` (di serie 2) o `width`, per le immagini raster.
+//! - `scale` (di serie 2) o `width`, per le immagini raster;
+//! - per il PDF, la pagina di stampa ([`print_setup`]): `paper` (`fit` di
+//!   serie, un formato col nome o due misure in millimetri), `bleed` e
+//!   `marks`, e con una carta col suo formato `orientation`, `margin` e `fit`.
 //!
 //! Un valore sbagliato è un errore che lo nomina, prima di ogni file.
 //! Un'opzione che la destinazione o l'ambito non usano si ignora, come una
@@ -23,6 +26,10 @@ use std::collections::BTreeSet;
 use fub_abi::error::PluginError;
 use fub_abi::text::{Arg, StringCatalog, Text};
 use fub_abi::transfer::artifact_key;
+use fub_scene::export::print::{
+    self, Fit, Marks, Orientation, Paper, Setup, BLEED_MAX_MM, MARGIN_DEFAULT_MM, MARGIN_MAX_MM,
+    PAPER_MAX_MM, PAPER_MIN_MM,
+};
 use fub_scene::export::{Background, Scope, Size, SCALE_MAX, SIDE_MAX};
 use serde_json::Value;
 
@@ -35,6 +42,12 @@ const BOX: &str = "box";
 const BACKGROUND: &str = "background";
 const SCALE: &str = "scale";
 const WIDTH: &str = "width";
+const PAPER: &str = "paper";
+const ORIENTATION: &str = "orientation";
+const MARGIN: &str = "margin";
+const FIT: &str = "fit";
+const BLEED: &str = "bleed";
+const MARKS: &str = "marks";
 
 /// La scala di serie è 2, la densità di uno schermo ad alta risoluzione: a 1
 /// un disegno incollato in un documento si vede sgranato.
@@ -57,6 +70,13 @@ const E_BOX: &str = "e_box";
 const E_BACKGROUND: &str = "e_background";
 const E_WIDTH: &str = "e_width";
 const E_SCALE_AND_WIDTH: &str = "e_scale_and_width";
+const E_PAPER: &str = "e_paper";
+const E_ORIENTATION: &str = "e_orientation";
+const E_MARGIN: &str = "e_margin";
+const E_FIT: &str = "e_fit";
+const E_BLEED: &str = "e_bleed";
+const E_MARKS: &str = "e_marks";
+const E_ROOM: &str = "e_room";
 pub(super) const E_ONE_DRAWING: &str = "e_one_drawing";
 pub(super) const E_BOARD: &str = "e_board";
 pub(super) const E_OBJECT: &str = "e_object";
@@ -95,6 +115,34 @@ pub(super) fn in_italian(catalog: StringCatalog) -> StringCatalog {
         .with(
             E_SCALE_AND_WIDTH,
             "La scala e la larghezza dell'immagine non vanno insieme: chiedine una sola.",
+        )
+        .with(
+            E_PAPER,
+            "La carta dev'essere fit, a2, a3, a4, a5, a6, letter, legal o tabloid, o due misure in millimetri da 10 a 5000, non «{paper}».",
+        )
+        .with(
+            E_ORIENTATION,
+            "L'orientamento della carta dev'essere auto, portrait o landscape, non «{orientation}».",
+        )
+        .with(
+            E_MARGIN,
+            "Il margine dev'essere un numero di millimetri da 0 a 100, non «{margin}».",
+        )
+        .with(
+            E_FIT,
+            "La misura del disegno sulla carta dev'essere shrink o page, non «{fit}».",
+        )
+        .with(
+            E_BLEED,
+            "L'abbondanza dev'essere un numero di millimetri da 0 a 25, non «{bleed}».",
+        )
+        .with(
+            E_MARKS,
+            "I segni devono essere una lista di crop e registration, non «{marks}».",
+        )
+        .with(
+            E_ROOM,
+            "Su questa carta i margini, l'abbondanza e i segni non lasciano posto al disegno: togli un po' di margine o di abbondanza, o scegli una carta più grande.",
         )
         .with(
             E_ONE_DRAWING,
@@ -143,6 +191,34 @@ pub(super) fn in_english(catalog: StringCatalog) -> StringCatalog {
             "The image scale and width do not go together: ask for only one of them.",
         )
         .with(
+            E_PAPER,
+            "The paper must be fit, a2, a3, a4, a5, a6, letter, legal or tabloid, or two sizes in millimetres from 10 to 5000, not «{paper}».",
+        )
+        .with(
+            E_ORIENTATION,
+            "The paper orientation must be auto, portrait or landscape, not «{orientation}».",
+        )
+        .with(
+            E_MARGIN,
+            "The margin must be a number of millimetres from 0 to 100, not «{margin}».",
+        )
+        .with(
+            E_FIT,
+            "The size of the drawing on the paper must be shrink or page, not «{fit}».",
+        )
+        .with(
+            E_BLEED,
+            "The bleed must be a number of millimetres from 0 to 25, not «{bleed}».",
+        )
+        .with(
+            E_MARKS,
+            "The marks must be a list of crop and registration, not «{marks}».",
+        )
+        .with(
+            E_ROOM,
+            "On this paper the margins, the bleed and the marks leave no room for the drawing: take off some margin or bleed, or choose a larger paper.",
+        )
+        .with(
             E_ONE_DRAWING,
             "Boards and selections are exported from one drawing at a time, and the selection holds {count} drawings.",
         )
@@ -166,11 +242,14 @@ pub(super) enum Part {
     Selection { scope: Scope, suffix: String },
 }
 
-/// Le opzioni di tutte le destinazioni: che cosa, e con che sfondo.
+/// Le opzioni di tutte le destinazioni, che cosa e con che sfondo, e la
+/// pagina di stampa, che il PDF legge a parte ([`print_setup`]): per le
+/// altre destinazioni è quella di sempre.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Choice {
     pub(super) part: Part,
     pub(super) background: Background,
+    pub(super) print: Setup,
 }
 
 impl Choice {
@@ -193,13 +272,19 @@ impl Choice {
                 _ => return Err(wrong(E_BACKGROUND, BACKGROUND, Some(value))),
             },
         };
-        Ok(Choice { part, background })
+        Ok(Choice {
+            part,
+            background,
+            print: Setup::PLAIN,
+        })
     }
 
-    /// Il disegno intero con la sua carta: il file di prima, dai byte del
-    /// documento così come sono.
+    /// Il disegno intero con la sua carta e senza abbondanza: il file di
+    /// prima, dai byte del documento così come sono.
     pub(super) fn is_whole(&self) -> bool {
-        self.part == Part::Drawing && self.background == Background::Paper
+        self.part == Part::Drawing
+            && self.background == Background::Paper
+            && self.print.bleed <= 0.0
     }
 }
 
@@ -291,6 +376,108 @@ pub(super) fn raster_size(options: &Value) -> Result<Size, PluginError> {
                 Ok(Size::Pixels(width as u32))
             }
             _ => Err(wrong(E_WIDTH, WIDTH, Some(value))),
+        },
+    }
+}
+
+/// La pagina di stampa del PDF, o l'errore del primo valore sbagliato:
+///
+/// - `paper`: `fit` (di serie), la carta su misura del disegno; un formato
+///   col nome ([`print::PAPERS`]); o due misure in millimetri, da 10 a 5000,
+///   in un ordine qualunque;
+/// - `bleed`: l'abbondanza in millimetri, da 0 (di serie) a 25;
+/// - `marks`: i segni, una lista di `crop` e `registration`, di serie vuota;
+/// - con una carta col suo formato, `orientation` (`auto` di serie,
+///   `portrait` o `landscape`), `margin` in millimetri, da 0 a 100, di serie
+///   10, e `fit`, `shrink` (di serie) o `page`; con la carta su misura si
+///   ignorano.
+///
+/// Una carta su cui margini, abbondanza e segni non lasciano posto è un
+/// errore anche lei, prima di ogni file.
+pub(super) fn print_setup(options: &Value) -> Result<Setup, PluginError> {
+    let paper = match given(options, PAPER) {
+        None => Paper::Fit,
+        Some(value) => paper(value).ok_or_else(|| wrong(E_PAPER, PAPER, Some(value)))?,
+    };
+    let mut setup = Setup {
+        paper,
+        bleed: millimetres(options, BLEED, BLEED_MAX_MM, E_BLEED)?.unwrap_or(0.0),
+        marks: match given(options, MARKS) {
+            None => Marks::default(),
+            Some(value) => marks(value).ok_or_else(|| wrong(E_MARKS, MARKS, Some(value)))?,
+        },
+        ..Setup::PLAIN
+    };
+    if let Paper::Sheet(_) = paper {
+        setup.orientation = match given(options, ORIENTATION) {
+            None => Orientation::Auto,
+            Some(value) => match value.as_str() {
+                Some("auto") => Orientation::Auto,
+                Some("portrait") => Orientation::Portrait,
+                Some("landscape") => Orientation::Landscape,
+                _ => return Err(wrong(E_ORIENTATION, ORIENTATION, Some(value))),
+            },
+        };
+        setup.margin =
+            millimetres(options, MARGIN, MARGIN_MAX_MM, E_MARGIN)?.unwrap_or(MARGIN_DEFAULT_MM);
+        setup.fit = match given(options, FIT) {
+            None => Fit::Shrink,
+            Some(value) => match value.as_str() {
+                Some("shrink") => Fit::Shrink,
+                Some("page") => Fit::Page,
+                _ => return Err(wrong(E_FIT, FIT, Some(value))),
+            },
+        };
+        if !setup.has_room() {
+            return Err(PluginError::BadArgs(Text::key(E_ROOM)));
+        }
+    }
+    Ok(setup)
+}
+
+/// La carta: `fit`, un nome, o due misure in millimetri, il lato corto prima.
+fn paper(value: &Value) -> Option<Paper> {
+    if let Some(name) = value.as_str() {
+        return match name {
+            "fit" => Some(Paper::Fit),
+            name => print::paper_named(name).map(Paper::Sheet),
+        };
+    }
+    let sides = value
+        .as_array()?
+        .iter()
+        .map(Value::as_f64)
+        .collect::<Option<Vec<_>>>()?;
+    let [a, b] = <[f64; 2]>::try_from(sides).ok()?;
+    let within = |side: f64| (PAPER_MIN_MM..=PAPER_MAX_MM).contains(&side);
+    (within(a) && within(b)).then(|| Paper::Sheet([a.min(b), a.max(b)]))
+}
+
+/// I segni: una lista, anche vuota, di `crop` e `registration`.
+fn marks(value: &Value) -> Option<Marks> {
+    let mut marks = Marks::default();
+    for mark in value.as_array()? {
+        match mark.as_str()? {
+            "crop" => marks.crop = true,
+            "registration" => marks.registration = true,
+            _ => return None,
+        }
+    }
+    Some(marks)
+}
+
+/// L'opzione `name`, un numero di millimetri da 0 a `max`, se c'è.
+fn millimetres(
+    options: &Value,
+    name: &str,
+    max: f64,
+    key: &str,
+) -> Result<Option<f64>, PluginError> {
+    match given(options, name) {
+        None => Ok(None),
+        Some(value) => match value.as_f64() {
+            Some(n) if (0.0..=max).contains(&n) => Ok(Some(n)),
+            _ => Err(wrong(key, name, Some(value))),
         },
     }
 }
@@ -512,6 +699,136 @@ mod tests {
             refused(size(json!({"scale": 2, "width": 100}))).0,
             E_SCALE_AND_WIDTH
         );
+    }
+
+    #[test]
+    fn no_print_options_is_the_page_of_always() {
+        for options in [
+            Value::Null,
+            json!({}),
+            json!({"paper": null, "marks": null}),
+        ] {
+            assert_eq!(print_setup(&options).unwrap(), Setup::PLAIN);
+        }
+        // Le scelte di una carta col suo formato non contano con quella su
+        // misura, nemmeno sbagliate, e i default espliciti sono la pagina di
+        // sempre.
+        let setup = print_setup(&json!({
+            "paper": "fit",
+            "orientation": "storto",
+            "margin": -4,
+            "fit": 9,
+            "bleed": 0,
+            "marks": [],
+        }))
+        .unwrap();
+        assert!(setup.is_plain());
+    }
+
+    #[test]
+    fn a_paper_is_a_name_or_two_sizes_in_millimetres() {
+        let paper = |value: Value| {
+            print_setup(&json!({"paper": value, "margin": 0})).map(|setup| setup.paper)
+        };
+        assert_eq!(paper(json!("a4")).unwrap(), Paper::Sheet([210.0, 297.0]));
+        assert_eq!(
+            paper(json!("letter")).unwrap(),
+            Paper::Sheet([215.9, 279.4])
+        );
+        assert_eq!(
+            paper(json!([300, 100])).unwrap(),
+            Paper::Sheet([100.0, 300.0])
+        );
+        assert_eq!(
+            paper(json!([10, 5000])).unwrap(),
+            Paper::Sheet([10.0, 5000.0])
+        );
+        for wrong in [
+            json!("A4"),
+            json!("b5"),
+            json!(4),
+            json!([100]),
+            json!([100, 200, 300]),
+            json!([9.9, 100]),
+            json!([100, 5000.5]),
+            json!([100, "200"]),
+        ] {
+            assert_eq!(refused(paper(wrong.clone())).0, E_PAPER, "{wrong}");
+        }
+        assert_eq!(
+            refused(paper(json!("b5"))),
+            (E_PAPER.to_string(), "b5".to_string())
+        );
+    }
+
+    #[test]
+    fn a_sheet_reads_orientation_margin_and_fit() {
+        let setup = print_setup(&json!({
+            "paper": "a3",
+            "orientation": "landscape",
+            "margin": 0,
+            "fit": "page",
+            "bleed": 3,
+            "marks": ["registration", "crop", "crop"],
+        }))
+        .unwrap();
+        assert_eq!(
+            setup,
+            Setup {
+                paper: Paper::Sheet([297.0, 420.0]),
+                orientation: Orientation::Landscape,
+                margin: 0.0,
+                fit: Fit::Page,
+                bleed: 3.0,
+                marks: Marks {
+                    crop: true,
+                    registration: true,
+                },
+            }
+        );
+        let setup = print_setup(&json!({"paper": "a5"})).unwrap();
+        assert_eq!(
+            (setup.orientation, setup.margin, setup.fit),
+            (Orientation::Auto, MARGIN_DEFAULT_MM, Fit::Shrink)
+        );
+        for (options, key) in [
+            (json!({"orientation": "sideways"}), E_ORIENTATION),
+            (json!({"margin": -1}), E_MARGIN),
+            (json!({"margin": 100.5}), E_MARGIN),
+            (json!({"margin": "10"}), E_MARGIN),
+            (json!({"fit": "fill"}), E_FIT),
+        ] {
+            let mut options = options;
+            options["paper"] = json!("a4");
+            assert_eq!(refused(print_setup(&options)).0, key, "{options}");
+        }
+    }
+
+    #[test]
+    fn bleed_and_marks_have_their_limits() {
+        assert_eq!(print_setup(&json!({"bleed": 25})).unwrap().bleed, 25.0);
+        for wrong in [json!(-0.5), json!(25.5), json!("3")] {
+            assert_eq!(
+                refused(print_setup(&json!({"bleed": wrong}))).0,
+                E_BLEED,
+                "{wrong}"
+            );
+        }
+        for wrong in [json!("crop"), json!(["crop", "trim"]), json!([1])] {
+            assert_eq!(
+                refused(print_setup(&json!({"marks": wrong}))).0,
+                E_MARKS,
+                "{wrong}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_paper_without_room_is_refused_before_any_file() {
+        let options = json!({"paper": "a6", "margin": 40, "bleed": 5, "marks": ["crop"]});
+        assert_eq!(refused(print_setup(&options)).0, E_ROOM);
+        let options = json!({"paper": "a6", "margin": 39, "bleed": 5, "marks": ["crop"]});
+        assert!(print_setup(&options).is_ok());
     }
 
     #[test]

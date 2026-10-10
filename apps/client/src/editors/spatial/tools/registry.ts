@@ -173,7 +173,8 @@ export type Feature =
   | "typeset"
   | "effects"
   | "blend"
-  | "motifs";
+  | "motifs"
+  | "print";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -232,6 +233,9 @@ const COMMANDS: readonly FeatureSpec[] = [
   // campi, il nome e l'eliminazione, nel pannello delle proprietà: nel
   // Personalizzato si vedono con lui.
   { id: "motifs", level: "expert", label: "draw.feature.motifs" },
+  // La pagina di stampa è il gruppo «Pagina» della finestra «Esporta», per
+  // il PDF: nel Personalizzato si vede con lei.
+  { id: "print", level: "expert", label: "draw.feature.print" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli

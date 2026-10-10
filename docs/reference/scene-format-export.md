@@ -3,12 +3,15 @@
 > **Ambito:** che cosa diventa un disegno quando esce da Fub: le opzioni delle
 > quattro destinazioni di `fub.draw`, la derivazione che sceglie il disegno, le
 > tavole o la selezione e toglie lo sfondo, l'SVG pulito, la misura delle
-> immagini, i formati e i nomi dei file. Versione 1.
+> immagini, i formati, i nomi dei file e la pagina di stampa del PDF.
+> Versione 1.
 > **Fonti autorevoli:** `crates/fub-scene/src/export.rs`, con
-> `export/clean.rs` ed `export/measure.rs`; `apps/client/src/editors/spatial/scene/export.ts`,
-> che deriva e misura allo stesso modo per l'anteprima, con i vettori di prova
-> in `apps/client/src/__fixtures__/scene-export/`; le opzioni, i formati e i
-> nomi in `crates/fub-features/src/draw.rs` e `draw/choice.rs`.
+> `export/clean.rs`, `export/measure.rs` ed `export/print.rs`;
+> `apps/client/src/editors/spatial/scene/export.ts` e `scene/print.ts`, che
+> derivano, misurano e impaginano allo stesso modo per l'anteprima, con i
+> vettori di prova in `apps/client/src/__fixtures__/scene-export/`; le
+> opzioni, i formati e i nomi in `crates/fub-features/src/draw.rs` e
+> `draw/choice.rs`.
 
 Una parte del [formato della scena](scene-format.md), §9. L'export legge il
 file del vault e ne fa il file da scrivere in tre passi: sceglie che cosa,
@@ -42,13 +45,20 @@ di export, un oggetto JSON; il contratto di export non cambia.
 | `scale` | numero maggiore di 0, al più 8 | 2 | PNG, JPEG |
 | `width` | intero da 1 a 16 384 | — | PNG, JPEG |
 | `suffix` | parola, al più 40 caratteri | `selection`, `exported` | `scope: selection`; SVG del disegno |
+| `paper` | `fit`, un formato col nome, `[a, b]` in mm | `fit` | PDF (§7) |
+| `orientation` | `auto`, `portrait`, `landscape` | `auto` | PDF su una carta col suo formato |
+| `margin` | millimetri da 0 a 100 | 10 | PDF su una carta col suo formato |
+| `fit` | `shrink`, `page` | `shrink` | PDF su una carta col suo formato |
+| `bleed` | millimetri da 0 a 25 | 0 | PDF |
+| `marks` | lista di `crop` e `registration` | vuota | PDF |
 
 - **Un valore sbagliato** ferma l'export prima di aprire un file, con un
   errore del catalogo di `fub.draw` che lo nomina, ripetuto fino a 120
   caratteri. Un'opzione `null` vale come assente.
 - **Le opzioni che la destinazione o l'ambito non usano** si ignorano, come
   quelle sconosciute: `scale` in un PDF, `boards` col disegno intero,
-  `suffix` con le tavole o col disegno intero in PNG, JPEG e PDF. Senza
+  `suffix` con le tavole o col disegno intero in PNG, JPEG e PDF, `paper` in
+  un PNG, `orientation`, `margin` e `fit` con la carta `fit`. Senza
   opzioni i file sono quelli di prima, byte per byte, scritti dal testo del
   vault così com'è.
 - **Le tavole:** gli id sono stringhe; uno ripetuto vale una volta, e
@@ -73,6 +83,13 @@ di export, un oggetto JSON; il contratto di export non cambia.
 | `e_width` | `width` non è un intero da 1 a 16 384 |
 | `e_scale_and_width` | `scale` e `width` insieme |
 | `e_annotated_suffix` | `suffix` non segue le sue regole |
+| `e_paper` | `paper` non è `fit`, un nome di §7 o due misure da 10 a 5 000 mm |
+| `e_orientation` | `orientation` non è una delle tre parole |
+| `e_margin` | `margin` non è un numero da 0 a 100 |
+| `e_fit` | `fit` non è `shrink` o `page` |
+| `e_bleed` | `bleed` non è un numero da 0 a 25 |
+| `e_marks` | `marks` non è una lista, anche vuota, di `crop` e `registration` |
+| `e_room` | su quella carta margini, abbondanza e segni non lasciano posto (§7) |
 | `e_one_drawing` | `boards` o `selection` con più di un disegno nella richiesta |
 | `e_board` | il disegno non ha una delle tavole chieste |
 | `e_object` | un id della selezione non è un oggetto del disegno (§2) |
@@ -100,6 +117,11 @@ Cambia il testo del documento in tre punti, e lascia uguale ogni altro byte.
    `style`, `title` e le risorse comprese.
 3. **Lo sfondo** `none` toglie ogni carta, cioè ogni `rect` figlio della
    radice con `fub:role="paper"`.
+4. **L'abbondanza** di un PDF (§7), un numero di pixel della pagina maggiore
+   di 0, allarga di tanto per lato il rettangolo, anche quello del disegno
+   intero; con lo sfondo `paper` si allargano con lui le carte figlie della
+   radice grandi quanto lui, ai 2 decimali con cui si scrivono, così il loro
+   colore arriva fino al bordo da tagliare.
 
 - **Un id scelto** è un elemento grafico a cui si arriva dalla radice
   passando solo per `a`, `g`, `svg` e `switch`, e non una carta: un livello,
@@ -110,6 +132,11 @@ Cambia il testo del documento in tre punti, e lascia uguale ogni altro byte.
   di chiusura, e lo spazio bianco che lo precede nel genitore, se è un nodo di
   testo fatto solo di spazi. I cambi si fanno tutti sul testo di partenza, e
   non si sovrappongono. Derivare di nuovo il testo derivato non lo cambia.
+- **Il rettangolo del disegno intero** è il `viewBox` della radice, largo e
+  alto più di 0, o `0 0 width height`; la misura della pagina è `width` e
+  `height` se sono lunghezze maggiori di 0, se no quella del `viewBox`. Un
+  disegno che non ha né l'uno né le altre non dice dove finisce, e non si
+  allarga.
 - **Gli esiti:** il testo derivato, o un errore: `unknown-board` e
   `unknown-object` con l'id, `empty-selection`, `bad-box`, `malformed` e
   `not-svg`, gli stessi nei due linguaggi.
@@ -174,7 +201,9 @@ del vault resta l'originale.
   vettori. L'esito è la scala, i due lati e se la misura è ridotta.
 - **La densità** del PNG e del JPEG è 96 punti per pollice per la scala, così
   un programma di impaginazione mette l'immagine alla misura del disegno.
-- **Una pagina del PDF** misura il rettangolo, a 0,75 punti per unità.
+- **Una pagina del PDF** misura il rettangolo, a 0,75 punti per unità, sulla
+  carta `fit` senza abbondanza né segni; le altre pagine di stampa sono in
+  §7.
 
 ## 5. I formati
 
@@ -192,6 +221,7 @@ del vault resta l'originale.
   della sua misura, con un segnalibro col nome della tavola, e il lettore apre
   il pannello dei segnalibri. Ciò che le pagine hanno uguale, un carattere o
   un'immagine, si scrive una volta. Il titolo del disegno va nei metadati.
+  Ogni pagina va sulla stessa pagina di stampa (§7).
 - **Gli stessi byte** escono a ogni export, in tutti e quattro i formati:
   nessuno porta date, e l'ordine interno del PDF non cambia.
 - **Le risorse** sono quelle del formato della scena, §9: immagini raster in
@@ -218,3 +248,46 @@ del vault resta l'originale.
   `Scienze/acqua (Copertina 1).png`; due disegni con lo stesso nome li
   prendono dopo il nome, come prima, anche in SVG:
   `Scienze/acqua 1 (esportato).svg`.
+
+## 7. La pagina di stampa
+
+```json
+{ "scope": "boards", "boards": ["b1a2b3c4d"], "paper": "a4", "bleed": 3, "marks": ["crop", "registration"] }
+```
+
+Il PDF di una tavola su un A4, girato come lei, con 3 mm di abbondanza e i
+segni di taglio e di registro. Le scelte sono in millimetri, la pagina in
+punti, 72 per pollice. La **rifilatura**, il rettangolo da tagliare, è il
+rettangolo di §2 a 0,75 punti per pixel, per la scala della pagina.
+
+- **La carta `fit`** è la rifilatura con intorno l'abbondanza e, se ci sono
+  segni, il loro spazio, 8 mm per lato; il disegno resta alla sua misura.
+  Senza abbondanza né segni è la pagina di sempre (§4).
+- **Una carta col suo formato:** `a2`, `a3`, `a4`, `a5` e `a6`, `letter`
+  (215,9 × 279,4 mm), `legal` (215,9 × 355,6) e `tabloid` (279,4 × 431,8),
+  o due misure da 10 a 5 000 mm in un ordine qualunque. `orientation: auto`
+  la gira in orizzontale se il disegno è più largo che alto. Il disegno sta
+  al centro, dentro il margine, l'abbondanza e lo spazio dei segni di ogni
+  lato: con `shrink` alla sua misura, ridotto se non ci sta, con `page`
+  grande quanto la carta permette.
+- **Il posto:** se il lato corto della carta non è più lungo di due volte
+  margine, abbondanza e spazio dei segni, l'export si ferma con `e_room`,
+  prima di ogni file.
+- **L'abbondanza** entra nella derivazione (§2) in pixel della pagina, i
+  millimetri per 96 / 25,4 divisi per la scala: sulla carta misura ciò che
+  si è chiesto. Un disegno intero che non dice dove finisce esce senza, e il
+  log lo dice. Con lo sfondo `none` non c'è carta da allargare, e
+  nell'abbondanza va soltanto ciò che il disegno ha oltre il bordo.
+- **I segni** stanno fuori dall'abbondanza, a 3 mm dal suo bordo. Quelli di
+  taglio sono due per angolo, sul prolungamento dei lati, lunghi 5 mm;
+  quelli di registro un cerchio di 1,75 mm di raggio con una croce larga
+  5 mm, a metà di ogni lato. Sono linee di 0,25 punti nel colore di
+  registro, `/Separation /All`, che inchiostra ogni lastra; chi non separa
+  lo mostra col nero dei quattro inchiostri.
+- **Nel PDF** `/MediaBox` è la carta, `/TrimBox` la rifilatura e
+  `/BleedBox` la rifilatura con l'abbondanza, dentro la carta. Il catalogo
+  chiede di stampare senza adattare la pagina (`/PrintScaling /None`) e di
+  scegliere il cassetto dalla sua misura (`/PickTrayByPDFSize`). Gli effetti
+  che il PDF dipinge a pixel restano a 300 punti per pollice sulla carta.
+- **Il client** fa lo stesso conto per l'anteprima e per la misura che la
+  finestra «Esporta» dice, provato dai vettori di `print.json`.

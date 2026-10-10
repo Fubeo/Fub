@@ -1887,6 +1887,44 @@ html, body, #app {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
+/* «Esporta» (`draw-export-*`): la geometria che nessun tema cambia. Le
+   scelte e l'anteprima prendono l'altezza che la finestra lascia, e dove la
+   finestra è stretta stanno una sopra l'altra. Un campo ha il nome sopra, e
+   sotto il valore con l'unità accanto. Nell'anteprima il
+   disegno sta al suo posto sulla carta, in proporzione alla carta, e i segni
+   sopra, grandi quanto lei; ciò che va oltre la carta non si vede, come nel
+   PDF. */
+.draw-export-layout {
+  grid-template-rows: minmax(0, 1fr);
+}
+.draw-export-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.draw-export-field > span:first-child,
+.draw-export-select {
+  grid-column: 1 / -1;
+}
+.draw-export-sheet {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+.draw-export-sheet .draw-export-image {
+  position: absolute;
+}
+.draw-export-marks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+@media (max-width: 760px) {
+  .draw-export-layout {
+    grid-template-rows: none;
+  }
+}
 /* La descrizione di un'immagine appena entrata: in fondo al foglio, al
    centro; sopra la barra del gruppo isolato quando c'è. */
 .draw-describe {

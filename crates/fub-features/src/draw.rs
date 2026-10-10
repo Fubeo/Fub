@@ -10,11 +10,13 @@
 //! L'export sono quattro [`ExportProvider`], uno per formato, che leggono il
 //! disegno nello stesso modo. Le opzioni della richiesta ([`choice`]) dicono
 //! che cosa esce: il disegno intero, alcune tavole o gli oggetti scelti, con
-//! la carta o senza. Il disegno intero con la carta sono i byte del
-//! documento; il resto è la derivazione di `fub_scene::export`, la stessa che
-//! il client fa per l'anteprima. Il testo passa da `usvg`, che ne fa un
-//! albero, e da lì `resvg` rasterizza il PNG e il JPEG e `svg2pdf` scrive il
-//! PDF vettoriale; l'SVG è il testo stesso, ripulito per il web. Un disegno è
+//! la carta o senza, e per il PDF su che pagina di stampa. Il disegno intero
+//! con la carta sono i byte del documento; il resto è la derivazione di
+//! `fub_scene::export`, la stessa che il client fa per l'anteprima. Il testo
+//! passa da `usvg`, che ne fa un albero, e da lì `resvg` rasterizza il PNG e
+//! il JPEG e `svg2pdf` scrive il PDF vettoriale, sulla carta, con
+//! l'abbondanza e i segni chiesti ([`fub_scene::export::print`]); l'SVG è il
+//! testo stesso, ripulito per il web. Un disegno è
 //! un documento del formato `svg`; gli altri documenti della selezione si
 //! saltano, e il log dice quanti.
 //!
@@ -100,6 +102,7 @@ use fub_abi::transfer::{
 };
 use fub_abi::ui::UiOption;
 use fub_format_svg::FORMAT_ID;
+use fub_scene::export::print::{self, Setup};
 use fub_scene::export::{
     clean, embed_images, measure, Board, DeriveError, Scope, Size, Source, AREA_MAX, SIDE_MAX,
 };
@@ -120,7 +123,7 @@ pub use annotated::{AnnotatedPdfExport, RedactedPdfExport, DRAW_ANNOTATED_PDF, D
 pub use create::{DrawCommands, DRAWING_CREATE};
 
 use choice::{
-    board_label, raster_size, Choice, Names, Part, EXPORTED_SUFFIX, E_BOARD, E_OBJECT,
+    board_label, print_setup, raster_size, Choice, Names, Part, EXPORTED_SUFFIX, E_BOARD, E_OBJECT,
     E_ONE_DRAWING,
 };
 
@@ -157,6 +160,8 @@ pub const DRAW_SUGGESTIONS_KEY: &str = "draw.suggestions";
 
 /// La densità di riferimento dei pixel CSS: 96 per pollice.
 const CSS_DPI: f32 = 96.0;
+/// Pixel CSS per millimetro: 96 per pollice, 25,4 millimetri per pollice.
+const PX_PER_MM: f64 = print::PT_PER_MM / print::PT_PER_PX;
 /// La qualità del JPEG, da 1 a 100: a 90 i bordi dei tratti restano puliti, e
 /// il file resta molto più piccolo del PNG di una fotografia.
 const JPEG_QUALITY: u8 = 90;
@@ -495,8 +500,18 @@ impl ExportProvider for PdfExport {
         out: &mut dyn ArtifactSink,
     ) -> Result<ExportReport, PluginError> {
         check_target(request, DRAW_PDF)?;
-        let choice = Choice::read(&request.options)?;
-        export_drawings(request, host, out, Format::Pdf, &choice, &mut write_pdf)
+        let choice = Choice {
+            print: print_setup(&request.options)?,
+            ..Choice::read(&request.options)?
+        };
+        export_drawings(
+            request,
+            host,
+            out,
+            Format::Pdf,
+            &choice,
+            &mut |drawing, file, out, report| write_pdf(drawing, file, &choice.print, out, report),
+        )
     }
 }
 
@@ -551,11 +566,13 @@ enum Problem {
 }
 
 /// Una pagina di un file: il testo da cui esce, l'ambito con cui è stato
-/// derivato e, per una tavola, il suo nome.
+/// derivato, per una tavola il suo nome e, se il testo ha l'abbondanza di un
+/// PDF intorno, la misura in pixel CSS della pagina senza.
 struct Page<'b> {
     text: Cow<'b, [u8]>,
     scope: Scope,
     board: Option<String>,
+    frame: Option<[f64; 2]>,
 }
 
 /// Un file da scrivere: il percorso, e le pagine, che sono una tranne nel PDF
@@ -718,12 +735,20 @@ fn artifact_names(docs: &[DocId], extension: &str, label: Option<&str>) -> Vec<S
         .collect()
 }
 
+/// Il testo di una pagina e, se ha l'abbondanza intorno, la misura della
+/// pagina senza ([`Page::frame`]).
+type Derived<'b> = (Cow<'b, [u8]>, Option<[f64; 2]>);
+
 /// I file di un disegno per `choice`, con il nome `path` del disegno intero.
 ///
-/// Il disegno intero con la carta sono i byte del documento, così come sono:
-/// i file di prima. Il resto passa dalla derivazione, che vuole un SVG in
-/// UTF-8; le tavole e gli oggetti chiesti devono esserci tutti prima che si
-/// scriva un file.
+/// Il disegno intero con la carta e senza abbondanza sono i byte del
+/// documento, così come sono: i file di prima. Il resto passa dalla
+/// derivazione, che vuole un SVG in UTF-8; le tavole e gli oggetti chiesti
+/// devono esserci tutti prima che si scriva un file.
+///
+/// L'abbondanza di un PDF è in millimetri sulla carta: la derivazione la
+/// vuole in pixel della pagina, quindi divisa per la scala con cui la pagina
+/// va sulla carta ([`print::layout`]).
 fn files<'b>(
     doc: &DocId,
     bytes: &'b [u8],
@@ -731,39 +756,54 @@ fn files<'b>(
     format: Format,
     path: String,
 ) -> Result<Vec<File<'b>>, Problem> {
-    let whole = |text: Cow<'b, [u8]>| {
+    let whole = |(text, frame): Derived<'b>| {
         vec![File {
             path: path.clone(),
             pages: vec![Page {
                 text,
                 scope: Scope::Drawing,
                 board: None,
+                frame,
             }],
         }]
     };
     if choice.is_whole() {
-        return Ok(whole(Cow::Borrowed(bytes)));
+        return Ok(whole((Cow::Borrowed(bytes), None)));
     }
     let text = std::str::from_utf8(bytes).map_err(|_| Problem::Failed(not_utf8()))?;
     let source = Source::read(text).map_err(|error| Problem::Failed(unreadable(&error)))?;
-    let derive = |scope: &Scope| {
-        source
-            .derive(scope, choice.background)
-            .map(|text| Cow::Owned(text.into_bytes()))
-            .map_err(|error| derive_problem(doc, error))
+    let derive = |scope: &Scope| -> Result<Derived<'b>, Problem> {
+        let problem = |error| derive_problem(doc, error);
+        let setup = &choice.print;
+        let frame = match setup.bleed > 0.0 {
+            true => source.frame(scope).map_err(problem)?,
+            false => None,
+        };
+        let bleed = frame.map_or(0.0, |[width, height]| {
+            let scale = print::layout(width, height, setup).scale;
+            setup.bleed * PX_PER_MM / scale
+        });
+        let text = source
+            .derive_bled(scope, choice.background, bleed)
+            .map_err(problem)?;
+        Ok((Cow::Owned(text.into_bytes()), frame))
     };
     let base = strip_ext(doc.as_str());
     let extension = format.extension();
     match &choice.part {
         Part::Drawing => Ok(whole(derive(&Scope::Drawing)?)),
-        Part::Selection { scope, suffix } => Ok(vec![File {
-            path: format!("{base} ({suffix}).{extension}"),
-            pages: vec![Page {
-                text: derive(scope)?,
-                scope: scope.clone(),
-                board: None,
-            }],
-        }]),
+        Part::Selection { scope, suffix } => {
+            let (text, frame) = derive(scope)?;
+            Ok(vec![File {
+                path: format!("{base} ({suffix}).{extension}"),
+                pages: vec![Page {
+                    text,
+                    scope: scope.clone(),
+                    board: None,
+                    frame,
+                }],
+            }])
+        }
         Part::Boards(ids) => {
             let boards = source.boards();
             if let Some(missing) = ids.iter().find(|id| !boards.iter().any(|b| &b.id == *id)) {
@@ -783,10 +823,12 @@ fn files<'b>(
             let mut pages = Vec::with_capacity(chosen.len());
             for (_, board) in &chosen {
                 let scope = Scope::Board(board.id.clone());
+                let (text, frame) = derive(&scope)?;
                 pages.push(Page {
-                    text: derive(&scope)?,
+                    text,
                     scope,
                     board: Some(board.name.clone()),
+                    frame,
                 });
             }
             let mut names = Names::default();
@@ -858,6 +900,9 @@ struct Drawing<'h> {
     refused: Refused,
     /// I caratteri che i caratteri di Fub non hanno.
     missing: BTreeSet<char>,
+    /// Vero se il PDF ha chiesto l'abbondanza e il disegno intero non dice
+    /// la sua misura, quindi non ne ha.
+    unbled: bool,
     /// I byte che l'export tiene ancora, entro [`PLUGIN_EXPORT_LIMIT`]: l'SVG
     /// pulito ci misura le immagini che porta dentro, così un file che non
     /// ci starebbe tiene il percorso di quelle di troppo invece di fallire.
@@ -873,6 +918,7 @@ impl<'h> Drawing<'h> {
             images: VaultImages::new(host, doc),
             refused: Refused::default(),
             missing: BTreeSet::new(),
+            unbled: false,
             room,
         }
     }
@@ -913,8 +959,8 @@ impl<'h> Drawing<'h> {
         }
     }
 
-    /// Le note di un disegno esportato: ciò che è rimasto fuori e i caratteri
-    /// che i caratteri di Fub non hanno.
+    /// Le note di un disegno esportato: ciò che è rimasto fuori, i caratteri
+    /// che i caratteri di Fub non hanno e l'abbondanza che non c'è.
     fn notes(&self, report: &mut ExportReport) {
         let refused = &self.refused;
         let embedded = (refused.embedded > 0).then(|| {
@@ -936,7 +982,11 @@ impl<'h> Drawing<'h> {
                     .iter()
                     .map(|(why, images)| vault_note(*why, images)),
             )
-            .chain([embedded, glyphs_note(&self.missing)]);
+            .chain([
+                embedded,
+                glyphs_note(&self.missing),
+                self.unbled.then(|| UNBLED_NOTE.to_string()),
+            ]);
         for message in notes.flatten() {
             report
                 .log
@@ -1012,6 +1062,11 @@ fn vault_note(why: LeftOut, images: &BTreeSet<String>) -> Option<String> {
     };
     listed(images, &one, &many)
 }
+
+/// La nota di un PDF senza l'abbondanza chiesta: senza `viewBox` e senza
+/// `width` e `height`, il disegno non dice dove finisce.
+const UNBLED_NOTE: &str =
+    "the drawing has neither a viewBox nor a width and height, so its PDF has no bleed";
 
 /// La nota dei caratteri che i caratteri di Fub non hanno.
 fn glyphs_note(missing: &BTreeSet<char>) -> Option<String> {
@@ -1660,9 +1715,17 @@ fn write_svg(
 // PDF
 // ---------------------------------------------------------------------------
 
+/// Il PDF di `file`, una pagina per pagina, sulla pagina di stampa `setup`.
+///
+/// La rifilatura di una pagina è il rettangolo da tagliare, a scala 1 la
+/// misura del suo albero; con l'abbondanza l'albero è più grande, e la
+/// rifilatura è la misura della pagina senza ([`Page::frame`]). Il disegno va
+/// sulla carta con la scala della pagina di stampa, e gli effetti che
+/// `svg2pdf` dipinge restano a 300 punti per pollice sulla carta.
 fn write_pdf(
     drawing: &mut Drawing<'_>,
     file: &File<'_>,
+    setup: &Setup,
     out: &mut dyn ArtifactSink,
     report: &mut ExportReport,
 ) -> Result<Outcome, PluginError> {
@@ -1679,16 +1742,29 @@ fn write_pdf(
             Ok(tree) => tree,
             Err(reason) => return Ok(Outcome::Failed(reason)),
         };
-        let (chunk, root) = match svg2pdf::to_chunk(&tree, pdf::options(&tree, CSS_DPI)) {
+        let size = tree.size();
+        let drawn = [f64::from(size.width()), f64::from(size.height())];
+        let (trim, bleed) = match page.frame {
+            Some(frame) => (frame, setup.bleed),
+            None => {
+                drawing.unbled |= setup.bleed > 0.0;
+                (drawn, 0.0)
+            }
+        };
+        let setup = Setup { bleed, ..*setup };
+        let sheet = print::layout(trim[0], trim[1], &setup);
+        let units_per_inch = CSS_DPI / sheet.scale as f32;
+        let (chunk, root) = match svg2pdf::to_chunk(&tree, pdf::options(&tree, units_per_inch)) {
             Ok(converted) => converted,
             Err(error) => return failed(error.to_string()),
         };
-        let size = tree.size();
+        let placed = (!setup.is_plain()).then(|| pdf::Print::new(sheet, drawn, trim, setup.marks));
         match pdf::Page::read(
             chunk.as_bytes(),
             root.get(),
             size.width(),
             size.height(),
+            placed,
             page.board.clone(),
         ) {
             Ok(read) => pages.push(read),
@@ -1719,9 +1795,16 @@ mod pdf {
     //! pagina della misura del disegno, i metadati. Le tavole sono un pezzo
     //! per pagina, nello stesso file, con un segnalibro ciascuna; ciò che i
     //! pezzi hanno uguale si scrive una volta.
+    //!
+    //! Una pagina di stampa ([`Print`]) è la carta, con il disegno al suo
+    //! posto, i riquadri della rifilatura e dell'abbondanza (`/TrimBox`,
+    //! `/BleedBox`) e i segni nel colore di registro, che inchiostra ogni
+    //! lastra (`/Separation /All`); il catalogo chiede allora di stampare
+    //! senza adattare la pagina e di scegliere il cassetto dalla sua misura.
 
     use std::collections::{BTreeMap, VecDeque};
 
+    use fub_scene::export::print::{self, MarkShapes, Marks, Sheet, MARK_WEIGHT_PT};
     use resvg::usvg::{Group, Node, Transform, Tree};
 
     /// Il lato più lungo di una pagina in unità PDF: oltre, i lettori la
@@ -1825,14 +1908,44 @@ mod pdf {
         pub(super) stream: Option<Vec<u8>>,
     }
 
+    /// Una pagina di stampa, in punti con l'origine in alto a sinistra: la
+    /// carta con la rifilatura e l'abbondanza, il rettangolo del disegno, che
+    /// la rifilatura taglia, e i segni.
+    pub(super) struct Print {
+        sheet: Sheet,
+        drawing: [f64; 4],
+        marks: MarkShapes,
+    }
+
+    impl Print {
+        /// La pagina `sheet` per un disegno di `drawn` pixel CSS, la misura
+        /// dell'albero, la cui rifilatura ne misura `trim`: ciò che avanza è
+        /// l'abbondanza, metà per lato.
+        pub(super) fn new(sheet: Sheet, drawn: [f64; 2], trim: [f64; 2], marks: Marks) -> Print {
+            let points = PT_PER_PX * sheet.scale;
+            let outset = [(drawn[0] - trim[0]) / 2.0, (drawn[1] - trim[1]) / 2.0];
+            Print {
+                drawing: [
+                    sheet.trim[0] - outset[0] * points,
+                    sheet.trim[1] - outset[1] * points,
+                    drawn[0] * points,
+                    drawn[1] * points,
+                ],
+                marks: print::mark_shapes(&sheet, marks),
+                sheet,
+            }
+        }
+    }
+
     /// Una pagina da scrivere: gli oggetti del pezzo di `svg2pdf`, il suo
-    /// XObject, la misura del disegno in pixel CSS e, per una tavola, il
-    /// segnalibro.
+    /// XObject, la misura del disegno in pixel CSS, la pagina di stampa se
+    /// non è quella di sempre e, per una tavola, il segnalibro.
     pub(super) struct Page {
         objects: Vec<Object>,
         root: u32,
         width: f32,
         height: f32,
+        print: Option<Print>,
         bookmark: Option<String>,
     }
 
@@ -1843,6 +1956,7 @@ mod pdf {
             root: i32,
             width: f32,
             height: f32,
+            print: Option<Print>,
             bookmark: Option<String>,
         ) -> Result<Page, String> {
             let root = u32::try_from(root).map_err(|_| "invalid root object".to_string())?;
@@ -1851,6 +1965,7 @@ mod pdf {
                 root,
                 width,
                 height,
+                print,
                 bookmark,
             })
         }
@@ -1884,16 +1999,23 @@ mod pdf {
             None => info + 1,
         };
 
-        let sizes: Vec<(f32, f32)> = pages.iter().map(|page| (page.width, page.height)).collect();
+        let sizes: Vec<(f32, f32, Option<Print>)> = pages
+            .iter_mut()
+            .map(|page| (page.width, page.height, page.print.take()))
+            .collect();
         let (drawing, roots) = drawings(pages, first)?;
 
+        let mut preferences = vec![(name("DisplayDocTitle"), raw("true"))];
+        if sizes.iter().any(|(_, _, print)| print.is_some()) {
+            // La carta è già quella giusta: la stampa non la adatta, e il
+            // cassetto si sceglie dalla sua misura.
+            preferences.push((name("PickTrayByPDFSize"), raw("true")));
+            preferences.push((name("PrintScaling"), raw("/None")));
+        }
         let mut catalog = vec![
             (name("Type"), raw("/Catalog")),
             (name("Pages"), Value::Ref(2)),
-            (
-                name("ViewerPreferences"),
-                Value::Dict(vec![(name("DisplayDocTitle"), raw("true"))]),
-            ),
+            (name("ViewerPreferences"), Value::Dict(preferences)),
         ];
         if let Some(outlines) = outlines {
             catalog.push((name("Outlines"), Value::Ref(outlines)));
@@ -1918,8 +2040,11 @@ mod pdf {
                 stream: None,
             },
         ];
-        for (at, ((width, height), root)) in (0..count).zip(sizes.into_iter().zip(roots)) {
-            let (page, content) = page(width, height, page_id(at) + 1, root);
+        for (at, ((width, height, print), root)) in (0..count).zip(sizes.into_iter().zip(roots)) {
+            let (page, content) = match print {
+                None => page(width, height, page_id(at) + 1, root),
+                Some(print) => print_page(&print, page_id(at) + 1, root),
+            };
             objects.push(Object {
                 id: page_id(at),
                 value: page,
@@ -1983,9 +2108,7 @@ mod pdf {
         // In `f64`: le cifre che si scrivono sono quattro dopo la virgola, e su
         // un lato di 14 400 punti un `f32` ne ha già perse.
         let (width, height) = (f64::from(width) * PT_PER_PX, f64::from(height) * PT_PER_PX);
-        // L'unità si arrotonda per eccesso alla cifra che si scrive: così la
-        // pagina resta dentro il lato massimo anche dopo l'arrotondamento.
-        let unit = ((width.max(height) / PAGE_MAX * 10_000.0).ceil() / 10_000.0).max(1.0);
+        let unit = user_unit(width.max(height));
         let (width, height) = (width / unit, height / unit);
 
         let mut page = vec![
@@ -2030,6 +2153,148 @@ mod pdf {
         )
         .into_bytes();
         (Value::Dict(page), content)
+    }
+
+    /// L'unità di una pagina il cui lato più lungo misura `side` punti: 1, o
+    /// quella che la porta dentro [`PAGE_MAX`]. Si arrotonda per eccesso alla
+    /// cifra che si scrive: così la pagina resta dentro il lato massimo anche
+    /// dopo l'arrotondamento.
+    fn user_unit(side: f64) -> f64 {
+        ((side / PAGE_MAX * 10_000.0).ceil() / 10_000.0).max(1.0)
+    }
+
+    /// Il tratto dei quattro archi di Bézier con cui si disegna un cerchio:
+    /// 4 (√2 − 1) / 3 del raggio.
+    const KAPPA: f64 = 0.552_284_749_830_793_6;
+
+    /// Una pagina di stampa, che mostra l'XObject `drawing` al suo posto, e
+    /// il suo contenuto, l'oggetto `content`: il disegno, e poi i segni.
+    fn print_page(print: &Print, content: u32, drawing: u32) -> (Value, Vec<u8>) {
+        let sheet = &print.sheet;
+        let unit = user_unit(sheet.width.max(sheet.height));
+        // Dai punti con l'origine in alto a sinistra alle unità della pagina,
+        // con l'origine in basso a sinistra.
+        let x = |x: f64| x / unit;
+        let y = |y: f64| (sheet.height - y) / unit;
+        let n = |value: f64| text(number(value));
+        let rect = |left: f64, top: f64, right: f64, bottom: f64| {
+            Value::Array(vec![
+                number(x(left)),
+                number(y(bottom)),
+                number(x(right)),
+                number(y(top)),
+            ])
+        };
+        let [left, top, width, height] = sheet.trim;
+        let (right, bottom) = (left + width, top + height);
+        let bleed = sheet.bleed;
+
+        let mut resources = vec![
+            (
+                name("XObject"),
+                Value::Dict(vec![(name("D"), Value::Ref(drawing))]),
+            ),
+            (
+                name("ProcSet"),
+                Value::Array(vec![raw("/PDF"), raw("/ImageC"), raw("/ImageB")]),
+            ),
+        ];
+        let marked = !print.marks.lines.is_empty();
+        if marked {
+            // Il colore di registro: inchiostra ogni lastra, e chi non separa
+            // lo mostra col nero di tutti e quattro gli inchiostri.
+            resources.push((
+                name("ColorSpace"),
+                Value::Dict(vec![(
+                    name("R"),
+                    Value::Array(vec![
+                        raw("/Separation"),
+                        raw("/All"),
+                        raw("/DeviceCMYK"),
+                        Value::Dict(vec![
+                            (name("C0"), Value::Array(vec![raw("0"); 4])),
+                            (name("C1"), Value::Array(vec![raw("1"); 4])),
+                            (name("Domain"), Value::Array(vec![raw("0"), raw("1")])),
+                            (name("FunctionType"), raw("2")),
+                            (name("N"), raw("1")),
+                        ]),
+                    ]),
+                )]),
+            ));
+        }
+        let mut page = vec![
+            (name("Type"), raw("/Page")),
+            (name("Parent"), Value::Ref(2)),
+            (
+                name("MediaBox"),
+                Value::Array(vec![
+                    raw("0"),
+                    raw("0"),
+                    number(sheet.width / unit),
+                    number(sheet.height / unit),
+                ]),
+            ),
+            (
+                name("BleedBox"),
+                rect(
+                    (left - bleed).max(0.0),
+                    (top - bleed).max(0.0),
+                    (right + bleed).min(sheet.width),
+                    (bottom + bleed).min(sheet.height),
+                ),
+            ),
+            (name("TrimBox"), rect(left, top, right, bottom)),
+            (name("Resources"), Value::Dict(resources)),
+            (name("Contents"), Value::Ref(content)),
+            (
+                name("Group"),
+                Value::Dict(vec![
+                    (name("Type"), raw("/Group")),
+                    (name("S"), raw("/Transparency")),
+                    (name("I"), raw("true")),
+                    (name("K"), raw("false")),
+                    (name("CS"), raw("/DeviceRGB")),
+                ]),
+            ),
+        ];
+        if unit > 1.0 {
+            page.push((name("UserUnit"), number(unit)));
+        }
+
+        let [dx, dy, dw, dh] = print.drawing;
+        let mut content = format!(
+            "q {} 0 0 {} {} {} cm /D Do Q",
+            n(dw / unit),
+            n(dh / unit),
+            n(x(dx)),
+            n(y(dy + dh))
+        );
+        if marked {
+            content.push_str(&format!("\nq /R CS 1 SCN {} w", n(MARK_WEIGHT_PT / unit)));
+            for &[x1, y1, x2, y2] in &print.marks.lines {
+                content.push_str(&format!(
+                    "\n{} {} m {} {} l S",
+                    n(x(x1)),
+                    n(y(y1)),
+                    n(x(x2)),
+                    n(y(y2))
+                ));
+            }
+            for &[cx, cy, r] in &print.marks.circles {
+                let (cx, cy, r) = (x(cx), y(cy), r / unit);
+                let k = KAPPA * r;
+                content.push_str(&format!(
+                    "\n{} {} m {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c {} {} {} {} {} {} c S",
+                    n(cx + r), n(cy),
+                    n(cx + r), n(cy + k), n(cx + k), n(cy + r), n(cx), n(cy + r),
+                    n(cx - k), n(cy + r), n(cx - r), n(cy + k), n(cx - r), n(cy),
+                    n(cx - r), n(cy - k), n(cx - k), n(cy - r), n(cx), n(cy - r),
+                    n(cx + k), n(cy - r), n(cx + r), n(cy - k), n(cx + r), n(cy),
+                ));
+            }
+            content.push_str("\nQ");
+        }
+        (Value::Dict(page), content.into_bytes())
     }
 
     /// Gli oggetti dei disegni delle pagine in forma canonica, numerati da
@@ -2131,11 +2396,15 @@ mod pdf {
     }
 
     /// Un numero come lo scrive un PDF: senza esponente, con al massimo
-    /// quattro decimali e senza zeri in coda.
+    /// quattro decimali, senza zeri in coda e senza il segno davanti a uno
+    /// zero.
     fn number(value: f64) -> Value {
         let mut text = format!("{value:.4}");
         while text.contains('.') && (text.ends_with('0') || text.ends_with('.')) {
             text.pop();
+        }
+        if text == "-0" {
+            text.remove(0);
         }
         Value::Raw(text.into_bytes())
     }
@@ -2936,7 +3205,7 @@ mod tests {
     #[test]
     fn the_page_has_the_size_of_the_drawing_and_its_title() {
         let chunk = b"1 0 obj\n<</Type /XObject /Subtype /Form /BBox [0 0 401 250] /Length 0>>\nstream\n\nendstream\nendobj\n";
-        let page = pdf::Page::read(chunk, 1, 401.0, 250.0, None).unwrap();
+        let page = pdf::Page::read(chunk, 1, 401.0, 250.0, None, None).unwrap();
         let file = pdf::document(vec![page], "Città (1)").unwrap();
         let text = String::from_utf8_lossy(&file);
         // 401 × 250 pixel CSS sono 300,75 × 187,5 punti: senza zeri in coda.

@@ -358,11 +358,6 @@ describe("i campi che uno stile porta", () => {
 
 describe("mille oggetti che seguono uno stile", () => {
   it("la riga «Stile» si legge in fretta, e le operazioni non crescono col quadrato", () => {
-    const rects = Array.from({ length: 1000 }, (_, i) => RECT(`o${String(i).padStart(8, "0")}`, ` fub:style="rbox00000" fill="#e69f00" stroke="#000000" stroke-width="${i % 10 === 0 ? 4 : 2}"`)).join("");
-    const opened = drawing(BOX, rects);
-    const model = opened.engine.model!;
-    const all = opened.index.units;
-    expect(all).toHaveLength(1000);
     const time = (run: () => void): number => {
       let best = Infinity;
       for (let n = 0; n < 3; n++) {
@@ -372,16 +367,35 @@ describe("mille oggetti che seguono uno stile", () => {
       }
       return best;
     };
-    const list = styles(opened);
-    let row: ReturnType<typeof styleRow> = null;
-    const reading = time(() => (row = styleRow(model, all, "graphic", list, estimate)));
-    expect(row!.differing).toBe(100);
-    let update: ReturnType<typeof updateStyleOps> = null;
-    const updating = time(() => (update = updateStyleOps(model, [all[0]!], list[0]!, estimate, ids(opened))));
-    expect(update!.changed).toBe(900);
-    // Una ventina di millisecondi per la riga, una decina per aggiornare: le
-    // soglie hanno il margine per una macchina lenta o carica di altri test.
-    expect(reading).toBeLessThan(100);
-    expect(updating).toBeLessThan(200);
+    /// La riga e l'aggiornamento su `count` rettangoli che seguono lo stile,
+    /// uno su dieci col contorno diverso.
+    const measure = (count: number): { reading: number; updating: number } => {
+      const rects = Array.from({ length: count }, (_, i) => RECT(`o${String(i).padStart(8, "0")}`, ` fub:style="rbox00000" fill="#e69f00" stroke="#000000" stroke-width="${i % 10 === 0 ? 4 : 2}"`)).join("");
+      const opened = drawing(BOX, rects);
+      const model = opened.engine.model!;
+      const all = opened.index.units;
+      expect(all).toHaveLength(count);
+      const list = styles(opened);
+      let row: ReturnType<typeof styleRow> = null;
+      const reading = time(() => (row = styleRow(model, all, "graphic", list, estimate)));
+      expect(row!.differing).toBe(count / 10);
+      let update: ReturnType<typeof updateStyleOps> = null;
+      const updating = time(() => (update = updateStyleOps(model, [all[0]!], list[0]!, estimate, ids(opened))));
+      expect(update!.changed).toBe(count - count / 10);
+      return { reading, updating };
+    };
+    const small = measure(250);
+    const large = measure(1000);
+    // Quattro volte gli oggetti: quattro volte il tempo se il conto è
+    // lineare, sedici se cresce col quadrato. La soglia sta in mezzo, e
+    // guarda il rapporto, non i millisecondi, che su una macchina carica di
+    // altri test crescono tutti insieme; i due millisecondi di base tolgono il
+    // rumore delle misure piccole. Con mille oggetti la riga costa una
+    // ventina di millisecondi e l'aggiornamento una decina: oltre il mezzo
+    // secondo qualcosa è andato storto comunque.
+    expect(large.reading).toBeLessThan(10 * Math.max(small.reading, 2));
+    expect(large.updating).toBeLessThan(10 * Math.max(small.updating, 2));
+    expect(large.reading).toBeLessThan(500);
+    expect(large.updating).toBeLessThan(500);
   });
 });

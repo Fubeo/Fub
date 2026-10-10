@@ -14,6 +14,7 @@
 // 3. **lo sfondo** `none` toglie le carte.
 
 import { formatNumber } from "../number";
+import { length, viewBox } from "./values";
 import { boardBox, classifyChild, resourceIndex } from "./classify";
 import { ReadError } from "./read";
 import { SourceText } from "./text";
@@ -83,29 +84,77 @@ function removal(doc: XmlDocument, id: NodeId): Edit {
   return { start, end: node.end, text: "" };
 }
 
-/// I cambi che portano la radice sul rettangolo `box`: un attributo che c'è
-/// cambia valore sul posto, quelli che mancano si aggiungono in quest'ordine
-/// dopo l'ultimo attributo. La radice ne ha sempre uno: la dichiarazione del
-/// namespace di SVG.
-function onBox(root: ElementNode, box: ExportBox): Edit[] {
+/// Gli attributi del rettangolo della radice: il `viewBox` e la misura.
+const ROOT_BOX = ["viewBox", "width", "height"] as const;
+/// Gli attributi del rettangolo di una carta.
+const PAPER_BOX = ["x", "y", "width", "height"] as const;
+
+/// I valori degli attributi `names` per il rettangolo `box`: `viewBox` i
+/// quattro numeri, `x`, `y`, `width` e `height` il loro.
+function boxValues(names: readonly string[], box: ExportBox): [string, string][] {
+  return names.map((name) => {
+    const at = name === "x" ? 0 : name === "y" ? 1 : name === "width" ? 2 : 3;
+    return [name, name === "viewBox" ? box.map((n) => formatNumber(n, BOX_PLACES)).join(" ") : formatNumber(box[at]!, BOX_PLACES)];
+  });
+}
+
+/// I cambi che danno a `element` gli attributi `values`: uno che c'è cambia
+/// valore sul posto, quelli che mancano si aggiungono in quest'ordine dopo
+/// l'ultimo attributo, o dopo il nome se non ce n'è nessuno.
+function setAttrs(element: ElementNode, values: readonly (readonly [string, string])[]): Edit[] {
   const edits: Edit[] = [];
   let added = "";
-  const values = [
-    ["viewBox", box.map((n) => formatNumber(n, BOX_PLACES)).join(" ")],
-    ["width", formatNumber(box[2], BOX_PLACES)],
-    ["height", formatNumber(box[3], BOX_PLACES)],
-  ] as const;
   for (const [local, value] of values) {
-    const attr = attrOf(root, NS_NONE, local);
+    const attr = attrOf(element, NS_NONE, local);
     if (attr === undefined) added += ` ${local}="${value}"`;
     else edits.push({ start: attr.raw[0], end: attr.raw[1], text: value });
   }
   if (added !== "") {
     // Dopo la virgoletta che chiude il valore.
-    const end = root.attrs[root.attrs.length - 1]!.raw[1] + 1;
+    const last = element.attrs[element.attrs.length - 1];
+    const end = last === undefined ? element.start + 1 + element.name.length : last.raw[1] + 1;
     edits.push({ start: end, end, text: added });
   }
   return edits;
+}
+
+/// Il rettangolo di una carta: `x` e `y`, di serie 0, e la misura.
+function paperBox(element: ElementNode): ExportBox | null {
+  const at = (name: string): number | null => {
+    const value = valueOf(element, NS_NONE, name);
+    return value === undefined ? 0 : length(value);
+  };
+  const side = (name: string): number | null => {
+    const value = valueOf(element, NS_NONE, name);
+    return value === undefined ? null : length(value);
+  };
+  const box = [at("x"), at("y"), side("width"), side("height")];
+  return box.every((n): n is number => n !== null) ? (box as unknown as ExportBox) : null;
+}
+
+/// Due rettangoli uguali ai decimali con cui si scrivono.
+function sameBox(a: ExportBox, b: ExportBox): boolean {
+  return a.every((n, at) => formatNumber(n, BOX_PLACES) === formatNumber(b[at]!, BOX_PLACES));
+}
+
+/// Il rettangolo della radice nelle unità del disegno, il suo `viewBox`
+/// largo e alto più di 0 o `0 0 width height`, e la misura della pagina in
+/// pixel: `width` e `height` se sono lunghezze maggiori di 0, se no quelle
+/// del `viewBox`.
+function rootFrame(root: ElementNode): { box: ExportBox; size: readonly [number, number] } | null {
+  const raw = valueOf(root, NS_NONE, "viewBox");
+  const box = raw === undefined ? null : viewBox(raw);
+  const view = box !== null && box[2] > 0 && box[3] > 0 ? box : null;
+  const side = (name: string): number | null => {
+    const value = valueOf(root, NS_NONE, name);
+    const n = value === undefined ? null : length(value);
+    return n !== null && n > 0 ? n : null;
+  };
+  const width = side("width");
+  const height = side("height");
+  if (view !== null) return { box: view, size: [width ?? view[2], height ?? view[3]] };
+  if (width === null || height === null) return null;
+  return { box: [0, 0, width, height], size: [width, height] };
 }
 
 /// La tavola `id`: un `view` della radice che la scena legge come tavola.
@@ -192,22 +241,80 @@ function readWhole(svg: string): XmlDocument {
   return doc;
 }
 
+/// Il riquadro della selezione: quattro numeri finiti, largo e alto più di 0
+/// a 2 decimali.
+function checkBox(box: ExportBox): void {
+  if (box.length !== 4 || !box.every(Number.isFinite) || Number(formatNumber(box[2], BOX_PLACES)) <= 0 || Number(formatNumber(box[3], BOX_PLACES)) <= 0) {
+    throw new DeriveError("bad-box");
+  }
+}
+
+/// La misura in pixel CSS della pagina che la derivazione con `scope`
+/// disegna, senza abbondanza: la tavola e il riquadro della selezione, un'unità
+/// per pixel, o il disegno intero con la sua `width` e la sua `height`, che
+/// senza valere prendono quelle del `viewBox`. `null` se il disegno intero non
+/// ha né le une né l'altro.
+export function exportFrame(svg: string, scope: ExportScope): readonly [number, number] | null {
+  const doc = readWhole(svg);
+  if (scope.kind === "board") {
+    const box = boardRect(doc, scope.id);
+    return [box[2], box[3]];
+  }
+  if (scope.kind === "selection") {
+    checkBox(scope.box);
+    return [scope.box[2], scope.box[3]];
+  }
+  return rootFrame(doc.element(doc.root)!)?.size ?? null;
+}
+
 /// Il testo da esportare: `svg` con l'ambito `scope` e lo sfondo `background`.
 /// Lancia [`DeriveError`] per una tavola che non c'è, un id scelto che non è
 /// un oggetto o un riquadro senza area; [`ReadError`](./read) se `svg` non è
 /// un SVG.
-export function deriveExport(svg: string, scope: ExportScope, background: ExportBackground): string {
+///
+/// Con l'abbondanza `bleed`, in pixel CSS della pagina, il rettangolo
+/// dell'ambito si allarga di tanto per lato, anche quello del disegno intero,
+/// e con lui ogni carta della radice che era grande quanto lui. Un'abbondanza
+/// che non è un numero maggiore di 0, o un disegno intero che non dice la sua
+/// misura ([`exportFrame`]), non cambiano niente.
+export function deriveExport(svg: string, scope: ExportScope, background: ExportBackground, bleed = 0): string {
   const doc = readWhole(svg);
   const source = doc.source.text;
   const root = doc.element(doc.root)!;
   const edits: Edit[] = [];
-  if (scope.kind === "board") edits.push(...onBox(root, boardRect(doc, scope.id)));
+  let rect: ExportBox | null = null;
+  if (scope.kind === "board") rect = boardRect(doc, scope.id);
   if (scope.kind === "selection") {
-    const box = scope.box;
-    if (box.length !== 4 || !box.every(Number.isFinite) || Number(formatNumber(box[2], BOX_PLACES)) <= 0 || Number(formatNumber(box[3], BOX_PLACES)) <= 0) {
-      throw new DeriveError("bad-box");
+    checkBox(scope.box);
+    edits.push(...selectionEdits(doc, scope.ids));
+    rect = scope.box;
+  }
+  const bled = Number.isFinite(bleed) && bleed > 0;
+  // Il rettangolo nelle unità del disegno, la misura in pixel e quanto
+  // allargare il primo per lato, in orizzontale e in verticale.
+  let grown: { view: ExportBox; size: readonly [number, number]; by: readonly [number, number] } | null = null;
+  if (rect !== null && bled) grown = { view: rect, size: [rect[2], rect[3]], by: [bleed, bleed] };
+  else if (rect !== null) edits.push(...setAttrs(root, boxValues(ROOT_BOX, rect)));
+  else if (bled) {
+    const frame = rootFrame(root);
+    if (frame !== null) grown = { view: frame.box, size: frame.size, by: [bleed * frame.box[2] / frame.size[0], bleed * frame.box[3] / frame.size[1]] };
+  }
+  if (grown !== null) {
+    const { view, size, by } = grown;
+    const shown: ExportBox = [view[0] - by[0], view[1] - by[1], view[2] + 2 * by[0], view[3] + 2 * by[1]];
+    edits.push(...setAttrs(root, [
+      ["viewBox", shown.map((n) => formatNumber(n, BOX_PLACES)).join(" ")],
+      ["width", formatNumber(size[0] + 2 * bleed, BOX_PLACES)],
+      ["height", formatNumber(size[1] + 2 * bleed, BOX_PLACES)],
+    ]));
+    if (background === "paper") {
+      for (const child of doc.children(doc.root)) {
+        const element = doc.element(child);
+        if (element === null || !isPaper(element)) continue;
+        const box = paperBox(element);
+        if (box !== null && sameBox(box, view)) edits.push(...setAttrs(element, boxValues(PAPER_BOX, shown)));
+      }
     }
-    edits.push(...selectionEdits(doc, scope.ids), ...onBox(root, box));
   }
   if (background === "none") {
     for (const child of doc.children(doc.root)) {

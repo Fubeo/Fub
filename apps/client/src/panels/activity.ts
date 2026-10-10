@@ -224,7 +224,7 @@ export function exportNotes(notice: KernelNotice): TransferNote[] {
 }
 
 interface FinishedArtifact extends ExportArtifact {
-  state: "ready" | "saving" | "saved" | "failed";
+  state: "ready" | "saving" | "printing" | "saved" | "failed";
   detail: string;
 }
 interface FinishedExport {
@@ -459,15 +459,28 @@ function redraw(): void {
         status.textContent = t("activity.artifact_delivered", { size: artifact.content.value });
       } else {
         status.textContent = artifact.state === "saving" ? t("activity.artifact_saving") :
-          artifact.state === "failed" ? t("activity.artifact_failed", { reason: artifact.detail }) :
-            artifact.detail || t("activity.artifact_ready");
+          artifact.state === "printing" ? t("activity.artifact_printing") :
+            artifact.state === "failed" ? t("activity.artifact_failed", { reason: artifact.detail }) :
+              artifact.detail || t("activity.artifact_ready");
+        const busy = artifact.state === "saving" || artifact.state === "printing";
         const save = document.createElement("button");
         save.type = "button";
         save.className = "link-button";
         save.textContent = t("activity.artifact_save");
-        save.disabled = artifact.state === "saving";
+        save.disabled = busy;
         save.addEventListener("click", () => void persistArtifact(report, artifact));
         item.append(save);
+        // Un PDF si stampa anche: passa al lettore del sistema, e i byte
+        // restano per salvarlo.
+        if (artifact.media_type === "application/pdf") {
+          const print = document.createElement("button");
+          print.type = "button";
+          print.className = "link-button";
+          print.textContent = t("activity.artifact_print");
+          print.disabled = busy;
+          print.addEventListener("click", () => void printArtifact(report, artifact));
+          item.append(print);
+        }
       }
       item.append(status);
       list.append(item);
@@ -484,7 +497,7 @@ function redraw(): void {
 }
 
 async function persistArtifact(report: FinishedExport, artifact: FinishedArtifact): Promise<void> {
-  if (artifact.state === "saving" || artifact.content.kind !== "bytes" ||
+  if (artifact.state === "saving" || artifact.state === "printing" || artifact.content.kind !== "bytes" ||
       !finished.includes(report)) return;
   const bytes = artifact.content.value;
   const epoch = activityEpoch;
@@ -508,6 +521,32 @@ async function persistArtifact(report: FinishedExport, artifact: FinishedArtifac
     artifact.state = "failed";
     artifact.detail = errorText(error);
   }
+  redraw();
+}
+
+/// «Stampa…» su un PDF: l'host lo apre nel programma che il sistema usa per i
+/// PDF, e da lì si stampa con la finestra di stampa del sistema. I byte
+/// restano: il PDF si può ancora salvare.
+async function printArtifact(report: FinishedExport, artifact: FinishedArtifact): Promise<void> {
+  if (artifact.state === "saving" || artifact.state === "printing" || artifact.content.kind !== "bytes" ||
+      !finished.includes(report)) return;
+  const bytes = artifact.content.value;
+  const epoch = activityEpoch;
+  artifact.state = "printing";
+  artifact.detail = "";
+  redraw();
+  try {
+    const basename = artifact.path.slice(artifact.path.lastIndexOf("/") + 1);
+    const outcome = await api.printArtifact(basename, artifact.media_type, bytes);
+    if (epoch !== activityEpoch || !finished.includes(report)) return;
+    artifact.detail = outcome.status === "opened" ? t("activity.artifact_printed") :
+      outcome.status === "no_viewer" ? t("activity.artifact_print_no_viewer") :
+        t("activity.artifact_print_unwritable", { reason: outcome.reason });
+  } catch (error) {
+    if (epoch !== activityEpoch || !finished.includes(report)) return;
+    artifact.detail = t("activity.artifact_print_failed", { reason: errorText(error) });
+  }
+  artifact.state = "ready";
   redraw();
 }
 

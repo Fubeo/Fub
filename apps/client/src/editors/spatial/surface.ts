@@ -741,6 +741,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
         named: offer.named,
         memory,
         fonts,
+        print: featuresFor(level, custom).has("print"),
         ...(imagePort === undefined ? {} : { read: (path: string, limit: number) => imagePort.read(path, limit) }),
       });
       if (choice === null || life.closed) return null;

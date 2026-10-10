@@ -8,14 +8,17 @@
 //! lascia uguale ogni altro byte:
 //!
 //! 1. **il rettangolo:** la radice prende `viewBox`, `width` e `height` di una
-//!    tavola o del riquadro della selezione;
+//!    tavola o del riquadro della selezione; con l'abbondanza di un PDF
+//!    ([`Source::derive_bled`]) il rettangolo, anche quello del disegno
+//!    intero, si allarga per lato, e le carte grandi quanto lui con lui;
 //! 2. **la selezione:** lungo la strada dalla radice a ogni oggetto scelto si
 //!    tolgono gli elementi grafici che non sono scelti, non ne contengono uno e
 //!    non sono una carta;
 //! 3. **lo sfondo** [`Background::None`] toglie le carte.
 //!
-//! [`clean`] fa dal testo derivato l'SVG per il web, e [`measure`] dice i
-//! pixel di un'immagine raster con il conto a 32 bit di `resvg`.
+//! [`clean`] fa dal testo derivato l'SVG per il web, [`measure`] dice i
+//! pixel di un'immagine raster con il conto a 32 bit di `resvg`, e [`print`]
+//! la pagina di stampa di un PDF.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -23,11 +26,13 @@ use std::fmt;
 use crate::analysis::board_name;
 use crate::classify;
 use crate::ink::round_half_up;
+use crate::values;
 use crate::xml::{self, Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG};
 use crate::ReadError;
 
 mod clean;
 mod measure;
+pub mod print;
 
 pub use clean::{clean, embed_images};
 pub use measure::{measure, Measure, Size, AREA_MAX, SCALE_MAX, SIDE_MAX};
@@ -280,20 +285,79 @@ impl<'a> Source<'a> {
 
     /// Il testo da esportare con l'ambito `scope` e lo sfondo `background`.
     pub fn derive(&self, scope: &Scope, background: Background) -> Result<String, DeriveError> {
+        self.derive_bled(scope, background, 0.0)
+    }
+
+    /// Il testo da esportare con l'abbondanza `bleed`, in pixel CSS della
+    /// pagina che il testo derivato disegna: il rettangolo dell'ambito si
+    /// allarga di tanto per lato, anche quello del disegno intero, e con lui
+    /// ogni carta della radice che era grande quanto lui, così il colore della
+    /// tavola arriva fino al bordo della carta da tagliare. Un'abbondanza che
+    /// non è un numero maggiore di 0, o un disegno intero che non dice la sua
+    /// misura ([`Source::frame`]), danno il testo di [`Source::derive`].
+    pub fn derive_bled(
+        &self,
+        scope: &Scope,
+        background: Background,
+        bleed: f64,
+    ) -> Result<String, DeriveError> {
         let doc = &self.doc;
-        let root = doc.element(doc.root).expect("la radice è un elemento");
         let mut edits = Vec::new();
-        match scope {
-            Scope::Drawing => {}
-            Scope::Board(id) => edits.extend(on_rect(doc, root, self.board_rect(id)?)),
+        let rect = match scope {
+            Scope::Drawing => None,
+            Scope::Board(id) => Some(self.board_rect(id)?),
             Scope::Selection { ids, rect } => {
                 scope.check()?;
                 edits.extend(self.selection_edits(ids)?);
-                edits.extend(on_rect(doc, root, *rect));
+                Some(*rect)
+            }
+        };
+        let bled = bleed.is_finite() && bleed > 0.0;
+        // Il rettangolo nelle unità del disegno, la misura in pixel e quanto
+        // allargare il primo per lato, in orizzontale e in verticale.
+        let grown = match rect {
+            Some(rect) if bled => Some((rect, [rect[2], rect[3]], [bleed, bleed])),
+            Some(rect) => {
+                edits.extend(set_attrs(doc, doc.root, &rect_values(&ROOT_RECT, rect)));
+                None
+            }
+            None if bled => self.root_frame().map(|(view, size)| {
+                (
+                    view,
+                    size,
+                    [bleed * view[2] / size[0], bleed * view[3] / size[1]],
+                )
+            }),
+            None => None,
+        };
+        let children = doc.children(doc.root);
+        if let Some((view, size, by)) = grown {
+            let shown = outset(view, by);
+            edits.extend(set_attrs(
+                doc,
+                doc.root,
+                &[
+                    (
+                        "viewBox",
+                        shown.map(|n| format_number(n, RECT_PLACES)).join(" "),
+                    ),
+                    ("width", format_number(size[0] + 2.0 * bleed, RECT_PLACES)),
+                    ("height", format_number(size[1] + 2.0 * bleed, RECT_PLACES)),
+                ],
+            ));
+            if background == Background::Paper {
+                for &child in children {
+                    let Some(element) = doc.element(child) else {
+                        continue;
+                    };
+                    if is_paper(element) && paper_rect(element).is_some_and(|r| same_rect(r, view))
+                    {
+                        edits.extend(set_attrs(doc, child, &rect_values(&PAPER_RECT, shown)));
+                    }
+                }
             }
         }
         if background == Background::None {
-            let children = doc.children(doc.root);
             for (at, &child) in children.iter().enumerate() {
                 if doc.element(child).is_some_and(is_paper) {
                     edits.push(removal(doc, children, at));
@@ -301,6 +365,47 @@ impl<'a> Source<'a> {
             }
         }
         Ok(apply(doc.source, edits))
+    }
+
+    /// La misura in pixel CSS della pagina che la derivazione con `scope`
+    /// disegna, senza abbondanza: la tavola e il riquadro della selezione,
+    /// un'unità per pixel, o il disegno intero con la sua `width` e la sua
+    /// `height`, che senza valere prendono quelle del `viewBox`. `None` se il
+    /// disegno intero non ha né le une né l'altro.
+    pub fn frame(&self, scope: &Scope) -> Result<Option<[f64; 2]>, DeriveError> {
+        match scope {
+            Scope::Drawing => Ok(self.root_frame().map(|(_, size)| size)),
+            Scope::Board(id) => self.board_rect(id).map(|r| Some([r[2], r[3]])),
+            Scope::Selection { rect, .. } => {
+                scope.check()?;
+                Ok(Some([rect[2], rect[3]]))
+            }
+        }
+    }
+
+    /// Il rettangolo della radice nelle unità del disegno, il suo `viewBox`
+    /// largo e alto più di 0 o `0 0 width height`, e la misura della pagina
+    /// in pixel: `width` e `height` se sono lunghezze maggiori di 0, se no
+    /// quelle del `viewBox`.
+    fn root_frame(&self) -> Option<(Rect, [f64; 2])> {
+        let root = self.doc.element(self.doc.root)?;
+        let view = root
+            .value(NS_NONE, "viewBox")
+            .and_then(values::view_box)
+            .filter(|r| r[2] > 0.0 && r[3] > 0.0);
+        let side = |name: &str| {
+            root.value(NS_NONE, name)
+                .and_then(values::length)
+                .filter(|n| *n > 0.0)
+        };
+        let (width, height) = (side("width"), side("height"));
+        match view {
+            Some(view) => Some((view, [width.unwrap_or(view[2]), height.unwrap_or(view[3])])),
+            None => {
+                let size = [width?, height?];
+                Some(([0.0, 0.0, size[0], size[1]], size))
+            }
+        }
     }
 
     /// Il rettangolo della tavola `id`.
@@ -420,34 +525,78 @@ fn read_whole(text: &str) -> Result<Document<'_>, ReadError> {
     Ok(doc)
 }
 
-/// I cambi che portano la radice sul rettangolo `rect`: un attributo che c'è
+/// Gli attributi del rettangolo della radice: il `viewBox` e la misura.
+const ROOT_RECT: [&str; 3] = ["viewBox", "width", "height"];
+/// Gli attributi del rettangolo di una carta.
+const PAPER_RECT: [&str; 4] = ["x", "y", "width", "height"];
+
+/// Il rettangolo di una carta: `x` e `y`, di serie 0, e la misura.
+fn paper_rect(element: &Element<'_>) -> Option<Rect> {
+    let at = |name: &str| match element.value(NS_NONE, name) {
+        None => Some(0.0),
+        Some(value) => values::length(value),
+    };
+    let side = |name: &str| element.value(NS_NONE, name).and_then(values::length);
+    Some([at("x")?, at("y")?, side("width")?, side("height")?])
+}
+
+/// Due rettangoli uguali ai decimali con cui si scrivono.
+fn same_rect(a: Rect, b: Rect) -> bool {
+    a.iter()
+        .zip(b)
+        .all(|(&a, b)| format_number(a, RECT_PLACES) == format_number(b, RECT_PLACES))
+}
+
+/// `rect` allargato per lato di `by`, in orizzontale e in verticale.
+fn outset(rect: Rect, by: [f64; 2]) -> Rect {
+    [
+        rect[0] - by[0],
+        rect[1] - by[1],
+        rect[2] + 2.0 * by[0],
+        rect[3] + 2.0 * by[1],
+    ]
+}
+
+/// I valori degli attributi `names` per il rettangolo `rect`: `viewBox` i
+/// quattro numeri, `x`, `y`, `width` e `height` il loro.
+fn rect_values<'n>(names: &[&'n str], rect: Rect) -> Vec<(&'n str, String)> {
+    names
+        .iter()
+        .map(|&name| {
+            let value = match name {
+                "viewBox" => rect.map(|n| format_number(n, RECT_PLACES)).join(" "),
+                "x" => format_number(rect[0], RECT_PLACES),
+                "y" => format_number(rect[1], RECT_PLACES),
+                "width" => format_number(rect[2], RECT_PLACES),
+                _ => format_number(rect[3], RECT_PLACES),
+            };
+            (name, value)
+        })
+        .collect()
+}
+
+/// I cambi che danno all'elemento `node` gli attributi `values`: uno che c'è
 /// cambia valore sul posto, quelli che mancano si aggiungono in quest'ordine
-/// dopo l'ultimo attributo. La radice ne ha sempre uno: la dichiarazione del
-/// namespace di SVG.
-fn on_rect(doc: &Document<'_>, root: &Element<'_>, rect: Rect) -> Vec<Edit> {
-    let view_box = rect.map(|n| format_number(n, RECT_PLACES)).join(" ");
-    let values = [
-        ("viewBox", view_box),
-        ("width", format_number(rect[2], RECT_PLACES)),
-        ("height", format_number(rect[3], RECT_PLACES)),
-    ];
+/// dopo l'ultimo attributo, o dopo il nome se non ce n'è nessuno.
+fn set_attrs(doc: &Document<'_>, node: NodeId, values: &[(&str, String)]) -> Vec<Edit> {
+    let element = doc.element(node).expect("un elemento");
     let mut edits = Vec::new();
     let mut added = String::new();
     for (local, value) in values {
-        match root.attr(NS_NONE, local) {
+        match element.attr(NS_NONE, local) {
             Some(attr) => edits.push(Edit {
                 start: attr.raw.0,
                 end: attr.raw.1,
-                text: value,
+                text: value.clone(),
             }),
             None => added.push_str(&format!(" {local}=\"{value}\"")),
         }
     }
     if !added.is_empty() {
         // Dopo la virgoletta che chiude il valore.
-        let end = match root.attrs.last() {
+        let end = match element.attrs.last() {
             Some(attr) => attr.raw.1 + 1,
-            None => doc.nodes[doc.root].start + 1 + root.name.len(),
+            None => doc.nodes[node].start + 1 + element.name.len(),
         };
         edits.push(Edit {
             start: end,

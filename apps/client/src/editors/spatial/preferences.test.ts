@@ -428,8 +428,10 @@ describe("i colori recenti ricordati", () => {
 
 describe("le scelte di «Esporta» ricordate", () => {
   const EXPORT_KEY = "draw.export";
-  const PNG = { what: "boards", off: ["b2"], format: "png", size: { scale: 3 }, background: "paper" } as const;
-  const PDF = { what: "drawing", off: [], format: "pdf", size: { scale: 2 }, background: "none" } as const;
+  const PLAIN = { paper: "fit", custom: [210, 297], orientation: "auto", margin: 10, fit: "shrink", bleed: 0, crop: false, registration: false } as const;
+  const PRINTED = { paper: "a4", custom: [210, 297], orientation: "landscape", margin: 5, fit: "page", bleed: 3, crop: true, registration: true } as const;
+  const PNG = { what: "boards", off: ["b2"], format: "png", size: { scale: 3 }, background: "paper", print: PLAIN } as const;
+  const PDF = { what: "drawing", off: [], format: "pdf", size: { scale: 2 }, background: "none", print: PRINTED } as const;
 
   it("si ricordano per disegno, l'ultimo davanti", async () => {
     const host = createFakeHost();
