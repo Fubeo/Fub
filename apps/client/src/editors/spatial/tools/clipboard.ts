@@ -1174,7 +1174,7 @@ function styleText(text: string, refText: (id: string) => string | undefined): s
 /// lì dentro diventa il suo numero d'ordine. `fub:source` resta com'è, in
 /// fondo: l'id della libreria che nomina non è uno di questi. Due simboli
 /// con la stessa chiave si vedono uguali.
-function symbolKey(id: string, lookup: (id: string) => string | undefined): string {
+export function symbolKey(id: string, lookup: (id: string) => string | undefined): string {
   const sources: string[] = [];
   const joined = symbolClosure(id, lookup)
     .map(([, text]) => compact(text))

@@ -2055,6 +2055,7 @@ html, body, #app {
 .draw-history,
 .draw-boards,
 .draw-library,
+.draw-symbols,
 .draw-access {
   display: flex;
   flex-direction: column;
@@ -2492,6 +2493,138 @@ html, body, #app {
   max-width: 100%;
   pointer-events: none;
   overflow: visible;
+}
+/* I simboli: come le forme, il titolo col conteggio, il campo di ricerca e
+   sotto le sezioni, che scorrono: quella del disegno e una per libreria,
+   e in fondo la riga che dice dove si cercano le librerie. Un riquadro ha
+   l'anteprima sopra, quadrata, e il nome sotto, su due righe al più; nel
+   suo angolo, un segno: il numero delle istanze, la spunta o
+   l'aggiornamento. Una sezione che non mostra simboli dice perché al posto
+   della griglia. */
+.draw-symbols-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.draw-symbols-title {
+  margin: 0;
+}
+.draw-symbols-count {
+  margin-inline-start: auto;
+}
+.draw-symbols-find {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.draw-symbols-search {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-symbols-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-symbols-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-symbols-heading,
+.draw-symbols-note,
+.draw-symbols-empty,
+.draw-symbols-footer {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-symbols-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+}
+.draw-symbols-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  text-align: center;
+  cursor: default;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.draw-symbols-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-height: 0;
+  pointer-events: none;
+}
+.draw-symbols-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.draw-symbols-name {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.draw-symbols-badge {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  pointer-events: none;
+}
+.draw-symbols-tile[hidden],
+.draw-symbols-group[hidden],
+.draw-symbols-grid[hidden],
+.draw-symbols-preview[hidden],
+.draw-symbols-badge[hidden] {
+  display: none;
+}
+/* «Aggiorna dalla libreria»: le due anteprime affiancate, della stessa
+   misura, ognuna col suo nome sotto. */
+.draw-symbol-update-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.draw-symbol-update-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  margin: 0;
+}
+.draw-symbol-update-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+}
+.draw-symbol-update-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.draw-symbol-update-caption {
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 .draw-editor[data-library-drop="copy"],
 .draw-editor[data-library-drop="copy"] * {
@@ -3440,7 +3573,8 @@ textarea.draw-properties-input {
   }
   /* Il riquadro sollevato dal dito: il fondo e l'ombra si forzano, e
      l'anello dell'evidenza dice che è in mano. */
-  .draw-library-tile[data-lifted] {
+  .draw-library-tile[data-lifted],
+  .draw-symbols-tile[data-lifted] {
     outline: 2px solid Highlight;
     outline-offset: -2px;
   }

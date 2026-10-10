@@ -31,7 +31,7 @@ import { MAX_EDIT_BYTES } from "../scene/read";
 import type { Op } from "../scene/ops";
 import { SceneEngine } from "../scene/engine";
 import { utf8Length } from "../scene/text";
-import { copySvg, planPaste, readPaste } from "./clipboard";
+import { copySvg, planPaste, readPaste, symbolKey } from "./clipboard";
 import { NewIds, type Destination } from "./edit";
 import { IDENTITY } from "../scene/matrix";
 import { documentSymbols, readOrigin, resourceTexts, sourceValue, symbolClosure, symbolNode, type DocumentSymbol } from "./symbols";
@@ -112,6 +112,12 @@ const printOf = (closure: ReadonlyArray<readonly [string, string]>): string => f
 /// simboli, §4): il simbolo e ciò che usa, ognuno dopo un a capo, a LF.
 export function symbolPrint(model: DocumentModel, id: string): string {
   return printOf(symbolClosure(id, resourceTexts(model)));
+}
+
+/// L'impronta del simbolo `id` di `sheet`: come [`symbolPrint`], senza
+/// rileggere il disegno per ogni simbolo.
+export function sheetPrint(sheet: SymbolSheet, id: string): string {
+  return printOf(symbolClosure(id, sheet.texts));
 }
 
 /// Il motore di `text`; `null` se non è un SVG che si legge.
@@ -241,9 +247,11 @@ export function originSymbol(model: DocumentModel, path: string, id: string): Do
 /// Le operazioni che danno al simbolo `symbol` del disegno il contenuto del
 /// simbolo `id` di `library`: tolto il suo, tranne il primo `title`, entra
 /// quello della copia, con le risorse e i simboli che usa; `fub:source`
-/// prende l'impronta di adesso. `null` se la libreria non ha più il
-/// simbolo, o se il contenuto non si legge.
-export function updateOps(model: DocumentModel, symbol: DocumentSymbol, library: Library, id: string, ids: NewIds): Op[] | null {
+/// prende l'impronta di adesso. `href` riscrive per il disegno gli
+/// indirizzi delle immagini, che partono dalla libreria, come quando il
+/// simbolo è entrato. `null` se la libreria non ha più il simbolo, o se il
+/// contenuto non si legge.
+export function updateOps(model: DocumentModel, symbol: DocumentSymbol, library: Library, id: string, ids: NewIds, href: (href: string) => string | null = () => null): Op[] | null {
   const copy = libraryCopy(library, id);
   const print = library.symbols.find((each) => each.id === id)?.print;
   if (copy === null || print === undefined) return null;
@@ -261,10 +269,27 @@ export function updateOps(model: DocumentModel, symbol: DocumentSymbol, library:
     ops.push({ op: "remove", target: child.facts.id ?? { path: pathOf(child), tag: child.facts.local } });
   }
   const to: Destination = { parent: symbol.id, matrix: IDENTITY, inverse: IDENTITY, prelude: [] };
-  const run = planPaste(source, { model, container: node, to, ids, delta: [0, 0], href: () => null, refill: { from: id, into: node } });
+  const run = planPaste(source, { model, container: node, to, ids, delta: [0, 0], href, refill: { from: id, into: node } });
   let next = run.next();
   while (next.done !== true) next = run.next();
   ops.push(...next.value.ops);
   ops.push({ op: "set", id: symbol.id, attrs: { "fub:source": sourceValue(library.path, id, print) } });
   return ops;
+}
+
+/// Se aggiornare il simbolo `id` di `sheet` da quello `from` di `library`
+/// lo cambierebbe: lo si prova su una copia piccola del disegno, col simbolo
+/// e ciò che usa, e si guarda se il simbolo, a parte gli id, è un altro.
+/// Quando la libreria non è cambiata dalla copia, dice se il simbolo è
+/// stato modificato nel disegno. `null` se la prova non riesce.
+export function updateChanges(sheet: SymbolSheet, id: string, library: Library, from: string, href: (href: string) => string | null = () => null): boolean | null {
+  const small = miniature(sheet, id);
+  const engine = small === null ? null : opened(small);
+  const model = engine?.model ?? null;
+  const symbol = model === null ? undefined : documentSymbols(model).find((each) => each.id === id);
+  if (engine === null || model === null || symbol === undefined) return null;
+  const before = symbolKey(id, resourceTexts(model));
+  const ops = updateOps(model, symbol, library, from, new NewIds((value) => engine.holder(value) !== null), href);
+  if (ops === null || engine.apply({ op: "batch", ops }).outcome !== "applied") return null;
+  return symbolKey(id, resourceTexts(engine.model!)) !== before;
 }

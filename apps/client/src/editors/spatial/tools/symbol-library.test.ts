@@ -9,7 +9,7 @@ import { doc } from "../scene/test-support";
 import { nodeOf } from "./arrange";
 import { planPaste, readPaste } from "./clipboard";
 import { destinationIn, NewIds } from "./edit";
-import { fnv1a64, libraryCopy, miniature, originSymbol, readLibrary, readOrigin, sourceValue, symbolCopy, symbolPicture, symbolPrint, symbolSheet, updateOps, type Library } from "./symbol-library";
+import { fnv1a64, libraryCopy, miniature, originSymbol, readLibrary, readOrigin, sourceValue, symbolCopy, symbolPicture, symbolPrint, symbolSheet, updateChanges, updateOps, type Library } from "./symbol-library";
 import { documentSymbols, renameSymbolOps } from "./symbols";
 import { LAYER, open, type Opened } from "./test-support";
 
@@ -248,5 +248,54 @@ describe("aggiornare un simbolo dalla libreria", () => {
     const presa = originSymbol(opened.engine.model!, "Simboli/Impianti elettrici.svg", "rpresa000")!;
     const ids = new NewIds((id) => opened.engine.holder(id) !== null);
     expect(updateOps(opened.engine.model!, presa, library(TARGET), "rpresa000", ids)).toBeNull();
+  });
+  it("le immagini della libreria arrivano col loro indirizzo per il disegno", () => {
+    const withImage = doc(
+      '<defs id="fub-defs"><symbol id="rlogo0000" overflow="visible"><title>Logo</title><image id="oimg00001" href="img/logo.png" width="10" height="10"/></symbol></defs>' + `${LAYER}</g>`,
+    );
+    const opened = open(TARGET);
+    paste(opened, libraryCopy(library(withImage), "rlogo0000")!.svg);
+    const logo = originSymbol(opened.engine.model!, "Simboli/Impianti elettrici.svg", "rlogo0000")!;
+    const ids = new NewIds((id) => opened.engine.holder(id) !== null);
+    const rebase = (href: string): string | null => (href === "img/logo.png" ? "Simboli/img/logo.png" : null);
+    apply(opened, updateOps(opened.engine.model!, logo, library(withImage), "rlogo0000", ids, rebase)!);
+    expect(rawOf(originSymbol(opened.engine.model!, "Simboli/Impianti elettrici.svg", "rlogo0000")!.node)).toContain('href="Simboli/img/logo.png"');
+  });
+});
+
+describe("se l'aggiornamento cambierebbe il simbolo", () => {
+  const presaOf = (opened: Opened) => originSymbol(opened.engine.model!, "Simboli/Impianti elettrici.svg", "rpresa000")!;
+
+  it("appena copiato no, anche con le risorse e i simboli che usa", () => {
+    const opened = open(TARGET);
+    paste(opened, libraryCopy(library(), "rpresa000")!.svg);
+    expect(updateChanges(symbolSheet(opened.engine.model!), presaOf(opened).id, library(), "rpresa000")).toBe(false);
+  });
+
+  it("sì se la libreria ha un altro contenuto, o se il simbolo è cambiato nel disegno", () => {
+    const opened = open(TARGET);
+    paste(opened, libraryCopy(library(), "rpresa000")!.svg);
+    const id = presaOf(opened).id;
+    expect(updateChanges(symbolSheet(opened.engine.model!), id, library(LIBRARY("#ff0000")), "rpresa000")).toBe(true);
+    const inner = elementChildren(presaOf(opened).node).find((child) => child.facts.local === "rect")!.facts.id!;
+    apply(opened, [{ op: "set", id: inner, attrs: { width: "30" } }]);
+    expect(updateChanges(symbolSheet(opened.engine.model!), id, library(), "rpresa000")).toBe(true);
+  });
+
+  it("un nome diverso non è un cambiamento: l'aggiornamento tiene il nome del disegno", () => {
+    const opened = open(TARGET);
+    paste(opened, libraryCopy(library(), "rpresa000")!.svg);
+    const ids = new NewIds((id) => opened.engine.holder(id) !== null);
+    const named = renameSymbolOps(opened.engine.model!, presaOf(opened), "Presa di casa", ids);
+    if (named === "foreign") throw new Error("foreign");
+    apply(opened, named.ops);
+    expect(updateChanges(symbolSheet(opened.engine.model!), presaOf(opened).id, library(), "rpresa000")).toBe(false);
+  });
+
+  it("senza il simbolo nella libreria, o nel disegno, non si sa", () => {
+    const opened = open(TARGET);
+    paste(opened, libraryCopy(library(), "rpresa000")!.svg);
+    expect(updateChanges(symbolSheet(opened.engine.model!), presaOf(opened).id, library(TARGET), "rpresa000")).toBeNull();
+    expect(updateChanges(symbolSheet(opened.engine.model!), "rnessuno0", library(), "rpresa000")).toBeNull();
   });
 });
