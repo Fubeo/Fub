@@ -6,7 +6,8 @@
 // - `derive.json`: per ogni caso `name`, `description`, il testo `input`,
 //   l'ambito `scope` (`{kind: "drawing"}`, `{kind: "board", id}` o
 //   `{kind: "selection", ids, box: [x, y, width, height]}`), lo sfondo
-//   `background` (`paper` o `none`) e l'esito `expect`: `{text}`, il testo
+//   `background` (`paper` o `none`), l'abbondanza `bleed` in pixel se c'è,
+//   e l'esito `expect`: `{text}`, il testo
 //   derivato byte per byte, o `{error, id?}`, il rifiuto (`unknown-board`,
 //   `unknown-object`, `empty-selection`, `bad-box`, `not-svg`, `malformed`)
 //   con l'id che non va per i primi due;
@@ -16,8 +17,8 @@
 //   `expect`: `{scale, width, height, reduced}`, con la scala che è un numero
 //   a 32 bit scritto per intero.
 //
-// In più: il testo derivato si rilegge senza errori, e derivarlo di nuovo con
-// lo stesso ambito non lo cambia.
+// In più: il testo derivato si rilegge senza errori, e senza abbondanza
+// derivarlo di nuovo con lo stesso ambito non lo cambia.
 
 import { describe, expect, it } from "vitest";
 import derive from "../../../__fixtures__/scene-export/derive.json";
@@ -30,6 +31,7 @@ interface DeriveVector {
   readonly input: string;
   readonly scope: ExportScope;
   readonly background: ExportBackground;
+  readonly bleed?: number;
   readonly expect: { readonly text?: string; readonly error?: string; readonly id?: string };
 }
 
@@ -44,7 +46,7 @@ interface MeasureVector {
 /// L'esito di una derivazione nella forma dei vettori.
 function outcome(vector: DeriveVector): DeriveVector["expect"] {
   try {
-    return { text: deriveExport(vector.input, vector.scope, vector.background) };
+    return { text: deriveExport(vector.input, vector.scope, vector.background, vector.bleed ?? 0) };
   } catch (error) {
     if (error instanceof DeriveError) return error.id === null ? { error: error.refusal } : { error: error.refusal, id: error.id };
     if (error instanceof ReadError) return { error: error.kind };
@@ -59,7 +61,7 @@ describe("la derivazione dell'export", () => {
       expect(got).toEqual(vector.expect);
       if (got.text === undefined) return;
       expect(() => readScene(got.text!)).not.toThrow();
-      expect(deriveExport(got.text, vector.scope, vector.background)).toBe(got.text);
+      if ((vector.bleed ?? 0) === 0) expect(deriveExport(got.text, vector.scope, vector.background)).toBe(got.text);
     });
   }
 
