@@ -80,7 +80,13 @@ export function instanceSymbol(model: DocumentModel, node: ElementPart): Documen
 /// ogni nome: lui, poi `base 2`, `base 3` e così via. Due nomi uguali senza
 /// badare alle maiuscole sono lo stesso.
 export function freshSymbolName(model: DocumentModel, base: string): string {
-  const taken = new Set(documentSymbols(model).map((symbol) => nameKey(symbol.name)));
+  return freeSymbolName(new Set(documentSymbols(model).map((symbol) => nameKey(symbol.name))), base);
+}
+
+/// Il primo nome libero da `base` fuori da `taken`, le chiavi dei nomi presi
+/// ([`nameKey`]): come [`freshSymbolName`], per chi conta anche i simboli
+/// che stanno arrivando.
+export function freeSymbolName(taken: ReadonlySet<string>, base: string): string {
   const clean = cleanName(base);
   if (!taken.has(nameKey(clean))) return clean;
   for (let n = 2; ; n++) {

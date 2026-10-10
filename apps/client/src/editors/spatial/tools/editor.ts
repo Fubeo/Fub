@@ -21162,7 +21162,7 @@ const REASONS: Readonly<Record<Reason, DrawKey>> = {
   "invalid-elem": "draw.reason.invalid",
   locked: "draw.reason.locked",
   foreign: "draw.reason.foreign",
-  cycle: "draw.reason.invalid",
+  cycle: "draw.reason.cycle",
   limit: "draw.reason.limit",
   "read-only": "draw.reason.read_only",
 };
