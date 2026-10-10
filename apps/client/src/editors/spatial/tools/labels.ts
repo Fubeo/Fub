@@ -41,8 +41,8 @@ export const LABEL_PAD = 6;
 
 /// Dove stanno sopra e sotto la linea di base i bordi di una riga, in volte
 /// il corpo: come li misura il riquadro di un testo.
-const ASCENT_EM = 0.8;
-const DESCENT_EM = 0.25;
+export const ASCENT_EM = 0.8;
+export const DESCENT_EM = 0.25;
 
 /// La distanza sotto la quale due numeri di una trasformazione sono gli
 /// stessi: come li scrive il file, a quattro decimali.

@@ -22,6 +22,7 @@ import type { Role } from "../scene/analysis";
 import { BoundsBuilder, chords, flatten, winding, type Bounds, type Segment } from "../scene/geometry";
 import { IDENTITY, type Point } from "../scene/matrix";
 import { elementChildren, type ElementPart, type LeafNode } from "../scene/model";
+import type { Elem } from "../scene/serialize";
 import { length } from "../scene/values";
 import { elemOf } from "./arrange";
 import { shapeSegments } from "./hit";
@@ -78,20 +79,21 @@ function piecesOf(node: ElementPart): { readonly entry: { readonly raw: string; 
   let entry = known.get(node);
   if (entry === undefined || entry.raw !== node.raw) {
     const elem = elemOf(node);
-    let pieces: Pieces | null = null;
-    if (elem !== null) {
-      const closed: Point[][] = [];
-      const open: Array<readonly [Point, Point]> = [];
-      for (const sub of subpaths(shapeSegments(elem.tag, Object.entries(elem.attrs)))) {
-        if (sub.closed) closed.push(...flatten(sub.segments, IDENTITY));
-        else open.push(...chords(sub.segments));
-      }
-      pieces = closed.length === 0 ? null : { closed, open };
-    }
-    entry = { raw: node.raw, pieces };
+    entry = { raw: node.raw, pieces: elem === null ? null : piecesIn(elem) };
     known.set(node, entry);
   }
   return { entry };
+}
+
+/// I pezzi di `elem`; `null` se non ha un sottotracciato chiuso.
+function piecesIn(elem: Elem): Pieces | null {
+  const closed: Point[][] = [];
+  const open: Array<readonly [Point, Point]> = [];
+  for (const sub of subpaths(shapeSegments(elem.tag, Object.entries(elem.attrs)))) {
+    if (sub.closed) closed.push(...flatten(sub.segments, IDENTITY));
+    else open.push(...chords(sub.segments));
+  }
+  return closed.length === 0 ? null : { closed, open };
 }
 
 /// Vero se `node` può avere un'etichetta dentro: un rettangolo, un'ellisse,
@@ -342,6 +344,26 @@ function grown(rect: readonly number[], frame: Bounds, edges: readonly (readonly
 export function textBox(shape: ElementPart): Bounds | null {
   const elem = elemOf(shape);
   if (elem === null || !labelable(shape)) return null;
+  const plain = plainBox(elem);
+  if (plain !== undefined) return plain;
+  const read = piecesOf(shape);
+  if (read === null || read.entry.pieces === null) return null;
+  if (read.entry.box === undefined) read.entry.box = gridBox(read.entry.pieces);
+  return read.entry.box;
+}
+
+/// Il riquadro del testo dentro `elem`, una forma chiusa che non è ancora
+/// nella scena, come [`textBox`]: per chi la scrive insieme all'etichetta.
+export function elemTextBox(elem: Elem): Bounds | null {
+  const plain = plainBox(elem);
+  if (plain !== undefined) return plain;
+  const pieces = piecesIn(elem);
+  return pieces === null ? null : gridBox(pieces);
+}
+
+/// Il riquadro del testo di un rettangolo, di un'ellisse o di un cerchio;
+/// `undefined` se `elem` non è nessuno dei tre.
+function plainBox(elem: Elem): Bounds | null | undefined {
   const a = elem.attrs;
   if (elem.tag === "rect") {
     const [x, y, w, h] = [numberOf(a, "x"), numberOf(a, "y"), numberOf(a, "width"), numberOf(a, "height")];
@@ -360,8 +382,5 @@ export function textBox(shape: ElementPart): Bounds | null {
     if (!(rx > 0) || !(ry > 0)) return null;
     return { min: [cx - rx * Math.SQRT1_2, cy - ry * Math.SQRT1_2], max: [cx + rx * Math.SQRT1_2, cy + ry * Math.SQRT1_2] };
   }
-  const read = piecesOf(shape);
-  if (read === null || read.entry.pieces === null) return null;
-  if (read.entry.box === undefined) read.entry.box = gridBox(read.entry.pieces);
-  return read.entry.box;
+  return undefined;
 }

@@ -64,6 +64,7 @@ export const SHELL_KEYS = {
   "shell.preview.hide": null,
   "shell.doc.save": "Mod-s",
   "shell.note.new": "Mod-n",
+  "shell.draw.import": null,
   "shell.settings": "Mod-,",
   "shell.sidebar.toggle": "Mod-Alt-b",
   "shell.inspector.toggle": "Mod-Alt-i",

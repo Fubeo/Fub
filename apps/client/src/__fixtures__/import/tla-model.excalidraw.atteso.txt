@@ -1,0 +1,26 @@
+File: tla-model.excalidraw
+Oggetti: 20 (forme 2, testi 2, linee 6, tratti 10, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×2 (Virgil); rough ×8
+
+Livello «Livello 1»
+  Ellisse
+  Tratto
+  Tratto
+  Tratto
+  Tratto
+  Tratto
+  Tratto
+  Tratto
+  Tratto
+  Tratto
+  Ellisse
+  Tratto
+  Connettore
+  Connettore
+  Connettore
+  Connettore
+  Connettore
+  Connettore
+  Testo «States»
+  Testo «Init»

@@ -4732,6 +4732,119 @@ button.draw-isolation-crumb:hover {
   }
 }
 
+/* «Importa disegno» (`draw-import-*`): la finestra della galleria, più
+   stretta, con il disegno com'è venuto in grande, sulla carta del documento;
+   sotto, da dove viene, quanto c'è e che cosa cambia, in un elenco che si
+   legge di seguito, poi il nome e la cartella. Sul telefono la finestra
+   prende lo schermo. Le colonne dei campi, il ritaglio dell'immagine e
+   l'avviso vuoto stanno nella struttura (`structure.css`). */
+.modale .palette-box.draw-import {
+  width: min(760px, 94vw);
+  max-height: 86vh;
+  overflow: hidden;
+}
+.modale .draw-import-form {
+  flex: 1;
+  min-height: 0;
+}
+.modale .draw-import-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-2);
+  overflow: auto;
+}
+.modale .draw-import-from,
+.modale .draw-import-count {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+.modale .draw-import-preview {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 16rem;
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--doc-fill);
+  overflow: hidden;
+}
+.modale .draw-import-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  box-shadow: 0 0 0 1px var(--doc-rule-soft), 0 6px 14px -8px rgb(0 0 0 / 45%);
+}
+.modale .draw-import-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .draw-import-report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.modale .draw-import-report-title {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+}
+.modale .draw-import-report-none {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.modale .draw-import-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-7);
+}
+.modale .draw-import-note {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+.modale .draw-import-fields {
+  display: grid;
+  gap: var(--space-4);
+}
+.modale .draw-import-field input {
+  min-height: 44px;
+}
+.modale .draw-import .palette-actions {
+  flex: none;
+}
+.modale .draw-import .palette-actions button {
+  min-height: 44px;
+}
+@media (max-width: 760px) {
+  .modale.draw-import-overlay {
+    align-items: stretch;
+    padding: 0;
+  }
+  .modale .palette-box.draw-import {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+  .modale .draw-import-preview {
+    height: 11rem;
+  }
+}
+
 .modale .palette-actions .keys-show-all {
   margin-inline-end: auto;
 }

@@ -1,0 +1,60 @@
+File: aws-cdk-static-site-architecture.drawio
+Oggetti: 34 (forme 13, testi 13, linee 8, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: stencil ×11 (mxgraph.aws4.group)
+
+Livello «Livello 1»
+  Rettangolo
+  Testo «AWS CDK Static Site Starter Mark Gerald Martins | 2026-05-2…»
+  Gruppo, 2 oggetti
+    Rettangolo
+    Testo «Legend — solid: request path - - dashed: deploy / cert»
+  Gruppo, 2 oggetti
+    Rettangolo
+    Testo «AWS Cloud»
+  Gruppo, 2 oggetti
+    Rettangolo
+    Testo «Region: us-east-1»
+  Gruppo, 2 oggetti
+    Rettangolo
+    Testo «Region: eu-west-1»
+  Gruppo, 2 oggetti
+    Rettangolo «User»
+    Testo «User»
+  Gruppo, 2 oggetti
+    Rettangolo «Cloudflare DNS (authoritative)»
+    Testo «Cloudflare DNS (authoritative)»
+  Gruppo, 2 oggetti
+    Rettangolo «CloudFront (HTTPS, OAC, SPA fallback)»
+    Testo «CloudFront (HTTPS, OAC, SPA fallback)»
+  Gruppo, 2 oggetti
+    Rettangolo «S3 (private) Block Public Access website_dist/»
+    Testo «S3 (private) Block Public Access website_dist/»
+  Gruppo, 2 oggetti
+    Rettangolo «ACM Certificate (DNS validated)»
+    Testo «ACM Certificate (DNS validated)»
+  Gruppo, 2 oggetti
+    Rettangolo «GitHub Actions ci.yml»
+    Testo «GitHub Actions ci.yml»
+  Gruppo, 2 oggetti
+    Rettangolo «IAM Role (OIDC trust)»
+    Testo «IAM Role (OIDC trust)»
+  Gruppo, 2 oggetti
+    Rettangolo «CloudFormation (cdk deploy)»
+    Testo «CloudFormation (cdk deploy)»
+  Connettore «HTTPS» da «User» a «Cloudflare DNS (authoritative)»
+  Testo «HTTPS»
+  Connettore «CNAME» da «Cloudflare DNS (authoritative)» a «CloudFront (HTTPS, OAC, SPA fallback)»
+  Testo «CNAME»
+  Connettore «OAC SigV4» da «CloudFront (HTTPS, OAC, SPA fallback)» a «S3 (private) Block Public Access website_dist/»
+  Testo «OAC SigV4»
+  Connettore «TLS cert» da «ACM Certificate (DNS validated)» a «CloudFront (HTTPS, OAC, SPA fallback)»
+  Testo «TLS cert»
+  Connettore «OIDC AssumeRole» da «GitHub Actions ci.yml» a «IAM Role (OIDC trust)»
+  Testo «OIDC AssumeRole»
+  Connettore «cdk deploy» da «IAM Role (OIDC trust)» a «CloudFormation (cdk deploy)»
+  Testo «cdk deploy»
+  Connettore «s3 sync» da «CloudFormation (cdk deploy)» a «S3 (private) Block Public Access website_dist/»
+  Testo «s3 sync»
+  Connettore «invalidation» da «CloudFormation (cdk deploy)» a «CloudFront (HTTPS, OAC, SPA fallback)»
+  Testo «invalidation»

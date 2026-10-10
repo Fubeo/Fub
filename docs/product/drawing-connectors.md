@@ -45,9 +45,9 @@ agganci in `scene/connectors.ts`.
 | A gomito | tratti orizzontali e verticali |
 | Curvo | una curva che esce da ogni capo agganciato perpendicolare al lato |
 
-- **Il gomito gira attorno ai due oggetti che unisce,** non agli altri. Ogni
-  curva costa: sceglie il percorso con meno curve e, a parità, quello per la
-  via di mezzo.
+- **Il gomito gira attorno ai due oggetti che unisce,** non agli altri, e fra
+  due oggetti vicini passa in mezzo. Ogni curva costa: sceglie il percorso
+  con meno curve e, a parità, quello per la via di mezzo.
 - **Il tipo si cambia** nel pannello, in ogni momento. Il connettore che si
   tira dopo ha il tipo scelto per ultimo.
 

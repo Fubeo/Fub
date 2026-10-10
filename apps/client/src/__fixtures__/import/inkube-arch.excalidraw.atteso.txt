@@ -1,0 +1,29 @@
+File: inkube-arch.excalidraw
+Oggetti: 13 (forme 7, testi 3, linee 3, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×9 (Excalifont); rough ×10
+
+Livello «Livello 1»
+  Rettangolo
+  Testo «inkube»
+  Gruppo «kubevpn», 2 oggetti
+    Rettangolo «kubevpn»
+    Testo «kubevpn»
+  Gruppo «devbox», 2 oggetti
+    Rettangolo «devbox»
+    Testo «devbox»
+  Gruppo «kubeclient», 2 oggetti
+    Rettangolo «kubeclient»
+    Testo «kubeclient»
+  Rettangolo
+  Testo «cluster»
+  Connettore «handles intercept & connect» da «kubevpn» a Rettangolo
+  Testo «handles intercept & connect»
+  Rettangolo
+  Testo «service»
+  Connettore «load env secrets from deployed service» da «kubeclient» a Rettangolo
+  Testo «load env secrets from deployed service»
+  Connettore da «devbox» a «helps in setting develpment shell»
+  Gruppo «helps in setting develpment shell», 2 oggetti
+    Ellisse «helps in setting develpment shell»
+    Testo «helps in setting develpment shell»

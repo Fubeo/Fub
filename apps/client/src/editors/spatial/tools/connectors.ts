@@ -729,13 +729,23 @@ function grid(a: Port, b: Port, from: number, to: number, margin: number, boxes:
   return simplify([a.at, ...points, b.at]);
 }
 
+/// Lo spazio attorno ai due oggetti per il primo gomito: l'uscita intera, o
+/// metà dello spazio fra i due quando sono più vicini di due uscite, così il
+/// gomito passa in mezzo invece di girare loro attorno.
+function marginOf(a: Port, b: Port): number {
+  if (a.box === null || b.box === null) return STUB;
+  const gap = Math.max(b.box.min[0] - a.box.max[0], a.box.min[0] - b.box.max[0], b.box.min[1] - a.box.max[1], a.box.min[1] - b.box.max[1]);
+  return gap > 0 && gap < 2 * STUB ? gap / 2 : STUB;
+}
+
 /// Il gomito fra `a` e `b`: prima attorno ai due oggetti con l'uscita
-/// intera, poi con un'uscita più corta per due oggetti vicini, poi senza
+/// intera, o fra i due se sono vicini, poi con un'uscita più corta, poi senza
 /// guardare gli oggetti; e, se nemmeno così, una Z per la via di mezzo.
 function elbow(a: Port, b: Port): Point[] {
   const from = axisOf(a.dir);
   const to = axisOf(b.dir);
-  const tries: ReadonlyArray<readonly [number, boolean]> = [[STUB, true], [STUB / 4, true], [STUB, false]];
+  const room = marginOf(a, b);
+  const tries: ReadonlyArray<readonly [number, boolean]> = [[room, true], [Math.min(room, STUB / 4), true], [STUB, false]];
   for (const [margin, boxes] of tries) {
     const path = grid(a, b, from, to, margin, boxes);
     if (path !== null && path.length >= 2 && path.length <= 64) return path;
@@ -784,10 +794,11 @@ export function labelNormal([dx, dy]: Point): Point {
 }
 
 /// Quanto `box` arriva dal suo centro lungo la normale `n`.
-const reachAlong = (n: Point, box: LabelBox): number => (Math.abs(n[0]) * box.width) / 2 + (Math.abs(n[1]) * box.height) / 2;
+const reachAlong = (n: Point, box: Pick<LabelBox, "width" | "height">): number => (Math.abs(n[0]) * box.width) / 2 + (Math.abs(n[1]) * box.height) / 2;
 
-/// Dove va il centro dell'etichetta `box` messa a `place` lungo `track`.
-function centreAt(track: Track, place: LabelPlace, box: LabelBox): Point | null {
+/// Dove va il centro dell'etichetta `box`, larga e alta così, messa a
+/// `place` lungo `track`.
+export function labelCentre(track: Track, place: LabelPlace, box: Pick<LabelBox, "width" | "height">): Point | null {
   const at = track.at(place.t * track.length);
   if (at === null) return null;
   const n = labelNormal(at.direction);
@@ -825,7 +836,7 @@ function placedLabel(label: ElementPart, place: LabelPlace, segments: readonly S
   const box = labelBox(label, router);
   const track = new Track(segments);
   if (box === null || !(track.length > 0)) return undefined;
-  const centre = centreAt(track, place, box);
+  const centre = labelCentre(track, place, box);
   return centre === null ? undefined : movedLabel(label, [centre[0] - box.centre[0], centre[1] - box.centre[1]], router);
 }
 

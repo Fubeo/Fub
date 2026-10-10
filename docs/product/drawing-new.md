@@ -12,6 +12,9 @@ mentre si disegna, l'editor dice qualche gesto che non si vede, uno alla volta
 e una volta sola. Niente di questo usa la rete: i modelli e le loro anteprime
 sono file di Fub e del vault.
 
+Un disegno nasce anche da un file di Excalidraw o di draw.io, con «Importa
+disegno»: [Disegni, importare](drawing-import.md).
+
 ## Da dove si apre
 
 «Nuovo disegno…» c'è dove Fub offre già di creare una nota, quando la

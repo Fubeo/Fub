@@ -28,7 +28,7 @@ export type Join = "space" | "word";
 export const WRAP = "fub:wrap";
 
 /// I trattini dopo cui si va a capo.
-const HYPHENS: ReadonlySet<string> = new Set(["-", "‐", "–", "—"]);
+export const HYPHENS: ReadonlySet<string> = new Set(["-", "‐", "–", "—"]);
 
 const isSpace = (grapheme: string): boolean => grapheme === " " || grapheme === "\t";
 

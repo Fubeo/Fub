@@ -1,0 +1,59 @@
+File: casetracker-architecture.drawio
+Oggetti: 28 (forme 12, testi 5, linee 11, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: nessuna
+
+Livello «Livello 1»
+  Testo «CaseTracker — engagement overlay over the Microsoft 365 sys…»
+  Gruppo, 2 oggetti
+    Rettangolo
+    Testo «Microsoft Entra ID — identity provider»
+  Gruppo, 2 oggetti
+    Rettangolo
+    Testo «CaseTracker overlay — system of engagement (this codebase)»
+  Gruppo, 2 oggetti
+    Rettangolo
+    Testo «Microsoft 365 — system of record (governed; the heavy data…»
+  Gruppo, 6 oggetti
+    Rettangolo «Caseworker»
+    Ellisse
+    Linea
+    Linea
+    Tracciato
+    Testo «Caseworker»
+  Gruppo «Federated SSO sign-in + Entra group → department / role (no…», 2 oggetti
+    Rettangolo «Federated SSO sign-in + Entra group → department / role (no…»
+    Testo «Federated SSO sign-in + Entra group → department / role (no…»
+  Gruppo «Worker dashboard (one pane — planned)», 2 oggetti
+    Rettangolo «Worker dashboard (one pane — planned)»
+    Testo «Worker dashboard (one pane — planned)»
+  Gruppo «Django backend + the Index ("our data") case state · docume…», 2 oggetti
+    Rettangolo «Django backend + the Index ("our data") case state · docume…»
+    Testo «Django backend + the Index ("our data") case state · docume…»
+  Gruppo «Authorization & gates dept scope (see) · role (do) · shield…», 2 oggetti
+    Rettangolo «Authorization & gates dept scope (see) · role (do) · shield…»
+    Testo «Authorization & gates dept scope (see) · role (do) · shield…»
+  Gruppo «Microsoft Graph (delegated — acts as the signed-in worker)», 2 oggetti
+    Rettangolo «Microsoft Graph (delegated — acts as the signed-in worker)»
+    Testo «Microsoft Graph (delegated — acts as the signed-in worker)»
+  Gruppo «SharePoint / OneDrive documents · email bodies · attachments», 2 oggetti
+    Rettangolo «SharePoint / OneDrive documents · email bodies · attachments»
+    Testo «SharePoint / OneDrive documents · email bodies · attachments»
+  Gruppo «Outlook calendars (reference / sync target)», 2 oggetti
+    Rettangolo «Outlook calendars (reference / sync target)»
+    Testo «Outlook calendars (reference / sync target)»
+  Connettore «1. SSO sign-in» da «Caseworker» a «Federated SSO sign-in + Entra group → department / role (no…»
+  Testo «1. SSO sign-in»
+  Connettore «identity + group → role» da «Federated SSO sign-in + Entra group → department / role (no…» a «Authorization & gates dept scope (see) · role (do) · shield…»
+  Testo «identity + group → role»
+  Connettore «2. uses dashboard» da «Caseworker» a «Worker dashboard (one pane — planned)»
+  Testo «2. uses dashboard»
+  Connettore da «Worker dashboard (one pane — planned)» a «Django backend + the Index ("our data") case state · docume…»
+  Connettore «delegated Graph calls» da «Django backend + the Index ("our data") case state · docume…» a «Microsoft Graph (delegated — acts as the signed-in worker)»
+  Testo «delegated Graph calls»
+  Connettore «documents · mail trail» da «Microsoft Graph (delegated — acts as the signed-in worker)» a «SharePoint / OneDrive documents · email bodies · attachments»
+  Testo «documents · mail trail»
+  Connettore «calendars» da «Microsoft Graph (delegated — acts as the signed-in worker)» a «Outlook calendars (reference / sync target)»
+  Testo «calendars»
+  Connettore «3. open file — the drive enforces the actual open» da «Worker dashboard (one pane — planned)» a «SharePoint / OneDrive documents · email bodies · attachments»
+  Testo «3. open file — the drive enforces the actual open»

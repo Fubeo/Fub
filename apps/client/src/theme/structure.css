@@ -1860,6 +1860,33 @@ html, body, #app {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
+/* «Importa disegno» (`draw-import-*`): la geometria che nessun tema cambia.
+   Il nome e la cartella affiancati, l'anteprima ritagliata nel suo riquadro,
+   l'avviso che c'è sempre e vuoto non occupa posto, come nella galleria di
+   «Nuovo disegno». Sul telefono una colonna sola per i campi, e le azioni
+   stanno sopra la barra di sistema. */
+.draw-import-fields {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.draw-import-image {
+  object-fit: contain;
+}
+.draw-import-alert:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 760px) {
+  .draw-import-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modale .palette-box.draw-import {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
 /* La descrizione di un'immagine appena entrata: in fondo al foglio, al
    centro; sopra la barra del gruppo isolato quando c'è. */
 .draw-describe {

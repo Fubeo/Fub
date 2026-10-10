@@ -1,0 +1,13 @@
+File: ville-connect-widgets.excalidraw
+Oggetti: 3 (forme 2, testi 0, linee 1, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: nessuna
+
+Livello «Livello 1»
+  Gruppo «widget-red», 2 oggetti
+    Rettangolo «widget-red»
+    Testo «widget-red»
+  Gruppo «widget-blue», 2 oggetti
+    Rettangolo «widget-blue»
+    Testo «widget-blue»
+  Connettore da «widget-red» a «widget-blue»

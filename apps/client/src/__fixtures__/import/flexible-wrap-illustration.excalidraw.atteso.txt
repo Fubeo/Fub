@@ -1,0 +1,29 @@
+File: flexible-wrap-illustration.excalidraw
+Oggetti: 23 (forme 5, testi 6, linee 1, tratti 11, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×6 (Virgil)
+
+Livello «Livello 1»
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Tratto
+  Tratto
+  Tratto
+  Testo «width = itemwidth+spacing+padding rowItems = parentWidth /…»
+  Testo «width = 300+12+16 = 328 rowItems = 1305 / 328 = 3.97 => 3 r…»
+  Tratto
+  Tratto
+  Tratto
+  Tratto
+  Testo «12 px»
+  Testo «300 px»
+  Connettore da Rettangolo
+  Tratto
+  Tratto
+  Testo «1305 px»
+  Tratto
+  Tratto
+  Testo «16 px (padding)»
