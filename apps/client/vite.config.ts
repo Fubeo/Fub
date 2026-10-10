@@ -144,22 +144,25 @@ export default defineConfig({
           // tavole, i campioni, le sfumature, le punte delle linee, il
           // ritaglio delle immagini, le maschere, gli effetti, le campiture,
           // i motivi, i connettori e le etichette nelle forme, con ciò che
-          // il seguito delle une e degli altri ha in comune.
+          // il seguito delle une e degli altri ha in comune, le ripetizioni
+          // e la simmetria della penna.
           // Con loro ciò che i pannelli leggono senza DOM: copiare e
           // incollare, la cronologia, il controllo dell'accessibilità e la
           // descrizione del disegno, gli attributi e le misure con le unità,
           // le scelte dell'export.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
           // I pannelli dei disegni: le proprietà coi colori del documento, la
           // sfumatura, la campitura, gli effetti e il connettore, gli oggetti,
           // le tavole, la cronologia, l'accessibilità, l'ispettore degli
-          // attributi e la finestra «Esporta». Sono DOM attorno al foglio, che
-          // l'editor e la superficie montano e che leggono i comandi; non
-          // dipendono dall'editor, e cambiano con la loro interfaccia.
-          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog)\.ts$/.test(id)) {
+          // attributi, la finestra «Esporta», le forme e i simboli, con la
+          // finestra dell'aggiornamento di un simbolo. Sono DOM attorno al
+          // foglio, che l'editor e la superficie montano e che leggono i
+          // comandi; non dipendono dall'editor, e cambiano con la loro
+          // interfaccia.
+          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog)\.ts$/.test(id)) {
             return "drawing-panels";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
