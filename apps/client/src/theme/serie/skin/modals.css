@@ -453,21 +453,37 @@
    stretta l'anteprima va sopra le scelte. Ogni scelta è alta almeno 44px, e
    una spenta è più tenue. Sotto l'immagine c'è una scacchiera dove il file
    è trasparente, chiara in ogni tema come quella dei programmi di grafica,
-   e il bianco dove non lo è, il JPEG e il PDF. */
+   e il bianco dove non lo è, il JPEG e il PDF. La pagina del PDF è la carta
+   bianca, col disegno e i segni neri sopra, sottili a ogni grandezza come
+   quelli veri; i campi in millimetri hanno il nome sopra e l'unità accanto.
+   Le scelte scorrono e l'anteprima e le azioni restano in vista; sul
+   telefono scorrono insieme all'anteprima. */
 .modale .palette-box.draw-export {
   width: min(960px, 94vw);
   max-height: 82vh;
+  overflow: hidden;
+}
+.modale .draw-export .palette-form {
+  flex: 1;
+  min-height: 0;
 }
 .modale .draw-export-layout {
   display: grid;
   grid-template-columns: clamp(15rem, 34%, 20rem) 1fr;
   gap: var(--space-6);
+  flex: 1;
+  min-height: 0;
 }
 .modale .draw-export-choices {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
   min-width: 0;
+  padding: var(--space-1);
+  overflow: auto;
+}
+.modale .draw-export .palette-actions {
+  flex: none;
 }
 .modale .draw-export-group {
   display: flex;
@@ -527,7 +543,38 @@
 .modale .draw-export-width input:disabled {
   opacity: 0.55;
 }
+.modale .palette-form .draw-export-field {
+  display: grid;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  font-weight: normal;
+}
+.modale .draw-export-row > .draw-export-field {
+  flex: 1 1 7rem;
+  min-width: 0;
+  max-width: 10rem;
+  padding-block-end: var(--space-2);
+}
+.modale .draw-export-field input,
+.modale .draw-export-select {
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+.modale .draw-export-subgroup {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.modale .draw-export-subgroup legend {
+  padding: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 .modale .draw-export-width span,
+.modale .draw-export-unit,
 .modale .draw-export-hint {
   color: var(--muted);
 }
@@ -552,13 +599,21 @@
   background: var(--bg-input);
   overflow: hidden;
 }
-.modale .draw-export-image {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
+.modale .draw-export-sheet {
   box-shadow: 0 0 0 1px var(--doc-rule-soft), 0 12px 32px -20px rgb(0 0 0 / 45%);
 }
-.modale .draw-export-stage[data-backdrop="checker"] .draw-export-image {
+.modale .draw-export-image {
+  display: block;
+  max-width: none;
+}
+.modale .draw-export-marks line,
+.modale .draw-export-marks circle {
+  fill: none;
+  stroke: rgb(0 0 0);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+.modale .draw-export-stage[data-backdrop="checker"] .draw-export-sheet {
   background-color: rgb(255 255 255);
   background-image:
     linear-gradient(45deg, rgb(0 0 0 / 10%) 25%, transparent 25%, transparent 75%, rgb(0 0 0 / 10%) 75%),
@@ -566,7 +621,7 @@
   background-position: 0 0, 8px 8px;
   background-size: 16px 16px;
 }
-.modale .draw-export-stage[data-backdrop="white"] .draw-export-image {
+.modale .draw-export-stage[data-backdrop="white"] .draw-export-sheet {
   background-color: rgb(255 255 255);
 }
 .modale .draw-export-pager {
@@ -608,6 +663,10 @@
 @media (max-width: 760px) {
   .modale .draw-export-layout {
     grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .modale .draw-export-choices {
+    overflow: visible;
   }
   .modale .draw-export-preview {
     order: -1;

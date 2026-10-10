@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
 import type { FontSheets } from "../picture";
 import { exportDialog, labelOf, measureText, type ExportDialogOptions } from "./export-dialog";
-import type { ExportScene, ExportState } from "./export-plan";
+import { PLAIN_PRINT, type ExportScene, type ExportState } from "./export-plan";
 
 const HEAD = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1"';
 
@@ -73,6 +73,20 @@ const button = (label: string): HTMLButtonElement =>
 const measure = (): string => dialog().querySelector(".draw-export-measure")!.textContent ?? "";
 const page = (): string => dialog().querySelector(".draw-export-page")!.textContent ?? "";
 const image = (): HTMLImageElement => dialog().querySelector<HTMLImageElement>(".draw-export-image")!;
+const sheet = (): HTMLElement => dialog().querySelector<HTMLElement>(".draw-export-sheet")!;
+const printGroup = (): HTMLFieldSetElement => dialog().querySelector<HTMLSelectElement>(".draw-export-select")!.closest("fieldset")!;
+const paperSelect = (): HTMLSelectElement => dialog().querySelector<HTMLSelectElement>(".draw-export-select")!;
+const choosePaper = (value: string): void => {
+  paperSelect().value = value;
+  paperSelect().dispatchEvent(new Event("change", { bubbles: true }));
+};
+/// Il campo di millimetri col nome `name`.
+const field = (name: string): HTMLInputElement => {
+  const found = [...dialog().querySelectorAll<HTMLLabelElement>("label.draw-export-field")].find((each) => each.querySelector("span")!.textContent === name);
+  if (found === undefined) throw new Error(`nessun campo «${name}»`);
+  return found.querySelector("input")!;
+};
+const shown = (element: HTMLElement): boolean => element.closest("[hidden]") === null;
 const width = (): HTMLInputElement => dialog().querySelector<HTMLInputElement>(".draw-export-width input")!;
 const submit = (): void => dialog().querySelector("form")!.requestSubmit();
 const type = (input: HTMLInputElement, value: string): void => {
@@ -91,7 +105,8 @@ describe("exportDialog", () => {
     void open();
     expect(dialog().querySelector("h2")!.textContent).toBe("Esporta «Ciclo dell'acqua»");
     const legends = [...dialog().querySelectorAll("legend")].map((each) => each.textContent);
-    expect(legends).toEqual(["Che cosa", "Formato", "Misura", "Sfondo"]);
+    expect(legends).toEqual(["Che cosa", "Formato", "Misura", "Pagina", "Orientamento", "Il disegno sulla carta", "Segni", "Sfondo"]);
+    expect(printGroup().hidden, "la pagina è soltanto del PDF").toBe(true);
     expect(option("Le tavole").checked).toBe(true);
     expect(document.activeElement).toBe(option("Le tavole"));
     expect(option("Copertina").checked).toBe(true);
@@ -131,7 +146,7 @@ describe("exportDialog", () => {
     expect(measure()).toBe("800 × 600 pixel");
     choose("Evaporazione");
     expect(measure()).toBe("Scegli almeno una tavola.");
-    expect(image().hidden).toBe(true);
+    expect(sheet().hidden).toBe(true);
     submit();
     choose("Copertina");
     submit();
@@ -228,7 +243,7 @@ describe("exportDialog", () => {
       target: "draw.png",
       options: { background: "paper", scope: "selection", selection: { ids: ["o2"], box: [258, 168, 84, 64] }, suffix: "selezione", scale: 2 },
       label: "PNG della selezione",
-      memory: { what: "selection", off: [], format: "png", size: { scale: 2 }, background: "paper" },
+      memory: { what: "selection", off: [], format: "png", size: { scale: 2 }, background: "paper", print: PLAIN_PRINT },
     });
   });
 
@@ -247,7 +262,7 @@ describe("exportDialog", () => {
   });
 
   it("riparte dalle scelte ricordate", async () => {
-    const answer = open({ memory: { what: "boards", off: ["b2"], format: "jpeg", size: { pixels: 500 }, background: "paper" } });
+    const answer = open({ memory: { what: "boards", off: ["b2"], format: "jpeg", size: { pixels: 500 }, background: "paper", print: PLAIN_PRINT } });
     expect(option("JPEG").checked).toBe(true);
     expect(option("Evaporazione").checked).toBe(false);
     expect(option("Larghezza").checked).toBe(true);
@@ -284,12 +299,174 @@ describe("exportDialog", () => {
   it("un disegno che non si deriva non mostra l'anteprima, e lo dice", () => {
     void exportDialog({ name: "Rotto", text: "<svg", scene: { selection: null, boards: [] }, memory: null, fonts: FONTS });
     expect(measure()).toBe("Questa anteprima non si può mostrare.");
-    expect(image().hidden).toBe(true);
+    expect(sheet().hidden).toBe(true);
+  });
+});
+
+describe("la pagina del PDF", () => {
+  /// La finestra con la parte «Pagina di stampa del PDF», dell'Esperto.
+  const printing = (patch: Partial<ExportDialogOptions> = {}) => open({ print: true, ...patch });
+
+  it("parte dalla carta grande quanto il disegno, e i campi della carta col formato non ci sono", async () => {
+    const answer = printing();
+    choose("PDF");
+    expect(printGroup().hidden).toBe(false);
+    expect(paperSelect().value).toBe("fit");
+    expect([...paperSelect().options].map((each) => each.textContent)).toEqual([
+      "Grande quanto il disegno",
+      "A2 (420 × 594 mm)",
+      "A3 (297 × 420 mm)",
+      "A4 (210 × 297 mm)",
+      "A5 (148 × 210 mm)",
+      "A6 (105 × 148 mm)",
+      "Lettera US (215,9 × 279,4 mm)",
+      "Legale US (215,9 × 355,6 mm)",
+      "Tabloid (279,4 × 431,8 mm)",
+      "Formato personalizzato",
+    ]);
+    expect(shown(option("Verticale"))).toBe(false);
+    expect(shown(option("Grande quanto la carta"))).toBe(false);
+    expect(shown(field("Margini"))).toBe(false);
+    expect(field("Margini").disabled).toBe(true);
+    expect(shown(field("Larghezza"))).toBe(false);
+    expect(shown(field("Abbondanza"))).toBe(true);
+    expect(field("Abbondanza").value).toBe("0");
+    expect(measure()).toBe("105,8 × 79,4 mm");
+    expect(sheet().dataset.paper).toBe("file");
+    expect(formatIssues(checkAccessibility(dialog()))).toBe("");
+    submit();
+    expect((await answer)!.options).toEqual({ background: "paper", scope: "boards", boards: ["b1", "b2"] });
+  });
+
+  it("una carta col suo formato: girata come il disegno, coi margini, e la misura lo dice", async () => {
+    const answer = printing();
+    choose("PDF");
+    choosePaper("a4");
+    expect(shown(option("Verticale"))).toBe(true);
+    expect(option("Come il disegno").checked).toBe(true);
+    expect(option("Alla sua misura, ridotto se non ci sta").checked).toBe(true);
+    expect(field("Margini").value).toBe("10");
+    expect(measure()).toBe("Carta 297 × 210 mm · disegno 105,8 × 79,4 mm al 100%");
+    expect(sheet().dataset.paper).toBe("print");
+    // Il disegno al centro della carta.
+    expect(parseFloat(image().style.left)).toBeCloseTo(((297 - 105.833) / 2 / 297) * 100, 3);
+    expect(parseFloat(image().style.width)).toBeCloseTo((105.833 / 297) * 100, 2);
+    choose("Verticale");
+    choose("Grande quanto la carta");
+    expect(measure()).toBe("Carta 210 × 297 mm · disegno 190 × 142,5 mm al 180%");
+    submit();
+    expect((await answer)!.options).toEqual({ background: "paper", scope: "boards", boards: ["b1", "b2"], paper: "a4", orientation: "portrait", fit: "page" });
+  });
+
+  it("l'abbondanza e i segni allargano la carta, e i segni si vedono", async () => {
+    const answer = printing();
+    choose("PDF");
+    type(field("Abbondanza"), "3");
+    choose("Segni di taglio");
+    expect(measure()).toBe("Carta 127,8 × 101,4 mm · disegno 105,8 × 79,4 mm al 100%");
+    const marks = dialog().querySelector(".draw-export-marks")!;
+    expect(marks.querySelectorAll("line")).toHaveLength(8);
+    expect(marks.querySelectorAll("circle")).toHaveLength(0);
+    choose("Segni di registro");
+    expect(marks.querySelectorAll("line")).toHaveLength(16);
+    expect(marks.querySelectorAll("circle")).toHaveLength(4);
+    // Il disegno con l'abbondanza va oltre la rifilatura, di 3 mm per lato.
+    expect(parseFloat(image().style.left)).toBeCloseTo((8 / 127.833) * 100, 2);
+    submit();
+    expect((await answer)!.options).toEqual({ background: "paper", scope: "boards", boards: ["b1", "b2"], bleed: 3, marks: ["crop", "registration"] });
+  });
+
+  it("l'anteprima con l'abbondanza è la derivazione allargata", async () => {
+    const created = vi.spyOn(URL, "createObjectURL");
+    void printing();
+    choose("PDF");
+    // Mezzo pollice per lato: 48 pixel CSS.
+    type(field("Abbondanza"), "12.7");
+    const blob = created.mock.calls[created.mock.calls.length - 1]![0] as Blob;
+    expect(await blob.text()).toContain('viewBox="-48 -48 496 396" width="496" height="396"');
+  });
+
+  it("margini, abbondanza e carte che non vanno non esportano, e dicono perché", async () => {
+    const answer = printing();
+    choose("PDF");
+    type(field("Abbondanza"), "30");
+    expect(measure()).toBe("Scrivi l’abbondanza in millimetri, da 0 a 25.");
+    expect(field("Abbondanza").validationMessage).toBe("Scrivi l’abbondanza in millimetri, da 0 a 25.");
+    expect(sheet().hidden).toBe(true);
+    submit();
+    type(field("Abbondanza"), "5");
+    choosePaper("a6");
+    type(field("Margini"), "60");
+    expect(measure()).toBe("Su questa carta i margini, l’abbondanza e i segni non lasciano posto al disegno: togli un po’ di margine o di abbondanza, o scegli una carta più grande.");
+    expect(field("Margini").validationMessage).toBe("Su questa carta i margini, l’abbondanza e i segni non lasciano posto al disegno: togli un po’ di margine o di abbondanza, o scegli una carta più grande.");
+    submit();
+    type(field("Margini"), "");
+    expect(field("Margini").validationMessage).toBe("Scrivi i margini in millimetri, da 0 a 100.");
+    submit();
+    type(field("Margini"), "8");
+    submit();
+    expect((await answer)!.options).toEqual({ background: "paper", scope: "boards", boards: ["b1", "b2"], paper: "a6", margin: 8, bleed: 5 });
+  });
+
+  it("una carta su misura ha i suoi due lati, e l'orientamento viene da loro", async () => {
+    const answer = printing();
+    choose("PDF");
+    choosePaper("custom");
+    expect(shown(field("Larghezza"))).toBe(true);
+    expect(shown(option("Verticale"))).toBe(false);
+    expect(shown(field("Margini"))).toBe(true);
+    type(field("Larghezza"), "5");
+    expect(field("Larghezza").validationMessage).toBe("Scrivi i due lati della carta in millimetri, da 10 a 5000.");
+    expect(field("Altezza").validationMessage).toBe("");
+    submit();
+    type(field("Larghezza"), "300");
+    type(field("Altezza"), "200");
+    type(field("Margini"), "0");
+    expect(measure()).toBe("Carta 300 × 200 mm · disegno 105,8 × 79,4 mm al 100%");
+    submit();
+    expect((await answer)!.options).toEqual({ background: "paper", scope: "boards", boards: ["b1", "b2"], paper: [300, 200], orientation: "landscape", margin: 0 });
+  });
+
+  it("un disegno che non dice la sua misura esce senza abbondanza, e lo dice", () => {
+    void exportDialog({ name: "Senza misura", text: `${HEAD}><rect x="0" y="0" width="10" height="10"/></svg>`, scene: { selection: null, boards: [] }, memory: null, fonts: FONTS, print: true });
+    choose("PDF");
+    type(field("Abbondanza"), "3");
+    expect(measure()).toContain("Il disegno non dice la sua misura, quindi il PDF esce senza abbondanza.");
+  });
+
+  it("riparte dalla pagina ricordata, che vale soltanto per il PDF", async () => {
+    const print = { paper: "a3", custom: [210, 297], orientation: "landscape", margin: 5, fit: "page", bleed: 2, crop: true, registration: false } as const;
+    const answer = printing({ memory: { what: "drawing", off: [], format: "png", size: { scale: 1 }, background: "paper", print } });
+    expect(paperSelect().value).toBe("a3");
+    expect(option("Orizzontale").checked).toBe(true);
+    expect(option("Grande quanto la carta").checked).toBe(true);
+    expect(field("Margini").value).toBe("5");
+    expect(field("Abbondanza").value).toBe("2");
+    expect(option("Segni di taglio").checked).toBe(true);
+    submit();
+    const choice = await answer;
+    expect(choice!.options).toEqual({ background: "paper", scope: "drawing", scale: 1 });
+    expect(choice!.memory.print).toEqual(print);
+  });
+
+  it("senza la parte dell'Esperto il PDF ha la pagina di sempre, e la pagina ricordata resta", async () => {
+    const print = { paper: "a4", custom: [210, 297], orientation: "auto", margin: 120, fit: "shrink", bleed: 3, crop: true, registration: true } as const;
+    const answer = open({ memory: { what: "drawing", off: [], format: "pdf", size: { scale: 2 }, background: "paper", print } });
+    expect(printGroup().hidden).toBe(true);
+    // Un margine fuori misura non ferma niente: la pagina non c'è, e il PDF
+    // misura il disegno intero.
+    expect(measure()).toBe("232,8 × 79,4 mm");
+    expect(sheet().dataset.paper).toBe("file");
+    expect(dialog().querySelector(".draw-export-marks")!.children).toHaveLength(0);
+    submit();
+    const choice = await answer;
+    expect(choice!.options).toEqual({ background: "paper", scope: "drawing" });
+    expect(choice!.memory.print).toEqual(print);
   });
 });
 
 describe("labelOf e measureText", () => {
-  const state = (patch: Partial<ExportState>): ExportState => ({ what: "drawing", off: new Set(), format: "png", size: { scale: 1 }, background: "paper", ...patch });
+  const state = (patch: Partial<ExportState>): ExportState => ({ what: "drawing", off: new Set(), format: "png", size: { scale: 1 }, background: "paper", print: PLAIN_PRINT, ...patch });
 
   it("chiamano ciò che esce e la sua misura", () => {
     expect(labelOf(state({}), BOARDS)).toBe("PNG");

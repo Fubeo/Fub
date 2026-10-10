@@ -13,6 +13,7 @@ import { clearHistory, recentNotices } from "../../ui/notify";
 import { imageInfo, svgSize } from "../media/image-view";
 import { IMAGE_PLACEHOLDER } from "./painter/paint";
 import { READ_IMAGE_BYTES } from "./read-images";
+import { PLAIN_PRINT } from "./tools/export-plan";
 import { linkHref, mountVectorSurface, type VectorImages, type VectorSurfaceOptions } from "./surface";
 import { LAYER } from "./tools/test-support";
 
@@ -1055,7 +1056,7 @@ describe("la finestra «Esporta»", () => {
     cancel();
     expect(await second).toBeNull();
     expect(await host.module.api.viewState("draw.export")).toEqual({
-      drawings: [{ doc: "disegni/casa.svg", memory: { what: "drawing", off: [], format: "svg", size: { scale: 2 }, background: "paper" } }],
+      drawings: [{ doc: "disegni/casa.svg", memory: { what: "drawing", off: [], format: "svg", size: { scale: 2 }, background: "paper", print: PLAIN_PRINT } }],
     });
   });
 
