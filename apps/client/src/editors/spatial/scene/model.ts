@@ -786,7 +786,7 @@ export function isSvgElement(node: ElementPart, local: string): boolean {
 
 /// Il testo del primo `title` fra i figli di `container`, come lo legge la
 /// lettura intera; `null` se non ne ha. Un `title` estraneo si rilegge.
-function titleOf(container: ContainerNode): string | null {
+export function titleOf(container: ContainerNode): string | null {
   for (const part of container.parts) {
     if (typeof part === "string" || part.kind === "other" || !isSvgElement(part, "title")) continue;
     if (part.details?.text !== undefined) return part.details.text;

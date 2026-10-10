@@ -120,7 +120,7 @@ import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import type { ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
-import { countObjects, describe, keyOf, linkName, outline, polygonalKind, type OutlineNode } from "../describe";
+import { countObjects, describe, keyOf, linkName, outlineAll, polygonalKind, type OutlineNode } from "../describe";
 import { DrawingFonts, vaultFontsOf, type FontNotes, type VaultFamily, type VaultFontPort } from "../fonts/vault";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
@@ -136,7 +136,7 @@ import { pointAt } from "../scene/curves";
 import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
 import { widthsAt, type WidthPoint } from "../scene/varwidth";
 import { apply, compose, IDENTITY, invert, rotate, translate, type Matrix, type Point } from "../scene/matrix";
-import { elementChildren, elementsIn, pathOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { elementChildren, elementsIn, pathOf, tagName, titleOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { auditScene, MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
@@ -240,6 +240,7 @@ import {
   SHAPE_ACTIONS,
   shapeChange,
   sheetChange,
+  symbolLabel,
   TEXT_PRESETS,
   tipChange,
   typedOpacity,
@@ -247,6 +248,7 @@ import {
   vaultFamilyOptions,
   type SelectionFacts,
   type StyleFacts,
+  type SymbolFacts,
 } from "./fields";
 import { framedText, initialText, lookOf as selectionLook, lookOps, nodeStyle, opacityOf, styleOf, styleOps, textInherited, type LookChange, type Style } from "./look";
 import {
@@ -282,6 +284,7 @@ import type { HatchPanelView } from "./hatch-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
 import { paintCode, resourceHome, resourcesOf, swatchPaint } from "./resources";
+import { cyclingSymbols, detachOps, documentSymbols, instanceCounts, instanceSymbol, isInstance, renameSymbolOps, swapOps, symbolNameProblem, symbolOps } from "./symbols";
 import {
   applyStyleOps,
   deleteStyleOps,
@@ -965,7 +968,23 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector", "symbols"];
+
+/// Un'istanza da cui si è entrati nel suo simbolo isolato: la chiave e il
+/// posto con cui ritrovarla, come il contenitore isolato.
+interface Entered {
+  readonly key: string;
+  readonly path: readonly number[];
+}
+
+/// Un passo del percorso dell'isolamento: il contenitore, ciò che lo
+/// rappresenta dove sta, lui o per un simbolo l'istanza da cui ci si entra,
+/// e quante delle istanze da cui si è entrati servono per arrivarci.
+interface IsolationStep {
+  readonly node: ContainerNode;
+  readonly pick: ElementPart;
+  readonly through: number;
+}
 
 /// La larghezza dell'editor, in rem, da cui il pannello delle proprietà sta
 /// accanto al foglio e si apre da sé: sotto, i pannelli vanno sotto il
@@ -1253,6 +1272,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-duplicate": ["M9 9h11v11H9z", "M15 9V4H4v11h5"],
   "draw-group": ["M3 7V3h4", "M17 3h4v4", "M21 17v4h-4", "M7 21H3v-4", "M7 7h6v6H7z", "M11 11h6v6h-6z"],
   "draw-ungroup": ["M3 3h8v8H3z", "M13 13h8v8h-8z"],
+  "draw-symbol": ["M12 2l3 3-3 3-3-3z", "M12 16l3 3-3 3-3-3z", "M5 9l3 3-3 3-3-3z", "M19 9l3 3-3 3-3-3z"],
+  "draw-detach": ["M7 3l3 3-3 3-3-3z", "M17 15l3 3-3 3-3-3z", "M4 20L20 4"],
   "draw-order": ["M10 14H4V4h10v6", "M10 10h10v10H10z"],
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
@@ -2551,13 +2572,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   let closedTyping = false;
   /// L'ultimo tocco della selezione su un oggetto, per il doppio tocco.
   let lastTap: { readonly key: string; readonly time: number; readonly at: Point } | null = null;
-  /// Il gruppo, o il collegamento, isolato: si sceglie solo lì dentro, e il
-  /// resto si attenua. La chiave, e il posto e il tag con cui ritrovarlo
-  /// quando un'operazione gli dà un id o lo rifà; `null` quando si sceglie in
-  /// tutto il disegno. Isolare non scrive niente nel file.
-  let isolation: { readonly key: string; readonly path: readonly number[]; readonly tag: string } | null = null;
-  /// Il nodo isolato nel modello di adesso, cercato una volta per modello.
-  let isolatedFor: { readonly model: DocumentModel; readonly node: ContainerNode | null } | null = null;
+  /// Il gruppo, il collegamento o il simbolo isolato: si sceglie solo lì
+  /// dentro, e il resto si attenua. La chiave, e il posto e il tag con cui
+  /// ritrovarlo quando un'operazione gli dà un id o lo rifà, e le istanze da
+  /// cui si è entrati nei simboli, dalla più esterna; `null` quando si
+  /// sceglie in tutto il disegno. Isolare non scrive niente nel file.
+  let isolation: { readonly key: string; readonly path: readonly number[]; readonly tag: string; readonly through: readonly Entered[] } | null = null;
+  /// Il nodo isolato nel modello di adesso, e le istanze da cui ci si
+  /// arriva, cercati una volta per modello.
+  let isolatedFor: { readonly model: DocumentModel; readonly node: ContainerNode | null; readonly through: readonly LeafNode[] } | null = null;
   /// Lo strumento Nodi: le forme di cui modifica i nodi, in ordine di
   /// documento, o perché gli oggetti scelti non ne hanno; i nodi scelti di
   /// ogni forma; i tipi che chi modifica ha dato ai nodi, che il file non
@@ -3328,6 +3351,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto: gli oggetti scelti diventano un motivo del
   // documento, che i riempimenti possono usare.
   const motifButton = arrangeButton("draw.hatch.motif.make", "draw-hatch-pattern", null, () => motifFromSelection());
+  // Dal livello Esperto: gli oggetti scelti diventano un simbolo, con
+  // un'istanza al loro posto, e un'istanza torna un gruppo che si modifica
+  // da solo.
+  const symbolButton = arrangeButton("draw.symbol.make", "draw-symbol", null, () => symbolFromSelection());
+  const detachButton = arrangeButton("draw.symbol.detach", "draw-detach", null, () => detachSelection());
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
   // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
@@ -3386,11 +3414,15 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const crumb = event.target instanceof Element ? event.target.closest<HTMLElement>(".draw-isolation-crumb") : null;
     if (crumb instanceof HTMLButtonElement) isolateAt(Number(crumb.dataset.depth));
   });
+  /// I nomi della barra e del pulsante: di un gruppo, o di un simbolo.
+  const nameIsolation = (symbol: boolean): void => {
+    isolationBar.setAttribute("aria-label", t(symbol ? "draw.isolation.of_symbol" : "draw.isolation"));
+    const back = t(symbol ? "draw.isolate.exit.symbol" : "draw.isolate.exit");
+    isolationBack.setAttribute("aria-label", back);
+    isolationBack.title = `${back} (Esc)`;
+  };
   relabels.push(() => {
-    isolationBar.setAttribute("aria-label", t("draw.isolation"));
-    const text = t("draw.isolate.exit");
-    isolationBack.setAttribute("aria-label", text);
-    isolationBack.title = `${text} (Esc)`;
+    nameIsolation(false);
     isolationShown = null;
     showIsolation();
   });
@@ -3880,42 +3912,89 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il gruppo isolato nel disegno di adesso; `null` se non ce n'è, se non
   /// c'è più, o se dentro non si sceglie più: bloccato, nascosto, o dentro
   /// uno che lo è. Si cerca per id, poi al suo posto, dove un oggetto con un
-  /// altro id non è lui.
+  /// altro id non è lui; così le istanze da cui si entra in un simbolo, e
+  /// se una non c'è più non c'è più nemmeno il simbolo isolato.
   const isolatedNode = (): ContainerNode | null => {
     const model = engine.model;
     if (isolation === null || model === null) return null;
     if (isolatedFor?.model === model) return isolatedFor.node;
     const wanted = isolation;
-    const fits = (node: ElementPart | null): node is ContainerNode =>
-      node !== null && node.kind === "container" && tagName(node) === wanted.tag && indexer.opens(model, node);
-    let node: ElementPart | null = wanted.key.startsWith("@") ? null : engine.holder(wanted.key);
-    if (!fits(node)) {
-      node = nodeAtPath(model, wanted.path);
-      if (node !== null && node.facts.id !== null && node.facts.id !== wanted.key) node = null;
+    const found = <T extends ElementPart>(key: string, path: readonly number[], fits: (node: ElementPart | null) => node is T): T | null => {
+      let node: ElementPart | null = key.startsWith("@") ? null : engine.holder(key);
+      if (!fits(node)) {
+        node = nodeAtPath(model, path);
+        if (node !== null && node.facts.id !== null && node.facts.id !== key) node = null;
+      }
+      return fits(node) ? node : null;
+    };
+    const instance = (node: ElementPart | null): node is LeafNode => node !== null && node.kind === "leaf" && node.details?.role === "instance";
+    const through: LeafNode[] = [];
+    for (const entry of wanted.through) {
+      const node = found(entry.key, entry.path, instance);
+      if (node === null) {
+        isolatedFor = { model, node: null, through: [] };
+        return null;
+      }
+      through.push(node);
     }
-    const found = fits(node) ? node : null;
-    isolatedFor = { model, node: found };
-    if (found !== null) {
-      const path = pathOf(found);
-      isolation = { key: keyOf({ id: found.facts.id, path }), path, tag: wanted.tag };
-    }
-    return found;
+    const node = found(wanted.key, wanted.path, (each): each is ContainerNode =>
+      each !== null && each.kind === "container" && tagName(each) === wanted.tag && indexer.opens(model, each, through));
+    isolatedFor = { model, node, through: node === null ? [] : through };
+    if (node !== null) isolation = { ...isolationOf(node, through), tag: wanted.tag };
+    return node;
   };
 
-  /// Il gruppo isolato e chi lo contiene, dal figlio della radice in giù:
-  /// ciò che il painter non attenua.
-  const isolationChain = (): ContainerNode[] | null => {
+  /// Le istanze da cui si è entrati nel simbolo isolato, o in quello che
+  /// contiene il gruppo isolato, dalla più esterna; nessuna fuori dai
+  /// simboli.
+  const isolatedThrough = (): readonly LeafNode[] => (isolatedNode() === null ? [] : isolatedFor!.through);
+
+  /// L'isolamento di `node`, in cui si entra dalle istanze `through`.
+  const isolationOf = (node: ContainerNode, through: readonly LeafNode[]): NonNullable<typeof isolation> => ({
+    key: keyOfNode(node),
+    path: pathOf(node),
+    tag: tagName(node),
+    through: through.map((each) => ({ key: keyOfNode(each), path: pathOf(each) })),
+  });
+
+  /// Il contenitore isolato e chi lo contiene, dal figlio della radice in
+  /// giù: dal contenuto di un simbolo si risale all'istanza da cui ci si è
+  /// entrati, e da lì a chi la contiene.
+  const isolationSteps = (): IsolationStep[] | null => {
     const node = isolatedNode();
     if (node === null) return null;
-    const chain: ContainerNode[] = [];
-    for (let at: ContainerNode | null = node; at !== null && at.parent !== null; at = at.parent) chain.unshift(at);
-    return chain;
+    const through = isolatedThrough();
+    const steps: IsolationStep[] = [];
+    let depth = through.length;
+    for (let at: ContainerNode | null = node; at !== null && at.parent !== null; ) {
+      if (at.details?.role !== "symbol") {
+        steps.unshift({ node: at, pick: at, through: depth });
+        at = at.parent;
+        continue;
+      }
+      const instance = through[depth - 1];
+      if (instance === undefined) return null;
+      steps.unshift({ node: at, pick: instance, through: depth });
+      depth--;
+      at = instance.parent;
+    }
+    return steps;
+  };
+
+  /// Ciò che il painter non attenua: i contenitori del percorso fino al
+  /// primo simbolo, e l'istanza da cui ci si entra, che lo mostra.
+  const isolationChain = (): object[] | null => {
+    const steps = isolationSteps();
+    if (steps === null) return null;
+    const first = steps.findIndex((step) => step.node.details?.role === "symbol");
+    if (first < 0) return steps.map((step) => step.node);
+    return [...steps.slice(0, first).map((step) => step.node), ...builder.paintsOf(steps[first]!.pick).slice(0, 1)];
   };
 
   /// Gli oggetti che si scelgono: quelli in cima, o i figli del gruppo
   /// isolato.
   const currentIndex = (): SceneIndex => {
-    if (index === null) index = engine.model === null ? EMPTY : indexer.index(engine.model, isolatedNode());
+    if (index === null) index = engine.model === null ? EMPTY : indexer.index(engine.model, isolatedNode(), isolatedThrough());
     return index;
   };
 
@@ -5015,12 +5094,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// Il disegno in albero, ricalcolato quando cambia la scena, e i suoi nodi
   /// per chiave.
-  let outlined: { readonly items: readonly Item[]; readonly nodes: OutlineNode[]; readonly byKey: Map<string, OutlineNode> } | null = null;
+  let outlined: {
+    readonly items: readonly Item[];
+    readonly nodes: OutlineNode[];
+    readonly symbols: ReadonlyMap<string, readonly OutlineNode[]>;
+    readonly byKey: Map<string, OutlineNode>;
+  } | null = null;
   const outlineNow = (): NonNullable<typeof outlined> => {
     const items = engine.scene();
     if (outlined?.items !== items) {
       const model = engine.model;
-      const nodes = outline(items, (item) => (model === null ? null : linkTarget(nodeOf(model, item))));
+      const { nodes, symbols } = outlineAll(items, (item) => (model === null ? null : linkTarget(nodeOf(model, item))));
       const byKey = new Map<string, OutlineNode>();
       const walkNodes = (list: readonly OutlineNode[]): void => {
         for (const node of list) {
@@ -5029,7 +5113,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         }
       };
       walkNodes(nodes);
-      outlined = { items, nodes, byKey };
+      // Anche ciò che sta in un simbolo ha il suo nome, per quando lo si
+      // modifica.
+      for (const content of symbols.values()) walkNodes(content);
+      outlined = { items, nodes, symbols, byKey };
     }
     return outlined;
   };
@@ -5072,6 +5159,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     current: string | null,
     under: Refusal | null,
     refusals: Map<string, Refusal>,
+    moves: boolean,
   ): TreeEntry[] =>
     nodes.map((node) => {
       const unit = index.get(node.key) ?? undefined;
@@ -5092,10 +5180,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         toggles: editable() && (layer ? has("layers") : has("selection") && under === null),
         name: title === null || title === "" ? null : title,
         renames: editable() && has("layers"),
-        moves: editable() && has("layers"),
+        moves,
         ...(has("layers") ? { thumbnail: () => thumbnailOf(node.item) } : {}),
         kind: treeKind(node.item.role),
-        children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, inner, refusals) : [],
+        children: layer || (holds && has("selection")) ? entriesOf(node.children, index, current, inner, refusals, moves) : [],
         label: () => `${describeNode(node, unit)}${mark}`,
       };
     });
@@ -5171,9 +5259,13 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // si scrive.
     const mode = `${editable()} ${has("layers")} ${has("selection")}`;
     if (treeShown?.index !== index || treeShown.layer !== current || treeShown.mode !== mode) {
-      const nodes = outlineNow().nodes;
+      // Mentre si modifica un simbolo l'albero è il suo contenuto, che non
+      // sta sul foglio; le voci si spostano con «Disponi», non trascinandole.
+      const isolated = isolatedNode();
+      const symbol = isolated?.details?.role === "symbol" ? isolated.facts.id : null;
+      const nodes = symbol === null ? outlineNow().nodes : (outlineNow().symbols.get(symbol) ?? []);
       const refusals = new Map<string, Refusal>();
-      const entries = entriesOf(nodes, index, current, null, refusals);
+      const entries = entriesOf(nodes, index, current, null, refusals, editable() && has("layers") && symbol === null);
       treeShown = { index, layer: current, mode, entries, refusals, count: countObjects(nodes), keys: "" };
     } else if (treeShown.keys === keys) {
       return;
@@ -6031,6 +6123,23 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       shape: shapeFacts(model, units),
       tips: has("tips") ? tipsLookOf(model, units) : null,
       styles: has("styles") ? styleFactsOf(model, units) : null,
+      symbols: has("symbols") ? symbolFactsOf(model, units) : null,
+    };
+  };
+
+  /// La riga «Simbolo» per gli oggetti scelti `units`, se fra loro c'è
+  /// un'istanza: il suo simbolo, i simboli del documento con quante istanze
+  /// ha ciascuno, e quali le istanze scelte non possono avere.
+  const symbolFactsOf = (model: DocumentModel, units: readonly Unit[]): SymbolFacts | null => {
+    const instances = units.filter(isInstance);
+    if (instances.length === 0) return null;
+    const used = new Set(instances.map((unit) => unit.node.details?.symbol ?? ""));
+    const counts = instanceCounts(model);
+    const cycling = cyclingSymbols(model, instances);
+    return {
+      current: used.size === 1 ? [...used][0]! || null : null,
+      symbols: documentSymbols(model).map((symbol) => ({ id: symbol.id, name: symbol.name, instances: counts.get(symbol.id) ?? 0, cycle: cycling.has(symbol.id) })),
+      single: units.length === 1,
     };
   };
 
@@ -6419,6 +6528,55 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (problem === "empty") return t("draw.colors.problem.empty");
     return t(problem === "taken" ? "draw.styles.problem.taken" : "draw.colors.problem.reads_color", { name });
   };
+
+  /// Un comando della riga «Simbolo»: `symbol:<id>` dà quel simbolo alle
+  /// istanze scelte, al loro posto; `edit` entra nel simbolo dell'istanza
+  /// scelta da sola; `rename:<nome>` rinomina il simbolo delle istanze
+  /// scelte; `detach` le scollega. `null` se è fatto, altrimenti perché no.
+  function symbolCommand(value: string): string | null {
+    const model = engine.model;
+    const units = selectedUnits();
+    if (model === null || units.length === 0) return null;
+    const colon = value.indexOf(":");
+    const verb = colon < 0 ? value : value.slice(0, colon);
+    const rest = colon < 0 ? "" : value.slice(colon + 1);
+    const instances = units.filter(isInstance);
+    const all = documentSymbols(model);
+    switch (verb) {
+      case "symbol": {
+        const symbol = all.find((each) => each.id === rest);
+        if (symbol === undefined || instances.length === 0) return null;
+        if (cyclingSymbols(model, instances).has(symbol.id)) return t("draw.symbols.why.cycle");
+        const count = instances.filter((unit) => unit.node.details?.symbol !== symbol.id).length;
+        const swapped = swapOps(model, units, symbol.id, newIds());
+        const outcome = changeFromPanel("draw.action.symbol_swap", swapped.ops, swapped.keys);
+        if (outcome === null && count > 0) announce(plural(count, "draw.symbols.swapped.one", "draw.symbols.swapped.other", { name: symbolLabel(symbol.name) }));
+        return outcome;
+      }
+      case "edit":
+        editSymbol();
+        return null;
+      case "rename": {
+        const used = new Set(instances.map((unit) => unit.node.details?.symbol));
+        const current = used.size === 1 ? (all.find((each) => used.has(each.id)) ?? null) : null;
+        if (current === null) return t("draw.symbols.why.mixed");
+        const name = cleanName(rest);
+        const problem = symbolNameProblem(model, name, current.id);
+        if (problem !== null) return problem === "empty" ? t("draw.symbols.problem.empty") : t("draw.symbols.problem.taken", { name });
+        const renamed = renameSymbolOps(model, current, name, newIds());
+        if (renamed === "foreign") return t("draw.rename.foreign");
+        // La selezione resta sulle istanze: il nome sta nel simbolo.
+        const outcome = changeFromPanel("draw.action.symbol_rename", renamed.ops, null);
+        if (outcome === null && renamed.ops.length > 0) announce(t("draw.symbols.renamed", { name }));
+        return outcome;
+      }
+      case "detach":
+        detachSelection();
+        return null;
+      default:
+        return null;
+    }
+  }
 
   /// Un comando della riga «Stile» di tipo `kind`: `style:<id>` dà lo
   /// stile alla selezione, `preset:<id>` fa uno stile di serie e lo dà,
@@ -6995,6 +7153,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       case "textStyle":
         outcome = styleCommand(id === "textStyle" ? "text" : "graphic", String(value));
         break;
+      case "symbol":
+        outcome = symbolCommand(String(value));
+        break;
       default:
         outcome = styleFromPanel(id, value);
         // Un colore scritto nel riempimento o nel contorno entra fra i
@@ -7409,6 +7570,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     booleanButton.hidden = !has("boolean");
     maskButton.hidden = !has("masks");
     motifButton.hidden = !has("motifs");
+    symbolButton.hidden = !has("symbols");
+    detachButton.hidden = !has("symbols") || !units.some(isInstance);
     connectButton.hidden = !has("connector") || units.filter((unit) => attachable(unit.node)).length < 2;
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
@@ -7894,6 +8057,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return outlined === undefined ? tagName(node) : describe(outlined, { parts: true });
   };
 
+  /// Il nome di un passo del percorso: quello dell'oggetto, o per un
+  /// simbolo «Simbolo «Presa»».
+  const crumbOf = (node: ContainerNode): string => {
+    if (node.details?.role !== "symbol") return nameOfNode(node);
+    const name = (titleOf(node) ?? "").replace(/\s+/g, " ").trim();
+    return name === "" ? t("draw.isolation.symbol.unnamed") : t("draw.isolation.symbol", { name });
+  };
+
+  /// Ciò che si dice entrando in `node`, isolato.
+  const isolatedText = (node: ContainerNode): string =>
+    node.details?.role === "symbol" ? t("draw.isolated.symbol", { symbol: crumbOf(node) }) : t("draw.isolated", { name: nameOfNode(node) });
+
   /// Il percorso che la barra mostra adesso, per non rifarla uguale.
   let isolationShown: string | null = null;
 
@@ -7902,20 +8077,22 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// che lo isola; il primo esce del tutto. Se la barra perde il pulsante che
   /// aveva il fuoco, il fuoco torna al foglio.
   function showIsolation(): void {
-    const chain = isolationChain();
+    const steps = isolationSteps();
     const focused = isolationBar.contains(document.activeElement);
-    isolationBar.hidden = chain === null;
-    if (chain === null) {
+    isolationBar.hidden = steps === null;
+    if (steps === null) {
       isolationShown = null;
       isolationPath.replaceChildren();
       if (focused) surface.focus({ preventScroll: true });
       return;
     }
-    const crumbs = chain.map((node, depth) => ({ depth: node.details?.role === "layer" ? -1 : depth, text: nameOfNode(node) }));
-    if (chain[0]!.details?.role !== "layer") crumbs.unshift({ depth: -1, text: t("draw.isolation.drawing") });
+    const crumbs = steps.map(({ node }, depth) => ({ depth: node.details?.role === "layer" ? -1 : depth, text: crumbOf(node) }));
+    if (steps[0]!.node.details?.role !== "layer") crumbs.unshift({ depth: -1, text: t("draw.isolation.drawing") });
     const shown = crumbs.map((crumb) => `${crumb.depth}\t${crumb.text}`).join("\n");
     if (shown === isolationShown) return;
     isolationShown = shown;
+    // In un simbolo la barra e il pulsante dicono il simbolo.
+    nameIsolation(steps[steps.length - 1]!.node.details?.role === "symbol");
     isolationPath.replaceChildren(...crumbs.map((crumb, at) => {
       const item = document.createElement("li");
       if (at > 0) {
@@ -7956,66 +8133,86 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     syncTree();
   };
 
-  /// Isola `unit`, un gruppo o un collegamento in cui si sceglie: dentro si
-  /// sceglie l'oggetto sotto `at`, se c'è, o con `at` nullo il primo, e lo
-  /// si dice.
+  /// Isola `unit`, un gruppo o un collegamento in cui si sceglie, o il
+  /// simbolo di un'istanza, che si modifica dove lei sta: dentro si sceglie
+  /// l'oggetto sotto `at`, se c'è, o con `at` nullo il primo, e lo si dice.
   const isolate = (unit: Unit, at: Point | null, pointer: InkPointerType = "mouse"): boolean => {
     const model = engine.model;
-    if (!has("selection") || model === null || unit.node.kind !== "container" || !indexer.opens(model, unit.node)) return false;
+    if (!has("selection") || model === null) return false;
+    const symbol = unit.role === "instance" ? instanceSymbol(model, unit.node)?.node ?? null : null;
+    const node = symbol ?? (unit.node.kind === "container" ? unit.node : null);
+    const through = symbol === null ? isolatedThrough() : [...isolatedThrough(), unit.node as LeafNode];
+    if (node === null || !indexer.opens(model, node, through)) return false;
     cancelGesture();
-    isolation = { key: unit.key, path: unit.path, tag: unit.tag };
+    isolation = isolationOf(node, through);
     isolatedFor = null;
     index = null;
     const inside = currentIndex();
     const pick = at === null ? inside.units[0] ?? null : inside.at(at, HIT_PX[pointer] / camera.scale);
     rescope(pick === null ? [] : [pick.key]);
-    const name = t("draw.isolated", { name: nameOfNode(unit.node) });
+    const name = isolatedText(node);
     announce(pick === null ? name : `${name} ${t("draw.walk", { object: labelOf(pick), index: inside.units.indexOf(pick) + 1, count: inside.units.length })}`);
     return true;
   };
 
-  /// Esce dal gruppo isolato: verso il gruppo che lo contiene, se ce n'è
-  /// uno, o con `all` del tutto. Resta scelto il gruppo da cui si esce.
+  /// Esce dal gruppo isolato: verso il gruppo o il simbolo che lo
+  /// contiene, se ce n'è uno, o con `all` del tutto. Resta scelto il gruppo
+  /// da cui si esce, o l'istanza da cui si era entrati nel simbolo.
   function leaveIsolation(all: boolean): boolean {
     if (isolatedNode() === null) return false;
     settleCrop();
-    const node = isolatedNode();
-    if (node === null) return false;
-    const parent = node.parent;
-    const role = parent?.details?.role;
-    isolation = !all && parent !== null && (role === "group" || role === "link")
-      ? { key: keyOfNode(parent), path: pathOf(parent), tag: tagName(parent) }
+    const steps = isolationSteps();
+    if (steps === null) return false;
+    const left = steps[steps.length - 1]!;
+    const outer = steps[steps.length - 2];
+    const role = outer?.node.details?.role;
+    isolation = !all && outer !== undefined && (role === "group" || role === "link" || role === "symbol")
+      ? isolationOf(outer.node, isolatedThrough().slice(0, outer.through))
       : null;
-    rescope([keyOfNode(node)]);
+    rescope([keyOfNode(left.pick)]);
     const now = isolatedNode();
-    announce(now === null ? t("draw.isolation.left") : t("draw.isolated", { name: nameOfNode(now) }));
+    announce(now === null ? leftText(left.node) : isolatedText(now));
     return true;
   }
+
+  /// Ciò che si dice uscendo del tutto da `node`, il più interno.
+  const leftText = (node: ContainerNode): string => t(node.details?.role === "symbol" ? "draw.isolation.left.symbol" : "draw.isolation.left");
 
   /// Un gruppo del percorso della barra: isola il contenitore a profondità
   /// `depth`, o con -1 esce del tutto. Resta scelto il gruppo da cui si
   /// esce, il primo del percorso dentro quello a cui si torna.
   function isolateAt(depth: number): void {
-    if (isolationChain() === null) return;
+    if (isolationSteps() === null) return;
     settleCrop();
-    const chain = isolationChain();
-    if (chain === null) return;
-    const node = depth < 0 ? null : chain[depth];
-    if (node === undefined) return;
-    const left = node === null ? chain.find((each) => each.details?.role !== "layer") : chain[depth + 1];
-    isolation = node === null ? null : { key: keyOfNode(node), path: pathOf(node), tag: tagName(node) };
-    rescope(left === undefined ? [] : [keyOfNode(left)]);
+    const steps = isolationSteps();
+    if (steps === null) return;
+    const step = depth < 0 ? null : steps[depth];
+    if (step === undefined) return;
+    const left = step === null ? steps.find((each) => each.node.details?.role !== "layer") : steps[depth + 1];
+    const inner = steps[steps.length - 1]!.node;
+    isolation = step === null ? null : isolationOf(step.node, isolatedThrough().slice(0, step.through));
+    rescope(left === undefined ? [] : [keyOfNode(left.pick)]);
     surface.focus({ preventScroll: true });
     const now = isolatedNode();
-    announce(now === null ? t("draw.isolation.left") : t("draw.isolated", { name: nameOfNode(now) }));
+    announce(now === null ? leftText(inner) : isolatedText(now));
   }
 
+  /// Si isola un gruppo, un collegamento, o il simbolo di un'istanza.
+  const isolable = (unit: Unit): boolean => unit.role === "group" || unit.role === "link" || unit.role === "instance";
+
   /// Mod+Invio, o «Isola il gruppo»: il gruppo, o il collegamento, scelto
-  /// da solo.
+  /// da solo; con un'istanza, il suo simbolo.
   const isolateSelection = (): void => {
     const units = selectedUnits();
-    const unit = units.length === 1 && (units[0]!.role === "group" || units[0]!.role === "link") ? units[0]! : null;
+    const unit = units.length === 1 && isolable(units[0]!) ? units[0]! : null;
     if (unit === null || !isolate(unit, null)) announce(t("draw.isolate.none"));
+  };
+
+  /// «Modifica simbolo»: entra nel simbolo dell'istanza scelta da sola.
+  const editSymbol = (): void => {
+    const units = selectedUnits();
+    const unit = units.length === 1 && units[0]!.role === "instance" ? units[0]! : null;
+    if (unit === null || !isolate(unit, null)) announce(t("draw.symbol.edit.none"));
   };
 
   /// Porta `bounds` in vista: resta dov'è se si vede già intero, va al
@@ -8402,9 +8599,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const index = currentIndex();
     const model = engine.model;
     if (model === null) return [];
-    const opened = new Set([...(isolationChain() ?? []), ...open]);
-    if (open.length > 0) return indexer.seen(model, opened);
-    if (seenCache?.index !== index) seenCache = { index, units: indexer.seen(model, opened) };
+    const opened = new Set([...(isolationSteps() ?? []).map((step) => step.node), ...open]);
+    const through = isolatedThrough();
+    if (open.length > 0) return indexer.seen(model, opened, through);
+    if (seenCache?.index !== index) seenCache = { index, units: indexer.seen(model, opened, through) };
     return seenCache.units;
   };
 
@@ -8421,15 +8619,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Il gruppo isolato come oggetto, che riceve ciò che si disegna; `null`
-  /// senza gruppo isolato.
-  let isolatedUnitFor: { readonly model: DocumentModel; readonly unit: Unit | null } | null = null;
-  const isolatedUnit = (): Unit | null => {
-    const node = isolatedNode();
-    const model = engine.model;
-    if (node === null || model === null) return null;
-    if (isolatedUnitFor?.model !== model) isolatedUnitFor = { model, unit: indexer.index(model).get(keyOfNode(node)) };
-    return isolatedUnitFor.unit;
-  };
+  /// senza gruppo isolato. Un simbolo ha le coordinate dell'istanza da cui
+  /// lo si modifica.
+  const isolatedUnit = (): Unit | null => (isolatedNode() === null ? null : currentIndex().scope());
 
   /// Gli oggetti che si vedono nella vista `view`, o tutti senza, come
   /// bersagli delle guide: tranne quelli di chiave in `skipped`, e coi
@@ -9549,7 +9741,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         openCrop(false);
         return;
       }
-      if (unit !== null && (unit.role === "group" || unit.role === "link") && isolate(unit, tap.at, g.pointer)) {
+      if (unit !== null && isolable(unit) && isolate(unit, tap.at, g.pointer)) {
         lastTap = null;
         return;
       }
@@ -16120,6 +16312,39 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (kept !== null) announce(`${plural(groups, "draw.ungrouped.one", "draw.ungrouped.other")}${whole}${kept}`);
   }
 
+  /// «Crea simbolo»: gli oggetti scelti, con le etichette dei loro
+  /// connettori, diventano il contenuto di un simbolo nuovo, e al loro posto
+  /// resta una sua istanza, che diventa la selezione.
+  function symbolFromSelection(): void {
+    const units = arranging("symbols");
+    if (units === null) return;
+    const made = symbolOps(engine.model!, withLabels(units), t("draw.symbol.base"), newIds());
+    if (typeof made === "string") {
+      announce(t(`draw.symbol.refused.${made}`));
+      return;
+    }
+    const kept = arrange("draw.action.symbol_make", made, null, { key: "draw.symbol.styled" });
+    if (kept !== null) announce(`${t("draw.symbol.made", { name: made.name })}${kept}`);
+  }
+
+  /// «Scollega dal simbolo»: ogni istanza scelta diventa un gruppo con una
+  /// copia del contenuto del suo simbolo, e il resto della selezione resta.
+  function detachSelection(): void {
+    const units = arranging("symbols");
+    if (units === null) return;
+    const count = units.filter(isInstance).length;
+    if (count === 0) {
+      announce(t("draw.symbol.detach.none"));
+      return;
+    }
+    const detached = detachOps(engine.model!, units, newIds());
+    if (detached === "content") {
+      announce(t("draw.symbol.detach.content"));
+      return;
+    }
+    if (arrange("draw.action.symbol_detach", detached) !== null) announce(plural(count, "draw.symbol.detached.one", "draw.symbol.detached.other"));
+  }
+
   /// Il collegamento scelto da solo, se c'è.
   const lonelyLink = (units: readonly Unit[]): Unit | null => (units.length === 1 && isLink(units[0]!) ? units[0]! : null);
 
@@ -16473,16 +16698,26 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const reason = motifReason();
       items.push({ label: t("draw.hatch.motif.make"), separator: true, disabled: reason !== null, ...(reason === null ? {} : { description: reason }), run: () => motifFromSelection() });
     }
-    const single = units.length === 1 && (units[0]!.role === "group" || units[0]!.role === "link");
+    if (has("symbols")) {
+      const instances = units.some(isInstance);
+      items.push(
+        { label: t("draw.symbol.make"), separator: true, disabled: !canEdit || none, ...(canEdit ? unselected : {}), run: () => symbolFromSelection() },
+        { label: t("draw.symbol.detach"), disabled: !canEdit || !instances, ...(canEdit && !instances ? { description: t(none ? "draw.selection.empty" : "draw.symbol.detach.none") } : {}), run: () => detachSelection() },
+      );
+    }
+    // Un'istanza scelta da sola apre il suo simbolo.
+    const lone = units.length === 1 ? units[0]! : null;
+    const single = lone !== null && isolable(lone);
     items.push({
-      label: t("draw.isolate"),
+      label: t(lone?.role === "instance" ? "draw.symbol.edit" : "draw.isolate"),
       separator: true,
       hint: displayBinding("Mod-Enter"),
       disabled: !single,
       ...(single ? {} : { description: t("draw.isolate.none") }),
       run: () => isolateSelection(),
     });
-    if (isolatedNode() !== null) items.push({ label: t("draw.isolate.exit"), hint: "Esc", run: () => leaveIsolation(false) });
+    const isolated = isolatedNode();
+    if (isolated !== null) items.push({ label: t(isolated.details?.role === "symbol" ? "draw.isolate.exit.symbol" : "draw.isolate.exit"), hint: "Esc", run: () => leaveIsolation(false) });
     return items;
   };
 
@@ -21030,6 +21265,7 @@ const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
   unreadable: "draw.nodes.unreadable",
   empty: "draw.nodes.empty",
   stroke: "draw.nodes.stroke_fixed",
+  instance: "draw.nodes.instance",
   foreign: "draw.nodes.foreign",
   other: "draw.nodes.no_path",
 };

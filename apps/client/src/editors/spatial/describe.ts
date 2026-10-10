@@ -34,7 +34,9 @@ export interface OutlineNode {
   /// Che cosa è, al posto del tipo, per una forma che ha la sua etichetta e
   /// un `title`: il `title`, perché il nome sono le parole dell'etichetta, le
   /// stesse che si vedono. «Decisione «Controlla l'ordine»», non «Tracciato
-  /// «Decisione»». `null` per ogni altro oggetto, che dice il suo tipo.
+  /// «Decisione»». Per un'istanza che ha un `title`, il nome del suo
+  /// simbolo: «Presa «Cucina»». `null` per ogni altro oggetto, che dice il
+  /// suo tipo.
   readonly kind: string | null;
   /// Dove porta un collegamento: il percorso del vault com'è scritto nel suo
   /// `href`. `null` per ogni altro oggetto, e per un collegamento che non
@@ -292,23 +294,55 @@ function connect(all: readonly Building[], connectors: readonly Building[]): voi
 /// dice che cosa è al posto del tipo; il gruppo che tiene soltanto lei e la
 /// forma, senza un `title`, ha il nome della forma. Un connettore senza
 /// `title` prende il nome dalla sua prima etichetta, e dice a quali oggetti
-/// è agganciato.
+/// è agganciato. Un'istanza senza `title` si chiama come il suo simbolo;
+/// con un `title`, il simbolo dice che cosa è al posto del tipo.
 export function outline(items: readonly Item[], targets: LinkTargets = () => null): OutlineNode[] {
+  return outlineAll(items, targets).nodes;
+}
+
+/// L'albero degli oggetti e, per id, quello del contenuto di ogni simbolo,
+/// che non sta sul foglio: l'editor lo mostra quando si modifica il
+/// simbolo. I nomi si danno come in [`outline`].
+export interface Outline {
+  readonly nodes: OutlineNode[];
+  readonly symbols: ReadonlyMap<string, readonly OutlineNode[]>;
+}
+
+/// [`outline`], coi contenuti dei simboli.
+export function outlineAll(items: readonly Item[], targets: LinkTargets = () => null): Outline {
   const top: Building[] = [];
+  const contents = new Map<string, Building[]>();
   const byPath = new Map<string, Building>();
   const all: Building[] = [];
   const connectors: Building[] = [];
   const groups: Building[] = [];
+  // I simboli non sono oggetti, ma danno il nome alle loro istanze, che
+  // possono venire prima di loro nel documento.
+  const symbols = new Map<string, string>();
+  for (const item of items) {
+    if (item.kind !== "element" || item.role !== "symbol" || item.id === null) continue;
+    const name = nameOf(item.title ?? "");
+    if (name !== null) symbols.set(item.id, name);
+  }
   for (const item of items) {
     if (item.kind !== "element" || item.path.length === 0) continue;
+    if (item.role === "symbol" && item.id !== null && !contents.has(item.id)) {
+      // Un simbolo non è un oggetto: tiene soltanto i figli.
+      const children: Building[] = [];
+      contents.set(item.id, children);
+      byPath.set(item.path.join("."), { item, key: keyOf(item), name: null, kind: null, target: null, connection: null, joined: null, children });
+      continue;
+    }
     const parent = item.path.length === 1 ? null : byPath.get(item.path.slice(0, -1).join("."));
     if (item.path.length > 1 && parent === undefined) continue;
     if (NOT_OBJECTS.has(item.role)) continue;
     const title = nameOf(item.title ?? "");
+    const symbol = item.role === "instance" && item.symbol !== undefined ? (symbols.get(item.symbol) ?? null) : null;
     const name = item.role === "layer"
       ? nameOf(item.layer?.name ?? "") ?? title
-      : title ?? (item.role === "text" ? nameOf(textOf(item) ?? "") : null);
-    const node: Building = { item, key: keyOf(item), name, kind: null, target: item.role === "link" ? targets(item) : null, connection: null, joined: null, children: [] };
+      : title ?? (item.role === "text" ? nameOf(textOf(item) ?? "") : symbol);
+    const kind = title !== null && symbol !== null && title !== symbol ? symbol : null;
+    const node: Building = { item, key: keyOf(item), name, kind, target: item.role === "link" ? targets(item) : null, connection: null, joined: null, children: [] };
     byPath.set(item.path.join("."), node);
     (parent?.children ?? top).push(node);
     all.push(node);
@@ -317,7 +351,7 @@ export function outline(items: readonly Item[], targets: LinkTargets = () => nul
   }
   if (groups.length > 0) nameByLabels(groups);
   if (connectors.length > 0) connect(all, connectors);
-  return top;
+  return { nodes: top, symbols: contents };
 }
 
 export interface DescribeOptions {

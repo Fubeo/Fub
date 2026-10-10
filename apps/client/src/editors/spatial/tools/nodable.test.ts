@@ -112,6 +112,13 @@ describe("i nodi di ogni forma", () => {
     expect(nodableOf(o.engine.holder("z")!)).toBe("empty");
   });
 
+  it("non ci sono in un'istanza: le forme stanno nel suo simbolo", () => {
+    const o = open(doc(`<defs id="fub-defs"><symbol id="r1" overflow="visible"><rect id="in" x="0" y="0" width="5" height="5"/></symbol></defs>${LAYER}<use id="u" href="#r1"/></g>`));
+    expect(nodableOf(o.engine.holder("u")!)).toBe("instance");
+    // Dentro il simbolo la forma ha i suoi.
+    expect(nodable(o, "in").kind).toBe("shape");
+  });
+
   it("non ci sono in una parte di un altro programma, che resta com'è", () => {
     const o = opened('<g id="g"><path id="f" style="fill:none;stroke:#000000" d="M0 0 L10 0"/><rect id="k" class="box" x="0" y="0" width="5" height="5"/></g>');
     expect(nodableOf(o.engine.holder("f")!)).toBe("foreign");

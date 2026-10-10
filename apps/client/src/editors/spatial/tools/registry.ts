@@ -175,7 +175,8 @@ export type Feature =
   | "effects"
   | "blend"
   | "motifs"
-  | "print";
+  | "print"
+  | "symbols";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -241,6 +242,11 @@ const COMMANDS: readonly FeatureSpec[] = [
   // La pagina di stampa è il gruppo «Pagina» della finestra «Esporta», per
   // il PDF: nel Personalizzato si vede con lei.
   { id: "print", level: "expert", label: "draw.feature.print" },
+  // I simboli sono «Crea simbolo» e «Scollega» nella barra della selezione
+  // e nel menu, la riga «Simbolo» del pannello delle proprietà e il pannello
+  // dei simboli. Un'istanza si apre per modificare il suo simbolo dove si
+  // isola un gruppo, a ogni livello che ha la selezione avanzata.
+  { id: "symbols", level: "expert", label: "draw.feature.symbols" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli
