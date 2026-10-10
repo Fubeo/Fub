@@ -122,6 +122,7 @@ import type { ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
 import { countObjects, describe, keyOf, linkName, outlineAll, polygonalKind, type OutlineNode } from "../describe";
 import { DrawingFonts, vaultFontsOf, type FontNotes, type VaultFamily, type VaultFontPort } from "../fonts/vault";
+import type { SymbolLibraryPort } from "./symbol-libraries";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages } from "../read-images";
@@ -678,6 +679,10 @@ export interface DrawEditorOptions {
   /// I caratteri del vault: chi li elenca e li legge. Senza, e nel foglio
   /// delle annotazioni, i testi scrivono con le sole famiglie di Fub.
   readonly vaultFonts?: VaultFontPort;
+  /// Le librerie di simboli del vault: chi le elenca e le legge. Senza, e
+  /// nel foglio delle annotazioni, il pannello «Simboli» mostra i soli
+  /// simboli del disegno.
+  readonly symbolLibraries?: SymbolLibraryPort;
   /// Ciò che il disegno dice dei suoi caratteri è cambiato: quelli che non
   /// carica, e perché.
   onFontNotes?(notes: FontNotes): void;

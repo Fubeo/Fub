@@ -27,7 +27,7 @@
 
 import type { Bounds } from "../scene/geometry";
 import { apply, compose, invert, translate } from "../scene/matrix";
-import { elementChildren, pathOf, titleOf, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { elementChildren, pathOf, rawOf, titleOf, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import type { AddOp, Op } from "../scene/ops";
 import type { Elem } from "../scene/serialize";
 import { elemOf, fubAttributes, nodeOf, Plan, renamed, type Arranged } from "./arrange";
@@ -35,7 +35,7 @@ import { isLinkName, relinkCopies, relinked } from "./connector-copies";
 import { transformValue, type NewIds } from "./edit";
 import type { Unit } from "./hit";
 import { cleanName, NAME_MAX, nameKey, nameOps } from "./naming";
-import { homeOf, ResourceCopies } from "./resources";
+import { homeOf, ResourceCopies, resourcesOf } from "./resources";
 
 /// Un simbolo del disegno: l'id, il nome, il nodo e da dove viene.
 export interface DocumentSymbol {
@@ -45,6 +45,34 @@ export interface DocumentSymbol {
   readonly node: ContainerNode;
   /// `fub:source`, com'è scritto; `null` senza.
   readonly source: string | null;
+}
+
+/// L'origine di un simbolo copiato da una libreria, da `fub:source`.
+export interface Origin {
+  readonly path: string;
+  readonly id: string;
+  readonly print: string;
+}
+
+/// `fub:source` per il simbolo `id` della libreria `path` con l'impronta
+/// `print`.
+export function sourceValue(path: string, id: string, print: string): string {
+  return `${path}#${id} ${print}`;
+}
+
+/// L'origine scritta in `value`, letta dalla fine; `null` se non ha la
+/// forma del formato, e allora non dice niente.
+export function readOrigin(value: string | null): Origin | null {
+  if (value === null) return null;
+  const space = value.lastIndexOf(" ");
+  if (space < 0) return null;
+  const print = value.slice(space + 1);
+  if (!/^[0-9a-f]{16}$/.test(print)) return null;
+  const hash = value.lastIndexOf("#", space);
+  if (hash <= 0) return null;
+  const id = value.slice(hash + 1, space);
+  if (id === "" || /[\s#]/.test(id)) return null;
+  return { path: value.slice(0, hash), id, print };
 }
 
 /// I simboli del disegno `model`, in ordine di documento.
@@ -74,6 +102,43 @@ export function isInstance(unit: Unit): boolean {
 export function instanceSymbol(model: DocumentModel, node: ElementPart): DocumentSymbol | null {
   if (node.kind !== "leaf" || node.details?.role !== "instance") return null;
   return documentSymbols(model).find((symbol) => symbol.id === node.details!.symbol) ?? null;
+}
+
+/// I rimandi scritti in un testo: `url(#…)`, un `href` che è un frammento,
+/// lo stile che un oggetto segue.
+const TEXT_REFS = /url\(\s*["']?#([^"')\s]+)|\s(?:[\w.-]+:)?href\s*=\s*(["'])#(.*?)\2|\sfub:style\s*=\s*(["'])(.+?)\4/g;
+
+/// Il simbolo `id` e le risorse che usa, anche attraverso altre, ognuno con
+/// l'id e il testo letto da `lookup`: prima quelle che nomina lui, poi
+/// quelle che nominano loro, ognuna la prima volta che la si incontra. Un
+/// rimando che `lookup` non conosce, come un oggetto del contenuto, non
+/// conta.
+export function symbolClosure(id: string, lookup: (id: string) => string | undefined): Array<[id: string, text: string]> {
+  const texts: Array<[string, string]> = [];
+  const seen = new Set<string>([id]);
+  const queue = [id];
+  for (let i = 0; i < queue.length; i++) {
+    const text = lookup(queue[i]!);
+    if (text === undefined) continue;
+    texts.push([queue[i]!, text]);
+    for (const match of text.matchAll(TEXT_REFS)) {
+      const ref = match[1] ?? match[3] ?? match[5]!;
+      if (seen.has(ref)) continue;
+      seen.add(ref);
+      queue.push(ref);
+    }
+  }
+  return texts;
+}
+
+/// Il testo delle risorse e dei simboli del disegno `model`, per id.
+export function resourceTexts(model: DocumentModel): (id: string) => string | undefined {
+  const symbols = new Map(documentSymbols(model).map((symbol) => [symbol.id, symbol.node]));
+  const resources = resourcesOf(model);
+  return (id) => {
+    const symbol = symbols.get(id);
+    return symbol !== undefined ? rawOf(symbol) : resources.get(id)?.raw;
+  };
 }
 
 /// Il primo nome libero da `base` fra i simboli di `model`, pulito come

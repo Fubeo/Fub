@@ -30,11 +30,12 @@
 //   stile che non entra e che il disegno non ha lo lascia. Una punta delle
 //   linee (`tips.ts`) uguale a una del disegno, a parte l'id, è quella del
 //   disegno: una linea con le punte rientra con le sue, senza marcatori
-//   doppi, anche da un altro disegno. Un simbolo è quello del disegno col
-//   suo stesso nome che gli è uguale, a parte gli id, con ciò che usa: le
-//   istanze incollate tornano al simbolo da cui sono venute, anche in un
-//   altro disegno che l'ha già. Se arriva, il suo contenuto ha id da
-//   oggetto, e con un nome già preso prende il primo libero (`symbols.ts`).
+//   doppi, anche da un altro disegno. Un simbolo è quello del disegno
+//   copiato dallo stesso simbolo della stessa libreria, o col suo stesso
+//   nome che gli è uguale, a parte gli id, con ciò che usa: le istanze
+//   incollate tornano al simbolo da cui sono venute, anche in un altro
+//   disegno che l'ha già. Se arriva, il suo contenuto ha id da oggetto, e
+//   con un nome già preso prende il primo libero (`symbols.ts`).
 //   Ciò che nessuno usa resta fuori. Con un foglio di stile, che può
 //   rimandarvi, restano dove sono.
 // - **Id nuovi.** Ogni id cambia, e i riferimenti interni lo seguono:
@@ -77,7 +78,7 @@ import {
 import { reindent } from "../scene/engine";
 import type { Bounds } from "../scene/geometry";
 import { compose, IDENTITY, type Matrix, type Point } from "../scene/matrix";
-import { declarationsOf, elementChildren, indentOf, parseFragment, placeOf, rawOf, scopeOf, type ContainerNode, type DocumentModel } from "../scene/model";
+import { declarationsOf, elementChildren, indentOf, parseFragment, placeOf, scopeOf, type ContainerNode, type DocumentModel } from "../scene/model";
 import { MAX_OP_BYTES, type Op } from "../scene/ops";
 import { MAX_EDIT_BYTES, MAX_RESOURCES } from "../scene/read";
 import {
@@ -121,7 +122,7 @@ import { homeOf, paintCode, resourceHome, resourcesOf } from "./resources";
 import { arrivingStyleName, styleNameProblem, type NamedStyle } from "./styles";
 import { renameUrls, restyle } from "./stylesheet";
 import { freshSwatchName, swatchNameProblem } from "./swatches";
-import { documentSymbols, freeSymbolName } from "./symbols";
+import { documentSymbols, freeSymbolName, readOrigin, resourceTexts, symbolClosure } from "./symbols";
 import { markerTip } from "./tips";
 
 /// Il tipo di un SVG negli appunti.
@@ -1087,6 +1088,11 @@ export interface PasteTarget {
   /// L'`href` di un'immagine o di un collegamento del vault visto dal
   /// disegno che riceve; `null` lo lascia com'è.
   readonly href: (value: string) => string | null;
+  /// Un aggiornamento: il simbolo `into` del disegno prende il contenuto del
+  /// simbolo `from` dell'SVG, al posto del suo, dopo il suo primo `title`;
+  /// arrivano soltanto le risorse e i simboli che il contenuto usa, e niente
+  /// di ciò che sta fuori dalle `defs`.
+  readonly refill?: { readonly from: string; readonly into: ContainerNode };
 }
 
 /// Un incolla pronto.
@@ -1097,6 +1103,9 @@ export interface PastePlan {
   readonly keys: string[];
   /// Il riquadro dell'SVG nella scena, dove è andato.
   readonly bounds: Bounds;
+  /// I simboli dell'SVG, per id, e il simbolo del disegno che sono dopo:
+  /// uno che c'era già, o uno che arriva.
+  readonly symbols: ReadonlyMap<string, string>;
 }
 
 /// Il JSON di un testo, in byte.
@@ -1124,6 +1133,8 @@ interface Lift {
   /// Il nome nuovo di un simbolo che arriva con un nome già preso: il testo
   /// del suo primo `title`, per elemento del `title`.
   readonly titled: ReadonlyMap<NodeId, string>;
+  /// I simboli dell'SVG e quelli del disegno che sono, per id.
+  readonly symbols: ReadonlyMap<string, string>;
   /// Vero se il disegno ha lo stile `id`.
   readonly styled: (id: string) => boolean;
   /// Quali id saranno risorse del disegno, con gli id dell'SVG e con quelli
@@ -1158,40 +1169,30 @@ function styleText(text: string, refText: (id: string) => string | undefined): s
     });
 }
 
-/// I rimandi scritti in un testo: `url(#…)`, un `href` che è un frammento,
-/// lo stile che un oggetto segue.
-const TEXT_REFS = /url\(\s*["']?#([^"')\s]+)|\s(?:[\w.-]+:)?href\s*=\s*(["'])#(.*?)\2|\sfub:style\s*=\s*(["'])(.+?)\4/g;
-
-/// La chiave del simbolo `id` senza i suoi id: il suo testo compatto e, dopo,
-/// quello di ciò che usa, anche attraverso altro, nell'ordine in cui lo si
-/// incontra, letto da `lookup`; ogni id definito lì dentro diventa il suo
-/// numero d'ordine. Due simboli con la stessa chiave si vedono uguali.
+/// La chiave del simbolo `id` senza i suoi id: il suo testo compatto e quello
+/// di ciò che usa ([`symbolClosure`]), letti da `lookup`; ogni id definito
+/// lì dentro diventa il suo numero d'ordine. `fub:source` resta com'è, in
+/// fondo: l'id della libreria che nomina non è uno di questi. Due simboli
+/// con la stessa chiave si vedono uguali.
 function symbolKey(id: string, lookup: (id: string) => string | undefined): string {
-  const texts: string[] = [];
-  const seen = new Set<string>([id]);
-  const queue = [id];
-  for (let i = 0; i < queue.length; i++) {
-    const text = lookup(queue[i]!);
-    if (text === undefined) continue;
-    const body = compact(text);
-    texts.push(body);
-    for (const match of body.matchAll(TEXT_REFS)) {
-      const ref = match[1] ?? match[3] ?? match[5]!;
-      if (seen.has(ref)) continue;
-      seen.add(ref);
-      queue.push(ref);
-    }
-  }
-  const joined = texts.join("\n");
+  const sources: string[] = [];
+  const joined = symbolClosure(id, lookup)
+    .map(([, text]) => compact(text))
+    .join("\n")
+    .replace(/(\sfub:source\s*=\s*)(["'])(.*?)\2/g, (_whole, head: string, quote: string, value: string) => {
+      sources.push(value);
+      return `${head}${quote}${quote}`;
+    });
   const order = new Map<string, number>();
   for (const match of joined.matchAll(/\sid\s*=\s*(["'])(.*?)\1/g)) if (!order.has(match[2]!)) order.set(match[2]!, order.size);
-  return joined
+  const shape = joined
     .split(/([\s"'#().,;:=<>]+)/)
     .map((part) => {
       const n = order.get(part);
       return n === undefined ? part : `\u0000${n}`;
     })
     .join("");
+  return [shape, ...sources].join("\u0001");
 }
 
 /// Il trasloco delle risorse di `doc` nel disegno `model`, per i figli della
@@ -1215,6 +1216,7 @@ function liftOf(
   ids: NewIds,
   names: Map<string, string>,
   renamed: Map<NodeId, string>,
+  refill: PasteTarget["refill"],
 ): Lift {
   const resources = resourcesOf(model);
   const symbols = documentSymbols(model);
@@ -1229,7 +1231,7 @@ function liftOf(
     return symbolById.has(id) ? "symbol" : null;
   };
   const styled = (id: string): boolean => resources.get(id)?.details?.style !== undefined;
-  const none: Lift = { defs: new Set(), moved: [], decided: new Set(), named: new Map(), colors: new Map(), titled: new Map(), styled, resolve: outside, written: outside };
+  const none: Lift = { defs: new Set(), moved: [], decided: new Set(), named: new Map(), colors: new Map(), titled: new Map(), symbols: new Map(), styled, resolve: outside, written: outside };
   const defs = new Set(tops.filter((top) => classifyChild(doc, top, "root", 1)?.[1] === "defs"));
   if (!allowed || defs.size === 0 || doc.nodes.some((node) => node.kind === "element" && isSvg(node, "style"))) return none;
   const index = resourceIndex(doc);
@@ -1276,10 +1278,7 @@ function liftOf(
   };
   // Le chiavi senza id dei simboli del disegno, lette quando ne arriva uno
   // col loro nome.
-  const modelText = (id: string): string | undefined => {
-    const symbol = symbolById.get(id);
-    return symbol !== undefined ? rawOf(symbol.node) : resources.get(id)?.raw;
-  };
+  const modelText = resourceTexts(model);
   const keys = new Map<string, string>();
   const keyThere = (id: string): string => {
     const known = keys.get(id);
@@ -1293,18 +1292,31 @@ function liftOf(
     const holder = byId.get(id);
     return holder !== undefined && movedOf(holder) === holder ? textOf(holder) : undefined;
   };
-  /// Il simbolo del disegno che è il simbolo `child` dell'SVG: uno col suo
-  /// stesso nome che gli è uguale, a parte gli id, con ciò che usa; prima
-  /// quello col suo id. `null` se arriva.
+  // I simboli del disegno per origine: il primo copiato da ogni simbolo di
+  // una libreria.
+  const origins = new Map<string, string>();
+  for (const symbol of symbols) {
+    const origin = readOrigin(symbol.source);
+    const key = origin === null ? null : `${origin.path}#${origin.id}`;
+    if (key !== null && !origins.has(key)) origins.set(key, symbol.id);
+  }
+  /// Il simbolo del disegno che è il simbolo `child` dell'SVG: quello copiato
+  /// dallo stesso simbolo della stessa libreria, anche se una delle due
+  /// copie è cambiata, perché un simbolo di una libreria entra una volta
+  /// sola; se no uno col suo stesso nome che gli è uguale, a parte gli id,
+  /// con ciò che usa, prima quello col suo id. `null` se arriva.
   const symbolThere = (child: NodeId): string | null => {
     const element = doc.element(child)!;
     const id = valueOf(element, NS_NONE, "id") ?? "";
-    if (byId.get(id) !== child || index.get(id) !== "symbol") return null;
+    if (byId.get(id) !== child || index.get(id) !== "symbol" || id === refill?.from) return null;
+    const origin = readOrigin(valueOf(element, NS_FUB, "source") ?? null);
+    const same = origin === null ? undefined : origins.get(`${origin.path}#${origin.id}`);
+    if (same !== undefined) return same;
     const name = firstTitle(doc, element) ?? "";
-    const same = symbols.filter((symbol) => symbol.name === name).sort((a, b) => Number(b.id === id) - Number(a.id === id));
-    if (same.length === 0) return null;
+    const named = symbols.filter((symbol) => symbol.name === name).sort((a, b) => Number(b.id === id) - Number(a.id === id));
+    if (named.length === 0) return null;
     const key = symbolKey(id, sourceText);
-    return same.find((symbol) => keyThere(symbol.id) === key)?.id ?? null;
+    return named.find((symbol) => keyThere(symbol.id) === key)?.id ?? null;
   };
   // Gli stili e i simboli che restano quelli del disegno, con l'id dell'SVG.
   const keptStyles = new Map<string, string>();
@@ -1350,8 +1362,10 @@ function liftOf(
   }
   const named = new Map<NodeId, string>();
   const colors = new Map<string, string>();
-  // I nomi dei simboli, e poi quelli che arrivano.
+  // I nomi dei simboli, e poi quelli che arrivano; i simboli che arrivano,
+  // con l'id che avranno.
   const symbolNames = new Set(symbols.map((symbol) => nameKey(symbol.name)));
+  const arrived = new Map<string, string>();
   const titled = new Map<NodeId, string>();
   // Le punte del disegno, per il loro testo senza id; si leggono quando ne
   // arriva una.
@@ -1419,16 +1433,19 @@ function liftOf(
       copies++;
     }
     out.push(child);
-    // Il contenuto di un simbolo sono oggetti, coi loro id.
+    // Il contenuto di un simbolo sono oggetti, coi loro id; quello che si
+    // riempie tiene il suo.
     const symbol = kind === "symbol";
+    const refilled = symbol && id === refill?.from;
     for (const at of subtree(doc, child)) {
       const value = valueOf(doc.element(at)!, NS_NONE, "id") ?? "";
       if (value === "") continue;
-      const next = ids.next(symbol && at !== child ? "object" : "resource");
+      const next = refilled && at === child ? refill!.into.facts.id! : ids.next(symbol && at !== child ? "object" : "resource");
       fresh.set(at, next);
       if (!local.has(value)) local.set(value, next);
     }
-    if (symbol) {
+    if (symbol) arrived.set(id, fresh.get(child)!);
+    if (symbol && !refilled) {
       const title = element.children.find((at) => {
         const node = doc.element(at);
         return node !== null && isSvg(node, "title");
@@ -1457,6 +1474,7 @@ function liftOf(
   for (const [from, to] of keptSymbols) {
     local.set(from, to);
     kinds.set(from, "symbol");
+    arrived.set(from, to);
   }
   for (const [from, to] of local) if (!names.has(from)) names.set(from, to);
   for (const [at, to] of fresh) renamed.set(at, to);
@@ -1469,6 +1487,7 @@ function liftOf(
     named,
     colors,
     titled,
+    symbols: arrived,
     styled,
     resolve: (id) => kinds.get(id) ?? outside(id),
     written: (id) => written.get(id) ?? outside(id),
@@ -1569,7 +1588,8 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
   if (wrap && rootId !== "") names.set(rootId, sheetScope!);
   // Dentro un gruppo che resta estraneo non si cercano modificabili, e
   // allora nemmeno risorse.
-  const lift = liftOf(doc, tops, inner.length === 0, model, ids, names, renamed);
+  const refill = target.refill;
+  const lift = liftOf(doc, tops, inner.length === 0, model, ids, names, renamed, refill);
   for (const top of tops) {
     for (const at of subtree(doc, top)) {
       if (lift.decided.has(at)) continue;
@@ -1609,6 +1629,12 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     for (const child of lift.moved) {
       const element = doc.element(child)!;
       const from = doc.source.indent(element.start);
+      if (refill !== undefined && rewriter.idOf(child) === refill.into.facts.id) {
+        refillWith(rewriter, adds, child, refill.into, model);
+        const step = progress(element.end);
+        if (step !== null) yield step;
+        continue;
+      }
       rewriter.used.clear();
       rewriter.body(child, true);
       const declarations = needed(scopeOfChain(ancestors(doc, child)), homeScope, rewriter.used, element);
@@ -1626,6 +1652,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     }
     adds.flush();
   }
+  if (refill !== undefined) return { ops, keys: [], bounds, symbols: lift.symbols };
 
   if (!wrap) {
     const keys: string[] = [];
@@ -1671,7 +1698,7 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
       if (step !== null) yield step;
     }
     adds.flush();
-    return { ops, keys, bounds };
+    return { ops, keys, bounds, symbols: lift.symbols };
   }
 
   // Un SVG che entra in un gruppo nuovo: il gruppo prende gli attributi
@@ -1774,7 +1801,34 @@ export function* planPaste(source: PasteSource, target: PasteTarget): Generator<
     }
   }
   adds.flush();
-  return { ops, keys: [group!], bounds };
+  return { ops, keys: [group!], bounds, symbols: lift.symbols };
+}
+
+/// Il contenuto del simbolo `child` dell'SVG nel simbolo `into` del disegno,
+/// dopo il suo primo `title`: ogni figlio col suo testo riscritto, a pezzi
+/// se è troppo grande; il `title` di `child` resta fuori, perché il nome
+/// è quello del disegno.
+function refillWith(rewriter: Rewriter, adds: Adds, child: NodeId, into: ContainerNode, model: DocumentModel): void {
+  const doc = rewriter.doc;
+  const element = doc.element(child)!;
+  const scope = scopeOf(into);
+  const inner = elementChildren(into);
+  const indent = inner.length > 0 ? indentOf(model, inner[0]!) : `${indentOf(model, into)}  `;
+  const title = element.children.find((at) => {
+    const node = doc.element(at);
+    return node !== null && isSvg(node, "title");
+  });
+  for (const at of element.children) {
+    const node = doc.element(at);
+    if (node === null || at === title) continue;
+    const from = doc.source.indent(node.start);
+    rewriter.used.clear();
+    rewriter.body(at, true);
+    const declarations = needed(scopeOfChain(ancestors(doc, at)), scope, rewriter.used, node);
+    rewriter.head(at, { set: new Map(), before: null, canonical: false, unlayer: false, declarations, id: null, child: null }, from);
+    emit(rewriter, adds, at, into.facts.id!, rewriter.idOf(at), from, indent, scope, "inside", into.depth + 1);
+  }
+  adds.flush();
 }
 
 /// L'elemento del tag `open`, scritto da solo dove vale `scope`.

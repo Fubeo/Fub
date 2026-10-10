@@ -61,6 +61,7 @@ import { mountZoomView, type ZoomView } from "../media/zoom-view";
 import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
 import { familyKey } from "./fonts/faces";
 import { DrawingFonts, markupFonts, vaultFontsOf, type FontNotes, type VaultFontPort } from "./fonts/vault";
+import type { SymbolLibraryPort } from "./tools/symbol-libraries";
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import {
   currentCustom,
@@ -109,6 +110,8 @@ export interface VectorSurfaceOptions {
   fonts?: FontSheets;
   /// I caratteri del vault, che la shell elenca e legge.
   vaultFonts?: VaultFontPort;
+  /// Le librerie di simboli del vault, che la shell elenca e legge.
+  symbolLibraries?: SymbolLibraryPort;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -416,6 +419,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       links,
       ...(images === undefined ? {} : { images }),
       ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
+      ...(options.symbolLibraries === undefined ? {} : { symbolLibraries: options.symbolLibraries }),
       onFontNotes: sayFonts,
       place,
       onChange: (change) => {
