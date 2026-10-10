@@ -855,6 +855,7 @@ button.draw-isolation-crumb:hover {
   padding: var(--space-1);
   border-radius: calc(var(--radius-sm) - 1px);
   background: #ffffff;
+  color: #000000;
 }
 .draw-symbols-tile[data-picture="none"] .draw-symbols-frame {
   border: 1px dashed var(--border);

@@ -261,6 +261,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: #ffffff;
+  color: #000000;
 }
 .modale .draw-symbol-update-caption {
   color: var(--muted);
