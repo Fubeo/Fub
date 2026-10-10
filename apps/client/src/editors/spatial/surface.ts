@@ -26,6 +26,10 @@
 // l'`<img>` non carica niente da fuori, entrano nell'immagine coi loro byte
 // (`read-images.ts`).
 //
+// I file di caratteri del vault sono caratteri che i testi del disegno
+// possono nominare: la shell li elenca e li legge (`vaultFonts`), e sul
+// foglio valgono come nell'export (`fonts/vault.ts`).
+//
 // Il livello dell'editor è l'impostazione del vault `draw.level`, con le parti
 // del Personalizzato in `draw.custom`, e la griglia l'ultima scelta su questa
 // macchina (`preferences.ts`): la superficie li legge quando nasce, segue il
@@ -53,6 +57,7 @@ import type { EditorChange } from "../core/text-operation";
 import { imageInfo, svgSize } from "../media/image-view";
 import { mountZoomView, type ZoomView } from "../media/zoom-view";
 import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
+import type { VaultFontPort } from "./fonts/vault";
 import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
 import {
   currentCustom,
@@ -99,6 +104,8 @@ export interface VectorSurfaceOptions {
   /// I caratteri dell'app per la Lettura, che da un `img` non li caricherebbe;
   /// di partenza quelli dell'app stessa.
   fonts?: FontSheets;
+  /// I caratteri del vault, che la shell elenca e legge.
+  vaultFonts?: VaultFontPort;
 }
 
 /// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
@@ -389,6 +396,7 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
       onSuggestedChange: (seen) => saveSuggested(seen),
       links,
       ...(images === undefined ? {} : { images }),
+      ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
       place,
       onChange: (change) => {
         text = change.text;

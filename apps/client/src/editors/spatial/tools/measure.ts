@@ -1,11 +1,12 @@
 // La larghezza del testo, come la disegna l'export (formato della scena,
 // testo): serve agli a capo di un testo in area.
 //
-// - **Coi caratteri dell'app.** Il browser misura con `measureText` di un
-//   canvas, col carattere, il corpo, il peso e il corsivo di ogni pezzo: gli
-//   stessi file che il foglio e l'export usano (`text.ts`). Un carattere che
-//   non c'è, o che non è ancora arrivato, si misura col suo ripiego, come lo
-//   disegnerebbe il browser in quel momento.
+// - **Coi caratteri del disegno.** Il browser misura con `measureText` di un
+//   canvas, col carattere, il corpo, il peso e il corsivo di ogni pezzo, e
+//   con la famiglia viva che la superficie gli dà: gli stessi file che il
+//   foglio e l'export usano (`text.ts`, i caratteri del vault). Un carattere
+//   che non c'è, o che non è ancora arrivato, si misura col suo ripiego, come
+//   lo disegnerebbe il browser in quel momento, e la misura non si ricorda.
 // - **La spaziatura delle lettere** si aggiunge dopo ogni carattere, un
 //   grafema alla volta, come la applica SVG. Con la spaziatura SVG spegne le
 //   legature, e la «Th» di Literata torna due lettere: dove il canvas sa
@@ -14,6 +15,8 @@
 //   grafemi, che spegne le legature e lascia la crenatura.
 // - **Dove il browser non misura**, come nelle prove, ogni carattere è largo
 //   0,6 volte il corpo: la stima del campo e del colpo.
+
+import { fubLiveFamily } from "../fonts/faces";
 
 /// Il carattere di un pezzo di testo, come lo vede chi lo disegna.
 export interface Font {
@@ -56,10 +59,25 @@ export function graphemes(text: string): string[] {
 export const estimate: Measure = (text, font) => graphemes(text).length * (CHAR_EM * font.size + font.spacing);
 
 /// Il carattere di `font` come lo scrive la proprietà `font` di CSS, a
-/// `size` pixel.
-export function cssFont(font: Font, size: number = font.size): string {
-  return `${font.style} ${font.weight} ${size}px ${font.family}`;
+/// `size` pixel, con la famiglia `family`.
+export function cssFont(font: Font, size: number = font.size, family: string = font.family): string {
+  return `${font.style} ${font.weight} ${size}px ${family}`;
 }
+
+/// Le famiglie con cui si misura: la `font-family` da dare al browser per
+/// quella scritta, se non cambierà più, e quante volte i caratteri sono
+/// cambiati.
+export interface MeasureFamilies {
+  readonly live: (value: string) => string;
+  /// Falso finché la famiglia viva di `font` può ancora cambiare: un
+  /// carattere che sta arrivando.
+  settled(font: Font): boolean;
+  /// Cresce quando un carattere entra o esce: le misure di prima si scordano.
+  epoch(): number;
+}
+
+/// Le sole famiglie di Fub.
+const FUB_ONLY: MeasureFamilies = { live: fubLiveFamily, settled: () => true, epoch: () => 0 };
 
 /// Il corpo a cui il canvas misura: le larghezze crescono col corpo, e un
 /// corpo fisso tiene le misure in una cache sola per carattere.
@@ -71,11 +89,11 @@ const CACHE = 4096;
 /// Il non-congiuntore di larghezza zero: fra due lettere, le tiene separate.
 const ZWNJ = "\u200c";
 
-/// La misura del browser, `null` dove non c'è un canvas: allora vale
-/// [`estimate`]. Con `canvasSpacing` falso la spaziatura non la mette mai il
-/// canvas, come dove non la sa mettere: il banco prova così anche l'altra
-/// strada.
-export function browserMeasure(canvasSpacing = true): Measure | null {
+/// La misura del browser con le famiglie `families`, `null` dove non c'è un
+/// canvas: allora vale [`estimate`]. Con `canvasSpacing` falso la spaziatura
+/// non la mette mai il canvas, come dove non la sa mettere: il banco prova
+/// così anche l'altra strada.
+export function browserMeasure(canvasSpacing = true, families: MeasureFamilies = FUB_ONLY): Measure | null {
   if (typeof OffscreenCanvas === "undefined") return null;
   let context: OffscreenCanvasRenderingContext2D | null = null;
   try {
@@ -87,13 +105,14 @@ export function browserMeasure(canvasSpacing = true): Measure | null {
   const ctx = context;
   const spaces = canvasSpacing && "letterSpacing" in ctx;
   const caches = new Map<string, Map<string, number>>();
+  let epoch = families.epoch();
   /// La spaziatura che il canvas mette a [`PROBE_SIZE`] pixel: zero dove non
   /// la sa mettere.
   const spacedBy = (font: Font): number => (spaces && font.spacing !== 0 ? (font.spacing * PROBE_SIZE) / font.size : 0);
   /// La larghezza a [`PROBE_SIZE`] pixel, con la spaziatura se il canvas la
   /// mette; `null` se il browser non legge il carattere.
   const probe = (text: string, font: Font): number | null => {
-    const css = cssFont(font, PROBE_SIZE);
+    const css = cssFont(font, PROBE_SIZE, families.live(font.family));
     const spaced = spacedBy(font);
     const key = spaced === 0 ? css : `${css}|${spaced}`;
     let cache = caches.get(key);
@@ -116,13 +135,18 @@ export function browserMeasure(canvasSpacing = true): Measure | null {
     if (spaced !== 0) ctx.letterSpacing = "0px";
     // Un carattere che sta ancora arrivando si misura col ripiego, e la
     // misura non si ricorda: quella dopo sarà col carattere vero.
-    if (!arrived(css)) return width;
+    if (!arrived(css) || !families.settled(font)) return width;
     if (cache.size >= CACHE) cache.clear();
     cache.set(probed, width);
     return width;
   };
   return (text, font) => {
     if (text === "" || font.size <= 0) return 0;
+    const now = families.epoch();
+    if (now !== epoch) {
+      caches.clear();
+      epoch = now;
+    }
     const width = probe(text, font);
     if (width === null) return estimate(text, font);
     const after = spacedBy(font) === 0 ? graphemes(text).length * font.spacing : 0;
@@ -140,12 +164,12 @@ function arrived(css: string): boolean {
   }
 }
 
-/// Chiede al browser i caratteri di `fonts`, se servono: la misura di dopo
-/// li usa. Si risolve quando sono arrivati, o quando non c'è niente da
-/// chiedere.
-export function loadFonts(fonts: readonly Font[]): Promise<void> {
+/// Chiede al browser i caratteri di `fonts`, con le famiglie vive di `live`,
+/// se servono: la misura di dopo li usa. Si risolve quando sono arrivati, o
+/// quando non c'è niente da chiedere.
+export function loadFonts(fonts: readonly Font[], live: (value: string) => string = fubLiveFamily): Promise<void> {
   if (typeof document === "undefined" || document.fonts === undefined) return Promise.resolve();
-  const wanted = new Set(fonts.filter((font) => font.size > 0).map((font) => cssFont(font, PROBE_SIZE)));
+  const wanted = new Set(fonts.filter((font) => font.size > 0).map((font) => cssFont(font, PROBE_SIZE, live(font.family))));
   const loads: Promise<unknown>[] = [];
   for (const css of wanted) {
     try {

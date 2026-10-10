@@ -2137,7 +2137,9 @@ describe("il testo, dal livello Standard", () => {
     expect(document.activeElement).toBe(input());
     expect(input().getAttribute("aria-label")).toBe("Testo nuovo");
     expect(document.getElementById(input().getAttribute("aria-describedby")!)?.textContent).toBe("Invio va a capo; Ctrl+B, I e U formattano; Esc, Tab o Ctrl+Invio concludono.");
-    expect(input().style.fontFamily).toBe("Inter, sans-serif");
+    // Il campo scrive con le famiglie che la superficie usa davvero: quelle
+    // di Fub al posto delle generiche, come l'export.
+    expect(input().style.fontFamily).toBe('Inter, Literata, "JetBrains Mono"');
     expect(input().style.fontSize).toBe("32px");
     expect(input().style.lineHeight).toBe("1.25");
     expect(input().getAttribute("contenteditable")).toBe("true");

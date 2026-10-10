@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { browserMeasure, cssFont, estimate, graphemes, loadFonts, type Font } from "./measure";
 
 const INTER: Font = { family: "Inter, sans-serif", size: 10, weight: "normal", style: "normal", spacing: 0 };
+/// La famiglia viva di `INTER`, con le sole famiglie di Fub.
+const LIVE = 'Inter, Literata, "JetBrains Mono"';
 
 describe("i grafemi e la stima", () => {
   it("un grafema è una lettera coi suoi accenti o un'emoji intera", () => {
@@ -78,7 +80,7 @@ describe("la misura del browser", () => {
     const measure = browserMeasure()!;
     expect(measure("fine", INTER)).toBeCloseTo(15);
     expect(measure("fine", { ...INTER, spacing: 2 })).toBeCloseTo(28);
-    expect(calls).toEqual(["normal normal 100px Inter, sans-serif|fine", "normal normal 100px Inter, sans-serif|f\u200ci\u200cn\u200ce"]);
+    expect(calls).toEqual([`normal normal 100px ${LIVE}|fine`, `normal normal 100px ${LIVE}|f\u200ci\u200cn\u200ce`]);
   });
 
   it("ricorda le larghezze per carattere e per testo", () => {
@@ -87,7 +89,7 @@ describe("la misura del browser", () => {
     measure("ciao", INTER);
     measure("ciao", { ...INTER, size: 48 });
     measure("ciao", { ...INTER, weight: "bold" });
-    expect(calls).toEqual(["normal normal 100px Inter, sans-serif|ciao", "normal bold 100px Inter, sans-serif|ciao"]);
+    expect(calls).toEqual([`normal normal 100px ${LIVE}|ciao`, `normal bold 100px ${LIVE}|ciao`]);
   });
 
   it("non ricorda le misure di un carattere che sta ancora arrivando", () => {
@@ -135,8 +137,25 @@ describe("la misura del browser", () => {
 
   it("un carattere che il browser non legge si stima", () => {
     fakeCanvas();
-    const measure = browserMeasure()!;
-    expect(measure("abc", { ...INTER, family: "Rotto" })).toBeCloseTo(estimate("abc", INTER));
+    const measure = browserMeasure(true, { live: () => "Rotto", settled: () => true, epoch: () => 0 })!;
+    expect(measure("abc", INTER)).toBeCloseTo(estimate("abc", INTER));
+  });
+
+  it("misura con la famiglia viva, e non ricorda finché non è ferma", () => {
+    const { calls } = fakeCanvas();
+    let settled = false;
+    let epoch = 0;
+    const measure = browserMeasure(true, { live: (value) => (value === "Roboto" ? "fubdraw-vault-1, Literata" : "Literata"), settled: () => settled, epoch: () => epoch })!;
+    measure("ciao", { ...INTER, family: "Roboto" });
+    measure("ciao", { ...INTER, family: "Roboto" });
+    settled = true;
+    measure("ciao", { ...INTER, family: "Roboto" });
+    measure("ciao", { ...INTER, family: "Roboto" });
+    expect(calls).toEqual(Array(3).fill("normal normal 100px fubdraw-vault-1, Literata|ciao"));
+    // Una faccia nuova: le misure di prima si scordano.
+    epoch = 1;
+    measure("ciao", { ...INTER, family: "Roboto" });
+    expect(calls).toHaveLength(4);
   });
 });
 
@@ -147,10 +166,10 @@ describe("i caratteri da caricare", () => {
 
   it("chiede al browser solo quelli che non ha, una volta ciascuno", async () => {
     const load = vi.fn(async () => []);
-    const check = vi.fn((css: string) => css.includes("Literata"));
+    const check = vi.fn((css: string) => css.includes("px Literata"));
     vi.stubGlobal("document", { fonts: { check, load } });
     await loadFonts([INTER, { ...INTER, size: 30 }, { ...INTER, family: "Literata, serif" }, { ...INTER, size: 0 }]);
-    expect(load.mock.calls).toEqual([["normal normal 100px Inter, sans-serif"]]);
+    expect(load.mock.calls).toEqual([[`normal normal 100px ${LIVE}`]]);
   });
 
   it("senza documento non c'è niente da chiedere", async () => {

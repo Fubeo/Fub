@@ -121,6 +121,7 @@ import { showContextMenu, type MenuItem } from "../../../ui/menu";
 import type { ScaleLimits } from "../../../spatial/camera";
 import type { TextOperation } from "../../core/text-operation";
 import { countObjects, describe, keyOf, linkName, outline, polygonalKind, type OutlineNode } from "../describe";
+import { DrawingFonts, vaultFontsOf, type VaultFontPort } from "../fonts/vault";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
 import { imageDataUri, imageRefs, READ_IMAGE_BYTES, withImages } from "../read-images";
@@ -670,6 +671,9 @@ export interface DrawEditorOptions {
   /// Il foglio delle annotazioni; senza, il documento è un disegno.
   readonly sheet?: DrawSheet;
   readonly images?: DrawImages;
+  /// I caratteri del vault: chi li elenca e li legge. Senza, e nel foglio
+  /// delle annotazioni, i testi scrivono con le sole famiglie di Fub.
+  readonly vaultFonts?: VaultFontPort;
   /// Che cosa fa un dito quando nessuna penna è vicina (default `auto`).
   readonly touch?: TouchPolicy;
   /// Chi legge e ricodifica le immagini incollate: quello del browser, se
@@ -2397,8 +2401,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const has = (feature: Feature): boolean => features.has(feature);
   const relabels: Array<() => void> = [];
 
-  /// Le larghezze del testo, coi caratteri del browser dove li sa misurare.
-  const measureText: Measure = browserMeasure() ?? estimate;
+  /// I caratteri del disegno: le famiglie di Fub e, fuori dal foglio delle
+  /// annotazioni, quelle del vault.
+  const drawingFonts = new DrawingFonts(options.vaultFonts === undefined || folio !== undefined ? null : vaultFontsOf(options.vaultFonts));
+  life.add(() => drawingFonts.dispose());
+
+  /// Le larghezze del testo, coi caratteri del disegno dove il browser li sa
+  /// misurare.
+  const measureText: Measure = browserMeasure(true, drawingFonts) ?? estimate;
 
   /// `next`, con le etichette al centro delle loro forme, i connettori che
   /// seguono gli oggetti a cui sono agganciati, le punte delle linee che
@@ -3392,6 +3402,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     onChange: () => placeText(),
     onFinish: () => finishText(),
     announce: (text) => announce(text),
+    family: drawingFonts.live,
   });
   const textInput = field.element;
   const textHint = document.createElement("span");
@@ -3750,6 +3761,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const images = options.images;
   const painter = createSvgPainter(surface, life, {
     fonts: appFonts,
+    families: drawingFonts,
     ...(images === undefined ? {} : { images: (href: string, owner: Lifetime) => images.url(href, owner) }),
   });
   const preview = document.createElementNS(SVG_NS, "svg");
@@ -5115,7 +5127,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         if (framed === null) return null;
         const live = count <= THUMB_LIVE_SHAPES;
         const resolve = live && images !== undefined ? (href: string, life: Lifetime) => images.url(href, life) : undefined;
-        const svg = paintMiniature(paints, chain, framed, owner, resolve, used);
+        const svg = paintMiniature(paints, chain, framed, owner, resolve, used, drawingFonts.live);
         return live ? svg : miniaturePicture(svg, owner);
       },
     };
@@ -7440,6 +7452,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const refreshScene = (): void => {
     scene = builder.build(paintSource());
+    drawingFonts.use(scene);
     painter.setDraft(null);
     painter.update(scene);
     // Il gruppo isolato si ritrova nel disegno nuovo; se non c'è più, o lì
@@ -14844,11 +14857,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Il contesto con cui il browser misura un carattere; `null` dove non sa.
   let probe: CanvasRenderingContext2D | null | undefined;
   /// La linea di base sotto la metà della riga, in volte il corpo, per un
-  /// carattere scritto come `font-style`, `font-weight` e `font-family`.
+  /// carattere scritto come `font-style`, `font-weight` e `font-family`, con
+  /// la famiglia viva del disegno.
   const baselineOf = (style: string, weight: string, family: string): number => {
     probe ??= document.createElement("canvas").getContext("2d");
     if (probe === null) return BASELINE_EM;
-    probe.font = `${style} ${weight} 100px ${family}`;
+    probe.font = `${style} ${weight} 100px ${drawingFonts.live(family)}`;
     const metrics = probe.measureText("");
     const ascent = metrics.fontBoundingBoxAscent;
     const descent = metrics.fontBoundingBoxDescent;
@@ -15176,8 +15190,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     textLayer.scrollTop = 0;
     textLayer.scrollLeft = 0;
   });
-  // Un carattere che arriva dopo cambia le misure del campo.
+  // Un carattere che arriva dopo cambia le misure del campo, e così una
+  // famiglia del vault che ora c'è.
   if (typeof document.fonts?.addEventListener === "function") life.listen(document.fonts, "loadingdone", () => placeText());
+  life.add(drawingFonts.watch(() => placeText()));
   // Il tocco che apre un testo col dito manda dopo, per compatibilità, un
   // `mousedown` che porterebbe il fuoco al foglio.
   life.listen(surface, "mousedown", (event) => {

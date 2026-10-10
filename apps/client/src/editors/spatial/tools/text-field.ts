@@ -29,6 +29,7 @@
 //   capo, e ciò che si incolla sta sulla riga.
 
 import type { Lifetime } from "../../../ui/lifetime";
+import { fubLiveFamily } from "../fonts/faces";
 import { length, letterSpacing, nonNegativeLength, paintReference, trim } from "../scene/values";
 import { t, type DrawKey } from "../strings";
 import type { Measure } from "./measure";
@@ -68,6 +69,9 @@ export interface TextFieldOptions {
   onFinish(): void;
   /// Dice `text` a chi usa uno screen reader.
   announce(text: string): void;
+  /// La `font-family` da dare al browser per quella scritta: le famiglie del
+  /// disegno. Senza, le sole famiglie di Fub.
+  readonly family?: (value: string) => string;
 }
 
 /// Le misure del campo disegnato, in pixel dello schermo.
@@ -93,7 +97,8 @@ export type FieldForm =
 export const LINES_FORM: FieldForm = { kind: "lines" };
 
 /// La linea di base sotto la metà della riga, in volte il corpo, di un
-/// carattere scritto come `font-style`, `font-weight` e `font-family`.
+/// carattere scritto come `font-style`, `font-weight` e `font-family`; una
+/// famiglia vuota è quella di un testo che non la dice.
 export type BaselineOf = (style: string, weight: string, family: string) => number;
 
 export interface TextField {
@@ -233,12 +238,13 @@ function fieldColor(fill: string): string {
   return fallback === null || fallback === "none" ? "" : `#${fallback.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
-/// Lo stile CSS di `attrs`, scritto su `style` a `scale` pixel per unità.
-/// Ciò che `attrs` non scrive si toglie, e il campo lo eredita.
-function paintCss(style: CSSStyleDeclaration, attrs: Attrs | null, lines: ReadonlySet<string> | null, scale: number): void {
+/// Lo stile CSS di `attrs`, scritto su `style` a `scale` pixel per unità,
+/// con la famiglia viva di `family`. Ciò che `attrs` non scrive si toglie, e
+/// il campo lo eredita.
+function paintCss(style: CSSStyleDeclaration, attrs: Attrs | null, lines: ReadonlySet<string> | null, scale: number, family: (value: string) => string): void {
   const read = (name: string): string | undefined => attrs?.[name];
-  const family = read("font-family");
-  style.fontFamily = family === undefined ? "" : family;
+  const written = read("font-family");
+  style.fontFamily = written === undefined ? "" : family(written);
   const size = read("font-size");
   const px = size === undefined ? null : nonNegativeLength(size);
   style.fontSize = px === null ? "" : `${px * scale}px`;
@@ -257,6 +263,7 @@ function paintCss(style: CSSStyleDeclaration, attrs: Attrs | null, lines: Readon
 }
 
 export function createTextField(life: Lifetime, options: TextFieldOptions): TextField {
+  const family = options.family ?? fubLiveFamily;
   const element = document.createElement("div");
   element.className = "draw-text-input";
   element.contentEditable = "true";
@@ -330,18 +337,20 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
   /// Lo stile del campo, delle righe e dei pezzi, a `scale`.
   function paint(): void {
     const seen = textSeen();
-    paintCss(element.style, seen, ownLines(rich.attrs), scale);
+    paintCss(element.style, seen, ownLines(rich.attrs), scale, family);
     if (element.style.color === "") element.style.color = INK;
+    // Un testo che non dice la famiglia scrive come nell'export.
+    if (element.style.fontFamily === "") element.style.fontFamily = family("");
     const rows = lineEls();
     rows.forEach((row, i) => {
       const line = rich.lines[i];
       if (line === undefined) return;
-      paintCss(row.style, line.attrs, ownLines(line.attrs), scale);
+      paintCss(row.style, line.attrs, ownLines(line.attrs), scale, family);
       const anchor = trim(line.attrs["text-anchor"] ?? seen["text-anchor"] ?? "start");
       row.style.textAlign = anchor === "middle" ? "center" : anchor === "end" ? "right" : "left";
       for (const piece of row.querySelectorAll<HTMLElement>(`.${PIECE_CLASS}`)) {
         const attrs = pieceAttrs.get(piece) ?? null;
-        paintCss(piece.style, attrs, ownLines(attrs), scale);
+        paintCss(piece.style, attrs, ownLines(attrs), scale, family);
       }
     });
   }
@@ -350,7 +359,6 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
     scale = next;
     paint();
     const rows = lineEls();
-    const family = getComputedStyle(element).fontFamily;
     let height = 0;
     let baseline = 0;
     let longest = 0;
@@ -360,7 +368,7 @@ export function createTextField(life: Lifetime, options: TextFieldOptions): Text
       const own = sizeIn(rich, line, null) * scale;
       const tallest = Math.max(own, ...line.spans.map((span) => sizeIn(rich, line, span) * scale));
       const box = tallest * LINE_SPACING;
-      const b = baselineOf(trim(seenIn(rich, line, null, "font-style") ?? "normal"), trim(seenIn(rich, line, null, "font-weight") ?? "normal"), seenIn(rich, line, null, "font-family") || family);
+      const b = baselineOf(trim(seenIn(rich, line, null, "font-style") ?? "normal"), trim(seenIn(rich, line, null, "font-weight") ?? "normal"), seenIn(rich, line, null, "font-family") ?? "");
       // Dalla cima della riga alla sua linea di base, che la parte più grande
       // tiene più in basso.
       const drop = box / 2 + (Number.isFinite(b) ? b : BASELINE_EM) * tallest;

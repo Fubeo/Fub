@@ -17,6 +17,7 @@ import type {
 import { CanvasEngine, type CanvasChange, type CanvasEngineOptions } from "./engine";
 import { t } from "../../i18n/strings";
 import type { EditorChange, TextOperation } from "../core/text-operation";
+import type { VaultFontPort } from "../spatial/fonts/vault";
 import { mountPdfSurfaceLazily, mountVectorSurfaceLazily } from "../spatial/lazy";
 import { PDF_PROFILE, VECTOR_PROFILE } from "../spatial/modes";
 import type { PdfPorts } from "../spatial/pdf/surface";
@@ -42,6 +43,8 @@ export interface CanvasSurfaceCallbacks {
   readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
   /** The vault images of drawing `from`, resolved by the shell. */
   readonly drawingImages?: DrawingImagePort;
+  /** The vault's font files, listed and read by the shell, that a drawing's text can use. */
+  readonly drawingFonts?: VaultFontPort;
   readonly media?: CanvasEngineOptions["media"];
   readonly attachments?: CanvasEngineOptions["attachments"];
   readonly renderMarkdownForCard?: CanvasEngineOptions["renderMarkdownForCard"];
@@ -137,6 +140,7 @@ export function mountCanvasSurface(
         read: (path, limit) => images.read(path, context.documentId, limit),
         pick: pickImage === undefined ? undefined : () => pickImage(context.documentId),
       },
+      vaultFonts: callbacks.drawingFonts,
     });
   }
   if (profile === PDF_PROFILE) {
