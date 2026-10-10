@@ -35,6 +35,7 @@ use crate::geometry::parse_path;
 use crate::ink::{Ink, InkError};
 use crate::labels::read_inside;
 use crate::parametric::{read_polygonal, Polygonal, PolygonalShape};
+use crate::repeat::{read_repeat, Repeat};
 use crate::text::{Lines, Span, Utf16Map};
 use crate::values::{
     angle, blend_style, dasharray, fraction, href, href_id, is_wsp, keyword, leading, length,
@@ -99,6 +100,10 @@ pub enum Role {
     Symbol,
     /// Un'istanza di un simbolo: un `use` che lo mostra dove sta.
     Instance,
+    /// Una copia in una ripetizione: un `use` che mostra l'originale, suo
+    /// fratello, dove lo porta la sua `transform` (formato della scena,
+    /// ripetizioni).
+    Copy,
 }
 
 impl Role {
@@ -365,7 +370,9 @@ fn swatch_of(doc: &Document<'_>, element: &Element<'_>) -> Option<Swatch> {
 /// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
 /// `mask` e `filter` ritagli, maschere e filtri, un `textPath` un tracciato
 /// (formato della scena, testo), e un `use` un simbolo (formato della scena,
-/// simboli).
+/// simboli). Un `use` figlio di una ripetizione usa anche un originale, suo
+/// fratello, che non è una risorsa e vale soltanto per i fratelli (formato
+/// della scena, ripetizioni).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ResourceKind {
     Gradient,
@@ -376,6 +383,7 @@ pub(crate) enum ResourceKind {
     Filter,
     Path,
     Symbol,
+    Original,
 }
 
 /// Il tipo della risorsa modificabile che porta un id, o `None` se nessuna
@@ -566,6 +574,13 @@ pub struct ElementItem {
     /// scritto.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// La ripetizione di un gruppo: `fub:repeat` letto (formato della scena,
+    /// ripetizioni).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<Repeat>,
+    /// L'originale di una copia: l'id del fratello a cui rimanda.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original: Option<String>,
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -1493,19 +1508,32 @@ const INSTANCE_ATTRIBUTES: [&str; 8] = [
     "filter",
 ];
 
-/// Vero se `element`, un `use` fuori dalle `defs`, è un'istanza: un `href`
-/// o un `xlink:href`, uno solo, verso un simbolo modificabile, gli attributi
-/// di [`INSTANCE_ATTRIBUTES`], e per figli soltanto titoli e descrizioni.
-fn instance_allowed(doc: &Document<'_>, element: &Element<'_>, resolve: Resolve<'_>) -> bool {
+/// Gli attributi SVG di una copia oltre a `href`: dove sta e nient'altro,
+/// perché l'editor riscrive le copie quando la ripetizione cambia (formato
+/// della scena, ripetizioni).
+const COPY_ATTRIBUTES: [&str; 2] = ["id", "transform"];
+
+/// Vero se `element`, un `use` fuori dalle `defs`, rimanda a ciò che vuole
+/// `target`: un `href` o un `xlink:href`, uno solo, verso un id che
+/// `resolve` dice di quel tipo, gli attributi di `attributes`, e per figli
+/// soltanto titoli e descrizioni. Un'istanza vuole un simbolo e gli
+/// attributi di [`INSTANCE_ATTRIBUTES`], una copia un originale e quelli di
+/// [`COPY_ATTRIBUTES`].
+fn use_allowed(
+    doc: &Document<'_>,
+    element: &Element<'_>,
+    resolve: Resolve<'_>,
+    target: ResourceKind,
+    attributes: &[&str],
+) -> bool {
     let mut hrefs = 0;
-    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+    let allowed = element.attrs.iter().all(|attr| match attr.ns {
         NS_NONE | NS_XLINK => {
             if attr.local == "href" {
                 hrefs += 1;
-                return href_id(&attr.value)
-                    .is_some_and(|target| resolve(&target) == Some(ResourceKind::Symbol));
+                return href_id(&attr.value).is_some_and(|id| resolve(&id) == Some(target));
             }
-            if attr.ns == NS_XLINK || !INSTANCE_ATTRIBUTES.contains(&attr.local) {
+            if attr.ns == NS_XLINK || !attributes.contains(&attr.local) {
                 return false;
             }
             (REFERENCES.contains(&attr.local) || !has_url(&attr.value))
@@ -1514,12 +1542,62 @@ fn instance_allowed(doc: &Document<'_>, element: &Element<'_>, resolve: Resolve<
         NS_SVG => false,
         _ => true,
     });
-    attributes
+    allowed
         && hrefs == 1
         && element
             .children
             .iter()
             .all(|&child| blank_or_meta(doc, child) == Some(true))
+}
+
+// Le ripetizioni (formato della scena, ripetizioni).
+
+/// La ripetizione di `element`, se `fub:repeat` si legge. Vale per un `g`
+/// che è un gruppo, non un livello: lo sa chi lo classifica.
+pub(crate) fn repeat_of(element: &Element<'_>) -> Option<Repeat> {
+    read_repeat(element.value(NS_FUB, "repeat")?)
+}
+
+/// Gli originali fra i figli di `parent`, una ripetizione: gli id dei figli
+/// modificabili, titoli e descrizioni esclusi. `depth` è la profondità dei
+/// figli, e `resolve`, che non conosce gli originali, dice che cosa è ogni id
+/// a cui rimandano: un'istanza di un simbolo può essere un originale, una
+/// copia no.
+fn originals_of(
+    doc: &Document<'_>,
+    parent: NodeId,
+    depth: usize,
+    resolve: Resolve<'_>,
+) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for &child in doc.children(parent) {
+        let Some(id) = doc
+            .element(child)
+            .and_then(|element| element.value(NS_NONE, "id"))
+            .filter(|id| !id.is_empty())
+        else {
+            continue;
+        };
+        let found = classify_child(doc, child, Place::Inside, depth, resolve);
+        if found.is_some_and(|(_, role)| !matches!(role, Role::Title | Role::Desc)) {
+            out.insert(id.to_owned());
+        }
+    }
+    out
+}
+
+/// Che cosa è `id` per i figli di una ripetizione con gli originali
+/// `originals`: un id che una risorsa porta resta suo.
+fn with_originals(
+    resolve: Resolve<'_>,
+    originals: Option<&HashSet<String>>,
+    id: &str,
+) -> Option<ResourceKind> {
+    resolve(id).or_else(|| {
+        originals
+            .is_some_and(|originals| originals.contains(id))
+            .then_some(ResourceKind::Original)
+    })
 }
 
 /// Gli id a cui gli attributi di `element` rimandano, come li legge S014:
@@ -1790,6 +1868,19 @@ fn resource_index(doc: &Document<'_>) -> Resources {
     }
 }
 
+/// Come [`classify`], per un figlio a profondità `depth`: un contenitore oltre
+/// la profondità massima è un'unità.
+fn classify_child(
+    doc: &Document<'_>,
+    id: NodeId,
+    place: Place,
+    depth: usize,
+    resolve: Resolve<'_>,
+) -> Option<(Tag, Role)> {
+    classify(doc, id, place, resolve)
+        .filter(|&(_, role)| !role.is_container() || depth <= MAX_DEPTH)
+}
+
 /// Il ruolo di un figlio di un contenitore, o `None` se è estraneo. `place`
 /// dice dov'è il contenitore: la radice decide livelli, carta e `defs`, una
 /// `defs` della radice le risorse. `resolve` dice che cosa è la risorsa di
@@ -1839,7 +1930,25 @@ fn classify(
             .then_some((tag, Role::Board));
     }
     if tag == Tag::Use {
-        return instance_allowed(doc, element, resolve).then_some((tag, Role::Instance));
+        if use_allowed(
+            doc,
+            element,
+            resolve,
+            ResourceKind::Symbol,
+            &INSTANCE_ATTRIBUTES,
+        ) {
+            return Some((tag, Role::Instance));
+        }
+        // Una copia sta fra i figli di una ripetizione, dove `resolve` conosce
+        // gli originali (formato della scena, ripetizioni).
+        return use_allowed(
+            doc,
+            element,
+            resolve,
+            ResourceKind::Original,
+            &COPY_ATTRIBUTES,
+        )
+        .then_some((tag, Role::Copy));
     }
     if !attributes_allowed(element, tag, resolve, false) {
         return None;
@@ -2014,6 +2123,8 @@ struct Frame<'s> {
     elements: usize,
     pending: Option<Pending>,
     context: Context<'s>,
+    /// Gli originali dei figli, in una ripetizione.
+    originals: Option<HashSet<String>>,
 }
 
 struct Builder<'d, 'a> {
@@ -2299,6 +2410,8 @@ impl Builder<'_, '_> {
             source: (role == Role::Symbol)
                 .then(|| element.value(NS_FUB, "source").map(str::to_owned))
                 .flatten(),
+            repeat: (role == Role::Group).then(|| repeat_of(element)).flatten(),
+            original: (role == Role::Copy).then(|| use_target(element)).flatten(),
         };
         self.items.push(Item::Element(Box::new(item)));
     }
@@ -2306,6 +2419,7 @@ impl Builder<'_, '_> {
     /// Visita la radice e i contenitori modificabili, in ordine di documento.
     fn walk(&mut self, root: NodeId) {
         let doc = self.doc;
+        let resolve = self.resolve;
         let mut stack = vec![Frame {
             node: root,
             place: Place::Root,
@@ -2317,6 +2431,7 @@ impl Builder<'_, '_> {
                 doc.element(root).expect("la radice è un elemento"),
                 self.swatches,
             ),
+            originals: None,
         }];
         while let Some(frame) = stack.last_mut() {
             let children = doc.children(frame.node);
@@ -2331,16 +2446,27 @@ impl Builder<'_, '_> {
                 Kind::Element(_) => {
                     let index = frame.elements;
                     frame.elements += 1;
-                    // Un contenitore oltre la profondità massima è un'unità.
                     let depth = frame.path.len() + 1;
-                    let class = classify(doc, child, frame.place, self.resolve)
-                        .filter(|&(_, role)| !role.is_container() || depth <= MAX_DEPTH);
-                    match class {
+                    let originals = frame.originals.as_ref();
+                    let within = |id: &str| with_originals(resolve, originals, id);
+                    match classify_child(doc, child, frame.place, depth, &within) {
                         Some((tag, role)) => {
                             let pending = frame.pending.take();
-                            let context = frame
-                                .context
-                                .child(doc.element(child).expect("una voce è un elemento"));
+                            let element = doc.element(child).expect("una voce è un elemento");
+                            let mut context = frame.context.child(element);
+                            // Un originale ha il suo riquadro, che le copie
+                            // portano dove stanno.
+                            let id = element.value(NS_NONE, "id");
+                            if let Some(id) = id.filter(|&id| {
+                                role != Role::Copy
+                                    && frame
+                                        .originals
+                                        .as_ref()
+                                        .is_some_and(|originals| originals.contains(id))
+                            }) {
+                                self.tally.original(doc, &frame.context, id);
+                                context = context.original(child);
+                            }
                             let mut path = frame.path.clone();
                             self.flush(pending, Some(&path));
                             path.push(index);
@@ -2353,6 +2479,9 @@ impl Builder<'_, '_> {
                                 } else {
                                     context
                                 };
+                                let originals = (role == Role::Group
+                                    && repeat_of(element).is_some())
+                                .then(|| originals_of(doc, child, path.len() + 1, resolve));
                                 stack.push(Frame {
                                     node: child,
                                     place: if role == Role::Defs {
@@ -2365,6 +2494,7 @@ impl Builder<'_, '_> {
                                     elements: 0,
                                     pending: None,
                                     context,
+                                    originals,
                                 });
                             } else {
                                 self.element_item(child, tag, role, path, &context);

@@ -152,6 +152,7 @@ export type Feature =
   | "guides"
   | "rulers"
   | "recognize"
+  | "symmetry"
   | "gestures"
   | "links"
   | "images"
@@ -176,7 +177,8 @@ export type Feature =
   | "blend"
   | "motifs"
   | "print"
-  | "symbols";
+  | "symbols"
+  | "repeat";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -208,6 +210,9 @@ const COMMANDS: readonly FeatureSpec[] = [
   { id: "guides", level: "standard", label: "draw.feature.guides" },
   { id: "rulers", level: "standard", label: "draw.feature.rulers" },
   { id: "recognize", level: "standard", label: "draw.feature.recognize" },
+  // La simmetria della penna è una sezione del pannello delle proprietà,
+  // con la penna e l'evidenziatore: nel Personalizzato si vede con lui.
+  { id: "symmetry", level: "standard", label: "draw.feature.symmetry" },
   { id: "gestures", level: "standard", label: "draw.feature.gestures" },
   { id: "links", level: "standard", label: "draw.feature.links" },
   { id: "images", level: "standard", label: "draw.feature.images" },
@@ -247,6 +252,11 @@ const COMMANDS: readonly FeatureSpec[] = [
   // dei simboli. Un'istanza si apre per modificare il suo simbolo dove si
   // isola un gruppo, a ogni livello che ha la selezione avanzata.
   { id: "symbols", level: "expert", label: "draw.feature.symbols" },
+  // Le ripetizioni sono il menu «Ripeti» nella barra della selezione e nel
+  // menu, e la sezione «Ripetizione» del pannello delle proprietà. Una
+  // ripetizione si apre per modificare i suoi originali dove si isola un
+  // gruppo, e si separa come un gruppo, a ogni livello.
+  { id: "repeat", level: "expert", label: "draw.feature.repeat" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli

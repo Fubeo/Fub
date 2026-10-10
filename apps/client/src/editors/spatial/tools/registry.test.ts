@@ -127,8 +127,8 @@ describe("il registro degli strumenti", () => {
   it("elenca le parti per livello, prima gli strumenti nell'ordine della barra, ciascuna una volta", () => {
     expect(FEATURES.map((feature) => feature.id)).toEqual([
       "pen", "eraser", "rect", "ellipse", "line", "arrow",
-      "lasso", "board", "eyedropper", "gradient", "highlighter", "connector", "polygon", "text", "colors", "swatches", "styles", "tips", "hatches", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "gestures", "links", "images", "crop", "library", "properties", "style", "history", "accessibility", "export",
-      "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean", "trace", "masks", "typeset", "fonts", "effects", "blend", "motifs", "print", "symbols",
+      "lasso", "board", "eyedropper", "gradient", "highlighter", "connector", "polygon", "text", "colors", "swatches", "styles", "tips", "hatches", "selection", "arrange", "layers", "grid", "guides", "rulers", "recognize", "symmetry", "gestures", "links", "images", "crop", "library", "properties", "style", "history", "accessibility", "export",
+      "nodes", "builder", "scissors", "width", "bezier", "attributes", "outline", "transform", "apply", "path", "boolean", "trace", "masks", "typeset", "fonts", "effects", "blend", "motifs", "print", "symbols", "repeat",
     ]);
     expect(new Set(FEATURES.map((feature) => feature.label)).size).toBe(FEATURES.length);
     // Ogni strumento del disegno è una parte, tranne la Selezione, che c'è

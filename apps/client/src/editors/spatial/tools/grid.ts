@@ -104,7 +104,7 @@ export const DEFAULT_GRID: Grid = {
 
 /// Quante sezioni chiuse si ricordano, e quanto è lungo il nome di una: più
 /// di quante il pannello ne ha, e di quanto è lungo il nome di ciascuna.
-export const MAX_CLOSED = 16;
+export const MAX_CLOSED = 24;
 export const MAX_SECTION_NAME = 32;
 
 /// `value` come elenco delle sezioni chiuse, se lo è.

@@ -183,6 +183,13 @@ pub(crate) struct Context<'s> {
     /// Il simbolo di cui l'elemento è il contenuto, nelle sue coordinate;
     /// `None` fuori dai simboli (formato della scena, simboli).
     symbol: Option<NodeId>,
+    /// Dove si conta il riquadro dell'elemento: il simbolo o l'originale di
+    /// una ripetizione più vicini che lo contengono, o lui stesso; `None`
+    /// fuori da entrambi.
+    scope: Option<NodeId>,
+    /// Dalle coordinate del contenitore a quelle della radice: la matrice
+    /// prima della `transform` dell'elemento.
+    outer: Matrix,
 }
 
 /// Gli attributi che cambiano ciò che si vede di un elemento oltre il suo
@@ -213,6 +220,8 @@ impl<'s> Context<'s> {
             effect: false,
             swatches,
             symbol: None,
+            scope: None,
+            outer: Matrix::IDENTITY,
         }
     }
 
@@ -220,6 +229,7 @@ impl<'s> Context<'s> {
     /// rispettano già §4.
     pub fn child(&self, element: &Element<'_>) -> Context<'s> {
         let mut context = *self;
+        context.outer = self.matrix;
         let value = |name: &str| element.value(NS_NONE, name);
         if let Some(m) = value("transform").and_then(transform) {
             context.matrix = context.matrix.then(m);
@@ -256,6 +266,7 @@ impl<'s> Context<'s> {
     pub fn line(&self, tspan: &Element<'_>) -> Context<'s> {
         Context {
             matrix: self.matrix,
+            outer: self.outer,
             ..self.child(tspan)
         }
     }
@@ -265,6 +276,18 @@ impl<'s> Context<'s> {
     pub fn within(&self, symbol: NodeId) -> Context<'s> {
         Context {
             symbol: Some(symbol),
+            scope: Some(symbol),
+            ..*self
+        }
+    }
+
+    /// Il contesto dell'originale `original` di una ripetizione, che ha
+    /// questo: il suo riquadro e quello di ciò che contiene si contano a
+    /// parte, perché le copie lo portano dove stanno (formato della scena,
+    /// ripetizioni).
+    pub fn original(&self, original: NodeId) -> Context<'s> {
+        Context {
+            scope: Some(original),
             ..*self
         }
     }
@@ -353,10 +376,12 @@ pub(crate) fn use_target(element: &Element<'_>) -> Option<String> {
         .and_then(href_id)
 }
 
-/// Ciò che si conta di un simbolo: il riquadro del suo contenuto, nelle sue
-/// coordinate, e le istanze che contiene, col simbolo e la matrice.
+/// Ciò che si conta di un simbolo, o dell'originale di una ripetizione: il
+/// riquadro del suo contenuto, nelle coordinate del simbolo o in quelle dove
+/// sta l'originale, e ciò che vi si vede attraverso altri, istanze, copie e
+/// originali, con l'id e la matrice.
 #[derive(Default)]
-struct SymbolTally {
+struct ScopeTally {
     bounds: BoundsBuilder,
     instances: Vec<(String, Matrix)>,
 }
@@ -392,9 +417,12 @@ pub(crate) struct Tally {
     paths: HashMap<String, String>,
     /// Per ogni simbolo, il riquadro del suo contenuto nelle sue coordinate e
     /// le istanze che contiene; il riquadro di un'istanza si sa alla fine,
-    /// quando si sa quello del suo simbolo (formato della scena, simboli).
-    symbols: HashMap<String, SymbolTally>,
-    /// Le istanze fuori dai simboli, col simbolo e la matrice.
+    /// quando si sa quello del suo simbolo (formato della scena, simboli). Lo
+    /// stesso per ogni originale di una ripetizione, che le copie portano
+    /// dove stanno (formato della scena, ripetizioni).
+    scopes: HashMap<String, ScopeTally>,
+    /// Ciò che si vede attraverso altri fuori dai simboli e dagli originali:
+    /// le istanze, le copie e gli originali, con l'id e la matrice.
     instances: Vec<(String, Matrix)>,
 }
 
@@ -434,19 +462,28 @@ impl Tally {
                     return;
                 }
                 let target = use_target(element).expect("un'istanza ha il suo simbolo");
-                match symbol_id(doc, context) {
-                    Some(symbol) => self
-                        .symbols
-                        .entry(symbol)
-                        .or_default()
-                        .instances
-                        .push((target, context.matrix)),
-                    None => {
-                        self.legibility
-                            .instance(target.clone(), context.matrix, span);
-                        self.instances.push((target, context.matrix));
-                    }
+                if context.symbol.is_none() {
+                    self.legibility
+                        .instance(target.clone(), context.matrix, span);
                 }
+                self.instances_of(scope_id(doc, context))
+                    .push((target, context.matrix));
+                return;
+            }
+            // Una copia ha il riquadro del suo originale, portato dalla sua
+            // `transform` nelle coordinate del gruppo, e non si conta da sé: è
+            // l'originale un'altra volta (formato della scena, ripetizioni).
+            Role::Copy => {
+                let Some(back) = context.outer.invert().filter(|_| !context.hidden) else {
+                    return;
+                };
+                let original = use_target(element).expect("una copia ha il suo originale");
+                let m = context.matrix.then(back);
+                if context.symbol.is_none() {
+                    self.legibility.instance(original.clone(), m, span);
+                }
+                self.instances_of(scope_id(doc, context))
+                    .push((original, m));
                 return;
             }
             Role::Layer => self.layers.push(
@@ -503,8 +540,8 @@ impl Tally {
             Role::Title | Role::Desc | Role::Group => {}
         }
         if !context.hidden {
-            let out = match symbol_id(doc, context) {
-                Some(symbol) => &mut self.symbols.entry(symbol).or_default().bounds,
+            let out = match scope_id(doc, context) {
+                Some(scope) => &mut self.scopes.entry(scope).or_default().bounds,
                 None => &mut self.bounds,
             };
             bounds(doc, element, role, &context.matrix, out, &self.paths);
@@ -513,19 +550,35 @@ impl Tally {
         }
     }
 
-    /// Il riquadro del contenuto di ogni simbolo che il documento conta,
-    /// nelle sue coordinate, con quello delle istanze che contiene: dai
-    /// simboli più interni, senza ricorsione.
-    fn symbol_boxes(symbols: HashMap<String, SymbolTally>) -> HashMap<String, Option<Bounds>> {
+    /// Conta l'originale `id` di una ripetizione, che sta nel gruppo di
+    /// contesto `group`: si vede dov'è, col riquadro che si sa alla fine.
+    pub fn original(&mut self, doc: &Document<'_>, group: &Context<'_>, id: &str) {
+        self.instances_of(scope_id(doc, group))
+            .push((id.to_owned(), Matrix::IDENTITY));
+    }
+
+    /// Ciò che si vede attraverso altri nel simbolo o nell'originale `scope`,
+    /// o fuori da entrambi con `None`.
+    fn instances_of(&mut self, scope: Option<String>) -> &mut Vec<(String, Matrix)> {
+        match scope {
+            Some(scope) => &mut self.scopes.entry(scope).or_default().instances,
+            None => &mut self.instances,
+        }
+    }
+
+    /// Il riquadro del contenuto di ogni simbolo e di ogni originale che il
+    /// documento conta, nelle sue coordinate, con quello di ciò che vi si vede
+    /// attraverso altri: dai più interni, senza ricorsione.
+    fn scope_boxes(scopes: HashMap<String, ScopeTally>) -> HashMap<String, Option<Bounds>> {
         let mut boxes: HashMap<String, Option<Bounds>> = HashMap::new();
         let mut entered: HashSet<&str> = HashSet::new();
-        for start in symbols.keys() {
+        for start in scopes.keys() {
             let mut stack: Vec<(&str, bool)> = vec![(start, false)];
             while let Some((id, ready)) = stack.pop() {
                 if boxes.contains_key(id) {
                     continue;
                 }
-                let Some(tally) = symbols.get(id) else {
+                let Some(tally) = scopes.get(id) else {
                     boxes.insert(id.to_owned(), None);
                     continue;
                 };
@@ -601,11 +654,12 @@ impl Tally {
         diagnostics: &mut Vec<Diagnostic>,
     ) -> Summary {
         self.check_papers(diagnostics);
-        // Il riquadro di un'istanza è quello del suo simbolo, che si sa adesso.
+        // Il riquadro di un'istanza è quello del suo simbolo, e quello di una
+        // copia quello del suo originale, che si sanno adesso.
         let boxes = if self.instances.is_empty() {
             HashMap::new()
         } else {
-            Tally::symbol_boxes(self.symbols)
+            Tally::scope_boxes(self.scopes)
         };
         // Senza carta il disegno sta sul bianco della superficie (§12).
         self.legibility
@@ -639,11 +693,11 @@ impl Tally {
     }
 }
 
-/// L'id del simbolo di cui un elemento col contesto `context` è il
-/// contenuto, o `None` fuori dai simboli.
-fn symbol_id(doc: &Document<'_>, context: &Context<'_>) -> Option<String> {
-    let symbol = doc.element(context.symbol?)?;
-    symbol.value(NS_NONE, "id").map(str::to_owned)
+/// L'id del simbolo o dell'originale dove si conta il riquadro di un
+/// elemento col contesto `context`, o `None` fuori da entrambi.
+fn scope_id(doc: &Document<'_>, context: &Context<'_>) -> Option<String> {
+    let scope = doc.element(context.scope?)?;
+    scope.value(NS_NONE, "id").map(str::to_owned)
 }
 
 /// Il riepilogo di un file troncato: della testa si sa solo chi è.
@@ -822,7 +876,8 @@ fn bounds(
         | Role::Resource
         | Role::Board
         | Role::Symbol
-        | Role::Instance => {}
+        | Role::Instance
+        | Role::Copy => {}
     }
 }
 

@@ -547,6 +547,37 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<use id="o9" transform="matrix(1 0 0 1 36 116)" opacity="0.5" href="#rlampada0"><title>Spenta</title></use>'
       + '<use id="o10" transform="matrix(0.9848 -0.1736 0.1736 0.9848 176 104)" href="#rquadro00"/></g>'),
   },
+  {
+    // Le ripetizioni: un fiore di sei petali intorno al centro, una griglia
+    // di tre per due girata col suo gruppo, una foglia allo specchio su un
+    // asse obliquo, e una ripetizione radiale il cui originale è a sua volta
+    // una ripetizione, così le copie portano anche le copie dell'altra.
+    id: "ripetizioni",
+    text: scene(`${LAYER}<g id="o1" fub:repeat="radial 6 48 52">`
+      + '<ellipse id="o2" cx="48" cy="28" rx="8" ry="18" fill="#cc79a7" fill-opacity="0.8" stroke="#1a202c" stroke-width="1.5"/>'
+      + '<use id="o3" transform="matrix(0.5 0.866 -0.866 0.5 69.0333 -15.5692)" href="#o2"/>'
+      + '<use id="o4" transform="matrix(-0.5 0.866 -0.866 -0.5 117.0333 36.4308)" href="#o2"/>'
+      + '<use id="o5" transform="matrix(-1 0 0 -1 96 104)" href="#o2"/>'
+      + '<use id="o6" transform="matrix(-0.5 -0.866 0.866 -0.5 26.9667 119.5692)" href="#o2"/>'
+      + '<use id="o7" transform="matrix(0.5 -0.866 0.866 0.5 -21.0333 67.5692)" href="#o2"/></g>'
+      + '<g id="o8" fub:repeat="grid 3 2 26 26" transform="rotate(8 147 36)">'
+      + '<rect id="o9" x="112" y="14" width="18" height="18" rx="3" fill="#009e73" stroke="#1a202c" stroke-width="1.5"/>'
+      + '<use id="o10" transform="matrix(1 0 0 1 26 0)" href="#o9"/>'
+      + '<use id="o11" transform="matrix(1 0 0 1 52 0)" href="#o9"/>'
+      + '<use id="o12" transform="matrix(1 0 0 1 0 26)" href="#o9"/>'
+      + '<use id="o13" transform="matrix(1 0 0 1 26 26)" href="#o9"/>'
+      + '<use id="o14" transform="matrix(1 0 0 1 52 26)" href="#o9"/></g>'
+      + '<g id="o15" fub:repeat="mirror 188 100 208 160">'
+      + '<g id="o16"><path id="o17" d="M192 112 C174 100 154 116 166 134 C174 146 190 150 204 148 Z" fill="#56b4e9" stroke="#0072b2" stroke-width="2"/>'
+      + '<circle id="o18" cx="178" cy="124" r="4" fill="#1a202c"/></g>'
+      + '<use id="o19" transform="matrix(-0.8 0.6 0.6 0.8 278.4 -92.8)" href="#o16"/></g>'
+      + '<g id="o20" fub:repeat="radial 4 124 120">'
+      + '<g id="o21" fub:repeat="grid 2 1 8 8"><circle id="o22" cx="120" cy="100" r="3" fill="#d55e00"/>'
+      + '<use id="o23" transform="matrix(1 0 0 1 8 0)" href="#o22"/></g>'
+      + '<use id="o24" transform="matrix(0 1 -1 0 244 -4)" href="#o21"/>'
+      + '<use id="o25" transform="matrix(-1 0 0 -1 248 240)" href="#o21"/>'
+      + '<use id="o26" transform="matrix(0 -1 1 0 4 244)" href="#o21"/></g></g>'),
+  },
   ...FROM_LIBRARY,
   ...FROM_TEMPLATES,
 ];

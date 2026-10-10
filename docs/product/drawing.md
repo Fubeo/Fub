@@ -100,7 +100,7 @@ Lo Standard aggiunge:
   con `fub:tool="highlighter"` e `fill-opacity="0.4"`. Parte giallo, con colore
   e spessori suoi, 8, 16 e 24 unità, e la penna ritrova i propri quando torna;
 - le **forme dal tratto**: un tratto a penna tenuto fermo alla fine diventa
-  una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md));
+  una forma pulita ([Disegni, forme dal tratto](drawing-ink-shapes.md)); e la **penna in simmetria**: ogni tratto scrive anche le sue copie, riflesse su un asse o girate intorno a un centro ([Disegni, ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria));
 - il **Connettore** (`X`), dopo la freccia: una linea che unisce due oggetti e li segue ([Disegni, connettori](drawing-connectors.md));
 - il **Poligono** (`Y`), dopo il Connettore: poligoni regolari e stelle che si cambiano anche dopo ([Disegni, poligoni e stelle](drawing-shapes.md)); il pannello **«Forme»**, accanto al foglio: cinquantuno forme pronte, da inserire col clic o trascinandole ([Disegni, raccolte di forme](drawing-library.md)); e le **etichette nelle forme**: due tocchi su una forma chiusa ci scrivono un testo che resta al centro ([Disegni, etichette nelle forme](drawing-labels.md));
 - **«Altro colore…»**, dopo la tavolozza: un codice come `#3a7bd5`, anche di
@@ -345,7 +345,7 @@ L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
 strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore,
-«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault: [Disegni, livello Esperto](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [curve e
+«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault, le ripetizioni: [Disegni, livello Esperto](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [ripetizioni](drawing-repeats.md), [curve e
 tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [maschere](drawing-masks.md#le-maschere), [tipografia](drawing-typography.md#il-testo-in-area), [effetti e fusione](drawing-effects.md).
 
 ## Il livello Personalizzato

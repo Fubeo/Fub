@@ -70,9 +70,10 @@ export type Nodable =
 
 /// Perché un oggetto non ha nodi da modificare: un testo, un'immagine, dati
 /// che non si leggono, una forma che non disegna niente, un tratto che non
-/// si ridisegna, un'istanza, che ha i nodi del suo simbolo, una parte di un
-/// altro programma, che resta com'è, o un oggetto che non è una forma.
-export type NoNodes = "text" | "image" | "connector" | "unreadable" | "empty" | "stroke" | "instance" | "foreign" | "other";
+/// si ridisegna, un'istanza, che ha i nodi del suo simbolo, una copia, che ha
+/// quelli del suo originale, una parte di un altro programma, che resta
+/// com'è, o un oggetto che non è una forma.
+export type NoNodes = "text" | "image" | "connector" | "unreadable" | "empty" | "stroke" | "instance" | "copy" | "foreign" | "other";
 
 /// La spina di un inchiostro: `text` è il suo `fub:ink`, per chi la ricorda.
 export type SpineOf = (text: string, ink: Ink, tolerance: number) => Spine;
@@ -137,6 +138,9 @@ export function nodableOf(node: ElementPart, spineOf: SpineOf = freshSpine, trac
     // Le forme stanno nel simbolo, che si modifica entrandoci.
     case "instance":
       return "instance";
+    // Le forme sono quelle dell'originale, che si modifica da sé.
+    case "copy":
+      return "copy";
     // Il percorso lo calcola FubDraw dagli agganci.
     case "connector":
       return "connector";

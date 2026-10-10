@@ -1158,3 +1158,25 @@ describe("i simboli negli appunti", () => {
     expect(hrefOf(opened, out.keys[0]!)).toBe(`#${id}`);
   });
 });
+
+describe("le ripetizioni negli appunti", () => {
+  const REPEATED = doc(
+    `\n  ${LAYER}\n    <g id="orrrrrrrr" fub:repeat="radial 4 5 25">\n      <rect id="oaaaaaaaa" x="0" y="0" width="10" height="10"/>\n`
+      + '      <use id="o11111111" transform="matrix(0 1 -1 0 30 20)" href="#oaaaaaaaa"/>\n      <use id="o22222222" transform="matrix(-1 0 0 -1 10 50)" href="#oaaaaaaaa"/>\n'
+      + '      <use id="o33333333" transform="matrix(0 -1 1 0 -20 30)" href="#oaaaaaaaa"/>\n    </g>\n  </g>\n',
+  );
+
+  it("una ripetizione incollata è una ripetizione, con le copie rivolte al suo originale nuovo", () => {
+    const source = open(REPEATED);
+    const svg = copy(source, ["orrrrrrrr"]);
+    for (const opened of [open(REPEATED), open(TARGET)]) {
+      const pasted = paste(opened, svg);
+      const group = node(opened, pasted.keys[0]!) as ContainerNode;
+      expect(group.details?.repeat).toEqual({ kind: "radial", count: 4, center: [5, 25] });
+      const children = elementChildren(group);
+      const original = children[0]!.facts.id!;
+      expect(original).not.toBe("oaaaaaaaa");
+      expect(children.slice(1).map((child) => [child.details?.role, child.details?.original])).toEqual([["copy", original], ["copy", original], ["copy", original]]);
+    }
+  });
+});

@@ -18,6 +18,7 @@ import type { Role } from "./scene/analysis";
 import type { ConnectorFacts, ElementItem, Item } from "./scene/classify";
 import type { ConnectorEnd } from "./scene/connectors";
 import type { Polygonal } from "./scene/parametric";
+import type { Repeat } from "./scene/repeat";
 import type { Scene } from "./scene/read";
 
 /// Quanti caratteri di un testo entrano nel nome di un oggetto.
@@ -100,11 +101,12 @@ export function keyOf(item: { readonly id: string | null; readonly path: readonl
 
 /// I ruoli che non sono oggetti: il nome e la descrizione di chi li contiene,
 /// la carta, che è il fondo, le risorse con la `defs` che le tiene e i
-/// simboli, che si vedono soltanto in chi li usa, e le tavole, che si
-/// cambiano col loro strumento.
-const NOT_OBJECTS: ReadonlySet<Role> = new Set<Role>(["title", "desc", "paper", "defs", "resource", "board", "symbol"]);
+/// simboli, che si vedono soltanto in chi li usa, le tavole, che si
+/// cambiano col loro strumento, e le copie di una ripetizione, che sono il
+/// loro originale un'altra volta.
+const NOT_OBJECTS: ReadonlySet<Role> = new Set<Role>(["title", "desc", "paper", "defs", "resource", "board", "symbol", "copy"]);
 
-const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper" | "defs" | "resource" | "board" | "symbol">, DrawKey>> = {
+const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper" | "defs" | "resource" | "board" | "symbol" | "copy">, DrawKey>> = {
   layer: "draw.kind.layer",
   group: "draw.kind.group",
   link: "draw.kind.link",
@@ -151,10 +153,24 @@ export function polygonalKind(polygonal: Pick<Polygonal, "shape" | "count">): st
   return named === undefined ? t("draw.kind.ngon", { count }) : t(named);
 }
 
+/// Che cosa è una ripetizione, a parole: «Ripetizione radiale di 8»,
+/// «Griglia di 3 × 2», «Ripetizione a specchio».
+export function repeatKind(repeat: Repeat): string {
+  switch (repeat.kind) {
+    case "radial":
+      return t("draw.kind.repeat.radial", { count: repeat.count });
+    case "grid":
+      return t("draw.kind.repeat.grid", { columns: repeat.columns, rows: repeat.rows });
+    case "mirror":
+      return t("draw.kind.repeat.mirror");
+  }
+}
+
 /// Che cosa è `item`, a parole: «Rettangolo», «Evidenziatura», «Esagono».
 export function kindOf(item: ElementItem): string {
   if (item.role === "stroke" && item.stroke?.tool === "highlighter") return t("draw.kind.highlighter");
   if (item.polygonal !== undefined) return polygonalKind(item.polygonal);
+  if (item.repeat !== undefined) return repeatKind(item.repeat);
   return t(KINDS[item.role as keyof typeof KINDS]);
 }
 

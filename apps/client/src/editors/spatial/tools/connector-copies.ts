@@ -8,6 +8,9 @@
 //   nominano è copiato nello stesso comando, anche dentro un gruppo, la copia
 //   nomina la copia, e tiene il resto del valore com'era scritto, il punto
 //   d'aggancio, `t` e la distanza.
+// - **Una copia segue il suo originale.** Il `use` di una ripetizione
+//   (formato della scena, ripetizioni) copiato col suo originale rimanda
+//   alla copia dell'originale, e resta una copia.
 // - **Altrimenti si toglie.** Un capo agganciato a ciò che non è stato copiato
 //   resta libero, e un'etichetta senza il suo connettore o la sua forma è un
 //   testo qualunque, col suo `transform`: nominare l'originale, o peggio un
@@ -63,6 +66,13 @@ export function relinked(name: LinkName, value: string, renamed: (id: string) =>
 function relinkedElem(elem: Elem, renamed: (id: string) => string | null): Elem {
   let attrs: Record<string, string> | null = null;
   for (const [key, value] of Object.entries(elem.attrs)) {
+    if (elem.tag === "use" && (key === "href" || key === "xlink:href")) {
+      const next = value.startsWith("#") ? renamed(value.slice(1)) : null;
+      if (next === null) continue;
+      attrs ??= { ...elem.attrs };
+      attrs[key] = `#${next}`;
+      continue;
+    }
     if (!key.startsWith("fub:")) continue;
     const name = key.slice(4);
     if (!isLinkName(name)) continue;

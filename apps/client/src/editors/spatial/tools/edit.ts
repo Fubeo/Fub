@@ -17,7 +17,9 @@
 //   stesso modo: il riquadro della selezione va nel riquadro chiesto con una
 //   scala e una traslazione nella scena, e il contorno scala con l'oggetto.
 // - **Eliminare** toglie gli oggetti dall'ultimo al primo, così il percorso
-//   di un oggetto senza id resta valido fino al suo turno.
+//   di un oggetto senza id resta valido fino al suo turno. Un originale di
+//   una ripetizione porta via prima le sue copie, e l'ultimo originale la
+//   ripetizione intera (formato della scena, ripetizioni).
 // - **La pagina** si allarga a passi di 256 unità per lato quando un oggetto
 //   ne esce, nello stesso `batch` dell'operazione che lo fa uscire, e non si
 //   restringe mai da sola (formato della scena, §2). «Adatta la pagina» la
@@ -31,7 +33,8 @@ import type { Tool } from "../scene/analysis";
 import type { Bounds } from "../scene/geometry";
 import { createId, type IdKind } from "../scene/ids";
 import { apply, compose, IDENTITY, invert, translate, type Matrix } from "../scene/matrix";
-import { ROOT, type AddOp, type Op } from "../scene/ops";
+import { elementChildren, originalsIn, pathOf, tagName, type ContainerNode, type ElementPart } from "../scene/model";
+import { ROOT, type AddOp, type Op, type Target } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
 import type { Page } from "../painter/paint";
 import type { LayerInfo, SceneIndex, Unit } from "./hit";
@@ -231,8 +234,73 @@ function comparePaths(a: readonly number[], b: readonly number[]): number {
 }
 
 /// Le operazioni che tolgono `units`, dall'ultimo al primo nel documento.
+/// Un originale di una ripetizione porta via prima le sue copie: dopo, se
+/// stanno dopo di lui, o subito prima della prima, se ce n'è una prima, che
+/// lo nomina ancora. Togliere tutti gli originali di una ripetizione toglie
+/// la ripetizione.
 export function removeOps(units: readonly Unit[]): Op[] {
-  return [...units].sort((a, b) => comparePaths(b.path, a.path)).map((unit) => ({ op: "remove", target: unit.target }));
+  const chosen = new Set(units.map((unit) => unit.node));
+  /// Ciò che si toglie, per percorso: gli oggetti, le copie dei loro
+  /// originali e le ripetizioni che restano senza.
+  const doomed = new Map<string, { readonly path: readonly number[]; readonly target: Target; readonly copies: readonly ElementPart[] }>();
+  const add = (path: readonly number[], target: Target, copies: readonly ElementPart[] = []): void => {
+    doomed.set(path.join("."), { path, target, copies });
+  };
+  for (const unit of units) {
+    const parent = unit.node.parent;
+    const copies = parent === null ? [] : copiesOf(parent, unit.node);
+    if (copies.length === 0) {
+      add(unit.path, unit.target);
+      continue;
+    }
+    const repeat = parent as ContainerNode;
+    if (originalsOf(repeat).every((original) => chosen.has(original))) {
+      const path = pathOf(repeat);
+      add(path, repeat.facts.id ?? { path, tag: tagName(repeat) });
+      continue;
+    }
+    add(unit.path, unit.target, copies);
+    for (const copy of copies) {
+      const path = pathOf(copy);
+      add(path, copy.facts.id ?? { path, tag: tagName(copy) });
+    }
+  }
+  // Ciò che sta dentro qualcosa che se ne va se ne va con lui.
+  const all = [...doomed.values()].filter((item) => {
+    for (let n = item.path.length - 1; n > 0; n--) if (doomed.has(item.path.slice(0, n).join("."))) return false;
+    return true;
+  });
+  all.sort((a, b) => comparePaths(b.path, a.path));
+  // Un originale con una copia prima di lui aspetta lei: ha un id, e il suo
+  // percorso non serve.
+  const waiting = new Map<string, Target[]>();
+  const ops: Op[] = [];
+  for (const item of all) {
+    const first = item.copies.length === 0 ? null : pathOf(item.copies[0]!);
+    if (first !== null && comparePaths(first, item.path) < 0) {
+      const key = first.join(".");
+      waiting.set(key, [...(waiting.get(key) ?? []), item.target]);
+    } else {
+      ops.push({ op: "remove", target: item.target });
+    }
+    for (const target of waiting.get(item.path.join(".")) ?? []) ops.push({ op: "remove", target });
+  }
+  return ops;
+}
+
+/// Le copie di `node` fra i figli di `parent`, se è una ripetizione e lui ne
+/// è un originale, in ordine di documento.
+function copiesOf(parent: ContainerNode, node: ElementPart): ElementPart[] {
+  const id = node.facts.id;
+  if (parent.details?.repeat === undefined || id === null || node.details?.role === "copy") return [];
+  return elementChildren(parent).filter((child) => child.details?.role === "copy" && child.details.original === id);
+}
+
+/// Gli originali della ripetizione `repeat`: i figli modificabili con un
+/// id, titoli, descrizioni e copie esclusi.
+function originalsOf(repeat: ContainerNode): ElementPart[] {
+  const ids = originalsIn(repeat);
+  return elementChildren(repeat).filter((child) => child.facts.id !== null && ids.has(child.facts.id));
 }
 
 /// Il `viewBox` della pagina che contiene anche `bounds`: ogni lato da cui

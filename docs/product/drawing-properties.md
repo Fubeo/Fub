@@ -51,6 +51,14 @@ dell'Esperto. Una sezione senza niente da mostrare non c'è.
   in mano, quelli dello strumento ([Disegni, poligoni e stelle](drawing-shapes.md)).
   In testa, con la parte «Simboli», il Simbolo delle istanze scelte
   ([Disegni, simboli](drawing-symbols.md#la-riga-simbolo)).
+- **Simmetria**, senza selezione, con la penna o l'evidenziatore in mano: il
+  Tipo, gli Spicchi e «Specchiata» di una radiale, e il Centro ([Disegni,
+  ripetizioni e simmetria](drawing-repeats.md#la-penna-in-simmetria)).
+- **Ripetizione**, all'Esperto, per una ripetizione scelta: il Tipo, con
+  «Espandi la ripetizione», e i suoi valori, le Volte, il Raggio e il Centro
+  di una radiale, le Colonne, le Righe e i passi di una griglia, l'Angolo e
+  la Distanza dell'asse di uno specchio ([Disegni, ripetizioni e
+  simmetria](drawing-repeats.md#la-sezione-ripetizione)).
 - **Connettore**, per i connettori scelti: il Tipo, fra Dritto, A gomito e
   Curvo; l'Aggancio d’inizio e quello di fine; l'Etichetta; e «Inverti», che
   scambia inizio e fine ([Disegni, connettori](drawing-connectors.md)).

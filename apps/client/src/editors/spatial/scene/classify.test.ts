@@ -1424,3 +1424,118 @@ describe("i simboli", () => {
     expect(codes(`<defs>${symbol("s1", '<rect width="40" height="40" fill="#0072b2"/>')}</defs>${WHITE(10, 20)}<use href="#s1"/>`)).toEqual(["S009"]);
   });
 });
+
+describe("le ripetizioni", () => {
+  const RECT = (id: string, more = ""): string => `<rect id="${id}" width="10" height="10" fill="#000000"${more}/>`;
+
+  it("una ripetizione è un gruppo con fub:repeat, e le sue copie sono use verso un originale fratello", () => {
+    const scene = load(doc(`<g fub:repeat="radial 4 50 50"><use href="#o1" transform="rotate(270 50 50)"/>${RECT("o1")}<use id="c1" xlink:href="#o1" transform="rotate(90 50 50)"><title>Copia</title></use></g>`));
+    expect(role(scene, [0])).toBe("group");
+    expect(at(scene, [0])!.repeat).toEqual({ kind: "radial", count: 4, center: [50, 50] });
+    expect(role(scene, [0, 0])).toBe("copy");
+    expect(role(scene, [0, 1])).toBe("rect");
+    expect(role(scene, [0, 2])).toBe("copy");
+    expect(at(scene, [0, 0])!.original).toBe("o1");
+    expect(at(scene, [0, 2])!.original).toBe("o1");
+    expect(at(scene, [0, 1])!.original).toBeUndefined();
+    // Un'istanza di un simbolo può essere l'originale.
+    const instance = load(doc(`<defs><symbol id="s1" overflow="visible">${RECT("r1")}</symbol></defs><g fub:repeat="grid 2 1 20 0"><use id="o1" href="#s1"/><use href="#o1" transform="translate(20 0)"/></g>`));
+    expect(role(instance, [1, 0])).toBe("instance");
+    expect(role(instance, [1, 1])).toBe("copy");
+    expect(at(instance, [1])!.repeat).toEqual({ kind: "grid", columns: 2, rows: 1, step: [20, 0] });
+  });
+
+  it("una copia ha soltanto id, transform e un href, e per figli titoli e descrizioni", () => {
+    const copy = (use: string): Role | null => role(load(doc(`<g fub:repeat="mirror 20 0 20 10">${RECT("o1")}${use}</g>`)), [0, 1]);
+    for (const use of [
+      '<use href="#o1"/>',
+      '<use xlink:href="#o1"/>',
+      '<use id="c1" href="#o1" transform="matrix(-1 0 0 1 40 0)"/>',
+      '<use href="#o1" fub:nota="x">\n  <desc>Riflessa</desc>\n</use>',
+    ]) {
+      expect(copy(use), use).toBe("copy");
+    }
+    for (const use of [
+      "<use/>",
+      '<use href="#o1" opacity="0.5"/>',
+      '<use href="#o1" display="none"/>',
+      '<use href="#o1" fill="#ff0000"/>',
+      '<use href="#o1" style="opacity: 0.5"/>',
+      '<use href="#o1" x="10"/>',
+      '<use href="#o1" xlink:href="#o1"/>',
+      '<use href="#o1" transform="scale(2"/>',
+      '<use href="#o9"/>',
+      '<use href="o1"/>',
+      `<use href="#o1">${RECT("r2")}</use>`,
+    ]) {
+      expect(copy(use), use).toBeNull();
+    }
+  });
+
+  it("senza una ripetizione valida, o verso chi non è un originale fratello, un use resta estraneo", () => {
+    const roles = (body: string, path: number[]): Role | null => role(load(doc(body)), path);
+    const COPY = '<use href="#o1" transform="translate(20 0)"/>';
+    expect(roles(`<g>${RECT("o1")}${COPY}</g>`, [0, 1])).toBeNull();
+    expect(roles(`<g fub:repeat="radial 1 0 0">${RECT("o1")}${COPY}</g>`, [0, 1])).toBeNull();
+    expect(at(load(doc(`<g fub:repeat="radial 1 0 0">${RECT("o1")}</g>`)), [0])!.repeat).toBeUndefined();
+    expect(roles(`<g fub:layer="Sfondo" fub:repeat="grid 2 1 20 0">${RECT("o1")}${COPY}</g>`, [0])).toBe("layer");
+    expect(roles(`<g fub:layer="Sfondo" fub:repeat="grid 2 1 20 0">${RECT("o1")}${COPY}</g>`, [0, 1])).toBeNull();
+    expect(roles(`<a href="nota.md" fub:repeat="grid 2 1 20 0">${RECT("o1")}${COPY}</a>`, [0, 1])).toBeNull();
+    // Un cugino non è un originale, né una copia, un titolo o un estraneo.
+    expect(roles(`<g fub:repeat="grid 2 1 20 0"><g>${RECT("o1")}</g>${COPY}</g>`, [0, 1])).toBeNull();
+    expect(roles(`${RECT("o1")}<g fub:repeat="grid 2 1 20 0">${COPY}</g>`, [1, 0])).toBeNull();
+    expect(roles(`<g fub:repeat="grid 3 1 20 0">${RECT("o1")}<use id="c1" href="#o1"/><use href="#c1"/></g>`, [0, 2])).toBeNull();
+    expect(roles(`<g fub:repeat="grid 2 1 20 0"><title id="o1">Fila</title>${COPY}</g>`, [0, 1])).toBeNull();
+    expect(roles(`<g fub:repeat="grid 2 1 20 0"><switch id="o1"/>${COPY}</g>`, [0, 1])).toBeNull();
+    expect(roles(`<g fub:repeat="grid 2 1 20 0"><use id="o1" href="#o1"/></g>`, [0, 0])).toBeNull();
+    // Dentro un originale, una ripetizione ha i suoi originali e non vede
+    // quelli di fuori.
+    const nested = load(doc(`<g fub:repeat="radial 2 0 0"><g id="o1"><g fub:repeat="grid 2 1 10 0">${RECT("o2")}<use href="#o2" transform="translate(10 0)"/><use href="#o1"/></g></g><use href="#o1" transform="rotate(180)"/></g>`));
+    expect(role(nested, [0, 0, 0, 1])).toBe("copy");
+    expect(role(nested, [0, 0, 0, 2])).toBeNull();
+    expect(role(nested, [0, 1])).toBe("copy");
+  });
+
+  it("una copia non si conta, e il riquadro del disegno comprende le copie", () => {
+    const summary = (body: string): Summary => load(doc(body)).summary;
+    const row = summary(`<g fub:repeat="grid 3 1 20 0">${RECT("o1")}<use href="#o1" transform="translate(20 0)"/><use href="#o1" transform="translate(40 0)"/></g>`);
+    expect(row.bbox).toEqual({ x: 0, y: 0, width: 50, height: 10 });
+    expect(row.counts.shapes).toBe(1);
+    // Le copie stanno nelle coordinate del gruppo.
+    expect(summary(`<g transform="translate(100 0)" fub:repeat="mirror 20 0 20 10">${RECT("o1")}<use href="#o1" transform="matrix(-1 0 0 1 40 0)"/></g>`).bbox).toEqual({ x: 100, y: 0, width: 40, height: 10 });
+    expect(summary(`<g transform="rotate(90)" fub:repeat="grid 2 1 20 0">${RECT("o1")}<use href="#o1" transform="translate(20 0)"/></g>`).bbox).toEqual({ x: -10, y: 0, width: 10, height: 30 });
+    // L'originale si sposta e le copie lo seguono; un originale nascosto
+    // nasconde le copie.
+    expect(summary(`<g fub:repeat="grid 2 1 20 0">${RECT("o1", ' x="5" transform="translate(0 5)"')}<use href="#o1" transform="translate(20 0)"/></g>`).bbox).toEqual({ x: 5, y: 5, width: 30, height: 10 });
+    expect(summary(`<g fub:repeat="grid 2 1 20 0">${RECT("o1", ' display="none"')}<use href="#o1" transform="translate(20 0)"/></g>`).bbox).toBeNull();
+    // Un'istanza come originale, e una ripetizione dentro un simbolo.
+    expect(summary(`<defs><symbol id="s1" overflow="visible">${RECT("r1")}</symbol></defs><g fub:repeat="grid 2 1 20 0"><use id="o1" href="#s1" transform="translate(0 30)"/><use href="#o1" transform="translate(20 0)"/></g>`).bbox).toEqual({
+      x: 0,
+      y: 30,
+      width: 30,
+      height: 10,
+    });
+    expect(summary(`<defs><symbol id="s1" overflow="visible"><g fub:repeat="grid 1 2 0 20">${RECT("o1")}<use href="#o1" transform="translate(0 20)"/></g></symbol></defs><use href="#s1" transform="translate(50 0)"/>`).bbox).toEqual({
+      x: 50,
+      y: 0,
+      width: 10,
+      height: 30,
+    });
+    // Una ripetizione dentro un originale: le copie di fuori portano anche
+    // quelle di dentro.
+    expect(summary(`<g fub:repeat="grid 1 2 0 50"><g id="o1"><g fub:repeat="grid 2 1 20 0">${RECT("o2")}<use href="#o2" transform="translate(20 0)"/></g></g><use href="#o1" transform="translate(0 50)"/></g>`).bbox).toEqual({
+      x: 0,
+      y: 0,
+      width: 30,
+      height: 60,
+    });
+  });
+
+  it("sopra una copia il fondo non si sa, come sopra un'istanza", () => {
+    const codes = (body: string): string[] => findings(load(doc(body))).map((d) => d.code);
+    const WHITE = (x: number, y: number): string => `<text x="${x}" y="${y}" font-size="16" fill="#ffffff"><tspan x="${x}" dy="0">Luce</tspan></text>`;
+    const row = `<g fub:repeat="grid 2 1 100 0"><rect id="o1" width="40" height="40" fill="#0072b2"/><use href="#o1" transform="translate(100 0)"/></g>`;
+    expect(codes(`${row}${WHITE(110, 20)}`)).toEqual([]);
+    expect(codes(`${row}${WHITE(60, 20)}`)).toEqual(["S009"]);
+  });
+});

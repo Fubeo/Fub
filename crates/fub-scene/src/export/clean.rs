@@ -1098,6 +1098,23 @@ mod tests {
     }
 
     #[test]
+    fn a_repeat_keeps_its_copies_and_loses_only_fub_repeat() {
+        let text = svg(concat!(
+            "\n  <g fub:repeat=\"radial 3 50 50\">\n",
+            "    <rect id=\"o1\" x=\"40.123456\" width=\"10\" height=\"10\"/>\n",
+            "    <use href=\"#o1\" transform=\"matrix(-0.5 0.866025 -0.866025 -0.5 118.30127 31.69873)\"/>\n",
+            "    <use href=\"#o1\" transform=\"matrix(-0.5 -0.866025 0.866025 -0.5 31.69873 118.30127)\"/>\n",
+            "  </g>\n"
+        ));
+        let out = cleaned(&text);
+        assert!(!out.contains("fub:repeat"), "{out}");
+        assert_eq!(out.matches("href=\"#o1\"").count(), 2, "{out}");
+        // L'originale si vede anche dove lo portano le copie: i suoi numeri
+        // tengono tutti i decimali, come il contenuto di un simbolo.
+        assert!(out.contains("id=\"o1\" x=\"40.123456\""), "{out}");
+    }
+
+    #[test]
     fn entities_are_expanded_before_the_doctype_goes() {
         let text = concat!(
             "<?xml version=\"1.0\"?>\n<!DOCTYPE svg [\n<!ENTITY ns \"http://www.w3.org/2000/svg\">\n",

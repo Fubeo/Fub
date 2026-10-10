@@ -775,6 +775,94 @@ describe("le istanze dei simboli", () => {
   });
 });
 
+describe("le copie delle ripetizioni", () => {
+  const REPEATS = doc(
+    `${LAYER}<g id="p1" fub:repeat="grid 3 1 20 0"><rect id="a" x="0" y="0" width="10" height="10"/>`
+      + '<use id="c1" transform="translate(20 0)" href="#a"/><use id="c2" transform="translate(40 0)" href="#a"/></g>'
+      + '<g id="p2" transform="translate(0 100)" fub:repeat="radial 4 0 0"><g id="o"><rect id="b" x="10" y="-2" width="20" height="4"/></g>'
+      + '<use id="c3" transform="matrix(0 1 -1 0 0 0)" href="#o"/></g></g>',
+  );
+
+  it("si toccano dove si vede l'originale, portato dalla loro trasformazione", () => {
+    const opened = open(REPEATS);
+    const { index } = opened;
+    expect(index.units.map((unit) => unit.key)).toEqual(["p1", "p2"]);
+    expect(index.get("p1")?.bounds).toEqual(box(0, 0, 50, 10));
+    expect(index.get("p2")?.bounds).toEqual(box(-2, 98, 30, 130));
+    expect(index.at([25, 5], 0)?.key).toBe("p1");
+    expect(index.at([45, 5], 0)?.key).toBe("p1");
+    // Fra l'originale e la prima copia non c'è niente.
+    expect(index.at([15, 5], 0)).toBeNull();
+    expect(index.at([0, 120], 0)?.key).toBe("p2");
+    expect(index.along([15, 5], [25, 5], 0).map((unit) => unit.key)).toEqual(["p1"]);
+    expect(opened.frame("p1")).toEqual(box(0, 0, 50, 10));
+    expect(opened.extent()).toEqual(box(-2, 0, 50, 130));
+  });
+
+  it("per chi cambia una forma una copia è una forma sola, ma si vede che cosa c'è sotto il punto", () => {
+    const p1 = open(REPEATS).index.get("p1")!;
+    expect(p1.shapes().map(({ leaf, matrix }) => [leaf.facts.id, matrix])).toEqual([
+      ["a", IDENTITY],
+      ["c1", [1, 0, 0, 1, 20, 0]],
+      ["c2", [1, 0, 0, 1, 40, 0]],
+    ]);
+    expect(p1.shapeAt([25, 5], 0)?.facts.id).toBe("c1");
+    expect(p1.sampleAt([25, 5], 0)?.leaf.facts.id).toBe("a");
+    expect(p1.sampleAt([25, 5], 0)?.matrix).toEqual([1, 0, 0, 1, 20, 0]);
+  });
+
+  it("non sono oggetti: nella ripetizione isolata un clic su una copia dà l'originale", () => {
+    const opened = open(REPEATS);
+    const p1 = opened.index.get("p1")!;
+    expect(opened.index.children(p1).map((unit) => unit.key)).toEqual(["a"]);
+    expect(opened.index.get("c1")).toBeNull();
+    expect(opened.index.deepAt([45, 5], 0)?.key).toBe("a");
+    expect(opened.index.deepAt([0, 120], 0)?.key).toBe("o");
+    const index = opened.reindex(container(opened, "p1"));
+    expect(index.units.map((unit) => unit.key)).toEqual(["a"]);
+    expect(index.get("c1")).toBeNull();
+    expect(index.at([5, 5], 0)?.key).toBe("a");
+    expect(index.at([25, 5], 0)?.key).toBe("a");
+    expect(index.at([15, 5], 0)).toBeNull();
+    expect(index.within(box(18, -1, 32, 11))).toEqual([]);
+    // Le guide vedono l'originale, non le copie che lo seguono.
+    expect(opened.seen(new Set([container(opened, "p1")])).map((unit) => unit.key)).toEqual(["a", "p2"]);
+  });
+
+  it("un originale nascosto nasconde le copie, e uno che cambia le cambia", () => {
+    const opened = open(REPEATS);
+    expect(opened.engine.apply({ op: "set", id: "a", attrs: { width: "15" } }).outcome).toBe("applied");
+    expect(opened.reindex().get("p1")?.bounds).toEqual(box(0, 0, 55, 10));
+    expect(opened.engine.apply({ op: "set", id: "a", attrs: { display: "none" } }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect(index.get("p1")?.bounds).toBeNull();
+    expect(index.at([25, 5], 0)).toBeNull();
+  });
+
+  it("con troppe forme, una copia si tocca nel riquadro dell'originale", () => {
+    const rects = Array.from({ length: 70 }, (_, i) => `<rect x="${2 * i}" y="0" width="1" height="1"/>`).join("");
+    const copies = Array.from({ length: 69 }, (_, i) => `<use id="c${i}" transform="translate(0 ${2 * (i + 1)})" href="#o"/>`).join("");
+    const { index } = open(doc(`${LAYER}<g id="p" fub:repeat="grid 1 70 0 2"><g id="o">${rects}</g>${copies}</g></g>`));
+    const unit = index.get("p")!;
+    expect(unit.bounds).toEqual(box(0, 0, 139, 139));
+    expect(unit.hits([0.5, 0.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 0.5], 0)).toBe(false);
+    expect(unit.hits([1.5, 138.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 137.5], 0)).toBe(false);
+  });
+
+  it("un ritaglio con objectBoundingBox prende la scatola delle copie", () => {
+    const { index } = open(doc(
+      '<defs id="fub-defs"><clipPath id="k" fub:role="private" clipPathUnits="objectBoundingBox"><rect x="0" y="0" width="0.5" height="1"/></clipPath></defs>'
+        + `${LAYER}<g id="p1" fub:repeat="grid 3 1 20 0" clip-path="url(#k)"><rect id="a" x="0" y="0" width="10" height="10"/>`
+        + '<use id="c1" transform="translate(20 0)" href="#a"/><use id="c2" transform="translate(40 0)" href="#a"/></g></g>',
+    ));
+    expect(index.get("p1")?.bounds).toEqual(box(0, 0, 25, 10));
+    expect(index.at([22, 5], 0)?.key).toBe("p1");
+    expect(index.at([45, 5], 0)).toBeNull();
+  });
+});
+
 describe("sulle pagine di un PDF", () => {
   it("gli oggetti sono solo quelli dei gruppi della pagina, trattati come livelli", () => {
     const engine = SceneEngine.open(

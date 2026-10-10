@@ -83,6 +83,10 @@ export type OverlayHandle =
   | { readonly kind: "guide"; readonly from: Point; readonly to: Point; readonly dashed: boolean }
   /// Il segno a croce dove una guida passa per un bordo o per un centro.
   | { readonly kind: "cross"; readonly x: number; readonly y: number }
+  /// La simmetria della penna: dal centro, i raggi tratteggiati fino al
+  /// bordo della vista nelle direzioni `rays`, in gradi nella scena; e il
+  /// centro, un anello col mirino da tirare, più spesso mentre lo si tira.
+  | { readonly kind: "symmetry"; readonly center: Point; readonly rays: readonly number[]; readonly active: boolean }
   /// Una misura: la linea fra due punti, con le stanghette ai capi, e la
   /// distanza scritta a metà.
   | { readonly kind: "measure"; readonly from: Point; readonly to: Point; readonly text: string }
@@ -179,6 +183,14 @@ const CROP_THIRDS_ALPHA = 0.7;
 /// CSS.
 const CORNER = 10;
 const CORNER_DOT = 3;
+
+/// Il centro della simmetria, in pixel CSS: il diametro dell'anello, quanto
+/// sporgono le stanghette del mirino, il diametro del punto in mezzo; e
+/// quanto sono tenui i raggi, che stanno sotto ciò che si disegna.
+const SYMMETRY_RING = 14;
+const SYMMETRY_TICK = 4;
+const SYMMETRY_DOT = 3;
+const SYMMETRY_RAY_ALPHA = 0.6;
 
 /// Quanto una maniglia sporge dal suo punto, in pixel CSS: la metà della più
 /// grande, quella che ruota.
@@ -724,6 +736,23 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.moveTo(...crisp(handle.from));
         ctx.lineTo(...crisp(handle.to));
         ctx.stroke();
+      } else if (handle.kind === "symmetry") {
+        // Ogni raggio arriva oltre il bordo della vista, girata o no.
+        const [cx, cy] = screen(handle.center[0], handle.center[1]);
+        const reach = width + height;
+        ctx.setLineDash([6, 4]);
+        ctx.globalAlpha = SYMMETRY_RAY_ALPHA;
+        ctx.beginPath();
+        for (const ray of handle.rays) {
+          const radians = (ray * Math.PI) / 180;
+          const [ex, ey] = screen(handle.center[0] + Math.cos(radians), handle.center[1] + Math.sin(radians));
+          const length = Math.hypot(ex - cx, ey - cy);
+          if (length === 0) continue;
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + ((ex - cx) / length) * reach, cy + ((ey - cy) / length) * reach);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1;
       } else if (handle.kind === "cross") {
         ctx.setLineDash([]);
         const [px, py] = screen(handle.x, handle.y);
@@ -768,6 +797,28 @@ export function createOverlay(host: HTMLElement, owner: Lifetime): SceneOverlay 
         ctx.arc(px, py, (handle.kind === "rotor" ? ROTOR : CONTROL) / 2, 0, 2 * Math.PI);
         ctx.fill();
         ctx.stroke();
+      } else if (handle.kind === "symmetry") {
+        const [px, py] = screen(handle.center[0], handle.center[1]);
+        const r = SYMMETRY_RING / 2;
+        ctx.lineWidth = handle.active ? 2 : 1.5;
+        ctx.beginPath();
+        ctx.arc(px, py, r, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.moveTo(px - r - SYMMETRY_TICK, py);
+        ctx.lineTo(px - r, py);
+        ctx.moveTo(px + r, py);
+        ctx.lineTo(px + r + SYMMETRY_TICK, py);
+        ctx.moveTo(px, py - r - SYMMETRY_TICK);
+        ctx.lineTo(px, py - r);
+        ctx.moveTo(px, py + r);
+        ctx.lineTo(px, py + r + SYMMETRY_TICK);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+        ctx.fillStyle = line;
+        ctx.beginPath();
+        ctx.arc(px, py, SYMMETRY_DOT / 2, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = fill;
       } else if (handle.kind === "corner") {
         const [px, py] = screen(handle.x, handle.y);
         ctx.beginPath();

@@ -64,6 +64,13 @@
 //!   non va; le istanze con `href` e con
 //!   `xlink:href`, ruotata e con un titolo, una nascosta, un testo bianco
 //!   sopra un'istanza, e un esempio di ogni modo di non essere un'istanza;
+//! - `repeats`: un disegno con le ripetizioni (formato della scena,
+//!   ripetizioni): un fiore radiale che ha per originale l'istanza di un
+//!   simbolo, a sua volta con una ripetizione dentro; una griglia spostata,
+//!   con una copia scritta con `xlink:href` e un titolo; uno specchio che ha
+//!   per originale un gruppo con dentro un'altra ripetizione, e un testo
+//!   bianco sopra la copia riflessa; un esempio di ogni modo di non essere
+//!   una ripetizione o una copia;
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -84,6 +91,7 @@ use std::path::PathBuf;
 use common::check_lossless;
 use fub_scene::connectors::{Anchor, ConnectorEnd, ConnectorKind};
 use fub_scene::ink::INK_MAX_SAMPLES;
+use fub_scene::repeat::Repeat;
 use fub_scene::{
     read, Ink, Item, Lifecycle, Motif, Role, Sample, Scale, Scene, StyleFacts, StyleKind, Swatch,
     FUB_NS, MAX_ELEMENTS, STYLE_GRAPHIC_POINTS, SVG_NS,
@@ -2158,6 +2166,186 @@ fn symbols() -> String {
     document(&root, "\n")
 }
 
+fn repeats() -> String {
+    let copy = |id: &str, original: &str, transform: &str| {
+        El::new("use")
+            .a("id", id)
+            .a("transform", transform)
+            .a("href", format!("#{original}"))
+    };
+    let circle = |id: &str, cx: i32, cy: i32, r: i32| {
+        El::new("circle")
+            .a("id", id)
+            .a("cx", cx)
+            .a("cy", cy)
+            .a("r", r)
+            .a("fill", "#000000")
+    };
+    let square = |id: &str, x: i32, y: i32| {
+        El::new("rect")
+            .a("id", id)
+            .a("x", x)
+            .a("y", y)
+            .a("width", 20)
+            .a("height", 20)
+            .a("fill", "#e69f00")
+    };
+    // Un petalo, nelle coordinate del simbolo, con due punti in fila: una
+    // ripetizione dentro un simbolo.
+    let defs = El::new("defs").a("id", "fub-defs").child(
+        El::new("symbol")
+            .a("id", "r00000001")
+            .a("overflow", "visible")
+            .child(El::new("title").text("Petalo"))
+            .child(
+                El::new("ellipse")
+                    .a("id", "o00000001")
+                    .a("cx", 0)
+                    .a("cy", -30)
+                    .a("rx", 8)
+                    .a("ry", 20)
+                    .a("fill", "#cc79a7"),
+            )
+            .child(
+                El::new("g")
+                    .a("id", "o00000002")
+                    .a("fub:repeat", "grid 1 2 0 10")
+                    .child(circle("o00000003", 0, -40, 2))
+                    .child(copy("o00000004", "o00000003", "translate(0 10)")),
+            ),
+    );
+    let first = layer("l00000001", "Livello 1")
+        // Un fiore: l'originale è un'istanza del petalo, e le copie lo
+        // ruotano intorno al centro.
+        .child(
+            El::new("g")
+                .a("id", "o00000010")
+                .a("fub:repeat", "radial 6 200 200")
+                .child(El::new("title").text("Fiore"))
+                .child(
+                    El::new("use")
+                        .a("id", "o00000011")
+                        .a("transform", "translate(200 200)")
+                        .a("href", "#r00000001"),
+                )
+                .child(copy(
+                    "o00000012",
+                    "o00000011",
+                    "matrix(0.5 0.866 -0.866 0.5 273.2051 -73.2051)",
+                ))
+                .child(copy(
+                    "o00000013",
+                    "o00000011",
+                    "matrix(-0.5 0.866 -0.866 -0.5 473.2051 126.7949)",
+                ))
+                .child(copy("o00000014", "o00000011", "matrix(-1 0 0 -1 400 400)"))
+                .child(copy(
+                    "o00000015",
+                    "o00000011",
+                    "matrix(-0.5 -0.866 0.866 -0.5 126.7949 473.2051)",
+                ))
+                .child(copy(
+                    "o00000016",
+                    "o00000011",
+                    "matrix(0.5 -0.866 0.866 0.5 -73.2051 273.2051)",
+                )),
+        )
+        // Una griglia spostata: le copie stanno nelle coordinate del gruppo,
+        // una con `xlink:href` e un titolo.
+        .child(
+            El::new("g")
+                .a("id", "o00000020")
+                .a("fub:repeat", "grid 3 2 60 50")
+                .a("transform", "translate(450 80)")
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000021")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 40)
+                        .a("height", 30)
+                        .a("fill", "#0072b2"),
+                )
+                .child(copy("o00000022", "o00000021", "translate(60 0)"))
+                .child(
+                    El::new("use")
+                        .a("id", "o00000023")
+                        .a("transform", "translate(120 0)")
+                        .a("xlink:href", "#o00000021")
+                        .child(El::new("title").text("Terza")),
+                )
+                .child(copy("o00000024", "o00000021", "translate(0 50)"))
+                .child(copy("o00000025", "o00000021", "translate(60 50)"))
+                .child(copy("o00000026", "o00000021", "translate(120 50)")),
+        )
+        // Uno specchio: l'originale è un gruppo con dentro un'altra
+        // ripetizione, che le copie di fuori portano con sé.
+        .child(
+            El::new("g")
+                .a("id", "o00000030")
+                .a("fub:repeat", "mirror 400 300 400 400")
+                .child(
+                    El::new("g")
+                        .a("id", "o00000031")
+                        .child(
+                            El::new("path")
+                                .a("id", "o00000032")
+                                .a("d", "M300 450 L380 420 L380 520 Z")
+                                .a("fill", "#009e73"),
+                        )
+                        .child(
+                            El::new("g")
+                                .a("id", "o00000033")
+                                .a("fub:repeat", "grid 2 1 30 0")
+                                .child(circle("o00000034", 320, 470, 6))
+                                .child(copy("o00000035", "o00000034", "translate(30 0)")),
+                        ),
+                )
+                .child(copy("o00000036", "o00000031", "matrix(-1 0 0 1 800 0)")),
+        )
+        // Un testo bianco sopra la copia riflessa: il fondo non si sa.
+        .child(line(
+            El::new("text")
+                .a("id", "o00000040")
+                .a("x", 430)
+                .a("y", 480)
+                .a("font-size", 16)
+                .a("fill", "#ffffff"),
+            430,
+            "Eco",
+        ))
+        // Non sono ripetizioni, o non sono copie: un `fub:repeat` fuori
+        // grammatica, una copia con un'opacità, una verso un cugino.
+        .child(
+            El::new("g")
+                .a("id", "o00000050")
+                .a("fub:repeat", "radial 1 0 0")
+                .child(square("o00000051", 250, 500))
+                .child(copy("o00000052", "o00000051", "translate(30 0)")),
+        )
+        .child(
+            El::new("g")
+                .a("id", "o00000053")
+                .a("fub:repeat", "grid 2 1 30 0")
+                .child(square("o00000054", 250, 540))
+                .child(copy("o00000055", "o00000054", "translate(30 0)").a("opacity", "0.5"))
+                .child(copy("o00000056", "o00000021", "translate(30 0)")),
+        );
+    // Un livello non è una ripetizione.
+    let second = layer("l00000002", "Sfondo")
+        .a("fub:repeat", "grid 2 1 30 0")
+        .child(square("o00000060", 300, 560))
+        .child(copy("o00000061", "o00000060", "translate(30 0)"));
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("Le ripetizioni"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(first)
+        .child(second);
+    document(&root, "\n")
+}
+
 #[test]
 fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
@@ -2725,6 +2913,67 @@ fn symbols_are_read_with_their_instances() {
 }
 
 #[test]
+fn repeats_are_read_with_their_copies() {
+    let scene = fixture("repeats", &repeats());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    let role = |path: &[usize]| element(path).map(|e| e.role);
+    let original = |path: &[usize]| element(path).and_then(|e| e.original.as_deref());
+    // Nel simbolo, la ripetizione dei punti.
+    assert_eq!(role(&[1, 0, 2]), Some(Role::Group));
+    assert_eq!(role(&[1, 0, 2, 1]), Some(Role::Copy));
+    // Il fiore: l'istanza è l'originale, le cinque copie la ruotano.
+    assert_eq!(
+        element(&[3, 0]).and_then(|e| e.repeat.clone()),
+        Some(Repeat::Radial {
+            count: 6,
+            center: [200.0, 200.0]
+        })
+    );
+    assert_eq!(role(&[3, 0, 1]), Some(Role::Instance));
+    for at in 2..7 {
+        assert_eq!(role(&[3, 0, at]), Some(Role::Copy), "{at}");
+        assert_eq!(original(&[3, 0, at]), Some("o00000011"), "{at}");
+    }
+    // La griglia, con la copia che ha un titolo.
+    assert_eq!(role(&[3, 1, 2]), Some(Role::Copy));
+    assert_eq!(
+        element(&[3, 1, 2]).and_then(|e| e.title.as_deref()),
+        Some("Terza")
+    );
+    // Lo specchio, col gruppo per originale e la ripetizione dentro.
+    assert_eq!(role(&[3, 2, 0]), Some(Role::Group));
+    assert_eq!(role(&[3, 2, 0, 1, 1]), Some(Role::Copy));
+    assert_eq!(original(&[3, 2, 1]), Some("o00000031"));
+    // Gli esempi di ciò che non è una ripetizione o una copia.
+    assert_eq!(element(&[3, 4]).and_then(|e| e.repeat.clone()), None);
+    assert!(element(&[3, 4, 1]).is_none());
+    assert!(element(&[3, 5, 1]).is_none());
+    assert!(element(&[3, 5, 2]).is_none());
+    assert_eq!(role(&[4]), Some(Role::Layer));
+    assert_eq!(element(&[4]).and_then(|e| e.repeat.clone()), None);
+    assert!(element(&[4, 1]).is_none());
+    // Le copie non si contano, ma il riquadro le comprende: a sinistra i
+    // petali ruotati, a destra l'ultima colonna della griglia.
+    let counts = &scene.summary.counts;
+    assert_eq!((counts.shapes, counts.texts), (8, 1));
+    let bbox = scene.summary.bbox.as_ref().unwrap();
+    assert_eq!(
+        (bbox.x, bbox.y, bbox.width, bbox.height),
+        (152.69, 80.0, 457.31, 500.0)
+    );
+    // Niente S009: il testo bianco sta sopra la copia riflessa.
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::S002;
+    assert_eq!(codes, [S002, S002, S002]);
+}
+
+#[test]
 fn crlf_bom_moves_utf16_away_from_bytes() {
     let source = crlf_bom();
     let scene = fixture("crlf-bom", &source);
@@ -3194,6 +3443,7 @@ fn the_folder_holds_only_what_this_test_writes() {
         "connectors",
         "styles",
         "symbols",
+        "repeats",
     ]
     .iter()
     .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])

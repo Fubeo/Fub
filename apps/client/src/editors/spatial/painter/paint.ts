@@ -46,6 +46,10 @@
 // vivi, li trovano. Un simbolo che contiene qualcosa di estraneo che si vede
 // non si dipinge vivo, perché quel pezzo non entra nel documento vivo: le
 // sue istanze stanno negli strati immagine, col simbolo intero nei `defs`.
+//
+// Le copie di una ripetizione (formato della scena, ripetizioni) sono `use`
+// vivi verso l'originale, che sta fra i loro fratelli: la scena dice quali
+// originali hanno copie vive, e il painter dà a quelli l'id vivo.
 
 import type { Role } from "../scene/analysis";
 import { svgAttribute, textPathTarget } from "../scene/classify";
@@ -88,8 +92,9 @@ export const MAX_DEFS_CHARS = 8 * 1024 * 1024;
 /// Un attributo dipinto: nome senza namespace e valore.
 export type PaintAttr = readonly [name: string, value: string];
 
-/// I tag che un painter crea per una forma: anche un'istanza di un simbolo,
-/// un `use`, che si disegna come un elemento solo.
+/// I tag che un painter crea per una forma: anche un'istanza di un simbolo
+/// o una copia in una ripetizione, un `use`, che si disegna come un elemento
+/// solo.
 export type ShapeTag = "path" | "rect" | "ellipse" | "circle" | "line" | "polyline" | "polygon" | "text" | "image" | "use";
 
 /// Da dove viene un'immagine modificabile.
@@ -148,6 +153,8 @@ export interface PaintShape {
   readonly image?: ImageSource;
   /// L'id del simbolo di un'istanza, che il painter riscrive nel suo.
   readonly symbol?: string;
+  /// L'id dell'originale di una copia, che il painter riscrive nel suo.
+  readonly original?: string;
 }
 
 /// Un livello, un gruppo o un collegamento: un `g`. Un collegamento non
@@ -259,6 +266,9 @@ export interface PaintScene {
   /// I simboli modificabili che si dipingono vivi, in ordine di documento,
   /// col loro contenuto: lo stesso oggetto finché nessuno cambia.
   readonly symbols: readonly PaintGroup[];
+  /// Gli id degli originali che le copie vive usano: il painter dà loro
+  /// l'id vivo. Lo stesso oggetto finché non cambiano.
+  readonly originals: ReadonlySet<string>;
 }
 
 /// Il documento da cui si disegna: il motore delle operazioni lo è.
@@ -566,8 +576,9 @@ function shapeOf(leaf: LeafNode, scope: NamespaceScope): PaintShape | null {
       else shape.image = { kind: "remote" };
     }
   } else if (tag === "use") {
-    // La classificazione ha già trovato il simbolo.
-    shape.symbol = details.symbol!;
+    // La classificazione ha già trovato il simbolo, o l'originale.
+    if (details.role === "copy") shape.original = details.original!;
+    else shape.symbol = details.symbol!;
   }
   return shape;
 }
@@ -759,6 +770,12 @@ function take<T>(index: Map<string, Map<string, T>> | null, signature: string, r
   return item;
 }
 
+function sameSet<T>(a: ReadonlySet<T>, b: ReadonlySet<T>): boolean {
+  if (a.size !== b.size) return false;
+  for (const item of a) if (!b.has(item)) return false;
+  return true;
+}
+
 function shallowEqual<T>(a: readonly T[], b: readonly T[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
@@ -947,7 +964,9 @@ export class PaintBuilder {
     const resources = previous !== undefined && shallowEqual(previous, run.resources) ? previous : run.resources;
     const before = this.lastScene?.symbols;
     const symbols = before !== undefined && shallowEqual(before, run.symbols) ? before : run.symbols;
-    const scene = { root: root.root, layers, resources, symbols };
+    const earlier = this.lastScene?.originals;
+    const originals = earlier !== undefined && sameSet(earlier, run.originals) ? earlier : run.originals;
+    const scene = { root: root.root, layers, resources, symbols, originals };
     this.lastScene = scene;
     return scene;
   }
@@ -1322,6 +1341,8 @@ class BuildRun implements Visitor {
   readonly resources: PaintResource[] = [];
   /// I simboli modificabili, in ordine di documento.
   readonly symbols: PaintGroup[] = [];
+  /// Gli originali delle copie vive.
+  readonly originals = new Set<string>();
   /// Il simbolo che si legge e i contenitori aperti dentro di lui: il suo
   /// contenuto sta nel simbolo, e non entra negli strati vivi.
   private readonly symbolChain: Draft[] = [];
@@ -1397,6 +1418,7 @@ class BuildRun implements Visitor {
     if (symbol !== undefined) {
       const shape = this.builder.shape(node);
       if (shape !== null) symbol.children.push(shape);
+      if (shape?.original !== undefined) this.originals.add(shape.original);
     }
     const image = this.image;
     if (image !== null) {
@@ -1410,6 +1432,7 @@ class BuildRun implements Visitor {
     const shape = this.builder.shape(node);
     if (shape === null) return;
     this.liveParent().push(shape);
+    if (shape.original !== undefined) this.originals.add(shape.original);
   }
 
   run(owner: ContainerNode, from: number, to: number): void {

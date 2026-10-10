@@ -28,6 +28,7 @@ import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
 import { readConnectorEnd, readConnectorGeom, readLabelPlace, type ConnectorEnd, type ConnectorGeom, type LabelPlace } from "./connectors";
 import { parsePath } from "./geometry";
 import { readInside } from "./labels";
+import { readRepeat, type Repeat } from "./repeat";
 import { readPolygonal, type Polygonal } from "./parametric";
 import { readVarWidth, type VarWidth } from "./varwidth";
 import type { Span } from "./text";
@@ -178,6 +179,11 @@ export interface ElementItem extends Span {
   /// Da dove viene un simbolo copiato da una libreria: `fub:source`, com'è
   /// scritto.
   readonly source?: string;
+  /// La ripetizione di un gruppo: `fub:repeat` letto (formato della scena,
+  /// ripetizioni).
+  readonly repeat?: Repeat;
+  /// L'originale di una copia: l'id del fratello a cui rimanda.
+  readonly original?: string;
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -242,8 +248,10 @@ export function isResourceTag(tag: string): boolean {
 /// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
 /// `mask` e `filter` ritagli, maschere e filtri, un `textPath` un tracciato
 /// (formato della scena, testo), e un `use` un simbolo (formato della scena,
-/// simboli).
-export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter" | "path" | "symbol";
+/// simboli). Un `use` figlio di una ripetizione usa anche un originale, suo
+/// fratello, che non è una risorsa e vale soltanto per i fratelli (formato
+/// della scena, ripetizioni).
+export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter" | "path" | "symbol" | "original";
 
 /// Il tipo di una risorsa dal suo tag.
 export function resourceKind(tag: string): ResourceKind | null {
@@ -1157,21 +1165,29 @@ export function symbolAllowed(element: ElementNode): boolean {
 /// uguale in ogni istanza.
 const INSTANCE_ATTRIBUTES: ReadonlySet<string> = new Set(["id", "transform", "opacity", "display", "style", "clip-path", "mask", "filter"]);
 
-/// Vero se `element`, un `use` fuori dalle `defs`, è un'istanza: un `href`
-/// o un `xlink:href`, uno solo, verso un simbolo modificabile, gli attributi
-/// di [`INSTANCE_ATTRIBUTES`], e per figli soltanto titoli e descrizioni.
-function instanceAllowed(doc: XmlDocument, element: ElementNode, resolve: Resolve): boolean {
+/// Gli attributi SVG di una copia oltre a `href`: dove sta e nient'altro,
+/// perché l'editor riscrive le copie quando la ripetizione cambia (formato
+/// della scena, ripetizioni).
+const COPY_ATTRIBUTES: ReadonlySet<string> = new Set(["id", "transform"]);
+
+/// Vero se `element`, un `use` fuori dalle `defs`, rimanda a ciò che vuole
+/// `target`: un `href` o un `xlink:href`, uno solo, verso un id che
+/// `resolve` dice di quel tipo, gli attributi di `attributes`, e per figli
+/// soltanto titoli e descrizioni. Un'istanza vuole un simbolo e gli
+/// attributi di [`INSTANCE_ATTRIBUTES`], una copia un originale e quelli di
+/// [`COPY_ATTRIBUTES`].
+function useAllowed(doc: XmlDocument, element: ElementNode, resolve: Resolve, target: ResourceKind, attributes: ReadonlySet<string>): boolean {
   let hrefs = 0;
-  const attributes = element.attrs.every((attr) => {
+  const allowed = element.attrs.every((attr) => {
     switch (attr.ns) {
       case NS_NONE:
       case NS_XLINK: {
         if (attr.local === "href") {
           hrefs++;
-          const target = hrefId(attr.value);
-          return target !== null && resolve(target) === "symbol";
+          const id = hrefId(attr.value);
+          return id !== null && resolve(id) === target;
         }
-        if (attr.ns === NS_XLINK || !INSTANCE_ATTRIBUTES.has(attr.local)) return false;
+        if (attr.ns === NS_XLINK || !attributes.has(attr.local)) return false;
         return (REFERENCES.has(attr.local) || !hasUrl(attr.value)) && svgAttribute("use", attr.local, attr.value, resolve);
       }
       case NS_SVG:
@@ -1180,7 +1196,42 @@ function instanceAllowed(doc: XmlDocument, element: ElementNode, resolve: Resolv
         return true;
     }
   });
-  return attributes && hrefs === 1 && element.children.every((child) => blankOrMeta(doc, child) === true);
+  return allowed && hrefs === 1 && element.children.every((child) => blankOrMeta(doc, child) === true);
+}
+
+// ---------------------------------------------------------------------------
+// Le ripetizioni (formato della scena, ripetizioni).
+// ---------------------------------------------------------------------------
+
+/// La ripetizione di `element`, se `fub:repeat` si legge. Vale per un `g`
+/// che è un gruppo, non un livello: lo sa chi lo classifica.
+export function repeatOf(element: ElementNode): Repeat | null {
+  const value = valueOf(element, NS_FUB, "repeat");
+  return value === undefined ? null : readRepeat(value);
+}
+
+/// Gli originali fra i figli di `parent`, una ripetizione: gli id dei figli
+/// modificabili, titoli e descrizioni esclusi. `depth` è la profondità dei
+/// figli, e `resolve`, che non conosce gli originali, dice che cosa è ogni id
+/// a cui rimandano: un'istanza di un simbolo può essere un originale, una
+/// copia no.
+export function originalsOf(doc: XmlDocument, parent: NodeId, depth: number, resolve: Resolve): Set<string> {
+  const out = new Set<string>();
+  for (const child of doc.children(parent)) {
+    const element = doc.element(child);
+    if (element === null) continue;
+    const id = valueOf(element, NS_NONE, "id");
+    if (id === undefined || id === "") continue;
+    const found = classifyChild(doc, child, "inside", depth, resolve);
+    if (found !== null && found[1] !== "title" && found[1] !== "desc") out.add(id);
+  }
+  return out;
+}
+
+/// `resolve` con gli originali `originals`, per i figli di una ripetizione:
+/// un id che una risorsa porta resta suo.
+export function withOriginals(resolve: Resolve, originals: ReadonlySet<string>): Resolve {
+  return originals.size === 0 ? resolve : (id) => resolve(id) ?? (originals.has(id) ? "original" : null);
 }
 
 /// Gli id a cui rimanda `element` con ciò che contiene, una volta ciascuno.
@@ -1449,7 +1500,12 @@ function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve):
   if (place === "defs" && tag !== "title" && tag !== "desc") return null;
   // Una tavola è un `view` della radice (formato della scena, tavole).
   if (tag === "view") return place === "root" && boardAllowed(doc, element, resolve) ? [tag, "board"] : null;
-  if (tag === "use") return instanceAllowed(doc, element, resolve) ? [tag, "instance"] : null;
+  if (tag === "use") {
+    if (useAllowed(doc, element, resolve, "symbol", INSTANCE_ATTRIBUTES)) return [tag, "instance"];
+    // Una copia sta fra i figli di una ripetizione, dove `resolve` conosce
+    // gli originali (formato della scena, ripetizioni).
+    return useAllowed(doc, element, resolve, "original", COPY_ATTRIBUTES) ? [tag, "copy"] : null;
+  }
   if (!attributesAllowed(element, tag, resolve)) return null;
   const underRoot = place === "root";
   switch (tag) {
@@ -1589,6 +1645,8 @@ export interface Details {
   readonly board?: string;
   readonly symbol?: string;
   readonly source?: string;
+  readonly repeat?: Repeat;
+  readonly original?: string;
 }
 
 /// Un problema di un tratto: S004 o S010, col dettaglio.
@@ -1756,6 +1814,11 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
   }
   if (role === "title" || role === "desc") details.text = characterData(doc, id);
   if (role === "instance") details.symbol = useTarget(element)!;
+  if (role === "copy") details.original = useTarget(element)!;
+  if (role === "group") {
+    const repeat = repeatOf(element);
+    if (repeat !== null) details.repeat = repeat;
+  }
   if (role === "symbol") {
     const source = valueOf(element, NS_FUB, "source");
     if (source !== undefined) details.source = source;
@@ -1827,6 +1890,8 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.board !== undefined) item.board = details.board;
   if (details.symbol !== undefined) item.symbol = details.symbol;
   if (details.source !== undefined) item.source = details.source;
+  if (details.repeat !== undefined) item.repeat = details.repeat;
+  if (details.original !== undefined) item.original = details.original;
   return item;
 }
 
@@ -1847,6 +1912,11 @@ interface Frame {
   elements: number;
   pending: Pending | null;
   readonly context: Context;
+  /// Che cosa è ogni id a cui rimandano i figli: in una ripetizione, con
+  /// gli originali.
+  readonly resolve: Resolve;
+  /// Gli originali dei figli, in una ripetizione.
+  readonly originals: ReadonlySet<string> | null;
 }
 
 /// Ciò che la classificazione trova.
@@ -1947,7 +2017,17 @@ class Builder {
   walk(root: NodeId): void {
     const doc = this.doc;
     const stack: Frame[] = [
-      { node: root, place: "root", path: [], next: 0, elements: 0, pending: null, context: Context.root(doc.element(root)!, this.swatches) },
+      {
+        node: root,
+        place: "root",
+        path: [],
+        next: 0,
+        elements: 0,
+        pending: null,
+        context: Context.root(doc.element(root)!, this.swatches),
+        resolve: this.resolve,
+        originals: null,
+      },
     ];
     while (stack.length > 0) {
       const frame = stack[stack.length - 1]!;
@@ -1966,7 +2046,7 @@ class Builder {
         continue;
       }
       const index = frame.elements++;
-      const found = classifyChild(doc, child, frame.place, frame.path.length + 1, this.resolve);
+      const found = classifyChild(doc, child, frame.place, frame.path.length + 1, frame.resolve);
       if (found === null) {
         frame.pending = this.extend(frame.pending, child, index, frame.elements);
         continue;
@@ -1974,15 +2054,23 @@ class Builder {
       const [tag, role] = found;
       const pending = frame.pending;
       frame.pending = null;
-      const context = frame.context.child(node);
+      let context = frame.context.child(node);
+      // Un originale ha il suo riquadro, che le copie portano dove stanno.
+      const id = valueOf(node, NS_NONE, "id");
+      if (frame.originals !== null && role !== "copy" && id !== undefined && frame.originals.has(id)) {
+        this.tally.original(frame.context, id);
+        context = context.original(id);
+      }
       this.flush(pending, frame.path);
       const path = [...frame.path, index];
       this.elementItem(child, tag, role, path, context);
       if (isContainer(role)) {
         const place: Place = role === "defs" ? "defs" : "inside";
         // Il contenuto di un simbolo sta nelle coordinate del simbolo.
-        const inner = role === "symbol" ? context.within(valueOf(node, NS_NONE, "id")!) : context;
-        stack.push({ node: child, place, path, next: 0, elements: 0, pending: null, context: inner });
+        const inner = role === "symbol" ? context.within(id!) : context;
+        const originals = role === "group" && repeatOf(node) !== null ? originalsOf(doc, child, path.length + 1, this.resolve) : null;
+        const resolve = originals === null ? this.resolve : withOriginals(this.resolve, originals);
+        stack.push({ node: child, place, path, next: 0, elements: 0, pending: null, context: inner, resolve, originals });
       }
     }
   }

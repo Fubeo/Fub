@@ -125,6 +125,7 @@ import { DrawingFonts, vaultFontsOf, type FontNotes, type VaultFamily, type Vaul
 import { stem, SymbolLibraries, type LibraryState, type SymbolLibraryPort } from "./symbol-libraries";
 import { LIBRARY_MAX_BYTES, libraryCopy, originSymbol, readOrigin, sheetPrint, symbolPicture, symbolSheet, updateChanges, updateOps, type Library, type LibrarySymbol, type Origin, type SymbolCopy, type SymbolSheet } from "./symbol-library";
 import { symbolUpdateDialog } from "./symbol-update-dialog";
+import { clampSlices, DEFAULT_SYMMETRY, isSymmetryKind, mappedSamples, symmetryMatrices, symmetryRays, type PenSymmetry } from "./symmetry";
 import { resolveAgainst } from "../../../rules/mirrored";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
 import { pf1Outline } from "../ink/pf1";
@@ -141,6 +142,7 @@ import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
 import { widthsAt, type WidthPoint } from "../scene/varwidth";
 import { apply, compose, IDENTITY, invert, rotate, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, elementsIn, pathOf, tagName, titleOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { MAX_GRID, type Repeat } from "../scene/repeat";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { auditScene, MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
@@ -241,6 +243,7 @@ import {
   lookUnit,
   outlineChange,
   propertiesView,
+  repeatEdit,
   SHAPE_ACTIONS,
   shapeChange,
   sheetChange,
@@ -250,6 +253,7 @@ import {
   typedOpacity,
   UNIT_NAMES,
   vaultFamilyOptions,
+  type RepeatFacts,
   type SelectionFacts,
   type StyleFacts,
   type SymbolFacts,
@@ -288,6 +292,7 @@ import type { HatchPanelView } from "./hatch-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
 import { paintCode, resourceHome, resourcesOf, swatchPaint } from "./resources";
+import { editedRepeat, expandCopiesIn, expandOps, expandTargets, followRepeats, isRepeatKind, REPEAT_KINDS, repeatOps, repeatPlace, repeatTarget, repeatView, rewriteOps as rewriteRepeatOps, type RepeatKind } from "./repeat-ops";
 import { cyclingSymbols, detachOps, documentSymbols, instanceCounts, instanceSymbol, isInstance, renameSymbolOps, swapOps, symbolNameProblem, symbolOps, type DocumentSymbol } from "./symbols";
 import {
   applyStyleOps,
@@ -577,7 +582,7 @@ import { cornerAttrs, cornerCursor, cornerDrag, cornerGrip, cornerSpot, shapeFac
 import { allUnits, flagged, flagOps, hasLikeness, inverseOf, nodesOf, similarTo, type Flag, type Likeness } from "./selecting";
 import { constrainEnd, polygonCount, POLYGON_TOOL, shapeElem, stepRatio, withCount, type PolygonTool, type ShapeStyle, type ShapeTool } from "./shapes";
 import { centerOf, heldShape, mapped, regular, shapeOfRecognized, similar, starOf, type Recognized } from "./recognize";
-import { heldShapeOps, inkShapeOps, isPenStroke } from "./inkshape";
+import { heldShapeOps, inkShapeOps, isPenStroke, type HeldShape } from "./inkshape";
 import { keepLook, refused, type Refusal as Unkept } from "./styled";
 import { cropOps, croppedImages, cropState, dragCrop, marginsOf, MIN_CROP, slideImage, uncropOps, withMargins, type Crop, type CropHandle, type Margins } from "./crop";
 import { clipMaskOps, opacityMaskOps, releasable, releaseOps as releaseMaskOps, releaseRefusal, type MaskRefusal } from "./masks";
@@ -981,7 +986,7 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector", "symbols"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector", "symbols", "repeat"];
 
 /// Un'istanza da cui si è entrati nel suo simbolo isolato: la chiave e il
 /// posto con cui ritrovarla, come il contenitore isolato.
@@ -1111,6 +1116,16 @@ const PASTE_PROBLEMS: Readonly<Record<PasteProblem, DrawKey>> = {
 };
 
 const INK_KEY = "pen";
+
+/// La chiave dell'anteprima della copia `k` in simmetria del tratto in
+/// corso, da 0.
+const inkCopyKey = (k: number): string => `${INK_KEY}:${k}`;
+
+/// Quanto lontano dal centro della simmetria, in pixel, il puntatore lo
+/// prende; e quanto vicino al centro della pagina o di una tavola, tirato,
+/// ci si aggancia.
+const SYMMETRY_GRAB_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 7, touch: 16 };
+const SYMMETRY_SNAP_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 6, touch: 12 };
 
 /// Due tocchi sullo stesso testo entro questo tempo, in millisecondi, e
 /// questa distanza, in pixel, lo aprono: un doppio tocco come quello di un
@@ -1287,6 +1302,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-ungroup": ["M3 3h8v8H3z", "M13 13h8v8h-8z"],
   "draw-symbol": ["M12 2l3 3-3 3-3-3z", "M12 16l3 3-3 3-3-3z", "M5 9l3 3-3 3-3-3z", "M19 9l3 3-3 3-3-3z"],
   "draw-detach": ["M7 3l3 3-3 3-3-3z", "M17 15l3 3-3 3-3-3z", "M4 20L20 4"],
+  // Tre petali uguali intorno a un centro: un originale e le sue copie.
+  "draw-repeat": ["M12 14C10 10.7 10 7.3 12 4C14 7.3 14 10.7 12 14z", "M12 14C15.9 13.9 18.8 15.6 20.7 19C16.8 19.1 13.9 17.4 12 14z", "M12 14C10.1 17.4 7.2 19.1 3.3 19C5.2 15.6 8.1 13.9 12 14z"],
   "draw-order": ["M10 14H4V4h10v6", "M10 10h10v10H10z"],
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
@@ -1463,6 +1480,7 @@ type Gesture =
   | GradientGesture
   | CropGesture
   | NoteGesture
+  | SymmetryGesture
   | RefusedGesture;
 
 interface GestureBase {
@@ -1493,6 +1511,35 @@ interface InkGesture extends GestureBase {
   still: Point | null;
   /// La forma che il tratto è diventato; `null` finché è inchiostro.
   held: Held | null;
+  /// Le trasformazioni delle copie in simmetria, nella scena, prese quando
+  /// il tratto è cominciato; nessuna senza simmetria.
+  readonly copies: readonly Matrix[];
+}
+
+/// Il centro della simmetria della penna, preso e tirato.
+interface SymmetryGesture extends GestureBase {
+  readonly kind: "symmetry";
+  /// Dov'è sceso il puntatore, in pixel del foglio.
+  readonly from: Point;
+  /// Lo scarto, nella scena, fra il centro e il punto preso: il centro non
+  /// salta sotto il puntatore.
+  readonly offset: Point;
+  /// Dov'era il centro prima del gesto, per quando lo si annulla.
+  readonly before: Point;
+  /// Il puntatore si è mosso oltre la soglia del trascinamento.
+  moved: boolean;
+  /// Il centro della pagina o della tavola a cui il centro si è
+  /// agganciato; `null` se non si è agganciato.
+  snapped: Point | null;
+}
+
+/// Un tratto entrato nel disegno: il suo id, il livello che l'ha ricevuto
+/// e le sue copie in simmetria, ognuna con la trasformazione che porta il
+/// tratto su di lei nelle coordinate del livello.
+interface WrittenInk {
+  readonly id: string;
+  readonly to: Destination;
+  readonly copies: readonly { readonly id: string; readonly matrix: Matrix }[];
 }
 
 /// Un tratto a penna diventato forma, tenuto fermo alla fine: la forma
@@ -2498,8 +2545,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// `next`, con le etichette al centro delle loro forme, i connettori che
   /// seguono gli oggetti a cui sono agganciati, le punte delle linee che
-  /// tengono il colore del contorno e i filtri degli effetti la regione
-  /// dell'oggetto: il motore li segue a ogni operazione, nello stesso passo
+  /// tengono il colore del contorno, i filtri degli effetti la regione
+  /// dell'oggetto e un originale nuovo di una ripetizione le sue copie: il
+  /// motore li segue a ogni operazione, nello stesso passo
   /// d'annulla, e trova ciò che ha toccato col suo indice invece di scorrere
   /// il disegno. Le etichette vengono prima: un'etichetta che va a capo
   /// diversamente si riscrive al suo posto, prima che le punte aggiungano
@@ -2511,7 +2559,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const lines = followConnectors(model, touched, find, measureText, op);
       const tips = followTips(model, touched, new NewIds((id) => find(id) !== null), find);
       const regions = followEffects(model, touched, find, measureText);
-      const ops = [labels, lines, tips, regions].filter((each): each is Op => each !== null);
+      const copies = followRepeats(model, touched, find, new NewIds((id) => find(id) !== null));
+      const ops = [labels, lines, tips, regions, copies].filter((each): each is Op => each !== null);
       return ops.length === 0 ? null : ops.length === 1 ? ops[0]! : { op: "batch", ops };
     };
     return next;
@@ -2548,6 +2597,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// come il colore; lo cambiano i tasti mentre si disegna e il pannello
   /// delle proprietà.
   let polygonTool: PolygonTool = POLYGON_TOOL;
+  /// La simmetria della penna e dell'evidenziatore: il tipo, gli spicchi e
+  /// il centro. Vale finché l'editor vive, come lo strumento Poligono; il
+  /// centro torna al suo posto con un altro disegno.
+  let symmetry: PenSymmetry = DEFAULT_SYMMETRY;
   /// Il nome dello strumento `id`: il Poligono, quando disegna stelle, si
   /// chiama Stella.
   /// La penna di Bézier, con la Curvatura, si chiama Curvatura.
@@ -3231,6 +3284,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     readonly ratio: unknown;
     readonly kept: unknown;
     readonly polygon: PolygonTool | null;
+    readonly symmetry: PenSymmetry | null;
     readonly board: Board | null;
     readonly drawing: string;
     readonly recent: readonly string[];
@@ -3462,6 +3516,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // da solo.
   const symbolButton = arrangeButton("draw.symbol.make", "draw-symbol", null, () => symbolFromSelection());
   const detachButton = arrangeButton("draw.symbol.detach", "draw-detach", null, () => detachSelection());
+  // Dal livello Esperto, il menu Ripeti: l'oggetto scelto si ripete intorno
+  // a un centro, in griglia o allo specchio, e una ripetizione cambia tipo o
+  // si espande in oggetti.
+  const repeatButton = arrangeButton("draw.repeat", "draw-repeat", null, () => openMenu(repeatButton, repeatItems()));
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
   // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
@@ -3470,7 +3528,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto, con un testo scelto: metterlo su una forma,
   // toglierlo dal suo tracciato e rovesciarlo, in un menu.
   const textPathButton = arrangeButton("draw.text_path", "draw-text-path", null, () => openMenu(textPathButton, textPathItems()));
-  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, maskButton, outlineButton, textPathButton]) {
+  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, maskButton, repeatButton, outlineButton, textPathButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -3930,6 +3988,14 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Le guide del documento: sopra il disegno, sotto le maniglie.
   const guideLines = createGuideLines(surface);
   const overlay = createOverlay(surface, life);
+  /// Quante copie in simmetria del tratto in corso lo strato può mostrare.
+  let inkCopies = 0;
+  /// Toglie dallo strato il tratto in corso, con le sue copie in simmetria.
+  const clearInk = (): void => {
+    overlay.setInk(INK_KEY, null);
+    for (let k = 0; k < inkCopies; k++) overlay.setInk(inkCopyKey(k), null);
+    inkCopies = 0;
+  };
   // Il cursore del foglio: si vede quando lo muove la tastiera.
   const cursorMark = document.createElement("div");
   cursorMark.className = "draw-cursor";
@@ -5037,6 +5103,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     handles.push(...pathsHandles());
     handles.push(...cropHandles());
     handles.push(...connectorHandles());
+    handles.push(...symmetryHandles());
     for (const edit of edits) handles.push(...nodeHandles(edit));
     if (drafting !== null || current?.kind === "bezier") handles.push(...bezierHandles());
     const lasso = current?.kind === "select" && current.mode === "marquee"
@@ -5187,7 +5254,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   const clearPreviews = (): void => {
-    overlay.setInk(INK_KEY, null);
+    clearInk();
     showShape(null, [1, 0, 0, 1, 0, 0]);
     painter.setDraft(null);
     gradientShown = false;
@@ -6223,6 +6290,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const ratioOn = (units: readonly Unit[]): boolean =>
     ratioLock !== null && ratioLock.keys === selection.join("\n") ? ratioLock.on : units.some((unit) => RATIO_ROLES.has(unit.role));
 
+  /// Gli originali della ripetizione `container`: gli oggetti che si
+  /// scelgono quando la si isola.
+  const originalUnits = (container: ContainerNode): readonly Unit[] => indexer.index(engine.model!, container, isolatedThrough()).units;
+
+  /// La sezione «Ripetizione» per gli oggetti scelti `units`: la
+  /// ripetizione scelta da sola, o quella di cui sono originali.
+  const repeatFactsOf = (units: readonly Unit[]): RepeatFacts | null => {
+    const target = repeatTarget(units);
+    const repeat = target?.details?.repeat;
+    if (target === null || repeat === undefined) return null;
+    const place = repeatPlace(originalUnits(target));
+    return { kind: repeat.kind, view: place === null ? null : repeatView(repeat, place) };
+  };
+
   /// La selezione come la legge il pannello.
   const selectionFacts = (units: readonly Unit[]): SelectionFacts => {
     const model = engine.model!;
@@ -6247,6 +6328,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       tips: has("tips") ? tipsLookOf(model, units) : null,
       styles: has("styles") ? styleFactsOf(model, units) : null,
       symbols: has("symbols") ? symbolFactsOf(model, units) : null,
+      repeat: has("repeat") ? repeatFactsOf(units) : null,
     };
   };
 
@@ -6299,6 +6381,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     // La forma dello strumento Poligono, quando è lui lo strumento, e la
     // tavola scelta dallo strumento Tavola.
     const polygonNow = tool === "polygon" ? polygonTool : null;
+    // La simmetria della penna, con la penna e l'evidenziatore.
+    const symmetryPanel = (tool === "pen" || tool === "highlighter") && has("symmetry") ? symmetryNow() : null;
     const boardNow = tool === "board" ? (chosenSheet()?.board ?? null) : null;
     // Il colore con cui si disegna, col campione da cui viene.
     const drawing = `${style().color} ${style().swatch ?? ""}`;
@@ -6314,6 +6398,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last.ratio === ratioLock &&
       last.kept === kept &&
       last.polygon === polygonNow &&
+      last.symmetry === symmetryPanel &&
       last.board === boardNow &&
       last.drawing === drawing &&
       last.recent === recentColors &&
@@ -6329,7 +6414,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       last !== null && last.index === index && last.keys === keys && last.features === features && last.ratio === ratioLock && last.kept === kept
         ? last.reading
         : {};
-    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, board: boardNow, drawing, recent: recentColors, stop: gradientStop, reading };
+    panelShown = { index, keys, unit, editable: canEdit, grid, features, ratio: ratioLock, kept, polygon: polygonNow, symmetry: symmetryPanel, board: boardNow, drawing, recent: recentColors, stop: gradientStop, reading };
     const list = boardsNow();
     const model = engine.model;
     const units = selection.length === 0 || model === null ? [] : selectedUnits();
@@ -6355,6 +6440,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         bar: BAR_FEATURES.some(has),
         attributes: nestedNow() && units.length === 1,
         tool: polygonNow === null ? null : toolFacts(polygonNow),
+        symmetry: symmetryPanel,
         board:
           boardNow === null
             ? null
@@ -7140,6 +7226,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return changeFromPanel(SHAPE_ACTIONS[id]!, reshaped.ops, reshaped.keys);
   };
 
+  /// Un numero di «Ripetizione», nell'unità del documento: la ripetizione
+  /// della selezione cambia, con le sue copie, e il raggio sposta gli
+  /// originali; la selezione resta. Una griglia con troppe o troppo poche
+  /// celle non si scrive, e il campo lo dice.
+  const repeatFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    const model = engine.model;
+    const units = selectedUnits();
+    const target = repeatTarget(units);
+    const repeat = target?.details?.repeat;
+    const edit = repeatEdit(id, value, docUnit());
+    if (model === null || target === null || repeat === undefined || edit === null) return null;
+    const place = repeatPlace(originalUnits(target));
+    const next = place === null ? null : editedRepeat(repeat, place, edit);
+    if (next === null) {
+      const side = edit.field === "columns" || edit.field === "rows" ? Math.round(edit.value) : null;
+      const cells = repeat.kind !== "grid" || side === null ? null : side * (edit.field === "columns" ? repeat.rows : repeat.columns);
+      return cells !== null && (cells < 2 || cells > MAX_GRID) ? t("draw.properties.repeat.cells") : null;
+    }
+    const keys = units.length === 1 && units[0]!.node === target ? [] : units.map((unit) => unit.key);
+    const made = rewriteRepeatOps(model, target, next.repeat, newIds(), next.move, keys);
+    return changeFromPanel("draw.action.repeat_change", made.ops, made.keys);
+  };
+
   /// Un lato della pagina, nell'unità del documento.
   const pageFromPanel = (id: "pageWidth" | "pageHeight", value: number): string | null => {
     const page = scene.root.page;
@@ -7198,7 +7307,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// I campi del pannello che non scrivono nel disegno.
-  const SHEET_FIELDS: ReadonlySet<FieldId> = new Set<FieldId>(["grid", "snap", "guides", "rulers", "rulerGuides", "bar", "ratio"]);
+  const SHEET_FIELDS: ReadonlySet<FieldId> = new Set<FieldId>(["grid", "snap", "guides", "rulers", "rulerGuides", "bar", "ratio", "symmetry", "symmetrySlices", "symmetryMirror", "symmetryX", "symmetryY"]);
 
   /// Scrive il valore di un campo del pannello: `null` se il disegno l'ha
   /// accettato, altrimenti la ragione per cui no. Dopo, il pannello mostra
@@ -7278,6 +7387,31 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         break;
       case "symbol":
         outcome = symbolCommand(String(value));
+        break;
+      case "repeat":
+        // Un tipo rifà la ripetizione, «Espandi» la espande: dicono loro
+        // che cosa è successo.
+        if (value === "expand") expandSelection();
+        else if (isRepeatKind(value)) repeatSelection(value);
+        break;
+      case "repeatCount":
+      case "repeatRadius":
+      case "repeatX":
+      case "repeatY":
+      case "repeatColumns":
+      case "repeatRows":
+      case "repeatStepX":
+      case "repeatStepY":
+      case "repeatAngle":
+      case "repeatDistance":
+        outcome = repeatFromPanel(id, value);
+        break;
+      case "symmetry":
+      case "symmetrySlices":
+      case "symmetryMirror":
+      case "symmetryX":
+      case "symmetryY":
+        outcome = symmetryFromPanel(id, value);
         break;
       default:
         outcome = styleFromPanel(id, value);
@@ -7695,6 +7829,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     motifButton.hidden = !has("motifs");
     symbolButton.hidden = !has("symbols");
     detachButton.hidden = !has("symbols") || !units.some(isInstance);
+    repeatButton.hidden = !has("repeat");
     connectButton.hidden = !has("connector") || units.filter((unit) => attachable(unit.node)).length < 2;
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
@@ -8524,7 +8659,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
               ? gradientFor()
               : sheet !== null
                 ? sheetText(sheet)
-                : "";
+                : id === "pen" || id === "highlighter"
+                  ? symmetryText()
+                  : "";
     announce([finished, named, target].filter((part) => part !== "").join(" "));
   }
 
@@ -9271,6 +9408,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const guide = start.id >= 0 ? guideStart(base) : null;
     if (guide !== null) return guide;
     if (!editable()) return { ...base, kind: "refused" };
+    // Il centro della simmetria prende il gesto della penna che lo tocca.
+    const center = symmetryStart(base);
+    if (center !== null) return center;
     // Mentre si ritaglia, il gesto è del ritaglio.
     if (cropping !== null && tool === "select") return { ...base, kind: "crop", from: null, end: null, grab: null, start: null, offset: [0, 0], dragging: false };
     switch (tool) {
@@ -9303,6 +9443,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           holds: tool === "pen" && start.id >= 0 && !start.continued,
           still: null,
           held: null,
+          copies: symmetryShown() ? symmetryMatrices(symmetryNow()) : [],
         };
       }
       case "rect":
@@ -9421,8 +9562,171 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       }
     }
     const opacity = g.tool === "highlighter" ? Number(HIGHLIGHTER_OPACITY) : 1;
-    overlay.setInk(INK_KEY, outline.length === 0 ? null : { outline, matrix: g.to.matrix, color: g.color, opacity });
+    const ink = outline.length === 0 ? null : { outline, matrix: g.to.matrix, color: g.color, opacity };
+    overlay.setInk(INK_KEY, ink);
+    // Le copie in simmetria: lo stesso contorno, portato nella scena.
+    g.copies.forEach((m, k) => overlay.setInk(inkCopyKey(k), ink === null ? null : { ...ink, matrix: compose(m, g.to.matrix) }));
+    inkCopies = Math.max(inkCopies, g.copies.length);
     overlay.flush();
+  };
+
+  // --- La simmetria della penna ----------------------------------------------
+  //
+  // Con la simmetria accesa la penna e l'evidenziatore mostrano gli assi o i
+  // raggi, tratteggiati, e il centro, che si prende e si tira; ogni tratto
+  // scrive anche le sue copie (`symmetry.ts`). La simmetria si sceglie nel
+  // pannello delle proprietà, senza niente di scelto.
+
+  /// Il centro della simmetria quando nessuno l'ha messo: il centro della
+  /// tavola che si guarda, o della prima; senza tavole, della pagina; senza
+  /// pagina, di ciò che si vede.
+  const homeCenter = (): Point => {
+    const list = boardsNow();
+    const page = currentPage();
+    let center: Point;
+    if (list.length > 0) {
+      const { min, max } = (boardInView() ?? list[0]!).box;
+      center = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2];
+    } else if (page !== null) {
+      center = [page.x + page.width / 2, page.y + page.height / 2];
+    } else {
+      center = toScene(camera, viewCenter());
+    }
+    return [roundDelta(center[0]), roundDelta(center[1])];
+  };
+
+  /// La simmetria di adesso, col centro: la prima volta che serve, il
+  /// centro va al suo posto.
+  const symmetryNow = (): PenSymmetry & { readonly center: Point } => {
+    if (symmetry.center === null) symmetry = { ...symmetry, center: homeCenter() };
+    // La stessa simmetria finché non cambia: il pannello la confronta.
+    return symmetry as PenSymmetry & { readonly center: Point };
+  };
+
+  /// Vero se la penna o l'evidenziatore disegnano in simmetria.
+  const symmetryShown = (): boolean => has("symmetry") && symmetry.kind !== "none" && (tool === "pen" || tool === "highlighter") && editable();
+
+  /// La simmetria diventa `next`: le guide e il pannello la seguono. Il
+  /// tratto in corso finisce come era cominciato.
+  const setSymmetry = (next: PenSymmetry): void => {
+    symmetry = next;
+    showHandles();
+    syncProperties();
+  };
+
+  /// La simmetria della penna a parole; vuoto se è spenta.
+  const symmetryText = (): string => {
+    if (!has("symmetry")) return "";
+    switch (symmetry.kind) {
+      case "none":
+        return "";
+      case "vertical":
+        return t("draw.symmetry.said.vertical");
+      case "horizontal":
+        return t("draw.symmetry.said.horizontal");
+      case "radial":
+        return t(symmetry.mirror ? "draw.symmetry.said.mirrored" : "draw.symmetry.said.radial", { count: clampSlices(symmetry.slices) });
+    }
+  };
+
+  /// Vero se il punto `p` dello schermo sta sul centro della simmetria.
+  const onSymmetryCenter = (p: Point, pointer: InkPointerType): boolean => {
+    const [x, y] = toScreen(camera, symmetryNow().center);
+    return Math.hypot(x - p[0], y - p[1]) <= SYMMETRY_GRAB_PX[pointer];
+  };
+
+  /// Il centro sotto il puntatore appena sceso prende il gesto, e si tira.
+  const symmetryStart = (base: GestureBase): SymmetryGesture | null => {
+    const down = downAt;
+    if (down === null || !symmetryShown() || !onSymmetryCenter(down, base.pointer)) return null;
+    const center = symmetryNow().center;
+    const p = toScene(camera, down);
+    return { ...base, kind: "symmetry", from: down, offset: [center[0] - p[0], center[1] - p[1]], before: center, moved: false, snapped: null };
+  };
+
+  /// I punti a cui si aggancia il centro tirato: i centri delle tavole, o
+  /// senza tavole quello della pagina.
+  const symmetryTargets = (): Point[] => {
+    const list = boardsNow();
+    const page = currentPage();
+    if (list.length === 0) return page === null ? [] : [[page.x + page.width / 2, page.y + page.height / 2]];
+    return list.map(({ box }): Point => [(box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2]);
+  };
+
+  /// Il centro tirato segue il puntatore in `p`, oltre il tremito della
+  /// mano; vicino al centro di una tavola o della pagina ci si aggancia,
+  /// tranne con Ctrl o ⌘.
+  const symmetryUpdate = (g: SymmetryGesture, p: Point): void => {
+    const [x, y] = toScreen(camera, p);
+    if (!g.moved && Math.hypot(x - g.from[0], y - g.from[1]) <= DRAG_PX[g.pointer]) return;
+    if (!g.moved) showGrip("move");
+    g.moved = true;
+    const next: Point = [p[0] + g.offset[0], p[1] + g.offset[1]];
+    let reach = free ? 0 : SYMMETRY_SNAP_PX[g.pointer] / camera.scale;
+    g.snapped = null;
+    for (const target of symmetryTargets()) {
+      const far = Math.hypot(target[0] - next[0], target[1] - next[1]);
+      if (far <= reach) {
+        reach = far;
+        g.snapped = target;
+      }
+    }
+    const [cx, cy] = g.snapped ?? next;
+    symmetry = { ...symmetry, center: [roundDelta(cx), roundDelta(cy)] };
+    showHandles();
+    syncProperties();
+  };
+
+  /// La fine del gesto che tira il centro: si dice dove sta. Un tocco fermo
+  /// non cambia niente.
+  const symmetryEnd = (g: SymmetryGesture): void => {
+    current = null;
+    showGrip(null);
+    showHandles();
+    if (!g.moved) return;
+    const [x, y] = symmetryNow().center;
+    const said = g.snapped === null ? "draw.symmetry.moved" : boardsNow().length > 0 ? "draw.symmetry.snapped.board" : "draw.symmetry.snapped.page";
+    announce(t(said, { x: lengthSpoken(x), y: lengthSpoken(y) }));
+  };
+
+  /// Le guide della simmetria, con la penna e l'evidenziatore, e mentre si
+  /// tira il centro dove sta.
+  const symmetryHandles = (): OverlayHandle[] => {
+    if (!symmetryShown()) return [];
+    const now = symmetryNow();
+    const [x, y] = now.center;
+    const g = current?.kind === "symmetry" && current.moved ? current : null;
+    const out: OverlayHandle[] = [{ kind: "symmetry", center: now.center, rays: symmetryRays(now), active: g !== null }];
+    if (g !== null) out.push({ kind: "label", x, y, text: t("draw.cursor.at", { x: lengthText(x), y: lengthText(y) }) });
+    return out;
+  };
+
+  /// Il puntatore passa sopra `p`, sullo schermo, senza premere: sopra il
+  /// centro della simmetria il cursore dice che lo sposta.
+  const hoverSymmetry = (p: Point | null, pointer: InkPointerType): void => {
+    if (p !== null && symmetryShown() && onSymmetryCenter(p, pointer)) showGrip("move");
+  };
+
+  /// Un campo di «Simmetria»: cambia la simmetria della penna. «Rimetti al
+  /// centro» la riporta al centro della tavola che si guarda, o della
+  /// pagina.
+  const symmetryFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    const now = symmetryNow();
+    if (id === "symmetry" && value === "center") {
+      setSymmetry({ ...now, center: homeCenter() });
+      const [x, y] = symmetryNow().center;
+      announce(t("draw.symmetry.recentered", { x: lengthSpoken(x), y: lengthSpoken(y) }));
+    } else if (id === "symmetry" && typeof value === "string" && isSymmetryKind(value)) {
+      setSymmetry({ ...now, kind: value });
+    } else if (id === "symmetrySlices" && typeof value === "number") {
+      setSymmetry({ ...now, slices: clampSlices(value) });
+    } else if (id === "symmetryMirror" && typeof value === "boolean") {
+      setSymmetry({ ...now, mirror: value });
+    } else if ((id === "symmetryX" || id === "symmetryY") && typeof value === "number") {
+      const at = roundDelta(fromUnit(value, docUnit()));
+      setSymmetry({ ...now, center: id === "symmetryX" ? [at, now.center[1]] : [now.center[0], at] });
+    }
+    return null;
   };
 
   /// Gli estremi di una forma nelle coordinate del suo livello, con Maiusc
@@ -13256,9 +13560,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   };
 
   /// Il tratto del gesto `g` entra nel disegno, sottile alla fine se non
-  /// continua in un altro. Torna il suo id e il livello che l'ha ricevuto;
-  /// `null` se non è entrato.
-  const writeInk = (g: InkGesture, split: boolean): { readonly id: string; readonly to: Destination } | null => {
+  /// continua in un altro, con le sue copie in simmetria, in un passo solo.
+  /// Torna il suo id, il livello che l'ha ricevuto e le copie, con la
+  /// trasformazione che le porta nelle coordinate del livello; `null` se non
+  /// è entrato.
+  const writeInk = (g: InkGesture, split: boolean): WrittenInk | null => {
     // Il livello di adesso: mentre il gesto durava, il disegno può essere
     // cambiato.
     const to = target(g.ids);
@@ -13266,10 +13572,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const local = sameDestination(to, g.to) ? g.local : g.scene.map((sample) => toLocal(sample, to.inverse));
     let brush = g.brush;
     if (split) brush = { ...brush, taperEnd: 0 };
+    const samples = straightened(g) ? straight(local) : local;
     let ink;
     let outline;
     try {
-      ink = quantizeInk(straightened(g) ? straight(local) : local);
+      ink = quantizeInk(samples);
       outline = pf1Outline(ink, brush);
     } catch {
       announce(t("draw.ink_failed"));
@@ -13280,15 +13587,41 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     for (const point of outline) bounds.include(apply(to.matrix, point));
     const id = g.ids.next("object");
     const at = new Date(performance.timeOrigin + g.began).toISOString();
-    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, drawnPaint(g.color), brush, ink, at, g.tool))];
+    const paint = drawnPaint(g.color);
+    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, paint, brush, ink, at, g.tool))];
+    // Ogni copia è il tratto portato dalla sua trasformazione, nelle
+    // coordinate del livello: un tratto vero, col suo inchiostro. Una che
+    // uscirebbe dai numeri dell'inchiostro non si scrive.
+    const copies: WrittenInk["copies"][number][] = [];
+    for (const m of g.copies) {
+      const matrix = compose(to.inverse, compose(m, to.matrix));
+      let copy;
+      let shape;
+      try {
+        copy = quantizeInk(mappedSamples(samples, matrix));
+        shape = pf1Outline(copy, brush);
+      } catch {
+        continue;
+      }
+      if (shape.length === 0) continue;
+      for (const point of shape) bounds.include(apply(to.matrix, point));
+      const copyId = g.ids.next("object");
+      ops.push(addOp(to, strokeElem(copyId, paint, brush, copy, at, g.tool)));
+      copies.push({ id: copyId, matrix });
+    }
     const page = grownPage(bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });
-    return commit(g.tool === "highlighter" ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) === null ? null : { id, to };
+    return commit(g.tool === "highlighter" ? "draw.action.highlight" : "draw.action.stroke", asGesture(ops)) === null ? null : { id, to, copies };
   };
 
+  /// Ciò che si dice di un tratto appena scritto con `copies` copie in
+  /// simmetria: nulla senza copie.
+  const copiesText = (copies: number): string => (copies === 0 ? "" : ` ${plural(copies, "draw.symmetry.copies.one", "draw.symmetry.copies.other")}`);
+
   const finishInk = (g: InkGesture, stroke: FinishedStroke): void => {
-    if (writeInk(g, stroke.split) === null) return;
-    announce(`${t(g.tool === "highlighter" ? "draw.added.highlight" : "draw.added.stroke")} ${objects()}`);
+    const written = writeInk(g, stroke.split);
+    if (written === null) return;
+    announce(`${t(g.tool === "highlighter" ? "draw.added.highlight" : "draw.added.stroke")}${copiesText(written.copies.length)} ${objects()}`);
     if (!stroke.split) offerAfterInk(g);
   };
 
@@ -14260,7 +14593,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     if (shape === null) return;
     g.held = { shape, from: g.still, end: g.still, moved: false };
     g.predicted = [];
-    overlay.setInk(INK_KEY, null);
+    clearInk();
     overlay.flush();
     drawHeld(g);
     announce(t("draw.recognize.said", { kind: shapeSaid(heldNow(g)) }));
@@ -14290,8 +14623,17 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const heldStyle = (g: InkGesture): ShapeStyle => ({ color: g.color, width: g.brush.size });
 
+  /// La forma del tratto tenuto fermo, a schermo, con le copie in
+  /// simmetria che diventeranno la stessa forma.
   const drawHeld = (g: InkGesture): void => {
-    showShape(shapeOfRecognized(heldNow(g), "preview", heldStyle(g)), g.to.matrix);
+    const elem = shapeOfRecognized(heldNow(g), "preview", heldStyle(g));
+    if (elem === null || g.copies.length === 0) {
+      showShape(elem, g.to.matrix);
+      return;
+    }
+    const copy: Elem = { ...elem, attrs: Object.fromEntries(Object.entries(elem.attrs).filter(([name]) => name !== "id")) };
+    const copies = g.copies.map((m): Elem => ({ tag: "g", attrs: { transform: matrixText(compose(g.to.inverse, compose(m, g.to.matrix))) }, children: [copy] }));
+    showShape({ tag: "g", attrs: {}, children: [elem, ...copies] }, g.to.matrix);
   };
 
   /// Il puntatore del tratto diventato forma è in `p`: oltre il tremito
@@ -14334,17 +14676,27 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     let shape: Recognized | null = heldNow(g);
     // Il livello di adesso, se mentre il gesto durava è cambiato.
     if (!sameDestination(written.to, g.to)) shape = mapped(shape, compose(written.to.inverse, g.to.matrix));
-    const unit = shape === null ? null : currentIndex().get(written.id);
-    const shaped = unit === null || shape === null ? null : heldShapeOps(engine.model!, unit, shape, g.ids);
+    const index = currentIndex();
+    const unit = shape === null ? null : index.get(written.id);
+    // Le copie in simmetria diventano la stessa forma, portata come il
+    // tratto; dove il livello deforma, e la forma non resta la stessa,
+    // restano inchiostro.
+    const copies: HeldShape[] = [];
+    for (const copy of written.copies) {
+      const copied = shape === null ? null : mapped(shape, copy.matrix);
+      const copyUnit = index.get(copy.id);
+      if (copied !== null && copyUnit !== null) copies.push({ unit: copyUnit, shape: copied });
+    }
+    const shaped = unit === null || shape === null ? null : heldShapeOps(engine.model!, unit, shape, g.ids, copies);
     if (shaped === null) {
-      announce(`${t("draw.added.stroke")} ${objects()}`);
+      announce(`${t("draw.added.stroke")}${copiesText(written.copies.length)} ${objects()}`);
       return;
     }
     const ops: Op[] = [...shaped.ops];
     const page = grownPage(shaped.extent);
     if (page !== null) ops.push({ op: "page", viewBox: page });
     if (commit("draw.action.to_shape", asGesture(ops)) === null) return;
-    announce(`${t("draw.shaped.held", { kind: shapeSaid(shape!) })} ${objects()}`);
+    announce(`${t("draw.shaped.held", { kind: shapeSaid(shape!) })}${copiesText(written.copies.length)} ${objects()}`);
     suggestions.done("hold-shape");
     offerLabel();
   };
@@ -15456,6 +15808,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         hoverDropper(event.buttons === 0 ? point : null, pointer);
         hoverGradient(event.buttons === 0 ? point : null, pointer);
         hoverConnector(event.buttons === 0 ? point : null, pointer);
+        hoverSymmetry(event.buttons === 0 ? toScreen(camera, point) : null, pointer);
       }
       // Con Alt, le misure seguono il puntatore.
       if (current === null && pressed === null && (alt || measured)) showHandles();
@@ -15676,6 +16029,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "guide":
           guideUpdate(g, toPoint(samples[samples.length - 1]!));
           break;
+        case "symmetry":
+          symmetryUpdate(g, toPoint(samples[samples.length - 1]!));
+          break;
         case "note":
           g.at ??= toPoint(samples[0]!);
           break;
@@ -15726,7 +16082,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
           // stesso gestore, quindi a schermo non c'è un fotogramma senza
           // nessuno dei due.
           finishInk(g, stroke);
-          overlay.setInk(INK_KEY, null);
+          clearInk();
           overlay.flush();
           return;
         case "shape": {
@@ -15777,6 +16133,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         case "guide":
           guideEnd(g, stroke.timeStamp);
           return;
+        case "symmetry":
+          symmetryEnd(g);
+          return;
         case "note":
           current = null;
           noteAt(g.at, g.pointer);
@@ -15811,7 +16170,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       current = null;
       if (g.kind === "ink") clearTimeout(holdTimer);
       if ((g.kind === "select" && g.mode === "marquee") || g.kind === "lasso" || (g.kind === "builder" && g.mode === "objects")) select(g.base);
-      if (g.kind === "select" || g.kind === "guide" || g.kind === "board" || g.kind === "gradient" || g.kind === "connector") showGrip(null);
+      if (g.kind === "select" || g.kind === "guide" || g.kind === "board" || g.kind === "gradient" || g.kind === "connector" || g.kind === "symmetry") showGrip(null);
+      // Il centro della simmetria torna dov'era.
+      if (g.kind === "symmetry") setSymmetry({ ...symmetry, center: g.before });
       // I nodi tornano com'erano, e le forme e gli oggetti con loro.
       if (g.kind === "nodes") {
         focused = g.shapes;
@@ -17017,7 +17378,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(masked ? `${t("draw.ungroup.effect")} ${t("draw.ungroup.release")}` : t("draw.ungroup.effect"));
       return;
     }
-    const kept = arrange("draw.action.ungroup", ungroupOps(engine.model!, units, newIds()), null, { key: "draw.ungroup.styled" });
+    const kept = arrange("draw.action.ungroup", ungroupOps(engine.model!, units, newIds(), expandCopiesIn), null, { key: "draw.ungroup.styled" });
     const whole = groups < all.length ? ` ${t("draw.ungroup.effect_some")}` : "";
     if (kept !== null) announce(`${plural(groups, "draw.ungrouped.one", "draw.ungrouped.other")}${whole}${kept}`);
   }
@@ -17053,6 +17414,55 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     if (arrange("draw.action.symbol_detach", detached) !== null) announce(plural(count, "draw.symbol.detached.one", "draw.symbol.detached.other"));
+  }
+
+  /// La frase di una ripetizione fatta o cambiata in `repeat`.
+  const repeatText = (repeat: Repeat): string => {
+    switch (repeat.kind) {
+      case "radial":
+        return t("draw.repeat.made.radial", { count: repeat.count });
+      case "grid":
+        return t("draw.repeat.made.grid", { columns: repeat.columns, rows: repeat.rows });
+      case "mirror":
+        return t("draw.repeat.made.mirror");
+    }
+  };
+
+  /// «Ripetizione radiale», «a griglia» o «a specchio»: l'oggetto scelto,
+  /// o gli oggetti scelti messi prima in un gruppo, diventano l'originale di
+  /// una ripetizione nuova, che diventa la selezione. Una ripetizione
+  /// scelta, o i suoi originali, cambiano tipo e ricominciano coi valori di
+  /// partenza; il tipo che hanno già non cambia niente.
+  function repeatSelection(kind: RepeatKind): void {
+    const units = arranging("repeat");
+    if (units === null) return;
+    const target = repeatTarget(units);
+    if (target?.details?.repeat?.kind === kind) {
+      announce(t("draw.unchanged"));
+      return;
+    }
+    const made = repeatOps(engine.model!, withLabels(units), kind, newIds(), originalUnits);
+    if (typeof made === "string") {
+      announce(t(`draw.repeat.refused.${made}`));
+      return;
+    }
+    const kept = arrange(target === null ? "draw.action.repeat" : "draw.action.repeat_change", made, null, { key: "draw.repeat.styled" });
+    if (kept !== null) announce(`${repeatText(made.repeat)}${kept}`);
+  }
+
+  /// «Espandi la ripetizione»: ogni copia delle ripetizioni scelte, o di
+  /// quella degli originali scelti, diventa una copia vera del suo
+  /// originale, e la ripetizione un gruppo; la selezione resta.
+  function expandSelection(): void {
+    const units = arranging("repeat");
+    if (units === null) return;
+    const count = expandTargets(units).length;
+    const expanded = expandOps(engine.model!, units, newIds());
+    if (typeof expanded === "string") {
+      announce(t(`draw.repeat.expand.${expanded}`));
+      return;
+    }
+    if (arrange("draw.action.repeat_expand", expanded) !== null) announce(plural(count, "draw.repeat.expanded.one", "draw.repeat.expanded.other"));
   }
 
   /// Il collegamento scelto da solo, se c'è.
@@ -17414,6 +17824,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         { label: t("draw.symbol.make"), separator: true, disabled: !canEdit || none, ...(canEdit ? unselected : {}), run: () => symbolFromSelection() },
         { label: t("draw.symbol.detach"), disabled: !canEdit || !instances, ...(canEdit && !instances ? { description: t(none ? "draw.selection.empty" : "draw.symbol.detach.none") } : {}), run: () => detachSelection() },
       );
+    }
+    if (has("repeat")) {
+      // Le voci del menu «Ripeti», spente se il disegno non si scrive.
+      for (const [at, { description, ...item }] of repeatItems().entries()) {
+        items.push({ ...item, separator: at === 0, ...(canEdit ? (description === undefined ? {} : { description }) : { disabled: true }) });
+      }
     }
     // Un'istanza scelta da sola apre il suo simbolo.
     const lone = units.length === 1 ? units[0]! : null;
@@ -18823,6 +19239,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       { label: t("draw.mask.clip"), hint: displayBinding(CLIP_MASK_BINDING), ...when(creation("clip")), run: () => maskSelection("clip") },
       { label: t("draw.mask.opacity"), ...when(creation("opacity")), run: () => maskSelection("opacity") },
       { label: t("draw.mask.release"), hint: displayBinding(RELEASE_MASK_BINDING), separator: true, ...when(releaseReason()), run: () => releaseMasks() },
+    ];
+  };
+
+  /// Il menu «Ripeti»: i tre tipi, col segno su quello della ripetizione
+  /// scelta, ed «Espandi la ripetizione». Una voce che il comando
+  /// rifiuterebbe è spenta, e dice perché con le parole che il comando
+  /// direbbe.
+  const repeatItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const model = engine.model;
+    const current = repeatTarget(units)?.details?.repeat?.kind ?? null;
+    const when = (reason: string | null): Pick<MenuItem, "disabled" | "description"> =>
+      reason === null ? { disabled: false } : { disabled: true, description: units.length === 0 ? t("draw.selected.none") : reason };
+    const refusal = (kind: RepeatKind): string | null => {
+      if (model === null || units.length === 0) return t("draw.selected.none");
+      if (kind === current) return null;
+      const made = repeatOps(model, withLabels(units), kind, newIds(), originalUnits);
+      return typeof made === "string" ? t(`draw.repeat.refused.${made}`) : null;
+    };
+    const expandReason = (): string | null => {
+      if (model === null || expandTargets(units).length === 0) return t("draw.repeat.expand.none");
+      return expandOps(model, units, newIds()) === "content" ? t("draw.repeat.expand.content") : null;
+    };
+    return [
+      ...REPEAT_KINDS.map((kind): MenuItem => ({
+        label: t(`draw.repeat.${kind}`),
+        ...(current === null ? {} : { choice: "radio" as const, checked: kind === current }),
+        ...when(refusal(kind)),
+        run: () => repeatSelection(kind),
+      })),
+      { label: t("draw.repeat.expand"), separator: true, ...when(expandReason()), run: () => expandSelection() },
     ];
   };
 
@@ -21809,6 +22256,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       refresh();
       placed = false;
       fit();
+      // Il centro della simmetria era del disegno di prima: torna al suo
+      // posto in questo, inquadrato.
+      setSymmetry({ ...symmetry, center: null });
     },
     setReadOnly,
     reveal,
@@ -21991,6 +22441,7 @@ const NO_NODES: Readonly<Record<NoNodes, DrawKey>> = {
   empty: "draw.nodes.empty",
   stroke: "draw.nodes.stroke_fixed",
   instance: "draw.nodes.instance",
+  copy: "draw.nodes.copy",
   foreign: "draw.nodes.foreign",
   other: "draw.nodes.no_path",
 };

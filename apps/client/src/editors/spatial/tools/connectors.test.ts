@@ -116,6 +116,18 @@ describe("i capi", () => {
     expect(p![0]).toBeCloseTo(40, 2);
   });
 
+  it("una ripetizione ha il contorno delle sue copie", () => {
+    const row = '<g id="g" fub:repeat="grid 1 2 0 200"><rect id="o" x="0" y="0" width="40" height="40"/><use id="k" transform="translate(0 200)" href="#o"/></g>';
+    const opened = sheet(`${row}<rect id="b" x="0" y="400" width="40" height="40"/>${LINE("straight", "g auto", "b center")}`);
+    applied(opened, { op: "set", id: "b", attrs: { "fub:name": "B" } });
+    // Dal centro della ripetizione, (20, 120), il raggio scende ed esce dal
+    // fondo della copia.
+    expect(points(opened)[0]).toEqual([20, 240]);
+    // Cambiato l'originale, il capo segue la copia.
+    applied(opened, { op: "set", id: "o", attrs: { height: "60" } });
+    expect(points(opened)[0]).toEqual([20, 260]);
+  });
+
   it("l'etichetta di una forma non fa parte del contorno, nemmeno quando esce dalla forma", () => {
     const label = '<text id="t" fub:inside="r" fub:wrap="28" x="0" y="0" text-anchor="middle" transform="matrix(1 0 0 1 20 124)"><tspan x="0" dy="0">Unaparolalunghissima</tspan></text>';
     const group = `<g id="g"><rect id="r" x="0" y="100" width="40" height="40"/>${label}</g>`;
