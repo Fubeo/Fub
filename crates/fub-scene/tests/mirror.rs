@@ -56,6 +56,14 @@
 //!   segue; un esempio di ogni modo di dirsi stile senza esserlo; i testi, le
 //!   forme e un gruppo che li seguono, uno per ogni modo di seguire uno stile
 //!   che non c'è (S018), e un collegamento e un livello, che non ne seguono;
+//! - `symbols`: un disegno coi simboli (formato della scena, simboli): uno
+//!   con una sfumatura privata scritta dopo di lui e un testo bianco e
+//!   minuscolo, uno copiato da una libreria con un'istanza del primo e una
+//!   parte estranea, uno che usa un simbolo estraneo; un simbolo che contiene
+//!   sé stesso, due che si contengono a vicenda e due con un attributo che
+//!   non va; le istanze con `href` e con
+//!   `xlink:href`, ruotata e con un titolo, una nascosta, un testo bianco
+//!   sopra un'istanza, e un esempio di ogni modo di non essere un'istanza;
 //!
 //! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
 //! due spazi di rientro e un a capo finale.
@@ -1991,6 +1999,165 @@ fn styles() -> String {
     document(&root, "\n")
 }
 
+fn symbols() -> String {
+    let symbol = |id: &str| El::new("symbol").a("id", id).a("overflow", "visible");
+    let instance =
+        |id: &str, symbol: &str| El::new("use").a("id", id).a("href", format!("#{symbol}"));
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        // Una lampadina, nelle coordinate del simbolo attorno all'origine:
+        // la sfumatura che usa viene dopo, e il testo bianco e minuscolo
+        // non si confronta col fondo ma resta troppo piccolo (S013).
+        .child(
+            symbol("r00000001")
+                .child(El::new("title").text("Lampadina"))
+                .child(
+                    El::new("circle")
+                        .a("id", "o00000001")
+                        .a("cx", 0)
+                        .a("cy", 0)
+                        .a("r", 20)
+                        .a("fill", "url(#r00000002) #f0e442"),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000002")
+                        .a("x", -8)
+                        .a("y", 18)
+                        .a("width", 16)
+                        .a("height", 12)
+                        .a("fill", "#999999"),
+                )
+                .child(
+                    El::new("text")
+                        .a("id", "o00000003")
+                        .a("x", -6)
+                        .a("y", 2)
+                        .a("font-size", 6)
+                        .a("fill", "#ffffff")
+                        .child(El::new("tspan").a("x", -6).a("dy", 0).text("ON")),
+                ),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000002")
+                .a("fub:role", "private")
+                .a("x1", 0)
+                .a("y1", 0)
+                .a("x2", 0)
+                .a("y2", 1)
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#f0e442"))
+                .child(El::new("stop").a("offset", 1).a("stop-color", "#e69f00")),
+        )
+        // Un quadro copiato da una libreria, con una lampadina più piccola
+        // e una parte estranea, che resta com'è.
+        .child(
+            symbol("r00000003")
+                .a(
+                    "fub:source",
+                    "Simboli/Impianti.svg#r00000004 0123456789abcdef",
+                )
+                .child(El::new("title").text("Quadro"))
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000004")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 80)
+                        .a("height", 60)
+                        .a("fill", "#0072b2"),
+                )
+                .child(
+                    instance("o00000005", "r00000001")
+                        .a("transform", "translate(40 30) scale(0.5)"),
+                )
+                .child(El::new("switch").child(El::new("rect").a("width", 10).a("height", 10))),
+        )
+        // Simboli estranei: uno che contiene sé stesso, due che si
+        // contengono a vicenda, uno senza `overflow`, uno con un `viewBox`.
+        .child(symbol("r00000005").child(instance("o00000006", "r00000005")))
+        .child(symbol("r00000006").child(instance("o00000007", "r00000007")))
+        .child(symbol("r00000007").child(instance("o00000008", "r00000006")))
+        .child(
+            El::new("symbol")
+                .a("id", "r00000008")
+                .child(El::new("rect").a("width", 10).a("height", 10)),
+        )
+        .child(
+            symbol("r00000009")
+                .a("viewBox", "0 0 10 10")
+                .child(El::new("rect").a("width", 10).a("height", 10)),
+        )
+        // Un simbolo che usa un simbolo estraneo: il simbolo vale, l'istanza
+        // dentro è estranea.
+        .child(
+            symbol("r0000000a")
+                .child(
+                    El::new("circle")
+                        .a("id", "o00000009")
+                        .a("cx", 0)
+                        .a("cy", 0)
+                        .a("r", 5)
+                        .a("fill", "#009e73"),
+                )
+                .child(instance("o0000000a", "r00000006")),
+        );
+    let first = layer("l00000001", "Livello 1")
+        .child(instance("o00000010", "r00000001").a("transform", "translate(200 150)"))
+        // Con `xlink:href`, ruotata e con un titolo.
+        .child(
+            El::new("use")
+                .a("id", "o00000011")
+                .a("xlink:href", "#r00000003")
+                .a("transform", "translate(400 100) rotate(30)")
+                .a("opacity", "0.8")
+                .child(El::new("title").text("Quadro principale")),
+        )
+        // Un testo bianco sopra la lampadina: l'istanza copre il fondo come
+        // un'immagine, e il contrasto non si sa.
+        .child(line(
+            El::new("text")
+                .a("id", "o00000012")
+                .a("x", 190)
+                .a("y", 152)
+                .a("font-size", 16)
+                .a("fill", "#ffffff"),
+            190,
+            "Luce",
+        ))
+        // Un'istanza nascosta non conta nel riquadro del disegno.
+        .child(
+            El::new("g")
+                .a("id", "o00000013")
+                .a("display", "none")
+                .child(instance("o00000014", "r00000001").a("transform", "translate(5000 5000)")),
+        )
+        .child(instance("o00000015", "r0000000a").a("transform", "translate(600 400)"))
+        // Istanze estranee: con una posizione, con un riempimento che il
+        // simbolo erediterebbe, di un simbolo che contiene sé stesso, di una
+        // sfumatura, con due riferimenti, con una forma dentro, di un id che
+        // manca (S014).
+        .child(instance("o00000016", "r00000001").a("x", 10))
+        .child(instance("o00000017", "r00000001").a("fill", "#ff0000"))
+        .child(instance("o00000018", "r00000005"))
+        .child(instance("o00000019", "r00000002"))
+        .child(instance("o0000001a", "r00000001").a("xlink:href", "#r00000001"))
+        .child(
+            instance("o0000001b", "r00000001")
+                .child(El::new("rect").a("width", 10).a("height", 10)),
+        )
+        .child(instance("o0000001c", "r0000000z"))
+        // Un simbolo fuori dalle `defs` è estraneo.
+        .child(symbol("r0000000b").child(El::new("rect").a("width", 10).a("height", 10)));
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("I simboli"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(first);
+    document(&root, "\n")
+}
+
 #[test]
 fn sparse_is_a_complete_drawing() {
     let scene = fixture("sparse", &sparse());
@@ -2474,6 +2641,90 @@ fn styles_are_read_with_their_followers() {
 }
 
 #[test]
+fn symbols_are_read_with_their_instances() {
+    let scene = fixture("symbols", &symbols());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    let role = |path: &[usize]| element(path).map(|e| e.role);
+    // I simboli e la sfumatura scritta dopo il primo.
+    assert_eq!(role(&[1, 0]), Some(Role::Symbol));
+    assert_eq!(role(&[1, 1]), Some(Role::Resource));
+    assert_eq!(role(&[1, 2]), Some(Role::Symbol));
+    assert_eq!(role(&[1, 8]), Some(Role::Symbol));
+    // Il contenuto di un simbolo si classifica come quello di un gruppo.
+    assert_eq!(role(&[1, 0, 0]), Some(Role::Title));
+    assert_eq!(role(&[1, 0, 1]), Some(Role::Circle));
+    assert_eq!(role(&[1, 0, 3]), Some(Role::Text));
+    assert_eq!(role(&[1, 2, 2]), Some(Role::Instance));
+    assert_eq!(role(&[1, 2, 3]), None);
+    assert_eq!(role(&[1, 8, 0]), Some(Role::Circle));
+    assert_eq!(role(&[1, 8, 1]), None);
+    assert_eq!(
+        element(&[1, 0]).and_then(|e| e.title.as_deref()),
+        Some("Lampadina")
+    );
+    assert_eq!(
+        element(&[1, 2]).and_then(|e| e.source.as_deref()),
+        Some("Simboli/Impianti.svg#r00000004 0123456789abcdef")
+    );
+    assert_eq!(element(&[1, 0]).and_then(|e| e.source.as_deref()), None);
+    // Chi contiene sé stesso e chi ha un attributo che non va è estraneo.
+    for at in 3..8 {
+        assert!(element(&[1, at]).is_none(), "{at}");
+    }
+    // Le istanze, col loro simbolo.
+    let symbol = |path: &[usize]| element(path).and_then(|e| e.symbol.as_deref());
+    assert_eq!(symbol(&[3, 0]), Some("r00000001"));
+    assert_eq!(symbol(&[3, 1]), Some("r00000003"));
+    assert_eq!(symbol(&[1, 2, 2]), Some("r00000001"));
+    assert_eq!(symbol(&[3, 3, 0]), Some("r00000001"));
+    assert_eq!(symbol(&[3, 4]), Some("r0000000a"));
+    assert_eq!(
+        element(&[3, 1]).and_then(|e| e.title.as_deref()),
+        Some("Quadro principale")
+    );
+    for at in 5..13 {
+        assert!(element(&[3, at]).is_none(), "{at}");
+    }
+    // Il contenuto dei simboli si conta una volta; le istanze no.
+    let counts = &scene.summary.counts;
+    assert_eq!((counts.shapes, counts.texts), (4, 2));
+    // Il riquadro viene dalle istanze visibili: la lampadina in (200, 150),
+    // il quadro ruotato, che contiene una lampadina, e il cerchio in
+    // (600, 400). L'istanza nascosta e il contenuto dei simboli nelle loro
+    // coordinate non contano.
+    let bbox = scene.summary.bbox.as_ref().unwrap();
+    assert_eq!(
+        (bbox.x, bbox.y, bbox.width, bbox.height),
+        (180.0, 100.0, 425.0, 305.0)
+    );
+    use fub_scene::Code::{S002, S013, S014};
+    let found: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    // Niente S009: il testo bianco della lampadina sta nel simbolo, quello
+    // sopra l'istanza ha un fondo che non si sa.
+    assert_eq!(
+        found,
+        [
+            (S002, None),
+            (S002, None),
+            (S002, None),
+            (S002, None),
+            (S013, Some("6.00")),
+            (S014, Some("href #r0000000z")),
+        ]
+    );
+}
+
+#[test]
 fn crlf_bom_moves_utf16_away_from_bytes() {
     let source = crlf_bom();
     let scene = fixture("crlf-bom", &source);
@@ -2942,6 +3193,7 @@ fn the_folder_holds_only_what_this_test_writes() {
         "legend",
         "connectors",
         "styles",
+        "symbols",
     ]
     .iter()
     .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])

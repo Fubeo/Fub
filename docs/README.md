@@ -111,6 +111,7 @@ flowchart LR
 - [Formato della scena, risorse](reference/scene-format-resources.md)
 - [Formato della scena, effetti e fusione](reference/scene-format-effects.md)
 - [Formato della scena, stili](reference/scene-format-styles.md)
+- [Formato della scena, simboli](reference/scene-format-symbols.md)
 - [Formato della scena, tavole](reference/scene-format-boards.md)
 - [Formato della scena, export](reference/scene-format-export.md)
 - [Operazioni sulla scena](reference/scene-operations.md)

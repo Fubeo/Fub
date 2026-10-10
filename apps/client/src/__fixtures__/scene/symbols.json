@@ -1,0 +1,846 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        3112
+      ],
+      "utf16": [
+        0,
+        3112
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            193
+          ],
+          "utf16": [
+            0,
+            193
+          ]
+        },
+        "close": {
+          "bytes": [
+            3106,
+            3112
+          ],
+          "utf16": [
+            3106,
+            3112
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        196,
+        220
+      ],
+      "utf16": [
+        196,
+        220
+      ],
+      "indent": "  ",
+      "text": "I simboli"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        223,
+        1906
+      ],
+      "utf16": [
+        223,
+        1906
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            223,
+            243
+          ],
+          "utf16": [
+            223,
+            243
+          ]
+        },
+        "close": {
+          "bytes": [
+            1899,
+            1906
+          ],
+          "utf16": [
+            1899,
+            1906
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "symbol",
+      "role": "symbol",
+      "id": "r00000001",
+      "bytes": [
+        248,
+        623
+      ],
+      "utf16": [
+        248,
+        623
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            248,
+            290
+          ],
+          "utf16": [
+            248,
+            290
+          ]
+        },
+        "close": {
+          "bytes": [
+            614,
+            623
+          ],
+          "utf16": [
+            614,
+            623
+          ]
+        }
+      },
+      "title": "Lampadina"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        297,
+        321
+      ],
+      "utf16": [
+        297,
+        321
+      ],
+      "indent": "      ",
+      "text": "Lampadina"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        1
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000001",
+      "bytes": [
+        328,
+        404
+      ],
+      "utf16": [
+        328,
+        404
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        2
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000002",
+      "bytes": [
+        411,
+        485
+      ],
+      "utf16": [
+        411,
+        485
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        3
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000003",
+      "bytes": [
+        492,
+        609
+      ],
+      "utf16": [
+        492,
+        609
+      ],
+      "indent": "      ",
+      "lines": [
+        "ON"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        1
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000002",
+      "bytes": [
+        628,
+        820
+      ],
+      "utf16": [
+        628,
+        820
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2
+      ],
+      "tag": "symbol",
+      "role": "symbol",
+      "id": "r00000003",
+      "bytes": [
+        825,
+        1205
+      ],
+      "utf16": [
+        825,
+        1205
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            825,
+            928
+          ],
+          "utf16": [
+            825,
+            928
+          ]
+        },
+        "close": {
+          "bytes": [
+            1196,
+            1205
+          ],
+          "utf16": [
+            1196,
+            1205
+          ]
+        }
+      },
+      "title": "Quadro",
+      "source": "Simboli/Impianti.svg#r00000004 0123456789abcdef"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2,
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        935,
+        956
+      ],
+      "utf16": [
+        935,
+        956
+      ],
+      "indent": "      ",
+      "text": "Quadro"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000004",
+      "bytes": [
+        963,
+        1035
+      ],
+      "utf16": [
+        963,
+        1035
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2,
+        2
+      ],
+      "tag": "use",
+      "role": "instance",
+      "id": "o00000005",
+      "bytes": [
+        1042,
+        1121
+      ],
+      "utf16": [
+        1042,
+        1121
+      ],
+      "indent": "      ",
+      "symbol": "r00000001"
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        1,
+        2
+      ],
+      "bytes": [
+        1128,
+        1191
+      ],
+      "utf16": [
+        1128,
+        1191
+      ],
+      "elements": [
+        3,
+        4
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        1
+      ],
+      "bytes": [
+        1210,
+        1723
+      ],
+      "utf16": [
+        1210,
+        1723
+      ],
+      "elements": [
+        3,
+        8
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        8
+      ],
+      "tag": "symbol",
+      "role": "symbol",
+      "id": "r0000000a",
+      "bytes": [
+        1728,
+        1896
+      ],
+      "utf16": [
+        1728,
+        1896
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            1728,
+            1770
+          ],
+          "utf16": [
+            1728,
+            1770
+          ]
+        },
+        "close": {
+          "bytes": [
+            1887,
+            1896
+          ],
+          "utf16": [
+            1887,
+            1896
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        8,
+        0
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000009",
+      "bytes": [
+        1777,
+        1836
+      ],
+      "utf16": [
+        1777,
+        1836
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        1,
+        8
+      ],
+      "bytes": [
+        1843,
+        1882
+      ],
+      "utf16": [
+        1843,
+        1882
+      ],
+      "elements": [
+        1,
+        2
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        1909,
+        2000
+      ],
+      "utf16": [
+        1909,
+        2000
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        2003,
+        3105
+      ],
+      "utf16": [
+        2003,
+        3105
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2003,
+            2043
+          ],
+          "utf16": [
+            2003,
+            2043
+          ]
+        },
+        "close": {
+          "bytes": [
+            3101,
+            3105
+          ],
+          "utf16": [
+            3101,
+            3105
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "use",
+      "role": "instance",
+      "id": "o00000010",
+      "bytes": [
+        2048,
+        2118
+      ],
+      "utf16": [
+        2048,
+        2118
+      ],
+      "indent": "    ",
+      "symbol": "r00000001"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "use",
+      "role": "instance",
+      "id": "o00000011",
+      "bytes": [
+        2123,
+        2273
+      ],
+      "utf16": [
+        2123,
+        2273
+      ],
+      "indent": "    ",
+      "title": "Quadro principale",
+      "symbol": "r00000003"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000012",
+      "bytes": [
+        2278,
+        2398
+      ],
+      "utf16": [
+        2278,
+        2398
+      ],
+      "indent": "    ",
+      "lines": [
+        "Luce"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000013",
+      "bytes": [
+        2403,
+        2524
+      ],
+      "utf16": [
+        2403,
+        2524
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2403,
+            2436
+          ],
+          "utf16": [
+            2403,
+            2436
+          ]
+        },
+        "close": {
+          "bytes": [
+            2520,
+            2524
+          ],
+          "utf16": [
+            2520,
+            2524
+          ]
+        }
+      },
+      "hidden": true
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3,
+        0
+      ],
+      "tag": "use",
+      "role": "instance",
+      "id": "o00000014",
+      "bytes": [
+        2443,
+        2515
+      ],
+      "utf16": [
+        2443,
+        2515
+      ],
+      "indent": "      ",
+      "symbol": "r00000001"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "use",
+      "role": "instance",
+      "id": "o00000015",
+      "bytes": [
+        2529,
+        2599
+      ],
+      "utf16": [
+        2529,
+        2599
+      ],
+      "indent": "    ",
+      "symbol": "r0000000a"
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        3
+      ],
+      "bytes": [
+        2604,
+        3098
+      ],
+      "utf16": [
+        2604,
+        3098
+      ],
+      "elements": [
+        5,
+        13
+      ],
+      "indent": "    "
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "I simboli",
+      "bytes": [
+        196,
+        220
+      ],
+      "utf16": [
+        196,
+        220
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "ON",
+        "bytes": [
+          492,
+          609
+        ],
+        "utf16": [
+          492,
+          609
+        ]
+      },
+      {
+        "text": "Luce",
+        "bytes": [
+          2278,
+          2398
+        ],
+        "utf16": [
+          2278,
+          2398
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": [],
+    "boards": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "boards": [],
+    "counts": {
+      "strokes": 0,
+      "shapes": 4,
+      "texts": 2,
+      "images": 0,
+      "links": 0,
+      "foreign": 4
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 180.0,
+      "y": 100.0,
+      "width": 425.0,
+      "height": 305.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1128,
+        1191
+      ],
+      "utf16": [
+        1128,
+        1191
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1210,
+        1723
+      ],
+      "utf16": [
+        1210,
+        1723
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1843,
+        1882
+      ],
+      "utf16": [
+        1843,
+        1882
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        2604,
+        3098
+      ],
+      "utf16": [
+        2604,
+        3098
+      ]
+    },
+    {
+      "code": "S013",
+      "severity": "info",
+      "bytes": [
+        492,
+        609
+      ],
+      "utf16": [
+        492,
+        609
+      ],
+      "detail": "6.00"
+    },
+    {
+      "code": "S014",
+      "severity": "warning",
+      "bytes": [
+        2961,
+        3000
+      ],
+      "utf16": [
+        2961,
+        3000
+      ],
+      "detail": "href #r0000000z"
+    }
+  ]
+}

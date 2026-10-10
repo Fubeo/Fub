@@ -198,6 +198,11 @@ Altri dettagli:
 - **Uno [stile](scene-format-styles.md)** è una risorsa che non si raccoglie
   mai: toglierlo, o togliergli l'id con `ident`, mentre un oggetto lo segue
   con `fub:style` è `in-use`, e le sue risorse private se ne vanno con lui.
+- **Un [simbolo](scene-format-symbols.md)** è una risorsa che non si
+  raccoglie mai: toglierlo, o togliergli l'id con `ident`, mentre un'istanza
+  lo usa è `in-use`. Il suo contenuto sono oggetti coi loro id. In un `batch`
+  il simbolo viene prima delle sue istanze; un simbolo che userebbe sé
+  stesso, anche attraverso un altro, è `cycle`.
 - **`set` sulla radice:** con `id` uguale a `#root` cambia soltanto l'unità e
   le guide del documento, `fub:units` e `fub:guides`, coi valori nella loro
   grammatica ([unità e guide](scene-format-rulers.md)). Ogni altro attributo
@@ -233,7 +238,7 @@ Altri dettagli:
 | `invalid-elem` | tag, attributo o valore fuori dal formato, oppure `fub:ink` non conforme |
 | `locked` | il bersaglio o il genitore stanno in un elemento bloccato (`fub:locked="true"`), oppure il bersaglio è la carta della pagina, che cambia solo con `page` |
 | `foreign` | `set`, `text` o `add` dentro un nodo estraneo |
-| `cycle` | `move` dentro un discendente dell'elemento stesso |
+| `cycle` | `move` dentro un discendente dell'elemento stesso; un simbolo che userebbe sé stesso |
 | `limit` | operazione oltre i limiti (§5) |
 | `read-only` | documento in sola lettura: versione futura, `DOCTYPE`, oltre i limiti di modifica |
 
@@ -513,6 +518,11 @@ devono verificare renderebbe il test circolare.
 | 81 | `remove-style-in-use` | togliere uno [stile](scene-format-styles.md) che un oggetto segue: rifiuto `in-use` |
 | 82 | `collect-keeps-style` | togliere l'ultimo oggetto che segue uno stile lascia lo stile e la sua sfumatura privata |
 | 83 | `remove-style-collects-private` | un `batch` toglie `fub:style` da chi segue e poi lo stile: la raccolta toglie anche la sua sfumatura privata e la `fub-defs` rimasta vuota |
+| 84 | `add-symbol-instance` | un `batch` aggiunge la `defs` con un [simbolo](scene-format-symbols.md) e una sua istanza: il simbolo ha l'id di una risorsa, il suo contenuto quello di un oggetto, e `use` scrive `transform` prima di `href`; l'inversa toglie l'una e l'altra |
+| 85 | `remove-symbol-in-use` | togliere un simbolo che un'istanza usa: rifiuto `in-use` |
+| 86 | `symbol-cycle` | un'istanza di un simbolo dentro il simbolo stesso: rifiuto `cycle` |
+| 87 | `remove-instance-keeps-symbol` | togliere l'ultima istanza lascia il simbolo, che non si raccoglie mai |
+| 88 | `move-into-symbol` | un rettangolo del livello in fondo a un simbolo: resta un oggetto col suo id, rientrato come il contenuto del simbolo |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

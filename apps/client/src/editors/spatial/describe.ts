@@ -97,12 +97,12 @@ export function keyOf(item: { readonly id: string | null; readonly path: readonl
 }
 
 /// I ruoli che non sono oggetti: il nome e la descrizione di chi li contiene,
-/// la carta, che è il fondo, le risorse con la `defs` che le tiene, che si
-/// vedono soltanto in chi le usa, e le tavole, che si cambiano col loro
-/// strumento.
-const NOT_OBJECTS: ReadonlySet<Role> = new Set<Role>(["title", "desc", "paper", "defs", "resource", "board"]);
+/// la carta, che è il fondo, le risorse con la `defs` che le tiene e i
+/// simboli, che si vedono soltanto in chi li usa, e le tavole, che si
+/// cambiano col loro strumento.
+const NOT_OBJECTS: ReadonlySet<Role> = new Set<Role>(["title", "desc", "paper", "defs", "resource", "board", "symbol"]);
 
-const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper" | "defs" | "resource" | "board">, DrawKey>> = {
+const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper" | "defs" | "resource" | "board" | "symbol">, DrawKey>> = {
   layer: "draw.kind.layer",
   group: "draw.kind.group",
   link: "draw.kind.link",
@@ -123,6 +123,7 @@ const KINDS: Readonly<Record<Exclude<Role, "title" | "desc" | "paper" | "defs" |
   polygon: "draw.kind.polygon",
   text: "draw.kind.text",
   image: "draw.kind.image",
+  instance: "draw.kind.instance",
 };
 
 /// I poligoni regolari che hanno un nome, per numero di lati.

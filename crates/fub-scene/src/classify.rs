@@ -24,7 +24,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
-use crate::analysis::{Context, Swatches, Tally};
+use crate::analysis::{use_target, Context, Swatches, Tally};
 use crate::brush::{Brush, BrushError};
 use crate::connectors::{
     read_connector_end, read_connector_geom, read_label_place, ConnectorEnd, ConnectorGeom,
@@ -40,7 +40,7 @@ use crate::values::{
     angle, blend_style, dasharray, fraction, href, href_id, is_wsp, keyword, leading, length,
     letter_spacing, non_negative_length, number, number_list, one_or_two, opacity, paint,
     paint_reference, points, preserve_aspect_ratio, reference, start_offset, text_decoration,
-    transform, trim, view_box, wrap_width, Href, Paint,
+    transform, trim, url_ids, view_box, wrap_width, Href, Paint,
 };
 use crate::varwidth::{read_var_width, VarWidth};
 use crate::xml::{Document, Element, Kind, NodeId, NS_FUB, NS_NONE, NS_SVG, NS_XLINK};
@@ -94,12 +94,20 @@ pub enum Role {
     Resource,
     /// Una tavola: un `view` della radice (formato della scena, tavole).
     Board,
+    /// Un simbolo: un `symbol` di una `defs` della radice, coi figli giudicati
+    /// uno per uno come in un gruppo (formato della scena, simboli).
+    Symbol,
+    /// Un'istanza di un simbolo: un `use` che lo mostra dove sta.
+    Instance,
 }
 
 impl Role {
     /// Vero per i ruoli i cui figli si classificano uno per uno.
     pub fn is_container(self) -> bool {
-        matches!(self, Role::Layer | Role::Group | Role::Link | Role::Defs)
+        matches!(
+            self,
+            Role::Layer | Role::Group | Role::Link | Role::Defs | Role::Symbol
+        )
     }
 }
 
@@ -356,7 +364,8 @@ fn swatch_of(doc: &Document<'_>, element: &Element<'_>) -> Option<Swatch> {
 /// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
 /// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
 /// `mask` e `filter` ritagli, maschere e filtri, un `textPath` un tracciato
-/// (formato della scena, testo).
+/// (formato della scena, testo), e un `use` un simbolo (formato della scena,
+/// simboli).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ResourceKind {
     Gradient,
@@ -366,6 +375,7 @@ pub(crate) enum ResourceKind {
     Mask,
     Filter,
     Path,
+    Symbol,
 }
 
 /// Il tipo della risorsa modificabile che porta un id, o `None` se nessuna
@@ -548,6 +558,14 @@ pub struct ElementItem {
     /// La tavola di una carta: `fub:board`, com'è scritto.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub board: Option<String>,
+    /// Il simbolo di un'istanza: l'id a cui rimanda (formato della scena,
+    /// simboli).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    /// Da dove viene un simbolo copiato da una libreria: `fub:source`, com'è
+    /// scritto.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -597,6 +615,8 @@ enum Tag {
     Image,
     Defs,
     View,
+    Symbol,
+    Use,
     LinearGradient,
     RadialGradient,
     Pattern,
@@ -629,6 +649,8 @@ impl Tag {
             "image" => Tag::Image,
             "defs" => Tag::Defs,
             "view" => Tag::View,
+            "symbol" => Tag::Symbol,
+            "use" => Tag::Use,
             "linearGradient" => Tag::LinearGradient,
             "radialGradient" => Tag::RadialGradient,
             "pattern" => Tag::Pattern,
@@ -667,7 +689,7 @@ impl Tag {
     /// `clip-path`, `mask` e `filter`: non le righe e i pezzi di un testo, il
     /// cui riquadro i lettori non misurano tutti allo stesso modo.
     fn is_drawn(self) -> bool {
-        self.is_shape() || matches!(self, Tag::Text | Tag::Image | Tag::G | Tag::A)
+        self.is_shape() || matches!(self, Tag::Text | Tag::Image | Tag::G | Tag::A | Tag::Use)
     }
 
     /// Vero per i tag su cui i browser disegnano i marcatori.
@@ -694,6 +716,8 @@ impl Tag {
             Tag::Image => "image",
             Tag::Defs => "defs",
             Tag::View => "view",
+            Tag::Symbol => "symbol",
+            Tag::Use => "use",
             Tag::LinearGradient => "linearGradient",
             Tag::RadialGradient => "radialGradient",
             Tag::Pattern => "pattern",
@@ -1429,6 +1453,217 @@ fn primitives_allowed(doc: &Document<'_>, element: &Element<'_>) -> bool {
     true
 }
 
+// I simboli (formato della scena, simboli).
+
+/// Vero se `element`, un `symbol` di una `defs` della radice, ha gli
+/// attributi di un simbolo: un id e `overflow="visible"`, e nessun altro
+/// attributo SVG. I figli si giudicano uno per uno, come quelli di un gruppo.
+fn symbol_allowed(element: &Element<'_>) -> bool {
+    let mut id = false;
+    let mut overflow = false;
+    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE => match attr.local {
+            "overflow" => {
+                overflow = trim(&attr.value) == "visible";
+                overflow
+            }
+            "id" => {
+                id = !attr.value.is_empty();
+                id
+            }
+            _ => false,
+        },
+        NS_XLINK | NS_SVG => false,
+        _ => true,
+    });
+    attributes && id && overflow
+}
+
+/// Gli attributi SVG di un'istanza oltre a `href`: niente geometria e niente
+/// di ciò che il contenuto del simbolo erediterebbe, così il simbolo si vede
+/// uguale in ogni istanza.
+const INSTANCE_ATTRIBUTES: [&str; 8] = [
+    "id",
+    "transform",
+    "opacity",
+    "display",
+    "style",
+    "clip-path",
+    "mask",
+    "filter",
+];
+
+/// Vero se `element`, un `use` fuori dalle `defs`, è un'istanza: un `href`
+/// o un `xlink:href`, uno solo, verso un simbolo modificabile, gli attributi
+/// di [`INSTANCE_ATTRIBUTES`], e per figli soltanto titoli e descrizioni.
+fn instance_allowed(doc: &Document<'_>, element: &Element<'_>, resolve: Resolve<'_>) -> bool {
+    let mut hrefs = 0;
+    let attributes = element.attrs.iter().all(|attr| match attr.ns {
+        NS_NONE | NS_XLINK => {
+            if attr.local == "href" {
+                hrefs += 1;
+                return href_id(&attr.value)
+                    .is_some_and(|target| resolve(&target) == Some(ResourceKind::Symbol));
+            }
+            if attr.ns == NS_XLINK || !INSTANCE_ATTRIBUTES.contains(&attr.local) {
+                return false;
+            }
+            (REFERENCES.contains(&attr.local) || !has_url(&attr.value))
+                && svg_attribute(Tag::Use, attr.local, &attr.value, resolve)
+        }
+        NS_SVG => false,
+        _ => true,
+    });
+    attributes
+        && hrefs == 1
+        && element
+            .children
+            .iter()
+            .all(|&child| blank_or_meta(doc, child) == Some(true))
+}
+
+/// Gli id a cui gli attributi di `element` rimandano, come li legge S014:
+/// ogni `url(#id)` degli attributi senza prefisso e `xlink`, anche fuori dal
+/// formato, e l'`href` locale (`#id`) di un elemento SVG che non è un
+/// collegamento, dove `#id` è un'ancora.
+pub(crate) fn references_of(element: &Element<'_>) -> Vec<String> {
+    let mut out = Vec::new();
+    for attr in &element.attrs {
+        if attr.ns != NS_NONE && attr.ns != NS_XLINK {
+            continue;
+        }
+        if attr.local != "href" {
+            out.extend(url_ids(&attr.value).into_iter().map(str::to_owned));
+            continue;
+        }
+        if element.ns == NS_SVG && element.local != "a" {
+            out.extend(href_id(&attr.value));
+        }
+    }
+    out
+}
+
+/// Gli id a cui rimanda `element` con ciò che contiene, una volta ciascuno.
+fn references_within(doc: &Document<'_>, element: &Element<'_>) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut stack = vec![element];
+    while let Some(at) = stack.pop() {
+        out.extend(references_of(at));
+        stack.extend(
+            at.children
+                .iter()
+                .rev()
+                .filter_map(|&child| doc.element(child)),
+        );
+    }
+    out
+}
+
+/// I simboli fra `candidates`, `symbol` con gli attributi di
+/// [`symbol_allowed`]: quelli che non contengono sé stessi, nemmeno
+/// attraverso altri candidati. Un id che `taken` dice già preso, o di un
+/// candidato precedente, non è un simbolo. Restituisce gli id, in ordine.
+///
+/// Gli archi sono i riferimenti, `url(#id)` o `href="#id"`, che il contenuto
+/// di un candidato fa ad altri candidati; un candidato su un ciclo, o che
+/// rimanda a sé, non è un simbolo. Le componenti fortemente connesse si
+/// cercano con Tarjan, senza ricorsione: una catena di simboli può essere
+/// lunga quanto il file.
+fn acyclic_symbols(
+    doc: &Document<'_>,
+    candidates: &[&Element<'_>],
+    taken: &dyn Fn(&str) -> bool,
+) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    let mut index: HashMap<String, usize> = HashMap::new();
+    let mut elements = Vec::new();
+    for &element in candidates {
+        if !symbol_allowed(element) {
+            continue;
+        }
+        let id = element.value(NS_NONE, "id").expect("un simbolo ha un id");
+        if taken(id) || index.contains_key(id) {
+            continue;
+        }
+        index.insert(id.to_owned(), ids.len());
+        ids.push(id.to_owned());
+        elements.push(element);
+    }
+    let edges: Vec<Vec<usize>> = elements
+        .iter()
+        .map(|element| {
+            references_within(doc, element)
+                .iter()
+                .filter_map(|reference| index.get(reference).copied())
+                .collect()
+        })
+        .collect();
+    let n = ids.len();
+    let mut order = vec![usize::MAX; n];
+    let mut low = vec![0; n];
+    let mut on_stack = vec![false; n];
+    let mut cyclic = vec![false; n];
+    let mut stack = Vec::new();
+    let mut counter = 0;
+    for root in 0..n {
+        if order[root] != usize::MAX {
+            continue;
+        }
+        let mut frames = vec![(root, 0)];
+        order[root] = counter;
+        low[root] = counter;
+        counter += 1;
+        stack.push(root);
+        on_stack[root] = true;
+        while let Some(frame) = frames.last_mut() {
+            let (node, next) = *frame;
+            if next < edges[node].len() {
+                frame.1 += 1;
+                let to = edges[node][next];
+                if to == node {
+                    cyclic[node] = true;
+                }
+                if order[to] == usize::MAX {
+                    order[to] = counter;
+                    low[to] = counter;
+                    counter += 1;
+                    stack.push(to);
+                    on_stack[to] = true;
+                    frames.push((to, 0));
+                } else if on_stack[to] {
+                    low[node] = low[node].min(order[to]);
+                }
+                continue;
+            }
+            frames.pop();
+            if let Some(&(parent, _)) = frames.last() {
+                low[parent] = low[parent].min(low[node]);
+            }
+            if low[node] != order[node] {
+                continue;
+            }
+            let mut component = Vec::new();
+            loop {
+                let member = stack.pop().expect("il nodo è sulla pila");
+                on_stack[member] = false;
+                component.push(member);
+                if member == node {
+                    break;
+                }
+            }
+            if component.len() > 1 {
+                for member in component {
+                    cyclic[member] = true;
+                }
+            }
+        }
+    }
+    ids.into_iter()
+        .zip(cyclic)
+        .filter_map(|(id, cyclic)| (!cyclic).then_some(id))
+        .collect()
+}
+
 /// Le risorse modificabili di un documento: il tipo di ognuna, il `d` dei
 /// tracciati, il colore dei campioni e il tipo degli stili.
 struct Resources {
@@ -1452,6 +1687,7 @@ fn resource_index(doc: &Document<'_>) -> Resources {
     let mut styles = HashMap::new();
     let mut others = Vec::new();
     let mut prototypes = Vec::new();
+    let mut symbols = Vec::new();
     let judge = |found: &mut HashMap<String, ResourceKind>,
                  element: &Element<'_>,
                  tag: Tag,
@@ -1488,6 +1724,9 @@ fn resource_index(doc: &Document<'_>) -> Resources {
             if claims_style(element, tag) {
                 prototypes.push((element, tag));
             }
+            if tag == Tag::Symbol {
+                symbols.push(element);
+            }
             if tag != Tag::Path && tag.resource_kind().is_none() {
                 continue;
             }
@@ -1520,6 +1759,11 @@ fn resource_index(doc: &Document<'_>) -> Resources {
     let resolve = |id: &str| first.get(id).copied();
     for (element, tag) in others {
         judge(&mut found, element, tag, &resolve);
+    }
+    // I simboli dopo le altre risorse, che il loro contenuto usa: un id già
+    // preso resta della risorsa.
+    for id in acyclic_symbols(doc, &symbols, &|id| found.contains_key(id)) {
+        found.insert(id, ResourceKind::Symbol);
     }
     // Gli stili per ultimi: usano ogni altra risorsa, e nessuno li usa.
     let resolve = |id: &str| found.get(id).copied();
@@ -1575,7 +1819,17 @@ fn classify(
     if place == Place::Defs && claims_style(element, tag) {
         return style_allowed(doc, element, tag, resolve).then_some((tag, Role::Resource));
     }
-    // In una `defs` stanno solo risorse, stili, titolo e descrizione.
+    // Un simbolo sta in una `defs` della radice, e l'indice delle risorse sa
+    // se contiene sé stesso (formato della scena, simboli).
+    if tag == Tag::Symbol {
+        let symbol = element.value(NS_NONE, "id");
+        return (place == Place::Defs
+            && symbol.is_some_and(|symbol| resolve(symbol) == Some(ResourceKind::Symbol))
+            && symbol_allowed(element))
+        .then_some((tag, Role::Symbol));
+    }
+    // In una `defs` stanno solo risorse, stili, simboli, titolo e
+    // descrizione.
     if place == Place::Defs && !matches!(tag, Tag::Title | Tag::Desc) {
         return None;
     }
@@ -1583,6 +1837,9 @@ fn classify(
     if tag == Tag::View {
         return (place == Place::Root && board_allowed(doc, element, resolve))
             .then_some((tag, Role::Board));
+    }
+    if tag == Tag::Use {
+        return instance_allowed(doc, element, resolve).then_some((tag, Role::Instance));
     }
     if !attributes_allowed(element, tag, resolve, false) {
         return None;
@@ -2036,6 +2293,12 @@ impl Builder<'_, '_> {
             board: (role == Role::Paper)
                 .then(|| element.value(NS_FUB, "board").map(str::to_owned))
                 .flatten(),
+            symbol: (role == Role::Instance)
+                .then(|| use_target(element))
+                .flatten(),
+            source: (role == Role::Symbol)
+                .then(|| element.value(NS_FUB, "source").map(str::to_owned))
+                .flatten(),
         };
         self.items.push(Item::Element(Box::new(item)));
     }
@@ -2083,6 +2346,13 @@ impl Builder<'_, '_> {
                             path.push(index);
                             if role.is_container() {
                                 self.element_item(child, tag, role, path.clone(), &context);
+                                // Il contenuto di un simbolo sta nelle
+                                // coordinate del simbolo.
+                                let context = if role == Role::Symbol {
+                                    context.within(child)
+                                } else {
+                                    context
+                                };
                                 stack.push(Frame {
                                     node: child,
                                     place: if role == Role::Defs {

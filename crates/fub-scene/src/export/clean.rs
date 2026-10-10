@@ -1073,6 +1073,31 @@ mod tests {
     }
 
     #[test]
+    fn only_the_symbols_an_instance_draws_stay() {
+        let text = svg(concat!(
+            "\n  <defs id=\"fub-defs\">\n",
+            "    <symbol id=\"r1\" fub:source=\"Simboli/Impianti.svg#r9 0123456789abcdef\" overflow=\"visible\"><use href=\"#r2\"/></symbol>\n",
+            "    <symbol id=\"r2\" overflow=\"visible\"><circle r=\"2\" fill=\"url(#g)\"/></symbol>\n",
+            "    <symbol id=\"r3\" overflow=\"visible\"><rect width=\"4\" height=\"4\"/></symbol>\n",
+            "    <symbol id=\"r4\" overflow=\"visible\"><rect width=\"4\" height=\"4\"/></symbol>\n",
+            "    <linearGradient id=\"g\"/>\n",
+            "  </defs>\n",
+            "  <use id=\"o1\" transform=\"translate(10 10)\" href=\"#r1\"/>\n",
+            "  <use id=\"o2\" display=\"none\" href=\"#r4\"/>\n"
+        ));
+        let out = cleaned(&text);
+        // Il simbolo usato, quello che usa lui e la sfumatura del suo
+        // contenuto restano; quello che nessuno usa e quello di un'istanza
+        // nascosta se ne vanno, e con loro l'impronta della libreria.
+        for kept in ["id=\"r1\"", "id=\"r2\"", "id=\"g\"", "href=\"#r1\""] {
+            assert!(out.contains(kept), "{kept}: {out}");
+        }
+        for gone in ["id=\"r3\"", "id=\"r4\"", "id=\"o2\"", "fub:source"] {
+            assert!(!out.contains(gone), "{gone}: {out}");
+        }
+    }
+
+    #[test]
     fn entities_are_expanded_before_the_doctype_goes() {
         let text = concat!(
             "<?xml version=\"1.0\"?>\n<!DOCTYPE svg [\n<!ENTITY ns \"http://www.w3.org/2000/svg\">\n",

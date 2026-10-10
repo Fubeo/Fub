@@ -95,8 +95,8 @@ export class Tree {
     return this.ids.has(id);
   }
 
-  /// Quante risorse modificabili ha il documento (formato della scena,
-  /// risorse).
+  /// Quante risorse modificabili ha il documento, simboli compresi
+  /// (formato della scena, risorse).
   get resources(): number {
     return this.resourceCount;
   }
@@ -131,6 +131,8 @@ export class Tree {
     if (node.facts.id !== null) this.indexId(node.facts.id, node, add);
     this.count(node.facts.refs, add);
     this.follow(node.details, add);
+    // Un simbolo conta fra le risorse (formato della scena, simboli).
+    if (node.details?.role === "symbol") this.resourceCount += add ? 1 : -1;
     for (const part of node.parts) if (typeof part !== "string" && part.kind !== "other") this.index(part, add);
   }
 
@@ -214,6 +216,11 @@ export class Tree {
   /// Il punto del registro da cui un'operazione comincia.
   mark(): number {
     return this.log.length;
+  }
+
+  /// Le modifiche registrate da `mark` in poi, senza toglierle.
+  since(mark: number): readonly Entry[] {
+    return this.log.slice(mark);
   }
 
   /// Toglie dal registro le modifiche dopo `mark` e le restituisce.

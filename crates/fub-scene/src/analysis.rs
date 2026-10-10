@@ -17,7 +17,7 @@ use serde::Serialize;
 use crate::accessibility::Legibility;
 use crate::classify::{board_box, Role, Stroke};
 use crate::diagnostics::{Code, Diagnostic};
-use crate::geometry::{parse_path, rect_path, BoundsBuilder, Matrix};
+use crate::geometry::{parse_path, rect_path, Bounds, BoundsBuilder, Matrix};
 use crate::text::{Span, Utf16Map};
 use crate::values::{
     href, href_id, is_javascript, keyword, length, non_negative_length, opacity, paint,
@@ -180,6 +180,9 @@ pub(crate) struct Context<'s> {
     effect: bool,
     /// I campioni del documento, che danno il colore a chi li usa.
     swatches: &'s Swatches,
+    /// Il simbolo di cui l'elemento è il contenuto, nelle sue coordinate;
+    /// `None` fuori dai simboli (formato della scena, simboli).
+    symbol: Option<NodeId>,
 }
 
 /// Gli attributi che cambiano ciò che si vede di un elemento oltre il suo
@@ -209,6 +212,7 @@ impl<'s> Context<'s> {
             bold: root.value(NS_NONE, "font-weight").is_some_and(bold),
             effect: false,
             swatches,
+            symbol: None,
         }
     }
 
@@ -256,8 +260,21 @@ impl<'s> Context<'s> {
         }
     }
 
+    /// Il contesto del contenuto del simbolo `symbol`, che ha questo: le sue
+    /// coordinate sono quelle del simbolo.
+    pub fn within(&self, symbol: NodeId) -> Context<'s> {
+        Context {
+            symbol: Some(symbol),
+            ..*self
+        }
+    }
+
     pub fn matrix(&self) -> &Matrix {
         &self.matrix
+    }
+
+    pub fn symbol(&self) -> Option<NodeId> {
+        self.symbol
     }
 
     pub fn hidden(&self) -> bool {
@@ -328,6 +345,33 @@ pub(crate) fn board_name(doc: &Document<'_>, element: &Element<'_>) -> String {
     element.value(NS_NONE, "id").unwrap_or_default().to_owned()
 }
 
+/// L'id a cui rimanda un `use`: in SVG 2 `href` vince su `xlink:href`.
+pub(crate) fn use_target(element: &Element<'_>) -> Option<String> {
+    element
+        .value(NS_NONE, "href")
+        .or_else(|| element.value(NS_XLINK, "href"))
+        .and_then(href_id)
+}
+
+/// Ciò che si conta di un simbolo: il riquadro del suo contenuto, nelle sue
+/// coordinate, e le istanze che contiene, col simbolo e la matrice.
+#[derive(Default)]
+struct SymbolTally {
+    bounds: BoundsBuilder,
+    instances: Vec<(String, Matrix)>,
+}
+
+/// Aggiunge a `out` i quattro angoli di `bounds` trasformati da `m`.
+fn include_box(out: &mut BoundsBuilder, bounds: Option<Bounds>, m: &Matrix) {
+    let Some(b) = bounds else {
+        return;
+    };
+    out.include(m.apply([b.min[0], b.min[1]]));
+    out.include(m.apply([b.max[0], b.min[1]]));
+    out.include(m.apply([b.max[0], b.max[1]]));
+    out.include(m.apply([b.min[0], b.max[1]]));
+}
+
 /// Il riepilogo che si accumula durante la classificazione.
 #[derive(Default)]
 pub(crate) struct Tally {
@@ -346,6 +390,12 @@ pub(crate) struct Tally {
     /// Il `d` dei tracciati delle risorse, per id: il riquadro di un testo su
     /// tracciato è quello del tracciato (formato della scena, testo).
     paths: HashMap<String, String>,
+    /// Per ogni simbolo, il riquadro del suo contenuto nelle sue coordinate e
+    /// le istanze che contiene; il riquadro di un'istanza si sa alla fine,
+    /// quando si sa quello del suo simbolo (formato della scena, simboli).
+    symbols: HashMap<String, SymbolTally>,
+    /// Le istanze fuori dai simboli, col simbolo e la matrice.
+    instances: Vec<(String, Matrix)>,
 }
 
 impl Tally {
@@ -374,9 +424,31 @@ impl Tally {
         stroke: Option<&Stroke>,
     ) {
         match role {
-            // Le risorse non si disegnano da sole: contano gli oggetti che le
-            // usano (formato della scena, risorse).
-            Role::Defs | Role::Resource => return,
+            // Le risorse e i simboli non si disegnano da soli: contano gli
+            // oggetti che li usano (formato della scena, risorse e simboli).
+            Role::Defs | Role::Resource | Role::Symbol => return,
+            // Un'istanza ha il riquadro del suo simbolo, che si sa alla fine;
+            // il contenuto del simbolo si conta e si controlla una volta sola.
+            Role::Instance => {
+                if context.hidden {
+                    return;
+                }
+                let target = use_target(element).expect("un'istanza ha il suo simbolo");
+                match symbol_id(doc, context) {
+                    Some(symbol) => self
+                        .symbols
+                        .entry(symbol)
+                        .or_default()
+                        .instances
+                        .push((target, context.matrix)),
+                    None => {
+                        self.legibility
+                            .instance(target.clone(), context.matrix, span);
+                        self.instances.push((target, context.matrix));
+                    }
+                }
+                return;
+            }
             Role::Layer => self.layers.push(
                 element
                     .value(NS_FUB, "layer")
@@ -431,17 +503,54 @@ impl Tally {
             Role::Title | Role::Desc | Role::Group => {}
         }
         if !context.hidden {
-            bounds(
-                doc,
-                element,
-                role,
-                &context.matrix,
-                &mut self.bounds,
-                &self.paths,
-            );
+            let out = match symbol_id(doc, context) {
+                Some(symbol) => &mut self.symbols.entry(symbol).or_default().bounds,
+                None => &mut self.bounds,
+            };
+            bounds(doc, element, role, &context.matrix, out, &self.paths);
             self.legibility
                 .element(doc, element, role, context, span, stroke, &self.paths);
         }
+    }
+
+    /// Il riquadro del contenuto di ogni simbolo che il documento conta,
+    /// nelle sue coordinate, con quello delle istanze che contiene: dai
+    /// simboli più interni, senza ricorsione.
+    fn symbol_boxes(symbols: HashMap<String, SymbolTally>) -> HashMap<String, Option<Bounds>> {
+        let mut boxes: HashMap<String, Option<Bounds>> = HashMap::new();
+        let mut entered: HashSet<&str> = HashSet::new();
+        for start in symbols.keys() {
+            let mut stack: Vec<(&str, bool)> = vec![(start, false)];
+            while let Some((id, ready)) = stack.pop() {
+                if boxes.contains_key(id) {
+                    continue;
+                }
+                let Some(tally) = symbols.get(id) else {
+                    boxes.insert(id.to_owned(), None);
+                    continue;
+                };
+                if !ready {
+                    if !entered.insert(id) {
+                        continue;
+                    }
+                    stack.push((id, true));
+                    for (inner, _) in &tally.instances {
+                        if !boxes.contains_key(inner.as_str()) && !entered.contains(inner.as_str())
+                        {
+                            stack.push((inner, false));
+                        }
+                    }
+                    continue;
+                }
+                let mut out = BoundsBuilder::default();
+                include_box(&mut out, tally.bounds.clone().finish(), &Matrix::IDENTITY);
+                for (inner, m) in &tally.instances {
+                    include_box(&mut out, boxes.get(inner.as_str()).copied().flatten(), m);
+                }
+                boxes.insert(id.to_owned(), out.finish());
+            }
+        }
+        boxes
     }
 
     /// Le tavole, in ordine, col loro nome sullo span del `view`: le sezioni
@@ -492,9 +601,19 @@ impl Tally {
         diagnostics: &mut Vec<Diagnostic>,
     ) -> Summary {
         self.check_papers(diagnostics);
+        // Il riquadro di un'istanza è quello del suo simbolo, che si sa adesso.
+        let boxes = if self.instances.is_empty() {
+            HashMap::new()
+        } else {
+            Tally::symbol_boxes(self.symbols)
+        };
         // Senza carta il disegno sta sul bianco della superficie (§12).
         self.legibility
-            .finish(self.paper.unwrap_or(Some(WHITE)), diagnostics);
+            .finish(self.paper.unwrap_or(Some(WHITE)), &boxes, diagnostics);
+        let mut bounds = self.bounds;
+        for (symbol, m) in &self.instances {
+            include_box(&mut bounds, boxes.get(symbol).copied().flatten(), m);
+        }
         Summary {
             version,
             foreign: status == Status::Foreign,
@@ -503,7 +622,7 @@ impl Tally {
             boards: self.boards.into_iter().map(|board| board.name).collect(),
             counts: self.counts,
             ink: self.ink,
-            bbox: self.bounds.finish().and_then(|b| {
+            bbox: bounds.finish().and_then(|b| {
                 let [x1, y1, x2, y2] = [b.min[0], b.min[1], b.max[0], b.max[1]].map(hundredths);
                 let bbox = BBox {
                     x: x1 / 100.0,
@@ -518,6 +637,13 @@ impl Tally {
             }),
         }
     }
+}
+
+/// L'id del simbolo di cui un elemento col contesto `context` è il
+/// contenuto, o `None` fuori dai simboli.
+fn symbol_id(doc: &Document<'_>, context: &Context<'_>) -> Option<String> {
+    let symbol = doc.element(context.symbol?)?;
+    symbol.value(NS_NONE, "id").map(str::to_owned)
 }
 
 /// Il riepilogo di un file troncato: della testa si sa solo chi è.
@@ -694,7 +820,9 @@ fn bounds(
         | Role::Link
         | Role::Defs
         | Role::Resource
-        | Role::Board => {}
+        | Role::Board
+        | Role::Symbol
+        | Role::Instance => {}
     }
 }
 

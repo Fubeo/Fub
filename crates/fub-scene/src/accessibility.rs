@@ -12,6 +12,13 @@
 //! colore non si sa. Come per la carta, il CSS e i blocchi estranei non
 //! contano, e nemmeno i tratti a mano libera, che sono sottili.
 //!
+//! Un simbolo (formato della scena, simboli) si guarda una volta, nelle sue
+//! coordinate: il suo contenuto non sta dove si vede, quindi non dipinge e non
+//! si confronta col fondo, ma un'immagine senza descrizione (S012) e un testo
+//! troppo piccolo nelle coordinate del simbolo (S013) restano. Un'istanza
+//! copre ciò che ha sotto col riquadro del suo simbolo, come un'immagine: il
+//! fondo che dà non si sa.
+//!
 //! Dove si guarda:
 //!
 //! - **un testo**, una volta per riga: nel punto d'inizio del `tspan`, alzato
@@ -92,6 +99,13 @@ const LINE_PROBE: f64 = 0.35;
 /// codice.
 const MAX_CODES: usize = 12;
 
+/// Il rettangolo che non contiene niente: il posto di un'istanza finché il
+/// riquadro del suo simbolo non si sa.
+const NOWHERE: Bounds = Bounds {
+    min: [f64::INFINITY, f64::INFINITY],
+    max: [f64::NEG_INFINITY, f64::NEG_INFINITY],
+};
+
 /// Una figura dipinta: dove sta e di che colore.
 struct Painted {
     /// I segmenti nelle coordinate della figura, e la matrice verso la radice.
@@ -170,6 +184,9 @@ struct Check {
 #[derive(Default)]
 pub(crate) struct Legibility {
     painted: Vec<Painted>,
+    /// Le istanze dipinte: il loro posto fra le figure, il simbolo e la
+    /// matrice. Il riquadro del simbolo si sa alla fine.
+    instances: Vec<(usize, String, Matrix)>,
     checks: Vec<Check>,
     /// S012 e S013, che non dipendono dal fondo.
     found: Vec<Diagnostic>,
@@ -192,9 +209,12 @@ impl Legibility {
     ) {
         let m = *context.matrix();
         let at = |name: &str| len(element, name).unwrap_or(0.0);
+        // Il contenuto di un simbolo non sta dove si vede: non dipinge e non
+        // si confronta col fondo.
+        let in_symbol = context.symbol().is_some();
         let shape = match role {
             Role::Stroke => {
-                if stroke.is_some_and(|stroke| stroke.tool == Tool::Pen) {
+                if stroke.is_some_and(|stroke| stroke.tool == Tool::Pen) && !in_symbol {
                     if let Some(color) = context.fill() {
                         let probes = outline_probes(element, &m);
                         self.check(span, Subject::Pen { color, probes });
@@ -211,8 +231,10 @@ impl Legibility {
                     self.found
                         .push(Diagnostic::new(Code::S012, Some(span), None));
                 }
-                let r = rect_path(at("x"), at("y"), at("width"), at("height"), 0.0, 0.0);
-                self.paint(r, m, None, span);
+                if !in_symbol {
+                    let r = rect_path(at("x"), at("y"), at("width"), at("height"), 0.0, 0.0);
+                    self.paint(r, m, None, span);
+                }
                 return;
             }
             Role::Rect => {
@@ -235,6 +257,9 @@ impl Legibility {
             }
             _ => return,
         };
+        if in_symbol {
+            return;
+        }
         match context.fill_paint() {
             // Un riempimento ignoto copre come un'immagine.
             None => self.paint(shape, m, None, span),
@@ -243,6 +268,22 @@ impl Legibility {
             }
             Some(_) => {}
         }
+    }
+
+    /// Guarda un'istanza visibile fuori dai simboli, del simbolo `symbol` con
+    /// la matrice `matrix`: copre ciò che ha sotto col riquadro del simbolo,
+    /// come un'immagine, perché il contenuto del simbolo non si guarda in ogni
+    /// istanza.
+    pub fn instance(&mut self, symbol: String, matrix: Matrix, span: Span) {
+        self.instances.push((self.painted.len(), symbol, matrix));
+        self.painted.push(Painted {
+            segments: Vec::new(),
+            matrix,
+            bounds: NOWHERE,
+            polygons: OnceCell::new(),
+            paint: None,
+            span,
+        });
     }
 
     fn check(&mut self, span: Span, subject: Subject) {
@@ -345,15 +386,40 @@ impl Legibility {
             self.found
                 .push(Diagnostic::new(Code::S013, Some(span), Some(shown(size))));
         }
-        if !lines.is_empty() {
+        if !lines.is_empty() && context.symbol().is_none() {
             self.check(span, Subject::Text { lines });
         }
     }
 
     /// Chiude i controlli: S009 per ogni oggetto che contrasta poco col suo
     /// fondo, S017 per ogni colore di codice confuso con un altro, poi S012 e
-    /// S013. `paper` è il colore della carta, `None` se non si sa.
-    pub fn finish(self, paper: Option<Rgb>, diagnostics: &mut Vec<Diagnostic>) {
+    /// S013. `paper` è il colore della carta, `None` se non si sa; `boxes` il
+    /// riquadro di ogni simbolo, nelle sue coordinate.
+    pub fn finish(
+        mut self,
+        paper: Option<Rgb>,
+        boxes: &HashMap<String, Option<Bounds>>,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) {
+        for (at, symbol, m) in std::mem::take(&mut self.instances) {
+            let Some(Bounds { min, max }) = boxes.get(&symbol).copied().flatten() else {
+                continue;
+            };
+            let shape = rect_path(min[0], min[1], max[0] - min[0], max[1] - min[1], 0.0, 0.0);
+            let mut bounds = BoundsBuilder::default();
+            bounds.path(&shape, &m);
+            if let Some(covered) = bounds.finish() {
+                let span = self.painted[at].span;
+                self.painted[at] = Painted {
+                    segments: shape,
+                    matrix: m,
+                    bounds: covered,
+                    polygons: OnceCell::new(),
+                    paint: None,
+                    span,
+                };
+            }
+        }
         for check in &self.checks {
             let backdrop = |p: [f64; 2]| self.backdrop(paper, check.under, p);
             let worst = match &check.subject {

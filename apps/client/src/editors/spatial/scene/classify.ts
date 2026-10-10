@@ -23,7 +23,7 @@
 import { BrushError, parseBrush } from "../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
 import { InkError } from "../ink/sample";
-import { Context, isContainer, Tally, type Role, type Stroke, type Swatches, type Tool } from "./analysis";
+import { Context, isContainer, Tally, useTarget, type Role, type Stroke, type Swatches, type Tool } from "./analysis";
 import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
 import { readConnectorEnd, readConnectorGeom, readLabelPlace, type ConnectorEnd, type ConnectorGeom, type LabelPlace } from "./connectors";
 import { parsePath } from "./geometry";
@@ -172,6 +172,12 @@ export interface ElementItem extends Span {
   readonly box?: readonly [number, number, number, number];
   /// La tavola di una carta: `fub:board`, com'è scritto.
   readonly board?: string;
+  /// Il simbolo di un'istanza: l'id a cui rimanda (formato della scena,
+  /// simboli).
+  readonly symbol?: string;
+  /// Da dove viene un simbolo copiato da una libreria: `fub:source`, com'è
+  /// scritto.
+  readonly source?: string;
 }
 
 /// Una sequenza contigua di nodi estranei (§8).
@@ -209,6 +215,8 @@ export type Tag =
   | "image"
   | "defs"
   | "view"
+  | "symbol"
+  | "use"
   | ResourceTag;
 
 /// I tag delle risorse (formato della scena, risorse).
@@ -233,8 +241,9 @@ export function isResourceTag(tag: string): boolean {
 /// Che cosa è una risorsa per chi la usa (formato della scena, risorse): `fill`
 /// e `stroke` usano sfumature e motivi, `marker-*` i marcatori, `clip-path`,
 /// `mask` e `filter` ritagli, maschere e filtri, un `textPath` un tracciato
-/// (formato della scena, testo).
-export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter" | "path";
+/// (formato della scena, testo), e un `use` un simbolo (formato della scena,
+/// simboli).
+export type ResourceKind = "gradient" | "pattern" | "marker" | "clip" | "mask" | "filter" | "path" | "symbol";
 
 /// Il tipo di una risorsa dal suo tag.
 export function resourceKind(tag: string): ResourceKind | null {
@@ -254,6 +263,8 @@ export function resourceKind(tag: string): ResourceKind | null {
       return "mask";
     case "filter":
       return "filter";
+    case "symbol":
+      return "symbol";
     default:
       return null;
   }
@@ -413,6 +424,8 @@ const TAGS: ReadonlySet<string> = new Set<Tag>([
   "image",
   "defs",
   "view",
+  "symbol",
+  "use",
   ...(RESOURCE_TAGS as ReadonlySet<ResourceTag>),
 ]);
 
@@ -480,6 +493,7 @@ const DRAWN: ReadonlySet<string> = new Set([
   "image",
   "g",
   "a",
+  "use",
 ]);
 
 /// I tag su cui i browser disegnano i marcatori.
@@ -1113,6 +1127,190 @@ export function referencesOf(element: ElementNode): string[] {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// I simboli (formato della scena, simboli).
+// ---------------------------------------------------------------------------
+
+/// Vero se `element`, un `symbol` di una `defs` della radice, ha gli
+/// attributi di un simbolo: un id e `overflow="visible"`, e nessun altro
+/// attributo SVG. I figli si giudicano uno per uno, come quelli di un gruppo.
+export function symbolAllowed(element: ElementNode): boolean {
+  let id = false;
+  let overflow = false;
+  const attributes = element.attrs.every((attr) => {
+    switch (attr.ns) {
+      case NS_NONE:
+        if (attr.local === "overflow") return (overflow = trim(attr.value) === "visible");
+        return attr.local === "id" && (id = attr.value !== "");
+      case NS_XLINK:
+      case NS_SVG:
+        return false;
+      default:
+        return true;
+    }
+  });
+  return attributes && id && overflow;
+}
+
+/// Gli attributi SVG di un'istanza oltre a `href`: niente geometria e niente
+/// di ciò che il contenuto del simbolo erediterebbe, così il simbolo si vede
+/// uguale in ogni istanza.
+const INSTANCE_ATTRIBUTES: ReadonlySet<string> = new Set(["id", "transform", "opacity", "display", "style", "clip-path", "mask", "filter"]);
+
+/// Vero se `element`, un `use` fuori dalle `defs`, è un'istanza: un `href`
+/// o un `xlink:href`, uno solo, verso un simbolo modificabile, gli attributi
+/// di [`INSTANCE_ATTRIBUTES`], e per figli soltanto titoli e descrizioni.
+function instanceAllowed(doc: XmlDocument, element: ElementNode, resolve: Resolve): boolean {
+  let hrefs = 0;
+  const attributes = element.attrs.every((attr) => {
+    switch (attr.ns) {
+      case NS_NONE:
+      case NS_XLINK: {
+        if (attr.local === "href") {
+          hrefs++;
+          const target = hrefId(attr.value);
+          return target !== null && resolve(target) === "symbol";
+        }
+        if (attr.ns === NS_XLINK || !INSTANCE_ATTRIBUTES.has(attr.local)) return false;
+        return (REFERENCES.has(attr.local) || !hasUrl(attr.value)) && svgAttribute("use", attr.local, attr.value, resolve);
+      }
+      case NS_SVG:
+        return false;
+      default:
+        return true;
+    }
+  });
+  return attributes && hrefs === 1 && element.children.every((child) => blankOrMeta(doc, child) === true);
+}
+
+/// Gli id a cui rimanda `element` con ciò che contiene, una volta ciascuno.
+function referencesWithin(doc: XmlDocument, element: ElementNode): Set<string> {
+  const out = new Set<string>();
+  const stack: ElementNode[] = [element];
+  while (stack.length > 0) {
+    const at = stack.pop()!;
+    for (const id of referencesOf(at)) out.add(id);
+    for (let i = at.children.length - 1; i >= 0; i--) {
+      const child = doc.element(at.children[i]!);
+      if (child !== null) stack.push(child);
+    }
+  }
+  return out;
+}
+
+/// I simboli fra `candidates`, `symbol` con gli attributi di
+/// [`symbolAllowed`]: quelli che non contengono sé stessi, nemmeno
+/// attraverso altri candidati. Un id che `taken` dice già preso, o di un
+/// candidato precedente, non è un simbolo. Restituisce gli id, in ordine.
+///
+/// Gli archi sono i riferimenti, `url(#id)` o `href="#id"`, che il contenuto
+/// di un candidato fa ad altri candidati; un candidato su un ciclo, o che
+/// rimanda a sé, non è un simbolo. Le componenti fortemente connesse si
+/// cercano con Tarjan, senza ricorsione: una catena di simboli può essere
+/// lunga quanto il file.
+function acyclicSymbols(doc: XmlDocument, candidates: readonly ElementNode[], taken: (id: string) => boolean): string[] {
+  const ids: string[] = [];
+  const index = new Map<string, number>();
+  const elements: ElementNode[] = [];
+  for (const element of candidates) {
+    if (!symbolAllowed(element)) continue;
+    const id = valueOf(element, NS_NONE, "id")!;
+    if (taken(id) || index.has(id)) continue;
+    index.set(id, ids.length);
+    ids.push(id);
+    elements.push(element);
+  }
+  const edges = elements.map((element) => {
+    const out: number[] = [];
+    for (const ref of referencesWithin(doc, element)) {
+      const to = index.get(ref);
+      if (to !== undefined) out.push(to);
+    }
+    return out;
+  });
+  const order = new Array<number>(ids.length).fill(-1);
+  const low = new Array<number>(ids.length).fill(0);
+  const onStack = new Array<boolean>(ids.length).fill(false);
+  const cyclic = new Array<boolean>(ids.length).fill(false);
+  const stack: number[] = [];
+  let counter = 0;
+  for (let root = 0; root < ids.length; root++) {
+    if (order[root] !== -1) continue;
+    const frames: Array<[node: number, next: number]> = [[root, 0]];
+    order[root] = low[root] = counter++;
+    stack.push(root);
+    onStack[root] = true;
+    while (frames.length > 0) {
+      const frame = frames[frames.length - 1]!;
+      const [node, next] = frame;
+      if (next < edges[node]!.length) {
+        frame[1]++;
+        const to = edges[node]![next]!;
+        if (to === node) cyclic[node] = true;
+        if (order[to] === -1) {
+          order[to] = low[to] = counter++;
+          stack.push(to);
+          onStack[to] = true;
+          frames.push([to, 0]);
+        } else if (onStack[to]) {
+          low[node] = Math.min(low[node]!, order[to]!);
+        }
+        continue;
+      }
+      frames.pop();
+      const parent = frames[frames.length - 1];
+      if (parent !== undefined) low[parent[0]] = Math.min(low[parent[0]]!, low[node]!);
+      if (low[node] !== order[node]) continue;
+      const component: number[] = [];
+      for (;;) {
+        const member = stack.pop()!;
+        onStack[member] = false;
+        component.push(member);
+        if (member === node) break;
+      }
+      if (component.length > 1) for (const member of component) cyclic[member] = true;
+    }
+  }
+  return ids.filter((_, k) => !cyclic[k]);
+}
+
+/// I simboli fra gli elementi `ids` di `doc`, che entrano insieme in una
+/// `defs` della radice: per chi li legge prima di aggiungerli, con le
+/// risorse che `resolve` conosce già. Un id che `resolve` conosce resta
+/// suo.
+function localSymbols(doc: XmlDocument, ids: readonly NodeId[], resolve: Resolve): Map<string, ResourceKind> {
+  const candidates: ElementNode[] = [];
+  for (const id of ids) {
+    const element = doc.element(id);
+    if (element !== null && tagOf(element) === "symbol") candidates.push(element);
+  }
+  const found = new Map<string, ResourceKind>();
+  if (candidates.length === 0) return found;
+  for (const id of acyclicSymbols(doc, candidates, (id) => resolve(id) !== null)) found.set(id, "symbol");
+  return found;
+}
+
+/// `resolve` coi simboli fra gli elementi `ids` di `doc`, come
+/// [`localSymbols`].
+function withLocalSymbols(doc: XmlDocument, ids: readonly NodeId[], resolve: Resolve): Resolve {
+  const local = localSymbols(doc, ids, resolve);
+  return local.size === 0 ? resolve : (id) => local.get(id) ?? resolve(id);
+}
+
+/// `resolve` coi simboli che arrivano con gli elementi `ids` di `doc`, che
+/// entrano in un contenitore in `place`: loro stessi in una `defs`, i figli
+/// delle loro `defs` nella radice.
+export function withArrivingSymbols(doc: XmlDocument, ids: readonly NodeId[], place: Place, resolve: Resolve): Resolve {
+  if (place === "defs") return withLocalSymbols(doc, ids, resolve);
+  if (place === "inside") return resolve;
+  const inner: NodeId[] = [];
+  for (const id of ids) {
+    const element = doc.element(id);
+    if (element !== null && tagOf(element) === "defs") inner.push(...doc.children(id));
+  }
+  return inner.length === 0 ? resolve : withLocalSymbols(doc, inner, resolve);
+}
+
 /// L'indice delle risorse modificabili del documento: per ogni id, il tipo
 /// della risorsa (formato della scena, risorse). Prima le sfumature e i
 /// tracciati, che non rimandano a niente, poi le altre, che nel contenuto
@@ -1148,6 +1346,7 @@ function indexResources(doc: XmlDocument): Resources {
   const styles = new Map<string, StyleFacts["kind"]>();
   const others: Array<[ElementNode, ResourceTag]> = [];
   const prototypes: Array<[ElementNode, Tag]> = [];
+  const symbols: ElementNode[] = [];
   const judge = (element: ElementNode, tag: ResourceTag | "path", resolve: Resolve): void => {
     const id = valueOf(element, NS_NONE, "id");
     if (id === undefined || kinds.has(id)) return;
@@ -1166,6 +1365,7 @@ function indexResources(doc: XmlDocument): Resources {
       const tag = element === null ? null : tagOf(element);
       if (element === null || tag === null) continue;
       if (styleKindOf(tag) !== null && valueOf(element, NS_FUB, "role") === "style") prototypes.push([element, tag]);
+      if (tag === "symbol") symbols.push(element);
       if (tag !== "path" && !RESOURCE_TAGS.has(tag)) continue;
       if (tag === "linearGradient" || tag === "radialGradient" || tag === "path") judge(element, tag, NO_RESOURCES);
       else others.push([element, tag as ResourceTag]);
@@ -1173,6 +1373,9 @@ function indexResources(doc: XmlDocument): Resources {
   }
   const first: Resolve = (id) => kinds.get(id) ?? null;
   for (const [element, tag] of others) judge(element, tag, first);
+  // I simboli dopo le altre risorse, che il loro contenuto usa: un id già
+  // preso resta della risorsa.
+  for (const id of acyclicSymbols(doc, symbols, (id) => kinds.has(id))) kinds.set(id, "symbol");
   // Gli stili per ultimi: usano ogni altra risorsa, e nessuno li usa.
   for (const [element, tag] of prototypes) {
     const id = valueOf(element, NS_NONE, "id");
@@ -1235,10 +1438,18 @@ function classify(doc: XmlDocument, id: NodeId, place: Place, resolve: Resolve):
   if (place === "defs" && styleKindOf(tag) !== null && valueOf(element, NS_FUB, "role") === "style") {
     return styleAllowed(doc, element, tag, resolve) ? [tag, "resource"] : null;
   }
-  // In una `defs` stanno solo risorse, stili, titolo e descrizione.
+  // Un simbolo sta in una `defs` della radice, e l'indice delle risorse sa
+  // se contiene sé stesso (formato della scena, simboli).
+  if (tag === "symbol") {
+    const symbol = valueOf(element, NS_NONE, "id");
+    return place === "defs" && symbol !== undefined && resolve(symbol) === "symbol" && symbolAllowed(element) ? [tag, "symbol"] : null;
+  }
+  // In una `defs` stanno solo risorse, stili, simboli, titolo e
+  // descrizione.
   if (place === "defs" && tag !== "title" && tag !== "desc") return null;
   // Una tavola è un `view` della radice (formato della scena, tavole).
   if (tag === "view") return place === "root" && boardAllowed(doc, element, resolve) ? [tag, "board"] : null;
+  if (tag === "use") return instanceAllowed(doc, element, resolve) ? [tag, "instance"] : null;
   if (!attributesAllowed(element, tag, resolve)) return null;
   const underRoot = place === "root";
   switch (tag) {
@@ -1376,6 +1587,8 @@ export interface Details {
   readonly follows?: string;
   readonly box?: readonly [number, number, number, number];
   readonly board?: string;
+  readonly symbol?: string;
+  readonly source?: string;
 }
 
 /// Un problema di un tratto: S004 o S010, col dettaglio.
@@ -1542,6 +1755,11 @@ export function describe(doc: XmlDocument, id: NodeId, tag: Tag, role: Role): { 
     if (follows !== undefined) details.follows = follows;
   }
   if (role === "title" || role === "desc") details.text = characterData(doc, id);
+  if (role === "instance") details.symbol = useTarget(element)!;
+  if (role === "symbol") {
+    const source = valueOf(element, NS_FUB, "source");
+    if (source !== undefined) details.source = source;
+  }
   if (role === "text") {
     const path = textPathOf(doc, element);
     if (path !== null) {
@@ -1607,6 +1825,8 @@ export function elementItem(details: Details, path: readonly number[], span: Spa
   if (details.follows !== undefined) item.follows = details.follows;
   if (details.box !== undefined) item.box = details.box;
   if (details.board !== undefined) item.board = details.board;
+  if (details.symbol !== undefined) item.symbol = details.symbol;
+  if (details.source !== undefined) item.source = details.source;
   return item;
 }
 
@@ -1760,7 +1980,9 @@ class Builder {
       this.elementItem(child, tag, role, path, context);
       if (isContainer(role)) {
         const place: Place = role === "defs" ? "defs" : "inside";
-        stack.push({ node: child, place, path, next: 0, elements: 0, pending: null, context });
+        // Il contenuto di un simbolo sta nelle coordinate del simbolo.
+        const inner = role === "symbol" ? context.within(valueOf(node, NS_NONE, "id")!) : context;
+        stack.push({ node: child, place, path, next: 0, elements: 0, pending: null, context: inner });
       }
     }
   }

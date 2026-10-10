@@ -42,7 +42,8 @@ riempie del colore dopo il riferimento.
 - **La `defs` della radice:** un `defs` figlio della radice, che fra gli
   attributi SVG ha soltanto un `id` non vuoto, è un contenitore
   modificabile: i suoi figli si giudicano uno per uno, come in un livello.
-  Ognuno è una risorsa, un `title`, un `desc` o un blocco estraneo. La `defs`
+  Ognuno è una risorsa, un [simbolo](scene-format-symbols.md), un `title`,
+  un `desc` o un blocco estraneo. La `defs`
   può stare in qualunque punto fra i figli della radice: Inkscape la scrive
   in cima, Figma in fondo. Non si blocca e non si nasconde. Anche una `defs`
   senza id, o fatta tutta di figli estranei, resta una `defs`.
@@ -239,6 +240,8 @@ le esportazioni di Mermaid usano.
 - **`style`:** uno [stile](scene-format-styles.md), un `text` o una
   `polyline` che gli oggetti seguono. Non si raccoglie mai, e le risorse
   private che usa sono sue.
+- **Un [simbolo](scene-format-symbols.md),** un `symbol` che le istanze
+  usano, non ha `fub:role` e non si raccoglie mai.
 - **Senza `fub:role`, o con un altro valore:** non è di FubDraw. Resta anche
   quando nessuno la usa, e duplicare la condivide.
 - **La `fub-defs`** che resta senza figli se ne va con l'ultima risorsa: un
@@ -480,7 +483,8 @@ non cambiano mai natura per un'operazione su un altro elemento.
   l'etichetta dell'operazione; l'inversa rimette prima le risorse, poi
   disfa il seguito e l'operazione. Un seguito che il motore rifiuterebbe
   non c'è.
-- **Il limite:** un documento ha al più 10 000 risorse modificabili. Un
+- **Il limite:** un documento ha al più 10 000 risorse modificabili, coi
+  simboli. Un
   `add` che lo supererebbe è `limit`; un documento che ne ha di più si apre
   e si modifica, e un annulla rimette anche oltre il limite.
 
@@ -512,6 +516,6 @@ riscritture.
 - **Un lettore che non conosce i motivi del documento** legge un motivo
   come una risorsa senza ciclo di vita: resta, e duplicare chi lo usa lo
   condivide. Una campitura è un `pattern` privato come gli altri.
-- **`symbol` e `use`** restano estranei. Entreranno nel formato
-  con gli strumenti che li creano e li spostano: così la superficie non
-  incontra un oggetto modificabile che non sa misurare.
+- **Un lettore che non conosce i [simboli](scene-format-symbols.md)** vede
+  estranei il `symbol` nella `defs` e ogni `use`, e li conserva byte per
+  byte.
