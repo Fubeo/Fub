@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 600" width="800" height="600" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>Le ripetizioni</title>
+  <defs id="fub-defs">
+    <symbol id="r00000001" overflow="visible">
+      <title>Petalo</title>
+      <ellipse id="o00000001" cx="0" cy="-30" rx="8" ry="20" fill="#cc79a7"/>
+      <g id="o00000002" fub:repeat="grid 1 2 0 10">
+        <circle id="o00000003" cx="0" cy="-40" r="2" fill="#000000"/>
+        <use id="o00000004" transform="translate(0 10)" href="#o00000003"/>
+      </g>
+    </symbol>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <g id="o00000010" fub:repeat="radial 6 200 200">
+      <title>Fiore</title>
+      <use id="o00000011" transform="translate(200 200)" href="#r00000001"/>
+      <use id="o00000012" transform="matrix(0.5 0.866 -0.866 0.5 273.2051 -73.2051)" href="#o00000011"/>
+      <use id="o00000013" transform="matrix(-0.5 0.866 -0.866 -0.5 473.2051 126.7949)" href="#o00000011"/>
+      <use id="o00000014" transform="matrix(-1 0 0 -1 400 400)" href="#o00000011"/>
+      <use id="o00000015" transform="matrix(-0.5 -0.866 0.866 -0.5 126.7949 473.2051)" href="#o00000011"/>
+      <use id="o00000016" transform="matrix(0.5 -0.866 0.866 0.5 -73.2051 273.2051)" href="#o00000011"/>
+    </g>
+    <g id="o00000020" fub:repeat="grid 3 2 60 50" transform="translate(450 80)">
+      <rect id="o00000021" x="0" y="0" width="40" height="30" fill="#0072b2"/>
+      <use id="o00000022" transform="translate(60 0)" href="#o00000021"/>
+      <use id="o00000023" transform="translate(120 0)" xlink:href="#o00000021">
+        <title>Terza</title>
+      </use>
+      <use id="o00000024" transform="translate(0 50)" href="#o00000021"/>
+      <use id="o00000025" transform="translate(60 50)" href="#o00000021"/>
+      <use id="o00000026" transform="translate(120 50)" href="#o00000021"/>
+    </g>
+    <g id="o00000030" fub:repeat="mirror 400 300 400 400">
+      <g id="o00000031">
+        <path id="o00000032" d="M300 450 L380 420 L380 520 Z" fill="#009e73"/>
+        <g id="o00000033" fub:repeat="grid 2 1 30 0">
+          <circle id="o00000034" cx="320" cy="470" r="6" fill="#000000"/>
+          <use id="o00000035" transform="translate(30 0)" href="#o00000034"/>
+        </g>
+      </g>
+      <use id="o00000036" transform="matrix(-1 0 0 1 800 0)" href="#o00000031"/>
+    </g>
+    <text id="o00000040" x="430" y="480" font-size="16" fill="#ffffff">
+      <tspan x="430" dy="0">Eco</tspan>
+    </text>
+    <g id="o00000050" fub:repeat="radial 1 0 0">
+      <rect id="o00000051" x="250" y="500" width="20" height="20" fill="#e69f00"/>
+      <use id="o00000052" transform="translate(30 0)" href="#o00000051"/>
+    </g>
+    <g id="o00000053" fub:repeat="grid 2 1 30 0">
+      <rect id="o00000054" x="250" y="540" width="20" height="20" fill="#e69f00"/>
+      <use id="o00000055" transform="translate(30 0)" href="#o00000054" opacity="0.5"/>
+      <use id="o00000056" transform="translate(30 0)" href="#o00000021"/>
+    </g>
+  </g>
+  <g id="l00000002" fub:layer="Sfondo" fub:repeat="grid 2 1 30 0">
+    <rect id="o00000060" x="300" y="560" width="20" height="20" fill="#e69f00"/>
+    <use id="o00000061" transform="translate(30 0)" href="#o00000060"/>
+  </g>
+</svg>

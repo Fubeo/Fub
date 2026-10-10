@@ -203,6 +203,11 @@ Altri dettagli:
   lo usa è `in-use`. Il suo contenuto sono oggetti coi loro id. In un `batch`
   il simbolo viene prima delle sue istanze; un simbolo che userebbe sé
   stesso, anche attraverso un altro, è `cycle`.
+- **Una [ripetizione](scene-format-repeats.md)** non lascia mai una copia
+  senza il suo originale: togliere l'originale, spostarlo fuori dal gruppo,
+  togliergli l'id o togliere `fub:repeat` mentre ha copie è `in-use`. In un
+  `batch` la ripetizione e l'originale vengono prima delle copie, e una
+  copia si sposta soltanto fra i fratelli.
 - **`set` sulla radice:** con `id` uguale a `#root` cambia soltanto l'unità e
   le guide del documento, `fub:units` e `fub:guides`, coi valori nella loro
   grammatica ([unità e guide](scene-format-rulers.md)). Ogni altro attributo
@@ -233,8 +238,8 @@ Altri dettagli:
 | `missing-target` | il bersaglio non esiste |
 | `missing-parent` | il genitore non esiste o non è un livello o un gruppo modificabile |
 | `missing-anchor` | l'`after` non esiste, non è figlio del genitore, o è l'elemento stesso |
-| `duplicate-id` | `add` con un id già presente e un elemento diverso (§8), o di una risorsa con un id a cui il documento rimanda già |
-| `in-use` | `remove` di una risorsa, o di una `defs` che ne contiene, a cui rimanda qualcosa fuori da ciò che si toglie o che un oggetto fuori segue come stile; `ident` che toglie l'id a una risorsa usata o seguita |
+| `duplicate-id` | `add` con un id già presente e un elemento diverso (§8), o di una risorsa con un id a cui il documento rimanda già; un `use` estraneo che diventerebbe una copia |
+| `in-use` | `remove` di una risorsa, o di una `defs` che ne contiene, a cui rimanda qualcosa fuori da ciò che si toglie o che un oggetto fuori segue come stile; `ident` che toglie l'id a una risorsa usata o seguita; un originale che lascerebbe le sue copie |
 | `invalid-elem` | tag, attributo o valore fuori dal formato, oppure `fub:ink` non conforme |
 | `locked` | il bersaglio o il genitore stanno in un elemento bloccato (`fub:locked="true"`), oppure il bersaglio è la carta della pagina, che cambia solo con `page` |
 | `foreign` | `set`, `text` o `add` dentro un nodo estraneo |
@@ -523,6 +528,11 @@ devono verificare renderebbe il test circolare.
 | 86 | `symbol-cycle` | un'istanza di un simbolo dentro il simbolo stesso: rifiuto `cycle` |
 | 87 | `remove-instance-keeps-symbol` | togliere l'ultima istanza lascia il simbolo, che non si raccoglie mai |
 | 88 | `move-into-symbol` | un rettangolo del livello in fondo a un simbolo: resta un oggetto col suo id, rientrato come il contenuto del simbolo |
+| 89 | `add-repeat` | un `batch` fa una [ripetizione](scene-format-repeats.md) di un rettangolo: il gruppo con `fub:repeat` subito dopo l'id, l'originale spostato dentro e due copie; l'inversa toglie le copie, rimette l'originale e toglie il gruppo |
+| 90 | `remove-original-in-use` | togliere l'originale di una ripetizione che ha copie: rifiuto `in-use` |
+| 91 | `unset-repeat-in-use` | togliere `fub:repeat` a un gruppo che ha copie: rifiuto `in-use` |
+| 92 | `set-repeat-rewrites-copies` | un `batch` cambia la ripetizione da griglia a radiale e riscrive le trasformazioni delle copie, che restano copie |
+| 93 | `repeat-over-foreign-use` | `fub:repeat` su un gruppo con un `use` estraneo verso un fratello: rifiuto `duplicate-id` |
 
 Oltre ai campi dell'esempio, ogni vettore ha `description`. `expect` può avere
 `reason` e `index` per un rifiuto; `duplicate`, `inverse` ed `edits`, cioè le

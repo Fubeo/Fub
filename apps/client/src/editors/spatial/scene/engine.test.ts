@@ -1446,6 +1446,147 @@ describe("i simboli", () => {
   });
 });
 
+describe("le ripetizioni", () => {
+  const GROUP = "o5e6f7a8b";
+  const ORIGINAL = "o6f7a8b9c";
+  const C1 = "o7a8b9c0d";
+  const C2 = "o8b9c0d1e";
+  const group = (repeat: string | null, ...body: string[]): string[] => [`    <g id="${GROUP}"${repeat === null ? "" : ` fub:repeat="${repeat}"`}>`, ...body, "    </g>"];
+  const ORIG = `      <rect id="${ORIGINAL}" x="100" y="100" width="200" height="120" fill="#0072b2"/>`;
+  /// Una copia `id` dell'originale, spostata di `dx`.
+  const copy = (id: string, dx: number, of = ORIGINAL): string => `      <use id="${id}" transform="translate(${dx} 0)" href="#${of}"/>`;
+  const ROW = lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG, copy(C1, 300), copy(C2, 600)), END_G, END);
+  const item = (engine: SceneEngine, id: string) => engine.scene().find((each) => each.kind === "element" && each.id === id);
+  const roleOf = (engine: SceneEngine, id: string): string | undefined => {
+    const found = item(engine, id);
+    return found?.kind === "element" ? found.role : undefined;
+  };
+
+  it("un originale con copie non si toglie, non esce dal gruppo e non perde l'id", () => {
+    rejects(ROW, { op: "remove", target: ORIGINAL }, "in-use");
+    rejects(ROW, { op: "move", target: ORIGINAL, parent: "l3f8a0c2d", pos: { last: true } }, "in-use");
+    rejects(ROW, { op: "ident", path: [2, 0, 0], tag: "rect", id: null }, "in-use");
+    const path = [2, 0, 0];
+    rejects(ROW, { op: "batch", ops: [{ op: "ident", path, tag: "rect", id: null }, { op: "ident", path, tag: "rect", id: "o9c0d1e2f" }] }, "in-use");
+  });
+
+  it("un gruppo con copie resta una ripetizione", () => {
+    rejects(ROW, { op: "set", id: GROUP, attrs: { "fub:repeat": null } }, "in-use");
+    rejects(ROW, { op: "set", id: GROUP, attrs: { "fub:repeat": "radial 1 0 0" } }, "in-use");
+    rejects(ROW, { op: "set", id: GROUP, attrs: { "fub:repeat": "spiral 3 0 0" } }, "in-use");
+    // Cambia tipo, e le copie restano copie.
+    const engine = SceneEngine.open(ROW);
+    const out = apply(engine, { op: "set", id: GROUP, attrs: { "fub:repeat": "radial 3 400 160" } });
+    expect(out.text).toBe(ROW.replace('fub:repeat="grid 3 1 300 0"', 'fub:repeat="radial 3 400 160"'));
+    expect(item(engine, GROUP)).toMatchObject({ repeat: { kind: "radial", count: 3, center: [400, 160] } });
+    expect([roleOf(engine, C1), roleOf(engine, C2)]).toEqual(["copy", "copy"]);
+    // Senza copie il gruppo smette di essere una ripetizione quando vuole.
+    const alone = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG), END_G, END));
+    expect(apply(alone, { op: "set", id: GROUP, attrs: { "fub:repeat": null } }).text).toBe(lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG), END_G, END));
+  });
+
+  it("la ripetizione si toglie intera, o le copie prima dell'originale, e l'undo la rimette", () => {
+    const whole = apply(SceneEngine.open(ROW), { op: "remove", target: GROUP });
+    expect(whole.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    const back = SceneEngine.open(whole.text);
+    expect(applied(back.apply(whole.inverse)).text).toBe(ROW);
+    expect([roleOf(back, ORIGINAL), roleOf(back, C1), roleOf(back, C2)]).toEqual(["rect", "copy", "copy"]);
+    const engine = SceneEngine.open(ROW);
+    const out = apply(engine, {
+      op: "batch",
+      ops: [
+        { op: "remove", target: C1 },
+        { op: "remove", target: C2 },
+        { op: "remove", target: ORIGINAL },
+        { op: "set", id: GROUP, attrs: { "fub:repeat": null } },
+      ],
+    });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, ...group(null), END_G, END));
+    const again = SceneEngine.open(out.text);
+    expect(applied(again.apply(out.inverse)).text).toBe(ROW);
+    expect(roleOf(again, C2)).toBe("copy");
+  });
+
+  it("una copia nuova si aggiunge in una ripetizione che ha il suo originale, con elem e con raw", () => {
+    const engine = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG), END_G, END));
+    const use = (id: string, dx: number, more: Record<string, string> = {}): Elem => ({ tag: "use", attrs: { id, transform: `translate(${dx} 0)`, href: `#${ORIGINAL}`, ...more } });
+    apply(engine, { op: "add", parent: GROUP, pos: { last: true }, elem: use(C1, 300) });
+    const out = apply(engine, { op: "add", parent: GROUP, pos: { last: true }, raw: `<use id="${C2}" transform="translate(600 0)" href="#${ORIGINAL}"/>` });
+    expect(out.text).toBe(ROW);
+    expect([roleOf(engine, C1), roleOf(engine, C2)]).toEqual(["copy", "copy"]);
+    expect(item(engine, C1)).toMatchObject({ original: ORIGINAL });
+    // Una copia non ha altri attributi, e fuori da una ripetizione non c'è.
+    rejects(ROW, { op: "add", parent: GROUP, pos: { last: true }, elem: use("o9c0d1e2f", 900, { fill: "#000000" }) }, "invalid-elem");
+    rejects(ROW, { op: "add", parent: GROUP, pos: { last: true }, elem: use("o9c0d1e2f", 900, { opacity: "0.5" }) }, "invalid-elem");
+    rejects(ROW, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: use("o9c0d1e2f", 900) }, "invalid-elem");
+    rejects(lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG), END_G, END), { op: "add", parent: GROUP, pos: { last: true }, elem: use(C1, 300) }, "invalid-elem");
+  });
+
+  it("in un batch la ripetizione e l'originale vengono prima delle copie", () => {
+    const PLAIN = lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG), END_G, END);
+    const repeat: Op = { op: "set", id: GROUP, attrs: { "fub:repeat": "grid 3 1 300 0" } };
+    const add = (id: string, dx: number): Op => ({ op: "add", parent: GROUP, pos: { last: true }, elem: { tag: "use", attrs: { id, transform: `translate(${dx} 0)`, href: `#${ORIGINAL}` } } });
+    expect(SceneEngine.open(PLAIN).apply({ op: "batch", ops: [add(C1, 300), repeat] })).toMatchObject({ outcome: "rejected", index: 0, reason: "invalid-elem" });
+    const engine = SceneEngine.open(PLAIN);
+    expect(apply(engine, { op: "batch", ops: [repeat, add(C1, 300), add(C2, 600)] }).text).toBe(ROW);
+    expect(roleOf(engine, C2)).toBe("copy");
+    // Un gruppo nuovo con l'originale e le copie, in un add solo: fub:repeat
+    // dopo l'id.
+    const elem: Elem = {
+      tag: "g",
+      attrs: { "fub:repeat": "grid 3 1 300 0", id: GROUP },
+      children: [
+        { tag: "rect", attrs: { id: ORIGINAL, x: "100", y: "100", width: "200", height: "120", fill: "#0072b2" } },
+        { tag: "use", attrs: { href: `#${ORIGINAL}`, transform: "translate(300 0)", id: C1 } },
+        { tag: "use", attrs: { href: `#${ORIGINAL}`, transform: "translate(600 0)", id: C2 } },
+      ],
+    };
+    const fresh = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    expect(apply(fresh, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem }).text).toBe(ROW);
+    expect(roleOf(fresh, C1)).toBe("copy");
+  });
+
+  it("un use estraneo non diventa una copia perché un fratello diventa il suo originale", () => {
+    const FOREIGN = '      <use transform="translate(300 0)" href="#o6f7a8b9c"/>';
+    const loose = lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG, FOREIGN), END_G, END);
+    expect(readScene(loose).items.some((each) => each.kind === "foreign")).toBe(true);
+    rejects(loose, { op: "set", id: GROUP, attrs: { "fub:repeat": "grid 2 1 300 0" } }, "duplicate-id");
+    const RECT = '      <rect x="100" y="100" width="200" height="120" fill="#0072b2"/>';
+    const nameless = lf(ROOT, TITLE, PAPER, L1, ...group("grid 2 1 300 0", RECT, FOREIGN), END_G, END);
+    rejects(nameless, { op: "ident", path: [2, 0, 0], tag: "rect", id: ORIGINAL }, "duplicate-id");
+  });
+
+  it("una copia si trasforma e si sposta fra i fratelli, ma non esce dalla ripetizione", () => {
+    const engine = SceneEngine.open(ROW);
+    expect(apply(engine, { op: "set", id: C1, attrs: { transform: "matrix(-1 0 0 1 800 0)" } }).text).toBe(ROW.replace("translate(300 0)", "matrix(-1 0 0 1 800 0)"));
+    expect(roleOf(engine, C1)).toBe("copy");
+    rejects(ROW, { op: "set", id: C1, attrs: { fill: "#000000" } }, "invalid-elem");
+    rejects(ROW, { op: "set", id: C1, attrs: { href: "#o9c0d1e2f" } }, "invalid-elem");
+    rejects(ROW, { op: "move", target: C1, parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    const first = apply(SceneEngine.open(ROW), { op: "move", target: C2, parent: GROUP, pos: { first: true } });
+    expect(first.text).toBe(lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", copy(C2, 600), ORIG, copy(C1, 300)), END_G, END));
+    const moved = SceneEngine.open(first.text);
+    expect(roleOf(moved, C2)).toBe("copy");
+  });
+
+  it("la ripetizione si sposta intera, e nell'altro livello le copie restano copie", () => {
+    const source = lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG, copy(C1, 300), copy(C2, 600)), END_G, L2, R3, END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "move", target: GROUP, parent: "l9k8j7h6g", pos: { last: true } });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, L2, R3, ...group("grid 3 1 300 0", ORIG, copy(C1, 300), copy(C2, 600)), END_G, END));
+    expect([roleOf(engine, C1), roleOf(engine, C2)]).toEqual(["copy", "copy"]);
+    // Dentro un altro gruppo cambia il rientro, anche dentro una copia.
+    const named = (indent: string): string[] => [`${indent}<use id="${C1}" transform="translate(300 0)" href="#${ORIGINAL}">`, `${indent}  <title>Seconda</title>`, `${indent}</use>`];
+    const deep = (lines: string[]): string[] => lines.map((line) => `  ${line}`);
+    const titled = lf(ROOT, TITLE, PAPER, L1, ...group("grid 2 1 300 0", ORIG, ...named("      ")), END_G, L2, '    <g id="o4d5e6f7a">', "    </g>", END_G, END);
+    const inside = apply(SceneEngine.open(titled), { op: "move", target: GROUP, parent: "o4d5e6f7a", pos: { last: true } });
+    expect(inside.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, L2, '    <g id="o4d5e6f7a">', ...deep(group("grid 2 1 300 0", ORIG, ...named("      "))), "    </g>", END_G, END));
+    const back = SceneEngine.open(inside.text);
+    expect(roleOf(back, C1)).toBe("copy");
+    expect(applied(back.apply(inside.inverse)).text).toBe(titled);
+  });
+});
+
 describe("ciò che segue", () => {
   const DEFS = '  <defs id="fub-defs">';
   const END_DEFS = "  </defs>";

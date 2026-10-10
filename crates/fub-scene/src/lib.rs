@@ -43,6 +43,7 @@ mod geometry;
 pub mod ink;
 pub mod labels;
 pub mod parametric;
+pub mod repeat;
 pub mod rulers;
 pub mod text;
 mod values;

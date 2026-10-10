@@ -14,7 +14,7 @@
 import { Legibility, type Measures } from "./accessibility";
 import { diagnostic, type Diagnostic } from "./diagnostics";
 import { BoundsBuilder, fmax, fmin, parsePath, rectPath, type Bounds } from "./geometry";
-import { apply, compose, IDENTITY, type Matrix, type Point } from "./matrix";
+import { apply, compose, IDENTITY, invert, type Matrix, type Point } from "./matrix";
 import type { Span } from "./text";
 import {
   href,
@@ -111,7 +111,11 @@ export type Role =
   /// uno per uno come in un gruppo (formato della scena, simboli).
   | "symbol"
   /// Un'istanza di un simbolo: un `use` che lo mostra dove sta.
-  | "instance";
+  | "instance"
+  /// Una copia in una ripetizione: un `use` che mostra l'originale, suo
+  /// fratello, dove lo porta la sua `transform` (formato della scena,
+  /// ripetizioni).
+  | "copy";
 
 /// L'id a cui rimanda un `use`: in SVG 2 `href` vince su `xlink:href`.
 export function useTarget(element: ElementNode): string | null {
@@ -264,6 +268,13 @@ export class Context {
     /// Il simbolo di cui l'elemento è il contenuto, nelle sue coordinate;
     /// `null` fuori dai simboli (formato della scena, simboli).
     readonly symbol: string | null = null,
+    /// Dove si conta il riquadro dell'elemento: il simbolo o l'originale di
+    /// una ripetizione più vicini che lo contengono, o lui stesso; `null`
+    /// fuori da entrambi.
+    readonly scope: string | null = null,
+    /// Dalle coordinate del contenitore a quelle della radice: la matrice
+    /// prima della `transform` dell'elemento.
+    readonly outer: Matrix = IDENTITY,
   ) {}
 
   /// Il contesto dei figli della radice. Della radice contano solo `fill` e
@@ -328,6 +339,8 @@ export class Context {
       this.effect || effect,
       this.swatches,
       this.symbol,
+      this.scope,
+      this.matrix,
     );
   }
 
@@ -345,6 +358,28 @@ export class Context {
       this.effect,
       this.swatches,
       symbol,
+      symbol,
+      this.outer,
+    );
+  }
+
+  /// Il contesto dell'originale `id` di una ripetizione, che ha questo: il
+  /// suo riquadro e quello di ciò che contiene si contano a parte, perché le
+  /// copie lo portano dove stanno (formato della scena, ripetizioni).
+  original(id: string): Context {
+    return new Context(
+      this.matrix,
+      this.hidden,
+      this.fillValue,
+      this.fillOpacity,
+      this.opacity,
+      this.fontSize,
+      this.bold,
+      this.effect,
+      this.swatches,
+      this.symbol,
+      id,
+      this.outer,
     );
   }
 
@@ -363,6 +398,8 @@ export class Context {
       line.effect,
       this.swatches,
       this.symbol,
+      this.scope,
+      this.outer,
     );
   }
 
@@ -446,9 +483,11 @@ export function hundredths(v: number): number {
   return Math.floor(v * 100 + 0.5);
 }
 
-/// Ciò che si conta di un simbolo: il riquadro del suo contenuto, nelle
-/// sue coordinate, e le istanze che contiene, col simbolo e la matrice.
-interface SymbolTally {
+/// Ciò che si conta di un simbolo, o dell'originale di una ripetizione: il
+/// riquadro del suo contenuto, nelle coordinate del simbolo o in quelle dove
+/// sta l'originale, e ciò che vi si vede attraverso altri, istanze, copie e
+/// originali, con l'id e la matrice.
+interface ScopeTally {
   readonly bounds: BoundsBuilder;
   readonly instances: Array<readonly [string, Matrix]>;
 }
@@ -514,11 +553,13 @@ export class Tally {
   private readonly paths: ReadonlyMap<string, string>;
   /// Per ogni simbolo, il riquadro del suo contenuto nelle sue coordinate e
   /// le istanze che contiene; il riquadro di un'istanza si sa alla fine,
-  /// quando si sa quello del suo simbolo (formato della scena, simboli).
-  private readonly symbols = new Map<string, SymbolTally>();
-  /// Ciò che si conta fuori dai simboli: il riquadro del disegno e le
-  /// istanze.
-  private readonly whole: SymbolTally = { bounds: this.bounds, instances: [] };
+  /// quando si sa quello del suo simbolo (formato della scena, simboli). Lo
+  /// stesso per ogni originale di una ripetizione, che le copie portano
+  /// dove stanno (formato della scena, ripetizioni).
+  private readonly scopes = new Map<string, ScopeTally>();
+  /// Ciò che si conta fuori dai simboli e dagli originali: il riquadro del
+  /// disegno, le istanze, le copie e gli originali.
+  private readonly whole: ScopeTally = { bounds: this.bounds, instances: [] };
 
   constructor(paths: ReadonlyMap<string, string> = new Map()) {
     this.paths = paths;
@@ -552,8 +593,20 @@ export class Tally {
       case "instance": {
         if (context.hidden) return;
         const symbol = useTarget(element)!;
-        this.tallyOf(context.symbol).instances.push([symbol, context.matrix]);
+        this.tallyOf(context.scope).instances.push([symbol, context.matrix]);
         if (context.symbol === null) this.legibility.instance(symbol, context.matrix, span);
+        return;
+      }
+      // Una copia ha il riquadro del suo originale, portato dalla sua
+      // `transform` nelle coordinate del gruppo, e non si conta da sé: è
+      // l'originale un'altra volta (formato della scena, ripetizioni).
+      case "copy": {
+        const back = invert(context.outer);
+        if (context.hidden || back === null) return;
+        const original = useTarget(element)!;
+        const m = compose(context.matrix, back);
+        this.tallyOf(context.scope).instances.push([original, m]);
+        if (context.symbol === null) this.legibility.instance(original, m, span);
         return;
       }
       case "layer":
@@ -612,35 +665,41 @@ export class Tally {
         break;
     }
     if (!context.hidden) {
-      bounds(doc, element, role, context.matrix, this.tallyOf(context.symbol).bounds, this.paths);
+      bounds(doc, element, role, context.matrix, this.tallyOf(context.scope).bounds, this.paths);
       this.legibility.element(doc, element, role, context, span, stroke);
     }
   }
 
-  /// Ciò che si conta del simbolo `symbol`, o fuori dai simboli con
-  /// `null`.
-  private tallyOf(symbol: string | null): SymbolTally {
-    if (symbol === null) return this.whole;
-    let tally = this.symbols.get(symbol);
+  /// Conta l'originale `id` di una ripetizione, che sta nel gruppo di
+  /// contesto `group`: si vede dov'è, col riquadro che si sa alla fine.
+  original(group: Context, id: string): void {
+    this.tallyOf(group.scope).instances.push([id, IDENTITY]);
+  }
+
+  /// Ciò che si conta del simbolo o dell'originale `scope`, o fuori da
+  /// entrambi con `null`.
+  private tallyOf(scope: string | null): ScopeTally {
+    if (scope === null) return this.whole;
+    let tally = this.scopes.get(scope);
     if (tally === undefined) {
       tally = { bounds: new BoundsBuilder(), instances: [] };
-      this.symbols.set(symbol, tally);
+      this.scopes.set(scope, tally);
     }
     return tally;
   }
 
-  /// Il riquadro del contenuto di ogni simbolo che il documento conta,
-  /// nelle sue coordinate, con quello delle istanze che contiene: dai
-  /// simboli più interni, senza ricorsione.
-  private symbolBoxes(): Map<string, Bounds | null> {
+  /// Il riquadro del contenuto di ogni simbolo e di ogni originale che il
+  /// documento conta, nelle sue coordinate, con quello di ciò che vi si vede
+  /// attraverso altri: dai più interni, senza ricorsione.
+  private scopeBoxes(): Map<string, Bounds | null> {
     const boxes = new Map<string, Bounds | null>();
     const entered = new Set<string>();
-    for (const start of this.symbols.keys()) {
+    for (const start of this.scopes.keys()) {
       const stack: Array<[string, boolean]> = [[start, false]];
       while (stack.length > 0) {
         const [id, ready] = stack.pop()!;
         if (boxes.has(id)) continue;
-        const tally = this.symbols.get(id);
+        const tally = this.scopes.get(id);
         if (tally === undefined) {
           boxes.set(id, null);
           continue;
@@ -701,8 +760,9 @@ export class Tally {
   /// Chiude il conteggio: il riepilogo, più i controlli su come il disegno si
   /// legge.
   finish(foreign: boolean, version: number | null, diagnostics: Diagnostic[]): Summary {
-    // Il riquadro di un'istanza è quello del suo simbolo, che si sa adesso.
-    const boxes = this.whole.instances.length > 0 ? this.symbolBoxes() : new Map<string, Bounds | null>();
+    // Il riquadro di un'istanza è quello del suo simbolo, e quello di una
+    // copia quello del suo originale, che si sanno adesso.
+    const boxes = this.whole.instances.length > 0 ? this.scopeBoxes() : new Map<string, Bounds | null>();
     // Senza carta il disegno sta sul bianco della superficie (§12).
     this.legibility.finish(this.paper === undefined ? WHITE : this.paper, boxes, diagnostics);
     this.checkPapers(diagnostics);

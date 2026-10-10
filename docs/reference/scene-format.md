@@ -87,8 +87,8 @@ Radice di un documento nuovo:
 | `polyline`, `polygon` | `points` | letti e modificati |
 | `text` con figli `tspan`, o con un `textPath` | `x y`; ogni riga è un `tspan` con `x` e `dy`, e i suoi [pezzi](scene-format-text.md); `fub:wrap` per il [testo in area](scene-format-text.md#4-il-testo-in-area); un solo `textPath` per il [testo su tracciato](scene-format-text.md#5-il-testo-su-tracciato); `fub:inside` per l'[etichetta di una forma](scene-format-labels.md) | testo |
 | `image` | `x y width height href preserveAspectRatio` | immagine incorporata o del vault |
-| `use` | `href`, `transform` | un'istanza di un [simbolo](scene-format-symbols.md) |
-| `g` | — | livello o gruppo |
+| `use` | `href`, `transform` | un'istanza di un [simbolo](scene-format-symbols.md), o una copia in una [ripetizione](scene-format-repeats.md) |
+| `g` | `fub:repeat` per una [ripetizione](scene-format-repeats.md) | livello o gruppo |
 | `a` | `href` | collegamento a un documento del vault |
 | `title`, `desc` | — | descrizione accessibile, anche del singolo oggetto; il primo `title` di un oggetto è il suo nome |
 | `defs` della radice | `id` | le [risorse](scene-format-resources.md): sfumature, motivi, marcatori, ritagli, maschere, filtri e i tracciati dei testi, gli [stili](scene-format-styles.md) e i [simboli](scene-format-symbols.md) |
@@ -342,7 +342,7 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
    sta sulla stessa riga del tag, coi pezzi della riga.
 2. **Ordine degli attributi:**
    1. `id`;
-   2. `fub:layer`, `fub:role`, `fub:name`, `fub:style`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
+   2. `fub:layer`, `fub:role`, `fub:name`, `fub:source`, `fub:repeat`, `fub:style`, `fub:marker`, `fub:board`, `fub:tool`, `fub:shape`, `fub:geom`,
       `fub:from`, `fub:to`, `fub:along`, `fub:inside`, `fub:wrap`, `fub:join`, `fub:leading`, `fub:locked`, `fub:at`, `fub:brush`;
    3. geometria: `x y dy cx cy r width height rx ry x1 y1 x2 y2 points d startOffset`;
    4. presentazione: `fill fill-opacity stroke stroke-width stroke-opacity stroke-linecap

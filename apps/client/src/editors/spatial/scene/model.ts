@@ -25,7 +25,9 @@ import {
   elementItem,
   localGradients,
   withArrivingSymbols,
+  withOriginals,
   NO_RESOURCES,
+  originalsOf,
   referencesOf,
   resourceIndex,
   type Details,
@@ -167,6 +169,27 @@ export function placeOf(container: ContainerNode): Place {
   return container.details?.role === "defs" ? "defs" : "inside";
 }
 
+/// Gli originali fra i figli di `container` nell'albero, se è una
+/// ripetizione: gli id dei figli modificabili, titoli, descrizioni e copie
+/// esclusi (formato della scena, ripetizioni). Vuoto per ogni altro
+/// contenitore.
+export function originalsIn(container: ContainerNode): Set<string> {
+  const out = new Set<string>();
+  if (container.details?.repeat === undefined) return out;
+  for (const part of container.parts) {
+    if (typeof part === "string" || part.kind === "other" || part.facts.id === null) continue;
+    const role = part.details?.role;
+    if (role !== undefined && role !== "title" && role !== "desc" && role !== "copy") out.add(part.facts.id);
+  }
+  return out;
+}
+
+/// `resolve` per un figlio nuovo di `container`: in una ripetizione, con gli
+/// originali che ha già.
+export function childResolve(container: ContainerNode, resolve: Resolve): Resolve {
+  return container.details?.repeat === undefined ? resolve : withOriginals(resolve, originalsIn(container));
+}
+
 /// Le dichiarazioni di namespace sul tag di `element`.
 export function declarationsOf(element: ElementNode): Array<[string | null, string]> {
   const out: Array<[string | null, string]> = [];
@@ -211,13 +234,21 @@ class Builder {
     return this.text.slice(from, to);
   }
 
-  /// I pezzi dei figli di `id`, che nell'albero è `container`.
+  /// I pezzi dei figli di `id`, che nell'albero è `container`. In una
+  /// ripetizione gli originali sono i figli letti e quelli che `container`
+  /// ha già.
   parts(id: NodeId, container: ContainerNode): Part[] {
+    let resolve = this.resolve;
+    if (container.details?.repeat !== undefined) {
+      const originals = originalsOf(this.doc, id, container.depth + 1, this.resolve);
+      for (const original of originalsIn(container)) originals.add(original);
+      resolve = withOriginals(this.resolve, originals);
+    }
     const out: Part[] = [];
     for (const child of this.doc.children(id)) {
       const node = this.doc.nodes[child]!;
       if (node.kind === "text") this.textPart(out, node);
-      else if (node.kind === "element") out.push(this.element(child, container));
+      else if (node.kind === "element") out.push(this.element(child, container, resolve));
       else out.push({ kind: "other", raw: this.slice(node.start, node.end), parent: container, start: 0, end: 0 });
     }
     return out;
@@ -240,12 +271,13 @@ class Builder {
   }
 
   /// Un elemento figlio di `parent`, classificato come lo classifica il
-  /// lettore in quella posizione.
-  element(id: NodeId, parent: ContainerNode): ElementPart {
+  /// lettore in quella posizione; `resolve` dice che cosa è ogni id a cui
+  /// rimanda, gli originali compresi in una ripetizione.
+  element(id: NodeId, parent: ContainerNode, resolve: Resolve = this.resolve): ElementPart {
     const doc = this.doc;
     const element = doc.element(id)!;
     const depth = parent.depth + 1;
-    const found = classifyChild(doc, id, placeOf(parent), depth, this.resolve);
+    const found = classifyChild(doc, id, placeOf(parent), depth, resolve);
     const facts = factsOf(doc, element);
     if (found !== null && isContainer(found[1])) {
       const container: ContainerNode = {
@@ -524,11 +556,12 @@ export function buildSequence(sequence: Sequence, parent: ContainerNode, resolve
 }
 
 /// Il nodo di un frammento letto, come figlio di `parent`, coi riferimenti
-/// risolti da `resolve`.
+/// risolti da `resolve`. In una ripetizione rimanda anche agli originali che
+/// `parent` ha.
 export function buildFragment(fragment: Fragment, parent: ContainerNode, resolve: Resolve = NO_RESOURCES): ElementPart {
   // Un simbolo che entra in una `defs`, anche con la sua, è un simbolo da sé.
   const inner = withArrivingSymbols(fragment.doc, [fragment.id], placeOf(parent), resolve);
-  const node = new Builder(fragment.doc, inner).element(fragment.id, parent);
+  const node = new Builder(fragment.doc, inner).element(fragment.id, parent, childResolve(parent, inner));
   const adopt = (container: ContainerNode): void => {
     for (const part of container.parts) {
       if (typeof part === "string") continue;

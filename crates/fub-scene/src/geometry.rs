@@ -50,6 +50,24 @@ impl Matrix {
         let [a, b, c, d, e, f] = self.0;
         [a * x + c * y + e, b * x + d * y + f]
     }
+
+    /// La matrice che disfa `self`; `None` se schiaccia il piano su una retta
+    /// o su un punto.
+    pub fn invert(&self) -> Option<Matrix> {
+        let [a, b, c, d, e, f] = self.0;
+        let det = a * d - b * c;
+        if det == 0.0 || !det.is_finite() {
+            return None;
+        }
+        Some(Matrix([
+            d / det,
+            -b / det,
+            -c / det,
+            a / det,
+            (c * f - d * e) / det,
+            (b * e - a * f) / det,
+        ]))
+    }
 }
 
 /// Un segmento di path in coordinate assolute.

@@ -23,7 +23,22 @@ import { pf1 } from "../ink/pf1";
 import { InkError } from "../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer, len } from "./analysis";
-import { classifyChild, describe, isResourceTag, NO_RESOURCES, resourceKind, styleKindOf, withArrivingSymbols, type Details, type Item, type Place, type Resolve } from "./classify";
+import {
+  classifyChild,
+  describe,
+  isResourceTag,
+  NO_RESOURCES,
+  originalsOf,
+  repeatOf,
+  resourceKind,
+  styleKindOf,
+  withArrivingSymbols,
+  withOriginals,
+  type Details,
+  type Item,
+  type Place,
+  type Resolve,
+} from "./classify";
 import { sceneOperation } from "./diff";
 import { DEFS_ID, isNewId, pageId, type IdKind } from "./ids";
 import { positive } from "./annotations";
@@ -42,6 +57,7 @@ import {
   lastBreak,
   layout,
   materialize,
+  originalsIn,
   parseFragment,
   parseFragments,
   parseSequence,
@@ -499,30 +515,44 @@ function attributeSpan(doc: XmlDocument, element: ElementNode, attr: Attr): [num
 /// valori o il contenuto estraneo. Se anche una sola riga non comincia con
 /// `from`, il rientro del file non è regolare e l'elemento resta com'è: così
 /// la stessa regola, applicata all'indietro, rimette i byte di prima.
-export function reindent(raw: string, scope: NamespaceScope, place: Place, depth: number, from: string, to: string, resolve: Resolve = NO_RESOURCES): string {
+/// `originals` sono gli originali fra i fratelli dell'elemento, se sta in una
+/// ripetizione.
+export function reindent(
+  raw: string,
+  scope: NamespaceScope,
+  place: Place,
+  depth: number,
+  from: string,
+  to: string,
+  resolve: Resolve = NO_RESOURCES,
+  originals: ReadonlySet<string> = new Set(),
+): string {
   if (from === to || raw.includes("xml:space")) return raw;
   const fragment = parseFragment(raw, scope);
   if (fragment === null) return raw;
   const { doc } = fragment;
   // Un simbolo che si sposta in una `defs`, anche con la sua, è ancora un
   // simbolo.
-  resolve = withArrivingSymbols(doc, [fragment.id], place, resolve);
+  const inner = withArrivingSymbols(doc, [fragment.id], place, resolve);
   const base = doc.element(fragment.id)!.start;
   const ranges: Array<readonly [number, number]> = [];
-  const stack: Array<readonly [NodeId, Place, number]> = [[fragment.id, place, depth]];
+  const stack: Array<readonly [NodeId, Place, number, Resolve]> = [[fragment.id, place, depth, withOriginals(inner, originals)]];
   while (stack.length > 0) {
-    const [id, at, level] = stack.pop()!;
-    const found = classifyChild(doc, id, at, level, resolve);
+    const [id, at, level, around] = stack.pop()!;
+    const found = classifyChild(doc, id, at, level, around);
     if (found === null) continue;
     const element = doc.element(id)!;
     const container = isContainer(found[1]);
     // Gli spazi di un'unità contano solo fra figli elemento: dentro un
     // `title` sono il suo testo.
     if (!container && !element.children.some((child) => doc.element(child) !== null)) continue;
+    // I figli di una ripetizione rimandano anche ai loro originali.
+    const repeat = found[1] === "group" && repeatOf(element) !== null;
+    const below = repeat ? withOriginals(inner, originalsOf(doc, id, level + 1, inner)) : inner;
     for (const child of element.children) {
       const node = doc.nodes[child]!;
       if (node.kind === "text" && node.blank) ranges.push([node.start - base, node.end - base]);
-      else if (container && node.kind === "element") stack.push([child, found[1] === "defs" ? "defs" : "inside", level + 1]);
+      else if (container && node.kind === "element") stack.push([child, found[1] === "defs" ? "defs" : "inside", level + 1, below]);
     }
   }
   ranges.sort((a, b) => a[0] - b[0]);
@@ -739,6 +769,7 @@ export class SceneEngine {
         inverse = chain([...followed.inverses.reverse(), inverse]);
       }
       this.checkSymbols(mark);
+      this.checkRepeats(mark);
       const { removes, restores } = this.collect();
       if (!this.inverse) this.checkBoards(boards);
       if (removes.length > 0) {
@@ -1306,6 +1337,57 @@ export class SceneEngine {
         reject("cycle", `il simbolo ${symbol.facts.id!} conterrebbe sé stesso`);
       }
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Le ripetizioni (formato della scena, ripetizioni).
+  // -------------------------------------------------------------------------
+
+  /// Ogni contenitore che l'operazione ha cambiato, da `mark` in poi, ha le
+  /// copie che il lettore gli troverebbe. Nessuna copia resta senza il suo
+  /// originale: l'originale non se ne va, non esce dal gruppo, non perde
+  /// l'id, e il gruppo resta una ripetizione finché ha copie (`in-use`).
+  /// Nessun `use` estraneo diventa una copia perché un fratello è diventato
+  /// il suo originale (`duplicate-id`), come non diventa un'istanza per un
+  /// simbolo che arriva.
+  private checkRepeats(mark: number): void {
+    const containers = new Set<ContainerNode>();
+    for (const entry of this.t.since(mark)) {
+      if (entry.kind === "head") containers.add(entry.node);
+      else if (entry.kind === "splice") containers.add(entry.owner);
+    }
+    for (const container of containers) {
+      const repeat = container.details?.repeat !== undefined;
+      const children = elementChildren(container);
+      const copies = children.filter((child) => roleOf(child) === "copy");
+      if ((!repeat && copies.length === 0) || !this.attached(container)) continue;
+      const originals = originalsIn(container);
+      for (const copy of copies) {
+        const original = copy.details!.original!;
+        if (!originals.has(original)) reject("in-use", `una copia rimanda a ${original}, che non sarebbe più il suo originale`);
+      }
+      if (originals.size === 0) continue;
+      const resolve = withOriginals(this.resolve, originals);
+      for (const child of children) {
+        if (child.kind !== "leaf" || child.details !== null) continue;
+        const target = child.refs.find((id) => originals.has(id));
+        if (target === undefined) continue;
+        const fragment = parseFragment(child.raw, scopeOf(container));
+        if (fragment !== null && classifyChild(fragment.doc, fragment.id, placeOf(container), container.depth + 1, resolve)?.[1] === "copy") {
+          reject("duplicate-id", `il documento rimanda già a ${target}`);
+        }
+      }
+    }
+  }
+
+  /// Vero se `node` sta nel documento: un nodo tolto tiene il suo genitore.
+  private attached(node: ElementPart): boolean {
+    let at = node;
+    while (at.parent !== null) {
+      if (!at.parent.parts.includes(at)) return false;
+      at = at.parent;
+    }
+    return at === this.t.model.root;
   }
 
   /// Vero se dal contenuto di `symbol` si arriva a `symbol` attraverso i
@@ -2081,7 +2163,7 @@ export class SceneEngine {
     const { anchor, gap } = this.detach(node);
     const to = destination();
     const owner = to.kind === "point" ? to.point.owner : to.parent;
-    const moved = reindent(raw, oldScope, placeOf(oldParent), oldParent.depth + 1, oldIndent, this.indentFor(to), this.resolve);
+    const moved = reindent(raw, oldScope, placeOf(oldParent), oldParent.depth + 1, oldIndent, this.indentFor(to), this.resolve, originalsIn(oldParent));
     const built = this.build(moved, owner);
     if (built === null) reject("invalid-elem", "lo spostamento lascerebbe un prefisso non dichiarato");
     const newScope = scopeOf(owner);
