@@ -2,7 +2,7 @@
 // elemento e attributo che il disegno modifica, i testi in ogni carattere
 // dell'app, in tondo e in corsivo, coi pezzi di riga, una famiglia del vault, un'immagine, le
 // risorse di ogni tipo, i campioni, le sfumature e le campiture come le
-// scrive FubDraw, i motivi, le tavole con le loro carte, e gli estranei tipici di Inkscape, Illustrator e
+// scrive FubDraw, i motivi, le tavole con le loro carte, i simboli con le loro istanze, e gli estranei tipici di Inkscape, Illustrator e
 // Mermaid. Ogni scena è un disegno intero, grande quanto la sua resa; quella
 // che mostra una tavola sola è più grande, e la sua tavola è grande quanto la
 // resa. Le forme delle raccolte (basi, diagrammi di flusso, fumetti, frecce
@@ -523,6 +523,29 @@ export const FIDELITY: readonly FidelityScene[] = [
       + `<text id="o00000006" fub:inside="r2" fub:wrap="78.14" ${LABEL} font-size="14" text-anchor="middle" transform="matrix(0.9781 -0.2079 0.2079 0.9781 66.8005 117.7659)"><tspan x="0" dy="0">Girata</tspan></text></g>`
       + '<g id="o00000007"><path id="p1" d="M178 82 L234 116 L178 150 L122 116 Z" fill="#fed7e2" stroke="#c53030" stroke-width="2"/>'
       + `<text id="o00000008" fub:inside="p1" fub:wrap="49.79" ${LABEL} font-size="12" text-anchor="middle" transform="matrix(1 0 0 1 178 119.3)"><tspan x="0" dy="0">Esito?</tspan></text></g></g>`),
+  },
+  {
+    // I simboli: una lampadina con una sfumatura privata e una scritta, e un
+    // quadro che ne mostra due più piccole. Le istanze la mostrano dritta,
+    // girata e ingrandita, mezza trasparente, e dentro il quadro girato. Il
+    // contenuto sta intorno all'origine del simbolo, anche dalla parte dei
+    // numeri negativi, che un simbolo tagliato perderebbe.
+    id: "simboli",
+    text: scene('<defs id="fub-defs">'
+      + '<symbol id="rlampada0" overflow="visible"><title>Lampadina</title>'
+      + '<circle id="o1" cx="0" cy="0" r="20" fill="url(#rgiallo00) #f0e442" stroke="#1a202c" stroke-width="2"/>'
+      + '<rect id="o2" x="-8" y="19" width="16" height="10" rx="2" fill="#718096"/>'
+      + `<text id="o3" ${LABEL} font-size="9" font-weight="700" text-anchor="middle" transform="matrix(1 0 0 1 0 3)"><tspan x="0" dy="0">ON</tspan></text></symbol>`
+      + '<linearGradient id="rgiallo00" fub:role="private" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0e442"/><stop offset="1" stop-color="#e69f00"/></linearGradient>'
+      + '<symbol id="rquadro00" overflow="visible"><title>Quadro</title>'
+      + '<rect id="o4" x="-36" y="-26" width="72" height="52" rx="4" fill="#0072b2" stroke="#1a202c" stroke-width="2"/>'
+      + '<use id="o5" transform="matrix(0.6 0 0 0.6 -14 -4)" href="#rlampada0"/>'
+      + '<use id="o6" transform="matrix(0.6 0 0 0.6 14 -4)" href="#rlampada0"/></symbol>'
+      + `</defs>${LAYER}`
+      + '<use id="o7" transform="matrix(1 0 0 1 36 40)" href="#rlampada0"/>'
+      + '<use id="o8" transform="matrix(1.1746 0.4275 -0.4275 1.1746 100 46)" href="#rlampada0"/>'
+      + '<use id="o9" transform="matrix(1 0 0 1 36 116)" opacity="0.5" href="#rlampada0"><title>Spenta</title></use>'
+      + '<use id="o10" transform="matrix(0.9848 -0.1736 0.1736 0.9848 176 104)" href="#rquadro00"/></g>'),
   },
   ...FROM_LIBRARY,
   ...FROM_TEMPLATES,

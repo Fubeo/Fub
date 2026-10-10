@@ -105,11 +105,11 @@ export function fnv1a64(text: string): string {
 /// Il testo a LF.
 const lf = (text: string): string => (text.indexOf("\r") < 0 ? text : text.replace(/\r\n?/g, "\n"));
 
-/// L'impronta di una chiusura: i testi, ognuno dopo un a capo, a LF.
+/// L'impronta di una chiusura: i testi a LF, separati da un a capo.
 const printOf = (closure: ReadonlyArray<readonly [string, string]>): string => fnv1a64(closure.map(([, text]) => lf(text)).join("\n"));
 
 /// L'impronta del simbolo `id` del disegno `model` (formato della scena,
-/// simboli, §4): il simbolo e ciò che usa, ognuno dopo un a capo, a LF.
+/// simboli, §4): il simbolo e ciò che usa, a LF, separati da un a capo.
 export function symbolPrint(model: DocumentModel, id: string): string {
   return printOf(symbolClosure(id, resourceTexts(model)));
 }

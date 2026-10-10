@@ -111,9 +111,16 @@ una libreria porta `fub:source`, facoltativo:
 - **L'id** è quello del simbolo nella libreria, senza spazi né `#`; nella
   copia il simbolo ha un id nuovo.
 - **L'impronta** sono 16 cifre esadecimali minuscole: FNV-1a a 64 bit dei
-  byte UTF-8 del simbolo nella libreria, dal `<` del suo tag d'apertura
-  all'ultimo `>`, con gli a capo fatti LF. Dice se la libreria è cambiata
-  dalla copia.
+  byte UTF-8 del simbolo nella libreria e di ciò che usa. Ognuno si prende
+  com'è scritto nel file, dal `<` del suo tag d'apertura all'ultimo `>`, con
+  gli a capo fatti LF; i testi si uniscono con un LF fra l'uno e l'altro.
+  Prima il simbolo, poi le risorse e i simboli che nomina, con `url(#id)`,
+  con un `href` `#id` o con `fub:style`, poi quelli che nominano loro,
+  ognuno la prima volta che lo si incontra, in ordine di testo; un nome che
+  non è una risorsa né un simbolo della libreria, come un oggetto del
+  contenuto, non conta. Un simbolo che non usa niente ha l'impronta del suo
+  solo testo. Dice se la libreria è cambiata dalla copia, anche soltanto in
+  un colore di una sfumatura che il simbolo usa o in un simbolo che contiene.
 
 Si legge dalla fine: l'ultimo spazio separa l'impronta, l'ultimo `#` prima
 di lui l'id. Un valore senza questa forma resta e non dice niente. Il

@@ -67,6 +67,7 @@ flowchart LR
 - [Disegni, ricalco delle immagini](product/drawing-trace.md)
 - [Disegni, tipografia](product/drawing-typography.md)
 - [Disegni, caratteri del vault](product/drawing-fonts.md)
+- [Disegni, simboli](product/drawing-symbols.md)
 - [Disegni, risorse](product/drawing-resources.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Annotazioni dei PDF](product/pdf-annotations.md)

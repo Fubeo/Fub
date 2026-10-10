@@ -46,7 +46,9 @@ gradiente, un `use`, gli attributi ARIA, i selettori di un foglio di stile.
 Le sfumature, i motivi, i campioni e le altre risorse che usa entrano fra
 quelle del disegno, e quelle che il disegno ha già si riusano ([Disegni,
 risorse](drawing-resources.md#copiare-e-incollare)); così gli stili che gli
-oggetti seguono ([Disegni, stili](drawing-styles.md#appunti-e-duplica)). Fra due disegni con le
+oggetti seguono ([Disegni, stili](drawing-styles.md#appunti-e-duplica)) e i
+simboli che le istanze mostrano, che nel disegno che li ha già non entrano due
+volte ([Disegni, simboli](drawing-symbols.md#appunti-e-duplica)). Fra due disegni con le
 stesse unità un giro di copia e incolla riporta gli stessi byte, id a parte
 e con le risorse al loro posto, e un livello copiato torna come un gruppo
 col nome del livello. Le immagini e i collegamenti del vault copiati da un disegno

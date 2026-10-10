@@ -452,6 +452,14 @@ describe("le risorse", () => {
     expect(second.children.map((node) => node.id)).toEqual(["o8", "o9"]);
   });
 
+  it("della scena dei simboli sono tutte vive, coi simboli e le istanze", () => {
+    const scene = sceneOf(FIDELITY.find((each) => each.id === "simboli")!.text);
+    expect(kinds(scene)).toEqual(["live"]);
+    expect(ids(scene.resources)).toEqual(["rgiallo00"]);
+    expect(scene.symbols.map((symbol) => symbol.id)).toEqual(["rlampada0", "rquadro00"]);
+    expect((live(scene, 0).nodes[0] as PaintGroup).children.map((node) => node.id)).toEqual(["o7", "o8", "o9", "o10"]);
+  });
+
   it("restano gli stessi oggetti finché non cambiano, anche in un motore riaperto", () => {
     const source = doc(`${DEFS}${LAYER}<rect id="a" width="5" height="5" fill="url(#p1) #000000"/><rect id="b" width="1" height="1"/></g>`);
     const engine = SceneEngine.open(source);
