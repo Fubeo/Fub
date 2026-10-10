@@ -84,8 +84,19 @@ const out = join(OUTPUT, "fidelity");
 const { base, browser, close } = await openStage();
 let failed = false;
 try {
-  const page = await browser.newPage({ viewport: { width: 800, height: 200 }, deviceScaleFactor: 2 });
+  const VIEW = { viewport: { width: 800, height: 200 }, deviceScaleFactor: 2 };
+  const page = await browser.newPage(VIEW);
+  // Ogni scena in una pagina sua: una pagina sola, riaperta su un centinaio
+  // di scene, a un certo punto non arriva più a dirsi pronta.
   const shoot = async (scene, variant) => {
+    const page = await browser.newPage(VIEW);
+    try {
+      return await shootIn(page, scene, variant);
+    } finally {
+      await page.close();
+    }
+  };
+  const shootIn = async (page, scene, variant) => {
     await page.goto(`${base}/bench/fidelity.html?scene=${scene}${variant ? `&variant=${variant}` : ""}`);
     await page.waitForFunction(() => document.documentElement.dataset.fidelity !== undefined, null, { timeout: 30_000 });
     const state = await page.evaluate(() => [document.documentElement.dataset.fidelity, document.documentElement.dataset.error]);
