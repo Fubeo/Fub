@@ -45,6 +45,7 @@ import { resolvedLanguage } from "../../../i18n/strings";
 import type { MenuSample } from "../../../ui/menu";
 import { apply } from "../scene/matrix";
 import { MAX_COUNT, MIN_COUNT, type PolygonalShape } from "../scene/parametric";
+import { MAX_GRID_SIDE, MAX_RADIAL } from "../scene/repeat";
 import { UNITS, type LengthUnit } from "../scene/rulers";
 import { BLEND_MODES } from "../scene/values";
 import { plural, t, type DrawKey } from "../strings";
@@ -68,12 +69,14 @@ import {
   type NumberState,
   type PaintContrast,
   type PropertiesView,
+  type RepeatNumberId,
   type SegmentState,
 } from "./properties";
 import { ANGLE_UNITS, evaluate, lengthUnits, PERCENT_UNITS, type QuantityProblem } from "./quantity";
 import { NAME_MAX, nameKey } from "./naming";
 import type { Feature } from "./registry";
 import type { PaintSample } from "./resources";
+import { REPEAT_KINDS, type RepeatEdit, type RepeatKind, type RepeatView } from "./repeat-ops";
 import type { ShapeChange, ShapeFacts } from "./reshape";
 import type { StyleField, StyleKind, StyleRow } from "./styles";
 import type { ConnectorPanelView } from "./connector-panel";
@@ -317,6 +320,18 @@ export interface SelectionFacts {
   /// La riga «Simbolo», se il livello offre i simboli; senza, o `null`, non
   /// c'è un'istanza fra gli oggetti scelti.
   readonly symbols?: SymbolFacts | null;
+  /// La sezione «Ripetizione», se il livello offre le ripetizioni; senza, o
+  /// `null`, gli oggetti scelti non sono una ripetizione né i suoi
+  /// originali.
+  readonly repeat?: RepeatFacts | null;
+}
+
+/// La sezione «Ripetizione», come la legge l'editor: il tipo, e i numeri
+/// nella scena; senza numeri, `view` è `null`, se gli originali non
+/// disegnano niente o la ripetizione schiaccia il piano.
+export interface RepeatFacts {
+  readonly kind: RepeatKind;
+  readonly view: RepeatView | null;
 }
 
 /// La riga «Simbolo» del pannello, come la legge l'editor.
@@ -742,6 +757,50 @@ function symbolField(facts: SymbolFacts): MenuChoiceState {
   };
 }
 
+const REPEAT_KIND_LABELS: Readonly<Record<RepeatKind, DrawKey>> = {
+  radial: "draw.properties.repeat.radial",
+  grid: "draw.properties.repeat.grid",
+  mirror: "draw.properties.repeat.mirror",
+};
+
+/// Un conto intero da `min` a `max`, senza unità.
+const countField = (label: string, value: number, min: number, max: number): NumberState => ({ kind: "number", label, value, unit: "", units: {}, relative: false, places: 0, min, max });
+
+/// I campi di «Ripetizione» di `facts`, con le lunghezze in `unit`: il tipo,
+/// con «Espandi la ripetizione» nel suo menu, e i numeri del tipo.
+function repeatFields(fields: Partial<Record<FieldId, FieldState>>, facts: RepeatFacts, unit: LengthUnit): void {
+  fields.repeat = {
+    kind: "menu",
+    label: t("draw.properties.repeat.kind"),
+    value: facts.kind,
+    summary: t(REPEAT_KIND_LABELS[facts.kind]),
+    options: [
+      ...REPEAT_KINDS.map((kind): MenuOption => ({ value: kind, label: t(REPEAT_KIND_LABELS[kind]), checked: kind === facts.kind })),
+      { value: "expand", label: t("draw.repeat.expand"), action: true, separator: true },
+    ],
+  };
+  const view = facts.view;
+  if (view === null) return;
+  switch (view.kind) {
+    case "radial":
+      fields.repeatCount = countField(t("draw.properties.repeat.count"), view.count, 2, MAX_RADIAL);
+      fields.repeatRadius = lengthField(t("draw.properties.repeat.radius"), view.radius, unit, false, { min: 0 });
+      fields.repeatX = lengthField(t("draw.properties.repeat.center_x"), view.center[0], unit, false);
+      fields.repeatY = lengthField(t("draw.properties.repeat.center_y"), view.center[1], unit, false);
+      return;
+    case "grid":
+      fields.repeatColumns = countField(t("draw.properties.repeat.columns"), view.columns, 1, MAX_GRID_SIDE);
+      fields.repeatRows = countField(t("draw.properties.repeat.rows"), view.rows, 1, MAX_GRID_SIDE);
+      fields.repeatStepX = lengthField(t("draw.properties.repeat.step_x"), view.step[0], unit, false);
+      fields.repeatStepY = lengthField(t("draw.properties.repeat.step_y"), view.step[1], unit, false);
+      return;
+    case "mirror":
+      fields.repeatAngle = degreesField(t("draw.properties.repeat.angle"), view.angle, { min: 0, max: 180 });
+      fields.repeatDistance = lengthField(t("draw.properties.repeat.distance"), view.distance, unit, false);
+      return;
+  }
+}
+
 /// Segna i campi in cui la selezione è diversa dallo stile della riga
 /// `facts`: il punto, e la frase per chi ascolta. Un campo che due stili
 /// segnano, come il colore di un testo e di una forma, dice il primo.
@@ -842,6 +901,10 @@ export function propertiesView(input: FieldsInput): PropertiesView {
     const symbols = has("symbols") ? (selection.symbols ?? null) : null;
     if (symbols !== null) fields.symbol = symbolField(symbols);
     if (has("polygon") && selection.shape !== null) shapeFields(fields, selection.shape, unit, null);
+
+    // --- Ripetizione ---
+    const repeat = has("repeat") ? (selection.repeat ?? null) : null;
+    if (repeat !== null) repeatFields(fields, repeat, unit);
 
     // --- Aspetto ---
     const { look, outline } = selection;
@@ -1227,6 +1290,26 @@ export function lookChange(id: FieldId, value: number | string | boolean, unit: 
 /// Il cambio di «Forma» che scrive il campo `id` col valore `value`, con le
 /// lunghezze in `unit`; `null` se il campo non è della forma, o il valore non
 /// è suo.
+/// Il cambio di una ripetizione per il campo `id` di «Ripetizione», che
+/// scrive `value` nell'unità `unit`; `null` se il campo non è un suo numero.
+export function repeatEdit(id: FieldId, value: number | string | boolean, unit: LengthUnit): RepeatEdit | null {
+  if (typeof value !== "number") return null;
+  const length = (field: Extract<RepeatEdit["field"], "center-x" | "center-y" | "radius" | "step-x" | "step-y" | "distance">): RepeatEdit => ({ field, value: fromUnit(value, unit) });
+  const fields: Readonly<Record<RepeatNumberId, () => RepeatEdit>> = {
+    repeatCount: () => ({ field: "count", value }),
+    repeatColumns: () => ({ field: "columns", value }),
+    repeatRows: () => ({ field: "rows", value }),
+    repeatAngle: () => ({ field: "angle", value }),
+    repeatRadius: () => length("radius"),
+    repeatX: () => length("center-x"),
+    repeatY: () => length("center-y"),
+    repeatStepX: () => length("step-x"),
+    repeatStepY: () => length("step-y"),
+    repeatDistance: () => length("distance"),
+  };
+  return id in fields ? fields[id as RepeatNumberId]() : null;
+}
+
 export function shapeChange(id: FieldId, value: number | string | boolean, unit: LengthUnit): ShapeChange | null {
   switch (id) {
     case "shape":

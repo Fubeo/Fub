@@ -141,6 +141,7 @@ import { BoundsBuilder, type Bounds, type Segment } from "../scene/geometry";
 import { widthsAt, type WidthPoint } from "../scene/varwidth";
 import { apply, compose, IDENTITY, invert, rotate, translate, type Matrix, type Point } from "../scene/matrix";
 import { elementChildren, elementsIn, pathOf, tagName, titleOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { MAX_GRID, type Repeat } from "../scene/repeat";
 import { MAX_IMAGE_BYTES } from "../scene/analysis";
 import { auditScene, MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, SVG_NS } from "../scene/read";
 import { utf8Length } from "../scene/text";
@@ -241,6 +242,7 @@ import {
   lookUnit,
   outlineChange,
   propertiesView,
+  repeatEdit,
   SHAPE_ACTIONS,
   shapeChange,
   sheetChange,
@@ -250,6 +252,7 @@ import {
   typedOpacity,
   UNIT_NAMES,
   vaultFamilyOptions,
+  type RepeatFacts,
   type SelectionFacts,
   type StyleFacts,
   type SymbolFacts,
@@ -288,6 +291,7 @@ import type { HatchPanelView } from "./hatch-panel";
 import { rasterize } from "./png";
 import { evaluate, lengthUnits, type QuantityProblem } from "./quantity";
 import { paintCode, resourceHome, resourcesOf, swatchPaint } from "./resources";
+import { editedRepeat, expandCopiesIn, expandOps, expandTargets, followRepeats, isRepeatKind, REPEAT_KINDS, repeatOps, repeatPlace, repeatTarget, repeatView, rewriteOps as rewriteRepeatOps, type RepeatKind } from "./repeat-ops";
 import { cyclingSymbols, detachOps, documentSymbols, instanceCounts, instanceSymbol, isInstance, renameSymbolOps, swapOps, symbolNameProblem, symbolOps, type DocumentSymbol } from "./symbols";
 import {
   applyStyleOps,
@@ -981,7 +985,7 @@ interface Tracing {
 }
 
 /// Le parti che hanno un pulsante nella barra della selezione.
-const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector", "symbols"];
+const BAR_FEATURES: readonly Feature[] = ["text", "arrange", "links", "layers", "recognize", "transform", "apply", "path", "boolean", "outline", "crop", "trace", "masks", "motifs", "typeset", "connector", "symbols", "repeat"];
 
 /// Un'istanza da cui si è entrati nel suo simbolo isolato: la chiave e il
 /// posto con cui ritrovarla, come il contenitore isolato.
@@ -1287,6 +1291,8 @@ const ICONS: Readonly<Record<string, readonly string[]>> = {
   "draw-ungroup": ["M3 3h8v8H3z", "M13 13h8v8h-8z"],
   "draw-symbol": ["M12 2l3 3-3 3-3-3z", "M12 16l3 3-3 3-3-3z", "M5 9l3 3-3 3-3-3z", "M19 9l3 3-3 3-3-3z"],
   "draw-detach": ["M7 3l3 3-3 3-3-3z", "M17 15l3 3-3 3-3-3z", "M4 20L20 4"],
+  // Tre petali uguali intorno a un centro: un originale e le sue copie.
+  "draw-repeat": ["M12 14C10 10.7 10 7.3 12 4C14 7.3 14 10.7 12 14z", "M12 14C15.9 13.9 18.8 15.6 20.7 19C16.8 19.1 13.9 17.4 12 14z", "M12 14C10.1 17.4 7.2 19.1 3.3 19C5.2 15.6 8.1 13.9 12 14z"],
   "draw-order": ["M10 14H4V4h10v6", "M10 10h10v10H10z"],
   "draw-align": ["M4 3v18", "M8 6h12v5H8z", "M8 14h7v5H8z"],
   "draw-layers": ["M12 3l9 5-9 5-9-5z", "M3 13l9 5 9-5", "M3 17.5l9 5 9-5"],
@@ -2498,8 +2504,9 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   /// `next`, con le etichette al centro delle loro forme, i connettori che
   /// seguono gli oggetti a cui sono agganciati, le punte delle linee che
-  /// tengono il colore del contorno e i filtri degli effetti la regione
-  /// dell'oggetto: il motore li segue a ogni operazione, nello stesso passo
+  /// tengono il colore del contorno, i filtri degli effetti la regione
+  /// dell'oggetto e un originale nuovo di una ripetizione le sue copie: il
+  /// motore li segue a ogni operazione, nello stesso passo
   /// d'annulla, e trova ciò che ha toccato col suo indice invece di scorrere
   /// il disegno. Le etichette vengono prima: un'etichetta che va a capo
   /// diversamente si riscrive al suo posto, prima che le punte aggiungano
@@ -2511,7 +2518,8 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       const lines = followConnectors(model, touched, find, measureText, op);
       const tips = followTips(model, touched, new NewIds((id) => find(id) !== null), find);
       const regions = followEffects(model, touched, find, measureText);
-      const ops = [labels, lines, tips, regions].filter((each): each is Op => each !== null);
+      const copies = followRepeats(model, touched, find, new NewIds((id) => find(id) !== null));
+      const ops = [labels, lines, tips, regions, copies].filter((each): each is Op => each !== null);
       return ops.length === 0 ? null : ops.length === 1 ? ops[0]! : { op: "batch", ops };
     };
     return next;
@@ -3462,6 +3470,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // da solo.
   const symbolButton = arrangeButton("draw.symbol.make", "draw-symbol", null, () => symbolFromSelection());
   const detachButton = arrangeButton("draw.symbol.detach", "draw-detach", null, () => detachSelection());
+  // Dal livello Esperto, il menu Ripeti: l'oggetto scelto si ripete intorno
+  // a un centro, in griglia o allo specchio, e una ripetizione cambia tipo o
+  // si espande in oggetti.
+  const repeatButton = arrangeButton("draw.repeat", "draw-repeat", null, () => openMenu(repeatButton, repeatItems()));
   // Dal livello Esperto: tratteggio, estremi e angoli dei contorni scelti.
   const outlineButton = arrangeButton("draw.outline", "draw-outline", null, () => openMenu(outlineButton, outlineItems()));
   // Dal livello Esperto: un'immagine scelta da sola diventa tracciati
@@ -3470,7 +3482,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   // Dal livello Esperto, con un testo scelto: metterlo su una forma,
   // toglierlo dal suo tracciato e rovesciarlo, in un menu.
   const textPathButton = arrangeButton("draw.text_path", "draw-text-path", null, () => openMenu(textPathButton, textPathItems()));
-  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, maskButton, outlineButton, textPathButton]) {
+  for (const control of [orderButton, intoButton, alignButton, pathButton, booleanButton, maskButton, repeatButton, outlineButton, textPathButton]) {
     control.setAttribute("aria-haspopup", "menu");
     control.setAttribute("aria-expanded", "false");
   }
@@ -6223,6 +6235,20 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   const ratioOn = (units: readonly Unit[]): boolean =>
     ratioLock !== null && ratioLock.keys === selection.join("\n") ? ratioLock.on : units.some((unit) => RATIO_ROLES.has(unit.role));
 
+  /// Gli originali della ripetizione `container`: gli oggetti che si
+  /// scelgono quando la si isola.
+  const originalUnits = (container: ContainerNode): readonly Unit[] => indexer.index(engine.model!, container, isolatedThrough()).units;
+
+  /// La sezione «Ripetizione» per gli oggetti scelti `units`: la
+  /// ripetizione scelta da sola, o quella di cui sono originali.
+  const repeatFactsOf = (units: readonly Unit[]): RepeatFacts | null => {
+    const target = repeatTarget(units);
+    const repeat = target?.details?.repeat;
+    if (target === null || repeat === undefined) return null;
+    const place = repeatPlace(originalUnits(target));
+    return { kind: repeat.kind, view: place === null ? null : repeatView(repeat, place) };
+  };
+
   /// La selezione come la legge il pannello.
   const selectionFacts = (units: readonly Unit[]): SelectionFacts => {
     const model = engine.model!;
@@ -6247,6 +6273,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       tips: has("tips") ? tipsLookOf(model, units) : null,
       styles: has("styles") ? styleFactsOf(model, units) : null,
       symbols: has("symbols") ? symbolFactsOf(model, units) : null,
+      repeat: has("repeat") ? repeatFactsOf(units) : null,
     };
   };
 
@@ -7140,6 +7167,29 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return changeFromPanel(SHAPE_ACTIONS[id]!, reshaped.ops, reshaped.keys);
   };
 
+  /// Un numero di «Ripetizione», nell'unità del documento: la ripetizione
+  /// della selezione cambia, con le sue copie, e il raggio sposta gli
+  /// originali; la selezione resta. Una griglia con troppe o troppo poche
+  /// celle non si scrive, e il campo lo dice.
+  const repeatFromPanel = (id: FieldId, value: number | string | boolean): string | null => {
+    const model = engine.model;
+    const units = selectedUnits();
+    const target = repeatTarget(units);
+    const repeat = target?.details?.repeat;
+    const edit = repeatEdit(id, value, docUnit());
+    if (model === null || target === null || repeat === undefined || edit === null) return null;
+    const place = repeatPlace(originalUnits(target));
+    const next = place === null ? null : editedRepeat(repeat, place, edit);
+    if (next === null) {
+      const side = edit.field === "columns" || edit.field === "rows" ? Math.round(edit.value) : null;
+      const cells = repeat.kind !== "grid" || side === null ? null : side * (edit.field === "columns" ? repeat.rows : repeat.columns);
+      return cells !== null && (cells < 2 || cells > MAX_GRID) ? t("draw.properties.repeat.cells") : null;
+    }
+    const keys = units.length === 1 && units[0]!.node === target ? [] : units.map((unit) => unit.key);
+    const made = rewriteRepeatOps(model, target, next.repeat, newIds(), next.move, keys);
+    return changeFromPanel("draw.action.repeat_change", made.ops, made.keys);
+  };
+
   /// Un lato della pagina, nell'unità del documento.
   const pageFromPanel = (id: "pageWidth" | "pageHeight", value: number): string | null => {
     const page = scene.root.page;
@@ -7278,6 +7328,24 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         break;
       case "symbol":
         outcome = symbolCommand(String(value));
+        break;
+      case "repeat":
+        // Un tipo rifà la ripetizione, «Espandi» la espande: dicono loro
+        // che cosa è successo.
+        if (value === "expand") expandSelection();
+        else if (isRepeatKind(value)) repeatSelection(value);
+        break;
+      case "repeatCount":
+      case "repeatRadius":
+      case "repeatX":
+      case "repeatY":
+      case "repeatColumns":
+      case "repeatRows":
+      case "repeatStepX":
+      case "repeatStepY":
+      case "repeatAngle":
+      case "repeatDistance":
+        outcome = repeatFromPanel(id, value);
         break;
       default:
         outcome = styleFromPanel(id, value);
@@ -7695,6 +7763,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     motifButton.hidden = !has("motifs");
     symbolButton.hidden = !has("symbols");
     detachButton.hidden = !has("symbols") || !units.some(isInstance);
+    repeatButton.hidden = !has("repeat");
     connectButton.hidden = !has("connector") || units.filter((unit) => attachable(unit.node)).length < 2;
     outlineButton.hidden = !has("outline");
     traceButton.hidden = !has("trace") || units.length !== 1 || units[0]!.role !== "image";
@@ -17017,7 +17086,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       announce(masked ? `${t("draw.ungroup.effect")} ${t("draw.ungroup.release")}` : t("draw.ungroup.effect"));
       return;
     }
-    const kept = arrange("draw.action.ungroup", ungroupOps(engine.model!, units, newIds()), null, { key: "draw.ungroup.styled" });
+    const kept = arrange("draw.action.ungroup", ungroupOps(engine.model!, units, newIds(), expandCopiesIn), null, { key: "draw.ungroup.styled" });
     const whole = groups < all.length ? ` ${t("draw.ungroup.effect_some")}` : "";
     if (kept !== null) announce(`${plural(groups, "draw.ungrouped.one", "draw.ungrouped.other")}${whole}${kept}`);
   }
@@ -17053,6 +17122,55 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       return;
     }
     if (arrange("draw.action.symbol_detach", detached) !== null) announce(plural(count, "draw.symbol.detached.one", "draw.symbol.detached.other"));
+  }
+
+  /// La frase di una ripetizione fatta o cambiata in `repeat`.
+  const repeatText = (repeat: Repeat): string => {
+    switch (repeat.kind) {
+      case "radial":
+        return t("draw.repeat.made.radial", { count: repeat.count });
+      case "grid":
+        return t("draw.repeat.made.grid", { columns: repeat.columns, rows: repeat.rows });
+      case "mirror":
+        return t("draw.repeat.made.mirror");
+    }
+  };
+
+  /// «Ripetizione radiale», «a griglia» o «a specchio»: l'oggetto scelto,
+  /// o gli oggetti scelti messi prima in un gruppo, diventano l'originale di
+  /// una ripetizione nuova, che diventa la selezione. Una ripetizione
+  /// scelta, o i suoi originali, cambiano tipo e ricominciano coi valori di
+  /// partenza; il tipo che hanno già non cambia niente.
+  function repeatSelection(kind: RepeatKind): void {
+    const units = arranging("repeat");
+    if (units === null) return;
+    const target = repeatTarget(units);
+    if (target?.details?.repeat?.kind === kind) {
+      announce(t("draw.unchanged"));
+      return;
+    }
+    const made = repeatOps(engine.model!, withLabels(units), kind, newIds(), originalUnits);
+    if (typeof made === "string") {
+      announce(t(`draw.repeat.refused.${made}`));
+      return;
+    }
+    const kept = arrange(target === null ? "draw.action.repeat" : "draw.action.repeat_change", made, null, { key: "draw.repeat.styled" });
+    if (kept !== null) announce(`${repeatText(made.repeat)}${kept}`);
+  }
+
+  /// «Espandi la ripetizione»: ogni copia delle ripetizioni scelte, o di
+  /// quella degli originali scelti, diventa una copia vera del suo
+  /// originale, e la ripetizione un gruppo; la selezione resta.
+  function expandSelection(): void {
+    const units = arranging("repeat");
+    if (units === null) return;
+    const count = expandTargets(units).length;
+    const expanded = expandOps(engine.model!, units, newIds());
+    if (typeof expanded === "string") {
+      announce(t(`draw.repeat.expand.${expanded}`));
+      return;
+    }
+    if (arrange("draw.action.repeat_expand", expanded) !== null) announce(plural(count, "draw.repeat.expanded.one", "draw.repeat.expanded.other"));
   }
 
   /// Il collegamento scelto da solo, se c'è.
@@ -17414,6 +17532,12 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         { label: t("draw.symbol.make"), separator: true, disabled: !canEdit || none, ...(canEdit ? unselected : {}), run: () => symbolFromSelection() },
         { label: t("draw.symbol.detach"), disabled: !canEdit || !instances, ...(canEdit && !instances ? { description: t(none ? "draw.selection.empty" : "draw.symbol.detach.none") } : {}), run: () => detachSelection() },
       );
+    }
+    if (has("repeat")) {
+      // Le voci del menu «Ripeti», spente se il disegno non si scrive.
+      for (const [at, { description, ...item }] of repeatItems().entries()) {
+        items.push({ ...item, separator: at === 0, ...(canEdit ? (description === undefined ? {} : { description }) : { disabled: true }) });
+      }
     }
     // Un'istanza scelta da sola apre il suo simbolo.
     const lone = units.length === 1 ? units[0]! : null;
@@ -18823,6 +18947,37 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       { label: t("draw.mask.clip"), hint: displayBinding(CLIP_MASK_BINDING), ...when(creation("clip")), run: () => maskSelection("clip") },
       { label: t("draw.mask.opacity"), ...when(creation("opacity")), run: () => maskSelection("opacity") },
       { label: t("draw.mask.release"), hint: displayBinding(RELEASE_MASK_BINDING), separator: true, ...when(releaseReason()), run: () => releaseMasks() },
+    ];
+  };
+
+  /// Il menu «Ripeti»: i tre tipi, col segno su quello della ripetizione
+  /// scelta, ed «Espandi la ripetizione». Una voce che il comando
+  /// rifiuterebbe è spenta, e dice perché con le parole che il comando
+  /// direbbe.
+  const repeatItems = (): MenuItem[] => {
+    const units = selectedUnits();
+    const model = engine.model;
+    const current = repeatTarget(units)?.details?.repeat?.kind ?? null;
+    const when = (reason: string | null): Pick<MenuItem, "disabled" | "description"> =>
+      reason === null ? { disabled: false } : { disabled: true, description: units.length === 0 ? t("draw.selected.none") : reason };
+    const refusal = (kind: RepeatKind): string | null => {
+      if (model === null || units.length === 0) return t("draw.selected.none");
+      if (kind === current) return null;
+      const made = repeatOps(model, withLabels(units), kind, newIds(), originalUnits);
+      return typeof made === "string" ? t(`draw.repeat.refused.${made}`) : null;
+    };
+    const expandReason = (): string | null => {
+      if (model === null || expandTargets(units).length === 0) return t("draw.repeat.expand.none");
+      return expandOps(model, units, newIds()) === "content" ? t("draw.repeat.expand.content") : null;
+    };
+    return [
+      ...REPEAT_KINDS.map((kind): MenuItem => ({
+        label: t(`draw.repeat.${kind}`),
+        ...(current === null ? {} : { choice: "radio" as const, checked: kind === current }),
+        ...when(refusal(kind)),
+        run: () => repeatSelection(kind),
+      })),
+      { label: t("draw.repeat.expand"), separator: true, ...when(expandReason()), run: () => expandSelection() },
     ];
   };
 

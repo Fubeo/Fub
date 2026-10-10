@@ -176,7 +176,8 @@ export type Feature =
   | "blend"
   | "motifs"
   | "print"
-  | "symbols";
+  | "symbols"
+  | "repeat";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -247,6 +248,11 @@ const COMMANDS: readonly FeatureSpec[] = [
   // dei simboli. Un'istanza si apre per modificare il suo simbolo dove si
   // isola un gruppo, a ogni livello che ha la selezione avanzata.
   { id: "symbols", level: "expert", label: "draw.feature.symbols" },
+  // Le ripetizioni sono il menu «Ripeti» nella barra della selezione e nel
+  // menu, e la sezione «Ripetizione» del pannello delle proprietà. Una
+  // ripetizione si apre per modificare i suoi originali dove si isola un
+  // gruppo, e si separa come un gruppo, a ogni livello.
+  { id: "repeat", level: "expert", label: "draw.feature.repeat" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli

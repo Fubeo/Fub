@@ -11,7 +11,9 @@
 // - **Ciò che si vede resta.** Raggruppare oggetti di livelli diversi ne
 //   compensa le trasformazioni; separare un gruppo porta la sua
 //   trasformazione e lo stile che i figli ereditavano su ciascun figlio, e
-//   moltiplica la sua opacità nella loro. Qui si scrivono gli oggetti; le
+//   moltiplica la sua opacità nella loro. Separare una ripetizione mette al
+//   posto di ogni copia un duplicato del suo originale, che chi separa sa
+//   fare (`repeat-ops.ts`). Qui si scrivono gli oggetti; le
 //   parti estranee si spostano come sono, e ciò che serve perché si vedano
 //   com'erano, anche con un foglio di stile del disegno che dopo il comando
 //   sceglierebbe altro, lo aggiunge l'editor (`styled.ts`).
@@ -484,19 +486,27 @@ export function unwrappable(model: DocumentModel, unit: Unit): boolean {
   return !holdsEffects(nodeOf(model, unit));
 }
 
+/// Chi mette oggetti veri al posto delle copie di una ripetizione che si
+/// separa: per ogni copia di `container` l'elemento nuovo, nelle coordinate
+/// della ripetizione, dopo aver scritto in `plan` ciò che deve venire prima,
+/// come le risorse che copia. `null` se una copia non si sostituisce.
+export type Expanding = (plan: Plan, container: ContainerNode) => ReadonlyMap<ElementPart, Elem> | null;
+
 /// Separa i gruppi fra `units` che si separano: vedi [`unwrapOps`] e
-/// [`unwrappable`].
-export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds): Arranged {
-  return unwrapOps(model, units, ids, (unit) => isGroup(unit) && unwrappable(model, unit));
+/// [`unwrappable`]. Una ripetizione si separa con `expand`, senza resta.
+export function ungroupOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, expand?: Expanding): Arranged {
+  return unwrapOps(model, units, ids, (unit) => isGroup(unit) && unwrappable(model, unit) && (expand !== undefined || unit.node.details?.repeat === undefined), expand);
 }
 
 /// Toglie i contenitori fra `units` che `unwraps` sceglie, nel piano `plan`:
 /// i figli prendono il posto del contenitore, in ordine, con la sua
 /// trasformazione e lo stile che ne ereditavano; titolo e descrizione del
 /// contenitore se ne vanno con lui. Le parti estranee si spostano come sono:
-/// ciò che portano lo aggiunge `styled.ts`. Torna gli oggetti di `units`
+/// ciò che portano lo aggiunge `styled.ts`. Le copie di una ripetizione se ne
+/// vanno per prime, e al loro posto vengono gli elementi di `expand`; senza,
+/// o se `expand` non sa, la ripetizione resta. Torna gli oggetti di `units`
 /// rimasti, e gli id dei figli portati fuori.
-export function unwrapIn(plan: Plan, units: readonly Unit[], unwraps: (unit: Unit) => boolean): { readonly kept: Unit[]; readonly freed: string[] } {
+export function unwrapIn(plan: Plan, units: readonly Unit[], unwraps: (unit: Unit) => boolean, expand?: Expanding): { readonly kept: Unit[]; readonly freed: string[] } {
   const { model } = plan;
   const kept: Unit[] = [];
   const freed: string[] = [];
@@ -504,11 +514,12 @@ export function unwrapIn(plan: Plan, units: readonly Unit[], unwraps: (unit: Uni
   // primo: così il percorso di una parte estranea senza id vale ancora
   // quando tocca a lei.
   for (const unit of [...units].reverse()) {
-    if (!unwraps(unit)) {
+    const node = unwraps(unit) ? (nodeOf(model, unit) as ContainerNode) : null;
+    const swaps = node === null || node.details?.repeat === undefined ? new Map<ElementPart, Elem>() : (expand?.(plan, node) ?? null);
+    if (node === null || swaps === null) {
       kept.push(unit);
       continue;
     }
-    const node = nodeOf(model, unit) as ContainerNode;
     const container = plan.idOf(node);
     const parent = plan.parentOf(node);
     const own = plainAttributes(node);
@@ -519,10 +530,33 @@ export function unwrapIn(plan: Plan, units: readonly Unit[], unwraps: (unit: Uni
     const fades = alpha !== null && alpha < 1;
     const carries = moves || inherited.length > 0 || fades;
     const children = elementChildren(node).filter((child) => !(child.facts.uri === SVG_NS && (child.facts.local === "title" || child.facts.local === "desc")));
+    // Le copie vanno via prima che un originale esca, dall'ultima alla
+    // prima; chi resta senza id ha un posto in meno per ogni copia prima di
+    // lui.
+    const all = elementChildren(node);
+    const gone: number[] = [];
+    for (let at = all.length - 1; at >= 0; at--) {
+      const copy = all[at]!;
+      if (!swaps.has(copy)) continue;
+      plan.ops.push({ op: "remove", target: copy.facts.id ?? { path: pathOf(copy), tag: tagName(copy) } });
+      gone.push(at);
+    }
+    const shifted = (child: ElementPart): readonly number[] => {
+      const path = pathOf(child);
+      const at = path[path.length - 1]!;
+      return [...path.slice(0, -1), at - gone.filter((each) => each < at).length];
+    };
     for (const child of [...children].reverse()) {
+      const swap = swaps.get(child);
+      if (swap !== undefined) {
+        const elem = carries ? carried(swap, matrix, inherited, own, fades ? alpha : null) : swap;
+        plan.ops.push({ op: "add", parent, pos: { after: container }, elem });
+        freed.push(elem.attrs.id!);
+        continue;
+      }
       let target: Target;
       if (child.details === null) {
-        target = child.facts.id ?? { path: pathOf(child), tag: tagName(child) };
+        target = child.facts.id ?? { path: shifted(child), tag: tagName(child) };
       } else {
         const id = plan.idOf(child);
         target = id;
@@ -543,11 +577,25 @@ export function unwrapIn(plan: Plan, units: readonly Unit[], unwraps: (unit: Uni
   return { kept, freed };
 }
 
+/// `elem`, un figlio che esce da un contenitore nuovo, con ciò che il
+/// contenitore gli dava: la trasformazione `matrix`, gli attributi
+/// `inherited` di `own` che non ha, e l'opacità `alpha` moltiplicata nella
+/// sua.
+function carried(elem: Elem, matrix: Matrix, inherited: readonly string[], own: ReadonlyMap<string, string>, alpha: number | null): Elem {
+  const attrs: Record<string, string> = { ...elem.attrs };
+  const value = transformValue(compose(matrix, parseTransform(attrs.transform ?? "") ?? IDENTITY));
+  if (value === null) delete attrs.transform;
+  else attrs.transform = value;
+  for (const name of inherited) if (attrs[name] === undefined) attrs[name] = own.get(name)!;
+  if (alpha !== null) attrs.opacity = formatNumber((parseOpacity(attrs.opacity ?? "") ?? 1) * alpha, OPACITY_PLACES);
+  return { ...elem, attrs };
+}
+
 /// Toglie i contenitori fra `units` che `unwraps` sceglie: vedi
 /// [`unwrapIn`]. La selezione dopo sono i figli e gli altri oggetti scelti.
-export function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, unwraps: (unit: Unit) => boolean): Arranged {
+export function unwrapOps(model: DocumentModel, units: readonly Unit[], ids: NewIds, unwraps: (unit: Unit) => boolean, expand?: Expanding): Arranged {
   const plan = new Plan(model, ids);
-  const { kept, freed } = unwrapIn(plan, units, unwraps);
+  const { kept, freed } = unwrapIn(plan, units, unwraps, expand);
   if (plan.ops.length === 0) return { ops: [], keys: units.map((unit) => unit.key) };
   // Un oggetto rimasto scelto riceve un id: i figli portati fuori cambiano il
   // suo percorso.

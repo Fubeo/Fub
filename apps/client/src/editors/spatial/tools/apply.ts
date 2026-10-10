@@ -29,7 +29,8 @@
 //   e la perdono. Uno con parti estranee la tiene, perché un elemento
 //   estraneo non cambia, e i suoi figli applicano solo la loro; così uno
 //   con un ritaglio, una maschera o un filtro, che valgono nelle sue
-//   coordinate.
+//   coordinate, e una ripetizione, il cui centro, passi e asse stanno nelle
+//   sue coordinate come le trasformazioni delle copie.
 // - **Le sfumature vanno con la geometria.** Una sfumatura del riempimento
 //   o del contorno si riscrive nelle coordinate nuove, e si vede dov'era:
 //   sul posto se è soltanto dell'oggetto, se no in una copia sua, come
@@ -672,10 +673,10 @@ function bakeContainer(node: ContainerNode, pushed: Matrix | null, from: Inherit
   const m = pushed === null ? before : compose(pushed, before);
   const inner = handed(node, from);
   // Titolo e descrizione non si disegnano. Un ritaglio, una maschera, un
-  // filtro o degli effetti valgono nelle coordinate del gruppo: lui tiene la
-  // sua.
+  // filtro o degli effetti valgono nelle coordinate del gruppo, e così una
+  // ripetizione: lui tiene la sua.
   const children = elementChildren(node).filter((child) => !(child.facts.uri === SVG_NS && (child.facts.local === "title" || child.facts.local === "desc")));
-  if (transformValue(m) !== null && !holdsEffects(node) && children.every((child) => child.details !== null)) {
+  if (transformValue(m) !== null && !holdsEffects(node) && node.details?.repeat === undefined && children.every((child) => child.details !== null)) {
     const baked = children.map((child) => bake(child, m, inner, resources));
     if (baked.every((one) => one !== null)) {
       const changes: Change[] = own.has("transform") ? [{ node, attrs: { transform: null } }] : [];

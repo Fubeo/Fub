@@ -59,6 +59,7 @@ import { createSwatchesPanel, type ColorsView, type PaintTarget, type SwatchesPa
 export type SectionId =
   | "place"
   | "shape"
+  | "repeat"
   | "look"
   | "connector"
   | "gradient"
@@ -88,6 +89,7 @@ export type NumberId =
   | "leading"
   | "spacing"
   | "wrap"
+  | RepeatNumberId
   | TransformId
   | "boardX"
   | "boardY"
@@ -96,14 +98,30 @@ export type NumberId =
   | "pageWidth"
   | "pageHeight";
 
+/// I numeri di «Ripetizione»: quante volte, il raggio e il centro di una
+/// radiale, colonne, righe e passi di una griglia, l'angolo e la distanza
+/// dell'asse di uno specchio.
+export type RepeatNumberId =
+  | "repeatCount"
+  | "repeatRadius"
+  | "repeatX"
+  | "repeatY"
+  | "repeatColumns"
+  | "repeatRows"
+  | "repeatStepX"
+  | "repeatStepY"
+  | "repeatAngle"
+  | "repeatDistance";
+
 /// I campi di «Trasforma»: di quanto ruotare, scalare e inclinare.
 export type TransformId = "turn" | "scaleX" | "scaleY" | "skewX" | "skewY";
 
 export type PaintId = "fill" | "stroke";
 export type ChoiceId = "dash" | "cap" | "join" | "blend" | "preset" | "family" | "weight" | "boardPreset" | "pagePreset" | "unit";
-/// I campi a menu: il simbolo delle istanze, gli stili del disegno, grafico
-/// e di testo, e le punte delle linee, all'inizio e alla fine.
-export type MenuId = "symbol" | "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
+/// I campi a menu: il simbolo delle istanze, il tipo di una ripetizione, gli
+/// stili del disegno, grafico e di testo, e le punte delle linee, all'inizio
+/// e alla fine.
+export type MenuId = "symbol" | "repeat" | "lookStyle" | "textStyle" | "tipStart" | "tipEnd";
 export type SwitchId = "grid" | "snap" | "guides" | "rulers" | "rulerGuides" | "bar" | "isolate";
 export type FieldId = NumberId | PaintId | ChoiceId | MenuId | SwitchId | "ratio" | "shape" | "emphasis" | "anchor" | "textForm" | "boardName" | "boardOrientation" | "pageOrientation" | "desc";
 
@@ -419,6 +437,17 @@ const SPECS: readonly Spec[] = [
   { id: "count", kind: "number", section: "shape", column: "1" },
   { id: "inner", kind: "number", section: "shape", column: "2" },
   { id: "corner", kind: "number", section: "shape", column: "1" },
+  { id: "repeat", kind: "menu", section: "repeat", column: "all" },
+  { id: "repeatCount", kind: "number", section: "repeat", column: "1" },
+  { id: "repeatRadius", kind: "number", section: "repeat", column: "2" },
+  { id: "repeatX", kind: "number", section: "repeat", column: "1" },
+  { id: "repeatY", kind: "number", section: "repeat", column: "2" },
+  { id: "repeatColumns", kind: "number", section: "repeat", column: "1" },
+  { id: "repeatRows", kind: "number", section: "repeat", column: "2" },
+  { id: "repeatStepX", kind: "number", section: "repeat", column: "1" },
+  { id: "repeatStepY", kind: "number", section: "repeat", column: "2" },
+  { id: "repeatAngle", kind: "number", section: "repeat", column: "1" },
+  { id: "repeatDistance", kind: "number", section: "repeat", column: "2" },
   { id: "lookStyle", kind: "menu", section: "look", column: "all" },
   { id: "fill", kind: "paint", section: "look", column: "all" },
   { id: "stroke", kind: "paint", section: "look", column: "all" },
@@ -471,6 +500,7 @@ const SPECS: readonly Spec[] = [
 const SECTIONS: ReadonlyArray<{ readonly id: SectionId; readonly label: DrawKey }> = [
   { id: "place", label: "draw.properties.selection" },
   { id: "shape", label: "draw.properties.shape" },
+  { id: "repeat", label: "draw.properties.repeat" },
   { id: "look", label: "draw.properties.look" },
   { id: "connector", label: "draw.properties.connector" },
   { id: "gradient", label: "draw.properties.gradient" },
