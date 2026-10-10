@@ -707,6 +707,14 @@ function familyLabel(family: string): string {
   return first === undefined ? family : "name" in first ? first.name : first.generic;
 }
 
+/// Se `a` e `b` nominano per prima la stessa famiglia, magari con altre
+/// virgolette, altre maiuscole o un altro ripiego: lo stesso carattere.
+function sameFirstFamily(a: string, b: string): boolean {
+  const first = parseFamilies(a)?.[0];
+  const other = parseFamilies(b)?.[0];
+  return first !== undefined && other !== undefined && "name" in first && "name" in other && sameFamily(first.name, other.name);
+}
+
 /// Le voci del menu «Carattere» per le famiglie del vault `families`:
 /// ciascuna col suo ripiego, soltanto quelle che il file sa scrivere.
 export function vaultFamilyOptions(families: readonly { readonly name: string; readonly generic: Generic }[]): ChoiceOption[] {
@@ -866,12 +874,19 @@ export function propertiesView(input: FieldsInput): PropertiesView {
       if (has("fonts")) {
         vaultFamilyOptions(input.fonts?.families ?? []).forEach((option, i) => families.push(i === 0 ? { ...option, separator: true } : option));
       }
-      // Un carattere che non è fra questi c'è, col suo nome; uno che nessuno
-      // scrive è quello di serie.
+      // Un carattere che nessuno scrive è quello di serie. Uno scritto in un
+      // altro modo, come `Liberation Serif, serif` senza virgolette, è la voce
+      // della stessa famiglia, che il menu non ripete; uno che non è fra
+      // questi c'è, col suo nome.
+      let value = current;
       if (current === "") families.unshift({ value: "", label: t("draw.properties.family.default") });
-      else if (current !== null && !families.some((each) => each.value === current)) families.push({ value: current, label: familyLabel(current) });
+      else if (current !== null) {
+        const same = families.find((each) => each.value === current) ?? families.find((each) => sameFirstFamily(each.value, current));
+        if (same === undefined) families.push({ value: current, label: familyLabel(current) });
+        else value = same.value;
+      }
       const note = current === null || input.fonts === undefined ? undefined : familyNote(current, input.fonts);
-      fields.family = { kind: "choice", label: t("draw.properties.family"), value: current, options: families, ...(note === undefined ? {} : { note }) };
+      fields.family = { kind: "choice", label: t("draw.properties.family"), value, options: families, ...(note === undefined ? {} : { note }) };
     }
     if (look.size.count > 0) {
       fields.size = {

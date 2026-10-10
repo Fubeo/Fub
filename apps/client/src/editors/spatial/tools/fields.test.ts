@@ -697,6 +697,25 @@ describe("il testo", () => {
     expect(families("expert", '"Noto Sans JP", sans-serif')).toHaveLength(6);
   });
 
+  it("riconosce il carattere di un testo scritto in un altro modo, e non lo ripete nel menu", () => {
+    const fonts: FontFacts = {
+      families: [{ name: "Liberation Serif", generic: "serif" }],
+      notes: { missing: [], unreadable: [], over: [], failed: [] },
+      shown: () => "Liberation Serif",
+    };
+    const field = (value: string): ChoiceState => propertiesView(input({ level: "expert", fonts, selection: selection({ look: look({ family: { count: 1, value } }) }) })).fields.family as ChoiceState;
+    for (const written of ["Liberation Serif, serif", "'liberation serif', Georgia, serif", '"Liberation Serif"']) {
+      expect(field(written).value).toBe('"Liberation Serif", serif');
+      expect(field(written).options.map((option) => option.label)).toEqual(["Inter", "Literata", "JetBrains Mono", "Liberation Serif"]);
+    }
+    expect(field("inter").value).toBe("Inter, sans-serif");
+    expect(field("inter").options).toHaveLength(4);
+    // Un'altra famiglia, o una generica sola, resta col suo nome.
+    expect(field("Liberation Sans, sans-serif").options.slice(-1)).toEqual([{ value: "Liberation Sans, sans-serif", label: "Liberation Sans" }]);
+    expect(field("serif")).toMatchObject({ value: "serif" });
+    expect(field("serif").options.slice(-1)).toEqual([{ value: "serif", label: "serif" }]);
+  });
+
   it("dice sotto il carattere la famiglia che manca, è oltre il tetto o non si carica, e con quale si vede", () => {
     const note = (value: string, notes: Partial<FontFacts["notes"]>): string | undefined => {
       const fonts: FontFacts = { families: [], notes: { missing: [], unreadable: [], over: [], failed: [], ...notes }, shown: (each) => (each.startsWith("Roboto") ? "Roboto" : "Inter") };
