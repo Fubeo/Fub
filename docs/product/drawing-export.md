@@ -7,8 +7,9 @@
 
 Un [disegno](drawing.md) è già un SVG che ogni browser apre. «Esporta…» ne fa
 anche un PNG o un JPEG, per i programmi che vogliono un'immagine, un SVG
-pulito, per il web, o un PDF, per stampare e per chi legge: il disegno intero,
-la selezione o le [tavole](drawing-boards.md). Il disegno non cambia. Le
+pulito, per il web, o un PDF, per chi legge e per stampare, anche in
+tipografia: il disegno intero, la selezione o le [tavole](drawing-boards.md).
+Il disegno non cambia. Le
 annotazioni di un PDF hanno i loro due export, descritti in [Annotazioni dei
 PDF](pdf-annotations.md#esportare).
 
@@ -32,8 +33,9 @@ sono.
 
 ## La finestra «Esporta»
 
-A sinistra le scelte, in quattro gruppi; a destra l'anteprima, con la misura
-del file sotto. Su uno schermo stretto l'anteprima va sopra.
+A sinistra le scelte, in quattro gruppi e, per il PDF, un quinto; a destra
+l'anteprima, con la misura del file sotto. Su uno schermo stretto
+l'anteprima va sopra.
 
 - **Che cosa:** il disegno intero; la selezione, se c'è, col numero degli
   oggetti; le tavole, se il disegno ne ha, ciascuna con la sua casella.
@@ -43,6 +45,8 @@ del file sotto. Su uno schermo stretto l'anteprima va sopra.
   cosa dà.
 - **La misura**, per PNG e JPEG: la scala, da 1× a 4×, o la larghezza in
   pixel, da 1 a 16 384, che parte da quella della scala di prima.
+- **La pagina**, per il PDF, dall'Esperto: la carta, l'abbondanza e i
+  segni, descritti in [Per la stampa](#per-la-stampa).
 - **Lo sfondo:** la carta, o trasparente. Il JPEG non ha la trasparenza: esce
   sempre con la carta, e la finestra lo dice.
 
@@ -50,7 +54,8 @@ del file sotto. Su uno schermo stretto l'anteprima va sopra.
 disegno ritagliato sulla tavola o sulla selezione, coi caratteri dell'app e
 le immagini del vault, il più grande possibile nel suo riquadro. Sotto c'è
 una scacchiera dove il file sarà trasparente, il bianco per il JPEG e il
-PDF. Con più file, o più pagine del PDF, «‹» e «›» li sfogliano uno alla
+PDF; un PDF su una carta col suo formato si vede sulla sua carta, col
+disegno al suo posto, l'abbondanza e i segni. Con più file, o più pagine del PDF, «‹» e «›» li sfogliano uno alla
 volta, «File 2 di 3: Evaporazione». La misura sotto è quella del file: i
 pixel, contati come li conta l'host, le unità dell'SVG o le pagine del PDF
 in millimetri. Una misura che passa i limiti di un'immagine esce ridotta, e
@@ -70,7 +75,8 @@ da una casella, `Esc` chiude, e il fuoco torna dov'era.
 **Le scelte si ricordano** per disegno, su questa macchina e non nel vault,
 come la griglia: per gli ultimi 100 disegni esportati. La selezione si
 ricorda come scelta, i suoi oggetti no; delle tavole si ricordano quelle
-tolte, così una tavola nuova parte scelta.
+tolte, così una tavola nuova parte scelta. Si ricorda anche la pagina del
+PDF.
 
 ## I formati
 
@@ -90,14 +96,53 @@ tolte, così una tavola nuova parte scelta.
   restano vettoriali, e gli [effetti](drawing-effects.md#in-lettura-e-nellexport),
   che il PDF non ha, si dipingono a 300 punti per pollice. Il disegno e la
   selezione sono una pagina; le tavole una pagina per tavola, nell'ordine
-  del disegno, ciascuna della sua misura e con un segnalibro col suo nome.
-  Il titolo del disegno va fra le proprietà del file.
+  del disegno, ciascuna della sua misura e con un segnalibro col suo nome,
+  o tutte sulla stessa carta. Il titolo del disegno va fra le proprietà del
+  file.
 
 **La misura delle immagini.** Un'immagine resta entro 16 384 pixel per lato e
 32 milioni di pixel in tutto: oltre, esce alla scala più grande che ci sta.
 PNG e JPEG portano la densità della scala, 96 punti per pollice a 1×, così un
 programma di impaginazione li mette alla misura del disegno. Una pagina del
-PDF misura il disegno, la tavola o la selezione, a 0,75 punti per unità.
+PDF grande quanto il disegno misura il disegno, la tavola o la selezione, a
+0,75 punti per unità.
+
+## Per la stampa
+
+Il gruppo «Pagina» della finestra dice su che carta va il PDF. C'è
+all'Esperto, e nel Personalizzato con la parte «Pagina di stampa del PDF»;
+senza, e di serie, la carta è «Grande quanto il disegno»: la pagina misura
+il disegno, come sempre. Le scelte della pagina si ricordano anche quando
+il gruppo non c'è.
+
+- **La carta:** A2, A3, A4, A5 e A6, Lettera US, Legale US e Tabloid, o un
+  formato personalizzato, coi due lati in millimetri, da 10 a 5 000.
+  «Orientamento» la gira «Come il disegno», in verticale o in orizzontale.
+  Il disegno sta al centro, dentro i «Margini», di serie 10 mm: «Alla sua
+  misura, ridotto se non ci sta», o «Grande quanto la carta».
+- **L'abbondanza:** quanto il disegno continua oltre il bordo da tagliare,
+  per lato, fino a 25 mm, così chi stampa taglia senza lasciare un filo
+  bianco. La carta della tavola si allarga con lei, e un oggetto che passa
+  il bordo ci entra. Un disegno che non dice la sua misura, senza
+  `viewBox` né larghezza e altezza, esce senza abbondanza, e la finestra lo
+  dice.
+- **I segni:** quelli di taglio agli angoli e quelli di registro a metà dei
+  lati, fuori dall'abbondanza, nel colore che inchiostra ogni lastra.
+- **Il posto:** se margini, abbondanza e segni non lasciano posto al
+  disegno, la finestra lo dice e non esporta.
+
+La misura sotto l'anteprima dice la carta e il disegno sulla carta, in
+millimetri e in percentuale: «Carta 297 × 210 mm · disegno 158,8 × 105,8 mm
+al 100%». Il PDF dice a chi stampa dove si taglia e dove finisce
+l'abbondanza, e chiede di stampare senza adattare la pagina e di scegliere
+il cassetto dalla sua misura.
+
+**«Stampa…»**, nel centro attività accanto a «Salva…» di un PDF, lo apre
+nel programma che il sistema usa per i PDF: da lì si stampa, con la
+stampante, le copie e il fronte e retro del sistema. Se nessun programma
+apre i PDF, il centro attività lo dice, e il PDF si salva e si stampa da un
+lettore. Il PDF resta da salvare; dopo «Salva…» la stampa si fa dal file
+salvato.
 
 ## Che cosa entra
 
@@ -153,7 +198,8 @@ diventa `Scienze/acqua.png`, `Scienze/acqua.jpg` o `Scienze/acqua.pdf`.
   prendono ` 1`, ` 2`, come due disegni.
 
 I file compaiono nel centro attività, che si apre da sé senza prendere il
-fuoco, e «Salva…» chiede dove metterli. Sotto i file ci sono le note
+fuoco, e «Salva…» chiede dove metterli; un PDF ha anche «Stampa…»
+([Per la stampa](#per-la-stampa)). Sotto i file ci sono le note
 dell'export: una misura ridotta ai limiti, un'immagine rimasta fuori; un
 avviso e un errore lo dicono anche a parole.
 
@@ -163,5 +209,5 @@ export all'altro.
 
 Il formato dei file e le regole delle risorse sono nel
 [formato della scena](../reference/scene-format.md), §9; le opzioni, il
-ritaglio, l'SVG pulito e i nomi nel
+ritaglio, l'SVG pulito, i nomi e la pagina di stampa nel
 [formato dell'export](../reference/scene-format-export.md).
