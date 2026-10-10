@@ -113,7 +113,7 @@ deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
 `draw`: l'arco `host --> svg` è una dipendenza facoltativa, fuori dal
 `default`. La stessa feature accende in `fub-features` l'export dei disegni in
-PNG, JPEG, SVG e PDF, con `resvg`, `svg2pdf` e i caratteri di Fub incorporati,
+PNG, JPEG, SVG e PDF, con `resvg`, `svg2pdf`, i caratteri di Fub incorporati e quelli del vault,
 e il comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
 provider, o parte da un modello o da un disegno del vault e ne cambia il solo
 titolo con `retitle`: per questo anche `features --> svg` è un arco

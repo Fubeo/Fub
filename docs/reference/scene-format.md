@@ -143,9 +143,9 @@ Radice di un documento nuovo:
   virgole; una lista malformata rende l'elemento estraneo. In scrittura una
   sola `matrix(a b c d e f)` con al massimo 4 decimali, omessa se è
   l'identità: spostare o ruotare non riscrive la geometria.
-- **`font-family`:** si scrivono `Inter, sans-serif`, `Literata, serif` o
-  `JetBrains Mono, monospace`, i caratteri distribuiti con Fub. Altri valori
-  sono ammessi in lettura.
+- **`font-family`:** si scrivono `Inter, sans-serif`, `Literata, serif`,
+  `JetBrains Mono, monospace` o una famiglia del vault con la sua generica
+  ([testo](scene-format-text.md), §9). Altri valori sono ammessi in lettura.
 - **`href` di `a`:** percorso di un documento del vault con la regola dei link
   di Fub (`resolve_against` in `crates/fub-abi/src/rules/path.rs`): relativo
   alla cartella del disegno, oppure dalla radice del vault se comincia con
@@ -385,8 +385,8 @@ non converte `d`. Solo i valori nuovi seguono le regole sui numeri.
   dei `g` antenati, nell'ordine del documento. Nessun nodo estraneo entra nel
   DOM vivo, e gli script non partono: si conservano e producono S005.
 - **Operazioni ammesse:** `remove` e `move`.
-- **Caratteri:** in un `<img>` da blob il testo usa la famiglia generica di
-  ripiego di `font-family`; l'export carica i caratteri distribuiti con Fub.
+- **Caratteri:** un `<img>` da blob porta dentro i caratteri di Fub e del
+  vault che i `font-family` nominano, come li sceglie l'export ([testo](scene-format-text.md), §9).
 
 ## 9. Modello per l'indice
 
@@ -469,7 +469,7 @@ descrizione e riepilogo, con `truncated: true` (§11).
   `image` si scrive come un `a`, e l'etichetta non conta. Wikilink e URL non si
   scrivono in un disegno; un percorso fuori dal vault è un errore.
 - **[Export](scene-format-export.md)** in PNG, JPEG, SVG e PDF: immagini raster
-  in data URI e del vault, fino a 64 MiB, e caratteri di Fub; il resto nel log.
+  in data URI e del vault, fino a 64 MiB, e caratteri di Fub e del vault; il resto nel log.
 
 ## 10. Versioni e compatibilità
 

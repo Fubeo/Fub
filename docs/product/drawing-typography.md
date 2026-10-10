@@ -249,7 +249,8 @@ Lettura, in una nota e nel PNG: li scrive il file, e nessuno li ricalcola.
 Il corsivo è quello vero di ciascun carattere, non il tondo inclinato. In
 Lettura, in una nota e nel PNG copiato il disegno porta dentro i caratteri
 che i suoi testi nominano, e il corsivo soltanto se un testo lo chiede: tutti
-e sei i file insieme stanno sotto i 384 KB. Il banco di fedeltà
+e sei i file di Fub insieme stanno sotto i 384 KB, e quelli del
+[vault](drawing-fonts.md) entro i 64 MiB di un disegno. Il banco di fedeltà
 (`apps/client/bench/fidelity.mjs`) confronta pixel per pixel il foglio, la
 Lettura e il PNG anche su righe con pezzi, corsivi, spaziatura e
 decorazioni, su testi in area e su tracciato, e prova di vedere un corsivo

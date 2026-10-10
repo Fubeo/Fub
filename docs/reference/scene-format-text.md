@@ -4,7 +4,7 @@
 > stile loro, il corsivo, la spaziatura delle lettere, il sottolineato e il
 > barrato, il testo in area, che va a capo in un riquadro, e il testo su
 > tracciato; come si leggono, come si scrivono e come li cambia l'operazione
-> `text`. Versione 1.
+> `text`; i caratteri con cui si disegnano. Versione 1.
 > **Fonti autorevoli:** `apps/client/src/editors/spatial/scene/classify.ts`
 > e `crates/fub-scene/src/classify.rs`, che leggono allo stesso modo; i
 > valori in `scene/values.ts` e `crates/fub-scene/src/values.rs`; la
@@ -12,7 +12,9 @@
 > `scene/engine.ts`, con i vettori di prova da 46 a 49 e da 60 a 64
 > ([operazioni sulla scena](scene-operations.md), §9); gli a capo che
 > l'editor scrive in `tools/wrap.ts`, con la misura dei caratteri in
-> `tools/measure.ts`.
+> `tools/measure.ts`; i caratteri in `crates/fub-features/src/draw/fonts.rs`
+> e `typefaces.rs`, con la stessa scelta in `fonts/faces.ts` e i vettori di
+> `apps/client/src/__fixtures__/scene-fonts/choose.json`.
 
 Una parte del [formato della scena](scene-format.md), §4: un `text` è un
 oggetto modificabile, e ogni suo `tspan` è una riga. Una riga può avere,
@@ -137,7 +139,7 @@ secondo è «Fine.».
   che non è uno spazio; gli spazi in fondo alla riga non contano nella
   larghezza. Una parola più larga del riquadro si spezza fra
   due grafemi, e soltanto un grafema da solo può andare oltre. Le larghezze
-  sono quelle dei caratteri distribuiti con Fub, come li disegna
+  sono quelle dei caratteri con cui il testo si disegna (§9), come li disegna
   l'esportazione; la spaziatura delle lettere conta dopo ogni grafema.
 - **Una riga nuova di un paragrafo** copia gli attributi della prima, tranne
   `id`, e scende dell'interlinea del testo.
@@ -303,3 +305,55 @@ un `Elem` ([operazioni sulla scena](scene-operations.md), §2).
   larghezza del riquadro, `wrap`; per un testo su tracciato la sua riga sola
   e l'id del tracciato, `textPath`. I pezzi e i loro attributi restano nel
   documento, e la superficie li legge da lì.
+
+## 9. I caratteri
+
+Un testo si disegna coi caratteri di Fub, Literata, Inter e JetBrains Mono,
+e con quelli del vault che nomina; mai con un carattere del sistema o del
+web. La scelta è la stessa sulla superficie, nelle sue immagini e
+nell'esportazione, quindi le larghezze e gli a capo coincidono. Come la si
+vede è in [Disegni, caratteri del vault](../product/drawing-fonts.md).
+
+- **`font-family`** si legge come lo legge l'esportazione (`svgtypes`): una
+  lista separata da virgole di nomi fra virgolette, semplici o doppie, o di
+  serie di parole; `serif`, `sans-serif`, `monospace`, `cursive` e `fantasy`
+  senza virgolette sono le famiglie generiche. Un valore che così non si
+  legge, come `Café` o `1Inter` senza virgolette o una virgola seguita da
+  spazi in fondo, vale come assente.
+- **Le famiglie si provano in ordine.** Inter, Literata e JetBrains Mono
+  sono di Fub; `serif` e `cursive` sono Literata, `sans-serif` e `fantasy`
+  Inter, `monospace` JetBrains Mono; ogni altro nome si cerca fra i
+  caratteri del vault. Una famiglia che non c'è passa la mano alla seguente,
+  e in fondo c'è Literata. Due nomi sono la stessa famiglia senza badare a
+  maiuscole e minuscole, ma soltanto nell'ASCII.
+- **I caratteri del vault** sono i file `.ttf`, `.otf`, `.woff` e `.woff2`
+  (`font/ttf`, `font/otf`, `font/woff`, `font/woff2`), anche una raccolta di
+  facce in un WOFF2, fino a 64 MiB ciascuno, nell'ordine dell'anagrafe. Una
+  faccia vale per ogni nome di famiglia che il file dice; una col nome di
+  una famiglia di Fub non conta.
+- **La faccia** si sceglie con le regole dei CSS (CSS Fonts 4, §5.2): prima
+  la larghezza, poi lo stile, poi il peso; un carattere variabile vale per
+  tutto l'intervallo dei suoi assi; a pari merito vince una faccia statica,
+  poi l'ordine dei file e delle facce. La faccia scelta si fissa nel punto
+  chiesto e diventa un carattere statico con una faccia sola: gli stessi
+  byte per la superficie e per l'esportazione. Le famiglie di Fub hanno le
+  istanze statiche ai pesi 400 e 700, e l'istanza del file variabile agli
+  altri.
+- **Niente si inventa:** un grassetto o un corsivo che il carattere non ha
+  non si sintetizza. Una lettera che la faccia non ha si cerca nelle
+  famiglie che seguono nella lista, poi nei caratteri di Fub.
+- **Il tetto:** un disegno porta al più 64 MiB di caratteri fissati, di Fub
+  e del vault, contati nell'ordine del documento; una faccia che non ci sta
+  vale come una famiglia che non c'è.
+- **La scrittura:** FubDraw scrive una famiglia del vault col suo nome e
+  dopo la famiglia generica a cui la faccia somiglia, `Roboto, sans-serif`.
+  Il nome va come parola se `svgtypes` e il browser lo rileggono uguale, se
+  no fra virgolette doppie, se no fra semplici; un nome che in nessun modo
+  si rilegge uguale non si scrive.
+- **Gli a capo** di un testo in area (§4) si misurano con la faccia del
+  vault quando è arrivata: un cambio che li rifà la aspetta. Aprire un
+  disegno non li rifà, anche se il carattere nel frattempo è cambiato.
+- **L'esportazione** nomina nel log le famiglie che non ha trovato, i file
+  che non si leggono, le facce oltre il tetto e i caratteri la cui licenza
+  (`fsType`) non lascia incorporarli: nel PDF il loro testo va a tracciati
+  ([esportazione](scene-format-export.md), §5).

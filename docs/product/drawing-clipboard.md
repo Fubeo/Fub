@@ -22,8 +22,8 @@ sfumatura, un motivo o la forma di un `use` a cui rimanda va in un `defs`,
 anche quando l'oggetto la eredita.
 
 Dove il sistema lo consente, accanto all'SVG va un PNG dello stesso disegno,
-a due pixel per unità, coi caratteri dell'app e con le immagini del vault
-dentro: un programma che non legge l'SVG, come una chat, riceve l'immagine. Il
+a due pixel per unità, coi caratteri dell'app e del vault e con le immagini
+del vault dentro: un programma che non legge l'SVG, come una chat, riceve l'immagine. Il
 PNG arriva poco dopo la copia; se nel frattempo si è copiato altro, o la
 finestra ha perso il fuoco, non sostituisce niente.
 

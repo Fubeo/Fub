@@ -39,8 +39,8 @@ Il ruolo `source` non c'è: il testo del disegno si apre con «Apri come
 sorgente». Il riquadro ricorda la modalità, come per ogni altra famiglia.
 
 In Lettura il file non entra mai nel DOM della shell: è un `<img>` da un blob,
-che non esegue script e non carica risorse; i caratteri dell'app e le
-immagini del vault vi entrano coi loro byte ([immagini](drawing-images.md)). Se il disegno ha un
+che non esegue script e non carica risorse; i caratteri dell'app e del vault
+e le immagini del vault vi entrano coi loro byte ([immagini](drawing-images.md), [caratteri](drawing-fonts.md)). Se il disegno ha un
 titolo, l'immagine si chiama col titolo; altrimenti col nome del file. Sotto
 l'immagine ci sono la descrizione del disegno, che l'immagine annuncia come
 sua, i collegamenti del disegno, uno per pulsante (vedi «Collegamenti»), e

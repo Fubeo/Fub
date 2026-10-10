@@ -51,8 +51,8 @@ l'anteprima va sopra.
   sempre con la carta, e la finestra lo dice.
 
 **L'anteprima** è proprio ciò che l'host scrive, prima di scriverlo: il
-disegno ritagliato sulla tavola o sulla selezione, coi caratteri dell'app e
-le immagini del vault, il più grande possibile nel suo riquadro. Sotto c'è
+disegno ritagliato sulla tavola o sulla selezione, coi suoi caratteri e le
+immagini del vault, il più grande possibile nel suo riquadro. Sotto c'è
 una scacchiera dove il file sarà trasparente, il bianco per il JPEG e il
 PDF; un PDF su una carta col suo formato si vede sulla sua carta, col
 disegno al suo posto, l'abbondanza e i segni. Con più file, o più pagine del PDF, «‹» e «›» li sfogliano uno alla
@@ -165,17 +165,26 @@ con la carta sotto se lo sfondo è la carta.
 
 ### I caratteri
 
-Un disegno esportato usa soltanto i caratteri di Fub, compresi nel programma:
-Literata con le grazie, Inter senza grazie e JetBrains Mono a spaziatura
-fissa, in tondo e in corsivo, normale e grassetto. Le famiglie `serif`, `sans-serif` e
-`monospace` sono i tre caratteri di Fub. Un testo senza carattere, o con uno
-che Fub non ha, usa Literata, come il carattere di serie di un browser. Un
+Un disegno esportato usa i caratteri di Fub, compresi nel programma, e i
+[caratteri del vault](drawing-fonts.md) che i suoi testi nominano: Literata
+con le grazie, Inter senza grazie e JetBrains Mono a spaziatura fissa, in
+tondo e in corsivo, a ogni peso, e i file `.ttf`, `.otf`, `.woff` e `.woff2`
+del vault con la faccia che sceglierebbe un browser. Le famiglie `serif` e
+`cursive` sono Literata, `sans-serif` e `fantasy` Inter, `monospace` JetBrains
+Mono. Un testo senza carattere, o con uno che non c'è, usa il seguente della
+sua lista e in fondo Literata, come il carattere di serie di un browser. Un
 carattere del sistema non entra mai, quindi lo stesso disegno esce uguale su
-ogni computer.
+ogni computer che apre lo stesso vault; un disegno porta al più 64 MiB di
+caratteri.
 
-Un peso diverso prende il più vicino dei due. Una lettera che nessuno dei tre
-caratteri disegna esce come un riquadro vuoto. L'SVG pulito nomina i caratteri
-e non li porta con sé: li disegna il programma che lo apre.
+Un peso esce com'è chiesto: un 600 è un 600. Nessun grassetto o corsivo si
+inventa. Una lettera che nessun carattere del testo disegna si cerca in quelli
+di Fub, e se manca anche lì esce come un riquadro vuoto. Un carattere che non
+si carica lo dice la finestra «Esporta», sotto l'anteprima, e il log. Nel PDF
+un carattere entra coi soli glifi che usa; uno la cui licenza non lascia
+incorporarlo scrive il suo testo a tracciati, che non si seleziona. L'SVG
+pulito nomina i caratteri e non li porta con sé: li disegna il programma che
+lo apre.
 
 ## Il file
 
