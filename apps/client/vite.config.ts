@@ -150,20 +150,25 @@ export default defineConfig({
           // incollare, la cronologia, il controllo dell'accessibilità e la
           // descrizione del disegno, gli attributi e le misure con le unità,
           // le scelte dell'export.
+          // E gli aiuti degli strumenti senza DOM: la cornice di
+          // trasformazione, le forme coi parametri, il contagocce, le guide
+          // intelligenti e la griglia.
           // Dipendono dal formato e dalla geometria, e l'editor li chiama.
-          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan)|describe)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid)|describe)\.ts$/.test(id)) {
             return "drawing-commands";
           }
-          // I pannelli dei disegni: le proprietà coi colori del documento, la
-          // sfumatura, la campitura, gli effetti e il connettore, gli oggetti,
-          // le tavole, la cronologia, l'accessibilità, l'ispettore degli
-          // attributi, la finestra «Esporta», le forme e i simboli, con la
-          // finestra dell'aggiornamento di un simbolo, e la finestra di
-          // «Rendi modificabile». Sono DOM attorno al
-          // foglio, che l'editor e la superficie montano e che leggono i
-          // comandi; non dipendono dall'editor, e cambiano con la loro
-          // interfaccia.
-          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog|editable-dialog)\.ts$/.test(id)) {
+          // I pannelli dei disegni: le proprietà coi loro campi e coi colori
+          // del documento, la sfumatura, la campitura, gli effetti e il
+          // connettore, gli oggetti, le tavole, la cronologia, l'accessibilità,
+          // l'ispettore degli attributi, la finestra «Esporta», le forme e i
+          // simboli, con la finestra dell'aggiornamento di un simbolo, la
+          // finestra di «Rendi modificabile», le finestre «Penna e dita» e
+          // «Guide», il menu radiale, la nota di un'annotazione, i
+          // suggerimenti sotto il foglio e il campo dove si scrive un testo.
+          // Sono DOM attorno al foglio, che l'editor e la superficie montano e
+          // che leggono i comandi; non dipendono dall'editor, e cambiano con
+          // la loro interfaccia.
+          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog|editable-dialog|fields|touch-dialog|guide-dialog|radial|note|suggestions|text-field)\.ts$/.test(id)) {
             return "drawing-panels";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
