@@ -52,6 +52,7 @@ import type {
 } from "../src/host/contract";
 import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
+import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -90,6 +91,23 @@ type ConnectorsBenchMetadata = Readonly<{
     hubs: ConnectorsFixture["hubs"];
     labels: ConnectorsFixture["labels"];
     elements: number;
+    bytes: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco delle scene grandi (`large.mjs`) legge del disegno che
+/// apre: dove sta, quanto è grande, il rettangolo da scegliere.
+type LargeBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    elements: number;
+    objects: number;
+    strokes: number;
+    size: LargeFixture["size"];
+    cells: number;
+    columns: number;
+    target: LargeFixture["target"];
     bytes: number;
     digest: string;
   }> | null;
@@ -204,8 +222,42 @@ globalThis.__fubConnectorsBench = Object.freeze({
     : null,
 });
 
+// `?large=N` mette nel vault la lavagna di N elementi del banco delle scene
+// grandi (`large-fixture.ts`), e accende l'editor come `?boards=N`. Non sta
+// insieme agli altri due disegni.
+const largeParam = params.get("large");
+let LARGE: LargeFixture | null = null;
+if (largeParam !== null) {
+  if (BOARDS !== null || CONNECTORS !== null) throw new RangeError("large is a drawing of its own");
+  if (!/^[1-9]\d*$/.test(largeParam)) throw new RangeError("large must be a positive decimal integer");
+  LARGE = largeFixture(Number(largeParam));
+}
+
+globalThis.__fubLargeBench = Object.freeze({
+  fixture: LARGE
+    ? Object.freeze({
+        doc: LARGE_DOC,
+        elements: LARGE.elements,
+        objects: LARGE.objects,
+        strokes: LARGE.strokes,
+        size: LARGE.size,
+        cells: LARGE.cells,
+        columns: LARGE.columns,
+        target: LARGE.target,
+        bytes: new TextEncoder().encode(LARGE.text).length,
+        digest: LARGE.digest,
+      })
+    : null,
+});
+
 /// Il disegno che il banco apre dall'albero, se ne ha uno.
-const DRAWING = BOARDS !== null ? { doc: BOARDS_DOC, text: BOARDS.text } : CONNECTORS !== null ? { doc: CONNECTORS_DOC, text: CONNECTORS.text } : null;
+const DRAWING = BOARDS !== null
+  ? { doc: BOARDS_DOC, text: BOARDS.text }
+  : CONNECTORS !== null
+    ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
+    : LARGE !== null
+      ? { doc: LARGE_DOC, text: LARGE.text }
+      : null;
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -962,6 +1014,7 @@ declare global {
   var __fubGraphBench: GraphBenchMetadata;
   var __fubBoardsBench: BoardsBenchMetadata;
   var __fubConnectorsBench: ConnectorsBenchMetadata;
+  var __fubLargeBench: LargeBenchMetadata;
   interface Window {
     bench: {
       emit: typeof host.emit;
