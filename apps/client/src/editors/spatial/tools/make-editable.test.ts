@@ -236,6 +236,38 @@ describe("rendere modificabile un disegno", () => {
     expect(out.after).toBe(svg(`  <text x="10" y="20" font-family="'Myriad Pro', sans-serif" font-size="24" font-weight="bold"><tspan x="10" dy="0">Ciao</tspan></text>`));
   });
 
+  it("le righe di Inkscape scritte con la y diventano righe col dy, e una riga vuota prende uno spazio che non va a capo", () => {
+    const INK = 'xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"';
+    const out = plan(svg(`  <text xml:space="preserve" style="font-size:10.5833px;line-height:1.25;font-family:sans-serif;stroke-width:0.264583" x="30" y="40" id="text1"><tspan sodipodi:role="line" id="tspan1" style="stroke-width:0.264583" x="30" y="40">Ciao</tspan><tspan sodipodi:role="line" id="tspan2" x="30" y="53.229168" /><tspan sodipodi:role="line" style="stroke-width:0.264583" x="30" y="66.458336" id="tspan3">mondo</tspan></text>`, `viewBox="0 0 200 100" ${INK}`));
+    expect(out.after).toBe(svg(`  <text xml:space="preserve" x="30" y="40" id="text1" font-family="sans-serif" font-size="10.5833"><tspan sodipodi:role="line" id="tspan1" x="30" dy="0">Ciao</tspan><tspan sodipodi:role="line" id="tspan2" x="30" dy="13.2292"> </tspan><tspan sodipodi:role="line" x="30" id="tspan3" dy="13.2291">mondo</tspan></text>`, `viewBox="0 0 200 100" ${INK}`));
+    expect(Object.fromEntries(out.translations)).toEqual({ style: 3, text: 1 });
+  });
+
+  it("le righe di Illustrator, senza posizione sul testo, si misurano dall'origine", () => {
+    const out = plan(svg(`  <text transform="translate(10 20)" style="font-size:12px"><tspan x="0" y="0">Riga 1</tspan><tspan x="0" y="14.4">Riga 2</tspan><tspan x="0" dy="1.2em">Riga 3</tspan></text>`));
+    expect(out.after).toBe(svg(`  <text font-size="12" transform="translate(10 20)"><tspan x="0" dy="0">Riga 1</tspan><tspan x="0" dy="14.4">Riga 2</tspan><tspan x="0" dy="14.4">Riga 3</tspan></text>`));
+  });
+
+  it("il testo fuori dalle righe diventa una riga coi suoi pezzi, e gli spazi che SVG toglie restano fuori", () => {
+    const out = plan(svg(`  <text x="100" y="20" text-anchor="middle" style="font-size:12px">
+    Ciao <tspan font-weight="bold">mondo</tspan>
+  </text>`));
+    expect(out.after).toBe(svg(`  <text x="100" y="20" font-size="12" text-anchor="middle">
+    <tspan x="100" dy="0">Ciao <tspan font-weight="bold">mondo</tspan></tspan>
+  </text>`));
+    const kept = plan(svg(`  <text x="0" y="20" xml:space="preserve" data-name="Etichetta"> Ciao</text>`));
+    expect(kept.after).toBe(svg(`  <text x="0" y="20" xml:space="preserve"><title>Etichetta</title><tspan x="0" dy="0"> Ciao</tspan></text>`));
+  });
+
+  it("un testo che non si scrive a righe resta com'è", () => {
+    const out = plan(svg(`  <text x="0 10 20" y="20">ABC</text>
+  <text x="0" y="20"><tspan x="0" y="20">A<tspan y="25">b</tspan></tspan></text>
+  <text x="0" y="20" text-decoration="underline"><tspan x="0" y="20">A</tspan><tspan x="0" y="30"/><tspan x="0" y="40">B</tspan></text>
+  <text x="0" y="20"><tspan x="0" y="20">A</tspan><tspan y="20">B</tspan></text>`));
+    expect(out.ops).toEqual([]);
+    expect(out.leftovers.map((each) => [each.path, each.reason])).toEqual([0, 1, 2, 3].map((k) => [[k], { kind: "text" }]));
+  });
+
   it("i livelli bloccati, ciò che altri copiano, le copie e i comportamenti restano come sono", () => {
     const out = plan(svg(`  <g fub:layer="Livello" fub:locked="true"><rect style="fill:red" x="0" y="0" width="10" height="10"/></g>
   <rect id="r" style="fill:red" x="20" y="0" width="10" height="10"/>

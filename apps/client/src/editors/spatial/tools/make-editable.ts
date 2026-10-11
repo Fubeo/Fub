@@ -9,7 +9,9 @@
 //   `currentColor`, le forme con la trasparenza) in `#rrggbb` con l'opacità a
 //   parte; le misure relative (`em`, `rem`, le percentuali della finestra) in
 //   numeri; `data-name` e `aria-label` nel titolo, che è il nome
-//   dell'oggetto. Gli attributi che non disegnano niente e che il formato non
+//   dell'oggetto; le righe di un testo scritte con la `y`, come le scrivono
+//   Inkscape e Illustrator, in righe con il `dy`, e il testo fuori dalle
+//   righe in una riga. Gli attributi che non disegnano niente e che il formato non
 //   ammette, come `data-*` e `class`, se ne vanno.
 // - **Come lo vede un browser, prima e dopo:** lo stile di prima si calcola
 //   con la cascata di CSS e tutti i fogli (`cascade.ts`). Dopo, un elemento
@@ -37,18 +39,19 @@
 //   da cui è partita, con gli spazi attorno com'erano. Un documento non
 //   ancora adottato si adotta nello stesso passo.
 
-import { resourceIndex, resourceKind, svgAttribute, tagOf, type Resolve, type Tag } from "../scene/classify";
+import { lineText, resourceIndex, resourceKind, svgAttribute, tagOf, type Resolve, type Tag } from "../scene/classify";
 import { SceneEngine } from "../scene/engine";
 import { transform as svgTransform, viewBox as readViewBox, length as svgLength, paint as formatPaint, reference } from "../scene/values";
 import { elementChildren, tagName, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op, RestoreOp } from "../scene/ops";
 import { canonicalOrder, escapeAttribute, escapeText, formatTransform, type OutAttr } from "../scene/serialize";
 import { SourceText } from "../scene/text";
-import { isSpace, NS_NONE, NS_SVG, NS_XLINK, parseXml, SVG_NS, type Attr, type ElementNode, type XmlDocument } from "../scene/xml";
+import { isSpace, NS_NONE, NS_SVG, NS_XLINK, parseXml, SVG_NS, XML_URI, type Attr, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
 import { formatNumber } from "../number";
 import { Cascade, inherits, longhands, PRESENTATION, readOpacity, renders, same, type CascadeNode } from "./cascade";
 import { Matcher, readDeclarations, readSheet, readSheets, type Rule, type Sheet, type StyleAttr } from "./selectors";
 import { formatHex } from "./css-color";
+import { BLANK_LINE } from "./text";
 import { ambiguousSpace, difference, lengthOf, paintOf, shapeFacts, type Difference, type ShapeFacts } from "./editable-look";
 
 /// Su che cosa lavora il comando: tutto il disegno, o le unità estranee che
@@ -57,7 +60,7 @@ import { ambiguousSpace, difference, lengthOf, paintOf, shapeFacts, type Differe
 export type EditableScope = { readonly kind: "all" } | { readonly kind: "units"; readonly paths: readonly (readonly number[])[] };
 
 /// Le traduzioni che il comando conta, per dirle.
-export type Translation = "style" | "sheet" | "color" | "unit" | "data";
+export type Translation = "style" | "sheet" | "color" | "unit" | "data" | "text";
 
 /// Perché una parte resta estranea.
 export type Reason =
@@ -1313,9 +1316,14 @@ class Writer {
   readonly converted: El[] = [];
   /// Gli elementi di prima resi modificabili, in ordine di documento.
   readonly elements: El[] = [];
-  readonly translations = new Map<Translation, Set<El>>([["style", new Set()], ["sheet", new Set()], ["color", new Set()], ["unit", new Set()], ["data", new Set()]]);
+  readonly translations = new Map<Translation, Set<El>>([["style", new Set()], ["sheet", new Set()], ["color", new Set()], ["unit", new Set()], ["data", new Set()], ["text", new Set()]]);
   /// Il titolo nuovo di un elemento.
   private readonly titles = new Map<El, string>();
+  /// La riga nuova di un testo che non ne aveva: dove comincia e dove finisce
+  /// ciò che contiene, e il tag d'apertura.
+  private readonly wraps = new Map<El, { readonly from: number; readonly to: number; readonly open: string; readonly close: string }>();
+  /// Le righe vuote, che ricevono uno spazio che non va a capo.
+  private readonly blanks = new Set<El>();
   private readonly B: Cascade;
 
   constructor(
@@ -1370,6 +1378,10 @@ class Writer {
     for (const attr of node.attrs) {
       if (attr.uri === "" && (CONDITIONAL.has(attr.local) || /^on[a-z]/i.test(attr.local))) return { kind: "attribute", name: attr.local };
     }
+    if (node.is("text")) {
+      const reason = this.lines(node);
+      if (reason !== null) return reason;
+    }
     if (declares(node.attr("style"))) this.count("style", node);
     if (node.attr("class") !== null) this.count("sheet", node);
     // Ciò che non disegna niente, o che il formato non sa scrivere così, se
@@ -1421,6 +1433,105 @@ class Writer {
     // Un gruppo tiene ciò che portava ai figli.
     if (CONTAINERS.has(node.local)) this.inherited(node);
     else this.intent(node);
+    return null;
+  }
+
+  /// Le righe di un testo come le scrive il formato: ogni `tspan` figlio
+  /// con la sua `x` e il suo `dy`, quanto scende dalla riga prima, al posto
+  /// della `y` che scrivono Inkscape e Illustrator; il testo fuori dalle
+  /// righe in una riga sola. Una riga vuota SVG non la sposta, e chi la segue
+  /// si misura dall'ultima che si vede: riceve uno spazio che non va a capo,
+  /// come le righe vuote di FubDraw, e il `dy` che la mette dove l'autore
+  /// l'aveva messa. Un testo che non si sa leggere così resta com'è, e lo
+  /// dice la classificazione.
+  private lines(node: El): Reason | null {
+    const doc = this.planner.doc;
+    const element = node.element!;
+    const svg = (id: NodeId, ...locals: string[]): boolean => {
+      const inner = doc.element(id);
+      return inner !== null && inner.ns === NS_SVG && locals.includes(inner.local);
+    };
+    const kids = element.children;
+    const content = kids.filter((id) => {
+      const inner = doc.nodes[id]!;
+      return !(inner.kind === "text" && inner.blank) && !svg(id, "title", "desc");
+    });
+    if (content.length === 0 || content.some((id) => svg(id, "textPath"))) return null;
+    const byElement = new Map(node.children.map((child) => [child.element!, child]));
+    const at = (target: El, name: string): number | null | undefined => {
+      const value = target.attr(name);
+      return value === null ? undefined : this.relativeLength(target, name, value);
+    };
+    const tx = at(node, "x");
+    const ty = at(node, "y");
+    // Una posizione per ogni carattere non fa righe.
+    if (["x", "y", "dx", "dy", "rotate"].some((name) => /\S[\s,]+\S/.test(node.attr(name) ?? ""))) return { kind: "text" };
+    if (tx === null || ty === null) return null;
+    const x = this.xOf.get(node)!;
+    const positioned = (id: NodeId): boolean => svg(id, "tspan") && ["x", "y", "dx", "dy"].some((name) => byElement.get(doc.element(id)!)!.attr(name) !== null);
+    if (!content.some(positioned)) {
+      // Il testo senza righe diventa una riga sola, coi suoi pezzi.
+      const first = kids.indexOf(content[0]!);
+      const last = kids.indexOf(content[content.length - 1]!);
+      if (kids.slice(first, last + 1).some((id) => svg(id, "title", "desc"))) return { kind: "text" };
+      if (content.some((id) => doc.nodes[id]!.kind !== "text" && doc.nodes[id]!.kind !== "element")) return null;
+      const prefix = element.name.slice(0, element.name.length - element.local.length);
+      const line = new El(SVG_NS, "tspan", `${prefix}tspan`, [{ uri: "", local: "x", value: num(tx ?? 0) }, { uri: "", local: "dy", value: "0" }], true, null, null, this.planner.serial());
+      line.parent = x;
+      line.unit = x.unit;
+      line.foreign = x.foreign;
+      const inside = new Set(kids.slice(first, last + 1).map((id) => doc.element(id)).filter((inner) => inner !== null));
+      const before = kids.slice(0, first).filter((id) => doc.element(id) !== null).length;
+      line.children = x.children.filter((child) => child.origin !== null && inside.has(child.origin.element!));
+      for (const child of line.children) child.parent = line;
+      x.children = x.children.filter((child) => !line.children.includes(child));
+      x.children.splice(before, 0, line);
+      // Gli spazi in testa e in coda, che SVG toglie, restano fuori dalla
+      // riga; con `xml:space="preserve"` si vedono, e restano dentro.
+      let from = doc.nodes[content[0]!]!.start;
+      let to = doc.nodes[content[content.length - 1]!]!.end;
+      if (!preserved(node) && ["normal", "initial"].includes(this.B.value(node, "white-space").key)) {
+        const source = this.planner.text;
+        if (doc.nodes[content[0]!]!.kind === "text") while (isSpace(source.charCodeAt(from))) from++;
+        if (doc.nodes[content[content.length - 1]!]!.kind === "text") while (isSpace(source.charCodeAt(to - 1))) to--;
+      }
+      this.wraps.set(node, { from, to, open: `<${line.name} x="${num(tx ?? 0)}" dy="0">`, close: `</${line.name}>` });
+      this.count("text", node);
+      return null;
+    }
+    if (!content.every((id) => svg(id, "tspan"))) return { kind: "text" };
+    // Dove il browser mette la riga che si vede, e dove la metterà dopo.
+    let shown = ty ?? 0;
+    let written = ty ?? 0;
+    let changed = false;
+    const decorated = this.B.value(node, "text-decoration").key !== "none";
+    for (const [k, id] of content.entries()) {
+      const line = byElement.get(doc.element(id)!)!;
+      const lx = at(line, "x");
+      const ly = at(line, "y");
+      const ldy = at(line, "dy");
+      const ldx = at(line, "dx");
+      if (lx === null || ly === null || ldy === null || ldx === null || (ldx !== undefined && ldx !== 0)) return { kind: "text" };
+      const characters = lineText(doc, id);
+      const empty = characters === "";
+      if (!empty && characters.trim() === "") return { kind: "text" };
+      if (lx === undefined && k > 0 && !empty) return { kind: "text" };
+      const y = (ly ?? shown) + (ldy ?? 0);
+      if (!empty) shown = y;
+      else if (decorated || this.B.value(line, "text-decoration").key !== "none") return { kind: "text" };
+      const dy = num(y - written);
+      written += Number(dy);
+      if (ly !== undefined || ldy === undefined || ldy !== Number(dy)) {
+        this.write(line, "y", null);
+        this.write(line, "dy", dy);
+        changed = true;
+      }
+      if (ldx !== undefined) this.write(line, "dx", null);
+      if (lx === undefined) this.write(line, "x", num(tx ?? 0));
+      if (empty) this.blanks.add(line);
+      changed ||= ldx !== undefined || lx === undefined || empty;
+    }
+    if (changed) this.count("text", node);
     return null;
   }
 
@@ -1712,9 +1823,27 @@ class Writer {
           out.push([element.openEnd, element.openEnd, `${lead.includes("\n") ? lead : ""}${titled}`]);
         }
       }
+      const wrap = this.wraps.get(node);
+      if (wrap !== undefined) out.push([wrap.from, wrap.from, wrap.open], [wrap.to, wrap.to, wrap.close]);
+      if (this.blanks.has(node)) {
+        if (element.closeStart === null) {
+          let slash = element.openEnd - 2;
+          while (slash > last && isSpace(text.charCodeAt(slash - 1))) slash--;
+          out.push([slash, element.openEnd, `>${BLANK_LINE}</${element.name}>`]);
+        } else out.push([element.openEnd, element.openEnd, BLANK_LINE]);
+      }
     }
     return out;
   }
+}
+
+/// Vero se per `node` vale `xml:space="preserve"`, suo o di un antenato.
+function preserved(node: El): boolean {
+  for (let at: El | null = node; at !== null; at = at.parent) {
+    const space = at.attrs.find((attr) => attr.uri === XML_URI && attr.local === "space")?.value;
+    if (space !== undefined) return space === "preserve";
+  }
+  return false;
 }
 
 /// Vero se `node` sta in un `clipPath`, dove conta `clip-rule`.
