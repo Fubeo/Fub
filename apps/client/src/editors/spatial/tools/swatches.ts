@@ -35,12 +35,12 @@
 //   rilegge soltanto quando cambia.
 
 import { Context, WHITE, type Role } from "../scene/analysis";
-import { elementChildren, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
+import { elementChildren, readHead, writtenOf, type ContainerNode, type DocumentModel, type ElementPart, type LeafNode } from "../scene/model";
 import type { Elem } from "../scene/serialize";
 import { paint, paintReference, type Paint, type Rgb } from "../scene/values";
 import { NS_SVG, SVG_NS } from "../scene/xml";
 import { t } from "../strings";
-import { elemOf, plainAttributes, Plan, readHead, type Arranged } from "./arrange";
+import { elemOf, plainAttributes, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";
 import type { SceneIndex, Unit } from "./hit";
 import { hatchOf } from "./hatches";

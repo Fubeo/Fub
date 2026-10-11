@@ -56,6 +56,7 @@ import { svgAttribute, textPathTarget } from "../scene/classify";
 import {
   parseFragment,
   rawOf,
+  readHead,
   type ContainerNode,
   type DocumentModel,
   type ElementPart,
@@ -521,7 +522,7 @@ function shapeOf(leaf: LeafNode, scope: NamespaceScope): PaintShape | null {
   const details = leaf.details!;
   const tag = details.tag;
   if (!SHAPE_TAGS.has(tag)) return null;
-  const read = readElement(leaf.raw, scope);
+  const read = readHead(leaf, scope);
   // L'elemento è stato letto e classificato in questo scope: rileggerlo da
   // solo non può fallire, a meno di un errore del motore.
   if (read === null) throw new Error(`elemento modificabile illeggibile: ${leaf.facts.name}`);
@@ -611,7 +612,7 @@ function defOf(doc: XmlDocument, element: ElementNode): PaintDef {
 
 /// La risorsa viva di un elemento modificabile di ruolo `resource`.
 function resourceOf(leaf: LeafNode, scope: NamespaceScope): PaintResource {
-  const read = readElement(leaf.raw, scope);
+  const read = readHead(leaf, scope);
   // Come per le forme: l'elemento è stato letto e classificato in questo
   // scope.
   if (read === null || leaf.details!.id === null) throw new Error(`risorsa modificabile illeggibile: ${leaf.facts.name}`);
@@ -693,8 +694,7 @@ export interface HeadInfo {
 }
 
 function headInfoOf(container: ContainerNode, scope: NamespaceScope): HeadInfo {
-  const raw = container.tail === null ? container.head : container.head + container.tail;
-  const read = readElement(raw, scope);
+  const read = readHead(container, scope);
   if (read === null) throw new Error(`contenitore illeggibile: ${container.facts.name}`);
   const { attrs, space } = paintedAttributes(read.element);
   return {

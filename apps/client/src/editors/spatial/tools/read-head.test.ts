@@ -5,9 +5,9 @@
 
 import { describe, expect, it } from "vitest";
 import { SceneEngine, type Applied, type Outcome } from "../scene/engine";
-import { HEADS, type ElementPart } from "../scene/model";
+import { HEADS, readHead, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
-import { elemOf, fubAttributes, plainAttributes, readHead } from "./arrange";
+import { elemOf, fubAttributes, plainAttributes } from "./arrange";
 
 const NS = 'xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1"';
 const idOf = (i: number): string => `o${i.toString(36).padStart(8, "0")}`;
