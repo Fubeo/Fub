@@ -229,17 +229,40 @@ function rootDefs(model: DocumentModel): ContainerNode[] {
   return elementChildren(model.root).filter((child): child is ContainerNode => child.kind === "container" && child.details?.role === "defs");
 }
 
+/// I colori che un oggetto mostra, uno per colore, coi colori ereditati con
+/// cui si sono letti: finché lui e loro restano, si contano senza rileggerlo.
+const shownBy = new WeakMap<LeafNode, { readonly fill: string | undefined; readonly stroke: string | undefined; readonly values: readonly string[] }>();
+
+/// I valori di `uses` da `start` in poi, uno per valore, nell'ordine.
+function valuesFrom(uses: readonly Use[], start: number): string[] {
+  const out: string[] = [];
+  for (let k = start; k < uses.length; k++) {
+    const value = uses[k]!.value;
+    if (!out.includes(value)) out.push(value);
+  }
+  return out;
+}
+
 /// Ciò che il disegno scrive e mostra, in ordine di documento.
 class Walk {
   readonly sites: Site[] = [];
   readonly uses: Use[] = [];
   readonly swatches: Array<Omit<DocumentSwatch, "uses">> = [];
+  /// Con `counting`, i colori che mostra ogni elemento, uno per colore e in
+  /// ordine di documento, al posto di `sites` e `uses` degli oggetti: ciò che
+  /// serve a contarli. `null` altrimenti.
+  readonly shown: Array<readonly string[]> | null;
   private elements = 0;
 
-  constructor(readonly model: DocumentModel) {
+  constructor(
+    readonly model: DocumentModel,
+    counting = false,
+  ) {
+    this.shown = counting ? [] : null;
     const root = model.root;
     // La radice non si cambia: ciò che scrive resta.
-    this.children(root, this.written(root, null, (name) => attrsOf(root).get(name), false, true, UNWRITTEN), false);
+    const attrs = attrsOf(root);
+    this.children(root, this.written(root, null, (name) => attrs.get(name), false, true, UNWRITTEN), false);
   }
 
   /// I figli di `container`, che ereditano `from`; `locked` se lui o chi lo
@@ -253,11 +276,36 @@ class Walk {
         continue;
       }
       if (NOT_DRAWN.has(details.role)) continue;
+      if (this.shown !== null && child.kind === "leaf") {
+        this.count(child, details.role, from);
+        continue;
+      }
       const fixed = locked || details.locked === true;
-      const paints = this.written(child, null, (name) => attrsOf(child).get(name), !fixed, true, from);
+      const attrs = attrsOf(child);
+      const paints = this.written(child, null, (name) => attrs.get(name), !fixed, true, from);
       if (child.kind === "container") this.children(child, paints, fixed);
       else this.object(child, details.role, paints, !fixed);
     }
+  }
+
+  /// Conta i colori che l'oggetto `node` mostra, ereditando `from`.
+  private count(node: LeafNode, role: Role, from: Paints): void {
+    const fill = from.fill?.value;
+    const stroke = from.stroke?.value;
+    let known = shownBy.get(node);
+    if (known !== undefined && known.fill === fill && known.stroke === stroke) {
+      this.elements++;
+    } else {
+      const sites = this.sites.length;
+      const uses = this.uses.length;
+      const attrs = attrsOf(node);
+      this.object(node, role, this.written(node, null, (name) => attrs.get(name), true, true, from), true);
+      known = { fill, stroke, values: valuesFrom(this.uses, uses) };
+      shownBy.set(node, known);
+      this.sites.length = sites;
+      this.uses.length = uses;
+    }
+    this.shown!.push(known.values);
   }
 
   private object(node: LeafNode, role: Role, paints: Paints, free: boolean): void {
@@ -301,9 +349,11 @@ class Walk {
       }
       if (!paints) return;
       const element = this.elements++;
+      const start = this.uses.length;
       if (child.tag === "text") this.text(element, node, part, cachedRich(child), inner, free, false);
       if (CONTENT_FILLED.has(child.tag)) this.show(element, node, part, "fill", inner, free, false);
       if (CONTENT_OUTLINED.has(child.tag)) this.show(element, node, part, "stroke", inner, free, false);
+      this.shown?.push(valuesFrom(this.uses, start));
     });
   }
 
@@ -349,17 +399,16 @@ class Walk {
 
 /// I colori di `model`: i campioni, e i colori che il disegno usa scritti.
 export function documentColors(model: DocumentModel): DocumentColors {
-  const walk = new Walk(model);
-  const shown = new Map<string, Set<number>>();
-  for (const use of walk.uses) {
-    let elements = shown.get(use.value);
-    if (elements === undefined) shown.set(use.value, (elements = new Set()));
-    elements.add(use.element);
+  const walk = new Walk(model, true);
+  // Quanti elementi mostrano ogni colore.
+  const shown = new Map<string, number>();
+  for (const values of walk.shown!) {
+    for (const value of values) shown.set(value, (shown.get(value) ?? 0) + 1);
   }
-  const swatches = walk.swatches.map((swatch) => ({ ...swatch, uses: shown.get(`url(#${swatch.id})`)?.size ?? 0 }));
+  const swatches = walk.swatches.map((swatch) => ({ ...swatch, uses: shown.get(`url(#${swatch.id})`) ?? 0 }));
   // Nell'ordine del documento, poi dal più usato: `sort` tiene l'ordine a
   // parità.
-  const used = [...shown].filter(([value]) => value.startsWith("#")).map(([color, elements]) => ({ color, uses: elements.size }));
+  const used = [...shown].filter(([value]) => value.startsWith("#")).map(([color, uses]) => ({ color, uses }));
   used.sort((a, b) => b.uses - a.uses);
   return { swatches, used: used.slice(0, USED_MAX), hidden: Math.max(0, used.length - USED_MAX) };
 }

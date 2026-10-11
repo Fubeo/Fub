@@ -115,6 +115,25 @@ describe("i colori del documento", () => {
     expect(colors.hidden).toBe(2);
   });
 
+  it("dopo ogni operazione contano come in un disegno appena aperto, anche ciò che si eredita", () => {
+    const opened = open(SOURCE);
+    const seen = [documentColors(opened.engine.model!)];
+    const steps: Array<Parameters<typeof gesture>[0]> = [
+      [{ op: "set", id: "og", attrs: { fill: "#0072b2" } }],
+      [{ op: "set", id: "og", attrs: { fill: null, stroke: "#d55e00" } }],
+      [{ op: "set", id: "l1", attrs: { fill: "#009e73" } }],
+      [{ op: "set", id: "oa", attrs: { fill: null } }],
+    ];
+    for (const ops of steps) {
+      applied(opened, ops);
+      const colors = documentColors(opened.engine.model!);
+      expect(colors).toEqual(documentColors(open(opened.engine.text).engine.model!));
+      seen.push(colors);
+    }
+    // Ogni passo cambia ciò che si conta.
+    for (let k = 1; k < seen.length; k++) expect(seen[k]).not.toEqual(seen[k - 1]);
+  });
+
   it("si rileggono dopo un'operazione su un gruppo, che cambia sul posto", () => {
     const opened = open(SOURCE);
     applied(opened, [{ op: "set", id: "og", attrs: { fill: "#0072b2" } }]);
