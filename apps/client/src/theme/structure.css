@@ -1091,15 +1091,16 @@ html, body, #app {
   cursor: auto;
 }
 /* Una scena grande segue la camera con una trasformazione della radice, che
-   il compositor applica senza ridisporre né ridipingere: ciò che il movimento
-   scopre è già disegnato, e lo taglia la superficie. Ferma, la trasformazione
-   resta, nulla: in Chromium passare da nessuna trasformazione a una fa
-   ridisporre tutti i testi SVG. */
+   il compositor applica senza ridisporre né ridipingere. La radice dipinge un
+   margine attorno alla vista, che il painter misura (`overflow-clip-margin`),
+   e taglia il resto: lo strato del compositor resta della misura della vista,
+   anche quando il disegno è cento volte più largo. Ferma, la radice non ha
+   uno strato suo, e la trasformazione resta, nulla: in Chromium passare da
+   nessuna trasformazione a una fa ridisporre tutti i testi SVG. */
 .spatial-painter[data-large] {
-  overflow: visible;
+  overflow: clip;
   transform: translate(0, 0);
   transform-origin: 0 0;
-  will-change: transform;
 }
 .spatial-overlay {
   width: 100%;
