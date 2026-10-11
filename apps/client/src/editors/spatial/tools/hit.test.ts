@@ -12,7 +12,7 @@ import { strokeElem } from "./edit";
 import { PaintBuilder } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
 import { elementChildren, type ContainerNode, type LeafNode } from "../scene/model";
-import { elemBounds, geometryBox, linesBounds, SceneIndexer } from "./hit";
+import { elemBounds, geometryBox, linesBounds, SceneIndexer, type SceneIndex, type Unit } from "./hit";
 import { LAYER, open } from "./test-support";
 
 const SHAPES = doc(
@@ -1307,5 +1307,79 @@ describe("quando niente è ritagliato", () => {
     }
     expect(named.index.within({ min: [0, 0], max: [100, 100] }).map((unit) => unit.key)).toEqual(plain.index.within({ min: [0, 0], max: [100, 100] }).map((unit) => unit.key));
     expect(named.index.inside([[-5, -5], [200, -5], [200, 200], [-5, 200]]).map((unit) => unit.key)).toEqual(plain.index.inside([[-5, -5], [200, -5], [200, 200], [-5, 200]]).map((unit) => unit.key));
+  });
+});
+
+describe("l'indice dopo una modifica", () => {
+  const SCENE = doc(
+    '<defs id="fub-defs"><marker id="m" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 L10 5 L0 10 Z"/></marker>'
+      + '<clipPath id="k" fub:role="private"><rect x="0" y="0" width="0.5" height="1"/></clipPath>'
+      + '<mask id="q" fub:role="private" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200"><rect x="0" y="0" width="200" height="200" fill="#ffffff"/></mask>'
+      + '<path id="t1" fub:role="private" d="M 0 100 L 200 100"/>'
+      + '<symbol id="s" overflow="visible"><rect id="sr" x="0" y="0" width="10" height="10"/></symbol></defs>'
+      + `${LAYER}<rect id="r" x="10" y="10" width="20" height="20" stroke="#000000"/>`
+      + '<line x1="0" y1="90" x2="40" y2="90" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>'
+      + '<rect id="k1" x="0" y="0" width="30" height="30" clip-path="url(#k)"/>'
+      + '<rect id="q1" x="20" y="20" width="60" height="60" mask="url(#q)"/>'
+      + '<text id="tx" x="0" y="50"><tspan x="0" dy="0">Titolo</tspan></text>'
+      + '<text id="tp" font-size="10"><textPath href="#t1">abc</textPath></text>'
+      + '<use id="i" href="#s" transform="translate(100 0)"/>'
+      + '<g id="g" stroke="#000000" stroke-width="4" font-size="20"><rect id="gr" x="0" y="0" width="10" height="10"/><text id="gt" x="0" y="0"><tspan x="0" dy="0">Dentro</tspan></text></g>'
+      + '<g id="g2" clip-path="url(#k)"><rect id="g2r" x="40" y="40" width="30" height="30"/></g>'
+      + "</g>",
+  );
+
+  const project = (unit: Unit) => ({
+    key: unit.key,
+    path: unit.path,
+    layer: unit.layer,
+    parent: unit.parent,
+    transform: unit.transform,
+    bounds: unit.bounds,
+    geometry: unit.geometry,
+    frame: unit.frame(),
+    inner: unit.inner,
+    look: unit.look,
+  });
+  const read = (index: SceneIndex) => ({
+    units: index.units.map(project),
+    children: index.units.map((unit) => index.children(unit).map(project)),
+    hits: Array.from({ length: 121 }, (_, k) => index.at([(k % 11) * 12, Math.floor(k / 11) * 12], 2)?.key ?? null),
+  });
+
+  it("dà gli stessi oggetti di un indice nuovo, anche quando cambia solo ciò a cui rimandano", () => {
+    const opened = open(SCENE);
+    const first = opened.reindex();
+    expect(first.units.map((unit) => unit.key)).toEqual(["r", "@1.1", "k1", "q1", "tx", "tp", "i", "g", "g2"]);
+    const edits = [
+      { op: "set", id: "m", attrs: { markerWidth: "8" } },
+      { op: "set", id: "k", attrs: { clipPathUnits: "objectBoundingBox" } },
+      { op: "set", id: "q", attrs: { width: "40", height: "40" } },
+      { op: "set", id: "t1", attrs: { d: "M 100 0 L 100 200" } },
+      { op: "set", id: "sr", attrs: { width: "30" } },
+      { op: "set", id: "g", attrs: { "stroke-width": "8", "font-size": "30" } },
+      { op: "set", id: "l1", attrs: { transform: "translate(5 5)", "font-size": "12" } },
+      { op: "add", parent: "l1", pos: { first: true }, elem: { tag: "rect", attrs: { id: "o7k2m9x4q", x: "60", y: "60", width: "5", height: "5" } } },
+    ] as const;
+    for (const edit of edits) {
+      const result = opened.engine.apply(edit);
+      expect(result.outcome, JSON.stringify([edit, result])).toBe("applied");
+      expect(read(opened.reindex())).toEqual(read(open(opened.engine.text).index));
+    }
+    expect(opened.reindex().get("r")).not.toBe(first.get("r"));
+  });
+
+  it("ritrova gli oggetti che non cambiano, e misura di nuovo quello cambiato", () => {
+    const opened = open(SCENE);
+    const before = opened.reindex();
+    expect(opened.engine.apply({ op: "set", id: "tx", attrs: { y: "60" } }).outcome).toBe("applied");
+    const after = opened.reindex();
+    expect(after.get("r")).toBe(before.get("r"));
+    expect(after.get("gr")).toBe(before.get("gr"));
+    // La punta della linea può cambiare senza di lei: si misura sempre.
+    expect(after.get("@1.1")).not.toBe(before.get("@1.1"));
+    expect(project(after.get("@1.1")!)).toEqual(project(before.get("@1.1")!));
+    expect(after.get("tx")).not.toBe(before.get("tx"));
+    expect(after.get("tx")?.bounds?.min[1]).toBe((before.get("tx")?.bounds?.min[1] ?? 0) + 10);
   });
 });
