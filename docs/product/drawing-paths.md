@@ -172,8 +172,9 @@ livello, o aprire un documento che non si modifica, la chiude.
 I comandi stanno in `apps/client/src/editors/spatial/tools/paths.ts`; la
 geometria del contorno e dello scostamento in `offset.ts`, la
 semplificazione in `simplify.ts` e `fit.ts`, la spina dell'inchiostro in
-`spine.ts`; la barra e l'anteprima in `editor.ts`. La misura dello scarto
-su un corpus di tracciati, nei due versi, è in `simplify.test.ts`.
+`spine.ts`; la barra e l'anteprima in `editor/selection-commands.ts`. La
+misura dello scarto su un corpus di tracciati, nei due versi, è in
+`simplify.test.ts`.
 
 Non c'è niente da montare: il menu viene col livello Esperto, e nel
 Personalizzato è la parte «Tracciato: oggetti, contorni e inchiostro in

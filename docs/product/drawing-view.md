@@ -168,9 +168,9 @@ disegno, non dello schermo ([Formato della scena](../reference/scene-format.md))
 La vista girata sta in `apps/client/src/editors/spatial/view.ts`, coi conti
 fra lo schermo e il disegno a ogni angolo; il menu radiale in
 `tools/radial.ts`, la curva della pressione in `pen/pressure.ts`, la finestra
-«Penna e dita» in `tools/touch-dialog.ts`, i gesti in `editor.ts`. Le due
-caselle e la curva sono `twist`, `taps` e `pen` nella griglia che l'editor
-riceve e restituisce con `onGridChange`.
+«Penna e dita» in `tools/touch-dialog.ts`, i gesti in `tools/editor/input.ts`.
+Le due caselle e la curva sono `twist`, `taps` e `pen` nella griglia che
+l'editor riceve e restituisce con `onGridChange`.
 
 Non c'è niente da montare: la vista ruotata, i gesti e il menu radiale
 vengono col livello Standard, e nel Personalizzato sono la parte «Vista
