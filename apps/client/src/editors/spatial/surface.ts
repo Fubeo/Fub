@@ -43,6 +43,8 @@
 // - un SVG estraneo è l'immagine inerte del documento intero, con «Modifica»,
 //   che applica `adopt` nell'editor: l'editor c'è già, nascosto, così
 //   l'adozione è un passo di annulla, e annullarla riporta all'immagine;
+//   all'Esperto anche con «Rendi modificabile…», che nello stesso passo
+//   riscrive le sue parti nel formato dove si vedono uguali;
 // - un documento in sola lettura (un DOCTYPE, una versione futura, un file
 //   troppo grande) è l'immagine inerte del documento intero, col motivo;
 // - un file che non si legge come scena è il motivo e basta: il testo lo
@@ -236,7 +238,12 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   const adoptButton = document.createElement("button");
   adoptButton.type = "button";
   adoptButton.className = "primary vector-notice-action";
-  notice.append(noticeText, adoptButton);
+  // All'Esperto, accanto a «Modifica»: adotta e riscrive le parti nello
+  // stesso passo, dopo la finestra che mostra il prima e il dopo.
+  const editableButton = document.createElement("button");
+  editableButton.type = "button";
+  editableButton.className = "vector-notice-action";
+  notice.append(noticeText, adoptButton, editableButton);
   const drawHost = document.createElement("div");
   drawHost.className = "vector-draw";
   const readHost = document.createElement("div");
@@ -689,13 +696,15 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     const foreign = state?.kind === "scene" && state.engine.status === "foreign";
     let message: string | null = null;
     let canAdopt = false;
+    let canMake = false;
     if (state?.kind === "unreadable") {
       message = unreadableText(state.error);
     } else if (mode === "draw" && state?.kind === "inert") {
       message = t("vector.read_only", { reason: readOnlyText(state.engine.readOnly[0]!), command: t("commands.doc.source.open") });
     } else if (mode === "draw" && foreign) {
-      message = t("vector.foreign");
       canAdopt = !readOnly;
+      canMake = canAdopt && featuresFor(level, custom).has("editable");
+      message = canMake ? `${t("vector.foreign")} ${t("vector.foreign.editable.hint")}` : t("vector.foreign");
     }
     // Chi annulla l'adozione dal foglio non resta col fuoco su un nodo
     // nascosto: passa a «Modifica».
@@ -704,6 +713,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     notice.hidden = message === null;
     adoptButton.textContent = t("vector.foreign.edit");
     adoptButton.hidden = !canAdopt;
+    editableButton.textContent = t("vector.foreign.editable");
+    editableButton.hidden = !canMake;
     drawHost.hidden = !(mode === "draw" && state?.kind === "scene" && !foreign);
     const image = state !== null && state.kind !== "unreadable" && (mode === "read" || state.kind === "inert" || foreign);
     readHost.hidden = !image;
@@ -714,6 +725,11 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   life.listen(adoptButton, "click", () => {
     if (editor?.adopt()) editor.focus();
   });
+  life.listen(editableButton, "click", () => {
+    void editor?.makeDrawingEditable().then((done) => {
+      if (done && !life.closed) editor?.focus();
+    });
+  });
   life.add(onLanguage(paint));
 
   // --- Il livello e la griglia ----------------------------------------------
@@ -722,6 +738,8 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     level = next;
     custom = parts;
     editor?.setLevel(next, parts);
+    // «Rendi modificabile…» sull'avviso c'è all'Esperto.
+    paint();
   }));
   void readGrid().then((next) => {
     if (life.closed || gridChosen) return;

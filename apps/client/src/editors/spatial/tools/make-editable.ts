@@ -1096,7 +1096,8 @@ class Planner {
     }
     const invisible = this.invisibleUnits.filter((unit) => ![...outcome!.dropped].some((gone) => within(unit, gone))).length
       + symbols.filter((cluster) => this.isExcluded(cluster.target)).length;
-    if (outcome.ops.length === 0) return { ...EMPTY, leftovers: this.leftovers(outcome), invisible };
+    // L'adozione da sola non rende niente modificabile.
+    if (outcome.ops.every((op) => op.op === "adopt")) return { ...EMPTY, leftovers: this.leftovers(outcome), invisible };
     const translations = new Map<Translation, number>();
     for (const [kind, set] of outcome.translations) if (set.size > 0) translations.set(kind, set.size);
     return {

@@ -125,6 +125,8 @@ import { DrawingFonts, vaultFontsOf, type FontNotes, type VaultFamily, type Vaul
 import { stem, SymbolLibraries, type LibraryState, type SymbolLibraryPort } from "./symbol-libraries";
 import { LIBRARY_MAX_BYTES, libraryCopy, originSymbol, readOrigin, sheetPrint, symbolPicture, symbolSheet, updateChanges, updateOps, type Library, type LibrarySymbol, type Origin, type SymbolCopy, type SymbolSheet } from "./symbol-library";
 import { symbolUpdateDialog } from "./symbol-update-dialog";
+import { editableDialog, fadedMarkup } from "./editable-dialog";
+import type { EditablePlan, EditableScope } from "./make-editable";
 import { clampSlices, DEFAULT_SYMMETRY, isSymmetryKind, mappedSamples, symmetryMatrices, symmetryRays, type PenSymmetry } from "./symmetry";
 import { resolveAgainst } from "../../../rules/mirrored";
 import { brushForInput, PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
@@ -773,6 +775,10 @@ export interface DrawEditor {
   /// di annulla. `false` se il documento non è estraneo o la scrittura è
   /// tolta.
   adopt(): boolean;
+  /// «Rendi modificabile…» su tutto il disegno, anche su un SVG estraneo,
+  /// che si adotta nello stesso passo: la finestra, poi un passo di
+  /// annulla. Vero se il disegno è cambiato.
+  makeDrawingEditable(): Promise<boolean>;
   /// Un altro livello, dal vivo, e le parti del Personalizzato (default
   /// quelle di prima): la barra e i tasti cambiano, il documento e la
   /// cronologia restano. Uno strumento che il livello non ha più torna alla
@@ -836,6 +842,15 @@ const DRAG_PX: Readonly<Record<InkPointerType, number>> = { pen: 3, mouse: 3, to
 /// Quanti byte delle immagini del vault entrano nell'anteprima di un simbolo
 /// del pannello: oltre, un'immagine si vede come il segnaposto.
 const SYMBOL_IMAGE_BYTES = 16 * 1024 * 1024;
+
+/// Quanti byte delle immagini del vault entrano in ciascuna anteprima della
+/// finestra di «Rendi modificabile»: oltre, un'immagine si vede come il
+/// segnaposto.
+const EDITABLE_IMAGE_BYTES = 16 * 1024 * 1024;
+
+/// I tag SVG di altri programmi che da soli non si vedono: «Rendi
+/// modificabile» non li conta fra le parti da rendere modificabili.
+const UNSEEN_FOREIGN: ReadonlySet<string> = new Set(["metadata", "title", "desc"]);
 
 /// Quanto resta fermo il puntatore alla fine di un tratto a penna perché il
 /// tratto diventi una forma, in millisecondi.
@@ -1394,7 +1409,36 @@ function comparePaths(a: readonly number[], b: readonly number[]): number {
   return a.length - b.length;
 }
 
-/// Vero se il percorso `outer` contiene `inner`, a qualunque profondità.
+/// Vero se `node` è, o contiene, una parte di un altro programma che si
+/// vede, o un foglio di stile: ciò che «Rendi modificabile» può riscrivere.
+function holdsForeign(node: ElementPart): boolean {
+  if (node.kind === "leaf") return node.details === null && node.facts.uri === SVG_NS && !UNSEEN_FOREIGN.has(node.facts.local);
+  return node.parts.some((part) => typeof part !== "string" && part.kind !== "other" && holdsForeign(part));
+}
+
+/// Gli id che i `use` di altri programmi in `model` mostrano, come i cloni
+/// di Inkscape: ciò che li porta diventa modificabile con loro.
+function clonedIds(model: DocumentModel): Set<string> {
+  const out = new Set<string>();
+  const visit = (container: ContainerNode): void => {
+    for (const part of container.parts) {
+      if (typeof part === "string" || part.kind === "other") continue;
+      if (part.kind === "container") visit(part);
+      else if (part.details === null && part.facts.uri === SVG_NS && part.facts.local === "use") for (const id of part.facts.refs) out.add(id);
+    }
+  };
+  visit(model.root);
+  return out;
+}
+
+/// Gli id di `node` e di ciò che contiene.
+function idsWithin(node: ElementPart): string[] {
+  if (node.kind === "leaf") return [...node.ids];
+  const out = node.facts.id === null ? [] : [node.facts.id];
+  for (const part of node.parts) if (typeof part !== "string" && part.kind !== "other") out.push(...idsWithin(part));
+  return out;
+}
+
 /// Vero se `a` e `b` sono lo stesso elemento, o uno contiene l'altro.
 function related(a: ElementPart, b: ElementPart): boolean {
   for (let node: ElementPart | null = a; node !== null; node = node.parent) if (node === b) return true;
@@ -8525,18 +8569,90 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return true;
   }
 
-  function adopt(): boolean {
-    if (locked || engine.status !== "foreign" || engine.model === null) return false;
-    cancelGesture();
-    const outcome = engine.apply({ op: "adopt" });
+  /// Applica `op`, che adotta un SVG estraneo, come un passo di annulla col
+  /// nome `label`: un rifiuto si annuncia. Vero se è passato.
+  function adoptWith(label: DrawKey, op: Op): boolean {
+    const outcome = engine.apply(op);
     if (outcome.outcome === "rejected") {
       announce(t("draw.rejected", { reason: t(REASONS[outcome.reason]) }));
       return false;
     }
-    history.record("draw.action.adopt", outcome);
+    history.record(label, outcome);
     refresh();
     emit(outcome, "input");
+    return true;
+  }
+
+  function adopt(): boolean {
+    if (locked || engine.status !== "foreign" || engine.model === null) return false;
+    cancelGesture();
+    if (!adoptWith("draw.action.adopt", { op: "adopt" })) return false;
     announce(t("draw.adopted"));
+    return true;
+  }
+
+  /// L'anteprima del disegno `svg` per la finestra di «Rendi modificabile»,
+  /// come URL, con le immagini del vault e i caratteri dentro; `null` se
+  /// non si fa.
+  const drawingPictureUrl = async (svg: string): Promise<string | null> => {
+    const port = options.images;
+    const read = port === undefined ? () => Promise.resolve(null) : (path: string) => port.read(path);
+    const self = await selfContained(svg, read, EDITABLE_IMAGE_BYTES, pictureFonts).catch(() => null);
+    return self === null || disposed ? null : URL.createObjectURL(new Blob([self], { type: "image/svg+xml" }));
+  };
+
+  /// «Rendi modificabile»: le parti di altri programmi di `scope` diventano
+  /// oggetti del formato, dove si può senza che cambi ciò che si vede, dopo
+  /// la finestra che mostra il disegno prima e dopo e dice che cosa resta e
+  /// perché; in un passo, che per un SVG estraneo è anche l'adozione. Il
+  /// piano lo fa un modulo che arriva la prima volta che serve. `all` dice
+  /// se il comando è su tutto il disegno. Vero se il disegno è cambiato.
+  async function makeEditable(scope: EditableScope, all: boolean): Promise<boolean> {
+    const adopts = engine.status === "foreign";
+    if (asking || locked || engine.model === null || !(adopts || editable())) return false;
+    const text = engine.text;
+    const opened = loads;
+    finishText();
+    cancelGesture();
+    asking = true;
+    let plan: EditablePlan | null = null;
+    let yes = false;
+    try {
+      const { planEditable } = await import("./make-editable");
+      if (disposed || loads !== opened || engine.text !== text) return false;
+      plan = planEditable(text, scope);
+      if (plan.ops.length === 0 && plan.leftovers.length === 0) {
+        // Un SVG estraneo che è già tutto del formato si adotta e basta,
+        // come con «Modifica».
+        if (adopts && !locked && adoptWith("draw.action.adopt", { op: "adopt" })) {
+          announce(t("draw.editable.adopted"));
+          return true;
+        }
+        announce(t(all ? "draw.editable.none" : "draw.editable.none.here"));
+        return false;
+      }
+      const after = plan.after;
+      const urls = plan.ops.length === 0 || after === null ? [null, null] : await Promise.all([drawingPictureUrl(text), drawingPictureUrl(fadedMarkup(after, plan.leftovers.map((left) => left.path)))]);
+      try {
+        if (!disposed && loads === opened) yes = await editableDialog({ plan, all, adopts, before: urls[0] ?? null, after: urls[1] ?? null });
+      } finally {
+        for (const url of urls) if (url !== null) URL.revokeObjectURL(url);
+      }
+    } finally {
+      asking = false;
+    }
+    if (!yes || plan === null || disposed) return false;
+    // Mentre la finestra era aperta il disegno può essere cambiato: il piano
+    // era per quello di prima.
+    if (loads !== opened || engine.text !== text || locked || engine.status !== (adopts ? "foreign" : "fubdraw")) {
+      announce(t("draw.editable.gone"));
+      return false;
+    }
+    const op = asGesture(plan.ops);
+    if (op === null || !(adopts ? adoptWith("draw.action.make_editable", op) : commit("draw.action.make_editable", op) !== null)) return false;
+    const left = plan.leftovers.length;
+    const done = plan.converted === 0 ? t("draw.editable.tidied") : plural(plan.converted, "draw.editable.done.one", "draw.editable.done.other");
+    announce(left === 0 ? done : `${done} ${plural(left, "draw.editable.left.short.one", "draw.editable.left.short.other")}`);
     return true;
   }
 
@@ -15826,6 +15942,18 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     return index === null ? null : guideItems(index);
   };
 
+  /// Il blocco di un altro programma che si vede nel punto `p` della scena,
+  /// entro `tolerance`: il più in alto, se sta sopra `hit`, l'oggetto che il
+  /// punto prende.
+  const foreignAt = (p: Point, tolerance: number, hit: Unit | null): ForeignBlock | null => {
+    const blocks = foreignNow();
+    for (let at = blocks.length - 1; at >= 0; at--) {
+      const block = blocks[at]!;
+      if (block.covers(p, tolerance)) return hit === null || comparePaths(block.path, hit.path) > 0 ? block : null;
+    }
+    return null;
+  };
+
   /// Vero se lo strumento di adesso ha il menu della selezione.
   const selectingTool = (): boolean => has("selection") && (tool === "select" || tool === "lasso");
 
@@ -15882,9 +16010,11 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
       showContextMenu(event, items!);
       return;
     }
-    const hit = currentIndex().at(toScene(camera, p), HIT_PX[touch ? "touch" : "mouse"] / camera.scale);
+    const scenePoint = toScene(camera, p);
+    const tolerance = HIT_PX[touch ? "touch" : "mouse"] / camera.scale;
+    const hit = currentIndex().at(scenePoint, tolerance);
     if (hit !== null && !selectedUnits().some((unit) => unit.key === hit.key || holdsPath(hit.path, unit.path))) select([hit.key]);
-    showContextMenu(event, selectionItems(), { labelledBy: selectionButton.id });
+    showContextMenu(event, selectionItems(has("editable") ? foreignAt(scenePoint, tolerance, hit) : null), { labelledBy: selectionButton.id });
   });
   // Il tasto laterale della penna apre il menu radiale dove la penna è, e la
   // penna lo guida finché il tasto è giù. Sui righelli, sulle guide e con
@@ -17743,7 +17873,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
   /// Le voci della selezione avanzata: gli appunti e lo stile, scegliere
   /// tutto e il resto, i simili, bloccare e nascondere, sbloccare e mostrare
   /// tutto, isolare. Una voce che adesso non serve è spenta e dice perché.
-  const selectionItems = (): MenuItem[] => {
+  const selectionItems = (under: ForeignBlock | null = null): MenuItem[] => {
     const model = engine.model;
     const index = currentIndex();
     const units = selectedUnits();
@@ -17831,6 +17961,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
         items.push({ ...item, separator: at === 0, ...(canEdit ? (description === undefined ? {} : { description }) : { disabled: true }) });
       }
     }
+    if (has("editable") && model !== null) items.push(...editableItems(model, units, under));
     // Un'istanza scelta da sola apre il suo simbolo.
     const lone = units.length === 1 ? units[0]! : null;
     const single = lone !== null && isolable(lone);
@@ -17845,6 +17976,34 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     const isolated = isolatedNode();
     if (isolated !== null) items.push({ label: t(isolated.details?.role === "symbol" ? "draw.isolate.exit.symbol" : "draw.isolate.exit"), hint: "Esc", run: () => leaveIsolation(false) });
     return items;
+  };
+
+  /// Le voci di «Rendi modificabile» nel menu della selezione: una per il
+  /// blocco di un altro programma `under`, sotto il puntatore, o se non c'è
+  /// per gli oggetti scelti `units` che ne contengono o che dei `use` di
+  /// altri programmi mostrano; una per tutto il disegno. Spente, col perché,
+  /// se lì non ce n'è.
+  const editableItems = (model: DocumentModel, units: readonly Unit[], under: ForeignBlock | null): MenuItem[] => {
+    const canEdit = editable();
+    const cloned = under === null ? clonedIds(model) : new Set<string>();
+    const paths = under !== null ? [under.path] : units.filter((unit) => holdsForeign(unit.node) || idsWithin(unit.node).some((id) => cloned.has(id))).map((unit) => unit.path);
+    const some = holdsForeign(model.root);
+    const why = units.length === 0 ? "draw.editable.item.empty" : "draw.editable.item.none";
+    return [
+      {
+        label: t("draw.editable.item"),
+        separator: true,
+        disabled: !canEdit || paths.length === 0,
+        ...(canEdit && paths.length === 0 ? { description: t(why) } : {}),
+        run: () => void makeEditable({ kind: "units", paths }, false),
+      },
+      {
+        label: t("draw.editable.item.all"),
+        disabled: !canEdit || !some,
+        ...(canEdit && !some ? { description: t("draw.editable.item.all.none") } : {}),
+        run: () => void makeEditable({ kind: "all" }, true),
+      },
+    ];
   };
 
   /// Dà `change` ai contorni scelti, e dice quanti ne ha cambiati col nome
@@ -22263,6 +22422,7 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
     setReadOnly,
     reveal,
     adopt,
+    makeDrawingEditable: () => makeEditable({ kind: "all" }, true),
     setLevel,
     setTool,
     setColor: (color) => setColor(color),

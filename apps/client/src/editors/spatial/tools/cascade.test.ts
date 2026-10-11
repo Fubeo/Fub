@@ -317,14 +317,14 @@ describe("simboli e use", () => {
     const inner = el("rect", { width: "50%", height: "10" });
     const icon = el("symbol", { id: "i", viewBox: "0 0 20 10" }, [inner]);
     const plain = el("symbol", { id: "p", width: "30", height: "15" });
+    const cut = el("symbol", { id: "c", viewBox: "0 0 20 10", preserveAspectRatio: "xMinYMid slice" });
     const meet = el("use", { href: "#i", x: "5", width: "40", height: "40" });
-    const slice = el("use", { href: "#i", width: "40", height: "40" });
+    const slice = el("use", { href: "#c", width: "40", height: "40" });
     const sized = el("use", { href: "#p", x: "10%", y: "50%" });
-    const root = el("svg", { viewBox: "0 0 200 100" }, [el("defs", {}, [icon, plain]), meet, slice, sized]);
+    const root = el("svg", { viewBox: "0 0 200 100" }, [el("defs", {}, [icon, plain, cut]), meet, slice, sized]);
     const c = cascade("", root);
     expect(c.useWindow(meet, icon)).toMatchObject({ x: 5, y: 0, width: 40, height: 40, m: [2, 0, 0, 2, 5, 10], inner: [20, 10] });
-    icon.attrs.push({ uri: "", local: "preserveAspectRatio", value: "xMinYMid slice" });
-    expect(c.useWindow(slice, icon)?.m).toEqual([4, 0, 0, 4, 0, 0]);
+    expect(c.useWindow(slice, cut)?.m).toEqual([4, 0, 0, 4, 0, 0]);
     expect(c.useWindow(sized, plain)).toMatchObject({ x: 20, y: 50, width: 30, height: 15, m: [1, 0, 0, 1, 20, 50], inner: [30, 15] });
     expect(c.useOffset(sized)).toEqual([20, 50]);
     // Il contenuto conta le percentuali sul viewBox; senza, non si sa.

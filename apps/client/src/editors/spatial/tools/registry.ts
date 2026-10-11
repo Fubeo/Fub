@@ -178,7 +178,8 @@ export type Feature =
   | "motifs"
   | "print"
   | "symbols"
-  | "repeat";
+  | "repeat"
+  | "editable";
 
 export interface FeatureSpec {
   readonly id: Feature;
@@ -257,6 +258,11 @@ const COMMANDS: readonly FeatureSpec[] = [
   // ripetizione si apre per modificare i suoi originali dove si isola un
   // gruppo, e si separa come un gruppo, a ogni livello.
   { id: "repeat", level: "expert", label: "draw.feature.repeat" },
+  // «Rendi modificabile» è una voce del menu della selezione, per le parti
+  // di altri programmi scelte o sotto il puntatore, una per il disegno
+  // intero, e un pulsante accanto a «Modifica» sull'avviso di un SVG che
+  // FubDraw non ha fatto.
+  { id: "editable", level: "expert", label: "draw.feature.editable" },
 ];
 
 /// Tutte le parti del disegno, per livello, e in un livello prima gli

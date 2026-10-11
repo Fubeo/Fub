@@ -66,6 +66,14 @@ describe("rendere modificabile un disegno", () => {
     expect(Object.fromEntries(out.translations)).toEqual({ sheet: 3, data: 1 });
   });
 
+  it("un SVG estraneo che ha soltanto parti che restano non si adotta: l'adozione da sola non rende niente modificabile", () => {
+    const text = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">\n  <switch><rect width="10" height="10" style="fill:#e30613"/></switch>\n</svg>\n';
+    expect(SceneEngine.open(text).status).toBe("foreign");
+    const out = plan(text);
+    expect(out.ops).toEqual([]);
+    expect(out.leftovers.map((left) => left.reason)).toEqual([{ kind: "element", tag: "switch" }]);
+  });
+
   it("un file di Inkscape: lo stile in linea diventa attributi, nell'ordine e nel modo di scrivere del file", () => {
     const text = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
