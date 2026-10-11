@@ -99,10 +99,12 @@ piano si rifà senza. Il banco di fedeltà (`apps/client/bench/fidelity.mjs`)
 confronta pixel per pixel il disegno di prima col foglio di dopo, su scene
 che toccano ogni traduzione, e vede i fogli di stile tolti apposta al prima.
 
-Una sola differenza è voluta: un testo che nomina il suo carattere solo in un
-foglio di stile, come quelli di Mermaid, prima si vede nel carattere di
-ripiego, perché FubDraw legge i caratteri dagli attributi; dopo il carattere
-è un attributo, e il testo si vede nel carattere che il file chiede.
+Anche i caratteri restano: un testo che nomina il suo carattere in un foglio
+di stile, come quelli di Mermaid, si vede già prima nel carattere che l'export
+userebbe, e dopo la famiglia è un attributo. Fa eccezione un foglio che
+comincia con una famiglia generica, come `sans-serif`: prima la sceglie il
+browser, dopo è quella di Fub ([Disegni, caratteri del
+vault](drawing-fonts.md)).
 
 ## Livelli e parti
 

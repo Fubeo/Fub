@@ -197,12 +197,45 @@ describe("i caratteri di un documento scritto", () => {
       { family: "Inter", weight: 400, style: "normal" },
     ]);
     expect(read.families).toEqual(["Inter", "Arial"]);
+    expect(read.styles).toEqual([
+      ["font-weight: bold; FONT-FAMILY: 'Noto Sans'", "'Noto Sans'"],
+      ["font-family: Roboto", "Roboto"],
+    ]);
+    expect(read.sheets).toEqual([]);
+  });
+
+  it("prendono dai fogli di stile la famiglia, il peso e lo stile, per ogni testo", () => {
+    const read = markupFonts(
+      SVG('<style>/* .x{font-family:Nascosta} */ @font-face{font-family:Faccia;src:url(f.woff2)} #m text{font-family:"trebuchet ms", verdana, sans-serif !important} .b{font-weight:bold}</style><text font-style="italic">a</text><rect class="b"/>'),
+    );
+    expect(read.fonts).toEqual([
+      { family: "", weight: 400, style: "italic" },
+      { family: '"trebuchet ms", verdana, sans-serif', weight: 400, style: "italic" },
+      { family: "", weight: 700, style: "italic" },
+    ]);
+    expect(read.sheets).toEqual(['"trebuchet ms", verdana, sans-serif']);
+    expect(read.families).toEqual([]);
+    expect(read.styles).toEqual([]);
+    // Un foglio, senza testi, non chiede niente.
+    expect(markupFonts(SVG("<style>rect{font-family:Inter}</style><rect/>")).fonts).toEqual([]);
+  });
+
+  it("vengono anche dagli elementi che misurano col carattere, senza testi", () => {
+    expect(markupFonts(SVG('<g font-family="Inter"><rect width="3ex" height="10"/></g><rect id="a3ex" width="2em"/>')).fonts).toEqual([{ family: "Inter", weight: 400, style: "normal" }]);
+    expect(markupFonts(SVG('<rect style="stroke-width: .5ch"/>')).fonts).toEqual([{ family: "", weight: 400, style: "normal" }]);
+    expect(markupFonts(SVG('<rect data-size="3ex" class="1ex" width="12"/>')).fonts).toEqual([]);
+    // Se è un foglio a misurare col carattere, ogni elemento chiede il suo.
+    expect(markupFonts(SVG('<style>circle{r:2ex}</style><g font-family="Literata"><circle/></g><rect font-style="italic"/>')).fonts).toEqual([
+      { family: "", weight: 400, style: "normal" },
+      { family: "Literata", weight: 400, style: "normal" },
+      { family: "", weight: 400, style: "italic" },
+    ]);
   });
 
   it("contano soltanto i testi di SVG, e niente se il documento non si legge", () => {
     expect(markupFonts('<svg xmlns="http://www.w3.org/2000/svg"><g font-family="Roboto"><desc>no</desc></g></svg>').fonts).toEqual([]);
     expect(markupFonts("<svg><text>a</text></svg>").fonts).toEqual([]);
-    expect(markupFonts("<svg")).toEqual({ fonts: [], families: [] });
+    expect(markupFonts("<svg")).toEqual({ fonts: [], families: [], styles: [], sheets: [] });
   });
 
   it("hanno un tetto, e leggono un documento annidato a fondo", () => {
@@ -212,6 +245,16 @@ describe("i caratteri di un documento scritto", () => {
     const deep = 20_000;
     const nested = markupFonts(SVG(`${"<g>".repeat(deep)}<text font-family="Roboto">x</text>${"</g>".repeat(deep)}`));
     expect(nested.fonts).toEqual([{ family: "Roboto", weight: 400, style: "normal" }]);
+  });
+
+  it("si leggono in una scansione anche da un foglio o da una misura ostili", () => {
+    // Un commento che non si chiude arriva in fondo, come nei CSS.
+    const comments = markupFonts(SVG(`<style>text{font-weight:bold}${"/*".repeat(200_000)}text{font-family:Nascosta}</style><text>a</text>`));
+    expect(comments.fonts).toEqual([
+      { family: "", weight: 400, style: "normal" },
+      { family: "", weight: 700, style: "normal" },
+    ]);
+    expect(markupFonts(SVG(`<rect width=" ${"1".repeat(400_000)}"/><rect x="${" 1".repeat(200_000)}"/>`)).fonts).toEqual([]);
   });
 
   it("di uno strato immagine entrano fra quelli della scena", () => {

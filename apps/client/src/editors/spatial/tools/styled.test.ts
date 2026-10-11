@@ -73,7 +73,7 @@ describe("separare", () => {
     expect(after).not.toContain('id="m"');
     // Ogni forma ha su di sé ciò che le dava il foglio passando dal gruppo.
     expect(after).toContain('<rect x="10" y="50" width="90" height="40" rx="5" fill="#ECECFF" stroke="#9370DB"/>');
-    expect(after).toContain('<text class="label" x="55" y="75" text-anchor="middle" font-size="14px" fill="#333" font-family="Inter">Inizio</text>');
+    expect(after).toContain('<text class="label" x="55" y="75" text-anchor="middle" font-size="14px" fill="#333" font-family="&quot;trebuchet ms&quot;,verdana,arial,sans-serif">Inizio</text>');
     expect(after).toContain('<path class="edge" d="M 100 70 L 140 70" fill="none" stroke="#333" stroke-width="2px"/>');
     // La punta della freccia, un oggetto, non ne aveva bisogno.
     expect(after).toMatch(/<path id="o[a-z0-9]{8}" d="M 140 64 L 150 70 L 140 76 Z" fill="#333"\/>/);

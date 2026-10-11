@@ -30,7 +30,7 @@ const same = <T,>(value: Promise<T>) => value;
 
 /// Il foglio di un disegno con un testo `serif` quando i file dei caratteri
 /// dell'app non si leggono: le sole famiglie, nessuna del sistema.
-const SERIF_SHEET = '<style>:root{font-synthesis:none}:root:not([font-family]){font-family:Literata, Inter, "JetBrains Mono"}[font-family="serif"]{font-family:Literata, Inter, "JetBrains Mono"}</style>';
+const SERIF_SHEET = '<style>:root{font-synthesis:none}:where(:root:not([font-family])){font-family:Literata, Inter, "JetBrains Mono"}:where([font-family="serif"]){font-family:Literata, Inter, "JetBrains Mono"}</style>';
 /// `svg` col foglio `sheet` dopo l'apertura della radice.
 const sheeted = (svg: string, sheet = SERIF_SHEET): string => svg.replace(/^<svg[^>]*>/, (open) => `${open}${sheet}`);
 
@@ -173,9 +173,9 @@ describe("i media del vault dentro una nota", () => {
       await hydrateVaultMedia(root, "Note/qui.md", same, openLifetime(), media);
       const shown = await blobs.get(root.querySelector(".embed img")!.getAttribute("src")!)!.text();
       // Roboto c'è, coi suoi byte; Lobster no, e il testo usa Literata.
-      expect(shown).toBe(sheeted(DRAWING, '<style>:root{font-synthesis:none}:root:not([font-family]){font-family:Literata, Inter, "JetBrains Mono"}'
-        + '[font-family="Roboto, serif"]{font-family:Roboto, Literata, Inter, "JetBrains Mono"}'
-        + '[font-family="Lobster, cursive"]{font-family:Literata, Inter, "JetBrains Mono"}'
+      expect(shown).toBe(sheeted(DRAWING, '<style>:root{font-synthesis:none}:where(:root:not([font-family])){font-family:Literata, Inter, "JetBrains Mono"}'
+        + ':where([font-family="Roboto, serif"]){font-family:Roboto, Literata, Inter, "JetBrains Mono"}'
+        + ':where([font-family="Lobster, cursive"]){font-family:Literata, Inter, "JetBrains Mono"}'
         + `@font-face{font-family:"Roboto";src:url(data:application/octet-stream;base64,${btoa("font:Roboto")});font-weight:400;font-style:normal}</style>`));
       // L'immagine è fatta: la faccia non serve più a nessuno.
       await vi.waitFor(() => expect(fonts.size).toBe(0));

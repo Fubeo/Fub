@@ -80,7 +80,8 @@ stessa faccia:
 - nel PNG che si [copia](drawing-clipboard.md) negli appunti;
 - in un disegno incorporato in una nota, `![[disegno.svg]]`;
 - nelle parti di un SVG che FubDraw conserva senza modificarle, quando il loro
-  testo nomina il carattere con l'attributo `font-family`.
+  testo nomina il carattere con l'attributo `font-family`, con lo `style` o
+  con un foglio di stile.
 
 Un disegno porta al più 64 MiB di caratteri fissati, quelli di Fub e quelli
 del vault insieme, contati nell'ordine dei testi: una famiglia che non ci sta
@@ -135,10 +136,14 @@ apre.
 - **Un carattere la cui licenza non lascia incorporarlo** in un documento
   (`fsType` di OpenType) si vede e si esporta in PNG e in JPEG; nel PDF il
   suo testo diventa tracciati, che si vedono uguali ma non si selezionano.
-- **Uno stile in linea**, `style="font-family: …"`, in una parte di un SVG che
-  FubDraw conserva senza modificarla, sceglie il carattere da sé sul foglio e
-  in Lettura, dove il browser può prenderlo dal sistema; l'export lo legge
-  come l'attributo.
+- **Un foglio di stile**, in una parte di un SVG che FubDraw conserva senza
+  modificarla, dà un carattere ai suoi testi senza che FubDraw sappia quali
+  sono. Sul foglio e in Lettura il primo nome che dice, se non è di Fub né
+  del vault, si vede nel carattere di Fub che l'export userebbe; una famiglia
+  generica come `sans-serif` che viene per prima, o un nome che viene prima di
+  un carattere del vault, lo sceglie il browser, che può prenderlo dal
+  sistema. [«Rendi modificabile»](drawing-editable.md) porta la famiglia
+  nell'attributo.
 
 ## Dove sta il codice
 

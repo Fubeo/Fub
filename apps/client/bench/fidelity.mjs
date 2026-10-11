@@ -21,11 +21,10 @@
 // programmi: la pagina li rende modificabili tutti, col piano del comando, e
 // le tre strade mostrano il disegno di dopo. Una quarta, il prima, è il file
 // com'era nell'immagine del browser, e il foglio si confronta anche con lei:
-// ciò che diventa modificabile si vede come prima, con lo stesso limite. Un
-// testo che nomina il suo carattere solo in un foglio di stile, come quelli
-// di Mermaid, prima si vede nel carattere di ripiego, perché le immagini e
-// l'export leggono i caratteri dagli attributi; dopo, nel carattere che il
-// file chiede. Le sue lettere cambiano, sotto il limite.
+// ciò che diventa modificabile si vede come prima, con lo stesso limite.
+// Anche i caratteri: il testo di Mermaid nomina il suo soltanto nel foglio di
+// stile, coi nomi che Mermaid scrive, e prima e dopo si vede nel carattere di
+// Fub che l'export userebbe, qualunque carattere abbia il sistema.
 //
 // # La soglia
 //

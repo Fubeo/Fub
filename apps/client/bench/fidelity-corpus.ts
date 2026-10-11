@@ -185,7 +185,7 @@ const INKSCAPE = scene('<sodipodi:namedview xmlns:sodipodi="http://sodipodi.sour
 const ILLUSTRATOR = scene('<style>.st0{fill:#c53030;}.st1{fill:none;stroke:#2f855a;stroke-width:4;stroke-dasharray:10 5;}.st2{font-family:Literata;font-size:20px;}</style>'
   + '<rect class="st0" x="16" y="16" width="90" height="60"/><circle class="st1" cx="170" cy="56" r="40"/>'
   + '<text class="st2" x="16" y="130">Illustrator</text>');
-const MERMAID = scene('<style>#m .node rect{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#m .label{font-family:Inter;font-size:14px;fill:#333;}#m .edge{stroke:#333;stroke-width:2px;fill:none;}</style>'
+const MERMAID = scene('<style>#m .node rect{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#m .label{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:14px;fill:#333;}#m .edge{stroke:#333;stroke-width:2px;fill:none;}</style>'
   + '<g id="m"><g class="node"><rect x="10" y="50" width="90" height="40" rx="5"/><text class="label" x="55" y="75" text-anchor="middle">Inizio</text></g>'
   + '<path class="edge" d="M 100 70 L 140 70"/><path d="M 140 64 L 150 70 L 140 76 Z" fill="#333"/>'
   + '<g class="node"><rect x="150" y="50" width="80" height="40" rx="5"/><text class="label" x="190" y="75" text-anchor="middle">Fine</text></g></g>');
