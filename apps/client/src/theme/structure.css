@@ -1082,8 +1082,13 @@ html, body, #app {
   overflow: hidden;
   pointer-events: none;
 }
+/* Il painter non riceve il puntatore, e non eredita il cursore della
+   superficie: cambiare strumento o maniglia sotto il puntatore cambia il
+   cursore della superficie, e se il painter lo ereditasse andrebbe ricalcolato
+   lo stile di ogni oggetto del disegno. */
 .spatial-painter {
   isolation: isolate;
+  cursor: auto;
 }
 /* Una scena grande segue la camera con una trasformazione della radice, che
    il compositor applica senza ridisporre né ridipingere: ciò che il movimento
