@@ -10,7 +10,8 @@ import { elementChildren, type ContainerNode, type ElementPart } from "../scene/
 import type { Elem } from "../scene/serialize";
 import { doc, HEAD } from "../scene/test-support";
 import { IMAGE_PLACEHOLDER, PaintBuilder, resourcesFor, symbolsFor, wholeDocumentLayer, type PaintScene, type PaintShape } from "./paint";
-import { createSvgPainter, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
+import { toScene, toScreen, type View } from "../view";
+import { createSvgPainter, LARGE_SCENE_SHAPES, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
 import { createOverlay } from "./overlay";
 
 const LAYER = '<g id="l1" fub:layer="Livello 1">';
@@ -193,6 +194,64 @@ describe("il documento vivo", () => {
     painter.setView({ scale: 2, angle: 0, tx: 30, ty: -20 });
     painter.settle();
     expect(urls).toBe(3);
+  });
+
+  it("in una scena grande la camera muove la radice, e arriva agli strati quando si ferma", () => {
+    vi.useFakeTimers();
+    const rects = Array.from({ length: LARGE_SCENE_SHAPES }, (_, i) => `<rect x="${i % 100}" y="${Math.floor(i / 100)}" width="1" height="1"/>`);
+    const painter = createSvgPainter(host, owner, { settleMs: 100 });
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}${rects.join("")}</g>`)), new PaintBuilder()));
+    const root = host.querySelector<HTMLElement>(".spatial-painter")!;
+    const camera = host.querySelector(".spatial-layer > g")!;
+    const drawn = camera.getAttribute("transform");
+    expect(root.hasAttribute("data-large")).toBe(true);
+    /// Dove la radice porta un punto dello schermo, con la divisione per la
+    /// coordinata omogenea.
+    const moved = ([x, y]: readonly [number, number]): [number, number] => {
+      const m = /^matrix3d\((.*)\)$/.exec(root.style.transform)![1]!.split(",").map(Number);
+      const w = m[3]! * x + m[7]! * y + m[15]!;
+      return [(m[0]! * x + m[4]! * y + m[12]!) / w, (m[1]! * x + m[5]! * y + m[13]!) / w];
+    };
+    const views: View[] = [
+      { scale: 2, angle: 0, tx: 10, ty: -20 },
+      { scale: 0.3, angle: 30, tx: -400, ty: 75 },
+      { scale: 5, angle: 270, tx: 7, ty: 7 },
+    ];
+    for (const view of views) {
+      painter.setView(view);
+      // Gli strati restano dove sono disegnati; la radice li porta dove la
+      // camera chiede, punto per punto.
+      expect(camera.getAttribute("transform")).toBe(drawn);
+      for (const p of [[0, 0], [800, 0], [123, 456]] as const) {
+        const [x, y] = moved(p);
+        const [ex, ey] = toScreen(view, toScene({ scale: 1, angle: 0, tx: 0, ty: 0 }, p));
+        expect(x).toBeCloseTo(ex, 6);
+        expect(y).toBeCloseTo(ey, 6);
+      }
+    }
+    // La parte lineare della trasformazione non cambia scala.
+    expect(root.style.transform).toMatch(/^matrix3d\(0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, /);
+    vi.advanceTimersByTime(100);
+    expect(camera.getAttribute("transform")).toBe("matrix(0 -5 5 0 7 7)");
+    expect(root.style.transform).toBe("");
+    // Tornata piccola, la scena prende subito la vista che la radice
+    // mostrava.
+    painter.setView({ scale: 2, angle: 0, tx: 10, ty: -20 });
+    expect(root.style.transform).not.toBe("");
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}<rect width="1" height="1"/></g>`)), new PaintBuilder()));
+    expect(root.hasAttribute("data-large")).toBe(false);
+    expect(root.style.transform).toBe("");
+    expect(host.querySelector(".spatial-layer > g")!.getAttribute("transform")).toBe("matrix(2 0 0 2 10 -20)");
+  });
+
+  it("in una scena piccola la camera arriva subito agli strati", () => {
+    const painter = createSvgPainter(host, owner, { settleMs: 100 });
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}<rect width="1" height="1"/></g>`)), new PaintBuilder()));
+    painter.setView({ scale: 2, angle: 0, tx: 10, ty: -20 });
+    const root = host.querySelector<HTMLElement>(".spatial-painter")!;
+    expect(root.hasAttribute("data-large")).toBe(false);
+    expect(root.style.transform).toBe("");
+    expect(host.querySelector(".spatial-layer > g")!.getAttribute("transform")).toBe("matrix(2 0 0 2 10 -20)");
   });
 
   it("scrive i pezzi di una riga come tspan dentro la riga", async () => {

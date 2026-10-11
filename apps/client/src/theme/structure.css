@@ -1085,6 +1085,17 @@ html, body, #app {
 .spatial-painter {
   isolation: isolate;
 }
+/* Una scena grande segue la camera con una trasformazione della radice, che
+   il compositor applica senza ridisporre né ridipingere: ciò che il movimento
+   scopre è già disegnato, e lo taglia la superficie. Ferma, la trasformazione
+   resta, nulla: in Chromium passare da nessuna trasformazione a una fa
+   ridisporre tutti i testi SVG. */
+.spatial-painter[data-large] {
+  overflow: visible;
+  transform: translate(0, 0);
+  transform-origin: 0 0;
+  will-change: transform;
+}
 .spatial-overlay {
   width: 100%;
   height: 100%;
@@ -1277,6 +1288,15 @@ html, body, #app {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   cursor: crosshair;
+}
+/* Sopra ogni strato del foglio, un velo vuoto prende il puntatore. Gli
+   strati sotto non lo ricevono mai, ma senza il velo il browser li
+   attraverserebbe forma per forma a ogni movimento per scoprirlo: con
+   cinquantamila forme, cinque millisecondi. Il bersaglio resta il foglio. */
+.draw-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
 }
 /* Il foglio occupa tutta la larghezza: l'anello del fuoco sta dentro, o lo
    taglierebbe il riquadro che lo contiene. */
