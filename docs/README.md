@@ -59,6 +59,7 @@ flowchart LR
 - [Disegni, cronologia](product/drawing-history.md)
 - [Disegni, accessibilità](product/drawing-accessibility.md)
 - [Disegni, tavole](product/drawing-boards.md)
+- [Disegni grandi](product/drawing-large.md)
 - [Disegni, raccolte di forme](product/drawing-library.md)
 - [Disegni, livello Esperto](product/drawing-expert.md)
 - [Disegni, tracciati](product/drawing-paths.md)

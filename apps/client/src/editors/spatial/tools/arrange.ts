@@ -35,7 +35,7 @@
 import type { Bounds } from "../scene/geometry";
 import type { IdKind } from "../scene/ids";
 import { compose, IDENTITY, invert, type Matrix } from "../scene/matrix";
-import { declarationsOf, elementChildren, HEADS, parseFragment, pathOf, scopeKey, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart, type Head } from "../scene/model";
+import { declarationsOf, elementChildren, pathOf, readHead, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { ROOT, type AddOp, type Op, type Pos, type Target } from "../scene/ops";
 import { NamespaceScope, type Elem, type Run } from "../scene/serialize";
 import { href as parseHref, opacity as parseOpacity, transform as parseTransform } from "../scene/values";
@@ -146,23 +146,6 @@ function sameMatrix(a: Matrix, b: Matrix): boolean {
 // ---------------------------------------------------------------------------
 // Leggere un elemento.
 // ---------------------------------------------------------------------------
-
-/// Il tag d'apertura di `node` letto da solo, nello scope del genitore; la
-/// radice non ne ha. Chi lo riceve non lo cambia. I tag già letti stanno in
-/// [`HEADS`]: chi li chiede due volte per lo stesso testo, e nello stesso
-/// scope, non li rilegge. Un connettore che segue ne chiede tre, e
-/// un'operazione su duecento oggetti ne chiede migliaia.
-export function readHead(node: ElementPart): Head {
-  const raw = node.kind === "leaf" ? node.raw : node.tail === null ? node.head : `${node.head}</${node.facts.name}>`;
-  const scope = node.parent === null ? NamespaceScope.EMPTY : scopeOf(node.parent);
-  const key = scopeKey(scope);
-  const known = HEADS.get(node);
-  if (known !== undefined && known.raw === raw && known.scope === key) return known.head;
-  const fragment = parseFragment(raw, scope);
-  const head: Head = fragment === null ? null : { doc: fragment.doc, element: fragment.doc.element(fragment.id)! };
-  HEADS.set(node, { raw, scope: key, head });
-  return head;
-}
 
 /// Il nome di un attributo come lo scrive un'operazione; `null` se non ha un
 /// prefisso con cui scriverlo. Le dichiarazioni di namespace non sono

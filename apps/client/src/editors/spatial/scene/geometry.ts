@@ -791,6 +791,83 @@ export function winding(polygons: readonly (readonly Point[])[], p: Point): numb
   return winding;
 }
 
+/// Il livello più fine di [`BoundsGrid`]: celle di lato 2⁻⁶⁴, per i
+/// rettangoli più piccoli di così e per quelli senza larghezza o altezza.
+const GRID_FINEST = -64;
+
+/// Il livello più grosso di [`BoundsGrid`]: un rettangolo più largo sta
+/// dappertutto.
+const GRID_COARSEST = 1000;
+
+/// Da qui in su il numero di una cella non è più un intero esatto in virgola
+/// mobile: un rettangolo così lontano sta dappertutto.
+const GRID_FARTHEST = 2 ** 52;
+
+/// Delle celle che un rettangolo tocca, oltre le quali sta dappertutto: al
+/// suo livello ne tocca al più due per lato, tre se il logaritmo arrotonda.
+const GRID_CELLS = 9;
+
+/// Dei rettangoli in un ordine, divisi per posto: per un punto dice quali
+/// possono contenerlo senza guardarli tutti. Ogni rettangolo sta al livello
+/// delle celle quadrate più piccole, di lato una potenza di due, larghe
+/// almeno quanto lui, e un punto guarda la sua cella a ogni livello. Un
+/// rettangolo vuoto non sta da nessuna parte; uno troppo grande o troppo
+/// lontano per le celle sta dappertutto. Le celle sono un filtro e basta: chi
+/// chiede guarda ancora ogni rettangolo che riceve, e riceve tutti quelli che
+/// contengono il punto, bordi compresi, perché la cella di un numero non
+/// diminuisce mai col numero.
+export class BoundsGrid {
+  /// Per livello, il lato delle celle e i rettangoli di ogni cella, in ordine.
+  private readonly levels = new Map<number, { readonly side: number; readonly cells: Map<string, number[]> }>();
+  private readonly everywhere: number[] = [];
+
+  constructor(boxes: readonly Bounds[]) {
+    boxes.forEach(({ min, max }, at) => {
+      if (!(min[0] <= max[0] && min[1] <= max[1])) return;
+      const level = Math.max(GRID_FINEST, Math.ceil(Math.log2(Math.max(max[0] - min[0], max[1] - min[1]))));
+      const side = 2 ** level;
+      const [x0, y0, x1, y1] = [min[0], min[1], max[0], max[1]].map((value) => Math.floor(value / side)) as [number, number, number, number];
+      if (!(level <= GRID_COARSEST && Math.max(-x0, -y0, x1, y1) < GRID_FARTHEST && (x1 - x0 + 1) * (y1 - y0 + 1) <= GRID_CELLS)) {
+        this.everywhere.push(at);
+        return;
+      }
+      let found = this.levels.get(level);
+      if (found === undefined) {
+        found = { side, cells: new Map() };
+        this.levels.set(level, found);
+      }
+      for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+          const key = `${x},${y}`;
+          const cell = found.cells.get(key);
+          if (cell === undefined) found.cells.set(key, [at]);
+          else cell.push(at);
+        }
+      }
+    });
+  }
+
+  /// I rettangoli fra i primi `count` che possono contenere `p`, in ordine.
+  near(p: Point, count: number): number[] {
+    const found: number[] = [];
+    let lists = 0;
+    const take = (list: readonly number[] | undefined): void => {
+      if (list === undefined || list.length === 0 || list[0]! >= count) return;
+      lists++;
+      for (const at of list) {
+        if (at >= count) break;
+        found.push(at);
+      }
+    };
+    take(this.everywhere);
+    for (const { side, cells } of this.levels.values()) {
+      take(cells.get(`${Math.floor(p[0] / side)},${Math.floor(p[1] / side)}`));
+    }
+    if (lists > 1) found.sort((a, b) => a - b);
+    return found;
+  }
+}
+
 /// I segmenti di un'ellisse di centro `center` e raggi `radii`: quattro archi
 /// a partire dal punto a destra del centro, nel verso di SVG.
 export function ellipsePath([cx, cy]: Point, [rx, ry]: Point): Segment[] {

@@ -12,6 +12,8 @@
 // posizioni dei caratteri non ASCII e dei `\r\n`, così un file ASCII con LF
 // non costa memoria in più e una traduzione è una ricerca binaria.
 
+import { commonEnds } from "../../core/text-operation";
+
 /// Il BOM UTF-8 come carattere.
 export const BOM = "﻿";
 
@@ -49,6 +51,26 @@ export function utf8Length(text: string): number {
     }
   }
   return bytes;
+}
+
+/// Un testo e i suoi byte UTF-8, già contati.
+export interface Measured {
+  readonly text: string;
+  readonly bytes: number;
+}
+
+/// I byte UTF-8 di `text`, da quelli di `known`, un testo che gli somiglia:
+/// si contano solo le unità fra il prefisso e il suffisso comuni. Una coppia
+/// surrogata sul bordo resta tutta nel mezzo, dove vale quattro byte.
+export function utf8LengthFrom(known: Measured, text: string): number {
+  let [prefix, suffix] = commonEnds(known.text, text);
+  if (prefix > 0 && isHigh(text.charCodeAt(prefix - 1))) prefix--;
+  if (suffix > 0 && isLow(text.charCodeAt(text.length - suffix))) suffix--;
+  return known.bytes - utf8Length(known.text.slice(prefix, known.text.length - suffix)) + utf8Length(text.slice(prefix, text.length - suffix));
+}
+
+function isHigh(c: number): boolean {
+  return c >= 0xd800 && c <= 0xdbff;
 }
 
 function isLow(c: number): boolean {
@@ -134,24 +156,29 @@ export class SourceText {
     let extra = new Int32Array(16);
     let count = 0;
     let total = 0;
-    for (let i = 0; i < text.length; i++) {
-      const c = text.charCodeAt(i);
-      if (c < 0x80) continue;
-      const start = i;
-      if (c < 0x800) {
-        total += 1;
-      } else {
-        // Tre byte per un'unità, o quattro per due.
-        total += 2;
-        if (c >= 0xd800 && c <= 0xdbff && isLow(text.charCodeAt(i + 1))) i++;
+    // Il motore delle espressioni regolari salta l'ASCII molto più in fretta
+    // di un ciclo sulle unità: si guardano una per una solo le serie di
+    // caratteri non ASCII, che tengono anche entrambe le metà di una coppia.
+    const runs = /[^\x00-\x7f]+/g;
+    for (let run = runs.exec(text); run !== null; run = runs.exec(text)) {
+      for (let i = run.index; i < runs.lastIndex; i++) {
+        const c = text.charCodeAt(i);
+        const start = i;
+        if (c < 0x800) {
+          total += 1;
+        } else {
+          // Tre byte per un'unità, o quattro per due.
+          total += 2;
+          if (c >= 0xd800 && c <= 0xdbff && isLow(text.charCodeAt(i + 1))) i++;
+        }
+        if (count === wide.length) {
+          wide = grow(wide);
+          extra = grow(extra);
+        }
+        wide[count] = start;
+        extra[count] = total;
+        count++;
       }
-      if (count === wide.length) {
-        wide = grow(wide);
-        extra = grow(extra);
-      }
-      wide[count] = start;
-      extra[count] = total;
-      count++;
     }
     this.wide = wide;
     this.extra = extra;
@@ -232,12 +259,22 @@ export class SourceText {
     let starts = new Int32Array(64);
     let count = 0;
     starts[count++] = bomUnits(text);
-    for (let i = 0; i < text.length; i++) {
-      const c = text.charCodeAt(i);
-      if (c === 0x0a || (c === 0x0d && text.charCodeAt(i + 1) !== 0x0a)) {
-        if (count === starts.length) starts = grow(starts);
-        starts[count++] = i + 1;
+    // Si cercano i due terminatori con `indexOf`, che è nativo: un `\r`
+    // prima del prossimo `\n` va a capo da solo, se non gli sta attaccato.
+    let lf = text.indexOf("\n");
+    let cr = text.indexOf("\r");
+    while (lf >= 0 || cr >= 0) {
+      let start: number;
+      if (cr >= 0 && (lf < 0 || cr < lf)) {
+        start = cr + 1 === lf ? -1 : cr + 1;
+        cr = text.indexOf("\r", cr + 1);
+      } else {
+        start = lf + 1;
+        lf = text.indexOf("\n", lf + 1);
       }
+      if (start < 0) continue;
+      if (count === starts.length) starts = grow(starts);
+      starts[count++] = start;
     }
     this.lineStarts = starts;
     this.lineCount = count;

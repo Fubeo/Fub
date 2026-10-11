@@ -82,7 +82,6 @@ import {
   watchLevel,
   watchSuggested,
 } from "./preferences";
-import type { ElementItem } from "./scene/classify";
 import { SceneEngine } from "./scene/engine";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
 import { href as parseHref } from "./scene/values";
@@ -293,8 +292,6 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
   let shownUrl: string | null = null;
   /// Il testo che l'immagine mostra: non si ridisegna uguale.
   let shownText: string | null = null;
-  /// I byte del testo, per le selezioni: si ricavano una volta per testo.
-  let encoded: { readonly text: string; readonly bytes: Uint8Array } | null = null;
   /// Il testo di cui l'elenco degli oggetti è disegnato.
   let listedText: string | null = null;
   /// I collegamenti della Lettura, e il testo e la lingua di cui sono
@@ -758,17 +755,21 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
 
   // --- Le selezioni ---------------------------------------------------------
 
-  /// Gli elementi degli oggetti scelti, in ordine di documento.
-  const selectedItems = (): ElementItem[] => {
+  /// I tratti di sorgente degli oggetti scelti, in ordine di documento: i
+  /// byte, e il testo grezzo fra gli indici delle loro unità a LF, senza
+  /// codificare il documento intero.
+  const selectedRanges = (): EditorRange[] => {
     if (drawHost.hidden || editor === null || editor.selection.length === 0) return [];
     const keys = new Set(editor.selection);
-    return editor.engine.scene().filter((item): item is ElementItem => item.kind === "element" && keys.has(keyOf(item)));
-  };
-
-  const rangeOf = (item: ElementItem): EditorRange => {
-    if (encoded === null || encoded.text !== text) encoded = { text, bytes: new TextEncoder().encode(text) };
-    const [start, end] = item.bytes;
-    return { start, end, text: new TextDecoder().decode(encoded.bytes.subarray(start, end)) };
+    const engine = editor.engine;
+    const source = engine.source();
+    const ranges: EditorRange[] = [];
+    for (const item of engine.scene()) {
+      if (item.kind !== "element" || !keys.has(keyOf(item))) continue;
+      const [start, end] = item.bytes;
+      ranges.push({ start, end, text: source.text.slice(source.rawOf(item.utf16[0]), source.rawOf(item.utf16[1])) });
+    }
+    return ranges;
   };
 
   // --- «Esporta» ------------------------------------------------------------
@@ -864,16 +865,14 @@ export function mountVectorSurface(context: SurfaceMountContext, options: Vector
     focus: focusShown,
     reveal: ({ span }) => !drawHost.hidden && editor !== null && editor.reveal(span.start),
     selections: (): EditorSelections | undefined => {
-      const items = selectedItems();
-      if (items.length === 0) return undefined;
-      const [first, ...rest] = items.map(rangeOf);
-      return { primary: first!, secondary: rest };
+      const [first, ...rest] = selectedRanges();
+      if (first === undefined) return undefined;
+      return { primary: first, secondary: rest };
     },
     selectedText: (): SelectedText | null => {
-      const items = selectedItems();
-      if (items.length === 0) return null;
-      const [first, ...rest] = items.map((item) => rangeOf(item).text);
-      return { primary: first!, secondary: rest };
+      const [first, ...rest] = selectedRanges().map((range) => range.text);
+      if (first === undefined) return null;
+      return { primary: first, secondary: rest };
     },
     setReadOnly: (next) => {
       readOnly = next;

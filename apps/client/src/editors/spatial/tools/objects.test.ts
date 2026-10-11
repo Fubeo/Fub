@@ -933,6 +933,9 @@ describe("le miniature", () => {
       return next;
     });
     vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+    // L'orologio sta fermo: un fotogramma ha tutto il tempo che vuole, se una
+    // prova non dice altro.
+    vi.spyOn(performance, "now").mockReturnValue(0);
   });
 
   /// Un fotogramma.
@@ -1014,6 +1017,20 @@ describe("le miniature", () => {
     expect(drawn).toEqual(["c 1", "b 1"]);
     frame();
     expect(drawn).toEqual(["c 1", "b 1", "a 1"]);
+    expect(frames.size).toBe(0);
+  });
+
+  it("anche un fotogramma che non ha più tempo ne disegna una", () => {
+    // Il tempo passa a ogni lettura dell'orologio, anche prima di disegnare.
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => (clock += 10));
+    mount([pictured("a", "1"), pictured("b", "1"), pictured("c", "1")]);
+    frame();
+    expect(drawn).toHaveLength(1);
+    frame();
+    expect(drawn).toHaveLength(2);
+    frame();
+    expect([...drawn].sort()).toEqual(["a 1", "b 1", "c 1"]);
     expect(frames.size).toBe(0);
   });
 

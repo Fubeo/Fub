@@ -631,13 +631,16 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
   };
 
   /// Disegna le miniature che aspettano, per le righe in vista, finché il
-  /// fotogramma ha tempo; le altre aspettano che le si scorra fin lì.
+  /// fotogramma ha tempo, e almeno una: anche quando misurare le righe si
+  /// prende tutto il fotogramma, l'elenco va avanti. Le altre aspettano che
+  /// le si scorra fin lì.
   const drawThumbs = (): void => {
     thumbFrame = 0;
     if (!inView) return;
     const start = performance.now();
     const view = scroller.getBoundingClientRect();
     let more = false;
+    let drawn = 0;
     for (const key of [...waiting]) {
       const item = rendered.get(key);
       const row = item === undefined ? undefined : rows[Number(item.dataset.index)];
@@ -647,7 +650,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
       }
       const box = item.getBoundingClientRect();
       if (box.bottom < view.top - ROW_PX || box.top > view.bottom + ROW_PX) continue;
-      if (performance.now() - start > THUMB_BUDGET_MS) {
+      if (drawn > 0 && performance.now() - start > THUMB_BUDGET_MS) {
         more = true;
         break;
       }
@@ -658,6 +661,7 @@ export function createObjectTree(life: Lifetime, options: ObjectTreeOptions): Ob
       if (spec === null) continue;
       const thumbLife = openLifetime();
       const el = spec.draw(thumbLife);
+      drawn++;
       thumbs.set(key, { key: spec.key, el, life: thumbLife });
       putThumb(item.children[2] as HTMLElement, el, el === null);
     }

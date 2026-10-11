@@ -5,7 +5,7 @@
 // controllano su entrambe.
 
 import { describe, expect, it } from "vitest";
-import { bomUnits, lineBreakOf, lineEndingOf, SourceText, utf8Length } from "./text";
+import { bomUnits, lineBreakOf, lineEndingOf, SourceText, utf8Length, utf8LengthFrom } from "./text";
 
 /// Il testo che vede la shell: `\r\n` e `\r` diventano `\n`.
 function normalized(source: string): string {
@@ -68,5 +68,75 @@ describe("le coordinate della sorgente (text.rs)", () => {
     expect(bomUnits(source)).toBe(1);
     expect(lines.byteOf(bomUnits(source))).toBe(3);
     expect(bomUnits("<svg/>")).toBe(0);
+  });
+
+  it("le coordinate e i rientri valgono in un testo lungo con segni e terminatori sparsi", () => {
+    let seed = 0x2545f491;
+    const next = (bound: number): number => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) % bound;
+    };
+    const pieces = ["a", "<g/>", " ", "\t", "é", "€", "😀", "\ud83d", "\ude00", "\n", "\r", "\r\n", "  "];
+    let source = "﻿";
+    for (let i = 0; i < 6000; i++) source += pieces[next(pieces.length)]!;
+    const map = new SourceText(source);
+    const bom = bomUnits(source);
+    // L'inizio della riga di `index`: dopo un `\n`, o dopo un `\r` che non
+    // sta attaccato a un `\n`; mai prima del BOM.
+    const lineStart = (index: number): number => {
+      let start = index;
+      while (start > bom) {
+        const before = source[start - 1];
+        if (before === "\n" || (before === "\r" && source[start] !== "\n")) break;
+        start--;
+      }
+      return Math.min(Math.max(start, bom), index);
+    };
+    for (let index = 0; index <= source.length; index += source.codePointAt(index)! > 0xffff ? 2 : 1) {
+      const prefix = source.slice(0, index);
+      const insideCrlf = prefix.endsWith("\r") && source.startsWith("\n", index);
+      expect(map.byteOf(index), `indice ${index}`).toBe(utf8Length(prefix));
+      expect(map.lfOffset(index), `indice ${index}`).toBe(normalized(insideCrlf ? prefix.slice(0, -1) : prefix).length);
+      const start = lineStart(index);
+      const head = /^[ \t]*/.exec(source.slice(start, index))![0];
+      expect(map.indent(index), `indice ${index}`).toBe(head);
+      if (index === source.length) break;
+    }
+    expect(map.byteLength).toBe(utf8Length(source));
+  });
+});
+
+describe("i byte di un testo dopo una modifica", () => {
+  it("contano come il testo intero, anche quando la modifica taglia una coppia surrogata", () => {
+    let seed = 0x9e3779b9;
+    const next = (bound: number): number => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) % bound;
+    };
+    // Mezze coppie comprese: un testo può contenerne, e valgono tre byte.
+    const pieces = ["a", "é", "€", "🙂", "😀", "\ud83d", "\ude00", "\n"];
+    const piece = (): string => pieces[next(pieces.length)]!;
+    let text = "";
+    for (let i = 0; i < 3000; i++) text += piece();
+    let known = { text, bytes: utf8Length(text) };
+    for (let round = 0; round < 400; round++) {
+      // Ogni bordo può cadere in mezzo a una coppia.
+      const from = next(known.text.length + 1);
+      const to = Math.min(known.text.length, from + next(6));
+      let inserted = "";
+      for (let k = next(4); k > 0; k--) inserted += piece();
+      const changed = known.text.slice(0, from) + inserted + known.text.slice(to);
+      const bytes = utf8LengthFrom(known, changed);
+      expect(bytes, `giro ${round}`).toBe(utf8Length(changed));
+      known = { text: changed, bytes };
+    }
+    // Il motore parte dai byte che l'apertura conta: sono gli stessi.
+    expect(new SourceText(known.text).byteLength).toBe(known.bytes);
+    expect(utf8LengthFrom({ text: "😀", bytes: 4 }, "\ud83dx")).toBe(4);
+    expect(utf8LengthFrom({ text: "x😀", bytes: 5 }, "😀")).toBe(4);
   });
 });

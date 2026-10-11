@@ -10,7 +10,8 @@ import { elementChildren, type ContainerNode, type ElementPart } from "../scene/
 import type { Elem } from "../scene/serialize";
 import { doc, HEAD } from "../scene/test-support";
 import { IMAGE_PLACEHOLDER, PaintBuilder, resourcesFor, symbolsFor, wholeDocumentLayer, type PaintScene, type PaintShape } from "./paint";
-import { createSvgPainter, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
+import { toScene, toScreen, viewTransform, type View } from "../view";
+import { createSvgPainter, LARGE_SCENE_SHAPES, liveId, miniaturePicture, paintMiniature, shapeCount, type ScenePainter } from "./svg-dom";
 import { createOverlay } from "./overlay";
 
 const LAYER = '<g id="l1" fub:layer="Livello 1">';
@@ -63,6 +64,19 @@ afterEach(() => {
 
 function sceneOf(engine: SceneEngine, builder: PaintBuilder): PaintScene {
   return builder.build(engine);
+}
+
+/// Tanti rettangoli quanti fanno grande una scena.
+function largeRects(): string {
+  return Array.from({ length: LARGE_SCENE_SHAPES }, (_, i) => `<rect x="${i % 100}" y="${Math.floor(i / 100)}" width="1" height="1"/>`).join("");
+}
+
+/// La vista di scala `scale` e angolo `angle` che tiene fermo il centro della
+/// vista di 800 per 600, spostata di `shift` come la vista di partenza.
+function aroundCenter(scale: number, angle: number, shift: readonly [number, number] = [0, 0]): View {
+  const center: [number, number] = [400 - shift[0], 300 - shift[1]];
+  const [x, y] = toScreen({ scale, angle, tx: 0, ty: 0 }, center);
+  return { scale, angle, tx: 400 - x, ty: 300 - y };
 }
 
 /// Aspetta le decodifiche già partite.
@@ -193,6 +207,115 @@ describe("il documento vivo", () => {
     painter.setView({ scale: 2, angle: 0, tx: 30, ty: -20 });
     painter.settle();
     expect(urls).toBe(3);
+  });
+
+  it("in una scena grande la camera muove la radice, e arriva agli strati quando si ferma", () => {
+    vi.useFakeTimers();
+    const painter = createSvgPainter(host, owner, { settleMs: 100 });
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}${largeRects()}</g>`)), new PaintBuilder()));
+    const root = host.querySelector<HTMLElement>(".spatial-painter")!;
+    const camera = host.querySelector(".spatial-layer > g")!;
+    const drawn = camera.getAttribute("transform");
+    expect(root.hasAttribute("data-large")).toBe(true);
+    // Il margine dipinto è un quarto del lato più lungo della vista.
+    expect(root.style.getPropertyValue("overflow-clip-margin")).toBe("200px");
+    /// Dove la radice porta un punto dello schermo, con la divisione per la
+    /// coordinata omogenea.
+    const moved = ([x, y]: readonly [number, number]): [number, number] => {
+      const m = /^matrix3d\((.*)\)$/.exec(root.style.transform)![1]!.split(",").map(Number);
+      const w = m[3]! * x + m[7]! * y + m[15]!;
+      return [(m[0]! * x + m[4]! * y + m[12]!) / w, (m[1]! * x + m[5]! * y + m[13]!) / w];
+    };
+    // Uno zoom del doppio, poi girato e ancora avanti: la radice, partita,
+    // porta anche oltre il doppio.
+    const views = [aroundCenter(2, 0), aroundCenter(2.5, 30), aroundCenter(5, 270)];
+    for (const view of views) {
+      painter.setView(view);
+      // Gli strati restano dove sono disegnati; la radice li porta dove la
+      // camera chiede, punto per punto.
+      expect(camera.getAttribute("transform")).toBe(drawn);
+      for (const p of [[0, 0], [800, 0], [123, 456]] as const) {
+        const [x, y] = moved(p);
+        const [ex, ey] = toScreen(view, toScene({ scale: 1, angle: 0, tx: 0, ty: 0 }, p));
+        expect(x).toBeCloseTo(ex, 6);
+        expect(y).toBeCloseTo(ey, 6);
+      }
+    }
+    // La parte lineare della trasformazione non cambia scala.
+    expect(root.style.transform).toMatch(/^matrix3d\(0, -1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, /);
+    vi.advanceTimersByTime(100);
+    expect(camera.getAttribute("transform")).toBe(viewTransform(views[2]!));
+    expect(root.style.transform).toBe("");
+    // Tornata piccola, la scena prende subito la vista che la radice
+    // mostrava.
+    const last = aroundCenter(5.5, 270);
+    painter.setView(last);
+    expect(root.style.transform).not.toBe("");
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}<rect width="1" height="1"/></g>`)), new PaintBuilder()));
+    expect(root.hasAttribute("data-large")).toBe(false);
+    expect(root.style.transform).toBe("");
+    expect(root.style.getPropertyValue("overflow-clip-margin")).toBe("");
+    expect(host.querySelector(".spatial-layer > g")!.getAttribute("transform")).toBe(viewTransform(last));
+  });
+
+  it("in una scena grande un passo che scopre oltre il margine, o che salta, ridisegna subito", () => {
+    vi.useFakeTimers();
+    const painter = createSvgPainter(host, owner, { settleMs: 100 });
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}${largeRects()}</g>`)), new PaintBuilder()));
+    const root = host.querySelector<HTMLElement>(".spatial-painter")!;
+    const camera = host.querySelector(".spatial-layer > g")!;
+    /// Vero se la radice porta gli strati, che restano dove sono disegnati;
+    /// altrimenti sono già nella vista.
+    const carried = (view: View): boolean => {
+      const drawn = camera.getAttribute("transform");
+      painter.setView(view);
+      if (root.style.transform === "") {
+        expect(camera.getAttribute("transform")).toBe(viewTransform(view));
+        return false;
+      }
+      expect(camera.getAttribute("transform")).toBe(drawn);
+      return true;
+    };
+    // Una panoramica dentro il margine di 200 px la porta la radice; oltre,
+    // il bordo destro scoprirebbe ciò che non è dipinto.
+    expect(carried({ scale: 1, angle: 0, tx: -150, ty: 0 })).toBe(true);
+    expect(carried({ scale: 1, angle: 0, tx: -250, ty: 0 })).toBe(false);
+    // Da ferma, la radice non parte ingrandita oltre il doppio: un salto.
+    expect(carried(aroundCenter(2.5, 0, [-250, 0]))).toBe(false);
+    vi.advanceTimersByTime(100);
+    // Fino al doppio parte, e poi segue lo zoom anche oltre.
+    expect(carried(aroundCenter(2.5 * 1.5, 0, [-250, 0]))).toBe(true);
+    expect(carried(aroundCenter(2.5 * 4, 0, [-250, 0]))).toBe(true);
+    vi.advanceTimersByTime(100);
+    expect(root.style.transform).toBe("");
+    // Indietro, il margine basta fino a 0,7 della scala; a metà no.
+    expect(carried(aroundCenter(10 * 0.7, 0, [-250, 0]))).toBe(true);
+    expect(carried(aroundCenter(10 * 0.5, 0, [-250, 0]))).toBe(false);
+  });
+
+  it("dove il browser non conosce overflow-clip-margin, una scena grande ridisegna ogni passo che scopre", () => {
+    vi.stubGlobal("CSS", { supports: () => false });
+    const painter = createSvgPainter(host, owner, { settleMs: 100 });
+    vi.unstubAllGlobals();
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}${largeRects()}</g>`)), new PaintBuilder()));
+    const root = host.querySelector<HTMLElement>(".spatial-painter")!;
+    expect(root.hasAttribute("data-large")).toBe(true);
+    expect(root.style.getPropertyValue("overflow-clip-margin")).toBe("");
+    painter.setView({ scale: 1, angle: 0, tx: -1, ty: 0 });
+    expect(root.style.transform).toBe("");
+    // Uno zoom avanti non scopre niente.
+    painter.setView(aroundCenter(1.5, 0, [-1, 0]));
+    expect(root.style.transform).toMatch(/^matrix3d\(/);
+  });
+
+  it("in una scena piccola la camera arriva subito agli strati", () => {
+    const painter = createSvgPainter(host, owner, { settleMs: 100 });
+    painter.update(sceneOf(SceneEngine.open(doc(`${LAYER}<rect width="1" height="1"/></g>`)), new PaintBuilder()));
+    painter.setView({ scale: 2, angle: 0, tx: 10, ty: -20 });
+    const root = host.querySelector<HTMLElement>(".spatial-painter")!;
+    expect(root.hasAttribute("data-large")).toBe(false);
+    expect(root.style.transform).toBe("");
+    expect(host.querySelector(".spatial-layer > g")!.getAttribute("transform")).toBe("matrix(2 0 0 2 10 -20)");
   });
 
   it("scrive i pezzi di una riga come tspan dentro la riga", async () => {

@@ -301,15 +301,24 @@ interface Part {
 /// Il valore di `name` che `part` vede: il suo, o quello ereditato.
 const seen = (part: Part, name: string): string => part.own.get(name) ?? part.inherited.get(name)!;
 
+/// I valori già letti da [`paintText`]: un disegno scrive pochi colori,
+/// ripetuti su migliaia di oggetti.
+const PAINT_TEXTS = new Map<string, string>();
+const PAINT_TEXTS_MAX = 4096;
+
 /// Un colore come lo mostra il pannello: `#rrggbb` o `none`, una risorsa
 /// `url(#id)`, che è la stessa qualunque sia il ripiego, e com'è scritto ciò
 /// che non è un colore.
 export function paintText(value: string): string {
-  const text = trim(value);
-  if (text === "none") return "none";
-  const used = paintReference(text);
-  if (used !== null) return `url(#${used.id})`;
-  return customColor(text) ?? text;
+  let read = PAINT_TEXTS.get(value);
+  if (read === undefined) {
+    const text = trim(value);
+    const used = text === "none" ? null : paintReference(text);
+    read = text === "none" ? "none" : used !== null ? `url(#${used.id})` : customColor(text) ?? text;
+    if (PAINT_TEXTS.size >= PAINT_TEXTS_MAX) PAINT_TEXTS.clear();
+    PAINT_TEXTS.set(value, read);
+  }
+  return read;
 }
 
 /// Le parti della selezione, divise per ciò che hanno.

@@ -26,6 +26,15 @@
 // - **Copie vive:** una copia in una ripetizione è un `use` vivo verso
 //   l'originale, che solo per questo ha l'id vivo. Le copie seguono
 //   l'originale anche nell'anteprima: si sposta, e loro con lui.
+// - **Scene grandi:** da [`LARGE_SCENE_SHAPES`] forme vive, mentre la camera
+//   si muove gli strati la seguono tutti insieme con una trasformazione CSS
+//   della radice, che il browser compone senza ridisporre né ridipingere
+//   niente: uno zoom ingrandisce per un momento i pixel di prima. La radice
+//   dipinge la vista e un margine attorno, e taglia il resto; un passo che
+//   scoprirebbe ciò che sta oltre il margine, o che salta lontano, ridisegna
+//   subito. Quando la camera si ferma, gli strati prendono la vista nuova e
+//   la radice torna ferma. Sotto quella soglia ogni passo della camera
+//   ridisegna subito.
 // - **Strati immagine:** un `<img>` da blob, disegnato per il rettangolo della
 //   vista più un margine. Mentre la camera si muove l'immagine segue con una
 //   trasformazione CSS; quando si ferma si ridisegna alla nuova scala e al
@@ -323,6 +332,27 @@ const MARGIN = 1 / 8;
 
 const DEFAULT_SETTLE_MS = 150;
 
+/// Da quante forme vive una scena è grande: mentre la camera si muove, gli
+/// strati la seguono con la trasformazione della radice, e si ridisegnano a
+/// camera ferma. Con cinquantamila forme un passo di zoom ridisposto e
+/// ridipinto costa al browser un decimo di secondo; con cinquemila, quanto un
+/// fotogramma.
+export const LARGE_SCENE_SHAPES = 5000;
+
+/// Il margine che una scena grande dipinge attorno alla vista, per lato, in
+/// frazioni del lato più lungo della vista: ciò che una panoramica o uno zoom
+/// indietro possono scoprire prima di ridisegnare. Il resto è tagliato: il
+/// primo fotogramma in cui la radice si muove costa a Chromium in proporzione
+/// alla sua area sullo schermo, e con tutto il disegno dentro, duecento
+/// tavole viste da vicino, un passo costava più di mezzo secondo.
+const LARGE_MARGIN = 1 / 4;
+
+/// Fino a quale ingrandimento il primo passo di un movimento porta gli strati
+/// con la radice. Oltre, come per un salto su una tavola o sulla scelta, li
+/// ridisegna subito: la radice ingrandita costerebbe di più, e mostrerebbe
+/// pixel sfocati.
+const LARGE_CARRY = 2;
+
 /// Una forma o un gruppo nel DOM.
 interface NodeRecord {
   readonly paint: PaintNode;
@@ -402,9 +432,22 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
   root.setAttribute("aria-hidden", "true");
   host.append(root);
 
+  /// La vista in cui gli strati sono disegnati, e quella che la camera
+  /// chiede: in una scena grande la seconda corre avanti mentre la camera si
+  /// muove, e la radice porta gli strati dalla prima alla seconda.
   let view: PainterView = { scale: 1, angle: 0, tx: 0, ty: 0 };
+  let wanted: PainterView = view;
+  /// La scena ha almeno [`LARGE_SCENE_SHAPES`] forme vive.
+  let large = false;
+  /// La radice porta gli strati verso la vista che la camera chiede.
+  let carrying = false;
   let width = host.clientWidth;
   let height = host.clientHeight;
+  /// Il margine dipinto attorno alla vista in una scena grande, in pixel:
+  /// [`LARGE_MARGIN`] dove il browser conosce `overflow-clip-margin`;
+  /// altrimenti la radice taglia sul suo bordo, e il margine è nullo.
+  let margin = 0;
+  const clipMargin = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("overflow-clip-margin", "1px");
   let layers: LayerRecord[] = [];
   let defs: DefsRecord | null = null;
   let disposed = false;
@@ -1262,6 +1305,9 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
     if (originals !== anchored) reanchor();
     // Le risorse prima degli strati, come nel file.
     place(root, [...(defs === null ? [] : [defs.el]), ...layers.map((record) => record.el)]);
+    let shapes = 0;
+    for (const layer of scene.layers) if (layer.kind === "live") shapes += shapeCount(layer.nodes, LARGE_SCENE_SHAPES);
+    setLarge(shapes >= LARGE_SCENE_SHAPES);
     applyFocus();
     applyDraft();
     // Uno strato che la scena ridisegna tiene spostata l'immagine vecchia
@@ -1288,20 +1334,91 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
 
   // --- vista ----------------------------------------------------------------------
 
+  const sameView = (a: PainterView, b: PainterView): boolean => a.scale === b.scale && a.angle === b.angle && a.tx === b.tx && a.ty === b.ty;
+
+  /// Disegna gli strati nella vista che la camera chiede: la camera degli
+  /// strati vivi, il posto delle immagini. La radice torna ferma.
+  const commitView = (): void => {
+    if (!sameView(wanted, view)) {
+      view = wanted;
+      const transform = cameraTransform();
+      for (const record of layers) {
+        if (record.kind === "live") record.camera.setAttribute("transform", transform);
+        else if (record.shown !== null) position(record.shown);
+      }
+    }
+    root.style.removeProperty("transform");
+    carrying = false;
+  };
+
+  /// Il margine di una scena grande per la misura di adesso della vista.
+  const setMargin = (): void => {
+    margin = large && clipMargin ? Math.round(Math.max(width, height) * LARGE_MARGIN) : 0;
+    if (margin > 0) root.style.setProperty("overflow-clip-margin", `${margin}px`);
+    else root.style.removeProperty("overflow-clip-margin");
+  };
+
+  /// La scena diventa grande, o smette di esserlo: [`LARGE_SCENE_SHAPES`].
+  /// Una scena grande ha la radice che una trasformazione sposta senza
+  /// ridipingerla, e che taglia ciò che sta oltre il margine. La radice ha
+  /// sempre una trasformazione, anche ferma: in Chromium il passo da nessuna
+  /// trasformazione a una conta come un cambio di scala.
+  const setLarge = (next: boolean): void => {
+    if (next === large) return;
+    large = next;
+    root.toggleAttribute("data-large", large);
+    setMargin();
+    if (!large) commitView();
+  };
+
+  /// Vero se la radice può portare gli strati con `carry`, dalla vista in cui
+  /// sono disegnati a quella che la camera chiede. Ogni angolo della radice,
+  /// riportato nella vista disegnata, deve cadere nel margine dipinto: un
+  /// rettangolo trasformato è convesso, e se ci stanno i suoi angoli ci sta
+  /// tutto. Da ferma, poi, la radice non parte ingrandita oltre
+  /// [`LARGE_CARRY`].
+  const carries = (carry: Matrix): boolean => {
+    if (!carrying && wanted.scale / view.scale > LARGE_CARRY) return false;
+    const back = invert(carry);
+    if (back === null) return false;
+    const [a, b, c, d, e, f] = back;
+    for (const [x, y] of [[0, 0], [width, 0], [0, height], [width, height]] as const) {
+      const u = a * x + c * y + e;
+      const v = b * x + d * y + f;
+      if (u < -margin || u > width + margin || v < -margin || v > height + margin) return false;
+    }
+    return true;
+  };
+
   const settle = (): void => {
     clearSettle();
     if (disposed) return;
+    commitView();
     for (const record of layers) if (record.kind === "image" && stale(record)) render(record);
   };
 
   const setView = (next: PainterView): void => {
     if (disposed) return;
-    if (next.scale === view.scale && next.angle === view.angle && next.tx === view.tx && next.ty === view.ty) return;
-    view = { scale: next.scale, angle: next.angle, tx: next.tx, ty: next.ty };
-    const transform = cameraTransform();
-    for (const record of layers) {
-      if (record.kind === "live") record.camera.setAttribute("transform", transform);
-      else if (record.shown !== null) position(record.shown);
+    if (sameView(next, wanted)) return;
+    wanted = { scale: next.scale, angle: next.angle, tx: next.tx, ty: next.ty };
+    // Dalla vista in cui gli strati sono disegnati, alla scena, alla vista
+    // nuova.
+    const back = large && !sameView(wanted, view) ? invert(viewMatrix(view)) : null;
+    const carry = back === null ? null : compose(viewMatrix(wanted), back);
+    if (carry === null || !carries(carry)) {
+      commitView();
+    } else {
+      // Fra due viste c'è una similitudine: una rotazione `r`, una scala `s`,
+      // una traslazione `t`. La scala va nella coordinata omogenea, non nella
+      // parte lineare: il punto `p` diventa `(r p + t / s) / (1 / s)`, cioè
+      // `s r p + t`, lo stesso a schermo. Chromium invece, quando la parte
+      // lineare della trasformazione di un blocco cambia scala, ridispone
+      // ogni testo SVG che ha dentro al layout seguente, e qualunque cosa
+      // nella pagina ne chiede uno a ogni passo.
+      const [a, b, c, d, e, f] = carry;
+      const s = Math.sqrt(Math.abs(a * d - b * c));
+      root.style.transform = `matrix3d(${a / s}, ${b / s}, 0, 0, ${c / s}, ${d / s}, 0, 0, 0, 0, 1, 0, ${e / s}, ${f / s}, 0, ${1 / s})`;
+      carrying = true;
     }
     clearSettle();
     settleTimer = setTimeout(settle, settleMs);
@@ -1314,6 +1431,7 @@ export function createSvgPainter(host: HTMLElement, owner: Lifetime, options: Pa
       if (nextWidth === width && nextHeight === height) return;
       width = nextWidth;
       height = nextHeight;
+      setMargin();
       settle();
     });
     resizeObserver.observe(host);

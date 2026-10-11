@@ -324,11 +324,21 @@ export interface Outline {
   readonly symbols: ReadonlyMap<string, readonly OutlineNode[]>;
 }
 
+/// Vero se il percorso `parent` è quello del genitore di `child`.
+function holds(parent: readonly number[], child: readonly number[]): boolean {
+  if (parent.length !== child.length - 1) return false;
+  for (let i = parent.length - 1; i >= 0; i--) if (parent[i] !== child[i]) return false;
+  return true;
+}
+
 /// [`outline`], coi contenuti dei simboli.
 export function outlineAll(items: readonly Item[], targets: LinkTargets = () => null): Outline {
   const top: Building[] = [];
   const contents = new Map<string, Building[]>();
-  const byPath = new Map<string, Building>();
+  // In ordine di documento il genitore di un elemento è l'ultimo visto un
+  // livello più su: qui, per ogni profondità, l'ultimo che tiene i suoi
+  // figli, o `null`.
+  const open: (Building | null)[] = [];
   const all: Building[] = [];
   const connectors: Building[] = [];
   const groups: Building[] = [];
@@ -342,15 +352,17 @@ export function outlineAll(items: readonly Item[], targets: LinkTargets = () => 
   }
   for (const item of items) {
     if (item.kind !== "element" || item.path.length === 0) continue;
+    const depth = item.path.length;
+    open[depth - 1] = null;
     if (item.role === "symbol" && item.id !== null && !contents.has(item.id)) {
       // Un simbolo non è un oggetto: tiene soltanto i figli.
       const children: Building[] = [];
       contents.set(item.id, children);
-      byPath.set(item.path.join("."), { item, key: keyOf(item), name: null, kind: null, target: null, connection: null, joined: null, children });
+      open[depth - 1] = { item, key: keyOf(item), name: null, kind: null, target: null, connection: null, joined: null, children };
       continue;
     }
-    const parent = item.path.length === 1 ? null : byPath.get(item.path.slice(0, -1).join("."));
-    if (item.path.length > 1 && parent === undefined) continue;
+    const parent = depth === 1 ? null : open[depth - 2] ?? null;
+    if (depth > 1 && (parent === null || !holds(parent.item.path, item.path))) continue;
     if (NOT_OBJECTS.has(item.role)) continue;
     const title = nameOf(item.title ?? "");
     const symbol = item.role === "instance" && item.symbol !== undefined ? (symbols.get(item.symbol) ?? null) : null;
@@ -359,7 +371,7 @@ export function outlineAll(items: readonly Item[], targets: LinkTargets = () => 
       : title ?? (item.role === "text" ? nameOf(textOf(item) ?? "") : symbol);
     const kind = title !== null && symbol !== null && title !== symbol ? symbol : null;
     const node: Building = { item, key: keyOf(item), name, kind, target: item.role === "link" ? targets(item) : null, connection: null, joined: null, children: [] };
-    byPath.set(item.path.join("."), node);
+    open[depth - 1] = node;
     (parent?.children ?? top).push(node);
     all.push(node);
     if (item.role === "connector") connectors.push(node);

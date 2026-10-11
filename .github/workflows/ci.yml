@@ -330,3 +330,15 @@ jobs:
           name: banco-connettori-${{ github.sha }}
           path: apps/client/bench/.output/connectors-300.json
           include-hidden-files: true
+      - name: cinquantamila elementi si aprono e si muovono senza scatti
+        id: bench_large
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:large
+        working-directory: apps/client
+      - name: il referto del banco delle scene grandi
+        if: ${{ failure() && steps.bench_large.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-scene-grandi-${{ github.sha }}
+          path: apps/client/bench/.output/large.json
+          include-hidden-files: true

@@ -459,8 +459,10 @@ interface Nested {
 /// quelli del gruppo isolato; quelli più dentro si trovano con `get`,
 /// `children` e `deepAt`.
 export class SceneIndex {
-  private readonly byKey: Map<string, Unit | null>;
-  private readonly top: ReadonlySet<Unit>;
+  private readonly byKey = new Map<string, Unit | null>();
+  /// Gli oggetti di primo livello, per [`siblings`]: si raccolgono la prima
+  /// volta che servono.
+  private top: ReadonlySet<Unit> | null = null;
 
   private scoped: Unit | null | undefined;
 
@@ -469,8 +471,7 @@ export class SceneIndex {
     readonly layers: readonly LayerInfo[],
     private readonly nested: Nested | null = null,
   ) {
-    this.byKey = new Map(units.map((unit) => [unit.key, unit]));
-    this.top = new Set(units);
+    for (const unit of units) this.byKey.set(unit.key, unit);
   }
 
   /// Il gruppo, il collegamento o il simbolo isolato come oggetto, che
@@ -504,6 +505,7 @@ export class SceneIndex {
   /// compreso, in ordine di documento.
   siblings(unit: Unit): Unit[] {
     const parent = unit.node.parent;
+    this.top ??= new Set(this.units);
     if (this.top.has(unit) || parent === null || this.nested === null) return this.units.filter((each) => each.node.parent === parent);
     return this.nested.childrenOf(parent).map((child) => this.keep(child));
   }
@@ -621,6 +623,10 @@ export class SceneIndexer {
   private symbolInfos = new WeakMap<PaintNode, SymbolInfo>();
   /// Il riquadro degli originali delle copie, per nodo dipinto.
   private originalBoxes = new WeakMap<PaintNode, Bounds | null>();
+  /// Gli oggetti già misurati che dipendono soltanto dal loro elemento e da
+  /// dove stanno: dopo un tratto, l'indice nuovo misura di nuovo solo ciò
+  /// che è cambiato.
+  private known = new WeakMap<LeafNode, KnownUnit>();
   /// Quanti simboli si stanno attraversando, uno dentro l'altro.
   private depth = 0;
   /// Mentre si misura un simbolo, quelli che il suo contenuto usa.
@@ -939,6 +945,8 @@ export class SceneIndexer {
   private unit(node: ElementPart, path: number[], layer: string | null, parent: Matrix, style: Style, clips: readonly Clip[] | null, shown = false): Unit | null {
     const attrs = this.attrsOf(node);
     if (attrs === null || (!shown && hidden(attrs))) return null;
+    const known = node.kind === "leaf" && clips === null ? this.known.get(node) : undefined;
+    if (known !== undefined && known.attrs === attrs && known.unit.layer === layer && equalStyle(known.style, style) && sameMatrix(known.unit.parent, parent) && samePath(known.unit.path, path)) return known.unit;
     const own = transformOf(attrs);
     const matrix = compose(parent, own);
     const inner = styleOf(style, attrs);
@@ -955,7 +963,7 @@ export class SceneIndexer {
     const id = node.facts.id;
     const tag = tagName(node);
     const look = node.kind === "leaf" && node.details!.role === "text" ? textLook(this.builder.shape(node), inner, node.details!.wrap ?? null, this.textTrack(node)) : null;
-    return new Unit(
+    const unit = new Unit(
       id ?? `@${path.join(".")}`,
       id ?? { path, tag },
       id,
@@ -973,6 +981,8 @@ export class SceneIndexer {
       inner,
       look,
     );
+    if (node.kind === "leaf" && clips === null && standalone(node, attrs)) this.known.set(node, { unit, attrs, style });
+    return unit;
   }
 
   /// Gli attributi dipinti di un elemento; `null` se non disegna.
@@ -1361,6 +1371,44 @@ export class SceneIndexer {
     if (cache !== null) cache.scene = { matrix: part.matrix, bounds };
     return bounds;
   }
+}
+
+/// Un oggetto già misurato, con gli attributi dipinti della sua forma, che
+/// la riconoscono, e lo stile del genitore con cui si è misurato.
+interface KnownUnit {
+  readonly unit: Unit;
+  readonly attrs: readonly PaintAttr[];
+  readonly style: Style;
+}
+
+/// Vero se l'oggetto `leaf`, con gli attributi dipinti `attrs`, dipende
+/// soltanto da sé, da dove sta e dallo stile del genitore: non rimanda a
+/// simboli, originali, ritagli, maschere, punte o tracciati, che cambiano
+/// senza che lui cambi.
+function standalone(leaf: LeafNode, attrs: readonly PaintAttr[]): boolean {
+  const details = leaf.details!;
+  if (details.role === "instance" || details.role === "copy" || details.textPath !== undefined) return false;
+  return attrs.every(([name]) => name !== "clip-path" && name !== "mask" && !name.startsWith("marker"));
+}
+
+/// Due stili uguali in tutto, anche in ciò che di un testo si mostra.
+function equalStyle(a: Style, b: Style): boolean {
+  return (
+    a === b
+    || (a.fill === b.fill
+      && a.stroke === b.stroke
+      && a.strokeWidth === b.strokeWidth
+      && a.fontSize === b.fontSize
+      && a.spacing === b.spacing
+      && a.anchor === b.anchor
+      && a.family === b.family
+      && a.weight === b.weight
+      && a.color === b.color)
+  );
+}
+
+function samePath(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((step, at) => step === b[at]);
 }
 
 /// Dove stanno i figli di un contenitore: il suo percorso, il livello, la

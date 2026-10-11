@@ -82,7 +82,7 @@ use crate::classify::{Role, Stroke, Tool};
 use crate::diagnostics::{Code, Diagnostic};
 use crate::geometry::{
     along, ellipse_path, flatten, parse_path, points_path, rect_path, winding, Bounds,
-    BoundsBuilder, Matrix, Segment,
+    BoundsBuilder, BoundsGrid, Matrix, Segment,
 };
 use crate::text::Span;
 use crate::values::{points, start_offset, trim, Rgb};
@@ -420,8 +420,9 @@ impl Legibility {
                 };
             }
         }
+        let grid = BoundsGrid::new(self.painted.iter().map(|painted| painted.bounds));
         for check in &self.checks {
-            let backdrop = |p: [f64; 2]| self.backdrop(paper, check.under, p);
+            let backdrop = |p: [f64; 2]| self.backdrop(paper, check.under, p, &grid);
             let worst = match &check.subject {
                 Subject::Pen {
                     color: (rgb, alpha),
@@ -527,10 +528,19 @@ impl Legibility {
     }
 
     /// Il colore sotto il punto `p` della radice, con le prime `under` figure
-    /// dipinte sopra la carta; `None` se non si sa.
-    fn backdrop(&self, paper: Option<Rgb>, under: usize, p: [f64; 2]) -> Option<Rgb> {
+    /// dipinte sopra la carta; `None` se non si sa. `grid` divide le figure
+    /// per posto: si guardano soltanto quelle che possono coprire il punto,
+    /// nello stesso ordine, e un disegno grande non costa il quadrato dei suoi
+    /// oggetti.
+    fn backdrop(
+        &self,
+        paper: Option<Rgb>,
+        under: usize,
+        p: [f64; 2],
+        grid: &BoundsGrid,
+    ) -> Option<Rgb> {
         let mut color = paper;
-        for painted in &self.painted[..under] {
+        for painted in grid.near(p, under).into_iter().map(|at| &self.painted[at]) {
             if !painted.covers(p) {
                 continue;
             }

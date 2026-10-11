@@ -1082,8 +1082,25 @@ html, body, #app {
   overflow: hidden;
   pointer-events: none;
 }
+/* Il painter non riceve il puntatore, e non eredita il cursore della
+   superficie: cambiare strumento o maniglia sotto il puntatore cambia il
+   cursore della superficie, e se il painter lo ereditasse andrebbe ricalcolato
+   lo stile di ogni oggetto del disegno. */
 .spatial-painter {
   isolation: isolate;
+  cursor: auto;
+}
+/* Una scena grande segue la camera con una trasformazione della radice, che
+   il compositor applica senza ridisporre né ridipingere. La radice dipinge un
+   margine attorno alla vista, che il painter misura (`overflow-clip-margin`),
+   e taglia il resto: lo strato del compositor resta della misura della vista,
+   anche quando il disegno è cento volte più largo. Ferma, la radice non ha
+   uno strato suo, e la trasformazione resta, nulla: in Chromium passare da
+   nessuna trasformazione a una fa ridisporre tutti i testi SVG. */
+.spatial-painter[data-large] {
+  overflow: clip;
+  transform: translate(0, 0);
+  transform-origin: 0 0;
 }
 .spatial-overlay {
   width: 100%;
@@ -1277,6 +1294,15 @@ html, body, #app {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   cursor: crosshair;
+}
+/* Sopra ogni strato del foglio, un velo vuoto prende il puntatore. Gli
+   strati sotto non lo ricevono mai, ma senza il velo il browser li
+   attraverserebbe forma per forma a ogni movimento per scoprirlo: con
+   cinquantamila forme, cinque millisecondi. Il bersaglio resta il foglio. */
+.draw-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
 }
 /* Il foglio occupa tutta la larghezza: l'anello del fuoco sta dentro, o lo
    taglierebbe il riquadro che lo contiene. */

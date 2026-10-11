@@ -102,6 +102,7 @@ import { diagnostic, type Diagnostic } from "./diagnostics";
 import {
   along,
   BoundsBuilder,
+  BoundsGrid,
   ellipsePath,
   flatten,
   parsePath,
@@ -189,7 +190,7 @@ class Painted {
     private readonly matrix: Matrix,
     /// Il rettangolo che la contiene nella radice: un punto fuori non la
     /// tocca, e i poligoni non servono.
-    private readonly bounds: Bounds,
+    readonly bounds: Bounds,
     /// Il colore con la sua opacità totale; `null` se non si sa, come per
     /// un'immagine.
     readonly paint: Color | null,
@@ -462,8 +463,9 @@ export class Legibility {
       const covered = bounds.finish();
       if (covered !== null) this.painted[at] = new Painted(shape, m, covered, null, this.painted[at]!.span);
     }
+    const grid = new BoundsGrid(this.painted.map((painted) => painted.bounds));
     for (const check of this.checks) {
-      const backdrop = (p: Point): Rgb | null => this.backdrop(paper, check.under, p);
+      const backdrop = (p: Point): Rgb | null => this.backdrop(paper, check.under, p, grid);
       let worst: { readonly ratio: number; readonly measured: Contrast } | null = null;
       if (check.subject.kind === "pen") {
         const color = check.subject.color;
@@ -542,10 +544,13 @@ export class Legibility {
   }
 
   /// Il colore sotto il punto `p` della radice, con le prime `under` figure
-  /// dipinte sopra la carta; `null` se non si sa.
-  private backdrop(paper: Rgb | null, under: number, p: Point): Rgb | null {
+  /// dipinte sopra la carta; `null` se non si sa. `grid` divide le figure
+  /// per posto: si guardano soltanto quelle che possono coprire il punto,
+  /// nello stesso ordine, e un disegno grande non costa il quadrato dei suoi
+  /// oggetti.
+  private backdrop(paper: Rgb | null, under: number, p: Point, grid: BoundsGrid): Rgb | null {
     let color = paper;
-    for (let i = 0; i < under; i++) {
+    for (const i of grid.near(p, under)) {
       const painted = this.painted[i]!;
       if (!painted.covers(p)) continue;
       const paint = painted.paint;

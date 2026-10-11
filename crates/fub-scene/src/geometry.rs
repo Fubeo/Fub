@@ -7,6 +7,7 @@
 //! trasformato resta un arco, e i suoi estremi si trovano in forma chiusa.
 //! Nessun punto di controllo entra nel rettangolo se la curva non ci passa.
 
+use std::collections::HashMap;
 use std::f64::consts::{PI, TAU};
 
 use crate::values::scan_number;
@@ -798,6 +799,107 @@ pub(crate) fn winding(polygons: &[Vec<[f64; 2]>], p: [f64; 2]) -> i32 {
     winding
 }
 
+/// Il livello più fine di [`BoundsGrid`]: celle di lato 2⁻⁶⁴, per i
+/// rettangoli più piccoli di così e per quelli senza larghezza o altezza.
+const GRID_FINEST: f64 = -64.0;
+
+/// Il livello più grosso di [`BoundsGrid`]: un rettangolo più largo sta
+/// dappertutto.
+const GRID_COARSEST: f64 = 1000.0;
+
+/// Da qui in su il numero di una cella non è più un intero esatto in virgola
+/// mobile: un rettangolo così lontano sta dappertutto.
+const GRID_FARTHEST: f64 = 4_503_599_627_370_496.0;
+
+/// Delle celle che un rettangolo tocca, oltre le quali sta dappertutto: al
+/// suo livello ne tocca al più due per lato, tre se il logaritmo arrotonda.
+const GRID_CELLS: f64 = 9.0;
+
+/// Dei rettangoli in un ordine, divisi per posto: per un punto dice quali
+/// possono contenerlo senza guardarli tutti. Ogni rettangolo sta al livello
+/// delle celle quadrate più piccole, di lato una potenza di due, larghe
+/// almeno quanto lui, e un punto guarda la sua cella a ogni livello. Un
+/// rettangolo vuoto non sta da nessuna parte; uno troppo grande o troppo
+/// lontano per le celle sta dappertutto. Le celle sono un filtro e basta: chi
+/// chiede guarda ancora ogni rettangolo che riceve, e riceve tutti quelli che
+/// contengono il punto, bordi compresi, perché la cella di un numero non
+/// diminuisce mai col numero.
+#[derive(Default)]
+pub(crate) struct BoundsGrid {
+    /// I livelli che hanno rettangoli, in ordine, col lato delle loro celle.
+    levels: Vec<(i32, f64)>,
+    /// I rettangoli di ogni cella, in ordine: il livello e la cella.
+    cells: HashMap<(i32, i64, i64), Vec<usize>>,
+    everywhere: Vec<usize>,
+}
+
+impl BoundsGrid {
+    pub fn new(boxes: impl IntoIterator<Item = Bounds>) -> BoundsGrid {
+        let mut grid = BoundsGrid::default();
+        for (at, Bounds { min, max }) in boxes.into_iter().enumerate() {
+            if !(min[0] <= max[0] && min[1] <= max[1]) {
+                continue;
+            }
+            let level = (max[0] - min[0])
+                .max(max[1] - min[1])
+                .log2()
+                .ceil()
+                .max(GRID_FINEST);
+            let side = 2f64.powf(level);
+            let [x0, y0, x1, y1] =
+                [min[0], min[1], max[0], max[1]].map(|value| (value / side).floor());
+            if !(level <= GRID_COARSEST
+                && (-x0).max(-y0).max(x1).max(y1) < GRID_FARTHEST
+                && (x1 - x0 + 1.0) * (y1 - y0 + 1.0) <= GRID_CELLS)
+            {
+                grid.everywhere.push(at);
+                continue;
+            }
+            // `level` è un intero fra −64 e 1000, e i numeri delle celle
+            // sono interi esatti sotto 2⁵².
+            let level = level as i32;
+            if let Err(place) = grid.levels.binary_search_by(|&(each, _)| each.cmp(&level)) {
+                grid.levels.insert(place, (level, side));
+            }
+            for x in x0 as i64..=x1 as i64 {
+                for y in y0 as i64..=y1 as i64 {
+                    grid.cells.entry((level, x, y)).or_default().push(at);
+                }
+            }
+        }
+        grid
+    }
+
+    /// I rettangoli fra i primi `count` che possono contenere `p`, in ordine.
+    pub fn near(&self, p: [f64; 2], count: usize) -> Vec<usize> {
+        let mut found = Vec::new();
+        let mut lists = 0;
+        let mut take = |list: &[usize]| {
+            if list.first().is_some_and(|&first| first < count) {
+                lists += 1;
+                found.extend(list.iter().copied().take_while(|&at| at < count));
+            }
+        };
+        take(&self.everywhere);
+        for &(level, side) in &self.levels {
+            // Un punto non finito cade in una cella qualunque: nessun
+            // rettangolo lo contiene, e chi chiede lo vede.
+            let cell = (
+                level,
+                (p[0] / side).floor() as i64,
+                (p[1] / side).floor() as i64,
+            );
+            if let Some(list) = self.cells.get(&cell) {
+                take(list);
+            }
+        }
+        if lists > 1 {
+            found.sort_unstable();
+        }
+        found
+    }
+}
+
 /// I segmenti di un'ellisse di centro `center` e raggi `radii`: quattro archi
 /// a partire dal punto a destra del centro, nel verso di SVG.
 pub(crate) fn ellipse_path([cx, cy]: [f64; 2], [rx, ry]: [f64; 2]) -> Vec<Segment> {
@@ -1057,5 +1159,131 @@ mod tests {
             [-5.0, center - 5.0],
             [5.0, center + 5.0],
         );
+    }
+
+    /// Un generatore xorshift a 32 bit, lo stesso dei test di
+    /// `geometry.test.ts`: numeri in [0, 1).
+    fn generator(seed: u32) -> impl FnMut() -> f64 {
+        let mut state = seed;
+        move || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            f64::from(state) / 4_294_967_296.0
+        }
+    }
+
+    /// I rettangoli dei casi: per lo più comuni, alcuni minuscoli, senza
+    /// larghezza, enormi, lontanissimi, infiniti, vuoti, coi bordi sulle celle.
+    fn grid_boxes() -> Vec<Bounds> {
+        let mut next = generator(0x9e37_79b9);
+        let mut boxes = Vec::new();
+        for i in 0..300 {
+            let x = next() * 1000.0 - 500.0;
+            let y = next() * 1000.0 - 500.0;
+            let r = next();
+            let rect = |w: f64, h: f64| Bounds {
+                min: [x, y],
+                max: [x + w, y + h],
+            };
+            boxes.push(match i % 10 {
+                6 => rect(r * 1e-3, r * 1e-3),
+                7 if i % 20 == 7 => rect(0.0, r * 10.0),
+                7 => rect(0.0, 0.0),
+                8 => Bounds {
+                    min: [-1e6 + r, -1e6 - r],
+                    max: [1e6 + r * 1e6, 1e6 + r],
+                },
+                9 => match (i / 10) % 5 {
+                    0 => Bounds {
+                        min: [f64::INFINITY; 2],
+                        max: [f64::NEG_INFINITY; 2],
+                    },
+                    1 => Bounds {
+                        min: [f64::NAN, 0.0],
+                        max: [10.0, 10.0],
+                    },
+                    2 => Bounds {
+                        min: [1e17 + r * 1e16, -1e17],
+                        max: [1e17 + r * 1e16 + 1e15, -1e17 + 1e15],
+                    },
+                    3 => Bounds {
+                        min: [f64::NEG_INFINITY; 2],
+                        max: [f64::INFINITY; 2],
+                    },
+                    _ => Bounds {
+                        min: [0.0, 0.0],
+                        max: [64.0, 64.0],
+                    },
+                },
+                _ => rect(r.powi(3) * 300.0, next().powi(3) * 300.0),
+            });
+        }
+        boxes
+    }
+
+    #[test]
+    fn the_grid_gives_every_box_holding_the_point_in_order() {
+        let boxes = grid_boxes();
+        let grid = BoundsGrid::new(boxes.iter().copied());
+        let mut next = generator(0x2545_f491);
+        let mut probes = vec![
+            [f64::NAN, 0.0],
+            [f64::INFINITY, 0.0],
+            [f64::NEG_INFINITY, f64::NEG_INFINITY],
+            [0.0, 0.0],
+            [-0.0, 64.0],
+            [64.0, 64.0],
+        ];
+        for &Bounds { min, max } in &boxes {
+            probes.extend([
+                min,
+                max,
+                [min[0], max[1]],
+                [max[0], min[1]],
+                [(min[0] + max[0]) / 2.0, (min[1] + max[1]) / 2.0],
+            ]);
+        }
+        for _ in 0..300 {
+            probes.push([next() * 1200.0 - 600.0, next() * 1200.0 - 600.0]);
+        }
+        for p in probes {
+            for count in [0, 1, 150, 300] {
+                let near = grid.near(p, count);
+                assert!(
+                    near.iter().all(|&at| at < count) && near.windows(2).all(|w| w[0] < w[1]),
+                    "{p:?} {count}: {near:?}"
+                );
+                for (at, Bounds { min, max }) in boxes.iter().enumerate().take(count) {
+                    let inside =
+                        p[0] >= min[0] && p[0] <= max[0] && p[1] >= min[1] && p[1] <= max[1];
+                    assert!(!inside || near.contains(&at), "{p:?} {count}: manca {at}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_grid_looks_at_few_boxes_even_among_many() {
+        let mut next = generator(0x6c8e_9cf5);
+        let mut boxes = Vec::new();
+        for _ in 0..20_000 {
+            let x = next() * 2000.0;
+            let y = next() * 2000.0;
+            let w = 1.0 + next() * 19.0;
+            let h = 1.0 + next() * 19.0;
+            boxes.push(Bounds {
+                min: [x, y],
+                max: [x + w, y + h],
+            });
+        }
+        let grid = BoundsGrid::new(boxes.iter().copied());
+        let seen: usize = (0..2000)
+            .map(|_| {
+                let p = [next() * 2000.0, next() * 2000.0];
+                grid.near(p, boxes.len()).len()
+            })
+            .sum();
+        assert!(seen < 2000 * 20, "{seen}");
     }
 }

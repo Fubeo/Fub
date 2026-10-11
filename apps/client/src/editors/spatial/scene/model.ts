@@ -469,13 +469,31 @@ export type Head = { readonly doc: XmlDocument; readonly element: ElementNode } 
 
 /// I tag d'apertura già letti, per elemento, col testo e lo scope con cui sono
 /// stati letti: chi li chiede due volte per lo stesso testo, e nello stesso
-/// scope, non li rilegge. Li riempie chi li legge ([`readHead`] di `arrange`),
-/// e il motore per le unità che ha appena riscritto e riletto.
+/// scope, non li rilegge. Li riempie chi li legge ([`readHead`]), e il motore
+/// per le unità che ha appena riscritto e riletto.
 export const HEADS = new WeakMap<ElementPart, { readonly raw: string; readonly scope: string; readonly head: Head }>();
 
 /// Lo scope come chiave di [`HEADS`]: i suoi legami, in ordine.
 export function scopeKey(scope: NamespaceScope): string {
   return [...scope.entries()].map(([prefix, uri]) => `${prefix ?? ""}=${uri}`).join(" ");
+}
+
+/// Il tag d'apertura di `node` letto da solo, nello scope del genitore; la
+/// radice non ne ha. Di un elemento modificabile è l'elemento intero. Chi lo
+/// riceve non lo cambia. I tag già letti stanno in [`HEADS`]: chi li chiede
+/// due volte per lo stesso testo, e nello stesso scope, non li rilegge. Un
+/// connettore che segue ne chiede tre, un'operazione su duecento oggetti ne
+/// chiede migliaia, e il painter e gli strumenti leggono gli stessi elementi.
+/// `scope` è quello del genitore, per chi lo conosce già.
+export function readHead(node: ElementPart, scope: NamespaceScope = node.parent === null ? NamespaceScope.EMPTY : scopeOf(node.parent)): Head {
+  const raw = node.kind === "leaf" ? node.raw : node.tail === null ? node.head : `${node.head}</${node.facts.name}>`;
+  const key = scopeKey(scope);
+  const known = HEADS.get(node);
+  if (known !== undefined && known.raw === raw && known.scope === key) return known.head;
+  const fragment = parseFragment(raw, scope);
+  const head: Head = fragment === null ? null : { doc: fragment.doc, element: fragment.doc.element(fragment.id)! };
+  HEADS.set(node, { raw, scope: key, head });
+  return head;
 }
 
 /// `fragment`, da cui è stata costruita l'unità `node` dentro uno scope di

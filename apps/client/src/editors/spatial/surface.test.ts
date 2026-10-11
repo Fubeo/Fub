@@ -598,6 +598,18 @@ describe("le selezioni e `reveal`", () => {
     expect(surface.selectedText!()).toEqual({ primary: ACCENTED.slice(start, end), secondary: [] });
   });
 
+  it("il testo di un oggetto scelto tiene i terminatori del file", () => {
+    const source = doc(`\r\n<title>Perché è così</title>\r\n${LAYER}\r\n<g id="o9a8b7c6d">\r\n  <rect id="o1a2b3c4d" x="60" y="60" width="20" height="20"/>\r\n</g>\r\n</g>\r\n`);
+    const { surface } = mount(source);
+    const start = source.indexOf('<g id="o9');
+    const end = source.indexOf("</g>") + "</g>".length;
+    expect(surface.reveal!({ span: { start: bytes(source, start) + 2, end: bytes(source, start) + 2 } })).toBe(true);
+    expect(surface.selections!()).toEqual({
+      primary: { start: bytes(source, start), end: bytes(source, end), text: source.slice(start, end) },
+      secondary: [],
+    });
+  });
+
   it("con più oggetti, il primo nel documento è il principale", () => {
     const { surface } = mount(ACCENTED);
     key(parent, { key: "a", ctrlKey: true });

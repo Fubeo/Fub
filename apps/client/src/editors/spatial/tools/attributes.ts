@@ -28,7 +28,7 @@ import type { Details, Tag } from "../scene/classify";
 import { svgAttribute } from "../scene/classify";
 import { parsePath } from "../scene/geometry";
 import { writeConnectorEnd, writeLabelPlace } from "../scene/connectors";
-import { elementChildren, pathOf, writtenOf, type DocumentModel, type ElementPart } from "../scene/model";
+import { elementChildren, pathOf, readHead, writtenOf, type DocumentModel, type ElementPart } from "../scene/model";
 import type { Op } from "../scene/ops";
 import { attributeKey, canonicalOrder, pathData, type OutAttr } from "../scene/serialize";
 import {
@@ -48,7 +48,6 @@ import {
 import { FUB_NS, XLINK_NS, XMLNS_URI } from "../scene/xml";
 import type { Role } from "../scene/analysis";
 import { formatNumber } from "../number";
-import { readHead } from "./arrange";
 import { transformValue, type NewIds } from "./edit";
 import { lockedAbove } from "./follow";
 import { customColor } from "./palette";

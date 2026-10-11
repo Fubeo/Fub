@@ -8025,6 +8025,10 @@ export function createDrawEditor(host: HTMLElement, initial: SceneEngine, owner:
 
   const refreshScene = (): void => {
     scene = builder.build(paintSource());
+    // L'albero degli oggetti si ricava qui, nel passo che cambia il disegno:
+    // chi poi sceglie o descrive un oggetto lo trova pronto, e in un disegno
+    // grande non è un clic a pagarlo.
+    outlineNow();
     drawingFonts.use(scene);
     painter.setDraft(null);
     painter.update(scene);
