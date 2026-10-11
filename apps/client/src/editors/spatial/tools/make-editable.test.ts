@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ROOT_PRESENTATION } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
 import type { RandomBytes } from "../scene/ids";
+import { FIDELITY } from "../../../../bench/fidelity-corpus";
 import { LIVE_ROOT, planEditable, type EditablePlan, type EditableScope } from "./make-editable";
 
 const ALL: EditableScope = { kind: "all" };
@@ -927,5 +928,20 @@ describe("rendere modificabili i use: simboli e cloni", () => {
       [[0, 0], "circle", { kind: "attribute", name: "requiredFeatures" }],
       [[1], "use", { kind: "linked", id: "g1" }],
     ]);
+  });
+});
+
+describe("le scene del banco di fedeltà da rendere modificabili", () => {
+  const scenes = FIDELITY.filter((scene) => scene.editable !== undefined);
+
+  it("ci sono, e insieme toccano ogni traduzione", () => {
+    const seen = new Set<string>();
+    for (const scene of scenes) for (const [kind] of planEditable(scene.text, ALL).translations) seen.add(kind);
+    expect([...seen].sort()).toEqual(["color", "data", "resource", "sheet", "style", "svg", "text", "unit", "use"]);
+  });
+
+  it.each(scenes.map((scene) => [scene.id, scene] as const))("%s dà le parti che dice, in operazioni che si applicano e si annullano", (_, scene) => {
+    const out = plan(scene.text);
+    expect([out.converted, out.leftovers.length]).toEqual([scene.editable!.converted, scene.editable!.left]);
   });
 });

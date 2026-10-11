@@ -69,6 +69,7 @@ flowchart LR
 - [Disegni, caratteri del vault](product/drawing-fonts.md)
 - [Disegni, simboli](product/drawing-symbols.md)
 - [Disegni, ripetizioni e simmetria](product/drawing-repeats.md)
+- [Disegni, rendere modificabile](product/drawing-editable.md)
 - [Disegni, risorse](product/drawing-resources.md)
 - [Disegni, livello Personalizzato](product/drawing-custom.md)
 - [Annotazioni dei PDF](product/pdf-annotations.md)

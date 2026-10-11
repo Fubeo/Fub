@@ -87,6 +87,7 @@ in [Disegni, livello Esperto](drawing-expert.md).
 | Pagina di stampa del PDF | Esperto | nella finestra «Esporta», per il PDF, il gruppo «Pagina»: la carta, i margini, l'abbondanza e i segni ([Disegni, esportare](drawing-export.md#per-la-stampa)); senza, il PDF è grande quanto il disegno |
 | Simboli | Esperto | «Crea simbolo» e «Scollega dal simbolo», nella barra «Disponi», in «Selezione avanzata» e col tasto destro; nelle proprietà la riga «Simbolo»; il pulsante «Simboli» e il suo pannello, coi simboli del disegno e le librerie del vault ([Disegni, simboli](drawing-symbols.md)); senza, le istanze si vedono e si scelgono come ogni oggetto, e il loro simbolo si modifica dove si isola un gruppo |
 | Ripetizioni | Esperto | il menu «Ripeti», nella barra «Disponi», in «Selezione avanzata» e col tasto destro, con «Espandi la ripetizione»; nelle proprietà la sezione «Ripetizione» ([Disegni, ripetizioni e simmetria](drawing-repeats.md)); senza, le ripetizioni si vedono e si scelgono come ogni oggetto, si aprono dove si isola un gruppo e si separano come un gruppo |
+| Rendi modificabile | Esperto | «Rendi modificabile…» e «Rendi modificabile il disegno…», in «Selezione avanzata» e col tasto destro; «Rendi modificabile…» sull'avviso di un SVG estraneo, accanto a «Modifica» ([Disegni, rendere modificabile](drawing-editable.md)); senza, le parti di altri programmi restano come sono |
 
 Senza «Livelli» il disegno va nel livello più alto che si vede e non è
 bloccato, come all'Essenziale. La barra «Disponi» compare quando, per la
