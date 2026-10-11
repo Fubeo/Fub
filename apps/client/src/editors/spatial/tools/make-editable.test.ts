@@ -334,3 +334,205 @@ describe("rendere modificabile un disegno", () => {
     expect([...LIVE_ROOT]).toEqual([...ROOT_PRESENTATION]);
   });
 });
+
+const XL = 'viewBox="0 0 200 100" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"';
+
+describe("rendere modificabili le sfumature e le risorse fuori posto", () => {
+  it("una catena di Inkscape: la sfumatura prende gli stop e gli attributi del modello, che se ne va", () => {
+    const out = plan(svg(`  <defs id="defs1">
+    <linearGradient id="linearGradient1" inkscape:collect="always">
+      <stop style="stop-color:#ff0000;stop-opacity:1;" offset="0" id="stop1" />
+      <stop style="stop-color:#ff0000;stop-opacity:0;" offset="1" id="stop2" />
+    </linearGradient>
+    <linearGradient inkscape:collect="always" xlink:href="#linearGradient1" id="linearGradient2" x1="20" y1="50" x2="80" y2="50" gradientUnits="userSpaceOnUse" />
+  </defs>
+  <rect style="fill:url(#linearGradient2);stroke:none" id="rect1" x="20" y="20" width="60" height="60" />`, XL));
+    expect(out.after).toBe(svg(`  <defs id="defs1">
+    <linearGradient inkscape:collect="always" id="linearGradient2" x1="20" y1="50" x2="80" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff0000"/>
+      <stop offset="1" stop-color="#ff0000" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect id="rect1" x="20" y="20" width="60" height="60" fill="url(#linearGradient2)" />`, XL));
+    expect(out.translations.get("resource")).toBe(1);
+  });
+
+  it("un modello che qualcuno usa direttamente resta; da uno lineare una radiale prende solo gli stop", () => {
+    const shared = plan(svg(`  <defs id="defs1">
+    <linearGradient id="lg1" inkscape:collect="always"><stop offset="0" style="stop-color:#f00"/><stop offset="1" style="stop-color:#00f"/></linearGradient>
+    <radialGradient id="rg2" inkscape:collect="always" xlink:href="#lg1" cx="50" cy="50" r="40" gradientUnits="userSpaceOnUse"/>
+  </defs>
+  <rect width="10" height="10" style="fill:url(#lg1)"/>
+  <rect x="20" width="10" height="10" style="fill:url(#rg2)"/>`, XL));
+    expect(shared.after).toBe(svg(`  <defs id="defs1">
+    <linearGradient id="lg1" inkscape:collect="always"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+    <radialGradient id="rg2" inkscape:collect="always" cx="50" cy="50" r="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f00"/>
+      <stop offset="1" stop-color="#00f"/>
+    </radialGradient>
+  </defs>
+  <rect width="10" height="10" fill="url(#lg1)"/>
+  <rect x="20" width="10" height="10" fill="url(#rg2)"/>`, XL));
+  });
+
+  it("le sfumature che l'autore tiene in Inkscape e i campioni restano anche se nessuno le usa più", () => {
+    const library = plan(svg(`  <defs id="defs1">
+    <linearGradient id="lg1"><stop offset="0" style="stop-color:#f00"/></linearGradient>
+    <linearGradient id="lg2" inkscape:collect="always" xlink:href="#lg1" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse"/>
+  </defs>
+  <rect width="10" height="10" style="fill:url(#lg2)"/>`, XL));
+    expect(library.after).toContain(`<linearGradient id="lg1"><stop offset="0" stop-color="#f00"/></linearGradient>`);
+    const swatch = plan(svg(`  <defs id="defs1">
+    <linearGradient id="sw" inkscape:swatch="solid" inkscape:collect="always"><stop offset="0" style="stop-color:#336699"/></linearGradient>
+    <linearGradient id="lg" inkscape:collect="always" xlink:href="#sw" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse"/>
+  </defs>
+  <rect width="10" height="10" style="fill:url(#lg)"/>`, XL));
+    expect(swatch.after).toBe(svg(`  <defs id="defs1">
+    <linearGradient id="sw" inkscape:swatch="solid" inkscape:collect="always"><stop offset="0" stop-color="#336699"/></linearGradient>
+    <linearGradient id="lg" inkscape:collect="always" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#336699"/>
+    </linearGradient>
+  </defs>
+  <rect width="10" height="10" fill="url(#lg)"/>`, XL));
+  });
+
+  it("una sfumatura con stop suoi prende dal modello solo gli attributi che non ha", () => {
+    const out = plan(svg(`  <defs id="defs1">
+    <linearGradient id="base" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse" spreadMethod="reflect" inkscape:collect="always"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+    <linearGradient id="own" xlink:href="#base" x2="50"><stop offset="0" stop-color="#0f0"/><stop offset="1" stop-color="#ff0"/></linearGradient>
+  </defs>
+  <rect width="100" height="10" style="fill:url(#own)"/>`, XL));
+    expect(out.after).toBe(svg(`  <defs id="defs1">
+    <linearGradient id="own" x1="0" y1="0" x2="50" y2="0" gradientUnits="userSpaceOnUse" spreadMethod="reflect"><stop offset="0" stop-color="#0f0"/><stop offset="1" stop-color="#ff0"/></linearGradient>
+  </defs>
+  <rect width="100" height="10" fill="url(#own)"/>`, XL));
+  });
+
+  it("le sfumature di Illustrator nei livelli vanno in fondo alla defs, che prende l'id di FubDraw", () => {
+    const out = plan(svg(`  <defs>
+    <style>
+      .cls-1 {
+        fill: url(#Sfumatura_senza_nome_2);
+      }
+
+      .cls-2 {
+        fill: url(#Sfumatura_senza_nome);
+      }
+    </style>
+    <linearGradient id="Sfumatura_senza_nome" data-name="Sfumatura senza nome" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+  </defs>
+  <g id="Livello_1" data-name="Livello 1">
+    <rect class="cls-2" width="10" height="10"/>
+  </g>
+  <g id="Livello_2" data-name="Livello 2">
+    <linearGradient id="Sfumatura_senza_nome_2" data-name="Sfumatura senza nome 2" x1="20" y1="0" x2="30" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f00"/>
+      <stop offset="1" stop-color="#00f"/>
+    </linearGradient>
+    <rect class="cls-1" x="20" width="10" height="10"/>
+  </g>`));
+    expect(out.after).toBe(svg(`  <defs id="fub-defs">
+    <linearGradient id="Sfumatura_senza_nome" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse">
+      <title>Sfumatura senza nome</title>
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#000"/>
+    </linearGradient>
+    <linearGradient id="Sfumatura_senza_nome_2" x1="20" y1="0" x2="30" y2="0" gradientUnits="userSpaceOnUse">
+      <title>Sfumatura senza nome 2</title>
+      <stop offset="0" stop-color="#f00"/>
+      <stop offset="1" stop-color="#00f"/>
+    </linearGradient>
+  </defs>
+  <g id="Livello_1">
+    <title>Livello 1</title>
+    <rect width="10" height="10" fill="url(#Sfumatura_senza_nome)"/>
+  </g>
+  <g id="Livello_2">
+    <title>Livello 2</title>
+    <rect x="20" width="10" height="10" fill="url(#Sfumatura_senza_nome_2)"/>
+  </g>`));
+    expect(out.translations.get("resource")).toBe(1);
+  });
+
+  it("senza una defs, quella di FubDraw nasce dopo il titolo; una defs chiusa si apre", () => {
+    const fresh = plan(svg(`  <title>Disegno</title>
+  <linearGradient id="g" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#f00"/>
+    <stop offset="1" stop-color="#00f"/>
+  </linearGradient>
+  <rect width="100" height="50" fill="url(#g)"/>`));
+    expect(fresh.after).toBe(svg(`  <title>Disegno</title>
+  <defs id="fub-defs">
+    <linearGradient id="g" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f00"/>
+      <stop offset="1" stop-color="#00f"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="50" fill="url(#g)"/>`));
+    const closed = plan(svg(`  <defs id="defs1" />
+  <linearGradient id="g1" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+  <rect id="r1" width="100" height="50" fill="url(#g1)"/>`));
+    expect(closed.after).toBe(svg(`  <defs id="defs1">
+    <linearGradient id="g1" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+  </defs>
+  <rect id="r1" width="100" height="50" fill="url(#g1)"/>`));
+  });
+
+  it("chi usa una risorsa che arriva e resta estraneo si toglie e si rimette dopo di lei", () => {
+    const out = plan(svg(`  <linearGradient id="g" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+  <rect width="10" height="10" fill="url(#g)" onclick="go()"/>
+  <rect x="20" width="10" height="10" style="fill:url(#g)"/>`));
+    expect(out.after).toBe(svg(`  <defs id="fub-defs">
+    <linearGradient id="g" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+  </defs>
+  <rect width="10" height="10" fill="url(#g)" onclick="go()"/>
+  <rect x="20" width="10" height="10" fill="url(#g)"/>`));
+    expect(out.leftovers.map((each) => each.reason)).toEqual([{ kind: "attribute", name: "onclick" }]);
+  });
+
+  it("su un oggetto solo, vengono con lui le risorse che usa", () => {
+    const out = plan(svg(`  <defs id="defs1">
+    <linearGradient id="lg1" inkscape:collect="always"><stop offset="0" style="stop-color:#f00"/></linearGradient>
+    <linearGradient id="lg2" inkscape:collect="always" xlink:href="#lg1" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse"/>
+  </defs>
+  <rect width="10" height="10" style="fill:url(#lg2)"/>
+  <rect x="20" width="10" height="10" style="fill:#00f"/>`, XL), { kind: "units", paths: [[1]] });
+    expect(out.after).toBe(svg(`  <defs id="defs1">
+    <linearGradient id="lg2" inkscape:collect="always" x1="0" y1="0" x2="10" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f00"/>
+    </linearGradient>
+  </defs>
+  <rect width="10" height="10" fill="url(#lg2)"/>
+  <rect x="20" width="10" height="10" style="fill:#00f"/>`, XL));
+  });
+
+  it("una catena chiusa o rotta e un motivo con href restano estranei, col perché", () => {
+    const reasons = (body: string): unknown[] => plan(svg(body, XL)).leftovers.map((each) => [each.name, each.reason]);
+    expect(reasons(`  <defs id="defs1">
+    <linearGradient id="a" xlink:href="#b"><stop offset="0" stop-color="#f00"/></linearGradient>
+    <linearGradient id="b" xlink:href="#a" x1="0" y1="0" x2="1" y2="0"/>
+  </defs>
+  <rect width="10" height="10" style="fill:url(#b)"/>
+  <rect x="20" width="10" height="10" style="fill:#0f0"/>`)).toEqual([["a", { kind: "resource", id: "b" }], ["b", { kind: "resource", id: "a" }], [null, { kind: "resource", id: "b" }]]);
+    expect(reasons(`  <defs id="defs1">
+    <linearGradient id="b" xlink:href="#nope"><stop offset="0" stop-color="#f00"/></linearGradient>
+  </defs>
+  <rect width="10" height="10" style="fill:url(#b)"/>
+  <rect x="20" width="10" height="10" style="fill:#0f0"/>`)).toEqual([["b", { kind: "resource", id: "nope" }], [null, { kind: "resource", id: "b" }]]);
+    expect(reasons(`  <defs id="defs1">
+    <pattern id="p1" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="2" height="2"/></pattern>
+    <pattern id="p2" xlink:href="#p1" patternTransform="rotate(45)"/>
+  </defs>
+  <rect width="10" height="10" style="fill:url(#p2)"/>
+  <rect x="20" width="10" height="10" style="fill:#0f0"/>`)).toEqual([["p2", { kind: "attribute", name: "xlink:href" }], [null, { kind: "resource", id: "p2" }]]);
+  });
+
+  it("una sfumatura in coordinate dell'utente senza la fine resta estranea: SVG la prende dalla finestra", () => {
+    const out = plan(svg(`  <defs id="defs1"><linearGradient id="g" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:#f00"/><stop offset="1" stop-color="#00f"/></linearGradient></defs>
+  <rect width="10" height="10" style="fill:#0f0"/>`));
+    expect(out.leftovers.map((each) => each.reason)).toEqual([{ kind: "missing", name: "x2" }]);
+  });
+});

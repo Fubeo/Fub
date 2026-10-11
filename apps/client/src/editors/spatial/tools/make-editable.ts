@@ -13,6 +13,15 @@
 //   Inkscape e Illustrator, in righe con il `dy`, e il testo fuori dalle
 //   righe in una riga. Gli attributi che non disegnano niente e che il formato non
 //   ammette, come `data-*` e `class`, se ne vanno.
+// - **Le risorse vanno al loro posto:** una sfumatura che rimanda con `href`
+//   a un'altra, come le scrive Inkscape, prende gli attributi e gli `stop`
+//   che ne ereditava, coi valori calcolati; quella a cui rimandava se ne va,
+//   se nessun altro la usa e non è un campione. Una risorsa fuori dalla
+//   `defs` delle risorse, come le scrive Illustrator alla radice o dentro un
+//   livello, va in fondo a quella `defs`; se nessuna `defs` ha un id, la
+//   prima prende quello di FubDraw, e se non ce n'è nessuna se ne crea una
+//   dopo il titolo. Un oggetto che la usa e resta com'era si toglie e si
+//   rimette dopo di lei, perché la trovi.
 // - **Come lo vede un browser, prima e dopo:** lo stile di prima si calcola
 //   con la cascata di CSS e tutti i fogli (`cascade.ts`). Dopo, un elemento
 //   reso modificabile si guarda due volte: coi fogli che restano, come lo
@@ -39,18 +48,22 @@
 //   da cui è partita, con gli spazi attorno com'erano. Un documento non
 //   ancora adottato si adotta nello stesso passo.
 
-import { lineText, resourceIndex, resourceKind, svgAttribute, tagOf, type Resolve, type Tag } from "../scene/classify";
-import { SceneEngine } from "../scene/engine";
-import { transform as svgTransform, viewBox as readViewBox, length as svgLength, paint as formatPaint, reference } from "../scene/values";
-import { elementChildren, tagName, type DocumentModel, type ElementPart } from "../scene/model";
-import type { Op, RestoreOp } from "../scene/ops";
+import { lineText, resourceFault, resourceIndex, resourceKind, svgAttribute, tagOf, type Resolve, type ResourceTag, type Tag } from "../scene/classify";
+import { reindent, SceneEngine } from "../scene/engine";
+import { DEFS_ID } from "../scene/ids";
+import { transform as svgTransform, viewBox as readViewBox, length as svgLength, paint as formatPaint, hrefId, reference, urlIds } from "../scene/values";
+import { elementChildren, lastBreak, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { ROOT, type Op, type RestoreOp, type Target } from "../scene/ops";
 import { canonicalOrder, escapeAttribute, escapeText, formatTransform, type OutAttr } from "../scene/serialize";
 import { SourceText } from "../scene/text";
-import { isSpace, NS_NONE, NS_SVG, NS_XLINK, parseXml, SVG_NS, XML_URI, type Attr, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
+import {
+  FUB_NS, isSpace, NS_NONE, NS_SVG, NS_XLINK, parseXml, SVG_NS, XLINK_NS, XML_URI, type Attr, type ElementNode, type NodeId, type XmlDocument,
+} from "../scene/xml";
 import { formatNumber } from "../number";
 import { Cascade, inherits, longhands, PRESENTATION, readOpacity, renders, same, type CascadeNode } from "./cascade";
 import { Matcher, readDeclarations, readSheet, readSheets, type Rule, type Sheet, type StyleAttr } from "./selectors";
 import { formatHex } from "./css-color";
+import { resourceHome } from "./resources";
 import { BLANK_LINE } from "./text";
 import { ambiguousSpace, difference, lengthOf, paintOf, shapeFacts, type Difference, type ShapeFacts } from "./editable-look";
 
@@ -60,7 +73,7 @@ import { ambiguousSpace, difference, lengthOf, paintOf, shapeFacts, type Differe
 export type EditableScope = { readonly kind: "all" } | { readonly kind: "units"; readonly paths: readonly (readonly number[])[] };
 
 /// Le traduzioni che il comando conta, per dirle.
-export type Translation = "style" | "sheet" | "color" | "unit" | "data" | "text";
+export type Translation = "style" | "sheet" | "color" | "unit" | "data" | "text" | "resource";
 
 /// Perché una parte resta estranea.
 export type Reason =
@@ -73,6 +86,9 @@ export type Reason =
   | { readonly kind: "place"; readonly tag: string }
   /// Un attributo che il formato non ammette e che non si può togliere.
   | { readonly kind: "attribute"; readonly name: string }
+  /// Un attributo che il formato vuole e che manca, come una coordinata di
+  /// una sfumatura in `userSpaceOnUse`, che SVG prende dalla finestra.
+  | { readonly kind: "missing"; readonly name: string }
   /// Un valore di stile che il formato non sa scrivere.
   | { readonly kind: "property"; readonly name: string; readonly value: string }
   /// Uno stile che dipende da dove si guarda il disegno, come `@media`.
@@ -169,6 +185,18 @@ const GEOMETRY: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["x2", new Set(["line"])],
   ["y2", new Set(["line"])],
 ]);
+
+/// Gli attributi che una sfumatura prende da quella a cui rimanda con
+/// `href`, se non li ha: questi da ogni sfumatura…
+const GRADIENT_SHARED: readonly string[] = ["gradientUnits", "gradientTransform", "spreadMethod"];
+
+/// …e questi soltanto da una dello stesso tipo.
+const GRADIENT_OWN: Readonly<Record<string, readonly string[]>> = {
+  linearGradient: ["x1", "y1", "x2", "y2"],
+  radialGradient: ["cx", "cy", "r", "fx", "fy", "fr"],
+};
+
+const INKSCAPE_NS = "http://www.inkscape.org/namespaces/inkscape";
 
 /// I contenitori del formato: i figli di uno che lo diventa si classificano
 /// uno per uno.
@@ -369,6 +397,51 @@ function pathOf(node: El): number[] {
   const out: number[] = [];
   for (let at: El = node; at.parent !== null; at = at.parent) out.push(at.parent.children.indexOf(at));
   return out.reverse();
+}
+
+/// Il prefisso del nome di `node`, con i due punti: vuoto senza prefisso.
+function prefixOf(node: El): string {
+  return node.name.slice(0, node.name.length - node.local.length);
+}
+
+/// Vero se `node` è una sfumatura.
+function isGradient(node: El): boolean {
+  return node.is("linearGradient") || node.is("radialGradient");
+}
+
+/// Vero se `node` sta in una `defs` della radice che il formato legge.
+function inRootDefs(node: El): boolean {
+  const parent = node.parent;
+  return parent !== null && parent.is("defs") && parent.parent !== null && parent.parent.parent === null && parent.part?.kind === "container";
+}
+
+/// L'`href` di `node`: quello senza namespace, se c'è, come lo legge SVG 2.
+function hrefOf(node: El): StyleAttr | null {
+  return node.attrs.find((attr) => attr.uri === "" && attr.local === "href") ?? node.attrs.find((attr) => attr.uri === XLINK_NS && attr.local === "href") ?? null;
+}
+
+/// Gli id a cui rimanda `node` coi suoi attributi, come li conta il motore:
+/// ogni `url(#id)`, e l'`href` locale di un elemento SVG che non è un
+/// collegamento.
+function refsOf(node: El): string[] {
+  const out: string[] = [];
+  for (const attr of node.attrs) {
+    if (attr.uri !== "" && attr.uri !== XLINK_NS) continue;
+    if (attr.local !== "href") out.push(...urlIds(attr.value));
+    else if (node.uri === SVG_NS && node.local !== "a") {
+      const id = hrefId(attr.value);
+      if (id !== null) out.push(id);
+    }
+  }
+  return out;
+}
+
+/// Il rientro della riga su cui comincia ciò che sta in `at` di `text`, se
+/// la comincia; `null` se prima, sulla stessa riga, c'è altro.
+function lineIndent(text: string, at: number): string | null {
+  let k = at;
+  while (k > 0 && (text[k - 1] === " " || text[k - 1] === "\t")) k--;
+  return k === 0 || text[k - 1] === "\n" || text[k - 1] === "\r" ? text.slice(k, at) : null;
 }
 
 /// Vero se `node` è un elemento che da solo non disegna niente.
@@ -678,7 +751,7 @@ function explain(doc: XmlDocument, element: ElementNode, place: "root" | "defs" 
   if (tag === null) return { kind: "element", tag: element.name };
   if (tag === "use") return { kind: "use" };
   if (tag === "tspan" || tag === "textPath" || tag === "view" || tag === "defs" || tag === "symbol") return { kind: "place", tag };
-  if (RESOURCES.has(tag)) return place === "defs" ? { kind: "unknown" } : { kind: "place", tag };
+  if (RESOURCES.has(tag)) return place === "defs" ? resourceFault(doc, element, tag as ResourceTag, resolve) ?? { kind: "unknown" } : { kind: "place", tag };
   if (place === "defs" && tag !== "title" && tag !== "desc" && tag !== "path" && tag !== "text" && tag !== "polyline") return { kind: "place", tag };
   for (const attr of element.attrs) {
     if (attr.ns === NS_SVG) return { kind: "attribute", name: attr.name };
@@ -810,6 +883,18 @@ class Planner {
   /// Ciò che si è escluso, col perché: unità o pezzi di un gruppo.
   private readonly excluded = new Map<El, Reason>();
   private readonly facts = new Map<El, ShapeFacts>();
+  /// Il primo elemento di prima con ogni id.
+  private readonly byId = new Map<string, El>();
+  /// Chi rimanda a ogni id, e se lo fa con `href`.
+  private readonly users = new Map<string, Array<{ readonly node: El; readonly href: boolean }>>();
+  /// Le risorse estranee fuori da una `defs` della radice, che vanno nella
+  /// `defs` delle risorse se diventano modificabili: unità, o pezzi di un
+  /// gruppo che lo diventa.
+  readonly movable = new Set<El>();
+  /// La `defs` delle risorse: quella di FubDraw, la prima della radice con
+  /// un id o, se nessuna ne ha uno, la prima della radice, che prende quello
+  /// di FubDraw; `null` se il disegno non ne ha una.
+  private home: El | null = null;
 
   constructor(
     readonly text: string,
@@ -826,6 +911,31 @@ class Planner {
     if (!annotate(this.root, model)) return EMPTY;
     this.all = walk(this.root);
     this.order = new Map(this.all.map((node, at) => [node, at]));
+    for (const node of this.all) {
+      const id = node.attr("id");
+      if (id !== null && id !== "" && !this.byId.has(id)) this.byId.set(id, node);
+      const refer = (id: string, href: boolean): void => {
+        let list = this.users.get(id);
+        if (list === undefined) this.users.set(id, (list = []));
+        list.push({ node, href });
+      };
+      for (const attr of node.attrs) {
+        if (attr.uri !== "" && attr.uri !== XLINK_NS) continue;
+        if (attr.local !== "href") for (const ref of urlIds(attr.value)) refer(ref, false);
+        else if (node.uri === SVG_NS && node.local !== "a") {
+          const ref = hrefId(attr.value);
+          if (ref !== null) refer(ref, true);
+        }
+      }
+      if (node.local === "style") for (const ref of urlIds(node.sheet ?? "")) refer(ref, false);
+    }
+    const home = resourceHome(model);
+    this.home = home === null ? null : this.all.find((node) => node.part === home) ?? null;
+    // Una `defs` senza id, come quella di Illustrator: le risorse vanno lì,
+    // invece che in una seconda.
+    if (this.home === null && !this.byId.has(DEFS_ID)) {
+      this.home = this.root.children.find((node) => node.is("defs") && node.part?.kind === "container" && node.part.details?.role === "defs") ?? null;
+    }
     const read = readAllSheets(this.doc, this.root);
     this.sheets = read.sheets;
     this.sheetB = read.sheet;
@@ -891,6 +1001,17 @@ class Planner {
         // Un contenitore scelto porta le unità estranee che contiene.
         else if (at.unit === null) for (const inner of walk(at)) if (inner.unit === inner && inner.foreign) set.add(inner);
       }
+      // Una risorsa a cui rimanda ciò che si sceglie diventa modificabile
+      // con lui, e così quelle a cui rimanda lei.
+      const queue = [...set];
+      while (queue.length > 0) {
+        for (const id of this.referencesIn(queue.pop()!)) {
+          const target = this.byId.get(id);
+          if (target === undefined || target.unit !== target || !target.foreign || set.has(target) || target.uri !== SVG_NS || !RESOURCES.has(target.local)) continue;
+          set.add(target);
+          queue.push(target);
+        }
+      }
       chosen = units.filter((unit) => set.has(unit));
     }
     // Gli id che un `use` mostra altrove.
@@ -921,6 +1042,32 @@ class Planner {
       else if (this.lockedAbove(unit)) this.excluded.set(unit, { kind: "locked" });
       else if (walk(unit).some((node) => node.attr("id") !== null && shown.has(node.attr("id")!))) this.excluded.set(unit, { kind: "copy" });
     }
+    // Le risorse fuori posto: unità, o pezzi di un gruppo che diventa
+    // modificabile, con un id.
+    const candidates = new Set(this.candidates);
+    for (const node of this.all) {
+      if (node.uri !== SVG_NS || !RESOURCES.has(node.local) || (node.attr("id") ?? "") === "" || inRootDefs(node) || node.unit === null) continue;
+      if (candidates.has(node.unit) && (node.unit === node || this.subunit(node) === node)) this.movable.add(node);
+    }
+  }
+
+  /// Gli id a cui rimanda `root`, con quelli che gli danno le regole dei
+  /// fogli che lo scelgono.
+  private referencesIn(root: El): Set<string> {
+    const out = new Set<string>();
+    for (const node of walk(root)) {
+      for (const id of refsOf(node)) out.add(id);
+      for (const rule of this.sheetB.rules) {
+        if (this.matcher.selects(rule.selector, node) === false) continue;
+        for (const declaration of rule.declarations) for (const id of urlIds(declaration.value)) out.add(id);
+      }
+    }
+    return out;
+  }
+
+  /// L'elemento di prima con l'id `id`.
+  element(id: string): El | undefined {
+    return this.byId.get(id);
   }
 
   /// Vero se `unit` sta in un contenitore bloccato.
@@ -945,13 +1092,16 @@ class Planner {
   }
 
   /// Il tipo della risorsa modificabile `id`, contando anche le risorse
-  /// della `defs` della radice che il comando sta rendendo modificabili: se
-  /// poi una non lo diventa, la prova sul testo di dopo lo dice.
+  /// che il comando sta rendendo modificabili, nella `defs` della radice o
+  /// fuori, da portarvi: se poi una non lo diventa, la prova sul testo di
+  /// dopo lo dice.
   readonly hopeful: Resolve = (id) => {
     const known = this.resolve(id);
     if (known !== null) return known;
-    const unit = this.candidates.find((each) => each.attr("id") === id && !this.excluded.has(each));
-    return unit !== undefined && unit.parent?.is("defs") === true && unit.parent.parent === this.root ? resourceKind(unit.local) : null;
+    const node = this.byId.get(id);
+    if (node === undefined || node.uri !== SVG_NS || this.isExcluded(node)) return null;
+    const placed = node.unit === node && inRootDefs(node) && this.candidates.includes(node);
+    return placed || this.movable.has(node) ? resourceKind(node.local) : null;
   };
 
   /// Vero se `node` è escluso, lui o un antenato nella sua unità.
@@ -988,14 +1138,67 @@ class Planner {
     return out;
   }
 
+  /// Le sfumature che servono soltanto da modello, con `href`, ad altre che
+  /// diventano modificabili: se ne vanno, perché quelle prendono da loro ciò
+  /// che serve. Restano un campione e una risorsa di FubDraw, una che un
+  /// livello o un gruppo bloccato protegge e, in un disegno di Inkscape, una
+  /// che l'autore tiene fra le sue sfumature: Inkscape segna con
+  /// `inkscape:collect="always"` quelle che getta da sé.
+  private templates(): Set<El> {
+    const inkscape = this.all.some((node) => node.uri === INKSCAPE_NS || node.attrs.some((attr) => attr.uri === INKSCAPE_NS));
+    const flattened = new Set<El>();
+    for (const node of this.all) {
+      if (!isGradient(node) || hrefOf(node) === null || node.unit === null || this.isExcluded(node)) continue;
+      if ((node.unit === node && inRootDefs(node) && this.candidates.includes(node)) || this.movable.has(node)) flattened.add(node);
+    }
+    const out = new Set<El>();
+    for (let changed = flattened.size > 0; changed; ) {
+      changed = false;
+      for (const node of this.all) {
+        if (out.has(node) || !isGradient(node) || node.unit !== node || this.excluded.has(node) || this.lockedAbove(node)) continue;
+        if (node.attrs.some((attr) => (attr.uri === INKSCAPE_NS && attr.local === "swatch") || (attr.uri === FUB_NS && attr.local === "role"))) continue;
+        if (inkscape && !node.attrs.some((attr) => attr.uri === INKSCAPE_NS && attr.local === "collect" && attr.value.trim() === "always")) continue;
+        const users = this.users.get(node.attr("id") ?? "") ?? [];
+        if (users.length === 0 || !users.every((user) => user.href && (flattened.has(user.node) || out.has(user.node)))) continue;
+        out.add(node);
+        changed = true;
+      }
+    }
+    return out;
+  }
+
   // -------------------------------------------------------------------------
   // Un tentativo.
   // -------------------------------------------------------------------------
 
   private attempt(keepSheets: boolean): Outcome | Retry {
-    const units = this.candidates.filter((unit) => !this.excluded.has(unit));
+    const templates = this.templates();
+    const units = this.candidates.filter((unit) => !this.excluded.has(unit) && !templates.has(unit));
     // L'albero di dopo, e come lo vede la superficie.
     const [X, xOf] = cloneTree(this.root, this.serial, (node) => node);
+    // Le risorse fuori posto vanno nella `defs` delle risorse, in coda a
+    // quelle che ha e nell'ordine in cui stavano, prima di guardare come le
+    // vede la superficie: lì ereditano da lei.
+    const moving = [...this.movable].filter((node) => !this.isExcluded(node) && !templates.has(node)).sort((a, b) => this.order.get(a)! - this.order.get(b)!);
+    let homeX: El | null = null;
+    if (moving.length > 0) {
+      if (this.home !== null) {
+        homeX = xOf.get(this.home)!;
+        if (homeX.attr("id") === null) homeX.attrs = [{ uri: "", local: "id", value: DEFS_ID }, ...homeX.attrs];
+      } else {
+        homeX = new El(SVG_NS, "defs", `${prefixOf(X)}defs`, [{ uri: "", local: "id", value: DEFS_ID }], false, null, null, this.serial());
+        homeX.parent = X;
+        let at = 0;
+        while (at < X.children.length && (X.children[at]!.is("title") || X.children[at]!.is("desc"))) at++;
+        X.children.splice(at, 0, homeX);
+      }
+      for (const node of moving) {
+        const x = xOf.get(node)!;
+        x.parent!.children.splice(x.parent!.children.indexOf(x), 1);
+        x.parent = homeX;
+        homeX.children.push(x);
+      }
+    }
     const [live, liveOf] = liveTree(X, this.serial, (node) => node.origin);
     const L = new Cascade(NO_SHEET, live, (node) => identity(node as El), this.inlineB);
     const writer = new Writer(this, xOf, liveOf, L);
@@ -1076,14 +1279,31 @@ class Planner {
     if (shared.size > 0) return new Retry(shared, false);
 
     // Le modifiche delle unità, e le unità che se ne vanno.
+    const text = this.text;
     const edits = new Map<El, Edit[]>();
     const editsOf = (unit: El): Edit[] => {
       let list = edits.get(unit);
       if (list === undefined) edits.set(unit, (list = []));
       return list;
     };
-    for (const unit of converted) editsOf(unit).push(...writer.edits(unit));
-    const dropped = new Set<El>();
+    // Una risorsa che va nella `defs` delle risorse si scrive a parte; il
+    // gruppo da cui viene la perde con gli spazi che la precedono.
+    const movingSet = new Set(moving);
+    const movedRaws = new Map<El, string>();
+    for (const node of moving) {
+      const element = node.element!;
+      const raw = applyEdits(text, element.start, element.end, writer.edits(node));
+      if (raw === null) return this.exclude(node);
+      movedRaws.set(node, raw);
+      writer.count("resource", node);
+      if (node.unit === node) continue;
+      const holder = node.parent!.element!;
+      let from = element.start;
+      while (from > holder.openEnd && isSpace(text.charCodeAt(from - 1))) from--;
+      editsOf(node.unit!).push([from, element.end, ""]);
+    }
+    for (const unit of converted) if (!movingSet.has(unit)) editsOf(unit).push(...writer.edits(unit, movingSet));
+    const dropped = new Set<El>(templates);
     /// Gli elementi che se ne vanno da dentro un'unità che resta.
     const removedInside = new Set<El>();
     let sheetsDropped = 0;
@@ -1111,13 +1331,13 @@ class Planner {
       }
       const element = el.element!;
       let from = element.start;
-      while (isSpace(this.text.charCodeAt(from - 1)) && from > holder.element!.openEnd) from--;
+      while (isSpace(text.charCodeAt(from - 1)) && from > holder.element!.openEnd) from--;
       editsOf(holder).push([from, element.end, ""]);
       removedInside.add(el);
     }
     // Una `defs` della radice che resta vuota se ne va, se nessuno la cita.
     for (const defs of this.root.children) {
-      if (!defs.is("defs") || defs.part?.kind !== "container" || defs.children.length === 0) continue;
+      if (!defs.is("defs") || defs.part?.kind !== "container" || defs.children.length === 0 || (defs === this.home && moving.length > 0)) continue;
       if (!defs.children.every((child) => dropped.has(child))) continue;
       const other = defs.element!.children.some((child) => {
         const node = this.doc.nodes[child]!;
@@ -1128,57 +1348,25 @@ class Planner {
       for (const child of defs.children) dropped.delete(child);
       dropped.add(defs);
     }
-    if (edits.size === 0 && dropped.size === 0) {
-      return { ops: [], after: this.text, converted: 0, translations: new Map(), rules: 0, sheets: 0, dropped, yOf: new Map() };
+    if (edits.size === 0 && dropped.size === 0 && moving.length === 0) {
+      return { ops: [], after: text, converted: 0, translations: new Map(), rules: 0, sheets: 0, dropped, yOf: new Map() };
     }
-
-    // Le operazioni: le unità riscritte si tolgono dall'ultima e si rimettono
-    // nuove dalla prima, ognuna nel punto esatto da cui è partita; poi se ne
-    // vanno quelle da togliere, dall'ultima.
-    const rewritten = [...edits.keys()].sort((a, b) => this.order.get(a)! - this.order.get(b)!);
-    const raws: string[] = [];
-    for (const unit of rewritten) {
-      const element = unit.element!;
-      const part = unit.part!;
-      if (part.kind !== "leaf" || this.text.slice(element.start, element.end) !== part.raw) return this.internal(unit);
-      const raw = applyEdits(this.text, element.start, element.end, edits.get(unit)!);
-      if (raw === null) return this.internal(unit);
-      raws.push(raw);
-    }
-    const adopt: Op[] = this.engine.status === "foreign" ? [{ op: "adopt" }] : [];
-    // Un elemento con l'id si toglie per id, uno senza per percorso.
-    const target = (node: El): Op => ({ op: "remove", target: node.part!.facts.id ?? { path: pathOf(node), tag: tagName(node.part!) } });
-    const removes = [...rewritten].reverse().map(target);
-    const restores: RestoreOp[] = [];
-    if (rewritten.length > 0) {
-      const probe = SceneEngine.open(this.text).apply({ op: "batch", ops: [...adopt, ...removes] });
-      if (probe.outcome !== "applied") return this.internal(rewritten[rewritten.length - 1 - Math.max(0, (probe.index ?? adopt.length) - adopt.length)] ?? rewritten[0]!);
-      const inverse = flatten(probe.inverse).filter((op): op is RestoreOp => op.op === "add" && "slot" in op);
-      const own = inverse.slice(inverse.length - rewritten.length);
-      if (own.length !== rewritten.length) return this.internal(rewritten[0]!);
-      for (const [at, op] of own.entries()) {
-        const part = rewritten[at]!.part!;
-        if (part.kind !== "leaf" || op.raw !== part.raw) return this.internal(rewritten[at]!);
-        restores.push({ ...op, raw: raws[at]! });
-      }
-    }
-    const tops = [...dropped].filter((node) => ![...dropped].some((other) => other !== node && within(node, other)));
-    tops.sort((a, b) => this.order.get(b)! - this.order.get(a)!);
-    const ops: Op[] = [...adopt, ...removes, ...restores, ...tops.map(target)];
-    const engine = SceneEngine.open(this.text);
+    const sequence = this.sequence({ edits, moving, movedRaws, dropped, removedInside, drop, templates, convertedSet, xOf });
+    if (sequence instanceof Retry) return sequence;
+    const { ops, blame } = sequence;
+    const engine = SceneEngine.open(text);
     const applied = engine.apply({ op: "batch", ops });
+    const first = moving[0] ?? [...edits.keys()].sort((a, b) => this.order.get(a)! - this.order.get(b)!)[0] ?? units[0]!;
     if (applied.outcome !== "applied") {
-      const index = (applied.index ?? adopt.length) - adopt.length;
-      const n = rewritten.length;
-      const unit = index < 0 ? rewritten[0] : index < n ? rewritten[n - 1 - index] : index < 2 * n ? rewritten[index - n] : undefined;
-      return unit === undefined ? new Retry(new Map(), true) : this.internal(unit);
+      const culprit = blame[applied.index ?? 0];
+      return culprit === undefined ? this.exclude(first) : culprit === null ? new Retry(new Map(), true) : this.exclude(culprit);
     }
     const after = applied.text;
 
     // Il documento di dopo, letto da capo e affiancato a quello previsto.
     const yDoc = parseXml(new SourceText(after), false);
     const Y = treeOf(yDoc, this.serial);
-    if (engine.model === null || !annotate(Y, engine.model)) return this.internal(rewritten[0] ?? units[0]!);
+    if (engine.model === null || !annotate(Y, engine.model)) return this.exclude(first);
     const yOf = new Map<El, El>();
     const tOf = new Map<El, El | null>();
     const gone = new Set<El>();
@@ -1186,11 +1374,11 @@ class Planner {
     const stack: Array<[El, El]> = [[X, Y]];
     while (stack.length > 0) {
       const [x, y] = stack.pop()!;
-      if (x.local !== y.local || x.uri !== y.uri) return this.internal(rewritten[0] ?? units[0]!);
+      if (x.local !== y.local || x.uri !== y.uri) return this.exclude(first);
       tOf.set(y, x.origin);
       if (x.origin !== null) yOf.set(x.origin, y);
       const xs = x.children.filter((child) => !gone.has(child));
-      if (xs.length !== y.children.length) return this.internal(rewritten[0] ?? units[0]!);
+      if (xs.length !== y.children.length) return this.exclude(first);
       xs.forEach((child, at) => stack.push([child, y.children[at]!]));
     }
 
@@ -1211,7 +1399,7 @@ class Planner {
     // senza per ciò che è diventato modificabile.
     const yStyles = walk(Y).filter((node) => node.sheet !== null);
     const reread = readSheets(yStyles.map((node) => ({ id: this.sheets.find((sheet) => sheet.el === tOf.get(node))?.id ?? "?", css: node.sheet! })));
-    if (!sameRules(reread.rules, rulesA)) return keepSheets ? this.internal(rewritten[0] ?? units[0]!) : new Retry(new Map(), true);
+    if (!sameRules(reread.rules, rulesA)) return keepSheets ? this.exclude(first) : new Retry(new Map(), true);
     const sheetA: Sheet = { rules: rulesA, selectors: rulesA.map((rule) => rule.selector), deep: this.sheetB.deep, imports: this.sheetB.imports };
     const yIdentity = (node: El): string => {
       const origin = tOf.get(node);
@@ -1281,9 +1469,238 @@ class Planner {
   }
 
   /// Un tentativo finito male per un motivo che non dipende dal disegno:
-  /// l'unità resta estranea, e si riprova senza.
-  private internal(unit: El): Retry {
-    return new Retry(new Map([[unit.unit ?? unit, { kind: "unknown" }]]), false);
+  /// la parte resta estranea, e si riprova senza. Una risorsa che cambia
+  /// posto resta da sola; ogni altra cosa con la sua unità.
+  private exclude(node: El): Retry {
+    return new Retry(new Map([[this.movable.has(node) ? node : node.unit ?? node, { kind: "unknown" }]]), false);
+  }
+
+  /// Le operazioni del comando, per un `batch` solo, e per ognuna la parte
+  /// da lasciare estranea se il motore la rifiuta: `null` per un foglio,
+  /// che allora resta tutto.
+  ///
+  /// - Prima la `defs` delle risorse, se deve nascere o aprirsi: `<defs/>`
+  ///   diventa `<defs>…</defs>`.
+  /// - Poi se ne va ciò che non torna: fogli, modelli, risorse che cambiano
+  ///   posto; e si tolgono, dall'ultima, le unità da riscrivere.
+  /// - Poi si rimettono, ognuna nel punto esatto da cui è partita, con gli
+  ///   spazi attorno com'erano; le risorse che cambiano posto vanno in testa
+  ///   alla `defs` delle risorse. Una risorsa entra prima di chi la usa,
+  ///   perché il motore non accetta una risorsa a cui qualcosa rimanda già:
+  ///   chi la usa e resta com'è si toglie e si rimette uguale.
+  /// - Alla fine se ne vanno i modelli già modificabili, quando nessuno
+  ///   rimanda più a loro.
+  ///
+  /// Il percorso di un elemento senza id si conta nel momento in cui
+  /// l'operazione lo usa.
+  private sequence(input: {
+    readonly edits: ReadonlyMap<El, Edit[]>;
+    readonly moving: readonly El[];
+    readonly movedRaws: ReadonlyMap<El, string>;
+    readonly dropped: ReadonlySet<El>;
+    readonly removedInside: ReadonlySet<El>;
+    readonly drop: ReadonlyMap<SheetOf, Statement[]>;
+    readonly templates: ReadonlySet<El>;
+    readonly convertedSet: ReadonlySet<El>;
+    readonly xOf: ReadonlyMap<El, El>;
+  }): { readonly ops: Op[]; readonly blame: (El | null)[] } | Retry {
+    const { edits, moving, movedRaws, dropped, removedInside, drop, templates, convertedSet, xOf } = input;
+    const text = this.text;
+    const movingSet = new Set(moving);
+    const rewritten = [...edits.keys()].sort((a, b) => this.order.get(a)! - this.order.get(b)!);
+    const raws = new Map<El, string>();
+    for (const unit of rewritten) {
+      const element = unit.element!;
+      const part = unit.part!;
+      if (part.kind !== "leaf" || text.slice(element.start, element.end) !== part.raw) return this.exclude(unit);
+      const raw = applyEdits(text, element.start, element.end, edits.get(unit)!);
+      if (raw === null) return this.exclude(unit);
+      raws.set(unit, raw);
+    }
+    const first = moving[0] ?? rewritten[0] ?? null;
+    const ops: Op[] = [];
+    const blame: (El | null)[] = [];
+    const push = (op: Op, culprit: El | null): void => {
+      ops.push(op);
+      blame.push(culprit);
+    };
+    const paths = new Paths();
+    const settled = new Paths();
+    const remove = (node: El, culprit: El | null): void => {
+      push({ op: "remove", target: node.part!.facts.id ?? { path: paths.path(node), tag: tagName(node.part!) } }, culprit);
+      paths.remove(node);
+    };
+    if (this.engine.status === "foreign") push({ op: "adopt" }, first);
+
+    // La `defs` delle risorse, aperta.
+    let homeId = DEFS_ID;
+    let inner = "";
+    if (moving.length > 0) {
+      const unit = this.indentUnit();
+      const home = this.home;
+      if (home === null) {
+        let at = 0;
+        while (at < this.root.children.length && (this.root.children[at]!.is("title") || this.root.children[at]!.is("desc"))) at++;
+        const anchor = at > 0 ? this.root.children[at - 1]! : null;
+        const name = `${prefixOf(this.root)}defs`;
+        inner = unit + unit;
+        const after: Target | null = anchor === null ? null : anchor.part!.facts.id ?? { path: paths.path(anchor), tag: tagName(anchor.part!) };
+        push({ op: "add", slot: { parent: ROOT, after, skip: 0, lead: "" }, gap: `\n${unit}`, raw: `<${name} id="${DEFS_ID}">\n${unit}</${name}>` }, moving[0]!);
+        const placeholder = new El(SVG_NS, "defs", name, [], false, null, null, this.serial());
+        paths.insert(this.root, at, placeholder);
+        settled.insert(this.root, at, placeholder);
+      } else {
+        const named = home.attr("id");
+        const target: Target = named ?? { path: paths.path(home), tag: tagName(home.part!) };
+        homeId = named ?? DEFS_ID;
+        const part = home.part as ContainerNode;
+        const element = home.element!;
+        const own = lineIndent(text, element.start) ?? "";
+        inner = (home.children.length > 0 ? lineIndent(text, home.children[0]!.element!.start) : null) ?? own + unit;
+        if (part.tail === null || part.parts.every((piece) => typeof piece === "string" && lastBreak(piece) < 0)) {
+          // `<defs id="…"/>` si apre: si toglie e si rimette aperta.
+          const probe = SceneEngine.open(text).apply({ op: "batch", ops: [...ops, { op: "remove", target }] });
+          const raw = text.slice(element.start, element.end);
+          const back = probe.outcome === "applied" ? flatten(probe.inverse).find((op): op is RestoreOp => op.op === "add" && "slot" in op && op.raw === raw) : undefined;
+          if (back === undefined) return this.exclude(moving[0]!);
+          let open: string;
+          if (element.closeStart === null) {
+            let slash = element.openEnd - 2;
+            while (isSpace(text.charCodeAt(slash - 1))) slash--;
+            open = `${text.slice(element.start, slash)}>\n${own}</${element.name}>`;
+          } else open = `${text.slice(element.start, element.openEnd)}\n${own}${text.slice(element.closeStart, element.end)}`;
+          push({ op: "remove", target }, moving[0]!);
+          push({ ...back, raw: open }, moving[0]!);
+        }
+        if (named === null) push({ op: "ident", path: paths.path(home), tag: tagName(part), id: DEFS_ID }, moving[0]!);
+      }
+    }
+
+    // Ciò che se ne va per sempre: prima ciò che non è modificabile, che
+    // nessuno usa come risorsa; i modelli già modificabili alla fine.
+    const tops = [...dropped].filter((node) => ![...dropped].some((other) => other !== node && within(node, other)));
+    const late = (node: El): boolean => walk(node).some((each) => templates.has(each) && !each.foreign);
+    const byLast = (a: El, b: El): number => this.order.get(b)! - this.order.get(a)!;
+    const early = [...tops.filter((node) => !late(node)), ...moving.filter((node) => node.unit === node)].sort(byLast);
+    const culpritOf = (node: El): El | null => (templates.has(node) || movingSet.has(node) ? node : null);
+    for (const node of early) {
+      remove(node, culpritOf(node));
+      settled.remove(node);
+    }
+
+    // Chi porta una risorsa che entra, e chi la usa.
+    const provider = new Map<string, El>();
+    for (const unit of rewritten) {
+      const id = unit.attr("id");
+      if (id !== null && convertedSet.has(unit) && inRootDefs(unit) && unit.uri === SVG_NS && RESOURCES.has(unit.local)) provider.set(id, unit);
+    }
+    for (const node of moving) provider.set(node.attr("id")!, node);
+    const gone = new Set<El>();
+    for (const node of dropped) for (const each of walk(node)) gone.add(each);
+    const touched = new Set<El>([...rewritten, ...moving]);
+    const temporary = new Set<El>();
+    if (provider.size > 0) {
+      for (const node of this.all) {
+        const part = node.part;
+        if (node.unit !== node || part === null || part.kind !== "leaf" || touched.has(node) || gone.has(node)) continue;
+        if (part.refs.some((id) => provider.has(id))) temporary.add(node);
+      }
+    }
+    const css = new Map<El, string>();
+    for (const sheet of this.sheets) {
+      if (removedInside.has(sheet.el) || gone.has(sheet.el)) continue;
+      const statements = drop.get(sheet);
+      css.set(sheet.el, statements === undefined ? sheet.css : removeRanges(sheet.css, statements));
+    }
+    const refsAfter = (node: El): Set<string> => {
+      const out = new Set<string>();
+      for (const each of walk(xOf.get(node)!)) {
+        for (const id of refsOf(each)) out.add(id);
+        if (each.origin !== null) for (const id of urlIds(css.get(each.origin) ?? "")) out.add(id);
+      }
+      return out;
+    };
+    const nodes = [...rewritten, ...temporary, ...moving];
+    const waits = new Map<El, El[]>();
+    for (const node of nodes) {
+      const refs = temporary.has(node) ? new Set(node.part!.kind === "leaf" ? node.part!.refs : []) : refsAfter(node);
+      waits.set(node, [...refs].map((id) => provider.get(id)).filter((each): each is El => each !== undefined && each !== node));
+    }
+    const culprit = (node: El): El => (temporary.has(node) ? waits.get(node)![0] ?? node : node);
+    // Prima ciò che torna nella `defs` delle risorse, poi le risorse che
+    // vi arrivano, poi il resto, ognuno nell'ordine del documento; ma una
+    // risorsa sempre prima di chi la usa.
+    const group = (node: El): number => (movingSet.has(node) ? 1 : provider.get(node.attr("id") ?? "") === node || (this.home !== null && node.parent === this.home) ? 0 : 2);
+    const pending = [...nodes].sort((a, b) => group(a) - group(b) || this.order.get(a)! - this.order.get(b)!);
+    const sequence: El[] = [];
+    const placed = new Set<El>();
+    while (pending.length > 0) {
+      const ready = pending.findIndex((node) => waits.get(node)!.every((each) => placed.has(each)));
+      const [node] = pending.splice(Math.max(ready, 0), 1);
+      sequence.push(node!);
+      placed.add(node!);
+    }
+    const order = sequence.filter((node) => !movingSet.has(node));
+    for (const node of [...order].reverse()) remove(node, culprit(node));
+
+    // I punti da cui partono: l'inversa di ciò che li toglie.
+    const restores = new Map<El, RestoreOp>();
+    if (order.length > 0) {
+      const probe = SceneEngine.open(text).apply({ op: "batch", ops });
+      if (probe.outcome !== "applied") {
+        const blamed = blame[probe.index ?? 0];
+        return blamed === null ? new Retry(new Map(), true) : this.exclude(blamed ?? first ?? order[0]!);
+      }
+      const inverse = flatten(probe.inverse).filter((op): op is RestoreOp => op.op === "add" && "slot" in op);
+      let at = 0;
+      for (const node of order) {
+        const raw = node.part!.kind === "leaf" ? node.part!.raw : "";
+        while (at < inverse.length && inverse[at]!.raw !== raw) at++;
+        if (at === inverse.length) return this.exclude(culprit(node));
+        restores.set(node, { ...inverse[at]!, raw: raws.get(node) ?? raw });
+        at++;
+      }
+    }
+    let previous: Target | null = null;
+    for (const node of sequence) {
+      if (!movingSet.has(node)) {
+        push(restores.get(node)!, culprit(node));
+        paths.restore(node);
+        continue;
+      }
+      if (previous === null && this.home !== null) {
+        // In coda a ciò che la `defs` ha già.
+        const list = paths.children(this.home);
+        const last = list[list.length - 1];
+        if (last !== undefined) previous = last.part!.facts.id ?? { path: paths.path(last), tag: tagName(last.part!) };
+      }
+      push({ op: "add", slot: { parent: homeId, after: previous, skip: 0, lead: "" }, gap: `\n${inner}`, raw: this.reindented(node, movedRaws.get(node)!, inner) }, node);
+      previous = node.attr("id")!;
+    }
+    for (const node of tops.filter(late).sort(byLast)) {
+      push({ op: "remove", target: node.part!.facts.id ?? { path: settled.path(node), tag: tagName(node.part!) } }, culpritOf(node));
+      settled.remove(node);
+    }
+    return { ops, blame };
+  }
+
+  /// Il rientro di un livello nel file: quello dei figli della radice, se
+  /// stanno su righe loro; due spazi altrimenti.
+  private indentUnit(): string {
+    for (const child of this.root.children) {
+      const indent = lineIndent(this.text, child.element!.start);
+      if (indent !== null && indent !== "") return indent;
+    }
+    return "  ";
+  }
+
+  /// Il testo `raw` di una risorsa che va nella `defs` delle risorse, col
+  /// rientro `to` dei suoi nuovi fratelli al posto del suo, come lo sposta il
+  /// motore: lì è una risorsa modificabile.
+  private reindented(node: El, raw: string, to: string): string {
+    const from = lineIndent(this.text, node.element!.start);
+    const container = node.unit!.part?.parent ?? null;
+    return from === null || container === null ? raw : reindent(raw, scopeOf(container), "defs", 2, from, to, this.hopeful);
   }
 
   /// Ciò che resta estraneo, col perché, dove sta dopo: i pezzi dentro una
@@ -1297,6 +1714,50 @@ class Planner {
       out.push({ path: pathOf(y ?? node), tag: node.uri === SVG_NS ? node.local : node.name, name: nameOf(this.doc, node), reason });
     }
     return out;
+  }
+}
+
+/// I figli elemento di ogni elemento mentre le operazioni del comando li
+/// tolgono e li aggiungono: il percorso di un elemento senza id si conta
+/// qui, nel momento in cui l'operazione lo usa.
+class Paths {
+  private readonly lists = new Map<El, El[]>();
+
+  children(node: El): El[] {
+    let list = this.lists.get(node);
+    if (list === undefined) this.lists.set(node, (list = [...node.children]));
+    return list;
+  }
+
+  insert(parent: El, at: number, node: El): void {
+    this.children(parent).splice(at, 0, node);
+  }
+
+  /// Rimette `node` fra i fratelli, nell'ordine di prima.
+  restore(node: El): void {
+    const list = this.children(node.parent!);
+    const siblings = node.parent!.children;
+    let at = list.length;
+    for (let k = siblings.indexOf(node) + 1; k < siblings.length; k++) {
+      const index = list.indexOf(siblings[k]!);
+      if (index >= 0) {
+        at = index;
+        break;
+      }
+    }
+    list.splice(at, 0, node);
+  }
+
+  remove(node: El): void {
+    const list = this.children(node.parent!);
+    const at = list.indexOf(node);
+    if (at >= 0) list.splice(at, 1);
+  }
+
+  path(node: El): number[] {
+    const out: number[] = [];
+    for (let at = node; at.parent !== null; at = at.parent) out.push(this.children(at.parent).indexOf(at));
+    return out.reverse();
   }
 }
 
@@ -1316,7 +1777,9 @@ class Writer {
   readonly converted: El[] = [];
   /// Gli elementi di prima resi modificabili, in ordine di documento.
   readonly elements: El[] = [];
-  readonly translations = new Map<Translation, Set<El>>([["style", new Set()], ["sheet", new Set()], ["color", new Set()], ["unit", new Set()], ["data", new Set()], ["text", new Set()]]);
+  readonly translations = new Map<Translation, Set<El>>([
+    ["style", new Set()], ["sheet", new Set()], ["color", new Set()], ["unit", new Set()], ["data", new Set()], ["text", new Set()], ["resource", new Set()],
+  ]);
   /// Il titolo nuovo di un elemento.
   private readonly titles = new Map<El, string>();
   /// La riga nuova di un testo che non ne aveva: dove comincia e dove finisce
@@ -1324,6 +1787,9 @@ class Writer {
   private readonly wraps = new Map<El, { readonly from: number; readonly to: number; readonly open: string; readonly close: string }>();
   /// Le righe vuote, che ricevono uno spazio che non va a capo.
   private readonly blanks = new Set<El>();
+  /// Gli `stop` che una sfumatura prende da quella a cui rimandava, con i
+  /// loro attributi.
+  private readonly stops = new Map<El, { readonly from: El; readonly attrs: readonly StyleAttr[] }[]>();
   private readonly B: Cascade;
 
   constructor(
@@ -1335,8 +1801,19 @@ class Writer {
     this.B = planner.B;
   }
 
-  private count(kind: Translation, node: El): void {
+  count(kind: Translation, node: El): void {
     this.translations.get(kind)!.add(node);
+  }
+
+  /// Toglie da `node` l'attributo `local` del namespace `uri`, nell'albero di
+  /// dopo e in quello della superficie.
+  private unset(node: El, uri: string, local: string): void {
+    const x = this.xOf.get(node)!;
+    const live = this.liveOf.get(x)!;
+    const keep = (attr: StyleAttr): boolean => attr.uri !== uri || attr.local !== local;
+    x.attrs = x.attrs.filter(keep);
+    live.attrs = live.attrs.filter(keep);
+    this.L.forget(live);
   }
 
   /// Scrive `value` per `name` su `node`, nell'albero di dopo e in quello
@@ -1380,6 +1857,10 @@ class Writer {
     }
     if (node.is("text")) {
       const reason = this.lines(node);
+      if (reason !== null) return reason;
+    }
+    if (isGradient(node)) {
+      const reason = this.flatten(node);
       if (reason !== null) return reason;
     }
     if (declares(node.attr("style"))) this.count("style", node);
@@ -1433,6 +1914,65 @@ class Writer {
     // Un gruppo tiene ciò che portava ai figli.
     if (CONTAINERS.has(node.local)) this.inherited(node);
     else this.intent(node);
+    return null;
+  }
+
+  /// Una sfumatura che rimanda con `href` a un'altra, come le scrivono
+  /// Inkscape e Illustrator, prende da quella, e da quelle a cui rimanda a
+  /// sua volta, ciò che non ha: gli attributi, come SVG li eredita, e gli
+  /// `stop` se non ne ha, coi valori che vi si vedono. Il rimando se ne va.
+  private flatten(node: El): Reason | null {
+    const own = hrefOf(node);
+    if (own === null) return null;
+    // Il perché si dice col rimando di `node`, anche se la catena si rompe
+    // più in là: l'anello dopo ha il suo.
+    const ownId = hrefId(own.value);
+    const broken: Reason = ownId === null ? { kind: "attribute", name: own.uri === XLINK_NS ? "xlink:href" : "href" } : { kind: "resource", id: ownId };
+    const chain: El[] = [];
+    const seen = new Set<El>([node]);
+    for (let at = node; ; ) {
+      const link = hrefOf(at);
+      if (link === null) break;
+      const id = hrefId(link.value);
+      const next = id === null ? undefined : this.planner.element(id);
+      if (next === undefined || seen.has(next) || !isGradient(next)) return broken;
+      seen.add(next);
+      chain.push(next);
+      at = next;
+    }
+    for (const name of [...(GRADIENT_OWN[node.local] ?? []), ...GRADIENT_SHARED]) {
+      if (node.attr(name) !== null) continue;
+      const shared = GRADIENT_SHARED.includes(name);
+      const value = chain.find((template) => (shared || template.local === node.local) && template.attr(name) !== null)?.attr(name);
+      if (value !== undefined && value !== null) this.write(node, name, value);
+    }
+    this.unset(node, "", "href");
+    this.unset(node, XLINK_NS, "href");
+    if (!node.children.some((child) => child.is("stop"))) {
+      const source = chain.find((template) => template.children.some((child) => child.is("stop")));
+      const made: { from: El; attrs: StyleAttr[] }[] = [];
+      for (const stop of source?.children.filter((child) => child.is("stop")) ?? []) {
+        const attrs: StyleAttr[] = [];
+        const offset = stop.attr("offset");
+        if (offset !== null) attrs.push({ uri: "", local: "offset", value: offset });
+        const color = this.valueFor(stop, "stop-color", node);
+        if (!(color instanceof Map)) return color;
+        for (const [name, value] of color) if (value !== null && !(name === "stop-color" && value === "#000000")) attrs.push({ uri: "", local: name, value });
+        made.push({ from: stop, attrs });
+      }
+      if (made.length > 0) {
+        const x = this.xOf.get(node)!;
+        for (const { attrs } of made) {
+          const copy = new El(SVG_NS, "stop", `${prefixOf(node)}stop`, attrs, false, null, null, this.planner.serial());
+          copy.parent = x;
+          copy.unit = x.unit;
+          copy.foreign = x.foreign;
+          x.children.push(copy);
+        }
+        this.stops.set(node, made);
+      }
+    }
+    this.count("resource", node);
     return null;
   }
 
@@ -1583,7 +2123,7 @@ class Writer {
 
   /// Gli attributi che scrivono su `node` il valore di prima di `p`; il
   /// perché, se il formato non lo sa scrivere.
-  private valueFor(node: El, p: string): Map<string, string | null> | Reason {
+  private valueFor(node: El, p: string, counted = node): Map<string, string | null> | Reason {
     const B = this.B;
     const value = B.value(node, p);
     const tag = tagOf(node.element!);
@@ -1623,7 +2163,7 @@ class Writer {
           if (parsed.color.a === 1 && formatPaint(written) !== null) out.set(base, written);
           else {
             out.set(base, formatHex(parsed.color));
-            this.count("color", node);
+            this.count("color", counted);
           }
           total = parsed.color.a * a;
         }
@@ -1651,7 +2191,7 @@ class Writer {
       case "ry": {
         const px = lengthOf(p, value.text, this.planner.viewport);
         if (px === null) return { kind: "unit", value: shown(value) };
-        if (value.text !== null && /%/.test(value.text)) this.count("unit", node);
+        if (value.text !== null && /%/.test(value.text)) this.count("unit", counted);
         out.set(p, num(px));
         break;
       }
@@ -1766,12 +2306,21 @@ class Writer {
     }
   }
 
-  /// Le modifiche del testo che riscrivono `unit` come l'albero di dopo.
-  edits(unit: El): Edit[] {
+  /// Le modifiche del testo che riscrivono `top` come l'albero di dopo,
+  /// senza ciò che sta in `skip`.
+  edits(top: El, skip: ReadonlySet<El> = new Set()): Edit[] {
     const text = this.planner.text;
     const inside = new Set(this.elements);
     const out: Edit[] = [];
-    for (const node of walk(unit)) {
+    const nodes: El[] = [];
+    const stack = [top];
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (node !== top && skip.has(node)) continue;
+      nodes.push(node);
+      for (let k = node.children.length - 1; k >= 0; k--) stack.push(node.children[k]!);
+    }
+    for (const node of nodes) {
       if (!inside.has(node)) continue;
       const element = node.element!;
       const x = this.xOf.get(node)!;
@@ -1808,32 +2357,58 @@ class Writer {
         }
         for (const [at, inserted] of inserts) out.push([at, at, inserted]);
       }
+      // Ciò che entra nell'elemento: il titolo in testa, lo spazio di una
+      // riga vuota, gli `stop` presi da un'altra sfumatura in fondo. Un
+      // elemento vuoto, `<path …/>`, si apre: `<path …>…</path>`.
       const title = this.titles.get(node);
-      if (title !== undefined) {
-        const titled = `<title>${escapeText(title)}</title>`;
-        if (element.closeStart === null) {
-          // `<path …/>` diventa `<path …><title>…</title></path>`.
+      const titled = title === undefined ? "" : `<title>${escapeText(title)}</title>`;
+      const blank = this.blanks.has(node) ? BLANK_LINE : "";
+      const stops = this.stops.get(node);
+      const own = lineIndent(text, element.start);
+      const tail = stops === undefined ? "" : this.stopLines(node, stops, own);
+      if (element.closeStart === null) {
+        if (titled !== "" || blank !== "" || tail !== "") {
           let slash = element.openEnd - 2;
           while (slash > last && isSpace(text.charCodeAt(slash - 1))) slash--;
-          out.push([slash, element.openEnd, `>${titled}</${element.name}>`]);
-        } else {
+          const close = tail !== "" && own !== null ? `\n${own}` : "";
+          out.push([slash, element.openEnd, `>${titled}${blank}${tail}${close}</${element.name}>`]);
+        }
+      } else {
+        if (titled !== "") {
           let k = element.openEnd;
           while (k < element.closeStart && isSpace(text.charCodeAt(k))) k++;
           const lead = text.slice(element.openEnd, k);
           out.push([element.openEnd, element.openEnd, `${lead.includes("\n") ? lead : ""}${titled}`]);
         }
+        if (blank !== "") out.push([element.openEnd, element.openEnd, blank]);
+        if (tail !== "") {
+          let at = element.closeStart;
+          while (at > element.openEnd && isSpace(text.charCodeAt(at - 1))) at--;
+          out.push([at, at, tail]);
+        }
       }
       const wrap = this.wraps.get(node);
       if (wrap !== undefined) out.push([wrap.from, wrap.from, wrap.open], [wrap.to, wrap.to, wrap.close]);
-      if (this.blanks.has(node)) {
-        if (element.closeStart === null) {
-          let slash = element.openEnd - 2;
-          while (slash > last && isSpace(text.charCodeAt(slash - 1))) slash--;
-          out.push([slash, element.openEnd, `>${BLANK_LINE}</${element.name}>`]);
-        } else out.push([element.openEnd, element.openEnd, BLANK_LINE]);
-      }
     }
     return out;
+  }
+
+  /// Gli `stop` presi da un'altra sfumatura, scritti per stare in fondo a
+  /// `node`: ognuno su una riga se `node` comincia la sua, rientro `own`,
+  /// rientrati rispetto a lui come lo erano rispetto alla loro.
+  private stopLines(node: El, stops: readonly { readonly from: El; readonly attrs: readonly StyleAttr[] }[], own: string | null): string {
+    const text = this.planner.text;
+    let step = "  ";
+    const source = stops[0]!.from;
+    const outer = lineIndent(text, source.parent!.element!.start);
+    const inner = lineIndent(text, source.element!.start);
+    if (outer !== null && inner !== null && inner.startsWith(outer) && inner.length > outer.length) step = inner.slice(outer.length);
+    const name = `${prefixOf(node)}stop`;
+    return stops.map(({ attrs }) => {
+      const ordered = canonicalOrder(attrs.map((attr) => ({ name: attr.local, uri: "", local: attr.local, text: escapeAttribute(attr.value) })));
+      const stop = `<${name}${ordered.map((attr) => ` ${attr.name}="${attr.text}"`).join("")}/>`;
+      return own === null ? stop : `\n${own}${step}${stop}`;
+    }).join("");
   }
 }
 
