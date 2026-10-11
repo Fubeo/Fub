@@ -22,6 +22,17 @@
 //   prima prende quello di FubDraw, e se non ce n'è nessuna se ne crea una
 //   dopo il titolo. Un oggetto che la usa e resta com'era si toglie e si
 //   rimette dopo di lei, perché la trovi.
+// - **Un `svg` annidato diventa un gruppo, tutto insieme:** la sua finestra
+//   (posizione, misura, `viewBox` e `preserveAspectRatio`) diventa la
+//   matrice del gruppo, e un tratto in percentuale che arriva da fuori vi si
+//   scrive in numeri. Se ciò che contiene può uscire dalla finestra, il
+//   gruppo prende un ritaglio privato grande come la finestra, nella `defs`
+//   delle risorse; con `overflow: visible` niente ritaglio. Un `svg` con una
+//   trasformazione sua, che i browser non disegnano tutti allo stesso modo,
+//   o con un ritaglio, una maschera o un filtro che sul gruppo non darebbero
+//   lo stesso disegno, resta com'era. Le risorse nella sua `defs`, come le
+//   scrive Figma, vanno nella `defs` delle risorse, e la `defs` rimasta
+//   vuota se ne va.
 // - **Come lo vede un browser, prima e dopo:** lo stile di prima si calcola
 //   con la cascata di CSS e tutti i fogli (`cascade.ts`). Dopo, un elemento
 //   reso modificabile si guarda due volte: coi fogli che restano, come lo
@@ -50,8 +61,10 @@
 
 import { lineText, resourceFault, resourceIndex, resourceKind, svgAttribute, tagOf, type Resolve, type ResourceTag, type Tag } from "../scene/classify";
 import { reindent, SceneEngine } from "../scene/engine";
-import { DEFS_ID } from "../scene/ids";
-import { transform as svgTransform, viewBox as readViewBox, length as svgLength, paint as formatPaint, hrefId, reference, urlIds } from "../scene/values";
+import { createId, DEFS_ID, type RandomBytes } from "../scene/ids";
+import { transform as svgTransform, paint as formatPaint, hrefId, reference, urlIds } from "../scene/values";
+import { BoundsBuilder } from "../scene/geometry";
+import { apply, compose, IDENTITY, type Matrix } from "../scene/matrix";
 import { elementChildren, lastBreak, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { ROOT, type Op, type RestoreOp, type Target } from "../scene/ops";
 import { canonicalOrder, escapeAttribute, escapeText, formatTransform, type OutAttr } from "../scene/serialize";
@@ -60,12 +73,12 @@ import {
   FUB_NS, isSpace, NS_NONE, NS_SVG, NS_XLINK, parseXml, SVG_NS, XLINK_NS, XML_URI, type Attr, type ElementNode, type NodeId, type XmlDocument,
 } from "../scene/xml";
 import { formatNumber } from "../number";
-import { Cascade, inherits, longhands, PRESENTATION, readOpacity, renders, same, type CascadeNode } from "./cascade";
+import { Cascade, inherits, longhands, PRESENTATION, readOpacity, renders, same, type CascadeNode, type Window as SvgWindow } from "./cascade";
 import { Matcher, readDeclarations, readSheet, readSheets, type Rule, type Sheet, type StyleAttr } from "./selectors";
 import { formatHex } from "./css-color";
 import { resourceHome } from "./resources";
 import { BLANK_LINE } from "./text";
-import { ambiguousSpace, difference, lengthOf, paintOf, shapeFacts, type Difference, type ShapeFacts } from "./editable-look";
+import { ambiguousSpace, difference, lengthOf, paintOf, segmentsOf, shapeFacts, type Difference, type ShapeFacts } from "./editable-look";
 
 /// Su che cosa lavora il comando: tutto il disegno, o le unità estranee che
 /// stanno ai percorsi dati (gli indici dei figli elemento dalla radice), o
@@ -73,7 +86,7 @@ import { ambiguousSpace, difference, lengthOf, paintOf, shapeFacts, type Differe
 export type EditableScope = { readonly kind: "all" } | { readonly kind: "units"; readonly paths: readonly (readonly number[])[] };
 
 /// Le traduzioni che il comando conta, per dirle.
-export type Translation = "style" | "sheet" | "color" | "unit" | "data" | "text" | "resource";
+export type Translation = "style" | "sheet" | "color" | "unit" | "data" | "text" | "resource" | "svg";
 
 /// Perché una parte resta estranea.
 export type Reason =
@@ -248,9 +261,10 @@ class El implements CascadeNode {
 
   constructor(
     readonly uri: string,
-    readonly local: string,
-    /// Il nome com'è scritto.
-    readonly name: string,
+    /// Il nome, locale e com'è scritto: cambiano soltanto quando un `svg`
+    /// dentro il disegno diventa un gruppo.
+    public local: string,
+    public name: string,
     public attrs: StyleAttr[],
     readonly text: boolean,
     /// L'elemento letto; `null` per uno nuovo.
@@ -476,17 +490,6 @@ function attributeNames(root: El): Set<string> {
   const out = new Set<string>();
   for (const node of walk(root)) for (const attr of node.attrs) if (attr.uri === "") out.add(attr.local);
   return out;
-}
-
-/// La finestra della radice, larga e alta: il `viewBox`, o `width` e
-/// `height` assoluti.
-function viewportOf(root: El): readonly [number, number] | null {
-  const box = root.attr("viewBox");
-  const read = box === null ? null : readViewBox(box);
-  if (read !== null && read[2] > 0 && read[3] > 0) return [read[2], read[3]];
-  const w = svgLength(root.attr("width") ?? "");
-  const h = svgLength(root.attr("height") ?? "");
-  return w !== null && h !== null && w > 0 && h > 0 ? [w, h] : null;
 }
 
 /// Il nome di `node` per dirlo: il titolo, poi i nomi degli altri
@@ -851,9 +854,10 @@ interface Outcome {
   readonly yOf: ReadonlyMap<El, El>;
 }
 
-/// Il piano di «Rendi modificabile» per il documento `text` su `scope`.
-export function planEditable(text: string, scope: EditableScope): EditablePlan {
-  return new Planner(text, scope).plan();
+/// Il piano di «Rendi modificabile» per il documento `text` su `scope`; gli
+/// id delle risorse nuove vengono da `random`.
+export function planEditable(text: string, scope: EditableScope, random?: RandomBytes): EditablePlan {
+  return new Planner(text, scope, random).plan();
 }
 
 const EMPTY: EditablePlan = { ops: [], converted: 0, translations: new Map(), leftovers: [], rules: 0, sheets: 0, invisible: 0, after: null };
@@ -875,7 +879,6 @@ class Planner {
   /// sempre: quelle dichiarate e i nomi degli attributi.
   props = new Set<string>();
   resolve: Resolve = () => null;
-  viewport: readonly [number, number] | null = null;
   private readonly matcher = new Matcher();
   /// Le unità su cui si lavora, e quelle estranee che non si vedono.
   private candidates: El[] = [];
@@ -895,10 +898,13 @@ class Planner {
   /// un id o, se nessuna ne ha uno, la prima della radice, che prende quello
   /// di FubDraw; `null` se il disegno non ne ha una.
   private home: El | null = null;
+  /// Le risorse che crea il tentativo in corso, per id.
+  private readonly created = new Map<string, El>();
 
   constructor(
     readonly text: string,
     private readonly scope: EditableScope,
+    private readonly random?: RandomBytes,
   ) {
     this.doc = parseXml(new SourceText(text), false);
     this.engine = SceneEngine.open(text);
@@ -944,7 +950,6 @@ class Planner {
     this.props = new Set([...this.B.declared, ...attributeNames(this.root)]);
     const index = resourceIndex(this.doc);
     this.resolve = (id) => index.get(id) ?? null;
-    this.viewport = viewportOf(this.root);
     this.collect();
     if (this.candidates.length === 0 && (this.scope.kind !== "all" || this.sheets.length === 0)) return { ...EMPTY, invisible: this.invisibleUnits.length };
 
@@ -1042,12 +1047,12 @@ class Planner {
       else if (this.lockedAbove(unit)) this.excluded.set(unit, { kind: "locked" });
       else if (walk(unit).some((node) => node.attr("id") !== null && shown.has(node.attr("id")!))) this.excluded.set(unit, { kind: "copy" });
     }
-    // Le risorse fuori posto: unità, o pezzi di un gruppo che diventa
-    // modificabile, con un id.
+    // Le risorse fuori posto, con un id: unità, pezzi di un gruppo che
+    // diventa modificabile, o risorse di una `defs` dentro un'unità.
     const candidates = new Set(this.candidates);
     for (const node of this.all) {
       if (node.uri !== SVG_NS || !RESOURCES.has(node.local) || (node.attr("id") ?? "") === "" || inRootDefs(node) || node.unit === null) continue;
-      if (candidates.has(node.unit) && (node.unit === node || this.subunit(node) === node)) this.movable.add(node);
+      if (candidates.has(node.unit) && (node.unit === node || this.subunit(node) === node || tucked(node))) this.movable.add(node);
     }
   }
 
@@ -1081,10 +1086,13 @@ class Planner {
 
   /// Il pezzo che resta estraneo quando `node`, in un'unità che diventa
   /// modificabile, non può: l'elemento più in alto sopra di lui, o lui, che
-  /// sta direttamente in un gruppo dell'unità; altrimenti l'unità.
+  /// sta direttamente in un gruppo dell'unità; altrimenti l'unità. Un `svg`
+  /// dentro il disegno è un pezzo solo: diventa un gruppo con tutto ciò che
+  /// contiene, o resta com'è.
   subunit(node: El): El {
     const unit = node.unit!;
     let at = node;
+    for (let up = node; up !== unit; up = up.parent!) if (up.is("svg")) at = up;
     while (at !== unit && !(at.parent !== null && CONTAINERS.has(at.parent.local) && at.parent.uri === SVG_NS)) at = at.parent!;
     // Un pezzo sta in un gruppo che a sua volta diventa modificabile.
     for (let up = at.parent; up !== null && up !== unit.parent; up = up.parent) if (!CONTAINERS.has(up.local) || up.uri !== SVG_NS) return unit;
@@ -1093,16 +1101,25 @@ class Planner {
 
   /// Il tipo della risorsa modificabile `id`, contando anche le risorse
   /// che il comando sta rendendo modificabili, nella `defs` della radice o
-  /// fuori, da portarvi: se poi una non lo diventa, la prova sul testo di
-  /// dopo lo dice.
+  /// fuori, da portarvi, e quelle che crea: se poi una non lo diventa, la
+  /// prova sul testo di dopo lo dice.
   readonly hopeful: Resolve = (id) => {
     const known = this.resolve(id);
     if (known !== null) return known;
+    const made = this.created.get(id);
+    if (made !== undefined) return resourceKind(made.local);
     const node = this.byId.get(id);
     if (node === undefined || node.uri !== SVG_NS || this.isExcluded(node)) return null;
     const placed = node.unit === node && inRootDefs(node) && this.candidates.includes(node);
     return placed || this.movable.has(node) ? resourceKind(node.local) : null;
   };
+
+  /// Una risorsa nuova del tentativo in corso: il suo id.
+  create(node: El): string {
+    const id = createId("resource", (taken) => this.byId.has(taken) || this.created.has(taken), this.random);
+    this.created.set(id, node);
+    return id;
+  }
 
   /// Vero se `node` è escluso, lui o un antenato nella sua unità.
   isExcluded(node: El): boolean {
@@ -1131,7 +1148,7 @@ class Planner {
         ...shapeFacts(node.local, (name) => node.attr(name)),
         ambiguousSpace: node.local === "text" || node.local === "tspan" ? ambiguousSpace(texts) : null,
         wraps,
-        viewport: this.viewport,
+        viewport: this.B.viewport(node),
       };
       this.facts.set(node, out);
     }
@@ -1172,6 +1189,7 @@ class Planner {
   // -------------------------------------------------------------------------
 
   private attempt(keepSheets: boolean): Outcome | Retry {
+    this.created.clear();
     const templates = this.templates();
     const units = this.candidates.filter((unit) => !this.excluded.has(unit) && !templates.has(unit));
     // L'albero di dopo, e come lo vede la superficie.
@@ -1181,22 +1199,27 @@ class Planner {
     // vede la superficie: lì ereditano da lei.
     const moving = [...this.movable].filter((node) => !this.isExcluded(node) && !templates.has(node)).sort((a, b) => this.order.get(a)! - this.order.get(b)!);
     let homeX: El | null = null;
-    if (moving.length > 0) {
+    const homeOf = (): El => {
+      if (homeX !== null) return homeX;
       if (this.home !== null) {
         homeX = xOf.get(this.home)!;
         if (homeX.attr("id") === null) homeX.attrs = [{ uri: "", local: "id", value: DEFS_ID }, ...homeX.attrs];
-      } else {
-        homeX = new El(SVG_NS, "defs", `${prefixOf(X)}defs`, [{ uri: "", local: "id", value: DEFS_ID }], false, null, null, this.serial());
-        homeX.parent = X;
-        let at = 0;
-        while (at < X.children.length && (X.children[at]!.is("title") || X.children[at]!.is("desc"))) at++;
-        X.children.splice(at, 0, homeX);
+        return homeX;
       }
+      const made = new El(SVG_NS, "defs", `${prefixOf(X)}defs`, [{ uri: "", local: "id", value: DEFS_ID }], false, null, null, this.serial());
+      made.parent = X;
+      let at = 0;
+      while (at < X.children.length && (X.children[at]!.is("title") || X.children[at]!.is("desc"))) at++;
+      X.children.splice(at, 0, made);
+      return (homeX = made);
+    };
+    if (moving.length > 0) {
+      const home = homeOf();
       for (const node of moving) {
         const x = xOf.get(node)!;
         x.parent!.children.splice(x.parent!.children.indexOf(x), 1);
-        x.parent = homeX;
-        homeX.children.push(x);
+        x.parent = home;
+        home.children.push(x);
       }
     }
     const [live, liveOf] = liveTree(X, this.serial, (node) => node.origin);
@@ -1206,6 +1229,15 @@ class Planner {
     for (const unit of units) writer.unit(unit, failed);
     if (failed.size > 0) return new Retry(failed, false);
     writer.addTitles();
+    // I ritagli nuovi vanno nella `defs` delle risorse, in coda a ciò che ha
+    // e prima delle risorse che vi arrivano.
+    const clips = writer.clips;
+    if (clips.length > 0) {
+      const home = homeOf();
+      home.children.splice(home.children.length - moving.length, 0, ...clips.map((clip) => clip.el));
+      for (const clip of clips) clip.el.parent = home;
+    }
+    const arriving = moving.length > 0 || clips.length > 0;
     const converted = writer.converted;
     const convertedSet = new Set(converted);
     const elements = new Set(writer.elements);
@@ -1335,9 +1367,27 @@ class Planner {
       editsOf(holder).push([from, element.end, ""]);
       removedInside.add(el);
     }
+    // Una `defs` dentro un'unità che resta vuota se ne va: il formato non ne
+    // ha fuori dalla radice. Con lei vanno le modifiche di ciò che conteneva.
+    for (const unit of converted) {
+      for (const defs of walk(unit)) {
+        if (defs === unit || !defs.is("defs") || this.isExcluded(defs) || !defs.children.every((child) => movingSet.has(child) || removedInside.has(child))) continue;
+        const element = defs.element!;
+        const other = element.children.some((child) => {
+          const node = this.doc.nodes[child]!;
+          return node.kind !== "element" && !(node.kind === "text" && node.blank);
+        });
+        if (other) continue;
+        const holder = defs.parent!.element!;
+        let from = element.start;
+        while (from > holder.openEnd && isSpace(text.charCodeAt(from - 1))) from--;
+        edits.set(unit, [...editsOf(unit).filter((edit) => edit[1] <= element.start || edit[0] >= element.end), [from, element.end, ""]]);
+        removedInside.add(defs);
+      }
+    }
     // Una `defs` della radice che resta vuota se ne va, se nessuno la cita.
     for (const defs of this.root.children) {
-      if (!defs.is("defs") || defs.part?.kind !== "container" || defs.children.length === 0 || (defs === this.home && moving.length > 0)) continue;
+      if (!defs.is("defs") || defs.part?.kind !== "container" || defs.children.length === 0 || (defs === this.home && arriving)) continue;
       if (!defs.children.every((child) => dropped.has(child))) continue;
       const other = defs.element!.children.some((child) => {
         const node = this.doc.nodes[child]!;
@@ -1351,7 +1401,9 @@ class Planner {
     if (edits.size === 0 && dropped.size === 0 && moving.length === 0) {
       return { ops: [], after: text, converted: 0, translations: new Map(), rules: 0, sheets: 0, dropped, yOf: new Map() };
     }
-    const sequence = this.sequence({ edits, moving, movedRaws, dropped, removedInside, drop, templates, convertedSet, xOf });
+    const renamed = new Map<El, string>();
+    for (const node of writer.windows.keys()) if (node.unit === node) renamed.set(node, xOf.get(node)!.name);
+    const sequence = this.sequence({ edits, moving, movedRaws, clips, renamed, dropped, removedInside, drop, templates, convertedSet, xOf });
     if (sequence instanceof Retry) return sequence;
     const { ops, blame } = sequence;
     const engine = SceneEngine.open(text);
@@ -1369,8 +1421,15 @@ class Planner {
     if (engine.model === null || !annotate(Y, engine.model)) return this.exclude(first);
     const yOf = new Map<El, El>();
     const tOf = new Map<El, El | null>();
+    // Ciò che se ne va, senza le risorse che ne escono per la `defs` delle
+    // risorse.
     const gone = new Set<El>();
-    for (const node of [...dropped, ...removedInside]) for (const inner of walk(node)) gone.add(xOf.get(inner)!);
+    for (const stack = [...dropped, ...removedInside]; stack.length > 0; ) {
+      const node = stack.pop()!;
+      if (movingSet.has(node)) continue;
+      gone.add(xOf.get(node)!);
+      stack.push(...node.children);
+    }
     const stack: Array<[El, El]> = [[X, Y]];
     while (stack.length > 0) {
       const [x, y] = stack.pop()!;
@@ -1416,8 +1475,9 @@ class Planner {
       if (mismatched.has(piece)) continue;
       const y = yOf.get(node)!;
       const facts = (): ShapeFacts => this.shape(node);
-      const found = difference({ cascade: this.B, node }, { cascade: A, node: y }, props, facts)
-        ?? difference({ cascade: this.B, node }, { cascade: L2, node: yLiveOf.get(y)! }, props, facts);
+      const skip = writer.windows.get(node);
+      const found = difference({ cascade: this.B, node }, { cascade: A, node: y }, props, facts, skip)
+        ?? difference({ cascade: this.B, node }, { cascade: L2, node: yLiveOf.get(y)! }, props, facts, skip);
       if (found !== null) mismatched.set(piece, reasonOf(found));
     }
     if (mismatched.size > 0) return new Retry(mismatched, false);
@@ -1470,9 +1530,11 @@ class Planner {
 
   /// Un tentativo finito male per un motivo che non dipende dal disegno:
   /// la parte resta estranea, e si riprova senza. Una risorsa che cambia
-  /// posto resta da sola; ogni altra cosa con la sua unità.
+  /// posto resta da sola, un `svg` dentro il disegno col suo pezzo; ogni
+  /// altra cosa con la sua unità.
   private exclude(node: El): Retry {
-    return new Retry(new Map([[this.movable.has(node) ? node : node.unit ?? node, { kind: "unknown" }]]), false);
+    const part = this.movable.has(node) || node.unit === null ? node : node.is("svg") ? this.subunit(node) : node.unit;
+    return new Retry(new Map([[part, { kind: "unknown" }]]), false);
   }
 
   /// Le operazioni del comando, per un `batch` solo, e per ognuna la parte
@@ -1480,11 +1542,11 @@ class Planner {
   /// che allora resta tutto.
   ///
   /// - Prima la `defs` delle risorse, se deve nascere o aprirsi: `<defs/>`
-  ///   diventa `<defs>…</defs>`.
+  ///   diventa `<defs>…</defs>`; in coda vi entrano i ritagli nuovi.
   /// - Poi se ne va ciò che non torna: fogli, modelli, risorse che cambiano
   ///   posto; e si tolgono, dall'ultima, le unità da riscrivere.
   /// - Poi si rimettono, ognuna nel punto esatto da cui è partita, con gli
-  ///   spazi attorno com'erano; le risorse che cambiano posto vanno in testa
+  ///   spazi attorno com'erano; le risorse che cambiano posto vanno in coda
   ///   alla `defs` delle risorse. Una risorsa entra prima di chi la usa,
   ///   perché il motore non accetta una risorsa a cui qualcosa rimanda già:
   ///   chi la usa e resta com'è si toglie e si rimette uguale.
@@ -1497,6 +1559,9 @@ class Planner {
     readonly edits: ReadonlyMap<El, Edit[]>;
     readonly moving: readonly El[];
     readonly movedRaws: ReadonlyMap<El, string>;
+    readonly clips: Writer["clips"];
+    /// Le unità che cambiano nome: `svg` che diventano gruppi.
+    readonly renamed: ReadonlyMap<El, string>;
     readonly dropped: ReadonlySet<El>;
     readonly removedInside: ReadonlySet<El>;
     readonly drop: ReadonlyMap<SheetOf, Statement[]>;
@@ -1504,7 +1569,7 @@ class Planner {
     readonly convertedSet: ReadonlySet<El>;
     readonly xOf: ReadonlyMap<El, El>;
   }): { readonly ops: Op[]; readonly blame: (El | null)[] } | Retry {
-    const { edits, moving, movedRaws, dropped, removedInside, drop, templates, convertedSet, xOf } = input;
+    const { edits, moving, movedRaws, clips, renamed, dropped, removedInside, drop, templates, convertedSet, xOf } = input;
     const text = this.text;
     const movingSet = new Set(moving);
     const rewritten = [...edits.keys()].sort((a, b) => this.order.get(a)! - this.order.get(b)!);
@@ -1534,8 +1599,10 @@ class Planner {
 
     // La `defs` delle risorse, aperta.
     let homeId = DEFS_ID;
+    let homeNode = this.home;
     let inner = "";
-    if (moving.length > 0) {
+    if (moving.length > 0 || clips.length > 0) {
+      const herald = moving[0] ?? clips[0]!.node;
       const unit = this.indentUnit();
       const home = this.home;
       if (home === null) {
@@ -1545,10 +1612,11 @@ class Planner {
         const name = `${prefixOf(this.root)}defs`;
         inner = unit + unit;
         const after: Target | null = anchor === null ? null : anchor.part!.facts.id ?? { path: paths.path(anchor), tag: tagName(anchor.part!) };
-        push({ op: "add", slot: { parent: ROOT, after, skip: 0, lead: "" }, gap: `\n${unit}`, raw: `<${name} id="${DEFS_ID}">\n${unit}</${name}>` }, moving[0]!);
+        push({ op: "add", slot: { parent: ROOT, after, skip: 0, lead: "" }, gap: `\n${unit}`, raw: `<${name} id="${DEFS_ID}">\n${unit}</${name}>` }, herald);
         const placeholder = new El(SVG_NS, "defs", name, [], false, null, null, this.serial());
         paths.insert(this.root, at, placeholder);
         settled.insert(this.root, at, placeholder);
+        homeNode = placeholder;
       } else {
         const named = home.attr("id");
         const target: Target = named ?? { path: paths.path(home), tag: tagName(home.part!) };
@@ -1562,17 +1630,22 @@ class Planner {
           const probe = SceneEngine.open(text).apply({ op: "batch", ops: [...ops, { op: "remove", target }] });
           const raw = text.slice(element.start, element.end);
           const back = probe.outcome === "applied" ? flatten(probe.inverse).find((op): op is RestoreOp => op.op === "add" && "slot" in op && op.raw === raw) : undefined;
-          if (back === undefined) return this.exclude(moving[0]!);
+          if (back === undefined) return this.exclude(herald);
           let open: string;
           if (element.closeStart === null) {
             let slash = element.openEnd - 2;
             while (isSpace(text.charCodeAt(slash - 1))) slash--;
             open = `${text.slice(element.start, slash)}>\n${own}</${element.name}>`;
           } else open = `${text.slice(element.start, element.openEnd)}\n${own}${text.slice(element.closeStart, element.end)}`;
-          push({ op: "remove", target }, moving[0]!);
-          push({ ...back, raw: open }, moving[0]!);
+          push({ op: "remove", target }, herald);
+          push({ ...back, raw: open }, herald);
         }
-        if (named === null) push({ op: "ident", path: paths.path(home), tag: tagName(part), id: DEFS_ID }, moving[0]!);
+        if (named === null) push({ op: "ident", path: paths.path(home), tag: tagName(part), id: DEFS_ID }, herald);
+      }
+      for (const clip of clips) {
+        const elem = { tag: "clipPath", attrs: { id: clip.id, "fub:role": "private" }, children: [{ tag: "rect", attrs: clip.rect }] };
+        push({ op: "add", parent: homeId, pos: { last: true }, elem }, clip.node);
+        paths.insert(homeNode!, paths.children(homeNode!).length, clip.el);
       }
     }
 
@@ -1661,10 +1734,19 @@ class Planner {
         at++;
       }
     }
-    let previous: Target | null = null;
+    let previous: Target | null = clips.length > 0 ? clips[clips.length - 1]!.id : null;
     for (const node of sequence) {
       if (!movingSet.has(node)) {
-        push(restores.get(node)!, culprit(node));
+        // Il fratello che precede il punto può essere già tornato con un
+        // altro nome.
+        let restore = restores.get(node)!;
+        const after = restore.slot.after;
+        if (after !== null && typeof after !== "string") {
+          const sibling = paths.children(node.parent!)[after.path[after.path.length - 1]!];
+          const name = sibling === undefined ? undefined : renamed.get(sibling);
+          if (name !== undefined) restore = { ...restore, slot: { ...restore.slot, after: { ...after, tag: name } } };
+        }
+        push(restore, culprit(node));
         paths.restore(node);
         continue;
       }
@@ -1779,6 +1861,7 @@ class Writer {
   readonly elements: El[] = [];
   readonly translations = new Map<Translation, Set<El>>([
     ["style", new Set()], ["sheet", new Set()], ["color", new Set()], ["unit", new Set()], ["data", new Set()], ["text", new Set()], ["resource", new Set()],
+    ["svg", new Set()],
   ]);
   /// Il titolo nuovo di un elemento.
   private readonly titles = new Map<El, string>();
@@ -1790,6 +1873,13 @@ class Writer {
   /// Gli `stop` che una sfumatura prende da quella a cui rimandava, con i
   /// loro attributi.
   private readonly stops = new Map<El, { readonly from: El; readonly attrs: readonly StyleAttr[] }[]>();
+  /// Gli `svg` dentro il disegno che diventano gruppi, con le proprietà che
+  /// il confronto non guarda più: la finestra, diventata la trasformazione
+  /// del gruppo, e il ritaglio nuovo.
+  readonly windows = new Map<El, ReadonlySet<string>>();
+  /// I ritagli nuovi, uno per finestra da cui ciò che contiene può uscire:
+  /// di chi, l'id, l'elemento dell'albero di dopo e il rettangolo.
+  readonly clips: { readonly node: El; readonly id: string; readonly el: El; readonly rect: Readonly<Record<string, string>> }[] = [];
   private readonly B: Cascade;
 
   constructor(
@@ -1833,7 +1923,12 @@ class Writer {
     const stack = [unit];
     while (stack.length > 0) {
       const node = stack.pop()!;
-      if (node !== unit && (invisible(node) || this.planner.isExcluded(node))) continue;
+      if (node !== unit && (invisible(node) || this.planner.isExcluded(node))) {
+        // Le risorse di una `defs` dentro l'unità vanno in quella delle
+        // risorse: si riscrivono anche loro.
+        if (node.is("defs")) for (let k = node.children.length - 1; k >= 0; k--) if (this.planner.movable.has(node.children[k]!)) stack.push(node.children[k]!);
+        continue;
+      }
       elements.push(node);
       for (let k = node.children.length - 1; k >= 0; k--) stack.push(node.children[k]!);
     }
@@ -1850,10 +1945,15 @@ class Writer {
 
   /// Riscrive un elemento; il perché, se non si sa.
   private element(node: El): Reason | null {
-    const tag = tagOf(node.element!);
+    const tag = tagFor(node);
     // Ciò che decide se l'elemento si disegna resta, e l'elemento con lui.
     for (const attr of node.attrs) {
       if (attr.uri === "" && (CONDITIONAL.has(attr.local) || /^on[a-z]/i.test(attr.local))) return { kind: "attribute", name: attr.local };
+    }
+    const nested = node.is("svg") && node.parent !== null;
+    if (nested) {
+      const reason = this.nested(node);
+      if (reason !== null) return reason;
     }
     if (node.is("text")) {
       const reason = this.lines(node);
@@ -1901,7 +2001,7 @@ class Writer {
     const facts = (): ShapeFacts => this.planner.shape(node);
     const tried = new Set<string>();
     for (;;) {
-      const found = difference({ cascade: this.B, node }, { cascade: this.L, node: live }, this.planner.props, facts);
+      const found = difference({ cascade: this.B, node }, { cascade: this.L, node: live }, this.planner.props, facts, this.windows.get(node));
       if (found === null) break;
       if (found.doubt !== null) return reasonOf(found);
       const writes = this.valueFor(node, found.property);
@@ -1912,9 +2012,232 @@ class Writer {
       for (const [name, value] of writes) this.write(node, name, value);
     }
     // Un gruppo tiene ciò che portava ai figli.
-    if (CONTAINERS.has(node.local)) this.inherited(node);
+    if (CONTAINERS.has(node.local) || nested) this.inherited(node);
     else this.intent(node);
     return null;
+  }
+
+  /// Un `svg` dentro il disegno diventa un gruppo. La sua finestra (`x`,
+  /// `y`, `width`, `height`, `viewBox` e `preserveAspectRatio`) diventa la
+  /// trasformazione del gruppo, che scrive il confronto; il ritaglio della
+  /// finestra, se ciò che contiene può uscirne, un `clipPath` nuovo nella
+  /// `defs` delle risorse. Le percentuali di ciò che contiene si misurano
+  /// sulla finestra e diventano numeri. Resta com'è un `svg` con una sua
+  /// trasformazione, che i browser non applicano tutti, o con un ritaglio,
+  /// una maschera o un filtro che nel gruppo cambierebbero.
+  private nested(node: El): Reason | null {
+    const B = this.B;
+    const outer = B.viewport(node);
+    for (const p of ["x", "y", "width", "height"]) {
+      const value = B.value(node, p);
+      if (value.doubt !== null) return reasonOf({ property: p, value: value.text ?? value.key, doubt: value.doubt });
+    }
+    const window = B.window(node);
+    if (window === null) {
+      for (const p of ["x", "y", "width", "height"]) {
+        const text = B.value(node, p).text;
+        if (text !== null && !/^\s*(?:auto|initial|unset|revert)\s*$/i.test(text) && lengthOf(p, text, outer) === null) return { kind: "unit", value: text.trim() };
+      }
+      // Una finestra vuota non mostra niente.
+      const empty = ["width", "height"].find((p) => (lengthOf(p, B.value(node, p).text ?? "100%", outer) ?? 1) <= 0);
+      return { kind: "attribute", name: empty ?? "viewBox" };
+    }
+    const own = B.own(node);
+    if (own.m === null || !same(own.m, window.m)) return own.css || own.m === null ? { kind: "property", name: "transform", value: own.text } : { kind: "attribute", name: "transform" };
+    // Il ritaglio della finestra: `overflow` vale `hidden` per un `svg`
+    // dentro il disegno, se nessuno lo cambia.
+    for (const p of ["overflow-x", "overflow-y", "clip"]) {
+      const written = B.written(node, p);
+      if (written.doubt !== null) return reasonOf({ property: p, value: written.text ?? "", doubt: written.doubt });
+      if (written.text !== null && !(p === "clip" && /^\s*(?:auto|initial|unset)\s*$/i.test(written.text))) return { kind: "property", name: p, value: written.text.trim() };
+    }
+    const overflow = B.written(node, "overflow");
+    if (overflow.doubt !== null) return reasonOf({ property: "overflow", value: overflow.text ?? "", doubt: overflow.doubt });
+    const words = (overflow.text ?? "hidden").trim().toLowerCase().split(/\s+/);
+    if (words.length > 2 || (words.length === 2 && words[0] !== words[1])) return { kind: "property", name: "overflow", value: overflow.text!.trim() };
+    let clipped: boolean;
+    switch (words[0]) {
+      case "hidden":
+      case "scroll":
+      case "clip":
+      case "revert":
+        clipped = true;
+        break;
+      case "visible":
+      case "auto":
+      case "initial":
+      case "unset":
+        clipped = false;
+        break;
+      default:
+        return { kind: "property", name: "overflow", value: overflow.text!.trim() };
+    }
+    // Un ritaglio, una maschera o un filtro dell'`svg` si misurano nelle sue
+    // coordinate: valgono uguali nel gruppo solo se la finestra non sposta
+    // niente. Un filtro, poi, viene prima del ritaglio della finestra in un
+    // gruppo e dopo in un `svg`.
+    const moves = !same(window.m, IDENTITY);
+    const clip = clipped && !this.contained(node, window);
+    for (const p of ["clip-path", "mask", "filter"]) {
+      const value = B.value(node, p);
+      if (value.doubt !== null) return reasonOf({ property: p, value: value.text ?? value.key, doubt: value.doubt });
+      if (value.key === "none" || value.key === "initial") continue;
+      if (moves || (clip && p !== "mask")) return { kind: "property", name: p, value: value.text ?? value.key };
+    }
+    // Uno spessore o un tratteggio in percentuale, ereditato da fuori, si
+    // misura dentro sulla finestra: si scrive in numeri sul gruppo.
+    const inner = window.inner;
+    if (outer === null || outer[0] !== inner[0] || outer[1] !== inner[1]) {
+      for (const p of ["stroke-width", "stroke-dasharray", "stroke-dashoffset"]) {
+        const value = B.value(node, p);
+        if (value.own || value.doubt !== null || value.text === null || !value.text.includes("%")) continue;
+        const lengths = value.text.trim().split(/[\s,]+/).filter((part) => part !== "").map((part) => lengthOf(p, part, inner));
+        if (lengths.length === 0 || lengths.some((n) => n === null)) return { kind: "unit", value: value.text.trim() };
+        this.write(node, p, lengths.map((n) => num(n!)).join(" "));
+        this.count("unit", node);
+      }
+    }
+    // Il gruppo, senza la finestra.
+    const x = this.xOf.get(node)!;
+    const live = this.liveOf.get(x)!;
+    for (const each of [x, live]) {
+      each.local = "g";
+      each.name = `${prefixOf(node)}g`;
+    }
+    for (const name of ["x", "y", "width", "height", "viewBox", "preserveAspectRatio", "overflow", "clip"]) this.write(node, name, null);
+    const skip = new Set(["x", "y", "width", "height"]);
+    if (clip) {
+      const [a, , , d, e, f] = window.m;
+      const rect = { x: num((window.x - e) / a), y: num((window.y - f) / d), width: num(window.width / a), height: num(window.height / d) };
+      const prefix = prefixOf(node);
+      const made = new El(SVG_NS, "clipPath", `${prefix}clipPath`, [], false, null, null, this.planner.serial());
+      const id = this.planner.create(made);
+      made.attrs = [{ uri: "", local: "id", value: id }, { uri: FUB_NS, local: "role", value: "private" }];
+      const shape = new El(SVG_NS, "rect", `${prefix}rect`, Object.entries(rect).map(([local, value]) => ({ uri: "", local, value })), false, null, null, this.planner.serial());
+      shape.parent = made;
+      made.children.push(shape);
+      this.clips.push({ node, id, el: made, rect });
+      this.write(node, "clip-path", `url(#${id})`);
+      skip.add("clip-path");
+    }
+    this.windows.set(node, skip);
+    this.count("svg", node);
+    return null;
+  }
+
+  /// Vero se tutto ciò che disegna `svg` sta di sicuro nella sua finestra,
+  /// coi contorni: il ritaglio allora non serve. Un testo, un marcatore, un
+  /// filtro o ciò che non si sa misurare può uscirne.
+  private contained(svg: El, window: SvgWindow): boolean {
+    const B = this.B;
+    const [a, , , d, e, f] = window.m;
+    const min = [(window.x - e) / a, (window.y - f) / d];
+    const max = [(window.x + window.width - e) / a, (window.y + window.height - f) / d];
+    const bounds = new BoundsBuilder();
+    const matrices = new Map<El, Matrix>([[svg, IDENTITY]]);
+    const stack = [...svg.children];
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (invisible(node)) continue;
+      const display = B.value(node, "display");
+      if (display.doubt === null && display.key === "none") continue;
+      const filter = B.value(node, "filter");
+      if (filter.doubt !== null || (filter.key !== "none" && filter.key !== "initial")) return false;
+      const own = B.own(node).m;
+      if (own === null) return false;
+      const m = compose(matrices.get(node.parent!)!, own);
+      matrices.set(node, m);
+      if (CONTAINERS.has(node.local) || node.is("svg")) {
+        stack.push(...node.children);
+        continue;
+      }
+      const box = this.extent(node);
+      if (box === null) return false;
+      if (box === "empty") continue;
+      const reach = this.reach(node);
+      if (reach === null) return false;
+      for (const [px, py] of [[box.min[0], box.min[1]], [box.max[0], box.min[1]], [box.max[0], box.max[1]], [box.min[0], box.max[1]]] as const) {
+        for (const [dx, dy] of [[-reach, -reach], [reach, -reach], [reach, reach], [-reach, reach]] as const) bounds.include(apply(m, [px + dx, py + dy]));
+      }
+    }
+    const out = bounds.finish();
+    if (out === null) return true;
+    const slack = 1e-6 * Math.max(max[0]! - min[0]!, max[1]! - min[1]!);
+    return out.min[0] >= min[0]! - slack && out.min[1] >= min[1]! - slack && out.max[0] <= max[0]! + slack && out.max[1] <= max[1]! + slack;
+  }
+
+  /// Il riquadro della geometria di una forma nelle sue coordinate;
+  /// `"empty"` per una che non disegna niente, `null` se non si sa.
+  private extent(node: El): { readonly min: readonly [number, number]; readonly max: readonly [number, number] } | "empty" | null {
+    const B = this.B;
+    const viewport = B.viewport(node);
+    const css = (p: string, fallback: string): number | null => {
+      const value = B.value(node, p);
+      if (value.doubt !== null) return null;
+      return lengthOf(p, value.text === null || value.key === "initial" ? fallback : value.text, viewport);
+    };
+    const attr = (name: string): number | null => lengthOf(name, node.attr(name) ?? "0", viewport);
+    switch (node.local) {
+      case "rect":
+      case "image": {
+        const [x, y, w, h] = [css("x", "0"), css("y", "0"), css("width", "0"), css("height", "0")];
+        if (x === null || y === null || w === null || h === null) return null;
+        return w <= 0 || h <= 0 ? "empty" : { min: [x, y], max: [x + w, y + h] };
+      }
+      case "circle":
+      case "ellipse": {
+        const [cx, cy] = [css("cx", "0"), css("cy", "0")];
+        const rx = css(node.local === "circle" ? "r" : "rx", "0");
+        const ry = css(node.local === "circle" ? "r" : "ry", "0");
+        if (cx === null || cy === null || rx === null || ry === null) return null;
+        return rx <= 0 || ry <= 0 ? "empty" : { min: [cx - rx, cy - ry], max: [cx + rx, cy + ry] };
+      }
+      case "line": {
+        const [x1, y1, x2, y2] = [attr("x1"), attr("y1"), attr("x2"), attr("y2")];
+        if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
+        return { min: [Math.min(x1, x2), Math.min(y1, y2)], max: [Math.max(x1, x2), Math.max(y1, y2)] };
+      }
+      case "path":
+      case "polyline":
+      case "polygon": {
+        const segments = segmentsOf(node.local, (name) => node.attr(name));
+        if (segments === null) return null;
+        const builder = new BoundsBuilder();
+        builder.path(segments, IDENTITY);
+        const out = builder.finish();
+        return out === null ? "empty" : out;
+      }
+      default:
+        return null;
+    }
+  }
+
+  /// Quanto il contorno di una forma esce dalla sua geometria, al più;
+  /// `null` se non si sa, o se un marcatore vi disegna.
+  private reach(node: El): number | null {
+    const B = this.B;
+    for (const p of ["marker-start", "marker-mid", "marker-end", "vector-effect"]) {
+      const value = B.value(node, p);
+      if (value.doubt !== null || (value.key !== "none" && value.key !== "initial")) return null;
+    }
+    const stroke = B.value(node, "stroke");
+    if (stroke.doubt === null && stroke.key === "none") return 0;
+    const width = B.value(node, "stroke-width");
+    const thickness = width.doubt === null ? lengthOf("stroke-width", width.text ?? "1", B.viewport(node)) : null;
+    if (thickness === null) return null;
+    let factor = B.value(node, "stroke-linecap").key === "square" ? Math.SQRT2 : 1;
+    const join = B.value(node, "stroke-linejoin").key;
+    if (join !== "round" && join !== "bevel") {
+      // Uno spigolo esce di metà della sua lunghezza, finché non supera il
+      // limite; oltre, il giunto si smussa.
+      const limit = Number(B.value(node, "stroke-miterlimit").key);
+      const miters = this.planner.shape(node).miters;
+      if (!Number.isFinite(limit) || miters === null) return null;
+      if (join === "miter") {
+        for (const ratio of miters) if (ratio <= limit) factor = Math.max(factor, ratio);
+      } else if (miters.length > 0) factor = Math.max(factor, limit);
+    }
+    return (Math.max(thickness, 0) / 2) * factor;
   }
 
   /// Una sfumatura che rimanda con `href` a un'altra, come le scrivono
@@ -2113,7 +2436,7 @@ class Writer {
 
   /// Una lunghezza di `name` su `node` in pixel; `null` se non si sa.
   private relativeLength(node: El, name: string, value: string): number | null {
-    const absolute = lengthOf(name, value, this.planner.viewport);
+    const absolute = lengthOf(name, value, this.B.viewport(node));
     if (absolute !== null) return absolute;
     const match = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(em|rem)\s*$/i.exec(value);
     if (match === null) return null;
@@ -2126,11 +2449,14 @@ class Writer {
   private valueFor(node: El, p: string, counted = node): Map<string, string | null> | Reason {
     const B = this.B;
     const value = B.value(node, p);
-    const tag = tagOf(node.element!);
+    const tag = tagFor(node);
     const out = new Map<string, string | null>();
     const shown = (v: typeof value): string => (v.text ?? v.key).split("|")[0]!;
     const refuse = (): Reason => ({ kind: "property", name: p, value: shown(value) });
     const live = this.liveOf.get(this.xOf.get(node)!)!;
+    // Le percentuali di ciò che un `svg` che diventa un gruppo porta a chi
+    // contiene si misurano sulla sua finestra.
+    const base = this.windows.has(node) ? this.B.window(node)?.inner ?? null : this.B.viewport(node);
     switch (p) {
       case "fill":
       case "fill-opacity":
@@ -2189,7 +2515,7 @@ class Writer {
       case "r":
       case "rx":
       case "ry": {
-        const px = lengthOf(p, value.text, this.planner.viewport);
+        const px = lengthOf(p, value.text, base);
         if (px === null) return { kind: "unit", value: shown(value) };
         if (value.text !== null && /%/.test(value.text)) this.count("unit", counted);
         out.set(p, num(px));
@@ -2198,7 +2524,7 @@ class Writer {
       case "letter-spacing": {
         if (value.key === "normal") out.set(p, "0");
         else {
-          const px = lengthOf(p, value.text, this.planner.viewport);
+          const px = lengthOf(p, value.text, base);
           if (px === null) return { kind: "unit", value: shown(value) };
           out.set(p, num(px));
         }
@@ -2209,7 +2535,7 @@ class Writer {
         const text = value.text.trim().toLowerCase();
         if (text === "none") out.set(p, "none");
         else {
-          const lengths = text.split(/[\s,]+/).filter((part) => part !== "").map((part) => lengthOf(p, part, this.planner.viewport));
+          const lengths = text.split(/[\s,]+/).filter((part) => part !== "").map((part) => lengthOf(p, part, base));
           if (lengths.length === 0 || lengths.some((n) => n === null || n < 0)) return { kind: "unit", value: value.text };
           out.set(p, lengths.every((n) => n === 0) ? "none" : lengths.map((n) => num(n!)).join(" "));
         }
@@ -2341,6 +2667,19 @@ class Writer {
       }
       const added = x.attrs.filter((each) => !node.attrs.some((was) => was.uri === each.uri && was.local === each.local));
       const nameEnd = element.start + 1 + element.name.length;
+      // Un `svg` che diventa un gruppo cambia nome, e perde i namespace che
+      // dichiara uguali a quelli che ha già attorno.
+      const name = this.windows.has(node) ? x.name : element.name;
+      if (name !== element.name) {
+        out.push([element.start + 1, nameEnd, name]);
+        if (element.closeStart !== null) out.push([element.closeStart + 2, element.closeStart + 2 + element.name.length, name]);
+        for (const attr of element.attrs) {
+          if ((attr.name === "xmlns" || attr.name.startsWith("xmlns:")) && declaredAbove(node, attr.name) === attr.value) {
+            const span = spanOf.get(attr)!;
+            out.push([span.from, span.to, ""]);
+          }
+        }
+      }
       const last = spans.length === 0 ? nameEnd : spans[spans.length - 1]!.to;
       if (added.length > 0) {
         // Ogni attributo nuovo va dopo l'ultimo, nel testo, di quelli che
@@ -2371,7 +2710,7 @@ class Writer {
           let slash = element.openEnd - 2;
           while (slash > last && isSpace(text.charCodeAt(slash - 1))) slash--;
           const close = tail !== "" && own !== null ? `\n${own}` : "";
-          out.push([slash, element.openEnd, `>${titled}${blank}${tail}${close}</${element.name}>`]);
+          out.push([slash, element.openEnd, `>${titled}${blank}${tail}${close}</${name}>`]);
         }
       } else {
         if (titled !== "") {
@@ -2410,6 +2749,34 @@ class Writer {
       return own === null ? stop : `\n${own}${step}${stop}`;
     }).join("");
   }
+}
+
+/// Vero se `node` sta in una `defs` dentro la sua unità, fra gruppi e `svg`
+/// che ne diventano: la `defs` se ne va, e lui va in quella delle risorse.
+function tucked(node: El): boolean {
+  const defs = node.parent;
+  if (defs === null || !defs.is("defs") || defs === node.unit) return false;
+  for (let at = defs.parent; at !== null; at = at.parent) {
+    if (at.uri !== SVG_NS || !(CONTAINERS.has(at.local) || at.local === "svg")) return false;
+    if (at === node.unit) return true;
+  }
+  return false;
+}
+
+/// Il valore della dichiarazione di namespace `name` più vicina sopra
+/// `node`; `null` se nessuno la dichiara.
+function declaredAbove(node: El, name: string): string | null {
+  for (let at = node.parent; at !== null; at = at.parent) {
+    const found = at.element?.attrs.find((attr) => attr.name === name);
+    if (found !== undefined) return found.value;
+  }
+  return null;
+}
+
+/// Il tag del formato che `node` avrà dopo: un `svg` dentro il disegno
+/// diventa un gruppo.
+function tagFor(node: El): Tag | null {
+  return node.is("svg") && node.parent !== null ? "g" : tagOf(node.element!);
 }
 
 /// Vero se per `node` vale `xml:space="preserve"`, suo o di un antenato.

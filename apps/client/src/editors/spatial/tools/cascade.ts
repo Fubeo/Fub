@@ -25,7 +25,7 @@
 //   la pila.
 
 import { compose, IDENTITY, translate, type Matrix } from "../scene/matrix";
-import { NAMED_COLORS, transform as svgTransform } from "../scene/values";
+import { length as svgLength, NAMED_COLORS, transform as svgTransform, viewBox as readViewBox, viewBoxMatrix } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
 import { formatNumber } from "../number";
 import { Matcher, readDeclarations, type Declaration, type Maybe, type Rule, type Sheet, type StyleNode } from "./selectors";
@@ -67,6 +67,18 @@ export interface Value {
 export interface World {
   readonly m: Matrix;
   readonly sym: string;
+}
+
+/// La finestra di un `svg` dentro il disegno, nelle coordinate del genitore:
+/// dove sta, larga e alta, la trasformazione che vi porta ciò che contiene e
+/// la misura su cui ciò che contiene conta le percentuali.
+export interface Window {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly m: Matrix;
+  readonly inner: readonly [number, number];
 }
 
 /// Un'opacità accumulata dalla radice, come `World`.
@@ -675,6 +687,7 @@ export class Cascade {
   private readonly values = new Map<CascadeNode, Map<string, Value>>();
   private readonly worlds = new Map<CascadeNode, World>();
   private readonly alphas = new Map<CascadeNode, Alpha>();
+  private readonly windows = new Map<CascadeNode, Window | null>();
   private readonly resolving = new Set<string>();
   /// Le proprietà dichiarate da qualche parte, sciolte.
   readonly declared: ReadonlySet<string>;
@@ -706,6 +719,7 @@ export class Cascade {
       this.values.delete(at);
       this.worlds.delete(at);
       this.alphas.delete(at);
+      this.windows.delete(at);
       for (const child of at.children) stack.push(child);
     }
   }
@@ -1043,7 +1057,71 @@ export class Cascade {
       const other = this.won(node, name).text;
       if (other !== null && !/^\s*(?:none|initial|unset|revert)\s*$/i.test(other)) m = null;
     }
+    // Un `svg` dentro il disegno porta ciò che contiene nella sua finestra,
+    // dopo la sua trasformazione.
+    if (m !== null && node.local === "svg" && node.parent !== null) {
+      const window = this.window(node);
+      m = window === null ? null : compose(m, window.m);
+    }
     return { m, text, css };
+  }
+
+  /// Il valore di `p` che vince su `node`, com'è scritto: `null` se nessuno
+  /// lo scrive; col dubbio, se dipende da un selettore che non si sa leggere.
+  written(node: CascadeNode, p: string): { readonly text: string | null; readonly doubt: Doubt | null } {
+    const won = this.won(node, p);
+    return { text: won.text, doubt: won.marks.length > 0 ? won.doubt ?? { kind: "selector", text: won.marks[0]! } : null };
+  }
+
+  /// La finestra su cui si misurano le percentuali di `node`, larga e alta:
+  /// quella dell'`svg` più vicino che lo contiene, o della radice; `null` se
+  /// non si sa.
+  viewport(node: CascadeNode): readonly [number, number] | null {
+    for (let at = node.parent; at !== null; at = at.parent) {
+      if (!isSvg(at) || at.local !== "svg") continue;
+      return at.parent === null ? rootViewport(at) : this.window(at)?.inner ?? null;
+    }
+    return rootViewport(this.root);
+  }
+
+  /// La finestra di `node`, un `svg` dentro il disegno: `x`, `y`, `width` e
+  /// `height` nella finestra del genitore, `viewBox` e
+  /// `preserveAspectRatio`; `null` se non lo è, se non si sa calcolare o se
+  /// non disegna niente.
+  window(node: CascadeNode): Window | null {
+    if (!isSvg(node) || node.local !== "svg" || node.parent === null) return null;
+    const known = this.windows.get(node);
+    if (known !== undefined) return known;
+    const outer = this.viewport(node);
+    const read = (p: string, fallback: string, base: number | undefined): number | null => {
+      const value = this.value(node, p);
+      if (value.doubt !== null) return null;
+      const text = value.text === null || /^\s*(?:auto|initial|unset|revert)\s*$/i.test(value.text) ? fallback : value.text;
+      const percent = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)%\s*$/i.exec(text);
+      if (percent === null) return svgLength(text);
+      return base === undefined ? null : (Number(percent[1]) * base) / 100;
+    };
+    const x = read("x", "0", outer?.[0]);
+    const y = read("y", "0", outer?.[1]);
+    const width = read("width", "100%", outer?.[0]);
+    const height = read("height", "100%", outer?.[1]);
+    let out: Window | null = null;
+    if (x !== null && y !== null && width !== null && height !== null && width > 0 && height > 0) {
+      const attr = (local: string): string | undefined => node.attrs.find((each) => each.uri === "" && each.local === local)?.value;
+      const boxText = attr("viewBox");
+      if (boxText === undefined) out = { x, y, width, height, m: [1, 0, 0, 1, x, y], inner: [width, height] };
+      else {
+        // Un `viewBox` che non si legge non c'è; uno vuoto non disegna niente.
+        const box = readViewBox(boxText);
+        if (box === null) out = { x, y, width, height, m: [1, 0, 0, 1, x, y], inner: [width, height] };
+        else if (box[2] > 0 && box[3] > 0) {
+          const m = compose(translate(x, y), viewBoxMatrix(box, width, height, attr("preserveAspectRatio") ?? ""));
+          out = { x, y, width, height, m, inner: [box[2], box[3]] };
+        }
+      }
+    }
+    this.windows.set(node, out);
+    return out;
   }
 
   /// La trasformazione accumulata dalla radice fino a `node` compreso.
@@ -1086,6 +1164,17 @@ export class Cascade {
     }
     return out;
   }
+}
+
+/// La finestra della radice, larga e alta: il `viewBox`, o `width` e
+/// `height` in misure assolute; `null` se non si sa.
+function rootViewport(root: CascadeNode): readonly [number, number] | null {
+  const attr = (local: string): string => root.attrs.find((each) => each.uri === "" && each.local === local)?.value ?? "";
+  const box = readViewBox(attr("viewBox"));
+  if (box !== null && box[2] > 0 && box[3] > 0) return [box[2], box[3]];
+  const w = svgLength(attr("width"));
+  const h = svgLength(attr("height"));
+  return w !== null && h !== null && w > 0 && h > 0 ? [w, h] : null;
 }
 
 /// La prima virgola di `text` fuori dalle parentesi; -1 se non c'è.

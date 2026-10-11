@@ -253,13 +253,15 @@ const mitered = (ratio: number, limit: number): boolean => ratio <= limit;
 /// fatti `shape` della forma; `null` se si vedono uguali. Si guardano solo le
 /// proprietà che si vedono sull'elemento di prima. Due valori con la stessa
 /// chiave sono uguali anche se dipendono da una condizione: la stessa regola
-/// li dà a tutti e due.
-export function difference(was: Side, now: Side, props: ReadonlySet<string>, shape: () => ShapeFacts): Difference | null {
+/// li dà a tutti e due. Le proprietà in `skip` non si guardano: chi chiama le
+/// ha già confrontate a modo suo, come la finestra di un `svg` che diventa la
+/// trasformazione e il ritaglio di un gruppo.
+export function difference(was: Side, now: Side, props: ReadonlySet<string>, shape: () => ShapeFacts, skip: ReadonlySet<string> = NOTHING): Difference | null {
   const b = (p: string): Value => was.cascade.value(was.node, p);
   const a = (p: string): Value => now.cascade.value(now.node, p);
   const eq = (...ps: string[]): boolean => ps.every((p) => b(p).key === a(p).key);
   const node = was.node;
-  const shows = (p: string): boolean => renders(node, p);
+  const shows = (p: string): boolean => !skip.has(p) && renders(node, p);
   const differ = (p: string): Difference => {
     const value = b(p);
     return { property: p, value: value.text ?? value.key, doubt: value.doubt ?? a(p).doubt };
@@ -282,11 +284,13 @@ export function difference(was: Side, now: Side, props: ReadonlySet<string>, sha
     const oa = now.cascade.opacity(now.node);
     if (ob === null || oa === null || Math.abs(ob - oa) > 5e-5) return differ("opacity");
   }
+  // Le stesse dichiarazioni danno la stessa trasformazione, salvo la
+  // finestra di un `svg` dentro il disegno, che vi si aggiunge.
   const ownBefore = was.cascade.own(was.node);
   const ownAfter = now.cascade.own(now.node);
-  if (!(ownBefore.css === ownAfter.css && eq("transform", "transform-origin", "transform-box", "translate", "rotate", "scale"))) {
-    if (ownBefore.m === null || ownAfter.m === null || !same(ownBefore.m, ownAfter.m)) return { property: "transform", value: ownBefore.text, doubt: b("transform").doubt };
-  }
+  const declared = ownBefore.css === ownAfter.css && eq("transform", "transform-origin", "transform-box", "translate", "rotate", "scale");
+  const moved = ownBefore.m !== null && ownAfter.m !== null ? !same(ownBefore.m, ownAfter.m) : !declared;
+  if (moved) return { property: "transform", value: ownBefore.text, doubt: b("transform").doubt };
   for (const p of ["clip-path", "mask", "filter", "mix-blend-mode", "isolation"]) {
     if (shows(p) && !alike(p)) return differ(p);
   }
@@ -405,6 +409,8 @@ export function difference(was: Side, now: Side, props: ReadonlySet<string>, sha
   }
   return null;
 }
+
+const NOTHING: ReadonlySet<string> = new Set();
 
 /// Le proprietà che `difference` confronta da sé, coi loro casi.
 const CHECKED: ReadonlySet<string> = new Set([

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { ROOT_PRESENTATION } from "../painter/paint";
 import { SceneEngine } from "../scene/engine";
+import type { RandomBytes } from "../scene/ids";
 import { LIVE_ROOT, planEditable, type EditablePlan, type EditableScope } from "./make-editable";
 
 const ALL: EditableScope = { kind: "all" };
 
 /// Il piano su `text`. Le operazioni, applicate a un motore in un passo solo,
 /// danno il testo che il piano dice; il loro inverso torna al testo di prima.
-function plan(text: string, scope: EditableScope = ALL): EditablePlan {
-  const out = planEditable(text, scope);
+function plan(text: string, scope: EditableScope = ALL, random?: RandomBytes): EditablePlan {
+  const out = planEditable(text, scope, random);
   if (out.ops.length === 0) {
     expect(out.after).toBeNull();
     return out;
@@ -534,5 +535,186 @@ describe("rendere modificabili le sfumature e le risorse fuori posto", () => {
     const out = plan(svg(`  <defs id="defs1"><linearGradient id="g" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:#f00"/><stop offset="1" stop-color="#00f"/></linearGradient></defs>
   <rect width="10" height="10" style="fill:#0f0"/>`));
     expect(out.leftovers.map((each) => each.reason)).toEqual([{ kind: "missing", name: "x2" }]);
+  });
+});
+
+/// Byte sempre uguali, che cambiano a ogni id: i ritagli nuovi si chiamano
+/// `r00000000`, `r11111111` e così via.
+function counting(): RandomBytes {
+  let next = 0;
+  return (bytes) => {
+    bytes.fill(next++ % 36);
+  };
+}
+
+describe("rendere modificabili gli svg annidati", () => {
+  const nested = (body: string, attrs?: string): EditablePlan => plan(svg(body, attrs), ALL, counting());
+
+  it("un'icona diventa un gruppo: la finestra, coi rapporti e le percentuali, diventa la sua matrice", () => {
+    const icon = nested(`  <svg x="10" y="10" width="40" height="40" viewBox="0 0 20 20">
+    <rect width="20" height="20" fill="#f00"/>
+  </svg>`);
+    expect(icon.after).toBe(svg(`  <g transform="matrix(2 0 0 2 10 10)">
+    <rect width="20" height="20" fill="#f00"/>
+  </g>`));
+    expect([...icon.translations]).toEqual([["svg", 1]]);
+    expect(nested(`  <svg width="40" height="40" viewBox="0 0 20 10">
+    <rect width="20" height="10" fill="#f00"/>
+  </svg>`).after).toBe(svg(`  <g transform="matrix(2 0 0 2 0 10)">
+    <rect width="20" height="10" fill="#f00"/>
+  </g>`));
+    expect(nested(`  <svg x="10%" y="10%" width="50%" height="50%">
+    <rect width="100" height="50" fill="#f00"/>
+    <rect width="50%" height="50%" fill="#0f0"/>
+  </svg>`).after).toBe(svg(`  <g transform="matrix(1 0 0 1 20 10)">
+    <rect width="100" height="50" fill="#f00"/>
+    <rect width="50" height="25" fill="#0f0"/>
+  </g>`));
+  });
+
+  it("ciò che può uscire dalla finestra prende un ritaglio privato, in coordinate del gruppo", () => {
+    const out = nested(`  <svg x="10" y="10" width="40" height="40" viewBox="0 0 20 20">
+    <circle cx="20" cy="20" r="10" fill="#00f"/>
+  </svg>
+  <svg x="100" width="40" height="40" viewBox="0 0 20 10" preserveAspectRatio="xMinYMid slice">
+    <rect width="20" height="10" fill="#f00"/>
+  </svg>`);
+    expect(out.after).toBe(svg(`  <defs id="fub-defs">
+    <clipPath id="r00000000" fub:role="private">
+      <rect x="0" y="0" width="20" height="20"/>
+    </clipPath>
+    <clipPath id="r11111111" fub:role="private">
+      <rect x="0" y="0" width="10" height="10"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#r00000000)" transform="matrix(2 0 0 2 10 10)">
+    <circle cx="20" cy="20" r="10" fill="#00f"/>
+  </g>
+  <g clip-path="url(#r11111111)" transform="matrix(4 0 0 4 100 0)">
+    <rect width="20" height="10" fill="#f00"/>
+  </g>`));
+    expect(nested(`  <defs id="defs1" />
+  <svg x="10" y="10" width="40" height="40" viewBox="0 0 20 20">
+    <circle cx="20" cy="20" r="10" fill="#00f"/>
+  </svg>`).after).toBe(svg(`  <defs id="defs1">
+    <clipPath id="r00000000" fub:role="private">
+      <rect x="0" y="0" width="20" height="20"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#r00000000)" transform="matrix(2 0 0 2 10 10)">
+    <circle cx="20" cy="20" r="10" fill="#00f"/>
+  </g>`));
+    expect(nested(`  <svg x="10" width="20" height="20" style="overflow:visible">
+    <circle r="15" fill="#00f"/>
+  </svg>`).after).toBe(svg(`  <g transform="matrix(1 0 0 1 10 0)">
+    <circle r="15" fill="#00f"/>
+  </g>`));
+  });
+
+  it("uno dentro l'altro, e dentro un gruppo che resta estraneo", () => {
+    expect(nested(`  <svg x="10" y="10" width="80" height="80" viewBox="0 0 40 40">
+    <svg x="10" y="10" width="20" height="20" viewBox="0 0 10 10">
+      <rect width="10" height="10" fill="#f00"/>
+    </svg>
+  </svg>`).after).toBe(svg(`  <g transform="matrix(2 0 0 2 10 10)">
+    <g transform="matrix(2 0 0 2 10 10)">
+      <rect width="10" height="10" fill="#f00"/>
+    </g>
+  </g>`));
+    const out = nested(`  <g id="a">
+    <rect width="10" height="10" fill="#f00" onclick="go()"/>
+    <svg x="20" width="20" height="20" viewBox="0 0 10 10"><rect width="10" height="10" style="fill:#0f0"/></svg>
+  </g>`);
+    expect(out.after).toBe(svg(`  <g id="a">
+    <rect width="10" height="10" fill="#f00" onclick="go()"/>
+    <g transform="matrix(2 0 0 2 20 0)"><rect width="10" height="10" fill="#0f0"/></g>
+  </g>`));
+    expect(out.leftovers.map((each) => each.reason)).toEqual([{ kind: "attribute", name: "onclick" }]);
+  });
+
+  it("le risorse di Figma escono dalla defs dell'svg; il foglio di Illustrator se ne va con lei", () => {
+    expect(nested(`  <svg x="10" y="10" width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <g clip-path="url(#clip0_1_2)">
+      <path d="M2 2H22V22H2Z" fill="#111"/>
+    </g>
+    <defs>
+      <clipPath id="clip0_1_2">
+        <rect width="24" height="24" fill="white"/>
+      </clipPath>
+    </defs>
+  </svg>`).after).toBe(svg(`  <defs id="fub-defs">
+    <clipPath id="clip0_1_2">
+      <rect width="24" height="24" fill="white"/>
+    </clipPath>
+  </defs>
+  <g fill="none" transform="matrix(1 0 0 1 10 10)">
+    <g clip-path="url(#clip0_1_2)">
+      <path d="M2 2H22V22H2Z" fill="#111"/>
+    </g>
+  </g>`));
+    expect(nested(`  <svg id="Livello_1" data-name="Livello 1" x="20" y="0" width="50" height="50" viewBox="0 0 50 50">
+    <defs>
+      <style>.cls-1{fill:#e30613;}</style>
+    </defs>
+    <rect class="cls-1" width="50" height="50"/>
+  </svg>`).after).toBe(svg(`  <g id="Livello_1" transform="matrix(1 0 0 1 20 0)">
+    <title>Livello 1</title>
+    <rect width="50" height="50" fill="#e30613"/>
+  </g>`));
+  });
+
+  it("chi segue l'svg diventato gruppo si rimette dopo di lui", () => {
+    expect(nested(`  <svg x="50" y="0" width="40" height="40" viewBox="0 0 20 20">
+    <defs>
+      <linearGradient id="lg" x1="0" y1="0" x2="20" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" style="stop-color:#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+    </defs>
+    <rect width="20" height="20" fill="url(#lg)"/>
+  </svg>
+  <rect x="0" width="10" height="10" style="fill:#0f0"/>`).after).toBe(svg(`  <defs id="fub-defs">
+    <linearGradient id="lg" x1="0" y1="0" x2="20" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#f00"/><stop offset="1" stop-color="#00f"/></linearGradient>
+  </defs>
+  <g transform="matrix(2 0 0 2 50 0)">
+    <rect width="20" height="20" fill="url(#lg)"/>
+  </g>
+  <rect x="0" width="10" height="10" fill="#0f0"/>`));
+  });
+
+  it("un tratto in percentuale che arriva da fuori si misura sulla finestra dell'svg, in numeri", () => {
+    expect(nested(`  <g stroke="#000" stroke-width="2%">
+    <svg x="10" width="40" height="40" viewBox="0 0 20 20">
+      <path d="M2 10H18" fill="none"/>
+    </svg>
+  </g>`).after).toBe(svg(`  <g stroke="#000" stroke-width="3.1623">
+    <g stroke-width="0.4" transform="matrix(2 0 0 2 10 0)">
+      <path d="M2 10H18" fill="none"/>
+    </g>
+  </g>`));
+  });
+
+  it("le dichiarazioni dei namespace che la radice ha già se ne vanno", () => {
+    const XLINK = 'viewBox="0 0 200 100" xmlns:xlink="http://www.w3.org/1999/xlink"';
+    expect(nested(`  <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="10" width="20" height="20"><rect width="10" height="10" fill="#f00"/></svg>`, XLINK).after)
+      .toBe(svg(`  <g transform="matrix(1 0 0 1 10 0)"><rect width="10" height="10" fill="#f00"/></g>`, XLINK));
+  });
+
+  it("una trasformazione sua, un filtro che la finestra sposta, overflow-x restano estranei, col perché", () => {
+    const out = nested(`  <svg x="10" width="20" height="20" transform="rotate(10)"><rect width="10" height="10" fill="#f00"/></svg>
+  <svg x="40" width="20" height="20" filter="url(#f)"><rect width="10" height="10" fill="#f00"/></svg>
+  <svg width="20" height="20" style="overflow-x:hidden"><rect width="10" height="10" fill="#f00"/></svg>
+  <svg width="20" height="20" style="overflow:hidden"><rect width="10" height="10" fill="#f00"/></svg>
+  <defs id="defs1"><filter id="f"><feGaussianBlur stdDeviation="1"/></filter></defs>`);
+    expect(out.leftovers.map((each) => each.reason)).toEqual([
+      { kind: "attribute", name: "transform" },
+      { kind: "property", name: "filter", value: "url(#f)" },
+      { kind: "property", name: "overflow-x", value: "hidden" },
+    ]);
+    expect(out.after).toContain(`\n  <g><rect width="10" height="10" fill="#f00"/></g>\n`);
+  });
+
+  it("su un oggetto solo, gli altri svg restano come sono", () => {
+    const text = svg(`  <svg x="10" width="20" height="20"><rect width="10" height="10" fill="#f00"/></svg>
+  <svg x="40" width="20" height="20"><rect width="10" height="10" fill="#00f"/></svg>`);
+    expect(plan(text, { kind: "units", paths: [[1]] }, counting()).after).toBe(svg(`  <svg x="10" width="20" height="20"><rect width="10" height="10" fill="#f00"/></svg>
+  <g transform="matrix(1 0 0 1 40 0)"><rect width="10" height="10" fill="#00f"/></g>`));
   });
 });
