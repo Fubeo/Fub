@@ -2,7 +2,7 @@
 // eredita, come si risolvono colori, misure e variabili.
 
 import { describe, expect, it } from "vitest";
-import { Cascade, cssOrigin, cssTransform, expandFont, normal, renders, same, type CascadeNode } from "./cascade";
+import { Cascade, cssOrigin, cssTransform, expandFont, normal, plainValue, renders, same, type CascadeNode } from "./cascade";
 import { readSheet } from "./selectors";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -295,5 +295,43 @@ describe("dove una proprietà si vede", () => {
     expect(renders(title, "opacity")).toBe(false);
     expect(renders(el("use"), "fill")).toBe(true);
     expect(renders({ ...el("div"), uri: "http://www.w3.org/1999/xhtml" }, "fill")).toBe(true);
+  });
+});
+
+describe("simboli e use", () => {
+  it("un contesto prende il posto del genitore; ciò che non dà vale come all'inizio", () => {
+    const rect = el("rect", { id: "r", width: "10", height: "10" });
+    const symbol = el("symbol", { id: "s" }, [rect]);
+    const root = el("svg", { fill: "#f00", stroke: "#0f0" }, [el("defs", {}, [symbol])]);
+    const c = cascade("", root);
+    expect(c.value(rect, "fill").key).toBe("#ff0000");
+    c.setContext(symbol, (p) => (p === "fill" ? plainValue("fill", "blue") : null));
+    expect(c.value(rect, "fill").key).toBe("#0000ff");
+    expect(c.received(symbol, "fill")).toMatchObject({ key: "#0000ff", own: false });
+    expect(c.value(rect, "stroke").key).toBe("none");
+    c.setContext(symbol, null);
+    expect([c.value(rect, "fill").key, c.value(rect, "stroke").key]).toEqual(["#ff0000", "#00ff00"]);
+  });
+
+  it("la finestra di un use: posizione, misura, viewBox e preserveAspectRatio del simbolo", () => {
+    const inner = el("rect", { width: "50%", height: "10" });
+    const icon = el("symbol", { id: "i", viewBox: "0 0 20 10" }, [inner]);
+    const plain = el("symbol", { id: "p", width: "30", height: "15" });
+    const meet = el("use", { href: "#i", x: "5", width: "40", height: "40" });
+    const slice = el("use", { href: "#i", width: "40", height: "40" });
+    const sized = el("use", { href: "#p", x: "10%", y: "50%" });
+    const root = el("svg", { viewBox: "0 0 200 100" }, [el("defs", {}, [icon, plain]), meet, slice, sized]);
+    const c = cascade("", root);
+    expect(c.useWindow(meet, icon)).toMatchObject({ x: 5, y: 0, width: 40, height: 40, m: [2, 0, 0, 2, 5, 10], inner: [20, 10] });
+    icon.attrs.push({ uri: "", local: "preserveAspectRatio", value: "xMinYMid slice" });
+    expect(c.useWindow(slice, icon)?.m).toEqual([4, 0, 0, 4, 0, 0]);
+    expect(c.useWindow(sized, plain)).toMatchObject({ x: 20, y: 50, width: 30, height: 15, m: [1, 0, 0, 1, 20, 50], inner: [30, 15] });
+    expect(c.useOffset(sized)).toEqual([20, 50]);
+    // Il contenuto conta le percentuali sul viewBox; senza, non si sa.
+    expect(c.viewport(inner)).toEqual([20, 10]);
+    expect(c.viewport(el("rect"))).toEqual([200, 100]);
+    const loose = el("rect");
+    const bare = el("symbol", { id: "b" }, [loose]);
+    expect(cascade("", el("svg", { viewBox: "0 0 200 100" }, [el("defs", {}, [bare])])).viewport(loose)).toBeNull();
   });
 });

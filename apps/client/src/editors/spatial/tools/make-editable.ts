@@ -33,6 +33,19 @@
 //   lo stesso disegno, resta com'era. Le risorse nella sua `defs`, come le
 //   scrive Figma, vanno nella `defs` delle risorse, e la `defs` rimasta
 //   vuota se ne va.
+// - **Un `use` diventa un'istanza di un simbolo, coi suoi compagni:** un
+//   `symbol` estraneo della `defs`, come quelli di Illustrator e delle
+//   raccolte di icone, diventa un simbolo del formato col suo id e col nome
+//   nel titolo; la finestra di ogni `use` (posizione, misura, `viewBox`)
+//   diventa la matrice dell'istanza, e se il contenuto può uscirne l'istanza
+//   prende un ritaglio privato. Una forma, un testo o un gruppo che dei `use`
+//   clonano, come i cloni di Inkscape, va in un simbolo nuovo col suo nome,
+//   anche se è già modificabile, e al suo posto resta un'istanza. Il
+//   contenuto porta ciò che dichiara; un valore che riceve uguale in ogni
+//   posto in cui si vede, come il colore di `currentColor`, vi si scrive.
+//   Si prova in ogni posto: se un `use` dà qualcosa che un'istanza non
+//   porta, o altro rimanda al disegno, il disegno e i suoi `use` restano
+//   com'erano. Le copie di una ripetizione non si toccano.
 // - **Come lo vede un browser, prima e dopo:** lo stile di prima si calcola
 //   con la cascata di CSS e tutti i fogli (`cascade.ts`). Dopo, un elemento
 //   reso modificabile si guarda due volte: coi fogli che restano, come lo
@@ -65,7 +78,7 @@ import { createId, DEFS_ID, type RandomBytes } from "../scene/ids";
 import { transform as svgTransform, paint as formatPaint, hrefId, reference, urlIds } from "../scene/values";
 import { BoundsBuilder } from "../scene/geometry";
 import { apply, compose, IDENTITY, type Matrix } from "../scene/matrix";
-import { elementChildren, lastBreak, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
+import { elementChildren, lastBreak, rawOf, scopeOf, tagName, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { ROOT, type Op, type RestoreOp, type Target } from "../scene/ops";
 import { canonicalOrder, escapeAttribute, escapeText, formatTransform, type OutAttr } from "../scene/serialize";
 import { SourceText } from "../scene/text";
@@ -73,11 +86,13 @@ import {
   FUB_NS, isSpace, NS_NONE, NS_SVG, NS_XLINK, parseXml, SVG_NS, XLINK_NS, XML_URI, type Attr, type ElementNode, type NodeId, type XmlDocument,
 } from "../scene/xml";
 import { formatNumber } from "../number";
-import { Cascade, inherits, longhands, PRESENTATION, readOpacity, renders, same, type CascadeNode, type Window as SvgWindow } from "./cascade";
+import { Cascade, INHERITED, inherits, longhands, plainValue, PRESENTATION, readOpacity, renders, same, type CascadeNode, type Context, type Value, type Window as SvgWindow } from "./cascade";
 import { Matcher, readDeclarations, readSheet, readSheets, type Rule, type Sheet, type StyleAttr } from "./selectors";
 import { formatHex } from "./css-color";
 import { resourceHome } from "./resources";
 import { BLANK_LINE } from "./text";
+import { cleanName, nameKey } from "./naming";
+import { documentSymbols, freeSymbolName } from "./symbols";
 import { ambiguousSpace, difference, lengthOf, paintOf, segmentsOf, shapeFacts, type Difference, type ShapeFacts } from "./editable-look";
 
 /// Su che cosa lavora il comando: tutto il disegno, o le unità estranee che
@@ -86,7 +101,7 @@ import { ambiguousSpace, difference, lengthOf, paintOf, segmentsOf, shapeFacts, 
 export type EditableScope = { readonly kind: "all" } | { readonly kind: "units"; readonly paths: readonly (readonly number[])[] };
 
 /// Le traduzioni che il comando conta, per dirle.
-export type Translation = "style" | "sheet" | "color" | "unit" | "data" | "text" | "resource" | "svg";
+export type Translation = "style" | "sheet" | "color" | "unit" | "data" | "text" | "resource" | "svg" | "use";
 
 /// Perché una parte resta estranea.
 export type Reason =
@@ -120,6 +135,10 @@ export type Reason =
   | { readonly kind: "resource"; readonly id: string }
   /// Un `use` mostra la parte anche altrove.
   | { readonly kind: "copy" }
+  /// La parte è legata a un'altra che resta: un simbolo e i `use` che lo
+  /// mostrano, o un disegno e i suoi cloni, diventano modificabili tutti
+  /// insieme. `id` è quello del simbolo o del disegno.
+  | { readonly kind: "linked"; readonly id: string }
   /// La parte sta in un livello o in un gruppo bloccato.
   | { readonly kind: "locked" }
   /// Un testo con righe che il formato non ha.
@@ -231,6 +250,66 @@ export const LIVE_ROOT: readonly string[] = [
 /// I servizi di caratteri: i soli fogli importati che non toccano lo stile
 /// degli elementi.
 const FONT_SERVICES = /^(?:https?:)?\/\/(?:fonts\.googleapis\.com|fonts\.bunny\.net|use\.typekit\.net|fonts\.cdnfonts\.com|api\.fontshare\.com)\//i;
+
+/// Ciò che un `use` può clonare per diventare un'istanza di un simbolo
+/// nuovo.
+const CLONEABLE: ReadonlySet<string> = new Set(["g", "path", "rect", "circle", "ellipse", "line", "polyline", "polygon", "text", "image"]);
+
+/// Gli attributi di un `use` che restano sull'istanza; gli altri se ne
+/// vanno.
+const INSTANCE_KEPT: ReadonlySet<string> = new Set(["id", "href", "transform", "opacity", "display", "style", "clip-path", "mask", "filter"]);
+
+/// Le proprietà di un `use` che valgono per lui: ogni altra o la riceve il
+/// contenuto del simbolo, e si prova in ogni posto, o non disegna niente.
+const INSTANCE_OWN: ReadonlySet<string> = new Set(["display", "opacity", "clip-path", "mask", "filter", "mix-blend-mode", "isolation"]);
+
+/// Le proprietà che dipingono con un colore, anche quello di `currentColor`.
+const PAINTS: ReadonlySet<string> = new Set(["fill", "stroke", "stop-color", "flood-color", "lighting-color"]);
+
+/// Il contesto con cui si scrive il contenuto di un simbolo: per alcune
+/// proprietà ereditate un valore che nessun disegno usa, così che ciò che il
+/// contenuto dichiara da sé si veda diverso e si scriva, e ciò che eredita
+/// resti ereditato. Le altre prendono il valore iniziale.
+const PROBE: Readonly<Record<string, string>> = {
+  color: "#010203",
+  fill: "#0a0b0c",
+  "fill-opacity": "0.37",
+  stroke: "#101112",
+  "stroke-opacity": "0.43",
+  "stroke-width": "1.37",
+  "stroke-linecap": "square",
+  "stroke-linejoin": "bevel",
+  "stroke-dashoffset": "0.9",
+  "font-family": "fub-probe",
+  "font-size": "13.7px",
+  "font-style": "italic",
+  "font-weight": "300",
+  "letter-spacing": "0.7px",
+  "text-anchor": "middle",
+};
+
+/// Per le proprietà che hanno pochi valori, quelli che può prendere la
+/// sonda, in ordine: il primo che il contenuto non dichiara.
+const PROBE_CHOICES: Readonly<Record<string, readonly string[]>> = {
+  "stroke-linecap": ["square", "round", "butt"],
+  "stroke-linejoin": ["bevel", "round", "miter"],
+  "font-style": ["italic", "oblique", "normal"],
+  "font-weight": ["300", "100", "900", "500"],
+  "text-anchor": ["middle", "end", "start"],
+};
+
+const PROBES = new Map<string, Value | null>();
+
+/// Il valore di PROBE per `p`; `null` se non ne ha uno.
+const probe: Context = (p) => {
+  let out = PROBES.get(p);
+  if (out === undefined) {
+    const text = PROBE[p];
+    out = text === undefined ? null : plainValue(p, text);
+    PROBES.set(p, out);
+  }
+  return out;
+};
 
 /// Quante volte si riprova al più, togliendo ogni volta ciò che non torna.
 const MAX_ROUNDS = 48;
@@ -854,6 +933,30 @@ interface Outcome {
   readonly yOf: ReadonlyMap<El, El>;
 }
 
+/// Un disegno che dei `use` mostrano altrove, coi `use`: diventano un
+/// simbolo del formato e le sue istanze tutti insieme, o restano come sono.
+interface Cluster {
+  /// Il bersaglio: un `symbol` estraneo, o la forma, il gruppo, il testo o
+  /// l'immagine che i `use` clonano.
+  readonly target: El;
+  /// `symbol` per un simbolo che resta al suo posto; `clone` per ciò che va
+  /// in un simbolo nuovo e lascia al suo posto un'istanza.
+  readonly kind: "symbol" | "clone";
+  /// I `use` che lo mostrano, in ordine di documento.
+  readonly uses: readonly El[];
+}
+
+/// Il simbolo nuovo di un clone nel tentativo in corso: l'id, il nome, il
+/// simbolo e l'istanza che prende il posto del bersaglio nell'albero di
+/// dopo.
+interface Made {
+  readonly cluster: Cluster;
+  readonly id: string;
+  readonly name: string | null;
+  readonly symbol: El;
+  readonly instance: El;
+}
+
 /// Il piano di «Rendi modificabile» per il documento `text` su `scope`; gli
 /// id delle risorse nuove vengono da `random`.
 export function planEditable(text: string, scope: EditableScope, random?: RandomBytes): EditablePlan {
@@ -900,6 +1003,19 @@ class Planner {
   private home: El | null = null;
   /// Le risorse che crea il tentativo in corso, per id.
   private readonly created = new Map<string, El>();
+  /// I disegni che dei `use` mostrano, coi `use`; il gruppo di ogni
+  /// bersaglio e di ogni `use`, e quello di ogni elemento di un bersaglio.
+  private readonly clusters: Cluster[] = [];
+  readonly clusterOf = new Map<El, Cluster>();
+  readonly holderOf = new Map<El, Cluster>();
+  /// Le unità estranee dentro un gruppo modificabile che dei `use` clonano:
+  /// il gruppo diventa un'unità sola con loro, che va nel simbolo o resta.
+  private readonly absorbed = new Map<El, El[]>();
+  /// I gruppi che il tentativo in corso prova, e i simboli nuovi dei cloni.
+  active = new Set<Cluster>();
+  made = new Map<Cluster, Made>();
+  private readonly writers = new Map<Cluster, Context>();
+  private readonly probes = new Map<Cluster, Context>();
 
   constructor(
     readonly text: string,
@@ -951,6 +1067,7 @@ class Planner {
     const index = resourceIndex(this.doc);
     this.resolve = (id) => index.get(id) ?? null;
     this.collect();
+    this.propagate();
     if (this.candidates.length === 0 && (this.scope.kind !== "all" || this.sheets.length === 0)) return { ...EMPTY, invisible: this.invisibleUnits.length };
 
     let keepSheets = false;
@@ -968,13 +1085,17 @@ class Planner {
         this.excluded.set(node, reason);
         progress = true;
       }
+      if (this.propagate()) progress = true;
       if (!progress) break;
     }
+    // Un simbolo che resta estraneo non si vede da sé, come prima.
+    const symbols = this.clusters.filter((cluster) => cluster.kind === "symbol" && this.candidates.includes(cluster.target));
     if (outcome === null) {
       for (const unit of this.candidates) if (!this.excluded.has(unit)) this.excluded.set(unit, { kind: "unknown" });
-      return { ...EMPTY, leftovers: this.leftovers(null), invisible: this.invisibleUnits.length };
+      return { ...EMPTY, leftovers: this.leftovers(null), invisible: this.invisibleUnits.length + symbols.length };
     }
-    const invisible = this.invisibleUnits.filter((unit) => ![...outcome!.dropped].some((gone) => within(unit, gone))).length;
+    const invisible = this.invisibleUnits.filter((unit) => ![...outcome!.dropped].some((gone) => within(unit, gone))).length
+      + symbols.filter((cluster) => this.isExcluded(cluster.target)).length;
     if (outcome.ops.length === 0) return { ...EMPTY, leftovers: this.leftovers(outcome), invisible };
     const translations = new Map<Translation, number>();
     for (const [kind, set] of outcome.translations) if (set.size > 0) translations.set(kind, set.size);
@@ -993,28 +1114,42 @@ class Planner {
   /// Le unità su cui lavorare, quelle che non si vedono, e quelle escluse
   /// prima di cominciare.
   private collect(): void {
-    const units = this.all.filter((node) => node.unit === node && node.foreign);
+    this.findClusters();
+    for (const cluster of this.clusters) this.probing(cluster);
+    // Ciò che dei `use` clonano entra con loro, anche se è già modificabile.
+    const units = this.all.filter((node) => node.unit === node && (node.foreign || this.clusterOf.get(node)?.target === node));
     let chosen: El[];
     if (this.scope.kind === "all") chosen = units;
     else {
       const set = new Set<El>();
+      const wanted = (unit: El): boolean => unit.foreign || this.clusterOf.get(unit)?.target === unit;
       for (const path of this.scope.paths) {
         let at: El | undefined = this.root;
         for (const index of path) at = at?.children[index];
         if (at === undefined) continue;
-        if (at.unit !== null && at.unit.foreign) set.add(at.unit);
+        if (at.unit !== null && wanted(at.unit)) set.add(at.unit);
         // Un contenitore scelto porta le unità estranee che contiene.
-        else if (at.unit === null) for (const inner of walk(at)) if (inner.unit === inner && inner.foreign) set.add(inner);
+        else if (at.unit === null) for (const inner of walk(at)) if (inner.unit === inner && wanted(inner)) set.add(inner);
       }
       // Una risorsa a cui rimanda ciò che si sceglie diventa modificabile
-      // con lui, e così quelle a cui rimanda lei.
+      // con lui, e così quelle a cui rimanda lei; un simbolo o un disegno
+      // clonato, con tutti i `use` che lo mostrano.
       const queue = [...set];
+      const take = (unit: El): void => {
+        if (set.has(unit)) return;
+        set.add(unit);
+        queue.push(unit);
+      };
       while (queue.length > 0) {
-        for (const id of this.referencesIn(queue.pop()!)) {
+        const unit = queue.pop()!;
+        for (const id of this.referencesIn(unit)) {
           const target = this.byId.get(id);
-          if (target === undefined || target.unit !== target || !target.foreign || set.has(target) || target.uri !== SVG_NS || !RESOURCES.has(target.local)) continue;
-          set.add(target);
-          queue.push(target);
+          if (target === undefined || target.unit !== target || !target.foreign || target.uri !== SVG_NS || !RESOURCES.has(target.local)) continue;
+          take(target);
+        }
+        for (const node of walk(unit)) {
+          const cluster = this.clusterOf.get(node);
+          if (cluster !== undefined) for (const member of [cluster.target, ...cluster.uses]) take(member.unit!);
         }
       }
       chosen = units.filter((unit) => set.has(unit));
@@ -1037,7 +1172,7 @@ class Planner {
       return media !== "" && media !== "all";
     });
     for (const unit of chosen) {
-      if (invisible(unit)) {
+      if (invisible(unit) && this.clusterOf.get(unit)?.target !== unit) {
         this.invisibleUnits.push(unit);
         continue;
       }
@@ -1045,7 +1180,7 @@ class Planner {
       if (imported) this.excluded.set(unit, { kind: "import" });
       else if (conditioned !== undefined) this.excluded.set(unit, { kind: "condition", text: `media="${conditioned.el.attr("media")!.trim()}"` });
       else if (this.lockedAbove(unit)) this.excluded.set(unit, { kind: "locked" });
-      else if (walk(unit).some((node) => node.attr("id") !== null && shown.has(node.attr("id")!))) this.excluded.set(unit, { kind: "copy" });
+      else if (walk(unit).some((node) => node.attr("id") !== null && shown.has(node.attr("id")!) && this.clusterOf.get(node)?.target !== node)) this.excluded.set(unit, { kind: "copy" });
     }
     // Le risorse fuori posto, con un id: unità, pezzi di un gruppo che
     // diventa modificabile, o risorse di una `defs` dentro un'unità.
@@ -1068,6 +1203,189 @@ class Planner {
       }
     }
     return out;
+  }
+
+  /// I disegni che dei `use` mostrano altrove, coi `use`: un `symbol`
+  /// estraneo di una `defs` della radice, come quelli di Illustrator e delle
+  /// raccolte di icone, o una forma, un gruppo, un testo o un'immagine fuori
+  /// dalle `defs`, come i cloni di Inkscape. Un gruppo già modificabile
+  /// diventa un'unità sola con ciò che contiene: va tutto nel simbolo, o
+  /// resta tutto. Niente gruppo, e i `use` restano estranei, per un `use`
+  /// che non sta fra gruppi e collegamenti, che non è estraneo, come le
+  /// copie di una ripetizione, o che ha due `href`; per un bersaglio che
+  /// contiene `use`, fogli o risorse, che è bloccato o sta in un gruppo
+  /// bloccato, o il cui id, o quello di ciò che contiene se va in un simbolo
+  /// nuovo, è nominato da altro o portato da due elementi.
+  private findClusters(): void {
+    const count = new Map<string, number>();
+    for (const node of this.all) {
+      const id = node.attr("id");
+      if (id !== null && id !== "") count.set(id, (count.get(id) ?? 0) + 1);
+    }
+    // Chi nomina ogni id, con qualunque attributo: `#id`, `url(#id)`, un
+    // capo di un connettore; e i fogli.
+    const named = new Map<string, Set<El>>();
+    const name = (id: string, node: El): void => {
+      let set = named.get(id);
+      if (set === undefined) named.set(id, (set = new Set()));
+      set.add(node);
+    };
+    for (const node of this.all) {
+      for (const attr of node.attrs) {
+        for (const match of attr.value.matchAll(/#([^\s"'(),;#]+)/g)) name(match[1]!, node);
+        if (attr.uri === FUB_NS && (attr.local === "from" || attr.local === "to" || attr.local === "along")) name(attr.value.trim().split(/\s+/)[0]!, node);
+      }
+      if (node.sheet !== null) for (const id of urlIds(node.sheet)) name(id, node);
+    }
+    // Vero se `node` si disegna dove sta: fra gruppi e collegamenti, fino
+    // alla radice.
+    const placed = (node: El): boolean => {
+      for (let at = node.parent; at !== null && at.parent !== null; at = at.parent) if (at.uri !== SVG_NS || !CONTAINERS.has(at.local)) return false;
+      return true;
+    };
+    for (const [id, users] of this.users) {
+      const target = this.byId.get(id);
+      if (target === undefined || count.get(id) !== 1) continue;
+      const part = target.part;
+      const group = target.unit === null && part !== null && part.kind === "container" && part.details?.role === "group" && part.details.locked !== true && !this.lockedAbove(target);
+      if (target.unit === null && !group) continue;
+      const uses = [...new Set(users.filter((user) => user.href && user.node.is("use")).map((user) => user.node))];
+      if (uses.length === 0) continue;
+      const symbol = target.is("symbol") && target.unit === target && target.foreign && inRootDefs(target);
+      const clone = target.uri === SVG_NS && CLONEABLE.has(target.local) && placed(target);
+      if (!symbol && !clone) continue;
+      const own = new Set(uses);
+      if ([...(named.get(id) ?? [])].some((node) => !own.has(node))) continue;
+      const single = (use: El): boolean => use.attrs.filter((attr) => attr.local === "href" && (attr.uri === "" || attr.uri === XLINK_NS)).length === 1;
+      if (!uses.every((use) => use.unit !== null && use.foreign && placed(use) && single(use))) continue;
+      const inside = walk(target);
+      if (inside.some((node) => node.is("use") || node.is("style") || (node !== target && node.uri === SVG_NS && (node.local === "defs" || RESOURCES.has(node.local))))) continue;
+      if (clone && inside.some((node) => node !== target && named.has(node.attr("id") ?? ""))) continue;
+      const cluster: Cluster = { target, kind: symbol ? "symbol" : "clone", uses: uses.sort((a, b) => this.order.get(a)! - this.order.get(b)!) };
+      this.clusters.push(cluster);
+      for (const member of [target, ...uses]) this.clusterOf.set(member, cluster);
+      for (const node of inside) this.holderOf.set(node, cluster);
+      if (group) {
+        this.absorbed.set(target, inside.filter((node) => node.unit === node && node.foreign));
+        for (const node of inside) node.unit = target;
+      }
+    }
+  }
+
+  /// Un disegno e i `use` che lo mostrano diventano modificabili tutti
+  /// insieme: se una parte resta, o qualcosa di ciò che il disegno
+  /// contiene, restano tutte. Vero se ha escluso qualcosa.
+  private propagate(): boolean {
+    let changed = false;
+    for (let again = true; again; ) {
+      again = false;
+      for (const cluster of this.clusters) {
+        const members = [cluster.target, ...cluster.uses];
+        const failed = members.some((member) => this.isExcluded(member)) || walk(cluster.target).some((node) => this.excluded.has(node));
+        if (!failed) continue;
+        const id = cluster.target.attr("id")!;
+        for (const member of members) {
+          if (this.isExcluded(member)) continue;
+          const reason: Reason = member === cluster.target && cluster.kind === "clone" ? { kind: "copy" } : { kind: "linked", id };
+          this.excluded.set(this.subunit(member), reason);
+          changed = again = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /// Il contesto con cui si scrive il contenuto di `cluster` nella cascata
+  /// di prima: i valori di PROBE, che ciò che il contenuto dichiara da sé
+  /// batte. Ma dove tutti i posti in cui il contenuto si vede gli danno lo
+  /// stesso valore, e un `use` lo cambia, quel valore: va scritto sul
+  /// contenuto, perché un'istanza non lo può dare. Il colore, sempre, se è
+  /// lo stesso dappertutto: `currentColor` diventa quel colore.
+  writing(cluster: Cluster): Context {
+    let out = this.writers.get(cluster);
+    if (out === undefined) {
+      const memo = new Map<string, Value | null>();
+      out = (p) => {
+        let value = memo.get(p);
+        if (value === undefined) {
+          value = this.baked(cluster, p) ?? this.probing(cluster)(p);
+          memo.set(p, value);
+        }
+        return value;
+      };
+      this.writers.set(cluster, out);
+    }
+    return out;
+  }
+
+  /// La sonda di `cluster`: i valori di PROBE, ma dove la proprietà ha pochi
+  /// valori uno che nessun elemento del contenuto dichiara, perché ciò che
+  /// dichiara si veda diverso dalla sonda e si scriva. Si sceglie prima di
+  /// dare i contesti, perché leggere il contenuto non passi dalla sonda.
+  probing(cluster: Cluster): Context {
+    let out = this.probes.get(cluster);
+    if (out === undefined) {
+      const chosen = new Map<string, Value>();
+      for (const [p, choices] of Object.entries(PROBE_CHOICES)) {
+        const taken = new Set(walk(cluster.target).map((node) => this.B.value(node, p)).filter((each) => each.own).map((each) => each.key));
+        const choice = choices.map((each) => plainValue(p, each)).find((each) => !taken.has(each.key));
+        if (choice !== undefined) chosen.set(p, choice);
+      }
+      out = (p) => chosen.get(p) ?? probe(p);
+      this.probes.set(cluster, out);
+    }
+    return out;
+  }
+
+  /// Il valore di `p` che va scritto sul contenuto di `cluster` (vedi
+  /// `writing`); `null` se nessuno.
+  private baked(cluster: Cluster, p: string): Value | null {
+    if (!INHERITED.has(p)) return null;
+    let common: Value | null = null;
+    let changed = p === "color";
+    for (const place of this.placesOf(cluster)) {
+      const value = this.B.value(place, p);
+      if (value.doubt !== null || (common !== null && common.key !== value.key)) return null;
+      common = value;
+      if (place.is("use") && this.B.value(place.parent!, p).key !== value.key) changed = true;
+    }
+    return changed ? common : null;
+  }
+
+  /// Gli elementi da cui il contenuto di `cluster` riceve ciò che eredita:
+  /// i `use`, e per un clone il genitore del disegno.
+  private placesOf(cluster: Cluster): El[] {
+    return cluster.kind === "clone" ? [cluster.target.parent!, ...cluster.uses] : [...cluster.uses];
+  }
+
+  /// Vero se un posto in cui si vede il contenuto di `cluster` gli dà un
+  /// tratteggio: `pathLength` allora conta.
+  dashedSomewhere(cluster: Cluster): boolean {
+    return this.placesOf(cluster).some((place) => {
+      const dashes = this.B.value(place, "stroke-dasharray");
+      return dashes.doubt !== null || (dashes.key !== "none" && dashes.key !== "initial");
+    });
+  }
+
+  /// Il nome che porta `target`: il suo `title`, o, con `inkscape`,
+  /// `inkscape:label`, o `data-name` o `aria-label`; `null` se nessuno.
+  private labelOf(target: El, inkscape: boolean): string | null {
+    const title = target.children.find((child) => child.is("title"))?.element ?? null;
+    let base = title === null ? null : characterDataOf(this.doc, title);
+    const names: ReadonlyArray<readonly [string, string]> = inkscape ? [[INKSCAPE_NS, "label"], ["", "data-name"], ["", "aria-label"]] : [["", "data-name"], ["", "aria-label"]];
+    for (const [uri, local] of names) base ??= target.attrs.find((attr) => attr.uri === uri && attr.local === local)?.value ?? null;
+    return base === null || cleanName(base) === "" ? null : base;
+  }
+
+  /// Il nome del simbolo nuovo che contiene `target`: il suo, se ne ha uno,
+  /// diverso da quelli degli altri simboli, che si aggiunge a `taken`;
+  /// `null` se non ne ha.
+  private symbolName(target: El, taken: Set<string>): string | null {
+    const base = this.labelOf(target, true);
+    if (base === null) return null;
+    const name = freeSymbolName(taken, base);
+    taken.add(nameKey(name));
+    return name;
   }
 
   /// L'elemento di prima con l'id `id`.
@@ -1192,6 +1510,11 @@ class Planner {
     this.created.clear();
     const templates = this.templates();
     const units = this.candidates.filter((unit) => !this.excluded.has(unit) && !templates.has(unit));
+    // I gruppi dei `use` che il tentativo prova: quelli che ha tutti. Il
+    // contenuto dei loro disegni si scrive col contesto di prova.
+    const unitSet = new Set(units);
+    this.active = new Set(this.clusters.filter((cluster) => [cluster.target, ...cluster.uses].every((member) => !this.isExcluded(member) && unitSet.has(member.unit!))));
+    for (const cluster of this.clusters) this.B.setContext(cluster.target, this.active.has(cluster) ? this.writing(cluster) : null);
     // L'albero di dopo, e come lo vede la superficie.
     const [X, xOf] = cloneTree(this.root, this.serial, (node) => node);
     // Le risorse fuori posto vanno nella `defs` delle risorse, in coda a
@@ -1222,8 +1545,43 @@ class Planner {
         home.children.push(x);
       }
     }
+    // Ciò che dei `use` clonano va in un simbolo nuovo, in coda alla `defs`
+    // delle risorse, col nome che porta; al suo posto, un'istanza.
+    this.made = new Map();
+    const taken = new Set(documentSymbols(this.engine.model!).map((symbol) => nameKey(symbol.name)));
+    for (const cluster of this.active) {
+      const label = cluster.kind === "symbol" ? this.labelOf(cluster.target, false) : null;
+      if (label !== null) taken.add(nameKey(cleanName(label)));
+    }
+    const clones = [...this.active].filter((cluster) => cluster.kind === "clone").sort((a, b) => this.order.get(a.target)! - this.order.get(b.target)!);
+    for (const cluster of clones) {
+      const target = cluster.target;
+      const tx = xOf.get(target)!;
+      const prefix = prefixOf(target);
+      const symbol = new El(SVG_NS, "symbol", `${prefix}symbol`, [], false, null, null, this.serial());
+      const id = this.create(symbol);
+      symbol.attrs = [{ uri: "", local: "id", value: id }, { uri: "", local: "overflow", value: "visible" }];
+      const name = this.symbolName(target, taken);
+      if (name !== null) {
+        const title = new El(SVG_NS, "title", `${prefix}title`, [], true, null, null, this.serial());
+        title.parent = symbol;
+        symbol.children.push(title);
+      }
+      const instance = new El(SVG_NS, "use", `${prefix}use`, [{ uri: "", local: "href", value: `#${id}` }], false, null, null, this.serial());
+      const parent = tx.parent!;
+      parent.children[parent.children.indexOf(tx)] = instance;
+      instance.parent = parent;
+      instance.unit = tx.unit === tx ? instance : tx.unit;
+      tx.parent = symbol;
+      symbol.children.push(tx);
+      const home = homeOf();
+      symbol.parent = home;
+      home.children.push(symbol);
+      this.made.set(cluster, { cluster, id, name, symbol, instance });
+    }
     const [live, liveOf] = liveTree(X, this.serial, (node) => node.origin);
     const L = new Cascade(NO_SHEET, live, (node) => identity(node as El), this.inlineB);
+    for (const cluster of this.active) L.setContext(liveOf.get(xOf.get(cluster.target)!)!, this.probing(cluster));
     const writer = new Writer(this, xOf, liveOf, L);
     const failed = new Map<El, Reason>();
     for (const unit of units) writer.unit(unit, failed);
@@ -1234,10 +1592,10 @@ class Planner {
     const clips = writer.clips;
     if (clips.length > 0) {
       const home = homeOf();
-      home.children.splice(home.children.length - moving.length, 0, ...clips.map((clip) => clip.el));
+      home.children.splice(home.children.length - moving.length - this.made.size, 0, ...clips.map((clip) => clip.el));
       for (const clip of clips) clip.el.parent = home;
     }
-    const arriving = moving.length > 0 || clips.length > 0;
+    const arriving = moving.length > 0 || clips.length > 0 || this.made.size > 0;
     const converted = writer.converted;
     const convertedSet = new Set(converted);
     const elements = new Set(writer.elements);
@@ -1334,7 +1692,33 @@ class Planner {
       while (from > holder.openEnd && isSpace(text.charCodeAt(from - 1))) from--;
       editsOf(node.unit!).push([from, element.end, ""]);
     }
-    for (const unit of converted) if (!movingSet.has(unit)) editsOf(unit).push(...writer.edits(unit, movingSet));
+    // Ciò che va in un simbolo nuovo si scrive a parte; al suo posto resta
+    // l'istanza.
+    const cloned = new Map<El, Made>();
+    const clonedRaws = new Map<Made, string>();
+    for (const made of this.made.values()) {
+      const target = made.cluster.target;
+      const element = target.element!;
+      const raw = applyEdits(text, element.start, element.end, writer.edits(target, movingSet));
+      if (raw === null) return this.exclude(target);
+      cloned.set(target, made);
+      clonedRaws.set(made, raw);
+    }
+    const instanceText = (made: Made): string => `<${made.instance.name} href="#${made.id}"/>`;
+    const apart = new Set<El>([...moving, ...cloned.keys()]);
+    for (const unit of converted) {
+      if (movingSet.has(unit)) continue;
+      const own = cloned.get(unit);
+      if (own !== undefined) {
+        editsOf(unit).push([unit.element!.start, unit.element!.end, instanceText(own)]);
+        continue;
+      }
+      editsOf(unit).push(...writer.edits(unit, apart));
+      for (const node of walk(unit)) {
+        const made = node === unit ? undefined : cloned.get(node);
+        if (made !== undefined) editsOf(unit).push([node.element!.start, node.element!.end, instanceText(made)]);
+      }
+    }
     const dropped = new Set<El>(templates);
     /// Gli elementi che se ne vanno da dentro un'unità che resta.
     const removedInside = new Set<El>();
@@ -1403,7 +1787,8 @@ class Planner {
     }
     const renamed = new Map<El, string>();
     for (const node of writer.windows.keys()) if (node.unit === node) renamed.set(node, xOf.get(node)!.name);
-    const sequence = this.sequence({ edits, moving, movedRaws, clips, renamed, dropped, removedInside, drop, templates, convertedSet, xOf });
+    for (const [target, made] of cloned) if (target.unit === target) renamed.set(target, made.instance.name);
+    const sequence = this.sequence({ edits, moving, movedRaws, clips, made: [...this.made.values()], clonedRaws, renamed, dropped, removedInside, drop, templates, convertedSet, xOf });
     if (sequence instanceof Retry) return sequence;
     const { ops, blame } = sequence;
     const engine = SceneEngine.open(text);
@@ -1420,6 +1805,7 @@ class Planner {
     const Y = treeOf(yDoc, this.serial);
     if (engine.model === null || !annotate(Y, engine.model)) return this.exclude(first);
     const yOf = new Map<El, El>();
+    const yOfX = new Map<El, El>();
     const tOf = new Map<El, El | null>();
     // Ciò che se ne va, senza le risorse che ne escono per la `defs` delle
     // risorse.
@@ -1435,6 +1821,7 @@ class Planner {
       const [x, y] = stack.pop()!;
       if (x.local !== y.local || x.uri !== y.uri) return this.exclude(first);
       tOf.set(y, x.origin);
+      yOfX.set(x, y);
       if (x.origin !== null) yOf.set(x.origin, y);
       const xs = x.children.filter((child) => !gone.has(child));
       if (xs.length !== y.children.length) return this.exclude(first);
@@ -1451,6 +1838,16 @@ class Planner {
       const parent = y.parent!;
       const place = parent.parent === null ? "root" : parent.is("defs") && parent.parent.parent === null ? "defs" : "inside";
       unclassified.set(this.subunit(node), explain(yDoc, y.element!, place, yResolve));
+    }
+    // Anche i simboli nuovi e le istanze al posto dei disegni clonati.
+    for (const made of this.made.values()) {
+      for (const x of [made.symbol, made.instance]) {
+        const y = yOfX.get(x)!;
+        if (!y.foreign) continue;
+        const parent = y.parent!;
+        const place = parent.parent === null ? "root" : parent.is("defs") && parent.parent.parent === null ? "defs" : "inside";
+        unclassified.set(this.subunit(made.cluster.target), explain(yDoc, y.element!, place, yResolve));
+      }
     }
     if (unclassified.size > 0) return new Retry(unclassified, false);
 
@@ -1471,13 +1868,22 @@ class Planner {
     const props = new Set([...this.props, ...attributeNames(Y)]);
     const mismatched = new Map<El, Reason>();
     for (const node of writer.elements) {
+      // Il contenuto di un simbolo si prova dopo, in ogni posto.
+      const holder = this.holderOf.get(node);
+      if (holder !== undefined && this.active.has(holder)) continue;
       const piece = this.subunit(node);
       if (mismatched.has(piece)) continue;
       const y = yOf.get(node)!;
       const facts = (): ShapeFacts => this.shape(node);
-      const skip = writer.windows.get(node);
-      const found = difference({ cascade: this.B, node }, { cascade: A, node: y }, props, facts, skip)
+      const skip = writer.windows.get(node) ?? writer.instances.get(node);
+      let found = difference({ cascade: this.B, node }, { cascade: A, node: y }, props, facts, skip)
         ?? difference({ cascade: this.B, node }, { cascade: L2, node: yLiveOf.get(y)! }, props, facts, skip);
+      // Un'istanza sta dove il `use` metteva il disegno.
+      const placement = writer.placements.get(node);
+      if (found === null && placement !== undefined) {
+        const now = A.own(y);
+        if (now.m === null || !same(now.m, placement)) found = { property: "transform", value: now.text, doubt: null };
+      }
       if (found !== null) mismatched.set(piece, reasonOf(found));
     }
     if (mismatched.size > 0) return new Retry(mismatched, false);
@@ -1496,9 +1902,91 @@ class Planner {
       if (related.size > 0) return new Retry(related, false);
     }
 
+    const places = this.verifyPlaces({ writer, yOf, yOfX, yLiveOf, A, L2, props });
+    if (places !== null) return places;
+
     let rules = 0;
     for (const statements of drop.values()) rules += statements.reduce((sum, statement) => sum + statement.rules.length, 0);
-    return { ops, after, converted: converted.length, translations: writer.translations, rules, sheets: sheetsDropped, dropped, yOf };
+    // Un disegno clonato già modificabile non conta fra ciò che lo diventa;
+    // le unità estranee che conteneva sì.
+    const count = converted.reduce((sum, unit) => sum + (unit.foreign ? 1 : this.absorbed.get(unit)?.length ?? 0), 0);
+    return { ops, after, converted: count, translations: writer.translations, rules, sheets: sheetsDropped, dropped, yOf };
+  }
+
+  /// Il contenuto di ogni simbolo si vede uguale in ogni posto in cui si
+  /// vede: dove stava il disegno clonato e in ogni `use`, coi valori che vi
+  /// riceve prima e dopo. I posti che danno gli stessi valori si provano una
+  /// volta sola. Una proprietà che non torna è del `use` che la dichiara, se
+  /// la dichiara, altrimenti del disegno.
+  private verifyPlaces(input: {
+    readonly writer: Writer;
+    readonly yOf: ReadonlyMap<El, El>;
+    readonly yOfX: ReadonlyMap<El, El>;
+    readonly yLiveOf: ReadonlyMap<El, El>;
+    readonly A: Cascade;
+    readonly L2: Cascade;
+    readonly props: ReadonlySet<string>;
+  }): Retry | null {
+    const { writer, yOf, yOfX, yLiveOf, A, L2, props } = input;
+    const B = this.B;
+    const converted = new Set(writer.elements);
+    const keys = [...INHERITED, ...[...props].filter((p) => p.startsWith("--"))];
+    const failed = new Map<El, Reason>();
+    for (const cluster of this.active) {
+      const target = cluster.target;
+      const yTarget = yOf.get(target)!;
+      const yLiveTarget = yLiveOf.get(yTarget)!;
+      // Un `symbol` non si disegna: si disegna ciò che contiene.
+      const content = walk(target).filter((node) => converted.has(node) && (node !== target || cluster.kind === "clone"));
+      const places: Array<{ readonly use: El | null; readonly b: Context | null; readonly a: Context; readonly l: Context }> = [];
+      if (cluster.kind === "clone") {
+        const instance = yOfX.get(this.made.get(cluster)!.instance)!;
+        const live = yLiveOf.get(instance)!;
+        places.push({ use: null, b: null, a: (p) => A.value(instance, p), l: (p) => L2.value(live, p) });
+      }
+      for (const use of cluster.uses) {
+        const y = yOf.get(use)!;
+        const live = yLiveOf.get(y)!;
+        places.push({ use, b: (p) => B.value(use, p), a: (p) => A.value(y, p), l: (p) => L2.value(live, p) });
+      }
+      const seen = new Set<string>();
+      for (const place of places) {
+        B.setContext(target, place.b);
+        A.setContext(yTarget, place.a);
+        L2.setContext(yLiveTarget, place.l);
+        const key = keys.map((p) => `${B.received(target, p).key}|${A.received(yTarget, p).key}|${L2.received(yLiveTarget, p).key}`).join(";");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        let found: Difference | null = null;
+        let at: El | null = null;
+        for (const node of content) {
+          const y = yOf.get(node)!;
+          const facts = (): ShapeFacts => this.shape(node);
+          const skip = writer.windows.get(node);
+          found = difference({ cascade: B, node }, { cascade: A, node: y }, props, facts, skip)
+            ?? difference({ cascade: B, node }, { cascade: L2, node: yLiveOf.get(y)! }, props, facts, skip);
+          if (found !== null) {
+            at = node;
+            break;
+          }
+        }
+        if (found === null || at === null) continue;
+        // La colpa è del `use` che dà la proprietà, o il colore che il
+        // contenuto prende con `currentColor`: un'istanza non li porta.
+        const use = place.use;
+        const gives = (p: string): boolean => use !== null && inherits(p) && B.value(use, p).own;
+        if (gives(found.property)) failed.set(this.subunit(use!), reasonOf(found));
+        else if (gives("color") && PAINTS.has(found.property) && B.value(at, found.property).key === B.value(use!, "color").key) {
+          const color = B.value(use!, "color");
+          failed.set(this.subunit(use!), { kind: "property", name: "color", value: color.text ?? color.key });
+        } else failed.set(this.subunit(target), reasonOf(found));
+        break;
+      }
+      B.setContext(target, null);
+      A.setContext(yTarget, null);
+      L2.setContext(yLiveTarget, null);
+    }
+    return failed.size > 0 ? new Retry(failed, false) : null;
   }
 
   /// Vero se il comando può riscrivere il foglio `sheet`: sta da solo nella
@@ -1533,7 +2021,7 @@ class Planner {
   /// posto resta da sola, un `svg` dentro il disegno col suo pezzo; ogni
   /// altra cosa con la sua unità.
   private exclude(node: El): Retry {
-    const part = this.movable.has(node) || node.unit === null ? node : node.is("svg") ? this.subunit(node) : node.unit;
+    const part = this.movable.has(node) || node.unit === null ? node : node.is("svg") || this.clusterOf.has(node) ? this.subunit(node) : node.unit;
     return new Retry(new Map([[part, { kind: "unknown" }]]), false);
   }
 
@@ -1560,7 +2048,12 @@ class Planner {
     readonly moving: readonly El[];
     readonly movedRaws: ReadonlyMap<El, string>;
     readonly clips: Writer["clips"];
-    /// Le unità che cambiano nome: `svg` che diventano gruppi.
+    /// I simboli nuovi di ciò che dei `use` clonano, col testo riscritto di
+    /// ciò che ognuno contiene.
+    readonly made: readonly Made[];
+    readonly clonedRaws: ReadonlyMap<Made, string>;
+    /// Le unità che cambiano nome: `svg` che diventano gruppi, disegni
+    /// clonati che diventano istanze.
     readonly renamed: ReadonlyMap<El, string>;
     readonly dropped: ReadonlySet<El>;
     readonly removedInside: ReadonlySet<El>;
@@ -1569,15 +2062,23 @@ class Planner {
     readonly convertedSet: ReadonlySet<El>;
     readonly xOf: ReadonlyMap<El, El>;
   }): { readonly ops: Op[]; readonly blame: (El | null)[] } | Retry {
-    const { edits, moving, movedRaws, clips, renamed, dropped, removedInside, drop, templates, convertedSet, xOf } = input;
+    const { edits, moving, movedRaws, clips, made, clonedRaws, renamed, dropped, removedInside, drop, templates, convertedSet, xOf } = input;
     const text = this.text;
     const movingSet = new Set(moving);
+    // Un simbolo nuovo è un elemento dell'albero di dopo: si mette in fila
+    // subito dopo il disegno che contiene.
+    const madeOf = new Map(made.map((each) => [each.symbol, each]));
+    const rank = (node: El): number => {
+      const each = madeOf.get(node);
+      return each === undefined ? this.order.get(node)! : this.order.get(each.cluster.target)! + 0.5;
+    };
     const rewritten = [...edits.keys()].sort((a, b) => this.order.get(a)! - this.order.get(b)!);
     const raws = new Map<El, string>();
     for (const unit of rewritten) {
       const element = unit.element!;
       const part = unit.part!;
-      if (part.kind !== "leaf" || text.slice(element.start, element.end) !== part.raw) return this.exclude(unit);
+      // Un gruppo modificabile clonato se ne va tutto, e torna istanza.
+      if (part.kind === "leaf" ? text.slice(element.start, element.end) !== part.raw : this.clusterOf.get(unit)?.target !== unit) return this.exclude(unit);
       const raw = applyEdits(text, element.start, element.end, edits.get(unit)!);
       if (raw === null) return this.exclude(unit);
       raws.set(unit, raw);
@@ -1601,8 +2102,8 @@ class Planner {
     let homeId = DEFS_ID;
     let homeNode = this.home;
     let inner = "";
-    if (moving.length > 0 || clips.length > 0) {
-      const herald = moving[0] ?? clips[0]!.node;
+    if (moving.length > 0 || clips.length > 0 || made.length > 0) {
+      const herald = moving[0] ?? clips[0]?.node ?? made[0]!.cluster.target;
       const unit = this.indentUnit();
       const home = this.home;
       if (home === null) {
@@ -1665,9 +2166,11 @@ class Planner {
     const provider = new Map<string, El>();
     for (const unit of rewritten) {
       const id = unit.attr("id");
-      if (id !== null && convertedSet.has(unit) && inRootDefs(unit) && unit.uri === SVG_NS && RESOURCES.has(unit.local)) provider.set(id, unit);
+      const symbol = unit.is("symbol") && this.clusterOf.get(unit)?.target === unit;
+      if (id !== null && convertedSet.has(unit) && inRootDefs(unit) && unit.uri === SVG_NS && (RESOURCES.has(unit.local) || symbol)) provider.set(id, unit);
     }
     for (const node of moving) provider.set(node.attr("id")!, node);
+    for (const each of made) provider.set(each.id, each.symbol);
     const gone = new Set<El>();
     for (const node of dropped) for (const each of walk(node)) gone.add(each);
     const touched = new Set<El>([...rewritten, ...moving]);
@@ -1685,26 +2188,33 @@ class Planner {
       const statements = drop.get(sheet);
       css.set(sheet.el, statements === undefined ? sheet.css : removeRanges(sheet.css, statements));
     }
+    // Al posto di un disegno clonato che era un'unità torna la sua istanza.
+    const placeOf = new Map(made.filter((each) => each.cluster.target.unit === each.cluster.target).map((each) => [each.cluster.target, each.instance]));
+    const clonedBy = new Map([...placeOf.keys()].map((target) => [target.attr("id")!, target]));
     const refsAfter = (node: El): Set<string> => {
       const out = new Set<string>();
-      for (const each of walk(xOf.get(node)!)) {
+      for (const each of walk(madeOf.has(node) ? node : placeOf.get(node) ?? xOf.get(node)!)) {
         for (const id of refsOf(each)) out.add(id);
         if (each.origin !== null) for (const id of urlIds(css.get(each.origin) ?? "")) out.add(id);
       }
       return out;
     };
-    const nodes = [...rewritten, ...temporary, ...moving];
+    const nodes = [...rewritten, ...temporary, ...moving, ...made.map((each) => each.symbol)];
     const waits = new Map<El, El[]>();
     for (const node of nodes) {
       const refs = temporary.has(node) ? new Set(node.part!.kind === "leaf" ? node.part!.refs : []) : refsAfter(node);
       waits.set(node, [...refs].map((id) => provider.get(id)).filter((each): each is El => each !== undefined && each !== node));
     }
-    const culprit = (node: El): El => (temporary.has(node) ? waits.get(node)![0] ?? node : node);
+    const culprit = (node: El): El => (temporary.has(node) ? waits.get(node)![0] ?? node : madeOf.get(node)?.cluster.target ?? node);
     // Prima ciò che torna nella `defs` delle risorse, poi le risorse che
-    // vi arrivano, poi il resto, ognuno nell'ordine del documento; ma una
-    // risorsa sempre prima di chi la usa.
-    const group = (node: El): number => (movingSet.has(node) ? 1 : provider.get(node.attr("id") ?? "") === node || (this.home !== null && node.parent === this.home) ? 0 : 2);
-    const pending = [...nodes].sort((a, b) => group(a) - group(b) || this.order.get(a)! - this.order.get(b)!);
+    // vi arrivano, poi i simboli nuovi, poi il resto, ognuno nell'ordine del
+    // documento; ma una risorsa sempre prima di chi la usa.
+    const group = (node: El): number => {
+      if (movingSet.has(node)) return 1;
+      if (madeOf.has(node)) return 2;
+      return provider.get(node.attr("id") ?? "") === node || (this.home !== null && node.parent === this.home) ? 0 : 3;
+    };
+    const pending = [...nodes].sort((a, b) => group(a) - group(b) || rank(a) - rank(b));
     const sequence: El[] = [];
     const placed = new Set<El>();
     while (pending.length > 0) {
@@ -1713,7 +2223,7 @@ class Planner {
       sequence.push(node!);
       placed.add(node!);
     }
-    const order = sequence.filter((node) => !movingSet.has(node));
+    const order = sequence.filter((node) => !movingSet.has(node) && !madeOf.has(node));
     for (const node of [...order].reverse()) remove(node, culprit(node));
 
     // I punti da cui partono: l'inversa di ciò che li toglie.
@@ -1727,7 +2237,7 @@ class Planner {
       const inverse = flatten(probe.inverse).filter((op): op is RestoreOp => op.op === "add" && "slot" in op);
       let at = 0;
       for (const node of order) {
-        const raw = node.part!.kind === "leaf" ? node.part!.raw : "";
+        const raw = rawOf(node.part!);
         while (at < inverse.length && inverse[at]!.raw !== raw) at++;
         if (at === inverse.length) return this.exclude(culprit(node));
         restores.set(node, { ...inverse[at]!, raw: raws.get(node) ?? raw });
@@ -1736,7 +2246,8 @@ class Planner {
     }
     let previous: Target | null = clips.length > 0 ? clips[clips.length - 1]!.id : null;
     for (const node of sequence) {
-      if (!movingSet.has(node)) {
+      const each = madeOf.get(node);
+      if (!movingSet.has(node) && each === undefined) {
         // Il fratello che precede il punto può essere già tornato con un
         // altro nome.
         let restore = restores.get(node)!;
@@ -1745,6 +2256,11 @@ class Planner {
           const sibling = paths.children(node.parent!)[after.path[after.path.length - 1]!];
           const name = sibling === undefined ? undefined : renamed.get(sibling);
           if (name !== undefined) restore = { ...restore, slot: { ...restore.slot, after: { ...after, tag: name } } };
+        } else if (after !== null) {
+          // Il fratello era un disegno clonato: il suo id è andato nel
+          // simbolo, e al suo posto c'è l'istanza.
+          const sibling = clonedBy.get(after);
+          if (sibling !== undefined) restore = { ...restore, slot: { ...restore.slot, after: { path: paths.path(sibling), tag: renamed.get(sibling)! } } };
         }
         push(restore, culprit(node));
         paths.restore(node);
@@ -1756,8 +2272,9 @@ class Planner {
         const last = list[list.length - 1];
         if (last !== undefined) previous = last.part!.facts.id ?? { path: paths.path(last), tag: tagName(last.part!) };
       }
-      push({ op: "add", slot: { parent: homeId, after: previous, skip: 0, lead: "" }, gap: `\n${inner}`, raw: this.reindented(node, movedRaws.get(node)!, inner) }, node);
-      previous = node.attr("id")!;
+      const raw = each === undefined ? this.reindented(node, movedRaws.get(node)!, inner) : this.symbolRaw(each, clonedRaws.get(each)!, inner);
+      push({ op: "add", slot: { parent: homeId, after: previous, skip: 0, lead: "" }, gap: `\n${inner}`, raw }, culprit(node));
+      previous = each === undefined ? node.attr("id")! : each.id;
     }
     for (const node of tops.filter(late).sort(byLast)) {
       push({ op: "remove", target: node.part!.facts.id ?? { path: settled.path(node), tag: tagName(node.part!) } }, culpritOf(node));
@@ -1776,6 +2293,20 @@ class Planner {
     return "  ";
   }
 
+  /// Il testo del simbolo nuovo `made`, che contiene `raw`, il disegno
+  /// clonato riscritto, per una `defs` coi figli rientrati di `inner`: il
+  /// nome nel suo `title`, e il disegno rientrato di un livello in più.
+  private symbolRaw(made: Made, raw: string, inner: string): string {
+    const target = made.cluster.target;
+    const prefix = prefixOf(target);
+    const step = inner + this.indentUnit();
+    const title = made.name === null ? "" : `\n${step}<${prefix}title>${escapeText(made.name)}</${prefix}title>`;
+    const from = lineIndent(this.text, target.element!.start);
+    const container = target.unit!.part?.parent ?? null;
+    const body = from === null || container === null ? raw : reindent(raw, scopeOf(container), "inside", 3, from, step, this.hopeful);
+    return `<${prefix}symbol id="${made.id}" overflow="visible">${title}\n${step}${body}\n${inner}</${prefix}symbol>`;
+  }
+
   /// Il testo `raw` di una risorsa che va nella `defs` delle risorse, col
   /// rientro `to` dei suoi nuovi fratelli al posto del suo, come lo sposta il
   /// motore: lì è una risorsa modificabile.
@@ -1792,8 +2323,17 @@ class Planner {
     const sorted = [...this.excluded].sort((a, b) => this.order.get(a[0])! - this.order.get(b[0])!);
     for (const [node, reason] of sorted) {
       if (sorted.some(([other]) => other !== node && within(node, other))) continue;
-      const y = outcome?.yOf.get(node);
-      out.push({ path: pathOf(y ?? node), tag: node.uri === SVG_NS ? node.local : node.name, name: nameOf(this.doc, node), reason });
+      // Un simbolo che resta per i suoi `use` non si vede da sé.
+      if (invisible(node) && reason.kind === "linked") continue;
+      // Un disegno clonato già modificabile resta modificabile: restano
+      // estranee le unità che conteneva, ognuna col perché che ha dentro.
+      const pieces: Array<[El, Reason]> = node.foreign
+        ? [[node, reason]]
+        : (this.absorbed.get(node) ?? []).map((unit) => [unit, sorted.find(([other]) => within(other, unit))?.[1] ?? reason]);
+      for (const [piece, why] of pieces) {
+        const y = outcome?.yOf.get(piece);
+        out.push({ path: pathOf(y ?? piece), tag: piece.uri === SVG_NS ? piece.local : piece.name, name: nameOf(this.doc, piece), reason: why });
+      }
     }
     return out;
   }
@@ -1861,7 +2401,7 @@ class Writer {
   readonly elements: El[] = [];
   readonly translations = new Map<Translation, Set<El>>([
     ["style", new Set()], ["sheet", new Set()], ["color", new Set()], ["unit", new Set()], ["data", new Set()], ["text", new Set()], ["resource", new Set()],
-    ["svg", new Set()],
+    ["svg", new Set()], ["use", new Set()],
   ]);
   /// Il titolo nuovo di un elemento.
   private readonly titles = new Map<El, string>();
@@ -1880,6 +2420,13 @@ class Writer {
   /// I ritagli nuovi, uno per finestra da cui ciò che contiene può uscire:
   /// di chi, l'id, l'elemento dell'albero di dopo e il rettangolo.
   readonly clips: { readonly node: El; readonly id: string; readonly el: El; readonly rect: Readonly<Record<string, string>> }[] = [];
+  /// I `use` che diventano istanze, con le proprietà che il confronto non
+  /// guarda: quelle che riceve il contenuto del simbolo, che si provano a
+  /// parte in ogni posto, la posizione, diventata la trasformazione
+  /// dell'istanza, e il ritaglio nuovo.
+  readonly instances = new Map<El, ReadonlySet<string>>();
+  /// La trasformazione che ogni istanza deve avere.
+  readonly placements = new Map<El, Matrix>();
   private readonly B: Cascade;
 
   constructor(
@@ -1955,6 +2502,22 @@ class Writer {
       const reason = this.nested(node);
       if (reason !== null) return reason;
     }
+    const cluster = this.planner.clusterOf.get(node);
+    const active = cluster !== undefined && this.planner.active.has(cluster) ? cluster : null;
+    const symbol = active !== null && active.kind === "symbol" && active.target === node;
+    if (symbol) {
+      const reason = this.symbol(node);
+      if (reason !== null) return reason;
+    }
+    const holder = this.planner.holderOf.get(node);
+    const held = holder !== undefined && this.planner.active.has(holder) ? holder : null;
+    // Un clone si fonde con ciò che gli sta sotto; nel simbolo, con ciò che
+    // sta sotto l'istanza, attraverso la sua finestra: non si sa se è lo
+    // stesso.
+    if (held !== null && held.kind === "clone") {
+      const blend = this.B.value(node, "mix-blend-mode");
+      if (blend.doubt !== null || (blend.key !== "normal" && blend.key !== "initial")) return { kind: "property", name: "mix-blend-mode", value: blend.text ?? blend.key };
+    }
     if (node.is("text")) {
       const reason = this.lines(node);
       if (reason !== null) return reason;
@@ -1979,13 +2542,22 @@ class Writer {
         if ((name === "data-name" || name === "aria-label") && !titled && title === null && attr.value.trim() !== "") title = attr.value.trim().replace(/\s+/g, " ");
       }
       if (name === "pathLength") {
-        if (dashed(this.B, node)) return { kind: "attribute", name };
+        if (dashed(this.B, node) || (held !== null && this.planner.dashedSomewhere(held))) return { kind: "attribute", name };
         gone = true;
       }
       if (!gone && tag !== null && PRESENTATION.has(name) && !this.allowed(tag, name, attr.value, node)) gone = true;
       if (gone) this.write(node, name, null);
     }
     if (title !== null) this.titles.set(node, title);
+    if (symbol) {
+      this.finishSymbol(node);
+      return null;
+    }
+    const instance = active !== null && active.target !== node;
+    if (instance) {
+      const reason = this.instance(node, active);
+      if (reason !== null) return reason;
+    }
     // La geometria in misure relative.
     for (const [name, tags] of GEOMETRY) {
       const value = node.attr(name);
@@ -2001,7 +2573,7 @@ class Writer {
     const facts = (): ShapeFacts => this.planner.shape(node);
     const tried = new Set<string>();
     for (;;) {
-      const found = difference({ cascade: this.B, node }, { cascade: this.L, node: live }, this.planner.props, facts, this.windows.get(node));
+      const found = difference({ cascade: this.B, node }, { cascade: this.L, node: live }, this.planner.props, facts, this.windows.get(node) ?? this.instances.get(node));
       if (found === null) break;
       if (found.doubt !== null) return reasonOf(found);
       const writes = this.valueFor(node, found.property);
@@ -2013,7 +2585,7 @@ class Writer {
     }
     // Un gruppo tiene ciò che portava ai figli.
     if (CONTAINERS.has(node.local) || nested) this.inherited(node);
-    else this.intent(node);
+    else if (!instance) this.intent(node);
     return null;
   }
 
@@ -2044,34 +2616,8 @@ class Writer {
     }
     const own = B.own(node);
     if (own.m === null || !same(own.m, window.m)) return own.css || own.m === null ? { kind: "property", name: "transform", value: own.text } : { kind: "attribute", name: "transform" };
-    // Il ritaglio della finestra: `overflow` vale `hidden` per un `svg`
-    // dentro il disegno, se nessuno lo cambia.
-    for (const p of ["overflow-x", "overflow-y", "clip"]) {
-      const written = B.written(node, p);
-      if (written.doubt !== null) return reasonOf({ property: p, value: written.text ?? "", doubt: written.doubt });
-      if (written.text !== null && !(p === "clip" && /^\s*(?:auto|initial|unset)\s*$/i.test(written.text))) return { kind: "property", name: p, value: written.text.trim() };
-    }
-    const overflow = B.written(node, "overflow");
-    if (overflow.doubt !== null) return reasonOf({ property: "overflow", value: overflow.text ?? "", doubt: overflow.doubt });
-    const words = (overflow.text ?? "hidden").trim().toLowerCase().split(/\s+/);
-    if (words.length > 2 || (words.length === 2 && words[0] !== words[1])) return { kind: "property", name: "overflow", value: overflow.text!.trim() };
-    let clipped: boolean;
-    switch (words[0]) {
-      case "hidden":
-      case "scroll":
-      case "clip":
-      case "revert":
-        clipped = true;
-        break;
-      case "visible":
-      case "auto":
-      case "initial":
-      case "unset":
-        clipped = false;
-        break;
-      default:
-        return { kind: "property", name: "overflow", value: overflow.text!.trim() };
-    }
+    const clipped = this.overflow(node);
+    if (typeof clipped !== "boolean") return clipped;
     // Un ritaglio, una maschera o un filtro dell'`svg` si misurano nelle sue
     // coordinate: valgono uguali nel gruppo solo se la finestra non sposta
     // niente. Un filtro, poi, viene prima del ritaglio della finestra in un
@@ -2107,22 +2653,186 @@ class Writer {
     for (const name of ["x", "y", "width", "height", "viewBox", "preserveAspectRatio", "overflow", "clip"]) this.write(node, name, null);
     const skip = new Set(["x", "y", "width", "height"]);
     if (clip) {
-      const [a, , , d, e, f] = window.m;
-      const rect = { x: num((window.x - e) / a), y: num((window.y - f) / d), width: num(window.width / a), height: num(window.height / d) };
-      const prefix = prefixOf(node);
-      const made = new El(SVG_NS, "clipPath", `${prefix}clipPath`, [], false, null, null, this.planner.serial());
-      const id = this.planner.create(made);
-      made.attrs = [{ uri: "", local: "id", value: id }, { uri: FUB_NS, local: "role", value: "private" }];
-      const shape = new El(SVG_NS, "rect", `${prefix}rect`, Object.entries(rect).map(([local, value]) => ({ uri: "", local, value })), false, null, null, this.planner.serial());
-      shape.parent = made;
-      made.children.push(shape);
-      this.clips.push({ node, id, el: made, rect });
-      this.write(node, "clip-path", `url(#${id})`);
+      this.write(node, "clip-path", `url(#${this.clipFor(node, window)})`);
       skip.add("clip-path");
     }
     this.windows.set(node, skip);
     this.count("svg", node);
     return null;
+  }
+
+  /// Vero se la finestra di `node`, un `svg` dentro il disegno o un
+  /// `symbol`, ritaglia ciò che contiene: `overflow` vale `hidden` per tutti
+  /// e due, se nessuno lo cambia. Il perché, se non si sa dire.
+  private overflow(node: El): boolean | Reason {
+    const B = this.B;
+    for (const p of ["overflow-x", "overflow-y", "clip"]) {
+      const written = B.written(node, p);
+      if (written.doubt !== null) return reasonOf({ property: p, value: written.text ?? "", doubt: written.doubt });
+      if (written.text !== null && !(p === "clip" && /^\s*(?:auto|initial|unset)\s*$/i.test(written.text))) return { kind: "property", name: p, value: written.text.trim() };
+    }
+    const overflow = B.written(node, "overflow");
+    if (overflow.doubt !== null) return reasonOf({ property: "overflow", value: overflow.text ?? "", doubt: overflow.doubt });
+    const words = (overflow.text ?? "hidden").trim().toLowerCase().split(/\s+/);
+    if (words.length > 2 || (words.length === 2 && words[0] !== words[1])) return { kind: "property", name: "overflow", value: overflow.text!.trim() };
+    switch (words[0]) {
+      case "hidden":
+      case "scroll":
+      case "clip":
+      case "revert":
+        return true;
+      case "visible":
+      case "auto":
+      case "initial":
+      case "unset":
+        return false;
+      default:
+        return { kind: "property", name: "overflow", value: overflow.text!.trim() };
+    }
+  }
+
+  /// Un ritaglio nuovo di `node`, la finestra `window` nelle coordinate di
+  /// ciò che contiene, nella `defs` delle risorse: il suo id.
+  private clipFor(node: El, window: SvgWindow): string {
+    const [a, , , d, e, f] = window.m;
+    const rect = { x: num((window.x - e) / a), y: num((window.y - f) / d), width: num(window.width / a), height: num(window.height / d) };
+    const prefix = prefixOf(node);
+    const made = new El(SVG_NS, "clipPath", `${prefix}clipPath`, [], false, null, null, this.planner.serial());
+    const id = this.planner.create(made);
+    made.attrs = [{ uri: "", local: "id", value: id }, { uri: FUB_NS, local: "role", value: "private" }];
+    const shape = new El(SVG_NS, "rect", `${prefix}rect`, Object.entries(rect).map(([local, value]) => ({ uri: "", local, value })), false, null, null, this.planner.serial());
+    shape.parent = made;
+    made.children.push(shape);
+    this.clips.push({ node, id, el: made, rect });
+    return id;
+  }
+
+  /// Un `symbol` estraneo diventa un simbolo del formato, che non ha né
+  /// finestra né presentazione sua: la finestra va in ogni istanza, ciò che
+  /// il contenuto eredita scende su di lui, e lo scrive il confronto. Resta
+  /// com'è, coi suoi `use`, un simbolo spostato da `x`, `y`, `refX` o
+  /// `refY`, trasformato, con un effetto suo, o di cui non si sa dire se
+  /// ritaglia.
+  private symbol(node: El): Reason | null {
+    const B = this.B;
+    for (const name of ["refX", "refY"]) if (node.attr(name) !== null) return { kind: "attribute", name };
+    for (const p of ["x", "y"]) {
+      const value = B.value(node, p);
+      if (value.doubt !== null) return reasonOf({ property: p, value: value.text ?? value.key, doubt: value.doubt });
+      const text = value.text;
+      if (text !== null && !/^\s*(?:auto|initial|unset|revert)\s*$/i.test(text) && lengthOf(p, text, null) !== 0) return { kind: "attribute", name: p };
+    }
+    const own = B.own(node);
+    if (own.m === null || !same(own.m, IDENTITY)) return own.css || own.m === null ? { kind: "property", name: "transform", value: own.text } : { kind: "attribute", name: "transform" };
+    for (const p of ["opacity", "clip-path", "mask", "filter", "mix-blend-mode", "isolation", "display"]) {
+      const value = B.value(node, p);
+      if (value.doubt !== null) return reasonOf({ property: p, value: value.text ?? value.key, doubt: value.doubt });
+      let plain: boolean;
+      if (p === "opacity") plain = value.text === null || readOpacity(value.text) === 1;
+      else if (p === "display") plain = value.key !== "none";
+      else if (p === "isolation") plain = value.key !== "isolate";
+      else plain = value.key === "none" || value.key === "normal" || value.key === "initial";
+      if (!plain) return { kind: "property", name: p, value: value.text ?? value.key };
+    }
+    const clipped = this.overflow(node);
+    return typeof clipped === "boolean" ? null : clipped;
+  }
+
+  /// Il simbolo, senza ciò che il formato non gli lascia: restano l'id e
+  /// `overflow="visible"`, perché il ritaglio della finestra, dove serve, lo
+  /// porta l'istanza.
+  private finishSymbol(node: El): void {
+    for (const attr of node.attrs) {
+      if (attr.uri === XLINK_NS) this.unset(node, XLINK_NS, attr.local);
+      else if (attr.uri === "" && attr.local !== "id") this.write(node, attr.local, null);
+    }
+    this.write(node, "overflow", "visible");
+  }
+
+  /// Un `use` del gruppo `cluster` diventa un'istanza del simbolo. Dove lo
+  /// mette, e per un `symbol` la finestra (`x`, `y`, `width` e `height` del
+  /// `use`, `viewBox` e `preserveAspectRatio` del simbolo), va nella
+  /// trasformazione; ciò che il contenuto eredita se ne va dall'istanza, e
+  /// si prova in ogni posto; il `use` di un clone mostra il simbolo nuovo.
+  /// Il ritaglio della finestra, se il contenuto può uscirne, è un
+  /// `clipPath` nuovo dell'istanza. Resta com'è, coi compagni, un `use` con
+  /// un ritaglio, una maschera o un filtro che la finestra sposterebbe, o
+  /// che il ritaglio nuovo cambierebbe.
+  private instance(node: El, cluster: Cluster): Reason | null {
+    const B = this.B;
+    const target = cluster.target;
+    for (const p of cluster.kind === "symbol" ? ["x", "y", "width", "height"] : ["x", "y"]) {
+      const value = B.value(node, p);
+      if (value.doubt !== null) return reasonOf({ property: p, value: value.text ?? value.key, doubt: value.doubt });
+      const text = value.text;
+      if (text !== null && !/^\s*(?:auto|initial|unset|revert)\s*$/i.test(text) && lengthOf(p, text, B.viewport(node)) === null) return { kind: "unit", value: text.trim() };
+    }
+    let window: SvgWindow | null = null;
+    let shift: Matrix;
+    let clip = false;
+    if (cluster.kind === "symbol") {
+      window = B.useWindow(node, target);
+      if (window === null) {
+        // Un `use` che non mostra niente.
+        const empty = ["width", "height"].find((p) => (lengthOf(p, B.value(node, p).text ?? "", B.viewport(node)) ?? 1) <= 0);
+        return empty === undefined ? { kind: "unknown" } : { kind: "attribute", name: empty };
+      }
+      shift = window.m;
+      const clipped = this.overflow(target);
+      if (typeof clipped !== "boolean") return { kind: "linked", id: target.attr("id")! };
+      if (clipped) {
+        // Fin dove arriva il contenuto dipende da ciò che riceve qui, come
+        // lo spessore dei contorni.
+        B.setContext(target, (p) => B.value(node, p));
+        clip = !this.contained(target, window);
+        B.setContext(target, this.planner.writing(cluster));
+      }
+    } else {
+      const offset = B.useOffset(node);
+      if (offset === null) return { kind: "unknown" };
+      shift = [1, 0, 0, 1, offset[0], offset[1]];
+    }
+    const own = B.own(node);
+    if (own.m === null) return { kind: "property", name: "transform", value: own.text };
+    const moves = !same(shift, IDENTITY);
+    for (const p of ["clip-path", "mask", "filter"]) {
+      const value = B.value(node, p);
+      if (value.doubt !== null) return reasonOf({ property: p, value: value.text ?? value.key, doubt: value.doubt });
+      if (value.key === "none" || value.key === "initial") continue;
+      if (moves || (clip && p !== "mask")) return { kind: "property", name: p, value: value.text ?? value.key };
+    }
+    // L'istanza, con ciò che il formato le lascia.
+    const m = compose(own.m, shift);
+    const written = node.attr("transform");
+    const parsed = written === null ? null : svgTransform(written);
+    const keep = written !== null && parsed !== null && !own.css && same(parsed, m);
+    for (const attr of node.attrs) {
+      if (attr.uri === XLINK_NS && attr.local !== "href") this.unset(node, XLINK_NS, attr.local);
+      else if (attr.uri === "" && !INSTANCE_KEPT.has(attr.local)) this.write(node, attr.local, null);
+    }
+    this.write(node, "transform", keep ? written : same(m, IDENTITY) ? null : formatTransform(m));
+    if (cluster.kind === "clone") {
+      const href = node.attrs.find((attr) => attr.local === "href" && (attr.uri === "" || attr.uri === XLINK_NS))!;
+      this.retarget(node, href.uri, `#${this.planner.made.get(cluster)!.id}`);
+    }
+    const skip = new Set([...INHERITED, ...PRESENTATION, ...this.planner.props, "x", "y", "width", "height", "transform"].filter((p) => !INSTANCE_OWN.has(p)));
+    if (clip) {
+      this.write(node, "clip-path", `url(#${this.clipFor(node, window!)})`);
+      skip.add("clip-path");
+    }
+    this.instances.set(node, skip);
+    this.placements.set(node, m);
+    this.count("use", node);
+    return null;
+  }
+
+  /// Fa rimandare a `value` l'`href` del namespace `uri` di `node`,
+  /// nell'albero di dopo e in quello della superficie.
+  private retarget(node: El, uri: string, value: string): void {
+    const x = this.xOf.get(node)!;
+    const live = this.liveOf.get(x)!;
+    for (const each of [x, live]) each.attrs = each.attrs.map((attr) => (attr.uri === uri && attr.local === "href" ? { ...attr, value } : attr));
+    this.L.forget(live);
   }
 
   /// Vero se tutto ciò che disegna `svg` sta di sicuro nella sua finestra,
@@ -2406,7 +3116,7 @@ class Writer {
     const live = this.liveOf.get(this.xOf.get(node)!)!;
     for (const [p, initial] of [["stroke-linecap", "butt"], ["stroke-linejoin", "miter"]] as const) {
       const value = this.B.value(node, p);
-      if (!value.own || value.doubt !== null || value.key === initial || value.key === "initial") continue;
+      if (!(value.own || this.fromSymbol(node, p)) || value.doubt !== null || value.key === initial || value.key === "initial") continue;
       const now = this.L.value(live, p);
       if (now.key === value.key) continue;
       const writes = this.valueFor(node, p);
@@ -2421,11 +3131,21 @@ class Writer {
     const live = this.liveOf.get(this.xOf.get(node)!)!;
     for (const p of GROUP_INHERITED) {
       const value = this.B.value(node, p);
-      if (!value.own || value.doubt !== null || value.key === this.L.value(live, p).key) continue;
+      if (!(value.own || this.fromSymbol(node, p)) || value.doubt !== null || value.key === this.L.value(live, p).key) continue;
       if (!walk(node).some((inner) => inner !== node && renders(inner, p))) continue;
       const writes = this.valueFor(node, p);
       if (writes instanceof Map) for (const [name, written] of writes) this.write(node, name, written);
     }
+  }
+
+  /// Vero se `node` riceve `p` da un `symbol` che diventa del formato, che
+  /// lo dichiarava: ora lo deve portare il contenuto, come se fosse suo.
+  private fromSymbol(node: El, p: string): boolean {
+    for (let at = node.parent; at !== null; at = at.parent) {
+      if (at.is("symbol")) return this.planner.clusterOf.get(at)?.target === at && this.B.value(at, p).own;
+      if (this.B.value(at, p).own) return false;
+    }
+    return false;
   }
 
   /// Vero se `value` per `name` vale sull'elemento `node` di tag `tag`.
@@ -2499,9 +3219,10 @@ class Writer {
           out.set(alphaName, null);
           break;
         }
-        const parent = live.parent;
-        const inherited = parent === null ? 1 : readOpacity(this.L.value(parent, alphaName).text ?? "1") ?? 1;
-        out.set(alphaName, Math.abs(total - 1) < 5e-5 && Math.abs(inherited - 1) < 5e-5 ? null : num(total));
+        // L'opacità che l'elemento riceve già non si scrive, se non è sua:
+        // nel contenuto di un simbolo è quella di prova.
+        const inherited = readOpacity(this.L.received(live, alphaName).text ?? "1") ?? 1;
+        out.set(alphaName, Math.abs(total - inherited) < 5e-5 && (Math.abs(total - 1) < 5e-5 || !alpha.own) ? null : num(total));
         break;
       }
       case "stroke-width":

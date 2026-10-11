@@ -87,6 +87,11 @@ export interface Alpha {
   readonly sym: string;
 }
 
+/// Ciò che un elemento riceve per ogni proprietà al posto di ciò che gli dà
+/// il genitore; `null` per una che il contesto non dà: allora il valore
+/// iniziale, o nessuno per una variabile.
+export type Context = (p: string) => Value | null;
+
 /// Le proprietà che si ereditano.
 export const INHERITED: ReadonlySet<string> = new Set([
   "color", "fill", "fill-opacity", "fill-rule", "stroke", "stroke-width", "stroke-opacity", "stroke-linecap", "stroke-linejoin",
@@ -689,6 +694,10 @@ export class Cascade {
   private readonly alphas = new Map<CascadeNode, Alpha>();
   private readonly windows = new Map<CascadeNode, Window | null>();
   private readonly resolving = new Set<string>();
+  /// I contesti: ciò che un elemento riceve al posto di ciò che gli dà il
+  /// genitore, come il contenuto di un simbolo lo riceve dal `use` che lo
+  /// mostra.
+  private readonly contexts = new Map<CascadeNode, Context>();
   /// Le proprietà dichiarate da qualche parte, sciolte.
   readonly declared: ReadonlySet<string>;
 
@@ -722,6 +731,14 @@ export class Cascade {
       this.windows.delete(at);
       for (const child of at.children) stack.push(child);
     }
+  }
+
+  /// Dà a `node` il contesto `context`, al posto del genitore; `null` glielo
+  /// toglie.
+  setContext(node: CascadeNode, context: Context | null): void {
+    if (context === null) this.contexts.delete(node);
+    else this.contexts.set(node, context);
+    this.forget(node);
   }
 
   /// Le dichiarazioni dell'attributo `style` di `node`.
@@ -850,8 +867,19 @@ export class Cascade {
     return value;
   }
 
+  /// Il valore di `p` che `node` riceve dal genitore, o dal suo contesto.
+  received(node: CascadeNode, p: string): Value {
+    return this.parentValue(node, p);
+  }
+
   /// Il valore di `p` che `node` riceve dal genitore.
   private parentValue(node: CascadeNode, p: string): Value {
+    const context = this.contexts.get(node);
+    if (context !== undefined) {
+      const value = context(p);
+      if (value === null) return p.startsWith("--") ? MISSING : { ...this.initial(p), own: false };
+      return { ...value, own: false };
+    }
     if (node.parent === null) return this.initial(p);
     return { ...this.value(node.parent, p), own: false };
   }
@@ -1078,10 +1106,60 @@ export class Cascade {
   /// non si sa.
   viewport(node: CascadeNode): readonly [number, number] | null {
     for (let at = node.parent; at !== null; at = at.parent) {
-      if (!isSvg(at) || at.local !== "svg") continue;
+      if (!isSvg(at)) continue;
+      // Il contenuto di un simbolo conta sul suo `viewBox`; senza, sulla
+      // finestra di ogni `use` che lo mostra, che qui non si sa.
+      if (at.local === "symbol") return boxOf(at);
+      if (at.local !== "svg") continue;
       return at.parent === null ? rootViewport(at) : this.window(at)?.inner ?? null;
     }
     return rootViewport(this.root);
+  }
+
+  /// Una lunghezza di `p` su `node`, coi valori che non dicono niente come
+  /// `fallback` e le percentuali di `base`; `null` se non si sa.
+  private lengthIn(node: CascadeNode, p: string, fallback: string, base: number | undefined): number | null {
+    const value = this.value(node, p);
+    if (value.doubt !== null) return null;
+    const text = value.text === null || /^\s*(?:auto|initial|unset|revert)\s*$/i.test(value.text) ? fallback : value.text;
+    const percent = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)%\s*$/i.exec(text);
+    if (percent === null) return svgLength(text);
+    return base === undefined ? null : (Number(percent[1]) * base) / 100;
+  }
+
+  /// Lo spostamento di un `use`: `x` e `y`, misurati nella sua finestra;
+  /// `null` se non si sa.
+  useOffset(use: CascadeNode): readonly [number, number] | null {
+    const outer = this.viewport(use);
+    const x = this.lengthIn(use, "x", "0", outer?.[0]);
+    const y = this.lengthIn(use, "y", "0", outer?.[1]);
+    return x === null || y === null ? null : [x, y];
+  }
+
+  /// La finestra in cui un `use` mostra `symbol`: dove la sposta il `use`,
+  /// larga e alta come dice il `use`, o il simbolo, o tutta la finestra del
+  /// `use`, col `viewBox` e il `preserveAspectRatio` del simbolo. `null` se
+  /// non si sa calcolare o se non mostra niente.
+  useWindow(use: CascadeNode, symbol: CascadeNode): Window | null {
+    const offset = this.useOffset(use);
+    if (offset === null) return null;
+    const outer = this.viewport(use);
+    const [x, y] = offset;
+    const size = (p: string, base: number | undefined): number | null => {
+      const own = this.value(use, p);
+      const auto = own.doubt === null && (own.text === null || /^\s*(?:auto|initial|unset|revert)\s*$/i.test(own.text));
+      return auto ? this.lengthIn(symbol, p, "100%", base) : this.lengthIn(use, p, "100%", base);
+    };
+    const width = size("width", outer?.[0]);
+    const height = size("height", outer?.[1]);
+    if (width === null || height === null || width <= 0 || height <= 0) return null;
+    const attr = (local: string): string | undefined => symbol.attrs.find((each) => each.uri === "" && each.local === local)?.value;
+    const boxText = attr("viewBox");
+    const box = boxText === undefined ? null : readViewBox(boxText);
+    if (box === null) return { x, y, width, height, m: [1, 0, 0, 1, x, y], inner: [width, height] };
+    if (box[2] <= 0 || box[3] <= 0) return null;
+    const m = compose(translate(x, y), viewBoxMatrix(box, width, height, attr("preserveAspectRatio") ?? ""));
+    return { x, y, width, height, m, inner: [box[2], box[3]] };
   }
 
   /// La finestra di `node`, un `svg` dentro il disegno: `x`, `y`, `width` e
@@ -1093,14 +1171,7 @@ export class Cascade {
     const known = this.windows.get(node);
     if (known !== undefined) return known;
     const outer = this.viewport(node);
-    const read = (p: string, fallback: string, base: number | undefined): number | null => {
-      const value = this.value(node, p);
-      if (value.doubt !== null) return null;
-      const text = value.text === null || /^\s*(?:auto|initial|unset|revert)\s*$/i.test(value.text) ? fallback : value.text;
-      const percent = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)%\s*$/i.exec(text);
-      if (percent === null) return svgLength(text);
-      return base === undefined ? null : (Number(percent[1]) * base) / 100;
-    };
+    const read = (p: string, fallback: string, base: number | undefined): number | null => this.lengthIn(node, p, fallback, base);
     const x = read("x", "0", outer?.[0]);
     const y = read("y", "0", outer?.[1]);
     const width = read("width", "100%", outer?.[0]);
@@ -1164,6 +1235,20 @@ export class Cascade {
     }
     return out;
   }
+}
+
+/// Il valore di `p` scritto `text` su un elemento da solo, come lo calcola la
+/// cascata: per dare un contesto.
+export function plainValue(p: string, text: string): Value {
+  const node: CascadeNode = { uri: SVG_NS, local: "g", attrs: [{ uri: "", local: p, value: text }], parent: null, children: [], text: false };
+  return new Cascade({ rules: [], selectors: [], deep: false, imports: [] }, node, () => "plain", new Set()).value(node, p);
+}
+
+/// La finestra del contenuto di un `symbol`, larga e alta: il suo `viewBox`;
+/// `null` se non ne ha uno che si legge.
+function boxOf(symbol: CascadeNode): readonly [number, number] | null {
+  const box = readViewBox(symbol.attrs.find((each) => each.uri === "" && each.local === "viewBox")?.value ?? "");
+  return box !== null && box[2] > 0 && box[3] > 0 ? [box[2], box[3]] : null;
 }
 
 /// La finestra della radice, larga e alta: il `viewBox`, o `width` e

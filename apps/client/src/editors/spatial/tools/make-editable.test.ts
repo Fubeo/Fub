@@ -272,14 +272,16 @@ describe("rendere modificabile un disegno", () => {
   it("i livelli bloccati, ciò che altri copiano, le copie e i comportamenti restano come sono", () => {
     const out = plan(svg(`  <g fub:layer="Livello" fub:locked="true"><rect style="fill:red" x="0" y="0" width="10" height="10"/></g>
   <rect id="r" style="fill:red" x="20" y="0" width="10" height="10"/>
-  <use href="#r" x="50"/>
+  <use id="u" href="#r" x="50"/>
+  <use href="#u" x="80"/>
   <rect onclick="x()" style="fill:red" x="40" y="0" width="10" height="10"/>`));
     expect(out.ops).toEqual([]);
     expect(out.leftovers.map((each) => [each.path, each.name, each.reason])).toEqual([
       [[0, 0], null, { kind: "locked" }],
       [[1], "r", { kind: "copy" }],
-      [[2], null, { kind: "use" }],
-      [[3], null, { kind: "attribute", name: "onclick" }],
+      [[2], "u", { kind: "copy" }],
+      [[3], null, { kind: "use" }],
+      [[4], null, { kind: "attribute", name: "onclick" }],
     ]);
   });
 
@@ -716,5 +718,206 @@ describe("rendere modificabili gli svg annidati", () => {
   <svg x="40" width="20" height="20"><rect width="10" height="10" fill="#00f"/></svg>`);
     expect(plan(text, { kind: "units", paths: [[1]] }, counting()).after).toBe(svg(`  <svg x="10" width="20" height="20"><rect width="10" height="10" fill="#f00"/></svg>
   <g transform="matrix(1 0 0 1 40 0)"><rect width="10" height="10" fill="#00f"/></g>`));
+  });
+});
+
+describe("rendere modificabili i use: simboli e cloni", () => {
+  const XL = 'viewBox="0 0 200 100" xmlns:xlink="http://www.w3.org/1999/xlink"';
+  const INK = `${XL} xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"`;
+  const uses = (body: string, attrs?: string, scope: EditableScope = ALL): EditablePlan => plan(svg(body, attrs), scope, counting());
+
+  it("un simbolo di Illustrator resta col suo id e prende il nome come titolo; ogni use diventa un'istanza", () => {
+    const out = uses(`  <defs>
+    <style>.cls-1{fill:#e30613;}</style>
+    <symbol id="Nuovo_simbolo" data-name="Nuovo simbolo" viewBox="0 0 20 20">
+      <rect class="cls-1" width="20" height="20"/>
+    </symbol>
+  </defs>
+  <use width="20" height="20" transform="translate(10 10)" xlink:href="#Nuovo_simbolo"/>
+  <use width="20" height="20" transform="translate(50 10) scale(2)" xlink:href="#Nuovo_simbolo"/>`, XL);
+    expect(out.after).toBe(svg(`  <defs>
+    <symbol id="Nuovo_simbolo" overflow="visible">
+      <title>Nuovo simbolo</title>
+      <rect width="20" height="20" fill="#e30613"/>
+    </symbol>
+  </defs>
+  <use transform="translate(10 10)" xlink:href="#Nuovo_simbolo"/>
+  <use transform="translate(50 10) scale(2)" xlink:href="#Nuovo_simbolo"/>`, XL));
+    expect([out.converted, out.rules, out.sheets, [...out.translations]]).toEqual([3, 1, 1, [["sheet", 1], ["data", 1], ["use", 2]]]);
+  });
+
+  it("un'icona di una raccolta: la finestra di ogni use diventa la matrice, e il colore che tutti le danno si scrive", () => {
+    const out = uses(`  <defs>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2L15 9L22 9L16 14L18 21L12 17L6 21L8 14L2 9L9 9Z"/>
+    </symbol>
+  </defs>
+  <use href="#i-star" x="10" y="10" width="24" height="24" style="color:#c00"/>
+  <use href="#i-star" x="50" y="10" width="48" height="48" style="color:#c00"/>`);
+    // Le estremità tonde non si vedono su una forma chiusa: restano, perché
+    // si vedranno se la forma si apre.
+    expect(out.after).toBe(svg(`  <defs>
+    <symbol id="i-star" overflow="visible">
+      <path d="M12 2L15 9L22 9L16 14L18 21L12 17L6 21L8 14L2 9L9 9Z" fill="none" stroke="#c00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+  <use transform="matrix(1 0 0 1 10 10)" href="#i-star"/>
+  <use transform="matrix(2 0 0 2 50 10)" href="#i-star"/>`));
+    const colors = uses(`  <defs>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L15 9L22 9L16 14L18 21L12 17L6 21L8 14L2 9L9 9Z"/>
+    </symbol>
+  </defs>
+  <use href="#i-star" x="10" y="10" width="24" height="24" style="color:#c00"/>
+  <use href="#i-star" x="50" y="10" width="24" height="24" style="color:#00c"/>`);
+    expect(colors.ops).toEqual([]);
+    expect(colors.leftovers.map((each) => [each.path, each.reason])).toEqual([
+      [[1], { kind: "property", name: "color", value: "#c00" }],
+      [[2], { kind: "linked", id: "i-star" }],
+    ]);
+  });
+
+  it("un simbolo che taglia ciò che esce dalla finestra dà a ogni istanza un ritaglio privato; un riempimento comune si scrive", () => {
+    expect(uses(`  <defs>
+    <symbol id="s" viewBox="0 0 20 10" preserveAspectRatio="xMinYMid slice">
+      <rect width="20" height="10" fill="#f00"/>
+    </symbol>
+  </defs>
+  <use href="#s" width="40" height="40"/>`).after).toBe(svg(`  <defs id="fub-defs">
+    <symbol id="s" overflow="visible">
+      <rect width="20" height="10" fill="#f00"/>
+    </symbol>
+    <clipPath id="r00000000" fub:role="private">
+      <rect x="0" y="0" width="10" height="10"/>
+    </clipPath>
+  </defs>
+  <use clip-path="url(#r00000000)" transform="matrix(4 0 0 4 0 0)" href="#s"/>`));
+    expect(uses(`  <defs>
+    <symbol id="s" viewBox="0 0 10 10">
+      <circle cx="5" cy="5" r="5"/>
+    </symbol>
+  </defs>
+  <use href="#s" x="5" width="20" height="20" fill="#0a0"/>`).after).toBe(svg(`  <defs>
+    <symbol id="s" overflow="visible">
+      <circle cx="5" cy="5" r="5" fill="#0a0"/>
+    </symbol>
+  </defs>
+  <use transform="matrix(2 0 0 2 5 0)" href="#s"/>`));
+  });
+
+  it("un clone di Inkscape: l'originale va in un simbolo nuovo col suo nome, e al suo posto resta un'istanza", () => {
+    const out = uses(`  <rect id="rect1" x="10" y="10" width="20" height="20" style="fill:#ff0000" inkscape:label="Quadrato"/>
+  <use x="0" y="0" xlink:href="#rect1" id="use1" transform="translate(40,0)" width="100%" height="100%"/>`, INK);
+    expect(out.after).toBe(svg(`  <defs id="fub-defs">
+    <symbol id="r00000000" overflow="visible">
+      <title>Quadrato</title>
+      <rect id="rect1" x="10" y="10" width="20" height="20" fill="#ff0000" inkscape:label="Quadrato"/>
+    </symbol>
+  </defs>
+  <use href="#r00000000"/>
+  <use xlink:href="#r00000000" id="use1" transform="translate(40,0)"/>`, INK));
+    expect([out.converted, [...out.translations]]).toEqual([2, [["style", 1], ["use", 1]]]);
+    // Gli spigoli che l'autore ha scelto restano, anche se la sonda del
+    // simbolo li avrebbe confusi con i suoi.
+    expect(uses(`  <path id="p" d="M0 0L10 10" style="stroke:#000;stroke-linecap:square;fill:none"/>
+  <use href="#p" x="20"/>`).after).toBe(svg(`  <defs id="fub-defs">
+    <symbol id="r00000000" overflow="visible">
+      <path id="p" d="M0 0L10 10" fill="none" stroke="#000" stroke-linecap="square"/>
+    </symbol>
+  </defs>
+  <use href="#r00000000"/>
+  <use transform="matrix(1 0 0 1 20 0)" href="#r00000000"/>`));
+  });
+
+  it("un gruppo clonato va nel simbolo con ciò che contiene, anche se è già modificabile; dentro un gruppo, le istanze restano lì", () => {
+    const group = uses(`  <g id="g1" transform="translate(5 5)">
+    <circle cx="10" cy="10" r="5" style="fill:#00f"/>
+    <rect x="20" width="5" height="5" fill="#0f0"/>
+  </g>
+  <use href="#g1" x="50"/>
+  <use href="#g1" y="50" opacity="0.5"/>`);
+    expect(group.after).toBe(svg(`  <defs id="fub-defs">
+    <symbol id="r00000000" overflow="visible">
+      <g id="g1" transform="translate(5 5)">
+        <circle cx="10" cy="10" r="5" fill="#00f"/>
+        <rect x="20" width="5" height="5" fill="#0f0"/>
+      </g>
+    </symbol>
+  </defs>
+  <use href="#r00000000"/>
+  <use transform="matrix(1 0 0 1 50 0)" href="#r00000000"/>
+  <use href="#r00000000" opacity="0.5" transform="matrix(1 0 0 1 0 50)"/>`));
+    expect(group.converted).toBe(3);
+    expect(uses(`  <g id="layer" style="opacity:0.5">
+    <rect id="r" width="10" height="10" fill="#f00"/>
+    <use xlink:href="#r" x="20"/>
+  </g>`, XL).after).toBe(svg(`  <defs id="fub-defs">
+    <symbol id="r00000000" overflow="visible">
+      <rect id="r" width="10" height="10" fill="#f00"/>
+    </symbol>
+  </defs>
+  <g id="layer" opacity="0.5">
+    <use href="#r00000000"/>
+    <use transform="matrix(1 0 0 1 20 0)" xlink:href="#r00000000"/>
+  </g>`, XL));
+  });
+
+  it("le copie di una ripetizione e le istanze dei simboli del formato restano come sono", () => {
+    const text = `  <defs id="fub-defs">
+    <symbol id="s1" overflow="visible"><rect width="5" height="5" fill="#00f"/></symbol>
+  </defs>
+  <g id="or" fub:repeat="grid 2 1 20 0"><rect id="oa" x="0" y="0" width="10" height="10"/><use id="o1" transform="matrix(1 0 0 1 20 0)" href="#oa"/><use href="#oa" x="3"/></g>
+  <use id="i1" href="#s1"/>
+  <use href="#s1" x="40"/>
+  <rect x="60" width="10" height="10" style="fill:#f00"/>`;
+    const out = uses(text);
+    expect(out.after).toBe(svg(text.replace(`style="fill:#f00"`, `fill="#f00"`)));
+    expect(out.leftovers.map((each) => [each.path, each.reason])).toEqual([
+      [[1, 2], { kind: "use" }],
+      [[3], { kind: "use" }],
+    ]);
+  });
+
+  it("su un oggetto solo, un use porta con sé il disegno che clona", () => {
+    expect(uses(`  <rect id="r" width="10" height="10" style="fill:#f00"/>
+  <circle r="3" style="fill:#0f0"/>
+  <use href="#r" x="20" y="30"/>`, undefined, { kind: "units", paths: [[2]] }).after).toBe(svg(`  <defs id="fub-defs">
+    <symbol id="r00000000" overflow="visible">
+      <rect id="r" width="10" height="10" fill="#f00"/>
+    </symbol>
+  </defs>
+  <use href="#r00000000"/>
+  <circle r="3" style="fill:#0f0"/>
+  <use transform="matrix(1 0 0 1 20 30)" href="#r00000000"/>`));
+  });
+
+  it("ciò che un'istanza non porta, un connettore attaccato all'originale, un pezzo che non può tengono tutto com'era, col perché", () => {
+    const fill = uses(`  <rect id="r" width="10" height="10" style="stroke:none"/>
+  <use href="#r" x="20" fill="#00f"/>`);
+    expect(fill.ops).toEqual([]);
+    expect(fill.leftovers.map((each) => [each.path, each.reason])).toEqual([
+      [[0], { kind: "copy" }],
+      [[1], { kind: "property", name: "fill", value: "#00f" }],
+    ]);
+    const connected = uses(`  <rect id="r" width="10" height="10" style="fill:#f00"/>
+  <use href="#r" x="20"/>
+  <path d="M0 0L20 20" fub:from="r center"/>`);
+    expect(connected.ops).toEqual([]);
+    expect(connected.leftovers.map((each) => [each.path, each.reason])).toEqual([
+      [[0], { kind: "copy" }],
+      [[1], { kind: "use" }],
+    ]);
+    // Il gruppo già modificabile resta modificabile: resta estraneo ciò che
+    // conteneva, col suo perché.
+    const piece = uses(`  <g id="g1">
+    <circle cx="10" cy="10" r="5" style="fill:#00f" requiredFeatures="x"/>
+    <rect x="20" width="5" height="5" fill="#0f0"/>
+  </g>
+  <use href="#g1" x="50"/>`);
+    expect(piece.ops).toEqual([]);
+    expect(piece.leftovers.map((each) => [each.path, each.tag, each.reason])).toEqual([
+      [[0, 0], "circle", { kind: "attribute", name: "requiredFeatures" }],
+      [[1], "use", { kind: "linked", id: "g1" }],
+    ]);
   });
 });

@@ -255,7 +255,8 @@ const mitered = (ratio: number, limit: number): boolean => ratio <= limit;
 /// chiave sono uguali anche se dipendono da una condizione: la stessa regola
 /// li dà a tutti e due. Le proprietà in `skip` non si guardano: chi chiama le
 /// ha già confrontate a modo suo, come la finestra di un `svg` che diventa la
-/// trasformazione e il ritaglio di un gruppo.
+/// trasformazione e il ritaglio di un gruppo, o il posto e la presentazione
+/// di un `use` che diventa un'istanza.
 export function difference(was: Side, now: Side, props: ReadonlySet<string>, shape: () => ShapeFacts, skip: ReadonlySet<string> = NOTHING): Difference | null {
   const b = (p: string): Value => was.cascade.value(was.node, p);
   const a = (p: string): Value => now.cascade.value(now.node, p);
@@ -290,7 +291,7 @@ export function difference(was: Side, now: Side, props: ReadonlySet<string>, sha
   const ownAfter = now.cascade.own(now.node);
   const declared = ownBefore.css === ownAfter.css && eq("transform", "transform-origin", "transform-box", "translate", "rotate", "scale");
   const moved = ownBefore.m !== null && ownAfter.m !== null ? !same(ownBefore.m, ownAfter.m) : !declared;
-  if (moved) return { property: "transform", value: ownBefore.text, doubt: b("transform").doubt };
+  if (moved && !skip.has("transform")) return { property: "transform", value: ownBefore.text, doubt: b("transform").doubt };
   for (const p of ["clip-path", "mask", "filter", "mix-blend-mode", "isolation"]) {
     if (shows(p) && !alike(p)) return differ(p);
   }
