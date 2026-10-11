@@ -22,6 +22,12 @@ import { tryApplyOperation, type TextOperation } from "../editors/core/text-oper
 const SAVE_MS = 400;
 const DRAFT_MS = 1_000;
 
+/// Il testo coi terminatori di riga ridotti a `\n`. Senza un `\r` il testo
+/// resta quello: un testo grande non si ripassa tutto per niente.
+function lineFeeds(text: string): string {
+  return text.indexOf("\r") < 0 ? text : text.replace(/\r\n?/g, "\n");
+}
+
 /// La porta con cui una superficie si sottoscrive a una sessione. Soltanto
 /// dati: niente DOM, niente editor, niente cursore, selezione o history —
 /// ciò che la superficie fa del dato ricevuto resta tutto suo.
@@ -315,10 +321,10 @@ export class DocumentSession implements DraftBuffer {
     // A pending destructive command makes every editor read-only. Keep the
     // authoritative buffer untouched even if a stale adapter callback arrives.
     if (this.#state.pendingDeletion) return { kind: "realigned", text: this.#state.text };
-    // I due `replace` sono lo stesso lavello: preimage e atteso devono essere
+    // Preimage e atteso passano dallo stesso lavello: devono essere
     // normalizzati identicamente, o la validazione regge per caso.
-    const expected = edit.text.replace(/\r\n?/g, "\n");
-    const applied = tryApplyOperation(this.#state.text.replace(/\r\n?/g, "\n"), edit.operation);
+    const expected = lineFeeds(edit.text);
+    const applied = tryApplyOperation(lineFeeds(this.#state.text), edit.operation);
     if (applied.kind !== "applied" || applied.text !== expected) {
       return { kind: "realigned", text: this.#state.text };
     }
