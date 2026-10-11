@@ -26,6 +26,9 @@ describe("il disegno del banco delle scene grandi", () => {
     const fixture = largeFixture(5_000);
     const engine = SceneEngine.open(fixture.text);
     expect(engine.holder(fixture.target.id)?.facts.local).toBe("rect");
+    const [x, y, w, h] = fixture.target.box;
+    expect(fixture.text).toContain(`<rect id="${fixture.target.id}" x="${x}" y="${y}" width="${w}" height="${h}"`);
+    expect(fixture.target.center).toEqual([x + w / 2, y + h / 2]);
     expect(fixture.strokes).toBeGreaterThan(fixture.objects / 20);
     expect(fixture.text).toContain('fub:tool="pen"');
     // Il `d` di ogni tratto è quello che il motore ricalcola da `fub:ink`:

@@ -60,8 +60,9 @@ export interface LargeFixture {
   readonly cells: number;
   readonly columns: number;
   /// Un oggetto scelto dal banco: un rettangolo che sta nel primo riquadro,
-  /// col suo id e il suo centro.
-  readonly target: { readonly id: string; readonly center: readonly [number, number] };
+  /// col suo id, il suo centro e il rettangolo `[x, y, larghezza, altezza]`
+  /// che il pannello delle proprietà mostra quando è scelto.
+  readonly target: { readonly id: string; readonly center: readonly [number, number]; readonly box: readonly [number, number, number, number] };
   /// FNV-1a del testo, in esadecimale: dice quale disegno si è misurato.
   readonly digest: string;
 }
@@ -224,7 +225,7 @@ export function largeFixture(elements: number): LargeFixture {
       const object = id("o");
       const [x0, y0, w, h] = [cx + CELL[0] - pad - 120, cy + 12, 120, 34];
       marks.push(`<rect id="${object}" x="${num(x0)}" y="${num(y0)}" width="${w}" height="${h}" rx="6" fill="#2b6cb0"/>`);
-      target = { id: object, center: [round(x0 + w / 2), round(y0 + h / 2)] };
+      target = { id: object, center: [round(x0 + w / 2), round(y0 + h / 2)], box: [round(x0), round(y0), w, h] };
       left -= 1;
       objects += 1;
     }

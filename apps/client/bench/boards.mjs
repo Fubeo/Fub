@@ -65,11 +65,11 @@
 //
 // A mille tavole (40 000 oggetti) le soglie non valgono: il banco dice quanto
 // ci si allontana. Oggi un passo si dipinge, in mediana, in 105 ms con Alt+Pag
-// e in 47 ms col Tab, e quattro Alt+Pag su cinque fanno un compito lungo. Il
-// tempo è quasi tutto del browser: Alt+Pag cambia lo zoom, e a ogni cambio di
-// zoom il browser rifà il layout di tutto l'SVG (circa 60 ms) e lo ridipinge
-// (circa 40); l'editor ci mette circa 10 ms, quasi tutti a rimettere al loro
-// posto le mille carte e i mille nomi.
+// e in 52 ms col Tab, e quattro Alt+Pag su cinque fanno un compito lungo. Il
+// tempo è quasi tutto del browser: Alt+Pag salta su un'altra tavola e ne
+// cambia lo zoom, e a ogni cambio di zoom il browser rifà il layout di tutto
+// l'SVG (circa 60 ms) e lo ridipinge (circa 40); l'editor ci mette circa
+// 10 ms, quasi tutti a rimettere al loro posto le mille carte e i mille nomi.
 //
 // Dopo le corse il banco prova sé stesso: un Tab di troppo deve fargli vedere
 // la tavola sbagliata, e un tasto che tiene occupata la pagina 30 ms più
