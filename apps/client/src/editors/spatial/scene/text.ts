@@ -12,6 +12,8 @@
 // posizioni dei caratteri non ASCII e dei `\r\n`, così un file ASCII con LF
 // non costa memoria in più e una traduzione è una ricerca binaria.
 
+import { commonEnds } from "../../core/text-operation";
+
 /// Il BOM UTF-8 come carattere.
 export const BOM = "﻿";
 
@@ -49,6 +51,26 @@ export function utf8Length(text: string): number {
     }
   }
   return bytes;
+}
+
+/// Un testo e i suoi byte UTF-8, già contati.
+export interface Measured {
+  readonly text: string;
+  readonly bytes: number;
+}
+
+/// I byte UTF-8 di `text`, da quelli di `known`, un testo che gli somiglia:
+/// si contano solo le unità fra il prefisso e il suffisso comuni. Una coppia
+/// surrogata sul bordo resta tutta nel mezzo, dove vale quattro byte.
+export function utf8LengthFrom(known: Measured, text: string): number {
+  let [prefix, suffix] = commonEnds(known.text, text);
+  if (prefix > 0 && isHigh(text.charCodeAt(prefix - 1))) prefix--;
+  if (suffix > 0 && isLow(text.charCodeAt(text.length - suffix))) suffix--;
+  return known.bytes - utf8Length(known.text.slice(prefix, known.text.length - suffix)) + utf8Length(text.slice(prefix, text.length - suffix));
+}
+
+function isHigh(c: number): boolean {
+  return c >= 0xd800 && c <= 0xdbff;
 }
 
 function isLow(c: number): boolean {

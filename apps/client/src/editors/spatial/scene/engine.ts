@@ -117,7 +117,7 @@ import {
   type OutElement,
   type Run,
 } from "./serialize";
-import { lineBreakOf, newline, normalizeEol, SourceText, utf8Length } from "./text";
+import { lineBreakOf, newline, normalizeEol, SourceText, utf8Length, utf8LengthFrom, type Measured } from "./text";
 import { Tree, type Entry, type HeadState } from "./tree";
 import { length as svgLength, number as svgNumber } from "./values";
 import {
@@ -669,6 +669,9 @@ export class SceneEngine {
   /// Vero mentre `undoAll` applica la sua fila: il testo si scrive una volta,
   /// alla fine.
   private quiet = false;
+  /// L'ultimo testo contato contro il limite, coi suoi byte: il prossimo,
+  /// che gli somiglia, si conta da lì.
+  private measured: Measured | null = null;
   /// Ciò che segue ogni operazione applicata, nello stesso passo e nello
   /// stesso undo, a giri (vedi [`Follow`] e [`FOLLOW_ROUNDS`]); `null` per
   /// niente. Un'inversa non ha seguito: porta già l'inversa di ciò che aveva
@@ -692,6 +695,7 @@ export class SceneEngine {
     this.eol = newline(lineBreakOf(source));
     this.readOnly = opened.readOnly;
     this.tree = opened.readOnly.length === 0 ? new Tree(buildDocument(opened.doc), opened.status, opened.doc.elements) : null;
+    this.measured = { text: source, bytes: opened.text.byteLength };
   }
 
   /// Apre `source`, il testo intero del file. Lancia `ReadError` se non è
@@ -920,7 +924,8 @@ export class SceneEngine {
     let operation: TextOperation = { beforeLength: this.lf.length, afterLength: this.lf.length, edits: [] };
     if (entries.length > 0) {
       const raw = this.quiet && target !== null ? null : materialize(tree.model);
-      if (raw !== null && target === null && (utf8Length(raw) > MAX_EDIT_BYTES || tree.elements > MAX_ELEMENTS)) {
+      const measured = raw !== null && target === null ? this.measure(raw) : null;
+      if (measured !== null && (measured.bytes > MAX_EDIT_BYTES || tree.elements > MAX_ELEMENTS)) {
         const mark = tree.mark();
         tree.undo(entries);
         tree.take(mark);
@@ -930,6 +935,7 @@ export class SceneEngine {
           detail: `il documento supererebbe ${MAX_EDIT_BYTES} byte o ${MAX_ELEMENTS} elementi`,
         };
       }
+      if (measured !== null) this.measured = measured;
       if (raw !== null && !this.quiet) {
         const lf = normalizeEol(raw);
         operation = sceneOperation(this.lf, lf);
@@ -942,6 +948,11 @@ export class SceneEngine {
     const undo = new Undo(inverse, forward, touched);
     EXACT.set(undo, { engine: this, entries, before, after: this.state });
     return { outcome: "applied", forward, inverse, touched, operation, text: this.raw, duplicate, undo };
+  }
+
+  /// `raw`, un testo appena scritto, coi suoi byte UTF-8.
+  private measure(raw: string): Measured {
+    return { text: raw, bytes: this.measured === null ? utf8Length(raw) : utf8LengthFrom(this.measured, raw) };
   }
 
   // -------------------------------------------------------------------------
