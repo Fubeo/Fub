@@ -651,6 +651,9 @@ export class SceneEngine {
   private state = 0;
   private counter = 0;
   private items: readonly Item[] | null = null;
+  /// Le coordinate dell'ultimo testo che si sono chieste: quelle del testo
+  /// aperto le dà la lettura.
+  private coordinates: SourceText;
   // Lo stato di un'applicazione in corso.
   private touched = new Set<string>();
   private duplicate = false;
@@ -696,6 +699,7 @@ export class SceneEngine {
     this.readOnly = opened.readOnly;
     this.tree = opened.readOnly.length === 0 ? new Tree(buildDocument(opened.doc), opened.status, opened.doc.elements) : null;
     this.measured = { text: source, bytes: opened.text.byteLength };
+    this.coordinates = opened.text;
   }
 
   /// Apre `source`, il testo intero del file. Lancia `ReadError` se non è
@@ -742,10 +746,17 @@ export class SceneEngine {
         this.items = readScene(this.raw).items;
       } else {
         layout(this.tree.model);
-        this.items = deriveItems(this.tree.model, new SourceText(this.raw));
+        this.items = deriveItems(this.tree.model, this.source());
       }
     }
     return this.items;
+  }
+
+  /// Le coordinate del testo corrente, coi terminatori del file: sono quelle
+  /// degli span delle voci di [`scene`]. Si ricavano una volta per testo.
+  source(): SourceText {
+    if (this.coordinates.text !== this.raw) this.coordinates = new SourceText(this.raw);
+    return this.coordinates;
   }
 
   /// Applica `op`: tutta oppure niente.

@@ -69,6 +69,43 @@ describe("le coordinate della sorgente (text.rs)", () => {
     expect(lines.byteOf(bomUnits(source))).toBe(3);
     expect(bomUnits("<svg/>")).toBe(0);
   });
+
+  it("le coordinate e i rientri valgono in un testo lungo con segni e terminatori sparsi", () => {
+    let seed = 0x2545f491;
+    const next = (bound: number): number => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) % bound;
+    };
+    const pieces = ["a", "<g/>", " ", "\t", "é", "€", "😀", "\ud83d", "\ude00", "\n", "\r", "\r\n", "  "];
+    let source = "﻿";
+    for (let i = 0; i < 6000; i++) source += pieces[next(pieces.length)]!;
+    const map = new SourceText(source);
+    const bom = bomUnits(source);
+    // L'inizio della riga di `index`: dopo un `\n`, o dopo un `\r` che non
+    // sta attaccato a un `\n`; mai prima del BOM.
+    const lineStart = (index: number): number => {
+      let start = index;
+      while (start > bom) {
+        const before = source[start - 1];
+        if (before === "\n" || (before === "\r" && source[start] !== "\n")) break;
+        start--;
+      }
+      return Math.min(Math.max(start, bom), index);
+    };
+    for (let index = 0; index <= source.length; index += source.codePointAt(index)! > 0xffff ? 2 : 1) {
+      const prefix = source.slice(0, index);
+      const insideCrlf = prefix.endsWith("\r") && source.startsWith("\n", index);
+      expect(map.byteOf(index), `indice ${index}`).toBe(utf8Length(prefix));
+      expect(map.lfOffset(index), `indice ${index}`).toBe(normalized(insideCrlf ? prefix.slice(0, -1) : prefix).length);
+      const start = lineStart(index);
+      const head = /^[ \t]*/.exec(source.slice(start, index))![0];
+      expect(map.indent(index), `indice ${index}`).toBe(head);
+      if (index === source.length) break;
+    }
+    expect(map.byteLength).toBe(utf8Length(source));
+  });
 });
 
 describe("i byte di un testo dopo una modifica", () => {
