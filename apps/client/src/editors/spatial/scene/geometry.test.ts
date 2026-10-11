@@ -3,7 +3,7 @@
 // trasformate.
 
 import { describe, expect, it } from "vitest";
-import { BoundsBuilder, ellipsePath, flatten, parsePath, rectPath, Track, winding, type Bounds } from "./geometry";
+import { BoundsBuilder, BoundsGrid, ellipsePath, flatten, parsePath, rectPath, Track, winding, type Bounds } from "./geometry";
 import { IDENTITY, rotate, translate, type Matrix, type Point } from "./matrix";
 
 function polygons(d: string, m: Matrix): Point[][] {
@@ -137,5 +137,92 @@ describe("un tracciato da seguire", () => {
     expect(track.nearest([-20, 5])).toBe(0);
     expect(track.nearest([100, 90])).toBeCloseTo(150);
     expect(new Track(parsePath("M 5 5")!).nearest([0, 0])).toBe(0);
+  });
+});
+
+/// Un generatore xorshift a 32 bit, lo stesso dei test di `geometry.rs`:
+/// numeri in [0, 1).
+function generator(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state ^= state << 13;
+    state >>>= 0;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    state >>>= 0;
+    return state / 2 ** 32;
+  };
+}
+
+/// I rettangoli dei casi: per lo più comuni, alcuni minuscoli, senza larghezza,
+/// enormi, lontanissimi, infiniti, vuoti, coi bordi sulle celle.
+function gridBoxes(): Bounds[] {
+  const next = generator(0x9e3779b9);
+  const boxes: Bounds[] = [];
+  for (let i = 0; i < 300; i++) {
+    const x = next() * 1000 - 500;
+    const y = next() * 1000 - 500;
+    const r = next();
+    const box = (w: number, h: number): Bounds => ({ min: [x, y], max: [x + w, y + h] });
+    switch (i % 10) {
+      case 6:
+        boxes.push(box(r * 1e-3, r * 1e-3));
+        break;
+      case 7:
+        boxes.push(i % 20 === 7 ? box(0, r * 10) : box(0, 0));
+        break;
+      case 8:
+        boxes.push({ min: [-1e6 + r, -1e6 - r], max: [1e6 + r * 1e6, 1e6 + r] });
+        break;
+      case 9:
+        boxes.push(
+          ([
+            { min: [Infinity, Infinity], max: [-Infinity, -Infinity] },
+            { min: [Number.NaN, 0], max: [10, 10] },
+            { min: [1e17 + r * 1e16, -1e17], max: [1e17 + r * 1e16 + 1e15, -1e17 + 1e15] },
+            { min: [-Infinity, -Infinity], max: [Infinity, Infinity] },
+            { min: [0, 0], max: [64, 64] },
+          ] satisfies Bounds[])[Math.floor(i / 10) % 5]!,
+        );
+        break;
+      default:
+        boxes.push(box(r ** 3 * 300, next() ** 3 * 300));
+    }
+  }
+  return boxes;
+}
+
+describe("la griglia dei rettangoli (geometry.rs)", () => {
+  it("dà in ordine ogni rettangolo che contiene il punto, bordi compresi", () => {
+    const boxes = gridBoxes();
+    const grid = new BoundsGrid(boxes);
+    const next = generator(0x2545f491);
+    const probes: Point[] = [[Number.NaN, 0], [Infinity, 0], [-Infinity, -Infinity], [0, 0], [-0, 64], [64, 64]];
+    for (const { min, max } of boxes) {
+      probes.push(min, max, [min[0], max[1]], [max[0], min[1]], [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2]);
+    }
+    for (let i = 0; i < 300; i++) probes.push([next() * 1200 - 600, next() * 1200 - 600]);
+    for (const p of probes) {
+      for (const count of [0, 1, 150, 300]) {
+        const near = grid.near(p, count);
+        const inside = boxes.flatMap(({ min, max }, at) => (at < count && p[0] >= min[0] && p[0] <= max[0] && p[1] >= min[1] && p[1] <= max[1] ? [at] : []));
+        expect(near.every((at, k) => at < count && (k === 0 || at > near[k - 1]!)), `${JSON.stringify(p)} ${count}: ${near}`).toBe(true);
+        expect(inside.filter((at) => !near.includes(at)), `${JSON.stringify(p)} ${count}`).toEqual([]);
+      }
+    }
+  });
+
+  it("per un punto guarda pochi rettangoli anche quando sono tanti", () => {
+    const next = generator(0x6c8e9cf5);
+    const boxes: Bounds[] = [];
+    for (let i = 0; i < 20_000; i++) {
+      const x = next() * 2000;
+      const y = next() * 2000;
+      boxes.push({ min: [x, y], max: [x + 1 + next() * 19, y + 1 + next() * 19] });
+    }
+    const grid = new BoundsGrid(boxes);
+    let seen = 0;
+    for (let i = 0; i < 2000; i++) seen += grid.near([next() * 2000, next() * 2000], boxes.length).length;
+    expect(seen / 2000).toBeLessThan(20);
   });
 });
