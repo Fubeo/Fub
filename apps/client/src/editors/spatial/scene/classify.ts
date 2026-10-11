@@ -437,7 +437,9 @@ const TAGS: ReadonlySet<string> = new Set<Tag>([
   ...(RESOURCE_TAGS as ReadonlySet<ResourceTag>),
 ]);
 
-function tagOf(element: ElementNode): Tag | null {
+/// Il tag del formato di `element`; `null` per un elemento che il formato
+/// non conosce.
+export function tagOf(element: ElementNode): Tag | null {
   return element.ns === NS_SVG && TAGS.has(element.local) ? (element.local as Tag) : null;
 }
 

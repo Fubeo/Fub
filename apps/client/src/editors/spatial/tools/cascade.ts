@@ -24,7 +24,7 @@
 //   e si ricordano, così un disegno con centomila gruppi annidati non esaurisce
 //   la pila.
 
-import { compose, IDENTITY, type Matrix } from "../scene/matrix";
+import { compose, IDENTITY, translate, type Matrix } from "../scene/matrix";
 import { NAMED_COLORS, transform as svgTransform } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
 import { formatNumber } from "../number";
@@ -154,7 +154,7 @@ const INITIAL: Readonly<Record<string, string>> = {
 
 /// Le proprietà che si scrivono come attributi di presentazione, su ogni
 /// elemento SVG.
-const PRESENTATION: ReadonlySet<string> = new Set([
+export const PRESENTATION: ReadonlySet<string> = new Set([
   "alignment-baseline", "baseline-shift", "clip-path", "clip-rule", "color", "color-interpolation", "color-interpolation-filters",
   "color-rendering", "cursor", "direction", "display", "dominant-baseline", "fill", "fill-opacity", "fill-rule", "filter", "flood-color",
   "flood-opacity", "font-family", "font-size", "font-size-adjust", "font-stretch", "font-style", "font-variant", "font-weight",
@@ -580,6 +580,22 @@ export function cssTransform(text: string): Matrix | null {
     m = compose(m, step);
   }
   return m;
+}
+
+/// L'origine di una trasformazione in misure assolute, `[x, y]`; `null` se
+/// dipende dal riquadro, come le percentuali, `center`, `right`, `bottom` o un
+/// valore solo, che mette l'altro al centro. Un numero senza unità vale solo
+/// scritto come attributo.
+export function cssOrigin(text: string, unitless: boolean): readonly [number, number] | null {
+  const tokens = text.trim().toLowerCase().split(/\s+/);
+  if (tokens.length < 2 || tokens.length > 3) return null;
+  const size = (token: string): number | null => (unitless && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/.test(token) ? Number(token) : pixels(token));
+  if (tokens.length === 3 && size(tokens[2]!) !== 0) return null;
+  const [first, second] = tokens as [string, string];
+  if (first === "top" && second === "left") return [0, 0];
+  const x = first === "left" ? 0 : size(first);
+  const y = second === "top" ? 0 : size(second);
+  return x === null || y === null ? null : [x, y];
 }
 
 function cssStep(name: string, args: readonly string[]): Matrix | null {
@@ -1010,13 +1026,17 @@ export class Cascade {
       const keyword = text.trim().toLowerCase();
       m = keyword === "initial" || keyword === "unset" || keyword === "revert" ? IDENTITY : keyword === "inherit" || keyword === "revert-layer" ? null : cssTransform(text);
     }
-    // Un'origine o un riquadro che non sono quelli di SVG spostano il punto
-    // fermo della trasformazione, e non si sanno calcolare.
+    // Un'origine in misure assolute sposta il punto fermo della
+    // trasformazione; una che dipende dal riquadro, o un riquadro che non è
+    // quello di SVG, non si sa calcolare.
     if (m !== null && !same(m, IDENTITY)) {
-      const origin = this.declared.has("transform-origin") ? this.won(node, "transform-origin").text : null;
-      const box = this.declared.has("transform-box") ? this.won(node, "transform-box").text : null;
-      if (origin !== null && !/^\s*(?:0(?:px)?\s+0(?:px)?|left\s+top|top\s+left)\s*$/i.test(origin)) m = null;
-      if (box !== null && !/^\s*view-box\s*$/i.test(box)) m = null;
+      const origin = this.declared.has("transform-origin") ? this.won(node, "transform-origin") : null;
+      const box = this.declared.has("transform-box") ? this.won(node, "transform-box") : null;
+      if (box !== null && box.text !== null && (box.marks.length > 0 || !/^\s*view-box\s*$/i.test(box.text))) m = null;
+      else if (origin !== null && origin.text !== null) {
+        const at = origin.marks.length > 0 || hasVar(origin.text) ? null : cssOrigin(origin.text, origin.from === "attr");
+        m = at === null ? null : compose(compose(translate(at[0], at[1]), m), translate(-at[0], -at[1]));
+      }
     }
     for (const name of ["translate", "rotate", "scale"]) {
       if (!this.declared.has(name)) continue;

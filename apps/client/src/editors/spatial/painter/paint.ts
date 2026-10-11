@@ -428,7 +428,7 @@ export const RESOURCE_TAGS: ReadonlySet<string> = new Set(["linearGradient", "ra
 
 /// Gli attributi della radice che passano agli strati vivi, se il loro
 /// valore varrebbe su un `g`: quelli che i figli ereditano, e l'opacità.
-const ROOT_PRESENTATION: readonly string[] = [
+export const ROOT_PRESENTATION: readonly string[] = [
   "fill",
   "fill-opacity",
   "stroke",

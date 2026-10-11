@@ -2,7 +2,7 @@
 // eredita, come si risolvono colori, misure e variabili.
 
 import { describe, expect, it } from "vitest";
-import { Cascade, cssTransform, expandFont, normal, renders, same, type CascadeNode } from "./cascade";
+import { Cascade, cssOrigin, cssTransform, expandFont, normal, renders, same, type CascadeNode } from "./cascade";
 import { readSheet } from "./selectors";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -249,7 +249,7 @@ describe("trasformazioni e opacità accumulate", () => {
     expect(c.alpha(rect)).toEqual({ a: 0.25, sym: "" });
   });
 
-  it("una trasformazione di CSS vince sull'attributo; con un'origine diversa non si calcola", () => {
+  it("una trasformazione di CSS vince sull'attributo; con un'origine che dipende dal riquadro non si calcola", () => {
     const rect = el("rect", { id: "r", transform: "translate(5 5)" });
     const root = el("svg", {}, [rect]);
     const c = cascade("rect { transform: rotate(90deg) }", root);
@@ -258,6 +258,15 @@ describe("trasformazioni e opacità accumulate", () => {
     const centered = cascade("rect { transform: rotate(90deg); transform-origin: center }", root);
     expect(centered.own(rect).m).toBeNull();
     expect(centered.world(rect).sym).not.toBe("");
+    const moved = cascade("rect { transform: rotate(90deg); transform-origin: 5px 5px }", root);
+    expect(same(moved.own(rect).m!, [0, 1, -1, 0, 10, 0])).toBe(true);
+    expect(same(cascade("rect { transform: rotate(90deg); transform-origin: top left }", root).own(rect).m!, [0, 1, -1, 0, 0, 0])).toBe(true);
+    expect(cascade("rect { transform: rotate(90deg); transform-origin: 5px }", root).own(rect).m).toBeNull();
+    expect(cascade("rect { transform: rotate(90deg); transform-origin: 5 5 }", root).own(rect).m).toBeNull();
+    expect(cascade("rect { transform: rotate(90deg); transform-box: fill-box }", root).own(rect).m).toBeNull();
+    expect(cssOrigin("5 5", true)).toEqual([5, 5]);
+    expect(cssOrigin("left 2mm 0", false)![1]).toBeCloseTo(7.559, 3);
+    expect(cssOrigin("right top", false)).toBeNull();
     expect(cssTransform("translate(10%)")).toBeNull();
     expect(cssTransform("none")).toEqual([1, 0, 0, 1, 0, 0]);
   });
