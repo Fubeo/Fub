@@ -104,9 +104,9 @@ La barra lo dice accanto a ciò che il ricalco ha trovato, prima di Applica:
 Il ricalco sta in `apps/client/src/editors/spatial/tools/trace.ts` e
 `trace-pixels.ts`, le impostazioni dei tipi in `trace-settings.ts`, il gruppo
 nel disegno in `trace-ops.ts`, il worker in `trace-worker.ts` e chi gli
-parla in `trace-runner.ts`; la barra e l'anteprima in `editor.ts`. Le misure
-del ricalco su un corpus di immagini sintetiche, con l'errore e i nodi di
-ogni tipo, sono in `trace.test.ts`.
+parla in `trace-runner.ts`; la barra in `editor/stage.ts` e l'anteprima in
+`editor/image-commands.ts`. Le misure del ricalco su un corpus di immagini
+sintetiche, con l'errore e i nodi di ogni tipo, sono in `trace.test.ts`.
 
 L'editor legge i pixel col decodificatore delle immagini, `imageCodec`, lo
 stesso che le riduce quando entrano, e i file del vault con `images`:

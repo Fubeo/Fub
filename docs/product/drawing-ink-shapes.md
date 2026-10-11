@@ -104,8 +104,8 @@ rotazione in `transform`.
 
 Il riconoscimento sta in `apps/client/src/editors/spatial/tools/recognize.ts`,
 la forma che prende il posto del tratto in `inkshape.ts`, la tenuta ferma in
-`editor.ts`. L'interruttore è `shapes` nella griglia che l'editor riceve e
-restituisce con `onGridChange`. Il corpus dei tratti registrati, ciascuno
+`editor/shapes-connector.ts`. L'interruttore è `shapes` nella griglia che
+l'editor riceve e restituisce con `onGridChange`. Il corpus dei tratti registrati, ciascuno
 con la forma attesa nel suo titolo, è in `apps/client/src/__fixtures__/ink-shapes/`.
 
 Non c'è niente da montare: le forme dal tratto vengono col livello Standard, e
