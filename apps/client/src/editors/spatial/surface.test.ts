@@ -709,12 +709,12 @@ async function fresh(host: FakeHost) {
   vi.resetModules();
   const { mountVectorSurface: mountFresh } = await import("./surface");
   await (await import("../../state/kernel")).startKernelRouter();
-  return (at: HTMLElement, shell: Pick<VectorSurfaceOptions, "images"> = {}): EditorSurface => {
+  return (at: HTMLElement, shell: Pick<VectorSurfaceOptions, "images"> = {}, text = SOURCE): EditorSurface => {
     const surface = mountFresh(
       { paneId: `p${mounted.length + 1}`, documentId: "disegni/casa.svg", parent: at },
       { onChange: () => {}, onSelectionChange: () => {}, fonts: NO_FONTS, ...shell },
     );
-    surface.buffer!.setDoc(SOURCE);
+    surface.buffer!.setDoc(text);
     mounted.push({ surface, changes: [], selections: { count: 0 }, parent: at });
     return surface;
   };
@@ -817,6 +817,66 @@ describe("il livello e la griglia", () => {
     } finally {
       other.remove();
     }
+  });
+});
+
+describe("«Rendi modificabile…» nell'avviso di un SVG estraneo", () => {
+  const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  /// Il secondo pulsante dell'avviso, dopo «Modifica».
+  const editable = (): HTMLButtonElement => parent.querySelectorAll<HTMLButtonElement>(".vector-notice-action")[1]!;
+  const dialog = (): HTMLElement | null => document.querySelector<HTMLElement>(".shell-dialog");
+  const spoken = (): string => (parent.querySelector('.draw-editor > .sr-only[role="status"]')?.textContent ?? "").trim();
+  /// Lo stesso SVG estraneo col quadrato scritto con `style`.
+  const STYLED = FOREIGN.replace('fill="none" stroke="#000000" stroke-width="2"', 'style="fill:none;stroke:#000000;stroke-width:2"');
+
+  afterEach(() => {
+    for (const open of document.querySelectorAll(".shell-dialog")) open.remove();
+  });
+
+  it("c'è dall'Esperto, accanto a «Modifica», e la frase dice che cosa fa", async () => {
+    const host = createFakeHost({ settings: [level("standard")] });
+    (await fresh(host))(parent, {}, STYLED);
+    await settle();
+    expect(shown()).toMatchObject({ notice: "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è.", adopt: true });
+    expect(editable().hidden).toBe(true);
+    await host.module.api.setSetting("draw.level", "expert");
+    await settle();
+    expect(editable().hidden).toBe(false);
+    expect(editable().textContent).toBe("Rendi modificabile…");
+    expect(shown().notice).toBe(
+      "Questo SVG non è stato fatto con FubDraw: si guarda, e si disegna dopo «Modifica». Il file riceve due attributi sulla radice; il resto resta com’è. «Rendi modificabile…» riscrive anche le sue parti nel formato di FubDraw, dove si può senza che cambi ciò che si vede.",
+    );
+  });
+
+  it("adotta e riscrive in un passo dopo la finestra, e l'annulla torna all'immagine", async () => {
+    const surface = (await fresh(createFakeHost({ settings: [level("expert")] })))(parent, {}, STYLED);
+    await settle();
+    editable().click();
+    await vi.waitFor(() => expect(dialog()?.querySelector(".draw-editable-message")).toBeTruthy());
+    expect(dialog()!.querySelector(".palette-heading")!.textContent).toBe("Rendi modificabile il disegno");
+    expect(dialog()!.querySelector(".draw-editable-message")!.textContent).toBe(
+      "Una parte di un altro programma diventa modificabile, e si vede come prima. Il file riceve anche i due attributi di FubDraw sulla radice.",
+    );
+    dialog()!.querySelector("form")!.requestSubmit();
+    await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:version="1"'));
+    expect(surface.buffer!.getDoc()).toContain('fill="none" stroke="#000000" stroke-width="2"');
+    expect(surface.buffer!.getDoc()).not.toContain("style=");
+    expect(shown()).toEqual({ notice: null, adopt: false, draw: true, read: false });
+    await vi.waitFor(() => expect(document.activeElement).toBe(parent.querySelector(".draw-surface")));
+    expect(spoken()).toBe("Una parte è diventata modificabile.");
+    undo();
+    expect(surface.buffer!.getDoc()).toBe(STYLED);
+    expect(shown()).toMatchObject({ adopt: true, draw: false, read: true });
+  });
+
+  it("un SVG estraneo che è già tutto del formato si adotta e basta, senza finestra", async () => {
+    const surface = (await fresh(createFakeHost({ settings: [level("expert")] })))(parent, {}, FOREIGN);
+    await settle();
+    editable().click();
+    await vi.waitFor(() => expect(surface.buffer!.getDoc()).toContain('fub:version="1"'));
+    expect(surface.buffer!.getDoc()).toBe(SOURCE);
+    expect(dialog()).toBeNull();
+    expect(spoken()).toBe("Era già tutto nel formato di FubDraw: ora il disegno si modifica.");
   });
 });
 

@@ -2596,35 +2596,54 @@ html, body, #app {
 .draw-symbols-badge[hidden] {
   display: none;
 }
-/* «Aggiorna dalla libreria»: le due anteprime affiancate, della stessa
-   misura, ognuna col suo nome sotto. */
-.draw-symbol-update-pair {
+/* «Aggiorna dalla libreria» e «Rendi modificabile»: le due anteprime
+   affiancate, della stessa misura, ognuna col suo nome sotto. */
+.draw-symbol-update-pair,
+.draw-editable-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-.draw-symbol-update-side {
+.draw-symbol-update-side,
+.draw-editable-side {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   min-width: 0;
   margin: 0;
 }
-.draw-symbol-update-frame {
+.draw-symbol-update-frame,
+.draw-editable-frame {
   display: flex;
   align-items: center;
   justify-content: center;
   aspect-ratio: 4 / 3;
   min-height: 0;
 }
-.draw-symbol-update-preview {
+.draw-symbol-update-preview,
+.draw-editable-preview {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
-.draw-symbol-update-caption {
+.draw-symbol-update-caption,
+.draw-editable-caption {
   overflow-wrap: anywhere;
   text-align: center;
+}
+/* «Rendi modificabile»: gli elenchi di ciò che cambia e di ciò che resta
+   scorrono, e la frase e i pulsanti restano in vista. */
+.draw-editable-details {
+  overflow-y: auto;
+  max-height: 40vh;
+  min-height: 0;
+}
+.draw-editable-list {
+  margin: 0;
+  padding-inline-start: 1.25em;
+}
+.draw-editable-list li {
+  overflow-wrap: anywhere;
 }
 .draw-editor[data-library-drop="copy"],
 .draw-editor[data-library-drop="copy"] * {

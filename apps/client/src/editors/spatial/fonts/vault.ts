@@ -287,13 +287,19 @@ export function namesVault(layer: ImageLayer): boolean {
 }
 
 /// I caratteri di un documento SVG scritto: quelli che i suoi testi
-/// chiedono, e i valori di `font-family` dei suoi attributi.
+/// chiedono, i valori di `font-family` dei suoi attributi, i suoi `style` che
+/// ne dicono uno, e quelli dei suoi fogli di stile.
 export interface MarkupFonts {
   readonly fonts: readonly TextFont[];
   readonly families: readonly string[];
+  /// Gli attributi `style` che dicono `font-family`, ciascuno col valore che
+  /// dice.
+  readonly styles: readonly (readonly [style: string, family: string])[];
+  /// I valori di `font-family` dei fogli di stile.
+  readonly sheets: readonly string[];
 }
 
-const NO_MARKUP: MarkupFonts = { fonts: [], families: [] };
+const NO_MARKUP: MarkupFonts = { fonts: [], families: [], styles: [], sheets: [] };
 
 /// Quanti caratteri, e quanti valori di `font-family`, al più per documento:
 /// un file ostile non ne fa un foglio senza fine.
@@ -303,21 +309,63 @@ const MAX_MARKUP = 256;
 /// testo.
 const markupRead = new Map<string, MarkupFonts>();
 
-/// Le proprietà di carattere di uno `style`: i valori che contano qui.
+/// Una misura in un'unità del carattere, come `3ex` o `2ch`: dipende dalla
+/// faccia, non soltanto dalla dimensione come `em`.
+const FONT_UNIT = /(?:^|[\s,(:])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?r?(?:ex|ch|cap|ic|lh)(?=$|[\s,;)!}])/i;
+
+/// Gli attributi che dicono un nome o un testo, non una misura.
+const isLabel = (name: string): boolean => name === "id" || name === "class" || name.startsWith("data-") || name.startsWith("aria-");
+
+/// Le proprietà di carattere di uno `style`, o di un blocco di un foglio: i
+/// valori che contano qui, senza `!important`.
 function styleDeclarations(style: string): PaintAttr[] {
   const out: PaintAttr[] = [];
   for (const declaration of style.split(";")) {
     const colon = declaration.indexOf(":");
     if (colon < 0) continue;
     const name = declaration.slice(0, colon).trim().toLowerCase();
-    if (name === "font-family" || name === "font-weight" || name === "font-style") out.push([name, declaration.slice(colon + 1).trim()]);
+    if (name === "font-family" || name === "font-weight" || name === "font-style") out.push([name, declaration.slice(colon + 1).replace(/!\s*important\s*$/i, "").trim()]);
   }
   return out;
 }
 
+/// `css` senza i commenti; uno che non si chiude arriva in fondo, come nei
+/// CSS. Una scansione sola: un file ostile non la fa crescere col quadrato.
+function withoutComments(css: string): string {
+  let out = "";
+  let at = 0;
+  for (;;) {
+    const open = css.indexOf("/*", at);
+    if (open < 0) return out + css.slice(at);
+    out += css.slice(at, open);
+    const close = css.indexOf("*/", open + 2);
+    if (close < 0) return out;
+    at = close + 2;
+  }
+}
+
+/// I blocchi di un foglio di stile con proprietà di carattere, senza le
+/// regole `@font-face`, che dicono il nome di una faccia e non lo chiedono.
+/// Un blocco annidato in una regola come `@media` conta come gli altri.
+function sheetBlocks(css: string): PaintAttr[][] {
+  const blocks: PaintAttr[][] = [];
+  for (const chunk of css.split("}")) {
+    const open = chunk.lastIndexOf("{");
+    if (open < 0 || /@font-face\s*$/i.test(chunk.slice(0, open))) continue;
+    const declarations = styleDeclarations(chunk.slice(open + 1));
+    if (declarations.length > 0) blocks.push(declarations);
+  }
+  return blocks;
+}
+
 /// I caratteri dei testi di `svg`, un documento SVG come lo scrive un file:
 /// ereditati come li eredita l'export, dagli attributi e dagli `style` degli
-/// elementi, non dai fogli di stile. Vuoti se `svg` non si legge.
+/// elementi, e quelli che i fogli di stile danno. Un blocco di un foglio non
+/// si lega ai suoi elementi: vale per ogni testo, con la famiglia, il peso e
+/// lo stile che dice al posto di quelli del testo. Un elemento che misura in
+/// un'unità del carattere chiede il suo carattere anche senza testi, e ogni
+/// elemento lo chiede se è un foglio a usarne una. Vuoti se `svg` non si
+/// legge.
 export function markupFonts(svg: string): MarkupFonts {
   const known = markupRead.get(svg);
   if (known !== undefined) return known;
@@ -329,6 +377,14 @@ export function markupFonts(svg: string): MarkupFonts {
   }
   const fonts = new Map<string, TextFont>();
   const families = new Set<string>();
+  const styles = new Map<string, string>();
+  const sheetFamilies = new Set<string>();
+  const add = (font: TextFont): void => {
+    if (fonts.size < MAX_MARKUP) fonts.set(keyOf(font), font);
+  };
+  // I caratteri di tutti gli elementi, se un foglio misura col carattere.
+  const elements = new Map<string, TextFont>();
+  const sheetTexts: string[] = [];
   // Una pila al posto della ricorsione: un documento annidato a fondo non la
   // esaurisce.
   const stack: { readonly id: number; readonly parent: TextFont; readonly inText: boolean }[] = [{ id: doc.root, parent: ROOT_FONT, inText: false }];
@@ -336,23 +392,53 @@ export function markupFonts(svg: string): MarkupFonts {
     const { id, parent, inText } = stack.pop()!;
     const node = doc.nodes[id]!;
     if (node.kind === "text" || node.kind === "cdata" || node.kind === "entity-ref") {
-      if (inText && (node.kind === "entity-ref" || node.value !== "") && fonts.size < MAX_MARKUP) fonts.set(keyOf(parent), parent);
+      if (inText && (node.kind === "entity-ref" || node.value !== "")) add(parent);
       continue;
     }
     if (node.kind !== "element") continue;
+    const svgElement = node.ns === NS_SVG;
     const attrs: PaintAttr[] = [];
+    // Lo `style` vale sopra gli attributi: le sue proprietà vengono dopo.
+    const declared: PaintAttr[] = [];
+    let units = false;
     for (const attr of node.attrs) {
       if (attr.ns !== NS_NONE) continue;
       if (attr.local === "font-family" || attr.local === "font-weight" || attr.local === "font-style") attrs.push([attr.local, attr.value]);
       if (attr.local === "font-family" && families.size < MAX_MARKUP) families.add(attr.value);
+      if (attr.local === "style") {
+        const own = styleDeclarations(attr.value);
+        declared.push(...own);
+        let family: string | null = null;
+        for (const [name, value] of own) if (name === "font-family") family = value;
+        if (family !== null && styles.size < MAX_MARKUP) styles.set(attr.value, family);
+      }
+      if (!units && svgElement && !isLabel(attr.local)) units = FONT_UNIT.test(attr.value);
     }
-    for (const attr of node.attrs) if (attr.ns === NS_NONE && attr.local === "style") attrs.push(...styleDeclarations(attr.value));
+    attrs.push(...declared);
     const font = attrs.length === 0 ? parent : inherit(parent, attrs);
-    const text = inText || (node.ns === NS_SVG && node.local === "text");
+    if (units) add(font);
+    if (svgElement && elements.size < MAX_MARKUP) elements.set(keyOf(font), font);
+    if (svgElement && node.local === "style") {
+      const css: string[] = [];
+      for (const child of node.children) {
+        const inner = doc.nodes[child]!;
+        if (inner.kind === "text" || inner.kind === "cdata") css.push(inner.value);
+      }
+      sheetTexts.push(css.join(""));
+    }
+    const text = inText || (svgElement && node.local === "text");
     // In ordine di documento: il primo figlio esce per primo.
     for (let i = node.children.length - 1; i >= 0; i--) stack.push({ id: node.children[i]!, parent: font, inText: text });
   }
-  const read: MarkupFonts = { fonts: [...fonts.values()], families: [...families] };
+  if (sheetTexts.length > 0) {
+    const css = withoutComments(sheetTexts.join("\n"));
+    if (FONT_UNIT.test(css)) for (const font of elements.values()) add(font);
+    const blocks = sheetBlocks(css);
+    for (const block of blocks) for (const [name, value] of block) if (name === "font-family" && sheetFamilies.size < MAX_MARKUP) sheetFamilies.add(value);
+    const asked = [...fonts.values()];
+    for (const block of blocks) for (const font of asked) add(inherit(font, block));
+  }
+  const read: MarkupFonts = { fonts: [...fonts.values()], families: [...families], styles: [...styles], sheets: [...sheetFamilies] };
   if (markupRead.size >= 16) markupRead.delete(markupRead.keys().next().value!);
   markupRead.set(svg, read);
   return read;

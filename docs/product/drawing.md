@@ -345,7 +345,7 @@ L'Esperto aggiunge gli attributi di ogni oggetto, da leggere e cambiare uno
 per uno, il contorno, le trasformazioni in numeri, «Applica trasformazione»,
 il menu «Tracciato», le operazioni booleane, il Costruttore di forme, lo
 strumento Nodi, la penna di Bézier con la Curvatura, le Forbici, lo Spessore,
-«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault, le ripetizioni: [Disegni, livello Esperto](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [ripetizioni](drawing-repeats.md), [curve e
+«Ricalca immagine», le maschere, il testo in area e su tracciato, gli effetti e la fusione, i motivi del documento, i simboli con le librerie del vault, le ripetizioni, «Rendi modificabile» per le parti di altri programmi: [Disegni, livello Esperto](drawing-expert.md), [motivi](drawing-patterns.md#i-motivi-del-documento), [simboli](drawing-symbols.md), [ripetizioni](drawing-repeats.md), [rendere modificabile](drawing-editable.md), [curve e
 tagli](drawing-curves.md), [spessore variabile](drawing-width.md), [ricalco delle immagini](drawing-trace.md), [maschere](drawing-masks.md#le-maschere), [tipografia](drawing-typography.md#il-testo-in-area), [effetti e fusione](drawing-effects.md).
 
 ## Il livello Personalizzato
@@ -397,7 +397,7 @@ perché non si modifica, in un avviso in cima.
   logo esportato da un altro programma, si mostra come immagine del documento
   intero. «Modifica» lo adotta: aggiunge `xmlns:fub` e `fub:version` alla
   radice e lascia il resto com'è. L'adozione è un passo di annulla; annullarla
-  riporta all'immagine.
+  riporta all'immagine. All'Esperto, accanto, «Rendi modificabile…» adotta il file e nello stesso passo riscrive le sue parti nel formato ([Disegni, rendere modificabile](drawing-editable.md)).
 - **Sola lettura.** Una dichiarazione DOCTYPE, una codifica diversa da UTF-8,
   una versione non valida o più recente, due elementi con lo stesso id, un file
   oltre i limiti dell'editor (`MAX_EDIT_BYTES` e `MAX_ELEMENTS` in

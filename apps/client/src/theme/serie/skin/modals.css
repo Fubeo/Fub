@@ -245,27 +245,55 @@
   color: var(--muted);
   font-size: var(--text-sm);
 }
-/* «Aggiorna dalla libreria»: il simbolo prima e dopo, sullo stesso fondo
-   chiaro dei riquadri del pannello, col nome sotto in tinta tenue. */
-.modale .draw-symbol-update-message {
+/* «Aggiorna dalla libreria» e «Rendi modificabile»: prima e dopo, sullo
+   stesso fondo chiaro dei riquadri del pannello, col nome sotto in tinta
+   tenue. */
+.modale .draw-symbol-update-message,
+.modale .draw-editable-message {
   margin: 0;
 }
-.modale .draw-symbol-update-pair {
+.modale .draw-symbol-update-pair,
+.modale .draw-editable-pair {
   gap: var(--space-3);
 }
-.modale .draw-symbol-update-side {
+.modale .draw-symbol-update-side,
+.modale .draw-editable-side {
   gap: var(--space-1);
 }
-.modale .draw-symbol-update-frame {
+.modale .draw-symbol-update-frame,
+.modale .draw-editable-frame {
   padding: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: #ffffff;
   color: #000000;
 }
-.modale .draw-symbol-update-caption {
+.modale .draw-symbol-update-caption,
+.modale .draw-editable-caption {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+/* Gli elenchi di «Rendi modificabile»: i titoli piccoli, le righe in tinta
+   tenue, l'ultima riga di ciò che non si elenca in corsivo. */
+.modale .draw-editable-details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.modale .draw-editable-heading {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.modale .draw-editable-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .draw-editable-more {
+  font-style: italic;
 }
 /* La finestra «Guide»: le righe in una tabella che scorre, coi titoli delle
    colonne fermi in cima; sotto, i pulsanti che aggiungono una guida o le

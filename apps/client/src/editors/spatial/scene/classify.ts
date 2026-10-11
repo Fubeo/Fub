@@ -437,7 +437,9 @@ const TAGS: ReadonlySet<string> = new Set<Tag>([
   ...(RESOURCE_TAGS as ReadonlySet<ResourceTag>),
 ]);
 
-function tagOf(element: ElementNode): Tag | null {
+/// Il tag del formato di `element`; `null` per un elemento che il formato
+/// non conosce.
+export function tagOf(element: ElementNode): Tag | null {
   return element.ns === NS_SVG && TAGS.has(element.local) ? (element.local as Tag) : null;
 }
 
@@ -883,16 +885,30 @@ function resourceAttribute(tag: ResourceTag, name: string, value: string, box: b
 /// Vero se `element`, una risorsa di tag `tag` in una `defs` della radice, è
 /// modificabile: attributi, figli e riferimenti del suo contenuto.
 function resourceAllowed(doc: XmlDocument, element: ElementNode, tag: ResourceTag, resolve: Resolve): boolean {
+  return resourceFault(doc, element, tag, resolve) === null;
+}
+
+/// Ciò per cui una risorsa non è modificabile: un attributo che il formato
+/// non ammette, uno che vi manca, o un figlio che non va.
+export type ResourceFault =
+  | { readonly kind: "attribute"; readonly name: string }
+  | { readonly kind: "missing"; readonly name: string }
+  | { readonly kind: "child"; readonly tag: string };
+
+/// Il primo [`ResourceFault`] di `element`, una risorsa di tag `tag` in una
+/// `defs` della radice, nell'ordine in cui il formato la giudica; `null` se è
+/// modificabile.
+export function resourceFault(doc: XmlDocument, element: ElementNode, tag: ResourceTag, resolve: Resolve): ResourceFault | null {
   const id = valueOf(element, NS_NONE, "id");
-  if (id === undefined || id === "") return false;
+  if (id === undefined || id === "") return { kind: "missing", name: "id" };
   const unitsName = UNITS[tag];
   const units = unitsName === undefined ? undefined : valueOf(element, NS_NONE, unitsName);
   const box = units === undefined || trim(units) !== "userSpaceOnUse";
-  const attributes = element.attrs.every((attr) => {
-    if (attr.ns === NS_NONE) return !hasUrl(attr.value) && resourceAttribute(tag, attr.local, attr.value, box);
-    return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
+  const wrong = element.attrs.find((attr) => {
+    if (attr.ns === NS_NONE) return hasUrl(attr.value) || !resourceAttribute(tag, attr.local, attr.value, box);
+    return attr.ns === NS_XLINK || attr.ns === NS_SVG;
   });
-  if (!attributes) return false;
+  if (wrong !== undefined) return { kind: "attribute", name: wrong.name };
   // Una sfumatura con uno `stop` o nessuno è un colore pieno, o niente: le
   // sue coordinate non contano, nemmeno quelle del viewport.
   const stops = element.children.filter((child) => {
@@ -900,19 +916,32 @@ function resourceAllowed(doc: XmlDocument, element: ElementNode, tag: ResourceTa
     return stop !== null && isSvg(stop, "stop");
   }).length;
   const plain = (tag === "linearGradient" || tag === "radialGradient") && stops <= 1;
-  if (!box && !plain && REQUIRED[tag]?.some((name) => valueOf(element, NS_NONE, name) === undefined)) return false;
+  const missing = box || plain ? undefined : REQUIRED[tag]?.find((name) => valueOf(element, NS_NONE, name) === undefined);
+  if (missing !== undefined) return { kind: "missing", name: missing };
+  let child: NodeId | null;
   switch (tag) {
     case "linearGradient":
     case "radialGradient":
-      return stopsAllowed(doc, element);
+      child = stopsFault(doc, element);
+      break;
     case "filter":
-      return primitivesAllowed(doc, element);
+      child = primitivesFault(doc, element);
+      break;
     default: {
       const inner = gradientsOnly(resolve);
       const clip = tag === "clipPath";
-      return element.children.every((child) => contentAllowed(doc, child, clip, inner, 1));
+      child = element.children.find((each) => !contentAllowed(doc, each, clip, inner, 1)) ?? null;
     }
   }
+  return child === null ? null : { kind: "child", tag: nodeName(doc, child) };
+}
+
+/// Il nome di un nodo per dirlo: il tag di un elemento, `#text` per il
+/// testo, `#comment` per un commento.
+function nodeName(doc: XmlDocument, id: NodeId): string {
+  const node = doc.nodes[id]!;
+  if (node.kind === "element") return node.name;
+  return node.kind === "cdata" || node.kind === "entity-ref" ? "#text" : `#${node.kind}`;
 }
 
 /// Vero se `element`, un `path` in una `defs` della radice, è il tracciato di
@@ -947,18 +976,19 @@ function blankOrMeta(doc: XmlDocument, child: NodeId): boolean | null {
   return tag === "title" || tag === "desc" ? allowedPart(doc, child, false, NO_RESOURCES) : null;
 }
 
-/// Vero se i figli di una sfumatura sono ammessi: `stop`, al più
-/// [`MAX_STOPS`], ognuno con `offset`, `stop-color` e `stop-opacity`.
-function stopsAllowed(doc: XmlDocument, element: ElementNode): boolean {
+/// Il primo figlio di una sfumatura che non è ammesso, `null` se lo sono
+/// tutti: `stop`, al più [`MAX_STOPS`], ognuno con `offset`, `stop-color` e
+/// `stop-opacity`.
+function stopsFault(doc: XmlDocument, element: ElementNode): NodeId | null {
   let stops = 0;
   for (const child of element.children) {
     const plain = blankOrMeta(doc, child);
     if (plain !== null) {
-      if (!plain) return false;
+      if (!plain) return child;
       continue;
     }
     const stop = doc.element(child)!;
-    if (!isSvg(stop, "stop") || ++stops > MAX_STOPS) return false;
+    if (!isSvg(stop, "stop") || ++stops > MAX_STOPS) return child;
     const attributes = stop.attrs.every((attr) => {
       if (attr.ns !== NS_NONE) return attr.ns !== NS_XLINK && attr.ns !== NS_SVG;
       switch (attr.local) {
@@ -980,9 +1010,9 @@ function stopsAllowed(doc: XmlDocument, element: ElementNode): boolean {
       const node = doc.nodes[inner]!;
       return node.kind === "text" && node.blank;
     });
-    if (!attributes || !empty) return false;
+    if (!attributes || !empty) return child;
   }
-  return true;
+  return null;
 }
 
 /// Vero se `id`, nel contenuto di una risorsa, è ammesso: spazi, `title`,
@@ -1095,26 +1125,26 @@ function primitiveAllowed(doc: XmlDocument, element: ElementNode, results: Reado
   });
 }
 
-/// Vero se i figli di un filtro sono ammessi: primitive dell'elenco, al più
-/// [`MAX_PRIMITIVES`] coi `feMergeNode`, ognuna con ingressi che vengono
-/// prima.
-function primitivesAllowed(doc: XmlDocument, element: ElementNode): boolean {
+/// Il primo figlio di un filtro che non è ammesso, `null` se lo sono tutti:
+/// primitive dell'elenco, al più [`MAX_PRIMITIVES`] coi `feMergeNode`,
+/// ognuna con ingressi che vengono prima.
+function primitivesFault(doc: XmlDocument, element: ElementNode): NodeId | null {
   const results = new Set<string>();
   let count = 0;
   for (const child of element.children) {
     const plain = blankOrMeta(doc, child);
     if (plain !== null) {
-      if (!plain) return false;
+      if (!plain) return child;
       continue;
     }
     const primitive = doc.element(child)!;
-    if (primitive.ns !== NS_SVG || !PRIMITIVES.has(primitive.local)) return false;
+    if (primitive.ns !== NS_SVG || !PRIMITIVES.has(primitive.local)) return child;
     count += 1 + primitive.children.filter((inner) => doc.element(inner) !== null).length;
-    if (count > MAX_PRIMITIVES || !primitiveAllowed(doc, primitive, results)) return false;
+    if (count > MAX_PRIMITIVES || !primitiveAllowed(doc, primitive, results)) return child;
     const result = valueOf(primitive, NS_NONE, "result");
     if (result !== undefined) results.add(result);
   }
-  return true;
+  return null;
 }
 
 /// Gli id a cui gli attributi di `element` rimandano, come li legge S014:

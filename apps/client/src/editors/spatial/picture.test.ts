@@ -59,9 +59,9 @@ describe("i caratteri dentro l'SVG", () => {
     const { fontFaces } = await import("./picture");
     const read = vi.fn(async (_url: string) => new Blob(["F"]));
     const css = await fontFaces(SVG('<text font-family="Arial, sans-serif">a</text><text>b</text><g font-family="monospace"><text>c</text></g>'), read);
-    expect(css).toContain(':root{font-synthesis:none}:root:not([font-family]){font-family:Literata, Inter, "JetBrains Mono"}');
-    expect(css).toContain('[font-family="Arial, sans-serif"]{font-family:Inter, Literata, "JetBrains Mono"}');
-    expect(css).toContain('[font-family="monospace"]{font-family:"JetBrains Mono", Literata, Inter}');
+    expect(css).toContain(':root{font-synthesis:none}:where(:root:not([font-family])){font-family:Literata, Inter, "JetBrains Mono"}');
+    expect(css).toContain(':where([font-family="Arial, sans-serif"]){font-family:Inter, Literata, "JetBrains Mono"}');
+    expect(css).toContain(':where([font-family="monospace"]){font-family:"JetBrains Mono", Literata, Inter}');
     // Ogni testo trova la sua prima famiglia di Fub: Inter al posto di
     // Arial, Literata dove nessuno la dice, JetBrains Mono dal gruppo.
     expect(read.mock.calls.map(([url]) => url)).toEqual([
@@ -71,11 +71,61 @@ describe("i caratteri dentro l'SVG", () => {
     ]);
   });
 
+  it("una misura col carattere porta il carattere anche senza testi", async () => {
+    vi.resetModules();
+    const { fontFaces } = await import("./picture");
+    const css = await fontFaces(SVG('<rect width="3ex" height="3ex"/>'), async () => new Blob(["L"]));
+    expect(css).toContain(':where(:root:not([font-family])){font-family:Literata, Inter, "JetBrains Mono"}');
+    expect(css).toContain('@font-face{font-family:"Literata";src:url(data:font/woff2;base64,TA==)');
+  });
+
+  it("uno style dice la famiglia dell'export, e vince come lo style", async () => {
+    vi.resetModules();
+    const { fontFaces } = await import("./picture");
+    const css = await fontFaces(SVG('<text font-family="Inter" style="font-size:12px;font-family:sans-serif">a</text><text style="font-family: \'Un &lt;nome&gt;\'">b</text>'), async () => new Blob(["F"]));
+    expect(css).toContain('[style="font-size:12px;font-family:sans-serif"]{font-family:Inter, Literata, "JetBrains Mono"!important}');
+    expect(css).toContain('[style="font-family: \'Un \\3c nome\\3e \'"]{font-family:Literata, Inter, "JetBrains Mono"!important}');
+    expect(css).not.toMatch(/[<>&]/);
+  });
+
+  it("i caratteri dei fogli di stile entrano, e un nome che il browser cercherebbe nel sistema prende la faccia dell'export", async () => {
+    vi.resetModules();
+    const { fontFaces, fontSheets, FUB_PICTURE_FAMILIES } = await import("./picture");
+    const read = vi.fn(async (url: string) => new Blob([url.includes("inter") ? (url.includes("italic") ? "C" : "I") : "L"]));
+    const css = await fontFaces(
+      SVG('<style>.m text{font-family:"trebuchet ms", verdana, arial, sans-serif}.c{font-family:Helvetica, Inter}.g{font-family:sans-serif}.f{font-family:Inter}</style><g class="m"><text>Inizio</text><text font-style="italic">b</text></g>'),
+      read,
+    );
+    expect(css).toContain('@font-face{font-family:"Inter";src:url(data:font/woff2;base64,SQ==) format("woff2");font-weight:100 900;}');
+    expect(css).toContain('@font-face{font-family:"trebuchet ms";src:url(data:font/woff2;base64,SQ==) format("woff2");font-weight:100 900;}');
+    expect(css).toContain('@font-face{font-family:"trebuchet ms";src:url(data:font/woff2;base64,Qw==) format("woff2");font-weight:100 900;font-style:italic;}');
+    expect(css).toContain('@font-face{font-family:"Helvetica";src:url(data:font/woff2;base64,SQ==) format("woff2");font-weight:100 900;}');
+    expect(css).toContain('@font-face{font-family:"Helvetica";src:url(data:font/woff2;base64,Qw==) format("woff2");font-weight:100 900;font-style:italic;}');
+    // Una generica resta del browser, una famiglia di Fub ha già la sua faccia.
+    expect(css.match(/@font-face/g)).toHaveLength(8);
+    // Una famiglia del vault che viene prima del carattere di Fub tiene il posto.
+    const families = { ...FUB_PICTURE_FAMILIES, picture: (value: string) => (value === "Avenir, Roboto, sans-serif" ? 'Roboto, Inter, Literata, "JetBrains Mono"' : FUB_PICTURE_FAMILIES.picture(value)) };
+    const vault = await fontSheets(families, read).load(SVG('<style>text{font-family:Avenir, Roboto, sans-serif}</style><text>e</text>'));
+    expect(vault).not.toContain('"Avenir"');
+  });
+
+  it("i nomi che prendono una faccia di Fub stanno sotto il loro tetto", async () => {
+    vi.resetModules();
+    const { fontFaces, MAX_FONT_SHEET_BYTES } = await import("./picture");
+    const big = new Blob([new Uint8Array(100 * 1024)]);
+    const rules = ["Uno", "Due", "Tre", "Quattro"].map((name, i) => `.n${i}{font-family:${name}}`).join("");
+    const css = await fontFaces(SVG(`<style>${rules}</style><text>x</text>`), async () => big);
+    expect(css).toContain('@font-face{font-family:"Uno";');
+    expect(css).toContain('@font-face{font-family:"Due";');
+    expect(css).not.toContain('@font-face{font-family:"Tre";');
+    expect(css.length).toBeLessThanOrEqual(2 * MAX_FONT_SHEET_BYTES);
+  });
+
   it("un nome con le virgolette o coi segni del markup resta dentro lo stile", async () => {
     vi.resetModules();
     const { fontFaces } = await import("./picture");
     const css = await fontFaces(SVG('<text font-family=\'Un "&lt;nome&gt;" &amp; altro\'>a</text>'), async () => new Blob(["F"]));
-    expect(css).toContain('[font-family="Un \\"\\3c nome\\3e \\" \\26  altro"]{font-family:Literata, Inter, "JetBrains Mono"}');
+    expect(css).toContain(':where([font-family="Un \\"\\3c nome\\3e \\" \\26  altro"]){font-family:Literata, Inter, "JetBrains Mono"}');
     expect(css).not.toMatch(/[<>&]/);
   });
 
@@ -117,7 +167,7 @@ describe("i caratteri dentro l'SVG", () => {
     expect(sheets.now(svg)).toBeNull();
     const css = await sheets.load(svg);
     expect(ready).toHaveBeenCalledWith([expect.objectContaining({ family: "Roboto, sans-serif", weight: 700, style: "normal" })]);
-    expect(css).toContain('[font-family="Roboto, sans-serif"]{font-family:Roboto, Inter, Literata, "JetBrains Mono"}');
+    expect(css).toContain(':where([font-family="Roboto, sans-serif"]){font-family:Roboto, Inter, Literata, "JetBrains Mono"}');
     expect(css).toContain('@font-face{font-family:"Roboto";src:url(data:application/octet-stream;base64,Ug==)');
     // Il ripiego di Fub entra comunque: Inter, la generica di Roboto.
     expect(css).toContain('@font-face{font-family:"Inter";src:');

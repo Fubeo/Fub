@@ -24,8 +24,8 @@
 //   e si ricordano, così un disegno con centomila gruppi annidati non esaurisce
 //   la pila.
 
-import { compose, IDENTITY, type Matrix } from "../scene/matrix";
-import { NAMED_COLORS, transform as svgTransform } from "../scene/values";
+import { compose, IDENTITY, translate, type Matrix } from "../scene/matrix";
+import { length as svgLength, NAMED_COLORS, transform as svgTransform, viewBox as readViewBox, viewBoxMatrix } from "../scene/values";
 import { SVG_NS } from "../scene/xml";
 import { formatNumber } from "../number";
 import { Matcher, readDeclarations, type Declaration, type Maybe, type Rule, type Sheet, type StyleNode } from "./selectors";
@@ -69,11 +69,28 @@ export interface World {
   readonly sym: string;
 }
 
+/// La finestra di un `svg` dentro il disegno, nelle coordinate del genitore:
+/// dove sta, larga e alta, la trasformazione che vi porta ciò che contiene e
+/// la misura su cui ciò che contiene conta le percentuali.
+export interface Window {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  readonly m: Matrix;
+  readonly inner: readonly [number, number];
+}
+
 /// Un'opacità accumulata dalla radice, come `World`.
 export interface Alpha {
   readonly a: number;
   readonly sym: string;
 }
+
+/// Ciò che un elemento riceve per ogni proprietà al posto di ciò che gli dà
+/// il genitore; `null` per una che il contesto non dà: allora il valore
+/// iniziale, o nessuno per una variabile.
+export type Context = (p: string) => Value | null;
 
 /// Le proprietà che si ereditano.
 export const INHERITED: ReadonlySet<string> = new Set([
@@ -154,7 +171,7 @@ const INITIAL: Readonly<Record<string, string>> = {
 
 /// Le proprietà che si scrivono come attributi di presentazione, su ogni
 /// elemento SVG.
-const PRESENTATION: ReadonlySet<string> = new Set([
+export const PRESENTATION: ReadonlySet<string> = new Set([
   "alignment-baseline", "baseline-shift", "clip-path", "clip-rule", "color", "color-interpolation", "color-interpolation-filters",
   "color-rendering", "cursor", "direction", "display", "dominant-baseline", "fill", "fill-opacity", "fill-rule", "filter", "flood-color",
   "flood-opacity", "font-family", "font-size", "font-size-adjust", "font-stretch", "font-style", "font-variant", "font-weight",
@@ -582,6 +599,22 @@ export function cssTransform(text: string): Matrix | null {
   return m;
 }
 
+/// L'origine di una trasformazione in misure assolute, `[x, y]`; `null` se
+/// dipende dal riquadro, come le percentuali, `center`, `right`, `bottom` o un
+/// valore solo, che mette l'altro al centro. Un numero senza unità vale solo
+/// scritto come attributo.
+export function cssOrigin(text: string, unitless: boolean): readonly [number, number] | null {
+  const tokens = text.trim().toLowerCase().split(/\s+/);
+  if (tokens.length < 2 || tokens.length > 3) return null;
+  const size = (token: string): number | null => (unitless && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/.test(token) ? Number(token) : pixels(token));
+  if (tokens.length === 3 && size(tokens[2]!) !== 0) return null;
+  const [first, second] = tokens as [string, string];
+  if (first === "top" && second === "left") return [0, 0];
+  const x = first === "left" ? 0 : size(first);
+  const y = second === "top" ? 0 : size(second);
+  return x === null || y === null ? null : [x, y];
+}
+
 function cssStep(name: string, args: readonly string[]): Matrix | null {
   const numbers = (): number[] | null => {
     const out = args.map((arg) => (/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(arg) ? Number(arg) : NaN));
@@ -659,7 +692,12 @@ export class Cascade {
   private readonly values = new Map<CascadeNode, Map<string, Value>>();
   private readonly worlds = new Map<CascadeNode, World>();
   private readonly alphas = new Map<CascadeNode, Alpha>();
+  private readonly windows = new Map<CascadeNode, Window | null>();
   private readonly resolving = new Set<string>();
+  /// I contesti: ciò che un elemento riceve al posto di ciò che gli dà il
+  /// genitore, come il contenuto di un simbolo lo riceve dal `use` che lo
+  /// mostra.
+  private readonly contexts = new Map<CascadeNode, Context>();
   /// Le proprietà dichiarate da qualche parte, sciolte.
   readonly declared: ReadonlySet<string>;
 
@@ -690,8 +728,17 @@ export class Cascade {
       this.values.delete(at);
       this.worlds.delete(at);
       this.alphas.delete(at);
+      this.windows.delete(at);
       for (const child of at.children) stack.push(child);
     }
+  }
+
+  /// Dà a `node` il contesto `context`, al posto del genitore; `null` glielo
+  /// toglie.
+  setContext(node: CascadeNode, context: Context | null): void {
+    if (context === null) this.contexts.delete(node);
+    else this.contexts.set(node, context);
+    this.forget(node);
   }
 
   /// Le dichiarazioni dell'attributo `style` di `node`.
@@ -820,8 +867,19 @@ export class Cascade {
     return value;
   }
 
+  /// Il valore di `p` che `node` riceve dal genitore, o dal suo contesto.
+  received(node: CascadeNode, p: string): Value {
+    return this.parentValue(node, p);
+  }
+
   /// Il valore di `p` che `node` riceve dal genitore.
   private parentValue(node: CascadeNode, p: string): Value {
+    const context = this.contexts.get(node);
+    if (context !== undefined) {
+      const value = context(p);
+      if (value === null) return p.startsWith("--") ? MISSING : { ...this.initial(p), own: false };
+      return { ...value, own: false };
+    }
     if (node.parent === null) return this.initial(p);
     return { ...this.value(node.parent, p), own: false };
   }
@@ -1010,20 +1068,131 @@ export class Cascade {
       const keyword = text.trim().toLowerCase();
       m = keyword === "initial" || keyword === "unset" || keyword === "revert" ? IDENTITY : keyword === "inherit" || keyword === "revert-layer" ? null : cssTransform(text);
     }
-    // Un'origine o un riquadro che non sono quelli di SVG spostano il punto
-    // fermo della trasformazione, e non si sanno calcolare.
+    // Un'origine in misure assolute sposta il punto fermo della
+    // trasformazione; una che dipende dal riquadro, o un riquadro che non è
+    // quello di SVG, non si sa calcolare.
     if (m !== null && !same(m, IDENTITY)) {
-      const origin = this.declared.has("transform-origin") ? this.won(node, "transform-origin").text : null;
-      const box = this.declared.has("transform-box") ? this.won(node, "transform-box").text : null;
-      if (origin !== null && !/^\s*(?:0(?:px)?\s+0(?:px)?|left\s+top|top\s+left)\s*$/i.test(origin)) m = null;
-      if (box !== null && !/^\s*view-box\s*$/i.test(box)) m = null;
+      const origin = this.declared.has("transform-origin") ? this.won(node, "transform-origin") : null;
+      const box = this.declared.has("transform-box") ? this.won(node, "transform-box") : null;
+      if (box !== null && box.text !== null && (box.marks.length > 0 || !/^\s*view-box\s*$/i.test(box.text))) m = null;
+      else if (origin !== null && origin.text !== null) {
+        const at = origin.marks.length > 0 || hasVar(origin.text) ? null : cssOrigin(origin.text, origin.from === "attr");
+        m = at === null ? null : compose(compose(translate(at[0], at[1]), m), translate(-at[0], -at[1]));
+      }
     }
     for (const name of ["translate", "rotate", "scale"]) {
       if (!this.declared.has(name)) continue;
       const other = this.won(node, name).text;
       if (other !== null && !/^\s*(?:none|initial|unset|revert)\s*$/i.test(other)) m = null;
     }
+    // Un `svg` dentro il disegno porta ciò che contiene nella sua finestra,
+    // dopo la sua trasformazione.
+    if (m !== null && node.local === "svg" && node.parent !== null) {
+      const window = this.window(node);
+      m = window === null ? null : compose(m, window.m);
+    }
     return { m, text, css };
+  }
+
+  /// Il valore di `p` che vince su `node`, com'è scritto: `null` se nessuno
+  /// lo scrive; col dubbio, se dipende da un selettore che non si sa leggere.
+  written(node: CascadeNode, p: string): { readonly text: string | null; readonly doubt: Doubt | null } {
+    const won = this.won(node, p);
+    return { text: won.text, doubt: won.marks.length > 0 ? won.doubt ?? { kind: "selector", text: won.marks[0]! } : null };
+  }
+
+  /// La finestra su cui si misurano le percentuali di `node`, larga e alta:
+  /// quella dell'`svg` più vicino che lo contiene, o della radice; `null` se
+  /// non si sa.
+  viewport(node: CascadeNode): readonly [number, number] | null {
+    for (let at = node.parent; at !== null; at = at.parent) {
+      if (!isSvg(at)) continue;
+      // Il contenuto di un simbolo conta sul suo `viewBox`; senza, sulla
+      // finestra di ogni `use` che lo mostra, che qui non si sa.
+      if (at.local === "symbol") return boxOf(at);
+      if (at.local !== "svg") continue;
+      return at.parent === null ? rootViewport(at) : this.window(at)?.inner ?? null;
+    }
+    return rootViewport(this.root);
+  }
+
+  /// Una lunghezza di `p` su `node`, coi valori che non dicono niente come
+  /// `fallback` e le percentuali di `base`; `null` se non si sa.
+  private lengthIn(node: CascadeNode, p: string, fallback: string, base: number | undefined): number | null {
+    const value = this.value(node, p);
+    if (value.doubt !== null) return null;
+    const text = value.text === null || /^\s*(?:auto|initial|unset|revert)\s*$/i.test(value.text) ? fallback : value.text;
+    const percent = /^\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)%\s*$/i.exec(text);
+    if (percent === null) return svgLength(text);
+    return base === undefined ? null : (Number(percent[1]) * base) / 100;
+  }
+
+  /// Lo spostamento di un `use`: `x` e `y`, misurati nella sua finestra;
+  /// `null` se non si sa.
+  useOffset(use: CascadeNode): readonly [number, number] | null {
+    const outer = this.viewport(use);
+    const x = this.lengthIn(use, "x", "0", outer?.[0]);
+    const y = this.lengthIn(use, "y", "0", outer?.[1]);
+    return x === null || y === null ? null : [x, y];
+  }
+
+  /// La finestra in cui un `use` mostra `symbol`: dove la sposta il `use`,
+  /// larga e alta come dice il `use`, o il simbolo, o tutta la finestra del
+  /// `use`, col `viewBox` e il `preserveAspectRatio` del simbolo. `null` se
+  /// non si sa calcolare o se non mostra niente.
+  useWindow(use: CascadeNode, symbol: CascadeNode): Window | null {
+    const offset = this.useOffset(use);
+    if (offset === null) return null;
+    const outer = this.viewport(use);
+    const [x, y] = offset;
+    const size = (p: string, base: number | undefined): number | null => {
+      const own = this.value(use, p);
+      const auto = own.doubt === null && (own.text === null || /^\s*(?:auto|initial|unset|revert)\s*$/i.test(own.text));
+      return auto ? this.lengthIn(symbol, p, "100%", base) : this.lengthIn(use, p, "100%", base);
+    };
+    const width = size("width", outer?.[0]);
+    const height = size("height", outer?.[1]);
+    if (width === null || height === null || width <= 0 || height <= 0) return null;
+    const attr = (local: string): string | undefined => symbol.attrs.find((each) => each.uri === "" && each.local === local)?.value;
+    const boxText = attr("viewBox");
+    const box = boxText === undefined ? null : readViewBox(boxText);
+    if (box === null) return { x, y, width, height, m: [1, 0, 0, 1, x, y], inner: [width, height] };
+    if (box[2] <= 0 || box[3] <= 0) return null;
+    const m = compose(translate(x, y), viewBoxMatrix(box, width, height, attr("preserveAspectRatio") ?? ""));
+    return { x, y, width, height, m, inner: [box[2], box[3]] };
+  }
+
+  /// La finestra di `node`, un `svg` dentro il disegno: `x`, `y`, `width` e
+  /// `height` nella finestra del genitore, `viewBox` e
+  /// `preserveAspectRatio`; `null` se non lo è, se non si sa calcolare o se
+  /// non disegna niente.
+  window(node: CascadeNode): Window | null {
+    if (!isSvg(node) || node.local !== "svg" || node.parent === null) return null;
+    const known = this.windows.get(node);
+    if (known !== undefined) return known;
+    const outer = this.viewport(node);
+    const read = (p: string, fallback: string, base: number | undefined): number | null => this.lengthIn(node, p, fallback, base);
+    const x = read("x", "0", outer?.[0]);
+    const y = read("y", "0", outer?.[1]);
+    const width = read("width", "100%", outer?.[0]);
+    const height = read("height", "100%", outer?.[1]);
+    let out: Window | null = null;
+    if (x !== null && y !== null && width !== null && height !== null && width > 0 && height > 0) {
+      const attr = (local: string): string | undefined => node.attrs.find((each) => each.uri === "" && each.local === local)?.value;
+      const boxText = attr("viewBox");
+      if (boxText === undefined) out = { x, y, width, height, m: [1, 0, 0, 1, x, y], inner: [width, height] };
+      else {
+        // Un `viewBox` che non si legge non c'è; uno vuoto non disegna niente.
+        const box = readViewBox(boxText);
+        if (box === null) out = { x, y, width, height, m: [1, 0, 0, 1, x, y], inner: [width, height] };
+        else if (box[2] > 0 && box[3] > 0) {
+          const m = compose(translate(x, y), viewBoxMatrix(box, width, height, attr("preserveAspectRatio") ?? ""));
+          out = { x, y, width, height, m, inner: [box[2], box[3]] };
+        }
+      }
+    }
+    this.windows.set(node, out);
+    return out;
   }
 
   /// La trasformazione accumulata dalla radice fino a `node` compreso.
@@ -1066,6 +1235,31 @@ export class Cascade {
     }
     return out;
   }
+}
+
+/// Il valore di `p` scritto `text` su un elemento da solo, come lo calcola la
+/// cascata: per dare un contesto.
+export function plainValue(p: string, text: string): Value {
+  const node: CascadeNode = { uri: SVG_NS, local: "g", attrs: [{ uri: "", local: p, value: text }], parent: null, children: [], text: false };
+  return new Cascade({ rules: [], selectors: [], deep: false, imports: [] }, node, () => "plain", new Set()).value(node, p);
+}
+
+/// La finestra del contenuto di un `symbol`, larga e alta: il suo `viewBox`;
+/// `null` se non ne ha uno che si legge.
+function boxOf(symbol: CascadeNode): readonly [number, number] | null {
+  const box = readViewBox(symbol.attrs.find((each) => each.uri === "" && each.local === "viewBox")?.value ?? "");
+  return box !== null && box[2] > 0 && box[3] > 0 ? [box[2], box[3]] : null;
+}
+
+/// La finestra della radice, larga e alta: il `viewBox`, o `width` e
+/// `height` in misure assolute; `null` se non si sa.
+function rootViewport(root: CascadeNode): readonly [number, number] | null {
+  const attr = (local: string): string => root.attrs.find((each) => each.uri === "" && each.local === local)?.value ?? "";
+  const box = readViewBox(attr("viewBox"));
+  if (box !== null && box[2] > 0 && box[3] > 0) return [box[2], box[3]];
+  const w = svgLength(attr("width"));
+  const h = svgLength(attr("height"));
+  return w !== null && h !== null && w > 0 && h > 0 ? [w, h] : null;
 }
 
 /// La prima virgola di `text` fuori dalle parentesi; -1 se non c'è.

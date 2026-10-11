@@ -158,11 +158,12 @@ export default defineConfig({
           // sfumatura, la campitura, gli effetti e il connettore, gli oggetti,
           // le tavole, la cronologia, l'accessibilità, l'ispettore degli
           // attributi, la finestra «Esporta», le forme e i simboli, con la
-          // finestra dell'aggiornamento di un simbolo. Sono DOM attorno al
+          // finestra dell'aggiornamento di un simbolo, e la finestra di
+          // «Rendi modificabile». Sono DOM attorno al
           // foglio, che l'editor e la superficie montano e che leggono i
           // comandi; non dipendono dall'editor, e cambiano con la loro
           // interfaccia.
-          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog)\.ts$/.test(id)) {
+          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog|editable-dialog)\.ts$/.test(id)) {
             return "drawing-panels";
           }
           if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {

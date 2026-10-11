@@ -6,7 +6,10 @@
 // tondo o in corsivo come lui, e le facce del vault che il disegno ha già
 // caricato. Lo stesso foglio dà a ogni `font-family` la famiglia che userebbe
 // l'export, come sulla superficie: quelle di Fub al posto delle generiche,
-// Literata dove nessuno la dice, mai un carattere del sistema. La Lettura,
+// Literata dove nessuno la dice, mai un carattere del sistema: le regole
+// sugli attributi pesano quanto gli attributi, sotto i fogli del documento;
+// quelle sugli `style` vincono come lo `style`; un nome che un foglio dà
+// prende la faccia di Fub che l'export userebbe. La Lettura,
 // gli strati immagine del foglio, l'anteprima dell'export, gli embed delle
 // note e il PNG copiato scrivono così con gli stessi caratteri del foglio. Il
 // file non cambia.
@@ -16,7 +19,8 @@
 //   riprova la volta dopo.
 // - **Un tetto.** I caratteri dell'app pesano al più
 //   [`MAX_FONT_SHEET_BYTES`], tanto in più tiene in memoria ogni immagine che
-//   li porta tutti; quelli del vault, al più il tetto del disegno.
+//   li porta tutti; i nomi dei fogli che prendono una faccia di Fub, al più
+//   altrettanto; quelli del vault, al più il tetto del disegno.
 //
 // Una nota può incorporare una sezione sola del disegno, `![[disegno#nome]]`:
 // il titolo è il disegno intero, e una tavola è il disegno ritagliato su di
@@ -27,7 +31,7 @@ import { boardBox } from "./scene/classify";
 import { openSource, ReadError, readScene, type Scene } from "./scene/read";
 import { SourceText } from "./scene/text";
 import { attrOf, isSvg, NS_NONE, parseXml, type ElementNode } from "./scene/xml";
-import { cssString, fubLiveFamily, shownFamily } from "./fonts/faces";
+import { cssString, familyName, fubFamily, fubLiveFamily, parseFamilies, shownFamily } from "./fonts/faces";
 import { markupFonts, type TextFont } from "./fonts/vault";
 import { FONT_FILES } from "./tools/text";
 
@@ -87,8 +91,54 @@ function fubFiles(fonts: readonly TextFont[]): FontFile[] {
   return FONT_FILES.filter((file) => out.has(file));
 }
 
-const fontRule = ([family, url, weight, style]: FontFile): string =>
-  `@font-face{font-family:"${family}";src:url(${fontData.get(url)}) format("woff2");font-weight:${weight};${style === "normal" ? "" : `font-style:${style};`}}`;
+/// La regola del file `file`, già letto, col nome `name`: quello della sua
+/// famiglia, se non se ne dà un altro.
+const fontRule = ([family, url, weight, style]: FontFile, name = `"${family}"`): string =>
+  `@font-face{font-family:${name};src:url(${fontData.get(url)}) format("woff2");font-weight:${weight};${style === "normal" ? "" : `font-style:${style};`}}`;
+
+/// I nomi che non sono famiglie da dare a una faccia: le generiche dei CSS che
+/// l'export non conosce, e le parole che valgono per ogni proprietà.
+const NOT_FACES: ReadonlySet<string> = new Set(["system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded", "math", "emoji", "fangsong", "inherit", "initial", "unset", "revert", "revert-layer", "default"]);
+
+/// Il primo nome di `value` se il browser lo cercherebbe fra i caratteri del
+/// sistema: non una generica, non una famiglia di Fub.
+function systemName(value: string): string | null {
+  const first = parseFamilies(value)?.[0];
+  if (first === undefined || "generic" in first) return null;
+  const name = familyName(first);
+  return name === "" || fubFamily(name) !== null || NOT_FACES.has(name.toLowerCase()) ? null : name;
+}
+
+/// Le facce dei nomi che i fogli di stile del documento danno ai testi
+/// `fonts`, i valori `sheets`: nessuna regola li riscrive, perché non si sa
+/// a quali elementi vanno, e il browser li cercherebbe fra i caratteri del
+/// sistema. Il primo nome di un valore, se non è di Fub, prende la faccia di
+/// Fub che l'export userebbe, coi byte già letti, quando nessuna famiglia del
+/// vault viene prima; al più [`MAX_FONT_SHEET_BYTES`] per immagine,
+/// nell'ordine dei testi. Una generica resta del browser.
+function aliasRules(fonts: readonly TextFont[], sheets: readonly string[], families: PictureFamilies): string[] {
+  const values = new Set(sheets);
+  const rules: string[] = [];
+  const done = new Set<string>();
+  let bytes = 0;
+  for (const font of fonts) {
+    if (!values.has(font.family)) continue;
+    const name = systemName(font.family);
+    if (name === null) continue;
+    const first = parseFamilies(families.picture(font.family))?.[0];
+    const target = first === undefined || "generic" in first ? null : fubFamily(familyName(first));
+    const style = font.style === "normal" ? "normal" : "italic";
+    const file = FONT_FILES.find((each) => each[0] === target && each[3] === style);
+    const key = `${name.toLowerCase()}\u0000${style}`;
+    if (file === undefined || !fontData.has(file[1]) || done.has(key)) continue;
+    const rule = fontRule(file, cssString(name));
+    if (bytes + rule.length > MAX_FONT_SHEET_BYTES) continue;
+    done.add(key);
+    bytes += rule.length;
+    rules.push(rule);
+  }
+  return rules;
+}
 
 /// Il data URI dei byte `blob`, col tipo `type`.
 function blobUri(blob: Blob, type: string): Promise<string | null> {
@@ -130,18 +180,24 @@ async function readFiles(files: readonly FontFile[], read: (url: string) => Prom
 /// Il foglio dei caratteri dei testi di `svg`. Le regole sulle `font-family`
 /// danno a ogni testo la famiglia che l'export userebbe, con quelle di Fub al
 /// posto delle generiche e Literata dove nessuno la dice, come sulla
-/// superficie; poi i file dell'app e le facce del vault che servono. Nessun
-/// grassetto o corsivo si inventa. Con `strict`, `null` se un file o una
-/// faccia non è ancora pronta; altrimenti senza.
+/// superficie. Quelle sugli attributi pesano quanto un attributo, con
+/// `:where`, e un foglio del documento che dice un'altra famiglia vince come
+/// vince sull'attributo; quelle sugli `style`, uno per uno, vincono con
+/// `!important` come vince lo `style`. Poi i file dell'app, le facce dei
+/// nomi dei fogli, e le facce del vault che servono. Nessun grassetto o
+/// corsivo si inventa. Con `strict`, `null` se un file o una faccia non è
+/// ancora pronta; altrimenti senza.
 function sheet(svg: string, families: PictureFamilies, strict: boolean): string | null {
-  const { fonts, families: written } = markupFonts(svg);
+  const { fonts, families: written, styles, sheets } = markupFonts(svg);
   if (fonts.length === 0) return "";
-  const rules = [`:root{font-synthesis:none}:root:not([font-family]){font-family:${families.picture("")}}`];
-  for (const value of written) rules.push(`[font-family=${cssString(value)}]{font-family:${families.picture(value)}}`);
+  const rules = [`:root{font-synthesis:none}:where(:root:not([font-family])){font-family:${families.picture("")}}`];
+  for (const value of written) rules.push(`:where([font-family=${cssString(value)}]){font-family:${families.picture(value)}}`);
+  for (const [style, value] of styles) rules.push(`[style=${cssString(style)}]{font-family:${families.picture(value)}!important}`);
   for (const file of fubFiles(fonts)) {
     if (fontData.has(file[1])) rules.push(fontRule(file));
     else if (strict) return null;
   }
+  rules.push(...aliasRules(fonts, sheets, families));
   const faces = families.faces(fonts, strict);
   if (faces === null) return null;
   rules.push(faces);

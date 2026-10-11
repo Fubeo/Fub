@@ -8,7 +8,9 @@
 // resa. Le forme delle raccolte (basi, diagrammi di flusso, fumetti, frecce
 // e fogli di scuola) sono scritte da chi le inserisce nel disegno, non a mano.
 // I modelli di «Nuovo disegno» sono i file che il crate distribuisce, più grandi
-// della resa: ognuno si guarda tutto da una finestra (`view`).
+// della resa: ognuno si guarda tutto da una finestra (`view`). Le parti di
+// altri programmi tornano, con le altre che «Rendi modificabile» riscrive,
+// nelle scene che il banco rende modificabili (`editable`).
 
 import type { Bounds } from "../src/editors/spatial/scene/geometry";
 import { SceneEngine } from "../src/editors/spatial/scene/engine";
@@ -55,6 +57,11 @@ export interface FidelityScene {
   /// Se la scena usa i caratteri del vault del banco, la famiglia «Banco»
   /// (`fidelity.ts`).
   readonly vault?: true;
+  /// Per un disegno con parti di altri programmi: il banco lo rende
+  /// modificabile tutto, come «Rendi modificabile il disegno…», le tre
+  /// strade mostrano il disegno di dopo, e il foglio si confronta anche col
+  /// disegno di prima. Quante parti diventano modificabili e quante restano.
+  readonly editable?: { readonly converted: number; readonly left: number };
 }
 
 /// Gli id delle forme delle raccolte, in fila: la scena è la stessa a ogni
@@ -166,6 +173,93 @@ const FROM_TEMPLATES: readonly FidelityScene[] = [
   { id: "modello-lavagna", text: template("lesson"), view: [0, -100, 1920] },
   { id: "modello-storyboard", text: template("storyboard"), view: [0, -853, 5920] },
   { id: "modello-mappa", text: template("concept-map"), view: [200, 100, 1200] },
+];
+
+/// Gli estranei tipici: un livello di Inkscape con lo stile in linea, le
+/// classi di Illustrator, i selettori di Mermaid.
+const INKSCAPE = scene('<sodipodi:namedview xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" pagecolor="#ffffff"/>'
+  + '<g xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" inkscape:groupmode="layer" inkscape:label="Layer 1" id="layer1">'
+  + '<path style="fill:#2b6cb0;stroke:#1a202c;stroke-width:2;stroke-dasharray:6,3" d="M 20,20 H 120 V 90 H 20 Z" id="rect1"/>'
+  + '<circle style="fill:#f6ad55;fill-opacity:0.7" cx="160" cy="90" r="50" id="c1"/>'
+  + '<text style="font-family:Inter;font-size:18px;fill:#1a202c" x="24" y="140" id="tx1">Inkscape</text></g>');
+const ILLUSTRATOR = scene('<style>.st0{fill:#c53030;}.st1{fill:none;stroke:#2f855a;stroke-width:4;stroke-dasharray:10 5;}.st2{font-family:Literata;font-size:20px;}</style>'
+  + '<rect class="st0" x="16" y="16" width="90" height="60"/><circle class="st1" cx="170" cy="56" r="40"/>'
+  + '<text class="st2" x="16" y="130">Illustrator</text>');
+const MERMAID = scene('<style>#m .node rect{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#m .label{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:14px;fill:#333;}#m .edge{stroke:#333;stroke-width:2px;fill:none;}</style>'
+  + '<g id="m"><g class="node"><rect x="10" y="50" width="90" height="40" rx="5"/><text class="label" x="55" y="75" text-anchor="middle">Inizio</text></g>'
+  + '<path class="edge" d="M 100 70 L 140 70"/><path d="M 140 64 L 150 70 L 140 76 Z" fill="#333"/>'
+  + '<g class="node"><rect x="150" y="50" width="80" height="40" rx="5"/><text class="label" x="190" y="75" text-anchor="middle">Fine</text></g></g>');
+
+/// Un SVG di un altro programma grande quanto la resa: senza `fub:version`,
+/// come un file che FubDraw non ha fatto.
+const foreign = (body: string): string => '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"'
+  + ` width="${FIDELITY_SIZE.width}" height="${FIDELITY_SIZE.height}" viewBox="0 0 ${FIDELITY_SIZE.width} ${FIDELITY_SIZE.height}">${body}</svg>`;
+
+/// Le scene che il banco rende modificabili: gli estranei tipici, e una
+/// scena per ogni altra traduzione di «Rendi modificabile» (i colori di
+/// CSS, le misure relative, gli `svg` annidati, le sfumature a catena e
+/// fuori dalla `defs`, i `use` di Feather, le righe di Inkscape, i nomi di
+/// Illustrator). Dove una parte resta, il resto si vede come prima anche
+/// accanto a lei.
+const EDITABLE: readonly FidelityScene[] = [
+  { id: "modificabile-inkscape", text: INKSCAPE, editable: { converted: 3, left: 0 } },
+  { id: "modificabile-illustrator", text: ILLUSTRATOR, editable: { converted: 3, left: 0 } },
+  { id: "modificabile-mermaid", text: MERMAID, editable: { converted: 3, left: 0 } },
+  {
+    id: "modificabile-colori",
+    text: foreign('<rect x="10" y="10" width="60" height="40" fill="rgb(43, 108, 176)"/>'
+      + '<circle cx="120" cy="30" r="22" fill="hsl(30, 90%, 65%)" stroke="rgba(26, 32, 44, 0.6)" stroke-width="4"/>'
+      + '<rect x="170" y="10" width="60" height="40" style="fill:rebeccapurple;fill-opacity:0.5"/>'
+      + '<g color="#2f855a"><path d="M10 80 L70 80 L40 140 Z" fill="transparent" stroke="currentColor" stroke-width="3"/>'
+      + '<circle cx="120" cy="110" r="25" fill="currentColor"/></g>'
+      + '<switch><rect x="170" y="80" width="60" height="60" fill="#c53030"/></switch>'),
+    editable: { converted: 4, left: 1 },
+  },
+  {
+    id: "modificabile-misure",
+    text: foreign('<rect x="5%" y="10%" width="25%" height="2em" fill="#2b6cb0"/>'
+      + '<circle cx="50%" cy="25%" r="1.5em" fill="#f6ad55"/>'
+      + '<text x="10" y="120" font-family="Inter" font-size="1.5em" fill="#1a202c">Misure</text>'
+      + '<rect x="160" y="90" width="3ex" height="3ex" fill="#c53030"/>'),
+    editable: { converted: 3, left: 1 },
+  },
+  {
+    id: "modificabile-annidati",
+    text: foreign('<svg x="10" y="10" width="100" height="60" viewBox="0 0 50 30"><rect x="5" y="5" width="40" height="20" fill="#2b6cb0"/></svg>'
+      + '<svg x="130" y="10" width="100" height="100" viewBox="0 0 20 10" preserveAspectRatio="xMidYMid meet"><circle cx="10" cy="5" r="4" fill="#2f855a"/></svg>'
+      + '<svg x="20" y="90" width="80" height="60"><rect x="-10" y="-10" width="120" height="40" fill="#c53030"/></svg>'),
+    editable: { converted: 3, left: 0 },
+  },
+  {
+    id: "modificabile-sfumature",
+    text: foreign('<defs><linearGradient id="base"><stop offset="0" stop-color="#2b6cb0"/><stop offset="1" stop-color="#f6ad55"/></linearGradient>'
+      + '<linearGradient id="obliqua" xlink:href="#base" x1="0" y1="0" x2="1" y2="1"/></defs>'
+      + '<rect x="10" y="10" width="100" height="70" fill="url(#obliqua)"/>'
+      + '<radialGradient id="tonda" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#2f855a"/></radialGradient>'
+      + '<circle cx="170" cy="60" r="45" fill="url(#tonda)"/>'),
+    editable: { converted: 4, left: 0 },
+  },
+  {
+    id: "modificabile-simboli",
+    text: foreign('<defs><symbol id="stella" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">'
+      + '<path d="M12 2L15 9L22 9L16 14L18 21L12 17L6 21L8 14L2 9L9 9Z"/></symbol></defs>'
+      + '<use href="#stella" x="10" y="10" width="48" height="48" style="color:#c53030"/>'
+      + '<use href="#stella" x="80" y="20" width="96" height="96" style="color:#c53030"/>'),
+    editable: { converted: 3, left: 0 },
+  },
+  {
+    id: "modificabile-testi",
+    text: foreign('<text xml:space="preserve" style="font-size:16px;font-family:Inter;fill:#1a202c" x="12" y="30" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">'
+      + '<tspan sodipodi:role="line" x="12" y="30">Prima riga</tspan><tspan sodipodi:role="line" x="12" y="50">seconda riga</tspan></text>'
+      + '<text x="120" y="100" style="font-family:Literata;font-size:20px;fill:#2b6cb0">Titolo</text>'),
+    editable: { converted: 2, left: 0 },
+  },
+  {
+    id: "modificabile-dati",
+    text: foreign('<g data-name="Livello 1"><rect data-name="Sfondo" x="10" y="10" width="220" height="140" fill="#bee3f8"/>'
+      + '<circle aria-label="Sole" cx="180" cy="50" r="24" fill="#f6ad55" data-x="1"/></g>'),
+    editable: { converted: 1, left: 0 },
+  },
 ];
 
 export const FIDELITY: readonly FidelityScene[] = [
@@ -488,27 +582,9 @@ export const FIDELITY: readonly FidelityScene[] = [
       + '<text id="w5" x="400" y="56" font-family="Literata" font-size="22" text-anchor="middle" fill="#1a202c"><tspan x="400" dy="0">Evaporazione</tspan></text></g>',
     root(520, 200)),
   },
-  {
-    id: "inkscape",
-    text: scene('<sodipodi:namedview xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" pagecolor="#ffffff"/>'
-      + '<g xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" inkscape:groupmode="layer" inkscape:label="Layer 1" id="layer1">'
-      + '<path style="fill:#2b6cb0;stroke:#1a202c;stroke-width:2;stroke-dasharray:6,3" d="M 20,20 H 120 V 90 H 20 Z" id="rect1"/>'
-      + '<circle style="fill:#f6ad55;fill-opacity:0.7" cx="160" cy="90" r="50" id="c1"/>'
-      + '<text style="font-family:Inter;font-size:18px;fill:#1a202c" x="24" y="140" id="tx1">Inkscape</text></g>'),
-  },
-  {
-    id: "illustrator",
-    text: scene('<style>.st0{fill:#c53030;}.st1{fill:none;stroke:#2f855a;stroke-width:4;stroke-dasharray:10 5;}.st2{font-family:Literata;font-size:20px;}</style>'
-      + '<rect class="st0" x="16" y="16" width="90" height="60"/><circle class="st1" cx="170" cy="56" r="40"/>'
-      + '<text class="st2" x="16" y="130">Illustrator</text>'),
-  },
-  {
-    id: "mermaid",
-    text: scene('<style>#m .node rect{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#m .label{font-family:Inter;font-size:14px;fill:#333;}#m .edge{stroke:#333;stroke-width:2px;fill:none;}</style>'
-      + '<g id="m"><g class="node"><rect x="10" y="50" width="90" height="40" rx="5"/><text class="label" x="55" y="75" text-anchor="middle">Inizio</text></g>'
-      + '<path class="edge" d="M 100 70 L 140 70"/><path d="M 140 64 L 150 70 L 140 76 Z" fill="#333"/>'
-      + '<g class="node"><rect x="150" y="50" width="80" height="40" rx="5"/><text class="label" x="190" y="75" text-anchor="middle">Fine</text></g></g>'),
-  },
+  { id: "inkscape", text: INKSCAPE },
+  { id: "illustrator", text: ILLUSTRATOR },
+  { id: "mermaid", text: MERMAID },
   {
     // Le etichette nelle forme, dove le mette FubDraw: un rettangolo, un
     // testo su due righe in un'ellisse, un rettangolo tondo e girato, che
@@ -580,4 +656,5 @@ export const FIDELITY: readonly FidelityScene[] = [
   },
   ...FROM_LIBRARY,
   ...FROM_TEMPLATES,
+  ...EDITABLE,
 ];
