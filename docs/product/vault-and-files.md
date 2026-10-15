@@ -220,14 +220,33 @@ posto che ricorda da dove veniva. Se non si scrive, la nota torna dov'era e la
 cancellazione fallisce con l'errore. Una nota della radice si cestina lo stesso,
 perché il nome basta a riportarla.
 
-Finché una nota sta nel cestino, i suoi dati per-documento restano: la raccolta
-degli spazi orfani li conserva. Una voce senza sidecar, come quelle cestinate
-da Obsidian, non dice la sua cartella: la raccolta conserva i dati di ogni nota
-con quel nome, in qualunque cartella. Se il disco non sa dire se il cestino c'è, se
-il cestino non si elenca, o se un sidecar presente non si legge o viene da una
-versione più nuova di Fub, la raccolta si ferma invece di indovinare da quale
-cartella venisse la nota. Anche l'elenco del cestino risponde con l'errore
-invece di mostrarsi vuoto.
+Finché una nota sta nel cestino, i suoi dati per-documento restano, ma non sotto
+il suo path: il path è l'identità di una nota viva, e una nota cestinata lo
+lascia libero. La cestinatura li parcheggia sotto l'identità che la voce ha nel
+cestino e mette nel sidecar l'organizzazione della nota (icona, posto fra le
+appuntate, posto nell'ordine della sua cartella); la storia delle versioni
+segue la stessa regola. Una nota nuova che riprende quel path parte quindi da
+zero, senza ereditare niente da quella cestinata, e un ripristino altrove non
+porta via ciò che appartiene alla nota che ha preso il path. Il ripristino
+riporta tutto sotto il path d'arrivo, anche se non è quello d'origine; se lì
+c'è già uno spazio per-documento vale la regola delle rinomine
+(`~displaced`), e un'icona già scelta per la nota che occupa quel path non si
+sovrascrive. L'ordine a mano torna soltanto se la nota rientra nella stessa
+cartella.
+
+La raccolta degli spazi orfani conserva lo stato parcheggiato di ogni voce che
+è ancora nel cestino e toglie quello delle altre. Una voce cestinata da una
+versione precedente di Fub, o senza sidecar come quelle cestinate da Obsidian,
+non ha parcheggiato niente e non dice la sua cartella: la raccolta conserva i
+dati di ogni nota con quel nome, in qualunque cartella. Al ripristino di una voce
+così i dati seguono la nota solo se il path d'origine è libero; se lo occupa una
+nota viva Fub non indovina di chi siano, li lascia dove stanno e lo dice con un
+avviso. Lo stesso vale per la cancellazione fatta con `trash.os`: lo stato resta
+sotto il path d'origine. Se il disco non sa dire se il cestino c'è, se il cestino
+non si elenca, o se un sidecar presente non si legge o viene da una versione più
+nuova di Fub, la raccolta si ferma invece di indovinare da quale cartella
+venisse la nota. Anche l'elenco del cestino risponde con l'errore invece di
+mostrarsi vuoto.
 
 L'impostazione di vault `files.trash` sceglie dove finisce una nota cancellata
 dalla shell. `vault` (default) usa il cestino interno. `system` usa il comando

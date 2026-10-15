@@ -39,6 +39,19 @@
 //!   **a mentire**: nessun tombstone, quindi una nota cancellata risulterebbe
 //!   ancora viva.
 //!
+//! # Una nota cestinata non ha più il suo path
+//!
+//! La storia è per path, e il path di una nota cestinata torna libero: chi lo
+//! riprende è un'altra nota, e se la storia restasse sotto quel path
+//! comincerebbe da quella della prima (il primo salvataggio *«fa tornare in vita»*
+//! la chiave, e ci aggiunge le sue versioni). Quando arriva il
+//! [`Event::DocumentRemoved`] di una nota che il cestino ha preso, la storia
+//! passa quindi sotto l'identità che la voce ha lì dentro, la stessa con cui il
+//! kernel annuncerà il ritorno ([`Event::DocumentRenamed`] dalla voce al path
+//! d'arrivo): resta leggibile lì, e al ripristino segue la nota dovunque vada.
+//! Se la voce non si trova — una cancellazione che il cestino non ha visto, un
+//! cestino illeggibile — vale il comportamento di sempre: un tombstone sul path.
+//!
 //! Per questo l'handler è abbonato anche a [`EventKind::Overflow`] e riconcilia:
 //! `IndexQuery::Entries` elenca i file correnti, e ciò che lo store crede vivo e il
 //! vault non ha più prende un tombstone. La frattura da rename perso degrada a
@@ -119,6 +132,12 @@ const INDEX_UNWRITABLE: &str = "index_unwritable";
 /// rete di sicurezza di chi scrive, e perderla vuol dire perdere la possibilità
 /// di tornare a quel punto.
 const VERSION_UNSAVED: &str = "version_unsaved";
+/// Quanto può essere vecchia una voce del cestino perché la si riconosca come
+/// quella di una cancellazione che l'handler sta ricevendo: gli eventi si
+/// consegnano subito dopo l'operazione, e una voce più vecchia di così è di
+/// un'altra nota.
+const TRASH_RECENT_SECS: u64 = 600;
+
 /// Il tombstone di un documento non è stato scritto: la sua storia resta viva
 /// quando dovrebbe essere chiusa. `Failure` (0052).
 const TOMBSTONE_UNWRITABLE: &str = "tombstone_unwritable";
@@ -908,6 +927,15 @@ impl VersionStore {
             .docs
             .get(id.as_str())
             .is_some_and(|d| !d.versions.is_empty())
+    }
+
+    /// Lo store conserva qualcosa per questo documento?
+    pub fn holds(&self, id: &DocId) -> bool {
+        self.inner
+            .lock()
+            .expect("mutex")
+            .docs
+            .contains_key(id.as_str())
     }
 
     /// I documenti di cui lo store conserva qualcosa. Utile alle diagnostiche e
@@ -1780,6 +1808,37 @@ impl VersioningHandler {
         }
     }
 
+    /// Una nota che non c'è più: se l'ha presa il cestino, la sua storia le va
+    /// dietro (vedi «Una nota cestinata non ha più il suo path» in testa).
+    fn bury(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let Some(trashed) = self.trash_entry_of(id, host) else {
+            return self.store.tombstone(id, host);
+        };
+        self.store.rename(id, &trashed, host)?;
+        self.store.tombstone(&trashed, host)
+    }
+
+    /// La voce del cestino che ha appena preso `id`, se si riconosce.
+    ///
+    /// Il cestino può avere più voci con lo stesso path d'origine: serve quella
+    /// **di adesso**, e le altre sono già state prese da chi le ha viste
+    /// arrivare (la loro chiave sta nello store) oppure sono vecchie. Una
+    /// cancellazione senza voce — il file è sparito da fuori, mentre nel cestino
+    /// c'è una nota più vecchia che veniva dallo stesso path — non deve
+    /// attribuire la storia di una nota alla voce di un'altra: per questo la voce
+    /// dev'essere recente, e nessuno deve già averla presa.
+    fn trash_entry_of(&self, id: &DocId, host: &dyn HostApi) -> Option<DocId> {
+        let now = host.now_unix_millis() / 1_000;
+        host.list_trash()
+            .ok()?
+            .into_iter()
+            .filter(|entry| &entry.original == id)
+            .filter(|entry| now.saturating_sub(entry.deleted_at) <= TRASH_RECENT_SECS)
+            .filter(|entry| !self.store.holds(&entry.id))
+            .max_by_key(|entry| entry.deleted_at)
+            .map(|entry| entry.id)
+    }
+
     /// Riconciliazione dopo un [`Event::Overflow`]: la coda è stata troncata e
     /// non si sa *cosa* si è perso, quindi si riparte dalla verità.
     ///
@@ -1883,7 +1942,7 @@ impl EventHandler for VersioningHandler {
                 self.store.rename(from, to, host)?;
             }
             Event::DocumentRemoved { id } | Event::EntryRemoved { id, .. } => {
-                self.store.tombstone(id, host)?;
+                self.bury(id, host)?;
             }
             Event::Overflow { .. } => self.reconcile_after_overflow(host)?,
             _ => {}

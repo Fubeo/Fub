@@ -147,10 +147,54 @@ pub(crate) fn migrate(
     from: &DocId,
     to: &DocId,
 ) -> Migration {
+    migrate_between(storage, roots, from, &|root| {
+        (space_dir(root, from), space_dir(root, to))
+    })
+}
+
+/// **Mette al sicuro lo spazio di una nota che entra nel cestino**, sotto
+/// l'identità che la voce ha lì dentro (`trash`).
+///
+/// Il path di `doc` da questo momento è libero, e chi lo riprende non è la
+/// nota di prima: se lo spazio restasse sotto il path, la nuova nota lo
+/// erediterebbe e un ripristino altrove porterebbe via anche ciò che lei ha
+/// scritto per sé (FUB-003). Stessa meccanica di [`migrate`] — passa di lato,
+/// non cancella, nomina ciò che sposta —, un altro percorso.
+pub(crate) fn park(
+    storage: &dyn VaultStorage,
+    roots: &[Utf8PathBuf],
+    doc: &DocId,
+    trash: &DocId,
+) -> Migration {
+    migrate_between(storage, roots, doc, &|root| {
+        (space_dir(root, doc), parked_dir(root, trash))
+    })
+}
+
+/// Il contrario di [`park`]: lo spazio che la voce `trash` aveva parcheggiato
+/// torna sotto il path `to` che la nota riprende nel vault.
+pub(crate) fn unpark(
+    storage: &dyn VaultStorage,
+    roots: &[Utf8PathBuf],
+    trash: &DocId,
+    to: &DocId,
+) -> Migration {
+    migrate_between(storage, roots, trash, &|root| {
+        (parked_dir(root, trash), space_dir(root, to))
+    })
+}
+
+/// Sposta uno spazio da `route(root).0` a `route(root).1` in **ogni** spazio
+/// dati di plugin. `subject` è la nota di cui si dice nei messaggi.
+fn migrate_between(
+    storage: &dyn VaultStorage,
+    roots: &[Utf8PathBuf],
+    subject: &DocId,
+    route: &dyn Fn(&Utf8Path) -> (Utf8PathBuf, Utf8PathBuf),
+) -> Migration {
     let mut migration = Migration::default();
     for root in roots {
-        let source = space_dir(root, from);
-        let destination = space_dir(root, to);
+        let (source, destination) = route(root);
         let aside = move_aside(&source);
         let plugin = root.file_name().unwrap_or(root.as_str());
         // Un file sotto il nome di uno spazio non è uno spazio: non lo scrive
@@ -210,7 +254,7 @@ pub(crate) fn migrate(
                 if let Some(displaced) = &displaced {
                     migration.messages.push(format!(
                         "{plugin}: {destination} already held another document space; \
-                         it was moved to {displaced} to make room for the data of {from}"
+                         it was moved to {displaced} to make room for the data of {subject}"
                     ));
                 }
                 migration.moved.push(Moved {
@@ -468,10 +512,69 @@ pub(crate) fn collect(
     Ok(removed_count)
 }
 
+/// Toglie lo spazio parcheggiato ([`park`]) delle voci che nel cestino non ci
+/// sono più. Restituisce quanti ne ha tolti.
+///
+/// `in_trash` risponde a una domanda sola: *questa voce è ancora nel cestino?*
+/// Una nota cestinata è recuperabile, e il suo stato con lei: è lo stesso
+/// patto di [`collect`], su un altro spazio. Una voce che non c'è più è stata
+/// svuotata, o ripristinata da una copia di Fub che non conosce il parcheggio,
+/// o tolta a mano: in nessuno dei tre casi c'è un documento a cui riportarlo.
+///
+/// Come per [`collect`], si tocca soltanto ciò che questa convenzione ha
+/// scritto, e un guasto che non sia «non c'è» risale.
+pub(crate) fn collect_parked(
+    storage: &dyn VaultStorage,
+    roots: &[Utf8PathBuf],
+    in_trash: &dyn Fn(&DocId) -> bool,
+) -> crate::Result<usize> {
+    let mut removed_count = 0usize;
+    for root in roots {
+        let base = root.join(doc_data::PARKED_SPACE);
+        let Some(entries) =
+            crate::error::optional(storage.list(&base)).map_err(|and| crate::KernelError::Io {
+                path: base.clone(),
+                source: and,
+            })?
+        else {
+            continue;
+        };
+        for entry in entries {
+            let Some(name) = entry.path.file_name() else {
+                continue;
+            };
+            if entry.stat.kind != EntryKind::Dir
+                || doc_data::encode(&doc_data::decode(name)) != name
+                || name.ends_with(ASIDE_SUFFIX)
+            {
+                continue;
+            }
+            if in_trash(&DocId::new(doc_data::decode(name))) {
+                continue;
+            }
+            storage
+                .remove_dir_all(&entry.path)
+                .map_err(|and| crate::KernelError::Io {
+                    path: entry.path.clone(),
+                    source: and,
+                })?;
+            removed_count += 1;
+        }
+    }
+    Ok(removed_count)
+}
+
 /// La cartella di `doc` dentro lo spazio dati di **un** plugin.
 fn space_dir(root: &Utf8Path, doc: &DocId) -> Utf8PathBuf {
     root.join(doc_data::DOC_SPACE)
         .join(doc_data::encode(doc.as_str()))
+}
+
+/// La cartella che lo spazio di una nota occupa **mentre è nel cestino**, dentro
+/// lo spazio dati di un plugin: `doc~trash/<voce del cestino codificata>`.
+fn parked_dir(root: &Utf8Path, trash: &DocId) -> Utf8PathBuf {
+    root.join(doc_data::PARKED_SPACE)
+        .join(doc_data::encode(trash.as_str()))
 }
 
 #[cfg(test)]
