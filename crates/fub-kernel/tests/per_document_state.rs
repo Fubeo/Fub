@@ -91,6 +91,16 @@ fn read_data_item(root: &Utf8PathBuf, plugin: &str, rel: &str) -> Option<Vec<u8>
     std::fs::read(data_root(root).join("plugins").join(plugin).join(rel)).ok()
 }
 
+/// Dove sta lo stato `name` di una nota **mentre è nel cestino**: sotto
+/// l'identità della voce, non sotto il suo vecchio path (FUB-003).
+fn parked_rel(trashed: &DocId, name: &str) -> String {
+    format!(
+        "{}{}",
+        doc_data::parked_space(trashed),
+        doc_data::encode(name)
+    )
+}
+
 fn notes(ws: &mut Workspace, id: &str, text: &str) -> DocId {
     let doc = DocId::new(id);
     ws.write_document(&doc, text, WriteBase::Dictated)
@@ -240,14 +250,26 @@ fn also_the_restore_on_a_other_path_and_a_rename() {
     // occupato, l'app ne sceglie un altro — e allora la chiave è cambiata. È il
     // caso che il §13.2 nominava come «rename a tutti gli effetti, anche se il
     // documento non era indicizzato».
+    //
+    // **Ma di chi sono i dati?** Prima questo banco controllava soltanto che
+    // quelli della nota ripristinata la seguissero, e non guardava l'altra:
+    // quella che nel frattempo aveva preso il path d'origine. Il difetto stava
+    // lì (FUB-003) — la migrazione portava via tutto ciò che stava sotto il
+    // path, quindi anche ciò che la nuova nota aveva scritto per sé.
     let (_g, root, mut ws) = vault();
     let original = notes(&mut ws, "Nota.md", "prima");
     let rel = doc_data::path(&original, "stato.bin");
     write_data_item(&root, OFF, &rel, b"conservami");
 
     let trashed = ws.delete_document(&original).expect("cestina");
-    // Qualcun altro riprende il path.
-    notes(&mut ws, "Nota.md", "un'altra");
+    // Qualcun altro riprende il path, e scrive il suo stato.
+    let usurper = notes(&mut ws, "Nota.md", "un'altra");
+    write_data_item(
+        &root,
+        OFF,
+        &doc_data::path(&usurper, "suo.bin"),
+        b"non-toccarmi",
+    );
 
     let returned =
         restore_document(&mut ws, &trashed, Some(DocId::new("Nota 1.md"))).expect("ripristino");
@@ -257,6 +279,315 @@ fn also_the_restore_on_a_other_path_and_a_rename() {
         read_data_item(&root, OFF, &doc_data::path(&returned, "stato.bin")).as_deref(),
         Some(&b"conservami"[..]),
         "il ripristino su un altro path non ha portato dietro i dati"
+    );
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&usurper, "suo.bin")).as_deref(),
+        Some(&b"non-toccarmi"[..]),
+        "il ripristino ha portato via lo stato della nota che aveva preso il path"
+    );
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&returned, "suo.bin")),
+        None,
+        "la nota ripristinata ha ricevuto lo stato di un'altra"
+    );
+}
+
+/// Il difetto FUB-003 nella forma più semplice: **chi prende un path libero
+/// non eredita ciò che la nota di prima ci aveva lasciato**, e quella di prima
+/// lo ritrova intero al ripristino.
+#[test]
+fn the_note_that_takes_a_freed_path_starts_without_the_state_of_the_trashed_one() {
+    let (_g, root, mut ws) = vault();
+    let first = notes(&mut ws, "Nota.md", "prima");
+    write_data_item(
+        &root,
+        OFF,
+        &doc_data::path(&first, "stato.bin"),
+        b"della-prima",
+    );
+
+    let trashed = ws.delete_document(&first).expect("cestina");
+
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&first, "stato.bin")),
+        None,
+        "una nota cestinata lascia il path libero, e lo stato sotto quel path \
+         sarebbe di chi lo prende"
+    );
+    assert_eq!(
+        read_data_item(&root, OFF, &parked_rel(&trashed, "stato.bin")).as_deref(),
+        Some(&b"della-prima"[..]),
+        "lo stato della nota cestinata sta sotto l'identità che ha nel cestino"
+    );
+
+    let second = notes(&mut ws, "Nota.md", "seconda");
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&second, "stato.bin")),
+        None,
+        "la nota nuova ha ereditato lo stato di quella cestinata"
+    );
+
+    // E il ripristino sul path d'origine, una volta libero, riporta lo stato.
+    ws.delete_document(&second).expect("cestina la seconda");
+    let returned = restore_document(&mut ws, &trashed, None).expect("ripristino");
+    assert_eq!(returned, first);
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&returned, "stato.bin")).as_deref(),
+        Some(&b"della-prima"[..]),
+        "il ripristino sul path d'origine non ha riportato lo stato"
+    );
+    assert_eq!(
+        read_data_item(&root, OFF, &parked_rel(&trashed, "stato.bin")),
+        None,
+        "lo stato è tornato sotto il path: non deve restare anche parcheggiato"
+    );
+}
+
+/// Due note cestinate **dallo stesso path**, una dopo l'altra: ognuna ha il
+/// suo stato e lo riavrà, nell'ordine che si vuole e dove si vuole.
+#[test]
+fn two_notes_trashed_from_the_same_path_each_get_back_their_own_state() {
+    let (_g, root, mut ws) = vault();
+    let first = notes(&mut ws, "Nota.md", "prima");
+    write_data_item(
+        &root,
+        OFF,
+        &doc_data::path(&first, "stato.bin"),
+        b"della-prima",
+    );
+    let first_trash = ws.delete_document(&first).expect("cestina la prima");
+
+    let second = notes(&mut ws, "Nota.md", "seconda");
+    write_data_item(
+        &root,
+        OFF,
+        &doc_data::path(&second, "stato.bin"),
+        b"della-seconda",
+    );
+    let second_trash = ws.delete_document(&second).expect("cestina la seconda");
+
+    let b = restore_document(&mut ws, &second_trash, Some(DocId::new("Seconda.md")))
+        .expect("ripristino della seconda");
+    let a = restore_document(&mut ws, &first_trash, Some(DocId::new("Prima.md")))
+        .expect("ripristino della prima");
+
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&a, "stato.bin")).as_deref(),
+        Some(&b"della-prima"[..])
+    );
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&b, "stato.bin")).as_deref(),
+        Some(&b"della-seconda"[..])
+    );
+}
+
+/// Simula una voce **cestinata da una copia di Fub che non parcheggiava**: il
+/// sidecar non dice che lo stato è stato portato via, e lo stato sta ancora
+/// sotto il path d'origine.
+fn as_trashed_by_an_older_fub(
+    root: &Utf8PathBuf,
+    trashed: &DocId,
+    original: &DocId,
+    rels: &[&str],
+) {
+    let name = trashed.as_str().rsplit('/').next().expect("un nome");
+    let sidecar = data_root(root).join("trash").join(format!("{name}.json"));
+    let mut json: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&sidecar).expect("il sidecar")).expect("json");
+    json.as_object_mut().expect("un oggetto").remove("parked");
+    std::fs::write(&sidecar, serde_json::to_vec(&json).expect("json")).expect("riscrive");
+    // Lo stato che una copia vecchia avrebbe lasciato sotto il path.
+    for rel in rels {
+        let bytes =
+            read_data_item(root, OFF, &parked_rel(trashed, rel)).expect("lo stato parcheggiato");
+        write_data_item(root, OFF, &doc_data::path(original, rel), &bytes);
+    }
+    let space = data_root(root)
+        .join("plugins")
+        .join(OFF)
+        .join(doc_data::PARKED_SPACE);
+    std::fs::remove_dir_all(space).expect("toglie il parcheggio");
+}
+
+/// Una voce di prima del parcheggio, con il path d'origine **libero**: lo
+/// stato sta sotto il path e nessun altro può averlo scritto, quindi la
+/// rinomina lo porta dietro com'è sempre stato.
+#[test]
+fn an_older_entry_with_its_path_still_free_keeps_following_the_rename() {
+    let (_g, root, mut ws) = vault();
+    let original = notes(&mut ws, "Nota.md", "prima");
+    write_data_item(
+        &root,
+        OFF,
+        &doc_data::path(&original, "stato.bin"),
+        b"della-prima",
+    );
+    let trashed = ws.delete_document(&original).expect("cestina");
+    as_trashed_by_an_older_fub(&root, &trashed, &original, &["stato.bin"]);
+
+    let returned =
+        restore_document(&mut ws, &trashed, Some(DocId::new("Altro.md"))).expect("ripristino");
+
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&returned, "stato.bin")).as_deref(),
+        Some(&b"della-prima"[..]),
+        "una voce di prima non ha più seguito il suo stato"
+    );
+}
+
+/// Una voce di prima del parcheggio, con il path d'origine **occupato**: lo
+/// stato sotto il path può essere di una nota o dell'altra, e non c'è modo di
+/// saperlo. Non si indovina: resta dov'è, e lo si dice.
+#[test]
+fn an_older_entry_with_its_path_taken_does_not_guess_whose_state_it_is() {
+    let (_g, root, mut ws) = vault();
+    let original = notes(&mut ws, "Nota.md", "prima");
+    write_data_item(
+        &root,
+        OFF,
+        &doc_data::path(&original, "stato.bin"),
+        b"incerto",
+    );
+    let trashed = ws.delete_document(&original).expect("cestina");
+    as_trashed_by_an_older_fub(&root, &trashed, &original, &["stato.bin"]);
+    let usurper = notes(&mut ws, "Nota.md", "un'altra");
+
+    let returned =
+        restore_document(&mut ws, &trashed, Some(DocId::new("Altro.md"))).expect("ripristino");
+
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&usurper, "stato.bin")).as_deref(),
+        Some(&b"incerto"[..]),
+        "lo stato di un path occupato è stato portato via a chi lo occupa"
+    );
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&returned, "stato.bin")),
+        None,
+        "uno stato di cui non si sa il padrone è finito a una delle due"
+    );
+    assert!(
+        ws.doc_data_warnings()
+            .iter()
+            .any(|warning| warning.contains("Nota.md")),
+        "non si indovina, ma lo si dice: {:?}",
+        ws.doc_data_warnings()
+    );
+}
+
+/// La raccolta riguarda anche lo spazio parcheggiato: **toglie quello di una
+/// voce che non è più nel cestino, e non tocca quello di chi c'è ancora.**
+#[test]
+fn the_collection_sweeps_the_parked_state_of_emptied_entries_and_only_those() {
+    let (_g, root, mut ws) = vault();
+    let kept = notes(&mut ws, "Resta.md", "resto");
+    let gone = notes(&mut ws, "Va.md", "vado");
+    write_data_item(&root, OFF, &doc_data::path(&kept, "x"), b"resta");
+    write_data_item(&root, OFF, &doc_data::path(&gone, "x"), b"va");
+    let kept_trash = ws.delete_document(&kept).expect("cestina");
+    let gone_trash = ws.delete_document(&gone).expect("cestina");
+    let parked = |trash: &DocId| read_data_item(&root, OFF, &parked_rel(trash, "x"));
+    assert!(parked(&kept_trash).is_some() && parked(&gone_trash).is_some());
+
+    // Una voce se ne va dal cestino senza che Fub se ne accorga (Obsidian, una
+    // mano), l'altra resta: la raccolta all'apertura le distingue.
+    std::fs::remove_file(root.join(gone_trash.as_str())).expect("toglie la voce");
+    ws.reindex().expect("riapertura");
+
+    assert_eq!(
+        parked(&kept_trash).as_deref(),
+        Some(&b"resta"[..]),
+        "la raccolta ha tolto lo stato di una nota ancora nel cestino"
+    );
+    assert_eq!(
+        parked(&gone_trash),
+        None,
+        "lo stato di una voce che non c'è più è rimasto a occupare spazio"
+    );
+}
+
+/// L'organizzazione (icona, appuntata, posto nell'ordine) è stato per-documento
+/// come l'altro, e ha lo stesso difetto: **la nota che prende il path libero non
+/// ha l'icona né il pin di quella cestinata**, e quella cestinata li ritrova.
+#[test]
+fn the_organization_of_a_trashed_note_is_not_inherited_by_the_one_that_takes_its_path() {
+    let (_g, _root, mut ws) = vault();
+    let first = notes(&mut ws, "Nota.md", "prima");
+    notes(&mut ws, "A.md", "a");
+    notes(&mut ws, "Z.md", "z");
+    ws.set_icon("Nota.md", Some("📌".into())).expect("icona");
+    ws.set_pinned("Nota.md", true).expect("pin");
+    ws.set_order("", vec!["A.md".into(), "Nota.md".into(), "Z.md".into()])
+        .expect("ordine");
+    let trashed = ws.delete_document(&first).expect("cestina");
+
+    let org = ws.organization();
+    assert!(
+        !org.icons.contains_key("Nota.md") && !org.pinned.iter().any(|p| p == "Nota.md"),
+        "una nota cestinata ha lasciato icona e pin sul path libero: {org:?}"
+    );
+
+    let second = notes(&mut ws, "Nota.md", "seconda");
+    ws.set_icon("Nota.md", Some("🌱".into())).expect("icona");
+    assert_eq!(second, first);
+
+    let returned =
+        restore_document(&mut ws, &trashed, Some(DocId::new("Nota 1.md"))).expect("ripristino");
+
+    let org = ws.organization();
+    assert_eq!(
+        org.icons.get("Nota 1.md").map(String::as_str),
+        Some("📌"),
+        "la nota ripristinata ha perso la sua icona"
+    );
+    assert_eq!(
+        org.pinned,
+        ["Nota 1.md"],
+        "la nota ripristinata non è più appuntata, o lo è chi non lo era"
+    );
+    assert_eq!(
+        org.icons.get("Nota.md").map(String::as_str),
+        Some("🌱"),
+        "il ripristino ha portato via l'icona della nota che aveva preso il path"
+    );
+    assert_eq!(returned, DocId::new("Nota 1.md"));
+}
+
+/// Sul path d'origine, una volta libero, tornano anche il pin e il **posto
+/// nell'ordine scelto a mano**.
+#[test]
+fn the_organization_comes_back_with_the_note_to_its_original_path() {
+    let (_g, _root, mut ws) = vault();
+    let note = notes(&mut ws, "Nota.md", "prima");
+    notes(&mut ws, "A.md", "a");
+    notes(&mut ws, "Z.md", "z");
+    ws.set_icon("Nota.md", Some("📌".into())).expect("icona");
+    ws.set_pinned("A.md", true).expect("pin");
+    ws.set_pinned("Nota.md", true).expect("pin");
+    ws.set_pinned("Z.md", true).expect("pin");
+    ws.set_order("", vec!["A.md".into(), "Nota.md".into(), "Z.md".into()])
+        .expect("ordine");
+    let trashed = ws.delete_document(&note).expect("cestina");
+
+    let returned = restore_document(&mut ws, &trashed, None).expect("ripristino");
+
+    assert_eq!(returned, note);
+    let org = ws.organization();
+    assert_eq!(org.icons.get("Nota.md").map(String::as_str), Some("📌"));
+    assert_eq!(
+        org.pinned,
+        ["A.md", "Nota.md", "Z.md"],
+        "il posto fra i pin"
+    );
+    assert_eq!(
+        org.order.get("").map(Vec::as_slice),
+        Some(
+            &[
+                "A.md".to_string(),
+                "Nota.md".to_string(),
+                "Z.md".to_string()
+            ][..]
+        ),
+        "il posto nell'ordine scelto a mano"
     );
 }
 
@@ -330,7 +661,10 @@ fn the_collection_removes_only_that_that_no_one_notes_names_more() {
     }
     write_data_item(&root, OFF, "suo.json", b"mio");
 
-    ws.delete_document(&trashed_doc).expect("cestina");
+    let trash = ws.delete_document(&trashed_doc).expect("cestina");
+    // Cestinandola la nota si è portata via il suo stato: sta sotto la voce.
+    assert_eq!(read_data_item(&root, OFF, &data_item_trashed), None);
+    let data_item_trashed = parked_rel(&trash, "x");
     // La raccolta gira all'apertura, ed è così che si riapre.
     ws.reindex().expect("riapertura");
 
@@ -367,9 +701,8 @@ fn an_unreadable_trash_collects_nothing() {
 
     let (_g, root, mut ws) = vault();
     let doc = notes(&mut ws, "Cestinata.md", "vado nel cestino");
-    let rel = doc_data::path(&doc, "x");
-    write_data_item(&root, OFF, &rel, b"dato");
-    ws.delete_document(&doc).expect("cestina");
+    write_data_item(&root, OFF, &doc_data::path(&doc, "x"), b"dato");
+    let rel = parked_rel(&ws.delete_document(&doc).expect("cestina"), "x");
 
     let trash = root.join(".trash");
     let set = |mode| {
@@ -461,9 +794,8 @@ fn a_trash_that_cannot_be_stat_collects_nothing() {
     .expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex del vault vuoto");
     let doc = notes(&mut ws, "Cestinata.md", "vado nel cestino");
-    let rel = doc_data::path(&doc, "x");
-    write_data_item(&root, OFF, &rel, b"dato");
-    ws.delete_document(&doc).expect("cestina");
+    write_data_item(&root, OFF, &doc_data::path(&doc, "x"), b"dato");
+    let rel = parked_rel(&ws.delete_document(&doc).expect("cestina"), "x");
 
     storage.failing.store(true, Ordering::Relaxed);
     assert!(
@@ -482,17 +814,27 @@ fn a_trash_that_cannot_be_stat_collects_nothing() {
 
 /// Il sidecar dell'unica voce del cestino, e la nota cestinata da una
 /// cartella che il nome da solo non ricorda.
-fn trashed_in_a_folder(root: &Utf8PathBuf, ws: &mut Workspace) -> (String, std::path::PathBuf) {
+///
+/// Torna dove stava lo stato (sotto il path, da viva), dove sta adesso (sotto la
+/// voce, da cestinata) e il sidecar.
+fn trashed_in_a_folder(
+    root: &Utf8PathBuf,
+    ws: &mut Workspace,
+) -> (String, String, std::path::PathBuf) {
     let doc = notes(ws, "Diario/Idea.md", "vado nel cestino");
     let rel = doc_data::path(&doc, "x");
     write_data_item(root, OFF, &rel, b"dato");
-    ws.delete_document(&doc).expect("cestina");
+    let trashed = ws.delete_document(&doc).expect("cestina");
     let sidecars: Vec<_> = std::fs::read_dir(root.join(".fub/data/trash"))
         .expect("i sidecar del cestino")
         .map(|entry| entry.expect("voce").path())
         .collect();
     assert_eq!(sidecars.len(), 1, "{sidecars:?}");
-    (rel, sidecars.into_iter().next().unwrap())
+    (
+        rel,
+        parked_rel(&trashed, "x"),
+        sidecars.into_iter().next().unwrap(),
+    )
 }
 
 /// **Un sidecar che non si legge non autorizza a indovinare.** Senza il
@@ -505,7 +847,7 @@ fn an_unreadable_trash_sidecar_collects_nothing() {
     use std::os::unix::fs::PermissionsExt;
 
     let (_g, root, mut ws) = vault();
-    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    let (_, rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
     let set = |mode| {
         std::fs::set_permissions(&sidecar, std::fs::Permissions::from_mode(mode))
             .expect("permessi del sidecar")
@@ -539,7 +881,7 @@ fn an_unreadable_trash_sidecar_stops_the_restore() {
     use std::os::unix::fs::PermissionsExt;
 
     let (_g, root, mut ws) = vault();
-    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    let (rel, _, sidecar) = trashed_in_a_folder(&root, &mut ws);
     let trashed = ws.list_trash().expect("il cestino")[0].id.clone();
     let set = |mode| {
         std::fs::set_permissions(&sidecar, std::fs::Permissions::from_mode(mode))
@@ -624,7 +966,7 @@ fn an_excluded_folder_keeps_the_space_of_its_notes() {
 #[test]
 fn a_trash_sidecar_from_a_newer_version_collects_nothing() {
     let (_g, root, mut ws) = vault();
-    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    let (_, rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
     let mut json: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&sidecar).unwrap()).unwrap();
     json["v"] = serde_json::json!(99);
@@ -748,15 +1090,25 @@ fn a_note_of_the_root_is_trashed_even_without_its_sidecar() {
     let rel = doc_data::path(&doc, "x");
     write_data_item(&root, OFF, &rel, b"dato");
 
-    ws.delete_document(&doc).expect("cestina");
+    let trashed = ws.delete_document(&doc).expect("cestina");
 
     let trash = ws.list_trash().expect("il cestino");
     assert_eq!(trash.len(), 1);
     assert_eq!(trash[0].original, doc);
     ws.reindex().expect("riapertura");
     assert_eq!(
+        read_data_item(&root, OFF, &parked_rel(&trashed, "x")).as_deref(),
+        Some(&b"dato"[..]),
+        "lo stato non c'è più sotto la voce che lo teneva"
+    );
+    // Senza sidecar la voce non dice che lo stato è stato messo al sicuro, e il
+    // ripristino lo riporta lo stesso: lo spazio parcheggiato torna sempre.
+    let returned = restore_document(&mut ws, &trashed, None).expect("ripristino");
+    assert_eq!(returned, doc);
+    assert_eq!(
         read_data_item(&root, OFF, &rel).as_deref(),
-        Some(&b"dato"[..])
+        Some(&b"dato"[..]),
+        "il ripristino di una voce senza sidecar ha lasciato lo stato nel cestino"
     );
 }
 
@@ -769,7 +1121,7 @@ fn a_note_of_the_root_is_trashed_even_without_its_sidecar() {
 #[test]
 fn a_trash_entry_without_sidecar_keeps_the_data_of_every_namesake() {
     let (_g, root, mut ws) = vault();
-    let (rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
+    let (_, rel, sidecar) = trashed_in_a_folder(&root, &mut ws);
     std::fs::remove_file(&sidecar).expect("sidecar perso");
     let namesake = doc_data::path(&DocId::new("Archivio/Idea.md"), "x");
     let dead = doc_data::path(&DocId::new("Archivio/Morta.md"), "x");
@@ -803,10 +1155,9 @@ fn empty_the_trash_and_reopen_collects() {
     // svuota qualcun altro ad app chiusa.
     let (_g, root, mut ws) = vault();
     let doc = notes(&mut ws, "Effimera.md", "ciao");
-    let rel = doc_data::path(&doc, "x");
-    write_data_item(&root, OFF, &rel, b"dato");
+    write_data_item(&root, OFF, &doc_data::path(&doc, "x"), b"dato");
 
-    ws.delete_document(&doc).expect("cestina");
+    let rel = parked_rel(&ws.delete_document(&doc).expect("cestina"), "x");
     ws.reindex().expect("riapertura col cestino pieno");
     assert!(read_data_item(&root, OFF, &rel).is_some());
 

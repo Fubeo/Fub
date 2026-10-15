@@ -13318,13 +13318,19 @@ impl Workspace {
                 .path_for(doc)
                 .is_ok_and(|path| !matches!(crate::error::optional(storage.stat(&path)), Ok(None)))
         };
-        crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
+        let collected = crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
             metas.contains_key(doc)
                 || entries.contains_key(doc)
                 || trashed.may_hold(doc)
                 || suspended.contains(doc)
                 || on_disk(doc)
-        })
+        })?;
+        // Lo spazio che una nota ha messo al sicuro cestinandosi vive quanto la
+        // sua voce: finché è nel cestino è recuperabile, e con lei il suo stato.
+        let parked = crate::docdata::collect_parked(storage.as_ref(), &roots, &|trash: &DocId| {
+            trashed.holds_entry(trash)
+        })?;
+        Ok(collected + parked)
     }
 
     /// I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
