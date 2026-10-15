@@ -1546,6 +1546,38 @@ describe("chiudere linguette e superfici", () => {
     );
   });
 
+  it("le frecce fra le linguette chiudono il giro, vanno agli estremi e lasciano stare gli altri tasti", async () => {
+    await start(VAULT);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await openDocument("note/Spesa.md");
+    await settle();
+    const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+    expect(tabs()).toHaveLength(3);
+    const press = (key: string): boolean => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    const focused = () => tabs().indexOf(document.activeElement as HTMLButtonElement);
+
+    tabs()[0]!.focus();
+    expect(press("ArrowLeft")).toBe(true);
+    expect(focused()).toBe(2);
+    press("ArrowRight");
+    expect(focused()).toBe(0);
+    press("End");
+    expect(focused()).toBe(2);
+    press("Home");
+    expect(focused()).toBe(0);
+    press("ArrowRight");
+    expect(focused()).toBe(1);
+    // Il riquadro resta una fermata sola del Tab: la segue la linguetta col fuoco.
+    expect(tabs().map((tab) => tab.tabIndex)).toEqual([-1, 0, -1]);
+    expect(press("ArrowDown")).toBe(false);
+    expect(focused()).toBe(1);
+  });
+
   it("chiude una linguetta senza chiudere le altre", async () => {
     const host = await start(VAULT);
     const folder = document.querySelector<HTMLElement>("#file-list .tree-row.folder");
@@ -2127,6 +2159,39 @@ describe("cerca", () => {
     await settle();
     expect(textToVideo()).toContain("pane, latte, arance");
   });
+
+  it("l'estratto del risultato taglia sui byte, e il testo del provider resta testo", async () => {
+    const host = await start(VAULT);
+    // Il finto non scrive estratti: la sua risposta passa, con uno aggiunto.
+    // «però» sta ai byte 3..8 e non 3..7, perché la `ò` ne occupa due; i tag
+    // sono testo del provider, e devono restare testo.
+    const answer = host.module.api.queryIndex;
+    vi.spyOn(host.module.api, "queryIndex").mockImplementation(async (query) => {
+      const result = await answer(query);
+      if (result.kind !== "documents") return result;
+      const items = result.value.items.map((row) => ({
+        ...row,
+        snippet: "<b>però</b> arance",
+        highlights: [{ start: 3, end: 8 }],
+      }));
+      return { ...result, value: { ...result.value, items } };
+    });
+    const field = document.querySelector<HTMLInputElement>("#search-input");
+    if (!field) throw new Error("la casella di ricerca non c'è");
+
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor(
+      "l'estratto arriva",
+      () => document.querySelector("#search-results .hit-snippet") !== null,
+    );
+
+    const snippet = document.querySelector<HTMLElement>("#search-results .hit-snippet");
+    if (!snippet) throw new Error("l'estratto non c'è");
+    expect(snippet.textContent).toBe("<b>però</b> arance");
+    expect([...snippet.children].map((e) => e.tagName)).toEqual(["MARK"]);
+    expect(snippet.children[0].textContent).toBe("però");
+  });
 });
 
 describe("ripristina", () => {
@@ -2429,6 +2494,11 @@ describe("la palette flussa prima di un comando che scrive", () => {
     // Il comando ha un parametro facoltativo: la palette mostra il form.
     const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
     field.value = "Appunti.md";
+    // Il buffer si sporca subito prima dell'invio, a palette aperta:
+    // l'autosave parte 400 ms dopo l'ultima battuta, e su una macchina carica
+    // aprire la palette ne prende di più. Così non può arrivare prima del
+    // comando, e un `writeDocument` prima di lui è soltanto il flush.
+    typeInEditor("testo non ancora salvato");
     const form = document.querySelector<HTMLFormElement>(".palette-form")!;
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await settle();
@@ -2461,19 +2531,26 @@ describe("la palette flussa prima di un comando che scrive", () => {
       surfaces: [],
     };
     const host = await start(VAULT, [], undefined, null, [specSearchOpen]);
-    typeInEditor("testo non ancora salvato");
 
     await chooseCommand(specSearchOpen);
 
     const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
     field.value = "rust";
+    // Come sopra: il buffer si sporca subito prima dell'invio, perché
+    // l'autosave non arrivi prima del comando.
+    typeInEditor("testo non ancora salvato");
     const form = document.querySelector<HTMLFormElement>(".palette-form")!;
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await settle();
 
-    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
+    const invoked = host.calls.findIndex(
+      (c) => c.gate === "invokeCommand" && c.args[0] === "search.open",
+    );
+    expect(invoked, "search.open non è arrivato al kernel").toBeGreaterThan(-1);
+    // L'autosave, 400 ms dopo la battuta, può arrivare dopo il comando; un
+    // flush della palette verrebbe prima.
     expect(
-      host.atGate("writeDocument"),
+      host.calls.slice(0, invoked).filter((c) => c.gate === "writeDocument"),
       "un comando di sola lettura non deve salvare i buffer",
     ).toHaveLength(0);
   });

@@ -194,7 +194,13 @@ fn str_of<'a>(v: &'a Value, key: &str) -> &'a str {
 
 /// `true` se il nome appartiene a una delle famiglie proibite.
 fn forbidden(name: &str) -> bool {
-    FORBIDDEN.iter().any(|f| {
+    in_families(name, FORBIDDEN)
+}
+
+/// `true` se il nome è una delle `families` o ne comincia uno seguito da `-`
+/// o `_`: `tauri-build` è di `tauri`, `tauribbon` no.
+fn in_families(name: &str, families: &[&str]) -> bool {
+    families.iter().any(|f| {
         name == *f || name.starts_with(&format!("{f}-")) || name.starts_with(&format!("{f}_"))
     })
 }
@@ -561,6 +567,62 @@ fn the_glue_does_not_bypass_the_mounter() {
     );
 }
 
+/// Ciò che il lettore delle scene non deve vedere, per famiglia: il contratto,
+/// il core, il toolkit dell'app e il runtime wasm.
+const SCENE_FORBIDDEN: &[&str] = &["fub-abi", "fub-kernel", "tauri", "wasmtime"];
+
+/// Le dipendenze normali che `fub-scene` può dichiarare. Elenco chiuso, come
+/// quello di `fub-abi` e `fub-kernel`.
+const SCENE_ALLOWED_DIRECT: &[&str] = &["quick-xml", "serde"];
+
+/// Il lettore delle scene sta da solo.
+///
+/// `fub-scene` legge i disegni per il provider `svg` (ADR 0203), che gira
+/// nell'host accanto al kernel, ma è scritto anche per un secondo
+/// consumatore: un plugin WASM, componente `wasm32-wasip2`, che lo prende via
+/// Git a una `rev` fissata e il contratto lo prende da `fub-sdk`. Se il
+/// lettore dipendesse da `fub-abi`, il guest avrebbe il contratto da due
+/// strade, e ogni cambio del contratto obbligherebbe a spostare insieme le due
+/// `rev`; se dipendesse dal kernel, dal toolkit o dal runtime wasm, il
+/// componente non compilerebbe nemmeno. La CI compila il crate per
+/// `wasm32-wasip2`; questa rete dice il perché prima del linker.
+///
+/// Le dirette sono un elenco chiuso per la stessa ragione di quelle del
+/// contratto: aggiungerne una è una decisione, e il plugin la paga in byte.
+#[test]
+fn the_scene_reader_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let trespassers: Vec<&str> = graph
+        .closure("fub-scene")
+        .into_iter()
+        .filter(|n| in_families(n, SCENE_FORBIDDEN) || forbidden(n))
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-scene` raggiunge {trespassers:?} fra le dipendenze normali.\n\
+         Il lettore delle scene è lo stesso nell'host e in un componente\n\
+         `wasm32-wasip2`: non può portarsi dietro il contratto, il kernel, il\n\
+         toolkit dell'app o un runtime wasm. Vedi\n\
+         ../../../docs/decisions/0203-superfici-spaziali.md."
+    );
+
+    let allowed: BTreeSet<&str> = SCENE_ALLOWED_DIRECT.iter().copied().collect();
+    let extra: Vec<&str> = graph
+        .direct("fub-scene")
+        .into_iter()
+        .filter(|d| !allowed.contains(d))
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "`fub-scene` dichiara {extra:?}, che non sono nell'elenco delle sue\n\
+         dipendenze dirette. Il crate compila per `wasm32-wasip2` e finisce nel\n\
+         plugin: se serve davvero, aggiungilo a `SCENE_ALLOWED_DIRECT` con la\n\
+         ragione accanto."
+    );
+}
+
 // ---------------------------------------------------------------------------
 // La quarta rete: il diagramma dei componenti.
 // ---------------------------------------------------------------------------
@@ -796,6 +858,14 @@ fn forbidden_families_match_by_prefix() {
     assert!(!forbidden("tauribbon"));
     assert!(!forbidden("serde"));
     assert!(!forbidden("camino"));
+    // Le famiglie del lettore delle scene: il contratto e il core per nome
+    // intero, senza prendere i vicini.
+    assert!(in_families("fub-abi", SCENE_FORBIDDEN));
+    assert!(in_families("fub-kernel", SCENE_FORBIDDEN));
+    assert!(in_families("wasmtime-wasi", SCENE_FORBIDDEN));
+    assert!(!in_families("fub-abilities", SCENE_FORBIDDEN));
+    assert!(!in_families("fub-scene", SCENE_FORBIDDEN));
+    assert!(!in_families("quick-xml", SCENE_FORBIDDEN));
 }
 
 /// Il test del parser: deve distinguere i due archi, e deve saltare il blocco

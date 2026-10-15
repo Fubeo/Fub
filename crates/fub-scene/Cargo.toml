@@ -1,0 +1,14 @@
+[package]
+name = "fub-scene"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Lettura delle scene FubDraw: SVG classificati in elementi modificabili e blocchi estranei, codec dell'inchiostro, analisi e diagnostica. Puro: niente ABI di Fub, niente kernel, niente I/O."
+
+[dependencies]
+quick-xml = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

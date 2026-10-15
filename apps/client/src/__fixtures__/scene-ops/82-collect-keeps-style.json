@@ -1,0 +1,26 @@
+{
+  "name": "collect-keeps-style",
+  "description": "togliere l'ultimo oggetto che segue uno stile lascia lo stile e la sua sfumatura privata",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1a2b3c4d\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"100\" y2=\"0\">\n      <stop offset=\"0\" stop-color=\"#0072b2\"/>\n      <stop offset=\"1\" stop-color=\"#56b4e9\"/>\n    </linearGradient>\n    <polyline id=\"r5e6f7a8b\" fub:role=\"style\" fub:name=\"Riquadro\" points=\"0,0 100,0 100,100\" fill=\"url(#r1a2b3c4d) #0072b2\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" fub:style=\"r5e6f7a8b\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "remove",
+      "target": "o2b3c4d5e"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <defs id=\"fub-defs\">\n    <linearGradient id=\"r1a2b3c4d\" fub:role=\"private\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"0\" x2=\"100\" y2=\"0\">\n      <stop offset=\"0\" stop-color=\"#0072b2\"/>\n      <stop offset=\"1\" stop-color=\"#56b4e9\"/>\n    </linearGradient>\n    <polyline id=\"r5e6f7a8b\" fub:role=\"style\" fub:name=\"Riquadro\" points=\"0,0 100,0 100,100\" fill=\"url(#r1a2b3c4d) #0072b2\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "add",
+      "slot": {
+        "parent": "l3f8a0c2d",
+        "after": null,
+        "skip": 0,
+        "lead": ""
+      },
+      "gap": "\n    ",
+      "raw": "<rect id=\"o2b3c4d5e\" fub:style=\"r5e6f7a8b\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\" stroke=\"#1a1a1a\" stroke-width=\"2\"/>"
+    }
+  }
+}

@@ -406,9 +406,17 @@ function nodeIndex(source: string, node: ChildNode | Root): number {
 }
 
 function location(source: string, index: number): Pick<ThemeCssViolation, "line" | "column"> {
-  const before = source.slice(0, Math.max(0, Math.min(index, source.length)));
-  const lines = before.split("\n");
-  return { line: lines.length, column: (lines[lines.length - 1]?.length ?? 0) + 1 };
+  const at = Math.max(0, Math.min(index, source.length));
+  const starts = lineStarts(source);
+  // L'ultima riga che comincia prima di `at`, o proprio lì.
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = (low + high + 1) >> 1;
+    if (starts[middle]! <= at) low = middle;
+    else high = middle - 1;
+  }
+  return { line: low + 1, column: at - starts[low]! + 1 };
 }
 
 function violation(

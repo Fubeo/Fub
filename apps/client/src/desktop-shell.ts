@@ -29,9 +29,17 @@ import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
+  canCreateDrawing,
+  canImportDrawing,
   displayBinding,
   loadKeyOverrides,
   mountKeyOverrides,
+  NEW_DRAWING,
+  newDrawing,
+  pickDrawingImport,
+  registerCommandForm,
+  registerCommandStarter,
+  registerDrawingImport,
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
@@ -856,6 +864,14 @@ async function init(): Promise<Teardown> {
     run: () => void newNoteInActiveSpace(),
   });
   registerShellCommand({
+    id: "shell.draw.import",
+    title: "commands.draw.import",
+    description: "commands.draw.import.desc",
+    layer: "global",
+    available: () => canImportDrawing(),
+    run: () => void pickDrawingImport(),
+  });
+  registerShellCommand({
     id: "shell.zoom.in",
     title: "commands.zoom.in",
     description: "commands.zoom.in.desc",
@@ -901,6 +917,12 @@ async function init(): Promise<Teardown> {
       label: t("palette.open_view", { title: spec.title }),
       run: () => openPrimaryView(spec.id),
     })),
+    // «Nuovo disegno…» e «Importa disegno…» accanto a «Nuova nota», se il
+    // kernel ha il comando.
+    creations: () => [
+      ...(canCreateDrawing() ? [{ label: t("menu.file.new_drawing"), run: () => void newDrawing() }] : []),
+      ...(canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
+    ],
   }));
   refreshTitlebarShortcuts();
   pageWindowLifetime.add(onLanguage(refreshTitlebarShortcuts));
@@ -927,6 +949,34 @@ async function init(): Promise<Teardown> {
   // sa `ui/keyboard.ts`, che è il posto in cui una sequenza a metà ha un tempo
   // e una via d'uscita (§18.2).
   mountKeyboard(pageWindowLifetime, (entry) => startCommand(entry, paletteHost));
+  // Le porte di creazione dei pannelli (menu di una cartella, riquadro vuoto)
+  // non importano la palette: quando un comando non ha un modulo proprio, la
+  // fanno partire da qui.
+  pageWindowLifetime.add(registerCommandStarter((entry, prefill) => startCommand(entry, paletteHost, prefill)));
+  // «Nuovo disegno» si compila guardando i modelli: la galleria sostituisce il
+  // modulo generico della palette, e il suo codice arriva la prima volta che
+  // serve. Vale anche per la shell mobile, che parte da questa.
+  pageWindowLifetime.add(
+    registerCommandForm(NEW_DRAWING, (prefill) => {
+      void import("./editors/spatial/templates/gallery")
+        .then((module) => module.openGallery(prefill, paletteHost))
+        .catch((error: unknown) => {
+          const command = state.commandSpecs.find((spec) => spec.id === NEW_DRAWING)?.title ?? NEW_DRAWING;
+          notify(t("commands.failed", { command, reason: errorText(error) }), "guasto");
+        });
+    }),
+  );
+  // «Importa disegno» legge il file e prepara il disegno nella sua finestra,
+  // che arriva coi lettori dei due programmi la prima volta che serve.
+  pageWindowLifetime.add(
+    registerDrawingImport((from) => {
+      void import("./editors/spatial/import/dialog")
+        .then((module) => module.openImport(from, paletteHost))
+        .catch((error: unknown) => {
+          notify(t("commands.failed", { command: t("commands.draw.import"), reason: errorText(error) }), "guasto");
+        });
+    }),
+  );
 
   listenForFailures(pageWindowLifetime);
   // Un rifiuto che nessuno ha raccolto è un guasto che nessuno vedrebbe: la

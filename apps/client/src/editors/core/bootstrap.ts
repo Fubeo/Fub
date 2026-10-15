@@ -16,6 +16,9 @@ import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
+import type { DrawingImagePort } from "../canvas/surface";
+import type { VaultFontPort } from "../spatial/fonts/vault";
+import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
 import type { SyntaxForm } from "../../host/contract";
 import {
   DocumentSurfaceRegistry,
@@ -37,6 +40,17 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly canvasAttachments?: CanvasAttachmentPort;
   readonly onCreateCanvasNote?: (text: string) => Promise<string>;
   readonly onPickCanvasFile?: () => Promise<string | null>;
+  /// Il documento a cui porta un collegamento del disegno `from`, scelto
+  /// dall'utente; `current` è l'`href` del collegamento che si cambia.
+  readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
+  /// Le immagini del vault dei disegni: aperte, lette e scelte dalla shell.
+  readonly drawingImages?: DrawingImagePort;
+  /// I file di caratteri del vault, che i testi dei disegni possono usare:
+  /// elencati e letti dalla shell.
+  readonly drawingFonts?: VaultFontPort;
+  /// Le librerie di simboli del vault: la cartella, i file e il loro testo,
+  /// dalla shell.
+  readonly drawingSymbols?: SymbolLibraryPort;
   readonly renderCanvasMarkdown?: (
     nodeId: string,
     text: string,
@@ -265,6 +279,7 @@ export function createDocumentSurfaceRegistry(
     defaultProfile: CANVAS_MOUNT.defaultProfile,
     profiles: CANVAS_MOUNT.profiles,
     formats: CANVAS_MOUNT.formats,
+    sourceViews: CANVAS_MOUNT.sourceViews,
     factory: {
       mount(profile, context) {
         return mountCanvasSurface(profile, context, {
@@ -274,11 +289,18 @@ export function createDocumentSurfaceRegistry(
           onOpenPath: options.onOpenPath,
           onCreateNote: options.onCreateCanvasNote,
           onPickFile: options.onPickCanvasFile,
+          onPickDrawingLink: options.onPickDrawingLink,
+          drawingImages: options.drawingImages,
+          drawingFonts: options.drawingFonts,
+          drawingSymbols: options.drawingSymbols,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,
           media: options.canvasMedia,
           attachments: options.canvasAttachments,
+          // Le annotazioni leggono il PDF come il visore: stessi byte, stesso
+          // pdf.js.
+          pdf: options.media ? { transport: options.media.transport, loader: options.media.pdfLoader ?? loadPdf } : undefined,
         });
       },
     },

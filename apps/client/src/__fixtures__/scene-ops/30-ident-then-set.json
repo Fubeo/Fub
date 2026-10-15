@@ -1,0 +1,53 @@
+{
+  "name": "ident-then-set",
+  "description": "ident e set nello stesso batch su un elemento senza id",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect x=\"10\" y=\"10\" width=\"50\" height=\"50\" fill=\"#ff0000\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "ident",
+          "path": [
+            1,
+            0
+          ],
+          "tag": "rect",
+          "id": "o0a1b2c3d"
+        },
+        {
+          "op": "set",
+          "id": "o0a1b2c3d",
+          "attrs": {
+            "fill": "#0072b2"
+          }
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o0a1b2c3d\" x=\"10\" y=\"10\" width=\"50\" height=\"50\" fill=\"#0072b2\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "set",
+          "id": "o0a1b2c3d",
+          "attrs": {
+            "fill": "#ff0000"
+          }
+        },
+        {
+          "op": "ident",
+          "path": [
+            1,
+            0
+          ],
+          "tag": "rect",
+          "id": null
+        }
+      ]
+    }
+  }
+}

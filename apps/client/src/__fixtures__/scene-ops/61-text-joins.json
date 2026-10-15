@@ -1,0 +1,37 @@
+{
+  "name": "text-joins",
+  "description": "text con joins su un testo in area: ogni riga ha il suo fub:join, la prima nessuno; l'inversa rimette righe e joins di prima",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <text id=\"o5e6f7g8h\" fub:wrap=\"320\" x=\"100\" y=\"200\" font-size=\"32\">\n      <tspan x=\"100\" dy=\"0\">Il testo in area va a</tspan>\n      <tspan fub:join=\"space\" x=\"100\" dy=\"40\">capo da solo.</tspan>\n    </text>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "text",
+      "id": "o5e6f7g8h",
+      "lines": [
+        "Il testo in area",
+        "va a capo da so",
+        "lo."
+      ],
+      "joins": [
+        null,
+        "space",
+        "word"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <text id=\"o5e6f7g8h\" fub:wrap=\"320\" x=\"100\" y=\"200\" font-size=\"32\">\n      <tspan x=\"100\" dy=\"0\">Il testo in area</tspan>\n      <tspan fub:join=\"space\" x=\"100\" dy=\"40\">va a capo da so</tspan>\n      <tspan fub:join=\"word\" x=\"100\" dy=\"40\">lo.</tspan>\n    </text>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "text",
+      "id": "o5e6f7g8h",
+      "lines": [
+        "Il testo in area va a",
+        "capo da solo."
+      ],
+      "joins": [
+        null,
+        "space"
+      ]
+    }
+  }
+}

@@ -146,6 +146,32 @@ export interface SurfacePoint {
 }
 
 /**
+ * An export the document offers as one of its own gestures: a target the host
+ * registers (`ExportTarget.id`) and the options it runs with. The words are
+ * functions because the language can change while the surface is mounted.
+ */
+export interface SurfaceExport {
+  readonly target: string;
+  /** What the menu and the chooser call it. */
+  label(): string;
+  /** What comes out, in one line. */
+  detail(): string;
+  /** The target's options, in the language of now: a file name suffix, say. */
+  options?(): Record<string, unknown>;
+}
+
+/**
+ * A surface's own export window: the user chooses there what goes out and how,
+ * with a preview, and the shell offers it in place of its chooser.
+ */
+export interface SurfaceExportWindow {
+  /** Whether the window can open now: not while the document is unreadable, say. */
+  available(): boolean;
+  /** Opens the window; the export to run, or `null` when the user closes it. */
+  open(): Promise<SurfaceExport | null>;
+}
+
+/**
  * A mounted shell-owned surface. No DOM or CodeMirror value crosses its
  * boundary. Past the first five members everything is a capability: the shell
  * offers a gesture where the mounted surface declares it, and never asks which
@@ -196,6 +222,17 @@ export interface EditorSurface {
    */
   readonly printable?: boolean;
   /**
+   * The exports this document offers, in the order the chooser lists them.
+   * The core runs one on the saved document and hands the file to the
+   * activity panel, from which the user saves it where they choose.
+   */
+  readonly exports?: readonly SurfaceExport[];
+  /**
+   * The window the shell opens for «Esporta…» while it is available; the
+   * chooser of `exports` otherwise.
+   */
+  readonly exportWindow?: SurfaceExportWindow;
+  /**
    * The writing gestures this surface runs on its own text — bold, heading 2,
    * a table row — by the stable id the formatting bar and the
    * `fub.editor.action` intent name (`editor-actions.ts`). Only ids and
@@ -226,6 +263,21 @@ export interface SurfaceRegistration {
    * `null` when this binding does not show the requested document.
    */
   readonly selectSourceProfile?: (request: SurfaceRequest, fallback: string) => string | null;
+  /**
+   * The source view of a profile, by profile: the surface that shows the same
+   * document as the text it is stored in, which the user may open in a tab in
+   * place of this one («Apri come sorgente»). Opt-in: a profile without an
+   * entry offers none. The view names a family, not a factory, so it may be
+   * owned by someone else and registered later; the shell offers it only
+   * while it resolves (`sourceView`).
+   */
+  readonly sourceViews?: Readonly<Record<string, SurfaceOverride>>;
+}
+
+/** A source view that resolves now: a registered family and one of its profiles. */
+export interface SourceView {
+  readonly family: SurfaceFamily;
+  readonly profile: string;
 }
 
 export interface ResolvedSurface {
@@ -239,6 +291,7 @@ interface RegistrationRecord extends SurfaceRegistration {
   readonly profileSet: ReadonlySet<string>;
   readonly formats: Readonly<Record<string, string>>;
   readonly sources: Readonly<Partial<Record<SourceKind, string>>>;
+  readonly sourceViews: Readonly<Record<string, SurfaceOverride>>;
 }
 
 interface Binding {
@@ -296,6 +349,22 @@ export class DocumentSurfaceRegistry {
         required(`profile for source ${source}`, profile),
       ]),
     ) as Partial<Record<SourceKind, string>>;
+    const sourceViews = Object.fromEntries(
+      Object.entries(registration.sourceViews ?? {}).map(([profile, view]) => {
+        const own = required("source view profile", profile);
+        if (!profiles.has(own)) throw new TypeError(`source view of unregistered profile ${own}`);
+        const target: SurfaceOverride = {
+          family: required(`source view family of ${own}`, view.family),
+          ...(view.profile === undefined ? {} : { profile: required(`source view profile of ${own}`, view.profile) }),
+        };
+        // A profile is not a view of itself: the command would remount the
+        // same surface and call it something else.
+        if (target.family === family && (target.profile ?? defaultProfile) === own) {
+          throw new TypeError(`profile ${own} names itself as its source view`);
+        }
+        return [own, target];
+      }),
+    );
     for (const [binding, profile] of [
       ...Object.entries(formats).map(([key, value]) => [`format:${key}`, value] as const),
       ...Object.entries(sources).map(([key, value]) => [`source:${key}`, value] as const),
@@ -331,6 +400,7 @@ export class DocumentSurfaceRegistry {
       formats,
       sources,
       selectSourceProfile: registration.selectSourceProfile,
+      sourceViews,
     };
     this.#families.set(family, record);
     for (const [format, profile] of Object.entries(formats)) {
@@ -365,6 +435,24 @@ export class DocumentSurfaceRegistry {
     if (source && profile !== null) return this.#resolved(source.registration, profile);
     const error = this.#families.get("error");
     return error ? this.#resolved(error, error.defaultProfile) : null;
+  }
+
+  /**
+   * The source view the document's own surface declares, with its profile
+   * spelled out, or `null` when it declares none or the view does not resolve
+   * now (its family unregistered, its profile unknown there). The request's
+   * override is ignored: the view belongs to the surface the document gets
+   * without one, so a tab already showing it can still name the way back.
+   */
+  sourceView(request: SurfaceRequest): SourceView | null {
+    const natural = this.resolve({ ...request, override: undefined });
+    const registration = natural ? this.#families.get(natural.family) : undefined;
+    const view = natural && registration ? registration.sourceViews[natural.profile] : undefined;
+    if (!view) return null;
+    const target = this.#families.get(view.family);
+    const profile = view.profile ?? target?.defaultProfile;
+    if (!target || profile === undefined || !target.profileSet.has(profile)) return null;
+    return { family: target.family, profile };
   }
 
   /**

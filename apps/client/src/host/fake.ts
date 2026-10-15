@@ -76,7 +76,7 @@ import type {
   ViewSpec,
   KnownVault,
 } from "./contract";
-import type { SaveArtifactOutcome } from "./ipc";
+import type { PrintArtifactOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
@@ -159,8 +159,15 @@ export interface Options {
   /// I file binari del vault: path → byte. Compaiono nell'albero come gli
   /// altri, e le porte risorsa li servono davvero, a fette.
   resources?: Record<string, FakeResource>;
+  /// La feature `draw` del kernel: accesa, un `.svg` ha il formato `svg` e si
+  /// apre come disegno, un `.fubann` ha il formato `fubann` e si apre come
+  /// annotazioni, ci sono `drawing.create` e `pdf.annotate`, ed `export.run`
+  /// accetta i target `draw.*`. Spenta come nel kernel di default: un `.svg`
+  /// resta un file senza formato, testo con l'anteprima accanto.
+  draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -207,7 +214,7 @@ export interface FakeHost {
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
   /// Alza se nessuno si è iscritto: una chiusura consegnata a nessuno non
-  /// fallisce da sé, ed è esattamente il difetto che questo simula (0205).
+  /// fallisce da sé, ed è esattamente il difetto che questo simula (0208).
   close(): Promise<void>;
 
   /// Simula la chiusura nativa di una finestra documento ancora aperta.
@@ -289,6 +296,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// non inventa byte.
   const leases = new Map<string, Lease>();
   let nextLease = 0;
+  let nextJob = 0;
 
   function write(id: string, text: string): string {
     revision += 1;
@@ -327,6 +335,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".canvas")) return "canvas";
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
+    if (options.draw === true && id.toLowerCase().endsWith(".svg")) return "svg";
+    if (options.draw === true && id.toLowerCase().endsWith(".fubann")) return "fubann";
     return null;
   }
 
@@ -708,6 +718,64 @@ export function createFakeHost(options: Options = {}): FakeHost {
           partial: null,
         };
       }
+      case "drawing.create": {
+        // Come il comando della feature `draw`: il documento nuovo del
+        // provider, un modello distribuito o un disegno del vault da copiare,
+        // col titolo che diventa il nome. I modelli sono gli stessi file del
+        // comando vero, in italiano come il resto di questo vault.
+        if (options.draw !== true) throw new Error("host fake: drawing.create senza la feature draw");
+        const template = typeof args?.template === "string" ? args.template : "blank";
+        const from = typeof args?.from === "string" ? args.from : null;
+        if (from !== null && template !== "blank") {
+          throw { kind: "bad_args", message: "Un disegno nasce da un modello o da un disegno del vault, non da tutti e due." } satisfies PluginError;
+        }
+        const folder = typeof args?.folder === "string" ? args.folder.replace(/^\/+|\/+$/g, "") : "";
+        const given = typeof args?.name === "string" ? args.name.trim() : "";
+        const placed = (name: string) => (folder && !name.includes("/") ? `${folder}/${name}` : name);
+        let doc = placed(given ? (/\.svg$/i.test(given) ? given : `${given}.svg`) : "Disegno.svg");
+        if (given && docs.has(doc)) {
+          throw { kind: "already_exists", message: `«${doc}» c'è già: un disegno nuovo non prende il posto di un file.` } satisfies PluginError;
+        }
+        for (let n = 1; !given && docs.has(doc); n++) doc = placed(`Disegno ${n}.svg`);
+        const source = from !== null ? docs.get(from)?.text : template === "blank" ? blankDrawing() : DRAWING_TEMPLATES[template];
+        if (source === undefined) {
+          throw { kind: from !== null ? "not_found" : "bad_args", message: `host fake: «${from ?? template}» non c'è` } satisfies PluginError;
+        }
+        write(doc, titled(source, doc.split("/").pop()!.replace(/\.svg$/i, "")));
+        emit({ type: "document_changed", id: doc });
+        return { notify: `Creato il disegno «${doc}»`, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+      }
+      case "pdf.annotate": {
+        // Come il comando della feature `draw`: le annotazioni accanto al
+        // PDF, nate dal modello del provider la prima volta e aperte dopo.
+        if (options.draw !== true) throw new Error("host fake: pdf.annotate senza la feature draw");
+        const pdf = String(args?.pdf);
+        const doc = `${pdf}.fubann`;
+        if (docs.has(doc)) return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+        const name = pdf.split("/").pop()!;
+        const escaped = name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const href = encodeURI(name).replace(/[#?]/g, encodeURIComponent).replace(/&/g, "&amp;");
+        // Il nome della radice sta in una costante: il controllo delle icone
+        // non vuole tag SVG scritti fuori da `ui/icons.ts`, e questo non è
+        // un'icona ma un documento del vault.
+        const root = "svg";
+        write(
+          doc,
+          `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="${href}">\n  <title>${escaped}</title>\n</${root}>\n`,
+        );
+        emit({ type: "document_changed", id: doc });
+        return { notify: `Create le annotazioni «${doc}»`, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+      }
+      case "export.run": {
+        // Come il comando del kernel: un target che non è registrato si
+        // rifiuta, gli altri accodano il lavoro e lo dicono, in inglese. Qui il
+        // lavoro non gira, e il file non arriva.
+        const request = JSON.parse(String(args?.request_json)) as { target?: unknown };
+        const drawTarget = typeof request.target === "string" && request.target.startsWith("draw.");
+        if (!drawTarget || options.draw !== true) throw new Error(`host fake: unknown export target \`${String(request.target)}\``);
+        nextJob += 1;
+        return { notify: `export.run queued (job ${nextJob})`, effect: { kind: "done" as const }, undo: null, partial: null };
+      }
       case "folder.create": {
         const path = String(args?.path ?? "");
         const taken =
@@ -807,7 +875,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
+        const extensions = ["md", "markdown", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id) => {
@@ -875,6 +944,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.saveArtifact
           ? gate("saveArtifact", [suggestedName, mediaType, bytes], options.saveArtifact(suggestedName, mediaType, bytes))
           : unavailable("saveArtifact", [suggestedName, mediaType, bytes]),
+      printArtifact: (suggestedName, mediaType, bytes) =>
+        options.printArtifact
+          ? gate("printArtifact", [suggestedName, mediaType, bytes], options.printArtifact(suggestedName, mediaType, bytes))
+          : unavailable("printArtifact", [suggestedName, mediaType, bytes]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
       openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
         if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
@@ -1251,6 +1324,74 @@ export function createFakeHost(options: Options = {}): FakeHost {
     },
     emit,
   };
+}
+
+/// I modelli di «Nuovo disegno» in italiano, per id: gli stessi file che il
+/// comando vero distribuisce.
+const DRAWING_TEMPLATES: Record<string, string> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>("../../../../crates/fub-features/templates/*.it.svg", { query: "?raw", import: "default", eager: true }),
+  ).map(([path, text]) => [path.split("/").pop()!.replace(/\.it\.svg$/, ""), text]),
+);
+
+/// La spec di `drawing.create` come la dichiara la feature `draw`, in
+/// italiano: le prove della galleria e delle sue porte la danno all'host.
+export function drawingCreateSpec(): CommandSpec {
+  const choices: [string, string][] = [
+    ["blank", "Vuoto"],
+    ["a4-portrait", "A4 verticale"],
+    ["a4-landscape", "A4 orizzontale"],
+    ["slide", "Diapositiva 16:9"],
+    ["diagram", "Diagramma di flusso"],
+    ["lesson", "Lavagna per la lezione"],
+    ["storyboard", "Storyboard"],
+    ["concept-map", "Mappa concettuale"],
+  ];
+  return {
+    id: "drawing.create",
+    title: "Nuovo disegno",
+    description: "Crea un disegno, vuoto o da un modello, e lo apre.",
+    keybinding: null,
+    params: [
+      { name: "name", title: "Nome", description: "", kind: { kind: "text" }, required: false },
+      { name: "folder", title: "Cartella", description: "", kind: { kind: "text" }, required: false },
+      {
+        name: "template",
+        title: "Modello",
+        description: "",
+        kind: { kind: "choice", value: choices.map(([value, title]) => ({ value, title })) },
+        required: false,
+      },
+      { name: "from", title: "Dal vault", description: "", kind: { kind: "document" }, required: false },
+    ],
+    scope: { writes: true, reach: "document", reversible: true },
+    surfaces: [],
+  };
+}
+
+/// Il documento nuovo del provider dei disegni: radice, titolo, carta e
+/// «Livello 1». Il nome della radice sta in una costante, come per le
+/// annotazioni.
+function blankDrawing(): string {
+  const root = "svg";
+  return [
+    `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">`,
+    "  <title></title>",
+    '  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>',
+    '  <g id="livello-1" fub:layer="Livello 1">',
+    "  </g>",
+    `</${root}>`,
+    "",
+  ].join("\n");
+}
+
+/// La sorgente col titolo della radice cambiato in `title`: il testo del
+/// `<title>` che apre la radice, o un `<title>` nuovo in testa alla radice.
+/// Il titolo di una forma più in basso resta suo.
+function titled(source: string, title: string): string {
+  const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
+  return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
 }
 
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,

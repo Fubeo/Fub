@@ -40,11 +40,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** The table name of a `[…]` line, or `null` if the line is not one. */
-function nomeSezione(riga) {
-  const m = riga.match(/^\[\[?([^\]]+)\]\]?\s*$/);
-  return m === null ? m : m[1].trim();
-}
+import { sectionName } from "./cargo-lines.mjs";
 
 /**
  * The members declared by `[workspace] members` in the root manifest.
@@ -64,7 +60,7 @@ function membriDichiarati(manifestRadice) {
   let dentro = false;
 
   for (let i = 0; i < righe.length; i++) {
-    const sezione = nomeSezione(righe[i].trim());
+    const sezione = sectionName(righe[i].trim());
     if (sezione !== null) {
       dentro = sezione === "workspace";
       continue;

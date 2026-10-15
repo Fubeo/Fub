@@ -1,0 +1,48 @@
+File: drawio-classes.xml
+Oggetti: 35 (forme 8, testi 20, linee 7, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: tip ×2 (block)
+
+Livello «Livello 1»
+  Gruppo, 8 oggetti
+    Rettangolo «Person»
+    Rettangolo
+    Testo «Person»
+    Testo «Name»
+    Testo «Phone Number»
+    Testo «Email Address»
+    Linea
+    Testo «Purchase Parking Pass»
+  Gruppo, 8 oggetti
+    Rettangolo «Student»
+    Rettangolo
+    Testo «Student»
+    Testo «Student Number»
+    Testo «Average Mark»
+    Linea
+    Testo «Is Eligible To Enroll»
+    Testo «Get Seminars Taken»
+  Connettore da «Student» a «Person»
+  Gruppo, 5 oggetti
+    Rettangolo «Professor»
+    Rettangolo
+    Testo «Professor»
+    Testo «Salary»
+    Linea
+  Connettore da «Professor» a «Person»
+  Gruppo, 11 oggetti
+    Rettangolo «Address»
+    Rettangolo
+    Testo «Address»
+    Testo «Street»
+    Testo «City»
+    Testo «State»
+    Testo «Postal Code»
+    Testo «Country»
+    Linea
+    Testo «Validate»
+    Testo «Output As Label»
+  Connettore «0..1» da «Person» a «Address»
+  Testo «0..1»
+  Testo «1»
+  Testo «lives at»

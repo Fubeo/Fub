@@ -20,8 +20,8 @@
 // Niente i18n qui: ogni stringa mostrata all'utente arriva da un parametro
 // (`setA11yLabel`), perché i test non devono conoscere le lingue.
 
-import type { Camera, CameraState, Point, WorldBound } from "./render/camera";
-import { screenToWorld } from "./render/camera";
+import type { Camera, CameraState, Point, WorldBound } from "../spatial/camera";
+import { screenToWorld } from "../spatial/camera";
 import type { Structure } from "./sim/types";
 
 export interface InteractionActions {

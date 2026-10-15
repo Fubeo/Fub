@@ -1,0 +1,97 @@
+File: mac-slidegenerator-architecture.drawio
+Oggetti: 57 (forme 22, testi 6, linee 29, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: route ×25
+
+Livello «Livello 1»
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Testo «Multi-Agent Collaboration Hierarchical Agent Teams»
+  Tracciato
+  Gruppo «Agent», 2 oggetti
+    Rettangolo «Agent»
+    Testo «Agent»
+  Connettore
+  Testo «Conditional Edge»
+  Testo «Edge»
+  Connettore
+  Gruppo «Supervisor», 2 oggetti
+    Rettangolo «Supervisor»
+    Testo «Supervisor»
+  Gruppo «Writer», 2 oggetti
+    Rettangolo «Writer»
+    Testo «Writer»
+  Gruppo «Researcher», 2 oggetti
+    Rettangolo «Researcher»
+    Testo «Researcher»
+  Gruppo «Team», 2 oggetti
+    Rettangolo «Team»
+    Testo «Team»
+  Gruppo «Google Search», 2 oggetti
+    Ellisse «Google Search»
+    Testo «Google Search»
+  Gruppo «Web Scraper», 2 oggetti
+    Ellisse «Web Scraper»
+    Testo «Web Scraper»
+  Gruppo «tool», 2 oggetti
+    Ellisse «tool»
+    Testo «tool»
+  Testo «Research Team»
+  Gruppo «Slide Planner», 2 oggetti
+    Rettangolo «Slide Planner»
+    Testo «Slide Planner»
+  Gruppo «Presentation Planner», 2 oggetti
+    Rettangolo «Presentation Planner»
+    Testo «Presentation Planner»
+  Gruppo «Image Finder», 2 oggetti
+    Rettangolo «Image Finder»
+    Testo «Image Finder»
+  Gruppo «Image Search», 2 oggetti
+    Ellisse «Image Search»
+    Testo «Image Search»
+  Gruppo «Image Downloader», 2 oggetti
+    Ellisse «Image Downloader»
+    Testo «Image Downloader»
+  Gruppo «Merge Videos», 2 oggetti
+    Ellisse «Merge Videos»
+    Testo «Merge Videos»
+  Gruppo «Create Video Slide», 2 oggetti
+    Ellisse «Create Video Slide»
+    Testo «Create Video Slide»
+  Connettore da «Google Search» a «Researcher»
+  Connettore da «Web Scraper»
+  Connettore da «Image Search» a «Image Finder»
+  Connettore da «Image Downloader»
+  Connettore da «Merge Videos» a «Presentation Planner»
+  Connettore da «Create Video Slide» a «Presentation Planner»
+  Connettore da «Google Search» a «Researcher»
+  Connettore da «Web Scraper» a «Researcher»
+  Connettore da «Image Search» a «Image Finder»
+  Connettore da «Image Downloader» a «Image Finder»
+  Connettore da «Merge Videos» a «Presentation Planner»
+  Connettore da «Create Video Slide» a «Presentation Planner»
+  Connettore da «Image Finder» a «Slide Planner»
+  Connettore da «Image Finder» a «Slide Planner»
+  Connettore da «Researcher» a «Writer»
+  Connettore da «Researcher» a «Writer»
+  Connettore da «Writer» a «Supervisor»
+  Connettore da «Presentation Planner» a «Supervisor»
+  Connettore da Tracciato a «Supervisor»
+  Connettore verso Tracciato
+  Connettore da «Writer» a «Supervisor»
+  Connettore da «Slide Planner» a «Supervisor»
+  Connettore da «Slide Planner» a «Supervisor»
+  Connettore da «Presentation Planner» a «Supervisor»
+  Testo «Slides Team»
+  Testo «Presenter Team»
+  Gruppo «Text-to-Audio», 2 oggetti
+    Ellisse «Text-to-Audio»
+    Testo «Text-to-Audio»
+  Gruppo «Slide-to-Video», 2 oggetti
+    Ellisse «Slide-to-Video»
+    Testo «Slide-to-Video»
+  Connettore da «Create Video Slide» a «Text-to-Audio»
+  Connettore da «Text-to-Audio» a «Slide-to-Video»
+  Connettore da «Slide-to-Video» a «Create Video Slide»

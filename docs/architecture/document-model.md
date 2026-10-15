@@ -93,7 +93,13 @@ Il modello distingue blocchi e contenuto inline. Tra le forme comuni esistono:
 
 Una forma entra nel modello comune quando più consumatori devono interrogarne la
 struttura o quando l'escape hatch perderebbe dati necessari. Un'estensione
-specifica del formato può restare `Custom`.
+specifica del formato può restare `Custom`: un disegno di FubDraw, per esempio,
+è un blocco `fub.scene.summary` che contiene titolo, descrizione e testi come
+heading e paragrafi comuni, così ricerca, backlink e grafo lo leggono senza
+conoscere il formato ([formato della scena](../reference/scene-format.md), §9).
+Le annotazioni di un PDF aggiungono blocchi custom per pagine e note, e il PDF
+annotato è un collegamento come gli altri ([formato delle
+annotazioni](../reference/annotation-format.md), §5).
 
 ## Identità interne
 
@@ -185,3 +191,4 @@ albero malformato.
 - `crates/fub-format-markdown/src/render.rs`
 - `crates/fub-format-markdown/src/serialize.rs`
 - `crates/fub-format-sheet/src/lib.rs`
+- `crates/fub-format-svg/src/parse.rs`

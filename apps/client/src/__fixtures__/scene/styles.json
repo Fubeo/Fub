@@ -1,0 +1,875 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        4199
+      ],
+      "utf16": [
+        0,
+        4199
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            154
+          ],
+          "utf16": [
+            0,
+            154
+          ]
+        },
+        "close": {
+          "bytes": [
+            4193,
+            4199
+          ],
+          "utf16": [
+            4193,
+            4199
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        157,
+        181
+      ],
+      "utf16": [
+        157,
+        181
+      ],
+      "indent": "  ",
+      "text": "Gli stili"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        184,
+        2395
+      ],
+      "utf16": [
+        184,
+        2395
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            184,
+            204
+          ],
+          "utf16": [
+            184,
+            204
+          ]
+        },
+        "close": {
+          "bytes": [
+            2388,
+            2395
+          ],
+          "utf16": [
+            2388,
+            2395
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000005",
+      "bytes": [
+        209,
+        366
+      ],
+      "utf16": [
+        209,
+        366
+      ],
+      "indent": "    ",
+      "lifecycle": "swatch",
+      "swatch": {
+        "name": "Blu mare",
+        "color": "#0072b2"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        1
+      ],
+      "tag": "text",
+      "role": "resource",
+      "id": "r00000001",
+      "bytes": [
+        371,
+        539
+      ],
+      "utf16": [
+        371,
+        539
+      ],
+      "indent": "    ",
+      "lifecycle": "style",
+      "style": {
+        "name": "Titolo del capitolo",
+        "kind": "text"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        2
+      ],
+      "tag": "text",
+      "role": "resource",
+      "id": "r00000002",
+      "bytes": [
+        544,
+        764
+      ],
+      "utf16": [
+        544,
+        764
+      ],
+      "indent": "    ",
+      "title": "Le note a margine",
+      "lifecycle": "style",
+      "style": {
+        "name": "Nota",
+        "kind": "text"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        3
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "r00000003",
+      "bytes": [
+        769,
+        994
+      ],
+      "utf16": [
+        769,
+        994
+      ],
+      "indent": "    ",
+      "lifecycle": "private"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        4
+      ],
+      "tag": "marker",
+      "role": "resource",
+      "id": "r00000006",
+      "bytes": [
+        999,
+        1205
+      ],
+      "utf16": [
+        999,
+        1205
+      ],
+      "indent": "    ",
+      "lifecycle": "shared"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        5
+      ],
+      "tag": "polyline",
+      "role": "resource",
+      "id": "r00000004",
+      "bytes": [
+        1210,
+        1511
+      ],
+      "utf16": [
+        1210,
+        1511
+      ],
+      "indent": "    ",
+      "lifecycle": "style",
+      "style": {
+        "name": "Riquadro",
+        "kind": "graphic"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        6
+      ],
+      "tag": "polyline",
+      "role": "resource",
+      "id": "r00000007",
+      "bytes": [
+        1516,
+        1633
+      ],
+      "utf16": [
+        1516,
+        1633
+      ],
+      "indent": "    ",
+      "lifecycle": "style",
+      "style": {
+        "name": "Avviso",
+        "kind": "graphic"
+      }
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        1
+      ],
+      "bytes": [
+        1638,
+        2385
+      ],
+      "utf16": [
+        1638,
+        2385
+      ],
+      "elements": [
+        7,
+        15
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        2398,
+        2491
+      ],
+      "utf16": [
+        2398,
+        2491
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        2494,
+        4125
+      ],
+      "utf16": [
+        2494,
+        4125
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2494,
+            2534
+          ],
+          "utf16": [
+            2494,
+            2534
+          ]
+        },
+        "close": {
+          "bytes": [
+            4121,
+            4125
+          ],
+          "utf16": [
+            4121,
+            4125
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000001",
+      "bytes": [
+        2539,
+        2746
+      ],
+      "utf16": [
+        2539,
+        2746
+      ],
+      "indent": "    ",
+      "lines": [
+        "Il ciclo dell'acqua"
+      ],
+      "follows": "r00000001"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000002",
+      "bytes": [
+        2751,
+        2982
+      ],
+      "utf16": [
+        2751,
+        2982
+      ],
+      "indent": "    ",
+      "lines": [
+        "Una nota"
+      ],
+      "follows": "r00000002"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000003",
+      "bytes": [
+        2987,
+        3121
+      ],
+      "utf16": [
+        2987,
+        3121
+      ],
+      "indent": "    ",
+      "follows": "r00000004"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000004",
+      "bytes": [
+        3126,
+        3299
+      ],
+      "utf16": [
+        3126,
+        3299
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            3126,
+            3166
+          ],
+          "utf16": [
+            3126,
+            3166
+          ]
+        },
+        "close": {
+          "bytes": [
+            3295,
+            3299
+          ],
+          "utf16": [
+            3295,
+            3299
+          ]
+        }
+      },
+      "follows": "r00000004"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3,
+        0
+      ],
+      "tag": "polyline",
+      "role": "polyline",
+      "id": "o00000005",
+      "bytes": [
+        3173,
+        3290
+      ],
+      "utf16": [
+        3173,
+        3290
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000006",
+      "bytes": [
+        3304,
+        3451
+      ],
+      "utf16": [
+        3304,
+        3451
+      ],
+      "indent": "    ",
+      "lines": [
+        "Sbagliato"
+      ],
+      "follows": "r00000004"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000007",
+      "bytes": [
+        3456,
+        3590
+      ],
+      "utf16": [
+        3456,
+        3590
+      ],
+      "indent": "    ",
+      "follows": "r00000001"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6
+      ],
+      "tag": "ellipse",
+      "role": "ellipse",
+      "id": "o00000008",
+      "bytes": [
+        3595,
+        3691
+      ],
+      "utf16": [
+        3595,
+        3691
+      ],
+      "indent": "    ",
+      "follows": "r0000000z"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        7
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000009",
+      "bytes": [
+        3696,
+        3783
+      ],
+      "utf16": [
+        3696,
+        3783
+      ],
+      "indent": "    ",
+      "follows": "r00000005"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        8
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000a",
+      "bytes": [
+        3788,
+        3923
+      ],
+      "utf16": [
+        3788,
+        3923
+      ],
+      "indent": "    ",
+      "follows": "r00000008"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        9
+      ],
+      "tag": "a",
+      "role": "link",
+      "id": "o0000000b",
+      "bytes": [
+        3928,
+        4118
+      ],
+      "utf16": [
+        3928,
+        4118
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            3928,
+            3989
+          ],
+          "utf16": [
+            3928,
+            3989
+          ]
+        },
+        "close": {
+          "bytes": [
+            4114,
+            4118
+          ],
+          "utf16": [
+            4114,
+            4118
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        9,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o0000000c",
+      "bytes": [
+        3996,
+        4109
+      ],
+      "utf16": [
+        3996,
+        4109
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000002",
+      "bytes": [
+        4128,
+        4192
+      ],
+      "utf16": [
+        4128,
+        4192
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            4128,
+            4185
+          ],
+          "utf16": [
+            4128,
+            4185
+          ]
+        },
+        "close": {
+          "bytes": [
+            4188,
+            4192
+          ],
+          "utf16": [
+            4188,
+            4192
+          ]
+        }
+      },
+      "layer": {
+        "name": "Note",
+        "locked": false,
+        "hidden": false
+      }
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Gli stili",
+      "bytes": [
+        157,
+        181
+      ],
+      "utf16": [
+        157,
+        181
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Ciao",
+        "bytes": [
+          1697,
+          1803
+        ],
+        "utf16": [
+          1697,
+          1803
+        ]
+      },
+      {
+        "text": "Il ciclo dell'acqua",
+        "bytes": [
+          2539,
+          2746
+        ],
+        "utf16": [
+          2539,
+          2746
+        ]
+      },
+      {
+        "text": "Una nota",
+        "bytes": [
+          2751,
+          2982
+        ],
+        "utf16": [
+          2751,
+          2982
+        ]
+      },
+      {
+        "text": "Sbagliato",
+        "bytes": [
+          3304,
+          3451
+        ],
+        "utf16": [
+          3304,
+          3451
+        ]
+      }
+    ],
+    "links": [
+      {
+        "path": "note/acqua.md",
+        "bytes": [
+          3928,
+          4118
+        ],
+        "utf16": [
+          3928,
+          4118
+        ],
+        "href": {
+          "bytes": [
+            3952,
+            3965
+          ],
+          "utf16": [
+            3952,
+            3965
+          ]
+        }
+      }
+    ],
+    "embeds": [],
+    "boards": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1",
+      "Note"
+    ],
+    "boards": [],
+    "counts": {
+      "strokes": 0,
+      "shapes": 7,
+      "texts": 3,
+      "images": 0,
+      "links": 1,
+      "foreign": 1
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 100.0,
+      "y": 120.0,
+      "width": 1400.0,
+      "height": 580.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1638,
+        2385
+      ],
+      "utf16": [
+        1638,
+        2385
+      ]
+    },
+    {
+      "code": "S018",
+      "severity": "warning",
+      "bytes": [
+        3304,
+        3451
+      ],
+      "utf16": [
+        3304,
+        3451
+      ],
+      "detail": "r00000004"
+    },
+    {
+      "code": "S018",
+      "severity": "warning",
+      "bytes": [
+        3456,
+        3590
+      ],
+      "utf16": [
+        3456,
+        3590
+      ],
+      "detail": "r00000001"
+    },
+    {
+      "code": "S018",
+      "severity": "warning",
+      "bytes": [
+        3595,
+        3691
+      ],
+      "utf16": [
+        3595,
+        3691
+      ],
+      "detail": "r0000000z"
+    },
+    {
+      "code": "S018",
+      "severity": "warning",
+      "bytes": [
+        3696,
+        3783
+      ],
+      "utf16": [
+        3696,
+        3783
+      ],
+      "detail": "r00000005"
+    },
+    {
+      "code": "S018",
+      "severity": "warning",
+      "bytes": [
+        3788,
+        3923
+      ],
+      "utf16": [
+        3788,
+        3923
+      ],
+      "detail": "r00000008"
+    }
+  ]
+}

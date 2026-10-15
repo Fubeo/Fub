@@ -1,0 +1,34 @@
+{
+  "name": "remove-with-foreign-neighbors",
+  "description": "i byte estranei vicini restano identici",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <!-- schizzo,   da   rifinire -->\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n    <foreignObject x=\"0\" y=\"0\" width=\"10\" height=\"10\"><div xmlns=\"http://www.w3.org/1999/xhtml\">ciao</div></foreignObject>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "remove",
+      "target": "o2b3c4d5e"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <!-- schizzo,   da   rifinire -->\n    <foreignObject x=\"0\" y=\"0\" width=\"10\" height=\"10\"><div xmlns=\"http://www.w3.org/1999/xhtml\">ciao</div></foreignObject>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "add",
+      "slot": {
+        "parent": "l3f8a0c2d",
+        "after": null,
+        "skip": 1,
+        "lead": ""
+      },
+      "gap": "\n    ",
+      "raw": "<rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>"
+    },
+    "edits": [
+      {
+        "from": 354,
+        "to": 437,
+        "deleted": "\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>",
+        "inserted": ""
+      }
+    ]
+  }
+}

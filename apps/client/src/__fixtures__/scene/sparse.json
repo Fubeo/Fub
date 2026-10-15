@@ -1,0 +1,1032 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        5343
+      ],
+      "utf16": [
+        0,
+        5343
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            154
+          ],
+          "utf16": [
+            0,
+            154
+          ]
+        },
+        "close": {
+          "bytes": [
+            5337,
+            5343
+          ],
+          "utf16": [
+            5337,
+            5343
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        157,
+        188
+      ],
+      "utf16": [
+        157,
+        188
+      ],
+      "indent": "  ",
+      "text": "Ciclo dell'acqua"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "desc",
+      "role": "desc",
+      "id": null,
+      "bytes": [
+        191,
+        235
+      ],
+      "utf16": [
+        191,
+        235
+      ],
+      "indent": "  ",
+      "text": "Dal mare alle nuvole, e ritorno"
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        238,
+        331
+      ],
+      "utf16": [
+        238,
+        331
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l3f8a0c2d",
+      "bytes": [
+        334,
+        4591
+      ],
+      "utf16": [
+        334,
+        4591
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            334,
+            374
+          ],
+          "utf16": [
+            334,
+            374
+          ]
+        },
+        "close": {
+          "bytes": [
+            4587,
+            4591
+          ],
+          "utf16": [
+            4587,
+            4591
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "ellipse",
+      "role": "ellipse",
+      "id": "o1a2b3c4d",
+      "bytes": [
+        379,
+        485
+      ],
+      "utf16": [
+        379,
+        485
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "path",
+      "role": "arrow",
+      "id": "o5e6f7g8h",
+      "bytes": [
+        490,
+        710
+      ],
+      "utf16": [
+        490,
+        710
+      ],
+      "indent": "    ",
+      "arrow": [
+        420.0,
+        200.0,
+        700.0,
+        420.0
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o9i0j1k2l",
+      "bytes": [
+        715,
+        1093
+      ],
+      "utf16": [
+        715,
+        1093
+      ],
+      "indent": "    ",
+      "lines": [
+        "Evaporazione",
+        "& condensa",
+        "in pioggia"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o7k2m9x4q",
+      "bytes": [
+        1098,
+        1646
+      ],
+      "utf16": [
+        1098,
+        1646
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": true,
+        "samples": 12,
+        "duration": 88
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000001",
+      "bytes": [
+        1651,
+        1999
+      ],
+      "utf16": [
+        1651,
+        1999
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "highlighter",
+        "redrawable": true,
+        "samples": 5,
+        "duration": 64
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000010",
+      "bytes": [
+        2004,
+        2945
+      ],
+      "utf16": [
+        2004,
+        2945
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2004,
+            2088
+          ],
+          "utf16": [
+            2004,
+            2088
+          ]
+        },
+        "close": {
+          "bytes": [
+            2941,
+            2945
+          ],
+          "utf16": [
+            2941,
+            2945
+          ]
+        }
+      },
+      "locked": true
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000011",
+      "bytes": [
+        2095,
+        2180
+      ],
+      "utf16": [
+        2095,
+        2180
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        1
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000012",
+      "bytes": [
+        2187,
+        2252
+      ],
+      "utf16": [
+        2187,
+        2252
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        2
+      ],
+      "tag": "line",
+      "role": "line",
+      "id": "o00000013",
+      "bytes": [
+        2259,
+        2376
+      ],
+      "utf16": [
+        2259,
+        2376
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        3
+      ],
+      "tag": "polyline",
+      "role": "polyline",
+      "id": "o00000014",
+      "bytes": [
+        2383,
+        2498
+      ],
+      "utf16": [
+        2383,
+        2498
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        4
+      ],
+      "tag": "polygon",
+      "role": "polygon",
+      "id": "o00000015",
+      "bytes": [
+        2505,
+        2610
+      ],
+      "utf16": [
+        2505,
+        2610
+      ],
+      "indent": "      ",
+      "hidden": true
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        5
+      ],
+      "tag": "path",
+      "role": "path",
+      "id": "o00000016",
+      "bytes": [
+        2617,
+        2768
+      ],
+      "utf16": [
+        2617,
+        2768
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        6
+      ],
+      "tag": "image",
+      "role": "image",
+      "id": "o00000017",
+      "bytes": [
+        2775,
+        2898
+      ],
+      "utf16": [
+        2775,
+        2898
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        3,
+        5
+      ],
+      "bytes": [
+        2905,
+        2936
+      ],
+      "utf16": [
+        2905,
+        2936
+      ],
+      "elements": [
+        7,
+        8
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6
+      ],
+      "tag": "a",
+      "role": "link",
+      "id": "o00000020",
+      "bytes": [
+        2950,
+        3167
+      ],
+      "utf16": [
+        2950,
+        3167
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2950,
+            2989
+          ],
+          "utf16": [
+            2950,
+            2989
+          ]
+        },
+        "close": {
+          "bytes": [
+            3163,
+            3167
+          ],
+          "utf16": [
+            3163,
+            3167
+          ]
+        }
+      },
+      "title": "Il ciclo nella nota"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6,
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        2996,
+        3030
+      ],
+      "utf16": [
+        2996,
+        3030
+      ],
+      "indent": "      ",
+      "text": "Il ciclo nella nota"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        6,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000021",
+      "bytes": [
+        3037,
+        3158
+      ],
+      "utf16": [
+        3037,
+        3158
+      ],
+      "indent": "      ",
+      "title": "Nuvola"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        7
+      ],
+      "tag": "path",
+      "role": "ngon",
+      "id": "o00000022",
+      "bytes": [
+        3172,
+        3535
+      ],
+      "utf16": [
+        3172,
+        3535
+      ],
+      "indent": "    ",
+      "polygonal": {
+        "shape": "polygon",
+        "cx": 1300.0,
+        "cy": 560.0,
+        "r": 80.0,
+        "count": 6,
+        "ratio": null,
+        "rotation": 0.0,
+        "corner": 8.0
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        8
+      ],
+      "tag": "path",
+      "role": "star",
+      "id": "o00000023",
+      "bytes": [
+        3540,
+        3786
+      ],
+      "utf16": [
+        3540,
+        3786
+      ],
+      "indent": "    ",
+      "polygonal": {
+        "shape": "star",
+        "cx": 1100.0,
+        "cy": 820.0,
+        "r": 70.0,
+        "count": 5,
+        "ratio": 0.382,
+        "rotation": 0.0,
+        "corner": 0.0
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        9
+      ],
+      "tag": "path",
+      "role": "width",
+      "id": "o00000024",
+      "bytes": [
+        3791,
+        4251
+      ],
+      "utf16": [
+        3791,
+        4251
+      ],
+      "indent": "    ",
+      "varwidth": {
+        "cap": "round",
+        "join": "round",
+        "profile": [
+          [
+            0.0,
+            1.0,
+            1.0
+          ],
+          [
+            0.4,
+            8.0,
+            6.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ]
+        ],
+        "spine": "M1200 960 L1300 960 L1360 1020"
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        10
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000032",
+      "bytes": [
+        4256,
+        4584
+      ],
+      "utf16": [
+        4256,
+        4584
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": true,
+        "samples": 5,
+        "duration": 64
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l9z8y7x6w",
+      "bytes": [
+        4594,
+        5336
+      ],
+      "utf16": [
+        4594,
+        5336
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            4594,
+            4665
+          ],
+          "utf16": [
+            4594,
+            4665
+          ]
+        },
+        "close": {
+          "bytes": [
+            5332,
+            5336
+          ],
+          "utf16": [
+            5332,
+            5336
+          ]
+        }
+      },
+      "layer": {
+        "name": "Appunti",
+        "locked": true,
+        "hidden": true
+      },
+      "locked": true,
+      "hidden": true
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        0
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000030",
+      "bytes": [
+        4670,
+        4914
+      ],
+      "utf16": [
+        4670,
+        4914
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        1
+      ],
+      "tag": "path",
+      "role": "stroke",
+      "id": "o00000031",
+      "bytes": [
+        4919,
+        5192
+      ],
+      "utf16": [
+        4919,
+        5192
+      ],
+      "indent": "    ",
+      "stroke": {
+        "tool": "pen",
+        "redrawable": false,
+        "samples": 2,
+        "duration": 8
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        2
+      ],
+      "tag": "image",
+      "role": "image",
+      "id": "o00000033",
+      "bytes": [
+        5197,
+        5297
+      ],
+      "utf16": [
+        5197,
+        5297
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        3
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000034",
+      "bytes": [
+        5302,
+        5329
+      ],
+      "utf16": [
+        5302,
+        5329
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            5302,
+            5320
+          ],
+          "utf16": [
+            5302,
+            5320
+          ]
+        },
+        "close": {
+          "bytes": [
+            5325,
+            5329
+          ],
+          "utf16": [
+            5325,
+            5329
+          ]
+        }
+      }
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Ciclo dell'acqua",
+      "bytes": [
+        157,
+        188
+      ],
+      "utf16": [
+        157,
+        188
+      ]
+    },
+    "desc": {
+      "text": "Dal mare alle nuvole, e ritorno",
+      "bytes": [
+        191,
+        235
+      ],
+      "utf16": [
+        191,
+        235
+      ]
+    },
+    "texts": [
+      {
+        "text": "Evaporazione & condensa in pioggia",
+        "bytes": [
+          715,
+          1093
+        ],
+        "utf16": [
+          715,
+          1093
+        ]
+      }
+    ],
+    "links": [
+      {
+        "path": "note/acqua.md",
+        "bytes": [
+          2950,
+          3167
+        ],
+        "utf16": [
+          2950,
+          3167
+        ],
+        "href": {
+          "bytes": [
+            2974,
+            2987
+          ],
+          "utf16": [
+            2974,
+            2987
+          ]
+        }
+      }
+    ],
+    "embeds": [
+      {
+        "path": "foto/mare.png",
+        "bytes": [
+          2775,
+          2898
+        ],
+        "utf16": [
+          2775,
+          2898
+        ],
+        "href": {
+          "bytes": [
+            2882,
+            2895
+          ],
+          "utf16": [
+            2882,
+            2895
+          ]
+        }
+      }
+    ],
+    "boards": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1",
+      "Appunti"
+    ],
+    "boards": [],
+    "counts": {
+      "strokes": 5,
+      "shapes": 12,
+      "texts": 1,
+      "images": 2,
+      "links": 1,
+      "foreign": 1
+    },
+    "ink": {
+      "samples": 24,
+      "duration": 224
+    },
+    "bbox": {
+      "x": 39.7,
+      "y": 26.13,
+      "width": 1480.3,
+      "height": 1068.57
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        2905,
+        2936
+      ],
+      "utf16": [
+        2905,
+        2936
+      ]
+    },
+    {
+      "code": "S004",
+      "severity": "error",
+      "bytes": [
+        4670,
+        4914
+      ],
+      "utf16": [
+        4670,
+        4914
+      ],
+      "detail": "fub:ink arity 1"
+    },
+    {
+      "code": "S009",
+      "severity": "info",
+      "bytes": [
+        4256,
+        4584
+      ],
+      "utf16": [
+        4256,
+        4584
+      ],
+      "detail": "2.25"
+    },
+    {
+      "code": "S010",
+      "severity": "info",
+      "bytes": [
+        4919,
+        5192
+      ],
+      "utf16": [
+        4919,
+        5192
+      ],
+      "detail": "q"
+    },
+    {
+      "code": "S012",
+      "severity": "warning",
+      "bytes": [
+        2775,
+        2898
+      ],
+      "utf16": [
+        2775,
+        2898
+      ]
+    },
+    {
+      "code": "S017",
+      "severity": "info",
+      "bytes": [
+        2095,
+        2180
+      ],
+      "utf16": [
+        2095,
+        2180
+      ],
+      "detail": "#009e73 #cc79a7 1.11"
+    },
+    {
+      "code": "S017",
+      "severity": "info",
+      "bytes": [
+        2187,
+        2252
+      ],
+      "utf16": [
+        2187,
+        2252
+      ],
+      "detail": "#cc79a7 #009e73 1.11"
+    }
+  ]
+}

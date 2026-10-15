@@ -27,7 +27,7 @@
 // [decisione 0035]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 import { api } from "../host/ipc";
 import { activeJobs } from "../host/query";
-import type { ExportArtifact, JobProgress, JobStatus, KernelNotice } from "../host/contract";
+import type { ExportArtifact, JobProgress, JobStatus, KernelNotice, TransferNote } from "../host/contract";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { onAnyEvent } from "../state/kernel";
 import { $ } from "../ui/dom";
@@ -194,13 +194,43 @@ export function exportArtifacts(notice: KernelNotice): ExportArtifact[] | null {
   return parsed;
 }
 
+/** How many notes of one export the panel shows, and how long each may be:
+ * the report comes from a plugin, and the panel stays readable whatever it
+ * says. */
+const NOTES_MAX = 8;
+const NOTE_CHARS = 300;
+
+/** The notes of an export report that read as notes, bounded: what the export
+ * wants the user to know about the files (a size reduced to the limits, a
+ * missing font). */
+export function exportNotes(notice: KernelNotice): TransferNote[] {
+  const log = (exportReport(notice) as { log?: unknown } | null)?.log;
+  if (!Array.isArray(log)) return [];
+  const notes: TransferNote[] = [];
+  for (const note of log as unknown[]) {
+    if (notes.length === NOTES_MAX) break;
+    if (!note || typeof note !== "object") continue;
+    const { level, message, entry } = note as Record<string, unknown>;
+    if ((level !== "info" && level !== "warning" && level !== "error") || typeof message !== "string") continue;
+    const text = message.trim();
+    if (text === "") continue;
+    notes.push({
+      level,
+      message: text.length > NOTE_CHARS ? `${text.slice(0, NOTE_CHARS - 1)}…` : text,
+      entry: typeof entry === "string" ? entry : null,
+    });
+  }
+  return notes;
+}
+
 interface FinishedArtifact extends ExportArtifact {
-  state: "ready" | "saving" | "saved" | "failed";
+  state: "ready" | "saving" | "printing" | "saved" | "failed";
   detail: string;
 }
 interface FinishedExport {
   id: string;
   artifacts: FinishedArtifact[];
+  notes: TransferNote[];
 }
 // --- da qui in giù è disegno ------------------------------------------------
 
@@ -316,11 +346,13 @@ export function mountActivity(lifetime: Lifetime): void {
       const completed = eventNotice.event;
       if (completed.type === "job_done") {
         const artifacts = exportArtifacts(eventNotice);
-        if (artifacts && artifacts.length > 0 &&
+        const notes = artifacts === null ? [] : exportNotes(eventNotice);
+        if (artifacts && (artifacts.length > 0 || notes.length > 0) &&
             !finished.some((report) => report.id === completed.id)) {
           finished.push({
             id: completed.id,
             artifacts: artifacts.map((artifact) => ({ ...artifact, state: "ready", detail: "" })),
+            notes,
           });
           // Keep at most two completed exports; byte-bearing reports are
           // bounded by the producer's 32 MiB cap and released on vault close.
@@ -350,6 +382,16 @@ export function mountActivity(lifetime: Lifetime): void {
   // conteggio, quindi il testo fermo di `index.html` non lo può possedere.
   lifetime.add(onLanguage(redraw));
 
+  redraw();
+}
+
+/// Apre il centro attività senza prendergli il fuoco: chi ha appena chiesto un
+/// export ci vede il lavoro che gira e poi il file da salvare, e intanto resta
+/// dove stava. Senza il pannello (una shell che non lo monta) non fa niente.
+export function showActivity(): void {
+  if (open || !document.getElementById("activity-panel")) return;
+  open = true;
+  void request();
   redraw();
 }
 
@@ -440,17 +482,38 @@ function redraw(): void {
         status.textContent = t("activity.artifact_delivered", { size: artifact.content.value });
       } else {
         status.textContent = artifact.state === "saving" ? t("activity.artifact_saving") :
-          artifact.state === "failed" ? t("activity.artifact_failed", { reason: artifact.detail }) :
-            artifact.detail || t("activity.artifact_ready");
+          artifact.state === "printing" ? t("activity.artifact_printing") :
+            artifact.state === "failed" ? t("activity.artifact_failed", { reason: artifact.detail }) :
+              artifact.detail || t("activity.artifact_ready");
+        const busy = artifact.state === "saving" || artifact.state === "printing";
         const save = document.createElement("button");
         save.type = "button";
         save.className = "link-button";
         save.textContent = t("activity.artifact_save");
-        save.disabled = artifact.state === "saving";
+        save.disabled = busy;
         save.addEventListener("click", () => void persistArtifact(report, artifact));
         item.append(save);
+        // Un PDF si stampa anche: passa al lettore del sistema, e i byte
+        // restano per salvarlo.
+        if (artifact.media_type === "application/pdf") {
+          const print = document.createElement("button");
+          print.type = "button";
+          print.className = "link-button";
+          print.textContent = t("activity.artifact_print");
+          print.disabled = busy;
+          print.addEventListener("click", () => void printArtifact(report, artifact));
+          item.append(print);
+        }
       }
       item.append(status);
+      list.append(item);
+    }
+    // Le note dell'export, sotto i suoi file: un'informazione è tenue, un
+    // avviso e un errore no, e lo dicono anche a parole.
+    for (const note of report.notes) {
+      const item = document.createElement("li");
+      item.className = note.level === "info" ? "muted" : "activity-row";
+      item.textContent = note.level === "info" ? note.message : t(`activity.note.${note.level}`, { message: note.message });
       list.append(item);
     }
   }
@@ -488,7 +551,7 @@ function pastRow(item: Past): HTMLLIElement {
 }
 
 async function persistArtifact(report: FinishedExport, artifact: FinishedArtifact): Promise<void> {
-  if (artifact.state === "saving" || artifact.content.kind !== "bytes" ||
+  if (artifact.state === "saving" || artifact.state === "printing" || artifact.content.kind !== "bytes" ||
       !finished.includes(report)) return;
   const bytes = artifact.content.value;
   const epoch = activityEpoch;
@@ -512,6 +575,32 @@ async function persistArtifact(report: FinishedExport, artifact: FinishedArtifac
     artifact.state = "failed";
     artifact.detail = errorText(error);
   }
+  redraw();
+}
+
+/// «Stampa…» su un PDF: l'host lo apre nel programma che il sistema usa per i
+/// PDF, e da lì si stampa con la finestra di stampa del sistema. I byte
+/// restano: il PDF si può ancora salvare.
+async function printArtifact(report: FinishedExport, artifact: FinishedArtifact): Promise<void> {
+  if (artifact.state === "saving" || artifact.state === "printing" || artifact.content.kind !== "bytes" ||
+      !finished.includes(report)) return;
+  const bytes = artifact.content.value;
+  const epoch = activityEpoch;
+  artifact.state = "printing";
+  artifact.detail = "";
+  redraw();
+  try {
+    const basename = artifact.path.slice(artifact.path.lastIndexOf("/") + 1);
+    const outcome = await api.printArtifact(basename, artifact.media_type, bytes);
+    if (epoch !== activityEpoch || !finished.includes(report)) return;
+    artifact.detail = outcome.status === "opened" ? t("activity.artifact_printed") :
+      outcome.status === "no_viewer" ? t("activity.artifact_print_no_viewer") :
+        t("activity.artifact_print_unwritable", { reason: outcome.reason });
+  } catch (error) {
+    if (epoch !== activityEpoch || !finished.includes(report)) return;
+    artifact.detail = t("activity.artifact_print_failed", { reason: errorText(error) });
+  }
+  artifact.state = "ready";
   redraw();
 }
 

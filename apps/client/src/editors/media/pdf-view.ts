@@ -20,10 +20,26 @@ export interface PdfSearchHit {
   readonly snippet: string;
 }
 
+/** Un rettangolo di una pagina, in punti dall'angolo in alto a sinistra. */
+export interface PdfArea {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface PdfEngine {
   readonly pageCount: number;
   search(needle: string, limit?: number): Promise<PdfSearchHit[]>;
   renderPage(index: number, canvas: HTMLCanvasElement, scale?: number): Promise<void>;
+  /** La misura della pagina `index` (da 0) in punti, girata come la si legge. */
+  pageSize(index: number): Promise<readonly [number, number]>;
+  /**
+   * Disegna in `canvas` il rettangolo `area` della pagina `index`, a `scale`
+   * pixel per punto: la parte che si vede di una pagina ingrandita. `false`
+   * se una resa successiva l'ha interrotta, e allora il canvas è a metà.
+   */
+  renderArea(index: number, canvas: HTMLCanvasElement, scale: number, area: PdfArea): Promise<boolean>;
   destroy(): void;
 }
 
@@ -37,7 +53,7 @@ export interface PdfJsModule {
     promise: Promise<{
       numPages: number;
       getPage(page: number): Promise<{
-        getViewport(options: { scale: number }): { width: number; height: number };
+        getViewport(options: { scale: number; offsetX?: number; offsetY?: number }): { width: number; height: number };
         getTextContent(): Promise<{ items: Array<{ str?: string }> }>;
         render(options: { canvas: HTMLCanvasElement; canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }): {
           promise: Promise<void>;
@@ -116,6 +132,35 @@ export function makePdfJsLoader(
           if (activeRender === task) activeRender = null;
         }
       },
+      async pageSize(index) {
+        if (destroyed || index < 0 || index >= document.numPages) throw new Error("PDF page is unavailable");
+        const viewport = (await document.getPage(index + 1)).getViewport({ scale: 1 });
+        return [viewport.width, viewport.height] as const;
+      },
+      async renderArea(index, canvas, scale, area) {
+        if (destroyed || index < 0 || index >= document.numPages) throw new Error("PDF page is unavailable");
+        const generation = ++renderGeneration;
+        activeRender?.cancel();
+        const page = await document.getPage(index + 1);
+        if (destroyed || generation !== renderGeneration) return false;
+        // Lo spostamento porta l'angolo dell'area nell'origine del canvas.
+        const viewport = page.getViewport({ scale, offsetX: -area.x * scale, offsetY: -area.y * scale });
+        canvas.width = Math.max(1, Math.ceil(area.width * scale));
+        canvas.height = Math.max(1, Math.ceil(area.height * scale));
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("PDF canvas is unavailable");
+        const task = page.render({ canvas, canvasContext: context, viewport });
+        activeRender = task;
+        try {
+          await task.promise;
+          return !destroyed && generation === renderGeneration;
+        } catch (error) {
+          if (!destroyed && generation === renderGeneration) throw error;
+          return false;
+        } finally {
+          if (activeRender === task) activeRender = null;
+        }
+      },
       destroy() {
         if (destroyed) return;
         destroyed = true;
@@ -171,6 +216,7 @@ export function mountPdfView(
     initialPage?: number | null;
     onOpenExternal?: () => void | Promise<void>;
     onCopyLink?: (page: number) => void | Promise<void>;
+    onAnnotate?: () => void | Promise<void>;
   },
   life: Lifetime,
 ): PdfView {
@@ -250,6 +296,14 @@ export function mountPdfView(
     });
   });
   toolbar.append(prev, next, search);
+  if (options.onAnnotate) {
+    const annotate = document.createElement("button");
+    annotate.type = "button";
+    annotate.className = "media-pdf-annotate";
+    annotate.textContent = t("media.pdf.annotate");
+    life.listen(annotate, "click", () => invokeAction(() => options.onAnnotate?.()));
+    toolbar.append(annotate);
+  }
   if (options.onOpenExternal) {
     const open = document.createElement("button");
     open.type = "button";

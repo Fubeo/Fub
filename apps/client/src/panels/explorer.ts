@@ -35,7 +35,7 @@ import {
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu, type MenuItem } from "../ui/menu";
-import { registerShellCommand } from "../ui/commands";
+import { canCreateDrawing, canImportDrawing, canImportFile, importDrawing, newDrawing, pickDrawingImport, registerShellCommand } from "../ui/commands";
 import { showPanel } from "./sidebar";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { canShowFile, focusEditor, openDocument } from "../state/document-controller";
@@ -44,10 +44,11 @@ import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui
 import { trashManyWithConfirm, trashWithConfirm } from "./trash";
 import { mountTreeSelection, type TreeSelection } from "./explorer-selection";
 import { errorText } from "../host/errors";
-import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
-import { onLanguage, plural, t, type Key } from "../i18n/strings";
+import { nameFault, normalizedName } from "../rules/mirrored";
+import { onLanguage, plural, t } from "../i18n/strings";
 import { notify } from "../ui/notify";
 import type { Lifetime } from "../ui/lifetime";
+import { nameFaultText } from "../ui/name-fault";
 import { setTooltip } from "../ui/tooltip";
 import { mediaKindOfId } from "../editors/media/media-types";
 import type { ResourceKind } from "../host/contract";
@@ -121,10 +122,17 @@ let lastSignature = "";
 export function mountExplorer(lifetime: Lifetime): void {
   lifetime.listen($("#new-note"), "click", () => void newNote());
   // Il titolo del pannello è la radice di ciò che si vede (il vault o lo
-  // spazio attivo): il suo contestuale crea una cartella lì.
+  // spazio attivo): il suo contestuale crea lì un disegno, se il kernel sa
+  // farli, e una cartella.
   lifetime.listen(filesTitleEl, "contextmenu", (e) => {
     e.preventDefault();
     showContextMenu(e, [
+      ...(canCreateDrawing()
+        ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(state.activeSpace ?? "") }]
+        : []),
+      ...(canImportDrawing()
+        ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(state.activeSpace ?? "") }]
+        : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
     ]);
   });
@@ -191,6 +199,12 @@ export function mountExplorer(lifetime: Lifetime): void {
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
   // icone, pin e ordine non passano dal kernel.
   lifetime.add(on("organization", renderFileList));
+  // L'elenco dei comandi arriva dopo l'apertura del vault: un albero vuoto
+  // offre «Nuovo disegno…» solo da quel momento, e lo toglie se il comando se
+  // ne va. Un albero con delle note non ha niente da ridisegnare.
+  lifetime.add(on("commands", () => {
+    if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
+  }));
   lifetime.add(on("active-doc", markActive));
 
   // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
@@ -375,6 +389,16 @@ function renderFileList(): void {
     create.textContent = t("commands.note.new");
     create.addEventListener("click", () => void newNote());
     li.append(text, create);
+    // Il primo gesto può anche essere un disegno, se il kernel sa farli.
+    if (canCreateDrawing()) {
+      const draw = document.createElement("button");
+      draw.type = "button";
+      draw.className = "link-button";
+      draw.textContent = t("explorer.empty.new_drawing");
+      draw.addEventListener("click", () => void newDrawing(state.activeSpace ?? ""));
+      // Uno spazio fra i due, che vanno a capo insieme se non ci stanno.
+      li.append(document.createTextNode(" "), draw);
+    }
     fileListEl.append(li);
   }
 
@@ -703,17 +727,23 @@ function fileRow(id: string): HTMLElement {
   name.className = "row-name";
   name.textContent = childName(id);
   row.appendChild(name);
+  // Un file di Excalidraw o di draw.io che Fub non mostra si apre
+  // importandolo: la finestra lo prepara, e niente si scrive prima di
+  // «Importa».
   row.addEventListener("click", () => {
     if (canShowFile(id)) void openDocument(id);
-    else notify(t("explorer.no_viewer", { name: childName(id) }), "info");
+    else if (!(canImportFile(id) && importDrawing({ kind: "vault", path: id }))) notify(t("explorer.no_viewer", { name: childName(id) }), "info");
   });
   // Un allegato si rinomina (l'estensione resta) e si cestina come una nota:
   // il kernel li tratta allo stesso modo, e il cestino li ripristina uguali.
+  // Uno che si importa lo offre per primo, anche quando Fub lo mostra, come
+  // l'SVG o il PNG che draw.io esporta col disegno dentro.
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     showMenuFor(
       e,
       [
+        ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
         { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
         { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
         { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
@@ -963,6 +993,14 @@ function folderMenu(at: MouseEvent, path: string): void {
     at,
     [
       { label: t("explorer.new_note_here"), run: () => void newNote(path) },
+      // Accanto alla nota, se il kernel sa fare disegni: la cartella arriva alla
+      // galleria già scelta.
+      ...(canCreateDrawing()
+        ? [{ label: t("explorer.new_drawing_here"), run: () => void newDrawing(path) }]
+        : []),
+      ...(canImportDrawing()
+        ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(path) }]
+        : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
       { label: t("explorer.as_space"), run: () => addSpace(path) },
@@ -1359,22 +1397,6 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
   input.addEventListener("blur", () => void confirm());
 }
 
-/// La frase per ciascun guasto di un nome: la mappa è un `Record` **esaustivo**,
-/// quindi un'etichetta nuova in `NameFault` non compila finché non ha la sua
-/// chiave di catalogo. Un `` `name_fault.${tag}` `` composto a mano avrebbe
-/// compilato sempre, e la chiave mancante sarebbe comparsa a schermo.
-const FAILURE_REASON: Record<NameFault, Key> = {
-  empty: "name_fault.empty",
-  traversal: "name_fault.traversal",
-  machine: "name_fault.machine",
-  control: "name_fault.control",
-  reserved: "name_fault.reserved",
-  device: "name_fault.device",
-  "trailing-dot": "name_fault.trailing_dot",
-  hidden: "name_fault.hidden",
-  "too-long": "name_fault.too_long",
-};
-
 /// Una collisione riapre il campo col nome digitato e la frase accanto: il nome
 /// è la cosa da correggere, e chiuderlo la farebbe ridigitare.
 function reportRenameCollision(outcome: RenameResult, typed: string): boolean {
@@ -1413,7 +1435,7 @@ async function renameDoc(from: string, newPageName: string, typed?: string): Pro
     reopenRename(
       from,
       typed ?? newPageName,
-      t("explorer.bad_name", { name: newPageName, reason: t(FAILURE_REASON[failure]) }),
+      t("explorer.bad_name", { name: newPageName, reason: nameFaultText(failure) }),
     );
     return;
   }

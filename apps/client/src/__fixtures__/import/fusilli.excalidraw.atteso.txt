@@ -1,0 +1,54 @@
+File: fusilli.excalidraw
+Oggetti: 26 (forme 13, testi 6, linee 7, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×3 (Excalifont); rough ×20
+
+Livello «Livello 1»
+  Rettangolo
+  Rettangolo
+  Gruppo «IREE Compiler», 2 oggetti
+    Rettangolo «IREE Compiler»
+    Testo «IREE Compiler»
+  Gruppo «IREE Runtime», 2 oggetti
+    Rettangolo «IREE Runtime»
+    Testo «IREE Runtime»
+  Gruppo «mlir assembly (~torch dialect)», 2 oggetti
+    Rettangolo «mlir assembly (~torch dialect)»
+    Testo «mlir assembly (~torch dialect)»
+  Gruppo «Kernel Cache», 2 oggetti
+    Rettangolo «Kernel Cache»
+    Testo «Kernel Cache»
+  Gruppo «fusilli::Graph», 2 oggetti
+    Rettangolo «fusilli::Graph»
+    Testo «fusilli::Graph»
+  Gruppo «iree binary (.vmfb)», 2 oggetti
+    Rettangolo «iree binary (.vmfb)»
+    Testo «iree binary (.vmfb)»
+  Gruppo «Graph API», 2 oggetti
+    Rettangolo «Graph API»
+    Testo «Graph API»
+  Gruppo «ASM Emitter», 2 oggetti
+    Rettangolo «ASM Emitter»
+    Testo «ASM Emitter»
+  Testo «Fusilli»
+  Connettore da «ASM Emitter» a «mlir assembly (~torch dialect)»
+  Gruppo «Fusion Patterns», 2 oggetti
+    Rettangolo «Fusion Patterns»
+    Testo «Fusion Patterns»
+  Connettore da «mlir assembly (~torch dialect)» a «IREE Compiler»
+  Connettore da «IREE Compiler» a «iree binary (.vmfb)»
+  Connettore da «iree binary (.vmfb)» a «Kernel Cache»
+  Testo «g->execute()»
+  Testo «JIT compile + cache»
+  Connettore da «fusilli::Graph» a Rettangolo
+  Connettore da Rettangolo a «IREE Runtime»
+  Testo «this block runs upon cache miss»
+  Testo «C++ Graph API & JIT Frontend backed by IREE Kernel Codegen»
+  Testo «g->compile()»
+  Connettore da «fusilli::Graph» a Rettangolo
+  Gruppo «Shape/Type Inference», 2 oggetti
+    Rettangolo «Shape/Type Inference»
+    Testo «Shape/Type Inference»
+  Gruppo «Op Definitions», 2 oggetti
+    Rettangolo «Op Definitions»
+    Testo «Op Definitions»

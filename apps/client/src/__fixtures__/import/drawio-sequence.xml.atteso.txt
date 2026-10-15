@@ -1,0 +1,27 @@
+File: drawio-sequence.xml
+Oggetti: 12 (forme 5, testi 0, linee 7, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: nessuna
+
+Livello «Livello 1»
+  Gruppo, 7 oggetti
+    Rettangolo «:Object»
+    Testo «:Object»
+    Linea
+    Rettangolo
+    Connettore «dispatch» verso Rettangolo
+    Testo «dispatch»
+    Rettangolo
+  Gruppo, 4 oggetti
+    Rettangolo «:Object»
+    Testo «:Object»
+    Linea
+    Rettangolo
+  Connettore «dispatch» da Rettangolo a Rettangolo
+  Testo «dispatch»
+  Connettore «return» da Rettangolo a Rettangolo
+  Testo «return»
+  Connettore «callback» da Rettangolo a Rettangolo
+  Testo «callback»
+  Connettore «return» da Rettangolo a Rettangolo
+  Testo «return»

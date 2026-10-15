@@ -711,6 +711,49 @@ describe("le linguette di una barra di schede si riusano (§2.8)", () => {
   });
 });
 
+describe("le frecce fra le linguette di una barra di schede", () => {
+  it("si spostano col giro chiuso, vanno agli estremi e lasciano stare gli altri tasti", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const tab = (label: string) => ({
+      node: "tab",
+      label,
+      action: null,
+      children: [{ node: "text", content: label }],
+    });
+    const node = { node: "tabs", active: 0, tabs: [tab("Uno"), tab("Due"), tab("Tre")] } as UiNode;
+    mountTree(host, node, async () => {});
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>(".ui-tab-button")];
+    const press = (key: string): boolean => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      document.activeElement!.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    // La scheda scelta e quella col fuoco, che le frecce muovono insieme.
+    const where = () => [
+      buttons.findIndex((b) => b.getAttribute("aria-selected") === "true"),
+      buttons.indexOf(document.activeElement as HTMLButtonElement),
+    ];
+
+    buttons[0]!.focus();
+    expect(press("ArrowLeft")).toBe(true);
+    expect(where()).toEqual([2, 2]);
+    press("ArrowRight");
+    expect(where()).toEqual([0, 0]);
+    press("End");
+    expect(where()).toEqual([2, 2]);
+    press("Home");
+    expect(where()).toEqual([0, 0]);
+    press("ArrowRight");
+    expect(where()).toEqual([1, 1]);
+    expect(press("ArrowDown")).toBe(false);
+    expect(where()).toEqual([1, 1]);
+
+    unmountTree(host);
+    host.remove();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Un'azione che va storta lo dice (§20.4, decisione 0080)
 // ---------------------------------------------------------------------------

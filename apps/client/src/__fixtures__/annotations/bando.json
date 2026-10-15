@@ -1,0 +1,106 @@
+{
+  "notes": [
+    {
+      "text": "Importo da rivedere",
+      "body": "L'importo a base d'asta è cambiato.\n\nChiedere conferma all'ufficio gare.",
+      "bytes": [
+        467,
+        727
+      ],
+      "utf16": [
+        467,
+        726
+      ],
+      "content": {
+        "bytes": [
+          659,
+          720
+        ],
+        "utf16": [
+          658,
+          719
+        ]
+      },
+      "value": {
+        "bytes": [
+          576,
+          657
+        ],
+        "utf16": [
+          576,
+          656
+        ]
+      }
+    },
+    {
+      "text": "",
+      "body": "Manca la firma del RUP: vedi l'allegato B.",
+      "bytes": [
+        880,
+        1034
+      ],
+      "utf16": [
+        879,
+        1033
+      ],
+      "content": null,
+      "value": {
+        "bytes": [
+          989,
+          1031
+        ],
+        "utf16": [
+          988,
+          1030
+        ]
+      }
+    }
+  ],
+  "annotates": {
+    "path": "Bando%20di%20gara.pdf",
+    "value": {
+      "bytes": [
+        118,
+        139
+      ],
+      "utf16": [
+        118,
+        139
+      ]
+    }
+  },
+  "digest": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "pageCount": 12,
+  "pages": [
+    {
+      "number": 1,
+      "size": [
+        595.28,
+        841.89
+      ],
+      "bytes": [
+        281,
+        734
+      ],
+      "utf16": [
+        281,
+        733
+      ]
+    },
+    {
+      "number": 3,
+      "size": [
+        595.28,
+        841.89
+      ],
+      "bytes": [
+        737,
+        1041
+      ],
+      "utf16": [
+        736,
+        1040
+      ]
+    }
+  ]
+}

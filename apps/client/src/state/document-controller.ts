@@ -33,14 +33,23 @@ import {
   selectionSetOf,
   type DocumentSurfaceRegistry,
   type EditorSurface,
+  type SourceView,
+  type SurfaceExport,
+  type SurfaceExportWindow,
   type SurfaceLocation,
   type SurfaceMode,
+  type SurfaceOverride,
   type SurfaceReference,
+  type SurfaceRequest,
 } from "../editors/core/registry";
+import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
+import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
+import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
+import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
 import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
@@ -54,9 +63,11 @@ import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-cac
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, notesByName, renderPrint, resolvedReference, settings, vaultEntries, vaultTags } from "../host/query";
-import { theseDocuments, type PaneMode, type SyntaxForm, type ViewContext } from "../host/contract";
+import { theseDocuments, type PaneMode, type SyntaxForm, type VaultEntry, type ViewContext } from "../host/contract";
 import { existingRecentNotes } from "./recent";
 import { onEvent } from "./kernel";
+import { drawingFonts } from "./drawing-fonts";
+import { drawingSymbols } from "./drawing-symbols";
 import { emit, on, state } from "./store";
 import { CASE_KEY, caseOf, toRecover } from "./drafts";
 import { addSheetNotice, clearAllRemovedNotices, clearSheetNotices, dismissSheetNotice, moveSheetNotices, setLimitedMode, setRemovedNotice } from "./sheet-notices";
@@ -99,6 +110,10 @@ import {
   panes as layoutPanes,
   rename,
   sameTab,
+  activateTab,
+  sameOverride,
+  setTabOverride,
+  tabOverride,
   activeTab,
   removeEverywhere,
   type LayoutNode,
@@ -107,6 +122,8 @@ import {
 import { createNote, loadCommandSpecs } from "./vault";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
+import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
+import { showActivity } from "../panels/activity";
 import { notify } from "../ui/notify";
 import { applyIntent } from "../ui/intents";
 import { slashContextDoc } from "./slash";
@@ -220,6 +237,11 @@ export interface Pane {
   /// Il disposer della registrazione di questo riquadro alla sessione del
   /// documento mostrato. Null finché il documento mostrato non c'è.
   disposeSurface: (() => void) | null;
+  /// La vista sorgente che la superficie del documento mostrato dichiara
+  /// (ADR 0203), risolta quando il documento si è letto: è ciò che «Apri come
+  /// sorgente» apre, e ciò contro cui si controlla una scelta già fatta.
+  /// Null senza documento, prima della lettura, o se non ce n'è una.
+  sourceView: SourceView | null;
 }
 /// Nome breve della tab + stato testuale: non solo colore (U21).
 /// View: titolo dichiarato, mai finto file.
@@ -297,6 +319,78 @@ async function pickCanvasFile(): Promise<string | null> {
     items: page.items.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id })),
     more: Math.max(0, page.total - page.offset - page.items.length),
   });
+}
+
+/// Il documento a cui porta un collegamento del disegno `from`: uno che c'è,
+/// scelto dall'utente fra i file del vault, come il file di una card. Il
+/// disegno stesso non c'è; quello a cui porta adesso il collegamento `current`,
+/// se si trova, è già scelto, e c'è anche oltre le voci elencate.
+async function pickDrawingLink(from: string, current: string | null): Promise<string | null> {
+  const [page, now] = await Promise.all([
+    vaultEntries({ offset: 0, limit: CANVAS_FILE_CHOICES }),
+    current === null ? null : resolvedReference({ kind: "path", value: current }, from).catch(() => null),
+  ]);
+  const ids = page.items.map((entry) => entry.id).filter((id) => id !== from);
+  const known = now?.doc ?? null;
+  if (known !== null && known !== from && !ids.includes(known)) ids.unshift(known);
+  return pickFromList<string>({
+    title: t(current === null ? "vector.link.pick" : "vector.link.change"),
+    placeholder: t("vector.link.filter"),
+    items: ids.map((id) => ({ label: pageName(id), detail: id, value: id })),
+    more: Math.max(0, page.total - page.offset - page.items.length),
+    current: known ?? undefined,
+  });
+}
+
+/// I byte dei file del vault, per chi li legge interi.
+const mediaTransport: ResourceTransport = {
+  open: (id, vault) => api.resourceOpen(id, vault ?? null),
+  read_chunk: api.resourceReadChunk,
+  close: api.resourceClose,
+};
+
+/// Un'immagine del vault che un disegno mostra per nome. Gli SVG non si
+/// propongono: nel vault sono disegni, e a un disegno si porta un
+/// collegamento.
+function drawingImageChoice(id: string): boolean {
+  return mediaKindOfId(id) === "image" && mimeOfId(id) !== "image/svg+xml";
+}
+
+/// Le immagini del vault, dalla più recente: l'anagrafe degli allegati letta a
+/// pagine, tutta, perché l'elenco dica quante ne lascia fuori.
+async function drawingImageEntries(): Promise<VaultEntry[]> {
+  const found: VaultEntry[] = [];
+  for (let offset = 0; ;) {
+    const page = await vaultEntries({ offset, limit: CANVAS_FILE_CHOICES }, "asset");
+    for (const entry of page.items) if (drawingImageChoice(entry.id)) found.push(entry);
+    offset += page.items.length;
+    if (page.items.length === 0 || offset >= page.total) break;
+  }
+  return found.sort((a, b) => b.mtime - a.mtime || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+/// L'immagine del vault da mettere in un disegno: una che c'è, scelta con la
+/// sua miniatura fra le immagini del vault, le più recenti prima.
+async function pickDrawingImage(): Promise<string | null> {
+  const images = await drawingImageEntries();
+  if (images.length === 0) {
+    notify(t("vector.image.none"));
+    return null;
+  }
+  const shown = images.slice(0, CANVAS_FILE_CHOICES);
+  return pickFromList<string>({
+    title: t("vector.image.pick"),
+    placeholder: t("vector.image.filter"),
+    items: shown.map((entry) => ({ label: pageName(entry.id), detail: entry.id, value: entry.id, thumbnail: vaultImageSource(entry.id) })),
+    more: images.length - shown.length,
+  });
+}
+
+/// L'immagine a cui porta l'`href` `path` del disegno `from`: il documento,
+/// se c'è ed è un'immagine.
+async function drawingImageId(path: string, from: string): Promise<string | null> {
+  const id = (await resolvedReference({ kind: "path", value: path }, from).catch(() => null))?.doc ?? null;
+  return id !== null && mediaKindOfId(id) === "image" ? id : null;
 }
 
 async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
@@ -459,6 +553,27 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     onCreateCanvasNote: createCanvasNote,
     onPickCanvasFile: pickCanvasFile,
+    onPickDrawingLink: pickDrawingLink,
+    drawingImages: {
+      url: async (path, from, owner) => {
+        const id = await drawingImageId(path, from);
+        return id === null ? null : vaultImageSource(id)(owner);
+      },
+      read: async (path, from, limit) => {
+        const id = await drawingImageId(path, from);
+        if (id === null) return null;
+        const port = await openResourcePort(mediaTransport, id);
+        try {
+          if (limit !== undefined && port.descriptor.len > limit) return null;
+          return new Blob([(await port.readAll()) as BlobPart], { type: port.descriptor.mime });
+        } finally {
+          await port.close();
+        }
+      },
+      pick: () => pickDrawingImage(),
+    },
+    drawingFonts,
+    drawingSymbols,
     renderCanvasMarkdown: (_nodeId, text, host, documentId, forms) => mountMarkdown(host, renderMarkdown(text, forms).html, {
       documentId,
       openWikilink: (page, heading, block) => openWikilink(page, heading, block),
@@ -508,13 +623,23 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     },
     gridHost: api,
     media: {
-      transport: {
-        open: (id, vault) => api.resourceOpen(id, vault ?? null),
-        read_chunk: api.resourceReadChunk,
-        close: api.resourceClose,
-      },
+      transport: mediaTransport,
       assetUrl: api.assetUrl,
       copyText: writeClipboardText,
+      // Il comando del kernel, come dalla palette: crea le annotazioni accanto
+      // al PDF, o apre quelle che ci sono.
+      annotate: {
+        available: () => state.commandSpecs.some((spec) => spec.id === "pdf.annotate"),
+        run: async (pdf) => {
+          try {
+            const outcome = await api.invokeCommand("pdf.annotate", { pdf }, "apply");
+            if (outcome.notify) notify(outcome.notify, outcome.partial ? "guasto" : "info");
+            await applyIntent(outcome.effect);
+          } catch (error) {
+            notify(errorText(error), "guasto");
+          }
+        },
+      },
     },
   });
   view.attach();
@@ -677,25 +802,27 @@ function invalidateLoads(doc: string): void {
 // un punto solo.
 
 function registerCommands(): void {
-  // Le due modalità come comandi (§18.2): erano due bottoni nel commutatore,
-  // cioè raggiungibili col mouse e con nient'altro. Passano dalla stessa porta
-  // del click (`setMode`), che è dove sta il cablaggio — classe attiva, resa
+  // Le modalità come comandi (§18.2): erano bottoni nel commutatore, cioè
+  // raggiungibili col mouse e con nient'altro. Passano dalla stessa porta del
+  // click (`setMode`), che è dove sta il cablaggio — classe attiva, resa
   // inline, superficie di lettura, contesto pubblicato — e non da una seconda
   // via che deve restare d'accordo con la prima.
   //
-  // La terza modalità («sorgente») non è qui, e non è una dimenticanza: chi
-  // passa da Lettura a Modifica lo fa cento volte al giorno, chi guarda il
-  // sorgente nudo lo fa per capire cosa ha scritto un plugin. Dichiarare tre
-  // comandi perché le modalità sono tre vorrebbe dire tre scorciatoie da
-  // trovare per un caso che non le chiede.
-  // `Mod-e` alterna: dalla scrittura porta in Lettura, dalla Lettura torna
-  // alla modalità di scrittura da cui si era partiti.
+  // Un comando nomina un ruolo e non un id: la superficie dichiara il ruolo di
+  // ogni sua modalità (`contextMode`), e il comando raggiunge la modalità che
+  // ce l'ha — la «canvas» della tela per Live, la «read» di un profilo che
+  // chiama così la sua lettura. C'è soltanto dove porterebbe a qualcosa: una
+  // superficie con una modalità sola non ne offre nessuno (`surface-modes.ts`).
+  // Solo `Mod-e` ha un accordo: chi passa da Lettura a scrittura lo fa cento
+  // volte al giorno, chi guarda il sorgente nudo lo fa per capire cosa c'è
+  // scritto. Dalla scrittura porta in Lettura, dalla Lettura torna alla
+  // modalità di scrittura da cui si era partiti.
   registerShellCommand({
     id: "shell.mode.reading",
     title: "commands.mode.reading",
     description: "commands.mode.reading.desc",
     layer: "surface",
-    available: () => supportsMode("reading"),
+    available: () => offersReadingToggle(focusedModes()),
     run: () => void toggleReading(),
   });
   registerShellCommand({
@@ -703,16 +830,57 @@ function registerCommands(): void {
     title: "commands.mode.live",
     description: "commands.mode.live.desc",
     layer: "profile",
-    available: () => supportsMode("live_preview"),
-    run: () => void setMode("live_preview"),
+    available: () => offersContext(focusedModes(), "live_preview"),
+    run: () => void setContextMode("live_preview"),
   });
   registerShellCommand({
     id: "shell.mode.source",
     title: "commands.mode.source",
     description: "commands.mode.source.desc",
     layer: "profile",
-    available: () => supportsMode("source"),
-    run: () => void setMode("source"),
+    available: () => offersContext(focusedModes(), "source"),
+    run: () => void setContextMode("source"),
+  });
+  // La vista sorgente di una scheda (ADR 0203): lo stesso documento, sulla
+  // stessa sessione, nella superficie che la sua dichiara come sorgente — un
+  // disegno come testo SVG. Aprirla, lì o accanto, si può dove la superficie
+  // la offre e la scheda non la mostra già; tornare indietro, dove la scheda
+  // la mostra: mai le due cose insieme.
+  registerShellCommand({
+    id: "shell.doc.source.open",
+    title: "commands.doc.source.open",
+    description: "commands.doc.source.open.desc",
+    layer: "document",
+    available: () => offeredSourceView(panes.get(layout.focus)) !== null,
+    run: () => void openSourceView(),
+  });
+  registerShellCommand({
+    id: "shell.doc.source.side",
+    title: "commands.doc.source.side",
+    description: "commands.doc.source.side.desc",
+    layer: "document",
+    available: () => offeredSourceView(panes.get(layout.focus)) !== null,
+    run: () => void openSourceViewBeside(layout.focus),
+  });
+  registerShellCommand({
+    id: "shell.doc.source.close",
+    title: "commands.doc.source.close",
+    description: "commands.doc.source.close.desc",
+    layer: "document",
+    available: () => tabOverride(activeTab()) !== null,
+    run: () => void closeSourceView(),
+  });
+  // Gli export che la superficie del documento dichiara (`exports`): la sua
+  // finestra, se ne ha una; se no, con uno solo il comando lo esegue, con più
+  // d'uno chiede quale. Nel menu del riquadro sono una voce ciascuno, dopo
+  // quella della finestra.
+  registerShellCommand({
+    id: "shell.doc.export",
+    title: "commands.doc.export",
+    description: "commands.doc.export.desc",
+    layer: "document",
+    available: () => offeredExports(panes.get(layout.focus)).length > 0,
+    run: () => void chooseExport(layout.focus),
   });
   registerShellCommand({
     id: "shell.doc.save",
@@ -841,7 +1009,10 @@ export async function resolveDiscardingMine(doc: string | null): Promise<void> {
 /// mentre si scrive — ed è anche il primo cliente vero della regola del buffer
 /// unico: le due superfici mostrano lo stesso testo perché *è* lo stesso testo.
 /// Un riquadro nuovo e vuoto lo si ottiene chiudendo la linguetta, che è un gesto in
-/// meno di quello che servirebbe per il contrario.
+/// meno di quello che servirebbe per il contrario. Il documento ci arriva sulla
+/// sua superficie, senza la vista sorgente della scheda di partenza: il disegno
+/// da una parte e il suo testo dall'altra è proprio la disposizione per cui si
+/// divide.
 function splitPane(dir: "row" | "col"): void {
   const toSplit = layout.focus;
   const current = activeDoc(toSplit);
@@ -1046,6 +1217,7 @@ export function resetDocumentsForVault(): Promise<string[]> {
       view.removePane(r);
     }
     panes.clear();
+    writingModes.clear();
     treeSignature = "";
     return documentSessions.closeAll();
   });
@@ -1110,6 +1282,7 @@ function buildStructure(): void {
       view.releaseFrame(r);
       view.removePane(r);
       panes.delete(id);
+      writingModes.delete(id);
     }
   }
   view.layoutTree(layout.tree);
@@ -1135,6 +1308,7 @@ export function renderPane(id: string): Pane {
     shown: null,
     loadGeneration: 0,
     disposeSurface: null,
+    sourceView: null,
   };
   panes.set(id, r);
   return r;
@@ -1316,9 +1490,15 @@ export function docTitle(doc: string): string {
 /// Le due specie di tab accendono due superfici diverse dello stesso riquadro, e
 /// il ramo che le distingue sta **qui e basta**: da `render` in giù nessuno sa
 /// che esistano due specie, e chi cambia tab non deve dire quale.
+///
+/// Lo stesso documento con un'altra superficie scelta (la vista sorgente
+/// aperta o chiusa) è un cambio come un altro, e passa dalla stessa via: si
+/// smonta la superficie e se ne monta un'altra sulla stessa sessione, che
+/// tiene testo, modifiche non salvate e bozza; la lettura non torna al disco.
 async function show(r: Pane, tab: Tab | null): Promise<void> {
   const generation = ++r.loadGeneration;
-  const changed = !r.shown || !tab || !sameTab(r.shown, tab);
+  const changed = !r.shown || !tab || !sameTab(r.shown, tab)
+    || !sameOverride(tabOverride(r.shown), tabOverride(tab));
   // Una view che se ne va porta con sé il suo pannello: senza, resterebbe
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
   if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
@@ -1327,6 +1507,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (changed) {
     detachSurface(r);
     destroySurface(r);
+    r.sourceView = null;
   }
   r.shown = tab;
   view.drawViewSurface(r, tab?.k === "view");
@@ -1346,6 +1527,10 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // sessione di testo resta dei documenti di testo. Un formato del vault per
   // la stessa estensione passa invece dal descrittore, come ogni documento.
   if (!handledByVault(tab.doc) && surfaceRegistry.showsBytes(tab.doc)) {
+    // Dai byte non c'è un testo da guardare come sorgente: una scelta rimasta
+    // sulla scheda (uno stato scritto a mano, un file cambiato di natura) si
+    // scarta, e il visualizzatore si monta come sempre.
+    tab = forgetOverride(r, tab);
     const surface = surfaceRegistry.mount(
       { formatId: null, sourceKind: "bytes", documentId: tab.doc },
       { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
@@ -1377,10 +1562,23 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // montare si prende adesso, senza attese fino a `attachSurface`.
   const text = documentSessions.text(tab.doc) ?? source.text;
 
+  const request = { formatId: source.formatId, sourceKind: source.sourceKind, documentId: tab.doc };
+  // La vista sorgente si conosce da qui, e resta anche se la superficie poi
+  // non si monta: davanti a una tela rotta, aprirne il testo è la riparazione.
+  r.sourceView = surfaceRegistry.sourceView(request);
+  // Una scelta vale finché la superficie del documento la offre e il registro
+  // la risolve a quella stessa vista. Altrimenti — il profilo che la offriva
+  // non c'è più, il documento rinominato è di un'altra specie, il file di
+  // stato dice altro — si scarta e il documento si apre come senza: mai la
+  // superficie d'errore per una preferenza di vista.
+  if (tab.override && !resolvesToSourceView(request, tab.override, r.sourceView)) {
+    tab = forgetOverride(r, tab);
+  }
+
   let surface: EditorSurface;
   try {
     surface = surfaceRegistry.mount(
-      { formatId: source.formatId, sourceKind: source.sourceKind, documentId: tab.doc },
+      { ...request, ...(tab.override ? { override: tab.override } : {}) },
       {
         paneId: r.id,
         documentId: tab.doc,
@@ -1418,6 +1616,38 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   attachSurface(r, tab.doc);
   refreshNoteClasses(r, tab.doc);
   mountDocumentAttachments(r, tab.doc);
+}
+
+/// La scelta di una scheda porta davvero alla vista sorgente che la superficie
+/// del documento dichiara: confrontata **risolta**, così una scelta senza
+/// profilo vale quanto quella col profilo predefinito scritto per esteso.
+function resolvesToSourceView(
+  request: SurfaceRequest,
+  override: SurfaceOverride,
+  view: SourceView | null,
+): boolean {
+  if (!view) return false;
+  const resolved = surfaceRegistry.resolve({ ...request, override });
+  return resolved?.family === view.family && resolved.profile === view.profile;
+}
+
+/// Toglie da una scheda una scelta di superficie che non vale più, e torna la
+/// scheda che il riquadro mostra adesso. La prende come mostrata: il giro di
+/// disegno che l'annuncio del layout provoca la trova già a posto e non
+/// rimonta niente. Se il layout ha già sostituito la scheda durante la lettura
+/// (un pin, un rename), questo giro monta senza scelta e il prossimo ritrova
+/// la scheda nuova, la confronta e la pulisce lui.
+function forgetOverride(r: Pane, tab: Extract<Tab, { k: "doc" }>): Extract<Tab, { k: "doc" }> {
+  if (!tab.override) return tab;
+  const p = paneState(r.id);
+  const index = p ? p.tabs.indexOf(tab) : -1;
+  if (index >= 0) setTabOverride(r.id, index, null);
+  const current = index >= 0 ? p?.tabs[index] : undefined;
+  const next: Extract<Tab, { k: "doc" }> = current?.k === "doc" && !current.override
+    ? current
+    : { k: "doc", doc: tab.doc, ...(tab.pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
+  r.shown = next;
+  return next;
 }
 
 /// Un formato del vault gestisce il file: lo dicono le estensioni dei
@@ -1615,8 +1845,9 @@ export function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
     ?? modes[0];
 }
 
-function supportsMode(id: string): boolean {
-  return panes.get(layout.focus)?.surface?.modes.some((mode) => mode.id === id) ?? false;
+/// Le modalità della superficie del riquadro col fuoco; nessuna senza superficie.
+function focusedModes(): readonly SurfaceMode[] {
+  return panes.get(layout.focus)?.surface?.modes ?? [];
 }
 
 /// Esegue un'azione dell'editor nella superficie del riquadro col fuoco: è
@@ -2038,18 +2269,180 @@ function scheduleContext(): void {
 /// Che sia **del riquadro** e non della finestra è la parte nuova, ed è ciò che
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
-/// L'ultima modalità di scrittura di ogni riquadro, per tornare dalla Lettura.
-const writingModes = new Map<string, string>();
+/// L'ultima modalità di scrittura di ogni riquadro, per famiglia di superfici,
+/// per tornare dalla Lettura: come `PaneState.modes`, un id vale dentro la sua
+/// famiglia, e il «source» del testo non è quello della tela. Vive quanto il
+/// riquadro (`buildStructure` la toglie con lui).
+const writingModes = new Map<string, Map<string, string>>();
 
+/// `Mod-e`: dalla scrittura alla prima lettura che la superficie dichiara,
+/// dalla lettura alla scrittura di prima (`readingToggleTarget`).
 async function toggleReading(): Promise<void> {
-  const id = layout.focus;
-  const current = selectedMode(panes.get(id))?.id;
-  if (current === "reading") {
-    const back = writingModes.get(id) ?? "live_preview";
-    await setMode(supportsMode(back) ? back : "live_preview");
+  const r = panes.get(layout.focus);
+  if (!r?.surface) return;
+  const { family, modes, defaultMode } = r.surface;
+  const target = readingToggleTarget(modes, selectedMode(r)?.id, writingModes.get(r.id)?.get(family), defaultMode);
+  if (target) await setMode(target.id);
+}
+
+/// `shell.mode.live` e `shell.mode.source`: la modalità della superficie col
+/// fuoco che ha quel ruolo, qualunque sia il suo id.
+async function setContextMode(context: PaneMode): Promise<void> {
+  const r = panes.get(layout.focus);
+  if (!r?.surface) return;
+  const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
+  if (target) await setMode(target.id);
+}
+
+/// La vista sorgente che «Apri come sorgente» aprirebbe adesso nel riquadro:
+/// la sua scheda attiva è il documento che mostra, non ne ha già scelta una,
+/// e la superficie del documento ne dichiara una che si risolve.
+export function offeredSourceView(r: Pane | undefined): SourceView | null {
+  if (!r?.sourceView) return null;
+  const tab = activeTab(r.id);
+  if (tab?.k !== "doc" || tab.override || r.shown?.k !== "doc" || r.shown.doc !== tab.doc) return null;
+  return r.sourceView;
+}
+
+async function openSourceView(): Promise<void> {
+  const view = offeredSourceView(panes.get(layout.focus));
+  if (view) await showSourceView(layout.focus, view);
+}
+
+async function closeSourceView(): Promise<void> {
+  if (tabOverride(activeTab()) !== null) await showSourceView(layout.focus, null);
+}
+
+/// «Apri come sorgente accanto»: la vista sorgente della scheda attiva di un
+/// riquadro, in un riquadro nuovo alla sua destra, sullo stesso documento e
+/// sulla stessa sessione. La superficie resta dov'è e il testo le sta accanto,
+/// nella modalità che lo mostra senza resa, perché la resa è già lì. Il fuoco
+/// va sul testo, come dopo una divisione.
+///
+/// Se un altro riquadro ha già quella vista dello stesso documento si va lì,
+/// invece di aprirne una seconda: chi ripete il gesto vuole il testo accanto,
+/// non un terzo riquadro.
+export async function openSourceViewBeside(id: string): Promise<void> {
+  const view = offeredSourceView(panes.get(id));
+  const doc = activeDoc(id);
+  if (!view || !doc) return;
+  const there = sourceTabElsewhere(id, doc, view);
+  if (there) {
+    activateTab(there.pane, there.index);
+    await showSourceView(there.pane, view);
     return;
   }
-  await setMode("reading");
+  const added = split(id, "row");
+  if (!added) return;
+  openIn(added, doc);
+  await showSourceView(added, view, "source");
+}
+
+/// La linguetta di un riquadro diverso da `id` che mostra `doc` nella vista
+/// `view`: quella attiva, se c'è, altrimenti la prima.
+function sourceTabElsewhere(id: string, doc: string, view: SourceView): { pane: string; index: number } | null {
+  const shows = (tab: Tab): boolean => tab.k === "doc" && tab.doc === doc && sameOverride(tabOverride(tab), view);
+  let first: { pane: string; index: number } | null = null;
+  for (const other of layoutPanes()) {
+    const p = paneState(other);
+    if (other === id || !p) continue;
+    if (p.active >= 0 && p.active < p.tabs.length && shows(p.tabs[p.active]!)) return { pane: other, index: p.active };
+    const index = p.tabs.findIndex(shows);
+    if (index >= 0) first ??= { pane: other, index };
+  }
+  return first;
+}
+
+/// Gli export che il riquadro offre adesso: quelli che la sua superficie
+/// dichiara, finché mostra un documento e il registro ha il comando che li
+/// esegue.
+export function offeredExports(r: Pane | undefined): readonly SurfaceExport[] {
+  const offered = r?.surface?.exports ?? [];
+  if (offered.length === 0 || r?.shown?.k !== "doc") return [];
+  return state.commandSpecs.some((spec) => spec.id === EXPORT_COMMAND) ? offered : [];
+}
+
+/// La finestra «Esporta» del riquadro, se la sua superficie ne ha una che si
+/// apre adesso, e l'export si può eseguire.
+export function exportWindow(r: Pane | undefined): SurfaceExportWindow | null {
+  const own = r?.surface?.exportWindow;
+  return own !== undefined && offeredExports(r).length > 0 && own.available() ? own : null;
+}
+
+/// «Esporta…»: la finestra della superficie, se ne ha una; se no l'export che
+/// la superficie offre, o quello che si sceglie fra i suoi.
+export async function chooseExport(paneId: string): Promise<void> {
+  const r = panes.get(paneId);
+  const offered = offeredExports(r);
+  if (r?.shown?.k !== "doc" || offered.length === 0) return;
+  const doc = r.shown.doc;
+  const own = exportWindow(r);
+  let chosen: SurfaceExport | null | undefined;
+  if (own !== null) chosen = await own.open();
+  else if (offered.length === 1) chosen = offered[0]!;
+  else {
+    chosen = await pickFromList({
+      title: t("document.export.title", { doc: docTitle(doc) }),
+      placeholder: t("document.export.placeholder"),
+      items: offered.map((item) => ({ label: item.label(), detail: item.detail(), value: item })),
+    });
+  }
+  if (chosen) await runExport(doc, chosen);
+}
+
+/// Esporta `doc`. L'host legge il documento dal vault, quindi prima si svuota
+/// la coda di salvataggio: un export del testo di prima, con le ultime
+/// modifiche sullo schermo, sarebbe un file che dice il falso. Il file arriva
+/// al centro attività, che si apre senza prendere il fuoco e da cui lo si
+/// salva dove si sceglie.
+export async function runExport(doc: string, chosen: SurfaceExport): Promise<void> {
+  const unsaved = await flushPendingSave();
+  if (unsaved.includes(doc)) {
+    notify(t("document.export.unsaved", { doc: docTitle(doc) }), "guasto");
+    return;
+  }
+  const request = {
+    target: chosen.target,
+    selection: { kind: "documents", value: [doc] },
+    options: chosen.options?.() ?? {},
+  };
+  try {
+    await api.invokeCommand(EXPORT_COMMAND, { request_json: JSON.stringify(request) }, "apply");
+  } catch (error) {
+    notify(t("document.export.failed", { reason: errorText(error) }), "guasto");
+    return;
+  }
+  notify(t("document.export.started", { doc: docTitle(doc), what: chosen.label() }), "info");
+  showActivity();
+}
+
+/// Mette la scheda attiva di un riquadro nella vista sorgente, o la riporta
+/// alla superficie del documento con `null`, e porta il fuoco sulla
+/// superficie nuova: quella di prima non c'è più, e il fuoco che stava dentro
+/// di lei finirebbe sul corpo della pagina, dove chi usa la tastiera o un
+/// lettore di schermo perde il punto.
+///
+/// La vista sorgente si apre per scrivere: se il riquadro ricorda una lettura
+/// per la sua famiglia (una nota lasciata in Lettura), si passa alla scrittura
+/// che il toggle sceglierebbe, invece di mostrare un'altra resa a chi ha
+/// chiesto il testo. Con `context` si passa invece alla modalità che ha quel
+/// ruolo, se la vista ne ha una.
+export async function showSourceView(id: string, view: SourceView | null, context?: PaneMode): Promise<void> {
+  const p = paneState(id);
+  if (!p || p.active < 0) return;
+  setTabOverride(id, p.active, view);
+  await synchronize();
+  const r = panes.get(id);
+  if (view && r?.surface && layout.focus === id && context) {
+    const target = modeForContext(r.surface.modes, selectedMode(r)?.id, context);
+    if (target && target.id !== selectedMode(r)?.id) await setMode(target.id);
+  } else if (view && r?.surface && layout.focus === id && selectedMode(r)?.contextMode === "reading") {
+    const { family, modes, defaultMode } = r.surface;
+    const writing = readingToggleTarget(modes, selectedMode(r)?.id, writingModes.get(id)?.get(family), defaultMode);
+    if (writing) await setMode(writing.id);
+  }
+  await publishContext();
+  if (layout.focus === id) panes.get(id)?.surface?.focus?.();
 }
 
 /// `Mod-s`: il salvataggio è automatico, ma chi lo chiede vuole saperlo fatto
@@ -2069,8 +2462,12 @@ export async function setMode(next: string): Promise<void> {
   const doc = activeDoc();
   // Nessun salvataggio per cambiare modo: la lettura si monta dal buffer
   // corrente, e il cambio è immediato anche con modifiche non salvate.
-  const previous = selectedMode(r)?.id;
-  if (mode.id === "reading" && previous && previous !== "reading") writingModes.set(layout.focus, previous);
+  const previous = selectedMode(r);
+  if (mode.contextMode === "reading" && previous && previous.contextMode !== "reading") {
+    const remembered = writingModes.get(layout.focus) ?? new Map<string, string>();
+    remembered.set(r.surface.family, previous.id);
+    writingModes.set(layout.focus, remembered);
+  }
   setPaneMode(layout.focus, r.surface.family, mode.id);
   r.root.dataset.mode = mode.id;
   r.surface.setMode(mode.id);

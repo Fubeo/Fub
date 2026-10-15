@@ -91,9 +91,10 @@ function section(title: string): HTMLElement {
  * della pelle produce davvero. Il banco fotograferebbe quei composti come se
  * fossero verità, e il presidio del contrasto li condannerebbe a nome della
  * pelle. Un hook, un elemento: ogni foto è quella di un selettore reale. */
-/** Hook che **sono** una superficie di copertura a sé (scrim a pagina
- * intera), non un contenuto: si fotografano senza prosa addosso. */
-const SUPERFICI: Set<string> = new Set(["modale", "views-modal"]);
+/** Hook che **sono** una superficie a sé, non un contenuto: il velo a pagina
+ * intera di una modale, la carta del disegno. Si fotografano senza prosa
+ * addosso. */
+const SUPERFICI: Set<string> = new Set(["modale", "views-modal", "draw-page"]);
 
 function anatomy(): void {
   const grid = section("Shell anatomy");
@@ -111,11 +112,18 @@ function anatomy(): void {
           proof.setAttribute("aria-label", "Foglio di calcolo");
           proof.style.minHeight = "var(--space-8)";
         }
+        // La carta non ha una misura sua: gliela dà l'editor, dalla pagina
+        // del disegno e dalla vista. Qui ne ha una qualunque, così si vede.
+        if (hook === "draw-page") {
+          proof.style.width = "8rem";
+          proof.style.height = "5rem";
+        }
         // Le superfici di copertura (`.modale`, `.views-modal`) sono un velo
         // a pagina intera: il loro testo vero sta dentro il pannello che
         // ospitano — che qui arriva per conto suo, come hook a sé. Mettere
         // della prosa **sul velo** fotograferebbe uno stato che la pelle non
-        // produce: il velo si fotografa nudo.
+        // produce: il velo si fotografa nudo. Così la carta del disegno, che
+        // è bianca in ogni tema e non porta mai testo.
         if (!SUPERFICI.has(hook)) proof.textContent = `${component.name} · ${hook}`;
         const frame = el("div", "provino provino-anatomia");
         frame.dataset.label = `${component.name} · ${state.label} · ${hook}`;

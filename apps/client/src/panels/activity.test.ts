@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
 import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
-import { apply, exportArtifacts, mountActivity, noticeOf, labelOf, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
+import { apply, exportArtifacts, exportNotes, mountActivity, noticeOf, labelOf, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
 import { api } from "../host/ipc";
 import samples from "../__fixtures__/mirror-samples.json";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
@@ -270,6 +270,101 @@ describe("export artifacts from completed transfer jobs", () => {
     expect(saveButton()).toBeUndefined();
     lifetime.close();
     save.mockRestore();
+    query.mockRestore();
+  });
+
+  it("offers Print for a PDF only: the system viewer opens it, and the bytes stay to be saved", async () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    let opened: () => void = () => {};
+    const print = vi.spyOn(api, "printArtifact")
+      .mockImplementationOnce(() => new Promise((resolve) => { opened = () => resolve({ status: "opened" }); }))
+      .mockResolvedValueOnce({ status: "no_viewer" })
+      .mockResolvedValueOnce({ status: "unwritable", reason: "No space left on device" })
+      .mockRejectedValueOnce({ kind: "bad_args", message: "invalid artifact media type" });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(notice({ type: "job_done", id: "11", job: ARTIFACT_JOB, result: { Ok: { artifacts: [
+      { path: "disegni/Casa.pdf", media_type: "application/pdf", content: { kind: "bytes", value: [37, 80, 68, 70] } },
+      { path: "disegni/Casa.png", media_type: "image/png", content: { kind: "bytes", value: [1] } },
+    ], log: [] } } }));
+    document.getElementById("activity-button")!.click();
+    const list = () => document.getElementById("activity-list")!;
+    const buttons = (label: string) => [...list().querySelectorAll<HTMLButtonElement>("button")].filter((button) => button.textContent === label);
+    expect(buttons("Stampa…"), "soltanto il PDF").toHaveLength(1);
+    expect(buttons("Salva…")).toHaveLength(2);
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Apro il PDF nel lettore del sistema…"));
+    expect(buttons("Stampa…")[0]!.disabled).toBe(true);
+    expect(buttons("Salva…")[0]!.disabled, "niente salvataggio mentre si apre").toBe(true);
+    expect(print).toHaveBeenCalledWith("Casa.pdf", "application/pdf", [37, 80, 68, 70]);
+    opened();
+    await vi.waitFor(() => expect(list().textContent).toContain("Aperto nel lettore di PDF del sistema: stampalo da lì."));
+    expect(buttons("Salva…")[0]!.disabled, "i byte restano").toBe(false);
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Nessun programma del sistema apre i PDF: salvalo e stampalo da un lettore di PDF."));
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Il PDF da stampare non si scrive nella cartella temporanea: No space left on device"));
+    buttons("Stampa…")[0]!.click();
+    await vi.waitFor(() => expect(list().textContent).toContain("Non aperto per la stampa: invalid artifact media type"));
+    expect(buttons("Stampa…")[0]!.disabled).toBe(false);
+    lifetime.close();
+    print.mockRestore();
+    query.mockRestore();
+  });
+});
+
+describe("the notes of an export report", () => {
+  const PNG = { path: "casa.png", media_type: "image/png", content: { kind: "bytes", value: [1] } };
+  const done = (id: string, artifacts: unknown[], log: unknown): KernelNotice =>
+    notice({ type: "job_done", id, job: ARTIFACT_JOB, result: { Ok: { artifacts, log } } });
+
+  it("keeps the notes that read as notes, trimmed and bounded", () => {
+    const long = "x".repeat(400);
+    expect(exportNotes(done("1", [PNG], [
+      { level: "warning", message: "  La misura esce ridotta.  ", entry: "casa.svg" },
+      { level: "info", message: "ok", entry: null },
+      { level: "debug", message: "no" },
+      { level: "error", message: "   " },
+      { level: "error", message: 3 },
+      null,
+      { level: "error", message: long, entry: 7 },
+    ]))).toEqual([
+      { level: "warning", message: "La misura esce ridotta.", entry: "casa.svg" },
+      { level: "info", message: "ok", entry: null },
+      { level: "error", message: `${"x".repeat(299)}…`, entry: null },
+    ]);
+    const many = Array.from({ length: 20 }, (_, index) => ({ level: "info", message: `nota ${index}`, entry: null }));
+    expect(exportNotes(done("2", [PNG], many))).toHaveLength(8);
+    expect(exportNotes(done("3", [PNG], "rotto"))).toEqual([]);
+    expect(exportNotes(notice({ type: "job_done", id: "4", job: "export.run", result: { Ok: { artifacts: [], log: many } } }))).toEqual([]);
+  });
+
+  it("shows them under the files, warnings and errors in words too, even with no file", () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(done("5", [PNG], [
+      { level: "info", message: "Due pagine.", entry: null },
+      { level: "warning", message: "Il carattere Comic Sans manca: esce in Inter.", entry: null },
+    ]));
+    forwardNotice(done("6", [], [{ level: "error", message: "La tavola b9 non c'è.", entry: null }]));
+    document.getElementById("activity-button")!.click();
+    const rows = [...document.querySelectorAll<HTMLLIElement>("#activity-list li")];
+    const texts = rows.map((row) => row.textContent ?? "");
+    const info = texts.indexOf("Due pagine.");
+    expect(info).toBeGreaterThan(texts.findIndex((text) => text.includes("casa.png")));
+    expect(rows[info]!.className).toBe("muted");
+    expect(texts).toContain("Attenzione: Il carattere Comic Sans manca: esce in Inter.");
+    expect(texts).toContain("Errore: La tavola b9 non c'è.");
+    lifetime.close();
     query.mockRestore();
   });
 });

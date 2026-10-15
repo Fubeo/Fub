@@ -1,0 +1,2099 @@
+[
+  {
+    "name": "peso esatto",
+    "description": "Fra 400 e 700 statici, il 700 è il 700.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 700,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "600 cerca più nero",
+    "description": "Sopra 500 si cercano prima i pesi più neri.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 600,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "450 sale fino a 500",
+    "description": "Fra 400 e 500 si sale prima fino a 500.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            300,
+            300
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        },
+        {
+          "index": 1,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            500,
+            500
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        },
+        {
+          "index": 2,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 450,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 1,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "450 poi scende",
+    "description": "Fra 400 e 500, senza niente fino a 500, si scende prima di passare 500.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            300,
+            300
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 450,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "300 scende",
+    "description": "Sotto 400 si cercano prima i più chiari.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            200,
+            200
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 300,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 2,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "300 poi sale",
+    "description": "Sotto 400, senza più chiari, il più vicino sopra.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 300,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "800 poi scende",
+    "description": "Sopra 500, senza più neri, il più vicino sotto.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 800,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "variabile nel mezzo",
+    "description": "Un variabile vale per tutto l'asse: il punto è il peso chiesto.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            100,
+            900
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 650,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": [
+        {
+          "tag": "wght",
+          "value": 650
+        }
+      ]
+    }
+  },
+  {
+    "name": "variabile al bordo",
+    "description": "Un peso fuori dall'asse si ferma al bordo.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            300,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 300,
+              "default": 400,
+              "max": 700
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 900,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": [
+        {
+          "tag": "wght",
+          "value": 700
+        }
+      ]
+    }
+  },
+  {
+    "name": "lo statico vince il pari",
+    "description": "A pari merito vince la faccia statica.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            300,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 300,
+              "default": 400,
+              "max": 700
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 700,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "corsivo",
+    "description": "Il corsivo cerca il corsivo.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "italic",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "italic",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "corsivo senza corsivo",
+    "description": "Senza corsivo né obliquo, il tondo.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "italic",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "corsivo dall'obliquo",
+    "description": "Senza corsivo, l'obliquo dell'asse slnt, inclinato fin dove l'asse arriva.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            100,
+            900
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": [
+                {
+                  "tag": "slnt",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "style": "oblique",
+              "fixed": [
+                {
+                  "tag": "slnt",
+                  "value": -10
+                }
+              ]
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "slnt",
+              "min": -10,
+              "default": 0,
+              "max": 0
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 500,
+      "style": "italic",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": [
+        {
+          "tag": "wght",
+          "value": 500
+        },
+        {
+          "tag": "slnt",
+          "value": -10
+        }
+      ]
+    }
+  },
+  {
+    "name": "tondo senza tondo",
+    "description": "Il tondo, se c'è soltanto il corsivo, prende il corsivo.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "italic",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "asse ital",
+    "description": "Un variabile con l'asse ital dà il corsivo con ital a 1.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            100,
+            900
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": [
+                {
+                  "tag": "ital",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "style": "italic",
+              "fixed": [
+                {
+                  "tag": "ital",
+                  "value": 1
+                }
+              ]
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "ital",
+              "min": 0,
+              "default": 0,
+              "max": 1
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 300,
+      "style": "italic",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": [
+        {
+          "tag": "wght",
+          "value": 300
+        },
+        {
+          "tag": "ital",
+          "value": 1
+        }
+      ]
+    }
+  },
+  {
+    "name": "asse ital, tondo",
+    "description": "E il tondo con ital a 0.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            100,
+            900
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": [
+                {
+                  "tag": "ital",
+                  "value": 0
+                }
+              ]
+            },
+            {
+              "style": "italic",
+              "fixed": [
+                {
+                  "tag": "ital",
+                  "value": 1
+                }
+              ]
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "ital",
+              "min": 0,
+              "default": 0,
+              "max": 1
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 300,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": [
+        {
+          "tag": "wght",
+          "value": 300
+        },
+        {
+          "tag": "ital",
+          "value": 0
+        }
+      ]
+    }
+  },
+  {
+    "name": "stretto prima",
+    "description": "Fino al 100% si cercano prima le larghezze più strette.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            125,
+            125
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            75,
+            75
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "largo prima",
+    "description": "Oltre il 100% prima le più larghe.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            150,
+            150
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 112.5
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "asse wdth",
+    "description": "Un variabile con l'asse wdth: il punto è la larghezza chiesta.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            100,
+            900
+          ],
+          "stretch": [
+            75,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 100,
+              "default": 400,
+              "max": 900
+            },
+            {
+              "tag": "wdth",
+              "min": 75,
+              "default": 100,
+              "max": 100
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 87.5
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": [
+        {
+          "tag": "wght",
+          "value": 400
+        },
+        {
+          "tag": "wdth",
+          "value": 87.5
+        }
+      ]
+    }
+  },
+  {
+    "name": "maiuscole",
+    "description": "Il nome della famiglia non bada a maiuscole e minuscole.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Roboto Flex",
+          "names": [
+            "Roboto Flex"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "roboto FLEX",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "un altro nome",
+    "description": "Una famiglia si chiama con ogni suo nome.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Noto Sans JP",
+          "names": [
+            "Noto Sans JP",
+            "Noto Sans JP 日本語"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Noto Sans JP 日本語",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "famiglia di Fub",
+    "description": "Una faccia che si chiama come un carattere di Fub non conta.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Inter",
+          "names": [
+            "Inter"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Inter",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": null
+  },
+  {
+    "name": "famiglia che manca",
+    "description": "Una famiglia che il vault non ha.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Altra",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": null
+  },
+  {
+    "name": "l'ordine dei file",
+    "description": "A pari merito, il primo file.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "la collezione",
+    "description": "In una collezione, la prima faccia a pari merito.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Altra",
+          "names": [
+            "Altra"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        },
+        {
+          "index": 1,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        },
+        {
+          "index": 2,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 1,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "la larghezza prima del peso",
+    "description": "La larghezza conta prima del peso.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            75,
+            75
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 700,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "lo stile prima del peso",
+    "description": "Lo stile conta prima del peso.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "italic",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 700,
+      "style": "italic",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "420 sale nel variabile",
+    "description": "Fra 400 e 500, un variabile che comincia a 450 viene prima di uno statico più chiaro.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            300,
+            300
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            450,
+            900
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 450,
+              "default": 450,
+              "max": 900
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 420,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": [
+        {
+          "tag": "wght",
+          "value": 450
+        }
+      ]
+    }
+  },
+  {
+    "name": "420 scende oltre 500",
+    "description": "Fra 400 e 500, un variabile che comincia dopo 500 viene dopo uno statico più chiaro.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            300,
+            300
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            600,
+            900
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": [
+            {
+              "tag": "wght",
+              "min": 600,
+              "default": 600,
+              "max": 900
+            }
+          ]
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 420,
+      "style": "normal",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 0,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "l'obliquo cerca l'obliquo",
+    "description": "L'obliquo cerca l'obliquo, poi il corsivo.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "italic",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "oblique",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": {
+      "weight": 400,
+      "style": "oblique",
+      "stretch": 100
+    },
+    "expect": {
+      "file": 1,
+      "face": 0,
+      "coordinates": []
+    }
+  },
+  {
+    "name": "generica dal tondo",
+    "description": "La famiglia generica è quella del tondo normale.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "serif",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "sans-serif",
+          "weight": [
+            400,
+            400
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": null,
+    "expect": {
+      "generic": "sans-serif"
+    }
+  },
+  {
+    "name": "generica senza tondo",
+    "description": "Senza tondo, quella della faccia che lo sostituisce.",
+    "files": [
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "monospace",
+          "weight": [
+            700,
+            700
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ],
+      [
+        {
+          "index": 0,
+          "family": "Prova",
+          "names": [
+            "Prova"
+          ],
+          "generic": "serif",
+          "weight": [
+            900,
+            900
+          ],
+          "stretch": [
+            100,
+            100
+          ],
+          "styles": [
+            {
+              "style": "normal",
+              "fixed": []
+            }
+          ],
+          "axes": []
+        }
+      ]
+    ],
+    "family": "Prova",
+    "request": null,
+    "expect": {
+      "generic": "monospace"
+    }
+  }
+]

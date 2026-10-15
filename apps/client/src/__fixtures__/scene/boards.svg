@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1300 900" width="1300" height="900">
+  <title>Storia</title>
+  <rect id="fub-paper" fub:role="paper" fub:board="b00000001" x="0" y="0" width="600" height="400" fill="#ffffff"/>
+  <rect id="c00000001" fub:role="paper" fub:board="b00000002" x="700" y="0" width="600" height="400" fill="#ffffff"/>
+  <rect id="c00000002" fub:role="paper" fub:board="b00000002" x="700" y="0" width="600" height="400" fill="#ffffff"/>
+  <rect id="c00000003" fub:role="paper" fub:board="b0000000z" x="0" y="500" width="300" height="200" fill="#ffffff"/>
+  <rect id="c00000004" fub:role="paper" fub:board="b00000003" x="0" y="500" width="300" height="250" fill="#ffffff"/>
+  <rect fub:role="paper" x="400" y="750" width="100" height="100" fill="#ffffff"/>
+  <view id="b00000001" fub:role="board" viewBox="0 0 600 400">
+    <title>Copertina</title>
+  </view>
+  <view id="b00000002" fub:role="board" viewBox="700,0,600,400">
+    <title>  Due
+  tavole </title>
+    <desc>La seconda</desc>
+  </view>
+  <view id="b00000003" fub:role="board" viewBox="0 500 300 200"/>
+  <view id="b00000004" fub:role="board" viewBox="400 500 300 200" fub:note="sì">
+    <title>Storia</title>
+  </view>
+  <view id="b00000005" fub:role="board" viewBox="800 500 300 200">
+    <title>Copertina</title>
+  </view>
+  <view id="v1" viewBox="0 0 10 10"/>
+  <view id="b00000006" fub:role="board" viewBox="0 0 0 10"/>
+  <view id="b00000007" fub:role="board" viewBox="0 0 10 10" preserveAspectRatio="none"/>
+  <view fub:role="board" viewBox="0 0 10 10"/>
+  <view id="b00000008" fub:role="board" viewBox="0 0 10 10"><g/></view>
+  <g id="l00000001" fub:layer="Livello 1">
+    <view id="b00000009" fub:role="board" viewBox="0 0 10 10"/>
+    <rect id="o00000001" x="40" y="40" width="200" height="100" fill="#0072b2"/>
+  </g>
+</svg>

@@ -19,6 +19,15 @@
 // `navigator` ha un solo campo perché uno solo se ne legge. Il giorno che un
 // presidio avrà bisogno degli appunti (`navigator.clipboard`, che
 // `ui/intents.ts` usa) è qui che glielo si aggiunge, invece di in dodici file.
-import { vi } from "vitest";
+//
+// E la si rimette prima di ogni caso: `vi.unstubAllGlobals()`, con cui un caso
+// toglie i finti che ha messo, toglie anche questo, e i casi che vengono dopo
+// nello stesso file parlerebbero la lingua di happy-dom.
+import { beforeEach, vi } from "vitest";
 
-vi.stubGlobal("navigator", { language: "it-IT" });
+const ITALIAN = { language: "it-IT" };
+
+vi.stubGlobal("navigator", ITALIAN);
+beforeEach(() => {
+  vi.stubGlobal("navigator", ITALIAN);
+});

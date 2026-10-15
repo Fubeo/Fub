@@ -1,0 +1,884 @@
+// La superficie del disegno: il profilo `vector` della famiglia `canvas`
+// (ADR 0203). Monta l'editor degli strumenti su un file .svg di FubDraw e lo
+// tiene allineato alla `DocumentSession` come ogni superficie col buffer: un
+// gesto esce come `{ text, operation, origin }`, e un testo che arriva da
+// fuori ricostruisce la scena senza perdere annulla e ripeti.
+//
+// Due modalità, Disegno (`draw`, col ruolo `live_preview`) e Lettura (`read`,
+// `reading`). In Lettura il documento intero è un `<img>` da un blob, e niente
+// del file entra nel DOM vivo.
+//
+// La Lettura dice anche a parole che cosa c'è: la descrizione del disegno
+// accanto all'immagine, e l'elenco degli oggetti in albero, chiuso finché non
+// lo si apre e costruito soltanto allora (`describe.ts`). I collegamenti, che
+// nell'immagine non si toccano, sono una riga di pulsanti che aprono le note;
+// le connessioni, le linee che uniscono due oggetti, un elenco di «da dove a
+// dove», con l'etichetta della linea.
+//
+// I collegamenti del disegno sono `a` con un `href` relativo al disegno: la
+// shell sceglie la nota e la apre (`onPickLink`, `onOpenPath`), e la
+// superficie scrive il riferimento come lo scrive il kernel quando lo
+// riscrive dopo un rename.
+//
+// Le immagini del vault sono `image` con un `href` scritto allo stesso modo:
+// la shell le risolve, le apre e ne sceglie una da inserire (`images`). Sul
+// foglio il painter le mostra con l'URL che la shell apre; in Lettura, dove
+// l'`<img>` non carica niente da fuori, entrano nell'immagine coi loro byte
+// (`read-images.ts`).
+//
+// I file di caratteri del vault sono caratteri che i testi del disegno
+// possono nominare: la shell li elenca e li legge (`vaultFonts`), e sul
+// foglio, in Lettura e nell'anteprima dell'export valgono come nell'export
+// (`fonts/vault.ts`). Un carattere che il disegno non può caricare lo dice un
+// avviso, una volta per famiglia.
+//
+// Il livello dell'editor è l'impostazione del vault `draw.level`, con le parti
+// del Personalizzato in `draw.custom`, e la griglia l'ultima scelta su questa
+// macchina (`preferences.ts`): la superficie li legge quando nasce, segue il
+// livello finché vive, e ricorda la griglia che chi disegna sceglie. Così i
+// suggerimenti brevi: se si mostrano, e quelli già visti.
+//
+// In Disegno il documento può non essere modificabile, e la modalità del
+// riquadro non cambia per questo (`docs/product/drawing.md`):
+// - un SVG estraneo è l'immagine inerte del documento intero, con «Modifica»,
+//   che applica `adopt` nell'editor: l'editor c'è già, nascosto, così
+//   l'adozione è un passo di annulla, e annullarla riporta all'immagine;
+//   all'Esperto anche con «Rendi modificabile…», che nello stesso passo
+//   riscrive le sue parti nel formato dove si vedono uguali;
+// - un documento in sola lettura (un DOCTYPE, una versione futura, un file
+//   troppo grande) è l'immagine inerte del documento intero, col motivo;
+// - un file che non si legge come scena è il motivo e basta: il testo lo
+//   mostra «Apri come sorgente».
+
+import { errorText } from "../../host/errors";
+import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { relativeRef, resolveAgainst } from "../../rules/mirrored";
+import { identifier } from "../../ui/a11y";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { notify } from "../../ui/notify";
+import type { EditorRange, EditorSelections, EditorSurface, SelectedText, SurfaceExportWindow, SurfaceMountContext } from "../core/registry";
+import type { EditorChange } from "../core/text-operation";
+import { imageInfo, svgSize } from "../media/image-view";
+import { mountZoomView, type ZoomView } from "../media/zoom-view";
+import { countObjects, describe, keyOf, linkName, outline, sceneTargets, type LinkTargets, type OutlineNode } from "./describe";
+import { familyKey } from "./fonts/faces";
+import { DrawingFonts, markupFonts, vaultFontsOf, type FontNotes, type VaultFontPort } from "./fonts/vault";
+import type { SymbolLibraryPort } from "./tools/symbol-libraries";
+import { VECTOR_EXPORTS, VECTOR_MODES, VECTOR_PROFILE } from "./modes";
+import {
+  currentCustom,
+  currentGrid,
+  currentLevel,
+  currentRecentColors,
+  currentSuggested,
+  readExportMemory,
+  readGrid,
+  readRecentColors,
+  saveExportMemory,
+  saveGrid,
+  saveRecentColors,
+  saveSuggested,
+  switchSuggestions,
+  watchLevel,
+  watchSuggested,
+} from "./preferences";
+import { SceneEngine } from "./scene/engine";
+import { MAX_EDIT_BYTES, MAX_ELEMENTS, readScene, ReadError, type ReadOnly } from "./scene/read";
+import { href as parseHref } from "./scene/values";
+import { linkTarget, nodeOf } from "./tools/arrange";
+import { createDrawEditor, type DrawEditor, type DrawExport, type DrawImages, type DrawLinks, type DrawPlace } from "./tools/editor";
+import { exportDialog } from "./tools/export-dialog";
+import { featuresFor } from "./tools/registry";
+import { imageDataUri, imageRefs, READ_IMAGE_BYTES, type ImageRef } from "./read-images";
+import { fontSheets, picture, type FontSheets } from "./picture";
+
+type VectorMode = "draw" | "read";
+
+export interface VectorSurfaceOptions {
+  onChange(change: EditorChange): void;
+  onSelectionChange(): void;
+  /// Apre il percorso `path` com'è scritto nel disegno, relativo al disegno o
+  /// dalla radice del vault: la shell lo risolve. Lancia se non ci riesce.
+  onOpenPath?(path: string): Promise<void>;
+  /// Chiede il documento del vault a cui porta un collegamento; `current` è
+  /// l'`href` di quello che si cambia, `null` per uno nuovo. Torna il suo
+  /// `DocId`, o `null` se chi disegna rinuncia.
+  onPickLink?(current: string | null): Promise<string | null>;
+  /// Le immagini del vault, che la shell risolve dal disegno.
+  images?: VectorImages;
+  /// I caratteri dell'app per la Lettura, che da un `img` non li caricherebbe;
+  /// di partenza quelli dell'app stessa.
+  fonts?: FontSheets;
+  /// I caratteri del vault, che la shell elenca e legge.
+  vaultFonts?: VaultFontPort;
+  /// Le librerie di simboli del vault, che la shell elenca e legge.
+  symbolLibraries?: SymbolLibraryPort;
+}
+
+/// Le immagini del vault di un disegno: `path` è l'`href` com'è scritto nel
+/// disegno, relativo al disegno o dalla radice del vault.
+export interface VectorImages {
+  /// L'URL dell'immagine `path`, aperto nella vita che riceve; `null` se non
+  /// si risolve.
+  url(path: string, life: Lifetime): Promise<string | null>;
+  /// I byte dell'immagine `path`, col loro tipo; `null` se non si risolve, o
+  /// se pesa più di `limit` byte, che allora non si leggono.
+  read(path: string, limit?: number): Promise<Blob | null>;
+  /// Chiede un'immagine del vault da mettere nel disegno; torna il suo
+  /// `DocId`, o `null` se chi disegna rinuncia.
+  pick?(): Promise<string | null>;
+}
+
+/// L'`href` con cui il disegno `drawing` porta al documento `doc`: relativo
+/// alla cartella del disegno, come lo scrive il kernel. Se il primo segmento
+/// si leggerebbe come uno schema (`nota:1.md`), con `./` davanti, che non
+/// cambia la destinazione.
+export function linkHref(drawing: string, doc: string): string {
+  const ref = relativeRef(drawing, doc);
+  return parseHref(ref).kind === "vault" ? ref : `./${ref}`;
+}
+
+/// Come si apre un testo: una scena da modificare (anche estranea), un
+/// documento da guardare soltanto, o un file che non è una scena.
+export type Opened =
+  | { readonly kind: "scene"; readonly engine: SceneEngine }
+  | { readonly kind: "inert"; readonly engine: SceneEngine }
+  | { readonly kind: "unreadable"; readonly error: ReadError };
+
+export function open(text: string): Opened {
+  try {
+    const engine = SceneEngine.open(text);
+    return engine.model === null ? { kind: "inert", engine } : { kind: "scene", engine };
+  } catch (error) {
+    if (error instanceof ReadError) return { kind: "unreadable", error };
+    throw error;
+  }
+}
+
+const READ_ONLY: Readonly<Record<ReadOnly, Key>> = {
+  doctype: "vector.read_only.doctype",
+  encoding: "vector.read_only.encoding",
+  "invalid-version": "vector.read_only.invalid_version",
+  "future-version": "vector.read_only.future_version",
+  "duplicate-id": "vector.read_only.duplicate_id",
+  "too-large": "vector.read_only.too_large",
+  "too-many-elements": "vector.read_only.too_many_elements",
+};
+
+/// Perché il documento si guarda soltanto, a parole: il primo motivo, che la
+/// scena elenca in un ordine fisso.
+export function readOnlyText(reason: ReadOnly): string {
+  const numbers = new Intl.NumberFormat(resolvedLanguage());
+  if (reason === "too-large") return t(READ_ONLY[reason], { limit: `${numbers.format(MAX_EDIT_BYTES / (1024 * 1024))} MiB` });
+  if (reason === "too-many-elements") return t(READ_ONLY[reason], { limit: numbers.format(MAX_ELEMENTS) });
+  return t(READ_ONLY[reason]);
+}
+
+export function unreadableText(error: ReadError): string {
+  const reason = error.kind === "malformed"
+    ? t("vector.unreadable.malformed", { offset: new Intl.NumberFormat(resolvedLanguage()).format(error.offset) })
+    : t("vector.unreadable.not_svg");
+  return t("vector.unreadable", { reason, command: t("commands.doc.source.open") });
+}
+
+export function fileName(id: string): string {
+  return id.split("/").pop() || id;
+}
+
+/// Dove portano i collegamenti di `engine`: dal modello, se c'è; da una
+/// lettura del testo per un documento in sola lettura.
+function targetsOf(engine: SceneEngine): LinkTargets {
+  const model = engine.model;
+  if (model !== null) return (item) => linkTarget(nodeOf(model, item));
+  return sceneTargets(readScene(engine.text));
+}
+
+/// I percorsi dei collegamenti di `nodes`, una volta ciascuno, nell'ordine
+/// del disegno.
+function linkTargetsIn(nodes: readonly OutlineNode[], out: string[] = []): string[] {
+  for (const node of nodes) {
+    if (node.target !== null && !out.includes(node.target)) out.push(node.target);
+    linkTargetsIn(node.children, out);
+  }
+  return out;
+}
+
+/// I connettori di `nodes` agganciati a due oggetti, nell'ordine del disegno.
+function joinedIn(nodes: readonly OutlineNode[], out: OutlineNode[] = []): OutlineNode[] {
+  for (const node of nodes) {
+    if (node.joined !== null) out.push(node);
+    joinedIn(node.children, out);
+  }
+  return out;
+}
+
+/// Gli oggetti in elenchi annidati, come l'albero dell'editor.
+function objectList(nodes: readonly OutlineNode[]): HTMLUListElement {
+  const list = document.createElement("ul");
+  for (const node of nodes) {
+    const item = document.createElement("li");
+    item.textContent = describe(node);
+    if (node.children.length > 0) item.append(objectList(node.children));
+    list.append(item);
+  }
+  return list;
+}
+
+export function mountVectorSurface(context: SurfaceMountContext, options: VectorSurfaceOptions): EditorSurface {
+  const life = openLifetime();
+  const root = document.createElement("div");
+  root.className = "vector-surface";
+  const notice = document.createElement("div");
+  notice.className = "vector-notice";
+  // Cortese: dice com'è il documento appena aperto, non è un allarme.
+  notice.setAttribute("role", "status");
+  const noticeText = document.createElement("p");
+  noticeText.className = "vector-notice-text";
+  const adoptButton = document.createElement("button");
+  adoptButton.type = "button";
+  adoptButton.className = "primary vector-notice-action";
+  // All'Esperto, accanto a «Modifica»: adotta e riscrive le parti nello
+  // stesso passo, dopo la finestra che mostra il prima e il dopo.
+  const editableButton = document.createElement("button");
+  editableButton.type = "button";
+  editableButton.className = "vector-notice-action";
+  notice.append(noticeText, adoptButton, editableButton);
+  const drawHost = document.createElement("div");
+  drawHost.className = "vector-draw";
+  const readHost = document.createElement("div");
+  readHost.className = "vector-read";
+  // Sotto l'immagine, il disegno a parole.
+  const about = document.createElement("div");
+  about.className = "vector-about";
+  const aboutDesc = document.createElement("p");
+  aboutDesc.className = "vector-about-desc";
+  aboutDesc.id = identifier("vector-desc");
+  const aboutObjects = document.createElement("details");
+  aboutObjects.className = "vector-about-objects";
+  const aboutSummary = document.createElement("summary");
+  aboutObjects.append(aboutSummary);
+  // I collegamenti, che nell'immagine non si toccano: un pulsante per nota.
+  const aboutLinks = document.createElement("nav");
+  aboutLinks.className = "vector-about-links";
+  aboutLinks.hidden = true;
+  const aboutLinksTitle = document.createElement("span");
+  aboutLinksTitle.className = "vector-about-links-title";
+  aboutLinksTitle.id = identifier("vector-links");
+  aboutLinks.setAttribute("aria-labelledby", aboutLinksTitle.id);
+  const aboutLinksList = document.createElement("ul");
+  aboutLinks.append(aboutLinksTitle, aboutLinksList);
+  // Le connessioni, che nell'immagine sono linee: da dove a dove, a parole.
+  const aboutConnections = document.createElement("div");
+  aboutConnections.className = "vector-about-connections";
+  aboutConnections.hidden = true;
+  const aboutConnectionsTitle = document.createElement("span");
+  aboutConnectionsTitle.className = "vector-about-connections-title muted";
+  aboutConnectionsTitle.id = identifier("vector-connections");
+  const aboutConnectionsList = document.createElement("ul");
+  aboutConnectionsList.setAttribute("aria-labelledby", aboutConnectionsTitle.id);
+  aboutConnections.append(aboutConnectionsTitle, aboutConnectionsList);
+  about.append(aboutDesc, aboutLinks, aboutConnections, aboutObjects);
+  root.append(notice, drawHost, readHost);
+  context.parent.append(root);
+
+  let mode: VectorMode = "draw";
+  let readOnly = false;
+  /// Il testo grezzo del documento, coi terminatori del file.
+  let text = "";
+  let opened: Opened | null = null;
+  let editor: DrawEditor | null = null;
+  let editorLife: Lifetime | null = null;
+  let view: ZoomView | null = null;
+  let shownUrl: string | null = null;
+  /// Il testo che l'immagine mostra: non si ridisegna uguale.
+  let shownText: string | null = null;
+  /// Il testo di cui l'elenco degli oggetti è disegnato.
+  let listedText: string | null = null;
+  /// I collegamenti della Lettura, e il testo e la lingua di cui sono
+  /// disegnati.
+  let linkedText: string | null = null;
+  let linkedLanguage: string | null = null;
+  /// Le connessioni della Lettura, e il testo e la lingua di cui sono
+  /// disegnate.
+  let connectedText: string | null = null;
+  let connectedLanguage: string | null = null;
+  /// Il livello, le parti del Personalizzato e la griglia dell'editor: quelli
+  /// dell'ultima lettura, finché non arriva quella di questa superficie.
+  let level = currentLevel();
+  let custom = currentCustom();
+  let grid = currentGrid();
+  /// Chi disegna ha già scelto la griglia qui: la lettura non la riporta
+  /// indietro.
+  let gridChosen = false;
+  /// I colori recenti, come la griglia.
+  let colors = currentRecentColors();
+  let colorsChosen = false;
+  /// I suggerimenti, come il livello.
+  let suggested = currentSuggested();
+
+  // --- I collegamenti -------------------------------------------------------
+
+  /// Apre il collegamento `href`; se non si apre, lo dice.
+  const openLink = (href: string): void => {
+    const open = options.onOpenPath;
+    if (open === undefined) return;
+    void Promise.resolve()
+      .then(() => open(href))
+      .catch((error: unknown) => notify(t("preview.open_failed", { page: linkName(href), reason: errorText(error) }), "guasto"));
+  };
+
+  /// Chi sceglie e apre le note dei collegamenti dell'editor, se la shell lo
+  /// sa fare.
+  const pick = options.onPickLink;
+  const links: DrawLinks | undefined =
+    pick === undefined || options.onOpenPath === undefined
+      ? undefined
+      : {
+          choose: async (current) => {
+            try {
+              const doc = await pick(current);
+              return doc === null ? null : linkHref(context.documentId, doc);
+            } catch (error) {
+              notify(errorText(error), "guasto");
+              return null;
+            }
+          },
+          open: openLink,
+        };
+
+  /// Le immagini del vault per l'editor: le apre e le legge la shell, e
+  /// quella scelta si scrive relativa al disegno, come un collegamento.
+  const imagePort = options.images;
+  const pickImage = imagePort?.pick;
+  const images: DrawImages | undefined = imagePort === undefined
+    ? undefined
+    : {
+        url: (path, owner) => imagePort.url(path, owner),
+        read: (path) => imagePort.read(path),
+        ...(pickImage === undefined
+          ? {}
+          : {
+              choose: async () => {
+                try {
+                  const doc = await pickImage();
+                  return doc === null ? null : linkHref(context.documentId, doc);
+                } catch (error) {
+                  notify(errorText(error), "guasto");
+                  return null;
+                }
+              },
+            }),
+      };
+
+  /// Dove sta il disegno nel vault: gli `href` che gli appunti portano da un
+  /// disegno all'altro si leggono e si riscrivono da qui.
+  const place: DrawPlace = {
+    locate: (href) => resolveAgainst(context.documentId, href),
+    refer: (doc) => linkHref(context.documentId, doc),
+  };
+
+  life.listen(aboutLinksList, "click", (event) => {
+    const control = event.target instanceof Element ? event.target.closest("button") : null;
+    if (control instanceof HTMLButtonElement && control.dataset.href !== undefined) openLink(control.dataset.href);
+  });
+
+  // --- I caratteri che mancano ----------------------------------------------
+
+  /// Le famiglie che il disegno ha già detto di non poter caricare.
+  const saidFonts = new Set<string>();
+
+  /// Dice, una volta per famiglia, le famiglie del vault che i testi del
+  /// disegno nominano e che non si caricano: non ci sono, superano il tetto
+  /// o il browser non le legge. I testi usano altri caratteri, come l'export.
+  function sayFonts(notes: FontNotes): void {
+    const fresh = [...notes.missing, ...notes.over, ...notes.failed].filter((name) => !saidFonts.has(familyKey(name)));
+    if (fresh.length === 0) return;
+    for (const name of fresh) saidFonts.add(familyKey(name));
+    const families = new Intl.ListFormat(resolvedLanguage(), { type: "conjunction" }).format(fresh);
+    notify(t("vector.fonts.missing", { name: drawingName(), families }), "info");
+  }
+
+  // --- L'editor -------------------------------------------------------------
+
+  const mountEditor = (engine: SceneEngine): DrawEditor => {
+    const owner = openLifetime();
+    const mounted = createDrawEditor(drawHost, engine, owner, {
+      level,
+      custom,
+      grid,
+      onGridChange: (next) => {
+        grid = next;
+        gridChosen = true;
+        saveGrid(next);
+      },
+      colors,
+      onColorsChange: (next) => {
+        colors = next;
+        colorsChosen = true;
+        saveRecentColors(next);
+      },
+      suggestions: suggested,
+      onSuggestionsSwitch: (on) => switchSuggestions(on),
+      onSuggestedChange: (seen) => saveSuggested(seen),
+      links,
+      ...(images === undefined ? {} : { images }),
+      ...(options.vaultFonts === undefined ? {} : { vaultFonts: options.vaultFonts }),
+      ...(options.symbolLibraries === undefined ? {} : { symbolLibraries: options.symbolLibraries }),
+      onFontNotes: sayFonts,
+      place,
+      onChange: (change) => {
+        text = change.text;
+        opened = { kind: "scene", engine: mounted.engine };
+        options.onChange(change);
+        paint();
+      },
+      onSelectionChange: () => options.onSelectionChange(),
+    });
+    mounted.setReadOnly(readOnly);
+    editorLife = owner;
+    editor = mounted;
+    return mounted;
+  };
+
+  const unmountEditor = (): void => {
+    const had = editor !== null && editor.selection.length > 0;
+    editorLife?.close();
+    editorLife = null;
+    editor = null;
+    if (had) options.onSelectionChange();
+  };
+
+  /// Mostra `next`: in un editor che c'è già la scena si ricostruisce, e con
+  /// `fresh` il documento è un altro e la cronologia riparte.
+  const show = (next: Opened, fresh: boolean): void => {
+    opened = next;
+    if (next.kind === "scene") {
+      if (editor === null) mountEditor(next.engine);
+      else if (fresh) editor.load(next.engine);
+      else editor.setEngine(next.engine);
+    } else {
+      unmountEditor();
+    }
+    paint();
+  };
+
+  // --- L'immagine -----------------------------------------------------------
+
+  /// Il nome del disegno: il titolo del documento, figlio della radice, o il
+  /// nome del file.
+  const shownEngine = (): SceneEngine | null => (opened !== null && opened.kind !== "unreadable" ? opened.engine : null);
+
+  /// Il `title` o la `desc` del disegno, figli della radice; `null` se non
+  /// ci sono o sono vuoti.
+  const rootText = (role: "title" | "desc"): string | null => {
+    for (const item of shownEngine()?.scene() ?? []) {
+      if (item.kind === "element" && item.role === role && item.path.length === 1 && item.text?.trim()) return item.text.trim();
+    }
+    return null;
+  };
+
+  const drawingName = (): string => rootText("title") ?? fileName(context.documentId);
+
+  /// La descrizione e il conteggio sotto l'immagine; l'elenco si costruisce
+  /// quando lo si apre, e ogni volta che il testo cambia mentre è aperto.
+  /// Il disegno in albero, una volta per testo: coi collegamenti, se la
+  /// shell li sa aprire.
+  let outlined: { readonly text: string; readonly nodes: readonly OutlineNode[] } | null = null;
+  const outlineShown = (): readonly OutlineNode[] => {
+    const engine = shownEngine();
+    if (engine === null) return [];
+    if (outlined?.text !== text) outlined = { text, nodes: outline(engine.scene(), options.onOpenPath === undefined ? undefined : targetsOf(engine)) };
+    return outlined.nodes;
+  };
+
+  const showAbout = (): void => {
+    const nodes = outlineShown();
+    const desc = rootText("desc");
+    aboutDesc.textContent = desc ?? "";
+    aboutDesc.hidden = desc === null;
+    if (desc === null) view?.stage.removeAttribute("aria-describedby");
+    else view?.stage.setAttribute("aria-describedby", aboutDesc.id);
+    aboutSummary.textContent = t("vector.read.objects", { count: countObjects(nodes) });
+    aboutObjects.hidden = nodes.length === 0;
+    showLinks(nodes);
+    showConnections(nodes);
+    if (!aboutObjects.open) {
+      aboutObjects.querySelector("ul")?.remove();
+      listedText = null;
+    } else if (listedText !== text) {
+      listedText = text;
+      aboutObjects.querySelector("ul")?.remove();
+      aboutObjects.append(objectList(nodes));
+    }
+  };
+  life.listen(aboutObjects, "toggle", () => showAbout());
+
+  /// La riga dei collegamenti, ridisegnata quando cambia il testo o la
+  /// lingua.
+  const showLinks = (nodes: readonly OutlineNode[]): void => {
+    const language = resolvedLanguage();
+    if (linkedText === text && linkedLanguage === language) return;
+    linkedText = text;
+    linkedLanguage = language;
+    const targets = linkTargetsIn(nodes);
+    aboutLinks.hidden = targets.length === 0;
+    aboutLinksTitle.textContent = t("vector.read.links");
+    aboutLinksList.replaceChildren(
+      ...targets.map((target) => {
+        const item = document.createElement("li");
+        const control = document.createElement("button");
+        control.type = "button";
+        control.className = "vector-about-link";
+        control.dataset.href = target;
+        control.textContent = linkName(target);
+        control.title = t("vector.link.open", { note: linkName(target) });
+        item.append(control);
+        return item;
+      }),
+    );
+  };
+
+  /// L'elenco delle connessioni, ridisegnato quando cambia il testo o la
+  /// lingua: i connettori agganciati a due oggetti, «Ingresso → Verifica» e,
+  /// se hanno un'etichetta, «Ingresso → Verifica: sì». La freccia non si
+  /// legge: a voce, «da Ingresso a Verifica, sì».
+  const showConnections = (nodes: readonly OutlineNode[]): void => {
+    const language = resolvedLanguage();
+    if (connectedText === text && connectedLanguage === language) return;
+    connectedText = text;
+    connectedLanguage = language;
+    const rows = joinedIn(nodes);
+    aboutConnections.hidden = rows.length === 0;
+    aboutConnectionsTitle.textContent = t("vector.read.connections", { count: rows.length });
+    aboutConnectionsList.replaceChildren(
+      ...rows.map((row) => {
+        const { from, to, label } = row.joined!;
+        const item = document.createElement("li");
+        const shown = document.createElement("span");
+        shown.setAttribute("aria-hidden", "true");
+        shown.textContent = label === null ? t("vector.read.connection", { from, to }) : t("vector.read.connection.labelled", { from, to, label });
+        const spoken = document.createElement("span");
+        spoken.className = "sr-only";
+        spoken.textContent = label === null ? t("vector.read.connection.spoken", { from, to }) : t("vector.read.connection.spoken.labelled", { from, to, label });
+        item.append(shown, spoken);
+        return item;
+      }),
+    );
+  };
+
+  /// Le immagini del vault che la Lettura ha letto, per percorso: il data URI
+  /// e quanti byte pesa. Restano quelle del testo che si mostra; una che non
+  /// si è aperta si riprova al testo dopo.
+  const readImages = new Map<string, { readonly uri: string; readonly bytes: number }>();
+  /// Il giro della lettura delle immagini: uno più recente rende vecchi gli
+  /// altri.
+  let imagesRound = 0;
+
+  const imageSources = (): Map<string, string> => new Map([...readImages].map(([path, entry]) => [path, entry.uri]));
+
+  /// I caratteri del vault della Lettura e dell'anteprima dell'export, che
+  /// le loro immagini portano nel foglio (`picture.ts`).
+  const readingFonts = new DrawingFonts(options.vaultFonts === undefined ? null : vaultFontsOf(options.vaultFonts));
+  life.add(() => readingFonts.dispose());
+  const fonts = options.fonts ?? fontSheets(readingFonts);
+  life.add(readingFonts.watch(() => {
+    sayFonts(readingFonts.fontNotes());
+    // Le facce arrivate, o cambiate nel vault: l'immagine si ridisegna.
+    const shown = shownText;
+    if (shown === null || view === null) return;
+    const refs = imageRefs(shown);
+    if (fonts.now(shown) !== null) display(shownPicture(shown, refs));
+    else void readFonts(shown, refs);
+  }));
+
+  /// Ciò che l'immagine mostra di `shown`: coi caratteri che nomina, se già
+  /// letti, e con le immagini lette.
+  const shownPicture = (shown: string, refs: readonly ImageRef[]): string =>
+    picture(shown, fonts.now(shown) ?? "", refs, imageSources());
+
+  /// Legge i caratteri che `shown` nomina, e mostra di nuovo l'immagine se è
+  /// ancora quella di `shown`.
+  const readFonts = async (shown: string, refs: readonly ImageRef[]): Promise<void> => {
+    if (fonts.now(shown) !== null) return;
+    await fonts.load(shown);
+    if (life.closed || shownText !== shown || view === null || fonts.now(shown) === null) return;
+    display(shownPicture(shown, refs));
+  };
+
+  /// Mostra `source`, il testo di adesso con le immagini al loro posto. La
+  /// riga sotto dice il peso del file, non quello delle immagini.
+  const display = (source: string): void => {
+    const label = t("vector.read.label", { name: drawingName() });
+    const file = new Blob([text], { type: "image/svg+xml" });
+    const blob = source === text ? file : new Blob([source], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const size = svgSize(text);
+    const info = imageInfo({ format: "SVG", blob: file }, size?.width ?? null, size?.height ?? null);
+    const previous = shownUrl;
+    shownUrl = url;
+    if (view === null) {
+      // La carta è bianca anche dove il disegno non ne ha una.
+      view = mountZoomView(url, { label, size, backdrop: "light", vector: true, info }, life);
+      readHost.append(view.element, about);
+    } else {
+      view.replace(url, size);
+      view.info(info);
+      view.stage.setAttribute("aria-label", label);
+      view.image.alt = label;
+    }
+    if (previous !== null) URL.revokeObjectURL(previous);
+  };
+
+  /// Legge le immagini del vault di `refs` che mancano, e mostra di nuovo
+  /// l'immagine se è ancora quella di `shown`. Oltre il tetto della Lettura
+  /// un'immagine resta un segnaposto, e la si riprova al testo dopo.
+  const readVaultImages = async (shown: string, refs: readonly ImageRef[]): Promise<void> => {
+    const port = options.images;
+    if (port === undefined) return;
+    const paths = [...new Set(refs.flatMap((ref) => (ref.path === null || readImages.has(ref.path) ? [] : [ref.path])))];
+    if (paths.length === 0) return;
+    const round = ++imagesRound;
+    let spent = 0;
+    for (const entry of readImages.values()) spent += entry.bytes;
+    let added = false;
+    // Una alla volta, col tetto che resta: un'immagine che non ci sta non si
+    // legge nemmeno.
+    for (const path of paths) {
+      const room = READ_IMAGE_BYTES - spent;
+      const blob = await port.read(path, room).catch(() => null);
+      const uri = blob === null || blob.size > room ? null : await imageDataUri(blob);
+      if (life.closed || round !== imagesRound) return;
+      if (uri === null) continue;
+      readImages.set(path, { uri, bytes: blob!.size });
+      spent += blob!.size;
+      added = true;
+    }
+    if (!added || life.closed || round !== imagesRound || shownText !== shown || view === null) return;
+    display(shownPicture(shown, refs));
+  };
+
+  const showImage = (): void => {
+    if (shownText === text && view !== null) {
+      const label = t("vector.read.label", { name: drawingName() });
+      view.stage.setAttribute("aria-label", label);
+      view.image.alt = label;
+      showAbout();
+      return;
+    }
+    const refs = imageRefs(text);
+    // Restano lette soltanto le immagini che il testo ha ancora.
+    const kept = new Set(refs.map((ref) => ref.path));
+    for (const path of [...readImages.keys()]) if (!kept.has(path)) readImages.delete(path);
+    shownText = text;
+    readingFonts.useFonts(markupFonts(text).fonts);
+    display(shownPicture(text, refs));
+    showAbout();
+    void readFonts(text, refs);
+    void readVaultImages(text, refs);
+  };
+
+  // --- Lo stato a vista -----------------------------------------------------
+
+  /// Il fuoco nella parte che si vede: il foglio, «Modifica», o l'immagine.
+  const focusShown = (): void => {
+    if (!drawHost.hidden && editor !== null) editor.focus();
+    else if (!notice.hidden && !adoptButton.hidden) adoptButton.focus();
+    else if (!readHost.hidden && view !== null) view.stage.focus({ preventScroll: true });
+  };
+
+  /// Porta la superficie a modalità, documento e scrittura di adesso.
+  const paint = (): void => {
+    root.dataset.mode = mode;
+    const state = opened;
+    const foreign = state?.kind === "scene" && state.engine.status === "foreign";
+    let message: string | null = null;
+    let canAdopt = false;
+    let canMake = false;
+    if (state?.kind === "unreadable") {
+      message = unreadableText(state.error);
+    } else if (mode === "draw" && state?.kind === "inert") {
+      message = t("vector.read_only", { reason: readOnlyText(state.engine.readOnly[0]!), command: t("commands.doc.source.open") });
+    } else if (mode === "draw" && foreign) {
+      canAdopt = !readOnly;
+      canMake = canAdopt && featuresFor(level, custom).has("editable");
+      message = canMake ? `${t("vector.foreign")} ${t("vector.foreign.editable.hint")}` : t("vector.foreign");
+    }
+    // Chi annulla l'adozione dal foglio non resta col fuoco su un nodo
+    // nascosto: passa a «Modifica».
+    const hadFocus = drawHost.contains(document.activeElement);
+    if (noticeText.textContent !== (message ?? "")) noticeText.textContent = message ?? "";
+    notice.hidden = message === null;
+    adoptButton.textContent = t("vector.foreign.edit");
+    adoptButton.hidden = !canAdopt;
+    editableButton.textContent = t("vector.foreign.editable");
+    editableButton.hidden = !canMake;
+    drawHost.hidden = !(mode === "draw" && state?.kind === "scene" && !foreign);
+    const image = state !== null && state.kind !== "unreadable" && (mode === "read" || state.kind === "inert" || foreign);
+    readHost.hidden = !image;
+    if (image) showImage();
+    if (hadFocus && drawHost.hidden) focusShown();
+  };
+
+  life.listen(adoptButton, "click", () => {
+    if (editor?.adopt()) editor.focus();
+  });
+  life.listen(editableButton, "click", () => {
+    void editor?.makeDrawingEditable().then((done) => {
+      if (done && !life.closed) editor?.focus();
+    });
+  });
+  life.add(onLanguage(paint));
+
+  // --- Il livello e la griglia ----------------------------------------------
+
+  life.add(watchLevel((next, parts) => {
+    level = next;
+    custom = parts;
+    editor?.setLevel(next, parts);
+    // «Rendi modificabile…» sull'avviso c'è all'Esperto.
+    paint();
+  }));
+  void readGrid().then((next) => {
+    if (life.closed || gridChosen) return;
+    grid = next;
+    editor?.setGrid(next);
+  });
+  void readRecentColors().then((next) => {
+    if (life.closed || colorsChosen) return;
+    colors = next;
+    editor?.setRecentColors(next);
+  });
+  life.add(watchSuggested((next) => {
+    suggested = next;
+    editor?.setSuggestions(next);
+  }));
+
+  // --- Le selezioni ---------------------------------------------------------
+
+  /// I tratti di sorgente degli oggetti scelti, in ordine di documento: i
+  /// byte, e il testo grezzo fra gli indici delle loro unità a LF, senza
+  /// codificare il documento intero.
+  const selectedRanges = (): EditorRange[] => {
+    if (drawHost.hidden || editor === null || editor.selection.length === 0) return [];
+    const keys = new Set(editor.selection);
+    const engine = editor.engine;
+    const source = engine.source();
+    const ranges: EditorRange[] = [];
+    for (const item of engine.scene()) {
+      if (item.kind !== "element" || !keys.has(keyOf(item))) continue;
+      const [start, end] = item.bytes;
+      ranges.push({ start, end, text: source.text.slice(source.rawOf(item.utf16[0]), source.rawOf(item.utf16[1])) });
+    }
+    return ranges;
+  };
+
+  // --- «Esporta» ------------------------------------------------------------
+
+  /// Ciò che la finestra chiede al disegno, col testo che l'anteprima
+  /// deriva: la selezione soltanto dove la si vede, sul foglio, e con gli id
+  /// che riceverebbe già scritti, su una copia.
+  const exportOffer = (): DrawExport & { readonly text: string } => {
+    const offer = editor?.exportScene() ?? { scene: { selection: null, boards: [] }, naming: null, named: 0 };
+    const { selection } = offer.scene;
+    if (drawHost.hidden || selection === null) return { text, scene: { ...offer.scene, selection: null }, naming: null, named: 0 };
+    if (offer.naming === null) return { text, ...offer };
+    const applied = SceneEngine.open(text).apply(offer.naming);
+    if (applied.outcome === "applied") return { text: applied.text, ...offer };
+    // Gli id non si danno: la selezione resta senza, e la finestra lo dice.
+    const named = new Set(offer.naming.op === "batch" ? offer.naming.ops.map((op) => (op.op === "ident" ? op.id : null)) : []);
+    return { text, scene: { ...offer.scene, selection: { ...selection, ids: selection.ids.filter((id) => !named.has(id)) } }, naming: null, named: 0 };
+  };
+
+  /// La finestra «Esporta», col suo pezzo dell'editor e su un disegno che si
+  /// legge. Quando si esporta la selezione, gli oggetti scelti senza id lo
+  /// ricevono in un passo che si annulla; le scelte si ricordano.
+  const exportWindow: SurfaceExportWindow = {
+    available: () => featuresFor(level, custom).has("export") && shownEngine() !== null,
+    open: async () => {
+      const memory = await readExportMemory(context.documentId);
+      if (life.closed || shownEngine() === null) return null;
+      const base = text;
+      const offer = exportOffer();
+      readingFonts.useFonts(markupFonts(offer.text).fonts);
+      const choice = await exportDialog({
+        name: drawingName(),
+        text: offer.text,
+        scene: offer.scene,
+        named: offer.named,
+        memory,
+        fonts,
+        fontNotes: readingFonts,
+        print: featuresFor(level, custom).has("print"),
+        ...(imagePort === undefined ? {} : { read: (path: string, limit: number) => imagePort.read(path, limit) }),
+      });
+      if (choice === null || life.closed) return null;
+      if (choice.memory.what === "selection" && offer.naming !== null) {
+        // Gli id sono quelli del testo di quando la finestra si è aperta.
+        if (text !== base || editor === null || !editor.perform("draw.action.export_ids", offer.naming)) {
+          notify(t("vector.export.changed"), "guasto");
+          return null;
+        }
+        editor.select(offer.scene.selection!.ids);
+      }
+      void saveExportMemory(context.documentId, choice.memory);
+      return { target: choice.target, label: () => choice.label, detail: () => "", options: () => choice.options };
+    },
+  };
+
+  life.add(() => {
+    unmountEditor();
+    if (shownUrl !== null) URL.revokeObjectURL(shownUrl);
+    shownUrl = null;
+    root.remove();
+  });
+
+  paint();
+
+  return {
+    family: "canvas",
+    profile: VECTOR_PROFILE,
+    surfaceId: context.paneId,
+    modes: VECTOR_MODES,
+    defaultMode: "draw",
+    exports: VECTOR_EXPORTS,
+    exportWindow,
+    setMode(next) {
+      if (next !== "draw" && next !== "read") throw new RangeError(`surface mode ${next} is not supported`);
+      if (next === mode) return;
+      mode = next;
+      paint();
+      options.onSelectionChange();
+    },
+    buffer: {
+      setDoc: (next) => {
+        text = next;
+        show(open(next), true);
+      },
+      syncDoc: (update) => {
+        const next = typeof update === "string" ? update : update.text;
+        if (next === text) return;
+        text = next;
+        show(open(next), false);
+      },
+      getDoc: () => text,
+    },
+    focus: focusShown,
+    reveal: ({ span }) => !drawHost.hidden && editor !== null && editor.reveal(span.start),
+    selections: (): EditorSelections | undefined => {
+      const [first, ...rest] = selectedRanges();
+      if (first === undefined) return undefined;
+      return { primary: first, secondary: rest };
+    },
+    selectedText: (): SelectedText | null => {
+      const [first, ...rest] = selectedRanges().map((range) => range.text);
+      if (first === undefined) return null;
+      return { primary: first, secondary: rest };
+    },
+    setReadOnly: (next) => {
+      readOnly = next;
+      editor?.setReadOnly(next);
+      paint();
+    },
+    destroy: () => life.close(),
+  };
+}

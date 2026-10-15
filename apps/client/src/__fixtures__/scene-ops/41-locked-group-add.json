@@ -1,0 +1,31 @@
+{
+  "name": "locked-group-add",
+  "description": "dentro un gruppo bloccato non si aggiunge niente: rifiuto locked",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <g id=\"o4d5e6f7g\" fub:locked=\"true\">\n      <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n      <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n    </g>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "add",
+      "parent": "o4d5e6f7g",
+      "pos": {
+        "last": true
+      },
+      "elem": {
+        "tag": "rect",
+        "attrs": {
+          "id": "o5e6f7g8h",
+          "x": "1100",
+          "y": "100",
+          "width": "200",
+          "height": "120",
+          "fill": "#cc79a7"
+        },
+        "children": [],
+        "text": null
+      }
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "locked"
+  }
+}

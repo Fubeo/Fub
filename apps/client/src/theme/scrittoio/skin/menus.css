@@ -88,6 +88,34 @@
   width: 6px;
   height: 20px;
 }
+/* Le voci con una figura: 24 px prima del nome, nel colore della voce, che
+   la spenta attenua con le parole. Chi non ha la sua ne tiene il posto, e il
+   nome si centra sulla figura invece di restare sulla riga di base. */
+.context-menu .menu-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon > svg {
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon ~ .menu-label,
+.context-menu .menu-icon ~ .menu-body {
+  align-self: center;
+}
+/* L'anteprima di uno stile: «Aa» nel colore del menu se lo stile non ne
+   dice uno, e il quadratino con un filo che lo stacca dal fondo. */
+.menu-sample {
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.menu-sample-box {
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border);
+}
 .context-menu .menu-body {
   display: flex;
   flex: 1 1 auto;

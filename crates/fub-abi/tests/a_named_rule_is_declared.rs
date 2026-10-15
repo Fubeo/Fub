@@ -245,21 +245,14 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/registry.rs::register",
+            "crates/fub-kernel/src/registry.rs::checked_extensions",
             (
                 Family::ContextualCase,
                 "l'identità di un'estensione nel registro è full-Unicode e non ASCII, e diverge \
                  apposta da `rules/media.rs`: qui l'estensione arriva dal **descrittore di un \
-                 provider**, che è testo di terzi, non dal nome di un file del vault.",
-            ),
-        ),
-        (
-            "crates/fub-kernel/src/registry.rs::register_source",
-            (
-                Family::ContextualCase,
-                "dichiara nella stessa mappa un formato privo di parser `DocumentModel`: \
-                 l'assenza del provider non può cambiare l'identità dell'estensione, quindi \
-                 deve piegarla esattamente come `register` prima di controllare i conflitti.",
+                 provider**, che è testo di terzi, non dal nome di un file del vault. È la sola \
+                 piega di `register` e di `register_source`: un formato privo di parser \
+                 `DocumentModel` non può avere un'altra identità né un altro conflitto.",
             ),
         ),
         (
@@ -456,6 +449,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-app/src/print.rs::file_name",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: riconosce l'estensione `.pdf` anche scritta \
+                 `.PDF`, per non aggiungerne una seconda al file temporaneo che «Stampa…» passa al \
+                 lettore dei PDF. I sistemi scelgono quel lettore dall'estensione senza badare alle \
+                 maiuscole, e l'alfabeto di un'estensione è ASCII.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/edit.rs::matches_bytes",
             (
                 Family::AsciiCase,
@@ -525,6 +528,25 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 Family::AsciiCase,
                 "confronta un tag di lingua BCP 47, che è ASCII per la sua stessa grammatica: \
                  `IT` e `it` sono la stessa lingua, e non c'è nessun altro modo di scriverla.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/draw/templates.rs::of",
+            (
+                Family::AsciiCase,
+                "sceglie la lingua dei file di un modello di disegno dalla parte di lingua di un \
+                 tag BCP 47, come `text.rs::template`: è ASCII per la grammatica del tag, ed `EN` \
+                 ed `en` sono la stessa lingua.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/draw/fonts.rs::same_family",
+            (
+                Family::AsciiCase,
+                "confronta i nomi di famiglia di un carattere come i browser, che seguono la \
+                 risoluzione del CSSWG del 2019: maiuscole e minuscole contano soltanto fuori \
+                 dall'ASCII. L'export deve trovare la famiglia che la superficie dell'editor \
+                 trova, e piegare in full-Unicode ne troverebbe di più.",
             ),
         ),
         (
@@ -1377,6 +1399,145 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "taglia gli slash e abbassa il gambo in ASCII per farne uno slug URL: gli slug \
                  pubblicati sono ASCII per costruzione. Diverge da `folders::normalized` perché qui \
                  la regola fabbrica un nome pubblico, non normalizza un nome del vault.",
+            ),
+        ),
+        // -- CasoAscii: la scena SVG (grammatiche XML, URL e CSS) -------------
+        (
+            "crates/fub-scene/src/lib.rs::read_then",
+            (
+                Family::AsciiCase,
+                "confronta la codifica della dichiarazione XML con `utf-8`: per XML 1.0 \
+                 (§4.3.3) il nome di una codifica è ASCII e si legge senza badare al caso. Non è \
+                 il nome di un file del vault ma una parola del prologo, e decide se un altro \
+                 lettore vedrebbe altri caratteri: il documento si apre in sola lettura.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/xml.rs::pi",
+            (
+                Family::AsciiCase,
+                "rifiuta un'istruzione di elaborazione col bersaglio `xml` in qualunque caso: XML \
+                 1.0 (§2.6) riserva lettera per lettera `(('X'|'x') ('M'|'m') ('L'|'l'))`, ed è la \
+                 grammatica a dire che la piegatura è ASCII. Diverge da `read` perché qui decide \
+                 se il documento è ben formato, non come si apre.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::scheme",
+            (
+                Family::AsciiCase,
+                "abbassa lo schema di un `href` dopo aver verificato che sia ASCII: per la RFC \
+                 3986 gli schemi sono ASCII e senza caso, e il parser di URL del browser li \
+                 abbassa così. Diverge da `validate_source_url` perché qui lo schema non valida \
+                 un canale: classifica un riferimento di un SVG (vault, `data:`, rete, \
+                 `javascript:`) come lo leggerà la webview.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::data_uri",
+            (
+                Family::AsciiCase,
+                "abbassa il tipo MIME di un `data:` e riconosce `;base64` in qualunque caso: tipi \
+                 e parametri sono token ASCII senza caso (RFC 2045 e RFC 2397). Diverge da \
+                 `scheme` perché legge l'interno dell'URL con un'altra grammatica, e da lì decide \
+                 se un'immagine incorporata è un raster e quanto pesa decodificata.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/classify.rs::has_url",
+            (
+                Family::AsciiCase,
+                "cerca `url(` in ogni caso dentro un valore di attributo: i nomi di funzione CSS \
+                 sono ASCII e senza caso, e `URL(#a)` riferisce come `url(#a)`. Non stabilisce \
+                 un'identità ma una paura: un riferimento rende estraneo l'elemento, e la rete \
+                 sbaglia apposta dal lato largo, su ogni finestra di quattro byte.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/values.rs::scan_url",
+            (
+                Family::AsciiCase,
+                "legge `url(#id)` con `url` in qualunque caso: i nomi di funzione CSS sono ASCII \
+                 e senza caso. Diverge da `has_url` perché qui il riferimento non è una paura \
+                 ma un'identità: ne esce l'id della risorsa, che decide se l'elemento resta \
+                 modificabile, e per S014 se il documento ha quell'id.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/geometry.rs::parse_path",
+            (
+                Family::AsciiCase,
+                "porta in maiuscolo la lettera di un comando di `d` dopo averne letto il caso: \
+                 nella grammatica dei path SVG la minuscola è il comando relativo e la maiuscola \
+                 l'assoluto, e le lettere sono ASCII. Diverge da ogni altra riga perché qui il \
+                 caso porta un significato, che si legge prima di piegarlo.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/analysis.rs::active_content",
+            (
+                Family::AsciiCase,
+                "riconosce i gestori di evento `on*` senza badare al caso, per l'avviso S005: \
+                 in XML `ONCLICK` non è `onclick`, ma lo stesso SVG incollato in una pagina HTML \
+                 passa dal tokenizer, che abbassa in ASCII i nomi di attributo. L'avviso sbaglia \
+                 dal lato largo apposta, perché il file non resta sempre dove è nato.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::hidden",
+            (
+                Family::AsciiCase,
+                "riconosce la proprietà `display` dentro un attributo `style` senza badare al \
+                 caso: i nomi di proprietà CSS sono ASCII e senza caso, e un browser non disegna \
+                 un elemento con `DISPLAY: none`. È un'identità, non una paura: decide che \
+                 l'elemento nascosto lascia l'SVG pulito. Il valore `none` invece si confronta \
+                 com'è scritto, e un valore in un altro caso lascia l'elemento dov'è.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::hiding_is_final",
+            (
+                Family::AsciiCase,
+                "cerca `display` in qualunque caso nel testo di un foglio di stile. Come \
+                 `classify.rs::has_url` non stabilisce un'identità ma una paura: un foglio che \
+                 nomina `display` potrebbe mostrare ciò che un attributo nasconde, e allora \
+                 nessun elemento nascosto lascia l'SVG pulito. Diverge da `hidden` perché sbaglia \
+                 dal lato largo apposta, anche su un selettore o su un commento.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/export/clean.rs::path_data",
+            (
+                Family::AsciiCase,
+                "porta in maiuscolo la lettera di un comando di `d` per sapere quanti numeri \
+                 vuole e quali sono coordinate, dopo averne letto il caso, che dice se il comando \
+                 è relativo. Diverge da `geometry.rs::parse_path` perché non legge il tracciato \
+                 per disegnarlo: lo riscrive con le stesse lettere e gli stessi separatori, e il \
+                 caso decide da dove si arrotonda una coordinata.",
+            ),
+        ),
+        (
+            "crates/fub-scene/src/annotation.rs::digest",
+            (
+                Family::AsciiCase,
+                "porta in minuscolo le cifre esadecimali di `fub:digest` dopo aver verificato che \
+                 siano 64 e ASCII, con il prefisso `sha256:` lasciato esatto: una cifra \
+                 esadecimale non ha caso, e due impronte uguali devono essere la stessa stringa \
+                 per chi le confronta con il PDF. Diverge da `data_uri` perché qui non classifica \
+                 un riferimento: dà l'identità di un valore che il lettore non verifica.",
+            ),
+        ),
+        // -- CasoAscii: le annotazioni dei PDF ---------------------------------
+        (
+            "crates/fub-format-svg/src/serialize.rs::annotated_of",
+            (
+                Family::AsciiCase,
+                "riconosce `.fubann` e `.pdf` in fondo al nome di un documento senza badare al \
+                 caso ASCII, come il vault confronta le estensioni (`rules::media`): \
+                 `Bando.PDF.FubAnn` annota `Bando.PDF`. Diverge da `kind_of` perché qui non dà la \
+                 specie di un file ma ne deduce un altro, il PDF che un documento nuovo nomina in \
+                 `fub:annotates` e che l'export cerca quando `fub:annotates` manca, e il resto del \
+                 nome resta com'è.",
             ),
         ),
         // -- ConfineDiCartella: comporre cartella e nome ----------------------

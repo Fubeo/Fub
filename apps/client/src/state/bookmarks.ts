@@ -329,12 +329,20 @@ export function addBookmark(title: string, target: BookmarkTarget): Bookmark | n
 
 /// Salva le tab aperte come un segnalibro solo (F20): il gruppo resta dove
 /// sta, le sessioni restano uniche — qui si ricordano identità, non testi.
+/// Nemmeno viste: la superficie scelta per una linguetta (un disegno guardato
+/// come sorgente) resta della linguetta, e il segnalibro riapre il documento
+/// sulla sua superficie. Si toglie qui, apposta, e non per caso alla rilettura.
 export function saveTabsAsBookmark(title: string, tabs: Tab[]): Bookmark | null {
   const clean = tabs.filter((t) =>
     (t.k === "doc" && t.doc) || (t.k === "view" && t.view),
   );
   if (clean.length === 0) return null;
-  return addBookmark(title, { k: "tabs", tabs: clean.map((t) => ({ ...t })) });
+  return addBookmark(title, { k: "tabs", tabs: clean.map(withoutOverride) });
+}
+
+function withoutOverride(tab: Tab): Tab {
+  if (tab.k !== "doc") return { ...tab };
+  return { k: "doc", doc: tab.doc, ...(tab.pinned ? { pinned: true } : {}), ...(tab.stack ? { stack: tab.stack } : {}) };
 }
 
 export function removeBookmark(id: string): boolean {

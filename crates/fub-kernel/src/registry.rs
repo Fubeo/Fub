@@ -65,18 +65,7 @@ impl FormatRegistry {
     /// registrato, perché funziona per alcuni file e non per altri.
     pub fn register(&mut self, provider: Box<dyn FormatProvider>) -> Result<(), RegistryConflict> {
         let descriptor = provider.descriptor();
-        let mut extensions = Vec::with_capacity(descriptor.extensions.len());
-        for ext in &descriptor.extensions {
-            let ext = ext.to_lowercase();
-            if let Some(&at) = self.by_ext.get(&ext) {
-                return Err(RegistryConflict {
-                    extension: ext,
-                    incumbent: self.providers[at].descriptor.id.clone(),
-                    challenger: descriptor.id,
-                });
-            }
-            extensions.push(ext);
-        }
+        let extensions = self.checked_extensions(&descriptor)?;
         let capabilities = provider.capabilities();
         self.insert_normalized(Some(provider), descriptor, capabilities, extensions);
         Ok(())
@@ -90,6 +79,18 @@ impl FormatRegistry {
         &mut self,
         descriptor: FormatDescriptor,
     ) -> Result<(), RegistryConflict> {
+        let extensions = self.checked_extensions(&descriptor)?;
+        self.insert_normalized(None, descriptor, FormatCapabilities::default(), extensions);
+        Ok(())
+    }
+
+    /// Le estensioni di `descriptor` in minuscolo e nell'ordine dichiarato, o
+    /// il **primo** conflitto in quell'ordine. Non tocca il registro: chi la
+    /// chiama inserisce soltanto quando sono tutte libere.
+    fn checked_extensions(
+        &self,
+        descriptor: &FormatDescriptor,
+    ) -> Result<Vec<String>, RegistryConflict> {
         let mut extensions = Vec::with_capacity(descriptor.extensions.len());
         for ext in &descriptor.extensions {
             let ext = ext.to_lowercase();
@@ -97,13 +98,12 @@ impl FormatRegistry {
                 return Err(RegistryConflict {
                     extension: ext,
                     incumbent: self.providers[at].descriptor.id.clone(),
-                    challenger: descriptor.id,
+                    challenger: descriptor.id.clone(),
                 });
             }
             extensions.push(ext);
         }
-        self.insert_normalized(None, descriptor, FormatCapabilities::default(), extensions);
-        Ok(())
+        Ok(extensions)
     }
 
     /// Registra un provider **sostituendo** chi rivendicava le stesse
@@ -392,6 +392,84 @@ mod tests {
         assert_eq!(error.challenger, "mixed");
         assert!(!reg.has_doc_ext("fubsheet"));
         assert!(reg.provider_for_ext("md").is_some());
+    }
+
+    /// Un provider che dichiara il descrittore che gli si dà.
+    struct Declares(FormatDescriptor);
+
+    impl FormatProvider for Declares {
+        fn descriptor(&self) -> FormatDescriptor {
+            self.0.clone()
+        }
+        fn capabilities(&self) -> FormatCapabilities {
+            FormatCapabilities::default()
+        }
+        fn parse(
+            &self,
+            _source: &DocumentSource,
+            ctx: &ParseContext,
+        ) -> Result<DocumentModel, FormatError> {
+            Ok(DocumentModel::empty(DocId::new(ctx.doc_id.clone())))
+        }
+        fn render_html(
+            &self,
+            _m: &DocumentModel,
+            _or: &RenderOptions,
+        ) -> Result<String, FormatError> {
+            Ok(String::new())
+        }
+        fn serialize(&self, _m: &DocumentModel) -> Result<String, FormatError> {
+            Ok(String::new())
+        }
+    }
+
+    /// Le due porte rivendicano allo stesso modo: estensioni in minuscolo, il
+    /// **primo** conflitto nell'ordine dichiarato e niente registrato a metà,
+    /// nemmeno l'estensione libera che lo precede.
+    #[test]
+    fn both_ports_claim_lowercase_extensions_and_name_the_first_conflict() {
+        type Claim = fn(&mut FormatRegistry, FormatDescriptor) -> Result<(), RegistryConflict>;
+        let ports: [(&str, Claim); 2] = [
+            ("register", |reg, descriptor| {
+                reg.register(Box::new(Declares(descriptor)))
+            }),
+            ("register_source", |reg, descriptor| {
+                reg.register_source(descriptor)
+            }),
+        ];
+        for (port, claim) in ports {
+            let mut reg = FormatRegistry::new();
+            reg.register(Box::new(Fake("markdown", "md"))).unwrap();
+            reg.register(Box::new(Fake("testo", "txt"))).unwrap();
+
+            let error = claim(
+                &mut reg,
+                FormatDescriptor::text("misto", "Misto", &["Fub", "TXT", "md"]),
+            )
+            .expect_err("txt e md sono già presi");
+            assert_eq!(
+                error,
+                RegistryConflict {
+                    extension: "txt".into(),
+                    incumbent: "testo".into(),
+                    challenger: "misto".into(),
+                },
+                "{port}"
+            );
+            assert!(!reg.has_doc_ext("fub"), "{port}");
+            assert_eq!(reg.descriptor_for_ext("txt").unwrap().id, "testo", "{port}");
+
+            claim(
+                &mut reg,
+                FormatDescriptor::text("foglio", "Foglio", &["FubSheet"]),
+            )
+            .unwrap();
+            assert_eq!(
+                reg.descriptor_for_ext("fubsheet").unwrap().id,
+                "foglio",
+                "{port}"
+            );
+        }
     }
 
     #[test]

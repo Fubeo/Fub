@@ -1,0 +1,31 @@
+{
+  "name": "anchor-pdf",
+  "description": "anchor lega le annotazioni a un PDF che non avevano ancora",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" fub:annotates=\"Bando%20di%20gara.pdf\">\n  <title>Bando di gara</title>\n</svg>\n",
+  "ops": [
+    {
+      "op": "anchor",
+      "digest": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "pages": 12
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" fub:annotates=\"Bando%20di%20gara.pdf\" fub:digest=\"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" fub:pages=\"12\">\n  <title>Bando di gara</title>\n</svg>\n",
+    "inverse": {
+      "op": "anchor",
+      "previous": {
+        "digest": null,
+        "pages": null
+      }
+    },
+    "edits": [
+      {
+        "from": 140,
+        "to": 140,
+        "deleted": "",
+        "inserted": " fub:digest=\"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" fub:pages=\"12\""
+      }
+    ]
+  }
+}
