@@ -1043,6 +1043,13 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
         self.inner.trash_document(id)
     }
 
+    fn trash_document_if(&mut self, id: &DocId, expected: &Revision) -> Result<DocId, PluginError> {
+        self.check_path(Capability::VaultStructure, id.as_str(), || {
+            format!("trashing `{id}`")
+        })?;
+        self.inner.trash_document_if(id, expected)
+    }
+
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
         self.check(Capability::VaultStructure, || {
             format!("restoring `{entry}`")
