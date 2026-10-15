@@ -29,7 +29,7 @@
 
 use std::io::{self, Read};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use fub_abi::net::{HttpHeader, HttpRequest, HttpResponse};
 use fub_abi::traits::HostNetwork;
@@ -73,14 +73,24 @@ pub struct UreqNetwork {
 struct CancellationReader<'a, R> {
     inner: R,
     cancelled: &'a AtomicBool,
+    /// Scadenza assoluta della richiesta: `ureq` non rinnova il budget globale
+    /// a ogni lettura, e una scadenza che il reader riprova resterebbe
+    /// invisibile al job.
+    deadline: Instant,
 }
 
-fn is_timeout(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::TimedOut
-        || error
-            .get_ref()
-            .and_then(|source| source.downcast_ref::<ureq::Error>())
-            .is_some_and(|error| matches!(error, ureq::Error::Timeout(_)))
+/// `true` soltanto per il breve timeout di ricezione che serve a controllare
+/// l'annullamento. Ogni altra scadenza (globale, per chiamata, connessione)
+/// arriva a chi legge: ritentarla non rinnova nulla.
+fn is_poll_timeout(error: &io::Error) -> bool {
+    match error
+        .get_ref()
+        .and_then(|source| source.downcast_ref::<ureq::Error>())
+    {
+        Some(ureq::Error::Timeout(timeout)) => matches!(timeout, ureq::Timeout::RecvBody),
+        Some(_) => false,
+        None => error.kind() == io::ErrorKind::TimedOut,
+    }
 }
 
 impl<R: Read> Read for CancellationReader<'_, R> {
@@ -92,8 +102,14 @@ impl<R: Read> Read for CancellationReader<'_, R> {
                     "network request cancelled",
                 ));
             }
+            if Instant::now() >= self.deadline {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "network request exceeded its overall time limit",
+                ));
+            }
             match self.inner.read(buffer) {
-                Err(error) if is_timeout(&error) => continue,
+                Err(error) if is_poll_timeout(&error) => continue,
                 result => return result,
             }
         }
@@ -144,6 +160,7 @@ impl UreqNetwork {
         request: HttpRequest,
         cancelled: Option<&AtomicBool>,
     ) -> Result<HttpResponse, PluginError> {
+        let started = Instant::now();
         let io = |and: ureq::Error| PluginError::Io(format!("{}: {and}", request.url).into());
         let mut builder = ureq::http::Request::builder()
             .method(request.method.as_str())
@@ -184,6 +201,7 @@ impl UreqNetwork {
                 let mut reader = CancellationReader {
                     inner: response.body_mut().with_config().limit(MAX_BODY).reader(),
                     cancelled: flag,
+                    deadline: started + TOTAL_TIMEOUT,
                 };
                 let mut body = Vec::new();
                 reader.read_to_end(&mut body).map_err(|and| {
@@ -306,6 +324,7 @@ mod tests {
         let mut reader = CancellationReader {
             inner: CancelAfterFirst(&cancelled),
             cancelled: &cancelled,
+            deadline: Instant::now() + TOTAL_TIMEOUT,
         };
         let started = std::time::Instant::now();
         let mut byte = [0; 1];
@@ -313,5 +332,70 @@ mod tests {
         let error = reader.read(&mut byte).expect_err("cancelled reader");
         assert_eq!(error.kind(), io::ErrorKind::Interrupted);
         assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    /// Un reader che fallisce sempre con la stessa scadenza, contando i
+    /// tentativi: sblocca un retry infinito senza un server vero.
+    struct AlwaysTimesOut {
+        timeout: ureq::Timeout,
+        attempts: usize,
+    }
+
+    impl Read for AlwaysTimesOut {
+        fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+            self.attempts += 1;
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                ureq::Error::Timeout(self.timeout),
+            ))
+        }
+    }
+
+    /// La scadenza globale di `ureq` non si rinnova ritentando: deve arrivare
+    /// al job invece di essere assorbita dal polling.
+    #[test]
+    fn global_timeout_reaches_the_caller() {
+        let cancelled = AtomicBool::new(false);
+        let mut reader = CancellationReader {
+            inner: AlwaysTimesOut {
+                timeout: ureq::Timeout::Global,
+                attempts: 0,
+            },
+            cancelled: &cancelled,
+            deadline: Instant::now() + TOTAL_TIMEOUT,
+        };
+        let error = reader.read(&mut [0; 1]).expect_err("global timeout");
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert_eq!(reader.inner.attempts, 1);
+    }
+
+    /// Il timeout di polling si ritenta, ma non oltre la scadenza assoluta, e
+    /// l'annullamento lo interrompe.
+    #[test]
+    fn poll_timeout_is_retried_until_the_deadline_or_cancellation() {
+        let cancelled = AtomicBool::new(false);
+        let mut reader = CancellationReader {
+            inner: AlwaysTimesOut {
+                timeout: ureq::Timeout::RecvBody,
+                attempts: 0,
+            },
+            cancelled: &cancelled,
+            deadline: Instant::now() + Duration::from_millis(30),
+        };
+        let error = reader.read(&mut [0; 1]).expect_err("deadline");
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert!(reader.inner.attempts > 1, "the poll timeout is retried");
+
+        let mut reader = CancellationReader {
+            inner: AlwaysTimesOut {
+                timeout: ureq::Timeout::RecvBody,
+                attempts: 0,
+            },
+            cancelled: &cancelled,
+            deadline: Instant::now() + TOTAL_TIMEOUT,
+        };
+        cancelled.store(true, Ordering::Relaxed);
+        let error = reader.read(&mut [0; 1]).expect_err("cancelled");
+        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
     }
 }
