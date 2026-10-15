@@ -331,45 +331,43 @@ pub fn frontmatter(
     out
 }
 
-/// Minimal base64 decoder (standard alphabet, `=` padding, whitespace
-/// rejected). Avoids a new dependency for the single ENEX `<data>` case;
-/// invalid input is an error, never silent truncation.
+/// Minimal base64 decoder (standard alphabet, mandatory `=` padding,
+/// whitespace rejected). Avoids a new dependency for the single ENEX `<data>`
+/// case; invalid input is an error, never silent truncation: the length must
+/// be a multiple of four and padding may only close the final group.
 pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
-    let mut vals: Vec<u8> = Vec::with_capacity(input.len() / 4 * 3);
+    let bytes = input.as_bytes();
+    if bytes.len() % 4 != 0 {
+        return Err("base64 length is not a multiple of 4".to_string());
+    }
+    let pad = bytes.iter().rev().take_while(|&&b| b == b'=').count();
+    if pad > 2 {
+        return Err("too much base64 padding".to_string());
+    }
+    let data_len = bytes.len() - pad;
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len() / 4 * 3);
     let mut buf: u32 = 0;
     let mut bits: u8 = 0;
-    let mut pad = 0usize;
-    for b in input.bytes() {
+    for (i, &b) in bytes.iter().enumerate() {
         let v = match b {
             b'A'..=b'Z' => b - b'A',
             b'a'..=b'z' => b - b'a' + 26,
             b'0'..=b'9' => b - b'0' + 52,
             b'+' => 62,
             b'/' => 63,
-            b'=' => {
-                pad += 1;
-                0
-            }
+            b'=' if i >= data_len => break,
+            b'=' => return Err("base64 padding before the end of the data".to_string()),
             _ => return Err(format!("invalid base64 character: {b:#04x}")),
         };
-        if pad > 0 && b != b'=' {
-            return Err("data after base64 padding".to_string());
-        }
         buf = (buf << 6) | u32::from(v);
         bits += 6;
         if bits >= 8 {
             bits -= 8;
-            vals.push((buf >> bits) as u8);
+            out.push((buf >> bits) as u8);
             buf &= (1 << bits) - 1;
         }
     }
-    if pad > 2 {
-        return Err("too much base64 padding".to_string());
-    }
-    for _ in 0..pad {
-        vals.pop();
-    }
-    Ok(vals)
+    Ok(out)
 }
 
 /// Fallback plain-text import: the contract's faithful minimum.
@@ -434,5 +432,25 @@ impl fub_abi::transfer::ImportProvider for TextImport {
             &mut report,
         )?;
         Ok(report)
+    }
+}
+
+#[cfg(test)]
+mod base64_tests {
+    use super::base64_decode;
+
+    #[test]
+    fn decodes_canonical_groups() {
+        assert_eq!(base64_decode("").unwrap(), b"");
+        assert_eq!(base64_decode("TQ==").unwrap(), b"M");
+        assert_eq!(base64_decode("TWE=").unwrap(), b"Ma");
+        assert_eq!(base64_decode("TWFu").unwrap(), b"Man");
+    }
+
+    #[test]
+    fn rejects_incomplete_or_misplaced_input() {
+        for bad in ["T", "TQ", "TWFu=", "TQ=A", "T===", "=TWF", "TW=u", "TWF\n"] {
+            assert!(base64_decode(bad).is_err(), "`{bad}` must be rejected");
+        }
     }
 }
