@@ -4152,6 +4152,14 @@ impl Host {
         self.with_session(vault, |session| session.workspace.clone())
     }
 
+    /// Il turno di scrittura del vault è in mano a qualcuno? Una sonda, non una
+    /// porta: dice di chi non è, non dà modo di prenderlo. Serve ai banchi che
+    /// fissano l'ordine fra due thread aspettando un fatto invece di un orologio.
+    #[doc(hidden)]
+    pub fn is_write_turn_held(&self, vault: Option<&str>) -> Result<bool, PluginError> {
+        self.with_session(vault, |session| session.workspace.writer_turn_held())
+    }
+
     #[cfg(test)]
     pub(crate) fn debug_sessions_write_available(&self) -> bool {
         self.sessions.try_write().is_some()
