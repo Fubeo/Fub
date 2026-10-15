@@ -283,6 +283,43 @@ Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
+### Importer
+
+`fub.importers` tiene, per ogni job di import che ha cominciato a scrivere:
+
+```text
+.fub/plugins/fub.importers/imports/
+├── commit/<job>.json              journal con la preimmagine di ogni bersaglio
+├── commit-receipts/<job>.json     lo stesso journal, a import committato
+├── preimages/<job>/<n>            i byte di ogni bersaglio che esisteva
+└── receipts/<job>/<impronta>.json ricevuta di un bersaglio scritto
+```
+
+Il journal è scritto prima dell'apply e nomina ogni bersaglio che il piano crea o
+sostituisce (schema 1). Una ricevuta la lascia l'importer subito dopo ogni
+scrittura riuscita, con la revisione che il bersaglio ha avuto in quell'istante;
+il commit le raccoglie nel journal e le toglie quando chiude. Un importer che non
+lascia ricevute (un componente di terzi) è ammesso: i suoi bersagli si provano
+con ciò che il suo rapporto dichiara scritto e con l'impronta riletta subito
+dopo l'apply.
+
+Il rollback riporta indietro soltanto ciò che l'import può provare scritto da
+sé: un bersaglio la cui revisione attuale è quella della ricevuta (o, senza
+ricevuta, quella dell'impronta del dopo). La scrittura che lo ripristina e il
+cestinamento di una nota creata sono condizionati a quella stessa revisione: se
+un altro scrittore è intervenuto, l'host risponde con un conflitto e la sua
+modifica resta. Un bersaglio che non è com'era e che nessuna prova attribuisce
+all'import — per esempio uno creato da un altro scrittore dopo il preflight, o
+uno scritto da un import interrotto senza ricevuta — ferma il rollback con un
+conflitto **prima** di cambiare qualsiasi altro bersaglio, e journal e
+preimmagini restano. Anche la sostituzione dell'apply è condizionata: un
+bersaglio che l'importer sostituisce si scrive solo se ha ancora la revisione
+vista dal preflight.
+
+Un journal scritto da una versione precedente non ha ricevute e, se è
+interrotto, non ha nemmeno l'impronta del dopo: i suoi bersagli diversi dalla
+preimmagine sono ambigui e il rollback si ferma sul primo.
+
 Quindi `.fub/plugins/` non è né tutta cache né tutto dato autorevole.
 
 ## Cestino
