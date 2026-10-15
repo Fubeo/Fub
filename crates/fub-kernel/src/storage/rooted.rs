@@ -25,6 +25,9 @@ pub struct RootedFsStorage {
     /// si provoca su un filesystem di prova.
     #[cfg(all(test, unix))]
     dir_sync_fault: std::sync::Mutex<Option<i32>>,
+    /// Le cartelle di cui si è chiesto il sync, nell'ordine.
+    #[cfg(all(test, unix))]
+    dir_sync_log: std::sync::Mutex<Vec<Utf8PathBuf>>,
 }
 
 impl std::fmt::Debug for RootedFsStorage {
@@ -145,6 +148,8 @@ impl RootedFsStorage {
             dir,
             #[cfg(all(test, unix))]
             dir_sync_fault: std::sync::Mutex::new(None),
+            #[cfg(all(test, unix))]
+            dir_sync_log: std::sync::Mutex::new(Vec::new()),
         };
         Ok(storage)
     }
@@ -408,6 +413,8 @@ impl RootedFsStorage {
             let mut options = OpenOptions::new();
             options.read(true).custom_flags(libc::O_DIRECTORY);
             let opened = self.dir.open_with(rel, &options)?;
+            #[cfg(all(test, unix))]
+            self.dir_sync_log.lock().unwrap().push(dir.to_owned());
             #[cfg(all(test, unix))]
             if let Some(code) = *self.dir_sync_fault.lock().unwrap() {
                 return dir_sync_outcome(Err(io::Error::from_raw_os_error(code)));
@@ -731,6 +738,9 @@ impl VaultStorage for RootedFsStorage {
         expected: Option<&[u8]>,
         bytes: &[u8],
     ) -> io::Result<ConditionalWrite> {
+        // Prima del lock, che crea i genitori senza sincronizzarli: le cartelle
+        // nuove diventano durevoli come nella scrittura diretta.
+        self.create_parent_synced(path)?;
         self.with_lock(path, || {
             let current = self.current_bytes(path)?;
             if current.as_deref() != expected {
@@ -741,6 +751,7 @@ impl VaultStorage for RootedFsStorage {
     }
 
     fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> io::Result<()> {
+        self.create_parent_synced(path)?;
         self.with_lock(path, || {
             let current = self.current_bytes(path)?;
             if let Some(bytes) = merge(current.as_deref())? {
@@ -1171,6 +1182,38 @@ mod tests {
             .unwrap();
         let moved = storage.rename_no_replace(&path, &root.join("cartella/spostata.md"));
         assert_eq!(moved.unwrap_err().raw_os_error(), Some(libc::EIO));
+    }
+
+    /// La creazione con CAS rende durevoli le cartelle nate per lei, come la
+    /// scrittura diretta: radice e antenati, non soltanto il genitore finale.
+    #[cfg(unix)]
+    #[test]
+    fn conditional_creation_syncs_the_ancestors_it_creates() {
+        let synced = |conditional: bool| {
+            let temp = tempfile::tempdir().unwrap();
+            let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+            let storage = RootedFsStorage::open(&root).unwrap();
+            let path = root.join("Nuova/Sotto/Nota.md");
+            if conditional {
+                let outcome = storage.write_if_unchanged(&path, None, b"x").unwrap();
+                assert!(matches!(outcome, ConditionalWrite::Written(_)));
+            } else {
+                storage.write(&path, b"x").unwrap();
+            }
+            let log = storage.dir_sync_log.lock().unwrap().clone();
+            log.iter()
+                .map(|dir| dir.strip_prefix(&root).unwrap().to_owned())
+                .collect::<Vec<_>>()
+        };
+        let direct = synced(false);
+        let conditional = synced(true);
+        for want in ["", "Nuova", "Nuova/Sotto"] {
+            assert!(direct.iter().any(|d| d == want), "{want}");
+            assert!(
+                conditional.iter().any(|d| d == want),
+                "CAS must sync `{want}`: {conditional:?}"
+            );
+        }
     }
 
     #[cfg(unix)]
