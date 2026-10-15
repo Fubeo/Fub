@@ -5,7 +5,8 @@
 > **Fonti autorevoli:** `crates/fub-kernel/src/bus.rs`,
 > `crates/fub-kernel/src/index/mod.rs`,
 > `crates/fub-kernel/src/workspace/removal.rs`,
-> `crates/fub-host/src/jobs.rs`, `crates/fub-host/src/session.rs`.
+> `crates/fub-host/src/jobs.rs`, `crates/fub-host/src/session.rs`,
+> `crates/fub-host/src/custody.rs`, `crates/fub-host/src/waits.rs`.
 
 ## Tre forme di lavoro
 
@@ -137,6 +138,43 @@ durante `invoke`. Dove l'esito dipende da uno snapshot, il finalizzatore
 verifica generazione, revisione o identità del workspace. Un token legato a
 un'altra istanza produce un `Conflict` e torna al chiamante: il finalizzatore
 sbagliato non chiude il frame originale.
+
+## Turno di scrittura e istanza
+
+I due lucchetti si prendono in ordine opposto da due parti. Un salvataggio tiene
+il turno di scrittura del vault attraverso parser, hook, indici e handler di
+evento, e per ciascuno chiede l'istanza. Un job (o un handler, o un comando)
+tiene l'istanza per tutta la chiamata e, quando usa una capacità che cambia il
+vault (`emit`, `spawn-job`, `report-progress`: l'host WASM non serve
+`host-vault-write`), chiede il turno. Senza una regola, ciascuno aspetta ciò che
+l'altro tiene, con attese native che né la cancellazione né i limiti di
+esecuzione interrompono.
+
+Un ordine unico non è imponibile: il turno è tenuto attraverso i provider per
+conservare l'unità logica del salvataggio, ed è il guest a decidere quando
+chiedere il turno, già dentro l'istanza; il mutex d'istanza non si rilascia
+durante una chiamata all'host. La regola è quindi un'altra:
+
+- ogni presa di un'istanza passa da `LockInstance::lock_instance`
+  (`fub-wasm-host`, verificato da `tests/instance_door.rs`), che registra chi la
+  tiene e chi l'aspetta nel grafo delle attese di `fub_host::waits`;
+- chi sta dentro un componente prende il turno da `Custody::write_turn_yielding`
+  (`JobHost::turn`, `JobHost::writing_until`; `Custody::write` lo usa da solo se
+  il thread tiene un'istanza). Ogni 10 ms l'attesa guarda la cancellazione e se
+  il turno è di chi aspetta, direttamente o attraverso altri thread, ciò che
+  questo thread tiene;
+- se l'attesa chiude un ciclo **cede sempre il lato che sta dentro il guest**,
+  perché ha un esito e può ritentare: la capacità risponde `Conflict` con la
+  chiave `host.turn.cycle`. Il salvataggio, che è ciò che l'utente sta
+  guardando, non fallisce e riparte appena l'istanza torna libera.
+
+`emit` e `report-progress` non hanno un esito: in un ciclo non partono e lo
+scrivono nel log (`tracing::warn!` per `emit`). Chi deve esserci a ogni costo
+usa `spawn-job`, che dice di no. Il job che riceve `host.turn.cycle` deve uscire
+dalla chiamata, restituendo l'istanza, e ritentare.
+
+Non sono coperti i cicli puri fra due istanze senza un turno di mezzo: nessun
+percorso noto li chiude, e il grafo non li scioglie.
 
 ## Callback degli indici
 

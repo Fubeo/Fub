@@ -12,6 +12,16 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+# **Una porta d'ingresso per variante.** Il componente esporta sempre indice,
+# handler di eventi e comando, ma li lascia vuoti: l'host non li chiama finché
+# una feature non li dichiara. Così una prova non è schermata da un'altra — il
+# primo ingresso che chiede l'istanza a un salvataggio è quello che il job
+# incontra, e se fossero tutti accesi si proverebbe sempre il primo.
+indice = []
+eventi = []
+comando = []
+
 [dependencies]
 wit-bindgen = "0.60"
 

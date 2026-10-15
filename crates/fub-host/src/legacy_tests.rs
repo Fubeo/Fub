@@ -34,6 +34,7 @@ mod switches;
 mod the_bridge;
 mod the_first_plugin;
 mod the_runner;
+mod the_turn_yields;
 mod the_watcher_batch;
 mod the_watcher_window;
 mod unlinked_mentions;
