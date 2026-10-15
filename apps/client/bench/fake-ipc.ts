@@ -50,6 +50,9 @@ import type {
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
+import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
+import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
+import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -61,6 +64,51 @@ type GraphBenchMetadata = Readonly<{
     nodes: readonly string[];
     edges: readonly { readonly from: string; readonly to: string }[];
     seed: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco delle tavole (`boards.mjs`) legge del disegno che
+/// naviga: dove sta, le tavole nel loro ordine, quanto è grande.
+type BoardsBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    boards: BoardsFixture["boards"];
+    objects: number;
+    elements: number;
+    bytes: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco dei connettori (`connectors.mjs`) legge del disegno che
+/// sposta: dove sta, le forme e i connettori con ciò che li unisce, i nodi.
+type ConnectorsBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    shapes: ConnectorsFixture["shapes"];
+    connectors: ConnectorsFixture["connectors"];
+    hubs: ConnectorsFixture["hubs"];
+    labels: ConnectorsFixture["labels"];
+    elements: number;
+    bytes: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco delle scene grandi (`large.mjs`) legge del disegno che
+/// apre: dove sta, quanto è grande, il rettangolo da scegliere.
+type LargeBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    elements: number;
+    objects: number;
+    strokes: number;
+    size: LargeFixture["size"];
+    cells: number;
+    columns: number;
+    target: LargeFixture["target"];
+    bytes: number;
     digest: string;
   }> | null;
 }>;
@@ -116,6 +164,100 @@ globalThis.__fubGraphBench = Object.freeze({
       })
     : null,
 });
+
+// `?boards=N` mette nel vault il disegno di N tavole del banco delle tavole
+// (`boards-fixture.ts`), accende la feature `draw`, che apre un `.svg` come
+// disegno, e mette l'editor al livello Standard, il primo che ha le tavole.
+// Senza, il vault e le impostazioni restano quelli che le foto conoscono.
+const boardsParam = params.get("boards");
+let BOARDS: BoardsFixture | null = null;
+if (boardsParam !== null) {
+  if (!/^[1-9]\d*$/.test(boardsParam)) throw new RangeError("boards must be a positive decimal integer");
+  BOARDS = boardsFixture(Number(boardsParam));
+}
+
+globalThis.__fubBoardsBench = Object.freeze({
+  fixture: BOARDS
+    ? Object.freeze({
+        doc: BOARDS_DOC,
+        boards: BOARDS.boards,
+        objects: BOARDS.objects,
+        elements: BOARDS.elements,
+        bytes: new TextEncoder().encode(BOARDS.text).length,
+        digest: BOARDS.digest,
+      })
+    : null,
+});
+
+// `?connectors=N` mette nel vault il disegno di N connettori del banco dei
+// connettori (`connectors-fixture.ts`), con due forme ogni tre connettori, e
+// accende l'editor come `?boards=N`. I due disegni non stanno insieme.
+//
+// Questo modulo sta nel giro fra le stringhe della shell e l'host
+// (`i18n/strings.ts` legge le impostazioni dall'host, che qui è lui): ciò che
+// importa si valuta mentre le stringhe sono a metà. Perciò i due disegni si
+// fanno coi moduli dell'editor che non leggono le stringhe: un catalogo
+// valutato qui troverebbe quello della shell non ancora pronto, e la pagina
+// del catalogo del banco non partirebbe.
+const connectorsParam = params.get("connectors");
+let CONNECTORS: ConnectorsFixture | null = null;
+if (connectorsParam !== null) {
+  if (BOARDS !== null) throw new RangeError("boards and connectors are two different drawings");
+  if (!/^[1-9]\d*$/.test(connectorsParam)) throw new RangeError("connectors must be a positive decimal integer");
+  CONNECTORS = connectorsFixture(Number(connectorsParam));
+}
+
+globalThis.__fubConnectorsBench = Object.freeze({
+  fixture: CONNECTORS
+    ? Object.freeze({
+        doc: CONNECTORS_DOC,
+        shapes: CONNECTORS.shapes,
+        connectors: CONNECTORS.connectors,
+        hubs: CONNECTORS.hubs,
+        labels: CONNECTORS.labels,
+        elements: CONNECTORS.elements,
+        bytes: new TextEncoder().encode(CONNECTORS.text).length,
+        digest: CONNECTORS.digest,
+      })
+    : null,
+});
+
+// `?large=N` mette nel vault la lavagna di N elementi del banco delle scene
+// grandi (`large-fixture.ts`), e accende l'editor come `?boards=N`. Non sta
+// insieme agli altri due disegni.
+const largeParam = params.get("large");
+let LARGE: LargeFixture | null = null;
+if (largeParam !== null) {
+  if (BOARDS !== null || CONNECTORS !== null) throw new RangeError("large is a drawing of its own");
+  if (!/^[1-9]\d*$/.test(largeParam)) throw new RangeError("large must be a positive decimal integer");
+  LARGE = largeFixture(Number(largeParam));
+}
+
+globalThis.__fubLargeBench = Object.freeze({
+  fixture: LARGE
+    ? Object.freeze({
+        doc: LARGE_DOC,
+        elements: LARGE.elements,
+        objects: LARGE.objects,
+        strokes: LARGE.strokes,
+        size: LARGE.size,
+        cells: LARGE.cells,
+        columns: LARGE.columns,
+        target: LARGE.target,
+        bytes: new TextEncoder().encode(LARGE.text).length,
+        digest: LARGE.digest,
+      })
+    : null,
+});
+
+/// Il disegno che il banco apre dall'albero, se ne ha uno.
+const DRAWING = BOARDS !== null
+  ? { doc: BOARDS_DOC, text: BOARDS.text }
+  : CONNECTORS !== null
+    ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
+    : LARGE !== null
+      ? { doc: LARGE_DOC, text: LARGE.text }
+      : null;
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -494,6 +636,30 @@ const SETTINGS: SettingEntry[] = [
   },
 ];
 
+/// Il livello dell'editor dei disegni come lo dichiara il bundle `fub.draw`,
+/// a Standard: serve ai banchi che aprono un disegno, e sta fuori da
+/// `SETTINGS` perché il pannello delle impostazioni si fotografa senza.
+const DRAW_LEVEL: SettingEntry = {
+  spec: {
+    key: "draw.level",
+    label: "Livello d'interfaccia",
+    description: "",
+    group: "Disegni",
+    scope: "vault",
+    kind: {
+      kind: "choice",
+      default: "essential",
+      options: [
+        { value: "essential", label: "Essenziale" },
+        { value: "standard", label: "Standard" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: "standard",
+  source: "vault",
+};
+
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
 /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
@@ -863,14 +1029,15 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: CORPUS,
+  file: DRAWING === null ? CORPUS : { ...CORPUS, [DRAWING.doc]: DRAWING.text },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
   commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : BENCH_COMMANDS,
-  settings: SETTINGS,
+  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
+  ...(DRAWING === null ? {} : { draw: true }),
 };
 
 const host = createFakeHost(options);
@@ -885,6 +1052,9 @@ const host = createFakeHost(options);
 /// codice che non condivide il grafo dei moduli con la pagina.
 declare global {
   var __fubGraphBench: GraphBenchMetadata;
+  var __fubBoardsBench: BoardsBenchMetadata;
+  var __fubConnectorsBench: ConnectorsBenchMetadata;
+  var __fubLargeBench: LargeBenchMetadata;
   interface Window {
     bench: {
       emit: typeof host.emit;

@@ -36,6 +36,14 @@
 // Ciò che il compilatore **non** copre è il testo fermo di `index.html`, che
 // nomina le chiavi in un attributo: quello lo presidia `strings.test.ts`,
 // leggendo il file vero.
+//
+// # I cataloghi che arrivano dopo
+//
+// Questo catalogo si scarica all'avvio, con la shell. Una parte del client
+// che arriva con un `import()` porta le sue stringhe in un catalogo suo, fatto
+// con `catalog`: la stessa lingua, la stessa scala, gli stessi nomi fra
+// graffe, e chiavi che la shell non ha. È il caso dell'editor dei disegni
+// (`editors/spatial/strings.ts`).
 import { EN, IT, type Key } from "./catalog";
 import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
@@ -49,7 +57,14 @@ export type { Key } from "./catalog";
 /// La lingua di ripiego di questa shell, che è quella in cui è scritto.
 const FALLBACK = "it";
 
-const CATALOGS: Record<string, Record<string, string>> = { it: IT, en: EN };
+/// Le lingue in cui la shell è tradotta, oltre a quella in cui è scritta. Un
+/// catalogo di [`catalog`] le deve avere tutte: una lingua nuova non compila
+/// finché ognuno non la traduce.
+export type Translation = "en";
+
+const TRANSLATIONS: Record<Translation, Record<Key, string>> = { en: EN };
+
+const CATALOGS: Record<string, Record<string, string>> = { [FALLBACK]: IT, ...TRANSLATIONS };
 
 /// La chiave dell'impostazione della lingua. La stessa stringa sta in
 /// `fub-kernel/src/locale.rs`, come `CHIAVE_TEMA` sta in
@@ -198,13 +213,16 @@ export function expand(template: string, args: Record<string, string | number>):
 /// italiano e in inglese «uno» è singolare, ma una lingua nuova non deve
 /// portarsi dietro l'assunzione.
 export function plural(count: number, one: Key, other: Key, args: Record<string, string | number> = {}): string {
-  let form = "other";
+  return t(singular(count) ? one : other, { count, n: count, ...args });
+}
+
+/// Se `count` vuole la forma singolare nella lingua che si sta parlando.
+function singular(count: number): boolean {
   try {
-    form = new Intl.PluralRules(resolvedLanguage()).select(count);
+    return new Intl.PluralRules(resolvedLanguage()).select(count) === "one";
   } catch {
-    form = count === 1 ? "one" : "other";
+    return count === 1;
   }
-  return t(form === "one" ? one : other, { count, n: count, ...args });
 }
 
 /// I nomi fra graffe di un modello del catalogo: `"«{name}»: {reason}"` →
@@ -224,17 +242,56 @@ type Placeholders<S extends string> = S extends `${string}{${infer Rest}`
 /// la forma di una qualunque delle chiavi possibili: la prova piena è sulle
 /// chiamate con la chiave scritta. Una chiave forzata (`as never`, letta da
 /// un attributo) non promette niente e non chiede niente.
-export type ArgsFor<K extends Key> = [K] extends [never] ? [args?: Record<string, string | number>] : ArgsOf<K>;
+export type ArgsFor<K extends Key> = TemplateArgs<typeof IT, K>;
 
-type ArgsOf<K extends Key> = K extends Key
-  ? [Placeholders<(typeof IT)[K]>] extends [never]
-    ? [args?: Record<string, string | number>]
-    : [args: Record<Placeholders<(typeof IT)[K]>, string | number> & Record<string, string | number>]
-  : never;
+/// Lo stesso per la chiave `K` di un catalogo qualunque `C`, i cui testi sono
+/// i modelli nella lingua di ripiego.
+export type TemplateArgs<C extends Readonly<Record<string, string>>, K extends keyof C> = [K] extends [never]
+  ? [args?: Record<string, string | number>]
+  : K extends keyof C
+    ? [Placeholders<C[K]>] extends [never]
+      ? [args?: Record<string, string | number>]
+      : [args: Record<Placeholders<C[K]>, string | number> & Record<string, string | number>]
+    : never;
 
 export function t<K extends Key>(key: K, ...[args = {}]: ArgsFor<K>): string {
   const template = catalogFor(languageCurrent())[key] ?? IT[key] ?? key;
   return expand(template, args);
+}
+
+/// Il catalogo di una parte del client che arriva quando serve.
+///
+/// Questo catalogo si scarica all'avvio, con la shell. Una parte grande che
+/// arriva con un `import()`, come l'editor dei disegni, porta le sue stringhe
+/// con sé, e chi non la apre non le scarica. Parla la lingua della shell, con
+/// la stessa scala di ripiego, gli stessi nomi fra graffe e gli stessi
+/// plurali; le chiavi sono sue, e il tipo le tiene complete in ogni lingua
+/// come `Key` tiene quelle della shell.
+export interface Catalog<C extends Readonly<Record<string, string>>> {
+  /// Il testo di una chiave, nella lingua di chi guarda, come [`t`].
+  t<K extends keyof C & string>(key: K, ...args: TemplateArgs<C, K>): string;
+  /// La frase giusta per un numero, come [`plural`].
+  plural(count: number, one: keyof C & string, other: keyof C & string, args?: Record<string, string | number>): string;
+  /// I testi per una lingua, con la scala di [`catalogFor`].
+  catalogFor(language: string): Readonly<Record<string, string>>;
+}
+
+/// Un catalogo coi modelli di `source`, scritti nella lingua di ripiego, e le
+/// loro traduzioni.
+export function catalog<const C extends Readonly<Record<string, string>>>(
+  source: C,
+  translations: Readonly<Record<Translation, Readonly<Record<keyof C, string>>>>,
+): Catalog<C> {
+  const fallback: Readonly<Record<string, string>> = source;
+  const tables: Readonly<Record<string, Readonly<Record<string, string>>>> = { [FALLBACK]: fallback, ...translations };
+  const tableFor = (language: string): Readonly<Record<string, string>> => tables[catalogLanguage(language)] ?? fallback;
+  const text = (key: string, args: Record<string, string | number>): string =>
+    expand(tableFor(languageCurrent())[key] ?? fallback[key] ?? key, args);
+  return {
+    t: (key, ...args) => text(key, (args as [Record<string, string | number>?])[0] ?? {}),
+    plural: (count, one, other, args = {}) => text(singular(count) ? one : other, { count, n: count, ...args }),
+    catalogFor: tableFor,
+  };
 }
 
 /// Gli attributi che il testo fermo di `index.html` può chiedere, e dove

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="https://example.org/bando.pdf" fub:digest="sha256:9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08" fub:pages="007">
+  <g fub:page="0"><text fub:note="fuori dalle pagine">zero</text></g>
+  <g id="p0002" fub:page="2" fub:page-size="612 792 1">
+    <g fub:page="5"><rect x="1" y="1" width="2" height="2" fub:note="non conta"/></g>
+    <text fub:note=" 	 ">soli spazi</text>
+    <text fub:note="esterna">fuori<text fub:note="interna">dentro</text></text>
+  </g>
+  <g fub:page="2" fub:page-size=" 612,792 "/>
+  <g fub:page="4294967296"/>
+  <g fub:page="+3"/>
+</svg>

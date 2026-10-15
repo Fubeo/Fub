@@ -42,6 +42,7 @@
 // prima di ogni vault. Da qui in poi la tabella degli accordi arriva generata
 // (`shell-keys.generated.ts`) e questo modulo non distingue più i due registri
 // se non per chi esegue.
+import { IMPORT_ACCEPT, sourceOf } from "../editors/spatial/import/sources";
 import type { CommandSpec, SettingEntry } from "../host/contract";
 import { settings } from "../host/query";
 import { type Key, t } from "../i18n/strings";
@@ -135,6 +136,184 @@ export function unregisterShellCommand(command: ShellCommand): void {
 /// porterebbe dentro i comandi dichiarati dal test precedente.
 export function resetShellCommands(): void {
   shell.clear();
+}
+
+// # Il modulo proprio di un comando del kernel
+//
+// Un comando del kernel arriva alla palette con la sua spec, e la palette ne
+// disegna il modulo generico: un campo per parametro. Per quasi tutti basta. Per
+// qualcuno no: «Nuovo disegno» sceglie fra dei modelli che si guardano, e un
+// elenco a discesa non lo dice. Il comando non cambia — è lo stesso del kernel,
+// con gli stessi parametri e lo stesso esito — cambia **chi chiede gli
+// argomenti**: un modulo che chi conosce il comando registra qui.
+//
+// È un registro e non un `run` sulla voce del kernel, perché `run` direbbe che
+// il comando è della shell: la voce comparirebbe due volte nelle impostazioni
+// delle scorciatoie e la palette salterebbe il giro del kernel. Qui la voce
+// resta quella di prima; si sceglie soltanto con quale modulo si compila.
+
+/// Il modulo proprio di un comando, al posto di quello generico della palette.
+/// Riceve ciò che chi lo apre sa già (la cartella dove si crea, per esempio),
+/// come testo per nome di parametro.
+export type CommandForm = (prefill: Readonly<Record<string, string>>) => void;
+
+/// I moduli registrati, per id di comando. Una mappa come quella dei comandi
+/// di shell: registrare due volte lo stesso id è ciò che fa un rimontaggio, e
+/// la seconda registrazione sostituisce la prima.
+const forms = new Map<string, CommandForm>();
+
+/// Registra il modulo di `id`; restituisce chi lo toglie. Chi toglie un modulo
+/// già sostituito da un altro non toglie quello nuovo.
+export function registerCommandForm(id: string, open: CommandForm): () => void {
+  forms.set(id, open);
+  return () => {
+    if (forms.get(id) === open) forms.delete(id);
+  };
+}
+
+/// Apre il modulo di `id`, se ce n'è uno registrato: vero se l'ha aperto.
+export function openCommandForm(id: string, prefill: Readonly<Record<string, string>> = {}): boolean {
+  const open = forms.get(id);
+  if (open === undefined) return false;
+  open(prefill);
+  return true;
+}
+
+/// Il comando `id` ha un modulo proprio?
+export function hasCommandForm(id: string): boolean {
+  return forms.has(id);
+}
+
+/// Solo per i banchi, come `resetShellCommands`.
+export function resetCommandForms(): void {
+  forms.clear();
+}
+
+/// Il kernel dichiara il comando `id`? È la domanda con cui una porta di
+/// creazione sa se mostrarsi: la shell non sa se una feature è accesa, vede
+/// soltanto i comandi che il kernel elenca.
+export function hasKernelCommand(id: string): boolean {
+  return state.commandSpecs.some((spec) => spec.id === id);
+}
+
+/// Come la shell fa partire un comando dalla palette: la mette chi ha la
+/// palette (`startCommand`), perché i pannelli non la importano.
+type CommandStarter = (entry: CommandEntry, prefill: Readonly<Record<string, string>>) => void;
+
+let starter: CommandStarter | null = null;
+
+/// Dice come far partire un comando dalla palette; restituisce chi lo toglie.
+export function registerCommandStarter(start: CommandStarter): () => void {
+  starter = start;
+  return () => {
+    if (starter === start) starter = null;
+  };
+}
+
+/// La porta di un comando del kernel per i pannelli: il modulo proprio se
+/// c'è, altrimenti la palette su quel comando, con ciò che si sa già nei campi
+/// che il comando ha. Falso se il kernel non dichiara il comando — un modulo
+/// registrato non lo fa esistere — o se la shell non ha detto come far partire
+/// la palette.
+export function launchCommand(id: string, prefill: Readonly<Record<string, string>> = {}): boolean {
+  if (!hasKernelCommand(id)) return false;
+  if (openCommandForm(id, prefill)) return true;
+  const entry = allCommands().find((candidate) => candidate.id === id);
+  if (entry === undefined || starter === null) return false;
+  starter(entry, prefill);
+  return true;
+}
+
+// # Le porte di «Nuovo disegno…»
+//
+// Il menu dell'app, il menu di una cartella, il riquadro vuoto e la shell
+// mobile offrono lo stesso gesto, e lo offrono alle stesse condizioni: il
+// comando del kernel c'è (la feature `draw` è accesa) e qualcuno sa farlo
+// partire. Le due domande stanno qui, così le porte non si ripetono e nessuna
+// ne dimentica una.
+
+/// L'id del comando del kernel che fa nascere un disegno.
+export const NEW_DRAWING = "drawing.create";
+
+/// Le porte di «Nuovo disegno…» si mostrano? Soltanto se il kernel dichiara il
+/// comando: con la feature `draw` spenta un `.svg` non è nemmeno un disegno, e
+/// una voce che non può riuscire è peggio di una voce che manca. Si legge a ogni
+/// apertura di un menu e a ogni cambio dell'elenco (`on("commands")`).
+export function canCreateDrawing(): boolean {
+  return hasKernelCommand(NEW_DRAWING);
+}
+
+/// Apre «Nuovo disegno…»: il modulo proprio del comando, la galleria, o la
+/// palette sul comando se nessuno ne ha registrato uno. `folder` è la cartella
+/// dove nasce ("" è la radice, e non si passa: il campo resta vuoto).
+export function newDrawing(folder = ""): boolean {
+  return launchCommand(NEW_DRAWING, folder === "" ? {} : { folder });
+}
+
+// # Le porte di «Importa disegno…»
+//
+// Un file di Excalidraw o di draw.io diventa un disegno nuovo, e l'originale
+// non cambia. Le porte sono quelle di «Nuovo disegno…», più il file stesso nel
+// riquadro dei file, e si mostrano alle stesse condizioni, più una: la shell
+// ha registrato la finestra che importa, che arriva la prima volta che serve.
+
+/// Da dove si importa: un file del vault, per percorso, o uno scelto dal
+/// disco, con la cartella dove nasce il disegno ("" è la radice).
+export type DrawingSource =
+  | { readonly kind: "vault"; readonly path: string }
+  | { readonly kind: "file"; readonly file: File; readonly folder: string };
+
+/// Chi apre la finestra che importa.
+export type DrawingImport = (from: DrawingSource) => void;
+
+let importer: DrawingImport | null = null;
+
+/// Registra la finestra che importa; restituisce chi la toglie.
+export function registerDrawingImport(open: DrawingImport): () => void {
+  importer = open;
+  return () => {
+    if (importer === open) importer = null;
+  };
+}
+
+/// Le porte di «Importa disegno…» si mostrano? Come quelle di «Nuovo
+/// disegno…», e soltanto se c'è chi importa.
+export function canImportDrawing(): boolean {
+  return canCreateDrawing() && importer !== null;
+}
+
+/// Il file `path` del vault si importa? Lo dice il nome: chi lo apre legge
+/// anche il contenuto.
+export function canImportFile(path: string): boolean {
+  return canImportDrawing() && sourceOf(path) !== null;
+}
+
+/// Apre la finestra che importa `from`; falso se non si importa.
+export function importDrawing(from: DrawingSource): boolean {
+  if (importer === null || !canCreateDrawing()) return false;
+  importer(from);
+  return true;
+}
+
+/// Sceglie un file dal disco e lo importa nella cartella `folder`. La scelta
+/// si apre subito, dentro il gesto che la chiede: il browser apre la finestra
+/// dei file soltanto da un clic o da un tasto, e un `await` prima la
+/// perderebbe.
+export function pickDrawingImport(folder = ""): boolean {
+  if (!canImportDrawing()) return false;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = IMPORT_ACCEPT;
+  input.addEventListener(
+    "change",
+    () => {
+      const file = input.files?.[0];
+      if (file !== undefined) importDrawing({ kind: "file", file, folder });
+    },
+    { once: true },
+  );
+  input.click();
+  return true;
 }
 
 /// Gli accordi riconfigurati, letti dalle impostazioni.
@@ -470,7 +649,34 @@ const KEY_NAMES: Record<string, string> = {
   delete: "Del",
   backspace: "⌫",
   " ": "Space",
+  space: "Space",
 };
+
+/// Il nome che si legge di un tasto di `KeyboardEvent.key`, da solo: `←`,
+/// `Esc`, `Enter`, `P`. Un tasto funzione si legge come è stampato, `F10`,
+/// anche quando l'accordo lo scrive minuscolo.
+export function keyName(key: string): string {
+  return KEY_NAMES[key.toLowerCase()] ?? (key.length === 1 || /^f\d{1,2}$/i.test(key) ? key.toUpperCase() : key);
+}
+
+/// Il nome che si legge di un modificatore da solo, tenuto mentre si fa
+/// altro: `Mod` è Ctrl, o ⌘ su macOS. `null` se `name` non è un modificatore.
+export function modifierName(
+  name: string,
+  platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
+): string | null {
+  const mac = platform === "mac";
+  switch (name.trim().toLowerCase()) {
+    case "mod":
+      return mac ? "⌘" : "Ctrl";
+    case "alt":
+      return mac ? "⌥" : "Alt";
+    case "shift":
+      return mac ? "⇧" : "Shift";
+    default:
+      return null;
+  }
+}
 
 export function displayBinding(
   binding: string | null | undefined,
@@ -478,6 +684,8 @@ export function displayBinding(
 ): string {
   const first = splitAlternatives(binding)[0];
   if (!first) return "";
+  const held = modifierName(first, platform);
+  if (held !== null) return held;
   const chords = parseChords(first);
   if (!chords) return first;
   const mac = platform === "mac";
@@ -487,7 +695,7 @@ export function displayBinding(
       if (chord.mod) parts.push(mac ? "⌘" : "Ctrl");
       if (chord.alt) parts.push(mac ? "⌥" : "Alt");
       if (chord.shift) parts.push(mac ? "⇧" : "Shift");
-      parts.push(KEY_NAMES[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key));
+      parts.push(keyName(chord.key));
       return parts.join(mac ? "" : "+");
     })
     .join(" ");

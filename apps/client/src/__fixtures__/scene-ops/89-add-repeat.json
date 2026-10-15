@@ -1,0 +1,98 @@
+{
+  "name": "add-repeat",
+  "description": "un batch fa una ripetizione di un rettangolo: un gruppo con fub:repeat subito dopo l'id, l'originale spostato dentro e due copie, use con transform prima di href; l'inversa toglie le copie, rimette l'originale al suo posto e toglie il gruppo",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "batch",
+      "label": "Ripeti",
+      "ops": [
+        {
+          "op": "add",
+          "parent": "l3f8a0c2d",
+          "pos": {
+            "after": "o2b3c4d5e"
+          },
+          "elem": {
+            "tag": "g",
+            "attrs": {
+              "fub:repeat": "grid 3 1 250 0",
+              "id": "o5e6f7a8b"
+            }
+          }
+        },
+        {
+          "op": "move",
+          "target": "o2b3c4d5e",
+          "parent": "o5e6f7a8b",
+          "pos": {
+            "last": true
+          }
+        },
+        {
+          "op": "add",
+          "parent": "o5e6f7a8b",
+          "pos": {
+            "last": true
+          },
+          "elem": {
+            "tag": "use",
+            "attrs": {
+              "href": "#o2b3c4d5e",
+              "transform": "translate(250 0)",
+              "id": "o6f7a8b9c"
+            }
+          }
+        },
+        {
+          "op": "add",
+          "parent": "o5e6f7a8b",
+          "pos": {
+            "last": true
+          },
+          "elem": {
+            "tag": "use",
+            "attrs": {
+              "href": "#o2b3c4d5e",
+              "transform": "translate(500 0)",
+              "id": "o7a8b9c0d"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <g id=\"o5e6f7a8b\" fub:repeat=\"grid 3 1 250 0\">\n      <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n      <use id=\"o6f7a8b9c\" transform=\"translate(250 0)\" href=\"#o2b3c4d5e\"/>\n      <use id=\"o7a8b9c0d\" transform=\"translate(500 0)\" href=\"#o2b3c4d5e\"/>\n    </g>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "remove",
+          "target": "o7a8b9c0d"
+        },
+        {
+          "op": "remove",
+          "target": "o6f7a8b9c"
+        },
+        {
+          "op": "move",
+          "target": "o2b3c4d5e",
+          "slot": {
+            "parent": "l3f8a0c2d",
+            "after": null,
+            "skip": 0,
+            "lead": ""
+          },
+          "gap": "\n    "
+        },
+        {
+          "op": "remove",
+          "target": "o5e6f7a8b"
+        }
+      ],
+      "label": "Ripeti"
+    }
+  }
+}

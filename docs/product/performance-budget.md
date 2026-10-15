@@ -1,7 +1,8 @@
-# Budget prestazionale della Graph View
+# Budget prestazionale
 
-> **Ambito:** evidenza osservazionale e criteri provvisori per la Graph View.
-> **Snapshot applicativo:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
+> **Ambito:** evidenza osservazionale e criteri provvisori per la Graph View;
+> budget applicati in CI per i [disegni grandi](#i-disegni-grandi).
+> **Snapshot applicativo della Graph View:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
 
 Questa pagina documenta tre distribuzioni dello stesso codice (locale, CI push e
 CI PR). Le misure descrivono quelle esecuzioni e quella fixture deterministica;
@@ -143,3 +144,43 @@ hardware, fixture, renderer o algoritmo. Confrontare sempre la stessa fixture e
 lo stesso digest, aggiungere le nuove distribuzioni alla serie e riesaminare
 p50/p95/max, total, delta, heap e slope insieme. I budget di frame time restano osservazionali; il solo limite numerico heap
 descritto sopra è invece un gate CI esplicito e limitato alla fixture canonica.
+
+## I disegni grandi
+
+Il banco delle scene grandi ([`large.mjs`](../../apps/client/bench/large.mjs))
+apre nell'app vera, al livello Standard, tre lavagne di 5 000, 20 000 e
+49 900 elementi, e ne controlla ogni passo: lo zoom coi tasti, la rotella,
+Ctrl+rotella, la rotella e Ctrl+rotella da vicino, la scelta, i tasti di due
+strumenti, un tratto a penna e Annulla. Il tempo di un passo va dall'arrivo
+dell'evento al fotogramma dipinto. I budget sono gate CI, nel passo
+«cinquantamila elementi si aprono e si muovono senza scatti» di
+[`ci.yml`](../../.github/workflows/ci.yml):
+
+| Budget | 5 000 | 20 000 | 49 900 | Peggio a riposo, 49 900 | Stato |
+|---|---:|---:|---:|---:|---|
+| Un passo che segue un gesto: la rotella, un movimento della penna | 50 ms | 50 ms | 50 ms | 11,8 ms | **CI-enforced** |
+| Un passo che risponde a un comando: un tasto, la scelta, la pressione | 100 ms | 100 ms | 100 ms | 48 ms | **CI-enforced** |
+| Un passo che scrive: il rilascio del tratto, Annulla | 250 ms | 500 ms | 1 000 ms | 432 ms | **CI-enforced** |
+| L'assestamento della vista, un passo che ridisegna subito | 100 ms | 150 ms | 300 ms | 86 ms | **CI-enforced** |
+| L'apertura, fino all'ultimo oggetto dipinto | 4 s | 6 s | 10 s | 3,08 s | **CI-enforced** |
+
+Nessun compito lungo, oltre 50 ms, cade fuori dai passi che rispondono,
+scrivono o ridisegnano e dagli assestamenti. Nelle scene grandi, da 5 000
+forme, la vista in movimento porta gli strati già dipinti, con un margine
+attorno alla vista; un passo che andrebbe oltre il margine, o che salta,
+ridisegna subito, e 150 ms dopo che la vista si è fermata il painter
+ridisegna gli strati nella vista nuova: è l'assestamento, un fotogramma che
+cresce coi testi del disegno.
+
+Le misure sono di un Ryzen 7 7730U con 16 thread, Chromium `149` senza
+finestra, viewport 1280 × 800. A riposo, in otto corse, ogni budget tiene
+con un margine di due volte o più. A macchina piena, sedici processi
+occupati, in quattro corse escono la scelta e il rilascio del tratto a
+20 000 e 49 900 elementi, fino a 368 e 1 040 ms, e una volta il primo tasto
+dello zoom, 110 ms. La CI ha i tempi di questa macchina a riposo. Le misure
+complete, a riposo, a macchina piena e a pagina rallentata, stanno
+nell'intestazione del banco; che cosa vede chi disegna sta in
+[disegni grandi](drawing-large.md).
+
+Ricalibrare quando cambiano Chromium, la lavagna del banco, il painter o la
+soglia delle scene grandi, con le stesse tre serie di corse.

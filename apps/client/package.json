@@ -18,6 +18,10 @@
     "bench:update": "node bench/photos.mjs --update",
     "bench:a11y": "node bench/a11y.mjs",
     "bench:motion": "node bench/motion.mjs",
+    "bench:fidelity": "node bench/fidelity.mjs",
+    "bench:boards": "node bench/boards.mjs",
+    "bench:connectors": "node bench/connectors.mjs",
+    "bench:large": "node bench/large.mjs",
     "theme:generate": "node theme/generate.mjs",
     "theme:verify": "node theme/generate.mjs --verify"
   },
@@ -44,6 +48,7 @@
     "katex": "0.16.47",
     "mermaid": "11.17.2",
     "pdfjs-dist": "6.3.289",
+    "perfect-freehand": "1.2.3",
     "turndown": "^7.2.4"
   },
   "devDependencies": {

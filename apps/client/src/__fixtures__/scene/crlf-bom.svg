@@ -1,0 +1,13 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 600" width="800" height="600">
+  <title>Città di 東京 🌧</title>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello — uno">
+    <!-- un commento
+     su due righe -->
+    <text id="o00000001" x="40" y="80" font-family="Literata, serif" font-size="24">
+      <tspan x="40" dy="0">Perché sì 😀</tspan>
+      <tspan x="40" dy="30">𝄞 e ♪</tspan>
+    </text>
+    <rect id="o00000002" x="40" y="200" width="100" height="50" fill="#0072b2" fub:nota="prima riga&#10;seconda"/>
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+{
+  "name": "remove-original-in-use",
+  "description": "togliere l'originale di una ripetizione che ha copie è in-use",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <g id=\"o5e6f7a8b\" fub:repeat=\"grid 3 1 250 0\">\n      <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n      <use id=\"o6f7a8b9c\" transform=\"translate(250 0)\" href=\"#o2b3c4d5e\"/>\n      <use id=\"o7a8b9c0d\" transform=\"translate(500 0)\" href=\"#o2b3c4d5e\"/>\n    </g>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "remove",
+      "target": "o2b3c4d5e"
+    }
+  ],
+  "expect": {
+    "outcome": "rejected",
+    "reason": "in-use"
+  }
+}

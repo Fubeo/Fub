@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 600" width="800" height="600" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>Risorse</title>
+  <defs id="fub-defs">
+    <linearGradient id="r00000001" fub:role="private" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0072b2"/>
+      <stop offset="1" stop-color="#56b4e9" stop-opacity="0.5"/>
+    </linearGradient>
+    <radialGradient id="r00000002" fub:role="private" cx="0.5" cy="0.5" r="0.5" fx="0.3" fy="0.3" spreadMethod="reflect">
+      <title>Sole</title>
+      <stop offset="0" stop-color="#e69f00"/>
+      <stop offset="100%" stop-color="#d55e00"/>
+    </radialGradient>
+    <pattern id="r00000003" fub:role="shared" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <rect x="0" y="0" width="10" height="10" fill="url(#r00000001) #0072b2"/>
+    </pattern>
+    <marker id="r00000004" fub:role="shared" refX="5" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse" viewBox="0 0 10 10">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#000000"/>
+    </marker>
+    <clipPath id="r00000005" fub:role="private" clipPathUnits="objectBoundingBox">
+      <circle cx="0.5" cy="0.5" r="0.5"/>
+    </clipPath>
+    <mask id="r00000006" fub:role="private" maskContentUnits="objectBoundingBox">
+      <rect x="0" y="0" width="1" height="1" fill="#ffffff"/>
+    </mask>
+    <filter id="r00000007" fub:role="shared" x="-0.2" y="-0.2" width="1.4" height="1.4">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="ombra"/>
+      <feOffset in="ombra" dx="2" dy="3" result="spostata"/>
+      <feMerge>
+        <feMergeNode in="spostata"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="r00000008" fub:role="shared">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+    <linearGradient id="inkscape1" xlink:href="#r00000001"/>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <rect id="o00000001" x="40" y="40" width="200" height="120" fill="url(#r00000001) #4593ce"/>
+    <circle id="o00000002" cx="400" cy="100" r="60" fill="url(#r00000002) #e69f00" stroke="url(#r00000003) #000000" stroke-width="8"/>
+    <path id="o00000003" d="M40 250 L300 250" fill="none" stroke="#000000" stroke-width="2" marker-end="url(#r00000004)"/>
+    <image id="o00000004" x="500" y="40" width="160" height="120" clip-path="url(#r00000005)" href="foto.png">
+      <title>Il porto</title>
+    </image>
+    <g id="o00000005" filter="url(#r00000007)">
+      <rect id="o00000006" x="40" y="320" width="160" height="80" fill="#009e73"/>
+      <text id="o00000007" x="60" y="370" fill="#f0e442" font-size="24">
+        <tspan x="60" dy="0">Ombra</tspan>
+      </text>
+    </g>
+    <text id="o00000008" x="300" y="370" fill="url(#r00000001) #0072b2" font-size="32">
+      <tspan x="300" dy="0">Cielo</tspan>
+    </text>
+    <rect id="o00000009" x="500" y="200" width="100" height="60" fill="#cc79a7" mask="url(#r00000006)" filter="url(#r00000008)"/>
+    <rect x="500" y="300" width="100" height="60" fill="url(#inkscape1)"/>
+    <path d="M40 450 L300 450" stroke="#000000" marker-start="url(#r00000001)"/>
+    <rect x="620" y="300" width="100" height="60" fill="url(#r0000000z) #cccccc"/>
+  </g>
+</svg>

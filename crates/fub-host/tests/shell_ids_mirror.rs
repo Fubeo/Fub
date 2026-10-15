@@ -1,8 +1,9 @@
 //! **Gli id che la shell riconosce senza possederli, emessi verso la shell.**
 //!
-//! Le chiavi con un gesto loro e il job degli artefatti stanno in
-//! [`fub_host::shell`], scritti con le costanti di chi li possiede, e di là
-//! arrivano generati: `apps/client/src/ui/shell-ids.generated.ts`. Il giro è
+//! Le chiavi con un gesto loro, il job degli artefatti e il comando degli
+//! export stanno in [`fub_host::shell`], scritti con le costanti di chi li
+//! possiede, e di là arrivano generati:
+//! `apps/client/src/ui/shell-ids.generated.ts`. Il giro è
 //! quello di `shell_keys_mirror` — genera, confronta il committato,
 //! `UPDATE_MIRROR=1` per rigenerare — e la ragione è la stessa: un id scritto
 //! per letterale nella shell sopravvive al rename del proprietario e smette in
@@ -10,7 +11,7 @@
 
 use std::path::PathBuf;
 
-use fub_host::shell::{ARTIFACT_JOB, SETTINGS_WITH_THEIR_OWN_GESTURE};
+use fub_host::shell::{ARTIFACT_JOB, EXPORT_COMMAND, SETTINGS_WITH_THEIR_OWN_GESTURE};
 
 const HEADER: &str = "\
 // FILE GENERATO — non modificare a mano.
@@ -41,7 +42,9 @@ fn render() -> String {
     out.push_str("];\n\n");
     out.push_str(&format!(
         "/// Il job il cui esito, quando riesce, può portare gli artefatti di un export.\n\
-         export const ARTIFACT_JOB = {ARTIFACT_JOB:?};\n"
+         export const ARTIFACT_JOB = {ARTIFACT_JOB:?};\n\n\
+         /// Il comando che accoda un export registrato.\n\
+         export const EXPORT_COMMAND = {EXPORT_COMMAND:?};\n"
     ));
     out
 }

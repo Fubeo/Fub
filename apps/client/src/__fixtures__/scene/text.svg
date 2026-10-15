@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 800 600" width="800" height="600" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <title>Testo</title>
+  <defs id="fub-defs">
+    <path id="r00000001" fub:role="private" d="M40 400 C160 300 280 300 400 400"/>
+    <path id="r00000002" fub:role="shared" d="M440 400 A120 120 0 0 1 680 400">
+      <title>Arco</title>
+    </path>
+    <path id="r00000003" d="M40 540 L400 540" transform="rotate(5)"/>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="800" height="600" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <text id="o00000001" fub:wrap="240" x="40" y="60" fill="#000000" font-family="Inter, sans-serif" font-size="20">
+      <tspan x="40" dy="0">L'acqua del mare sale</tspan>
+      <tspan fub:join="space" x="40" dy="24">in cielo e <tspan font-style="italic">torna</tspan> giù:</tspan>
+      <tspan fub:join="space" x="40" dy="24">precipitevolissimevol</tspan>
+      <tspan fub:join="word" x="40" dy="24">mente.</tspan>
+      <tspan x="40" dy="24"> </tspan>
+      <tspan x="40" dy="24">Fine.</tspan>
+    </text>
+    <text id="o00000002" fub:wrap="-5" x="400" y="60" font-size="20">
+      <tspan x="400" dy="0">Due</tspan>
+      <tspan fub:join="word" x="400" dy="24">righe</tspan>
+    </text>
+    <text id="o00000003" fill="#0072b2" font-size="24" text-anchor="middle">
+      <textPath startOffset="50%" href="#r00000001">Sopra <tspan font-weight="bold">la</tspan> collina</textPath>
+    </text>
+    <text id="o00000004" font-size="18">
+      <textPath startOffset="12" xlink:href="#r00000002">Lungo l'arco</textPath>
+    </text>
+    <text id="o00000005" x="40" y="500"><textPath href="#r00000001">Con x e y</textPath></text>
+    <text id="o00000006"><textPath href="#r00000003">Storto</textPath></text>
+  </g>
+</svg>

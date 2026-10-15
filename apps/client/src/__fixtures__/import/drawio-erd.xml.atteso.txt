@@ -1,0 +1,48 @@
+File: drawio-erd.xml
+Oggetti: 31 (forme 10, testi 13, linee 8, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: tip ×2 (ERzeroToMany)
+
+Livello «Livello 1»
+  Connettore da «PK customer_id int NOT NULL» a «FK1 customer_id int NOT NULL»
+  Connettore da «PK order_id int NOT NULL» a «FK1 order_id int NOT NULL»
+  Gruppo, 7 oggetti
+    Rettangolo
+    Rettangolo «Orders»
+    Testo «Orders»
+    Gruppo, 4 oggetti
+      Rettangolo «PK order_id int NOT NULL»
+      Linea
+      Testo «PK»
+      Testo «order_id int NOT NULL»
+    Gruppo, 3 oggetti
+      Rettangolo «FK1 customer_id int NOT NULL»
+      Testo «FK1»
+      Testo «customer_id int NOT NULL»
+    Testo «order_date date NOT NULL»
+    Linea
+  Gruppo, 7 oggetti
+    Rettangolo
+    Rettangolo «Shipments»
+    Testo «Shipments»
+    Gruppo, 3 oggetti
+      Linea
+      Testo «PK»
+      Testo «shipment_id int NOT NULL»
+    Gruppo, 3 oggetti
+      Rettangolo «FK1 order_id int NOT NULL»
+      Testo «FK1»
+      Testo «order_id int NOT NULL»
+    Testo «shipment_date date NOT NULL»
+    Linea
+  Gruppo, 6 oggetti
+    Rettangolo
+    Rettangolo «Customers»
+    Testo «Customers»
+    Gruppo, 4 oggetti
+      Rettangolo «PK customer_id int NOT NULL»
+      Linea
+      Testo «PK»
+      Testo «customer_id int NOT NULL»
+    Testo «customer_name char(50) NOT NULL»
+    Linea

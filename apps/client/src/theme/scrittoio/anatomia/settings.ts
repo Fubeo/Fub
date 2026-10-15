@@ -63,6 +63,10 @@ export const SETTINGS: PartAnatomy = {
       hooks: [
         "setting-row",
         "setting-block",
+        "setting-features",
+        "setting-features-group",
+        "setting-features-level",
+        "setting-feature",
         "setting-text",
         "setting-label",
         "setting-description",

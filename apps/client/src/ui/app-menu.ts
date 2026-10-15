@@ -48,6 +48,10 @@ export interface MenuHost {
   /// Le view principali che si aprono senza argomenti, lette a ogni apertura
   /// del menu: un componente acceso o spento cambia l'elenco.
   views?(): readonly MenuView[];
+  /// Le creazioni oltre «Nuova nota» (oggi «Nuovo disegno…»), lette a ogni
+  /// apertura del menu: una feature accesa o spenta ne cambia l'elenco, e
+  /// senza il comando del kernel la voce non c'è.
+  creations?(): readonly MenuCreation[];
 }
 
 /// Una view principale come voce del menu Vista: il nome già tradotto e il
@@ -56,6 +60,11 @@ export interface MenuView {
   readonly label: string;
   run(): void;
 }
+
+/// Una creazione come voce del menu File: il nome già tradotto e il gesto che
+/// la fa partire. Ha la forma di una view principale perché è lo stesso
+/// bisogno: una voce che il kernel decide se c'è.
+export type MenuCreation = MenuView;
 
 
 /// I cinque menu, nell'ordine canonico. Le voci sono i comandi di shell già
@@ -74,6 +83,8 @@ type MenuEntry = (
   | { label: string; click: string }
   /// Il posto delle view principali dichiarate: zero, una o più voci.
   | { views: true }
+  /// Il posto delle altre creazioni: zero, una o più voci.
+  | { creations: true }
 ) & { separator?: boolean };
 
 const MENU: { title: string; entries: MenuEntry[] }[] = [
@@ -81,6 +92,7 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
     title: "menu.file",
     entries: [
       { label: "menu.file.new_note", command: "shell.note.new" },
+      { creations: true },
       { label: "launcher.command.templates", command: "shell.launcher.templates", optional: true },
       { label: "menu.file.save", command: "shell.doc.save" },
       { label: "menu.file.open_vault", command: "shell.vault.open", separator: true },
@@ -305,8 +317,9 @@ export function mountAppMenu(host: MenuHost): Teardown {
   /// stesso gesto.
   function itemsOf(entries: MenuEntry[]): MenuItem[] {
     return entries.flatMap((v): MenuItem[] => {
-      if ("views" in v) {
-        return (host.views?.() ?? []).map((view, i) => ({
+      if ("views" in v || "creations" in v) {
+        const extra = "views" in v ? host.views?.() : host.creations?.();
+        return (extra ?? []).map((view, i) => ({
           label: view.label,
           separator: i === 0 ? v.separator : undefined,
           run: () => {

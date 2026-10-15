@@ -44,6 +44,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sectionName } from "./cargo-lines.mjs";
 import { crateDelWorkspace } from "./workspace-members.mjs";
 
 // Feature che possono restare fuori dal `default`, ognuna con il **comando di
@@ -52,13 +53,24 @@ import { crateDelWorkspace } from "./workspace-members.mjs";
 // qualcun altro lo faccia.
 const FUORI_DAL_DEFAULT = new Map([
   // ["crates/x/Cargo.toml#feature", "chi la compila, e in quale passo di CI"],
+  //
+  // Il formato `svg` delle scene di FubDraw (ADR 0203). Accenderlo cambia la
+  // natura di ogni `.svg` del vault, da allegato a documento: è una scelta di
+  // chi monta, non un default.
+  [
+    "crates/fub-host/Cargo.toml#draw",
+    "job test, passo «le scene di FubDraw, con la feature `draw` dell'host»; " +
+      "clippy nel job fmt",
+  ],
+  // L'export dei disegni in PNG e PDF: va con il formato qui sopra, che
+  // `fub-host/draw` accende insieme a lei, e porta un rasterizzatore, un
+  // convertitore PDF e i caratteri di Fub che senza disegni non servono.
+  [
+    "crates/fub-features/Cargo.toml#draw",
+    "job test, passo «l'export dei disegni, con la feature `draw` delle feature»; " +
+      "clippy nel job fmt",
+  ],
 ]);
-
-/** Il nome della tabella di una riga `[…]`, o `null` se la riga non lo è. */
-function nomeSezione(riga) {
-  const m = riga.match(/^\[\[?([^\]]+)\]\]?\s*$/);
-  return m === null ? m : m[1].trim();
-}
 
 /**
  * Le feature dichiarate da un `Cargo.toml`: `nome -> [cosa accende]`.
@@ -76,7 +88,7 @@ function featureDi(file) {
   const righe = fs.readFileSync(file, "utf8").split("\n");
 
   for (let i = 0; i < righe.length; i++) {
-    const sezione = nomeSezione(righe[i].trim());
+    const sezione = sectionName(righe[i].trim());
     if (sezione !== null) {
       dentro = sezione === "features";
       continue;

@@ -1,0 +1,611 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        1886
+      ],
+      "utf16": [
+        0,
+        1885
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            152
+          ],
+          "utf16": [
+            0,
+            152
+          ]
+        },
+        "close": {
+          "bytes": [
+            1880,
+            1886
+          ],
+          "utf16": [
+            1879,
+            1885
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        155,
+        176
+      ],
+      "utf16": [
+        155,
+        176
+      ],
+      "indent": "  ",
+      "text": "Storia"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        179,
+        292
+      ],
+      "utf16": [
+        179,
+        292
+      ],
+      "indent": "  ",
+      "board": "b00000001"
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "c00000001",
+      "bytes": [
+        295,
+        410
+      ],
+      "utf16": [
+        295,
+        410
+      ],
+      "indent": "  ",
+      "board": "b00000002"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "c00000002",
+      "bytes": [
+        413,
+        528
+      ],
+      "utf16": [
+        413,
+        528
+      ],
+      "indent": "  ",
+      "board": "b00000002"
+    },
+    {
+      "kind": "element",
+      "path": [
+        4
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "c00000003",
+      "bytes": [
+        531,
+        646
+      ],
+      "utf16": [
+        531,
+        646
+      ],
+      "indent": "  ",
+      "board": "b0000000z"
+    },
+    {
+      "kind": "element",
+      "path": [
+        5
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "c00000004",
+      "bytes": [
+        649,
+        764
+      ],
+      "utf16": [
+        649,
+        764
+      ],
+      "indent": "  ",
+      "board": "b00000003"
+    },
+    {
+      "kind": "element",
+      "path": [
+        6
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": null,
+      "bytes": [
+        767,
+        847
+      ],
+      "utf16": [
+        767,
+        847
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        7
+      ],
+      "tag": "view",
+      "role": "board",
+      "id": "b00000001",
+      "bytes": [
+        850,
+        949
+      ],
+      "utf16": [
+        850,
+        949
+      ],
+      "indent": "  ",
+      "title": "Copertina",
+      "box": [
+        0.0,
+        0.0,
+        600.0,
+        400.0
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        8
+      ],
+      "tag": "view",
+      "role": "board",
+      "id": "b00000002",
+      "bytes": [
+        952,
+        1087
+      ],
+      "utf16": [
+        952,
+        1087
+      ],
+      "indent": "  ",
+      "title": "  Due\n  tavole ",
+      "box": [
+        700.0,
+        0.0,
+        600.0,
+        400.0
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        9
+      ],
+      "tag": "view",
+      "role": "board",
+      "id": "b00000003",
+      "bytes": [
+        1090,
+        1153
+      ],
+      "utf16": [
+        1090,
+        1153
+      ],
+      "indent": "  ",
+      "box": [
+        0.0,
+        500.0,
+        300.0,
+        200.0
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        10
+      ],
+      "tag": "view",
+      "role": "board",
+      "id": "b00000004",
+      "bytes": [
+        1156,
+        1271
+      ],
+      "utf16": [
+        1156,
+        1270
+      ],
+      "indent": "  ",
+      "title": "Storia",
+      "box": [
+        400.0,
+        500.0,
+        300.0,
+        200.0
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        11
+      ],
+      "tag": "view",
+      "role": "board",
+      "id": "b00000005",
+      "bytes": [
+        1274,
+        1377
+      ],
+      "utf16": [
+        1273,
+        1376
+      ],
+      "indent": "  ",
+      "title": "Copertina",
+      "box": [
+        800.0,
+        500.0,
+        300.0,
+        200.0
+      ]
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [],
+      "bytes": [
+        1380,
+        1684
+      ],
+      "utf16": [
+        1379,
+        1683
+      ],
+      "elements": [
+        12,
+        17
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        17
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        1687,
+        1879
+      ],
+      "utf16": [
+        1686,
+        1878
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            1687,
+            1727
+          ],
+          "utf16": [
+            1686,
+            1726
+          ]
+        },
+        "close": {
+          "bytes": [
+            1875,
+            1879
+          ],
+          "utf16": [
+            1874,
+            1878
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        17
+      ],
+      "bytes": [
+        1732,
+        1791
+      ],
+      "utf16": [
+        1731,
+        1790
+      ],
+      "elements": [
+        0,
+        1
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        17,
+        1
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000001",
+      "bytes": [
+        1796,
+        1872
+      ],
+      "utf16": [
+        1795,
+        1871
+      ],
+      "indent": "    "
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Storia",
+      "bytes": [
+        155,
+        176
+      ],
+      "utf16": [
+        155,
+        176
+      ]
+    },
+    "desc": null,
+    "texts": [],
+    "links": [],
+    "embeds": [],
+    "boards": [
+      {
+        "text": "Copertina",
+        "bytes": [
+          850,
+          949
+        ],
+        "utf16": [
+          850,
+          949
+        ]
+      },
+      {
+        "text": "Due tavole",
+        "bytes": [
+          952,
+          1087
+        ],
+        "utf16": [
+          952,
+          1087
+        ]
+      },
+      {
+        "text": "b00000003",
+        "bytes": [
+          1090,
+          1153
+        ],
+        "utf16": [
+          1090,
+          1153
+        ]
+      },
+      {
+        "text": "Storia",
+        "bytes": [
+          1156,
+          1271
+        ],
+        "utf16": [
+          1156,
+          1270
+        ]
+      },
+      {
+        "text": "Copertina",
+        "bytes": [
+          1274,
+          1377
+        ],
+        "utf16": [
+          1273,
+          1376
+        ]
+      }
+    ]
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1"
+    ],
+    "boards": [
+      "Copertina",
+      "Due tavole",
+      "b00000003",
+      "Storia",
+      "Copertina"
+    ],
+    "counts": {
+      "strokes": 0,
+      "shapes": 1,
+      "texts": 0,
+      "images": 0,
+      "links": 0,
+      "foreign": 2
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 40.0,
+      "y": 40.0,
+      "width": 200.0,
+      "height": 100.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1380,
+        1684
+      ],
+      "utf16": [
+        1379,
+        1683
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1732,
+        1791
+      ],
+      "utf16": [
+        1731,
+        1790
+      ]
+    },
+    {
+      "code": "S015",
+      "severity": "info",
+      "bytes": [
+        413,
+        528
+      ],
+      "utf16": [
+        413,
+        528
+      ],
+      "detail": "c00000002 second"
+    },
+    {
+      "code": "S015",
+      "severity": "info",
+      "bytes": [
+        531,
+        646
+      ],
+      "utf16": [
+        531,
+        646
+      ],
+      "detail": "c00000003 board"
+    },
+    {
+      "code": "S015",
+      "severity": "info",
+      "bytes": [
+        649,
+        764
+      ],
+      "utf16": [
+        649,
+        764
+      ],
+      "detail": "c00000004 geometry"
+    },
+    {
+      "code": "S015",
+      "severity": "info",
+      "bytes": [
+        767,
+        847
+      ],
+      "utf16": [
+        767,
+        847
+      ],
+      "detail": "free"
+    },
+    {
+      "code": "S016",
+      "severity": "warning",
+      "bytes": [
+        1156,
+        1271
+      ],
+      "utf16": [
+        1156,
+        1270
+      ],
+      "detail": "Storia"
+    },
+    {
+      "code": "S016",
+      "severity": "warning",
+      "bytes": [
+        1274,
+        1377
+      ],
+      "utf16": [
+        1273,
+        1376
+      ],
+      "detail": "Copertina"
+    }
+  ]
+}

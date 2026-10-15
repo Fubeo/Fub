@@ -11,6 +11,8 @@ import { ORDER } from "./skin/order";
 import { CENTRES } from "./anatomia/centres";
 import { CONTROLS } from "./anatomia/controls";
 import { DOCUMENT } from "./anatomia/document";
+import { DRAW } from "./anatomia/draw";
+import { DRAW_DIALOGS } from "./anatomia/draw-dialogs";
 import { DRAWERS } from "./anatomia/drawers";
 import { EDITORS } from "./anatomia/editors";
 import { FOUNDATION } from "./anatomia/foundation";
@@ -43,12 +45,14 @@ const DECLARED: readonly PartAnatomy[] = [
   SHEETS,
   DOCUMENT,
   EDITORS,
+  DRAW,
   MEDIA,
   NODES,
   GRAPH,
   MENUS,
   LAUNCHER,
   CENTRES,
+  DRAW_DIALOGS,
   SETTINGS,
   WELCOME,
   MOTION,

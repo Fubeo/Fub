@@ -34,6 +34,7 @@ import {
   pane as paneState,
   panes as layoutPanes,
   activeTab,
+  tabOverride,
   setSplitSizes,
   MIN_SPLIT_FRACTION,
   type LayoutNode,
@@ -43,25 +44,31 @@ import {
 import { $ } from "../ui/dom";
 import { showContextMenu } from "../ui/menu";
 import { confirm } from "../platform/confirm";
-import { allCommands, ariaBinding, displayBinding } from "../ui/commands";
+import { allCommands, ariaBinding, canCreateDrawing, displayBinding, newDrawing } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
 import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
+import { tabIndexForKey } from "../ui/tab-keys";
 import { createFormatBar, registerFormatIcons, type FormatBar } from "./format-bar";
 import { createSelectionBubble, type SelectionBubble } from "./selection-bubble";
 import { platformSupports } from "../platform/capabilities";
 import { writeClipboardText } from "../platform/clipboard";
 import {
+  chooseExport,
   closeOthersAndRelease,
   closeRightAndRelease,
   closeTabAt,
   closeUnpinnedAndRelease,
   describeTab,
   docTitle,
+  exportWindow,
   mountDocumentController,
   nameTab,
+  offeredExports,
+  offeredSourceView,
+  openSourceViewBeside,
   paneBack,
   paneForward,
   paneOf,
@@ -71,8 +78,10 @@ import {
   renderPane,
   resolveDiscardingMine,
   resolveKeepingMine,
+  runExport,
   selectedMode,
   setMode,
+  showSourceView,
   synchronize,
   toggleRecorder,
   type DocumentDeps,
@@ -167,6 +176,13 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
     for (const pane of frames.values()) {
       pane.formatBar.update(state.commandSpecs);
       pane.selectionBubble.update(state.commandSpecs);
+    }
+    // Il riquadro vuoto offre «Nuovo disegno…» quando il kernel ha il comando,
+    // e l'elenco arriva dopo che il vault è già aperto.
+    for (const id of layoutPanes()) {
+      const frame = frames.get(id);
+      const current = paneState(id);
+      if (frame && current) drawEmptyPane(frame, current.tabs.length === 0);
     }
   }));
   mountDocumentController(lifetime, d, view);
@@ -458,15 +474,6 @@ function focusPaneTab(r: PaneFrame, index: number): void {
   tabs[index]?.focus();
 }
 
-function movePaneTab(current: number, key: string, count: number): number | null {
-  if (count < 1) return null;
-  if (key === "ArrowLeft") return (current - 1 + count) % count;
-  if (key === "ArrowRight") return (current + 1) % count;
-  if (key === "Home") return 0;
-  if (key === "End") return count - 1;
-  return null;
-}
-
 /// Disegna la striscia delle tab di un riquadro.
 function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
   // Solo l'identità modifica la struttura: dirty, lingua e selezione
@@ -531,28 +538,48 @@ function drawTab(r: PaneFrame, tabs: Tab[], active: number): void {
   drawTabOverflow(r, tabs, active);
 }
 
-/// Lo stato vuoto del riquadro: due gesti con le loro scorciatoie. Si
-/// ridisegna a ogni giro perché segue lingua e accordi riconfigurati.
+/// Lo stato vuoto del riquadro: i gesti con le loro scorciatoie, e «Nuovo
+/// disegno…» se il kernel sa farli. Si ridisegna a ogni giro perché segue
+/// lingua, accordi riconfigurati e l'elenco dei comandi del kernel, che arriva
+/// dopo l'apertura del vault.
 function drawEmptyPane(r: PaneFrame, empty: boolean): void {
   r.emptyEl.hidden = !empty || state.vaultRoot === "";
   if (r.emptyEl.hidden) return;
   const chord = (id: string): string =>
     displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null);
+  /// Un gesto del comando di shell `id`, col nome `label` e la sua scorciatoia.
+  const shellGesture = (id: string, label: "commands.note.new" | "pane.empty.open") => {
+    const keys = chord(id);
+    return {
+      text: keys ? `${t(label)} (${keys})` : t(label),
+      run: () => allCommands().find((candidate) => candidate.id === id)?.run?.(),
+    };
+  };
+  const gestures = [
+    shellGesture("shell.note.new", "commands.note.new"),
+    // La porta di un disegno, fra la nota nuova e l'apertura: due creazioni
+    // vicine. Senza il comando del kernel non c'è, e non lascia un buco.
+    ...(canCreateDrawing() ? [{ text: t("pane.empty.new_drawing"), run: () => void newDrawing() }] : []),
+    shellGesture("shell.switcher", "pane.empty.open"),
+  ];
+  // Se i gesti sono gli stessi non si tocca niente: chi ha il fuoco su un
+  // bottone non lo perde per un elenco di comandi che è arrivato uguale.
+  const signature = JSON.stringify([t("pane.empty.title"), gestures.map((gesture) => gesture.text)]);
+  if (r.emptyEl.dataset.gestures === signature) return;
+  r.emptyEl.dataset.gestures = signature;
   const title = document.createElement("p");
   title.className = "pane-empty-title";
   title.textContent = t("pane.empty.title");
   const actions = document.createElement("div");
   actions.className = "pane-empty-actions";
-  for (const [id, label] of [["shell.note.new", "commands.note.new"], ["shell.switcher", "pane.empty.open"]] as const) {
+  for (const gesture of gestures) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "link-button";
-    const keys = chord(id);
-    button.textContent = keys ? `${t(label)} (${keys})` : t(label);
+    button.textContent = gesture.text;
     button.addEventListener("click", () => {
       focusPane(r.id);
-      const entry = allCommands().find((candidate) => candidate.id === id);
-      entry?.run?.();
+      gesture.run();
     });
     actions.append(button);
   }
@@ -650,7 +677,7 @@ function buildTab(r: PaneFrame, target: Tab, index: number): HTMLElement {
       remove();
       return;
     }
-    const next = movePaneTab(index, event.key, r.tabsShell.querySelectorAll(".tab").length);
+    const next = tabIndexForKey(index, event.key, r.tabsShell.querySelectorAll(".tab").length);
     if (next !== null) {
       event.preventDefault();
       focusPaneTab(r, next);
@@ -838,19 +865,23 @@ function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boo
   tab.classList.toggle("tab-pinned", target.pinned === true);
   tab.setAttribute("aria-selected", String(selected));
   tab.tabIndex = tabStop ? 0 : -1;
+  // La vista sorgente si dice a vista e al lettore di schermo: lo stesso
+  // documento in due riquadri, una volta disegnato e una volta come testo,
+  // darebbe due schede indistinguibili.
+  const source = tabOverride(target) ? t("document.tab.source_view") : null;
   const name = tab.querySelector<HTMLElement>(".tab-name")!;
-  name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "");
+  name.textContent = described.label + (target.stack ? ` [${target.stack}]` : "") + (source ? ` · ${source}` : "");
   const pin = target.pinned ? iconEl("pin") : null;
   if (pin) {
     pin.classList.add("tab-pin");
     name.prepend(pin);
   }
-  setTooltip(tab, target.k === "doc" ? target.doc : described.label);
+  setTooltip(tab, (target.k === "doc" ? target.doc : described.label) + (source ? ` · ${source}` : ""));
   // Si ridipinge a ogni giro: segue gli accordi riconfigurati.
   tab.setAttribute("aria-keyshortcuts", tabShortcuts());
   tab.setAttribute(
     "aria-label",
-    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
+    (target.pinned ? `${t("tabmenu.pinned")} · ` : "") + (described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label) + (source ? ` · ${source}` : "") + (target.stack ? ` · ${t("tabmenu.stack", { stack: target.stack })}` : ""),
   );
   const close = tab.parentElement!.querySelector<HTMLElement>(".tab-close")!;
   close.tabIndex = tab.tabIndex;
@@ -990,6 +1021,10 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
   );
   const doc = activeDoc(r.id);
   const surface = r.surface;
+  // La vista sorgente si chiede a **questo** riquadro, non a quello col fuoco
+  // come farebbe `available`: il menu si apre anche su un riquadro accanto.
+  const sourceView = offeredSourceView(r);
+  const sourceShown = tabOverride(activeTab(r.id)) !== null;
   showContextMenu(event, [
     ...entries.map((entry) => ({
       label: entry.title,
@@ -998,12 +1033,40 @@ function openPaneMenu(r: Pane, event: MouseEvent): void {
         void entry.run?.();
       },
     })),
+    ...(sourceView || sourceShown ? [{
+      label: t(sourceShown ? "commands.doc.source.close" : "commands.doc.source.open"),
+      run: () => {
+        focusPane(r.id);
+        void showSourceView(r.id, sourceShown ? null : sourceView);
+      },
+    }] : []),
+    ...(sourceView ? [{
+      label: t("commands.doc.source.side"),
+      run: () => {
+        focusPane(r.id);
+        void openSourceViewBeside(r.id);
+      },
+    }] : []),
     ...(doc && surface?.insertReferences ? [{
       label: t(r.disposeRecorder ? "pane.recorder.close" : "pane.recorder.open"),
       run: () => void toggleRecorder(r, doc),
     }] : []),
     ...(doc && surface?.mountPresentation ? [{ label: t("pane.slides"), run: () => presentSlides(r, doc) }] : []),
     ...(doc && surface?.printable ? [{ label: t("pane.print"), run: () => void presentPrint(r, doc) }] : []),
+    ...(exportWindow(r) ? [{
+      label: t("commands.doc.export"),
+      run: () => {
+        focusPane(r.id);
+        void chooseExport(r.id);
+      },
+    }] : []),
+    ...offeredExports(r).map((offered) => ({
+      label: t("pane.export", { what: offered.label() }),
+      run: () => {
+        focusPane(r.id);
+        if (r.shown?.k === "doc") void runExport(r.shown.doc, offered);
+      },
+    })),
   ]);
 }
 

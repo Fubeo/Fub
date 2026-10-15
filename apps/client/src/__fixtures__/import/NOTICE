@@ -1,0 +1,144 @@
+I disegni di questa cartella
+============================
+
+Sono file veri di Excalidraw e di draw.io, pubblicati dai loro autori con una
+licenza libera, e servono alle prove dell'importazione nei disegni
+(`src/editors/spatial/import/corpus.test.ts`). Sono copie senza modifiche:
+cambia soltanto il nome del file. Accanto a ognuno, il file `.atteso.txt` è
+ciò che l'importazione ne deve fare; quello lo scrivono le prove.
+
+Per ogni file: il nome qui, da dove viene (repository, percorso, commit),
+la licenza e chi ne ha i diritti.
+
+
+Excalidraw
+----------
+
+turbowire.excalidraw
+  https://github.com/arjunkomath/TurboWire, turbowire.excalidraw,
+  commit e07baf7959ffabc388b3ed288d9e5b12ce1c03b1
+  MIT. Copyright (c) 2025 Arjun Komath
+
+excalirender-sample.excalidraw
+  https://github.com/JonRC/excalirender, sample.excalidraw,
+  commit dd2e231ccc7fc9d40755f8fccbc7748967b5a4d0
+  MIT. Copyright (c) 2026 JonRC
+
+inkube-arch.excalidraw
+  https://github.com/abdheshnayak/inkube, arch.excalidraw,
+  commit 5f902f16d83b5dd9425213d279ca76867b84db91
+  Apache-2.0. Abdhesh Nayak
+
+ha.excalidraw
+  https://github.com/litesql/ha, ha.excalidraw,
+  commit 174bdf56ee3fa8c28b427f94e5fa2e2c2704f23b
+  Apache-2.0. Copyright 2025 Walter Alves Wanderley
+
+hey.excalidraw
+  https://github.com/TodePond/Hey, hey.excalidraw,
+  commit 7433b22d64c10f265192c765cf2836eb7d31e91f
+  Apache-2.0. Lu Wilson (TodePond)
+
+ville-connect-widgets.excalidraw
+  https://github.com/sqville/ville.Connect, widgets.excalidraw,
+  commit 5f8a0382a6e7de41e19e879343c7b4387fa3ddd5
+  MIT. Copyright (c) 2021 sqville
+
+flexible-wrap-illustration.excalidraw
+  https://github.com/bixat/flexible_wrap, illustration.excalidraw,
+  commit 2d9d521ef780d53c7074a3dd9c904ab6a2c0e6bf
+  MIT. Copyright (c) 2024 Bixat.dev (https://bixat.dev)
+
+tla-model.excalidraw
+  https://github.com/jskri/modeling-with-tla, img/tla_model.excalidraw,
+  commit 75a74b5eea7788d2361729a32d578db3384b2edb
+  CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). jskri,
+  dal tutorial «Modeling with TLA+»
+
+fusilli.excalidraw
+  https://github.com/iree-org/fusilli, docs/fusilli.excalidraw,
+  commit c302ffd099b171541cf49e2a04d9f0848c2046fa
+  Apache-2.0 con le eccezioni LLVM. The IREE Authors
+
+
+draw.io
+-------
+
+drawio-flowchart.xml, drawio-orgchart.xml, drawio-erd.xml,
+drawio-classes.xml, drawio-cross-functional-flowchart.xml,
+drawio-educational.xml
+  https://github.com/jgraph/drawio, src/main/webapp/templates/
+  basic/flowchart.xml, basic/orgchart.xml, basic/erd.xml,
+  basic/classes.xml, flowcharts/cross_functional_flowchart_1.xml,
+  other/educational.xml,
+  commit 6c66d8c3ecf59a00e110b92832504ad1f9530140
+  Apache-2.0. draw.io Ltd (già JGraph) e draw.io AG
+
+drawio-sequence.xml
+  https://github.com/jgraph/drawio, src/main/webapp/templates/
+  basic/sequence.xml, commit 96f82344513935b16a06d0dea9a0f529a758a56b
+  Apache-2.0. draw.io Ltd (già JGraph) e draw.io AG
+
+zm-py-architecture.drawio
+  https://github.com/rohankapoorcom/zm-py, docs/architecture.drawio,
+  commit 2f0780fb35a32fb4d9daf63dd23cfc2cc441bb86
+  Apache-2.0. Rohan Kapoor
+
+yapne-architecture.drawio
+  https://github.com/chimenkamp/YAPNE-Yet-Another-Petri-Net-Editor,
+  docs/architecture.drawio, commit 3c776471baa3e968a9c4441ef48ddf26d8adab76
+  MIT. Copyright (c) 2025 chimenkamp
+
+aws-cdk-static-site-architecture.drawio
+  https://github.com/markgerald/aws-cdk-static-site-starter,
+  docs/architecture.drawio, commit c2082feb79c6638ea5d49a3c89730e2790efc4a5
+  MIT. Copyright (c) 2026 Mark Gerald Martins and contributors
+
+mac-slidegenerator-architecture.drawio
+  https://github.com/cyrus2281/MAC-SlideGenerator, architecture.drawio,
+  commit 426e70eb0c544db1fa570c44b643d8c2d05e1dac
+  MIT. Copyright (c) 2024 Cyrus Mobini
+
+casetracker-architecture.drawio
+  https://github.com/VoiceLessQ/casetracker, architecture.drawio,
+  commit f766224c107d7959b38f345890d21f2662e66e56
+  Apache-2.0. Il suo NOTICE dice:
+
+    CaseTracker
+    Copyright 2026 VoiceLessQ
+
+    This product includes software created by VoiceLessQ
+    (https://github.com/VoiceLessQ).
+
+    Licensed under the Apache License, Version 2.0 (see the LICENSE file).
+    Per section 4 of that License, this NOTICE file and the attribution above
+    must be retained in any redistribution or derivative work.
+
+
+Le licenze
+----------
+
+Apache-2.0: il testo è in LICENSE-APACHE, alla radice del repository.
+
+MIT: ai file con questa licenza vale l'avviso che segue, insieme alla riga
+del copyright scritta sopra accanto a ciascuno.
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+CC BY 4.0: https://creativecommons.org/licenses/by/4.0/

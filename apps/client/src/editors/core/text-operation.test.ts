@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyOperation,
+  commonEnds,
   invertOperation,
   operationFromText,
   rebaseStaleChange,
@@ -18,6 +19,45 @@ function operation(before: string, edits: readonly TextEdit[]): TextOperation {
   );
   return { beforeLength: before.length, afterLength: before.length + delta, edits };
 }
+
+/** Common ends unit by unit, the definition `commonEnds` must match. */
+function naiveEnds(a: string, b: string): [number, number] {
+  const minimum = Math.min(a.length, b.length);
+  let prefix = 0;
+  while (prefix < minimum && a[prefix] === b[prefix]) prefix += 1;
+  let suffix = 0;
+  while (suffix < minimum - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) suffix += 1;
+  return [prefix, suffix];
+}
+
+describe("commonEnds", () => {
+  it("trova gli stessi bordi comuni dello scorrere unità per unità, attraverso i blocchi", () => {
+    let seed = 0x2545f491;
+    const next = (bound: number): number => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) % bound;
+    };
+    // Testi lunghi qualche blocco, ripetitivi perché i bordi si possano
+    // sovrapporre, con una modifica in un punto qualunque.
+    const alphabet = ["a", "b", "\n", "é", "🙂"];
+    for (let round = 0; round < 300; round++) {
+      let base = "";
+      const length = next(5000);
+      while (base.length < length) base += alphabet[next(round % 3 === 0 ? 1 : alphabet.length)]!;
+      const at = next(base.length + 1);
+      const cut = Math.min(base.length, at + next(40));
+      const inserted = round % 4 === 0 ? "" : alphabet[next(alphabet.length)]!.repeat(next(3000));
+      const other = base.slice(0, at) + inserted + base.slice(cut);
+      expect(commonEnds(base, other), `giro ${round}`).toEqual(naiveEnds(base, other));
+      expect(commonEnds(other, base), `giro ${round}`).toEqual(naiveEnds(other, base));
+    }
+    expect(commonEnds("", "")).toEqual([0, 0]);
+    expect(commonEnds("a".repeat(3000), "a".repeat(5000))).toEqual([3000, 0]);
+    expect(commonEnds("x" + "a".repeat(3000), "a".repeat(3000))).toEqual([0, 3000]);
+  });
+});
 
 describe("TextOperation", () => {
   it("costruisce una patch prefix/suffix applicabile", () => {

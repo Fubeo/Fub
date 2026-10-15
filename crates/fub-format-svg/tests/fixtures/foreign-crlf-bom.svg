@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!-- Ricostruito sul formato di Inkscape: CRLF, BOM, apici singoli. -->
+<svg width="210mm" height="297mm" viewBox="0 0 210 297" version="1.1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd">
+  <title>Mappa del quartiere</title>
+  <g inkscape:groupmode="layer" inkscape:label="Strade" id="layer1">
+    <a xlink:href='quartiere/parco.md' href='quartiere/parco.md' id='a1'>
+      <text x="10" y="20" style="font-size:6px"><tspan sodipodi:role="line" x="10" y="20">Parco</tspan><tspan sodipodi:role="line" x="10" y="27">giochi 𝄞</tspan></text>
+    </a>
+    <image xlink:href="foto/mappa.png" x="0" y="0" width="50" height="40" id="image1"/>
+    <a xlink:href="mailto:comune@example.org"><text x="10" y="200">Scrivi al comune</text></a>
+    <a xlink:href="https://example.org"><rect x="0" y="0" width="5" height="5"/></a>
+  </g>
+</svg>

@@ -43,6 +43,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { sectionName } from "./cargo-lines.mjs";
+
 // Le chiavi del profilo, e accanto a ognuna chi paga se sparisce.
 const ATTESE = new Map([
   [
@@ -65,12 +67,6 @@ const ATTESE = new Map([
   ],
 ]);
 
-/** Il nome della tabella di una riga `[…]`, o `null` se la riga non lo è. */
-function nomeSezione(riga) {
-  const m = riga.match(/^\[\[?([^\]]+)\]\]?\s*$/);
-  return m === null ? m : m[1].trim();
-}
-
 /**
  * Le coppie chiave/valore dichiarate da `[profile.dev]`, e i dubbi.
  *
@@ -87,7 +83,7 @@ function profiloDev(file) {
 
   for (let i = 0; i < righe.length; i++) {
     const testo = righe[i].trim();
-    const sezione = nomeSezione(testo);
+    const sezione = sectionName(testo);
     if (sezione !== null) {
       dentro = sezione === "profile.dev";
       continue;
@@ -103,7 +99,7 @@ function profiloDev(file) {
     trovate.set(m[1], { valore: m[2], riga: i + 1 });
   }
 
-  return { trovate, dubbi, presente: righe.some((r) => nomeSezione(r.trim()) === "profile.dev") };
+  return { trovate, dubbi, presente: righe.some((r) => sectionName(r.trim()) === "profile.dev") };
 }
 
 function main() {

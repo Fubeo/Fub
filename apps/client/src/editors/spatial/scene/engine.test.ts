@@ -1,0 +1,2084 @@
+// Il motore delle operazioni oltre i vettori di `vectors.test.ts`: la forma
+// della rete, i rifiuti uno per uno, i limiti, l'undo che non è esatto, i
+// rientri di un `move`, `adopt`, `page` e `anchor` nei casi di bordo, gli id
+// dei gruppi di pagina, i riferimenti alle risorse e la loro raccolta, il
+// testo in area e su tracciato, le tavole con le loro carte. I testi attesi
+// sono scritti a mano, e i `§` sono le sezioni di
+// `docs/reference/scene-operations.md`.
+
+import { describe, expect, it } from "vitest";
+import { tryApplyOperation } from "../../core/text-operation";
+import { parseBrush } from "../ink/brush";
+import { decodeInk, inkToQuantized } from "../ink/codec";
+import { pf1 } from "../ink/pf1";
+import { FOLLOW_ROUNDS, mergeUndo, SceneEngine, type Applied, type Outcome } from "./engine";
+import { MAX_BATCH, MAX_NESTING, MAX_OP_BYTES, MAX_VALUE_BYTES, parseWireOp, type Op, type Reason } from "./ops";
+import { MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, readScene } from "./read";
+import type { Elem } from "./serialize";
+import { normalizeEol } from "./text";
+
+const NS = 'xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1"';
+const FUB_NS = "https://fubeo.github.io/ns/scene/1";
+const ROOT = `<svg ${NS} fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">`;
+const TITLE = "  <title>Prova</title>";
+const PAPER = '  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>';
+const L1 = '  <g id="l3f8a0c2d" fub:layer="Livello 1">';
+const L1_LOCKED = '  <g id="l3f8a0c2d" fub:layer="Livello 1" fub:locked="true">';
+const L2 = '  <g id="l9k8j7h6g" fub:layer="Livello 2">';
+const L2_LOCKED = '  <g id="l9k8j7h6g" fub:layer="Livello 2" fub:locked="true">';
+const END_G = "  </g>";
+const END = "</svg>";
+const E1 = '    <ellipse id="o1a2b3c4d" cx="300" cy="200" rx="120" ry="60" fill="none" stroke="#0072b2" stroke-width="4"/>';
+const R2 = '    <rect id="o2b3c4d5e" x="500" y="100" width="200" height="120" fill="#e69f00"/>';
+const R3 = '    <rect id="o3c4d5e6f" x="800" y="100" width="200" height="120" fill="#009e73"/>';
+const R4 = '    <rect id="o4d5e6f7g" x="10" y="20" width="30" height="40"/>';
+const R4_ELEM: Elem = { tag: "rect", attrs: { id: "o4d5e6f7g", x: "10", y: "20", width: "30", height: "40" } };
+
+const INK = "1 s100 cxypt 12050,3020,128,0 25,-3,2,8 31,-5,0,8";
+const BRUSH = "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1 sim=0";
+
+const lf = (...lines: string[]): string => `${lines.join("\n")}\n`;
+const BASE = lf(ROOT, TITLE, PAPER, L1, E1, R2, R3, END_G, END);
+const TWO_LAYERS = lf(ROOT, TITLE, PAPER, L1, E1, R2, END_G, L2, R3, END_G, END);
+
+function applied(outcome: Outcome): Applied {
+  if (outcome.outcome !== "applied") throw new Error(`rifiutata: ${outcome.reason} (${outcome.detail})`);
+  return outcome;
+}
+
+/// Applica `op` e controlla le invarianti di §6 sul risultato.
+function apply(engine: SceneEngine, op: Op): Applied {
+  const before = engine.normalized;
+  const out = applied(engine.apply(op));
+  expect(tryApplyOperation(before, out.operation)).toEqual({ kind: "applied", text: normalizeEol(out.text) });
+  expect(engine.scene()).toEqual(readScene(out.text).items);
+  return out;
+}
+
+function rejects(source: string, op: unknown, reason: Reason): void {
+  const engine = SceneEngine.open(source);
+  const outcome = engine.apply(op as Op);
+  expect(outcome, JSON.stringify(op).slice(0, 200)).toMatchObject({ outcome: "rejected", reason });
+  expect(engine.text).toBe(source);
+  expect(engine.scene()).toEqual(readScene(source).items);
+}
+
+describe("parseWireOp", () => {
+  it("accetta le forme pubbliche così come sono", () => {
+    const op = { op: "batch", ops: [{ op: "remove", target: "o1a2b3c4d" }, { op: "page", viewBox: "0 0 10 10" }] };
+    expect(parseWireOp(op)).toEqual({ op });
+  });
+
+  it("rifiuta le forme che scrive solo il motore, anche dentro un batch", () => {
+    const slot = { parent: "l3f8a0c2d", after: null, skip: 0, lead: "" };
+    const engineOnly = [
+      { op: "add", slot, gap: "\n    ", raw: "<rect/>" },
+      { op: "move", target: "o1a2b3c4d", slot, gap: "\n    " },
+      { op: "page", viewBox: "0 0 10 10", previous: { root: {}, paper: null } },
+      { op: "anchor", previous: { digest: null, pages: null } },
+    ];
+    for (const op of engineOnly) {
+      expect(parseWireOp(op)).toMatchObject({ reason: "invalid-elem" });
+      expect(parseWireOp({ op: "batch", ops: [{ op: "batch", ops: [op] }] })).toMatchObject({ reason: "invalid-elem" });
+    }
+  });
+
+  it("accetta un add con raw, e rifiuta raw sulle altre operazioni", () => {
+    const op = { op: "batch", ops: [{ op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw: '<rect style="fill:red"/>' }] };
+    expect(parseWireOp(op)).toEqual({ op });
+    expect(parseWireOp({ op: "remove", target: "o1a2b3c4d", raw: "<rect/>" })).toMatchObject({ reason: "invalid-elem" });
+  });
+
+  it("rifiuta ciò che non è un'operazione", () => {
+    for (const value of [null, 3, [], {}, { op: "drop" }, { op: "batch" }, { op: "batch", ops: [null] }]) {
+      expect(parseWireOp(value)).toMatchObject({ reason: "invalid-elem" });
+    }
+  });
+
+  it("conta le operazioni dei batch annidati", () => {
+    const remove = { op: "remove", target: "o1a2b3c4d" };
+    const exactly = { op: "batch", ops: [{ op: "batch", ops: Array(MAX_BATCH - 1).fill(remove) }, remove] };
+    expect(parseWireOp(exactly)).toEqual({ op: exactly });
+    const over = { op: "batch", ops: [{ op: "batch", ops: Array(MAX_BATCH).fill(remove) }, remove] };
+    expect(parseWireOp(over)).toMatchObject({ reason: "limit" });
+  });
+
+  it("rifiuta un'operazione oltre 8 MiB di JSON", () => {
+    const big = { op: "set", id: "o1a2b3c4d", attrs: { "fub:note": "é".repeat(MAX_OP_BYTES / 2) } };
+    expect(parseWireOp(big)).toMatchObject({ reason: "limit" });
+  });
+});
+
+describe("un documento in sola lettura", () => {
+  it("rifiuta ogni operazione e si legge lo stesso", () => {
+    const source = lf(ROOT.replace('fub:version="1"', 'fub:version="2"'), TITLE, PAPER, L1, E1, END_G, END);
+    const engine = SceneEngine.open(source);
+    expect(engine.readOnly).toEqual(["future-version"]);
+    expect(engine.status).toBeNull();
+    expect(engine.apply({ op: "remove", target: "o1a2b3c4d" })).toMatchObject({ outcome: "rejected", reason: "read-only" });
+    expect(engine.apply({ op: "adopt" })).toMatchObject({ outcome: "rejected", reason: "read-only" });
+    expect(engine.scene()).toEqual(readScene(source).items);
+  });
+});
+
+describe("i rifiuti lasciano la scena com'era", () => {
+  const LAST = { last: true };
+  const add = (parent: string, elem: unknown, pos: unknown = LAST): unknown => ({ op: "add", parent, pos, elem });
+  const move = (target: string, parent: string, pos: unknown = LAST): unknown => ({ op: "move", target, parent, pos });
+  const set = (id: string, attrs: Record<string, unknown>): unknown => ({ op: "set", id, attrs });
+  const rect = (id: string): Elem => ({ ...R4_ELEM, attrs: { ...R4_ELEM.attrs, id } });
+  const group = (id: string, ...children: Elem[]): Elem => ({ tag: "g", attrs: { id }, children });
+  const WITH_GROUP = lf(ROOT, PAPER, L1, '    <g id="o6f7g8h9i">', "    </g>", END_G, END);
+  const WITH_GROUP_AND_L2 = lf(ROOT, PAPER, L1, '    <g id="o6f7g8h9i">', "    </g>", END_G, L2, END_G, END);
+  const FOREIGN = lf('<svg xmlns="http://www.w3.org/2000/svg">', '  <rect x="1" y="1" width="2" height="2"/>', END);
+  const WITH_TEXT = lf(ROOT, PAPER, L1, '    <text id="o5e6f7g8h" x="10" y="20">', '      <tspan x="10" dy="0">a</tspan>', "    </text>", END_G, END);
+
+  const cases: ReadonlyArray<[string, string, unknown, Reason]> = [
+    ["operazione sconosciuta", BASE, { op: "drop" }, "invalid-elem"],
+    ["id assente", BASE, { op: "remove", target: "o0z0z0z0z" }, "missing-target"],
+    ["la radice non è un bersaglio", BASE, { op: "remove", target: { path: [], tag: "svg" } }, "missing-target"],
+    ["un percorso vale solo senza id", BASE, { op: "remove", target: { path: [3, 0], tag: "ellipse" } }, "missing-target"],
+    ["un percorso col tag sbagliato", BASE, { op: "ident", path: [3, 0], tag: "rect", id: "o0a1b2c3d" }, "missing-target"],
+    ["ident su un elemento che ha già un id", BASE, { op: "ident", path: [3, 0], tag: "ellipse", id: "o0a1b2c3d" }, "missing-target"],
+    ["genitore assente", BASE, add("o0z0z0z0z", R4_ELEM), "missing-parent"],
+    ["genitore che non contiene", BASE, add("o2b3c4d5e", R4_ELEM), "missing-parent"],
+    ["after che non è un figlio", BASE, add("l3f8a0c2d", R4_ELEM, { after: "fub-paper" }), "missing-anchor"],
+    ["after è l'elemento spostato", BASE, move("o1a2b3c4d", "l3f8a0c2d", { after: "o1a2b3c4d" }), "missing-anchor"],
+    ["posizione assente", BASE, add("l3f8a0c2d", R4_ELEM, {}), "invalid-elem"],
+    ["id non valido", BASE, add("l3f8a0c2d", rect("x1")), "invalid-elem"],
+    ["id da livello su un oggetto", BASE, add("l3f8a0c2d", rect("l0a1b2c3d")), "invalid-elem"],
+    ["oggetto senza id", BASE, add("l3f8a0c2d", { tag: "rect", attrs: { width: "1", height: "1" } }), "invalid-elem"],
+    ["tag fuori dal formato", BASE, add("l3f8a0c2d", { tag: "script", attrs: { id: "o0a1b2c3d" } }), "invalid-elem"],
+    ["livello dentro un livello", BASE, add("l3f8a0c2d", { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "X" } }), "invalid-elem"],
+    ["una seconda carta", BASE, add("l3f8a0c2d", { tag: "rect", attrs: { id: "o0a1b2c3d", "fub:role": "paper" } }), "invalid-elem"],
+    ["titolo della radice con add", BASE, add("#root", { tag: "title", attrs: {}, text: "X" }), "invalid-elem"],
+    ["id ripetuto nello stesso elemento", BASE, add("l3f8a0c2d", group("o0a1b2c3d", group("o0a1b2c3d"))), "duplicate-id"],
+    ["id di un figlio già nel documento", BASE, add("l3f8a0c2d", group("o0a1b2c3d", group("o2b3c4d5e"))), "duplicate-id"],
+    ["l'id cambia solo con ident", BASE, set("o2b3c4d5e", { id: "o0a1b2c3d" }), "invalid-elem"],
+    ["prefisso non dichiarato", BASE, set("o2b3c4d5e", { "inkscape:label": "X" }), "invalid-elem"],
+    ["valore non stringa", BASE, set("o2b3c4d5e", { fill: 3 }), "invalid-elem"],
+    ["carattere non XML", BASE, set("o2b3c4d5e", { fill: "\u0001" }), "invalid-elem"],
+    ["valore troppo lungo", BASE, set("o2b3c4d5e", { "fub:note": "x".repeat(MAX_VALUE_BYTES + 1) }), "limit"],
+    ["text su un rettangolo", BASE, { op: "text", id: "o2b3c4d5e", lines: ["X"] }, "invalid-elem"],
+    ["un a capo in un pezzo", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [["a", { text: "b\nc", attrs: { fill: "#000000" } }]] }, "invalid-elem"],
+    ["un pezzo senza attributi", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b" }]] }, "invalid-elem"],
+    ["un valore di un pezzo che non è una stringa", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b", attrs: { "font-size": 3 } }]] }, "invalid-elem"],
+    ["una parte di riga che non è testo né pezzo", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[3]] }, "invalid-elem"],
+    ["un pezzo con un valore fuori dal formato", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b", attrs: { "font-style": "slanted" } }]] }, "invalid-elem"],
+    ["un pezzo con un attributo della riga", WITH_TEXT, { op: "text", id: "o5e6f7g8h", lines: [[{ text: "b", attrs: { dy: "4" } }]] }, "invalid-elem"],
+    ["pezzi e testo nella stessa riga di un add", BASE, add("l3f8a0c2d", { tag: "text", attrs: { id: "o0a1b2c3d" }, children: [{ tag: "tspan", attrs: {}, text: "a", runs: ["b"] }] }), "invalid-elem"],
+    ["pezzi fuori da una riga", BASE, add("l3f8a0c2d", { tag: "text", attrs: { id: "o0a1b2c3d" }, runs: ["b"] } as Elem), "invalid-elem"],
+    ["un livello non va in un gruppo", WITH_GROUP_AND_L2, move("l9k8j7h6g", "o6f7g8h9i"), "invalid-elem"],
+    ["un gruppo non diventa un livello", WITH_GROUP, set("o6f7g8h9i", { "fub:layer": "X" }), "invalid-elem"],
+    ["viewBox con tre numeri", BASE, { op: "page", viewBox: "0 0 10" }, "invalid-elem"],
+    ["viewBox con larghezza zero", BASE, { op: "page", viewBox: "0 0 0 10" }, "invalid-elem"],
+    ["viewBox che non è un numero", BASE, { op: "page", viewBox: "0 0 a 10" }, "invalid-elem"],
+    ["adopt su un documento di FubDraw", BASE, { op: "adopt" }, "invalid-elem"],
+    ["adopt annullato su un documento estraneo", FOREIGN, { op: "adopt", undo: true }, "invalid-elem"],
+    ["add in un livello bloccato", lf(ROOT, PAPER, L1_LOCKED, E1, END_G, END), add("l3f8a0c2d", R4_ELEM), "locked"],
+    ["move fuori da un livello bloccato", TWO_LAYERS.replace(L1, L1_LOCKED), move("o2b3c4d5e", "l9k8j7h6g"), "locked"],
+    ["move dentro un livello bloccato", TWO_LAYERS.replace(L2, L2_LOCKED), move("o2b3c4d5e", "l9k8j7h6g"), "locked"],
+    ["remove in un livello bloccato", TWO_LAYERS.replace(L2, L2_LOCKED), { op: "remove", target: "o3c4d5e6f" }, "locked"],
+    ["remove della carta", BASE, { op: "remove", target: "fub-paper" }, "locked"],
+    ["un documento estraneo si modifica dopo «Modifica»", FOREIGN, { op: "remove", target: { path: [0], tag: "rect" } }, "foreign"],
+  ];
+  for (const [name, source, op, reason] of cases) {
+    it(name, () => rejects(source, op, reason));
+  }
+});
+
+describe("i livelli bloccati", () => {
+  it("si sbloccano: il livello stesso si cambia", () => {
+    const engine = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1_LOCKED, E1, R2, R3, END_G, END));
+    const out = apply(engine, { op: "set", id: "l3f8a0c2d", attrs: { "fub:locked": null } });
+    expect(out.text).toBe(BASE);
+    expect(out.touched).toEqual(["l3f8a0c2d", "o1a2b3c4d", "o2b3c4d5e", "o3c4d5e6f"]);
+  });
+});
+
+describe("i gruppi e le forme bloccati", () => {
+  const LOCKED_GROUP = '    <g id="o6f7g8h9i" fub:locked="true">';
+  const INNER = '      <rect id="o4d5e6f7g" x="10" y="20" width="30" height="40"/>';
+  const IN_GROUP = lf(ROOT, PAPER, L1, LOCKED_GROUP, INNER, "    </g>", R2, END_G, END);
+  const move = (id: string, parent: string): Op => ({ op: "move", target: id, parent, pos: { last: true } });
+
+  const cases: [string, Op][] = [
+    ["un figlio non si cambia", { op: "set", id: "o4d5e6f7g", attrs: { fill: "#000000" } }],
+    ["un figlio non esce", move("o4d5e6f7g", "l3f8a0c2d")],
+    ["un altro oggetto non entra", move("o2b3c4d5e", "o6f7g8h9i")],
+    ["un figlio non si toglie", { op: "remove", target: "o4d5e6f7g" }],
+  ];
+  for (const [name, op] of cases) {
+    it(name, () => rejects(IN_GROUP, op, "locked"));
+  }
+
+  it("un gruppo dentro un gruppo bloccato è fermo anche lui, coi suoi figli", () => {
+    const deep = lf(ROOT, PAPER, L1, LOCKED_GROUP, '      <g id="o7g8h9i0j">', '        <rect id="o4d5e6f7g" x="10" y="20" width="30" height="40"/>', "      </g>", "    </g>", END_G, END);
+    rejects(deep, { op: "set", id: "o7g8h9i0j", attrs: { opacity: "0.5" } }, "locked");
+    rejects(deep, { op: "set", id: "o4d5e6f7g", attrs: { opacity: "0.5" } }, "locked");
+  });
+
+  it("il gruppo stesso si sposta, si toglie e si sblocca", () => {
+    const engine = SceneEngine.open(IN_GROUP);
+    apply(engine, { op: "set", id: "o6f7g8h9i", attrs: { transform: "translate(5 5)" } });
+    apply(engine, { op: "move", target: "o6f7g8h9i", parent: "l3f8a0c2d", pos: { last: true } });
+    const out = apply(engine, { op: "set", id: "o6f7g8h9i", attrs: { "fub:locked": null } });
+    expect(out.touched).toEqual(["o6f7g8h9i", "o4d5e6f7g"]);
+    apply(engine, { op: "set", id: "o4d5e6f7g", attrs: { fill: "#000000" } });
+    apply(SceneEngine.open(IN_GROUP), { op: "remove", target: "o6f7g8h9i" });
+  });
+
+  it("una forma bloccata si cambia ancora, e la scena lo dice", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, '    <rect id="o2b3c4d5e" x="500" y="100" width="200" height="120" fill="#e69f00" fub:locked="true" display="none"/>', END_G, END));
+    const item = engine.scene().find((entry) => entry.kind === "element" && entry.id === "o2b3c4d5e");
+    expect(item).toMatchObject({ locked: true, hidden: true });
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "fub:locked": null, display: null } });
+    const after = engine.scene().find((entry) => entry.kind === "element" && entry.id === "o2b3c4d5e");
+    expect(after).not.toHaveProperty("locked");
+    expect(after).not.toHaveProperty("hidden");
+  });
+
+  it("un valore diverso da true non blocca", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, '    <g id="o6f7g8h9i" fub:locked="yes">', INNER, "    </g>", END_G, END));
+    apply(engine, { op: "set", id: "o4d5e6f7g", attrs: { fill: "#000000" } });
+  });
+});
+
+describe("i limiti", () => {
+  /// Gruppi annidati, ciascuno dentro il precedente, a partire da `first`.
+  function nested(count: number, first = 0): Elem {
+    let elem: Elem = { tag: "g", attrs: { id: `o${String(first + count - 1).padStart(8, "0")}` } };
+    for (let i = count - 2; i >= 0; i--) elem = { tag: "g", attrs: { id: `o${String(first + i).padStart(8, "0")}` }, children: [elem] };
+    return elem;
+  }
+
+  it(`l'annidamento si ferma a ${MAX_NESTING} livelli, il livello compreso`, () => {
+    const engine = SceneEngine.open(BASE);
+    apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: nested(MAX_NESTING - 1) });
+    const deepest = `o${String(MAX_NESTING - 2).padStart(8, "0")}`;
+    // Un elemento che non contiene si mette anche in fondo.
+    apply(engine, { op: "add", parent: deepest, pos: { last: true }, elem: R4_ELEM });
+    const text = engine.text;
+    const deeper: Op = { op: "add", parent: deepest, pos: { last: true }, elem: { tag: "g", attrs: { id: "o0a1b2c3d" } } };
+    expect(engine.apply(deeper)).toMatchObject({
+      outcome: "rejected",
+      reason: "limit",
+      detail: expect.stringContaining("annidamento"),
+    });
+    expect(engine.text).toBe(text);
+  });
+
+  it("un move non porta un gruppo oltre il limite", () => {
+    const engine = SceneEngine.open(BASE);
+    apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: nested(MAX_NESTING - 1) });
+    apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: nested(2, 100) });
+    const text = engine.text;
+    const deepest = `o${String(MAX_NESTING - 2).padStart(8, "0")}`;
+    expect(engine.apply({ op: "move", target: "o00000100", parent: deepest, pos: { last: true } })).toMatchObject({
+      outcome: "rejected",
+      reason: "limit",
+      detail: expect.stringContaining("annidamento"),
+    });
+    expect(engine.text).toBe(text);
+  });
+
+  it(`il documento non supera ${MAX_ELEMENTS} elementi`, () => {
+    const engine = SceneEngine.open(BASE);
+    const children: Elem[] = [];
+    for (let i = 0; i < MAX_ELEMENTS; i++) {
+      children.push({ tag: "rect", attrs: { id: `o${i.toString(36).padStart(8, "0")}`, width: "1", height: "1" } });
+    }
+    const elem: Elem = { tag: "g", attrs: { id: "o0a1b2c3d" }, children };
+    const outcome = engine.apply({ op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem });
+    expect(outcome).toMatchObject({ outcome: "rejected", reason: "limit", detail: expect.stringContaining("elementi") });
+    expect(engine.text).toBe(BASE);
+  });
+
+  it(`il documento non supera ${MAX_EDIT_BYTES} byte`, () => {
+    const engine = SceneEngine.open(BASE);
+    const href = `data:image/png;base64,${"A".repeat(7 * 1024 * 1024 - 100)}`;
+    const image = (id: string): Op => ({
+      op: "add",
+      parent: "l3f8a0c2d",
+      pos: { last: true },
+      elem: { tag: "image", attrs: { id, x: "0", y: "0", width: "10", height: "10", href } },
+    });
+    // Due immagini stanno nel limite, la terza no.
+    const two = applied(engine.apply({ op: "batch", ops: [image("o0a1b2c3d"), image("o1b2c3d4e")] }));
+    const outcome = engine.apply(image("o2c3d4e5f"));
+    expect(outcome).toMatchObject({ outcome: "rejected", reason: "limit", detail: expect.stringContaining("byte") });
+    expect(engine.text).toBe(two.text);
+    expect(applied(engine.undo(two.undo)).text).toBe(BASE);
+  });
+
+  it(`un batch non supera ${MAX_BATCH} operazioni`, () => {
+    const set: Op = { op: "set", id: "o2b3c4d5e", attrs: { fill: "#000000" } };
+    rejects(BASE, { op: "batch", ops: [{ op: "batch", ops: Array(MAX_BATCH).fill(set) }, set] }, "limit");
+  });
+});
+
+describe("l'undo", () => {
+  const R3_GREY = '    <rect id="o3c4d5e6f" x="800" y="100" width="200" height="120" fill="#111111"/>';
+
+  it("dopo un'altra operazione passa dall'inversa", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } });
+    const second = apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#111111" } });
+    expect(applied(engine.undo(first.undo)).text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3_GREY, END_G, END));
+    expect(applied(engine.undo(second.undo)).text).toBe(BASE);
+  });
+
+  it("si rifiuta se il bersaglio non c'è più", () => {
+    const engine = SceneEngine.open(BASE);
+    const added = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: R4_ELEM });
+    apply(engine, { op: "remove", target: "o4d5e6f7g" });
+    expect(engine.undo(added.undo)).toMatchObject({ outcome: "rejected", reason: "missing-target" });
+  });
+
+  it("si rifiuta se il punto da cui un elemento è partito non c'è più", () => {
+    const engine = SceneEngine.open(BASE);
+    const removed = apply(engine, { op: "remove", target: "o2b3c4d5e" });
+    apply(engine, { op: "remove", target: "o1a2b3c4d" });
+    expect(engine.undo(removed.undo)).toMatchObject({ outcome: "rejected", reason: "missing-anchor" });
+  });
+
+  it("resta esatto dopo un rifiuto, che non cambia la scena", () => {
+    const engine = SceneEngine.open(BASE);
+    const out = apply(engine, { op: "remove", target: "o2b3c4d5e" });
+    expect(engine.apply({ op: "remove", target: "o0z0z0z0z" }).outcome).toBe("rejected");
+    const undone = applied(engine.undo(out.undo));
+    expect(undone.text).toBe(BASE);
+    // L'undo esatto rimette lo stesso nodo: un nuovo undo è di nuovo esatto.
+    expect(applied(engine.undo(undone.undo)).text).toBe(out.text);
+  });
+
+  it("di un altro motore passa dall'inversa", () => {
+    const one = SceneEngine.open(BASE);
+    const out = apply(one, { op: "remove", target: "o2b3c4d5e" });
+    const other = SceneEngine.open(out.text);
+    expect(applied(other.undo(out.undo)).text).toBe(BASE);
+  });
+
+  it("annulla un batch rifiutato senza lasciare traccia", () => {
+    const engine = SceneEngine.open(BASE);
+    const outcome = engine.apply({
+      op: "batch",
+      ops: [
+        { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: R4_ELEM },
+        { op: "move", target: "o4d5e6f7g", parent: "l3f8a0c2d", pos: { first: true } },
+        { op: "set", id: "o4d5e6f7g", attrs: { fill: "#000000" } },
+        { op: "remove", target: "o0z0z0z0z" },
+      ],
+    });
+    expect(outcome).toMatchObject({ outcome: "rejected", reason: "missing-target", index: 3 });
+    expect(engine.text).toBe(BASE);
+    // L'id del rettangolo tolto col rifiuto è di nuovo libero.
+    expect(apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: R4_ELEM }).text).toBe(
+      lf(ROOT, TITLE, PAPER, L1, E1, R2, R3, R4, END_G, END),
+    );
+  });
+
+  it("annulla una fila di undo con un cambiamento solo, gli stessi byte di uno per volta", () => {
+    const engine = SceneEngine.open(BASE);
+    const steps = [
+      apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } }),
+      apply(engine, { op: "remove", target: "o2b3c4d5e" }),
+      apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { first: true }, elem: R4_ELEM }),
+    ];
+    const end = engine.normalized;
+    const back = engine.undoAll(steps.map((step) => step.undo).reverse());
+    expect(back.rejected).toBeNull();
+    expect(back.text).toBe(BASE);
+    expect(tryApplyOperation(end, back.operation)).toEqual({ kind: "applied", text: BASE });
+    expect(back.touched).toEqual(["o4d5e6f7g", "o2b3c4d5e", "o1a2b3c4d"]);
+    expect(engine.scene()).toEqual(readScene(BASE).items);
+    // Gli undo della fila la ripetono, ed esatti: i byte tornano quelli di
+    // prima, e un passo per volta va come la fila.
+    const again = engine.undoAll(back.undos.slice().reverse());
+    expect(again.text).toBe(end);
+    expect(applied(engine.undo(again.undos[2]!)).text).toBe(steps[1]!.text);
+  });
+
+  it("ferma la fila al primo undo rifiutato e tiene quelli prima", () => {
+    const engine = SceneEngine.open(BASE);
+    const added = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: R4_ELEM });
+    const black = apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } });
+    const grey = apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#111111" } });
+    // Da fuori il rettangolo aggiunto se ne va: il suo undo non vale più.
+    apply(engine, { op: "remove", target: "o4d5e6f7g" });
+    const before = engine.normalized;
+    const run = engine.undoAll([grey.undo, black.undo, added.undo]);
+    expect(run.undos).toHaveLength(2);
+    expect(run.rejected).toMatchObject({ outcome: "rejected", reason: "missing-target" });
+    expect(run.text).toBe(BASE);
+    expect(tryApplyOperation(before, run.operation)).toEqual({ kind: "applied", text: BASE });
+    expect(engine.undoAll([])).toMatchObject({ undos: [], rejected: null, text: BASE, operation: { edits: [] } });
+  });
+
+  it("riporta l'indice esterno di un batch annidato", () => {
+    const nested: Op = {
+      op: "batch",
+      ops: [{ op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } }, { op: "batch", ops: [{ op: "remove", target: "o0z0z0z0z" }] }],
+    };
+    rejects(BASE, nested, "missing-target");
+    expect(SceneEngine.open(BASE).apply(nested)).toMatchObject({ index: 1 });
+  });
+});
+
+describe("la fusione di due undo", () => {
+  const E1_BLACK = '    <ellipse id="o1a2b3c4d" cx="300" cy="200" rx="120" ry="60" fill="#000000" stroke="#0072b2" stroke-width="4"/>';
+  const R3_GREY = '    <rect id="o3c4d5e6f" x="800" y="100" width="200" height="120" fill="#111111"/>';
+  const fill = (id: string, value: string): Op => ({ op: "set", id, attrs: { fill: value } });
+
+  it("due set sulle stesse chiavi diventano un passo solo, esatto", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#111111"));
+    const second = apply(engine, fill("o1a2b3c4d", "#000000"));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(merged.inverse).toEqual(first.undo.inverse);
+    expect(merged.forward).toEqual(second.undo.forward);
+    const undone = applied(engine.undo(merged));
+    expect(undone.text).toBe(BASE);
+    expect(applied(engine.undo(undone.undo)).text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+
+  it("vale per due batch con gli stessi set nello stesso ordine", () => {
+    const engine = SceneEngine.open(BASE);
+    const both = (value: string): Op => ({ op: "batch", ops: [fill("o1a2b3c4d", value), fill("o3c4d5e6f", value)] });
+    const first = apply(engine, both("#222222"));
+    const second = apply(engine, both("#111111"));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(applied(engine.undo(merged)).text).toBe(BASE);
+  });
+
+  it("dopo un cambiamento altrui passa dall'inversa della prima", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#222222"));
+    const second = apply(engine, fill("o1a2b3c4d", "#000000"));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    apply(engine, fill("o3c4d5e6f", "#111111"));
+    expect(applied(engine.undo(merged)).text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3_GREY, END_G, END));
+  });
+
+  it("non fonde chiavi o elementi diversi", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#222222"));
+    const stroke = apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { stroke: "#000000" } });
+    expect(mergeUndo(first.undo, stroke.undo)).toBeNull();
+    const other = apply(engine, fill("o3c4d5e6f", "#111111"));
+    expect(mergeUndo(stroke.undo, other.undo)).toBeNull();
+    const both = apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#000000", stroke: "#000000" } });
+    expect(mergeUndo(other.undo, both.undo)).toBeNull();
+  });
+
+  it("non fonde operazioni che non sono una subito dopo l'altra", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, fill("o1a2b3c4d", "#222222"));
+    apply(engine, fill("o3c4d5e6f", "#111111"));
+    const second = apply(engine, fill("o1a2b3c4d", "#000000"));
+    expect(mergeUndo(first.undo, second.undo)).toBeNull();
+    // Né operazioni di due motori diversi.
+    const other = SceneEngine.open(BASE);
+    expect(mergeUndo(apply(other, fill("o1a2b3c4d", "#222222")).undo, second.undo)).toBeNull();
+  });
+});
+
+describe("i rientri di un move", () => {
+  const GROUP = '    <g id="o6f7g8h9i">';
+  const TEXT = [
+    '      <text id="o9i0j1k2l" x="720" y="460" font-size="32">',
+    '        <tspan x="720" dy="0">Uno</tspan>',
+    '        <tspan x="720" dy="40">Due</tspan>',
+    "      </text>",
+  ];
+
+  it("un testo che esce da un gruppo perde un rientro", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, GROUP, ...TEXT, "    </g>", END_G, END));
+    const out = apply(engine, { op: "move", target: "o9i0j1k2l", parent: "l3f8a0c2d", pos: { last: true } });
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, GROUP, "    </g>", ...TEXT.map((line) => line.slice(2)), END_G, END));
+  });
+
+  it("un rientro irregolare resta com'è scritto", () => {
+    const odd = [TEXT[0]!, '  <tspan x="720" dy="0">Uno</tspan>', TEXT[3]!];
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, GROUP, ...odd, "    </g>", END_G, END));
+    const out = apply(engine, { op: "move", target: "o9i0j1k2l", parent: "l3f8a0c2d", pos: { last: true } });
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, GROUP, "    </g>", `    ${odd[0]!.trimStart()}`, ...odd.slice(1), END_G, END));
+  });
+
+  it("il testo di un tspan non si tocca", () => {
+    const spaced = [TEXT[0]!, '        <tspan x="720" dy="0">a\n        b</tspan>', TEXT[3]!];
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, GROUP, ...spaced, "    </g>", END_G, END));
+    const out = apply(engine, { op: "move", target: "o9i0j1k2l", parent: "l3f8a0c2d", pos: { last: true } });
+    const moved = [TEXT[0]!.slice(2), '      <tspan x="720" dy="0">a\n        b</tspan>', TEXT[3]!.slice(2)];
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, GROUP, "    </g>", ...moved, END_G, END));
+  });
+});
+
+describe("adopt", () => {
+  const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">';
+  const RECT = '  <rect x="1" y="1" width="2" height="2"/>';
+
+  it("usa il primo prefisso libero se fub è già preso", () => {
+    const source = lf('<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="urn:altro" viewBox="0 0 10 10">', RECT, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "adopt" });
+    const root = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="urn:altro" xmlns:fub1="${FUB_NS}" fub1:version="1" viewBox="0 0 10 10">`;
+    expect(out.text).toBe(lf(root, RECT, END));
+    expect(readScene(out.text).status).toBe("fubdraw");
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(source);
+  });
+
+  it("annullato, tiene la dichiarazione se un livello la usa", () => {
+    const engine = SceneEngine.open(lf(SVG, RECT, END));
+    apply(engine, { op: "adopt" });
+    const layer: Elem = { tag: "g", attrs: { id: "l1a2b3c4d", "fub:layer": "Nuovo" } };
+    apply(engine, { op: "add", parent: "#root", pos: { last: true }, elem: layer });
+    const out = apply(engine, { op: "adopt", undo: true });
+    const root = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="${FUB_NS}" viewBox="0 0 10 10">`;
+    expect(out.text).toBe(lf(root, RECT, '  <g id="l1a2b3c4d" fub:layer="Nuovo">', "  </g>", END));
+    expect(engine.status).toBe("foreign");
+    expect(engine.apply({ op: "set", id: "l1a2b3c4d", attrs: { "fub:layer": "X" } })).toMatchObject({ reason: "foreign" });
+  });
+
+  it("su una radice senza dichiarazioni va subito dopo il nome", () => {
+    const source = lf("<svg viewBox='0 0 10 10'>", END);
+    // Senza namespace SVG non è una scena: niente da adottare.
+    expect(() => SceneEngine.open(source)).toThrow();
+  });
+});
+
+describe("page", () => {
+  it("su una radice senza width e height li aggiunge, e l'inversa li toglie", () => {
+    const root = `<svg ${NS} fub:version="1" viewBox="0 0 1600 1000">`;
+    const source = lf(root, PAPER, L1, END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "page", viewBox: "-10 -20 800 600" });
+    expect(out.text).toBe(
+      lf(
+        `<svg ${NS} fub:version="1" viewBox="-10 -20 800 600" width="800" height="600">`,
+        '  <rect id="fub-paper" fub:role="paper" x="-10" y="-20" width="800" height="600" fill="#ffffff"/>',
+        L1,
+        END_G,
+        END,
+      ),
+    );
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(source);
+  });
+
+  it("senza carta cambia solo la radice", () => {
+    const engine = SceneEngine.open(lf(ROOT, L1, END_G, END));
+    const out = apply(engine, { op: "page", viewBox: "0 0 800 600" });
+    expect(out.text).toBe(lf(`<svg ${NS} fub:version="1" viewBox="0 0 800 600" width="800" height="600">`, L1, END_G, END));
+    expect(out.inverse).toEqual({
+      op: "page",
+      viewBox: "0 0 1600 1000",
+      previous: { root: { viewBox: "0 0 1600 1000", width: "1600", height: "1000" }, paper: null },
+    });
+  });
+});
+
+describe("set sulla radice", () => {
+  const guides = (value: string | null): Op => ({ op: "set", id: "#root", attrs: { "fub:guides": value } });
+
+  it("due spostamenti di una guida diventano un passo solo, esatto, e non toccano id", () => {
+    const engine = SceneEngine.open(BASE);
+    const first = apply(engine, guides("x 100"));
+    const second = apply(engine, guides("x 110"));
+    expect(first.touched).toEqual([]);
+    expect(second.text).toBe(BASE.replace('height="1000">', 'height="1000" fub:guides="x 110">'));
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(applied(engine.undo(merged)).text).toBe(BASE);
+  });
+
+  it("rifiuta dichiarazioni, altri attributi e valori fuori grammatica", () => {
+    for (const attrs of [
+      { "xmlns:fub": FUB_NS },
+      { "fub:version": "2" },
+      { "fub:layer": "A" },
+      { width: "10" },
+      { "fub:units": "pc" },
+      { "fub:units": 3 },
+      { "fub:guides": "x 1\u0001" },
+      { "fub:guides": "x 1", "altro:guides": "x 2" },
+    ]) {
+      rejects(BASE, { op: "set", id: "#root", attrs }, "invalid-elem");
+    }
+  });
+
+  it("su un documento estraneo aspetta «Modifica»", () => {
+    rejects(lf(`<svg ${NS} viewBox="0 0 10 10">`, END), guides("x 1"), "foreign");
+  });
+
+  it("le guide che non si leggono restano com'erano, finché non si riscrivono", () => {
+    const source = BASE.replace('height="1000">', 'height="1000" fub:guides="x 1;">');
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "set", id: "#root", attrs: { "fub:units": "mm" } });
+    expect(out.text).toBe(BASE.replace('height="1000">', 'height="1000" fub:units="mm" fub:guides="x 1;">'));
+    expect(apply(engine, guides("y 2")).inverse).toEqual(guides("x 1;"));
+  });
+});
+
+describe("anchor", () => {
+  const HEX = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+  const OTHER = "0".repeat(64);
+  const ANNOTATIONS = `<svg ${NS} fub:version="1" fub:annotates="Bando.pdf"`;
+  const P1 = '  <g id="p0001" fub:page="1" fub:page-size="595 842">';
+
+  it("riscrive solo i valori, anche fra apici singoli, e l'inversa rimette quelli di prima", () => {
+    const source = lf(`${ANNOTATIONS} fub:pages='3' data-x="1" fub:digest='SHA256:${HEX}'>`, P1, END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "anchor", digest: `sha256:${OTHER}`, pages: 12 });
+    expect(out.text).toBe(lf(`${ANNOTATIONS} fub:pages='12' data-x="1" fub:digest='sha256:${OTHER}'>`, P1, END_G, END));
+    expect(out.inverse).toEqual({ op: "anchor", previous: { digest: `SHA256:${HEX}`, pages: "3" } });
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(source);
+  });
+
+  it("l'inversa toglie ciò che non c'era, col suo spazio", () => {
+    const source = lf(`${ANNOTATIONS}>`, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "anchor", digest: `sha256:${HEX}`, pages: 1 });
+    expect(out.text).toBe(lf(`${ANNOTATIONS} fub:digest="sha256:${HEX}" fub:pages="1">`, END));
+    expect(apply(engine, out.inverse).text).toBe(source);
+  });
+
+  it("scrive solo la parte che riceve, e l'inversa rimette l'altra com'era", () => {
+    const source = lf(`${ANNOTATIONS} fub:pages="3">`, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "anchor", digest: `sha256:${HEX}` });
+    expect(out.text).toBe(lf(`${ANNOTATIONS} fub:pages="3" fub:digest="sha256:${HEX}">`, END));
+    expect(out.inverse).toEqual({ op: "anchor", previous: { digest: null, pages: "3" } });
+    expect(apply(engine, out.inverse).text).toBe(source);
+    const pages = apply(SceneEngine.open(lf(`${ANNOTATIONS} fub:digest='SHA256:${HEX}'>`, END)), { op: "anchor", pages: 7 });
+    expect(pages.text).toBe(lf(`${ANNOTATIONS} fub:digest='SHA256:${HEX}' fub:pages="7">`, END));
+  });
+
+  it("rifiuta un'impronta o un numero di pagine fuori grammatica, e un documento estraneo", () => {
+    const source = lf(`${ANNOTATIONS}>`, END);
+    for (const [digest, pages] of [
+      [`sha256:${HEX.toUpperCase()}`, 1],
+      [`sha256:${HEX}0`, 1],
+      [`sha1:${HEX}`, 1],
+      [`sha256:${HEX}`, 0],
+      [`sha256:${HEX}`, 1.5],
+      [`sha256:${HEX}`, 2 ** 32],
+      [`sha256:${HEX}`, "3"],
+    ]) {
+      rejects(source, { op: "anchor", digest, pages }, "invalid-elem");
+    }
+    rejects(source, { op: "anchor" }, "invalid-elem");
+    rejects(source, { op: "anchor", digest: null, pages: 1 }, "invalid-elem");
+    rejects(lf('<svg xmlns="http://www.w3.org/2000/svg">', END), { op: "anchor", digest: `sha256:${HEX}`, pages: 1 }, "foreign");
+  });
+});
+
+describe("i gruppi di pagina", () => {
+  const ANNOTATIONS = `<svg ${NS} fub:version="1" fub:annotates="Bando.pdf">`;
+  const page = (id: string, n: string): unknown => ({
+    op: "add",
+    parent: "#root",
+    pos: { last: true },
+    elem: { tag: "g", attrs: { id, "fub:page": n, "fub:page-size": "595 842" } },
+  });
+
+  it("hanno l'id dal numero, su almeno quattro cifre", () => {
+    const engine = SceneEngine.open(lf(ANNOTATIONS, END));
+    apply(engine, page("p0003", "3") as Op);
+    const out = apply(engine, page("p12345", "12345") as Op);
+    expect(out.text).toBe(
+      lf(ANNOTATIONS, '  <g id="p0003" fub:page="3" fub:page-size="595 842">', END_G, '  <g id="p12345" fub:page="12345" fub:page-size="595 842">', END_G, END),
+    );
+    for (const [id, n] of [["p3", "3"], ["p0004", "3"], ["o1a2b3c4d", "3"], ["p0000", "0"]]) {
+      rejects(lf(ANNOTATIONS, END), page(id!, n!), "invalid-elem");
+    }
+  });
+
+  it("ident dà a un gruppo di pagina l'id del suo numero", () => {
+    const source = lf(ANNOTATIONS, '  <g fub:page="2"/>', END);
+    rejects(source, { op: "ident", path: [0], tag: "g", id: "o1a2b3c4d" }, "invalid-elem");
+    const out = apply(SceneEngine.open(source), { op: "ident", path: [0], tag: "g", id: "p0002" });
+    expect(out.text).toBe(lf(ANNOTATIONS, '  <g id="p0002" fub:page="2"/>', END));
+  });
+});
+
+describe("meta", () => {
+  it("mette la descrizione dopo il titolo, e null li toglie", () => {
+    const engine = SceneEngine.open(BASE);
+    const out = apply(engine, { op: "meta", desc: "Una prova" });
+    expect(out.text).toBe(lf(ROOT, TITLE, "  <desc>Una prova</desc>", PAPER, L1, E1, R2, R3, END_G, END));
+    expect(out.inverse).toEqual({ op: "meta", desc: null });
+    const both = apply(engine, { op: "meta", title: null, desc: null });
+    expect(both.text).toBe(lf(ROOT, PAPER, L1, E1, R2, R3, END_G, END));
+    expect(applied(engine.apply(both.inverse)).text).toBe(out.text);
+  });
+
+  it("un titolo vuoto resta un titolo, autochiuso come ogni elemento senza testo", () => {
+    const engine = SceneEngine.open(BASE);
+    expect(apply(engine, { op: "meta", title: "" }).text).toBe(lf(ROOT, "  <title/>", PAPER, L1, E1, R2, R3, END_G, END));
+  });
+});
+
+describe("ident", () => {
+  const BARE = '    <rect x="10" y="10" width="50" height="50"/>';
+
+  it("toglie l'id, e l'inversa lo rimette", () => {
+    const source = lf(ROOT, PAPER, L1, '    <rect id="o0a1b2c3d" x="10" y="10" width="50" height="50"/>', END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "ident", path: [1, 0], tag: "rect", id: null });
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, BARE, END_G, END));
+    expect(out.inverse).toEqual({ op: "ident", path: [1, 0], tag: "rect", id: "o0a1b2c3d" });
+    expect(applied(engine.apply(out.inverse)).text).toBe(source);
+  });
+
+  it("non riusa un id del documento", () => {
+    rejects(lf(ROOT, PAPER, L1, BARE, R2, END_G, END), { op: "ident", path: [1, 0], tag: "rect", id: "o2b3c4d5e" }, "duplicate-id");
+  });
+
+  it("cambia un id togliendolo e dandone un altro, e l'undo rimette quello di prima com'era", () => {
+    const source = lf(ROOT, PAPER, L1, "    <rect id='path1234' x=\"10\" y=\"10\" width=\"50\" height=\"50\"/>", END_G, END);
+    const engine = SceneEngine.open(source);
+    const rename: Op = {
+      op: "batch",
+      ops: [
+        { op: "ident", path: [1, 0], tag: "rect", id: null },
+        { op: "ident", path: [1, 0], tag: "rect", id: "Sole_1" },
+      ],
+    };
+    const out = apply(engine, rename);
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, '    <rect id="Sole_1" x="10" y="10" width="50" height="50"/>', END_G, END));
+    expect([...out.touched].sort()).toEqual(["Sole_1", "path1234"]);
+    expect(applied(engine.apply(out.inverse)).text, "l'undo").toBe(lf(ROOT, PAPER, L1, BARE.replace("<rect", '<rect id="path1234"'), END_G, END));
+  });
+
+  it("dà ogni id che il formato ammette, e rifiuta quello vuoto, non XML o troppo lungo", () => {
+    const source = lf(ROOT, PAPER, L1, BARE, END_G, END);
+    const engine = SceneEngine.open(source);
+    expect(apply(engine, { op: "ident", path: [1, 0], tag: "rect", id: "un sole & più" }).text).toContain('<rect id="un sole &amp; più"');
+    rejects(source, { op: "ident", path: [1, 0], tag: "rect", id: "" }, "invalid-elem");
+    rejects(source, { op: "ident", path: [1, 0], tag: "rect", id: "a\u0001" }, "invalid-elem");
+    rejects(source, { op: "ident", path: [1, 0], tag: "rect", id: "a".repeat(MAX_VALUE_BYTES + 1) }, "limit");
+  });
+
+  it("scrive l'id nel tag così com'è, senza riordinare il resto", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, "    <rect height='50'   width='50'/>", END_G, END));
+    const out = apply(engine, { op: "ident", path: [1, 0], tag: "rect", id: "o0a1b2c3d" });
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, "    <rect id=\"o0a1b2c3d\" height='50'   width='50'/>", END_G, END));
+  });
+});
+
+describe("i tratti", () => {
+  const STROKE = `    <path id="o7k2m9x4q" fub:tool="pen" fub:brush="${BRUSH}" d="M0 0 Z" fill="#000000" fub:ink="${INK}"/>`;
+
+  it("un set del pennello ridisegna il contorno", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, STROKE, END_G, END));
+    const brush = BRUSH.replace("size=4", "size=8");
+    const out = apply(engine, { op: "set", id: "o7k2m9x4q", attrs: { "fub:brush": brush } });
+    const d = pf1(inkToQuantized(decodeInk(INK)), parseBrush(brush));
+    const redrawn = `    <path id="o7k2m9x4q" fub:tool="pen" fub:brush="${brush}" d="${d}" fill="#000000" fub:ink="${INK}"/>`;
+    expect(out.text).toBe(lf(ROOT, PAPER, L1, redrawn, END_G, END));
+    // L'inversa rimette il pennello e il `d` di prima, scritto a mano.
+    expect(out.inverse).toEqual({ op: "set", id: "o7k2m9x4q", attrs: { "fub:brush": BRUSH, d: "M0 0 Z" } });
+  });
+
+  it("un d scritto a mano su un tratto si ricalcola", () => {
+    const engine = SceneEngine.open(lf(ROOT, PAPER, L1, STROKE, END_G, END));
+    const out = apply(engine, { op: "set", id: "o7k2m9x4q", attrs: { d: "M1 1 Z" } });
+    expect(out.text).toContain(` d="${pf1(inkToQuantized(decodeInk(INK)), parseBrush(BRUSH))}"`);
+  });
+
+  it("un inchiostro non conforme si rifiuta", () => {
+    const broken: Op = { op: "set", id: "o7k2m9x4q", attrs: { "fub:ink": "1 s100 cxypt 1,2" } };
+    rejects(lf(ROOT, PAPER, L1, STROKE, END_G, END), broken, "invalid-elem");
+  });
+});
+
+describe("i terminatori", () => {
+  it("le righe nuove usano il terminatore prevalente, anche \\r", () => {
+    const source = [ROOT, TITLE, PAPER, L1, E1, END_G, END, ""].join("\r");
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: R4_ELEM });
+    expect(out.text).toBe([ROOT, TITLE, PAPER, L1, E1, R4, END_G, END, ""].join("\r"));
+  });
+
+  it("un set su un gruppo autochiuso in un file CRLF apre il gruppo con CRLF", () => {
+    const source = [ROOT, PAPER, L1, '    <g id="o6f7g8h9i"/>', END_G, END, ""].join("\r\n");
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "set", id: "o6f7g8h9i", attrs: { opacity: "0.5" } });
+    expect(out.text).toBe([ROOT, PAPER, L1, '    <g id="o6f7g8h9i" opacity="0.5">', "    </g>", END_G, END, ""].join("\r\n"));
+  });
+});
+
+describe("add con raw", () => {
+  const RAW = '<g style="fill:#e69f00">\n      <!-- un commento -->\n      <rect width="10" height="10"/>\n    </g>';
+
+  it("scrive l'elemento estraneo così com'è, e l'inversa lo toglie col percorso", () => {
+    const engine = SceneEngine.open(BASE);
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { after: "o1a2b3c4d" }, raw: RAW });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, `    ${RAW}`, R2, R3, END_G, END));
+    expect(out.inverse).toEqual({ op: "remove", target: { path: [2, 1], tag: "g" } });
+    expect(engine.scene().some((item) => item.kind === "foreign")).toBe(true);
+    apply(engine, out.inverse);
+    expect(engine.text).toBe(BASE);
+  });
+
+  it("con un id lo toglie per id, e un add ripetuto è un doppione", () => {
+    const engine = SceneEngine.open(BASE);
+    const raw = '<use id="u1" href="#o1a2b3c4d" x="10"/>';
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw });
+    expect(out.inverse).toEqual({ op: "remove", target: "u1" });
+    expect(out.touched).toContain("u1");
+    const again = applied(engine.apply({ op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }));
+    expect(again.duplicate).toBe(true);
+    expect(again.text).toBe(out.text);
+  });
+
+  it("i ritorni a capo diventano quelli del documento", () => {
+    const source = [ROOT, TITLE, PAPER, L1, E1, END_G, END, ""].join("\r\n");
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw: '<g style="x">\n<rect/>\r</g>' });
+    expect(out.text).toBe([ROOT, TITLE, PAPER, L1, E1, '    <g style="x">', "<rect/>", "</g>", END_G, END, ""].join("\r\n"));
+  });
+
+  it("uno script entra inerte, con S005", () => {
+    const engine = SceneEngine.open(BASE);
+    const out = apply(engine, { op: "add", parent: "#root", pos: { last: true }, raw: "<script>alert(1)</script>" });
+    expect(readScene(out.text).diagnostics.map((d) => d.code)).toContain("S005");
+  });
+
+  it("una sequenza entra con gli spazi fra gli elementi, e l'inversa la toglie dall'ultimo al primo", () => {
+    const engine = SceneEngine.open(BASE);
+    const raw = `${R4.trim()}\n    <g style="x"><!-- nota --><rect/></g>`;
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3, R4, '    <g style="x"><!-- nota --><rect/></g>', END_G, END));
+    expect(out.inverse).toEqual({ op: "batch", ops: [{ op: "remove", target: { path: [2, 4], tag: "g" } }, { op: "remove", target: "o4d5e6f7g" }] });
+    expect(engine.scene().some((item) => item.kind === "element" && item.id === "o4d5e6f7g")).toBe(true);
+    apply(engine, out.inverse);
+    expect(engine.text).toBe(BASE);
+  });
+
+  it("in un genitore vuoto la sequenza va su righe sue", () => {
+    const engine = SceneEngine.open(lf(ROOT, TITLE, PAPER, '  <g id="l3f8a0c2d" fub:layer="Livello 1"/>', END));
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw: `${R4.trim()}\n    <rect style="x"/>` });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R4, '    <rect style="x"/>', END_G, END));
+  });
+
+  it("un elemento del formato tiene i suoi byte, e il contorno dei tratti si ricalcola", () => {
+    const engine = SceneEngine.open(BASE);
+    const d = pf1(inkToQuantized(decodeInk(INK)), parseBrush(BRUSH));
+    const group = '<g id="o5e6f7g8h"  opacity=\'0.5\'>\n      <!-- c -->\n      <foo xmlns="urn:x"/>\n      <rect id="o6f7g8h9i" x="1" y="1" width="2" height="2"/>\n    </g>';
+    const stale = `<path id="o7k2m9x4q" fub:tool="pen" fub:brush="${BRUSH}" d="M0 0 Z" fill="#000000" fub:ink="${INK}"/>`;
+    const bare = `<path id="o8m3n0y5r" fub:tool="highlighter" fub:brush="${BRUSH}" fill="#000000" fub:ink="${INK}"></path>`;
+    const raw = `${group}\n    ${stale}\n    ${bare}`;
+    const out = apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { first: true }, raw });
+    const strokes = [stale.replace('d="M0 0 Z"', `d="${d}"`), bare.replace('"></path>', `" d="${d}"></path>`)];
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, `    ${group}`, ...strokes.map((s) => `    ${s}`), E1, R2, R3, END_G, END));
+    expect(out.inverse).toEqual({ op: "batch", ops: ["o8m3n0y5r", "o7k2m9x4q", "o5e6f7g8h"].map((target) => ({ op: "remove", target })) });
+    expect(out.touched).toEqual(expect.arrayContaining(["o5e6f7g8h", "o6f7g8h9i", "o7k2m9x4q", "o8m3n0y5r"]));
+  });
+
+  it("rifiuta una forma sbagliata, un elemento del formato che elem non ammetterebbe, gli id presi e i genitori bloccati", () => {
+    const add = (raw: unknown, parent = "l3f8a0c2d"): unknown => ({ op: "add", parent, pos: { last: true }, raw });
+    rejects(BASE, { ...(add("<rect style='x'/>") as object), elem: R4_ELEM }, "invalid-elem");
+    const malformed = ["<rect style='x'>", "<rect style='x'/>testo<rect style='y'/>", " <rect style='x'/>", "<rect style='x'/> ", "<!-- c --><rect style='x'/>", "<rect style='x'/><!-- c --><rect style='y'/>", "<rect style='x'/><?pi?><rect style='y'/>", "testo", 7, ""];
+    for (const raw of malformed) rejects(BASE, add(raw), "invalid-elem");
+    for (const raw of [
+      '<rect width="10" height="10"/>',
+      '<rect id="z" width="10" height="10"/>',
+      '<g id="l1b2c3d4e" fub:layer="Dentro"/>',
+      '<rect id="o9z8y7x6w" fub:role="paper" width="10" height="10"/>',
+      '<g id="o9z8y7x6w"><rect width="1" height="1"/></g>',
+      `<path id="o9z8y7x6w" fub:tool="pen" fub:brush="${BRUSH}" fub:ink="1 s100 cxypt"/>`,
+    ]) {
+      rejects(BASE, add(raw), "invalid-elem");
+    }
+    rejects(BASE, add("<title>Nome</title>", "#root"), "invalid-elem");
+    rejects(BASE, add(`<rect id="o9z8y7x6w" width="1" height="1" font-family="${"x".repeat(MAX_VALUE_BYTES + 1)}"/>`), "limit");
+    rejects(BASE, add('<g style="x"><rect id="o2b3c4d5e"/></g>'), "duplicate-id");
+    rejects(BASE, add('<g style="x"><rect id="z"/><rect id="z"/></g>'), "duplicate-id");
+    rejects(BASE, add(`${R4.trim()}<rect style="x" id="o4d5e6f7g"/>`), "duplicate-id");
+    rejects(lf(ROOT, TITLE, PAPER, L1_LOCKED, E1, END_G, END), add("<rect style='x'/>"), "locked");
+    rejects(BASE, add("<rect style='x'/>", "o1a2b3c4d"), "missing-parent");
+  });
+
+  it("un estraneo porta valori oltre il limite di elem", () => {
+    const engine = SceneEngine.open(BASE);
+    const raw = `<rect style="x" data-n="${"x".repeat(MAX_VALUE_BYTES + 1)}"/>`;
+    expect(apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }).text).toContain(raw);
+  });
+
+  it(`l'inversa di una sequenza lunga si applica anche oltre ${MAX_BATCH} operazioni`, () => {
+    const engine = SceneEngine.open(BASE);
+    const ids = Array.from({ length: MAX_BATCH + 1 }, (_, i) => `o${i.toString(36).padStart(8, "0")}`);
+    const raw = ids.map((id) => `<rect id="${id}" x="0" y="0" width="1" height="1"/>`).join("\n    ");
+    const added = applied(engine.apply({ op: "add", parent: "l3f8a0c2d", pos: { last: true }, raw }));
+    // Un'altra modifica in mezzo: l'annulla non è più esatto, e passa
+    // dall'inversa.
+    applied(engine.apply({ op: "set", id: "o1a2b3c4d", attrs: { fill: "#000000" } }));
+    applied(engine.undo(added.undo));
+    expect(engine.text).toBe(BASE.replace('fill="none"', 'fill="#000000"'));
+    // Ciò che arriva resta nel limite.
+    rejects(BASE, added.undo.inverse, "limit");
+  });
+});
+
+describe("i nomi", () => {
+  it("il nome di un oggetto segue il suo primo `title`, anche quando il tag del contenitore si riscrive", () => {
+    const engine = SceneEngine.open(BASE);
+    const named = (id: string): string | undefined => {
+      const item = engine.scene().find((entry) => entry.kind === "element" && entry.id === id);
+      return item?.kind === "element" ? item.title : undefined;
+    };
+    apply(engine, { op: "add", parent: "l3f8a0c2d", pos: { first: true }, elem: { tag: "title", attrs: {}, text: "Sfondo" } });
+    expect(named("l3f8a0c2d")).toBe("Sfondo");
+    // Il tag d'apertura si riscrive senza rileggere i figli: il nome resta.
+    apply(engine, { op: "set", id: "l3f8a0c2d", attrs: { "fub:layer": "Primo" } });
+    expect(named("l3f8a0c2d")).toBe("Sfondo");
+    apply(engine, {
+      op: "add",
+      parent: "l3f8a0c2d",
+      pos: { last: true },
+      elem: { tag: "g", attrs: { id: "o9g8f7e6d" }, children: [{ tag: "title", attrs: {}, text: "Casa" }, { ...R4_ELEM, children: [{ tag: "title", attrs: {}, text: "Tetto" }] }] },
+    });
+    expect(named("o9g8f7e6d")).toBe("Casa");
+    expect(named("o4d5e6f7g")).toBe("Tetto");
+    apply(engine, { op: "set", id: "o9g8f7e6d", attrs: { opacity: "0.5" } });
+    expect(named("o9g8f7e6d")).toBe("Casa");
+    apply(engine, { op: "remove", target: { path: [2, 0], tag: "title" } });
+    expect(named("l3f8a0c2d")).toBeUndefined();
+    expect(named("o1a2b3c4d")).toBeUndefined();
+  });
+});
+
+describe("le risorse", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  /// Una sfumatura nella `defs`, col suo ciclo di vita.
+  const gradient = (id: string, role: string | null): string[] => [
+    `    <linearGradient id="${id}"${role === null ? "" : ` fub:role="${role}"`} x1="0" y1="0" x2="1" y2="0">`,
+    '      <stop offset="0" stop-color="#0072b2"/>',
+    '      <stop offset="1" stop-color="#56b4e9"/>',
+    "    </linearGradient>",
+  ];
+  /// Un rettangolo nel livello che usa `ref` per il riempimento.
+  const user = (id: string, ref: string): string => `    <rect id="${id}" x="500" y="100" width="200" height="120" fill="url(#${ref}) #0072b2"/>`;
+  const G = "r1a2b3c4d";
+  const PRIVATE = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, user("o2b3c4d5e", G), R3, END_G, END);
+  const PLAIN = lf(ROOT, TITLE, PAPER, L1, R2, R3, END_G, END);
+
+  it("una risorsa condivisa resta finché qualcuno la usa, poi se ne va con la defs", () => {
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, "shared"), END_DEFS, PAPER, L1, user("o2b3c4d5e", G), user("o3c4d5e6f", G), END_G, END);
+    const engine = SceneEngine.open(source);
+    const first = apply(engine, { op: "remove", target: "o2b3c4d5e" });
+    expect(first.forward).toEqual({ op: "remove", target: "o2b3c4d5e" });
+    expect(first.text).toBe(lf(ROOT, TITLE, DEFS, ...gradient(G, "shared"), END_DEFS, PAPER, L1, user("o3c4d5e6f", G), END_G, END));
+    const second = apply(engine, { op: "remove", target: "o3c4d5e6f" });
+    expect(second.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    expect(second.forward).toEqual({
+      op: "batch",
+      ops: [{ op: "remove", target: "o3c4d5e6f" }, { op: "remove", target: G }, { op: "remove", target: "fub-defs" }],
+    });
+    expect([...second.touched].sort()).toEqual(["fub-defs", "o3c4d5e6f", G].sort());
+    expect(applied(engine.undo(second.undo)).text).toBe(first.text);
+  });
+
+  it("la raccolta tocca solo ciò che l'operazione lascia solo", () => {
+    // Una sfumatura privata che nessuno usava resta anche se l'operazione la
+    // cambia.
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, R2, END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "set", id: G, attrs: { x2: "0.5" } });
+    expect(out.text).toBe(source.replace('x2="1"', 'x2="0.5"'));
+    expect(out.forward).toEqual({ op: "set", id: G, attrs: { x2: "0.5" } });
+  });
+
+  it("un riferimento da un elemento estraneo o da un foglio di stile tiene la risorsa", () => {
+    const foreign = '    <path style="fill:url(#r1a2b3c4d)" d="M0 0h10v10z"/>';
+    const withForeign = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, user("o2b3c4d5e", G), foreign, END_G, END);
+    const engine = SceneEngine.open(withForeign);
+    const out = apply(engine, { op: "remove", target: "o2b3c4d5e" });
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, foreign, END_G, END));
+    rejects(out.text, { op: "remove", target: G }, "in-use");
+
+    const sheet = "  <style>.sole { fill: url(#r1a2b3c4d) }</style>";
+    const withSheet = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, sheet, PAPER, L1, user("o2b3c4d5e", G), END_G, END);
+    expect(apply(SceneEngine.open(withSheet), { op: "remove", target: "o2b3c4d5e" }).text).toContain(`<linearGradient id="${G}"`);
+  });
+
+  it("chi usa e la risorsa si tolgono insieme, in un batch", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    const out = apply(engine, { op: "batch", label: "Via", ops: [{ op: "remove", target: "o2b3c4d5e" }, { op: "remove", target: G }] });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R3, END_G, END));
+    // La raccolta toglie la `defs` rimasta vuota, nello stesso batch.
+    expect(out.forward).toEqual({
+      op: "batch",
+      label: "Via",
+      ops: [{ op: "remove", target: "o2b3c4d5e" }, { op: "remove", target: G }, { op: "remove", target: "fub-defs" }],
+    });
+    expect(out.inverse).toMatchObject({ op: "batch", label: "Via" });
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(PRIVATE);
+  });
+
+  it("una defs non si toglie se qualcosa fuori usa le sue risorse", () => {
+    rejects(PRIVATE, { op: "remove", target: "fub-defs" }, "in-use");
+    // Un motivo che usa una sfumatura della stessa defs non la trattiene.
+    const pattern = [
+      '    <pattern id="r2b3c4d5e" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">',
+      `      <rect x="0" y="0" width="20" height="20" fill="url(#${G}) #0072b2"/>`,
+      "    </pattern>",
+    ];
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, null), ...pattern, END_DEFS, PAPER, L1, R2, END_G, END);
+    expect(apply(SceneEngine.open(source), { op: "remove", target: "fub-defs" }).text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, END_G, END));
+  });
+
+  it("ident non toglie l'id a una risorsa usata; a una che non lo è sì, e diventa estranea", () => {
+    rejects(PRIVATE, { op: "ident", path: [1, 0], tag: "linearGradient", id: null }, "in-use");
+    const unused = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, L1, R2, END_G, END);
+    const engine = SceneEngine.open(unused);
+    const out = apply(engine, { op: "ident", path: [1, 0], tag: "linearGradient", id: null });
+    expect(out.text).toBe(unused.replace(` id="${G}"`, ""));
+    expect(engine.scene().some((item) => item.kind === "foreign")).toBe(true);
+  });
+
+  it("una risorsa si sposta solo fra le defs della radice; chi la usa si sposta e resta modificabile", () => {
+    const other = ['  <defs id="defs2">', "  </defs>"];
+    const source = lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, ...other, PAPER, L1, user("o2b3c4d5e", G), END_G, L2, R3, END_G, END);
+    rejects(source, { op: "move", target: G, parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    const engine = SceneEngine.open(source);
+    const moved = apply(engine, { op: "move", target: G, parent: "defs2", pos: { last: true } });
+    // La `defs` di FubDraw rimasta vuota se ne va con lo spostamento.
+    expect(moved.text).toBe(lf(ROOT, TITLE, '  <defs id="defs2">', ...gradient(G, "private"), "  </defs>", PAPER, L1, user("o2b3c4d5e", G), END_G, L2, R3, END_G, END));
+    const user2 = apply(engine, { op: "move", target: "o2b3c4d5e", parent: "l9k8j7h6g", pos: { last: true } });
+    expect(user2.text).toBe(lf(ROOT, TITLE, '  <defs id="defs2">', ...gradient(G, "private"), "  </defs>", PAPER, L1, END_G, L2, R3, user("o2b3c4d5e", G), END_G, END));
+    expect(engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+  });
+
+  it("set su una risorsa la lascia modificabile", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    expect(apply(engine, { op: "set", id: G, attrs: { "fub:role": "shared" } }).text).toBe(PRIVATE.replace('fub:role="private"', 'fub:role="shared"'));
+    rejects(PRIVATE, { op: "set", id: G, attrs: { href: "#altro" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, attrs: { spreadMethod: "sideways" } }, "invalid-elem");
+  });
+
+  it("set con part cambia una parte della risorsa: il punto di un campione, in un passo", () => {
+    const S = "r5e6f7g8h";
+    const swatch = (color: string): string[] => [
+      `    <linearGradient id="${S}" fub:role="swatch" fub:name="Blu" gradientUnits="userSpaceOnUse">`,
+      "      <title>Il blu del titolo</title>",
+      `      <stop stop-color="${color}"/>`,
+      "    </linearGradient>",
+    ];
+    // Chi lo usa sta anche in un livello bloccato: la risorsa no.
+    const source = lf(ROOT, TITLE, DEFS, ...swatch("#0072b2"), END_DEFS, PAPER, L1, user("o2b3c4d5e", S), END_G, L2_LOCKED, user("o3c4d5e6f", S), END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "set", id: S, part: [1], attrs: { "stop-color": "#d55e00" } });
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, ...swatch("#d55e00"), END_DEFS, PAPER, L1, user("o2b3c4d5e", S), END_G, L2_LOCKED, user("o3c4d5e6f", S), END_G, END));
+    expect(out.inverse).toEqual({ op: "set", id: S, part: [1], attrs: { "stop-color": "#0072b2" } });
+    expect(out.touched).toEqual([S]);
+    expect(engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(source);
+    expect(applied(engine.undo(out.undo)).text).toBe(source);
+
+    // Due cambi della stessa parte, uno dopo l'altro, sono un passo solo;
+    // di due parti diverse no.
+    const again = SceneEngine.open(source);
+    const first = apply(again, { op: "set", id: S, part: [1], attrs: { "stop-color": "#d55e00" } });
+    const second = apply(again, { op: "set", id: S, part: [1], attrs: { "stop-color": "#cc79a7" } });
+    const merged = mergeUndo(first.undo, second.undo)!;
+    expect(merged.inverse).toEqual({ op: "set", id: S, part: [1], attrs: { "stop-color": "#0072b2" } });
+    expect(applied(again.undo(merged)).text).toBe(source);
+    // Le parti contano anche il titolo, il cui contenuto è testo.
+    rejects(source, { op: "set", id: S, part: [0], attrs: { "stop-color": "#d55e00" } }, "invalid-elem");
+    rejects(source, { op: "set", id: S, part: [0, 0], attrs: { "stop-color": "#d55e00" } }, "missing-target");
+    const third = SceneEngine.open(source);
+    const one = apply(third, { op: "set", id: S, part: [1], attrs: { "stop-color": "#d55e00" } });
+    const other = apply(third, { op: "set", id: S, attrs: { "fub:name": "Arancio" } });
+    expect(mergeUndo(one.undo, other.undo)).toBeNull();
+  });
+
+  it("set con part vale soltanto su una parte che c'è di una risorsa, e la lascia modificabile", () => {
+    rejects(PRIVATE, { op: "set", id: G, part: [2], attrs: { offset: "0.5" } }, "missing-target");
+    rejects(PRIVATE, { op: "set", id: G, part: [0, 0], attrs: { offset: "0.5" } }, "missing-target");
+    rejects(PRIVATE, { op: "set", id: "o2b3c4d5e", part: [0], attrs: { fill: "#000000" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: "#root", part: [0], attrs: { "fub:units": "mm" } }, "invalid-elem");
+    for (const part of [[], [-1], [0.5], ["0"], 0, null]) rejects(PRIVATE, { op: "set", id: G, part, attrs: { offset: "0.5" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { id: "r0a0b0c0d" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { "stop-color": "none" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { href: "#altro" } }, "invalid-elem");
+    rejects(PRIVATE, { op: "set", id: G, part: [0], attrs: { offset: "0.5", "offset ": "0.6" } }, "invalid-elem");
+    const engine = SceneEngine.open(PRIVATE);
+    const out = apply(engine, { op: "set", id: G, part: [1], attrs: { offset: "0.5", "stop-opacity": "0.25" } });
+    expect(out.text).toBe(PRIVATE.replace('<stop offset="1" stop-color="#56b4e9"/>', '<stop offset="0.5" stop-color="#56b4e9" stop-opacity="0.25"/>'));
+    expect(out.inverse).toEqual({ op: "set", id: G, part: [1], attrs: { offset: "1", "stop-opacity": null } });
+    expect(parseWireOp({ op: "set", id: G, part: [1], attrs: { offset: "0.5" } })).toEqual({ op: { op: "set", id: G, part: [1], attrs: { offset: "0.5" } } });
+  });
+
+  it("set su chi usa un ritaglio e un filtro lo lascia modificabile", () => {
+    const C = "r2b3c4d5e";
+    const F = "r3c4d5e6f";
+    const clip = [`    <clipPath id="${C}" fub:role="private">`, '      <circle cx="600" cy="160" r="50"/>', "    </clipPath>"];
+    const blur = [`    <filter id="${F}" fub:role="shared">`, '      <feGaussianBlur stdDeviation="4"/>', "    </filter>"];
+    const rect = (attrs: string): string => `    <rect id="o2b3c4d5e" x="500" y="100" width="200" height="120" fill="#e69f00"${attrs}/>`;
+    const source = lf(ROOT, TITLE, DEFS, ...clip, ...blur, END_DEFS, PAPER, L1, rect(` clip-path="url(#${C})" filter="url(#${F})"`), END_G, END);
+    const engine = SceneEngine.open(source);
+    expect(apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { opacity: "0.5", transform: "rotate(10 600 160)" } }).text).toBe(
+      lf(ROOT, TITLE, DEFS, ...clip, ...blur, END_DEFS, PAPER, L1, rect(` clip-path="url(#${C})" filter="url(#${F})" opacity="0.5" transform="rotate(10 600 160)"`), END_G, END),
+    );
+    // Il ritaglio e il filtro che nessuno usa più se ne vanno, e la defs con loro.
+    const cleared = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "clip-path": null, filter: null } });
+    expect(cleared.text).toBe(lf(ROOT, TITLE, PAPER, L1, rect(' opacity="0.5" transform="rotate(10 600 160)"'), END_G, END));
+    expect(engine.scene().every((item) => item.kind !== "foreign")).toBe(true);
+  });
+
+  it("in un batch la risorsa viene prima di chi la usa", () => {
+    const elem: Elem = { tag: "linearGradient", attrs: { id: G, x1: "0", y1: "0", x2: "1", y2: "0" } };
+    const add: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [elem] } };
+    const use: Op = { op: "set", id: "o2b3c4d5e", attrs: { fill: `url(#${G}) #0072b2` } };
+    expect(SceneEngine.open(PLAIN).apply({ op: "batch", ops: [use, add] })).toMatchObject({ outcome: "rejected", reason: "invalid-elem", index: 0 });
+    expect(apply(SceneEngine.open(PLAIN), { op: "batch", ops: [add, use] }).text).toContain(`fill="url(#${G}) #0072b2"`);
+  });
+
+  it("gli id delle risorse e del loro contenuto", () => {
+    const add = (elem: Elem): Op => ({ op: "add", parent: "#root", pos: { first: true }, elem });
+    const defs = (...children: Elem[]): Elem => ({ tag: "defs", attrs: { id: "fub-defs" }, children });
+    const stop: Elem = { tag: "stop", attrs: { offset: "0", "stop-color": "#0072b2" } };
+    rejects(PLAIN, add({ tag: "defs", attrs: { id: "defs2" } }), "invalid-elem");
+    rejects(PLAIN, add(defs({ tag: "linearGradient", attrs: { x2: "1" }, children: [stop] })), "invalid-elem");
+    rejects(PLAIN, add(defs({ tag: "linearGradient", attrs: { id: "o1a2b3c4d" }, children: [stop] })), "invalid-elem");
+    rejects(PLAIN, add(defs({ tag: "linearGradient", attrs: { id: G }, children: [{ ...stop, attrs: { ...stop.attrs, id: "o1a2b3c4d" } }] })), "invalid-elem");
+    const named = apply(SceneEngine.open(PLAIN), add(defs({ tag: "linearGradient", attrs: { id: G }, children: [{ ...stop, attrs: { ...stop.attrs, id: "r0a0b0c0d" } }] })));
+    expect(named.text).toContain('<stop id="r0a0b0c0d" offset="0" stop-color="#0072b2"/>');
+    // Il contenuto di un motivo è senza id, anche un gruppo.
+    const pattern: Elem = {
+      tag: "pattern",
+      attrs: { id: G, x: "0", y: "0", width: "40", height: "40", patternUnits: "userSpaceOnUse" },
+      children: [{ tag: "g", attrs: {}, children: [{ tag: "rect", attrs: { width: "20", height: "20", fill: "#0072b2" } }] }],
+    };
+    expect(apply(SceneEngine.open(PLAIN), add(defs(pattern))).text).toContain("      <g>\n        <rect width=\"20\" height=\"20\" fill=\"#0072b2\"/>\n      </g>");
+  });
+
+  it("first sotto la radice: una defs va prima della carta, il resto dopo le defs e la carta in testa", () => {
+    const layer: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "Sfondo" } } };
+    const engine = SceneEngine.open(PRIVATE);
+    expect(apply(engine, layer).text).toBe(
+      lf(ROOT, TITLE, DEFS, ...gradient(G, "private"), END_DEFS, PAPER, '  <g id="l0a1b2c3d" fub:layer="Sfondo">', "  </g>", L1, user("o2b3c4d5e", G), R3, END_G, END),
+    );
+    // Una defs in fondo, come la scrive Figma, non sta in testa.
+    const figma = lf(ROOT, L1, R2, END_G, '  <defs id="defs1">', ...gradient(G, null), "  </defs>", END);
+    expect(apply(SceneEngine.open(figma), layer).text).toBe(
+      lf(ROOT, '  <g id="l0a1b2c3d" fub:layer="Sfondo">', "  </g>", L1, R2, END_G, '  <defs id="defs1">', ...gradient(G, null), "  </defs>", END),
+    );
+    const defs: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" } } };
+    expect(apply(SceneEngine.open(lf(ROOT, PAPER, L1, R2, END_G, END)), defs).text).toBe(lf(ROOT, '  <defs id="fub-defs"/>', PAPER, L1, R2, END_G, END));
+  });
+
+  it("una risorsa privata raccolta da una defs che non è di FubDraw lascia la defs", () => {
+    const source = lf(ROOT, '  <defs id="defs2">', ...gradient(G, "private"), "  </defs>", PAPER, L1, user("o2b3c4d5e", G), END_G, END);
+    const out = apply(SceneEngine.open(source), { op: "set", id: "o2b3c4d5e", attrs: { fill: "#e69f00" } });
+    expect(out.text).toBe(lf(ROOT, '  <defs id="defs2">', "  </defs>", PAPER, L1, R2, END_G, END));
+  });
+
+  it("l'undo della raccolta che non è esatto rimette risorse e riferimenti", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    const out = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#e69f00" } });
+    apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#111111" } });
+    const undone = applied(engine.undo(out.undo));
+    expect(undone.text).toBe(PRIVATE.replace('fill="#009e73"', 'fill="#111111"'));
+    expect(engine.scene()).toEqual(readScene(undone.text).items);
+    // Il ripeti, dopo un altro cambiamento, raccoglie di nuovo.
+    apply(engine, { op: "set", id: "o3c4d5e6f", attrs: { fill: "#009e73" } });
+    expect(applied(engine.undo(undone.undo)).text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, R3, END_G, END));
+  });
+
+  it("due set di cui il secondo raccoglie non si fondono", () => {
+    const engine = SceneEngine.open(PRIVATE);
+    const first = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: `url(#${G}) #000000` } });
+    const second = apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#e69f00" } });
+    expect(mergeUndo(first.undo, second.undo)).toBeNull();
+  });
+
+  it("un documento non riceve risorse oltre il limite, ma si modifica", () => {
+    const many = (count: number): string => {
+      const lines: string[] = [];
+      for (let i = 0; i < count; i++) lines.push(`    <linearGradient id="r${i.toString(36).padStart(8, "0")}"/>`);
+      return lf(ROOT, DEFS, ...lines, END_DEFS, PAPER, L1, R2, END_G, END);
+    };
+    const one: Op = { op: "add", parent: "fub-defs", pos: { last: true }, elem: { tag: "linearGradient", attrs: { id: "rzzzzzzzz" } } };
+    rejects(many(MAX_RESOURCES), one, "limit");
+    const full = SceneEngine.open(many(MAX_RESOURCES + 1));
+    expect(full.apply({ op: "set", id: "o2b3c4d5e", attrs: { fill: "#000000" } }).outcome).toBe("applied");
+    expect(full.apply(one)).toMatchObject({ outcome: "rejected", reason: "limit" });
+    expect(SceneEngine.open(many(MAX_RESOURCES - 1)).apply(one).outcome).toBe("applied");
+  });
+});
+
+describe("gli stili", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const S = "r5e6f7a8b";
+  const STYLE = `    <polyline id="${S}" fub:role="style" fub:name="Riquadro" points="0,0 100,0 100,100" fill="#0072b2" stroke="#1a1a1a" stroke-width="2"/>`;
+  /// Un rettangolo nel livello che segue lo stile.
+  const follower = (id: string): string => `    <rect id="${id}" fub:style="${S}" x="500" y="100" width="200" height="120" fill="#0072b2" stroke="#1a1a1a" stroke-width="2"/>`;
+  const FOLLOWED = lf(ROOT, TITLE, DEFS, STYLE, END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+  const ALONE = lf(ROOT, TITLE, DEFS, STYLE, END_DEFS, PAPER, L1, R2, END_G, END);
+
+  it("uno stile seguito non si toglie, né con la sua defs, né togliendogli l'id", () => {
+    rejects(FOLLOWED, { op: "remove", target: S }, "in-use");
+    rejects(FOLLOWED, { op: "remove", target: "fub-defs" }, "in-use");
+    rejects(FOLLOWED, { op: "ident", path: [1, 0], tag: "polyline", id: null }, "in-use");
+  });
+
+  it("uno stile che nessuno segue non si raccoglie, e si toglie", () => {
+    const engine = SceneEngine.open(ALONE);
+    expect(apply(engine, { op: "remove", target: "o2b3c4d5e" }).text).toBe(lf(ROOT, TITLE, DEFS, STYLE, END_DEFS, PAPER, L1, END_G, END));
+    const out = apply(SceneEngine.open(ALONE), { op: "remove", target: S });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, END_G, END));
+    expect(applied(SceneEngine.open(out.text).apply(out.inverse)).text).toBe(ALONE);
+  });
+
+  it("chi comincia a seguire uno stile lo trattiene, chi smette lo lascia", () => {
+    const engine = SceneEngine.open(ALONE);
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "fub:style": S } });
+    expect(engine.apply({ op: "remove", target: S })).toMatchObject({ outcome: "rejected", reason: "in-use" });
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { "fub:style": null } });
+    expect(engine.apply({ op: "remove", target: S }).outcome).toBe("applied");
+  });
+
+  it("uno stile nuovo ha l'id di una risorsa, con elem e con raw", () => {
+    const text: Elem = { tag: "text", attrs: { id: "r6f7a8b9c", "fub:role": "style", "fub:name": "Nota", "fub:leading": "1.4", "font-size": "14", fill: "#1a1a1a" } };
+    const engine = SceneEngine.open(FOLLOWED);
+    const out = apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, elem: text });
+    expect(out.text).toBe(
+      lf(ROOT, TITLE, DEFS, STYLE, '    <text id="r6f7a8b9c" fub:role="style" fub:name="Nota" fub:leading="1.4" fill="#1a1a1a" font-size="14"/>', END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END),
+    );
+    expect(engine.scene().find((item) => item.kind === "element" && item.id === "r6f7a8b9c")).toMatchObject({ lifecycle: "style", style: { name: "Nota", kind: "text" } });
+    const raw = '<polyline id="r7a8b9c0d" fub:role="style" fub:name="Avviso" points="0,0 100,0 100,100" stroke="#d55e00"><title>Per gli avvisi</title></polyline>';
+    expect(apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, raw }).text).toContain(raw);
+    rejects(FOLLOWED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...text, attrs: { ...text.attrs, id: "o6f7a8b9c" } } }, "invalid-elem");
+    rejects(FOLLOWED, { op: "add", parent: "fub-defs", pos: { last: true }, raw: raw.replace("r7a8b9c0d", "o7a8b9c0d") }, "invalid-elem");
+  });
+
+  it("uno stile non entra con l'id che un oggetto segue già", () => {
+    const dangling = lf(ROOT, TITLE, DEFS, '    <linearGradient id="r1a2b3c4d"/>', END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+    const elem: Elem = { tag: "polyline", attrs: { id: S, "fub:role": "style", "fub:name": "Riquadro", points: "0,0 100,0 100,100" } };
+    rejects(dangling, { op: "add", parent: "fub-defs", pos: { last: true }, elem }, "duplicate-id");
+  });
+
+  it("fub:style verso una risorsa che non è uno stile non la trattiene", () => {
+    const swatch = '    <linearGradient id="r5e6f7a8b" fub:role="swatch" fub:name="Blu" gradientUnits="userSpaceOnUse"><stop stop-color="#0072b2"/></linearGradient>';
+    const wrong = lf(ROOT, TITLE, DEFS, swatch, END_DEFS, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+    expect(apply(SceneEngine.open(wrong), { op: "remove", target: S }).text).toBe(lf(ROOT, TITLE, PAPER, L1, follower("o2b3c4d5e"), END_G, END));
+    expect(apply(SceneEngine.open(wrong), { op: "ident", path: [1, 0], tag: "linearGradient", id: null }).text).toBe(wrong.replace(` id="${S}"`, ""));
+    // Una sfumatura entra anche con l'id che un oggetto segue: chi segue
+    // resta com'era, con S018.
+    const dangling = lf(ROOT, TITLE, PAPER, L1, follower("o2b3c4d5e"), END_G, END);
+    const gradient: Elem = { tag: "linearGradient", attrs: { id: S }, children: [{ tag: "stop", attrs: { offset: "0", "stop-color": "#000000" } }] };
+    const out = apply(SceneEngine.open(dangling), {
+      op: "batch",
+      ops: [
+        { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" } } },
+        { op: "add", parent: "fub-defs", pos: { last: true }, elem: gradient },
+      ],
+    });
+    expect(readScene(out.text).diagnostics.map((d) => d.code)).toContain("S018");
+  });
+});
+
+describe("i simboli", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const Y = "r5e6f7a8b";
+  const Z = "r6f7a8b9c";
+  /// Un simbolo nella `defs` con `body` dentro.
+  const symbol = (id: string, ...body: string[]): string[] => [`    <symbol id="${id}" overflow="visible">`, ...body, "    </symbol>"];
+  const BULB = '      <circle id="o9a8b7c6d" cx="0" cy="0" r="20" fill="#f0e442"/>';
+  /// Un'istanza di `of` nel livello.
+  const instance = (id: string, of = Y): string => `    <use id="${id}" transform="translate(200 150)" href="#${of}"/>`;
+  const USED = lf(ROOT, TITLE, DEFS, ...symbol(Y, "      <title>Lampadina</title>", BULB), END_DEFS, PAPER, L1, instance("o2b3c4d5e"), END_G, END);
+  const ALONE = lf(ROOT, TITLE, DEFS, ...symbol(Y, "      <title>Lampadina</title>", BULB), END_DEFS, PAPER, L1, R2, END_G, END);
+  const roleOf = (engine: SceneEngine, id: string): string | undefined => {
+    const item = engine.scene().find((each) => each.kind === "element" && each.id === id);
+    return item?.kind === "element" ? item.role : undefined;
+  };
+
+  it("un simbolo usato non si toglie, né con la sua defs, né togliendogli l'id", () => {
+    rejects(USED, { op: "remove", target: Y }, "in-use");
+    rejects(USED, { op: "remove", target: "fub-defs" }, "in-use");
+    rejects(USED, { op: "ident", path: [1, 0], tag: "symbol", id: null }, "in-use");
+  });
+
+  it("un simbolo che nessuno usa non si raccoglie, e si toglie; l'undo lo rimette", () => {
+    const engine = SceneEngine.open(USED);
+    expect(apply(engine, { op: "remove", target: "o2b3c4d5e" }).text).toBe(
+      lf(ROOT, TITLE, DEFS, ...symbol(Y, "      <title>Lampadina</title>", BULB), END_DEFS, PAPER, L1, END_G, END),
+    );
+    const out = apply(SceneEngine.open(ALONE), { op: "remove", target: Y });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R2, END_G, END));
+    const back = SceneEngine.open(out.text);
+    expect(applied(back.apply(out.inverse)).text).toBe(ALONE);
+    expect(roleOf(back, Y)).toBe("symbol");
+    expect(roleOf(back, "o9a8b7c6d")).toBe("circle");
+  });
+
+  it("chi usa e il simbolo si tolgono insieme, in un batch, e tornano insieme", () => {
+    const engine = SceneEngine.open(USED);
+    const out = apply(engine, { op: "batch", ops: [{ op: "remove", target: "o2b3c4d5e" }, { op: "remove", target: Y }] });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    const back = SceneEngine.open(out.text);
+    expect(applied(back.apply(out.inverse)).text).toBe(USED);
+    expect(roleOf(back, "o2b3c4d5e")).toBe("instance");
+  });
+
+  it("un simbolo nuovo ha l'id di una risorsa e il suo contenuto quelli degli oggetti, con elem e con raw", () => {
+    const rect: Elem = { tag: "rect", attrs: { id: "o7a8b9c0d", width: "10", height: "10", fill: "#0072b2" } };
+    const elem: Elem = { tag: "symbol", attrs: { id: Z, overflow: "visible" }, children: [{ tag: "title", attrs: {}, text: "Quadro" }, rect] };
+    const engine = SceneEngine.open(USED);
+    const out = apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, elem });
+    expect(out.text).toBe(
+      lf(
+        ROOT,
+        TITLE,
+        DEFS,
+        ...symbol(Y, "      <title>Lampadina</title>", BULB),
+        ...symbol(Z, "      <title>Quadro</title>", '      <rect id="o7a8b9c0d" width="10" height="10" fill="#0072b2"/>'),
+        END_DEFS,
+        PAPER,
+        L1,
+        instance("o2b3c4d5e"),
+        END_G,
+        END,
+      ),
+    );
+    expect(roleOf(engine, Z)).toBe("symbol");
+    expect(roleOf(engine, "o7a8b9c0d")).toBe("rect");
+    const raw = `<symbol id="r7a8b9c0d" overflow="visible"><use id="o8b9c0d1e" href="#${Y}"/></symbol>`;
+    apply(engine, { op: "add", parent: "fub-defs", pos: { last: true }, raw });
+    expect(roleOf(engine, "r7a8b9c0d")).toBe("symbol");
+    expect(roleOf(engine, "o8b9c0d1e")).toBe("instance");
+    rejects(USED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...elem, attrs: { ...elem.attrs, id: "o6f7a8b9c" } } }, "invalid-elem");
+    rejects(USED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...elem, children: [{ ...rect, attrs: { ...rect.attrs, id: "r7a8b9c0d" } }] } }, "invalid-elem");
+    rejects(USED, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { ...elem, children: [{ ...rect, attrs: { width: "10", height: "10" } }] } }, "invalid-elem");
+    // Fuori da una defs un simbolo è estraneo.
+    rejects(USED, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem }, "invalid-elem");
+  });
+
+  it("un simbolo scrive l'origine dalla libreria subito dopo l'id, e overflow dopo la presentazione", () => {
+    const source = "Simboli/Impianti.svg#r00000004 0123456789abcdef";
+    const rect: Elem = { tag: "rect", attrs: { id: "o7a8b9c0d", width: "10", height: "10" } };
+    const elem: Elem = { tag: "symbol", attrs: { overflow: "visible", "fub:source": source, id: Z }, children: [rect] };
+    const out = apply(SceneEngine.open(ALONE), { op: "add", parent: "fub-defs", pos: { last: true }, elem });
+    expect(out.text).toContain(`    <symbol id="${Z}" fub:source="${source}" overflow="visible">\n      <rect id="o7a8b9c0d" width="10" height="10"/>\n    </symbol>\n`);
+  });
+
+  it("in un batch il simbolo viene prima delle sue istanze", () => {
+    const PLAIN = lf(ROOT, TITLE, PAPER, L1, R2, END_G, END);
+    const elem: Elem = { tag: "symbol", attrs: { id: Y, overflow: "visible" }, children: [{ tag: "circle", attrs: { id: "o9a8b7c6d", cx: "0", cy: "0", r: "20", fill: "#f0e442" } }] };
+    const add: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [elem] } };
+    const use: Op = { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "use", attrs: { id: "o1b2c3d4e", href: `#${Y}`, transform: "translate(200 150)" } } };
+    expect(SceneEngine.open(PLAIN).apply({ op: "batch", ops: [use, add] })).toMatchObject({ outcome: "rejected", index: 0, reason: "invalid-elem" });
+    const engine = SceneEngine.open(PLAIN);
+    expect(apply(engine, { op: "batch", ops: [add, use] }).text).toBe(lf(ROOT, TITLE, DEFS, ...symbol(Y, BULB), END_DEFS, PAPER, L1, R2, instance("o1b2c3d4e"), END_G, END));
+    expect(roleOf(engine, "o1b2c3d4e")).toBe("instance");
+  });
+
+  it("un simbolo non contiene mai sé stesso, nemmeno attraverso un altro", () => {
+    const self: Op = { op: "add", parent: Y, pos: { last: true }, elem: { tag: "use", attrs: { id: "o1b2c3d4e", href: `#${Y}` } } };
+    rejects(USED, self, "cycle");
+    rejects(USED, { op: "move", target: "o2b3c4d5e", parent: Y, pos: { last: true } }, "cycle");
+    // A usa B, e B non può usare A: né con una nuova istanza, né cambiando
+    // quella che ha, né spostandoci dentro un'istanza di A.
+    const TWO = lf(
+      ROOT,
+      TITLE,
+      DEFS,
+      ...symbol(Y, BULB),
+      ...symbol(Z, '      <use id="o3c4d5e6f" href="#r5e6f7a8b"/>', '      <use id="o4d5e6f7a" href="#r5e6f7a8b"/>'),
+      END_DEFS,
+      PAPER,
+      L1,
+      instance("o2b3c4d5e", Z),
+      END_G,
+      END,
+    );
+    rejects(TWO, { op: "add", parent: Y, pos: { last: true }, elem: { tag: "use", attrs: { id: "o1b2c3d4e", href: `#${Z}` } } }, "cycle");
+    rejects(TWO, { op: "set", id: "o3c4d5e6f", attrs: { href: `#${Z}` } }, "cycle");
+    rejects(TWO, { op: "move", target: "o2b3c4d5e", parent: Y, pos: { last: true } }, "cycle");
+    // Un'istanza di B dentro A, se B non usa più A, va bene.
+    const engine = SceneEngine.open(TWO);
+    apply(engine, {
+      op: "batch",
+      ops: [
+        { op: "remove", target: "o3c4d5e6f" },
+        { op: "remove", target: "o4d5e6f7a" },
+        { op: "move", target: "o2b3c4d5e", parent: Y, pos: { last: true } },
+      ],
+    });
+    expect(roleOf(engine, "o2b3c4d5e")).toBe("instance");
+  });
+
+  it("il contenuto di un simbolo si modifica come quello di un gruppo, e le istanze restano", () => {
+    const engine = SceneEngine.open(USED);
+    expect(apply(engine, { op: "set", id: "o9a8b7c6d", attrs: { fill: "#e69f00" } }).text).toBe(USED.replace('fill="#f0e442"', 'fill="#e69f00"'));
+    const out = apply(engine, { op: "add", parent: Y, pos: { last: true }, elem: R4_ELEM });
+    expect(out.text).toContain(`${BULB.replace("#f0e442", "#e69f00")}\n      <rect id="o4d5e6f7g" x="10" y="20" width="30" height="40"/>\n    </symbol>`);
+    expect(roleOf(engine, "o2b3c4d5e")).toBe("instance");
+    // Un'istanza si sposta e si trasforma come un oggetto.
+    expect(apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { transform: "translate(10 20) rotate(45)" } }).text).toContain('transform="translate(10 20) rotate(45)"');
+    rejects(USED, { op: "set", id: "o2b3c4d5e", attrs: { x: "10" } }, "invalid-elem");
+    rejects(USED, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#000000" } }, "invalid-elem");
+  });
+
+  it("un simbolo si sposta soltanto fra le defs della radice, e chi lo usa resta un'istanza", () => {
+    const other = ['  <defs id="defs2">', "  </defs>"];
+    const source = lf(ROOT, TITLE, DEFS, ...symbol(Y, BULB), END_DEFS, ...other, PAPER, L1, instance("o2b3c4d5e"), END_G, END);
+    rejects(source, { op: "move", target: Y, parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    const engine = SceneEngine.open(source);
+    const moved = apply(engine, { op: "move", target: Y, parent: "defs2", pos: { last: true } });
+    expect(moved.text).toBe(lf(ROOT, TITLE, '  <defs id="defs2">', ...symbol(Y, BULB), "  </defs>", PAPER, L1, instance("o2b3c4d5e"), END_G, END));
+    expect(roleOf(engine, Y)).toBe("symbol");
+    expect(roleOf(engine, "o2b3c4d5e")).toBe("instance");
+    const back = SceneEngine.open(moved.text);
+    expect(applied(back.apply(moved.inverse)).text).toBe(source);
+    expect(roleOf(back, Y)).toBe("symbol");
+  });
+
+  it("i simboli contano fra le risorse", () => {
+    const many = lf(ROOT, TITLE, DEFS, ...Array.from({ length: MAX_RESOURCES }, (_, k) => `    <symbol id="r${k.toString(16).padStart(8, "0")}" overflow="visible"/>`), END_DEFS, PAPER, L1, R2, END_G, END);
+    rejects(many, { op: "add", parent: "fub-defs", pos: { last: true }, elem: { tag: "symbol", attrs: { id: Y, overflow: "visible" } } }, "limit");
+  });
+});
+
+describe("le ripetizioni", () => {
+  const GROUP = "o5e6f7a8b";
+  const ORIGINAL = "o6f7a8b9c";
+  const C1 = "o7a8b9c0d";
+  const C2 = "o8b9c0d1e";
+  const group = (repeat: string | null, ...body: string[]): string[] => [`    <g id="${GROUP}"${repeat === null ? "" : ` fub:repeat="${repeat}"`}>`, ...body, "    </g>"];
+  const ORIG = `      <rect id="${ORIGINAL}" x="100" y="100" width="200" height="120" fill="#0072b2"/>`;
+  /// Una copia `id` dell'originale, spostata di `dx`.
+  const copy = (id: string, dx: number, of = ORIGINAL): string => `      <use id="${id}" transform="translate(${dx} 0)" href="#${of}"/>`;
+  const ROW = lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG, copy(C1, 300), copy(C2, 600)), END_G, END);
+  const item = (engine: SceneEngine, id: string) => engine.scene().find((each) => each.kind === "element" && each.id === id);
+  const roleOf = (engine: SceneEngine, id: string): string | undefined => {
+    const found = item(engine, id);
+    return found?.kind === "element" ? found.role : undefined;
+  };
+
+  it("un originale con copie non si toglie, non esce dal gruppo e non perde l'id", () => {
+    rejects(ROW, { op: "remove", target: ORIGINAL }, "in-use");
+    rejects(ROW, { op: "move", target: ORIGINAL, parent: "l3f8a0c2d", pos: { last: true } }, "in-use");
+    rejects(ROW, { op: "ident", path: [2, 0, 0], tag: "rect", id: null }, "in-use");
+    const path = [2, 0, 0];
+    rejects(ROW, { op: "batch", ops: [{ op: "ident", path, tag: "rect", id: null }, { op: "ident", path, tag: "rect", id: "o9c0d1e2f" }] }, "in-use");
+  });
+
+  it("un gruppo con copie resta una ripetizione", () => {
+    rejects(ROW, { op: "set", id: GROUP, attrs: { "fub:repeat": null } }, "in-use");
+    rejects(ROW, { op: "set", id: GROUP, attrs: { "fub:repeat": "radial 1 0 0" } }, "in-use");
+    rejects(ROW, { op: "set", id: GROUP, attrs: { "fub:repeat": "spiral 3 0 0" } }, "in-use");
+    // Cambia tipo, e le copie restano copie.
+    const engine = SceneEngine.open(ROW);
+    const out = apply(engine, { op: "set", id: GROUP, attrs: { "fub:repeat": "radial 3 400 160" } });
+    expect(out.text).toBe(ROW.replace('fub:repeat="grid 3 1 300 0"', 'fub:repeat="radial 3 400 160"'));
+    expect(item(engine, GROUP)).toMatchObject({ repeat: { kind: "radial", count: 3, center: [400, 160] } });
+    expect([roleOf(engine, C1), roleOf(engine, C2)]).toEqual(["copy", "copy"]);
+    // Senza copie il gruppo smette di essere una ripetizione quando vuole.
+    const alone = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG), END_G, END));
+    expect(apply(alone, { op: "set", id: GROUP, attrs: { "fub:repeat": null } }).text).toBe(lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG), END_G, END));
+  });
+
+  it("la ripetizione si toglie intera, o le copie prima dell'originale, e l'undo la rimette", () => {
+    const whole = apply(SceneEngine.open(ROW), { op: "remove", target: GROUP });
+    expect(whole.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    const back = SceneEngine.open(whole.text);
+    expect(applied(back.apply(whole.inverse)).text).toBe(ROW);
+    expect([roleOf(back, ORIGINAL), roleOf(back, C1), roleOf(back, C2)]).toEqual(["rect", "copy", "copy"]);
+    const engine = SceneEngine.open(ROW);
+    const out = apply(engine, {
+      op: "batch",
+      ops: [
+        { op: "remove", target: C1 },
+        { op: "remove", target: C2 },
+        { op: "remove", target: ORIGINAL },
+        { op: "set", id: GROUP, attrs: { "fub:repeat": null } },
+      ],
+    });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, ...group(null), END_G, END));
+    const again = SceneEngine.open(out.text);
+    expect(applied(again.apply(out.inverse)).text).toBe(ROW);
+    expect(roleOf(again, C2)).toBe("copy");
+  });
+
+  it("una copia nuova si aggiunge in una ripetizione che ha il suo originale, con elem e con raw", () => {
+    const engine = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG), END_G, END));
+    const use = (id: string, dx: number, more: Record<string, string> = {}): Elem => ({ tag: "use", attrs: { id, transform: `translate(${dx} 0)`, href: `#${ORIGINAL}`, ...more } });
+    apply(engine, { op: "add", parent: GROUP, pos: { last: true }, elem: use(C1, 300) });
+    const out = apply(engine, { op: "add", parent: GROUP, pos: { last: true }, raw: `<use id="${C2}" transform="translate(600 0)" href="#${ORIGINAL}"/>` });
+    expect(out.text).toBe(ROW);
+    expect([roleOf(engine, C1), roleOf(engine, C2)]).toEqual(["copy", "copy"]);
+    expect(item(engine, C1)).toMatchObject({ original: ORIGINAL });
+    // Una copia non ha altri attributi, e fuori da una ripetizione non c'è.
+    rejects(ROW, { op: "add", parent: GROUP, pos: { last: true }, elem: use("o9c0d1e2f", 900, { fill: "#000000" }) }, "invalid-elem");
+    rejects(ROW, { op: "add", parent: GROUP, pos: { last: true }, elem: use("o9c0d1e2f", 900, { opacity: "0.5" }) }, "invalid-elem");
+    rejects(ROW, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: use("o9c0d1e2f", 900) }, "invalid-elem");
+    rejects(lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG), END_G, END), { op: "add", parent: GROUP, pos: { last: true }, elem: use(C1, 300) }, "invalid-elem");
+  });
+
+  it("in un batch la ripetizione e l'originale vengono prima delle copie", () => {
+    const PLAIN = lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG), END_G, END);
+    const repeat: Op = { op: "set", id: GROUP, attrs: { "fub:repeat": "grid 3 1 300 0" } };
+    const add = (id: string, dx: number): Op => ({ op: "add", parent: GROUP, pos: { last: true }, elem: { tag: "use", attrs: { id, transform: `translate(${dx} 0)`, href: `#${ORIGINAL}` } } });
+    expect(SceneEngine.open(PLAIN).apply({ op: "batch", ops: [add(C1, 300), repeat] })).toMatchObject({ outcome: "rejected", index: 0, reason: "invalid-elem" });
+    const engine = SceneEngine.open(PLAIN);
+    expect(apply(engine, { op: "batch", ops: [repeat, add(C1, 300), add(C2, 600)] }).text).toBe(ROW);
+    expect(roleOf(engine, C2)).toBe("copy");
+    // Un gruppo nuovo con l'originale e le copie, in un add solo: fub:repeat
+    // dopo l'id.
+    const elem: Elem = {
+      tag: "g",
+      attrs: { "fub:repeat": "grid 3 1 300 0", id: GROUP },
+      children: [
+        { tag: "rect", attrs: { id: ORIGINAL, x: "100", y: "100", width: "200", height: "120", fill: "#0072b2" } },
+        { tag: "use", attrs: { href: `#${ORIGINAL}`, transform: "translate(300 0)", id: C1 } },
+        { tag: "use", attrs: { href: `#${ORIGINAL}`, transform: "translate(600 0)", id: C2 } },
+      ],
+    };
+    const fresh = SceneEngine.open(lf(ROOT, TITLE, PAPER, L1, END_G, END));
+    expect(apply(fresh, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem }).text).toBe(ROW);
+    expect(roleOf(fresh, C1)).toBe("copy");
+  });
+
+  it("un use estraneo non diventa una copia perché un fratello diventa il suo originale", () => {
+    const FOREIGN = '      <use transform="translate(300 0)" href="#o6f7a8b9c"/>';
+    const loose = lf(ROOT, TITLE, PAPER, L1, ...group(null, ORIG, FOREIGN), END_G, END);
+    expect(readScene(loose).items.some((each) => each.kind === "foreign")).toBe(true);
+    rejects(loose, { op: "set", id: GROUP, attrs: { "fub:repeat": "grid 2 1 300 0" } }, "duplicate-id");
+    const RECT = '      <rect x="100" y="100" width="200" height="120" fill="#0072b2"/>';
+    const nameless = lf(ROOT, TITLE, PAPER, L1, ...group("grid 2 1 300 0", RECT, FOREIGN), END_G, END);
+    rejects(nameless, { op: "ident", path: [2, 0, 0], tag: "rect", id: ORIGINAL }, "duplicate-id");
+  });
+
+  it("una copia si trasforma e si sposta fra i fratelli, ma non esce dalla ripetizione", () => {
+    const engine = SceneEngine.open(ROW);
+    expect(apply(engine, { op: "set", id: C1, attrs: { transform: "matrix(-1 0 0 1 800 0)" } }).text).toBe(ROW.replace("translate(300 0)", "matrix(-1 0 0 1 800 0)"));
+    expect(roleOf(engine, C1)).toBe("copy");
+    rejects(ROW, { op: "set", id: C1, attrs: { fill: "#000000" } }, "invalid-elem");
+    rejects(ROW, { op: "set", id: C1, attrs: { href: "#o9c0d1e2f" } }, "invalid-elem");
+    rejects(ROW, { op: "move", target: C1, parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    const first = apply(SceneEngine.open(ROW), { op: "move", target: C2, parent: GROUP, pos: { first: true } });
+    expect(first.text).toBe(lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", copy(C2, 600), ORIG, copy(C1, 300)), END_G, END));
+    const moved = SceneEngine.open(first.text);
+    expect(roleOf(moved, C2)).toBe("copy");
+  });
+
+  it("la ripetizione si sposta intera, e nell'altro livello le copie restano copie", () => {
+    const source = lf(ROOT, TITLE, PAPER, L1, ...group("grid 3 1 300 0", ORIG, copy(C1, 300), copy(C2, 600)), END_G, L2, R3, END_G, END);
+    const engine = SceneEngine.open(source);
+    const out = apply(engine, { op: "move", target: GROUP, parent: "l9k8j7h6g", pos: { last: true } });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, L2, R3, ...group("grid 3 1 300 0", ORIG, copy(C1, 300), copy(C2, 600)), END_G, END));
+    expect([roleOf(engine, C1), roleOf(engine, C2)]).toEqual(["copy", "copy"]);
+    // Dentro un altro gruppo cambia il rientro, anche dentro una copia.
+    const named = (indent: string): string[] => [`${indent}<use id="${C1}" transform="translate(300 0)" href="#${ORIGINAL}">`, `${indent}  <title>Seconda</title>`, `${indent}</use>`];
+    const deep = (lines: string[]): string[] => lines.map((line) => `  ${line}`);
+    const titled = lf(ROOT, TITLE, PAPER, L1, ...group("grid 2 1 300 0", ORIG, ...named("      ")), END_G, L2, '    <g id="o4d5e6f7a">', "    </g>", END_G, END);
+    const inside = apply(SceneEngine.open(titled), { op: "move", target: GROUP, parent: "o4d5e6f7a", pos: { last: true } });
+    expect(inside.text).toBe(lf(ROOT, TITLE, PAPER, L1, END_G, L2, '    <g id="o4d5e6f7a">', ...deep(group("grid 2 1 300 0", ORIG, ...named("      "))), "    </g>", END_G, END));
+    const back = SceneEngine.open(inside.text);
+    expect(roleOf(back, C1)).toBe("copy");
+    expect(applied(back.apply(inside.inverse)).text).toBe(titled);
+  });
+});
+
+describe("ciò che segue", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const G = "r1a2b3c4d";
+  const GRADIENT = [
+    `    <linearGradient id="${G}" fub:role="shared" x1="0" y1="0" x2="1" y2="0">`,
+    '      <stop offset="0" stop-color="#0072b2"/>',
+    '      <stop offset="1" stop-color="#56b4e9"/>',
+    "    </linearGradient>",
+  ];
+  const E1_BLACK = E1.replace('stroke="#0072b2"', 'stroke="#000000"');
+  const R2_BLACK = R2.replace('fill="#e69f00"', 'fill="#000000"');
+  const R3_USER = `    <rect id="o3c4d5e6f" x="800" y="100" width="200" height="120" fill="url(#${G}) #0072b2"/>`;
+  const stroke: Op = { op: "set", id: "o1a2b3c4d", attrs: { stroke: "#000000" } };
+  const fill = (id: string, value: string): Op => ({ op: "set", id, attrs: { fill: value } });
+  const MISSING = fill("o9z9z9z9z", "#000000");
+
+  /// Un motore su `source` che, a ogni operazione che tocca l'ellisse,
+  /// aggiunge `extra`, e conta le volte in cui lo chiede.
+  const following = (source: string, extra: () => Op | null): { engine: SceneEngine; calls: ReadonlySet<string>[] } => {
+    const engine = SceneEngine.open(source);
+    const calls: ReadonlySet<string>[] = [];
+    engine.follow = (_model, touched) => {
+      calls.push(new Set(touched));
+      return touched.has("o1a2b3c4d") ? extra() : null;
+    };
+    return { engine, calls };
+  };
+
+  it("va nello stesso passo, e un undo solo lo toglie, byte per byte", () => {
+    const { engine, calls } = following(BASE, () => fill("o2b3c4d5e", "#000000"));
+    const out = apply(engine, stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3, END_G, END));
+    expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+    expect([...out.touched].sort()).toEqual(["o1a2b3c4d", "o2b3c4d5e"]);
+    // Il secondo giro vede ciò che ha toccato il primo, e non dice niente.
+    expect(calls).toEqual([new Set(["o1a2b3c4d"]), new Set(["o2b3c4d5e"])]);
+    expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("annullato dall'inversa, non si chiede di nuovo: l'inversa porta già la sua", () => {
+    const { engine, calls } = following(BASE, () => fill("o2b3c4d5e", "#000000"));
+    const out = apply(engine, stroke);
+    expect(calls).toHaveLength(2);
+    apply(engine, fill("o3c4d5e6f", "#111111"));
+    expect(calls).toHaveLength(3);
+    const undone = applied(engine.undo(out.undo));
+    expect(undone.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1, R2, R3.replace("#009e73", "#111111"), END_G, END));
+    expect(calls).toHaveLength(3);
+  });
+
+  it("null lascia l'operazione com'è", () => {
+    const { engine, calls } = following(BASE, () => null);
+    const out = apply(engine, stroke);
+    expect(out.forward).toEqual(stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+    expect(calls).toEqual([new Set(["o1a2b3c4d"])]);
+  });
+
+  it("il passo resta col nome dell'operazione chiesta", () => {
+    const { engine } = following(BASE, () => ({ op: "batch", label: "Seguito", ops: [fill("o2b3c4d5e", "#000000")] }));
+    expect(apply(engine, stroke).forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+    const named: Op = { op: "batch", label: "Colore", ops: [fill("o1a2b3c4d", "#000000")] };
+    const out = apply(engine, named);
+    expect(out.forward).toEqual({ op: "batch", label: "Colore", ops: [fill("o1a2b3c4d", "#000000"), fill("o2b3c4d5e", "#000000")] });
+    expect(out.inverse).toMatchObject({ op: "batch", label: "Colore" });
+  });
+
+  it("un seguito rifiutato non c'è, nemmeno a metà, e l'operazione resta con ciò che ha toccato", () => {
+    for (const extra of [MISSING, { op: "batch", ops: [fill("o2b3c4d5e", "#000000"), MISSING] } as Op]) {
+      const { engine } = following(BASE, () => extra);
+      const out = apply(engine, stroke);
+      expect(out.forward).toEqual(stroke);
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+      expect(out.touched).toEqual(["o1a2b3c4d"]);
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    }
+  });
+
+  it("un seguito che non si sa calcolare non c'è", () => {
+    const { engine } = following(BASE, () => {
+      throw new Error("guasto");
+    });
+    const out = apply(engine, stroke);
+    expect(out.forward).toEqual(stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+
+  it("un'operazione rifiutata non lo chiede", () => {
+    const { engine, calls } = following(BASE, () => fill("o2b3c4d5e", "#000000"));
+    expect(engine.apply({ op: "batch", ops: [stroke, MISSING] })).toMatchObject({ outcome: "rejected", reason: "missing-target" });
+    expect(engine.text).toBe(BASE);
+    expect(calls).toEqual([]);
+  });
+
+  it("la raccolta prende, nello stesso passo, ciò che il seguito lascia solo", () => {
+    const source = lf(ROOT, TITLE, DEFS, ...GRADIENT, END_DEFS, PAPER, L1, E1, R2, R3_USER, END_G, END);
+    const { engine } = following(source, () => fill("o3c4d5e6f", "#000000"));
+    const out = apply(engine, stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2, R3.replace("#009e73", "#000000"), END_G, END));
+    expect(out.forward).toEqual({
+      op: "batch",
+      ops: [stroke, fill("o3c4d5e6f", "#000000"), { op: "remove", target: G }, { op: "remove", target: "fub-defs" }],
+    });
+    expect(applied(engine.undo(out.undo)).text).toBe(source);
+  });
+
+  it("un seguito rifiutato non fa raccogliere la risorsa che aveva ripreso", () => {
+    // La sfumatura non la usa nessuno già prima: la raccolta guarda solo ciò
+    // che le operazioni applicate lasciano solo.
+    const source = lf(ROOT, TITLE, DEFS, ...GRADIENT, END_DEFS, PAPER, L1, E1, R2, R3, END_G, END);
+    const { engine } = following(source, () => ({ op: "batch", ops: [fill("o2b3c4d5e", `url(#${G}) #0072b2`), MISSING] }));
+    const out = apply(engine, stroke);
+    expect(out.forward).toEqual(stroke);
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, ...GRADIENT, END_DEFS, PAPER, L1, E1_BLACK, R2, R3, END_G, END));
+  });
+
+  describe("a giri", () => {
+    const R3_BLACK = R3.replace("#009e73", "#000000");
+
+    /// Un motore su `BASE` che, a ogni giro, dà `rounds[giro]` finché ce ne
+    /// sono, e registra ciò che gli si chiede.
+    const rounding = (
+      rounds: readonly (Op | null)[],
+    ): { engine: SceneEngine; calls: { touched: ReadonlySet<string>; op: Op }[] } => {
+      const engine = SceneEngine.open(BASE);
+      const calls: { touched: ReadonlySet<string>; op: Op }[] = [];
+      engine.follow = (_model, touched, op) => {
+        calls.push({ touched: new Set(touched), op });
+        return rounds[calls.length - 1] ?? null;
+      };
+      return { engine, calls };
+    };
+
+    it("un secondo giro vede soltanto ciò che ha toccato il primo, e la stessa operazione chiesta", () => {
+      const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), fill("o3c4d5e6f", "#000000"), null]);
+      const out = apply(engine, stroke);
+      expect(calls.map((call) => call.touched)).toEqual([new Set(["o1a2b3c4d"]), new Set(["o2b3c4d5e"]), new Set(["o3c4d5e6f"])]);
+      // Ogni giro riceve l'operazione chiesta, la stessa oggetto per oggetto.
+      for (const call of calls) expect(call.op).toBe(stroke);
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3_BLACK, END_G, END));
+      // Le operazioni dei giri vanno in ordine, in un `batch` solo.
+      expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000"), fill("o3c4d5e6f", "#000000")] });
+      expect(out.inverse).toEqual({
+        op: "batch",
+        ops: [fill("o3c4d5e6f", "#009e73"), fill("o2b3c4d5e", "#e69f00"), { op: "set", id: "o1a2b3c4d", attrs: { stroke: "#0072b2" } }],
+      });
+      expect([...out.touched]).toEqual(["o1a2b3c4d", "o2b3c4d5e", "o3c4d5e6f"]);
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("un giro che non tocca niente di nuovo ferma il seguito", () => {
+      // Il secondo giro rifà il colore del primo: niente id nuovi, e il terzo non si chiede.
+      const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), fill("o2b3c4d5e", "#111111"), fill("o3c4d5e6f", "#000000")]);
+      const out = apply(engine, stroke);
+      expect(calls.map((call) => call.touched)).toEqual([new Set(["o1a2b3c4d"]), new Set(["o2b3c4d5e"])]);
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2.replace("#e69f00", "#111111"), R3, END_G, END));
+      expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000"), fill("o2b3c4d5e", "#111111")] });
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("dopo tre giri ci si ferma, anche se il seguito ha ancora altro", () => {
+      let next = 0;
+      const engine = SceneEngine.open(BASE);
+      let calls = 0;
+      engine.follow = () => {
+        calls++;
+        // Ogni giro aggiunge un rettangolo nuovo, e quindi ha sempre qualcosa di nuovo da seguire.
+        const id = `o000000${++next}a`;
+        return { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "rect", attrs: { id, x: "0", y: "0", width: "10", height: "10" } } };
+      };
+      const out = apply(engine, stroke);
+      expect(FOLLOW_ROUNDS).toBe(3);
+      expect(calls).toBe(FOLLOW_ROUNDS);
+      expect(out.forward).toMatchObject({ op: "batch" });
+      expect((out.forward as { ops: readonly Op[] }).ops).toHaveLength(1 + FOLLOW_ROUNDS);
+      expect([...out.touched]).toEqual(["o1a2b3c4d", "o0000001a", "o0000002a", "o0000003a"]);
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("un giro rifiutato non c'è: i giri prima restano, in un passo solo, e l'undo li toglie tutti", () => {
+      for (const bad of [MISSING, { op: "batch", ops: [fill("o3c4d5e6f", "#000000"), MISSING] } as Op]) {
+        const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), bad, fill("o3c4d5e6f", "#222222")]);
+        const out = apply(engine, stroke);
+        // Il giro dopo il rifiuto non si chiede: ci si ferma.
+        expect(calls).toHaveLength(2);
+        expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3, END_G, END));
+        expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+        expect([...out.touched]).toEqual(["o1a2b3c4d", "o2b3c4d5e"]);
+        expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+      }
+    });
+
+    it("un giro che non si sa calcolare ferma il seguito e lascia i giri prima", () => {
+      const engine = SceneEngine.open(BASE);
+      let calls = 0;
+      engine.follow = () => {
+        if (++calls === 2) throw new Error("guasto");
+        return fill("o2b3c4d5e", "#000000");
+      };
+      const out = apply(engine, stroke);
+      expect(calls).toBe(2);
+      expect(out.forward).toEqual({ op: "batch", ops: [stroke, fill("o2b3c4d5e", "#000000")] });
+      expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1_BLACK, R2_BLACK, R3, END_G, END));
+      expect(applied(engine.undo(out.undo)).text).toBe(BASE);
+    });
+
+    it("l'inversa non ha seguito: nemmeno a giri", () => {
+      const { engine, calls } = rounding([fill("o2b3c4d5e", "#000000"), fill("o3c4d5e6f", "#000000"), null]);
+      const out = apply(engine, stroke);
+      expect(calls).toHaveLength(3);
+      // Un'altra modifica sposta la scena: l'undo non è più esatto e passa dall'inversa.
+      engine.follow = null;
+      apply(engine, { op: "set", id: "o1a2b3c4d", attrs: { "stroke-width": "6" } });
+      let asked = 0;
+      engine.follow = () => {
+        asked++;
+        return fill("o2b3c4d5e", "#333333");
+      };
+      const undone = applied(engine.undo(out.undo));
+      expect(asked).toBe(0);
+      expect(undone.text).toBe(lf(ROOT, TITLE, PAPER, L1, E1.replace('stroke-width="4"', 'stroke-width="6"'), R2, R3, END_G, END));
+    });
+  });
+});
+
+describe("il testo in area e su tracciato", () => {
+  const DEFS = '  <defs id="fub-defs">';
+  const END_DEFS = "  </defs>";
+  const P = "r1a2b3c4d";
+  const CURVE = `    <path id="${P}" fub:role="private" d="M100 400 C250 250 450 250 600 400"/>`;
+  const along = (content: string): string[] => [
+    '    <text id="o5e6f7g8h" fill="#000000" font-size="32" text-anchor="middle">',
+    `      <textPath startOffset="50%" href="#${P}">${content}</textPath>`,
+    "    </text>",
+  ];
+  const ALONG = lf(ROOT, TITLE, DEFS, CURVE, END_DEFS, PAPER, L1, ...along("Il testo segue"), R3, END_G, END);
+  const area = (...lines: string[]): string[] => [
+    '    <text id="o5e6f7g8h" fub:wrap="320" x="100" y="200" font-size="32">',
+    ...lines.map((line) => `      ${line}`),
+    "    </text>",
+  ];
+  const AREA = lf(
+    ROOT,
+    TITLE,
+    PAPER,
+    L1,
+    ...area('<tspan x="100" dy="0">Il testo in area va a</tspan>', '<tspan fub:join="space" x="100" dy="40">capo da solo.</tspan>'),
+    END_G,
+    END,
+  );
+
+  it("text su un testo su tracciato cambia il contenuto del textPath, coi pezzi, e l'undo lo rimette", () => {
+    const engine = SceneEngine.open(ALONG);
+    const out = apply(engine, { op: "text", id: "o5e6f7g8h", lines: [["Il testo ", { text: "segue", attrs: { "font-weight": "bold" } }, " la linea"]] });
+    expect(out.text).toBe(lf(ROOT, TITLE, DEFS, CURVE, END_DEFS, PAPER, L1, ...along('Il testo <tspan font-weight="bold">segue</tspan> la linea'), R3, END_G, END));
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo segue"] });
+    const back = applied(engine.apply(out.inverse));
+    expect(back.text).toBe(ALONG);
+    expect(back.inverse).toEqual({
+      op: "text",
+      id: "o5e6f7g8h",
+      lines: [["Il testo ", { text: "segue", attrs: { "font-weight": "bold" } }, " la linea"]],
+    });
+  });
+
+  it("un testo su tracciato ha una riga sola, e non va a capo", () => {
+    rejects(ALONG, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"] }, "invalid-elem");
+    rejects(ALONG, { op: "text", id: "o5e6f7g8h", lines: [] }, "invalid-elem");
+    rejects(ALONG, { op: "text", id: "o5e6f7g8h", lines: ["Uno"], joins: [null] }, "invalid-elem");
+  });
+
+  it("joins scrive fub:join riga per riga, e l'inversa rimette quelli di prima", () => {
+    const engine = SceneEngine.open(AREA);
+    const out = apply(engine, { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area", "va a capo da", "solo."], joins: [null, "space", "space"] });
+    expect(out.text).toBe(
+      lf(
+        ROOT,
+        TITLE,
+        PAPER,
+        L1,
+        ...area(
+          '<tspan x="100" dy="0">Il testo in area</tspan>',
+          '<tspan fub:join="space" x="100" dy="40">va a capo da</tspan>',
+          '<tspan fub:join="space" x="100" dy="40">solo.</tspan>',
+        ),
+        END_G,
+        END,
+      ),
+    );
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, "space"] });
+    expect(applied(engine.apply(out.inverse)).text).toBe(AREA);
+    // Un a capo dentro una parola, e un paragrafo nuovo.
+    const word = apply(SceneEngine.open(AREA), { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "ca", "po."], joins: [null, "space", "word"] });
+    expect(word.text).toContain('<tspan fub:join="word" x="100" dy="40">po.</tspan>');
+    const split = apply(SceneEngine.open(AREA), { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, null] });
+    expect(split.text).toContain('<tspan x="100" dy="40">capo da solo.</tspan>');
+  });
+
+  it("senza joins le righe tengono il loro fub:join, e una riga nuova comincia un paragrafo", () => {
+    const out = apply(SceneEngine.open(AREA), { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo.", "Fine."] });
+    expect(out.text).toBe(
+      lf(
+        ROOT,
+        TITLE,
+        PAPER,
+        L1,
+        ...area(
+          '<tspan x="100" dy="0">Il testo in area va a</tspan>',
+          '<tspan fub:join="space" x="100" dy="40">capo da solo.</tspan>',
+          '<tspan x="100" dy="40">Fine.</tspan>',
+        ),
+        END_G,
+        END,
+      ),
+    );
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, "space"] });
+  });
+
+  it("senza joins l'inversa rimette il fub:join di una riga che se ne va", () => {
+    const engine = SceneEngine.open(AREA);
+    const out = apply(engine, { op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a capo da solo."] });
+    expect(out.inverse).toEqual({ op: "text", id: "o5e6f7g8h", lines: ["Il testo in area va a", "capo da solo."], joins: [null, "space"] });
+    expect(apply(engine, out.inverse).text).toBe(AREA);
+    // Un testo senza fub:join ha l'inversa senza joins.
+    const plain = SceneEngine.open(AREA.replace(/ fub:join="space"/g, ""));
+    expect(apply(plain, { op: "text", id: "o5e6f7g8h", lines: ["Uno"] }).inverse).not.toHaveProperty("joins");
+  });
+
+  it("joins vuole una voce per riga, un testo o null", () => {
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"], joins: [null] }, "invalid-elem");
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno"], joins: "space" }, "invalid-elem");
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"], joins: [null, 1] }, "invalid-elem");
+    rejects(AREA, { op: "text", id: "o5e6f7g8h", lines: ["Uno", "Due"], joins: [null, "a\u0001"] }, "invalid-elem");
+  });
+
+  it("il tracciato di un testo è una risorsa: lo trattiene, e se ne va con lui", () => {
+    rejects(ALONG, { op: "remove", target: P }, "in-use");
+    rejects(ALONG, { op: "ident", path: [1, 0], tag: "path", id: null }, "in-use");
+    const engine = SceneEngine.open(ALONG);
+    const out = apply(engine, { op: "remove", target: "o5e6f7g8h" });
+    expect(out.text).toBe(lf(ROOT, TITLE, PAPER, L1, R3, END_G, END));
+    expect(out.forward).toEqual({
+      op: "batch",
+      ops: [{ op: "remove", target: "o5e6f7g8h" }, { op: "remove", target: P }, { op: "remove", target: "fub-defs" }],
+    });
+    expect(applied(engine.undo(out.undo)).text).toBe(ALONG);
+  });
+
+  it("set sul tracciato ne cambia la forma; un attributo fuori dal formato lo renderebbe estraneo", () => {
+    const engine = SceneEngine.open(ALONG);
+    expect(apply(engine, { op: "set", id: P, attrs: { d: "M600 400 C450 250 250 250 100 400" } }).text).toBe(
+      ALONG.replace("M100 400 C250 250 450 250 600 400", "M600 400 C450 250 250 250 100 400"),
+    );
+    rejects(ALONG, { op: "set", id: P, attrs: { transform: "rotate(10)" } }, "invalid-elem");
+    rejects(ALONG, { op: "set", id: P, attrs: { d: "M100 Q" } }, "invalid-elem");
+  });
+
+  it("add porta il tracciato nella defs e il testo che lo segue, coi pezzi", () => {
+    const PLAIN = lf(ROOT, TITLE, PAPER, L1, R3, END_G, END);
+    const defs: Op = {
+      op: "add",
+      parent: "#root",
+      pos: { first: true },
+      elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [{ tag: "path", attrs: { id: P, "fub:role": "private", d: "M100 400 C250 250 450 250 600 400" } }] },
+    };
+    const text: Op = {
+      op: "add",
+      parent: "l3f8a0c2d",
+      pos: { first: true },
+      elem: {
+        tag: "text",
+        attrs: { id: "o5e6f7g8h", fill: "#000000", "font-size": "32", "text-anchor": "middle" },
+        children: [{ tag: "textPath", attrs: { href: `#${P}`, startOffset: "50%" }, runs: ["Il testo segue"] }],
+      },
+    };
+    const out = apply(SceneEngine.open(PLAIN), { op: "batch", ops: [defs, text] });
+    expect(out.text).toBe(ALONG);
+    // Con raw, allo stesso modo: il testo resta com'è scritto.
+    const raw: Op = { op: "add", parent: "#root", pos: { first: true }, raw: `<defs id="fub-defs">\n${CURVE}\n${END_DEFS}` };
+    expect(apply(SceneEngine.open(PLAIN), { op: "batch", ops: [raw, text] }).text).toBe(ALONG);
+    // Un tracciato fra gli oggetti vuole un id da oggetto; nella defs, da risorsa.
+    rejects(PLAIN, { ...defs, elem: { tag: "defs", attrs: { id: "fub-defs" }, children: [{ tag: "path", attrs: { id: "o1a2b3c4d", d: "M0 0 L10 10" } }] } }, "invalid-elem");
+    rejects(PLAIN, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "path", attrs: { id: P, d: "M0 0 L10 10" } } }, "invalid-elem");
+    // Un textPath fuori da un testo, o con dei figli, non si scrive.
+    rejects(PLAIN, { op: "add", parent: "l3f8a0c2d", pos: { last: true }, elem: { tag: "textPath", attrs: { href: `#${P}` }, text: "No" } }, "invalid-elem");
+    // Un testo che segue un tracciato che non c'è è estraneo.
+    rejects(PLAIN, text, "invalid-elem");
+  });
+});
+
+describe("le tavole", () => {
+  const P1 = '  <rect id="fub-paper" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>';
+  const P2 = '  <rect id="c5e6f7g8h" fub:role="paper" fub:board="b9i0j1k2l" x="1680" y="0" width="1600" height="1000" fill="#ffffff"/>';
+  const V1 = ['  <view id="b1a2b3c4d" fub:role="board" viewBox="0 0 1600 1000">', "    <title>Tavola 1</title>", "  </view>"];
+  const V2 = ['  <view id="b9i0j1k2l" fub:role="board" viewBox="1680 0 1600 1000">', "    <title>Tavola 2</title>", "  </view>"];
+  const TWO = lf(ROOT, TITLE, P1, P2, ...V1, ...V2, L1, R2, END_G, END);
+  const paper = (id: string, board: string, x = "1680"): Elem => ({
+    tag: "rect",
+    attrs: { id, "fub:role": "paper", "fub:board": board, x, y: "0", width: "1600", height: "1000", fill: "#ffffff" },
+  });
+  const board = (id: string, x = "3360"): Elem => ({ tag: "view", attrs: { id, "fub:role": "board", viewBox: `${x} 0 1600 1000` } });
+  const add = (parent: string, elem: Elem): Op => ({ op: "add", parent, pos: { last: true }, elem });
+
+  /// Il motivo per cui `op` si rifiuta su `source`, che resta com'era.
+  function refused(source: string, op: unknown, reason: Reason): string {
+    rejects(source, op, reason);
+    const outcome = SceneEngine.open(source).apply(op as Op);
+    return outcome.outcome === "rejected" ? outcome.detail : "";
+  }
+
+  it("la carta della pagina cambia solo con page, o diventa quella di una tavola", () => {
+    expect(refused(BASE, { op: "set", id: "fub-paper", attrs: { "fub:board": "b1a2b3c4d", fill: "#000000" } }, "locked")).toMatch(/fill/);
+    refused(BASE, { op: "set", id: "fub-paper", attrs: { "fub:board": null } }, "locked");
+    refused(BASE, { op: "move", target: "fub-paper", parent: "#root", pos: { last: true } }, "locked");
+    // Da sola, senza la tavola, non diventa niente.
+    expect(refused(BASE, { op: "set", id: "fub-paper", attrs: { "fub:board": "b1a2b3c4d" } }, "invalid-elem")).toMatch(/b1a2b3c4d/);
+  });
+
+  it("la carta di una tavola cambia in geometria e tavola, e si toglie da sola", () => {
+    refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { fill: "#000000" } }, "locked");
+    refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { "fub:role": null } }, "locked");
+    // Una tavola senza carta si legge, e si disegna senza fondo.
+    const out = apply(SceneEngine.open(TWO), { op: "remove", target: "c5e6f7g8h" });
+    expect(out.text).toBe(lf(ROOT, TITLE, P1, ...V1, ...V2, L1, R2, END_G, END));
+    // Né la carta né la tavola vanno in un livello.
+    refused(TWO, { op: "move", target: "c5e6f7g8h", parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+    refused(TWO, { op: "move", target: "b9i0j1k2l", parent: "l3f8a0c2d", pos: { last: true } }, "invalid-elem");
+  });
+
+  it("una carta nuova è di una tavola, sotto la radice, con gli id delle tavole", () => {
+    const free: Elem = { tag: "rect", attrs: { id: "c0a1b2c3d", "fub:role": "paper", x: "0", y: "0", width: "1", height: "1" } };
+    refused(TWO, add("#root", free), "invalid-elem");
+    refused(TWO, add("l3f8a0c2d", paper("c0a1b2c3d", "b9i0j1k2l")), "invalid-elem");
+    expect(refused(TWO, { op: "batch", ops: [add("#root", paper("o0a1b2c3d", "b0a1b2c3d", "3360")), add("#root", board("b0a1b2c3d"))] }, "invalid-elem")).toMatch(/carta di una tavola/);
+    expect(refused(TWO, { op: "batch", ops: [add("#root", paper("c0a1b2c3d", "o0a1b2c3d", "3360")), add("#root", board("o0a1b2c3d"))] }, "invalid-elem")).toMatch(/una tavola/);
+    // Con gli id giusti entra, dove la mette `last`.
+    const out = apply(SceneEngine.open(TWO), { op: "batch", ops: [add("#root", paper("c0a1b2c3d", "b0a1b2c3d", "3360")), add("#root", board("b0a1b2c3d"))] });
+    expect(readScene(out.text).summary.boards).toEqual(["Tavola 1", "Tavola 2", "b0a1b2c3d"]);
+  });
+
+  it("ogni tavola toccata ha al più una carta, con la sua geometria, e ogni carta la sua tavola", () => {
+    expect(refused(TWO, add("#root", paper("c0a1b2c3d", "b0z0z0z0z")), "invalid-elem")).toMatch(/b0z0z0z0z, che non c'è/);
+    expect(refused(TWO, add("#root", paper("c0a1b2c3d", "b9i0j1k2l")), "invalid-elem")).toMatch(/più di una carta/);
+    expect(refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { "fub:board": "b1a2b3c4d" } }, "invalid-elem")).toMatch(/più di una carta/);
+    expect(refused(TWO, { op: "set", id: "c5e6f7g8h", attrs: { "fub:board": null } }, "invalid-elem")).toMatch(/non ha una tavola/);
+    // Una tavola che perde l'id è estranea: la sua carta resterebbe sola.
+    expect(refused(TWO, { op: "ident", path: [4], tag: "view", id: null }, "invalid-elem")).toMatch(/b9i0j1k2l, che non c'è/);
+  });
+
+  it("un file già fuori regola altrove si modifica lo stesso, e page riporta la carta libera", () => {
+    const extra = '  <rect fub:role="paper" x="0" y="0" width="10" height="10" fill="#ffffff"/>';
+    const second = '  <rect id="c0a1b2c3d" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>';
+    const out = lf(ROOT, TITLE, P1, second, extra, P2, ...V1, ...V2, L1, R2, END_G, END);
+    const engine = SceneEngine.open(out);
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#0072b2" } });
+    // Sulla seconda tavola, che va con la sua carta, si lavora.
+    apply(engine, { op: "batch", ops: [{ op: "set", id: "b9i0j1k2l", attrs: { viewBox: "1700 0 1600 1000" } }, { op: "set", id: "c5e6f7g8h", attrs: { x: "1700" } }] });
+    // Sulla prima, che ha due carte, no; togliere la seconda sì.
+    refused(engine.text, { op: "set", id: "b1a2b3c4d", attrs: { viewBox: "0 0 1600 1000" } }, "invalid-elem");
+    apply(engine, { op: "remove", target: "c0a1b2c3d" });
+    // page riscrive la carta senza tavola, non quelle delle tavole.
+    const paged = apply(engine, { op: "page", viewBox: "0 0 3300 1000" });
+    expect(paged.text).toContain('<rect fub:role="paper" x="0" y="0" width="3300" height="1000" fill="#ffffff"/>');
+    expect(paged.text).toContain(P1);
+  });
+
+  it("le inverse rimettono anche uno stato fuori regola", () => {
+    const second = '  <rect id="c0a1b2c3d" fub:role="paper" fub:board="b1a2b3c4d" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>';
+    const out = lf(ROOT, TITLE, P1, second, ...V1, L1, R2, END_G, END);
+    const engine = SceneEngine.open(out);
+    const removed = apply(engine, { op: "remove", target: "c0a1b2c3d" });
+    apply(engine, { op: "set", id: "o2b3c4d5e", attrs: { fill: "#0072b2" } });
+    // Non è più esatto: passa dall'inversa, che non si guarda.
+    const undone = applied(engine.undo(removed.undo));
+    expect(undone.text).toContain(second);
+  });
+
+  it("first sotto la radice va dopo le carte e le tavole", () => {
+    const layer: Op = { op: "add", parent: "#root", pos: { first: true }, elem: { tag: "g", attrs: { id: "l0a1b2c3d", "fub:layer": "Sfondo" } } };
+    const out = apply(SceneEngine.open(TWO), layer);
+    expect(out.text).toBe(lf(ROOT, TITLE, P1, P2, ...V1, ...V2, '  <g id="l0a1b2c3d" fub:layer="Sfondo">', END_G, L1, R2, END_G, END));
+  });
+
+  it(`il documento non riceve oltre ${MAX_BOARDS} tavole, e uno che ne ha di più si modifica`, () => {
+    const views = (count: number): string[] =>
+      Array.from({ length: count }, (_, i) => `  <view id="b${i.toString(36).padStart(8, "0")}" fub:role="board" viewBox="${i * 10} 0 5 5"/>`);
+    const full = lf(ROOT, TITLE, ...views(MAX_BOARDS), L1, R2, END_G, END);
+    expect(refused(full, add("#root", board("bzzzzzzzz")), "limit")).toMatch(new RegExp(`${MAX_BOARDS}`));
+    const over = lf(ROOT, TITLE, ...views(MAX_BOARDS + 1), L1, R2, END_G, END);
+    apply(SceneEngine.open(over), { op: "remove", target: "b00000000" });
+    apply(SceneEngine.open(over), { op: "set", id: "b00000001", attrs: { viewBox: "0 0 9 9" } });
+  });
+});

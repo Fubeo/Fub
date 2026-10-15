@@ -1,0 +1,49 @@
+{
+  "name": "add-page-group",
+  "description": "la prima annotazione di una pagina nasce col suo gruppo, in ordine di pagina",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" fub:annotates=\"Bando%20di%20gara.pdf\" fub:digest=\"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" fub:pages=\"12\">\n  <title>Bando di gara</title>\n  <g id=\"p0001\" fub:page=\"1\" fub:page-size=\"595.28 841.89\">\n    <text id=\"o5p6q7r8s\" x=\"330\" y=\"150\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"12\" fub:note=\"Chiedere conferma all'ufficio gare.\"><tspan x=\"330\" dy=\"0\">Importo da rivedere</tspan></text>\n  </g>\n  <g id=\"p0005\" fub:page=\"5\" fub:page-size=\"595.28 841.89\">\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "add",
+          "parent": "#root",
+          "pos": {
+            "after": "p0001"
+          },
+          "elem": {
+            "tag": "g",
+            "attrs": {
+              "id": "p0003",
+              "fub:page": "3",
+              "fub:page-size": "841.89 595.28"
+            }
+          }
+        },
+        {
+          "op": "add",
+          "parent": "p0003",
+          "pos": {
+            "last": true
+          },
+          "elem": {
+            "tag": "rect",
+            "attrs": {
+              "id": "o1a2b3c4d",
+              "x": "72",
+              "y": "300",
+              "width": "200",
+              "height": "40",
+              "fill": "#ffffff"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" fub:annotates=\"Bando%20di%20gara.pdf\" fub:digest=\"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" fub:pages=\"12\">\n  <title>Bando di gara</title>\n  <g id=\"p0001\" fub:page=\"1\" fub:page-size=\"595.28 841.89\">\n    <text id=\"o5p6q7r8s\" x=\"330\" y=\"150\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"12\" fub:note=\"Chiedere conferma all'ufficio gare.\"><tspan x=\"330\" dy=\"0\">Importo da rivedere</tspan></text>\n  </g>\n  <g id=\"p0003\" fub:page=\"3\" fub:page-size=\"841.89 595.28\">\n    <rect id=\"o1a2b3c4d\" x=\"72\" y=\"300\" width=\"200\" height=\"40\" fill=\"#ffffff\"/>\n  </g>\n  <g id=\"p0005\" fub:page=\"5\" fub:page-size=\"595.28 841.89\">\n  </g>\n</svg>\n"
+  }
+}

@@ -18,8 +18,9 @@
 //! 1. **Le lingue dicono le stesse cose.** I cataloghi di un componente hanno
 //!    tutti lo stesso insieme di chiavi. Chi aggiunge una riga in italiano e
 //!    dimentica l'inglese lo scopre adesso e non da una segnalazione.
-//! 2. **Ciò che si dichiara si può tradurre.** Ogni chiave che una `ViewSpec` o
-//!    una `CommandSpec` porta ha una voce in ogni catalogo del suo componente.
+//! 2. **Ciò che si dichiara si può tradurre.** Ogni chiave che una `ViewSpec`,
+//!    una `CommandSpec` (con il nome di ogni scelta dei suoi parametri) o una
+//!    `SettingSpec` porta ha una voce in ogni catalogo del suo componente.
 //! 3. **Non è rimasto niente di cablato.** Nessuna delle stringhe dichiarate è
 //!    un `Text::Literal`: un letterale lì dentro è prosa che nessun catalogo
 //!    potrà mai raggiungere, ed è precisamente com'erano tutte prima di questa
@@ -42,7 +43,8 @@
 //! [`fub_features::ogni_feature_ufficiale`], che è la stessa fetta da cui
 //! `fub_host::mount` monta i bundle: un componente che esiste nell'app passa
 //! di qui.
-use fub_abi::settings::SettingKind;
+use fub_abi::command::ParamKind;
+use fub_abi::settings::{SettingKind, SettingSpec};
 use fub_abi::text::{StringCatalog, Text};
 use fub_abi::traits::{CommandProvider, ViewProvider};
 
@@ -104,6 +106,34 @@ fn of_a_command(
             let location = format!("{id}: «{}» / `{}`", spec.id, par.name);
             key(&par.title, &location, keys, wired);
             key(&par.description, &location, keys, wired);
+            // Il nome di ogni scelta: un modello senza nome in una lingua si
+            // leggerebbe come la sua chiave nel menu.
+            if let ParamKind::Choice(choices) = &par.kind {
+                for choice in choices {
+                    key(&choice.title, &location, keys, wired);
+                }
+            }
+        }
+    }
+}
+
+/// Le chiavi che le impostazioni di un componente dichiarano: etichetta,
+/// descrizione, gruppo, e l'etichetta di ogni opzione di una scelta.
+///
+/// La prosa qui conta quanto lo schema: un peso della ricerca senza la frase
+/// che spiega cosa fa lo zero è un campo che qualcuno mette a zero credendo di
+/// spegnere la ricerca su quel campo, e trova le stesse note di prima in un
+/// altro ordine.
+fn of_settings(id: &str, specs: &[SettingSpec], keys: &mut Vec<String>, wired: &mut Vec<String>) {
+    for spec in specs {
+        let location = format!("{id}: impostazione `{}`", spec.key);
+        key(&spec.label, &location, keys, wired);
+        key(&spec.description, &location, keys, wired);
+        key(&spec.group, &location, keys, wired);
+        if let SettingKind::Choice { options, .. } = &spec.kind {
+            for option in options {
+                key(&option.label, &location, keys, wired);
+            }
         }
     }
 }
@@ -124,6 +154,9 @@ fn components() -> Vec<Component> {
             }
             if let Some(builder) = f.commands {
                 of_a_command(f.id, builder().as_ref(), &mut keys, &mut wired);
+            }
+            if let Some(builder) = f.settings {
+                of_settings(f.id, &builder(), &mut keys, &mut wired);
             }
             Component {
                 id: f.id,

@@ -1,0 +1,15 @@
+[package]
+name = "fub-format-svg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "FormatProvider `svg` per le scene di FubDraw: modello per indice, ricerca e grafo, segnaposto per l'anteprima, documenti nuovi e riscrittura chirurgica dei collegamenti."
+
+[dependencies]
+fub-abi = { workspace = true }
+fub-scene = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+fub-sdk = { workspace = true }

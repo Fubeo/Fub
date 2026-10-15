@@ -1,0 +1,33 @@
+File: drawio-flowchart.xml
+Oggetti: 11 (forme 6, testi 0, linee 5, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: tip ×5 (block)
+
+Livello «Livello 1»
+  Connettore da «Lamp doesn't work» a «Lamp plugged in?»
+  Gruppo «Lamp doesn't work», 2 oggetti
+    Rettangolo «Lamp doesn't work»
+    Testo «Lamp doesn't work»
+  Connettore «Yes» da «Lamp plugged in?» a «Bulb burned out?»
+  Testo «Yes»
+  Connettore «No» da «Lamp plugged in?» a «Plug in lamp»
+  Testo «No»
+  Gruppo «Lamp plugged in?», 2 oggetti
+    Rombo «Lamp plugged in?»
+    Testo «Lamp plugged in?»
+  Gruppo «Plug in lamp», 2 oggetti
+    Rettangolo «Plug in lamp»
+    Testo «Plug in lamp»
+  Connettore «No» da «Bulb burned out?» a «Repair Lamp»
+  Testo «No»
+  Connettore «Yes» da «Bulb burned out?» a «Replace Bulb»
+  Testo «Yes»
+  Gruppo «Bulb burned out?», 2 oggetti
+    Rombo «Bulb burned out?»
+    Testo «Bulb burned out?»
+  Gruppo «Repair Lamp», 2 oggetti
+    Rettangolo «Repair Lamp»
+    Testo «Repair Lamp»
+  Gruppo «Replace Bulb», 2 oggetti
+    Rettangolo «Replace Bulb»
+    Testo «Replace Bulb»

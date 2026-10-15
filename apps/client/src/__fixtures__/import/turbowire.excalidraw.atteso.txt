@@ -1,0 +1,26 @@
+File: turbowire.excalidraw
+Oggetti: 14 (forme 4, testi 5, linee 5, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×8 (Excalifont); rough ×9
+
+Livello «Livello 1»
+  Rettangolo
+  Connettore da «Client» a «TurboWire Server»
+  Gruppo «Client», 2 oggetti
+    Rettangolo «Client»
+    Testo «Client»
+  Testo «Persistent WebSocket Connection»
+  Gruppo «Serverless», 2 oggetti
+    Rettangolo «Serverless»
+    Testo «Serverless»
+  Connettore da «Serverless» a «Client»
+  Testo «Signed Wire URL»
+  Connettore da «Serverless» a «TurboWire Server»
+  Testo «Broadcast message to client»
+  Connettore da «TurboWire Server» a «Serverless»
+  Testo «Webhook for messages from client»
+  Testo «Your Serverless Application»
+  Connettore da «Client» a «TurboWire Server»
+  Gruppo «TurboWire Server», 2 oggetti
+    Rettangolo «TurboWire Server»
+    Testo «TurboWire Server»

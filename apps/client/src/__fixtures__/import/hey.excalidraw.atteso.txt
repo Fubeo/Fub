@@ -1,0 +1,24 @@
+File: hey.excalidraw
+Oggetti: 18 (forme 10, testi 5, linee 3, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×5 (Virgil); rough ×13
+
+Livello «Livello 1»
+  Rettangolo
+  Testo «GitHub Blocks are awesome»
+  Tracciato «Rombo»
+  Connettore da Rettangolo a «Rombo»
+  Ellisse
+  Testo «Yes»
+  Ellisse
+  Testo «Very Yes»
+  Testo «?»
+  Connettore da «Rombo» a Ellisse
+  Connettore da «Rombo» a Ellisse
+  Rettangolo
+  Rettangolo
+  Ellisse
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Testo «Hi Josie!»

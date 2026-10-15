@@ -154,7 +154,9 @@ il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
 linguetta, Delete la chiude. Gli aggiornamenti di stato preservano il nodo a
 fuoco; una chiusura trasferisce il focus a una linguetta vicina o al menu del
-riquadro rimasto vuoto.
+riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
+nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
+la vista porta il focus sulla superficie montata al posto della precedente.
 
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
@@ -162,7 +164,7 @@ non altera il rapporto fra movimento del puntatore e larghezza risultante.
 
 ## La finestra: lo Scrittoio
 
-La finestra è lo Scrittoio ([decisione 0205](../decisions/0205-la-finestra-e-lo-scrittoio.md)):
+La finestra è lo Scrittoio ([decisione 0208](../decisions/0208-la-finestra-e-lo-scrittoio.md)):
 la scrivania è il piano di fondo, i documenti sono fogli appoggiati sopra e gli
 strumenti stanno in due cassetti. Le pagine `index.html`, `mobile.html` e
 `document.html` ne portano il markup, e `main.ts` avvia
@@ -286,7 +288,11 @@ Gli appunti passano da una porta sola (`platform/clipboard.ts`): di serie sono
 quelli della webview, e una shell che ne ha di propri li dichiara con
 `declareClipboard`. `writeClipboardText` non lancia mai in modo sincrono, e
 l'assenza degli appunti è un errore tipizzato (`ClipboardUnavailable`), non un
-controllo ripetuto in ogni pannello.
+controllo ripetuto in ogni pannello. Il disegno scrive più tipi insieme, l'SVG
+e il suo PNG, con `writeClipboardData`, dopo aver chiesto a
+`clipboardSupports` se servono, e dal menu legge gli appunti con
+`readClipboard`; una shell che dichiara i suoi appunti dichiara anche questi,
+o il disegno resta agli eventi di copia e incolla del browser.
 
 ## Superfici di editing
 
@@ -298,7 +304,7 @@ CodeMirror e al suo guard, sono in [Superfici dell'editor](editor-surfaces.md).
 Oltre al confine di CodeMirror, i guard del frontend impediscono:
 
 - nuovi import Tauri fuori dal seam;
-- scritture negli appunti della webview fuori da `platform/clipboard.ts`;
+- usi degli appunti della webview fuori da `platform/clipboard.ts`;
 - listener globali senza owner;
 - attese concorrenti senza il primitivo di cancellazione;
 - mirror TypeScript non aggiornati.

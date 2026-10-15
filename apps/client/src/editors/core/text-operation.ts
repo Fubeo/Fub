@@ -125,20 +125,37 @@ export function invertOperation(operation: TextOperation): TextOperation {
   };
 }
 
+/** Units compared at once while looking for common ends: the engine compares equal blocks natively. */
+const COMMON_BLOCK = 1024;
+
+/**
+ * The lengths of the common prefix and of the common suffix of `a` and `b`, in UTF-16 units. The suffix never
+ * overlaps the prefix. Whole blocks first, then unit by unit: two texts of millions of units that differ in one
+ * place cost a few thousand native comparisons, not millions of steps.
+ */
+export function commonEnds(a: string, b: string): [prefix: number, suffix: number] {
+  const minimum = Math.min(a.length, b.length);
+  let prefix = 0;
+  while (prefix + COMMON_BLOCK <= minimum && a.slice(prefix, prefix + COMMON_BLOCK) === b.slice(prefix, prefix + COMMON_BLOCK)) {
+    prefix += COMMON_BLOCK;
+  }
+  while (prefix < minimum && a.charCodeAt(prefix) === b.charCodeAt(prefix)) prefix += 1;
+  const room = minimum - prefix;
+  let suffix = 0;
+  while (
+    suffix + COMMON_BLOCK <= room &&
+    a.slice(a.length - suffix - COMMON_BLOCK, a.length - suffix) === b.slice(b.length - suffix - COMMON_BLOCK, b.length - suffix)
+  ) {
+    suffix += COMMON_BLOCK;
+  }
+  while (suffix < room && a.charCodeAt(a.length - 1 - suffix) === b.charCodeAt(b.length - 1 - suffix)) suffix += 1;
+  return [prefix, suffix];
+}
+
 /** A single prefix/suffix patch for a full-text synchronization. */
 export function operationFromText(before: string, after: string): TextOperation {
   if (before === after) return { beforeLength: before.length, afterLength: before.length, edits: [] };
-  let prefix = 0;
-  const minimum = Math.min(before.length, after.length);
-  while (prefix < minimum && before[prefix] === after[prefix]) prefix += 1;
-
-  let suffix = 0;
-  while (
-    suffix < minimum - prefix &&
-    before[before.length - 1 - suffix] === after[after.length - 1 - suffix]
-  ) {
-    suffix += 1;
-  }
+  const [prefix, suffix] = commonEnds(before, after);
 
   const edit: TextEdit = {
     from: prefix,

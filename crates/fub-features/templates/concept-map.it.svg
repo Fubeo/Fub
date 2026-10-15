@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <title>Mappa concettuale</title>
+  <defs id="fub-defs">
+    <marker id="rlink1001" fub:role="shared" fub:marker="triangle medium end" refX="3.44" refY="3" markerWidth="5.34" markerHeight="6" orient="auto">
+      <path d="M4.84 3 L0.51 5.5 L0.51 0.5 Z" fill="#000000"/>
+    </marker>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>
+  <g id="llivello1" fub:layer="Livello 1">
+    <g id="oargom002">
+      <ellipse id="oargom001" cx="800" cy="500" rx="140" ry="80" fill="#e3f2fb" stroke="#000000" stroke-width="4">
+        <title>Ellisse</title>
+      </ellipse>
+      <text id="oargom003" fub:inside="oargom001" fub:wrap="185.99" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" font-weight="bold" text-anchor="middle" transform="matrix(1 0 0 1 800 508.8)">
+        <tspan x="0" dy="0">Argomento</tspan>
+      </text>
+    </g>
+    <g id="oidea1002">
+      <rect id="oidea1001" x="260" y="200" width="200" height="100" rx="15" ry="15" fill="none" stroke="#000000" stroke-width="4">
+        <title>Rettangolo arrotondato</title>
+      </rect>
+      <text id="oidea1003" fub:inside="oidea1001" fub:wrap="179.21" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" text-anchor="middle" transform="matrix(1 0 0 1 360 258.8)">
+        <tspan x="0" dy="0">Idea 1</tspan>
+      </text>
+    </g>
+    <path id="olink1001" fub:shape="connector" fub:geom="curved 658 500 530.93 500 589.07 250 462 250" fub:from="oargom002 left" fub:to="oidea1002 right" d="M658 500 C530.93 500 589.07 250 462 250" fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rlink1001)"/>
+    <g id="oidea2002">
+      <rect id="oidea2001" x="1140" y="200" width="200" height="100" rx="15" ry="15" fill="none" stroke="#000000" stroke-width="4">
+        <title>Rettangolo arrotondato</title>
+      </rect>
+      <text id="oidea2003" fub:inside="oidea2001" fub:wrap="179.21" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" text-anchor="middle" transform="matrix(1 0 0 1 1240 258.8)">
+        <tspan x="0" dy="0">Idea 2</tspan>
+      </text>
+    </g>
+    <path id="olink2001" fub:shape="connector" fub:geom="curved 942 500 1069.07 500 1010.93 250 1138 250" fub:from="oargom002 right" fub:to="oidea2002 left" d="M942 500 C1069.07 500 1010.93 250 1138 250" fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rlink1001)"/>
+    <g id="oidea3002">
+      <rect id="oidea3001" x="260" y="700" width="200" height="100" rx="15" ry="15" fill="none" stroke="#000000" stroke-width="4">
+        <title>Rettangolo arrotondato</title>
+      </rect>
+      <text id="oidea3003" fub:inside="oidea3001" fub:wrap="179.21" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" text-anchor="middle" transform="matrix(1 0 0 1 360 758.8)">
+        <tspan x="0" dy="0">Idea 3</tspan>
+      </text>
+    </g>
+    <path id="olink3001" fub:shape="connector" fub:geom="curved 658 500 530.93 500 589.07 750 462 750" fub:from="oargom002 left" fub:to="oidea3002 right" d="M658 500 C530.93 500 589.07 750 462 750" fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rlink1001)"/>
+    <g id="oidea4002">
+      <rect id="oidea4001" x="1140" y="700" width="200" height="100" rx="15" ry="15" fill="none" stroke="#000000" stroke-width="4">
+        <title>Rettangolo arrotondato</title>
+      </rect>
+      <text id="oidea4003" fub:inside="oidea4001" fub:wrap="179.21" x="0" y="0" fill="#000000" font-family="Inter, sans-serif" font-size="32" text-anchor="middle" transform="matrix(1 0 0 1 1240 758.8)">
+        <tspan x="0" dy="0">Idea 4</tspan>
+      </text>
+    </g>
+    <path id="olink4001" fub:shape="connector" fub:geom="curved 942 500 1069.07 500 1010.93 750 1138 750" fub:from="oargom002 right" fub:to="oidea4002 left" d="M942 500 C1069.07 500 1010.93 750 1138 750" fill="none" stroke="#000000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#rlink1001)"/>
+  </g>
+</svg>

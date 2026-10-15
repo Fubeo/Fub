@@ -1,0 +1,41 @@
+{
+  "name": "set-connector-free",
+  "description": "un batch stacca un capo di un connettore: set cambia fub:geom e d e toglie fub:from con null; l'inversa rimette fub:from al suo posto, e il testo torna a quello di prima byte per byte, anche su un motore aperto dal testo di dopo",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"100\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n    <rect id=\"o3c4d5e6f\" x=\"500\" y=\"400\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n    <path id=\"o7k2m9x4q\" fub:shape=\"connector\" fub:geom=\"elbow 200 220 200 310 600 310 600 400\" fub:from=\"o2b3c4d5e bottom\" fub:to=\"o3c4d5e6f top\" d=\"M200 220 L200 310 L600 310 L600 400\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "batch",
+      "label": "Stacca il capo",
+      "ops": [
+        {
+          "op": "set",
+          "id": "o7k2m9x4q",
+          "attrs": {
+            "fub:geom": "elbow 260 260 260 330 600 330 600 400",
+            "d": "M260 260 L260 330 L600 330 L600 400",
+            "fub:from": null
+          }
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"100\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n    <rect id=\"o3c4d5e6f\" x=\"500\" y=\"400\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n    <path id=\"o7k2m9x4q\" fub:shape=\"connector\" fub:geom=\"elbow 260 260 260 330 600 330 600 400\" fub:to=\"o3c4d5e6f top\" d=\"M260 260 L260 330 L600 330 L600 400\" fill=\"none\" stroke=\"#000000\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "set",
+          "id": "o7k2m9x4q",
+          "attrs": {
+            "fub:geom": "elbow 200 220 200 310 600 310 600 400",
+            "d": "M200 220 L200 310 L600 310 L600 400",
+            "fub:from": "o2b3c4d5e bottom"
+          }
+        }
+      ],
+      "label": "Stacca il capo"
+    }
+  }
+}
