@@ -5,13 +5,15 @@
 //! error. `Cancelled` always propagates as `Err` so a cancelled job never
 //! reports a partial success as complete.
 
-use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::edit::Revision;
 use fub_abi::model::DocId;
 use fub_abi::traits::HostApi;
 use fub_abi::transfer::{
     ConflictPolicy, ImportMode, ImportOutcome, ImportReport, ImportRequest, TransferNote,
 };
 use fub_abi::PluginError;
+
+use crate::receipts;
 
 /// Largest single source accepted without an explicit chunked path.
 pub const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
@@ -239,13 +241,28 @@ pub fn write_doc(
         && request.mode == ImportMode::Apply;
     let outcome = if writes {
         let res = match &outcome {
+            // Condizionata alla revisione che il preflight ha visto, se il
+            // commit l'ha detta: una modifica arrivata dopo non si copre.
             ImportOutcome::Replaced => host
-                .write_document(doc, text, WriteBase::Dictated)
-                .map(|_| ()),
-            _ => host.create_document(doc, text),
+                .write_document(doc, text, receipts::base_for(request, doc))
+                .map(Some),
+            _ => host.create_document(doc, text).map(|()| None),
         };
         match res {
-            Ok(()) => outcome,
+            Ok(revision) => {
+                // La ricevuta subito dopo la scrittura, prima del bersaglio
+                // dopo: è ciò che dice al rollback che questa nota è dell'import.
+                // Una creazione non rende la revisione; la si rilegge soltanto
+                // se qualcuno la chiede.
+                if receipts::armed(request) {
+                    let revision = match revision {
+                        Some(revision) => revision,
+                        None => host.document_revision(doc)?,
+                    };
+                    receipts::record(host, request, doc, &revision)?;
+                }
+                outcome
+            }
             Err(e) if is_cancelled(&e) => return Err(e),
             Err(e) => ImportOutcome::Failed(e.to_string()),
         }
@@ -274,16 +291,26 @@ pub fn write_asset(
     let outcome = if request.mode == ImportMode::Apply {
         match outcome {
             ImportOutcome::Created => match host.write_document_bytes(doc, bytes, None) {
-                Ok(_) => ImportOutcome::Created,
+                Ok(revision) => {
+                    receipts::record(host, request, doc, &revision)?;
+                    ImportOutcome::Created
+                }
                 Err(e) if is_cancelled(&e) => return Err(e),
                 Err(e) => ImportOutcome::Failed(e.to_string()),
             },
             ImportOutcome::Replaced => {
-                let result = host
-                    .document_revision(doc)
-                    .and_then(|revision| host.write_document_bytes(doc, bytes, Some(revision)));
+                // La revisione del preflight, se il commit l'ha detta; senza,
+                // quella di adesso (la guardia di sempre).
+                let result = match receipts::expected(request, doc) {
+                    Some(revision) => Ok(revision),
+                    None => host.document_revision(doc),
+                }
+                .and_then(|revision| host.write_document_bytes(doc, bytes, Some(revision)));
                 match result {
-                    Ok(_) => ImportOutcome::Replaced,
+                    Ok(revision) => {
+                        receipts::record(host, request, doc, &revision)?;
+                        ImportOutcome::Replaced
+                    }
                     Err(e) if is_cancelled(&e) => return Err(e),
                     Err(e) => ImportOutcome::Failed(e.to_string()),
                 }
