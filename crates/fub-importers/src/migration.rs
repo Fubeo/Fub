@@ -23,6 +23,10 @@ struct Preimage {
     existed: bool,
     before_sha: Option<String>,
     after_sha: Option<String>,
+    /// The apply did not write this target (skipped, failed or absent from
+    /// its report): whatever it holds belongs to someone else.
+    #[serde(default)]
+    untouched: bool,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -220,6 +224,7 @@ fn commit_with(
             existed,
             before_sha,
             after_sha: None,
+            untouched: false,
         });
     }
     save(job, &journal, host)?;
@@ -258,6 +263,35 @@ fn commit_with(
             }
         }
     }
+    if let Ok(report) = &result {
+        // The rollback must touch only what this apply wrote: a target the
+        // report does not claim (for example one another writer created
+        // after the preview) is left alone, and the claimed ones are pinned
+        // to their current digest so later edits stay protected.
+        journal.committed = None;
+        for entry in &mut journal.entries {
+            let written = report.documents.iter().any(|d| {
+                d.doc == entry.doc
+                    && matches!(d.outcome, ImportOutcome::Created | ImportOutcome::Replaced)
+            });
+            entry.untouched = !written;
+            entry.after_sha = if written {
+                host.read_document_bytes(&entry.doc)
+                    .ok()
+                    .map(|bytes| content_hash_hex(&bytes))
+            } else {
+                None
+            };
+        }
+        if let Err(error) = save(job, &journal, host) {
+            return Err(PluginError::Conflict(
+                format!(
+                    "job `{job}` stopped and rollback needs recovery: {error}; preimages retained"
+                )
+                .into(),
+            ));
+        }
+    }
     match rollback(job, host) {
         Ok(()) => {
             if let Some(e) = persist_error {
@@ -291,6 +325,9 @@ pub fn rollback(job: &str, host: &mut dyn HostApi) -> Result<(), PluginError> {
     // Check every target and backup before changing any of them. A later
     // user edit in one document must not make us partly roll back the others.
     for (index, entry) in journal.entries.iter().enumerate() {
+        if entry.untouched {
+            continue;
+        }
         let current = match host.read_document_bytes(&entry.doc) {
             Ok(bytes) => Some(bytes),
             Err(PluginError::NotFound(_)) if !entry.existed => None,
@@ -329,6 +366,9 @@ pub fn rollback(job: &str, host: &mut dyn HostApi) -> Result<(), PluginError> {
         }
     }
     for (index, entry) in journal.entries.iter().enumerate().rev() {
+        if entry.untouched {
+            continue;
+        }
         let current = match host.read_document_bytes(&entry.doc) {
             Ok(bytes) => bytes,
             Err(PluginError::NotFound(_)) if !entry.existed => continue,

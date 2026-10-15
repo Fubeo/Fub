@@ -19,6 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use fub_abi::rules::path::resolution_key;
 use fub_abi::traits::{HostApi, ReadApi};
 use fub_abi::transfer::{
     ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider,
@@ -347,6 +348,10 @@ impl ImportProvider for CsvImport {
             .filter(|s| !s.is_empty())
             .unwrap_or("imported");
         let mut clean = true;
+        // Rows sharing a title would share a file: each gets its own name
+        // before the conflict policy meets the vault, in preview and apply
+        // alike.
+        let mut taken: BTreeSet<String> = BTreeSet::new();
         for (idx, row) in table.rows.iter().enumerate() {
             if report.documents.len() >= MAX_DOCS_PER_IMPORT {
                 report.log.push(
@@ -362,7 +367,13 @@ impl ImportProvider for CsvImport {
             let note = row_note(&table.headers, row, &source.name, idx);
             let file_stem =
                 sanitize_component(&note.title).unwrap_or_else(|| format!("row_{}", idx + 1));
-            let wanted = request.destination(&format!("{stem_base}-{file_stem}.md"));
+            let mut name = format!("{stem_base}-{file_stem}.md");
+            let mut suffix = 1;
+            while !taken.insert(resolution_key(&name)) {
+                suffix += 1;
+                name = format!("{stem_base}-{file_stem}-{suffix}.md");
+            }
+            let wanted = request.destination(&name);
             let (doc, outcome) =
                 resolve_destination(host, request, wanted, &entry, &mut report.log);
             clean &= note.convertible;

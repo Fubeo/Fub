@@ -679,3 +679,133 @@ fn notes_with_the_same_stem_print_to_distinct_pdfs() {
     };
     assert_eq!(String::from_utf8_lossy(index), names.join("\n"));
 }
+
+#[test]
+fn evernote_rename_links_the_note_to_the_attachment_it_actually_created() {
+    let mut host = MemoryHost::new();
+    let mut provider = EnexImport;
+    let source = ImportSource::text_source("meeting.enex", ENEX);
+    let first = provider
+        .import(&source, &ImportRequest::apply(), &mut host)
+        .unwrap();
+    let asset = first.documents[1].doc.clone();
+    // L'utente modifica l'allegato importato, poi reimporta con Rename.
+    let revision = host.document_revision(&asset).unwrap();
+    host.write_document_bytes(&asset, b"EDITED", Some(revision))
+        .unwrap();
+    let mut request = ImportRequest::apply();
+    request.on_conflict = fub_abi::transfer::ConflictPolicy::Rename;
+    let second = provider.import(&source, &request, &mut host).unwrap();
+    let new_note = second.documents[0].doc.clone();
+    let new_asset = second.documents[1].doc.clone();
+    assert_ne!(new_asset, asset);
+    assert_eq!(
+        host.read_document_bytes(&asset).unwrap(),
+        b"EDITED",
+        "the previous attachment stays intact"
+    );
+    assert_eq!(host.read_document_bytes(&new_asset).unwrap(), b"PNG");
+    let file = new_asset.as_str().rsplit('/').next().unwrap();
+    let note = host.read_document(&new_note).unwrap();
+    assert!(
+        note.contains(&format!("](assets/{file})")),
+        "the note must link `{file}`: {note}"
+    );
+}
+
+#[test]
+fn csv_rows_with_the_same_title_get_distinct_files_in_preview_and_apply() {
+    let source =
+        ImportSource::text_source("projects.csv", "project,status\nAlpha,todo\nAlpha,done\n");
+    let mut provider = fub_importers::CsvImport;
+    for policy in [
+        fub_abi::transfer::ConflictPolicy::Skip,
+        fub_abi::transfer::ConflictPolicy::Replace,
+        fub_abi::transfer::ConflictPolicy::Rename,
+    ] {
+        let mut host = MemoryHost::new();
+        let mut request = ImportRequest::preview();
+        request.on_conflict = policy;
+        let planned = provider.import(&source, &request, &mut host).unwrap();
+        request.mode = ImportMode::Apply;
+        let applied = provider.import(&source, &request, &mut host).unwrap();
+        assert_eq!(planned.documents, applied.documents, "{policy:?}");
+        let names: Vec<_> = applied.documents.iter().map(|d| d.doc.as_str()).collect();
+        assert_eq!(
+            names,
+            ["projects-Alpha.md", "projects-Alpha-2.md"],
+            "{policy:?}"
+        );
+        assert!(host
+            .read_document(&applied.documents[0].doc)
+            .unwrap()
+            .contains("todo"));
+        assert!(host
+            .read_document(&applied.documents[1].doc)
+            .unwrap()
+            .contains("done"));
+    }
+}
+
+/// Un importer che pianifica due note nuove; all'apply un altro scrittore ha
+/// già creato la seconda, e l'importer la salta.
+struct Racy;
+
+impl ImportProvider for Racy {
+    fn can_handle(&self, _: &ImportSource) -> bool {
+        true
+    }
+
+    fn import(
+        &mut self,
+        _: &ImportSource,
+        request: &ImportRequest,
+        host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<fub_abi::transfer::ImportReport, fub_abi::PluginError> {
+        let mut report = fub_abi::transfer::ImportReport::new(request.mode);
+        let applying = request.mode == ImportMode::Apply;
+        if applying {
+            host.create_document(&DocId::new("Mine.md"), "imported")?;
+            // L'altro scrittore arriva fra la registrazione del journal e
+            // l'apply.
+            host.create_document(&DocId::new("Theirs.md"), "other writer")?;
+        }
+        report.documents.push(fub_abi::transfer::ImportedDocument {
+            doc: DocId::new("Mine.md"),
+            outcome: ImportOutcome::Created,
+            entry: None,
+        });
+        report.documents.push(fub_abi::transfer::ImportedDocument {
+            doc: DocId::new("Theirs.md"),
+            outcome: if applying {
+                ImportOutcome::Skipped
+            } else {
+                ImportOutcome::Created
+            },
+            entry: None,
+        });
+        Ok(report)
+    }
+}
+
+#[test]
+fn diverged_apply_rolls_back_only_what_it_wrote() {
+    let mut host = MemoryHost::new();
+    let mut provider = Racy;
+    let source = ImportSource::text_source("racy.txt", "x");
+    StagingManifest::prepare(
+        "racy",
+        &source,
+        &ImportRequest::apply(),
+        &mut provider,
+        &mut host,
+        42,
+    )
+    .unwrap();
+    assert!(fub_importers::pipeline::commit("racy", &mut provider, &mut host).is_err());
+    assert!(host.read_document(&DocId::new("Mine.md")).is_err());
+    assert_eq!(
+        host.read_document(&DocId::new("Theirs.md")).unwrap(),
+        "other writer"
+    );
+}
