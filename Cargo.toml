@@ -47,6 +47,7 @@ exclude = [
     "esempi/modello-wasm",
     "esempi/eventi-wasm",
     "esempi/format-wasm",
+    "esempi/stallo-wasm",
     "esempi/view-wasm",
     "esempi/grid-wasm",
     "esempi/event-handler-wasm",

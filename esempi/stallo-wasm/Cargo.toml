@@ -1,0 +1,20 @@
+# Il componente dello stallo: formato e job con lo stesso mutex d'istanza.
+#
+# **Fuori dal workspace, come `format-wasm` e per la stessa ragione**: si
+# compila per `wasm32-wasip2`, che il workspace non ha. Lo compila il test
+# `the_instance_and_the_turn` di `fub-wasm-host`.
+[package]
+name = "stallo-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"

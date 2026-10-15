@@ -253,6 +253,20 @@ impl<T> Custody<T> {
         }
     }
 
+    /// Il turno di scrittura è in mano a qualcuno **in questo istante**?
+    ///
+    /// Non lo prende e non aspetta: legge di chi è. Serve a un banco che deve
+    /// fissare l'ordine fra due thread senza orologio — «il salvataggio ha il
+    /// turno» è un fatto che si può aspettare, «è passato abbastanza tempo» no.
+    pub fn writer_turn_held(&self) -> bool {
+        self.inside
+            .writer_turn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .owner
+            .is_some()
+    }
+
     /// Come [`write_turn`](Self::write_turn), ma senza mettersi in fila.
     fn try_write_turn(&self) -> Option<WriteTurn<'_, T>> {
         let me = std::thread::current().id();

@@ -1,0 +1,16 @@
+// Il mondo di QUESTO componente, che non è `plugin-world`.
+//
+// Dichiara ciò che lo stallo richiede e niente di più: un **formato** (così
+// il salvataggio di una nota sua chiama il parser dentro l'istanza), un
+// **plugin** con un job che chiede un altro job (così l'istanza sta in mano al
+// job mentre chiede il turno di scrittura del vault) e le due famiglie che
+// servono al job per aspettare un segnale, annunciarsi e chiedere.
+package esempio:stallo@0.1.0;
+
+world stallo {
+    import fub:abi/host-events@0.2.0;
+    import fub:abi/host-vault-read@0.2.0;
+
+    export fub:abi/plugin@0.2.0;
+    export fub:abi/format@0.2.0;
+}
