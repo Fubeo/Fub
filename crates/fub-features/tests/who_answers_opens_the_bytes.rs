@@ -26,13 +26,15 @@
 //! meno. Sostituire la scansione con una domanda all'indice non renderebbe
 //! `vault.replace` più rapido — lo renderebbe **incompleto**, e in silenzio.
 //!
-//! # `rebuild_from_store`: l'impronta *è* il contenuto
+//! # `rebuild_from_store`: l'impronta si registra, non si ricalcola
 //!
 //! `VersionRef` porta `hash` (FNV-1a su tutti i byte) e `size` (quanti byte).
-//! Non si ricavano da altro: l'unico posto in cui erano già scritti è
-//! `versions.json`, cioè l'indice — e `rebuild_from_store` gira **solo** quando
-//! quell'indice è assente o illeggibile. Chiedere di non caricare gli snapshot
-//! è chiedere di non calcolare l'impronta.
+//! Il `meta.json` di ogni cartella le registra quando la versione nasce, e
+//! `rebuild_from_store` — che gira **solo** quando l'indice è assente o
+//! illeggibile — le prende da lì senza aprire gli snapshot: ricalcolarle dai
+//! byte di adesso farebbe passare per sano un blob alterato. Solo per una
+//! cartella scritta prima di questa registrazione lo snapshot si apre e
+//! l'impronta si ricalcola dal contenuto.
 //!
 //! # I numeri
 //!
@@ -40,16 +42,18 @@
 //! |---|---|
 //! | `vault.replace` su 2000 note, 3 combaciano | **2003 letture**, 119 019 byte |
 //! | idem su 1000 note | 1003 letture, 59 019 byte |
-//! | ricostruzione di 200 documenti con uno snapshot ciascuno | **400 letture**, 20 290 byte |
+//! | ricostruzione di 200 documenti con uno snapshot ciascuno | **200 letture** |
+//! | idem con `meta.json` di prima delle impronte registrate | **400 letture**, 20 290 byte |
 //!
 //! 2003 = una lettura per nota, più una per ogni nota che entra nel piano
-//! (`document_revision`, che è la base della modifica). 400 = un `meta.json` per
-//! cartella più uno snapshot: nessun blob si apre due volte.
+//! (`document_revision`, che è la base della modifica). 200 = un `meta.json` per
+//! cartella e nessuno snapshot aperto; 400 = anche lo snapshot, ma una volta
+//! sola: nessun blob si apre due volte.
 
 use fub_abi::command::InvokeMode;
 use fub_abi::model::DocId;
-use fub_abi::traits::{CommandProvider, DataWrite, VaultRead};
-use fub_features::{CoreCommands, VersionStore, VersioningHandler, VAULT_REPLACE};
+use fub_abi::traits::{CommandProvider, DataRead, DataWrite, VaultRead};
+use fub_features::{CoreCommands, VersionRef, VersionStore, VersioningHandler, VAULT_REPLACE};
 use fub_sdk::testing::MemoryHost;
 
 /// L'ago. Una parola che non compare per caso, e abbastanza lunga da poterla
@@ -218,20 +222,10 @@ fn replace_finds_what_the_index_cannot_see() {
     }
 }
 
-/// **Il numero della riga 0045**: la ricostruzione apre ogni snapshot una volta
-/// sola, e ne ricava un'impronta identica a quella che l'indice perduto
-/// portava.
-///
-/// L'uguaglianza sulle impronte è la parte che spiega il conto: `hash` e `size`
-/// tornano *esattamente* gli stessi solo perché sono stati ricalcolati sugli
-/// stessi byte. Un modo di non leggerli non c'è — c'era, e stava in
-/// `versions.json`, che è il file che questo test cancella.
-///
-/// *Provato in rosso* rileggendo il blob una seconda volta dentro il giro di
-/// `rebuild_from_store`: 600 letture invece di 400.
-#[test]
-fn the_rebuild_finds_again_the_fingerprints_from_the_content() {
-    const DOCUMENTS: usize = 200;
+const DOCUMENTS: usize = 200;
+
+/// Un vault fotografato per intero, e l'elenco di ciò che lo store sa.
+fn photographed() -> (MemoryHost, Vec<(DocId, Vec<VersionRef>)>) {
     let mut host = vault(DOCUMENTS, 0);
     let store = VersionStore::open(&mut host).expect("apertura");
     VersioningHandler::new(store.clone())
@@ -247,25 +241,75 @@ fn the_rebuild_finds_again_the_fingerprints_from_the_content() {
         DOCUMENTS,
         "il vault è stato fotografato tutto"
     );
+    (host, before)
+}
 
-    // L'indice sparisce: è il solo caso in cui `rebuild_from_store` gira, ed è
-    // anche il solo posto in cui le impronte erano già scritte.
+/// Riapre lo store senza indice e dice cosa ha trovato e quante letture ha pagato.
+fn rebuilt(host: &mut MemoryHost) -> (Vec<(DocId, Vec<VersionRef>)>, usize) {
     host.data_remove("versions.json").expect("l'indice va via");
     let (reads_first, _) = host.read_totals();
-    let rebuilt = VersionStore::open(&mut host).expect("riapertura");
+    let store = VersionStore::open(host).expect("riapertura");
     let (reads_after, _) = host.read_totals();
-
-    let after: Vec<_> = rebuilt
+    let after = store
         .documents()
         .into_iter()
-        .map(|id| (id.clone(), rebuilt.list(&id)))
+        .map(|id| (id.clone(), store.list(&id)))
         .collect();
+    (after, reads_after - reads_first)
+}
+
+/// La ricostruzione prende le impronte che il `meta.json` registrò alla
+/// scrittura, e non apre nessuno snapshot: una lettura per cartella.
+///
+/// L'uguaglianza sulle impronte dice che non se ne è persa nessuna; il conto
+/// dice che non sono state ricalcolate dai byte di adesso — che è proprio ciò
+/// che faceva passare per sano un blob alterato.
+#[test]
+fn the_rebuild_takes_the_registered_fingerprints_without_opening_the_snapshots() {
+    let (mut host, before) = photographed();
+    let (after, reads) = rebuilt(&mut host);
     assert_eq!(
         after, before,
         "le impronte ricostruite non coincidono con quelle perdute"
     );
     assert_eq!(
-        reads_after - reads_first,
+        reads, DOCUMENTS,
+        "attesa una sola lettura per documento, il `meta.json`"
+    );
+}
+
+/// **Il numero della riga 0045**, per le cartelle di prima delle impronte
+/// registrate: la ricostruzione apre ogni snapshot una volta sola, e ne ricava
+/// un'impronta identica a quella che l'indice perduto portava.
+///
+/// L'uguaglianza sulle impronte è la parte che spiega il conto: `hash` e `size`
+/// tornano *esattamente* gli stessi solo perché sono stati ricalcolati sugli
+/// stessi byte, ed è l'unica strada quando il `meta.json` non le registra.
+///
+/// *Provato in rosso* rileggendo il blob una seconda volta dentro il giro di
+/// `rebuild_from_store`: 600 letture invece di 400.
+#[test]
+fn a_folder_from_before_the_registered_fingerprints_is_rebuilt_from_its_content() {
+    let (mut host, before) = photographed();
+    // Il `meta.json` com'era prima: senza l'elenco delle versioni.
+    for path in host.data_list("").expect("elenco") {
+        if !path.ends_with("/meta.json") {
+            continue;
+        }
+        let raw = host.data_read(&path).expect("lettura").expect("c'è");
+        let mut meta: serde_json::Value = serde_json::from_slice(&raw).expect("json");
+        meta.as_object_mut().expect("oggetto").remove("versions");
+        host.data_write(&path, &serde_json::to_vec(&meta).expect("json"))
+            .expect("riscrittura");
+    }
+
+    let (after, reads) = rebuilt(&mut host);
+    assert_eq!(
+        after, before,
+        "le impronte ricostruite non coincidono con quelle perdute"
+    );
+    assert_eq!(
+        reads,
         2 * DOCUMENTS,
         "attesi un `meta.json` e uno snapshot per documento, e niente di riletto"
     );

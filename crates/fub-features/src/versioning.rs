@@ -53,7 +53,7 @@
 //!
 //! ```text
 //! versions.json                    indice: doc_id → versioni + tombstone
-//! <dir>/meta.json                  { doc_id, deleted_at }
+//! <dir>/meta.json                  { doc_id, deleted_at, versions: [{ts, hash, size}] }
 //! <dir>/<ts>.<ext>                 i byte originali di una versione
 //! ```
 //!
@@ -547,6 +547,15 @@ impl Serialize for PlanDocs<'_> {
 struct Meta {
     doc_id: String,
     deleted_at: Option<u64>,
+    /// Le impronte **registrate** di ogni versione della cartella, scritte
+    /// quando la versione nasce. Sono ciò che rende la ricostruzione
+    /// dell'indice un confronto e non un'autocertificazione: un blob alterato
+    /// dopo la sua scrittura non si fa passare per sano ricalcolandogli
+    /// l'impronta. Manca nelle cartelle scritte prima che esistesse (e
+    /// `#[serde(default)]` le legge lo stesso): lì la ricostruzione ricalcola
+    /// dai byte, come faceva, e il primo salvataggio le registra.
+    #[serde(default)]
+    versions: Vec<VersionRef>,
 }
 
 /// Che cosa una cartella dello store **rivendica**, e i due modi diversi in cui
@@ -1106,6 +1115,7 @@ fn write_metadata(
     let metadata = Meta {
         doc_id: id.to_string(),
         deleted_at: doc.deleted_at,
+        versions: doc.versions.clone(),
     };
     let raw = serde_json::to_vec(&metadata).map_err(|and| {
         PluginError::Internal(Text::message(
@@ -1453,12 +1463,15 @@ fn claim_of(dir: &str, host: &dyn ReadApi) -> Result<Claim, PluginError> {
 /// ma succede solo quando l'indice è perso — e un indice perso, senza questo,
 /// renderebbe le versioni irraggiungibili per sempre.
 ///
-/// Quella lettura non si può togliere: [`VersionRef::hash`] è l'impronta FNV-1a
-/// **del contenuto** e `size` è la sua lunghezza, e l'unico posto in cui erano
-/// già scritti è `versions.json`, cioè proprio l'indice che qui manca. Caricare
-/// gli snapshot non è il prezzo per calcolare l'impronta: è il calcolo. Il conto
-/// — 400 letture per 200 documenti, un `meta.json` e uno snapshot ciascuno,
-/// niente riletto — sta in `fub-features/tests/chi_risponde_apre_i_byte.rs`.
+/// [`VersionRef::hash`] è l'impronta FNV-1a **del contenuto** e `size` è la sua
+/// lunghezza. Il `meta.json` di ogni cartella le registra quando la versione
+/// nasce, e la ricostruzione le prende da lì senza aprire gli snapshot: così un
+/// blob alterato dopo la scrittura resta alterato per `read_snapshot`, invece di
+/// diventare "sano" perché gli si è ricalcolata l'impronta. Solo per le versioni
+/// che il `meta.json` non nomina (cartelle di prima, scrittura interrotta) lo
+/// snapshot si apre e l'impronta si ricalcola. I conti — una lettura per
+/// documento con le impronte registrate, due senza — stanno in
+/// `fub-features/tests/who_answers_opens_the_bytes.rs`.
 fn rebuild_from_store(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
     // I blob sono ordinati, quindi quelli di una stessa cartella sono contigui.
     let mut for_dir: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -1495,12 +1508,26 @@ fn rebuild_from_store(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions
                 continue;
             }
         };
+        let registered: BTreeMap<u64, VersionRef> =
+            metadata.versions.iter().map(|v| (v.ts, *v)).collect();
         let mut versions = Vec::new();
         for name in names {
             let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
             let Ok(ts) = stem.parse::<u64>() else {
                 continue; // meta.json e tutto ciò che non è uno snapshot
             };
+            // Un'impronta registrata dalla scrittura vale più di una
+            // calcolata adesso: se il blob è stato alterato nel frattempo,
+            // `read_snapshot` lo vedrà. Il blob nemmeno si apre — l'elenco
+            // dello store dice già che c'è.
+            if let Some(version) = registered.get(&ts) {
+                versions.push(*version);
+                continue;
+            }
+            // Una versione che `meta.json` non nomina: o la cartella è di
+            // prima delle impronte registrate, o la scrittura si è interrotta
+            // fra il blob e il `meta.json`. Si ricalcola dai byte, e non si
+            // può fare di meglio.
             let Some(bytes) = host.data_read(&blob(dir, name))? else {
                 continue;
             };
@@ -3109,6 +3136,67 @@ mod tests {
                 v.ts
             );
         }
+    }
+
+    /// L'impronta registrata alla scrittura sopravvive alla perdita dell'indice:
+    /// un blob alterato nel frattempo non diventa "sano" perché lo si
+    /// ricalcola, e la lettura lo rifiuta.
+    #[test]
+    fn a_blob_altered_before_the_rebuild_is_still_refused() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "originale".as_bytes(), &mut host)
+            .unwrap();
+        let version = store.list(&id("a.md"))[0];
+        let path = blob(
+            &store.inner.lock().unwrap().docs["a.md"].dir,
+            &snapshot_name(version.ts, "a.md"),
+        );
+
+        // Il blob cambia sul disco, l'indice si perde.
+        host.data_write(&path, "alterato!".as_bytes()).unwrap();
+        host.data_remove(INDEX_FILE).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        assert_eq!(
+            store.list(&id("a.md")),
+            vec![version],
+            "la ricostruzione ridà l'impronta registrata, non quella dei byte di adesso"
+        );
+        let refused = store.read(&id("a.md"), version.ts, &host);
+        assert!(
+            matches!(&refused, Err(PluginError::Internal(_))),
+            "il contenuto alterato non si consegna: {refused:?}"
+        );
+    }
+
+    /// Una cartella scritta prima che il `meta.json` registrasse le impronte
+    /// si ricostruisce ancora, ricalcolandole dai byte.
+    #[test]
+    fn a_folder_without_registered_fingerprints_is_still_rebuilt() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "vecchio".as_bytes(), &mut host)
+            .unwrap();
+        let expected = store.list(&id("a.md"));
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+
+        // Il `meta.json` di prima: solo `doc_id` e `deleted_at`.
+        host.data_write(
+            &blob(&dir, METADATA_FILE),
+            br#"{"doc_id":"a.md","deleted_at":null}"#,
+        )
+        .unwrap();
+        host.data_remove(INDEX_FILE).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        assert_eq!(store.list(&id("a.md")), expected);
+        assert_eq!(
+            store.read(&id("a.md"), expected[0].ts, &host).unwrap(),
+            "vecchio"
+        );
     }
 
     #[test]

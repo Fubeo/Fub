@@ -226,7 +226,13 @@ essere eliminata e ricostruita dai documenti.
 ```
 
 `versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
-autorevoli: eliminarli perde la memoria delle versioni. Ogni nuova versione
+autorevoli: eliminarli perde la memoria delle versioni. `meta.json` dice di
+chi è la cartella (`doc_id`, `deleted_at`) e registra dimensione e impronta di
+ogni versione (`versions`), scritte quando la versione nasce: la ricostruzione
+dell'indice le riprende da lì, quindi un blob alterato dopo la scrittura resta
+rifiutato in lettura. Una cartella scritta prima di questo campo si ricostruisce
+ancora, ricalcolando le impronte dai byte attuali; il primo salvataggio le
+registra. Ogni nuova versione
 pota le altre per fasce: tutte sotto le 24 ore, una per ora fino a 7 giorni,
 una per giorno fino a 90. Oltre resta solo la più recente. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
