@@ -76,15 +76,34 @@ import { basename, join } from "node:path";
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import { SCENE, LIGHTS, sceneUrl, photoFilename } from "./scene.mjs";
-import { openStage, openPage, prepareScene, stillShot, BASELINE, OUTPUT } from "./stage.mjs";
+import {
+  openStage,
+  openPage,
+  prepareScene,
+  stillShot,
+  BASELINE,
+  OUTPUT,
+  WINDOW,
+} from "./stage.mjs";
 
 const COLOR_THRESHOLD = 0.01;
 const DIFF_THRESHOLD = 0.001;
 
 const update = process.argv.includes("--update");
 
-const CURRENT = join(OUTPUT, "attuale");
-const DIFFERENCES = join(OUTPUT, "differenze");
+/// Che cosa si fotografa, dove sta il termine di paragone, dove va il referto.
+const SET = {
+  name: "banco di Fub",
+  scenes: SCENE,
+  baseline: BASELINE,
+  baselineLabel: "bench/baseline/",
+  output: OUTPUT,
+  updateHint: "npm run bench:update",
+};
+
+const CURRENT = join(SET.output, "attuale");
+const DIFFERENCES = join(SET.output, "differenze");
+const SHEET = join(SET.output, "foglio-di-contatto.html");
 
 /// Cosa è successo a una foto. Sono cinque e sono tutte diverse fra loro: un
 /// «manca la baseline» che si confondesse con un «è cambiata» renderebbe
@@ -106,7 +125,7 @@ async function main() {
   await rm(DIFFERENCES, { recursive: true, force: true });
   await mkdir(CURRENT, { recursive: true });
   await mkdir(DIFFERENCES, { recursive: true });
-  if (update) await mkdir(BASELINE, { recursive: true });
+  if (update) await mkdir(SET.baseline, { recursive: true });
 
   const stage = await openStage();
   const report = [];
@@ -114,7 +133,10 @@ async function main() {
   try {
     for (const light of LIGHTS) {
       const page = await openPage(stage.browser, light);
-      for (const scene of SCENE) {
+      for (const scene of SET.scenes) {
+        // La finestra è della scena: chi ne chiede una stretta non la lascia
+        // in eredità a quella dopo.
+        await page.setViewportSize(scene.viewport ?? WINDOW);
         report.push(await aPhoto(page, scene, light, stage.base));
       }
       await page.context().close();
@@ -143,7 +165,7 @@ async function aPhoto(page, scene, light, base) {
   }
 
   await writeFile(join(CURRENT, name), shot);
-  const whereBefore = join(BASELINE, name);
+  const whereBefore = join(SET.baseline, name);
 
   if (update) {
     await writeFile(whereBefore, shot);
@@ -154,7 +176,7 @@ async function aPhoto(page, scene, light, base) {
 
   if (!existsSync(whereBefore)) {
     row.outcome = OUTCOMES.withoutBaseline;
-    console.error(`✗ ${name}: nessuna baseline (è una scena newItem? «npm run bench:update»)`);
+    console.error(`✗ ${name}: nessuna baseline (è una scena newItem? «${SET.updateHint}»)`);
     return row;
   }
 
@@ -239,7 +261,7 @@ async function sideBySide(report) {
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<title>Foglio di contatto — banco di Fub</title>
+<title>Foglio di contatto — ${esc(SET.name)}</title>
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; background: #14171c; color: #e6e8eb;
@@ -266,7 +288,7 @@ async function sideBySide(report) {
 <body>
 <header>
   <h1>Foglio di contatto</h1>
-  <p class="sommario"><b>${SCENE.length}</b> scene · <b>${report.length}</b> foto ·
+  <p class="sommario"><b>${SET.scenes.length}</b> scene · <b>${report.length}</b> foto ·
      ${changedItems.length === 0 ? "tutte uguali alle baseline" : `<b>${changedItems.length}</b> da guardare`}
      · finestra 1280×800 · soglia ${DIFF_THRESHOLD * 100}% dei pixel</p>
 </header>
@@ -274,7 +296,7 @@ ${sections}
 </body>
 </html>`;
 
-  await writeFile(join(OUTPUT, "foglio-di-contatto.html"), html);
+  await writeFile(SHEET, html);
 }
 
 const esc = (s) =>
@@ -285,7 +307,7 @@ const slug = (s) => String(s).replace(/\s+/g, "-");
 
 async function summary(report) {
   const count = (outcome) => report.filter((r) => r.outcome === outcome).length;
-  const sheet = join(OUTPUT, "foglio-di-contatto.html");
+  const sheet = SHEET;
 
   if (update) {
     // Le baseline orfane si dicono, non si cancellano: una scena tolta e una
@@ -293,10 +315,10 @@ async function summary(report) {
     // il lavoro sa quale delle due è stata. Il presidio (`scene.test.ts`) le
     // rende rosse comunque.
     const expected = new Set(report.map((r) => r.name));
-    const orphans = (await readdir(BASELINE))
+    const orphans = (await readdir(SET.baseline))
       .filter((f) => f.endsWith(".png"))
       .filter((f) => !expected.has(basename(f)));
-    console.log(`\n${count(OUTCOMES.written)} baseline scritte in bench/baseline/`);
+    console.log(`\n${count(OUTCOMES.written)} baseline scritte in ${SET.baselineLabel}`);
     if (orphans.length) {
       console.log(`${orphans.length} baseline non corrispondono a nessuna scena: ${orphans.join(", ")}`);
     }
@@ -313,7 +335,7 @@ async function summary(report) {
   console.log(`Il sheet di contatto: ${sheet}`);
   if (errors) {
     console.log(
-      "Se il cambiamento è quello che volevi, il gesto è «npm run bench:update» — dopo aver guardato il foglio.",
+      `Se il cambiamento è quello che volevi, il gesto è «${SET.updateHint}» — dopo aver guardato il foglio.`,
     );
   }
   return errors ? 1 : 0;

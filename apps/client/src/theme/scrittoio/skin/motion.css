@@ -1,0 +1,119 @@
+/* Il moto delle superfici che entrano ed escono. */
+
+/* Gli stati li possiede `ui/motion.ts`: lo stesso attributo governa entrata,
+   uscita, riannodamento e puntatore, e questi fotogrammi chiave sono il moto
+   completo di ciò che non passa ancora dalle molle di `src/moto`. Transform e
+   opacità, mai geometria; il moto ridotto resta un pavimento della struttura.
+
+   Il gesto è uno solo, in tre misure: una superficie **si posa**. Arriva da
+   poco lontano e si assesta con la curva d'uscita; se ne va più in fretta di
+   come è arrivata, appena rimpicciolita, così l'Esc non sembra ignorato. La
+   scala è minima apposta: si sente come profondità, non si vede come zoom.
+
+   Entrando non scala. Dopo una corsa composita con una scala, Chromium
+   dipinge un elemento posato su una frazione di pixel (un toast alto quanto le
+   sue righe) un pixel più in là di dove lo dipinge senza: lo stato d'arrivo
+   non sarebbe più quello del moto ridotto. Un'uscita finisce con l'elemento
+   tolto, e la sua scala non lascia niente.
+
+   Il lanciatore nasce dalla pillola, quindi scende dall'alto; una finestra
+   interna sale dal basso; un menu si apre dal punto in cui lo si è chiesto. */
+
+@keyframes fub-enter-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fub-exit-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes fub-enter-rise {
+  from { opacity: 0; transform: translateY(var(--space-5)); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fub-exit-rise {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(var(--space-3)) scale(0.99); }
+}
+@keyframes fub-enter-drop {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--space-5))); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fub-exit-drop {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(calc(-1 * var(--space-3))) scale(0.985); }
+}
+@keyframes fub-enter-rise-sm {
+  from { opacity: 0; transform: translateY(calc(-1 * var(--space-2))); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fub-exit-rise-sm {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(calc(-1 * var(--space-1))) scale(0.98); }
+}
+
+[data-shell-motion="pre-enter"],
+[data-shell-motion="exit"] {
+  pointer-events: none !important;
+}
+
+/* Il fotogramma di partenza e quello d'arrivo dell'uscita. Il secondo serve:
+   fra la fine del keyframe e `animationend`, che chiude la superficie, passa
+   almeno un fotogramma, e senza questa riga la superficie ci torna piena —
+   un lampo proprio mentre se ne va. */
+[data-shell-motion="pre-enter"],
+[data-shell-motion="exit"] {
+  opacity: 0;
+}
+
+.modale[data-shell-motion="enter"] {
+  animation: fub-enter-fade var(--duration-med) var(--ease-out);
+}
+.modale[data-shell-motion="exit"] {
+  animation: fub-exit-fade var(--duration-fast) var(--ease-in);
+}
+.palette-box {
+  transform-origin: top center;
+}
+.modale[data-shell-motion="enter"] .palette-box {
+  animation: fub-enter-drop var(--duration-med) var(--ease-out);
+}
+.modale[data-shell-motion="exit"] .palette-box {
+  animation: fub-exit-drop var(--duration-fast) var(--ease-in);
+}
+.settings-panel[data-shell-motion="enter"],
+.icon-picker[data-shell-motion="enter"] {
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+.settings-panel[data-shell-motion="exit"],
+.icon-picker[data-shell-motion="exit"] {
+  animation: fub-exit-rise var(--duration-fast) var(--ease-in);
+}
+/* Il menu nasce dal punto in cui lo si è chiesto: l'origine è l'angolo in
+   alto a sinistra, che è dove sta il puntatore. */
+.context-menu {
+  transform-origin: top left;
+}
+.context-menu[data-shell-motion="enter"] {
+  animation: fub-enter-rise-sm var(--duration-fast) var(--ease-out);
+}
+.context-menu[data-shell-motion="exit"] {
+  animation: fub-exit-rise-sm var(--duration-state) var(--ease-in);
+}
+
+/* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
+.cm-editor,
+.cm-editor *,
+.pane-editor,
+.pane-editor * {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* La sagoma di un foglio appena chiuso: carta senza niente sopra, con il
+   rilievo del foglio, che si dissolve mentre i vicini prendono il suo posto. */
+.sheet-ghost::before {
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-1);
+}

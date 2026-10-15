@@ -3,7 +3,7 @@
 //     node tema/genera.mjs             riscrive i derivati
 //     node tema/genera.mjs --verifica  dice se sono quelli che le sorgenti producono
 //
-// Sono due, e hanno la stessa forma. I **due fogli** (§31.2) vengono dalla
+// Sono due, e hanno la stessa forma. I **fogli** (§31.2) vengono dalla
 // ricetta in OKLCH: si dichiara luminosità, croma e tinta, ed esce
 // l'esadecimale. La **pelle** (§31.4) viene dai suoi pezzi, uno per componente:
 // si scrive un componente per volta ed esce il file solo che il caricatore
@@ -41,7 +41,7 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SERIES = join(HERE, "..", "src", "theme", "serie");
+const SERIES = join(HERE, "..", "src", "theme", "scrittoio");
 const AUTHOR = join(HERE, "author");
 const SAMPLE = join(AUTHOR, "sample");
 
@@ -56,100 +56,103 @@ const vite = await createServer({
   logLevel: "warn",
 });
 
-/** @type {{ VARIANTS: readonly { light: string, contrast: string }[], SHEETS: Record<string,Record<string,string>>, sheet: (l: string, c: string) => string }} */
-const recipe = await vite.ssrLoadModule("/src/theme/serie/recipe.ts");
-/** @type {{ ORDINE: readonly string[], SKIN: string, assembla: (c: Record<string,string>) => string }} */
-const skin = await vite.ssrLoadModule("/src/theme/serie/skin/order.ts");
-/** @type {{ HOOKS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, hooks: readonly string[], states: readonly { name: string }[] }[], unassignedHooks: () => string[] }} */
-const anatomy = await vite.ssrLoadModule("/src/theme/serie/anatomia.ts");
-/** @type {{ REQUIRED_THEME_ROLES: readonly string[], THEME_CONTRAST_PAIRS: readonly unknown[] }} */
-const contrast = await vite.ssrLoadModule("/src/theme/contrast-fixture.ts");
+/** @type {{ VARIANTS: readonly { light: string, contrast: string }[], SHEETS: Record<string,Record<string,string>>, sheet: (l: string, c: string) => string, roles: () => string[] }} */
+const recipe = await vite.ssrLoadModule("/src/theme/scrittoio/recipe.ts");
+/** @type {{ SKIN: string, assemble: (c: Record<string,string>) => string }} */
+const skin = await vite.ssrLoadModule("/src/theme/scrittoio/skin/order.ts");
+/** @type {{ HOOKS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, part: string, hooks: readonly string[], states: readonly { name: string }[] }[] }} */
+const anatomy = await vite.ssrLoadModule("/src/theme/scrittoio/anatomia.ts");
+/** @type {{ THEME_2_ENGINE: string, THEME_2_PROFILE: { requiredRoles: readonly string[], contrastPairs: readonly unknown[], preferenceTokens: readonly string[], vocabulary: { properties?: readonly string[], functions?: readonly string[], atRules?: readonly string[] } } }} */
+const profile = await vite.ssrLoadModule("/src/theme/scrittoio/profile.ts");
 
 let diffCount = 0;
 
 /// Scrive, o dice che è diverso. Il nome è quello che compare a video; `atteso`
 /// è ciò che la sorgente produce.
-async function derived(name, expected, source, base = SERIES) {
+async function derived(name, expected, source, base = SERIES, label = name) {
   const file = join(base, name);
   const onDisk = await readFile(file, "utf8").catch(() => null);
 
   if (onDisk === expected) {
-    console.log(`· ${name}: uguale ${source}`);
+    console.log(`· ${label}: uguale ${source}`);
     return;
   }
 
   diffCount += 1;
   if (verify) {
-    console.error(`✗ ${name}: ${onDisk === null ? "non c'è" : `non è quello che si genera ${source}`}`);
+    console.error(`✗ ${label}: ${onDisk === null ? "non c'è" : `non è quello che si genera ${source}`}`);
     return;
   }
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, expected);
-  console.log(`✎ ${name}: riscritto (${expected.length} byte)`);
+  console.log(`✎ ${label}: riscritto (${expected.length} byte)`);
 }
 
-try {
-  for (const { light, contrast } of recipe.VARIANTS) {
-    await derived(
-      recipe.SHEETS[light][contrast],
-      recipe.sheet(light, contrast),
-      "alla ricetta",
-    );
-  }
-
-  // I pezzi si leggono **tutti**, non solo quelli elencati: `assembla` rifiuta
-  // ciò che nessuno ha messo nell'ordine, e quel rifiuto è il punto — un pezzo
-  // scritto e mai montato è la specie di silenzio che questo script esiste per
-  // rompere.
-  const folder = join(SERIES, "skin");
+/// I pezzi di una pelle come stanno sulla cartella: si leggono **tutti**, non
+/// solo quelli elencati, perché `assemble` rifiuta ciò che nessuno ha messo
+/// nell'ordine, e quel rifiuto è il punto.
+async function parts(folder) {
   const content = {};
   for (const f of (await readdir(folder)).sort()) {
     if (!f.endsWith(".css")) continue;
     content[f.slice(0, -".css".length)] = await readFile(join(folder, f), "utf8");
   }
-  const assembledSkin = skin.assemble(content);
+  return content;
+}
+
+try {
+  for (const { light, contrast } of recipe.VARIANTS) {
+    await derived(recipe.SHEETS[light][contrast], recipe.sheet(light, contrast), "alla ricetta");
+  }
+
+  // I pezzi si leggono **tutti**, non solo quelli elencati: `assemble` rifiuta
+  // ciò che nessuno ha messo nell'ordine, e quel rifiuto è il punto — un pezzo
+  // scritto e mai montato è la specie di silenzio che questo script esiste per
+  // rompere.
+  const assembledSkin = skin.assemble(await parts(join(SERIES, "skin")));
   await derived(skin.SKIN, assembledSkin, "ai suoi pezzi");
 
-  const roles = [...new Set([...recipe.roles(), ...contrast.REQUIRED_THEME_ROLES])].sort();
-  const assignedStates = anatomy.COMPONENTS.reduce(
-    (count, component) => count + component.states.length,
-    0,
-  );
+  const engine = profile.THEME_2_ENGINE;
+  const roles = [...new Set([...recipe.roles(), ...profile.THEME_2_PROFILE.requiredRoles])].sort();
+  const assignedStates = anatomy.COMPONENTS.reduce((count, component) => count + component.states.length, 0);
   const authorContract = {
-    engine: "theme-1",
+    engine,
     required_roles: roles,
     hooks: [...anatomy.HOOKS],
     states: [...anatomy.STATE_NAMES],
     components: anatomy.COMPONENTS.map((component) => ({
       name: component.name,
+      part: component.part,
       hooks: component.hooks,
       states: component.states.map((state) => state.name),
     })),
-    contrast_pairs: contrast.THEME_CONTRAST_PAIRS,
+    contrast_pairs: profile.THEME_2_PROFILE.contrastPairs,
+    preference_tokens: [...profile.THEME_2_PROFILE.preferenceTokens],
+    vocabulary: profile.THEME_2_PROFILE.vocabulary,
     counts: {
       required_roles: roles.length,
       hooks: anatomy.HOOKS.length,
       state_names: anatomy.STATE_NAMES.length,
       assigned_states: assignedStates,
       components: anatomy.COMPONENTS.length,
-      unassigned_hooks: anatomy.unassignedHooks().length,
+      preference_tokens: profile.THEME_2_PROFILE.preferenceTokens.length,
     },
   };
   const contractText = `${JSON.stringify(authorContract, null, 2)}\n`;
-  await derived("contract.json", contractText, "a ricetta, anatomia e fixture contrasto", AUTHOR);
+  await derived("contract.json", contractText, "a ricetta, anatomia e profilo", AUTHOR);
 
   const guide = [
-    "# Tema theme-1",
+    `# Tema ${engine}`,
     "",
     "Fonte generata: `npm run theme:generate`. Verifica: `npm run theme:verify`.",
     "",
-    `Il contratto richiede **${roles.length} ruoli**, espone **${anatomy.HOOKS.length} hook**, **${anatomy.STATE_NAMES.length} stati** (${assignedStates} assegnazioni su ${anatomy.COMPONENTS.length} componenti). Hook non assegnati: **${anatomy.unassignedHooks().length}**. Gli elenchi e le coppie di contrasto sono in \`contract.json\`, generato dalle sorgenti della shell.`,
+    `Il contratto richiede **${roles.length} ruoli**, espone **${anatomy.HOOKS.length} hook**, **${anatomy.STATE_NAMES.length} stati** (${assignedStates} assegnazioni su ${anatomy.COMPONENTS.length} componenti) e lascia ridichiarare alla persona **${profile.THEME_2_PROFILE.preferenceTokens.length} token**. Gli elenchi, le coppie di contrasto e il vocabolario CSS in più sono in \`contract.json\`, generato dalle sorgenti della shell.`,
     "",
     "## Struttura minima",
     "",
     "Una cartella installabile contiene `manifest.json`, un foglio per ogni luce dichiarata (`sheet-light.css` e/o `sheet-dark.css`), `skin.css` opzionale e asset locali. Il campione `sample/` è un bundle non-serie completo, generato dagli stessi cancelli.",
     "",
-    "Il manifest usa `engine: theme-1`; l'id deve essere un singolo componente di path sicuro e `asset_namespace` deve essere esattamente `theme://<id>/`. Il tema non dichiara permessi. Un engine futuro, un id insicuro, un namespace diverso, un manifest malformato o una luce non dichiarata vengono rifiutati.",
+    `Il manifest usa \`engine: ${engine}\`; l'id deve essere un singolo componente di path sicuro e \`asset_namespace\` deve essere esattamente \`theme://<id>/\`. Il tema non dichiara permessi; può dichiarare impostazioni sue (\`settings\`), che la shell mostra nelle Preferenze. Un engine sconosciuto, un id insicuro, un namespace diverso, un manifest malformato o una luce non dichiarata vengono rifiutati. Un tema \`theme-1\` resta installato ma la shell non lo monta: lo segnala con una diagnosi e ricade sul tema di serie.`,
     "",
     "## Limiti e pubblicazione",
     "",
@@ -161,7 +164,7 @@ try {
     "",
     "## Fallback e anteprima",
     "",
-    "La shell valida ogni luce prima di mostrarla nel catalogo. Se un tema installato non è leggibile o non supera il gate client, non viene montato e la resa ricade sul tema di serie con una diagnosi. La preview delle Impostazioni è temporanea: non scrive `appearance.theme` né la cache, Annulla o la chiusura del pannello rimontano la selezione precedente, e solo Applica persiste la nuova scelta.",
+    "La shell valida ogni luce prima di mostrarla nel catalogo. Se un tema installato non è leggibile o non supera il gate client, non viene montato e la resa ricade sul tema di serie con una diagnosi. La preview delle Preferenze è temporanea: non scrive `appearance.theme` né la cache, Annulla o la chiusura del pannello rimontano la selezione precedente, e solo Applica persiste la nuova scelta.",
     "",
     "## Ciclo autore",
     "",
@@ -174,12 +177,12 @@ try {
     id: "org.fub.theme-bench",
     name: "Fub Theme Bench",
     version: "1.0.0",
-    engine: "theme-1",
+    engine,
     lights: ["dark", "light"],
     asset_namespace: "theme://org.fub.theme-bench/",
     motion: ["opacity", "transform"],
   };
-  await derived("manifest.json", `${JSON.stringify(manifest, null, 2)}\n`, "al contratto theme-1", SAMPLE);
+  await derived("manifest.json", `${JSON.stringify(manifest, null, 2)}\n`, `al contratto ${engine}`, SAMPLE);
   await derived("sheet-dark.css", recipe.sheet("dark", "normal"), "alla ricetta", SAMPLE);
   await derived("sheet-light.css", recipe.sheet("light", "normal"), "alla ricetta", SAMPLE);
   await derived("skin.css", assembledSkin, "all'anatomia", SAMPLE);

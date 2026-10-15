@@ -367,6 +367,33 @@ export class TextEngine {
     return read(this.view.state);
   }
 
+  /// Il rettangolo del testo scelto, in coordinate della finestra, o `null` se
+  /// la selezione è vuota o fuori dalla porzione disegnata.
+  public selectionBox(): { left: number; top: number; right: number; bottom: number } | null {
+    if (this.disposed) return null;
+    const { from, to, empty } = this.view.state.selection.main;
+    if (empty) return null;
+    const start = this.view.coordsAtPos(from, 1);
+    const end = this.view.coordsAtPos(to, -1);
+    if (!start || !end) return null;
+    return {
+      left: Math.min(start.left, end.left),
+      top: Math.min(start.top, end.top),
+      right: Math.max(start.right, end.right),
+      bottom: Math.max(start.bottom, end.bottom),
+    };
+  }
+
+  /// Il punto in cui si scrive, in coordinate della finestra: il cursore, o il
+  /// testo scelto se ce n'è. Dove ancorare un menu aperto dalla tastiera.
+  public anchorBox(): { left: number; top: number; right: number; bottom: number } | null {
+    if (this.disposed) return null;
+    const range = this.selectionBox();
+    if (range) return range;
+    const at = this.view.coordsAtPos(this.view.state.selection.main.head);
+    return at ? { left: at.left, top: at.top, right: at.right, bottom: at.bottom } : null;
+  }
+
   /// Quante modifiche si possono annullare e ripetere adesso.
   public historyDepth(): { readonly undo: number; readonly redo: number } {
     if (this.disposed) return { undo: 0, redo: 0 };

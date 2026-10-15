@@ -1,0 +1,433 @@
+/* La ricerca nel cassetto. */
+
+/* **Il campo.** È l'unico oggetto di carta dentro il cassetto: fondo del
+   foglio e contorno pieno, perché lì si scrive. Col fuoco il contorno diventa
+   l'anello — stesso spessore dell'anello di tutti, senza sporgere di più. */
+.search-input {
+  flex: none;
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+}
+.search-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+.search-input:focus-visible {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 calc(var(--focus-ring-width) - 1px) var(--focus-ring);
+}
+
+/* **Gli esiti.** Una riga per nota — nome, percorso, estratto — con sotto le
+   occorrenze successive rientrate, e in fondo l'unica riga che non è un esito
+   ma un'offerta: creare la nota che si è cercata. */
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+/* La riga è il `li`: porta il fondo, e dentro una griglia in cui il risultato
+   occupa tutto e le azioni («Escludi») si posano sulla riga del percorso, a
+   destra. Così compaiono sotto il puntatore senza spostare niente: la prima
+   traccia è alta quanto il nome, la seconda nasce con le azioni e la terza
+   cede lo spazio. La prima colonna può azzerarsi: in un cassetto stretto le
+   azioni coprono il percorso finché il puntatore è lì, perché due linguette
+   leggibili valgono più di un moncone di percorso accanto a due «Escludi…». */
+.search-results li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+  grid-template-rows: calc(var(--space-2) + 20px) auto 1fr;
+  border-radius: var(--radius-control);
+}
+.search-results li:hover {
+  background: var(--bg-hover);
+}
+/* Premuta è il risultato a esserlo, non una sua azione: la riga scurisce
+   solo quando il dito è sul nome. */
+.search-results li:has(> .search-result:active) {
+  background: var(--bg-active);
+}
+/* La riga attiva è quella col fuoco da tastiera, sul risultato o su una sua
+   azione: qui non c'è una selezione che resta. */
+.search-results li:has(:focus-visible) {
+  background: var(--accent-wash);
+}
+
+/* Un risultato, ovunque sia (cassetto, palette, segnalibri): un bottone che
+   non sembra un bottone. La forma gliela dà la lista che lo contiene. */
+.search-result {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* La voce corrente di un elenco di scelte: lo dice la matita blu, e
+   `aria-current` lo dice a chi ascolta. */
+.search-result[aria-current="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* Il testo sta su una colonna sola, rientrata del posto dell'icona: nome,
+   percorso, estratto e occorrenze cominciano alla stessa verticale. Le righe
+   senza nome (occorrenza, «altri risultati», «riprova») sono gesti: piccole,
+   e blu quando portano un'azione. */
+.search-results .search-result {
+  position: relative;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  min-height: var(--row-h);
+  padding: var(--space-2) var(--space-4) var(--space-2) calc(var(--space-4) + var(--drawer-icon) + var(--space-3));
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: 20px;
+}
+.search-results .search-result:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+.hit-title {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il foglietto davanti al nome: lo stesso dell'albero, perché è la stessa
+   nota. */
+.search-results .search-result:has(> .hit-path)::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--space-2) + 11px - var(--drawer-icon) / 2);
+  left: calc(var(--space-4) + 2.5px);
+  box-sizing: border-box;
+  width: calc(var(--drawer-icon) - 5px);
+  height: calc(var(--drawer-icon) - 2px);
+  border: 1.5px solid var(--muted);
+  border-radius: 2.5px;
+  background: linear-gradient(to bottom left, transparent 50%, var(--muted) 50%) top right / 5px 5px no-repeat border-box;
+  clip-path: polygon(0 0, calc(100% - 4.5px) 0, 100% 4.5px, 100% 100%, 0 100%);
+}
+/* Il percorso sotto il nome: è ciò che distingue due omonimi. */
+.hit-path {
+  display: block;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* L'estratto: grafite, al più tre righe, con il termine trovato passato
+   all'evidenziatore — il giallo del foglio, sotto l'inchiostro pieno. */
+.hit-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  line-height: 16px;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.hit-snippet mark {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--highlight);
+  color: var(--text);
+}
+/* Le occorrenze dopo la prima: non un altro risultato, un altro punto dello
+   stesso — più basse, in grafite. */
+.search-results .hit-occurrence {
+  min-height: var(--space-8);
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+  color: var(--muted);
+  font-weight: var(--weight-regular);
+}
+.search-results li:has(> .hit-occurrence) {
+  grid-template-rows: auto;
+}
+
+/* «Crea questa nota» (§21.7): l'unica riga che **scrive** invece di aprire.
+   La distingue il «+» blu al posto del foglietto e il gesto scritto in blu
+   sotto il nome: chi scorre vede che è di un'altra specie prima di premerla. */
+.hit-create .search-result::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--space-2) + 5px);
+  left: calc(var(--space-4) + var(--drawer-icon) / 2 - 5px);
+  width: 10px;
+  height: 10px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) center / 100% 1.5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) center / 1.5px 100% no-repeat;
+}
+.hit-create .hit-snippet {
+  margin-top: 0;
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+
+/* **Le azioni**: copia e sintassi in testa, «Escludi» su ogni risultato.
+   Sono linguette piccole sul fondo della scrivania. */
+.search-action,
+.search-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: var(--space-8);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--bg-hover);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.search-action:hover,
+.search-action:active {
+  background: var(--bg-active);
+  color: var(--text);
+}
+.search-action[aria-expanded="true"],
+.search-action[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+
+/* Sul risultato le linguette sono di carta (la riga sotto è già scura), più
+   basse della riga del percorso su cui si posano, e ci sono soltanto sotto il
+   puntatore o col fuoco nella riga: dieci righe di bottoni sempre accesi
+   erano un muro. Il bersaglio resta di 24 px (`::after`). */
+.search-results li:not(.search-tools) > .search-action {
+  position: relative;
+  grid-row: 2;
+  grid-column: 2;
+  align-self: start;
+  height: 20px;
+  margin-top: -2px;
+  padding: 0 var(--space-3);
+  background: var(--bg-elev);
+  /* Fra una linguetta e l'altra il percorso non deve spuntare: le due ombre
+     piene del colore della riga (questa e quella della seconda) chiudono lo
+     spiraglio. */
+  box-shadow: var(--space-2) 0 0 var(--bg-hover);
+  color: var(--text);
+  font-size: var(--text-xs);
+}
+/* Il percorso che resta sotto sfuma prima delle linguette invece di finire
+   tagliato a metà lettera: una velatura del colore della riga, che non
+   prende i clic. */
+.search-results li:not(.search-tools) > .search-result + .search-action::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  width: var(--space-9);
+  background: linear-gradient(to right, transparent, var(--bg-hover) 75%);
+  pointer-events: none;
+}
+.search-results li:not(.search-tools):has(:focus-visible) > .search-result + .search-action::before {
+  background: linear-gradient(to right, transparent, var(--accent-wash) 75%);
+}
+.search-results li:not(.search-tools) > .search-action::after {
+  content: "";
+  position: absolute;
+  inset: -2px 0;
+}
+.search-results li:not(.search-tools) > .search-action:last-child {
+  margin-right: var(--space-3);
+}
+/* La seconda («Escludi cartella …») porta un nome che può essere lungo: è
+   lei a cedere, non il nome della nota. */
+.search-results li:not(.search-tools) > .search-action + .search-action {
+  display: block;
+  grid-column: 3;
+  min-width: 0;
+  margin-left: var(--space-2);
+  overflow: hidden;
+  box-shadow: calc(var(--space-2) * -1) 0 0 var(--bg-hover);
+  line-height: 20px;
+  text-overflow: ellipsis;
+}
+.search-results li:not(.search-tools):has(:focus-visible) > .search-action {
+  box-shadow: var(--space-2) 0 0 var(--accent-wash);
+}
+.search-results li:not(.search-tools):has(:focus-visible) > .search-action + .search-action {
+  box-shadow: calc(var(--space-2) * -1) 0 0 var(--accent-wash);
+}
+/* Velatura e ombre sono del colore della riga: la seguono anche quando è
+   premuta, o resterebbe una toppa più chiara attorno alle linguette. */
+.search-results li:not(.search-tools):has(> .search-result:active) > .search-result + .search-action::before {
+  background: linear-gradient(to right, transparent, var(--bg-active) 75%);
+}
+.search-results li:not(.search-tools):has(> .search-result:active) > .search-action {
+  box-shadow: var(--space-2) 0 0 var(--bg-active);
+}
+.search-results li:not(.search-tools):has(> .search-result:active) > .search-action + .search-action {
+  box-shadow: calc(var(--space-2) * -1) 0 0 var(--bg-active);
+}
+.search-results li:not(.search-tools) > .search-action:hover,
+.search-results li:not(.search-tools) > .search-action:active {
+  background: var(--bg-active);
+}
+.search-results li:not(.search-tools):not(:hover):not(:has(:focus-visible)) > .search-action {
+  display: none;
+}
+/* In colori forzati i fondi sono del sistema e le linguette non si staccano
+   più dalla riga: prendono un contorno vero. */
+@media (forced-colors: active) {
+  .search-action,
+  .search-chip {
+    border: 1px solid ButtonText;
+  }
+}
+
+/* La riga degli strumenti (copia, sintassi): non è un risultato, e non si
+   accende sotto il puntatore. */
+.search-results li.search-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 0 var(--space-3) var(--space-4);
+}
+.search-results li.search-tools:hover {
+  background: transparent;
+}
+/* La sintassi: un promemoria sotto gli strumenti — cosa si scrive, cosa fa. */
+.search-syntax {
+  flex: 1 0 100%;
+  margin: var(--space-2) 0 0 calc(var(--space-4) * -1);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+}
+/* Nel cassetto due colonne costringerebbero ogni spiegazione su tre righe:
+   l'operatore sta sopra, ciò che fa subito sotto. */
+.search-syntax dt {
+  margin: 0;
+}
+.search-syntax dd {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+}
+.search-syntax code {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* Le esclusioni in corso: filtri accesi, che un clic toglie. */
+.search-exclusions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 0 var(--space-3) var(--space-4);
+}
+.search-chip {
+  max-width: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.search-chip:hover,
+.search-chip:active {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent);
+  color: var(--accent);
+}
+
+/* **Le opzioni e la sostituzione**, sotto il campo. Gli interruttori sono le
+   stesse linguette delle azioni, accese in blu quando premuti; il blocco
+   «Sostituisci» si apre sotto di loro e porta il piano scritto, non un dialogo. */
+.search-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) 0 var(--space-2);
+}
+.search-option {
+  min-width: var(--space-8);
+  justify-content: center;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+.search-replace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+.search-replace[hidden] {
+  display: none;
+}
+.search-replace-entry {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.search-replace-entry .search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.search-replace-plan:empty {
+  display: none;
+}
+.search-replace-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.search-replace-docs {
+  max-height: 140px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow-y: auto;
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.search-replace-actions {
+  display: flex;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+.search-replace-apply {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.search-replace-apply:hover,
+.search-replace-apply:active {
+  background: color-mix(in oklch, var(--accent) 88%, var(--text));
+  color: var(--accent-contrast);
+}

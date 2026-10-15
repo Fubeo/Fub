@@ -1,0 +1,858 @@
+/* Il lanciatore e i dialoghi. */
+
+/* --- il velo e la scatola -------------------------------------------------- */
+/*
+   Una `.modale` è la sola superficie che ferma il resto: il velo copre la
+   finestra e la scatola sta in alto, sotto la barra del titolo, perché nasce
+   dalla pillola che la apre e non dal centro dello schermo.
+
+   La scatola ha due vestiti e li sceglie da ciò che contiene. Con un campo di
+   ricerca in testa è un **lanciatore** — campo, esiti, piede, senza margini: il
+   cambio rapido, la tavolozza dei comandi, la ricerca nella nota e la scelta in
+   un elenco sono la stessa superficie. Senza, è un **dialogo**: titolo, corpo
+   e azioni, con il respiro di un foglietto. Così il modulo dei parametri e il
+   piano, che la tavolozza scrive dentro la stessa scatola, cambiano vestito da
+   soli.
+
+   Il piano è quello delle modali e non quello dei popover: questa superficie
+   intrappola il fuoco, e una che lo intrappola dipinta *sotto* un'altra manda a
+   scrivere alla cieca dentro qualcosa che non si vede. */
+.modale {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: calc(var(--titlebar-h) + var(--space-5)) var(--space-6) var(--space-8);
+  background: var(--scrim);
+}
+
+.modale .palette-box {
+  width: min(640px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-7);
+  border: none;
+  border-radius: var(--radius-dialog);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-5);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Il lanciatore: niente margini, perché il campo e il piede toccano i bordi; e
+   non più alto di sei decimi della finestra, perché a scorrere è l'elenco. */
+.modale .palette-box:has(> .palette-input) {
+  gap: 0;
+  padding: 0;
+  max-height: min(60vh, 100%);
+  overflow: hidden;
+}
+
+/* Il menu «/» è una scatola ancorata al cursore e non un velo: niente scurito,
+   niente centro. Il punto lo calcola `placeAtCaret`, la forma sta qui. Resta
+   modale per il fuoco (lo intrappola finché è aperto) ma non copre la nota. */
+.modale[data-anchor="caret"] {
+  display: block;
+  padding: 0;
+  background: transparent;
+}
+.modale[data-anchor="caret"] .palette-box {
+  position: fixed;
+  width: 320px;
+  max-width: calc(100vw - 12px);
+  max-height: min(288px, 60vh);
+  border-radius: var(--radius-menu);
+  box-shadow: var(--shadow-3);
+}
+
+/* --- il campo -------------------------------------------------------------- */
+/* Senza bordo proprio: il campo *è* la testa della scatola, e lo separa dagli
+   esiti un filo solo. La lente è disegnata nel fondo — un anello e un manico —
+   perché la shell qui non scrive un'icona, e un campo senza lente si legge
+   come una riga di testo.
+
+   Il fuoco sta sempre qui finché la superficie è aperta: un anello intorno
+   alla testa, tagliato dagli angoli della scatola, sarebbe una cornice in più
+   e non un segnale. Il filo sotto prende lo spessore e il colore dell'anello:
+   è lo stesso segnale, steso dove c'è posto. */
+.modale .palette-input {
+  flex: none;
+  width: 100%;
+  height: 48px;
+  padding: 0 var(--space-6) 0 44px;
+  border: none;
+  border-radius: 0;
+  background:
+    linear-gradient(45deg, transparent 39%, var(--muted) 40%, var(--muted) 60%, transparent 61%) no-repeat 27px 27px / 5px 5px,
+    radial-gradient(circle, transparent 4.25px, var(--muted) 4.75px, var(--muted) 6px, transparent 6.5px) no-repeat 16px 17px / 13px 13px,
+    transparent;
+  box-shadow: inset 0 -1px 0 var(--border);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: var(--leading-normal);
+}
+.modale .palette-input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 calc(-1 * var(--focus-ring-width)) 0 var(--focus-ring);
+}
+.modale .palette-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* --- gli esiti ------------------------------------------------------------- */
+.modale .palette-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-3);
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Una riga è alta 36 e sta su una riga sola: il titolo a sinistra, ciò che lo
+   distingue (il percorso, il raggio, l'accordo di tasti) a destra, in grafite.
+   Niente transizione sul fondo: sotto le frecce l'evidenziazione deve arrivare
+   insieme al tasto, non un attimo dopo. */
+.modale .palette-list li {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-height: 36px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  cursor: pointer;
+}
+
+/* La riga su cui cadrà l'Invio è una sola e la dice `aria-selected`: fondo
+   d'accento e titolo d'accento, mai un grigio. Il puntatore ne ha una sua, più
+   tenue, e le due si vedono insieme: le frecce spostano la prima, il mouse la
+   seconda, e nessuna delle due fa sparire l'altra. */
+.modale .palette-list li:hover {
+  background: var(--overlay-hover);
+}
+.modale .palette-list li:active {
+  background: var(--overlay-active);
+}
+/* Sotto il dito la riga si legge tutta in inchiostro: sul fondo del premuto,
+   nella luce scura, la grafite del percorso scenderebbe sotto 4,5:1. */
+.modale .palette-list li:active:not([aria-selected="true"]) .palette-desc,
+.modale .palette-list li:active:not([aria-selected="true"]) .palette-scope {
+  color: var(--text);
+}
+.modale .palette-list li[aria-selected="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+
+/* Nel cambio rapido e nella ricerca la riga è un bottone vero: prende tutta la
+   riga, così il bersaglio e l'anello del fuoco sono la riga e non il testo. */
+.modale .palette-list li > button {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  height: 36px;
+  margin: 0 calc(-1 * var(--space-5));
+  padding: 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.modale .palette-list li > button:hover {
+  background: transparent;
+  color: inherit;
+}
+
+/* Nella tavolozza la riga è fatta di due blocchi — il nome con i suoi segni, e
+   sotto la descrizione. Qui si sciolgono in una riga sola: nome, descrizione
+   che riempie e si tronca, poi raggio, preferito e tasti. */
+.modale .palette-row {
+  display: contents;
+}
+
+.modale .palette-list li > button > .palette-title,
+.modale .palette-list .palette-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il testo che non è dentro un titolo — un estratto, un'occorrenza — fa lo
+   stesso: una riga, e ciò che non entra si tronca. */
+.modale .palette-list li > button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Le lettere scritte, ritrovate nel nome: inchiostro pieno e grassetto. Non il
+   giallo dell'evidenziatore, che è degli estratti: queste sono lettere di un
+   nome, non una citazione. */
+.modale .palette-list mark {
+  background: transparent;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+
+.modale .palette-list li > button > .palette-desc,
+.modale .palette-list .palette-desc,
+.modale .palette-scope {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il percorso di una nota: a destra, e cede lui il posto al nome. */
+.modale .palette-list li > button > .palette-desc {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+}
+/* La descrizione di un comando: subito dopo il nome, e riempie. */
+.modale .palette-list li > .palette-desc {
+  order: 1;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.modale .palette-scope {
+  order: 2;
+  flex: none;
+  margin-left: auto;
+}
+.modale .palette-favorite {
+  order: 3;
+  flex: none;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+.modale .palette-list kbd {
+  order: 4;
+  flex: none;
+}
+
+/* Un tasto: una pastiglia in grafite, con il carattere dell'interfaccia e le
+   cifre in colonna. */
+.modale kbd {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* Niente da mostrare: una frase in grafite, che non si sceglie. */
+.modale .palette-list .palette-empty,
+.modale .palette-list .palette-empty:hover {
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Un'occorrenza dentro la nota è figlia dell'esito che la precede: rientra.
+   Rientra il testo, non la riga: il bottone resta largo quanto gli altri, e
+   l'anello del fuoco con lui. */
+.modale .palette-list .hit-occurrence {
+  color: var(--muted);
+}
+.modale .palette-list .hit-occurrence > span {
+  padding-left: var(--space-5);
+}
+.modale .palette-list .hit-occurrence > button {
+  padding-left: var(--space-8);
+}
+
+/* --- il piede -------------------------------------------------------------- */
+/* La riga che dice dove si è e che cosa fanno i tasti. La shell la scrive per
+   prima, sopra il campo, perché chi ascolta la senta prima di scrivere; chi
+   guarda la vuole in fondo, dove non spinge giù il campo. `order` sposta solo
+   il disegno. */
+.modale .palette-box > .palette-desc:first-child {
+  order: 9;
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  margin: 0;
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+
+/* Quanti esiti ha la ricerca dentro la nota. Sopra la lista e non sotto: è la
+   riga che dice «zero» quando non c'è lista da guardare. */
+.modale .docsearch-summary {
+  flex: none;
+  margin: 0;
+  padding: var(--space-4) var(--space-6) 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.modale .docsearch-summary:empty {
+  display: none;
+}
+
+/* --- il dialogo: titolo, corpo, modulo ------------------------------------- */
+.modale .palette-heading {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+/* Il titolo sopra un campo di ricerca (la scelta in un elenco) non ha la
+   scatola a dargli il margine. */
+.modale .palette-box:has(> .palette-input) > .palette-heading {
+  padding: var(--space-6) var(--space-6) var(--space-2);
+}
+
+.modale .palette-box > .palette-desc {
+  margin: calc(-1 * var(--space-3)) 0 0;
+  color: var(--muted);
+  font-size: var(--text-base);
+}
+
+.modale .palette-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+}
+/* «Altre N voci», sotto l'elenco di una scelta: un piede anche lui. */
+.modale .palette-box > .palette-help {
+  flex: none;
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border);
+}
+
+.modale .palette-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+}
+.modale .palette-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.modale .palette-form > .palette-desc {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.modale .palette-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+
+/* I campi stanno un gradino sotto il rialzo (`--sheet-2`) e il confine li
+   stacca: su una superficie chiara il solo fondo non basterebbe a dire dove
+   finisce il campo. */
+.modale .palette-form input:not([type="checkbox"]):not([type="radio"]),
+.modale .palette-form select,
+.modale .palette-form textarea {
+  width: 100%;
+  min-height: var(--control-h);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background-color: var(--sheet-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+}
+.modale .palette-form textarea {
+  padding: var(--space-3) var(--space-4);
+  resize: vertical;
+}
+.modale .palette-form input:not([type="checkbox"]):not([type="radio"]):hover,
+.modale .palette-form select:hover,
+.modale .palette-form textarea:hover {
+  border-color: var(--text);
+}
+.modale .palette-form input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+.modale .palette-form select:focus-visible,
+.modale .palette-form textarea:focus-visible {
+  border-color: var(--accent);
+}
+.modale .palette-form input:disabled,
+.modale .palette-form select:disabled,
+.modale .palette-form textarea:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Una casella sta davanti al suo nome, sulla stessa riga. */
+.modale .palette-form label:has(> input[type="checkbox"]) {
+  flex-direction: row-reverse;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-4);
+}
+.modale .palette-form input[type="checkbox"] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* --- il piano prima di applicare ------------------------------------------- */
+/* Ciò che il comando farà, detto prima di farlo: il conto in una riga e
+   l'elenco in un riquadro. Se non si torna indietro lo dice la matita rossa —
+   nel conto e nel bottone, non nell'elenco, che resta da leggere. */
+.modale .palette-summary {
+  margin: calc(-1 * var(--space-3)) 0 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.modale .palette-box:has(.palette-actions > .danger) > .palette-summary {
+  color: var(--danger);
+  font-weight: var(--weight-medium);
+}
+
+.modale .palette-plan {
+  flex: 0 1 auto;
+  min-height: 72px;
+  max-height: 40vh;
+  margin: 0;
+  padding: var(--space-2) 0;
+  list-style: none;
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.modale .palette-plan li {
+  padding: var(--space-3) var(--space-5);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.modale .palette-plan li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* --- le azioni ------------------------------------------------------------- */
+/* A destra. La secondaria è una velatura, la primaria è l'unica cosa piena
+   della scatola: si deve vedere qual è la scelta che conferma. */
+.modale .palette-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+/* Le azioni chiudono la scatola anche quando un errore arriva dopo di loro:
+   la shell lo appende in fondo, e sotto i bottoni parrebbe una nota a margine. */
+.modale .palette-box > .palette-actions {
+  order: 1;
+}
+.modale .palette-actions button {
+  min-height: var(--control-h);
+  padding: 0 var(--space-6);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+.modale .palette-actions button:hover {
+  background: var(--overlay-active);
+}
+.modale .palette-actions button:active {
+  transform: scale(0.98);
+}
+
+.modale .palette-actions button.primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+}
+.modale .palette-actions button.primary:hover {
+  background: var(--accent-soft);
+  color: var(--bg);
+}
+
+/* Il distruttivo qui è già una conferma: è pieno, e sotto il puntatore si
+   scurisce con una velatura invece di cambiare tinta. */
+.modale .palette-actions button.danger {
+  background: var(--danger);
+  color: var(--danger-contrast);
+  font-weight: var(--weight-bold);
+}
+.modale .palette-actions button.danger:hover {
+  background: var(--danger);
+  box-shadow: inset 0 0 0 var(--control-h) var(--overlay-active);
+}
+
+.modale .palette-actions button:disabled,
+.modale .palette-actions button:disabled:hover {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
+/* L'errore di un comando: il fondo e il punto dicono la specie, e il testo
+   resta inchiostro — il rosso su un fondo rosato non si legge abbastanza nella
+   luce scura. */
+.modale .palette-error {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+.modale .palette-error::before {
+  content: "";
+  flex: none;
+  align-self: flex-start;
+  width: 6px;
+  height: 6px;
+  margin-top: calc((1em * var(--leading-normal) - 6px) / 2);
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+}
+
+/* --- il confronto di due testi --------------------------------------------- */
+/* Riga per riga (`ui/compare.ts`): il fondo dice da che parte sta la riga. */
+.modale .compare-box {
+  width: min(900px, 100%);
+}
+.modale .compare-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-3) 0;
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.modale .compare-line {
+  padding: 0 var(--space-5);
+}
+.modale .compare-line[data-side="mine"] {
+  background: var(--success-wash);
+}
+.modale .compare-line[data-side="theirs"] {
+  background: var(--danger-wash);
+}
+
+/* --- il lanciatore unificato ----------------------------------------------- */
+/*
+   Una superficie sola per aprire, cercare e comandare
+   (`shells/scrittoio/launcher/`). Cresce dalla pillola e si posa dove stanno
+   anche il modulo e il piano di un comando, con lo stesso vestito della
+   scatola qui sopra: i due devono sembrare la stessa cosa, perché scegliere un
+   comando con parametri passa dall'una all'altro.
+
+   La geometria non è qui: sta accanto al modulo. Qui ci sono colori, misure e
+   caratteri. La fila dei modi e l'elenco sono primitive del kit e arrivano già
+   vestite; questo pezzo veste ciò che il lanciatore ci mette dentro.
+*/
+.launcher-veil {
+  background: var(--scrim);
+}
+
+.launcher {
+  border-radius: var(--radius-dialog);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-5);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+
+/* La testa: l'icona del modo, il campo, l'attesa. Il fuoco sta sempre nel
+   campo finché la superficie è aperta: lo dice il filo sotto la testa, che
+   prende spessore e colore dell'anello, e non una cornice in più. */
+.launcher-head {
+  gap: var(--space-4);
+  height: 48px;
+  padding: 0 var(--space-6);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.launcher-head:focus-within {
+  box-shadow: inset 0 calc(-1 * var(--focus-ring-width)) 0 var(--focus-ring);
+}
+.launcher-lens {
+  display: inline-flex;
+  color: var(--muted);
+}
+.launcher-input {
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-lg);
+  line-height: var(--leading-normal);
+}
+/* Il segno del fuoco è del campo, ed è lo stesso filo della testa: i due
+   combaciano, e si legge una riga sola lunga quanto la superficie. */
+.launcher-input:focus-visible {
+  outline: none;
+  box-shadow: inset 0 calc(-1 * var(--focus-ring-width)) 0 var(--focus-ring);
+}
+.launcher-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+/* L'attesa: un anello fermo con un arco d'accento. Non gira: dice che una
+   risposta sta arrivando, e basta. */
+.launcher-wait {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+/* La fila dei modi, col prefisso che porta in ognuno scritto accanto al nome. */
+.launcher-modes {
+  padding: var(--space-2) var(--space-5) 0;
+}
+.launcher-mode-prefix {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-regular);
+}
+
+/* Gli esiti. Una riga sta su una riga sola, o su due quando porta con sé una
+   descrizione o un estratto; a destra, in grafite, ciò che la distingue. */
+.launcher-list {
+  padding: var(--space-3);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.launcher-row {
+  min-height: 36px;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-control);
+}
+.launcher-row-title {
+  font-size: var(--text-base);
+}
+/* Le lettere scritte, ritrovate nel nome: inchiostro pieno e grassetto. */
+.launcher-row-title mark {
+  background: transparent;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.launcher-row-detail {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Le parole trovate in un estratto sono una citazione: evidenziatore. */
+.launcher-row-detail mark {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--highlight);
+  color: var(--text);
+}
+.launcher-row-meta {
+  gap: var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Niente da scegliere: una frase in grafite, al centro. Un guasto si dice
+   col suo colore. */
+.launcher-note {
+  margin: 0;
+  padding: var(--space-8) var(--space-6);
+  color: var(--muted);
+  text-align: center;
+}
+.launcher-note[data-failed] {
+  color: var(--danger);
+}
+
+/* L'anteprima della nota attiva, accanto all'elenco: un filo la separa, e
+   dentro c'è la resa della Lettura un gradino più piccola. È uno sguardo
+   sull'inizio: ciò che continua sfuma nel fondo della superficie. */
+.launcher-preview {
+  padding: var(--space-6) var(--space-7) 0;
+  box-shadow: inset 1px 0 0 var(--border);
+}
+.launcher-preview::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, var(--bg-elev));
+}
+.launcher-preview .launcher-preview-page {
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  transition: opacity var(--duration-fast) var(--ease);
+}
+.launcher-preview .launcher-preview-page > * {
+  margin-bottom: var(--space-5);
+}
+.launcher-preview .launcher-preview-page h1,
+.launcher-preview .launcher-preview-page h2,
+.launcher-preview .launcher-preview-page h3,
+.launcher-preview .launcher-preview-page h4,
+.launcher-preview .launcher-preview-page h5,
+.launcher-preview .launcher-preview-page h6 {
+  padding-top: var(--space-3);
+}
+.launcher-preview .launcher-preview-page h1 {
+  font-size: 1.4em;
+}
+.launcher-preview .launcher-preview-page h2 {
+  font-size: 1.2em;
+}
+.launcher-preview .launcher-preview-page h3 {
+  font-size: 1.06em;
+}
+.launcher-preview .launcher-preview-page > :first-child {
+  padding-top: 0;
+}
+/* Una resa che tarda: quella di prima resta, attenuata, finché arriva. */
+.launcher-preview[data-waiting] .launcher-preview-page {
+  opacity: 0.45;
+}
+/* Niente da mostrare, o una resa che non riesce: una frase in grafite. */
+.launcher-preview-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Il piede: a sinistra il conto, a destra i tasti che servono in questo modo. */
+.launcher-foot {
+  gap: var(--space-6);
+  min-height: 32px;
+  padding: 0 var(--space-6);
+  box-shadow: inset 0 1px 0 var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.launcher-status {
+  font-variant-numeric: tabular-nums;
+}
+/* Alta quanto un tasto: la geometria manda a capo quelli che non entrano, e
+   qui la seconda riga non ha posto. */
+.launcher-hints {
+  gap: var(--space-5);
+  height: 20px;
+}
+.launcher-hint {
+  gap: var(--space-3);
+}
+/* «Apri nel pannello»: il solo controllo del piede. Si distingue dai tasti
+   detti accanto perché il bordo è suo e ha un fondo al passaggio: dentro, la
+   parola viene prima e l'accordo dopo, senza una cornice in più. Spento,
+   quando non c'è una domanda da portare, resta al suo posto in grafite. */
+.launcher-panel {
+  gap: var(--space-4);
+  height: 24px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.launcher-panel:hover {
+  background: var(--overlay-hover);
+}
+.launcher-panel:active {
+  background: var(--overlay-active);
+}
+.launcher-panel:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 1px;
+}
+.launcher-panel:disabled {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: default;
+}
+.launcher-panel .launcher-key {
+  padding: 0;
+  border-color: transparent;
+}
+.launcher-key {
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}

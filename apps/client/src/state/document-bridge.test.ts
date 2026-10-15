@@ -241,7 +241,10 @@ describe("document-window protocol", () => {
     let text = "";
     children.push(attachChildBridge(opened.request, (next) => { text = next; }, () => text, observeState, (theme) => themes.push(theme)));
     await settle();
-    expect(themes).toEqual([{ light: "dark", contrast: "normal", layers: [{ layer: "foglio", text: ":root { --x: 1; }" }] }]);
+    // Nessuna impostazione del tema scelta: le opzioni viaggiano vuote, non
+    // assenti, così la finestra toglie quelle che aveva.
+    const options = { attributes: {}, properties: {} };
+    expect(themes).toEqual([{ light: "dark", contrast: "normal", layers: [{ layer: "foglio", text: ":root { --x: 1; }" }], options }]);
 
     document.documentElement.dataset.theme = "light";
     mount(":root { --y: 2; }", "pelle");
@@ -249,7 +252,7 @@ describe("document-window protocol", () => {
     await settle();
     expect(themes[1]).toEqual({ light: "light", contrast: "normal", layers: [
       { layer: "foglio", text: ":root { --x: 1; }" }, { layer: "pelle", text: ":root { --y: 2; }" },
-    ] });
+    ], options });
 
     const navigate = vi.fn();
     setDocumentWindowNavigation({ navigate });

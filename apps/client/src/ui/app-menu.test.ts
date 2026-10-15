@@ -35,18 +35,18 @@ describe("menubar applicativa", () => {
 
   it("lascia un solo top-level nel giro del Tab e sposta il fuoco con le frecce", () => {
     const buttons = [...document.querySelectorAll<HTMLButtonElement>("#app-menu > button")];
-    expect(buttons).toHaveLength(5);
-    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+    expect(buttons).toHaveLength(6);
+    expect(buttons.map((button) => button.tabIndex)).toEqual([0, -1, -1, -1, -1, -1]);
 
     buttons[0]!.focus();
     key(buttons[0]!, "ArrowRight");
     expect(document.activeElement).toBe(buttons[1]);
     key(buttons[1]!, "End");
-    expect(document.activeElement).toBe(buttons[4]);
-    key(buttons[4]!, "Home");
+    expect(document.activeElement).toBe(buttons[5]);
+    key(buttons[5]!, "Home");
     expect(document.activeElement).toBe(buttons[0]);
     key(buttons[0]!, "ArrowLeft");
-    expect(document.activeElement).toBe(buttons[4]);
+    expect(document.activeElement).toBe(buttons[5]);
   });
 
   it("Down apre il menu e mette il fuoco sulla prima voce", () => {
@@ -99,6 +99,51 @@ describe("menubar applicativa", () => {
     button.click();
     expect(document.getElementById("context-menu")).toBeNull();
   });
+
+  it("la ricerca trova una voce in qualunque menu e la esegue", () => {
+    const search = document.querySelectorAll<HTMLButtonElement>("#app-menu > button")[5]!;
+    search.click();
+    const input = document.querySelector<HTMLInputElement>(".app-menu-search-input")!;
+    expect(search.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(input);
+    input.value = "impostaz";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const options = [...document.querySelectorAll(".app-menu-search-option")];
+    // «Impostazioni» sta in due menu e si offre una volta sola.
+    expect(options).toHaveLength(1);
+    expect(input.getAttribute("aria-activedescendant")).toBe(options[0]!.id);
+    key(input, "Enter");
+    expect(runCalls).toEqual(["shell.settings"]);
+    expect(document.querySelector(".app-menu-search-panel")).toBeNull();
+    expect(search.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("Esc chiude la ricerca e rida il fuoco al pulsante; senza risultati lo dice", () => {
+    const search = document.querySelectorAll<HTMLButtonElement>("#app-menu > button")[5]!;
+    search.click();
+    const input = document.querySelector<HTMLInputElement>(".app-menu-search-input")!;
+    input.value = "zzzz";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(document.querySelector(".app-menu-search-status")!.textContent).not.toBe("");
+    key(input, "Escape");
+    expect(document.querySelector(".app-menu-search-panel")).toBeNull();
+    expect(document.activeElement).toBe(search);
+  });
+
+  it("le frecce spostano la voce evidenziata, e lo smontaggio toglie il pannello", () => {
+    const search = document.querySelectorAll<HTMLButtonElement>("#app-menu > button")[5]!;
+    search.click();
+    const input = document.querySelector<HTMLInputElement>(".app-menu-search-input")!;
+    const options = [...document.querySelectorAll(".app-menu-search-option")];
+    expect(options.length).toBeGreaterThan(3);
+    key(input, "ArrowDown");
+    expect(options[1]!.getAttribute("aria-selected")).toBe("true");
+    key(input, "ArrowUp");
+    key(input, "ArrowUp");
+    expect(options[options.length - 1]!.getAttribute("aria-selected")).toBe("true");
+    teardown?.();
+    expect(document.querySelector(".app-menu-search-panel")).toBeNull();
+  });
 });
 
 describe("il menu Vista e le view principali", () => {
@@ -136,6 +181,81 @@ describe("il menu Vista e le view principali", () => {
     // aprire qualcosa che non c'è.
     declared = [];
     expect(viewMenuLabels().some((label) => label.includes("Grafo"))).toBe(false);
+    teardown();
+  });
+
+  it("una voce facoltativa c'è solo dove il suo comando è dichiarato", () => {
+    const menubar = document.createElement("nav");
+    menubar.id = "app-menu";
+    document.body.append(menubar);
+    const ran: ShellCommandId[] = [];
+    const declared = new Set<ShellCommandId>();
+    const teardown = mountAppMenu({ run: (id) => ran.push(id), has: (id) => declared.has(id) });
+
+    // Nessuno lo dichiara: il menu non mostra una riga che non farebbe niente.
+    const without = viewMenuLabels();
+    expect(without).not.toContain("Più spazio al foglio");
+    expect(without).toContain("Ingrandisci");
+    closeContextMenu();
+
+    // Letta a ogni apertura, come le scorciatoie.
+    declared.add("shell.chrome.compact.more");
+    const labels = viewMenuLabels();
+    expect(labels).toContain("Più spazio al foglio");
+    expect(labels).not.toContain("Meno spazio al foglio");
+    [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
+      .find((entry) => entry.textContent === "Più spazio al foglio")!
+      .click();
+    expect(ran).toEqual(["shell.chrome.compact.more"]);
+    teardown();
+  });
+
+  it("senza chi sappia rispondere, le voci facoltative non compaiono", () => {
+    const teardown = mountWith(() => []);
+    expect(viewMenuLabels().some((label) => label.includes("spazio"))).toBe(false);
+    teardown();
+  });
+
+  it("i modi del lanciatore hanno una voce dove una cornice li dichiara", () => {
+    const menubar = document.createElement("nav");
+    menubar.id = "app-menu";
+    document.body.append(menubar);
+    const ran: ShellCommandId[] = [];
+    const declared = new Set<ShellCommandId>();
+    const teardown = mountAppMenu({ run: (id) => ran.push(id), has: (id) => declared.has(id) });
+    const labelsOf = (menu: number): string[] => {
+      document.querySelector<HTMLButtonElement>(`#app-menu-${menu}`)!.click();
+      return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].map(
+        (item) => item.textContent ?? "",
+      );
+    };
+
+    expect(labelsOf(3)).not.toContain("Vai a un'intestazione");
+    closeContextMenu();
+    expect(labelsOf(0)).not.toContain("Nuova nota da un modello");
+    closeContextMenu();
+
+    for (const id of [
+      "shell.launcher.search",
+      "shell.launcher.headings",
+      "shell.launcher.line",
+      "shell.launcher.tags",
+      "shell.launcher.templates",
+    ] as const) declared.add(id);
+    expect(labelsOf(0)).toContain("Nuova nota da un modello");
+    closeContextMenu();
+    const go = labelsOf(3);
+    expect(go.slice(0, 5)).toEqual([
+      "Vai alla nota",
+      "Cerca nel vault dal lanciatore",
+      "Vai a un'intestazione",
+      "Vai a una riga",
+      "Sfoglia le etichette",
+    ]);
+    [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
+      .find((entry) => entry.textContent === "Vai a una riga")!
+      .click();
+    expect(ran).toEqual(["shell.launcher.line"]);
     teardown();
   });
 });

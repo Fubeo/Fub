@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
 import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
-import { apply, exportArtifacts, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
+import { apply, exportArtifacts, mountActivity, noticeOf, labelOf, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
 import { api } from "../host/ipc";
 import samples from "../__fixtures__/mirror-samples.json";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
@@ -159,6 +159,40 @@ describe("rimontaggio del centro attività", () => {
 
     expect(document.getElementById("activity-button")?.classList.contains("in-corso")).toBe(true);
     second.close();
+  });
+});
+
+describe("lo storico del centro attività", () => {
+  const item = (text: string): Past => ({ text, tone: "info", when: 1 });
+
+  it("ricorda dal più recente e tiene solo gli ultimi", () => {
+    let past: Past[] = [];
+    for (let i = 0; i < PAST_LIMIT + 3; i += 1) past = remember(past, item(`lavoro ${i}`));
+    expect(past).toHaveLength(PAST_LIMIT);
+    expect(past[0]!.text).toBe(`lavoro ${PAST_LIMIT + 2}`);
+  });
+
+  it("un lavoro finito resta nell'elenco con il suo esito, fallito o riuscito", () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    try {
+      mountActivity(lifetime);
+      forwardNotice(notice({ type: "job_done", id: "1", job: "export", result: { Ok: null } }));
+      forwardNotice(notice({
+        type: "job_done", id: "2", job: "import",
+        result: { Err: { kind: "io", message: "Disco pieno" } },
+      }));
+      document.getElementById("activity-button")!.click();
+      const rows = [...document.querySelectorAll<HTMLElement>("#activity-list > li[data-tone]")];
+      expect(rows.map((row) => row.dataset["tone"])).toEqual(["guasto", "info"]);
+      expect(rows[0]!.textContent).toContain("Disco pieno");
+    } finally {
+      lifetime.close();
+    }
   });
 });
 

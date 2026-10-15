@@ -6,7 +6,7 @@
 // mostra il report (doc mancanti, view non dichiarate, history potata).
 // Chiude in sé: `currentWorkspaceId` è l’ultimo applicato in questa
 // sessione, non una verità persistita.
-import { confirm } from "../host/dialog";
+import { confirm } from "../platform/confirm";
 import { promptText } from "../ui/dialogs";
 import { layout } from "./layout";
 import { state } from "./store";

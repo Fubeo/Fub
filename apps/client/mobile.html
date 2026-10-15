@@ -2,7 +2,7 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Fub</title>
   </head>
   <body>
@@ -14,63 +14,76 @@
     <a href="#panes" class="skip-link" data-i18n="app.skip_to_editor">Vai all'editor</a>
     <div id="app" class="app">
       <header id="topbar" class="titlebar" data-tauri-drag-region="deep">
-        <!-- #titlebar-left: il marchio e la menubar applicativa. -->
+        <!-- A sinistra: il marchio, che apre il menu dell'applicazione; il
+             vault aperto; indietro e avanti del foglio a fuoco. -->
         <div id="titlebar-left" class="titlebar-side titlebar-side--left" data-tauri-drag-region="deep">
-          <span class="brand" data-tauri-drag-region="deep">Fub</span>
           <button
-            id="app-menu-toggle"
+            id="brand-menu"
             type="button"
-            class="titlebar-btn titlebar-btn--icon app-menu-toggle"
-            data-i18n="app.menu"
-            data-i18n-label="app.menu"
-            aria-label="Menu"
+            class="brand-mark"
+            data-i18n-label="frame.app_menu"
+            data-i18n-title="frame.app_menu"
+            aria-label="Menu di Fub"
             aria-expanded="false"
             aria-controls="app-menu"
-            hidden
-          >Menu</button>
-          <nav id="app-menu" class="app-menu" role="menubar" data-i18n-label="region.menu" aria-label="Menu applicazione" data-tauri-drag-region="deep"></nav>
-          <!-- `#open-vault` resta un bottone cliccabile con il suo id, perché
-               il comando `shell.vault.open` e `mountAppMenu` lo cercano. Non è
-               visibile: la voce del menu File che apre il vault chiama lo
-               stesso handler, e il bottone è il manico che l'handler trova. -->
+          ><span class="brand-glyph" aria-hidden="true">f</span></button>
+          <!-- `#app-menu-toggle` e `#open-vault` restano come manici: il
+               registro dei comandi e `ui/titlebar.ts` li cercano per id. Non
+               si vedono mai: il menu si apre dal marchio. -->
+          <button id="app-menu-toggle" type="button" class="app-menu-toggle" data-i18n-label="app.menu" aria-label="Menu" hidden></button>
+          <nav id="app-menu" class="app-menu" role="menubar" data-i18n-label="region.menu" aria-label="Menu applicazione"></nav>
           <button id="open-vault" data-i18n="app.open_vault" hidden type="button">Apri vault…</button>
-          <!-- Il contenitore per le view che dichiarano ViewSurface::Menu
-               (§2.2). La shell le ospita qui, in fondo alla menubar. -->
+          <button
+            id="vault-chip"
+            type="button"
+            class="vault-chip"
+            data-i18n-label="frame.vault_chip"
+            aria-label="Apri un vault"
+            aria-haspopup="menu"
+            aria-expanded="false"
+          >
+            <!-- Il nome vero lo scrive `frame/vault-chip.ts`, che sa quale
+                 vault è aperto; la chiave qui è il ripiego, e a ogni cambio di
+                 lingua il modulo riscrive dopo `applyStrings`. -->
+            <span id="vault-chip-icon" class="vault-chip-icon" aria-hidden="true"></span>
+            <span id="vault-path" class="vault-chip-name"></span>
+            <span id="vault-chip-none" class="vault-chip-none" data-i18n="app.open_vault" hidden>Apri vault…</span>
+            <span class="vault-chip-caret" aria-hidden="true"></span>
+          </button>
+          <span id="frame-nav" class="frame-nav" role="group" data-i18n-label="frame.nav" aria-label="Cronologia del foglio">
+            <button id="nav-back" type="button" class="titlebar-btn titlebar-btn--icon" data-i18n-label="menu.go.back" aria-label="Indietro"></button>
+            <button id="nav-forward" type="button" class="titlebar-btn titlebar-btn--icon" data-i18n-label="menu.go.forward" aria-label="Avanti"></button>
+          </span>
+          <!-- Le view che dichiarano ViewSurface::Menu. -->
           <div id="app-menu-extra" data-tauri-drag-region="deep"></div>
         </div>
-        <!-- #titlebar-center: il trigger di ricerca + il percorso del vault. -->
+        <!-- Al centro: la pillola. A riposo dice dove sei; premuta, diventa
+             il lanciatore. -->
         <div id="titlebar-center" class="titlebar-center" data-tauri-drag-region="deep">
-          <!-- Il trigger fa focus su #search-input — la ricerca onesta, già
-               lì. L'accordo sta dentro il bottone, scritto come si preme. -->
           <button
-            id="command-search"
+            id="pill"
             type="button"
-            data-i18n-title="command-search.hint"
-            data-i18n-label="command-search.placeholder"
-            aria-label="Cerca nel vault…"
-            class="titlebar-btn titlebar-btn--wide"
+            class="pill"
+            data-i18n-label="frame.pill"
+            aria-label="Apri, cerca, comanda"
+            aria-haspopup="dialog"
           >
-            <span class="titlebar-btn-text" data-i18n="command-search.placeholder">Cerca nel vault…</span>
-            <kbd id="command-search-key" class="titlebar-shortcut" aria-hidden="true"></kbd>
+            <span id="pill-icon" class="pill-icon" aria-hidden="true"></span>
+            <span id="pill-path" class="pill-path"></span>
+            <span id="pill-title" class="pill-title">Apri, cerca, comanda…</span>
+            <kbd id="pill-key" class="titlebar-shortcut" aria-hidden="true"></kbd>
           </button>
-          <span id="vault-path" class="muted" data-tauri-drag-region="deep"></span>
+          <!-- Il manico del vecchio trigger di ricerca: la shell comune lo
+               abilita e lo spegne col vault, e il lanciatore non lo usa. -->
+          <button id="command-search" type="button" data-i18n-label="command-search.placeholder" aria-label="Cerca nel vault…" hidden>
+            <kbd id="command-search-key" hidden></kbd>
+          </button>
         </div>
-        <!-- #titlebar-right: avvisi, attività, palette e impostazioni, come
-             in `index.html`. Mobile non ha controlli finestra: la piattaforma
-             non ne ha (`nativeWindowControls`). I quattro bottoni nascono
-             vuoti: icona, conteggio e nome li scrive chi conosce lo stato
-             (`ui/notify.ts`, `panels/activity.ts`, `ui/titlebar.ts`). -->
+        <!-- A destra: lavori in corso, avvisi e l'ispettore, come in
+             `index.html`. Il telefono non ha controlli finestra: la
+             piattaforma non ne ha (`nativeWindowControls`). I bottoni nascono
+             vuoti: icona, conteggio e nome li scrive chi conosce lo stato. -->
         <div id="titlebar-right" class="titlebar-side">
-          <button
-            id="notify-button"
-            type="button"
-            class="titlebar-btn titlebar-btn--icon"
-            data-i18n-label="notices.title"
-            aria-label="Avvisi"
-            aria-expanded="false"
-            aria-controls="notify-panel"
-            data-i18n-title="notices.hint"
-          ></button>
           <button
             id="activity-button"
             type="button"
@@ -82,37 +95,54 @@
             data-i18n-title="activity.hint"
           ></button>
           <button
-            id="open-palette"
+            id="notify-button"
             type="button"
-            data-i18n-label="commands.palette"
             class="titlebar-btn titlebar-btn--icon"
-            aria-label="Apri la palette dei comandi"
+            data-i18n-label="notices.title"
+            aria-label="Avvisi"
+            aria-expanded="false"
+            aria-controls="notify-panel"
+            data-i18n-title="notices.hint"
           ></button>
           <button
-            id="open-settings"
+            id="toggle-inspector"
             type="button"
-            data-i18n-title="app.settings.hint"
-            data-i18n-label="app.settings"
             class="titlebar-btn titlebar-btn--icon"
-            aria-label="Impostazioni"
+            data-i18n-label="menu.view.inspector"
+            data-i18n-title="menu.view.inspector"
+            aria-label="Mostra o nascondi l'ispettore"
+            aria-pressed="false"
+            aria-controls="right-pane"
           ></button>
+          <button id="open-palette" type="button" data-i18n-label="commands.palette" aria-label="Apri la palette dei comandi" hidden></button>
         </div>
       </header>
       <main id="workspace">
         <h1 id="app-heading" class="sr-only">Fub</h1>
-        <!-- La rail: icone a sinistra, sempre visibile. Le icone shell
-             (Note, Cerca, Grafo) le monta `panels/rail.ts` dentro
-             `#rail-shell`; le view dichiarate con `left_sidebar` le appende
-             `ui/views.ts` nello stesso contenitore, dopo le shell. L'ordine
-             DOM è shell prima, declared dopo. -->
-        <div
-          id="views-ribbon"
-          class="rail views-ribbon"
-          role="toolbar"
-          data-i18n-label="region.rail"
-          aria-label="Navigazione"
-        >
-          <div id="rail-shell" class="rail-shell"></div>
+        <!-- Il binario: sceglie che cosa mostra il cassetto sinistro. Le
+             icone della shell le monta `panels/rail.ts` dentro `#rail-shell`;
+             le view dichiarate le appende `ui/views.ts` dopo di loro. In
+             fondo, ciò che non dipende dal vault: aiuto, preferenze, luce.
+             Stanno fuori dalla barra degli strumenti perché `panels/rail.ts`
+             appende in coda a `#views-ribbon`: dentro, finirebbero prima
+             delle icone nell'ordine del fuoco e dopo in quello che si vede. -->
+        <div id="rail" class="rail">
+          <div
+            id="views-ribbon"
+            class="rail-main views-ribbon"
+            role="toolbar"
+            aria-orientation="vertical"
+            data-i18n-label="region.rail"
+            aria-label="Navigazione"
+          >
+            <div id="rail-shell" class="rail-shell"></div>
+          </div>
+          <div id="rail-foot" class="rail-foot" role="group" data-i18n-label="frame.rail_foot" aria-label="Aiuto e preferenze">
+            <button id="open-help" type="button" class="rail-btn" data-i18n-label="frame.help" aria-label="Aiuto" aria-haspopup="menu" aria-expanded="false"></button>
+            <button id="open-settings" type="button" class="rail-btn" data-i18n-title="app.settings.hint" data-i18n-label="app.settings" aria-label="Impostazioni"></button>
+            <button id="toggle-light" type="button" class="rail-btn" data-i18n-label="commands.light.toggle" aria-label="Cambia luce"></button>
+          </div>
+          <span id="rail-notch" class="rail-notch" aria-hidden="true" hidden></span>
         </div>
         <div id="layout">
         <aside id="sidebar" class="sidebar" data-i18n-label="region.notes" aria-label="Note e ricerca">
@@ -253,17 +283,22 @@
         ></section>
         </div>
       </main>
-      <!-- Lo stato del documento a fuoco: il salvataggio (§20.4) e le view
-           dichiarate sulla superficie di stato (§2.2). Non c'è più una barra
-           in fondo alla finestra: `panels/document.ts` porta questo gruppo
-           nella toolbar del riquadro col fuoco, e qui resta solo finché non
-           c'è un riquadro. -->
+      <!-- Lo stato del documento a fuoco. `panels/document.ts` porta questo
+           gruppo nella testata del foglio col fuoco; qui resta solo finché non
+           c'è un foglio. Senza `data-i18n`: il testo lo scrive chi conosce lo
+           stato. -->
       <div id="pane-status" class="pane-status" hidden>
-        <!-- Senza `data-i18n`: il testo lo scrive chi conosce lo stato —
-             `panels/document.ts` — e un secondo proprietario lo cancellerebbe
-             al primo cambio di lingua. `role="status"`: cambia da sé mentre si
-             scrive. -->
         <span id="save-state" class="save-state" role="status"></span>
+      </div>
+      <!-- La banda di stato: a sinistra ciò che riguarda il vault, a destra
+           ciò che riguarda il foglio a fuoco. Le view dichiarate sulla
+           superficie di stato stanno in mezzo. -->
+      <footer id="status-band" class="status-band" data-i18n-label="region.statusbar" aria-label="Barra di stato">
+        <div id="status-start" class="status-side">
+          <span id="status-vault" class="status-item" hidden></span>
+          <span id="status-index" class="status-item" role="status" hidden></span>
+          <span id="status-saving" class="status-item" role="status" hidden></span>
+        </div>
         <div
           id="views-status"
           class="views-status"
@@ -272,7 +307,11 @@
           aria-label="Stato dei componenti"
           hidden
         ></div>
-      </div>
+        <div id="status-end" class="status-side status-side--end">
+          <span id="status-mode" class="status-item" hidden></span>
+          <button id="status-zoom" type="button" class="status-item status-item--button" hidden>100%</button>
+        </div>
+      </footer>
       <!-- «Sto aspettando il tasto successivo» (§18.2). Vive due secondi e
            galleggia in basso al centro: chi ha premuto `Mod-k` deve poter
            vedere che l'app ha capito. Lo riempie `ui/keyboard.ts`. -->

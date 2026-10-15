@@ -439,6 +439,44 @@ export function moveTabToPane(from: string, index: number, to: string, l: Layout
   return true;
 }
 
+/// Da che lato di un riquadro ne nasce un altro.
+export type SplitEdge = "left" | "right" | "top" | "bottom";
+
+/// Toglie una tab da dove sta e la mette in un riquadro **nuovo**, accanto a
+/// `target` dal lato `edge`: è il rilascio di una linguetta sul bordo di un
+/// foglio. Torna l'id del riquadro nato, o `null` — tab appuntata, indici che
+/// non reggono, o l'unica tab di un riquadro lasciata sul suo stesso bordo
+/// (non ci sarebbe niente da separare). Il riquadro di partenza, se resta
+/// vuoto, resta: mostra la scrivania, come per `moveTabToPane`.
+export function splitWithTab(
+  from: string,
+  index: number,
+  target: string,
+  edge: SplitEdge,
+  l: Layout = layout,
+): string | null {
+  const src = l.panes[from];
+  if (!src || !l.panes[target]) return null;
+  const tab = src.tabs[index];
+  if (!tab || tab.pinned) return null;
+  if (from === target && src.tabs.length <= 1) return null;
+  const newItem = mintPaneId(l);
+  const dir = edge === "left" || edge === "right" ? "row" : "col";
+  const before = edge === "left" || edge === "top";
+  const inserted = replace(l.tree, target, (leaf) => ({
+    k: "split",
+    dir,
+    children: before ? [{ k: "leaf", pane: newItem }, leaf] : [leaf, { k: "leaf", pane: newItem }],
+  }));
+  if (!inserted) return null;
+  removeTab(from, index, l);
+  l.tree = flatten(inserted);
+  l.panes[newItem] = { tabs: [tab], active: 0, modes: { ...l.panes[target]!.modes } };
+  l.focus = newItem;
+  changed();
+  return newItem;
+}
+
 /// Appunta o spunta una tab (P06/F21): le appuntate restano a sinistra e non
 /// si chiudono con «chiudi le altre». Il pin non cambia l'identità.
 export function setPinnedTab(id: string, index: number, pinned: boolean, l: Layout = layout): void {

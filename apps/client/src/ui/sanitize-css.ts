@@ -22,11 +22,31 @@ export interface ThemeCssViolation {
   readonly column: number;
 }
 
+/**
+ * Il vocabolario **in più** che un profilo di tema concede ai propri fogli e
+ * alle proprie pelli.
+ *
+ * Senza, il vocabolario è quello di `theme-1` e dei frammenti dell'utente, che
+ * restano com'erano: allargare l'elenco comune avrebbe cambiato in silenzio ciò
+ * che un tema già installato può dire. Un profilo nomina le sue aggiunte una
+ * per una; ciò che nessun profilo può concedere sta in `NEVER_PROPERTIES`.
+ */
+export interface ThemeCssVocabulary {
+  /** Proprietà di sola resa, oltre a `ALLOWED_PROPERTIES`. */
+  readonly properties?: readonly string[];
+  /** Funzioni di valore, oltre a `ALLOWED_FUNCTIONS`. */
+  readonly functions?: readonly string[];
+  /** At-rule della pelle, oltre a `ALLOWED_AT_RULES.skin`. */
+  readonly atRules?: readonly string[];
+}
+
 export interface ThemeCssPolicy {
   readonly assetNamespace: string;
   readonly allowedHooks: readonly string[];
   readonly requiredRoles?: readonly string[];
   readonly kind?: "sheet" | "skin" | "snippet";
+  /** Solo fogli e pelli di un profilo: un frammento dell'utente non lo riceve. */
+  readonly vocabulary?: ThemeCssVocabulary;
 }
 
 // The allowlist is intentionally finite.  A theme may paint an existing surface,
@@ -232,6 +252,71 @@ const ALLOWED_AT_RULES: Record<"sheet" | "skin", Record<string, true>> = {
   skin: { keyframes: true, media: true, "-webkit-keyframes": true },
 };
 
+// Ciò che nessun vocabolario concede. `backdrop-filter` rilegge i pixel che ha
+// sotto, e su WebKitGTK senza composizione è il modo più rapido di fermare una
+// finestra; le altre sono porte verso codice o risorse che un tema non carica.
+const NEVER_PROPERTIES: Record<string, true> = {
+  "backdrop-filter": true,
+  "-webkit-backdrop-filter": true,
+  behavior: true,
+  "-moz-binding": true,
+};
+const NEVER_AT_RULES: Record<string, true> = {
+  import: true,
+  namespace: true,
+  "font-face": true,
+  charset: true,
+};
+const NEVER_FUNCTIONS: Record<string, true> = {
+  expression: true,
+  element: true,
+  paint: true,
+  path: true,
+  src: true,
+};
+
+// Forme e maschere si disegnano, non si caricano: una `url()` qui sarebbe un
+// SVG esterno che decide la sagoma di una superficie della shell.
+const DRAWN_ONLY_PROPERTIES: Record<string, true> = {
+  "clip-path": true,
+  mask: true,
+  "mask-image": true,
+  "-webkit-mask": true,
+  "-webkit-mask-image": true,
+};
+
+/// Il vocabolario di una policy, già unito a quello comune.
+interface Vocabulary {
+  readonly extended: boolean;
+  readonly properties: ReadonlySet<string>;
+  readonly functions: ReadonlySet<string>;
+  readonly atRules: ReadonlySet<string>;
+}
+
+const CORE_VOCABULARY: Vocabulary = {
+  extended: false,
+  properties: new Set(),
+  functions: new Set(),
+  atRules: new Set(),
+};
+
+function vocabularyOf(policy: ThemeCssPolicy): Vocabulary {
+  const extra = policy.kind === "snippet" ? undefined : policy.vocabulary;
+  if (!extra) return CORE_VOCABULARY;
+  const lower = (values: readonly string[] | undefined, never: Record<string, true>): Set<string> =>
+    new Set(
+      (values ?? [])
+        .map((value) => value.toLowerCase())
+        .filter((value) => !Object.prototype.hasOwnProperty.call(never, value)),
+    );
+  return {
+    extended: true,
+    properties: lower(extra.properties, NEVER_PROPERTIES),
+    functions: lower(extra.functions, NEVER_FUNCTIONS),
+    atRules: lower(extra.atRules, NEVER_AT_RULES),
+  };
+}
+
 
 
 
@@ -294,16 +379,25 @@ function uniqueInOrder(values: readonly string[]): string[] {
   });
 }
 
-function indexAt(source: string, line: number, column: number): number {
-  let index = 0;
-  let current = 1;
-  while (current < line && index < source.length) {
-    const next = source.indexOf("\n", index);
-    if (next < 0) return source.length;
-    index = next + 1;
-    current += 1;
+/// Gli inizi di riga dell'ultimo sorgente guardato. `indexAt` è chiamata per
+/// ogni regola e ogni dichiarazione: ricontare le righe da capo a ogni chiamata
+/// costa righe × nodi, e su una pelle intera si misura in secondi.
+let lineStartsMemo: { source: string; starts: number[] } | null = null;
+
+function lineStarts(source: string): number[] {
+  if (lineStartsMemo?.source === source) return lineStartsMemo.starts;
+  const starts = [0];
+  for (let next = source.indexOf("\n"); next >= 0; next = source.indexOf("\n", next + 1)) {
+    starts.push(next + 1);
   }
-  return Math.min(source.length, index + Math.max(0, column - 1));
+  lineStartsMemo = { source, starts };
+  return starts;
+}
+
+function indexAt(source: string, line: number, column: number): number {
+  const starts = lineStarts(source);
+  if (line > starts.length) return source.length;
+  return Math.min(source.length, starts[Math.max(1, line) - 1]! + Math.max(0, column - 1));
 }
 
 function nodeIndex(source: string, node: ChildNode | Root): number {
@@ -736,7 +830,7 @@ function analyzeImageSet(input: string, open: number): ImageSetAnalysis {
 }
 
 /** Finds every function, including nested ones, without treating strings/comments as CSS. */
-function valueViolation(value: string): string | null {
+function valueViolation(value: string, vocabulary: Vocabulary = CORE_VOCABULARY): string | null {
   for (let i = 0; i < value.length; ) {
     if (value.startsWith("/*", i)) {
       i = skipComment(value, i);
@@ -761,7 +855,9 @@ function valueViolation(value: string): string | null {
     if (isImageSetName(name)) {
       const analysis = analyzeImageSet(value, open);
       if (analysis.invalid) return `${name} non sicura: ${analysis.invalid}`;
-    } else if (!Object.prototype.hasOwnProperty.call(ALLOWED_FUNCTIONS, name)) {
+    } else if (
+      !Object.prototype.hasOwnProperty.call(ALLOWED_FUNCTIONS, name) && !vocabulary.functions.has(name)
+    ) {
       return `funzione ${name} non ammessa`;
     } else if (name === "var") {
       let cursor = open + 1;
@@ -776,7 +872,33 @@ function valueViolation(value: string): string | null {
   return null;
 }
 
-function declarationViolations(source: string, root: Root, skin: boolean): IndexedViolation[] {
+/// `media` e `container` hanno una grammatica loro: `and (…)` e il nome del
+/// contenitore stanno davanti a una parentesi senza essere funzioni. Qui una
+/// funzione è solo un nome **attaccato** alla parentesi, e il resto è una
+/// condizione fatta di nomi, numeri e confronti.
+function queryViolation(params: string, vocabulary: Vocabulary): string | null {
+  if (!/^[\sA-Za-z0-9_\-():.,<>=%\/]*$/.test(params)) return "condizione non classificabile";
+  for (const match of params.matchAll(/([A-Za-z_-][A-Za-z0-9_-]*)\(/g)) {
+    const name = match[1]!.toLowerCase();
+    if (name === "var" || name === "url" || name === "style") return `funzione ${name} non ammessa in una condizione`;
+    if (!Object.prototype.hasOwnProperty.call(ALLOWED_FUNCTIONS, name) && !vocabulary.functions.has(name)) {
+      return `funzione ${name} non ammessa`;
+    }
+  }
+  return null;
+}
+
+function drawnOnlyViolation(property: string, value: string): string | null {
+  if (!Object.prototype.hasOwnProperty.call(DRAWN_ONLY_PROPERTIES, property)) return null;
+  return scanUrls(value).length > 0 ? "si disegna, non si carica: url() e image-set() vietati" : null;
+}
+
+function declarationViolations(
+  source: string,
+  root: Root,
+  skin: boolean,
+  vocabulary: Vocabulary = CORE_VOCABULARY,
+): IndexedViolation[] {
   const out: IndexedViolation[] = [];
   root.walkDecls((decl: Declaration) => {
     const decodedProperty = decodeCssEscapes(decl.prop);
@@ -790,9 +912,13 @@ function declarationViolations(source: string, root: Root, skin: boolean): Index
       if (!customPropertyName(decodedProperty) || decl.prop !== decodedProperty) {
         out.push(violation(source, index, "disallowed-property", `custom property ${decl.prop} non canonica`));
       } else {
-        const invalid = valueViolation(decl.value);
+        const invalid = valueViolation(decl.value, vocabulary);
         if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`));
       }
+      return;
+    }
+    if (Object.prototype.hasOwnProperty.call(NEVER_PROPERTIES, property)) {
+      out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`));
       return;
     }
     if (!property || (!skin && isStructuralProperty(property))) {
@@ -804,21 +930,26 @@ function declarationViolations(source: string, root: Root, skin: boolean): Index
       return;
     }
     if (skin && isStructuralProperty(property)) {
-      const invalid = valueViolation(decl.value);
+      const invalid = valueViolation(decl.value, vocabulary);
       if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`));
       return;
     }
-    if (!ALLOWED_PROPERTIES.has(property)) {
+    if (!ALLOWED_PROPERTIES.has(property) && !vocabulary.properties.has(property)) {
       out.push(violation(source, index, "disallowed-property", `proprietà ${property} non ammessa`));
       return;
     }
-    const invalid = valueViolation(decl.value);
+    const invalid = valueViolation(decl.value, vocabulary) ?? drawnOnlyViolation(property, decl.value);
     if (invalid) out.push(violation(source, index, "disallowed-value", `${property}: ${invalid}`));
   });
   return out;
 }
 
-function atRuleViolations(source: string, root: Root, kind: "sheet" | "skin"): IndexedViolation[] {
+function atRuleViolations(
+  source: string,
+  root: Root,
+  kind: "sheet" | "skin",
+  vocabulary: Vocabulary = CORE_VOCABULARY,
+): IndexedViolation[] {
   const out: IndexedViolation[] = [];
   const allowed = ALLOWED_AT_RULES[kind];
   root.walkAtRules((rule: AtRule) => {
@@ -828,10 +959,16 @@ function atRuleViolations(source: string, root: Root, kind: "sheet" | "skin"): I
       out.push(violation(source, index, "at-import", "@import vietato"));
     } else if (name === "namespace") {
       out.push(violation(source, index, "at-namespace", "@namespace vietato"));
-    } else if (!Object.prototype.hasOwnProperty.call(allowed, name)) {
+    } else if (
+      !Object.prototype.hasOwnProperty.call(allowed, name) &&
+      !(kind === "skin" && vocabulary.atRules.has(name))
+    ) {
       out.push(violation(source, index, "at-rule", `@${name} non ammesso`));
     } else {
-      const invalid = valueViolation(rule.params);
+      // Un profilo con vocabolario suo scrive condizioni composte; `theme-1`
+      // conserva la lettura di sempre, anche dove era più stretta del dovuto.
+      const query = vocabulary.extended && (name === "media" || name === "container");
+      const invalid = query ? queryViolation(rule.params, vocabulary) : valueViolation(rule.params, vocabulary);
       if (invalid) out.push(violation(source, index, "disallowed-value", `@${name}: ${invalid}`));
     }
   });
@@ -979,11 +1116,12 @@ export function themeCssViolations(css: string, policy: ThemeCssPolicy): ThemeCs
 
   const skin = policy.kind === "skin";
   const snippet = policy.kind === "snippet";
+  const vocabulary = vocabularyOf(policy);
   const violations: IndexedViolation[] = [
-    ...atRuleViolations(css, root, skin ? "skin" : "sheet"),
+    ...atRuleViolations(css, root, skin ? "skin" : "sheet", vocabulary),
     ...urlViolations(css, root, policy.assetNamespace),
     ...selectorViolations(css, root, policy.allowedHooks, skin),
-    ...declarationViolations(css, root, skin),
+    ...declarationViolations(css, root, skin, vocabulary),
   ];
   if (snippet) {
     root.walkAtRules((rule) => {

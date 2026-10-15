@@ -752,6 +752,86 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
     }
 }
 
+/// I predefiniti dell'aspetto sono scritti due volte anche loro: qui, perché
+/// li mostra il pannello e li rende un reset, e nella serie che la shell monta
+/// (`apps/client/src/theme/scrittoio/series.ts`), perché valgono prima che le
+/// impostazioni arrivino. Se divergono, chi non ha mai scelto vede un aspetto
+/// e il pannello gliene dichiara un altro.
+///
+/// Si legge il blocco `defaults` della serie e si chiede al core se lo conosce,
+/// come per le chiavi.
+#[test]
+fn the_defaults_of_appearance_are_those_of_the_series() {
+    let client = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/theme/scrittoio");
+    let read = |name: &str| {
+        let path = client.join(name);
+        std::fs::read_to_string(&path)
+            .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", path.display()))
+    };
+    let series = read("series.ts");
+    let recipe = read("recipe.ts");
+
+    // Solo le righe del blocco: `body: ` o `font: ` compaiono anche altrove.
+    let block: Vec<&str> = series
+        .lines()
+        .skip_while(|row| row.trim() != "defaults: {")
+        .skip(1)
+        .take_while(|row| row.trim() != "},")
+        .map(str::trim)
+        .collect();
+    assert!(
+        !block.is_empty(),
+        "the series no longer declares `defaults`"
+    );
+    let declared = |name: &str| -> String {
+        let prefix = format!("{name}: ");
+        block
+            .iter()
+            .find_map(|row| row.strip_prefix(&prefix)?.strip_suffix(','))
+            .unwrap_or_else(|| panic!("the series no longer declares `{name}` by default"))
+            .to_owned()
+    };
+
+    // L'accento non è scritto nel blocco: nomina la costante della ricetta.
+    assert_eq!(declared("accent"), "DEFAULT_ACCENT_HUE");
+    let accent = recipe
+        .lines()
+        .find_map(|row| {
+            row.strip_prefix("export const DEFAULT_ACCENT_HUE = ")?
+                .strip_suffix(';')
+        })
+        .expect("the recipe no longer declares DEFAULT_ACCENT_HUE");
+
+    let expected = [
+        (fub_host::settings::APPEARANCE_DENSITY, declared("density")),
+        (fub_host::settings::APPEARANCE_BODY, declared("body")),
+        (
+            fub_host::settings::APPEARANCE_LINE_HEIGHT,
+            declared("lineHeight"),
+        ),
+        (fub_host::settings::APPEARANCE_MEASURE, declared("measure")),
+        (fub_host::settings::APPEARANCE_FONT, declared("font")),
+        (fub_host::settings::APPEARANCE_ACCENT, accent.to_owned()),
+    ];
+    let core = fub_host::settings::core_settings();
+    for (key, written) in expected {
+        let spec = core
+            .iter()
+            .find(|spec| spec.key == key)
+            .unwrap_or_else(|| panic!("{key} is not declared by core"));
+        let host = match spec.kind.default_value() {
+            SettingValue::Number(value) => value.to_string(),
+            SettingValue::Text(value) => format!("\"{value}\""),
+            other => panic!("{key} has an unexpected kind: {}", other.name()),
+        };
+        assert_eq!(
+            host, written,
+            "{key}: core and the series declare different defaults"
+        );
+    }
+}
+
 /// I tetti dei fotogrammi sono scritti due volte, come le chiavi: il core li
 /// offre nel pannello, la shell li riconosce. Un tetto che la shell non
 /// conoscesse resterebbe nel menu e non limiterebbe niente.

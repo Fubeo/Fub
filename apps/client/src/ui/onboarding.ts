@@ -1,7 +1,8 @@
 // La schermata senza vault e i controlli della demo sono UI di macchina:
 // i dati e le mutazioni passano dall'adattatore host, mai dal registro plugin.
 import { api, type ConfigReport, type SupportPreview } from "../host/ipc";
-import { confirm, pickSupportDestination } from "../host/dialog";
+import { pickSupportDestination } from "../host/dialog";
+import { confirm } from "../platform/confirm";
 import { errorText, asPluginError } from "../host/errors";
 import { on } from "../state/store";
 import { t, onLanguage } from "../i18n/strings";

@@ -139,11 +139,11 @@ export function allowedAttribute(tag: string, attribute: string): boolean {
 // tutti gli inquilini della webview, la shell e il contenuto di una nota
 // pescano dallo stesso sacchetto. La shell cerca i propri elementi per nome —
 // `document.getElementById("save-state")`, `#context-menu`, `#activity-panel`,
-// `#toast`, più tutti quelli che `identificatore()` genera per l'accessibilità
+// `#toasts`, più tutti quelli che `identificatore()` genera per l'accessibilità
 // — e `getElementById` restituisce il **primo** elemento in ordine di
 // documento con quel nome: una nota che porti quel nome se lo prende, e la
 // shell smette di trovare la propria barra di stato o ne rimuove un pezzo
-// (`#toast` e `#context-menu` si tolgono per nome).
+// (`#toasts` e `#context-menu` si tolgono per nome).
 //
 // Non è esecuzione di codice e non arriva da un estraneo: arriva da un vault.
 // Ma un vault si scarica, e l'`id` del contenuto non è nemmeno HTML grezzo —

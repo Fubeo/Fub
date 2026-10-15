@@ -137,7 +137,7 @@ export type TextMode = "terms" | "phrase";
 
 export type TextTolerance = "exact" | "typos";
 
-export type ThemeEngine = "theme-1";
+export type ThemeEngine = "theme-1" | "theme-2";
 
 export type ThemeLight = "dark" | "light";
 

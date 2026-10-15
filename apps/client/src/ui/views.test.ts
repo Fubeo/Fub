@@ -239,6 +239,24 @@ describe("l'inspector a tab", () => {
     expect(document.activeElement).toBe(tabs[0]);
   });
 
+  it("una view che segue il documento dice che cosa segue, e quando non c'è niente", async () => {
+    listViews.mockResolvedValueOnce([
+      { ...spec("outline", "right_sidebar"), follows: ["document"] },
+      { ...spec("tags", "right_sidebar"), follows: [] },
+    ]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+
+    const right = document.getElementById("views-right")!;
+    const follows = right.querySelector<HTMLElement>(".inspector-follows")!;
+    expect(follows.hidden).toBe(false);
+    expect(follows.dataset.state).toBe("none");
+    expect(follows.textContent).toBe("Nessuna nota in primo piano");
+    // Una view che non dipende dal documento non ne parla.
+    right.querySelectorAll<HTMLButtonElement>(".inspector-tab")[1]!.click();
+    expect(follows.hidden).toBe(true);
+  });
+
   it("la scheda di una view nata chiusa ne mostra il contenuto", async () => {
     // `open_by_default: false` sceglie solo la scheda di partenza: era la
     // Cronologia, che si selezionava e restava vuota.

@@ -70,6 +70,19 @@ export const SHELL_KEYS = {
   "shell.zoom.out": "Mod--",
   "shell.zoom.reset": "Mod-0",
   "shell.focus.toggle": null,
+  "shell.chrome.compact.more": null,
+  "shell.chrome.compact.less": null,
+  "shell.chrome.compact.reset": null,
+  "shell.light.toggle": null,
+  "shell.launcher.search": null,
+  "shell.launcher.headings": null,
+  "shell.launcher.tags": null,
+  "shell.launcher.line": null,
+  "shell.launcher.templates": null,
+  "shell.pane.focus.left": null,
+  "shell.pane.focus.right": null,
+  "shell.pane.focus.up": null,
+  "shell.pane.focus.down": null,
 } as const satisfies Record<string, string | null>;
 
 /// L'id di un comando della shell: uno di quelli in tabella, e nessun altro.

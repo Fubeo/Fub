@@ -36,7 +36,8 @@
 // stessa strada, o l'utente non potrebbe cambiare le proprie impostazioni di
 // privacy, o un plugin potrebbe.
 import { api } from "../host/ipc";
-import { confirm, pickFile, pickFolder } from "../host/dialog";
+import { pickFile, pickFolder } from "../host/dialog";
+import { confirm } from "../platform/confirm";
 import { Race } from "../ui/race";
 import { settings } from "../host/query";
 import type {

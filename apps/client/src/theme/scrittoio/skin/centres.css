@@ -1,0 +1,433 @@
+/* I centri: avvisi, attività, notifiche. */
+
+/* Il posto in cui si guarda quando si vuole sapere che cosa sta succedendo,
+   senza essere interrotti. Lo stato del documento sta nella testata del
+   foglio; avvisi e attività scendono dai loro bottoni nella barra del titolo.
+   Il toast interrompe, ed è il solo che lo fa. */
+
+/* --- il toast -------------------------------------------------------------- */
+/* Il messaggio che non chiede niente: l'esito di un comando, un lavoro finito,
+   un errore che non blocca. In basso a destra, sopra la banda di stato che
+   altrimenti coprirebbe; è la superficie più alta di tutte, e lo dice l'ombra.
+   La specie la dice il punto a sinistra — blu per una notizia, rosso per un
+   guasto — e il testo resta inchiostro: un guasto deve farsi notare senza
+   diventare più difficile da leggere. */
+.toast-stack {
+  position: fixed;
+  right: var(--space-6);
+  bottom: calc(var(--status-h) + var(--space-5));
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-4);
+  /* La pila è geometria: lascia passare il puntatore fra un toast e l'altro. */
+  pointer-events: none;
+}
+.toast-stack > * {
+  pointer-events: auto;
+}
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-width: min(380px, calc(100vw - 2 * var(--space-6)));
+  padding: var(--space-5) var(--space-4) var(--space-5) var(--space-6);
+  border: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-6);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+/* Il punto sta a metà della prima riga, qualunque sia il corpo del testo. */
+.toast::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: calc((1em * var(--leading-normal) - 8px) / 2) var(--space-1) 0 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.toast[data-tone="guasto"]::before {
+  background: var(--danger);
+}
+
+/* Il testo va a capo dove l'avviso lo dice: un elenco di motivi resta un
+   elenco. */
+.toast-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Le azioni sono parole, non bottoni: alte 24 per il dito e per il puntatore,
+   ma rientrate nella riga del testo con cui stanno. */
+.toast-action,
+.toast-more,
+.toast-close {
+  flex: none;
+  min-height: 24px;
+  margin: calc((1em * var(--leading-normal) - 24px) / 2) 0;
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+.toast-action {
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.toast-action:hover {
+  background: transparent;
+  color: var(--accent-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.toast-more {
+  margin: 0;
+  min-height: 24px;
+  padding: 0 var(--space-4);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-6);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.toast-more:hover {
+  background: var(--bg-elev);
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.toast-close {
+  width: 24px;
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--text-xl);
+}
+.toast-close:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.toast-close:active {
+  background: var(--overlay-active);
+  color: var(--text);
+  transform: scale(0.96);
+}
+
+/* --- lo stato del documento ------------------------------------------------- */
+/* Nella testata del foglio, sulla carta, accanto al selettore di modalità: un
+   punto e una parola in grafite. «Salvato» è la parola che si legge quasi
+   sempre, e accendere quella vorrebbe dire spegnere le sole due che devono
+   farsi notare. */
+.pane-status {
+  gap: var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.save-state {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+.save-state:not(:empty)::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+  vertical-align: middle;
+}
+/* C'è qualcosa in sospeso: il punto si accende, la parola no. */
+.save-state[data-state="non_salvato"]::before,
+.save-state[data-state="in_corso"]::before {
+  background: var(--accent);
+}
+/* Qualcosa non è andato: qui la matita rossa prende anche la parola. */
+.save-state[data-state="fallito"],
+.save-state[data-state="conflitto"] {
+  color: var(--danger);
+  font-weight: var(--weight-bold);
+}
+.save-state[data-state="fallito"]::before,
+.save-state[data-state="conflitto"]::before {
+  background: var(--danger);
+}
+
+/* L'attesa del secondo tasto di una sequenza: una pastiglia che galleggia in
+   basso al centro finché l'app aspetta, e sparisce subito dopo. */
+.key-pending {
+  padding: var(--space-2) var(--space-6);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- i due centri ----------------------------------------------------------- */
+/* Scendono dalla barra del titolo, dove stanno i loro bottoni, e stanno
+   **affiancati** e non sovrapposti: sono due interruttori indipendenti, e chi
+   ne apre uno mentre l'altro è aperto non deve trovarsi un riquadro sopra
+   l'altro. La testa resta ferma e scorre l'elenco. */
+.dock-panel {
+  position: fixed;
+  top: calc(var(--titlebar-h) + var(--space-2));
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  max-width: calc(100vw - 2 * var(--space-5));
+  max-height: min(60vh, 520px);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-4);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  overflow: hidden;
+  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
+}
+
+.dock-panel--notify {
+  right: var(--space-5);
+}
+
+/* Largo quanto l'altro più i due margini: gli sta accanto. Dove la finestra è
+   troppo stretta per tenerli affiancati non esce dal bordo sinistro: si ferma
+   al margine e si sovrappone all'altro. */
+.dock-panel--activity {
+  right: min(calc(360px + 2 * var(--space-5)), calc(100vw - 360px - var(--space-5)));
+}
+
+.dock-panel > .panel-title {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-5) var(--space-5) var(--space-4) var(--space-6);
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.dock-panel > .panel-title > span:first-child {
+  margin-right: auto;
+}
+
+/* Le azioni di un centro sono parole. Quella che fa qualcosa («Pulisci») è
+   blu; quella che chiude, e quelle dentro le righe, restano grafite. */
+.dock-panel .link-button {
+  flex: none;
+  min-height: 24px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.dock-panel .link-button:hover {
+  background: transparent;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dock-panel > .panel-title > .link-button:not(:last-child) {
+  color: var(--accent);
+}
+.dock-panel > .panel-title > .link-button:not(:last-child):hover {
+  color: var(--accent-soft);
+}
+.dock-panel .link-button:disabled,
+.dock-panel .link-button:disabled:hover {
+  opacity: 0.4;
+  text-decoration: none;
+  cursor: default;
+}
+
+.dock-panel > ul {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--space-6) var(--space-3);
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+/* Le voci le separa un filo tenue, non una cornice. */
+.dock-panel > ul > li {
+  padding: var(--space-4) 0;
+}
+.dock-panel > ul > li + li {
+  border-top: 1px solid var(--border);
+}
+
+/* Una nota del centro (il watcher fermo, l'elenco che non si aggiorna): in
+   grafite. Quando non ha altro dentro che la frase, è il vuoto: al centro,
+   con aria intorno. */
+.dock-panel li.muted {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.dock-panel li.muted:not(:has(*)) {
+  padding: var(--space-8) 0;
+  font-size: var(--text-base);
+  text-align: center;
+}
+
+/* Un avviso: il punto dice se è un guasto, il testo va a capo, l'ora sta a
+   destra con le cifre in colonna. Il posto del punto c'è sempre, così i testi
+   partono tutti dallo stesso filo. */
+.notify-list li[data-tone] {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+.notify-list li[data-tone]::before {
+  content: "";
+  flex: none;
+  align-self: flex-start;
+  width: 6px;
+  height: 6px;
+  margin-top: calc((1em * var(--leading-normal) - 6px) / 2);
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+.notify-list li[data-tone="guasto"]::before {
+  background: var(--danger);
+}
+
+.notify-testo {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.notify-ora {
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Un lavoro: che cosa fa, a che punto è, e come si ferma. Il nome, il conto e
+   «Annulla» stanno su una riga; la barra sotto, larga quanto la riga. */
+.activity-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3) var(--space-3);
+}
+
+.activity-label {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-row > .muted {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+/* Un lavoro finito male si legge dal punto, come un guasto nel toast. */
+.activity-row[data-tone="guasto"] > .activity-label {
+  color: var(--danger);
+}
+.activity-row > .link-button {
+  grid-column: 3;
+  grid-row: 1;
+  margin-right: calc(-1 * var(--space-3));
+}
+.activity-row > span[role="status"] {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.activity-row > span[role="status"]:empty {
+  display: none;
+}
+
+/* La barra: sottile, col binario del piano premuto e il riempimento d'accento.
+   Sul rialzo, nella luce scura, quel piano è più buio del pannello di un
+   soffio e il binario sparirebbe: gli si stende sopra la velatura del premuto,
+   che lo stacca in tutte e due le luci. Il binario è il fondo dell'elemento;
+   lo strato del motore, che gli starebbe sopra, resta trasparente o la
+   velatura si sommerebbe a sé stessa. Le pseudo-classi dei due motori vanno
+   scritte separate: un selettore che le unisse cadrebbe intero su quello che
+   non conosce l'altra. */
+.activity-row progress {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(var(--overlay-active), var(--overlay-active)), var(--bg-active);
+  overflow: hidden;
+}
+.activity-row progress::-webkit-progress-bar {
+  background: transparent;
+}
+.activity-row progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.activity-row progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+/* Un lavoro che non sa quanto dura non ha un riempimento da mostrare: una
+   barra piena a metà direbbe una cosa falsa. Tutta la barra prende l'accento
+   sfumato e respira — è lavoro in corso, l'unico moto che non si ferma — e con
+   il moto ridotto resta ferma, ma diversa da una barra vuota. */
+.activity-row progress:indeterminate {
+  background: linear-gradient(90deg, var(--accent-wash), var(--accent) 50%, var(--accent-wash));
+  animation: fub-centres-breathe calc(var(--duration-slow) * 4) var(--ease) infinite alternate;
+}
+.activity-row progress:indeterminate::-moz-progress-bar {
+  background: transparent;
+}
+
+@keyframes fub-centres-breathe {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
+}

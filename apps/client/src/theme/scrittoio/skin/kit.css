@@ -1,0 +1,582 @@
+/* Le primitive di `src/kit/`. */
+
+/* Qui stanno i colori, i raggi, le ombre e le misure delle primitive. La loro
+   geometria — chi è fisso, chi sta sopra chi, dove nasce l'evidenziatore — è di
+   `src/kit/kit.css`, che arriva con il modulo: una pelle che la dimenticasse
+   non può rompere un popover. Gli stati si leggono da ciò che le primitive
+   scrivono per chi ascolta (`aria-selected`, `aria-pressed`, `aria-disabled`,
+   `aria-orientation`) e dai `data-*` che scrivono per la pelle. */
+
+/* ── Popover e scheda al passaggio ───────────────────────────────────────── */
+
+/* Un rialzo: il fondo dei menu, la loro ombra, il loro raggio. Il margine è
+   quello di un menu, perché il contenuto più frequente è una lista. */
+.kit-popover {
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+/* La superficie prende il fuoco solo quando dentro non c'è niente che lo
+   possa prendere: lì l'anello cerchierebbe l'intero rialzo senza dire nulla. */
+.kit-popover:focus-visible {
+  outline: none;
+}
+
+/* La scheda è testo da leggere: più aria di un menu, e una riga che non
+   attraversa lo schermo. */
+.kit-popover.kit-hover-card {
+  max-width: min(360px, calc(100vw - 16px));
+  padding: var(--space-5) var(--space-6);
+}
+
+/* **La scheda sui collegamenti.** Titolo e cartella, il ritaglio della nota con
+   la stessa resa della Lettura, e sotto i gesti. Sta sul rialzo del popover. */
+.link-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 260px;
+}
+.link-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.link-card-title {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.link-card-where {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.link-card-body {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.link-card .link-card-body {
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.link-card .link-card-body > * {
+  margin-bottom: var(--space-4);
+}
+.link-card .link-card-body h1,
+.link-card .link-card-body h2,
+.link-card .link-card-body h3,
+.link-card .link-card-body h4 {
+  padding-top: 0;
+  font-size: 1.12em;
+}
+.link-card .link-card-body > :first-child {
+  margin-top: 0;
+}
+.link-card-note {
+  margin: 0;
+  color: var(--muted);
+}
+.link-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.link-card-action {
+  display: inline-flex;
+  align-items: center;
+  height: var(--space-9);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--bg-hover);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.link-card-action:hover,
+.link-card-action:active {
+  background: var(--bg-active);
+}
+.link-card-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.link-card-primary:hover,
+.link-card-primary:active {
+  background: color-mix(in oklch, var(--accent) 88%, var(--text));
+}
+
+/* ── Dialogo ─────────────────────────────────────────────────────────────── */
+
+.kit-dialog-scrim {
+  padding: var(--space-8) var(--space-6);
+  background: var(--scrim);
+}
+
+.kit-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: min(440px, 100%);
+  padding: var(--space-7);
+  border: none;
+  border-radius: var(--radius-dialog);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-5);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+.kit-dialog:focus-visible {
+  outline: none;
+}
+
+.kit-dialog-title {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+/* La descrizione sta attaccata al titolo: è la sua seconda riga. Chi domanda
+   va a capo con `\n` (un elenco di permessi, un path su una riga sua) e ci
+   mette parole senza spazi (un'impronta, un indirizzo): gli a capo restano e
+   niente esce dal dialogo. */
+.kit-dialog-description {
+  margin: calc(-1 * var(--space-3)) 0 0;
+  color: var(--muted);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.kit-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.kit-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+/* ── Pulsanti ────────────────────────────────────────────────────────────── */
+
+/* Il pulsante col testo è una risposta: ha un fondo anche a riposo, perché in
+   una fila di risposte ognuna deve sembrare premibile. La pressione la dà
+   `pressable`, con `scale`: qui cambia soltanto il fondo. */
+.kit-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: 0 var(--space-6);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.kit-button:hover,
+.kit-button:active {
+  background: var(--overlay-active);
+}
+
+.kit-button[data-kind="primary"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+}
+/* L'inchiostro cambia col fondo: è la coppia che il presidio del contrasto
+   misura, la stessa del primario delle fondamenta. */
+.kit-button[data-kind="primary"]:hover,
+.kit-button[data-kind="primary"]:active {
+  background: var(--accent-soft);
+  color: var(--bg);
+}
+
+/* Il distruttivo è già una conferma: è pieno, e sotto il puntatore si scurisce
+   con una velatura invece di cambiare tinta. */
+.kit-button[data-kind="danger"] {
+  background: var(--danger);
+  color: var(--danger-contrast);
+  font-weight: var(--weight-bold);
+}
+.kit-button[data-kind="danger"]:hover,
+.kit-button[data-kind="danger"]:active {
+  background: var(--danger);
+  box-shadow: inset 0 0 0 var(--control-h) var(--overlay-active);
+}
+
+/* Il pulsante a icona non ha fondo a riposo: è un segno sul piano, in grafite. */
+.kit-button--icon {
+  width: var(--control-h);
+  height: var(--control-h);
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.kit-button--icon:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-button--icon:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.kit-button--icon[aria-pressed="true"],
+.kit-button--icon[aria-pressed="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.kit-button:disabled,
+.kit-button:disabled:hover {
+  box-shadow: none;
+  opacity: 0.4;
+  cursor: default;
+}
+.kit-button--icon:disabled,
+.kit-button--icon:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* ── Campo ───────────────────────────────────────────────────────────────── */
+
+.kit-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.kit-field-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+
+/* Il confine è della scatola e non del campo: così l'icona e il pulsante che
+   svuota stanno dentro lo stesso bordo. Il campo però la occupa tutta — una
+   sola cella, e l'icona e il pulsante posati sopra i suoi margini interni —
+   perché l'anello del fuoco sia di chi il fuoco ce l'ha, e cinga la scatola
+   intera. */
+.kit-field-box {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  height: var(--control-h);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+}
+.kit-field-box:hover {
+  border-color: var(--text);
+}
+/* Il fuoco del campo, non quello del pulsante che svuota: il pulsante ha il suo
+   anello. È lo stesso disegno dei campi nudi — l'anello a filo, più l'alone:
+   l'alone è della scatola, l'anello è del campo (più sotto). */
+.kit-field-box:has(> .kit-field-input:focus-visible) {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+.kit-field-box:has(> .kit-field-input[aria-invalid="true"]) {
+  border-color: var(--danger);
+}
+.kit-field-box:has(> .kit-field-input[aria-invalid="true"]:focus-visible) {
+  box-shadow: 0 0 0 4px var(--danger-wash);
+}
+.kit-field-box:has(> .kit-field-input:disabled) {
+  border-color: var(--outline);
+  opacity: 0.4;
+}
+
+/* Dentro la scatola il campo si spoglia di tutto ciò che un campo nudo porta,
+   e ne prende il posto per intero. */
+.kit-field-input,
+.kit-field-input:hover,
+.kit-field-input:focus-visible,
+.kit-field-input:disabled {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  align-self: stretch;
+  min-width: 0;
+  height: auto;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: calc(var(--radius-control) - 1px);
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-base);
+  opacity: 1;
+}
+/* Largo due, a filo del campo: uno copre il confine della scatola, l'altro gli
+   sta fuori. */
+.kit-field-input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 0;
+}
+/* Il testo lascia il posto a ciò che gli sta sopra: l'icona è larga 16, il
+   pulsante 20. */
+.kit-field-icon + .kit-field-input {
+  padding-left: calc(var(--space-4) + 16px + var(--space-3));
+}
+.kit-field-box:has(> .kit-field-clear:not([hidden])) > .kit-field-input {
+  padding-right: calc(var(--space-4) - var(--space-2) + 20px + var(--space-3));
+}
+
+.kit-field-icon {
+  display: inline-flex;
+  grid-row: 1;
+  grid-column: 1;
+  margin-left: var(--space-4);
+  color: var(--muted);
+}
+
+.kit-field-clear {
+  display: inline-flex;
+  grid-row: 1;
+  grid-column: 3;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: calc(var(--space-4) - var(--space-2));
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kit-field-clear:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-field-clear:active {
+  background: var(--overlay-active);
+}
+/* L'anello sta a filo del pulsante: con lo stacco di sempre arriverebbe sul
+   confine della scatola e i due tratti si toccherebbero. */
+.kit-field-clear:focus-visible {
+  outline-offset: 0;
+}
+
+/* ── Lista ───────────────────────────────────────────────────────────────── */
+
+.kit-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--text);
+  font-size: var(--text-base);
+}
+/* Il contenitore tiene il fuoco quando la riga attiva è detta da
+   `aria-activedescendant`: l'anello sta a filo, o un rialzo lo taglierebbe. */
+.kit-list:focus-visible,
+.kit-list-item:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+
+.kit-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--row-h);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--text);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+/* La riga attiva ha l'inchiostro dell'accento; il fondo non è suo, è
+   l'evidenziatore che le scivola sotto. Il peso non cambia: una riga che
+   ingrassa al passaggio sposta le parole. */
+.kit-list-item[data-active] {
+  color: var(--accent);
+}
+.kit-list-highlight {
+  border-radius: var(--radius-chip);
+  background: var(--accent-wash);
+}
+/* La scelta dichiarata resta dov'è mentre l'evidenziatore passa: la dice il
+   peso, che l'evidenziatore non ha. */
+.kit-list-item[data-selected] {
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.kit-list-item[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Schede ──────────────────────────────────────────────────────────────── */
+
+/* La fila sta su un filetto, e il segno della scheda scelta ci scorre sopra. */
+.kit-tabs {
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.kit-tabs[aria-orientation="vertical"] {
+  padding-bottom: 0;
+  padding-inline-start: var(--space-2);
+  box-shadow: inset 1px 0 0 var(--border);
+}
+
+.kit-tab {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.kit-tab:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.kit-tab:active {
+  background: var(--overlay-active);
+}
+.kit-tab[aria-selected="true"],
+.kit-tab[aria-selected="true"]:hover {
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.kit-tab:disabled,
+.kit-tab:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+.kit-tab:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+.kit-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kit-tab-indicator {
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.kit-tabs[aria-orientation="vertical"] > .kit-tab-indicator {
+  width: 2px;
+  height: auto;
+}
+
+/* ── Divisore ────────────────────────────────────────────────────────────── */
+
+/* A riposo non si vede: è una zona che si afferra. La linea compare quando la
+   si può prendere — sotto il puntatore, col fuoco, durante il gesto — ed è
+   disegnata come fondo, così la zona resta larga quanto la vuole chi la monta. */
+.kit-splitter {
+  background-color: transparent;
+  background-image: none;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 2px 100%;
+}
+.kit-splitter[aria-orientation="horizontal"] {
+  background-size: 100% 2px;
+}
+.kit-splitter:hover,
+.kit-splitter:focus-visible,
+.kit-splitter[data-dragging] {
+  background-image: linear-gradient(var(--accent), var(--accent));
+}
+/* Col fuoco la linea non basta: è la stessa del passaggio, e chi arriva da
+   tastiera non ha un puntatore che dica dov'è. L'anello cinge la maniglia, a
+   filo, come fra due fogli (`.pane-divider`). */
+.kit-splitter:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Garanzie ────────────────────────────────────────────────────────────── */
+
+/* In colori forzati i fondi sono del sistema e le ombre spariscono: i rialzi
+   si staccano con un bordo, e gli stati detti da un fondo li dice un contorno. */
+@media (forced-colors: active) {
+  .kit-popover,
+  .kit-dialog {
+    border: 1px solid CanvasText;
+  }
+  .kit-button,
+  .kit-field-box {
+    border: 1px solid ButtonText;
+  }
+  .kit-button--icon {
+    border-color: transparent;
+  }
+  .kit-button--icon[aria-pressed="true"],
+  .kit-list-item[data-active],
+  .kit-tab[aria-selected="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .kit-tab-indicator {
+    background: Highlight;
+  }
+  /* Qui una sfumatura non si disegna: i fondi che non sono immagini vere
+     spariscono. La linea diventa il colore della zona intera. */
+  .kit-splitter:hover,
+  .kit-splitter:focus-visible,
+  .kit-splitter[data-dragging] {
+    background-color: Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kit-button,
+  .kit-field-box,
+  .kit-field-clear,
+  .kit-list-item,
+  .kit-tab {
+    transition: none;
+  }
+}

@@ -77,6 +77,9 @@ let chromeHidden: string[] = [];
 let chromeVisible = true;
 let order: string[] = [];
 let hiddenPanels: string[] = [];
+/// L'ordine con cui le icone nascono, prima di ogni scelta: le icone shell e
+/// poi le viste nell'ordine in cui il vault le dichiara. È quello a cui si torna.
+let defaultOrder: string[] = [];
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string") ? [...new Set(value)] : [];
@@ -152,10 +155,37 @@ function setHiddenPanels(next: string[]): void {
   });
 }
 
+/// Ordine e icone nascoste tornano quelli di partenza, e la macchina li
+/// dimentica: scrive liste vuote, che per `arrangeRail` vogliono dire «come nascono».
+function resetRail(): void {
+  const previous = { order: [...order], hidden: [...hiddenPanels] };
+  order = [...defaultOrder];
+  hiddenPanels = [];
+  geometryOrder = [...order];
+  geometryHidden = [];
+  arrangeRail();
+  const restore = (error: unknown): void => {
+    order = previous.order;
+    hiddenPanels = previous.hidden;
+    geometryOrder = [...order];
+    geometryHidden = [...hiddenPanels];
+    arrangeRail();
+    notify(t("rail.reset_failed", { reason: errorText(error) }), "guasto");
+  };
+  void writeChrome(RAIL_ORDER, []).then(() => writeChrome(RAIL_HIDDEN, [])).catch(restore);
+}
+
+/// C'è qualcosa da riportare indietro?
+function railArranged(): boolean {
+  const current = railButtons().map((button) => button.dataset.panel!);
+  const natural = defaultOrder.filter((id) => current.includes(id));
+  return hiddenPanels.length > 0 || natural.some((id, index) => current[index] !== id);
+}
+
 function manageRail(at: MouseEvent, selected?: string): void {
   const buttons = railButtons();
   const names = buttons.map((button) => button.getAttribute("aria-label") ?? button.dataset.panel!);
-  showContextMenu(at, buttons.flatMap((button, index) => {
+  const items = buttons.flatMap((button, index) => {
     const id = button.dataset.panel!;
     const name = names[index]!;
     return [
@@ -165,7 +195,9 @@ function manageRail(at: MouseEvent, selected?: string): void {
       ...(index > 0 ? [{ label: t("rail.move_up", { name }), run: () => shiftRail(id, -1) }] : []),
       ...(index < buttons.length - 1 ? [{ label: t("rail.move_down", { name }), run: () => shiftRail(id, 1) }] : []),
     ];
-  }), { labelledBy: selected });
+  });
+  if (railArranged()) items.push({ separator: true, label: t("rail.reset"), run: resetRail });
+  showContextMenu(at, items, { labelledBy: selected });
 }
 
 function shiftRail(id: string, delta: number): void {
@@ -213,6 +245,7 @@ const SHELL = [
 /// Le view dichiarate si aggiungono dopo con `syncRail`.
 export function mountRail(): Teardown {
   const shell = $("#rail-shell");
+  defaultOrder = SHELL.map((each) => each.id);
   let disposed = false;
   const reads = new Race();
   const readChrome = () => reads.last(async (expected) => {
@@ -315,6 +348,7 @@ export function refreshRailShortcuts(): void {
 /// la rail ne fa un bottone icona.
 export function syncRail(): void {
   const ribbon = $("#views-ribbon");
+  const declared: string[] = [];
   // Rimuove i bottoni delle view dichiarate di un eventuale giro precedente:
   // le icone shell (dentro `#rail-shell`) non si toccano.
   for (const old of ribbon.querySelectorAll(".rail-btn-view")) {
@@ -334,6 +368,7 @@ export function syncRail(): void {
     btn.addEventListener("click", () => openPrimaryView(spec.id));
     ribbon.append(btn);
     wireConfiguration(btn);
+    declared.push(spec.id);
   }
   const viewsLeft = $("#views-left");
   for (const panel of viewsLeft.querySelectorAll<HTMLElement>(
@@ -355,7 +390,9 @@ export function syncRail(): void {
     btn.addEventListener("click", () => railClick(viewId));
     ribbon.append(btn);
     wireConfiguration(btn);
+    declared.push(viewId);
   }
+  defaultOrder = [...SHELL.map((each) => each.id), ...declared];
   // R07: una view ancora valida sopravvive a refresh/cambio vault — si
   // rimostra l'ultimo pannello chiesto se esiste ancora, i file altrimenti.
   // Mai un azzeramento arbitrario: se l'utente stava su una view dichiarata

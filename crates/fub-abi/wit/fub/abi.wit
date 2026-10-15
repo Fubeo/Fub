@@ -3293,17 +3293,18 @@ interface view {
         status-bar,
         ribbon,
         menu,
-        /// Questa shell non ospita un menu contestuale estendibile, e lo
-        /// dichiara a chi ci dichiara una view (`NON_OSPITATE`,
-        /// `apps/client/src/ui/views.ts`).
+        /// La shell le ospita in coda al menu di una nota, di una cartella o
+        /// di un file dell'albero (`apps/client/src/ui/context-views.ts`).
         ///
         /// Il bersaglio del clic **non** lo dice il contesto di sessione, e
         /// diceva il contrario proprio qui: `view-context` non ha quel campo e
         /// non lo avrà, perché un bersaglio è vero per un istante mentre quel
-        /// record si legge quando capita. Il giorno che un terzo contribuisca
-        /// una voce, il bersaglio viaggerà con l'**invocazione** — dove già
-        /// viaggia ciò su cui un comando agisce, `command-spec.params` — e non
-        /// con lo stato della sessione (decisione 0152).
+        /// record si legge quando capita. Viaggia con l'**invocazione** — dove
+        /// già viaggia ciò su cui un comando agisce, `command-spec.params` — e
+        /// non con lo stato della sessione (decisione 0152): nei params di
+        /// `render-view` e `view-action`, solo per le chiavi che la view
+        /// dichiara: `target` (l'id di ciò su cui si è cliccato) e
+        /// `target_kind` (`note`, `folder` o `file`).
         context-menu,
         settings-tab,
     }

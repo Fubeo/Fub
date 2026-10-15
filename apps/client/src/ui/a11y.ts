@@ -141,7 +141,7 @@ export function focusableElements(root: HTMLElement): HTMLElement[] {
 ///
 /// Che l'ultima aperta sia anche quella dipinta sopra non è un caso da sperare:
 /// una superficie che intrappola il fuoco sta sul piano `--z-modal`, ed è scritto
-/// in `theme/structure.css` accanto ai piani.
+/// in `theme/scrittoio/structure.css` accanto ai piani.
 export function trapFocus(root: HTMLElement, close: () => void): Teardown {
   const lifetime = openLifetime();
   // Il segnaposto di *questa* trappola nella pila. Un oggetto vuoto basta: serve

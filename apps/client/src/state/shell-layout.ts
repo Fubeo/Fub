@@ -36,7 +36,7 @@ async function releaseUnwatched(next: Layout): Promise<void> {
 export async function applyShellLayout(next: Layout): Promise<void> {
   await releaseUnwatched(next);
   setLayout(next);
-  const doc = await import("../panels/document");
+  const doc = await import("./document-controller");
   await doc.synchronize();
   await doc.publishContext();
 }

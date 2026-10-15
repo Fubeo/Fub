@@ -194,7 +194,7 @@ jobs:
       - name: i derivati del tema si rigenerano byte per byte
         run: |
           npm run theme:generate
-          git diff --exit-code -- src/theme/serie theme/author
+          git diff --exit-code -- src/theme/scrittoio theme/author
           npm run theme:verify
         working-directory: apps/client
       - run: npm run typecheck
@@ -285,3 +285,18 @@ jobs:
         if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
         run: npm run bench:a11y
         working-directory: apps/client
+      # Le coreografie si misurano contro sé stesse, non contro una baseline:
+      # stato finale uguale col moto e senza, nessun residuo, solo transform e
+      # opacità, un'inversione a metà che torna al punto di partenza.
+      - name: il movimento rispetta le sue quattro regole
+        id: bench_motion
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:motion
+        working-directory: apps/client
+      - name: referto e fotogrammi del banco del movimento
+        if: ${{ failure() && steps.bench_motion.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-moto-${{ github.sha }}
+          path: apps/client/bench/.output/moto/
+          include-hidden-files: true

@@ -279,6 +279,10 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   const times = [...new Set(Object.values(data.modified).map(dayOf))].sort((a, b) => a - b);
   const visible = new Set(data.nodes);
   let cutoffIndex = times.length;
+  // I gruppi che la legenda ha spento: i loro nodi stanno fuori dalla vista,
+  // come quelli che la linea del tempo non ha ancora raggiunto.
+  const hiddenGroups = new Set<string>();
+  const masked = (): boolean => cutoffIndex !== times.length || hiddenGroups.size > 0;
   let playTimer: number | undefined;
   // La superficie locale del grafo: l'host è il riquadro della view, e i
   // canvas del pittore sono absolute inset-0 sul loro contenitore — se quel
@@ -288,7 +292,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   // dentro, gli overlay strettamente grafici (conto, pannello fisica) stanno
   // con lui, e lo stato testuale con l'elenco restano fuori dal suo hit
   // testing. Geometria inline e non in pelle: il vocabolario degli hook è
-  // chiuso (`theme/serie/anatomia.ts`) e questa è geometria della superficie,
+  // chiuso (`theme/scrittoio/anatomia.ts`) e questa è geometria della superficie,
   // come gli stili inline con cui il pittore sovrappone i suoi canvas.
   const previousStyle = {
     display: host.style.display,
@@ -313,12 +317,13 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
   // sincrona: chi apre il grafo vede subito la superficie, non un'attesa.
   viewport.setAttribute("aria-busy", "true");
   let chart: Chart | null = null;
+  let zoomControls: HTMLElement | null = null;
   let panel: PhysicsPanel | null = null;
   let disposed = false;
   const settleEngine = (engine: GraphEngine): void => {
     if (disposed) return;
     const next = engine.createChart({ config, data, layout: rememberedLayout });
-    next.setVisibleNodes(cutoffIndex === times.length ? null : visible);
+    next.setVisibleNodes(masked() ? visible : null);
     chart = next;
     const created = engine.createPhysicsPanel({
       config,
@@ -340,9 +345,33 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     next.onFocusChange = showSelection;
     next.mount(viewport);
     drawLegend(next.setGroups(Object.keys(data.groups).length > 0 ? data.groups : null));
-    viewport.append(count, created.element);
+    viewport.append(count, created.element, zoomBar(next));
     refreshLive();
     viewport.removeAttribute("aria-busy");
+  };
+  /// Zoom e «inquadra» sulla tela, per chi non ha la rotella né la tastiera:
+  /// fanno ciò che fanno «+», «−» e «F».
+  const zoomBar = (live: Chart): HTMLElement => {
+    const bar = document.createElement("div");
+    bar.className = "graph-zoom";
+    bar.setAttribute("role", "group");
+    bar.setAttribute("aria-label", t("graph.zoom.label"));
+    const add = (key: "graph.zoom.in" | "graph.zoom.out" | "graph.zoom.fit", text: string, run: () => void): void => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "graph-zoom-button";
+      button.textContent = text;
+      button.dataset.label = key;
+      button.setAttribute("aria-label", t(key));
+      setTooltip(button, t(key));
+      button.addEventListener("click", run);
+      bar.append(button);
+    };
+    add("graph.zoom.in", "+", () => live.zoomBy(1.2));
+    add("graph.zoom.out", "\u2212", () => live.zoomBy(1 / 1.2));
+    add("graph.zoom.fit", "\u2922", () => live.fitAll());
+    zoomControls = bar;
+    return bar;
   };
   const failEngine = (error: unknown): void => {
     if (disposed) return;
@@ -539,9 +568,10 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     visible.clear();
     const cutoff = cutoffIndex === times.length ? Infinity : times[cutoffIndex];
     for (const id of data.nodes) {
+      if (hiddenGroups.has(data.groups[id] ?? "\u0000")) continue;
       if (data.modified[id] === undefined || dayOf(data.modified[id]) <= cutoff) visible.add(id);
     }
-    chart?.setVisibleNodes(cutoffIndex === times.length ? null : visible);
+    chart?.setVisibleNodes(masked() ? visible : null);
     timeInput.value = String(cutoffIndex);
     timeValue.textContent = timeText();
     const edges = data.edges.filter((edge) => visible.has(edge.from) && visible.has(edge.to)).length;
@@ -671,11 +701,24 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     legend.hidden = names.length === 0;
     names.forEach((name, index) => {
       const li = document.createElement("li");
+      // Ogni gruppo è un interruttore: acceso mostra i suoi nodi, spento li toglie.
+      const toggleGroup = document.createElement("button");
+      toggleGroup.type = "button";
+      toggleGroup.className = "graph-legend-group";
+      toggleGroup.setAttribute("aria-pressed", String(!hiddenGroups.has(name)));
+      setTooltip(toggleGroup, t("graph.group.toggle", { name: name === "" ? "/" : name }));
       const swatch = document.createElement("span");
       swatch.className = "graph-swatch";
       swatch.style.background = `var(${GROUP_TOKENS[index] ?? "--muted"})`;
       swatch.setAttribute("aria-hidden", "true");
-      li.append(swatch, document.createTextNode(name === "" ? "/" : name));
+      toggleGroup.append(swatch, document.createTextNode(name === "" ? "/" : name));
+      toggleGroup.addEventListener("click", () => {
+        if (hiddenGroups.has(name)) hiddenGroups.delete(name);
+        else hiddenGroups.add(name);
+        toggleGroup.setAttribute("aria-pressed", String(!hiddenGroups.has(name)));
+        updateTimeline();
+      });
+      li.append(toggleGroup);
       legend.append(li);
     });
   };
@@ -694,6 +737,13 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     const visibleEdges = data.edges.filter((edge) => visible.has(edge.from) && visible.has(edge.to)).length;
     count.textContent = t("graph.count", { note: visible.size, edges: visibleEdges });
     timeLabel.setAttribute("aria-label", t("graph.time.label"));
+    legend.setAttribute("aria-label", t("graph.group.legend"));
+    zoomControls?.setAttribute("aria-label", t("graph.zoom.label"));
+    for (const button of zoomControls?.querySelectorAll<HTMLButtonElement>("button") ?? []) {
+      const label = t(button.dataset.label as "graph.zoom.in");
+      button.setAttribute("aria-label", label);
+      setTooltip(button, label);
+    }
     timeValue.textContent = timeText();
     play.textContent = t(playTimer === undefined ? "graph.time.play" : "graph.time.pause");
     empty.textContent = testoP8("graph.empty");
@@ -721,6 +771,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
     rememberedLayout = chart?.snapshot() ?? rememberedLayout;
     chart?.unmount();
     chart = null;
+    zoomControls?.remove();
     panel?.destroy();
     panel = null;
     viewport.remove();

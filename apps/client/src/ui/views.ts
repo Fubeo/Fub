@@ -52,6 +52,10 @@ import { iconEl } from "./icons";
 import { setTooltip } from "./tooltip";
 import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
 import { primaryView, setPrimaryViews } from "./primary-views";
+import { setContextMenuViews } from "./context-views";
+import { activeDoc } from "../state/layout";
+import { on } from "../state/store";
+import { pageName } from "../rules/mirrored";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -222,9 +226,7 @@ function surfaceContainer(surface: ViewSurface): HTMLElement | null {
 /// Perché una superficie non è ospitata. Sta scritto qui e non in un commento
 /// perché è ciò che l'avviso dice a chi ha scritto la view: senza, il messaggio
 /// sarebbe «non supportato», che non aiuta nessuno a capire cosa aspettare.
-const NOT_HOSTED: Record<string, string> = {
-  context_menu: "questa shell non ha un menu contestuale estendibile",
-};
+const NOT_HOSTED: Record<string, string> = {};
 
 /// Scopre le view dal backend e le monta sulla superficie che dichiarano.
 ///
@@ -244,11 +246,13 @@ const mountRun = new Race();
 /// renderer può restare vivo dopo la chiusura del parent.
 function clearMountedViews(): void {
   mountRun.cancel();
+  stopFollowing();
   for (const [id, mountedView] of mounted) {
     unmountMounted(id, mountedView);
   }
   mounted.clear();
   setPrimaryViews([]);
+  setContextMenuViews([]);
   for (const el of [
     viewsLeftEl,
     viewsRightEl,
@@ -322,6 +326,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
     }
   }
   const mains: ViewSpec[] = [];
+  const contextSpecs: ViewSpec[] = [];
   for (const el of [
     viewsLeftEl,
     viewsRightEl,
@@ -356,6 +361,12 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
       mains.push(spec);
       continue;
     }
+    // Il menu contestuale non ha un contenitore: le sue voci si chiedono alla
+    // view a ogni apertura, col bersaglio del clic (`ui/context-views.ts`).
+    if (spec.surface === "context_menu") {
+      contextSpecs.push(spec);
+      continue;
+    }
     const host = surfaceContainer(spec.surface);
     if (!host) {
       notify(
@@ -372,6 +383,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   }
 
   setPrimaryViews(mains);
+  setContextMenuViews(contextSpecs);
 
   viewsBottomEl.hidden = viewsBottomEl.childElementCount === 0;
   viewsStatusEl.hidden = viewsStatusEl.childElementCount === 0;
@@ -429,6 +441,8 @@ function mountSpec(spec: ViewSpec, host: HTMLElement): void {
   // l'inspector a tab lo cercano da qui (`dataset.viewId`). Senza, i bottoni
   // della rail non nascevano e i tab persistivano `view-0` invece dell'id vero.
   panel.dataset.viewId = spec.id;
+  // Da che cosa invecchia: l'ispettore dice a chi guarda quale nota segue.
+  if (spec.follows.length > 0) panel.dataset.follows = spec.follows.join(" ");
   panel.id = `view-panel-${spec.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const title = document.createElement("div");
   title.className = "panel-title";
@@ -632,7 +646,13 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
 /// La scelta si persiste con `api.setViewState("inspector.tab", id)` e si
 /// ripristina al rimontaggio: chi aveva aperto Backlink ritrova Backlink.
 /// Il default è la prima view `open_by_default`, o la prima in assoluto.
+/// Smette di seguire il riquadro col fuoco: la riga «segue» dell'ispettore si
+/// ridisegnava a ogni cambio, e finché c'è un ispettore costruito c'è chi ascolta.
+let stopFollowing: Teardown = () => {};
+
 function buildInspector(): void {
+  stopFollowing();
+  stopFollowing = () => {};
   const panels = [...viewsRightEl.querySelectorAll<HTMLElement>(".declared-view-panel")];
   // Rimuove tablist e titolo del giro precedente, se ci sono.
   viewsRightEl.querySelector(".inspector-tabs")?.remove();
@@ -653,6 +673,12 @@ function buildInspector(): void {
   header.setAttribute("role", "presentation");
   const headerText = document.createElement("span");
   header.appendChild(headerText);
+  // «Segue: nota»: una vista che invecchia col documento dice **quale**, e dice
+  // quando non ce n'è nessuno (un grafo o una scrivania non hanno una nota).
+  const follows = document.createElement("span");
+  follows.className = "inspector-follows";
+  follows.hidden = true;
+  header.appendChild(follows);
   // Il tablist: un bottone per view, con ruolo `tab`. L'aria-selected segue
   // quale è attivo, e le frecce lo spostano — la navigazione da tastiera
   // che un tablist ARIA richiede.
@@ -746,6 +772,7 @@ function buildInspector(): void {
     // elenco scritto qui. Sparito il pannello, resta l'id onesto — brutto e
     // cercabile, come la scala della 0040 chiede ai ripieghi.
     headerText.textContent = titleEl?.textContent ?? current?.dataset.viewId ?? "";
+    drawFollows();
     const viewId = current?.dataset.viewId;
     if (focus) tabs[safe]?.focus();
     if (viewId) void api.setViewState("inspector.tab", viewId);
@@ -753,6 +780,22 @@ function buildInspector(): void {
       (tablist.children[safe] as HTMLElement)?.focus();
     }
   }
+
+  function drawFollows(): void {
+    const current = panels[active];
+    const onDocument = current?.dataset.follows?.split(" ").includes("document") ?? false;
+    follows.hidden = !onDocument;
+    if (!onDocument) return;
+    const doc = activeDoc();
+    follows.textContent = doc ? t("inspector.follows", { doc: pageName(doc) }) : t("inspector.follows_none");
+    follows.dataset.state = doc ? "doc" : "none";
+  }
+  const offLayout = on("layout", drawFollows);
+  const offDoc = on("active-doc", drawFollows);
+  stopFollowing = () => {
+    offLayout();
+    offDoc();
+  };
 
   // Il tablist va in cima, prima dei pannelli — e il titolo sopra di lui.
   header.after(tablist);

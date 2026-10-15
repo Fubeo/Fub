@@ -52,6 +52,21 @@ export const THEME_ENGINE = "theme-1" as const;
 
 export type { ThemeEngine, ThemeLight, ThemeMotion } from "./enums.generated";
 
+/**
+ * Un'impostazione che un tema dichiara per sé (da `theme-2`). L'host la
+ * dichiara al registro delle impostazioni con la chiave `<id>:<name>`, a
+ * livello macchina: si legge e si scrive come ogni altra impostazione.
+ */
+export interface ThemeSetting {
+  /** Il nome dentro il tema: `a-z`, `0-9`, `-`. */
+  name: string;
+  /** Prosa, non una chiave: un tema non ha un catalogo di stringhe. */
+  label: string;
+  description: string;
+  /** Un tema ne usa tre: `toggle`, `number`, `choice`. */
+  kind: SettingKind;
+}
+
 export interface ThemeManifest {
   id: string;
   name: string;
@@ -60,6 +75,8 @@ export interface ThemeManifest {
   lights: ThemeLight[];
   asset_namespace: string;
   motion: ThemeMotion[];
+  /** Assente quando il tema non ne dichiara. */
+  settings?: ThemeSetting[];
 }
 
 /** Un tema installato che il backend può consegnare alla shell. */
@@ -1939,4 +1956,5 @@ export const COMMANDS = {
   createFolder: "folder.create",
   osTrash: "trash.os",
   undo: "vault.undo",
+  replace: "vault.replace",
 } as const;

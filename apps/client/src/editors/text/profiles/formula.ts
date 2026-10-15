@@ -130,6 +130,9 @@ export function tokenizeFormula(input: string): readonly FormulaToken[] {
 
 export interface FormulaParserState {
   inString: boolean;
+  /// Un valore semplice — testo, numero — non è una formula: per il provider
+  /// del foglio la formula è l'input che comincia con «=», e si colora solo lei.
+  plain: boolean;
 }
 
 function streamString(stream: StringStream, state: FormulaParserState): string {
@@ -150,9 +153,14 @@ function streamString(stream: StringStream, state: FormulaParserState): string {
 
 const formulaParser: StreamParser<FormulaParserState> = {
   name: "fub-formula",
-  startState: () => ({ inString: false }),
-  copyState: (state) => ({ inString: state.inString }),
+  startState: () => ({ inString: false, plain: false }),
+  copyState: (state) => ({ inString: state.inString, plain: state.plain }),
   token(stream, state) {
+    if (stream.sol() && !state.inString) state.plain = !stream.string.startsWith("=");
+    if (state.plain) {
+      stream.skipToEnd();
+      return null;
+    }
     if (state.inString) {
       while (!stream.eol()) {
         const character = stream.next();

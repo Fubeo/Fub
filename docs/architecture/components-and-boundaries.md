@@ -149,5 +149,6 @@ indipendenti.
 | feature | `crates/fub-features/src/` |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |
-| shell | `apps/client/src/main.ts`, `panels/`, `state/`, `ui/` |
+| shell | `apps/client/src/main.ts`, `desktop-shell.ts`, `panels/`, `state/`, `ui/` |
+| finestra | `apps/client/src/shells/scrittoio/`, `kit/`, `moto/`, `theme/scrittoio/` |
 | test | `crates/*/tests/`, `apps/client/src/**/*.test.ts` |

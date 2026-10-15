@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import structure from "./structure.css?raw";
+import structure from "./scrittoio/structure.css?raw";
 
 describe("il pavimento dei colori forzati", () => {
   it("usa colori di sistema per fuoco, controlli e stato scelto", () => {

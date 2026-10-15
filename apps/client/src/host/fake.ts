@@ -57,12 +57,16 @@ import type {
   KernelNotice,
   Organization,
   PluginError,
+  HealthIssue,
+  InvokeMode,
+  PlannedEdit,
   QueryExpr,
   ResourceDescriptor,
   QueryPredicate,
   SettingEntry,
   SettingValue,
   SyntaxForm,
+  TextEdit,
   ThemeInfo,
   ThemePayload,
   UiNode,
@@ -555,6 +559,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const drafts: DraftInfo[] = [];
         return { kind: "drafts", value: paginate(drafts, q.page) };
       }
+      case "vault_health": {
+        // Solo i link rotti, i soli che il finto sa riconoscere: un wikilink il
+        // cui nome non è quello di nessuna nota (senza cartella né estensione).
+        const issues: HealthIssue[] = [];
+        if (q.check === "broken_links") {
+          const base = (id: string): string => (id.split("/").pop() ?? id).replace(/\.[^.]+$/, "").toLowerCase();
+          const names = new Set([...docs.keys()].map(base));
+          for (const [id, entry] of [...docs].sort(([a], [b]) => a.localeCompare(b))) {
+            for (const found of entry.text.matchAll(/\[\[([^\]|#\n]+)/g)) {
+              const target = (found[1] ?? "").trim();
+              if (target === "" || names.has(base(target))) continue;
+              const start = found.index ?? 0;
+              issues.push({ doc: id, check: q.check, detail: target, span: { start, end: start + found[0].length } });
+            }
+          }
+        }
+        return { kind: "vault_health", value: paginate(issues, q.page) };
+      }
       case "jobs":
         return { kind: "jobs", value: [] };
       case "resolve": {
@@ -620,7 +642,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// della palette usano per provare che un comando che non scrive non
   /// flussa — e un host finto che non lo sapesse eseguire lancerebbe al posto
   /// di rispondere.
-  function command(id: string, args: Record<string, unknown> | null) {
+  function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
     switch (id) {
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
@@ -698,6 +720,64 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return {
           notify: null,
           effect: { kind: "custom" as const, ns: "fub.folder.created", payload: { path } },
+          undo: null,
+          partial: null,
+        };
+      }
+      case "vault.replace": {
+        // Come il vero: sostituzione **letterale** nei byte, con la parola intera
+        // se richiesta; `dry_run` dà il piano e non scrive, `apply` scrive.
+        const find = String(args?.find ?? "");
+        const replacement = String(args?.replace ?? "");
+        if (!find) throw new Error("host fake: niente da cercare");
+        const wholeWord = args?.whole_word === true;
+        const named = Array.isArray(args?.docs) ? args.docs.map(String) : [...docs.keys()];
+        const planned: PlannedEdit[] = [];
+        const rewritten = new Map<string, string>();
+        for (const doc of named) {
+          const entry = docs.get(doc);
+          if (!entry || entry.text === null) continue;
+          const text = entry.text;
+          const edits: TextEdit[] = [];
+          let out = "";
+          let from = 0;
+          for (let at = text.indexOf(find); at !== -1; at = text.indexOf(find, from)) {
+            const end = at + find.length;
+            const word = /[\p{L}\p{N}_]/u;
+            const inside = wholeWord && (word.test(text[at - 1] ?? "") || word.test(text[end] ?? ""));
+            if (inside) {
+              out += text.slice(from, end);
+            } else {
+              out += text.slice(from, at) + replacement;
+              edits.push({ span: { start: at, end }, text: replacement });
+            }
+            from = end;
+          }
+          if (edits.length === 0) continue;
+          rewritten.set(doc, out + text.slice(from));
+          planned.push({ doc, edit: { base: entry.revision, edits } });
+        }
+        if (mode === "dry_run") {
+          const count = planned.reduce((n, p) => n + p.edit.edits.length, 0);
+          return {
+            notify: null,
+            effect: {
+              kind: "plan" as const,
+              summary: `${count} sostituzioni in ${planned.length} note`,
+              docs: planned.map((p) => p.doc),
+              edits: planned,
+            },
+            undo: null,
+            partial: null,
+          };
+        }
+        for (const [doc, text] of rewritten) {
+          write(doc, text);
+          emit({ type: "document_changed", id: doc });
+        }
+        return {
+          notify: `Sostituito in ${rewritten.size} note.`,
+          effect: { kind: "done" as const },
           undo: null,
           partial: null,
         };
@@ -871,7 +951,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       viewAction: (v, instance, params, action, payload, fields) => {
         calls.push({ gate: "viewAction", args: [v, instance, params, action, payload, fields] });
         if (v === TRASH_VIEW && action === "restore") {
-          command("trash.restore", { entry: String(payload) });
+          command("trash.restore", { entry: String(payload) }, "apply");
           return Promise.resolve({ kind: "replace" as const, root: viewTree(v) });
         }
         throw new Error(`host fake: la view «${v}» non ha l'azione «${action}»`);
@@ -883,7 +963,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const execute = () => {
           const fault = faults.get("invokeCommand");
           if (fault !== undefined) return Promise.reject(new Error(fault));
-          return Promise.resolve(command(commandId, args ?? null));
+          // Un comando che rifiuta **rifiuta la promessa**, come attraverso l'IPC:
+          // un'eccezione sincrona qui sfuggirebbe a chi aspetta con `.catch`.
+          try {
+            return Promise.resolve(command(commandId, args ?? null, mode ?? "apply"));
+          } catch (error) {
+            return Promise.reject(error);
+          }
         };
         const throttle = throttles.get("invokeCommand");
         return throttle ? throttle.then(execute) : execute();

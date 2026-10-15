@@ -18,6 +18,7 @@ import {
   normalize,
   shadowedPrefixes,
   registerShellCommand,
+  unregisterShellCommand,
   resetShellCommands,
   loadKeyOverrides,
   validateKeybinding,
@@ -273,6 +274,30 @@ describe("i due registri sono uno solo", () => {
     }
     expect(allCommands()).toHaveLength(1);
     expect(conflicts(allCommands())).toHaveLength(0);
+  });
+
+  it("chi si smonta ritira la sua dichiarazione, non quella di chi è arrivato dopo", () => {
+    const declare = (): Parameters<typeof registerShellCommand>[0] => ({
+      id: "shell.switcher",
+      title: "commands.switcher",
+      description: "commands.switcher.desc",
+      layer: "global",
+      run: () => {},
+    });
+    const first = declare();
+    registerShellCommand(first);
+    unregisterShellCommand(first);
+    expect(allCommands()).toHaveLength(0);
+
+    // Un rimontaggio dichiara di nuovo prima che il vecchio abbia finito di
+    // smontarsi: lo smontaggio in ritardo non deve portarsi via il nuovo.
+    registerShellCommand(first);
+    const second = declare();
+    registerShellCommand(second);
+    unregisterShellCommand(first);
+    expect(allCommands()).toHaveLength(1);
+    unregisterShellCommand(second);
+    expect(allCommands()).toHaveLength(0);
   });
 });
 

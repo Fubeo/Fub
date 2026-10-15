@@ -92,13 +92,14 @@ impl CatalogTrust {
 pub struct CatalogEntry {
     /// Id della voce (`namespaced` come nel manifest del plugin o del tema).
     pub id: String,
-    /// Specie della voce: plugin WASM o tema `theme-1`.
+    /// Specie della voce: plugin WASM o tema (`theme-1`, `theme-2`).
     pub kind: CatalogKind,
     /// Nome leggibile per la ricerca.
     pub name: String,
     /// Versione della release.
     pub version: String,
-    /// Contratto dichiarato: `fub:abi@X.Y.Z` per un plugin, `theme-1` per un tema.
+    /// Contratto dichiarato: `fub:abi@X.Y.Z` per un plugin, il motore
+    /// (`theme-1`, `theme-2`) per un tema.
     pub abi: String,
     /// URL (o path esplicito) dell'artefatto: `.wasm` per un plugin, albero del
     /// tema (cartella con `manifest.json`) per un tema.
@@ -132,7 +133,7 @@ pub enum CatalogKind {
     /// Componente WASM installato via [`InstalledPluginStore`].
     #[default]
     Plugin,
-    /// Tema `theme-1` installato via `install_theme` esistente.
+    /// Tema installato via `install_theme` esistente.
     Theme,
 }
 
@@ -650,7 +651,7 @@ fn verify_theme_entry(
             entry.id
         )));
     }
-    if entry.abi != fub_abi::theme::THEME_ENGINE || !entry.permissions.is_empty() {
+    if fub_abi::theme::ThemeEngine::parse(&entry.abi).is_none() || !entry.permissions.is_empty() {
         return Err(CatalogError::Unreadable(
             "motore di tema o permessi non validi".into(),
         ));
@@ -670,6 +671,23 @@ fn verify_theme_entry(
     if actual != entry.digest.0 {
         return Err(CatalogError::Integrity(
             "digest dell'albero tema diverso dalla voce".into(),
+        ));
+    }
+    // Il motore della voce è ciò che il catalogo mostra prima di installare:
+    // deve essere quello che il manifest dichiara, come l'ABI di un plugin.
+    // Un manifest senza `engine` è un `theme-1` (la forma di prima).
+    let raw = std::fs::read(source_dir.join("manifest.json").as_std_path())?;
+    let declared = serde_json::from_slice::<serde_json::Value>(&raw)
+        .ok()
+        .and_then(|manifest| {
+            manifest
+                .get("engine")
+                .map(|engine| engine.as_str().map(str::to_string))
+                .unwrap_or_else(|| Some(fub_abi::theme::THEME_ENGINE.to_string()))
+        });
+    if declared.as_deref() != Some(entry.abi.as_str()) {
+        return Err(CatalogError::Integrity(
+            "motore del manifest diverso dalla voce".into(),
         ));
     }
     Ok(())

@@ -1,0 +1,408 @@
+/* L'albero dei file. */
+
+/* Una lista che non è un elenco puntato: la lista dei file, le appuntate, i
+   risultati, gli avvisi, la palette. È il nome che chi scrive un tema cerca
+   per primo. */
+.plain-list,
+.tree-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* Appuntate e albero sono due liste una sotto l'altra senza un'etichetta in
+   mezzo: le stacca un respiro. */
+.files-panel .plain-list + .plain-list {
+  margin-top: var(--space-4);
+}
+
+/* **Una riga del cassetto**: nota o cartella, nell'albero o tra le appuntate.
+   È larga quanto il cassetto a ogni profondità — il rientro è un margine
+   interno, non della lista — così il fondo della riga corrente e quello sotto
+   il puntatore vanno da un bordo all'altro, come un evidenziatore. */
+.tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-h);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.tree-row:hover {
+  background: var(--bg-hover);
+}
+.tree-row:active {
+  background: var(--bg-active);
+}
+
+/* Il rientro, un livello alla volta (`--tree-indent` si stringe coi passi di
+   compattezza). Otto livelli sono scritti per esteso; dal nono rientra la
+   lista, che è meno bello — il fondo non arriva più al bordo — ma non perde
+   la gerarchia. */
+.tree-children .tree-row {
+  padding-left: calc(var(--space-4) + var(--tree-indent));
+}
+.tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 2 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 3 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 4 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 5 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 6 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 7 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-row {
+  padding-left: calc(var(--space-4) + 8 * var(--tree-indent));
+}
+.tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children {
+  padding-left: var(--tree-indent);
+}
+
+/* **La nota aperta.** Lo stato si legge da dove è annunciato: nell'albero è il
+   `treeitem` a essere selezionato, fra le appuntate è la riga a essere
+   «quella corrente». La dice la matita blu — fondo tenue, inchiostro blu,
+   peso da titolo — e non un grigio: è l'unica riga del cassetto che parla del
+   foglio aperto. */
+[role="treeitem"][aria-selected="true"] > .tree-row,
+.tree-row[aria-current="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+
+/* Il fuoco da tastiera sta sul `treeitem`, che contiene anche il sottoalbero:
+   l'anello attorno a lui cingerebbe l'intera cartella aperta. Lo porta la
+   riga, dentro il suo bordo perché il cassetto taglia ciò che sporge. */
+[role="treeitem"]:focus-visible {
+  outline: none;
+}
+[role="treeitem"]:focus-visible > .tree-row,
+.tree-row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+
+.row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* **La colonna dell'icona**, larga `--drawer-icon` per tutti: l'emoji scelta,
+   la cartella, o il foglietto disegnato qui sotto per chi non ne ha una. */
+.row-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  font-size: calc(var(--drawer-icon) - 3px);
+  line-height: 1;
+}
+/* Una nota senza icona tiene la colonna con un foglietto: contorno grafite,
+   l'angolo piegato. È disegnato, non un carattere, così prende il colore
+   della riga corrente. */
+.tree-row.no-icon::after {
+  content: "";
+  order: -1;
+  flex: none;
+  box-sizing: border-box;
+  width: calc(var(--drawer-icon) - 5px);
+  height: calc(var(--drawer-icon) - 2px);
+  margin: 0 2.5px;
+  border: 1.5px solid var(--muted);
+  border-radius: 2.5px;
+  background: linear-gradient(to bottom left, transparent 50%, var(--muted) 50%) top right / 5px 5px no-repeat border-box;
+  clip-path: polygon(0 0, calc(100% - 4.5px) 0, 100% 4.5px, 100% 100%, 0 100%);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row.no-icon::after,
+.tree-row.no-icon[aria-current="true"]::after {
+  border-color: var(--accent);
+  background-image: linear-gradient(to bottom left, transparent 50%, var(--accent) 50%);
+}
+
+/* **Il triangolino di apertura.** Nel markup è un carattere (▸ o ▾): qui il
+   carattere si spegne e il triangolo si disegna, uno solo, che ruota quando
+   la cartella è aperta. */
+.chevron {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--drawer-icon);
+  height: var(--drawer-icon);
+  margin-right: calc(var(--space-2) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0;
+  cursor: pointer;
+}
+.chevron::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.chevron[aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+/* Il bersaglio è più largo del disegno: 24 px attorno a un triangolo di 8. */
+.chevron::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+.chevron:hover,
+.chevron:active {
+  background: transparent;
+  color: var(--text);
+}
+/* Una cartella vuota non ha niente da aprire: il triangolo non c'è, il suo
+   posto resta. */
+.chevron:disabled {
+  opacity: 0;
+  cursor: default;
+}
+[role="treeitem"][aria-selected="true"] > .tree-row .chevron {
+  color: var(--accent);
+}
+/* Una foglia tiene il posto del triangolo delle cartelle sorelle: cartelle e
+   note dello stesso livello hanno l'icona sulla stessa colonna. Lo tiene
+   anche «…e altre N», che comincia dove cominciano le icone delle righe che
+   continua. */
+.tree-row.leaf::before,
+.tree-row.troncata::before {
+  content: "";
+  order: -2;
+  flex: none;
+  width: var(--drawer-icon);
+  margin-right: calc(var(--space-2) * -1);
+}
+/* Dove in cima non c'è nessuna cartella (uno spazio di sole note, un vault
+   piatto) non c'è un triangolo a cui fare posto: le note partono dalla
+   verticale delle appuntate e del titolo. */
+.plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.leaf::before,
+.plain-list:not(:has(> li > .tree-row > .chevron)) > li > .tree-row.troncata::before {
+  display: none;
+}
+
+/* «…e altre N»: la riga che apre il resto di una cartella lunga. È un
+   bottone, e si presenta come una riga sommessa. */
+.tree-row.troncata {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: left;
+}
+.tree-row.troncata:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tree-row.troncata:active {
+  background: var(--bg-active);
+}
+
+/* **Il nome che si sta scrivendo**: la rinomina dentro la riga e la cartella
+   nuova. Un campo vero — foglio, contorno blu — alto quanto la riga, così
+   l'albero non salta quando compare. */
+.plain-list .tree-row input,
+.new-folder {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  height: calc(var(--row-h) - var(--space-2));
+  padding: 0 var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-chip);
+  background: var(--sheet);
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+}
+/* Il contorno è già blu: l'anello gli aggiunge ciò che manca al suo spessore,
+   non un secondo giro. */
+.plain-list .tree-row input:focus-visible,
+.new-folder:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 calc(var(--focus-ring-width) - 1px) var(--focus-ring);
+}
+.new-folder {
+  display: block;
+  margin: var(--space-1) 0;
+}
+/* La cartella nuova nasce dentro quella da cui la si è chiesta: rientra di
+   un livello, come le righe che le staranno accanto. */
+[role="treeitem"] > .new-folder {
+  width: calc(100% - var(--space-4) - var(--tree-indent));
+  margin-left: calc(var(--space-4) + var(--tree-indent));
+}
+.tree-children [role="treeitem"] > .new-folder {
+  width: calc(100% - var(--space-4) - 2 * var(--tree-indent));
+  margin-left: calc(var(--space-4) + 2 * var(--tree-indent));
+}
+.tree-children .tree-children [role="treeitem"] > .new-folder {
+  width: calc(100% - var(--space-4) - 3 * var(--tree-indent));
+  margin-left: calc(var(--space-4) + 3 * var(--tree-indent));
+}
+/* Mentre il nome va al vault la riga aspetta. */
+.tree-row[aria-busy="true"] {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+/* Bersagli del trascinamento: un tratto blu dove la riga cadrà (sopra o
+   sotto), o la cartella accesa che la riceve. */
+/* Senza raggio, finché dura: il tratto è una riga dritta da un bordo
+   all'altro, non un arco che segue gli angoli. */
+.tree-row.drop-before,
+.tree-row.drop-after {
+  border-radius: 0;
+}
+.tree-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.tree-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.tree-row.drop-into {
+  background: var(--accent-wash);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+/* **Colori forzati.** Fondi, ombre e sfumature sono del sistema o spariscono:
+   ciò che qui era detto con quelli torna a dirsi con contorni e caratteri. */
+@media (forced-colors: active) {
+  /* La nota aperta: il contorno che la struttura dà al `treeitem` finirebbe
+     sotto il fondo della riga. Lo porta la riga. */
+  [role="treeitem"][aria-selected="true"] {
+    outline: none;
+  }
+  [role="treeitem"][aria-selected="true"] > .tree-row {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  /* Il triangolo disegnato è un fondo, e non c'è più: torna il carattere del
+     markup (▸ o ▾), che dice da sé se la cartella è aperta. */
+  .chevron {
+    font-size: var(--text-xs);
+  }
+  .chevron::before {
+    content: none;
+  }
+  /* Il tratto del trascinamento era un'ombra: diventa un bordo. */
+  .tree-row.drop-before {
+    border-top: 2px solid Highlight;
+  }
+  .tree-row.drop-after {
+    border-bottom: 2px solid Highlight;
+  }
+  .tree-row.drop-into {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
+/* L'albero vuoto: una frase e il primo gesto, dove sarebbero le note. */
+.tree-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.tree-empty p {
+  margin: 0;
+}
+/* Il gesto parte dalla verticale della frase: il suo margine interno, che
+   serve al fondo sotto il puntatore, non lo sposta. */
+.tree-empty .link-button {
+  margin-left: calc(var(--space-3) * -1);
+}
+
+/* **Più note scelte insieme.** La barra sta sopra l'albero e dice quante sono;
+   le righe scelte hanno il fondo della nota aperta ma non il suo peso, e un
+   segno a sinistra, così non si scambiano con «la nota che sto leggendo». */
+.tree-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-3) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--accent-wash);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.tree-selection[hidden] {
+  display: none;
+}
+.tree-selection-count {
+  flex: 1 1 100%;
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.tree-selection-action {
+  min-height: var(--control-h-compact);
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.tree-selection-action:hover {
+  background: var(--overlay-hover);
+}
+.tree-selection-action:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.tree-selection-trash {
+  color: var(--danger);
+}
+[role="treeitem"][data-picked] > .tree-row {
+  box-shadow: inset 2px 0 0 var(--accent);
+  font-weight: inherit;
+}
+
+/* Il nome rifiutato, accanto al campo di rinomina: la frase sotto la riga,
+   col segno della matita rossa, finché non si corregge. */
+.tree-rename-problem {
+  margin: var(--space-1) var(--space-3) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  background: color-mix(in oklch, var(--danger) 12%, transparent);
+  color: var(--danger);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}

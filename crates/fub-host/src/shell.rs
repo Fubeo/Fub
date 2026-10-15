@@ -152,6 +152,31 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.zoom.reset", Some("Mod-0")),
     // La scrittura senza cornice: via pannelli, rail e toolbar.
     ("shell.focus.toggle", None),
+    // Lo spazio dell'interfaccia (`chrome.compactness`), un passo alla volta
+    // come lo zoom: più compatta lascia più posto al foglio. **Senza accordo**:
+    // `Mod-=` e `Mod--` sono dello zoom, e un gesto che si fa quando si cambia
+    // schermo non ne merita uno suo.
+    ("shell.chrome.compact.more", None),
+    ("shell.chrome.compact.less", None),
+    ("shell.chrome.compact.reset", None),
+    // Passa all'altra luce. **Senza accordo**: il bottone sta sempre in vista.
+    ("shell.light.toggle", None),
+    // I modi del lanciatore che non avevano già un gesto: «apri» resta
+    // `shell.switcher` e «comanda» resta `shell.palette`, coi loro accordi.
+    // **Senza accordo**: dentro il lanciatore ognuno ha il suo prefisso (`?`,
+    // `@`, `#`, `:`), e da fuori ci si arriva dai due che l'accordo ce l'hanno.
+    ("shell.launcher.search", None),
+    ("shell.launcher.headings", None),
+    ("shell.launcher.tags", None),
+    ("shell.launcher.line", None),
+    ("shell.launcher.templates", None),
+    // Il fuoco da un foglio a quello che gli sta accanto, per direzione.
+    // **Senza accordo**: `Mod-Alt-frecce` è preso da più di un sistema, e chi
+    // divide spesso se ne sceglie uno dalle scorciatoie.
+    ("shell.pane.focus.left", None),
+    ("shell.pane.focus.right", None),
+    ("shell.pane.focus.up", None),
+    ("shell.pane.focus.down", None),
 ];
 
 /// Le chiavi di configurazione che hanno un gesto loro, e che nel form generico

@@ -1,0 +1,737 @@
+/* Il grafo. */
+
+/* La prima view a stare dentro un foglio: sta dove starebbe un documento e si
+   chiude dalla sua linguetta. Del disegno vero — nodi, archi, moto — qui non
+   c'è niente: lo fa il pittore su canvas, leggendo i token dalla tela. Resta
+   ciò che il pittore non conosce: la carta sotto, e i comandi che ci
+   galleggiano sopra.
+
+   I comandi non stanno *accanto* alla tela, le stanno *sopra*: una barra in
+   testa e una in fondo toglierebbero al grafo proprio i bordi, che è dove
+   finisce chi lo trascina. La shell li scrive come fratelli della tela, in
+   colonna; qui ognuno rinuncia al proprio posto nella colonna (altezza zero, o
+   un margine negativo pari alla sua altezza) e si disegna sopra la tela.
+   Nessuno si ancora a un antenato: la view regge dovunque la si monti. */
+
+/* La linguetta di una view non è quella di una nota: non si sporca mai e non
+   nomina un file, e il corsivo lo dice senza aggiungere un'icona a una
+   striscia già fitta. */
+.tab-view .tab-name {
+  font-style: italic;
+}
+
+/* --- la tela ---------------------------------------------------------------- */
+/* È la carta del foglio. Il pittore legge `--bg` per l'alone che stacca le
+   etichette dagli archi: qui vale la carta, non la scrivania, altrimenti ogni
+   nome avrebbe intorno un bordo del colore sbagliato. */
+.graph-viewport {
+  --bg: var(--sheet);
+  background: var(--sheet);
+  color: var(--text);
+}
+
+/* Finché il motore si carica la tela è vuota: un filo d'accento in testa, che
+   respira, dice che sta arrivando — è lavoro in corso, l'unico moto che non
+   si ferma da solo. */
+.graph-viewport[aria-busy="true"]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 50%, transparent);
+  animation: fub-graph-breathe calc(var(--duration-slow) * 4) var(--ease) infinite alternate;
+}
+
+@keyframes fub-graph-breathe {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- i comandi in testa ------------------------------------------------------ */
+/* Una fila di pastiglie in alto a sinistra, che va a capo sopra la tela. La
+   barra in sé non ha altezza — così fra una pastiglia e l'altra il puntatore
+   tocca il grafo — e sta un piano sopra la tela, che viene dopo di lei e
+   altrimenti la coprirebbe. A destra lascia il posto all'ingranaggio. */
+.graph-toolbar {
+  flex: none;
+  position: relative;
+  top: var(--space-5);
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: var(--space-3);
+  height: 0;
+  padding: 0 calc(var(--control-h) + 2 * var(--space-5)) 0 var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Una pastiglia: rialzo, ombra da popover, testo in grafite che diventa
+   inchiostro sotto il puntatore. Il rialzo è opaco — sotto ci passano archi e
+   nodi — e la velatura dell'hover gli si stende sopra invece di sostituirlo. */
+.graph-toolbar > button,
+.graph-toolbar-field {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-h);
+  padding: 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+.graph-toolbar > button:hover,
+.graph-toolbar-field:hover {
+  background: linear-gradient(var(--overlay-hover), var(--overlay-hover)), var(--bg-elev);
+  color: var(--text);
+}
+.graph-toolbar > button:active {
+  background: linear-gradient(var(--overlay-active), var(--overlay-active)), var(--bg-elev);
+  color: var(--text);
+  transform: scale(0.98);
+}
+/* Spenta, una pastiglia resta opaca: è il testo ad arretrare. Con l'opacità
+   si vedrebbe il grafo attraverso. */
+.graph-toolbar > button:disabled,
+.graph-toolbar > button:disabled:hover {
+  background: var(--bg-elev);
+  color: color-mix(in srgb, var(--muted) 55%, transparent);
+  transform: none;
+  cursor: default;
+}
+
+/* Un filtro acceso si legge in inchiostro; la casella resta, piccola, a dire
+   che è un sì o un no. */
+.graph-toolbar-field:has(> input:checked) {
+  color: var(--text);
+}
+.graph-toolbar-field input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+/* La scelta dentro la pastiglia non ha un campo suo: è la pastiglia. */
+.graph-toolbar-field select {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: var(--radius-chip);
+  background-color: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+/* Il vault è cambiato sotto il grafo: l'unica pastiglia che chiede qualcosa,
+   e lo chiede in blu. */
+.graph-toolbar > .graph-refresh {
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+/* Sotto il puntatore prende il fondo d'accento delle cose accese: è opaco, e
+   l'accento sopra ci si legge in tutte e due le luci. */
+.graph-toolbar > .graph-refresh:hover,
+.graph-toolbar > .graph-refresh:active {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* --- il conto ---------------------------------------------------------------- */
+/* Quante note e quanti collegamenti si stanno guardando: un'annotazione in un
+   angolo, non un comando. Sta sulla carta con un fondo di carta, quanto basta
+   a non farsi attraversare da un arco. */
+.graph-count {
+  position: absolute;
+  right: var(--space-5);
+  bottom: var(--space-5);
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--sheet);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-normal);
+  pointer-events: none;
+}
+/* Con la linea del tempo aperta il fondo è suo: il conto le sale sopra. */
+.graph-viewport:has(~ .graph-timeline:not([hidden])) .graph-count {
+  bottom: calc(var(--space-5) + 40px + var(--space-3));
+}
+
+.graph-viewport:has(~ .graph-timeline:not([hidden])) .graph-zoom {
+  bottom: calc(var(--space-5) + 32px + 40px + var(--space-3));
+}
+
+/* --- l'ingranaggio e il pannello della fisica -------------------------------- */
+/* In alto a destra. Il contenitore prende tutta l'altezza della tela per dare
+   al pannello un limite — si accorcia e scorre invece di finire tagliato dal
+   bordo — ma non ferma il puntatore: lo fermano solo il bottone e il pannello. */
+.graph-panel {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  bottom: var(--space-5);
+  left: var(--space-5);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+  pointer-events: none;
+}
+
+.graph-panel-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform var(--duration-state) var(--ease);
+}
+.graph-panel-toggle:hover {
+  background: linear-gradient(var(--overlay-hover), var(--overlay-hover)), var(--bg-elev);
+  color: var(--text);
+}
+.graph-panel-toggle:active {
+  transform: scale(0.96);
+}
+.graph-panel-toggle[aria-expanded="true"],
+.graph-panel-toggle[aria-expanded="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.graph-panel-popover {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 280px;
+  max-width: 100%;
+  padding: var(--space-6);
+  border: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow-y: auto;
+  pointer-events: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
+}
+.graph-panel-popover[hidden] {
+  display: none;
+}
+
+.graph-panel-titolo {
+  margin: 0 0 var(--space-5);
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+
+/* Una sezione si annuncia con un'etichetta piccola e maiuscola, e la separa
+   dalla precedente un filo tenue. */
+.graph-panel-sezione {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+.graph-panel-sezione-titolo {
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+/* Un parametro: il nome, il valore con le cifre in colonna, e sotto il
+   cursore largo quanto il pannello. */
+.graph-panel-campo {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 var(--space-4);
+  margin-top: var(--space-3);
+  color: var(--text);
+}
+.graph-panel-nome {
+  min-width: 0;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.graph-panel-valore {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.graph-panel-preset {
+  grid-template-columns: auto 1fr;
+  margin-top: 0;
+}
+.graph-panel-select {
+  min-width: 0;
+  height: var(--row-h);
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background-color: var(--sheet-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.graph-panel-select:hover {
+  border-color: var(--text);
+}
+
+.graph-panel-check {
+  grid-template-columns: 1fr auto;
+  min-height: 24px;
+  cursor: pointer;
+}
+.graph-panel-check input[type="checkbox"] {
+  grid-column: 2;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Le azioni si dividono la riga secondo quanto è lungo il nome di ognuna; se
+   in un'altra lingua non entrano, è un bottone ad andare a capo, non una
+   parola dentro il bottone. */
+.graph-panel-azioni {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+.graph-panel-azioni button {
+  flex: 1 1 auto;
+  min-height: var(--row-h);
+  padding: 0 var(--space-3);
+  white-space: nowrap;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+.graph-panel-azioni button:hover {
+  background: var(--overlay-active);
+}
+.graph-panel-azioni button:active {
+  transform: scale(0.98);
+}
+
+/* --- i cursori --------------------------------------------------------------- */
+/* Un binario sottile e un pollice d'accento, uguali nel pannello e nella
+   linea del tempo. Il binario è nel tono dei contorni e non in `--bg-active`:
+   sul rialzo, nella luce scura, quel piano si stacca dal pannello di un soffio
+   (1,1:1) e non si vedrebbe dove finisce la corsa; `--outline` regge 3:1 su
+   ogni superficie, ed è lo stesso binario dei cursori delle preferenze. Alti
+   24 anche se il binario è un filo: il bersaglio è la riga, non il filo. Le
+   due famiglie di pseudo-elementi vanno scritte separate: unite, la regola
+   cadrebbe intera sul motore che non conosce l'altra. */
+.graph-panel-campo input[type="range"],
+.graph-timeline input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.graph-panel-campo input[type="range"] {
+  grid-column: 1 / -1;
+}
+.graph-panel-campo input[type="range"]::-webkit-slider-runnable-track,
+.graph-timeline input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+}
+.graph-panel-campo input[type="range"]::-webkit-slider-thumb,
+.graph-timeline input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-elev);
+}
+.graph-panel-campo input[type="range"]:hover::-webkit-slider-thumb,
+.graph-timeline input[type="range"]:hover::-webkit-slider-thumb {
+  background: var(--accent-soft);
+}
+.graph-panel-campo input[type="range"]::-moz-range-track,
+.graph-timeline input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+}
+.graph-panel-campo input[type="range"]::-moz-range-thumb,
+.graph-timeline input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-elev);
+}
+
+/* --- zoom e inquadra ---------------------------------------------------------- */
+/* Tre pulsanti in basso a destra sulla tela, uniti in una pastiglia sopra il
+   conto: in alto stanno la barra dei filtri e il pannello della fisica, in
+   basso a sinistra la legenda. */
+.graph-zoom {
+  position: absolute;
+  right: var(--space-5);
+  bottom: calc(var(--space-5) + 32px);
+  z-index: 3;
+  display: flex;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  overflow: hidden;
+}
+.graph-zoom-button {
+  display: grid;
+  place-items: center;
+  min-width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-lg);
+  cursor: pointer;
+}
+.graph-zoom-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.graph-zoom-button:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* --- la legenda -------------------------------------------------------------- */
+/* Un colore per gruppo: una pastiglia in basso a sinistra, su una riga sola,
+   con il suo nome davanti in piccolo. La shell la scrive prima della tela;
+   `order` la porta sotto e il margine negativo la rialza della sua altezza.
+   Se i gruppi sono molti scorre di lato: una legenda che va a capo coprirebbe
+   il grafo che spiega. */
+.graph-legend {
+  order: 1;
+  flex: none;
+  position: relative;
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  max-width: calc(100% - 2 * var(--space-5) - 180px);
+  height: var(--row-h);
+  margin: calc(-1 * (var(--row-h) + var(--space-5))) var(--space-5) var(--space-5);
+  padding: 0 var(--space-5);
+  list-style: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.graph-legend::before {
+  content: attr(aria-label);
+  flex: none;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.graph-legend li {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+/* Ogni gruppo è un interruttore: spento perde il colore e si barra. */
+.graph-legend-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.graph-legend-group:hover {
+  color: var(--accent);
+}
+.graph-legend-group:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-chip);
+}
+.graph-legend-group[aria-pressed="false"] {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.graph-legend-group[aria-pressed="false"] .graph-swatch {
+  opacity: 0.35;
+}
+.graph-swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+}
+/* Con la linea del tempo aperta, la legenda le sta sopra. */
+.graph-legend:has(~ .graph-timeline:not([hidden])) {
+  margin-top: calc(-1 * (var(--row-h) + var(--space-5) + 40px + var(--space-3)));
+  margin-bottom: calc(var(--space-5) + 40px + var(--space-3));
+}
+
+/* --- la linea del tempo ------------------------------------------------------ */
+/* Una pillola in basso al centro: il cursore, la data a cui si è arrivati, e
+   il bottone che la fa scorrere da sola. Alta 40, e di 40 più il margine
+   risale sulla tela. */
+.graph-timeline {
+  order: 2;
+  flex: none;
+  position: relative;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  width: min(520px, calc(100% - 2 * var(--space-5)));
+  height: 40px;
+  margin: calc(-1 * (40px + var(--space-5))) 0 var(--space-5);
+  padding: 0 var(--space-3) 0 var(--space-6);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.graph-timeline label {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.graph-timeline span {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.graph-timeline button {
+  flex: none;
+  min-height: var(--row-h);
+  padding: 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+.graph-timeline button:hover {
+  background: var(--overlay-hover);
+}
+.graph-timeline button:active {
+  background: var(--overlay-active);
+  transform: scale(0.98);
+}
+
+/* --- vuoto, stato, elenco ---------------------------------------------------- */
+/* Niente da disegnare: una frase in grafite in mezzo alla tela. Viene dopo la
+   tela e non occupa posto; risale di metà dell'altezza della view, che è il
+   centro a meno dell'elenco. Dove quell'altezza non è nota resta sotto la
+   tela, che è un posto sensato lo stesso. */
+.graph-empty {
+  order: 2;
+  flex: none;
+  position: relative;
+  bottom: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 0;
+  padding: 0 var(--space-7);
+  color: var(--muted);
+  font-size: var(--text-base);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Che cosa è selezionato, detto a parole: sotto la tela, sulla carta. */
+.graph-status {
+  order: 2;
+  flex: none;
+  padding: var(--space-3) var(--space-6) 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.graph-status:empty {
+  display: none;
+}
+
+/* Le stesse note, in un elenco che si legge e si percorre senza il mouse. */
+.graph-list {
+  order: 2;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-4) var(--space-4);
+}
+.graph-list-summary {
+  padding: var(--space-2);
+  border-radius: var(--radius-chip);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.graph-list-summary:hover {
+  color: var(--accent);
+}
+/* Aperto, l'elenco scorre al suo posto invece di sottrarre la tela: la pagina
+   resta da cinquanta e il resto lo dice la riga «altre». */
+.graph-list-items {
+  max-height: min(32vh, 320px);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+/* Dentro un foglio l'hover è un gradino della carta; la nota corrente è
+   accesa come una riga selezionata ovunque. */
+.graph-list-open {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.graph-list-open:hover {
+  background: var(--sheet-2);
+}
+.graph-list-open:active {
+  background: var(--bg-hover);
+}
+.graph-list-open[aria-current="true"],
+.graph-list-open[aria-current="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.graph-list-empty,
+.graph-list-info {
+  padding: var(--space-2) var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.graph-list-page,
+.graph-list-more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-2) 0;
+}
+.graph-list-info {
+  padding: 0 var(--space-3);
+}
+.graph-list-page button,
+.graph-list-more button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--sheet-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.graph-list-page button:hover,
+.graph-list-more button:hover {
+  background: var(--bg-hover);
+}
+.graph-list-page button:disabled,
+.graph-list-page button:disabled:hover {
+  background: var(--sheet-2);
+  opacity: 0.4;
+  cursor: default;
+}

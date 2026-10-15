@@ -1,96 +1,40 @@
-/*
- * Il foglio del tema di serie, nella luce chiara: il gemello dello scuro.
- * Soglie normali WCAG AA (§31.2).
+/* Il foglio della serie Scrittoio: giorno.
  *
- * FILE GENERATO — non modificare a mano.
+ * GENERATO da `theme/scrittoio/recipe.ts`: non si modifica qui. Si tocca la
+ * ricetta e si rigenera con `npm run theme:generate`; un esadecimale ritoccato
+ * a mano sparisce alla prima rigenerazione.
  *
- * La sorgente è `theme/serie/recipe.ts`, che dichiara ogni colore come
- * *che colore è* (tinta e croma), *sopra cosa sta* e *quanto deve reggere*:
- * la chiarezza — l'unica grandezza che il contrasto muove — la trova la
- * generazione. Qui sotto ci sono i risultati, in esadecimale, perché i tre
- * presidi del tema leggono i fogli **come testo** e un `oklch()` vivo
- * sarebbe un valore che solo un browser sa dire.
- *
- *     npm run tema:genera       rigenera questo file
- *     npm run tema:verifica     dice se è quello che la ricetta produce
- *
- * Non è cablato nell'app: lo monta il caricatore (`theme/loader.ts`), che
- * **sostituisce** — un foglio solo alla volta, niente cascata fra due temi,
- * niente gara di specificità. Chi decide quale luce vale è la shell
- * (`theme/theme.ts`): per questo qui non c'è nessuna
- * `@media (prefers-color-scheme)` e nessun selettore `[data-theme]` — il
- * foglio montato È il tema, e `:root` basta.
- *
- * Le metriche della scocca e la scala dei piani stanno nella struttura
- * (`theme/structure.css`) e qui non si ripetono; il chrome dei componenti
- * sta nella pelle (`skin.css`), che di token non ne dichiara nessuno.
+ * Qui stanno i valori: scala, forma, caratteri, tempi, molle e colori. La
+ * pelle li consuma e non li dichiara; le misure della finestra sono della
+ * struttura (`theme/scrittoio/structure.css`) e non si tematizzano.
  */
 :root {
-  /* --- la scala: ciò che i due fogli condividono ------------------------- */
-
-  /* Gli spazi. La scala è quella che la shell **già usava** (2, 4, 6, 8, 10,
-     12, 16), raccolta e chiusa: i valori dispari che erano rimasti in giro —
-     3px, 5px, 11px, 14px, 18px — erano differenze che nessuno aveva scelto, e
-     sono state tirate sul gradino accanto. I numeri che restano letterali nella
-     pelle sono quelli **strutturali** (la colonna da 240px, un bordo da 1px,
-     l'altezza massima di una lista): non sono spaziatura, e metterli in questa
-     scala vorrebbe dire che cambiarla li muove. */
-
   --space-1: 2px;
   --space-2: 4px;
   --space-3: 6px;
   --space-4: 8px;
-  --space-5: 10px;
-  --space-6: 12px;
-  --space-7: 16px;
+  --space-5: 12px;
+  --space-6: 16px;
+  --space-7: 20px;
   --space-8: 24px;
   --space-9: 32px;
   --space-10: 48px;
-
-  /* --- i raggi ----------------------------------------------------------- */
-
-  /* Quattro raggi per quattro intenzioni: il segno appena smussato,
-     il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda.
-     Sono morbidi e non tondi: un angolo appena più largo toglie spigoli
-     all'insieme senza che nessun componente sembri una bolla. */
-
+  --space-11: 64px;
+  --control-h: 32px;
+  --row-h: 28px;
   --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-menu: 10px;
+  --radius-sheet: 12px;
+  --radius-dialog: 14px;
   --radius-pill: 999px;
-
-  /* --- la tipografia ----------------------------------------------------- */
-
-  /* `--font-mono` esisteva già come `var(--mono, monospace)` in due regole —
-     cioè come token **mai definito**, che è il modo più silenzioso di non avere
-     un token: il ripiego funzionava, quindi nessuno se ne accorgeva. La §31.3 ha
-     portato tre voci in bundle — Inter, Literata, JetBrains Mono, tutte e tre
-     OFL-1.1 — al posto di `system-ui`, cioè di tre prodotti diversi su tre
-     piattaforme. Il sistema resta raggiungibile: ogni pila ha il ripiego di
-     piattaforma in coda, e diventerà una preferenza vera con la §31.6.
-
-     `text-xs`…`text-xl` non si muovono: sono i sei valori di prima, e restano
-     perché cambiarli è un ridisegno di ogni componente che li spende — cinquantanove
-     regole nella pelle (`grep -cF 'var(--text-' apps/client/src/theme/serie/skin.css`)
-     — e quello è lavoro della §31.4, non di questa voce. La
-     scala **si allarga**: due gradini nuovi in cima (`text-2xl`, `text-3xl`),
-     che seguono un passo dichiarato (×1,2 da `text-xl`, arrotondato al pixel) al
-     posto di essere il prossimo numero che serve; e una voce nuova per la
-     lettura (`text-reading`), perché Literata non è Inter con un altro nome —
-     è disegnata per un corpo diverso. `leading-tight` era l'unica interlinea:
-     resta per chi la usa già, e accanto arrivano `leading-normal` (il paragrafo
-     di un pannello) e `leading-relaxed` (la prosa lunga, dove Literata respira).
-     `content-width` è la misura di lettura — 70 caratteri, il punto in cui una
-     riga più lunga fa perdere il segno tornando a capo. Queste ultime cinque voci
-     sono dichiarate e non ancora consumate da nessuna regola: tocca alla §31.8
-     (*la stessa nota in tre modi*) metterle sulla superficie di lettura, editor e
-     anteprima insieme — la §31.3 poteva scriverle o lasciarle implicite in una
-     regola sola, e implicite è precisamente il difetto che questa seduta cerca. */
-
-  --font-ui: "Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-reading: "Literata Variable", Georgia, "Times New Roman", serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-ui: "Hanken Grotesk Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-reading: "Newsreader Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -99,370 +43,127 @@
   --text-xl: 16px;
   --text-2xl: 19px;
   --text-3xl: 23px;
-  --text-reading: 16px;
-  /* I pesi sono un gradino sotto quelli di prima (600 e 700): Inter e
-     Literata sono variabili, e in una scocca minimale la gerarchia la porta
-     la misura, non l'inchiostro. Un'etichetta a 600 in ogni riga faceva di
-     ogni riga un titolo. */
+  --text-reading: 17px;
+  --text-source: 14px;
+  --weight-regular: 400;
   --weight-medium: 500;
   --weight-bold: 600;
-  --leading-tight: 1.35;
-  --leading-normal: 1.5;
-  --leading-relaxed: 1.7;
-  --content-width: 70ch;
-  /* Il maiuscoletto dei titoli di pannello: due proprietà che vanno sempre
-     insieme, e che separate si erano già disallineate (`0.6px` in un posto,
-     `0.04em` in un altro, per la stessa riga). */
-  --tracking-caps: 0.6px;
-
-  /* --- il moto ----------------------------------------------------------- */
-
-  /* Tre durate e tre curve, e sono le stesse in entrambe le luci — un bottone e
-     una modale non sono due prodotti, e un tema chiaro non ha un altro orologio.
-     `fast` è l'hover e il colore; `med` è lo spaziale piccolo (un menu, un
-     press); `slow` è l'ingresso di una superficie che si apre. `ease` è lo
-     standard; `ease-out` decade sull'ingresso (parte veloce, atterra fermo);
-     `ease-in` accelera sul press. Non c'è una durata «live»: la scocca non
-     respira. Ogni nome nuovo lo spende la pelle, o è debito — la lezione di
-     `--duration-med`.
-
-     Le durate sono più distese di prima (120/180/240 ms) e le curve più
-     morbide: l'ingresso è un'uscita quintica, che copre quasi tutto il tragitto
-     nel primo terzo e poi si posa per il resto, e l'uscita è una cubica che
-     parte piano invece di strappare. Il moto si sente come un respiro, non
-     come uno scatto. `slow` resta ben sotto il tetto di sicurezza di
-     `ui/motion.ts` (600 ms), che chiude comunque una superficie appesa. */
-
-  --duration-fast: 180ms;
-  --duration-med: 260ms;
-  --duration-slow: 420ms;
+  --leading-tight: 1.3;
+  --leading-normal: 1.45;
+  --leading-relaxed: 1.65;
+  --content-width: 68ch;
+  --tracking-caps: 0.06em;
+  --duration-state: 90ms;
+  --duration-fast: 140ms;
+  --duration-med: 220ms;
+  --duration-slow: 360ms;
+  --duration-scene: 560ms;
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
-
-  /* --- l'elevazione: dalla carta al dialogo ------------------------------ */
-
-  /* Cinque piani. In luce scura la superficie sale di un filo e, dal flottante
-     in su, l'ombra lunga e morbida torna a staccare; in luce chiara ciò che
-     galleggia è della carta stessa, e lo solleva l'ombra. Il filetto
-     appartiene alla stessa riga, non a un componente. */
-
-  --elevation-paper-surface: #fefcf9;
-  --elevation-paper-border: #fefcf9;
-  --elevation-paper-shadow: none;
-  --elevation-base-surface: #f9f7f4;
-  --elevation-base-border: #f5f3ef;
-  --elevation-base-shadow: 0 1px 2px rgb(45 38 30 / 3%);
-  --elevation-chrome-surface: #f9f7f4;
-  --elevation-chrome-border: #f1efeb;
-  --elevation-chrome-shadow: 0 1px 3px rgb(45 38 30 / 4%);
-  --elevation-floating-surface: #fefcf9;
-  --elevation-floating-border: #eeebe6;
-  --elevation-floating-shadow: 0 1px 2px rgb(45 38 30 / 5%), 0 10px 28px rgb(45 38 30 / 9%);
-  --elevation-dialog-surface: #fefcf9;
-  --elevation-dialog-border: #eae7e2;
-  --elevation-dialog-shadow: 0 2px 6px rgb(45 38 30 / 5%), 0 28px 64px rgb(45 38 30 / 14%);
-
-  /* --- le superfici: la scala, dalla carta in su ------------------------- */
-
-  /* Sette gradini, e nessuno di essi dichiara dove sta: dichiara **quanti
-     passi** sta sopra il precedente. Una scala costruita per accumulo non può
-     essere non-monotona — quella di prima lo era, e nessuno se n'era accorto
-     perché quattro valori scelti separatamente non hanno un posto in cui
-     contraddirsi.
-
-     Il fondo è la **carta** (`--doc-bg`, più giù), che è l'estremo: l'antracite
-     al buio, l'avorio in luce. Il corpo dell'app le sta appena sopra, la scocca
-     sopra di lui, e ciò che galleggia sopra ancora. È il verso di un editor —
-     la pagina è la superficie estrema e il resto ci galleggia — e non quello di
-     prima, dove titlebar, rail, statusbar, corpo dell'app e carta erano lo
-     stesso `#000000` e si distinguevano per un filetto.
-
-     `--bg-panel` e `--bg-active` sono nuovi. Non sono ruoli inventati: sono i
-     due posti in cui la pelle stava usando `--bg-input` per qualcosa che non è
-     un campo — la traccia di un segmentato, un banner, una pastiglia — e
-     `--bg-hover` per qualcosa che non è un hover: una riga **selezionata**, che
-     resta tale quando il puntatore se n'è andato. */
-
-  /* Il corpo dell'app: ciò che sta dietro tutto. */
-  --bg: #f9f7f4;
-  /* Titlebar, rail, statusbar. La scocca sta **sopra** la carta, non accanto. */
-  --bg-chrome: #f5f3ef;
-  /* Ciò che galleggia: pannelli, menu, popover, modali, toast. */
-  --bg-elev: #f1efeb;
-  /* Un riquadro **dentro** un pannello: la traccia di un controllo
-     segmentato, un banner, una pastiglia, la riga di una lista. */
-  --bg-panel: #eeebe6;
-  /* Il campo: dove si scrive. E basta. */
-  --bg-input: #eae7e2;
-  /* La riga sotto il puntatore. È uno stato, e sta un passo sopra il campo. */
-  --bg-hover: #e6e3de;
-  /* La riga **selezionata**, il segmento premuto. Prima non c'era e si
-     riusava l'hover, cioè si diceva «il puntatore è qui» per dire «questa è
-     quella scelta»: due cose che devono poter valere insieme. */
-  --bg-active: #e3dfd9;
-  /* Il velo del bottone fantasma: un velo sul testo, non un secondo grigio.
-     In alpha perché deve restare un velo sopra qualunque superficie, e le
-     superfici adesso sono sette. */
-  --overlay-hover: rgb(45 38 30 / 5%);
-  /* Il filetto è **il gradino dopo lo stato**, a due passi di distanza: un
-     bordo separa due superfici, quindi deve stare oltre la più lontana delle
-     due, e la scala sa già dov'è. Non gli si chiede 3:1 — un filetto non è un
-     controllo e pretenderglielo trasformerebbe l'interfaccia in un
-     wireframe — ma nemmeno lo si sceglie a mano.
-     In alto contrasto sì: lì il filetto è anche il contorno di ogni campo, e
-     chi ha chiesto più contrasto deve vedere dove si scrive (WCAG 1.4.11). */
-  --border: #dbd7d1;
-
-  /* --- gli inchiostri della shell ---------------------------------------- */
-
-  /* Nessuno di questi dichiara una chiarezza. Dichiarano che colore sono, sopra
-     quali superfici finiscono, e quanto devono reggere sulla **peggiore** di
-     quelle: la chiarezza la cerca la generazione, partendo dal fondo e
-     allontanandosene finché il conto passa. È il motivo per cui la stessa riga
-     produce due valori diversi nelle due luci senza che nessuno li abbia
-     scelti. */
-
-  /* Il testo della shell. La mira sta ben sopra la soglia, ma sotto il
-     massimo: un bianco pieno sull'antracite abbaglia, e un testo appena
-     velato si legge più a lungo. Si misura sulla superficie più chiara
-     (`--bg-active`), quindi sulla carta il rapporto è più alto. */
-  --text: #2a2826;
-  /* I sottotitoli, le didascalie, i secondi. Restano testo, quindi la mira
-     sta sopra la soglia del testo con un margine e non sul filo. */
-  --muted: #605c56;
-
-  /* --- l'accento --------------------------------------------------------- */
-
-  /* I due accenti non sono una tinta e la sua sfumatura: sono due **ruoli**, e
-     il presidio del contrasto li ha separati per sempre. `--accent` è un
-     **pieno** (il fondo di un bottone) e un **segno** (un bordo, un contorno di
-     selezione); `--accent-soft` è un **inchiostro**, sta sopra le superfici, e
-     gli tocca la soglia del testo.
-
-     La tinta è una sola, quella della decisione di prodotto di `bdc3203`, ma a
-     croma dimezzato: una salvia, non un lime. Le due mire dell'accento sono
-     diverse, e non per gusto: al buio l'accento è fra le cose più chiare dello
-     schermo e il contrasto gli viene gratis; in luce è un pieno che porta il
-     proprio testo sopra, e sta abbastanza giù — un muschio — perché quel testo
-     sia il bianco: un bottone salvia chiaro con l'inchiostro nero sopra si
-     legge come fango, non come un invito. */
-
-  --accent: #4c6a28;
-  --accent-soft: #3a521d;
-  /* Il testo **sopra** l'accento. Era `white` cablato in due regole, ed è la
-     riga che un tema chiaro non poteva ereditare: su un accento chiaro il
-     bianco sparisce. Adesso non è più una scelta né in una luce né
-     nell'altra — è un conto fra due candidati, e vince quello che regge. */
-  --accent-contrast: #ffffff;
-
-  /* --- i quattro intenti ------------------------------------------------- */
-
-  /* Guasto, avviso, riuscito, informazione. Prima esisteva il solo rosso, e le
-     altre tre cose si dicevano con ciò che capitava: un avviso arrivava dal
-     kernel come `severity: warning` e la shell lo mostrava **come
-     un'informazione**, perché un tono «avviso» non c'era; e sette regole su
-     otto che volevano il rosso della shell prendevano `--doc-danger`, cioè il
-     rosso del **documento** — che è il colore con cui un wikilink rotto si
-     scrive dentro una nota, non quello con cui la shell dice che qualcosa è
-     andato storto. I due fogli raccontavano di aver già sciolto quel nodo; la
-     pelle non se n'era accorta.
-
-     Ogni intento ha tre pezzi e sempre gli stessi tre: l'inchiostro, il velo (per
-     un fondo che non copre), e il controcolore (per un pieno). Le tinte sono
-     quattro e stanno lontane fra loro: il riuscito è **più freddo** del lime
-     apposta, perché un verde uguale all'accento direbbe «primario» dove voleva
-     dire «fatto».
-
-     I croma sono contenuti (0,1–0,13): un intento deve farsi notare quando
-     parla, non colorare la scocca quando tace. */
-
-  --danger: #9d3d39;
-  --danger-wash: rgb(157 61 57 / 12%);
-  --danger-contrast: #ffffff;
-  --warning: #7f5300;
-  --warning-wash: rgb(127 83 0 / 14%);
-  --warning-contrast: #ffffff;
-  --success: #0e6945;
-  --success-wash: rgb(14 105 69 / 14%);
-  --success-contrast: #ffffff;
-  --info: #216090;
-  --info-wash: rgb(33 96 144 / 12%);
-  --info-contrast: #ffffff;
-
-  /* --- l'anello del fuoco (§12.4) ---------------------------------------- */
-
-  /* Non è l'accento, ed è un colore a parte per una ragione che il foglio
-     scritto a mano diceva sbagliata. Diceva: «deve reggere sopra l'accento
-     stesso — un pulsante primario che prende il fuoco lo mostra su fondo
-     accento». Non è vero, e la tabella delle coppie non l'ha mai verificato:
-     l'anello si disegna con `outline-offset`, cioè **un pixel fuori**
-     dall'elemento, quindi il suo fondo è la superficie intorno e mai il pieno
-     che circonda. Provato a chiedergli quel conto, non esiste nessuna
-     chiarezza che lo soddisfi: al buio allontanarsi dal fondo lo avvicina
-     all'accento, che è la cosa più chiara dello schermo. Le due pretese si
-     escludono, e una delle due era immaginaria.
-
-     È l'offset a rendere vera la frase, ed è per questo che le misure viaggiano
-     col colore invece di stare nella scocca: senza l'offset, l'anello di un
-     bottone primario sarebbe lime su lime. Sono parte della forma dell'anello,
-     e la regola che le consuma sta nella struttura. */
-
-  --focus-ring: #4c6331;
+  --spring-snap-k: 560;
+  --spring-snap-c: 38;
+  --spring-soft-k: 300;
+  --spring-soft-c: 30;
+  --spring-wide-k: 170;
+  --spring-wide-c: 24;
+  --spring-elastic-k: 420;
+  --spring-elastic-c: 20;
+  --spring-jelly-k: 260;
+  --spring-jelly-c: 12;
   --focus-ring-width: 2px;
-  --focus-ring-offset: 1px;
-
-  /* --- i veli e le ombre ------------------------------------------------- */
-
-  /* Il velo sotto una superficie modale, e i tre nomi storici delle ombre.
-     Le ombre non hanno più numeri propri: leggono i livelli base, floating e
-     dialog della tabella, così un nome pubblico resta additivo senza diventare
-     una seconda scala. */
-
-  --scrim: rgb(45 38 30 / 18%);
-  --shadow-sm: 0 1px 2px rgb(45 38 30 / 3%);
-  --shadow-md: 0 1px 2px rgb(45 38 30 / 5%), 0 10px 28px rgb(45 38 30 / 9%);
-  --shadow-lg: 0 2px 6px rgb(45 38 30 / 5%), 0 28px 64px rgb(45 38 30 / 14%);
-
-  /* --- il grafo ---------------------------------------------------------- */
-
-  /* Il grafo dei collegamenti disegna su canvas, cioè fuori dalla portata di
-     qualunque regola CSS: i suoi colori li legge `panels/graph.ts` da qui con
-     `getComputedStyle`. Sono token come gli altri proprio perché quella
-     superficie, non essendo raggiungibile dal foglio di stile, è quella che si
-     dimentica per prima quando si cambia tema. */
-
-  --graph-node: #77716b;
-  /* Il nodo della nota aperta è l'accento, e lo dice ripetendone il valore. */
-  --graph-node-active: #4c6a28;
-  /* Il nodo sotto il puntatore: la tinta del riuscito, che qui vuol dire «questo». */
-  --graph-node-hover: #317857;
-
-  /* --- la superficie del documento --------------------------------------- */
-
-  /* La carta e ciò che ci sta sopra. Sta qui, in un posto solo, perché le tre
-     modalità di 4.1 devono essere la stessa nota vista in tre modi — non tre
-     note diverse. Li usano `.markdown-preview` (Lettura), il tema della live
-     preview e il tema dell'editor, che prima portava i propri.
-
-     La carta è il **fondo della scala**: un antracite caldo al buio, un avorio
-     in luce. Sono l'estremo della scala senza essere il nero o il bianco puri,
-     che su una pagina lunga affaticano l'occhio. */
-
-  /* La carta. Zero passi: è l'estremo da cui tutto il resto si allontana.
-     Porta la tinta dei neutri a un croma minimo, quanto basta perché la
-     pagina sia carta e non uno schermo spento. */
-  --doc-bg: #fefcf9;
-  /* La riga sotto il cursore: il gradino più vicino alla carta, non un colore
-     a parte. Dice dove si scrive senza disegnare una fascia sulla pagina. */
-  --doc-active-line: #f9f7f4;
-  /* Il testo selezionato. È il fondo **più lontano** su cui una specie di
-     sintassi possa finire, quindi è lui a decidere quanto scure possono
-     essere le dieci: portarlo un gradino più in là abbassa il soffitto di
-     tutta la tavolozza, e si vede subito perché la generazione si rifiuta. */
-  --doc-selection: #e6e3de;
-  /* Il suggerimento dell'editor: galleggia sulla carta come un pannello sul corpo. */
-  --doc-tooltip-bg: #f1efeb;
-  /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
-     il motivo per cui valgono identici nelle due luci. Sono la sola famiglia
-     di colori che i due fogli dichiarano con lo stesso valore, e
-     `struttura.test.ts` lo pretende. Stanno **prima** degli inchiostri perché
-     uno di quelli — il link — ci finisce sopra, e per misurarlo il velo va
-     composto: un fondo si dichiara prima di chi ci sta sopra. */
-  --doc-fill: rgb(135 135 135 / 16%);
-  --doc-fill-soft: rgb(135 135 135 / 10%);
-  --doc-rule: rgb(135 135 135 / 45%);
-  --doc-rule-soft: rgb(135 135 135 / 28%);
-  --doc-highlight: rgb(240 200 80 / 38%);
-  /* Il corpo della nota. Sopra tutti e tre i fondi della carta, non solo la pagina. */
-  --doc-fg: #34312e;
-  /* Un wikilink. Il quarto fondo è la pagina **sotto un velo**: `--doc-fill`
-     è `rgb(135 135 135 / 16%)`, cioè un velo e non un colore, e un link dentro
-     un riempimento ci finisce sopra. La tabella dei token quella coppia non
-     poteva vederla — si rifiuta, giustamente, di misurare ciò che ha un alfa,
-     perché non sa cosa c'è sotto. Qui sotto ci sta la carta, e si sa: il velo
-     si compone e il conto si fa. */
-  --doc-link: #145785;
-  /* Il titolo reso usa l'inchiostro del corpo: la gerarchia passa da
-     misura e respiro, non dal colore. Resta un nome proprio perché la
-     domanda «di che colore è un `<h1>` reso» è diversa da «di che
-     colore è il corpo». `--syn-heading` lo ripete per gli altri
-     linguaggi; il testo del titolo in Sorgente usa `doc-fg`, cioè lo
-     stesso valore. */
-  --doc-heading: #34312e;
-  /* Il rosso **del documento**: un wikilink rotto. Non è `--danger`, che è il
-     rosso della shell: stessa tinta, fondi diversi, e per questo due valori. */
-  --doc-danger: #993836;
-  /* I numeri di riga sono testo che qualcuno legge, non decorazione. */
-  --doc-gutter-fg: #635e59;
-  /* Il cursore di scrittura: non è testo, ma è la cosa che si cerca con gli occhi. */
-  --doc-caret: #006aaa;
-
-  /* --- i colori della sintassi ------------------------------------------- */
-
-  /* Dieci specie, e adesso sono **proprie**. Erano One Dark e One Light presi
-     interi, e la frase «la stessa nota in due luci» era vera perché quei due
-     pacchetti sono gemelli ufficiali — cioè per parentela, non per costruzione.
-     Misurandoli si vedeva che i gemelli non condividono nemmeno le tinte: la
-     parola chiave sta a 318° al buio e a 329° in luce, l'operatore a 206° e
-     237°, la stringa a 133° e 143°. Sono due tavolozze che si somigliano.
-
-     Qui la tinta è **una per specie** e vale in tutte e due le luci, e la
-     chiarezza è **una per luce** e vale per tutte le specie: si prende quella
-     che serve alla più difficile e si dà a tutte. Le dieci si distinguono per
-     tinta, che è come si distinguono le parole di una lingua — non per quanto
-     sono chiare. Le tinte non sono state immaginate: sono quelle dei due
-     pacchetti, misurate e portate a un valore solo.
-
-     Due specie restano fuori dalla famiglia, e si vede dalla riga che le
-     dichiara: il commento, che deve stare indietro, e l'invalido, che deve
-     saltare all'occhio. Sono le due il cui lavoro **è** stare a una chiarezza
-     diversa dalle altre.
-
-     I croma sono tenuti bassi (0,07–0,11): una tavolozza di sintassi quieta si
-     legge come testo colorato, una satura come un albero di Natale. Le tinte
-     restano distinte, ed è la tinta — non la saturazione — a separare le
-     specie.
-
-     E `SOTTO_AA` va a zero. Sette specie su dieci stavano sotto la soglia del
-     testo nella luce chiara dal giorno in cui quel tema è nato (`087a40f`), ed
-     era un debito dichiarato perché ritoccarle una alla volta avrebbe lasciato
-     una tavolozza che non era più nessuna delle due. Non se ne ritocca nessuna:
-     si chiede alla famiglia un rapporto, e la famiglia trova **una** chiarezza.
-     Era esattamente l'operazione che prenderle in coppia serviva a evitare. */
-
-  --syn-keyword: #744981;
-  --syn-name: #8c443a;
-  --syn-function: #2b5f92;
-  --syn-literal: #814f22;
-  --syn-type: #705a12;
-  --syn-operator: #236775;
-  /* Il commento è la sola specie che resta **fuori dalla famiglia**, e per la
-     ragione per cui la famiglia esiste: le altre nove devono vedersi come una
-     tavolozza, e il commento deve vedersi **indietro**. Prendere la chiarezza
-     delle altre lo porterebbe avanti, cioè gli toglierebbe il suo lavoro. La
-     sua mira è sopra la soglia del testo e non un dito più su. */
-  --syn-comment: #6a635b;
-  --syn-string: #3e6840;
-  /* Un titolo ha lo stesso colore reso e in scrittura, e restano due nomi
-     perché sono due domande diverse: «di che colore è un `<h1>` reso» e «di
-     che colore è il testo che il parser ha marcato come titolo». Prima erano
-     lo stesso valore ricopiato, e ricopiare è come si diverge. */
-  --syn-heading: #34312e;
-  /* Ciò che il parser non riesce a leggere. Fuori dalla famiglia anche lui, e
-     per il verso opposto al commento: deve saltare all'occhio, quindi sta un
-     gradino **avanti** alle altre. Al buio era `#ffffff`, che non è un colore
-     scelto — è l'assenza di una scelta; adesso porta la tinta del guasto, che
-     è ciò che vuol dire. */
-  --syn-invalid: #9a2929;
-
-  /* --- ciò che vale per tutta la pagina ---------------------------------- */
-
-  /* `color-scheme` dice al motore in che luce siamo: da qui prendono il verso
-     le barre di scorrimento e il cursore di testo. I controlli nativi che la
-     pelle veste — `<progress>`, le caselle — non lo leggono più, perché
-     `appearance: none` li ha portati dentro il tema (0166). */
-  font-family: var(--font-ui);
-  font-size: var(--text-md);
+  --focus-ring-offset: 2px;
+  --bg: #e8edf5;
+  --bg-chrome: #e8edf5;
+  --bg-panel: #e8edf5;
+  --bg-hover: #dce4ee;
+  --bg-active: #d1dae6;
+  --sheet: #fcfdff;
+  --sheet-2: #f3f6f9;
+  --bg-input: #f3f6f9;
+  --bg-elev: #ffffff;
+  --overlay-hover: rgb(26 31 41 / 5%);
+  --overlay-active: rgb(26 31 41 / 9%);
+  --scrim: rgb(14 22 36 / 32%);
+  --text: #1a1f29;
+  --muted: #5a5f6a;
+  --border: #d3d8e0;
+  --border-strong: #b2b8c2;
+  --outline: #808691;
+  --accent: #2b56cc;
+  --accent-soft: #1a40b6;
+  --accent-contrast: #fafcff;
+  --accent-wash: #d8e5ff;
+  --accent-veil: rgb(43 86 204 / 12%);
+  --focus-ring: #2b56cc;
+  --danger: #ca131b;
+  --danger-wash: rgb(202 19 27 / 12%);
+  --danger-contrast: #fffbfa;
+  --warning: #905900;
+  --warning-wash: rgb(144 89 0 / 14%);
+  --warning-contrast: #fefbf8;
+  --success: #007541;
+  --success-wash: rgb(0 117 65 / 14%);
+  --success-contrast: #f9fdfa;
+  --info: #006ba0;
+  --info-wash: rgb(0 107 160 / 12%);
+  --info-contrast: #f9fcff;
+  --highlight: #fade4e;
+  --amber: #d18500;
+  --shadow-1: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-2: 0 1px 2px rgb(24 28 44 / 6%), 0 10px 28px rgb(24 28 44 / 10%);
+  --shadow-3: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-4: 0 3px 8px rgb(24 28 44 / 9%), 0 20px 52px rgb(24 28 44 / 18%);
+  --shadow-5: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --shadow-6: 0 6px 14px rgb(24 28 44 / 12%), 0 32px 80px rgb(24 28 44 / 24%);
+  --shadow-7: 0 10px 24px rgb(24 28 44 / 16%), 0 40px 96px rgb(24 28 44 / 28%);
+  --shadow-sm: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --shadow-md: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --shadow-lg: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --elevation-paper-surface: #fcfdff;
+  --elevation-paper-border: #fcfdff;
+  --elevation-paper-shadow: 0 1px 1px rgb(24 28 44 / 5%), 0 6px 20px rgb(24 28 44 / 7%);
+  --elevation-base-surface: #e8edf5;
+  --elevation-base-border: #e8edf5;
+  --elevation-base-shadow: none;
+  --elevation-chrome-surface: #e8edf5;
+  --elevation-chrome-border: #e8edf5;
+  --elevation-chrome-shadow: none;
+  --elevation-floating-surface: #ffffff;
+  --elevation-floating-border: #ffffff;
+  --elevation-floating-shadow: 0 2px 4px rgb(24 28 44 / 8%), 0 14px 36px rgb(24 28 44 / 14%);
+  --elevation-dialog-surface: #ffffff;
+  --elevation-dialog-border: #ffffff;
+  --elevation-dialog-shadow: 0 4px 10px rgb(24 28 44 / 10%), 0 28px 70px rgb(24 28 44 / 22%);
+  --graph-node: #808693;
+  --graph-node-active: #2b56cc;
+  --graph-node-hover: #1a40b6;
+  --doc-bg: #fcfdff;
+  --doc-active-line: #f4f7fb;
+  --doc-selection: #d0defd;
+  --doc-tooltip-bg: #ffffff;
+  --doc-fill: rgb(26 31 41 / 8%);
+  --doc-fill-soft: rgb(26 31 41 / 5%);
+  --doc-rule: rgb(26 31 41 / 30%);
+  --doc-rule-soft: rgb(26 31 41 / 16%);
+  --doc-highlight: rgb(250 222 78 / 55%);
+  --doc-fg: #22272f;
+  --doc-link: #2c57cd;
+  --doc-heading: #22272f;
+  --doc-danger: #c60817;
+  --doc-gutter-fg: #5d626d;
+  --doc-caret: #2b56cc;
+  --syn-keyword: #6f4797;
+  --syn-name: #9a3936;
+  --syn-function: #215da5;
+  --syn-literal: #904700;
+  --syn-type: #785800;
+  --syn-operator: #006b74;
+  --syn-comment: #5c626e;
+  --syn-string: #067132;
+  --syn-heading: #22272f;
+  --syn-invalid: #993a33;
   color-scheme: light;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
 }

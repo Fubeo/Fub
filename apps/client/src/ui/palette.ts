@@ -27,11 +27,13 @@ import type {
 import { pageName } from "../rules/organizer";
 import { errorText } from "../host/errors";
 import { stableIdentifier, trapFocus } from "./a11y";
-import type { Tone } from "./notify";
+import type { NoticeAction, Tone } from "./notify";
+import type { SelectionBox } from "../editors/core/editor-actions";
 import { type Key, t } from "../i18n/strings";
 import { allCommands, displayBinding, loadKeyOverrides, type CommandEntry } from "./commands";
 import { enterSurface, exitSurface } from "./motion";
 import { readState, setCommandSpecs, writeState } from "../state/store";
+import { undoLastOperation } from "../state/vault";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { opensWithoutParams, primaryViews } from "./primary-views";
@@ -45,7 +47,10 @@ export interface PaletteHost {
   // avere lo stesso colore di uno riuscito, o l'unica differenza fra «dodici
   // note archiviate» e «undici su dodici, la dodicesima no» è una frase più
   // lunga che nessuno rilegge (§23.14).
-  notify(message: string, tone?: Tone): void;
+  //
+  // Il terzo argomento sono i gesti accanto al messaggio: l'«Annulla» di un
+  // esito che il kernel sa disfare.
+  notify(message: string, tone?: Tone, action?: NoticeAction | readonly NoticeAction[]): void;
   listDocuments(): Promise<string[]>;
   // **Flush-before-patch** (M3): salva i documenti ancora sporchi e dice
   // quali non ce l'hanno fatta. È la stessa porta che l'esploratore usa per
@@ -487,6 +492,7 @@ export async function openSlashPalette(
     publishContext(): Promise<void>;
   },
   onDismiss?: () => void,
+  anchor: SelectionBox | null = null,
 ): Promise<void> {
   closeCommandPalette();
   slashOwner = owner;
@@ -524,6 +530,12 @@ export async function openSlashPalette(
   const entries = orderCommands(allCommands(), paletteHistory).filter((entry) => allowed.has(entry.id));
   const box = openOverlay(false);
   box.innerHTML = "";
+  // Il menu «/» sta **dove si scrive**: sotto il cursore, o sopra se sotto non
+  // c'è posto. Senza un punto da cui partire resta la scatola in alto.
+  if (anchor) {
+    box.parentElement?.setAttribute("data-anchor", "caret");
+    placeAtCaret(box, anchor);
+  }
   const input = document.createElement("input");
   input.className = "palette-input";
   input.setAttribute("role", "combobox");
@@ -706,6 +718,35 @@ export async function openSlashPalette(
   input.focus();
 }
 
+/// Posa il menu «/» accanto al cursore: sotto la riga, allineato al suo inizio,
+/// e mai fuori dalla finestra. Sotto non c'è posto → sopra la riga.
+const SLASH_WIDTH = 320;
+const SLASH_HEIGHT = 288;
+const SLASH_GAP = 6;
+export function slashPlace(
+  anchor: SelectionBox,
+  view: { width: number; height: number },
+): { left: number; top: number; above: boolean } {
+  const left = Math.min(Math.max(SLASH_GAP, anchor.left), Math.max(SLASH_GAP, view.width - SLASH_WIDTH - SLASH_GAP));
+  const below = anchor.bottom + SLASH_GAP;
+  const above = below + SLASH_HEIGHT > view.height && anchor.top - SLASH_GAP - SLASH_HEIGHT >= SLASH_GAP;
+  return { left: Math.round(left), top: Math.round(above ? anchor.top - SLASH_GAP : below), above };
+}
+function placeAtCaret(box: HTMLElement, anchor: SelectionBox): void {
+  const at = slashPlace(anchor, { width: window.innerWidth, height: window.innerHeight });
+  box.style.left = `${at.left}px`;
+  // Sopra la riga la scatola cresce verso l'alto: il suo bordo basso sta al
+  // cursore, qualunque sia l'altezza dell'elenco. Si ancora con `bottom` e non
+  // con una traslazione, che l'animazione d'ingresso sovrascriverebbe.
+  if (at.above) {
+    box.style.top = "auto";
+    box.style.bottom = `${Math.round(window.innerHeight - at.top)}px`;
+  } else {
+    box.style.top = `${at.top}px`;
+    box.style.bottom = "auto";
+  }
+}
+
 export function closeSlashPalette(owner: HTMLElement): void {
   if (slashOwner === owner) closeCommandPalette();
 }
@@ -763,6 +804,11 @@ function openOverlay(closePrevious = true): HTMLElement {
     document.body.appendChild(overlay);
   }
   overlay.setAttribute("aria-label", t("palette.title"));
+  // Un'apertura riusa il velo ancora in uscita: ciò che l'apertura di prima
+  // aveva ancorato al cursore non deve restargli addosso.
+  overlay.removeAttribute("data-anchor");
+  const stale = overlay.querySelector<HTMLElement>(".palette-box");
+  for (const property of ["left", "top", "bottom"]) stale?.style.removeProperty(property);
   enterSurface(overlay);
   // Dopo l'inserimento nel documento: `intrappolaFuoco` mette a fuoco il primo
   // elemento, e un elemento fuori dal documento non lo può prendere.
@@ -1183,7 +1229,7 @@ function showLayer(
   apply.focus();
 }
 
-async function deliverOutcome(
+export async function deliverOutcome(
   outcome: CommandOutcome,
   host: Pick<PaletteHost, "onEffect" | "notify">,
   id?: string,
@@ -1196,7 +1242,25 @@ async function deliverOutcome(
   // Il tono lo decide il campo e non la frase, ed è tutta la differenza: prima
   // della §23.14 questa riga avrebbe dovuto cercare una parola dentro un
   // messaggio già tradotto per sapere com'era andata.
-  if (outcome.notify) host.notify(outcome.notify, outcome.partial ? "guasto" : "info");
+  //
+  // **«Annulla» viene dall'esito** (`outcome.undo`), per ogni comando che il
+  // kernel sa disfare: nessun comando lo dichiara da sé. Senza una frase da
+  // dire il gesto non ha dove stare: un'operazione annullabile e muta resta
+  // annullabile da `vault.undo`, non da un toast che non c'è.
+  if (outcome.notify) {
+    host.notify(
+      outcome.notify,
+      outcome.partial ? "guasto" : "info",
+      outcome.undo
+        ? {
+          label: t("app.undo"),
+          hint: outcome.undo.label,
+          run: () => undoLastOperation().catch((error: unknown) =>
+            host.notify(t("commands.undo_failed", { reason: errorText(error) }), "guasto")),
+        }
+        : undefined,
+    );
+  }
   if (id) rememberCommand(id);
   await host.onEffect(outcome.effect);
 }

@@ -1,0 +1,231 @@
+/* La geometria del lanciatore.
+ *
+ * Qui sta ciò che una pelle non decide: su che piano galleggia, dove si posa,
+ * che cosa scorre e che cosa resta fermo. Colore, raggio, ombra e misure sono
+ * della pelle (`theme/scrittoio/skin/launcher.css`). È CSS della shell: non
+ * passa dal sanitizer, e una pelle che manca lascia la superficie nuda ma al
+ * suo posto.
+ */
+
+/* Intrappola il fuoco, quindi sta su `--z-modal`. Si posa sotto la barra del
+   titolo, dove stanno anche il modulo e il piano di un comando: cresce dalla
+   pillola e ci arriva. */
+.launcher-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 90);
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: calc(var(--titlebar-h, 40px) + 8px) 16px 16px;
+}
+
+/* Il velo e la superficie portano il piano anche da soli: la loro immagine in
+   uscita è posata sul `body`, fuori da questo strato. */
+.launcher-veil {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-modal, 90);
+}
+
+/* L'origine in alto a sinistra è quella della corsa dalla pillola: la posa di
+   partenza (`pillPose`) si misura dall'angolo. */
+.launcher {
+  position: relative;
+  z-index: var(--z-modal, 90);
+  box-sizing: border-box;
+  width: min(640px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform-origin: 0 0;
+}
+/* Con l'anteprima la superficie è più larga, e lo è per tutto il modo: la
+   misura la decide chi monta (`previewFits`), non ciò che l'elenco contiene. */
+.launcher[data-preview] {
+  width: min(880px, 100%);
+}
+
+.launcher-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.launcher-head {
+  flex: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.launcher-input {
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+}
+
+/* L'attesa ha sempre il suo posto: accenderla non sposta niente. */
+.launcher-wait {
+  visibility: hidden;
+}
+.launcher[data-busy] .launcher-wait {
+  visibility: visible;
+}
+
+.launcher-modes {
+  flex: none;
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.launcher-modes > .kit-tab {
+  flex: none;
+}
+
+/* Il corpo ha un'altezza sua, non quella di ciò che contiene: fra una domanda
+   e la risposta, e fra molti esiti e nessuno, la superficie non cambia misura. */
+.launcher-body {
+  flex: 0 1 auto;
+  height: min(336px, calc(100vh - var(--titlebar-h, 40px) - 176px));
+  min-height: 72px;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Gli esiti e, accanto, l'anteprima. Le due colonne hanno misure loro: una
+   resa che arriva, o che manca, non sposta l'elenco. */
+.launcher-results {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.launcher[data-preview] .launcher-results {
+  flex: none;
+  width: 400px;
+}
+/* L'anteprima è uno sguardo sull'inizio della nota: ciò che non ci sta resta
+   fuori, senza una barra che nessuno potrebbe scorrere. */
+.launcher-preview {
+  position: relative;
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.launcher-preview[hidden] {
+  display: none;
+}
+.launcher-preview-page {
+  overflow-wrap: anywhere;
+}
+.launcher-preview-page img,
+.launcher-preview-page svg,
+.launcher-preview-page video,
+.launcher-preview-page table,
+.launcher-preview-page pre {
+  max-width: 100%;
+}
+.launcher-preview-page pre {
+  overflow: hidden;
+}
+
+/* A scorrere è l'elenco, non il corpo: è l'elenco il riquadro che il campo
+   dichiara di controllare, e le sue righe si raggiungono da lì con le frecce.
+   La pelle del kit lo mette in colonna: nascosto deve sparire lo stesso. */
+.launcher-list {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.launcher-list[hidden] {
+  display: none;
+}
+
+/* La riga è una riga del kit, che la mette in fila: il testo prende il posto
+   che c'è e cede, ciò che sta a destra no. In colonna non si schiaccia. */
+.launcher-row {
+  box-sizing: border-box;
+  flex: none;
+}
+
+/* Il rientro di un'intestazione: un passo per livello sotto il primo. */
+.launcher-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-inline-start: calc(var(--launcher-indent, 0) * 14px);
+}
+.launcher-row-title,
+.launcher-row-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.launcher-row-meta {
+  flex: none;
+  max-width: 50%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* La frase del vuoto ripete la domanda: una parola lunghissima va a capo
+   invece di uscire dalla superficie. */
+.launcher-note {
+  overflow-wrap: anywhere;
+}
+
+.launcher-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* Il conto resta intero e tiene la sinistra; se lo spazio manca sono i tasti
+   a cedere, dal fondo. */
+.launcher-status {
+  flex: none;
+  max-width: 60%;
+  margin-inline-end: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Un tasto che non entra intero va a capo, e a capo non si vede: l'altezza
+   di una riga sola la dà la pelle, con quella dei tasti. Così non resta mai
+   un tasto senza la sua parola. */
+.launcher-hints {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.launcher-hint {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+/* Il controllo del piede non cede mai il posto: è l'unico che si preme. */
+.launcher-panel {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.launcher-panel[hidden] {
+  display: none;
+}

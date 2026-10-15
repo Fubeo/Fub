@@ -17,13 +17,12 @@
 // senza dover riscrivere a mano l'inventario dei ruoli obbligatori.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { THEME_ENGINE } from "../host/contract";
 import { clearHistory, recentNotices, type ThemeTrouble } from "../ui/notify";
-import sheetLight from "./serie/sheet-light.css?raw";
-import sheetDark from "./serie/sheet-dark.css?raw";
-import sheetLightHigh from "./serie/sheet-light-high.css?raw";
-import sheetDarkHigh from "./serie/sheet-dark-high.css?raw";
-import skin from "./serie/skin.css?raw";
+import sheetLight from "./scrittoio/sheet-light.css?raw";
+import sheetDark from "./scrittoio/sheet-dark.css?raw";
+import sheetLightHigh from "./scrittoio/sheet-light-high.css?raw";
+import sheetDarkHigh from "./scrittoio/sheet-dark-high.css?raw";
+import skin from "./scrittoio/skin.css?raw";
 import benchManifest from "../../theme/author/sample/manifest.json";
 import benchSheet from "../../theme/author/sample/sheet-light.css?raw";
 import benchSkin from "../../theme/author/sample/skin.css?raw";
@@ -34,16 +33,9 @@ import {
   type ThemeBundleManifest,
   type ThemeMountResult,
 } from "./loader";
+import { SCRITTOIO_SERIES } from "./scrittoio/series";
 
-const SERIES_MANIFEST: ThemeBundleManifest = {
-  id: "fub.serie",
-  name: "Fub di serie",
-  version: "1.0.0",
-  engine: THEME_ENGINE,
-  lights: ["dark", "light"],
-  asset_namespace: "theme://fub.serie/",
-  motion: ["opacity", "transform"],
-};
+const SERIES_MANIFEST: ThemeBundleManifest = SCRITTOIO_SERIES.manifest;
 
 function bundle(sheet: string, skinText?: string) {
   return { manifest: SERIES_MANIFEST, sheet, skin: skinText, assets: {} };
@@ -121,7 +113,7 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
 
     expect(result.mounted).toBe(false);
     expect(troubles).toHaveLength(1);
-    expect(troubles[0].theme).toBe("Fub di serie");
+    expect(troubles[0].theme).toBe("Scrittoio");
     expect(troubles[0].reasons.join("\n")).toContain("ruolo --muted mancante");
     expect(count("foglio"), "un foglio rifiutato non si monta").toBe(0);
     expect(count("pelle"), "la pelle del fascio rifiutato non si monta").toBe(0);
@@ -176,7 +168,7 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
       expect(warn, "il cancello non parla per console").not.toHaveBeenCalled();
       const notice = recentNotices()[0];
       expect(notice).toBeDefined();
-      expect(notice.text).toContain("Tema «Fub di serie» rifiutato");
+      expect(notice.text).toContain("Tema «Scrittoio» rifiutato");
       expect(notice.text).toContain("ruolo --muted mancante");
       expect(notice.tone).toBe("guasto");
     } finally {
@@ -209,7 +201,7 @@ describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", (
     const escaped = "theme://fub.serie/escaped.png";
     const source = [
       skin,
-      `.brand {
+      `.brand-mark {
         background-image: image-set( "${quoted}" 1x, u\\72 l( "${escaped}" ) 2x);
         content: "url(${quoted})";
       }`,

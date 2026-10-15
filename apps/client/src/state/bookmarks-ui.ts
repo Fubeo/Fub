@@ -1,4 +1,4 @@
-import { confirm } from "../host/dialog";
+import { confirm } from "../platform/confirm";
 import { pickFromList, promptText } from "../ui/dialogs";
 import { activeTab, documents, layout, pane } from "./layout";
 import {

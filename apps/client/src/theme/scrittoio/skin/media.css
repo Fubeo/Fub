@@ -1,0 +1,852 @@
+/* Immagini, zoom, lightbox, SVG. */
+
+/*
+   Ciò che non è testo: un'immagine, un PDF, un suono, un filmato, le slide.
+   Sta sulla stessa carta del documento — la superficie è trasparente, la carta
+   è del foglio — e i suoi comandi non sono strisce attaccate ai bordi ma
+   pillole in rialzo posate sopra: l'oggetto resta solo sulla pagina.
+
+   Dentro il foglio non si dichiarano transizioni: `motion.css` le spegne tutte
+   sotto `.pane-editor`. La lightbox e le slide stanno fuori, sul corpo della
+   pagina, e lì il moto è quello delle modali.
+*/
+
+/* ── La superficie ───────────────────────────────────────────────────────── */
+
+.media-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+/* La superficie prende il fuoco intera: l'anello sta dentro il foglio, che
+   taglia ciò che esce. */
+.media-surface:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
+/* La riga di stato sta da sola finché il contenuto non arriva, e resta da sola
+   se non arriva: una frase in grafite al centro, come ogni superficie che non
+   si apre. */
+.media-surface > [role="status"] {
+  margin: auto;
+  padding: var(--space-9);
+  color: var(--muted);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.media-image {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+.media-image > [role="alert"] {
+  margin: auto;
+  padding: var(--space-9);
+  color: var(--muted);
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+/* ── La vista che ingrandisce ────────────────────────────────────────────── */
+
+/*
+   Una sola vista ingrandisce tutto (`editors/media/zoom-view.ts`): l'immagine
+   aperta in un foglio, l'SVG in anteprima, la foto o il diagramma nella
+   lightbox. Qui c'è come si vede; la geometria del palco — il contenuto posato
+   al centro e mosso con una trasformazione — la scrive la vista, perché è
+   gesto e non aspetto.
+*/
+.zoom-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.zoom-stage {
+  flex: 1;
+  min-height: 0;
+  cursor: zoom-in;
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+.zoom-stage[data-zoomed="true"] {
+  cursor: grab;
+}
+.zoom-stage[data-dragging] {
+  cursor: grabbing;
+}
+
+/* L'immagine è un cartoncino posato sulla carta: un filo che dice dove
+   finisce anche quando è bianca su bianco, e un'ombra bassa. */
+.zoom-content {
+  border-radius: var(--radius-control);
+  box-shadow: 0 0 0 1px var(--border), var(--shadow-1);
+  user-select: none;
+}
+/* Ingrandita si guarda il file, non il cartoncino: gli angoli tornano vivi,
+   anche perché il raggio crescerebbe con lo zoom. */
+.zoom-stage[data-zoomed="true"] .zoom-content {
+  border-radius: 0;
+}
+.zoom-content[data-animate] {
+  transition: transform var(--duration-fast) var(--ease);
+}
+
+/* Il fondo sotto la trasparenza sta **sotto l'immagine**, non sotto tutto il
+   palco: la scacchiera dice dove finisce il file, e intorno resta la pagina.
+   Le sue caselle hanno la misura dello schermo a ogni scala: il passo lo
+   scrive la vista, perché dipende dallo zoom. */
+.zoom-view[data-backdrop="checker"] .zoom-content {
+  background-color: var(--doc-bg);
+  background-image:
+    linear-gradient(45deg, var(--doc-rule-soft) 25%, transparent 25%, transparent 75%, var(--doc-rule-soft) 75%),
+    linear-gradient(45deg, var(--doc-rule-soft) 25%, transparent 25%, transparent 75%, var(--doc-rule-soft) 75%);
+}
+/* «Chiaro» e «scuro» promettono un fondo, non un ruolo: sono lo stesso nelle
+   due luci. I gettoni però cambiano con la luce, e al buio la coppia si
+   scambia: il chiaro è l'inchiostro, lo scuro è il tavolo. */
+.zoom-view[data-backdrop="light"] .zoom-content {
+  background-color: var(--bg-elev);
+}
+.zoom-view[data-backdrop="dark"] .zoom-content {
+  background-color: var(--text);
+}
+:root[data-theme="dark"] .zoom-view[data-backdrop="light"] .zoom-content {
+  background-color: var(--text);
+}
+:root[data-theme="dark"] .zoom-view[data-backdrop="dark"] .zoom-content {
+  background-color: var(--bg);
+}
+
+/* La barra è una pillola in rialzo sotto l'immagine: i comandi, e in coda la
+   riga delle informazioni, in cifre tabellari perché la percentuale non balli
+   mentre si zooma. Se manca il posto cede prima la riga, poi i comandi vanno a
+   capo. */
+.zoom-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: center;
+  justify-content: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  max-width: calc(100% - 2 * var(--space-5));
+  margin: var(--space-3) var(--space-5) var(--space-6);
+  padding: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-normal);
+}
+.zoom-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.zoom-button:hover,
+.zoom-button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.zoom-button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.zoom-button:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+.zoom-level {
+  flex: none;
+  min-width: 5ch;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
+.zoom-info {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-5);
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.zoom-info:empty {
+  display: none;
+}
+/* Nel foglio stretto la riga delle informazioni se ne va: il nome e il tipo
+   stanno già in testata. */
+@container sheet (max-width: 420px) {
+  .zoom-info {
+    display: none;
+  }
+}
+
+/* Le immagini della nota e i diagrammi si aprono nella lightbox. */
+.markdown-rendered img[data-vault-id],
+.markdown-preview img[data-vault-id],
+.mermaid-diagram img {
+  cursor: zoom-in;
+}
+
+/* ── La lightbox ─────────────────────────────────────────────────────────── */
+
+/*
+   Una `.modale` come le altre, ma a tutta finestra: una foto si guarda su un
+   fondo che non le fa concorrenza, quindi il velo qui è più fitto — tre volte
+   quello delle modali, che lascia la shell riconoscibile ma muta. Niente testo
+   sul velo: la didascalia, la chiusura e la barra dello zoom sono tre rialzi,
+   e portano con sé la carta su cui si leggono nelle due luci.
+*/
+.modale.lightbox {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background:
+    linear-gradient(var(--scrim), var(--scrim)),
+    linear-gradient(var(--scrim), var(--scrim)),
+    var(--scrim);
+}
+.lightbox .lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.lightbox-caption {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Senza didascalia la chiusura resta comunque in alto a destra. */
+.lightbox-caption:empty {
+  visibility: hidden;
+}
+.lightbox .lightbox-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-2xl);
+  line-height: 1;
+  cursor: pointer;
+}
+/* Il bottone è opaco, perché sta sul velo: il passaggio del puntatore è il
+   solito velo d'inchiostro steso sopra il rialzo, non al suo posto. */
+.lightbox .lightbox-close:hover,
+.lightbox .lightbox-close:focus-visible {
+  background: linear-gradient(var(--overlay-hover), var(--overlay-hover)), var(--bg-elev);
+  color: var(--text);
+}
+.lightbox .lightbox-close:active {
+  background: linear-gradient(var(--overlay-active), var(--overlay-active)), var(--bg-elev);
+  color: var(--text);
+}
+.lightbox-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.lightbox .zoom-stage {
+  cursor: default;
+}
+.lightbox .zoom-stage[data-zoomed="true"] {
+  cursor: grab;
+}
+.lightbox .zoom-stage[data-dragging] {
+  cursor: grabbing;
+}
+.lightbox .zoom-content {
+  box-shadow: var(--shadow-5);
+}
+.lightbox .zoom-bar {
+  margin: var(--space-4) 0 0;
+}
+.lightbox .lightbox-error {
+  margin: auto;
+  padding: var(--space-5) var(--space-7);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+}
+
+/* ── L'anteprima di un SVG che si scrive ─────────────────────────────────── */
+
+/*
+   Accanto al sorgente (modo Diviso) o da sola (Anteprima): è la stessa vista
+   che ingrandisce, e sopra c'è il motivo per cui l'ultima versione scritta non
+   si disegna. Intanto resta l'ultima buona, attenuata: si vede che è vecchia
+   senza perdere il riferimento. Chi mette i due riquadri fianco a fianco o
+   uno sopra l'altro è la struttura, come per i modi di Markdown.
+*/
+.svg-preview {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+}
+.pane-editor[data-svg-mode="live_preview"] > .svg-preview {
+  border-left: 1px solid var(--border);
+}
+.pane-editor[data-svg-mode="live_preview"][data-svg-stack] > .svg-preview {
+  border-left: 0;
+  border-top: 1px solid var(--border);
+}
+.svg-preview[data-stale] .zoom-content {
+  opacity: 0.45;
+}
+/* L'errore è un richiamo come quelli del documento: fondo velato del suo
+   colore, niente bordo. */
+.svg-error {
+  order: -1;
+  margin: var(--space-5) var(--space-5) 0;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  color: var(--doc-fg);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-normal);
+}
+
+/* ── Il PDF ──────────────────────────────────────────────────────────────── */
+
+/*
+   Le pagine sono fogli posati su un piano un tono sotto la carta; sopra, la
+   pillola dei comandi e la riga «pagina N di M». La superficie e la vista
+   portano la stessa classe: la vista è quella dentro.
+*/
+.media-surface > .media-pdf {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--sheet-2);
+}
+.media-surface > .media-pdf:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
+.media-pdf-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: center;
+  justify-content: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  max-width: calc(100% - 2 * var(--space-5));
+  margin: var(--space-5) var(--space-5) 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.media-pdf-toolbar > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.media-pdf-toolbar > button:hover,
+.media-pdf-toolbar > button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.media-pdf-toolbar > button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.media-pdf-toolbar > button:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+/* Il campo è quello di tutti, in misura di pillola. */
+.media-pdf-toolbar > input {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+  height: 28px;
+  margin: 0 var(--space-2);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+}
+.media-pdf > [role="status"] {
+  margin: var(--space-4) var(--space-5) 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+/* Il piano scorre nei due versi: una pagina più larga del foglio non si
+   rimpicciolisce, si percorre. */
+.media-pdf-page {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-5) var(--space-7) var(--space-9);
+  color: var(--muted);
+  font-size: var(--text-md);
+  text-align: center;
+  scrollbar-width: thin;
+}
+.media-pdf-page canvas {
+  display: block;
+  margin: 0 auto;
+  border-radius: var(--radius-xs);
+  box-shadow: var(--shadow-1);
+}
+.media-pdf-page > p {
+  max-width: 34rem;
+  margin: var(--space-9) auto var(--space-5);
+  overflow-wrap: anywhere;
+}
+
+/* ── Suono e filmato ─────────────────────────────────────────────────────── */
+
+/* I comandi sono quelli del sistema: qui si dà loro il posto, al centro della
+   carta, e l'accento dove il motore lo ascolta. La superficie e la vista
+   portano la stessa classe, come nel PDF: la vista è quella dentro, e centrare
+   anche la superficie toglierebbe alla vista la sua larghezza. */
+.media-surface > .media-audio,
+.media-surface > .media-video {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  box-sizing: border-box;
+  min-height: 0;
+  padding: var(--space-9);
+  font-family: var(--font-ui);
+}
+.media-audio audio {
+  width: min(100%, 34rem);
+  accent-color: var(--accent);
+}
+.media-video video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-1);
+  accent-color: var(--accent);
+}
+
+/* ── Ciò che non si apre ─────────────────────────────────────────────────── */
+
+/* Sobrio: il segno, il nome di ciò che manca, il motivo in grafite, e
+   un'azione sola nel colore d'accento. */
+.media-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  max-width: 36rem;
+  margin: auto;
+  padding: var(--space-9);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.media-error::before {
+  display: grid;
+  place-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-bottom: var(--space-3);
+  border: 1.5px solid var(--outline);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  content: "!";
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.media-error > p {
+  margin: 0;
+}
+.media-error > p:first-child {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.media-error > button,
+.media-pdf-page > button {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.media-error > button:hover,
+.media-error > button:focus-visible,
+.media-pdf-page > button:hover,
+.media-pdf-page > button:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.media-error > button:active,
+.media-pdf-page > button:active {
+  background: var(--accent-veil);
+  color: var(--accent-soft);
+}
+.media-error > button:disabled,
+.media-pdf-page > button:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ── Il registratore ─────────────────────────────────────────────────────── */
+
+/* Sta nella testata del foglio, fra i comandi: una riga sola, piccola. Il
+   punto rosso dice «registra» prima di leggerlo. Il posto nella testata glielo
+   dà la struttura. */
+.media-recorder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-left: var(--space-4);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.media-recorder button {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: var(--space-3);
+  height: 26px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.media-recorder button:hover,
+.media-recorder button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.media-recorder button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.media-recorder button:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+.media-recorder > button:first-child::before {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+  content: "";
+}
+.media-recorder > [role="status"] {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.media-recorder > [role="status"]:empty {
+  display: none;
+}
+
+/* ── Le slide ────────────────────────────────────────────────────────────── */
+
+/*
+   La presentazione è la carta a tutta finestra (il fondo e il piano li scrive
+   il mazzo): una slide per volta al centro, nel carattere di lettura e più
+   grande, perché si guarda da lontano. In alto il conto, in grafite; in basso
+   la pillola dei comandi. Una slide più alta della finestra scorre nel suo
+   palco, così il conto e i comandi restano dove sono.
+
+   Le slide arrivano senza la classe del documento reso: qui c'è la tipografia
+   che basta a una slide — titoli, testo, elenchi, citazioni, codice, tabelle,
+   immagini.
+*/
+.slide-deck {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  gap: var(--space-5);
+  font-family: var(--font-reading);
+}
+.slide-status {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-caps);
+  text-align: center;
+  text-transform: uppercase;
+}
+/* Il margine automatico centra la slide finché ci sta e la lascia scorrere
+   dall'inizio quando è più alta del palco. */
+.slide-stage {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.slide {
+  box-sizing: border-box;
+  width: min(100%, 60rem);
+  margin: auto;
+  padding: var(--space-8) var(--space-6);
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-3xl);
+  line-height: var(--leading-normal);
+  overflow-wrap: break-word;
+}
+.slide h1,
+.slide h2,
+.slide h3,
+.slide h4,
+.slide h5,
+.slide h6 {
+  margin: 0 0 0.5em;
+  padding: 0;
+  color: var(--doc-heading);
+  font-family: var(--font-reading);
+  font-weight: var(--weight-medium);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.slide h1 {
+  font-size: 2.3em;
+  line-height: 1.1;
+}
+.slide h2 {
+  font-size: 1.7em;
+  line-height: 1.15;
+}
+.slide h3 {
+  font-size: 1.3em;
+  line-height: 1.2;
+}
+.slide h4,
+.slide h5,
+.slide h6 {
+  font-size: 1em;
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.slide p,
+.slide ul,
+.slide ol,
+.slide blockquote,
+.slide pre,
+.slide table {
+  margin: 0 0 0.8em;
+}
+.slide > :last-child {
+  margin-bottom: 0;
+}
+.slide ul,
+.slide ol {
+  padding-left: 1.2em;
+}
+.slide li + li {
+  margin-top: 0.3em;
+}
+.slide a {
+  color: var(--doc-link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+.slide a:hover {
+  color: var(--accent-soft);
+}
+.slide blockquote {
+  margin-inline: 0;
+  padding-left: var(--space-7);
+  border-left: 2px solid var(--doc-rule);
+  font-style: italic;
+}
+.slide code {
+  font-family: var(--font-mono);
+  font-size: 0.84em;
+}
+.slide pre {
+  overflow: auto;
+  padding: var(--space-6) var(--space-7);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  font-size: 0.74em;
+  line-height: var(--leading-normal);
+  tab-size: 2;
+}
+.slide pre code {
+  font-size: 1em;
+}
+.slide mark {
+  background: var(--doc-highlight);
+  color: inherit;
+}
+.slide table {
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+}
+.slide th,
+.slide td {
+  padding: var(--space-3) var(--space-6);
+  border-bottom: 1px solid var(--doc-rule-soft);
+  text-align: left;
+}
+.slide th {
+  color: var(--muted);
+  font-weight: var(--weight-bold);
+}
+.slide img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-control);
+}
+/* Le proprietà della nota sono per chi scrive, non per chi guarda: sulla
+   slide d'apertura non si mostrano. */
+.slide .block-frontmatter-unparsed {
+  display: none;
+}
+.slide-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  align-self: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.slide-controls > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+.slide-controls > button:hover,
+.slide-controls > button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.slide-controls > button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.slide-controls > button:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}

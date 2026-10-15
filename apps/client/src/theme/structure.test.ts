@@ -12,16 +12,15 @@
 //
 // # I due confini
 //
-// 1. **Struttura contro foglio.** La struttura dichiara otto token — le metriche
-//    della scocca (`--titlebar-h`, `--rail-w`) e i piani (`--z-*`) — e nessun
-//    altro. Non dichiara token del foglio e non ne consuma la scala: un
-//    `--space-*` che comparisse qui vorrebbe dire che la geometria della
-//    finestra si muove col tema, che è proprio ciò che la separazione evita.
-//    Le uniche var() del foglio che la struttura consume sono l'anello del
-//    fuoco (`--focus-ring`, `--focus-ring-width`, `--focus-ring-offset`): che
-//    il fuoco si veda è una garanzia della shell, la forma dell'anello è un
-//    ruolo, e il caricatore garantisce che un foglio è montato prima che la
-//    regola possa valere.
+// 1. **Struttura contro foglio.** La struttura dello Scrittoio dichiara le
+//    misure della cornice e dei fogli e i piani (`--z-*`), e nessun altro token.
+//    Non dichiara token del foglio. Del foglio legge l'anello del fuoco
+//    (`--focus-ring`, `--focus-ring-width`, `--focus-ring-offset`): che il
+//    fuoco si veda è una garanzia della shell, la forma dell'anello è un ruolo,
+//    e il caricatore garantisce che un foglio è montato prima che la regola
+//    possa valere. Tutto il resto che legge da fuori — un raggio, un passo
+//    della scala, una misura scritta a runtime — lo legge **con il suo
+//    ripiego**: la geometria della finestra regge anche senza tema.
 //
 // 2. **Foglio scuro contro foglio chiaro.** I due fogli sono gemelli completi:
 //    lo stesso vocabolario, e i valori **non-colore** identici. Il colore, e
@@ -40,54 +39,57 @@
 // prova: nessuna riga di dichiarazione.
 import { describe, expect, it } from "vitest";
 
-import structure from "./structure.css?raw";
-import dark from "./serie/sheet-dark.css?raw";
-import light from "./serie/sheet-light.css?raw";
-import skin from "./serie/skin.css?raw";
+import structure from "./scrittoio/structure.css?raw";
+import dark from "./scrittoio/sheet-dark.css?raw";
+import light from "./scrittoio/sheet-light.css?raw";
+import skin from "./scrittoio/skin.css?raw";
 
-/// I otto token della scocca e dei piani: ciò che la struttura dichiara, e
-/// nient'altro. Se ne compare un nono, il banco diventa rosso; se ne manca uno,
-/// lo stesso. L'ordine è quello del file, ma il banco non lo presidia: presidia
-/// l'insieme.
+/// I token della cornice, dei fogli e dei piani: ciò che la struttura dichiara
+/// in `:root`, e nient'altro. Se ne compare uno in più il banco diventa rosso;
+/// se ne manca uno, lo stesso. L'ordine è quello del file, ma il banco non lo
+/// presidia: presidia l'insieme.
 const STRUCTURE_TOKEN = [
-  "titlebar-h",
-  "rail-w",
-  "z-menu",
-  "z-picker",
-  "z-popover",
-  "z-dialog",
-  "z-toast",
-  "z-modal",
+  // I piani.
+  "z-sheet", "z-sheet-active", "z-drawer", "z-menu", "z-picker",
+  "z-popover", "z-dialog", "z-toast", "z-modal", "z-drag",
+  // La cornice: barra del titolo, binario, cassetti, banda di stato.
+  "titlebar-h", "chrome-btn", "win-ctrl-w", "rail-w", "rail-icon", "rail-target",
+  "drawer-icon", "tree-indent", "drawer-pad", "drawer-head-h",
+  "sidebar-w", "sidebar-min", "inspector-w", "inspector-min", "status-h",
+  // I fogli e le loro linguette.
+  "sheet-gap", "focus-sheet-width", "tab-h", "tab-min", "tab-max",
+  "sheet-head-h", "format-bar-h", "tab-fillet", "tab-air", "tab-lap",
 ] as const;
 
 /// I valori non-colore che i due fogli dichiarano identici: la scala (spazi,
-/// raggi, tipografia, pesi, interlinea, tracking), il moto (durate e curve), le
-/// misure dell'annello del fuoco, e i quattro riempimenti/righe in alpha scelti
-/// perché reggono su entrambi i fondi. Un token di questo elenco che divergesse
-/// fra i due fogli è la duplicazione che diverge.
+/// misure dei controlli, raggi, tipografia, pesi, interlinea, tracking), il
+/// moto (durate, curve e molle) e le misure dell'anello del fuoco. Un token di
+/// questo elenco che divergesse fra i due fogli è la duplicazione che diverge.
 const IDENTICAL_NON_COLOR = [
   // La scala.
-  "space-1", "space-2", "space-3", "space-4", "space-5",
-  "space-6", "space-7", "space-8", "space-9", "space-10",
-  "radius-xs", "radius-sm", "radius-md", "radius-lg", "radius-pill",
+  "space-1", "space-2", "space-3", "space-4", "space-5", "space-6",
+  "space-7", "space-8", "space-9", "space-10", "space-11",
+  "control-h", "row-h",
+  "radius-xs", "radius-chip", "radius-control", "radius-menu", "radius-sheet",
+  "radius-dialog", "radius-pill", "radius-sm", "radius-md", "radius-lg",
   "font-ui", "font-reading", "font-mono",
   "text-xs", "text-sm", "text-base", "text-md", "text-lg", "text-xl",
-  "text-2xl", "text-3xl", "text-reading",
-  "weight-medium", "weight-bold",
+  "text-2xl", "text-3xl", "text-reading", "text-source",
+  "weight-regular", "weight-medium", "weight-bold",
   "leading-tight", "leading-normal", "leading-relaxed",
   "content-width",
   "tracking-caps",
   // Il moto.
-  "duration-fast", "duration-med", "duration-slow",
+  "duration-state", "duration-fast", "duration-med", "duration-slow", "duration-scene",
   "ease", "ease-out", "ease-in",
+  "spring-snap-k", "spring-snap-c", "spring-soft-k", "spring-soft-c",
+  "spring-wide-k", "spring-wide-c", "spring-elastic-k", "spring-elastic-c",
+  "spring-jelly-k", "spring-jelly-c",
   // Le misure dell'anello del fuoco: viaggiano col colore ma sono parte della
   // forma, e la forma non cambia col tema.
   "focus-ring-width", "focus-ring-offset",
-  // I quattro riempimenti/righe in alpha su grigio: scelti perché reggono su
-  // entrambi i fondi, e per questo identici nei due fogli.
-  "doc-fill", "doc-fill-soft", "doc-rule", "doc-rule-soft",
-  // La carta è il pavimento della scala: non proietta ombra in nessuna luce.
-  "elevation-paper-shadow",
+  // Il piano e la cornice non proiettano ombra in nessuna luce.
+  "elevation-base-shadow", "elevation-chrome-shadow",
 ] as const;
 
 /// Le uniche var() del foglio che la struttura può consumare: l'anello del
@@ -130,21 +132,20 @@ const DARK = palette(dark);
 const LIGHT = palette(light);
 
 describe("la struttura dichiara la scocca e i piani, e nient'altro", () => {
-  it("dichiara esattamente gli otto token scocca+piani, in :root", () => {
+  it("dichiara esattamente le misure e i piani, in :root", () => {
     const declared = Object.keys(STRUCTURE).sort();
     const expectedItems = [...STRUCTURE_TOKEN].sort();
     expect(
       declared,
-      "la struttura dichiara otto token e solo quelli: un nono vorrebbe dire " +
-        "che la scocca legge dal foglio, un mancante che un piano non ha più nome",
+      "la struttura dichiara le sue misure e solo quelle: uno in più vorrebbe " +
+        "dire che la scocca legge dal foglio, uno mancante che un piano non ha più nome",
     ).toEqual(expectedItems);
   });
 
   it("non dichiara nessun token del foglio (scala, ruoli, moto)", () => {
-    // Un token del foglio nella struttura vorrebbe dire che la geometria della
-    // finestra si muove col tema. La scala (`--space-*`, `--radius-*`, …) sta
-    // nel foglio, e la scocca non la consuma.
-    const fromSheet = Object.keys(STRUCTURE).filter((n) => !STRUCTURE_TOKEN.includes(n as never));
+    // Un token del foglio dichiarato nella struttura vorrebbe dire che la
+    // geometria della finestra e il tema si contendono lo stesso nome.
+    const fromSheet = Object.keys(STRUCTURE).filter((n) => n in DARK);
     expect(
       fromSheet,
       "la struttura non dichiara token del foglio: la scocca non si tematizza",
@@ -152,26 +153,24 @@ describe("la struttura dichiara la scocca e i piani, e nient'altro", () => {
   });
 });
 
-describe("la struttura non consuma la scala del foglio", () => {
-  it("ogni var() citata in structure.css è un token di struttura o l'anello del fuoco", () => {
-    // Si cercano le `var(--x)` in tutto il file (non solo nel `:root`): le
-    // regole geometriche consumano i token di struttura, e l'unica regola
-    // che legge il foglio è l'anello del fuoco. Un `--space-*` qui vorrebbe
-    // dire che la scocca si muove col tema.
+describe("la struttura regge senza il foglio", () => {
+  it("ogni var() che non è sua è l'anello del fuoco, o porta il suo ripiego", () => {
+    // Si cercano le `var(--x)` in tutto il file (non solo nel `:root`). Le
+    // regole geometriche consumano i token di struttura e quelli che si
+    // dichiarano da sé in una regola (la sagoma della linguetta); l'anello
+    // del fuoco è garantito dal caricatore. Ogni altra lettura — un raggio del
+    // foglio, un passo della scala, una misura scritta a runtime — porta un
+    // ripiego, o la cornice si scomporrebbe prima che un tema sia montato.
     const withoutComments = structure.replace(/\/\*[\s\S]*?\*\//g, "");
-    const quoted = new Set(
-      [...withoutComments.matchAll(/var\(--([\w-]+)\)/g)].map((m) => m[1]!),
-    );
-    // Le chiavi permesse sono tabelle statiche: `TOKEN_STRUTTURA` (array) e
-    // `VAR_FOGLIO_PERMESSE_NELLA_STRUTTURA` (Record). Membership su un Record
-    // unificato, senza costruire un `Set` da letterali.
-    const permission: Record<string, true> = { ...PERMISSIONS_SHEET_IN_STRUCTURE };
-    for (const n of STRUCTURE_TOKEN) permission[n] = true;
-    const outside = [...quoted].filter((n) => !permission[n]);
+    const declared = new Set([...withoutComments.matchAll(/--([\w-]+)\s*:/g)].map((m) => m[1]!));
+    const withoutFallback = [...withoutComments.matchAll(/var\(--([\w-]+)\s*([,)])/g)]
+      .filter((m) => m[2] === ")")
+      .map((m) => m[1]!)
+      .filter((n) => !declared.has(n) && !PERMISSIONS_SHEET_IN_STRUCTURE[n]);
     expect(
-      outside,
-      "structure.css cita solo token di struttura o l'anello del fuoco: " +
-        "un `--space-*` qui vorrebbe dire che la geometria dipende dal tema",
+      [...new Set(withoutFallback)],
+      "structure.css legge da fuori solo l'anello del fuoco, o con il ripiego: " +
+        "senza, la geometria dipende dal tema",
     ).toEqual([]);
   });
 });
@@ -260,11 +259,9 @@ describe("i due fogli hanno i valori non-colore identici", () => {
     // ed è esattamente il difetto che il gemello completo rischia di reintrodurre
     // ogni volta che qualcuno aggiunge un ruolo.
     //
-    // L'unica eccezione vera sono i **controcolori**: `--accent-contrast` è il
-    // nero in tutte e due le luci perché l'accento è un lime chiaro in tutte e
-    // due, e il nero ci regge sopra da entrambe le parti. Non è una copia: è due
-    // conti indipendenti che danno lo stesso risultato.
-    const MATCHING_COLORS = ["accent-contrast"];
+    // Un'eccezione vera sarebbe un **controcolore** che due conti indipendenti
+    // portano allo stesso esito; oggi non ce n'è.
+    const MATCHING_COLORS: string[] = [];
     const outsideList = Object.keys(DARK).filter(
       (n) =>
         DARK[n] === LIGHT[n] &&
@@ -295,9 +292,12 @@ describe("la pelle dichiara zero token", () => {
     // tag; una dichiarazione comincia con i due trattini. La differenza è dove
     // stanno nella riga, e finché nessuno aveva scritto un modificatore seguito
     // da una pseudo-classe il presidio passava per fortuna (§31.4).
-    const declarations = [...withoutComments.matchAll(/^[ \t]*--([\w-]+)\s*:/gm)].map(
-      (m) => m[1]!,
-    );
+    //
+    // Ripuntare un ruolo su un altro dentro una superficie resta ammesso
+    // (`--bg: var(--sheet)` sulla tela del grafo): nessun valore nuovo.
+    const declarations = [...withoutComments.matchAll(/^[ \t]*--([\w-]+)\s*:\s*([^;]+);/gm)]
+      .filter((m) => !/^var\(--[\w-]+\)$/.test(m[2]!.trim()))
+      .map((m) => m[1]!);
     expect(
       declarations,
       "la pelle dichiara zero token: un `--name:` qui vorrebbe dire che il " +

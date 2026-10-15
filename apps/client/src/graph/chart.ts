@@ -167,6 +167,11 @@ export interface Chart {
   reheat(): void;
   /// Toglie tutti i pin e il drag: i nodi tornano liberi.
   unpinNodes(): void;
+  /// Zoom di un fattore sul centro della vista, come il «+» e il «−» della
+  /// tastiera. Prima del mount è un no-op. La vista diventa dell'utente.
+  zoomBy(factor: number): void;
+  /// Inquadra tutto il grafo, come «F». La vista resta dell'utente.
+  fitAll(): void;
   /// L'aria del canvas (role/aria-label) per la tastiera.
   setA11yLabel(text: string): void;
   /// Seleziona il nodo i-esimo dagli stessi dati della simulazione (U46):
@@ -890,6 +895,22 @@ export function createChart(options: ChartOptions = {}): Chart {
     requestRedraw();
   }
 
+  function zoomBy(factor: number): void {
+    const v = viewport();
+    if (!cameraState || !v) return;
+    cameraTouched = true;
+    cameraState.zoom(factor, v.w / 2, v.h / 2);
+    requestRedraw();
+  }
+
+  function fitAll(): void {
+    const v = viewport();
+    if (!cameraState || !v || !s) return;
+    cameraTouched = true;
+    cameraState.fit(bound(), v);
+    requestRedraw();
+  }
+
   function setA11yLabel(text: string): void {
     if (interaction) interaction.setA11yLabel(text);
   }
@@ -958,6 +979,8 @@ export function createChart(options: ChartOptions = {}): Chart {
     warm,
     reheat,
     unpinNodes,
+    zoomBy,
+    fitAll,
     setA11yLabel,
     focusNode,
     focusedNode,

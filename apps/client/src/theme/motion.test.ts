@@ -10,18 +10,20 @@
 //
 // # Cosa presidia questo banco
 //
-// Sei token — tre durate e tre curve — e il loro esatto valore, identico nei
-// due fogli. La gemellatura del moto vale come quella della scala: una durata
+// Otto token — cinque durate e tre curve — e il loro esatto valore, identico
+// nei due fogli. La gemellatura del moto vale come quella della scala: una durata
 // che divergesse fra scuro e chiaro sarebbe la duplicazione che diverge. La
-// pelle, poi, li consume e non li dichiara: un `--nome:` nel chrome vorrebbe
+// pelle, poi, li consuma e non li dichiara: un `--nome:` nel chrome vorrebbe
 // dire che il moto ha una seconda scala, fuori dal foglio, e un tema di terzi
-// che la ridefinisse ne troverbbe due in gara. Lo stesso divieto della pelle
-// sui token di colore, e per la stessa ragione.
+// che la ridefinisse ne troverebbe due in gara. Lo stesso divieto della pelle
+// sui token di colore, e per la stessa ragione. Le molle no: le legge
+// `src/moto/spring.ts`, e il loro presidio sta lì.
 //
 // # Ciò che il moto non è
 //
 // Un loop infinito è decorazione, non moto: la scocca non respira, il brand
-// non ruota, un pallino non pulsa. Chi scrive non deve vedere la pagina che
+// non ruota, un pallino non pulsa. L'unica eccezione è il lavoro in corso, che
+// non sa quando finisce: una barra indeterminata, una tela che si carica. Chi scrive non deve vedere la pagina che
 // si muove da sola, e l'editor è sacro — il moto si ferma alla soglia di
 // `.cm-editor` e `.pane-editor`, e lì diventa `none`. Entrata e uscita delle
 // superfici sovrane passano dallo stesso attributo; `[hidden]` arriva soltanto
@@ -37,24 +39,32 @@
 // rimozione è una promessa, e la promessa si conta a ogni giro.
 import { describe, expect, it } from "vitest";
 
-import dark from "./serie/sheet-dark.css?raw";
-import light from "./serie/sheet-light.css?raw";
-import skin from "./serie/skin.css?raw";
+import dark from "./scrittoio/sheet-dark.css?raw";
+import light from "./scrittoio/sheet-light.css?raw";
+import skin from "./scrittoio/skin.css?raw";
 
-/// I sei token del moto: tre durate e tre curve. È un elenco chiuso, e un
-/// token di moto che non è qui non è moto — è debito. I valori attesi sono
-/// il contratto: se il foglio ne dichiara uno diverso, è il foglio che deve
-/// cedere, non il banco ad adattarsi.
+/// Gli otto token del moto: cinque durate e tre curve. È un elenco chiuso, e
+/// un token di moto che non è qui non è moto — è debito. I valori attesi sono
+/// il contratto (§5 del piano: 90, 140, 220, 360 ms, e 560 solo per le
+/// scene): se il foglio ne dichiara uno diverso, è il foglio che deve cedere,
+/// non il banco ad adattarsi.
 const MOTION = {
-  "duration-fast": "180ms",
-  "duration-med": "260ms",
-  "duration-slow": "420ms",
+  "duration-state": "90ms",
+  "duration-fast": "140ms",
+  "duration-med": "220ms",
+  "duration-slow": "360ms",
+  "duration-scene": "560ms",
   ease: "cubic-bezier(0.25, 0.1, 0.25, 1)",
   "ease-out": "cubic-bezier(0.22, 1, 0.36, 1)",
   "ease-in": "cubic-bezier(0.32, 0, 0.67, 0)",
 } as const;
 
 const MOTION_TOKEN = Object.keys(MOTION) as readonly (keyof typeof MOTION)[];
+
+/// La durata delle scene è delle coreografie di `src/moto/`, non della pelle:
+/// è dichiarata perché una pelle di terzi possa allinearsi, non per essere
+/// spesa da quella di serie.
+const SPENT_BY_SKIN = MOTION_TOKEN.filter((name) => name !== "duration-scene");
 
 /// Le tre coppie della coreografia: fade, rise e rise corto, in entrata e uscita.
 const KEYFRAMES_FUB = [
@@ -97,7 +107,7 @@ const SKIN = skin.replace(/\/\*[\s\S]*?\*\//g, "");
 const DARK = palette(dark);
 const LIGHT = palette(light);
 
-describe("i sei token di moto esistono in entrambi i fogli, valori identici", () => {
+describe("gli otto token di moto esistono in entrambi i fogli, valori identici", () => {
   it("dichiarano ciascuno il valore atteso, in scuro e in chiaro", () => {
     // La gemellatura del moto vale come quella della scala: una durata o una
     // curva che divergesse fra i due fogli è la duplicazione che diverge. Il
@@ -115,7 +125,7 @@ describe("i sei token di moto esistono in entrambi i fogli, valori identici", ()
     });
     expect(
       divergent,
-      "i sei token di moto stanno in entrambi i fogli col medesimo valore, " +
+      "gli otto token di moto stanno in entrambi i fogli col medesimo valore, " +
         "e il valore è quello del contratto: una durata che diverge è la " +
         "duplicazione che diverge",
     ).toEqual([]);
@@ -126,7 +136,7 @@ describe("la pelle spende tutti i token di moto", () => {
   it("per ogni nome, la pelle contiene var(--<nome>)", () => {
     // Un token dichiarato e non speso è debito: la pelle lo consuma, non lo
     // dichiara, e un token che nessuno legge è una promessa non mantenuta.
-    const unspent = MOTION_TOKEN.filter((n) => !SKIN.includes(`var(--${n})`));
+    const unspent = SPENT_BY_SKIN.filter((n) => !SKIN.includes(`var(--${n})`));
     expect(
       unspent,
       "la pelle spende ogni token di moto: un `var(--duration-slow)` che non " +
@@ -151,7 +161,13 @@ describe("la pelle non dichiara token", () => {
     // tag; una dichiarazione comincia con i due trattini. La differenza è dove
     // stanno nella riga, e finché nessuno aveva scritto un modificatore seguito
     // da una pseudo-classe il presidio passava per fortuna (§31.4).
-    const declarations = [...SKIN.matchAll(/^[ \t]*--([\w-]+)\s*:/gm)].map((m) => m[1]!);
+    //
+    // Ciò che resta ammesso è **ripuntare** un ruolo su un altro dentro una
+    // superficie (`--bg: var(--sheet)` sulla tela del grafo, il cui pittore
+    // legge `--bg`): nessun valore nuovo, nessuna scala propria.
+    const declarations = [...SKIN.matchAll(/^[ \t]*--([\w-]+)\s*:\s*([^;]+);/gm)]
+      .filter((m) => !/^var\(--[\w-]+\)$/.test(m[2]!.trim()))
+      .map((m) => m[1]!);
     expect(
       declarations,
       "la pelle dichiara zero token, di moto come di colore: un `--name:` " +
@@ -160,17 +176,18 @@ describe("la pelle non dichiara token", () => {
   });
 });
 
-describe("niente moto infinito", () => {
-  it("la pelle non contiene `infinite`", () => {
-    // Un loop infinito è decorazione, non moto: la scocca non respira, il
-    // brand non ruota, un pallino non pulsa. La scrittura non si anima da
-    // sola. Si cerca fuori dai commenti: un commento che dica «niente
-    // infinite» non deve far rosso il banco.
+describe("niente moto infinito, salvo il lavoro in corso", () => {
+  it("un `infinite` sta solo su una regola di lavoro in corso", () => {
+    // Si cerca fuori dai commenti: un commento che dica «niente infinite» non
+    // deve far rosso il banco. Ogni regola che gira all'infinito deve dire nel
+    // selettore che c'è un lavoro che non sa quando finisce.
+    const looping = [...SKIN.matchAll(/([^{}]+)\{[^{}]*\binfinite\b[^{}]*\}/g)].map((m) => m[1]!.trim());
+    expect(looping.length, "il presidio legge davvero le regole").toBeGreaterThan(0);
     expect(
-      SKIN,
-      "la pelle non contiene `infinite`: un loop infinito è decorazione, " +
-        "non moto, e la scocca non respira",
-    ).not.toMatch(/infinite/);
+      looping.filter((selector) => !/\[aria-busy="true"\]|:indeterminate/.test(selector)),
+      "un loop infinito è decorazione, non moto: è ammesso solo dove un lavoro " +
+        "è in corso (`[aria-busy=\"true\"]`, `:indeterminate`)",
+    ).toEqual([]);
   });
 });
 

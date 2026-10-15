@@ -124,6 +124,13 @@ export function registerShellCommand(command: ShellCommand): void {
   shell.set(command.id, command);
 }
 
+/// Ritira un comando dichiarato da chi si smonta. Toglie **quella**
+/// dichiarazione e non l'id: se nel frattempo un rimontaggio l'ha sostituita,
+/// la nuova resta dov'è.
+export function unregisterShellCommand(command: ShellCommand): void {
+  if (shell.get(command.id) === command) shell.delete(command.id);
+}
+
 /// Solo per i banchi: un registro che non si svuota fra un test e l'altro
 /// porterebbe dentro i comandi dichiarati dal test precedente.
 export function resetShellCommands(): void {
