@@ -81,6 +81,7 @@ use crate::contract::exports::fub::abi::plugin as w_plugin;
 use crate::contract::exports::fub::abi::view as w_view;
 use crate::guest::add_to_linker;
 use crate::inbound::{event_handler_from_inner, index_provider_from_inner};
+use crate::instance_lock::LockInstance;
 use crate::translate as tr;
 /// Famiglie del contratto effettivamente collegate da questo host.
 const FAMILIES_SERVED: &[&str] = &[
@@ -607,7 +608,7 @@ pub(crate) fn call<R>(
     let _guard = enter_instance(instance_identity(inner))
         .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
     let mut inner = inner
-        .lock()
+        .lock_instance()
         .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *inner;
     let interfaces = &*interfaces;
@@ -622,7 +623,7 @@ fn call_read<R>(
     let _guard = enter_instance(instance_identity(inner))
         .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
     let mut inner = inner
-        .lock()
+        .lock_instance()
         .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *inner;
     let interfaces = &*interfaces;
@@ -635,7 +636,7 @@ fn grid_call<R>(
     let _guard = enter_instance(instance_identity(inner))
         .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
     let mut inner = inner
-        .lock()
+        .lock_instance()
         .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *inner;
     let grid = interfaces
@@ -662,7 +663,7 @@ pub struct WasmPlugin {
 
 impl Plugin for WasmPlugin {
     fn manifest(&self) -> PluginManifest {
-        let mut inner = match self.inner.lock() {
+        let mut inner = match self.inner.lock_instance() {
             Ok(inner) => inner,
             Err(_) => return PluginManifest::new("", ""),
         };
@@ -1040,7 +1041,7 @@ impl FormatProvider for WasmFormatProvider {
             .map_err(|_| FormatError::Parse("re-entrant component call".into()))?;
         let mut instance = self
             .inner
-            .lock()
+            .lock_instance()
             .map_err(|_| FormatError::Parse("component instance is poisoned".into()))?;
         let Instance { store, interfaces } = &mut *instance;
         crate::limits::renew(&mut *store);
@@ -1067,7 +1068,7 @@ impl FormatProvider for WasmFormatProvider {
             .map_err(|_| FormatError::Render("re-entrant component call".into()))?;
         let mut instance = self
             .inner
-            .lock()
+            .lock_instance()
             .map_err(|_| FormatError::Render("component instance is poisoned".into()))?;
         let Instance { store, interfaces } = &mut *instance;
         crate::limits::renew(&mut *store);
@@ -1088,7 +1089,7 @@ impl FormatProvider for WasmFormatProvider {
             .map_err(|_| FormatError::Serialize("re-entrant component call".into()))?;
         let mut instance = self
             .inner
-            .lock()
+            .lock_instance()
             .map_err(|_| FormatError::Serialize("component instance is poisoned".into()))?;
         let Instance { store, interfaces } = &mut *instance;
         crate::limits::renew(&mut *store);
@@ -1143,7 +1144,7 @@ impl WasmViewProvider {
             .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
         let mut locked = self
             .inner
-            .lock()
+            .lock_instance()
             .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
         let Instance { store, interfaces } = &mut *locked;
         let view = interfaces.view.as_ref().ok_or_else(|| {
@@ -1264,7 +1265,7 @@ impl WasmBundle {
 
     fn declared_commands(inner: &Mutex<Instance>) -> Result<Vec<CommandSpec>, String> {
         let mut instance = inner
-            .lock()
+            .lock_instance()
             .map_err(|_| "component instance is poisoned".to_string())?;
         let Instance { store, interfaces } = &mut *instance;
         let Some(commands) = interfaces.commands.as_ref() else {
@@ -1279,7 +1280,7 @@ impl WasmBundle {
 
     fn declared_views(inner: &Mutex<Instance>) -> Result<Vec<ViewSpec>, String> {
         let mut instance = inner
-            .lock()
+            .lock_instance()
             .map_err(|_| "component instance is poisoned".to_string())?;
         let Instance { store, interfaces } = &mut *instance;
         let Some(view) = interfaces.view.as_ref() else {
@@ -1297,7 +1298,7 @@ impl WasmBundle {
     }
     fn declared_grids(inner: &Mutex<Instance>) -> Result<Vec<GridSurfaceSpec>, String> {
         let mut instance = inner
-            .lock()
+            .lock_instance()
             .map_err(|_| "component instance is poisoned".to_string())?;
         let Instance { store, interfaces } = &mut *instance;
         let Some(grid) = interfaces.grid.as_ref() else {
@@ -1334,7 +1335,7 @@ impl WasmBundle {
         switch: FormatSwitch,
     ) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
         let mut locked = inner
-            .lock()
+            .lock_instance()
             .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
         let Instance { store, interfaces } = &mut *locked;
         let format = match interfaces.format.as_ref() {

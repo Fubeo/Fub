@@ -21,35 +21,39 @@
 //!
 //! Non dipende da `fub-abi`: ha in mano il WIT e basta, come un plugin di terzi.
 
+#[cfg(not(feature = "indice"))]
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
     world: "esempio:stallo/stallo",
     generate_all,
 });
 
-use exports::fub::abi::format::{
-    DocumentSource, FormatCapabilities, FormatDescriptor, FormatError, FormatErrorUnsupported,
-    Guest as FormatGuest, ParseContext, RenderOptions, SourceKind,
-};
+// La variante dell'indice ha un mondo suo: vedi `wit/stallo.wit`.
+#[cfg(feature = "indice")]
+wit_bindgen::generate!({
+    path: ["../../crates/fub-abi/wit/fub", "wit"],
+    world: "esempio:stallo/stallo-indice",
+    generate_all,
+});
+
 use exports::fub::abi::plugin::{Guest as PluginGuest, PluginManifest, PluginPermissions};
 use fub::abi::errors::PluginError;
 use fub::abi::events::{Event, EventCustom};
-use fub::abi::model::{Block, BlockParagraph, DocumentModel, DocumentTree, Inline, Span};
+use fub::abi::jobs::JobSpec;
 use fub::abi::options::OptionEntry;
 use fub::abi::text::Text;
-use fub::abi::jobs::JobSpec;
 use fub::abi::{host_events, host_vault_read};
 
-const ID: &str = "demo.stallo";
+pub(crate) const ID: &str = "demo.stallo";
 
 /// Quante letture del segnale al massimo, prima di rinunciare. Il tetto non è
 /// una scadenza di prova: è ciò che impedisce a un test rotto di lasciare il
 /// job a girare per sempre dentro l'istanza.
 const GIRI: u32 = 20_000_000;
 
-struct Componente;
+pub(crate) struct Componente;
 
-fn literal(frase: &str) -> Text {
+pub(crate) fn literal(frase: &str) -> Text {
     Text::Literal(frase.to_string())
 }
 
@@ -114,7 +118,9 @@ impl PluginGuest for Componente {
             }
         }
         if !arrivato {
-            return Err(PluginError::Internal(literal("il segnale non è mai arrivato")));
+            return Err(PluginError::Internal(literal(
+                "il segnale non è mai arrivato",
+            )));
         }
 
         host_events::spawn_job(&JobSpec {
@@ -134,61 +140,195 @@ fn campo(json: &str, chiave: &str) -> Option<String> {
     Some(json[inizio..fine].to_string())
 }
 
-impl FormatGuest for Componente {
-    fn descriptor() -> FormatDescriptor {
-        FormatDescriptor {
-            id: ID.to_string(),
-            name: "Stallo".to_string(),
-            extensions: vec!["fubstallo".to_string()],
-            source: SourceKind::Text,
+/// Il mondo `stallo`: formato, handler di eventi e comando.
+#[cfg(not(feature = "indice"))]
+mod mondo {
+    use crate::exports::fub::abi::command::{
+        CommandEffect, CommandOutcome, CommandReach, CommandScope, CommandSpec,
+        Guest as CommandGuest, InvokeMode,
+    };
+    use crate::exports::fub::abi::event_handler::Guest as EventHandlerGuest;
+    use crate::exports::fub::abi::format::{
+        DocumentSource, FormatCapabilities, FormatDescriptor, FormatError, FormatErrorUnsupported,
+        Guest as FormatGuest, ParseContext, RenderOptions, SourceKind,
+    };
+    use crate::fub::abi::errors::PluginError;
+    use crate::fub::abi::events::{EventKind, EventMask, Notice};
+    use crate::fub::abi::model::{
+        Block, BlockParagraph, DocumentModel, DocumentTree, Inline, Span,
+    };
+    use crate::{literal, Componente, ID};
+
+    impl FormatGuest for Componente {
+        fn descriptor() -> FormatDescriptor {
+            FormatDescriptor {
+                id: ID.to_string(),
+                name: "Stallo".to_string(),
+                extensions: vec!["fubstallo".to_string()],
+                source: SourceKind::Text,
+            }
+        }
+
+        fn capabilities() -> FormatCapabilities {
+            FormatCapabilities { syntax: vec![] }
+        }
+
+        fn parse(source: DocumentSource, ctx: ParseContext) -> Result<DocumentModel, FormatError> {
+            let text = match source {
+                DocumentSource::Text(text) => text,
+                DocumentSource::Bytes(_) => {
+                    return Err(FormatError::Unsupported(FormatErrorUnsupported {
+                        format: ID.to_string(),
+                        got: SourceKind::Bytes,
+                    }))
+                }
+            };
+            let span = Span {
+                start: 0,
+                end: text.len() as u64,
+            };
+            Ok(DocumentModel {
+                id: ctx.doc_id,
+                frontmatter: "{}".to_string(),
+                body: DocumentTree {
+                    blocks: vec![Block::Paragraph(BlockParagraph {
+                        inlines: vec![0],
+                        anchor: None,
+                        span,
+                    })],
+                    inlines: vec![Inline::Text(text.clone())],
+                    roots: vec![0],
+                },
+                outline: vec![],
+                links: vec![],
+                tags: vec![],
+                anchors: vec![],
+                text,
+                frontmatter_present: false,
+            })
+        }
+
+        fn render_html(_: DocumentModel, _: RenderOptions) -> Result<String, FormatError> {
+            Err(FormatError::Render("lo stallo non disegna".to_string()))
+        }
+
+        fn serialize(model: DocumentModel) -> Result<String, FormatError> {
+            Ok(model.text)
         }
     }
 
-    fn capabilities() -> FormatCapabilities {
-        FormatCapabilities { syntax: vec![] }
-    }
-
-    fn parse(source: DocumentSource, ctx: ParseContext) -> Result<DocumentModel, FormatError> {
-        let text = match source {
-            DocumentSource::Text(text) => text,
-            DocumentSource::Bytes(_) => {
-                return Err(FormatError::Unsupported(FormatErrorUnsupported {
-                    format: ID.to_string(),
-                    got: SourceKind::Bytes,
-                }))
+    impl EventHandlerGuest for Componente {
+        fn subscribed() -> EventMask {
+            EventMask {
+                kinds: if cfg!(feature = "eventi") {
+                    vec![EventKind::DocumentChanged]
+                } else {
+                    vec![]
+                },
+                topics: vec![],
+                subjects: vec![],
+                changes: vec![],
             }
-        };
-        let span = Span {
-            start: 0,
-            end: text.len() as u64,
-        };
-        Ok(DocumentModel {
-            id: ctx.doc_id,
-            frontmatter: "{}".to_string(),
-            body: DocumentTree {
-                blocks: vec![Block::Paragraph(BlockParagraph {
-                    inlines: vec![0],
-                    anchor: None,
-                    span,
-                })],
-                inlines: vec![Inline::Text(text.clone())],
-                roots: vec![0],
-            },
-            outline: vec![],
-            links: vec![],
-            tags: vec![],
-            anchors: vec![],
-            text,
-            frontmatter_present: false,
-        })
+        }
+
+        /// È qui che un salvataggio chiede l'istanza per un evento.
+        fn handle(_notice: Notice) -> Result<(), PluginError> {
+            Ok(())
+        }
     }
 
-    fn render_html(_: DocumentModel, _: RenderOptions) -> Result<String, FormatError> {
-        Err(FormatError::Render("lo stallo non disegna".to_string()))
-    }
+    impl CommandGuest for Componente {
+        fn commands() -> Vec<CommandSpec> {
+            if !cfg!(feature = "comando") {
+                return vec![];
+            }
+            vec![CommandSpec {
+                id: format!("{ID}:vuoto"),
+                title: literal("Non fa niente"),
+                description: literal(
+                    "Esiste perché un gancio nativo prima della scrittura abbia un comando di \
+                     questo componente da chiamare mentre il salvataggio tiene il turno.",
+                ),
+                keybinding: None,
+                params: vec![],
+                scope: CommandScope {
+                    writes: false,
+                    reach: CommandReach::Session,
+                    reversible: false,
+                },
+                surfaces: vec![],
+            }]
+        }
 
-    fn serialize(model: DocumentModel) -> Result<String, FormatError> {
-        Ok(model.text)
+        /// È qui che un gancio chiede l'istanza per un comando.
+        fn invoke(
+            command: String,
+            _args: String,
+            _mode: InvokeMode,
+        ) -> Result<CommandOutcome, PluginError> {
+            if command != format!("{ID}:vuoto") {
+                return Err(PluginError::UnknownCommand(literal(&command)));
+            }
+            Ok(CommandOutcome {
+                notify: None,
+                effect: CommandEffect::Done,
+                undo: None,
+                partial: None,
+            })
+        }
+    }
+}
+
+/// Il mondo `stallo-indice`: la porta dell'indice al posto del formato.
+#[cfg(feature = "indice")]
+mod indice {
+    use crate::exports::fub::abi::index::{
+        Guest as IndexGuest, IndexLoss, IndexQuery, IndexResult, QueryKind, QueryRoute, VaultEntry,
+    };
+    use crate::fub::abi::errors::PluginError;
+    use crate::fub::abi::model::{DocId, DocumentModel};
+    use crate::Componente;
+
+    /// La rotta dell'indice, quando la feature `indice` lo accende.
+    const ROTTA: &str = "demo.stallo:vuota";
+
+    impl IndexGuest for Componente {
+        fn routes() -> Vec<QueryRoute> {
+            vec![QueryRoute::Query(QueryKind::Custom(ROTTA.to_string()))]
+        }
+
+        fn activate() -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        /// È qui che un salvataggio chiede l'istanza per l'indice.
+        fn on_documents_indexed(_docs: Vec<DocumentModel>) -> Vec<IndexLoss> {
+            vec![]
+        }
+
+        fn on_documents_removed(_ids: Vec<DocId>) -> Vec<IndexLoss> {
+            vec![]
+        }
+
+        fn reconcile(_ids: Vec<DocId>) -> Vec<IndexLoss> {
+            vec![]
+        }
+
+        fn flush() -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn close() -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn query(_query: IndexQuery) -> Result<IndexResult, PluginError> {
+            Ok(IndexResult::Custom("{}".to_string()))
+        }
+
+        fn up_to_date(_entries: Vec<VaultEntry>) -> Vec<DocId> {
+            vec![]
+        }
     }
 }
 

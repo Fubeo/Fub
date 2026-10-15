@@ -104,7 +104,19 @@ use std::sync::{Arc, Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread::ThreadId;
 use std::time::{Duration, Instant};
 
+use fub_abi::text::Text;
 use fub_abi::PluginError;
+
+use crate::waits;
+
+/// Ogni quanto chi aspetta il turno **dal dentro di un componente** si ferma a
+/// guardare se deve smettere (cancellazione) o se l'attesa ha chiuso un ciclo.
+///
+/// Non è una scadenza: il turno che si libera sveglia subito chi aspetta. È il
+/// tempo massimo che un job annullato, o uno che deve cedere, impiega a
+/// accorgersene. Un centesimo di secondo non si sente, e non fa girare a vuoto:
+/// un'attesa normale è una condvar.
+const YIELD_TICK: Duration = Duration::from_millis(10);
 
 /// **Quanto può durare un prestito esclusivo prima che valga la pena dirlo.**
 ///
@@ -224,30 +236,92 @@ impl<T> Custody<T> {
     /// quindi rientrare attraverso un host che prende `write()` per una singola
     /// capacità. Gli altri writer aspettano il turno; i reader non lo guardano
     /// e continuano a progredire mentre il callback gira fuori dal `RwLock`.
+    ///
+    /// **Non può dire di no**, quindi non è la porta di chi sta dentro il codice
+    /// di un componente: un guest che tiene la sua istanza e aspetta il turno di
+    /// un salvataggio che aspetta quell'istanza non si sbloccherebbe mai. Per
+    /// quello c'è [`write_turn_yielding`](Self::write_turn_yielding), che cede.
     pub fn write_turn(&self) -> WriteTurn<'_, T> {
+        match self.acquire_turn(None) {
+            Ok(turn) => turn,
+            Err(_) => unreachable!("senza una verifica di cessione l'attesa non fallisce"),
+        }
+    }
+
+    /// Il turno di scrittura per chi sta **dentro un componente**: aspetta, ma
+    /// non per sempre, e può rinunciare.
+    ///
+    /// Mentre aspetta, a ogni giro (ogni [`YIELD_TICK`], o prima se il turno si
+    /// libera):
+    ///
+    /// 1. chiede a `stopped` se deve smettere — la cancellazione del job, che
+    ///    prima non poteva interrompere un'attesa nativa;
+    /// 2. se tiene un'istanza e chi ha il turno aspetta quell'istanza (di
+    ///    seguito, magari attraverso altri thread), rinuncia con un
+    ///    [`PluginError::Conflict`]: il turno è tenuto *attraverso* il codice dei
+    ///    provider (decisione 0120), quindi l'unico modo di sciogliere il ciclo
+    ///    è che chi sta dentro il guest esca e restituisca l'istanza. Vedi
+    ///    [`crate::waits`] per perché è sempre lui a cedere e non il
+    ///    salvataggio.
+    ///
+    /// `stopped` gira **sotto il registro del turno**: deve essere istantanea e
+    /// non prendere lucchetti (leggere una bandiera atomica).
+    pub fn write_turn_yielding(
+        &self,
+        stopped: &dyn Fn() -> Result<(), PluginError>,
+    ) -> Result<WriteTurn<'_, T>, PluginError> {
+        self.acquire_turn(Some(stopped))
+    }
+
+    /// Il turno, con o senza la facoltà di rinunciare.
+    fn acquire_turn(
+        &self,
+        stopped: Option<&dyn Fn() -> Result<(), PluginError>>,
+    ) -> Result<WriteTurn<'_, T>, PluginError> {
         let me = std::thread::current().id();
         let mut state = self
             .inside
             .writer_turn
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut waiting: Option<waits::TurnWait> = None;
         loop {
-            match state.owner.as_ref() {
+            match state.owner {
                 None => {
                     state.owner = Some(me);
                     state.depth = 1;
-                    return WriteTurn::new(&self.inside);
+                    return Ok(WriteTurn::new(&self.inside));
                 }
-                Some(owner) if owner == &me => {
+                Some(owner) if owner == me => {
                     state.depth += 1;
-                    return WriteTurn::new(&self.inside);
+                    return Ok(WriteTurn::new(&self.inside));
                 }
-                Some(_) => {
+                Some(owner) => {
+                    let Some(stopped) = stopped else {
+                        state = self
+                            .inside
+                            .writer_turn_ready
+                            .wait(state)
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        continue;
+                    };
+                    stopped()?;
+                    match waiting.as_ref() {
+                        Some(wait) => wait.now_owned_by(owner),
+                        None => waiting = Some(waits::wait_turn(owner)),
+                    }
+                    if waits::closes_cycle(owner) {
+                        return Err(PluginError::Conflict(Text::message(
+                            "host.turn.cycle",
+                            vec![],
+                        )));
+                    }
                     state = self
                         .inside
                         .writer_turn_ready
-                        .wait(state)
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        .wait_timeout(state, YIELD_TICK)
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .0;
                 }
             }
         }
@@ -288,7 +362,13 @@ impl<T> Custody<T> {
     /// Il prestito **esclusivo**. Chi lo prende e pania è chi avvelena: è il
     /// caso che questa politica descrive.
     pub fn write(&self) -> Result<Hold<'_, T>, PluginError> {
-        let turn = self.write_turn();
+        // Chi tiene un'istanza sta eseguendo un componente: per lui l'attesa del
+        // turno può chiudere un ciclo, e `write` ha un esito per dirlo.
+        let turn = if waits::holds_instance() {
+            self.write_turn_yielding(&|| Ok(()))?
+        } else {
+            self.write_turn()
+        };
         match self.inside.lock.write() {
             Ok(g) => Ok(Hold::new(g, &self.inside, turn)),
             Err(_) => Err(self.report()),
@@ -668,5 +748,154 @@ mod tests {
         drop(c.read());
         drop(copy.read());
         assert_eq!(copy.reports(), 1, "one line, not one per copy");
+    }
+
+    // -----------------------------------------------------------------------
+    // Il turno di chi sta dentro un componente (FUB-019)
+    // -----------------------------------------------------------------------
+
+    /// Il thread di un salvataggio: prende il turno, poi aspetta l'istanza
+    /// `token` come farebbe chiamando il parser. Si ferma lì finché il banco non
+    /// lo lascia andare, e dice quando è arrivato a quel punto.
+    ///
+    /// Il salvataggio è fatto così **a mano** perché ciò che si prova è la
+    /// custodia, non un componente: la prova con un componente vero sta in
+    /// `fub-wasm-host/tests/the_instance_and_the_turn.rs`.
+    fn a_save_waiting_for_an_instance(
+        c: &Custody<u32>,
+        token: usize,
+    ) -> (std::sync::mpsc::Sender<()>, std::thread::JoinHandle<()>) {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let copy = c.clone();
+        let handle = std::thread::spawn(move || {
+            let _turn = copy.write_turn();
+            let _wait = waits::wait_instance(token);
+            ready_tx.send(()).expect("il banco aspetta");
+            let _ = release_rx.recv();
+        });
+        ready_rx
+            .recv()
+            .expect("il salvataggio ha il turno e aspetta");
+        (release_tx, handle)
+    }
+
+    fn is_cycle(error: &PluginError) -> bool {
+        matches!(
+            error,
+            PluginError::Conflict(Text::Message(message)) if message.key == "host.turn.cycle"
+        )
+    }
+
+    #[test]
+    fn a_yielding_turn_waits_for_a_free_turn_when_nothing_is_circular() {
+        let c = Custody::new("the test vault", 1_u32);
+        let (release, save) = a_save_waiting_for_an_instance(&c, 0xC0);
+        // Il banco non tiene nessuna istanza: l'attesa del turno non chiude
+        // niente, e il turno che si libera arriva a chi lo aspetta.
+        std::thread::scope(|s| {
+            let waiter = s.spawn(|| c.write_turn_yielding(&|| Ok(())).map(|_turn| ()));
+            release.send(()).expect("il salvataggio c'è");
+            assert!(waiter.join().expect("il thread").is_ok());
+        });
+        save.join().expect("il salvataggio finisce");
+    }
+
+    #[test]
+    fn a_yielding_turn_gives_up_instead_of_closing_a_cycle() {
+        let c = Custody::new("the test vault", 1_u32);
+        // Questo thread è «il job»: tiene l'istanza 0xC1, che il salvataggio sta
+        // aspettando mentre tiene il turno che il job sta per chiedere.
+        let _held = waits::hold_instance(0xC1);
+        let (release, save) = a_save_waiting_for_an_instance(&c, 0xC1);
+
+        let outcome = c.write_turn_yielding(&|| Ok(()));
+        assert!(
+            outcome.as_ref().err().is_some_and(is_cycle),
+            "il job doveva cedere con un conflitto, non aspettare per sempre"
+        );
+        drop(outcome);
+
+        // Cedere non ha tolto niente a nessuno: il salvataggio riparte, e il
+        // turno, libero, torna prendibile.
+        release.send(()).expect("il salvataggio c'è");
+        save.join().expect("il salvataggio finisce");
+        assert!(
+            c.write_turn_yielding(&|| Ok(())).is_ok(),
+            "senza il salvataggio non c'è più ciclo"
+        );
+    }
+
+    #[test]
+    fn the_exclusive_borrow_of_a_component_yields_too() {
+        let c = Custody::new("the test vault", 1_u32);
+        let _held = waits::hold_instance(0xC2);
+        let (release, save) = a_save_waiting_for_an_instance(&c, 0xC2);
+
+        // `write()` è la porta di ogni capacità del vault di un job: chi sta
+        // dentro un'istanza non deve potersi fermare lì dentro.
+        let outcome = c.write();
+        assert!(
+            outcome.as_ref().err().is_some_and(is_cycle),
+            "la capacità doveva rispondere di no, non pendere"
+        );
+        drop(outcome);
+
+        release.send(()).expect("il salvataggio c'è");
+        save.join().expect("il salvataggio finisce");
+        assert_eq!(*c.write().expect("libero"), 1);
+    }
+
+    #[test]
+    fn a_borrow_outside_a_component_waits_even_when_somebody_else_cycles() {
+        let c = Custody::new("the test vault", 1_u32);
+        // Il salvataggio aspetta un'istanza che **nessuno** tiene. Chi non è
+        // dentro un componente non cede mai: aspetta il turno, com'è sempre
+        // stato.
+        let (release, save) = a_save_waiting_for_an_instance(&c, 0xC3);
+        std::thread::scope(|s| {
+            let waiter = s.spawn(|| c.write().map(|g| *g));
+            release.send(()).expect("il salvataggio c'è");
+            assert_eq!(
+                waiter.join().expect("il thread").expect("il turno arriva"),
+                1
+            );
+        });
+        save.join().expect("il salvataggio finisce");
+    }
+
+    #[test]
+    fn a_yielding_turn_stops_waiting_when_the_job_is_cancelled() {
+        let c = Custody::new("the test vault", 1_u32);
+        let _turn = c.write_turn();
+        let cancelled = std::sync::atomic::AtomicBool::new(false);
+        let stopped = || {
+            if cancelled.load(Ordering::Relaxed) {
+                Err(PluginError::Cancelled("annullato".into()))
+            } else {
+                Ok(())
+            }
+        };
+        std::thread::scope(|s| {
+            // Il turno è del banco per tutto il tempo: chi aspetta non può
+            // riuscire, quindi se torna è perché ha visto la bandiera.
+            let waiter = s.spawn(|| c.write_turn_yielding(&stopped).map(|_turn| ()));
+            cancelled.store(true, Ordering::Relaxed);
+            let outcome = waiter.join().expect("il thread");
+            assert!(
+                matches!(outcome, Err(PluginError::Cancelled(_))),
+                "il job annullato doveva smettere di mettersi in fila: {outcome:?}"
+            );
+        });
+    }
+
+    #[test]
+    fn a_yielding_turn_is_reentrant_and_does_not_ask_whether_to_stop() {
+        let c = Custody::new("the test vault", 1_u32);
+        let _outer = c.write_turn();
+        // Chi ha già il turno non aspetta nessuno, quindi non ha niente da
+        // cedere: nemmeno se la sua bandiera è già alzata.
+        let inner = c.write_turn_yielding(&|| Err(PluginError::Cancelled("annullato".into())));
+        assert!(inner.is_ok(), "il turno rientra senza chiedere permesso");
     }
 }

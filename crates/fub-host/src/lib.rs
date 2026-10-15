@@ -113,6 +113,9 @@ pub mod support;
 mod teardown;
 pub mod theme;
 pub mod vaults;
+/// **Chi aspetta cosa** fra il turno di scrittura e l'istanza di un componente
+/// (FUB-019): il grafo che lascia cedere a chi sta dentro il guest.
+pub mod waits;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
 mod wall;
 mod watcher;

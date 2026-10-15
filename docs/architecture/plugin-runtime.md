@@ -257,6 +257,10 @@ Plugin e provider dello stesso componente condividono lo stato della medesima
 istanza. Un mutex rende esplicita la non rientranza richiesta dal component
 model; non offre esecuzione concorrente dentro l'istanza.
 
+Il turno di scrittura dell'host e l'istanza si prendono in ordine opposto da
+due parti; chi sta dentro il guest cede, il salvataggio no. La regola sta in
+[Turno di scrittura e istanza](runtime-events-and-jobs.md#turno-di-scrittura-e-istanza).
+
 Le host function che accodano lavoro non lo eseguono immediatamente durante la
 chiamata guest.
 
