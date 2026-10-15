@@ -1,0 +1,269 @@
+/* La geometria di ciò che i fogli aggiungono alla vista: dove stanno le cose,
+   quanto spazio prendono, su che piano. Colori, tipografia e stati sono della
+   pelle (`theme/scrittoio/skin/sheets.css`), che passa dal filtro dei temi;
+   questo foglio no, e lo importano i moduli di questa cartella. */
+
+/* ── Lo stato di salvataggio ─────────────────────────────────────────────── */
+
+/* Il bottone prende il posto della parola della vista, che resta come regione
+   viva fuori dalla vista. Si accorcia coi puntini quando il foglio è stretto. */
+.sheet-save {
+  display: block;
+  flex: 0 1 auto;
+  /* Stretto quanto si vuole, ma il punto dello stato resta: è ciò che si preme. */
+  min-width: 22px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-save[hidden] {
+  display: none;
+}
+
+.sheet-save-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  width: 288px;
+  max-width: calc(100vw - 32px);
+}
+.sheet-save-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2) var(--space-5);
+  min-width: 0;
+}
+.sheet-save-facts > dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sheet-save-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* ── Il titolo che si rinomina ───────────────────────────────────────────── */
+
+/* Il titolo di un documento si mette a fuoco: sta stretto attorno al suo testo
+   (l'anello non attraversa la testata) e cede per primo quando manca spazio,
+   come quando occupava soltanto lo spazio che avanzava. */
+.pane-toolbar > .muted.sheet-title {
+  flex: 0 1000 auto;
+  margin-right: auto;
+}
+.pane-toolbar > .muted[hidden] {
+  display: none;
+}
+/* Il campo prende il posto del titolo, e a differenza del titolo non sparisce
+   quando il foglio è stretto: finché si rinomina sono le modalità a cedere. */
+.pane-toolbar > .sheet-title-edit {
+  display: flex;
+  flex: 1 0 0;
+  align-items: center;
+  order: 1;
+  min-width: min(160px, 100%);
+}
+.pane-toolbar:has(> .sheet-title-edit) > .segmented {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.sheet-title-edit > .kit-field {
+  flex: 1 1 auto;
+  max-width: 360px;
+}
+.sheet-title-error {
+  box-sizing: border-box;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+/* ── La scrivania ────────────────────────────────────────────────────────── */
+
+/* I due gesti della vista cedono il posto a quelli della scrivania, che sono
+   gli stessi e non si rifanno a ogni ridisegno. */
+.pane-empty:has(> .sheet-desk:not([hidden])) > .pane-empty-actions {
+  display: none;
+}
+/* Il vuoto centra ciò che contiene. Con la scrivania può non starci: allora
+   deve scorrere dall'inizio, e a centrare sono i margini, che non tagliano la
+   cima come farebbe l'allineamento. */
+.pane-empty:has(> .sheet-desk:not([hidden])) {
+  justify-content: flex-start;
+}
+.pane-empty:has(> .sheet-desk:not([hidden])) > .pane-empty-title {
+  margin-top: auto;
+}
+.sheet-desk {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-8);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 600px;
+  min-width: 0;
+  margin-bottom: auto;
+}
+.sheet-desk[hidden] {
+  display: none;
+}
+.sheet-desk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-4);
+}
+/* I gruppi stanno affiancati finché c'è posto, poi uno sotto l'altro. */
+.sheet-desk-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  align-items: start;
+  gap: var(--space-7) var(--space-8);
+  width: 100%;
+  min-width: 0;
+}
+.sheet-desk-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.sheet-desk-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Una riga: il nome, e accanto la cartella, che cede per prima. */
+.sheet-desk-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.sheet-desk-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-desk-note {
+  flex: 1 1000 0;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Una bozza dice che cosa c'è da decidere: una frase, sotto il nome. */
+.sheet-desk-group[data-kind="draft"] .sheet-desk-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+.sheet-desk-group[data-kind="draft"] .sheet-desk-note {
+  flex: 0 0 auto;
+  text-align: left;
+  white-space: normal;
+}
+
+/* ── Il filo dei titoli ──────────────────────────────────────────────────── */
+
+/* A riposo: una colonna di tacche nel margine destro del testo, a sinistra
+   della barra di scorrimento. Il bordo c'è già, trasparente: aprendosi il filo
+   non si sposta di un pixel. */
+.sheet-thread {
+  position: absolute;
+  top: var(--space-8);
+  right: 10px;
+  z-index: 2;
+  box-sizing: border-box;
+  max-width: calc(100% - 24px);
+  max-height: calc(100% - 48px);
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+.sheet-thread[hidden] {
+  display: none;
+}
+.sheet-thread-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sheet-thread-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  width: 100%;
+  height: 9px;
+  padding: 0;
+}
+.sheet-thread-notch {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 2px;
+}
+.sheet-thread-item[data-level="2"] > .sheet-thread-notch {
+  width: 9px;
+}
+.sheet-thread-item[data-level="3"] > .sheet-thread-notch {
+  width: 7px;
+}
+.sheet-thread-item[data-level="4"] > .sheet-thread-notch,
+.sheet-thread-item[data-level="5"] > .sheet-thread-notch,
+.sheet-thread-item[data-level="6"] > .sheet-thread-notch {
+  width: 5px;
+}
+.sheet-thread-text {
+  display: none;
+}
+
+/* Sotto il puntatore, o col fuoco della tastiera: un indice che si legge. Le
+   tacche lasciano il posto ai titoli, rientrati quanto il loro livello. Il
+   fuoco lasciato da un clic non lo tiene aperto: scelto il titolo, l'indice si
+   richiude appena il puntatore se ne va. */
+.sheet-thread:is(:hover, :has(:focus-visible)) {
+  width: 260px;
+  padding: var(--space-2);
+  overflow-y: auto;
+}
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-item {
+  justify-content: flex-start;
+  height: 26px;
+  padding: 0 var(--space-4);
+}
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-notch {
+  display: none;
+}
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-item[data-level="2"] {
+  padding-left: var(--space-6);
+}
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-item[data-level="3"] {
+  padding-left: var(--space-8);
+}
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-item[data-level="4"],
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-item[data-level="5"],
+.sheet-thread:is(:hover, :has(:focus-visible)) .sheet-thread-item[data-level="6"] {
+  padding-left: var(--space-9);
+}

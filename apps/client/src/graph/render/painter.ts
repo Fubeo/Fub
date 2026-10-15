@@ -183,7 +183,7 @@ export function createPainter(host: HTMLElement, config: GraphicsConfig): Painte
   main.className = "graph-main";
   for (const c of [background, main]) {
     // Stile inline: i due canvas vivono sovrapposti dentro l'host, e questo
-    // non deve dipendere da `theme/serie/skin.css` (che è di un altro lotto). Il main è
+    // non deve dipendere dalla pelle (che è di un altro lotto). Il main è
     // sopra e riceve i pointer event; lo sfondo è trasparente agli eventi.
     c.style.position = "absolute";
     c.style.inset = "0";

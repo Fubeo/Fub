@@ -1,0 +1,377 @@
+/* La geometria di ciò che le preferenze dello Scrittoio aggiungono alla vista:
+   dove stanno le cose, quanto spazio prendono, su che piano. Colori,
+   tipografia e stati sono della pelle (`theme/scrittoio/skin/settings.css`),
+   che passa dal filtro dei temi; questo foglio no, e lo importano i moduli di
+   questa cartella. */
+
+/* ── Il velo ─────────────────────────────────────────────────────────────── */
+
+/* Sullo stesso piano della finestra e prima di lei nel documento: le sta
+   sotto, e sopra tutto il resto della shell. */
+.settings-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog, 80);
+}
+.settings-scrim[hidden] {
+  display: none;
+}
+
+/* ── Il corpo che scorre ─────────────────────────────────────────────────── */
+
+/* A ogni riscrittura della vista questa shell rimette i suoi nodi, alcuni
+   sopra ciò che si sta guardando. Il browser, ancorando lo scroll, lo
+   sposterebbe di quanto sono alti — e la vista l'ha già rimesso dov'era: i due
+   aggiustamenti si sommerebbero a ogni scrittura. Una sezione raggiunta
+   dall'indice si posa invece col respiro che ha in cima alla pagina, non a
+   filo della fascia della ricerca. */
+.settings-scroll {
+  overflow-anchor: none;
+  scroll-padding-top: var(--space-8);
+}
+
+/* ── Lo spazio dell'interfaccia ──────────────────────────────────────────── */
+
+.prefs-space {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 316px;
+  max-width: 100%;
+}
+.prefs-space-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.prefs-space-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 5px 5px 6px;
+  cursor: pointer;
+}
+.prefs-space-step:disabled {
+  cursor: default;
+}
+
+/* La finestra in piccolo: una barra sopra, binario e cassetto a sinistra, la
+   striscia di stato sotto, e in mezzo il foglio. Le tre misure della cornice
+   scendono passo dopo passo; il foglio prende ciò che lasciano. */
+.prefs-space-figure {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  grid-template-rows: 9px minmax(0, 1fr) 5px;
+  gap: 1px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  overflow: hidden;
+}
+.prefs-space-step[data-step="1"] .prefs-space-figure {
+  grid-template-columns: 13px minmax(0, 1fr);
+  grid-template-rows: 8px minmax(0, 1fr) 4px;
+}
+.prefs-space-step[data-step="2"] .prefs-space-figure {
+  grid-template-columns: 11px minmax(0, 1fr);
+  grid-template-rows: 7px minmax(0, 1fr) 4px;
+}
+.prefs-space-step[data-step="3"] .prefs-space-figure {
+  grid-template-columns: 9px minmax(0, 1fr);
+  grid-template-rows: 6px minmax(0, 1fr) 3px;
+}
+.prefs-space-step[data-step="4"] .prefs-space-figure {
+  grid-template-columns: 6px minmax(0, 1fr);
+  grid-template-rows: 4px minmax(0, 1fr) 2px;
+}
+.prefs-space-bar {
+  grid-area: 1 / 1 / 2 / 3;
+}
+.prefs-space-side {
+  grid-area: 2 / 1;
+}
+.prefs-space-foot {
+  grid-area: 3 / 1 / 4 / 3;
+}
+
+/* Il foglio: le righe di testo sono disegnate a misura fissa e contate
+   dall'angolo in alto a sinistra, così sono le stesse in tutte e cinque le
+   figure. È ciò che il controllo promette: la cornice si stringe, il testo no. */
+.prefs-space-sheet {
+  grid-area: 2 / 2;
+  background-image:
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-size: 12px 2px, 20px 1px, 17px 1px, 20px 1px;
+  background-position: 4px 4px, 4px 9px, 4px 12px, 4px 15px;
+}
+
+.prefs-space-stop {
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
+  flex: none;
+}
+
+.prefs-space-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 5px;
+}
+
+/* ── L'accento ───────────────────────────────────────────────────────────── */
+
+.prefs-accent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  max-width: 100%;
+}
+.prefs-accent-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Il colore di un campione è un dato, non una scelta della pelle: lo scrive il
+   modulo, calcolato dalla ricetta per la luce in vigore. */
+.prefs-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  background: var(--prefs-swatch, transparent);
+  color: var(--prefs-swatch-ink, currentColor);
+  cursor: pointer;
+}
+.prefs-swatch:disabled {
+  cursor: default;
+}
+.prefs-swatch-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+.prefs-swatch-mark svg {
+  width: 14px;
+  height: 14px;
+  visibility: hidden;
+}
+.prefs-swatch[aria-checked="true"] .prefs-swatch-mark svg {
+  visibility: visible;
+}
+
+/* «Su misura»: la ruota delle tinte, con un foro in mezzo per il segno. */
+.prefs-swatch--custom {
+  background: conic-gradient(
+    oklch(0.62 0.16 0),
+    oklch(0.62 0.16 60),
+    oklch(0.62 0.16 120),
+    oklch(0.62 0.16 180),
+    oklch(0.62 0.16 240),
+    oklch(0.62 0.16 300),
+    oklch(0.62 0.16 360)
+  );
+}
+
+.prefs-accent-custom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.prefs-accent-custom[hidden] {
+  display: none;
+}
+
+/* Il cursore della tinta: il binario è la ruota stesa, il pollice ha il colore
+   che l'accento prenderebbe. */
+.prefs-hue {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 208px;
+  height: 24px;
+  flex: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.prefs-hue:disabled {
+  cursor: default;
+}
+.prefs-hue::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    oklch(0.62 0.16 0),
+    oklch(0.62 0.16 60),
+    oklch(0.62 0.16 120),
+    oklch(0.62 0.16 180),
+    oklch(0.62 0.16 240),
+    oklch(0.62 0.16 300),
+    oklch(0.62 0.16 360)
+  );
+}
+.prefs-hue::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(
+    to right,
+    oklch(0.62 0.16 0),
+    oklch(0.62 0.16 60),
+    oklch(0.62 0.16 120),
+    oklch(0.62 0.16 180),
+    oklch(0.62 0.16 240),
+    oklch(0.62 0.16 300),
+    oklch(0.62 0.16 360)
+  );
+}
+.prefs-hue::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--prefs-swatch, currentColor);
+}
+.prefs-hue::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--prefs-swatch, currentColor);
+}
+.prefs-hue-value {
+  min-width: 4ch;
+  text-align: right;
+}
+
+/* ── L'esito sotto il controllo ──────────────────────────────────────────── */
+
+/* Una riga intera sotto il controllo, allineata dalla sua parte. */
+.setting-control > .setting-error {
+  flex: 0 0 100%;
+  margin-top: 0;
+  text-align: right;
+}
+
+/* ── Le voci del tema ────────────────────────────────────────────────────── */
+
+.prefs-theme[hidden] {
+  display: none;
+}
+.prefs-theme-entries {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── L'anteprima dell'aspetto ────────────────────────────────────────────── */
+
+.prefs-preview {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  box-sizing: border-box;
+  height: 148px;
+  margin: 16px 0 8px;
+  overflow: hidden;
+}
+.prefs-preview[hidden] {
+  display: none;
+}
+.prefs-preview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 10px 8px;
+}
+.prefs-preview-row {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--row-h, 28px);
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prefs-preview-action {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  box-sizing: border-box;
+  min-height: var(--control-h, 32px);
+  margin-top: auto;
+  padding: 0 12px;
+}
+.prefs-preview-sheet {
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 12px 12px 0 4px;
+  padding: 16px 20px 0;
+  overflow: hidden;
+}
+.prefs-preview-text {
+  max-width: var(--content-width, 68ch);
+}
+
+/* ── La finestra stretta ─────────────────────────────────────────────────── */
+
+/* Sotto i 760px la vista mette il controllo sotto il testo della riga, a
+   sinistra: ciò che sta nel controllo si allinea dalla stessa parte, e
+   l'anteprima tiene il foglio e lascia il cassetto. */
+@media (max-width: 760px) {
+  .prefs-accent {
+    align-items: flex-start;
+  }
+  .prefs-accent-swatches {
+    justify-content: flex-start;
+  }
+  .setting-control > .setting-error {
+    text-align: left;
+  }
+  .prefs-preview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .prefs-preview-side {
+    display: none;
+  }
+  .prefs-preview-sheet {
+    margin-left: 12px;
+  }
+}
+
+/* ── Colori forzati ──────────────────────────────────────────────────────── */
+
+/* Un campione è il suo colore, e l'anteprima mostra quelli del tema: forzati,
+   non direbbero più niente. */
+@media (forced-colors: active) {
+  .prefs-swatch,
+  .prefs-hue,
+  .prefs-preview {
+    forced-color-adjust: none;
+  }
+}

@@ -61,7 +61,7 @@ import { setTooltip } from "../ui/tooltip";
 import { markedTerms } from "../ui/highlight";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { cancelScheduledPreview, hidePreview, schedulePreview, showStickyPreview } from "../state/preview";
-import { openDocument } from "./document";
+import { openDocument } from "../state/document-controller";
 import { platformSupports } from "../platform/capabilities";
 
 const OVERLAY_ID = "quick-switcher";

@@ -300,6 +300,18 @@ describe("i workspace nominati", () => {
     expect(parseShellGeometry({ sidebar: { width: Number.POSITIVE_INFINITY } }).geometry.sidebar).toBeUndefined();
   });
 
+  it("accepts a saved drawer width only between the limits of its divider", () => {
+    // Sono gli stessi che il divisore del kit dichiara a chi lo monta.
+    const widths = (sidebar: number, inspector: number) =>
+      parseShellGeometry({ sidebar: { width: sidebar }, inspector: { width: inspector } });
+    expect(widths(208, 248).geometry).toEqual({ sidebar: { width: 208 }, inspector: { width: 248 } });
+    expect(widths(400, 440).geometry).toEqual({ sidebar: { width: 400 }, inspector: { width: 440 } });
+    const outside = widths(207, 247);
+    expect(outside.geometry).toEqual({});
+    expect(outside.rejected).toEqual({ sidebar: { width: 207 }, inspector: { width: 247 } });
+    expect(Object.keys(widths(401, 441).geometry)).toEqual([]);
+  });
+
   it("salvages healthy panes, tabs and history when one tab is corrupt", () => {
     const layout = layoutWith("a.md", "b.md");
     const second = split("main", "row", layout)!;

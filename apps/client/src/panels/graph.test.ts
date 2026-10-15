@@ -14,6 +14,8 @@ interface FakeChart {
   nodeCount: Mock;
   setOpenDocuments: Mock;
   setVisibleNodes: Mock;
+  zoomBy: Mock;
+  fitAll: Mock;
   unmount: Mock;
 }
 
@@ -27,6 +29,7 @@ const fakes = vi.hoisted(() => ({
   charts: [] as FakeChart[],
   panels: [] as FakePanel[],
   languageListeners: [] as Array<() => void>,
+  groups: [] as string[],
   lifetimes: [] as Lifetime[],
   layoutRegistrations: [] as Array<{
     listener: Mock;
@@ -66,12 +69,14 @@ vi.mock("../graph/chart", () => ({
       nodeId: vi.fn(() => null),
       nodeCount: vi.fn(() => 0),
       setVisibleNodes: vi.fn(),
-      setGroups: vi.fn(() => [] as string[]),
+      setGroups: vi.fn(() => fakes.groups),
       setOpenDocuments: vi.fn(),
       setA11yLabel: vi.fn(),
       setConfig: vi.fn(),
       warm: vi.fn(),
       unpinNodes: vi.fn(),
+      zoomBy: vi.fn(),
+      fitAll: vi.fn(),
       snapshot: vi.fn(() => null),
       unmount: vi.fn(),
     };
@@ -132,6 +137,7 @@ beforeEach(() => {
   fakes.panels.length = 0;
   fakes.languageListeners.length = 0;
   fakes.layoutRegistrations.length = 0;
+  fakes.groups = [];
 });
 
 function mountTestGraph(): void {
@@ -237,6 +243,51 @@ describe("lifecycle del renderer graph", () => {
     expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(null);
     expect(host.querySelectorAll(".graph-list-open")).toHaveLength(2);
     stop();
+  });
+
+  it("la legenda accende e spegne i gruppi: i loro nodi escono dalla vista e rientrano", async () => {
+    fakes.groups = ["a", "b"];
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const stop = render(host, {
+      nodes: ["a/x.md", "b/y.md"],
+      edges: [],
+      groups: { "a/x.md": "a", "b/y.md": "b" },
+    }, vi.fn(), NO_RENDER_CONTEXT)!;
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1]!;
+    const [first, second] = [...host.querySelectorAll<HTMLButtonElement>(".graph-legend-group")];
+    expect(first!.getAttribute("aria-pressed")).toBe("true");
+    first!.click();
+    expect(first!.getAttribute("aria-pressed")).toBe("false");
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set(["b/y.md"]));
+    second!.click();
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(new Set());
+    first!.click();
+    second!.click();
+    expect(chart.setVisibleNodes).toHaveBeenLastCalledWith(null);
+    stop();
+  });
+
+  it("i pulsanti di zoom e «inquadra» chiamano il grafico", async () => {
+    mountTestGraph();
+    const render = customRenderer(GRAPH_NS, null)!;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const stop = render(host, { nodes: ["a.md"], edges: [] }, vi.fn(), NO_RENDER_CONTEXT)!;
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1]!;
+    const bar = host.querySelector<HTMLElement>(".graph-zoom")!;
+    const [zoomIn, zoomOut, fit] = [...bar.querySelectorAll<HTMLButtonElement>("button")];
+    zoomIn!.click();
+    zoomOut!.click();
+    fit!.click();
+    expect(chart.zoomBy.mock.calls.map((call: unknown[]) => Number((call[0] as number).toFixed(3)))).toEqual([1.2, 0.833]);
+    expect(chart.fitAll).toHaveBeenCalledTimes(1);
+    stop();
+    expect(host.querySelector(".graph-zoom")).toBeNull();
   });
 
   it("non monta un motore arrivato dopo lo smontaggio della superficie", async () => {

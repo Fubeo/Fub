@@ -147,7 +147,16 @@ pub const CHROME_SIDEBAR_VISIBLE: &str = "chrome.sidebar.visible";
 pub const CHROME_INSPECTOR_VISIBLE: &str = "chrome.inspector.visible";
 pub const CHROME_STATUS_VISIBLE: &str = "chrome.status.visible";
 pub const CHROME_TOOLBAR_VISIBLE: &str = "chrome.toolbar.visible";
+/// La barra di formattazione del foglio. Spenta, gli stessi comandi restano
+/// raggiungibili dalla selezione, dal menu `/` e dalla tastiera.
+pub const CHROME_FORMATBAR_VISIBLE: &str = "chrome.formatbar.visible";
 pub const CHROME_FRAME: &str = "chrome.frame";
+/// Quanto spazio prende l'interfaccia attorno ai fogli: da `0` (ampia) a
+/// [`CHROME_COMPACTNESS_MAX`] (minima). Stringe barre, binario e cassetti; il
+/// foglio e le sue linguette non cambiano misura. Che cosa valga ogni passo lo
+/// decide il tema: l'host custodisce soltanto il passo.
+pub const CHROME_COMPACTNESS: &str = "chrome.compactness";
+pub const CHROME_COMPACTNESS_MAX: f64 = 4.0;
 pub const CHROME_SCHEMA_VERSION: f64 = 1.0;
 /// Preferenze locali del motore testuale, non comandi del documento.
 pub const EDITOR_SPELLCHECK: &str = "editor.spellcheck";
@@ -160,8 +169,9 @@ pub const EDITOR_INDENT: &str = "editor.indent";
 /// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
 /// `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
-/// Le animazioni della shell: `""` segue il sistema, `reduced` le spegne
-/// anche quando il sistema non lo chiede.
+/// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
+/// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
+/// valore scavalca la richiesta di moto ridotto del sistema.
 pub const APPEARANCE_MOTION: &str = "appearance.motion";
 /// Il tetto dei fotogrammi: `""` segue il refresh dello schermo, qualunque
 /// sia; un numero di [`FRAME_RATE_CAPS`] è un tetto in fotogrammi al secondo.
@@ -514,7 +524,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_ACCENT,
             C_ACCENT,
             C_ACCENT_DESC,
-            130.0,
+            265.0,
             0.0,
             360.0,
         ),
@@ -529,6 +539,14 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("relaxed", Text::key(C_DENSITY_RELAXED)),
             ],
         ),
+        number(
+            CHROME_COMPACTNESS,
+            C_COMPACTNESS,
+            C_COMPACTNESS_DESC,
+            0.0,
+            0.0,
+            CHROME_COMPACTNESS_MAX,
+        ),
         number(APPEARANCE_ZOOM, C_ZOOM, C_ZOOM_DESC, DEFAULT_ZOOM, 0.5, 2.0),
         choice(
             APPEARANCE_MOTION,
@@ -537,6 +555,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             fub_kernel::locale::AS_SYSTEM,
             vec![
                 system(),
+                UiOption::new("calm", Text::key(C_MOTION_CALM)),
                 UiOption::new("reduced", Text::key(C_MOTION_REDUCED)),
             ],
         ),
@@ -571,19 +590,21 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_FONT,
             C_FONT,
             C_FONT_DESC,
-            "literata",
+            "newsreader",
             vec![
+                UiOption::new("newsreader", Text::key(C_FONT_NEWSREADER)),
+                UiOption::new("hanken", Text::key(C_FONT_HANKEN)),
                 UiOption::new("literata", Text::key(C_FONT_LITERATA)),
                 UiOption::new("inter", Text::key(C_FONT_INTER)),
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
-        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 16.0, 12.0, 28.0),
+        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 17.0, 12.0, 28.0),
         number(
             APPEARANCE_LINE_HEIGHT,
             C_LINE_HEIGHT,
             C_LINE_HEIGHT_DESC,
-            1.7,
+            1.65,
             1.2,
             2.4,
         ),
@@ -591,7 +612,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MEASURE,
             C_MEASURE,
             C_MEASURE_DESC,
-            70.0,
+            68.0,
             40.0,
             100.0,
         ),
@@ -664,6 +685,11 @@ fn chrome_settings() -> Vec<SettingSpec> {
             CHROME_TOOLBAR_VISIBLE,
             C_CHROME_TOOLBAR,
             C_CHROME_TOOLBAR_DESC,
+        ),
+        toggle(
+            CHROME_FORMATBAR_VISIBLE,
+            C_CHROME_FORMATBAR,
+            C_CHROME_FORMATBAR_DESC,
         ),
         SettingSpec::new(
             CHROME_FRAME,
@@ -892,17 +918,22 @@ const C_MEASURE: &str = "core.measure";
 const C_MEASURE_DESC: &str = "core.measure.desc";
 const C_FONT: &str = "core.font";
 const C_FONT_DESC: &str = "core.font.desc";
+const C_FONT_NEWSREADER: &str = "core.font.newsreader";
+const C_FONT_HANKEN: &str = "core.font.hanken";
 const C_FONT_LITERATA: &str = "core.font.literata";
 const C_FONT_INTER: &str = "core.font.inter";
 const C_FONT_SYSTEM: &str = "core.font.system";
 const C_ACCENT: &str = "core.accent";
 const C_ACCENT_DESC: &str = "core.accent.desc";
+const C_COMPACTNESS: &str = "core.compactness";
+const C_COMPACTNESS_DESC: &str = "core.compactness.desc";
 const C_ZOOM: &str = "core.zoom";
 const C_ZOOM_DESC: &str = "core.zoom.desc";
 const C_THEME_ID: &str = "core.theme_id";
 const C_THEME_ID_DESC: &str = "core.theme_id.desc";
 const C_MOTION: &str = "core.motion";
 const C_MOTION_DESC: &str = "core.motion.desc";
+const C_MOTION_CALM: &str = "core.motion.calm";
 const C_MOTION_REDUCED: &str = "core.motion.reduced";
 const C_FRAME_RATE: &str = "core.frame_rate";
 const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
@@ -932,6 +963,8 @@ const C_CHROME_STATUS: &str = "core.chrome.status";
 const C_CHROME_STATUS_DESC: &str = "core.chrome.status.desc";
 const C_CHROME_TOOLBAR: &str = "core.chrome.toolbar";
 const C_CHROME_TOOLBAR_DESC: &str = "core.chrome.toolbar.desc";
+const C_CHROME_FORMATBAR: &str = "core.chrome.formatbar";
+const C_CHROME_FORMATBAR_DESC: &str = "core.chrome.formatbar.desc";
 const C_CHROME_FRAME: &str = "core.chrome.frame";
 const C_CHROME_FRAME_DESC: &str = "core.chrome.frame.desc";
 const C_FRAME_SYSTEM: &str = "core.chrome.frame.system";
@@ -1120,6 +1153,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_STATUS_DESC, "Mostra salvataggio e statistiche nella barra del riquadro.")
         .with(C_CHROME_TOOLBAR, "Mostra strumenti del pannello")
         .with(C_CHROME_TOOLBAR_DESC, "Mostra i comandi contestuali del pannello.")
+        .with(C_CHROME_FORMATBAR, "Mostra la barra di formattazione")
+        .with(
+            C_CHROME_FORMATBAR_DESC,
+            "Spenta, i comandi di formattazione compaiono sulla selezione.",
+        )
         .with(C_CHROME_FRAME, "Cornice finestra")
         .with(C_CHROME_FRAME_DESC, "Il cambio di cornice richiede la riapertura e dipende dalle capacità del sistema.")
         .with(C_FRAME_SYSTEM, "Del sistema")
@@ -1196,6 +1234,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_FONT, "Carattere di lettura")
         .with(C_FONT_DESC, "Famiglia usata per la prosa lunga.")
+        .with(C_FONT_NEWSREADER, "Newsreader")
+        .with(C_FONT_HANKEN, "Hanken Grotesk")
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "Del sistema")
@@ -1204,12 +1244,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_ACCENT_DESC,
             "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
         )
+        .with(C_COMPACTNESS, "Spazio dell'interfaccia")
+        .with(C_COMPACTNESS_DESC, "Quanto posto prendono barre, binario e cassetti: da 0, ampia, a 4, minima. Il foglio e le sue linguette non cambiano.")
         .with(C_ZOOM, "Zoom interfaccia")
         .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
         .with(C_THEME_ID, "Tema installato")
         .with(C_THEME_ID_DESC, "L'id del tema montato; si sceglie dal catalogo dei temi.")
         .with(C_MOTION, "Animazioni")
-        .with(C_MOTION_DESC, "Segue la preferenza del sistema, oppure riduce sempre le animazioni dell'interfaccia.")
+        .with(C_MOTION_DESC, "Segue la preferenza del sistema, oppure toglie rimbalzi e scene, oppure riduce sempre le animazioni dell'interfaccia.")
+        .with(C_MOTION_CALM, "Calme")
         .with(C_MOTION_REDUCED, "Ridotte")
         .with(C_FRAME_RATE, "Fotogrammi al secondo")
         .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
@@ -1349,6 +1392,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_STATUS_DESC, "Show save state and statistics in the pane bar.")
         .with(C_CHROME_TOOLBAR, "Show pane tools")
         .with(C_CHROME_TOOLBAR_DESC, "Show contextual pane commands.")
+        .with(C_CHROME_FORMATBAR, "Show the formatting bar")
+        .with(
+            C_CHROME_FORMATBAR_DESC,
+            "When off, formatting commands appear on the selection.",
+        )
         .with(C_CHROME_FRAME, "Window frame")
         .with(C_CHROME_FRAME_DESC, "Frame changes require reopening and depend on platform capabilities.")
         .with(C_FRAME_SYSTEM, "System")
@@ -1442,6 +1490,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_MEASURE_DESC, "Maximum width of the reading column.")
         .with(C_FONT, "Reading font")
         .with(C_FONT_DESC, "Font family used for long-form prose.")
+        .with(C_FONT_NEWSREADER, "Newsreader")
+        .with(C_FONT_HANKEN, "Hanken Grotesk")
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "System")
@@ -1450,12 +1500,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_ACCENT_DESC,
             "OKLCH hue; lightness and chroma are derived to preserve contrast.",
         )
+        .with(C_COMPACTNESS, "Interface space")
+        .with(C_COMPACTNESS_DESC, "How much room bars, rail and drawers take: from 0, roomy, to 4, minimal. The sheet and its tabs do not change.")
         .with(C_ZOOM, "Interface zoom")
         .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
         .with(C_THEME_ID, "Installed theme")
         .with(C_THEME_ID_DESC, "The id of the mounted theme; chosen from the theme catalog.")
         .with(C_MOTION, "Animations")
-        .with(C_MOTION_DESC, "Follow the system preference, or always reduce interface animations.")
+        .with(C_MOTION_DESC, "Follow the system preference, or drop bounces and scenes, or always reduce interface animations.")
+        .with(C_MOTION_CALM, "Calm")
         .with(C_MOTION_REDUCED, "Reduced")
         .with(C_FRAME_RATE, "Frame rate")
         .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")

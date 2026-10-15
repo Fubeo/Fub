@@ -6,7 +6,7 @@ vi.mock("./notify", () => ({
   notify: (message: string, tone?: string) => notified.push([message, tone]),
 }));
 const editorRuns = vi.hoisted(() => ({ calls: [] as string[], outcome: "done" as "done" | "nothing" | "unavailable" }));
-vi.mock("../panels/document", () => ({
+vi.mock("../state/document-controller", () => ({
   openDocument: vi.fn(),
   openFromView: vi.fn(),
   reveal: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("../panels/document", () => ({
     return editorRuns.outcome;
   },
 }));
-vi.mock("../panels/search", () => ({ searchFor: vi.fn() }));
+vi.mock("../state/search-port", () => ({ searchFor: vi.fn() }));
 // Il layout ricorda se stesso a ogni cambio: qui non c'è un backend a cui dirlo.
 vi.mock("../host/ipc", () => ({ api: { setViewState: async () => {} } }));
 

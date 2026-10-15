@@ -34,7 +34,7 @@ import { $ } from "../ui/dom";
 import { notify } from "../ui/notify";
 import type { Tone } from "../ui/notify";
 import { asPluginError, errorText } from "../host/errors";
-import { onLanguage, t } from "../i18n/strings";
+import { onLanguage, resolvedLanguage, t } from "../i18n/strings";
 import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 import { drawCountButton } from "../ui/icons";
@@ -220,6 +220,26 @@ let opener: HTMLElement | null = null;
 let finished: FinishedExport[] = [];
 let activityEpoch = 0;
 
+/// Un lavoro finito, come lo ricorda il centro: la frase del suo esito e quando.
+export interface Past {
+  text: string;
+  tone: Tone;
+  when: number;
+}
+/// Quanti lavori finiti si ricordano. Il centro dice **che cosa è successo**,
+/// non tiene il registro della sessione: dieci bastano a rispondere a «è
+/// finito, quel lavoro?» e a leggere perché no.
+export const PAST_LIMIT = 10;
+
+/// Aggiunge un esito alla memoria, il più recente in cima. Funzione pura: è la
+/// regola del limite, e si prova senza un DOM.
+export function remember(past: readonly Past[], item: Past): Past[] {
+  return [item, ...past].slice(0, PAST_LIMIT);
+}
+/// Gli esiti degli ultimi lavori, dal più recente. Si svuotano col vault: sono
+/// di quello di prima.
+let past: Past[] = [];
+
 /// Testi di stato con chiavi dedicate (U64): `activity.stale` non riusa
 /// `activity.none` — «nessun lavoro» e «lista non aggiornata» sono due fatti
 /// diversi, e comporli dalla stessa chiave li confonderebbe.
@@ -244,6 +264,7 @@ export function mountActivity(lifetime: Lifetime): void {
     if (epoch !== activityEpoch) return;
     activityEpoch++;
     finished = [];
+    past = [];
     open = false;
   });
   lifetime.listen($("#activity-button"), "click", () => {
@@ -286,7 +307,10 @@ export function mountActivity(lifetime: Lifetime): void {
         stale = false;
         staleReason = "";
         finished = [];
+        past = [];
       }
+      const resultNotice = noticeOf(eventNotice);
+      if (resultNotice) past = remember(past, { ...resultNotice, when: Date.now() });
       const result = apply(jobs, eventNotice);
       jobs = result.jobs;
       const completed = eventNotice.event;
@@ -319,7 +343,6 @@ export function mountActivity(lifetime: Lifetime): void {
       }
       // L'esito di un lavoro lungo è l'unico dei tre eventi del ciclo che l'utente
       // deve **leggere**: gli altri due li racconta la riga.
-      const resultNotice = noticeOf(eventNotice);
       if (resultNotice) notify(resultNotice.text, resultNotice.tone);
     }),
   );
@@ -394,7 +417,7 @@ function redraw(): void {
   // Nessun-job e lista-non-aggiornata restano due righe diverse: la prima dice
   // che non gira niente, la seconda che non lo si sa più.
   if (stale) list.appendChild(staleNote());
-  if (jobs.length === 0 && finished.length === 0) {
+  if (jobs.length === 0 && finished.length === 0 && past.length === 0) {
     const empty = document.createElement("li");
     empty.className = "muted";
     empty.textContent = t("activity.none");
@@ -431,6 +454,37 @@ function redraw(): void {
       list.append(item);
     }
   }
+  if (past.length > 0) {
+    // Con un lavoro in corso la sezione dice che quelli sotto sono finiti; da
+    // sola non serve, e il titolo sarebbe una parola in più sopra niente.
+    if (jobs.length > 0) {
+      const title = document.createElement("li");
+      title.className = "muted";
+      title.textContent = t("activity.recent");
+      list.append(title);
+    }
+    for (const item of past) list.append(pastRow(item));
+  }
+}
+
+/// Una riga dello storico: l'esito e l'ora, nella lingua della shell. Il tono
+/// lo porta l'attributo, come nel centro notifiche: un lavoro fallito non si
+/// legge come uno riuscito.
+function pastRow(item: Past): HTMLLIElement {
+  const el = document.createElement("li");
+  el.className = "activity-row";
+  el.dataset.tone = item.tone;
+  const text = document.createElement("span");
+  text.className = "activity-label";
+  text.textContent = item.text;
+  // Un esito fallito può essere lungo: la riga lo ellissa, il suggerimento lo
+  // ridice intero.
+  setTooltip(text, item.text);
+  const time = document.createElement("span");
+  time.className = "muted";
+  time.textContent = new Date(item.when).toLocaleTimeString(resolvedLanguage());
+  el.append(text, time);
+  return el;
 }
 
 async function persistArtifact(report: FinishedExport, artifact: FinishedArtifact): Promise<void> {

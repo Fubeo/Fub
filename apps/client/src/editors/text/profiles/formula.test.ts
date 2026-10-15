@@ -86,6 +86,26 @@ describe("FormulaProfile", () => {
     engine.destroy();
   });
 
+  it("colora soltanto una formula: un valore semplice resta testo", () => {
+    const profile = createFormulaProfile();
+    const { engine, view } = mounted(profile);
+    const names = (text: string): string[] => {
+      engine.setDoc(text);
+      const nodes: string[] = [];
+      syntaxTree(view().state).iterate({
+        enter(node) {
+          if (node.name.startsWith("formula")) nodes.push(node.name);
+        },
+      });
+      return nodes;
+    };
+    expect(names("Voce")).toEqual([]);
+    expect(names("12500")).toEqual([]);
+    expect(names(" =A1")).toEqual([]);
+    expect(names("=A1+Voce")).toEqual(["formulaOperator", "formulaReference", "formulaOperator", "formulaIdentifier"]);
+    engine.destroy();
+  });
+
   it("offre completamenti locali e iniettati senza chiamare il callback mentre si digita", async () => {
     const functions = vi.fn(() => ["SUM", "AVERAGE"]);
     const sheets = vi.fn(() => ["Budget 2026"]);

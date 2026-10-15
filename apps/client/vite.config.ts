@@ -78,9 +78,15 @@ export default defineConfig({
           if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
             return "markdown-grammar";
           }
-          if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
+          // La serie che la shell monta: ricetta, fogli, pelle, e i conti del
+          // colore che la ricetta usa.
+          if (/\/src\/theme\/(scrittoio\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
             return "theme-series";
           }
+          // Il catalogo delle stringhe è testo, cresce con ogni superficie e
+          // lo leggono tutte le finestre: senza un nome suo finisce nel chunk
+          // condiviso più grosso e ne consuma il margine a ogni frase nuova.
+          if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {

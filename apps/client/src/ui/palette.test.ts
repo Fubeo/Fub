@@ -12,6 +12,7 @@ import {
   viewEntries,
 } from "./palette";
 import type { CommandEntry } from "./commands";
+import { slashPlace } from "./palette";
 import { setPrimaryViews } from "./primary-views";
 
 // Le decisioni della palette sono funzioni pure apposta: la regola del consenso
@@ -309,5 +310,23 @@ describe("le view principali nella palette", () => {
   it("senza view principali non aggiunge niente", () => {
     setPrimaryViews([]);
     expect(viewEntries({ onEffect: () => {} })).toEqual([]);
+  });
+});
+
+describe("dove si posa il menu «/»", () => {
+  const view = { width: 1000, height: 700 };
+  it("sotto la riga, allineato al suo inizio", () => {
+    expect(slashPlace({ left: 200, top: 100, right: 201, bottom: 124 }, view)).toEqual({ left: 200, top: 130, above: false });
+  });
+  it("sopra la riga quando sotto non c'è posto", () => {
+    const at = slashPlace({ left: 200, top: 600, right: 201, bottom: 624 }, view);
+    expect(at).toEqual({ left: 200, top: 594, above: true });
+  });
+  it("mai fuori dai bordi", () => {
+    expect(slashPlace({ left: 990, top: 100, right: 991, bottom: 124 }, view).left).toBe(674);
+    expect(slashPlace({ left: 0, top: 100, right: 1, bottom: 124 }, view).left).toBe(6);
+  });
+  it("senza posto né sopra né sotto resta sotto", () => {
+    expect(slashPlace({ left: 10, top: 100, right: 11, bottom: 124 }, { width: 800, height: 300 }).above).toBe(false);
   });
 });

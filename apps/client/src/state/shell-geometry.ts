@@ -8,7 +8,10 @@ export interface ShellGeometry {
   hiddenPanels?: string[];
 }
 
-const limits = { sidebar: [200, 360], inspector: [240, 400] } as const;
+/// Le misure (px) fra cui i divisori dei due cassetti si muovono. Le stesse
+/// dichiara il divisore a chi lo monta e le stesse accetta una geometria salvata.
+export const SHELL_WIDTH_LIMITS = { sidebar: [208, 400], inspector: [248, 440] } as const;
+const limits = SHELL_WIDTH_LIMITS;
 
 export function parseShellGeometry(raw: unknown): { geometry: ShellGeometry; rejected: Record<string, unknown> } {
   const geometry: ShellGeometry = {};

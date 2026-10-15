@@ -107,9 +107,12 @@ Frontend (`apps/client/src/`):
 - `host/` is the seam. It holds `contract.ts` (the TS mirror of the IPC shapes),
   `ipc.ts` (real) and `fake.ts` (tests). Only `host/ipc.ts` and
   `host/dialog.ts` may import `@tauri-apps`, and a test enforces this.
-- `main.ts`, `entrypoints/` and `shells/desktop` compose the shell. `desktop-shell.ts`
-  is the desktop composition. `shells/mobile` is the boundary for the future
-  mobile shell.
+- `main.ts` starts the **Scrittoio**, the one window: `shells/scrittoio/bootstrap.ts`
+  composes it on top of `desktop-shell.ts` (sessions, panes, commands). The
+  frame, sheets, launcher, preferences and the in-app confirm live in
+  `shells/scrittoio/`. `kit/` holds the UI primitives (button, field, list,
+  tabs, popover, dialog, splitter, hover card), `moto/` the springs, FLIP and
+  gestures. `entrypoints/mobile*` and `shells/mobile` are the mobile boundary.
 - `state/document-session.ts`: there is one `DocumentSession` per document,
   created only by `DocumentSessionCollection`. It owns the in-memory buffer, the
   save and draft queues, conflicts, rename and delete. Each pane has its own
@@ -178,11 +181,14 @@ file in `src/` knows the bench exists, so keep it that way.
 - **Rejected skin.** The skin goes through the theme CSS sanitizer
   (`src/ui/sanitize-css.ts`). If one rule is rejected, the **whole page renders
   unstyled**; `src/theme/gate.test.ts` catches this.
-  - Rejected so far: `minmax()`, `scroll-margin-top` and `row-gap`. Use `1fr`
-    and the `gap` shorthand instead.
-  - After editing `src/theme/serie/skin/*.css`, run
-    `npm run theme:generate && npm run theme:verify`. Add every new class to the
-    hooks in `src/theme/serie/anatomia.ts`, or the anatomy test fails.
+  - The house series is **`theme-2`** (`src/theme/scrittoio/`), whose
+    vocabulary admits `minmax()`, `row-gap`, `oklch()` and `color-mix()`. A
+    `theme-1` theme (and any CSS snippet) still gets the narrow profile, where
+    `minmax()`, `scroll-margin-top` and `row-gap` are rejected.
+  - After editing `src/theme/scrittoio/skin/*.css`, run
+    `npm run theme:generate && npm run theme:verify` and
+    `npx vitest run src/theme/scrittoio`. Add every new class to the hooks of
+    that piece in `src/theme/scrittoio/anatomia/`, or the anatomy test fails.
 - **a11y bench (`npm run bench:a11y`):**
   - It treats `button`, `summary` and elements with role `checkbox`, `radio` or
     `switch` as commands: Enter **and** Space must each produce exactly one

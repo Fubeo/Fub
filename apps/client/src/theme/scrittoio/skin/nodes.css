@@ -1,0 +1,718 @@
+/* I nodi delle viste dichiarative. */
+
+/* **I nodi del §2.1**: il vocabolario con cui un provider disegna senza
+   conoscere il tema. Un nodo dichiara *cosa* è — una sezione, una riga, un
+   campo, un'etichetta — e mai di che colore: lo decide questa pelle, con la
+   stessa grammatica della shell. Una view dichiarata non deve sembrare un
+   ospite: le sue righe sono righe di cassetto, le sue sezioni etichette di
+   cassetto, i suoi campi i campi di base (`controls.css`, che qui non si
+   ridisegnano).
+
+   Un nodo non sa dove verrà montato — scrivania, foglio, modale — e quindi
+   sotto il puntatore prende una velatura, che regge su tutte; nei due cassetti
+   la velatura diventa il gradino pieno delle altre righe del cassetto. */
+
+/* ── Testo e pile ────────────────────────────────────────────────────────── */
+
+/* Un testo è testo semplice, a capo compresi: una versione di una nota o una
+   riga di confronto perderebbero la forma, schiacciate su una riga sola. */
+.ui-text {
+  line-height: var(--leading-normal);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* I titoli di una view sono titoli d'interfaccia: tre gradini bastano, e dal
+   quarto in giù un titolo è un'etichetta di sezione. */
+.ui-heading {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+h1.ui-heading {
+  font-size: var(--text-xl);
+}
+h2.ui-heading {
+  font-size: var(--text-lg);
+}
+h3.ui-heading {
+  font-size: var(--text-md);
+}
+h5.ui-heading,
+h6.ui-heading {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+/* Le pile in riga vanno a capo quando non ci stanno: la voce e il testo si
+   stringono, bottoni ed etichette restano interi. Un «Collega» accanto a una
+   menzione finiva tagliato fuori dal cassetto. */
+.ui-stack[data-dir="row"] {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ui-stack[data-dir="row"] > .ui-list-item,
+.ui-stack[data-dir="row"] > .ui-text {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.ui-stack[data-dir="row"] > .ui-button,
+.ui-stack[data-dir="row"] > .ui-badge {
+  flex: 0 0 auto;
+}
+/* In colonna una pila stira i figli: un bottone o un'etichetta larghi quanto
+   il pannello sembrerebbero una barra. Restano grandi quanto ciò che dicono. */
+.ui-stack[data-dir="column"] > .ui-button,
+.ui-stack[data-dir="column"] > .ui-badge,
+.ui-stack[data-dir="column"] > .ui-icon {
+  align-self: flex-start;
+}
+
+/* Il separatore di una view: un filetto, con l'aria dei separatori dei menu. */
+:where(.ui-stack, .ui-children) > hr {
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: none;
+  background: var(--border);
+}
+
+/* ── Il bottone ──────────────────────────────────────────────────────────── */
+
+/* Il bottone normale: una velatura a riposo, così si legge come bottone anche
+   fra righe di testo, e nessun bordo. È alto quanto una riga e non quanto un
+   controllo: in una view sta fra le righe, e in un cassetto due file di
+   bottoni da 32 pesano più del contenuto. Gli stati stanno in `:where()`
+   perché non scavalchino gli intenti che le fondamenta colorano (il primario
+   e il distruttivo hanno il loro passaggio). */
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--row-h);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  transition: scale var(--duration-state) var(--ease);
+}
+.ui-button:where(:hover) {
+  background: var(--overlay-active);
+}
+.ui-button:where(:active) {
+  scale: 0.98;
+}
+.ui-button:where(:disabled) {
+  background: var(--overlay-hover);
+  scale: 1;
+}
+/* Il distruttivo scrive in rosso già a riposo (lo dicono le fondamenta), e il
+   rosso sopra una velatura grigia scende sotto il 4,5:1: al posto del fondo
+   prende un confine. */
+.ui-button.intent-danger {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--outline);
+}
+.ui-button.intent-danger:hover {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+
+/* ── Sezioni ─────────────────────────────────────────────────────────────── */
+
+/* L'intestazione di una sezione è un'etichetta di cassetto: maiuscoletto
+   piccolo in grafite, che nomina senza pesare. Il triangolo è disegnato —
+   quello del sistema cambia forma da una macchina all'altra — ed è lo stesso
+   dell'albero dei file. */
+.ui-section {
+  margin: 0;
+}
+.ui-section > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--row-h);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  line-height: var(--leading-tight);
+  text-transform: uppercase;
+  list-style: none;
+  cursor: pointer;
+}
+.ui-section > summary::-webkit-details-marker {
+  display: none;
+}
+.ui-section > summary::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.ui-section[open] > summary::before {
+  transform: rotate(90deg);
+}
+.ui-section > summary:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.ui-section > summary:active {
+  background: var(--overlay-active);
+}
+.ui-section > .ui-children {
+  padding: var(--space-1) 0 var(--space-4);
+}
+/* Il vuoto dentro una sezione è una riga sommessa, non un riquadro. */
+.ui-section .ui-empty-state {
+  align-items: flex-start;
+  padding: var(--space-2) var(--space-4);
+  text-align: left;
+}
+.ui-section .ui-empty-title {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+}
+
+/* ── Righe: elenchi e alberi ─────────────────────────────────────────────── */
+
+/* Una voce di elenco è una riga di cassetto. L'altezza minima è scritta dal
+   nodo (un bersaglio); qui c'è il resto: rientro, raggio, e due righe di
+   testo che non si pestano. */
+.ui-list-item {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+.ui-list-item-subtitle {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.ui-tree-label {
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+}
+/* Chi ha figli porta il triangolo; una foglia ne tiene il posto, così i nomi
+   dello stesso livello cadono sulla stessa verticale. */
+.ui-tree-label::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+}
+.ui-tree-item[aria-expanded] > .ui-tree-label::before {
+  background: var(--muted);
+  clip-path: polygon(25% 8%, 85% 50%, 25% 92%);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.ui-tree-item[aria-expanded="true"] > .ui-tree-label::before {
+  transform: rotate(90deg);
+}
+/* Il rientro di un livello è il passo del triangolo: il nome di un figlio
+   parte sotto il nome del padre. */
+.ui-tree-item > .ui-children {
+  margin-left: calc(var(--space-3) + 8px);
+}
+
+.ui-row.clickable,
+.ui-list-item.clickable,
+.ui-tree-label.clickable {
+  cursor: pointer;
+}
+.ui-row.clickable:hover,
+.ui-list-item.clickable:hover,
+.ui-tree-label.clickable:hover {
+  background: var(--overlay-hover);
+}
+.ui-row.clickable:active,
+.ui-list-item.clickable:active,
+.ui-tree-label.clickable:active {
+  background: var(--overlay-active);
+}
+/* **La voce corrente.** Lo stato si legge da dove è annunciato: in un albero
+   il selezionato è il `treeitem` e l'etichetta è sua figlia; in un elenco è
+   `aria-current` (la ragione sta in `ui/node.ts`). La dice la matita blu —
+   fondo tenue, inchiostro blu, peso da titolo — come la nota aperta
+   nell'albero dei file. Il sottotitolo resta grafite: sul fondo tenue regge. */
+.ui-tree-item[aria-selected="true"] > .ui-tree-label,
+.ui-tree-item[aria-selected="true"] > .ui-tree-label.clickable:hover,
+.ui-list-item[aria-current="true"],
+.ui-list-item[aria-current="true"].clickable:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+/* Dentro un elenco o un albero il fondo tenue non è della riga: è una sagoma
+   posata sotto il testo, che la shell fa scivolare dalla riga di prima a
+   quella di adesso (`shells/scrittoio/views-motion.ts`). Per passare sotto le
+   righe che attraversa sta nel piano dell'elenco e non in quello della riga:
+   l'elenco apre il piano, la riga le fa solo da riferimento. I `:where()`
+   lasciano alle regole il peso di quelle qui sopra, così vincono e perdono
+   contro le stesse di prima; una voce scelta fuori da un elenco tiene il suo
+   fondo. */
+.ui-list,
+.ui-tree {
+  position: relative;
+  z-index: 0;
+}
+:where(.ui-tree) .ui-tree-item[aria-selected="true"] > .ui-tree-label,
+:where(.ui-tree) .ui-tree-item[aria-selected="true"] > .ui-tree-label.clickable:hover,
+:where(.ui-list) .ui-list-item[aria-current="true"],
+:where(.ui-list) .ui-list-item[aria-current="true"].clickable:hover {
+  position: relative;
+  background: transparent;
+}
+:where(.ui-tree) .ui-tree-item[aria-selected="true"] > .ui-tree-label::after,
+:where(.ui-list) .ui-list-item[aria-current="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--accent-wash);
+  pointer-events: none;
+}
+/* Premuta, una voce d'elenco mostra il gradino della pressione e non il fondo
+   tenue: la sagoma si ritira. */
+:where(.ui-list) .ui-list-item[aria-current="true"].clickable:active::after {
+  background: transparent;
+}
+.ui-tree-item[aria-expanded][aria-selected="true"] > .ui-tree-label::before {
+  background: var(--accent);
+}
+.ui-list-item[aria-current="true"] .ui-list-item-subtitle {
+  font-weight: var(--weight-regular);
+}
+
+/* Il fuoco da tastiera sta dentro la riga: un cassetto taglia ciò che
+   sporge. */
+.ui-row:focus-visible,
+.ui-list-item:focus-visible,
+.ui-tree-label:focus-visible,
+.ui-section > summary:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+
+/* ── Tabelle ─────────────────────────────────────────────────────────────── */
+
+/* Una tabella è un dato, come nel documento: cifre incolonnate, solo fili
+   orizzontali, l'intestazione su un gradino. Qui col carattere e il corpo
+   dell'interfaccia. */
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-normal);
+}
+.ui-table th {
+  padding: var(--space-3) var(--space-4);
+  background: var(--overlay-hover);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.ui-table th:first-child {
+  border-radius: var(--radius-chip) 0 0 var(--radius-chip);
+}
+.ui-table th:last-child {
+  border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+}
+.ui-table th:only-child {
+  border-radius: var(--radius-chip);
+}
+.ui-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.ui-table .ui-row:last-child > td {
+  border-bottom-color: transparent;
+}
+.ui-table .ui-empty-cell {
+  color: var(--muted);
+}
+
+/* ── Schede ──────────────────────────────────────────────────────────────── */
+
+/* Le schede di una view sono quelle dell'ispettore, con una parola al posto
+   dell'icona: grafite a riposo, matita blu l'accesa, nessun filo sotto. */
+.ui-tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: var(--space-4);
+}
+.ui-tab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--row-h);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ui-tab-button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.ui-tab-button[aria-selected="true"],
+.ui-tab-button[aria-selected="true"]:hover {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+
+/* ── Etichette, icone, avanzamento ───────────────────────────────────────── */
+
+/* Una pastiglia. Il neutro è una velatura in grafite; il primario è la
+   matita blu. Il rosso scritto sopra la propria velatura non arriva al
+   4,5:1 su tutte le superfici: la specie la dice il fondo, e il testo resta
+   inchiostro. */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 18px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--overlay-hover);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+}
+.ui-badge.intent-primary {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.ui-badge.intent-danger {
+  background: var(--danger-wash);
+  color: var(--text);
+}
+
+/* Un'icona del set della shell dentro una view: prende il colore del testo
+   intorno, come ogni altra icona della shell. */
+.ui-icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.ui-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--space-8);
+}
+.ui-progress progress {
+  flex: 1 1 96px;
+  min-width: 48px;
+  max-width: 240px;
+}
+.ui-progress-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Vuoti, attese, guasti ───────────────────────────────────────────────── */
+
+/* Uno stato vuoto sta al centro del suo spazio: il titolo in inchiostro dice
+   che cosa manca, il resto in grafite dice perché e che cosa fare. */
+.ui-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  text-align: center;
+}
+.ui-empty-title {
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+}
+.ui-empty-detail {
+  max-width: 36ch;
+}
+.ui-empty-state .ui-button,
+.ui-empty-state button.primary {
+  margin-top: var(--space-4);
+}
+
+/* I due stati del §2.5: «non ancora» e «non ce l'ho fatta». */
+.ui-pending {
+  padding: var(--space-3) 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* Il guasto: il fondo e il filo dicono la specie, e il testo resta
+   inchiostro. */
+.ui-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  box-shadow: inset 3px 0 0 var(--danger);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.ui-failed-message {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Coppie chiave-valore ────────────────────────────────────────────────── */
+
+.ui-key-value {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-5);
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+}
+.ui-key-value dt {
+  color: var(--muted);
+}
+.ui-key-value dd {
+  margin: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* ── Campi ───────────────────────────────────────────────────────────────── */
+
+/* Il campo è quello di base: qui c'è solo ciò che una view aggiunge, cioè
+   l'etichetta sopra e la larghezza piena. */
+.ui-text-input,
+.ui-date-picker,
+.ui-number,
+.ui-text-area,
+.ui-select,
+.ui-slider,
+.ui-radio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.ui-field-label {
+  display: block;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+}
+.ui-text-input input,
+.ui-date-picker input,
+.ui-number input,
+.ui-text-area textarea,
+.ui-select select,
+.ui-slider input {
+  width: 100%;
+}
+/* Casella e radio: il segno davanti al suo nome, su una riga che è un
+   bersaglio intero. */
+.ui-checkbox,
+.ui-radio-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--row-h);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-tight);
+  cursor: pointer;
+}
+.ui-checkbox .ui-field-label {
+  font-size: inherit;
+  font-weight: var(--weight-regular);
+}
+.ui-radio {
+  gap: 0;
+}
+.ui-radio > .ui-field-label {
+  margin-bottom: var(--space-2);
+}
+
+.ui-form,
+.ui-form > .ui-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+/* Il bottone che manda il form non si allarga quanto il form. */
+.ui-submit {
+  align-self: flex-start;
+}
+
+/* ── Ospiti ──────────────────────────────────────────────────────────────── */
+
+/* Markup fidato e nodi di terzi: prendono il corpo dell'interfaccia e non
+   escono dal loro spazio. */
+.ui-html,
+.ui-custom {
+  min-width: 0;
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+}
+/* Il markup porta i suoi elementi nudi: un collegamento e un frammento di
+   codice senza queste righe prendono i colori del browser. */
+.ui-html a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.ui-html a:hover {
+  color: var(--accent-soft);
+}
+.ui-html code {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--overlay-hover);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+/* Una finestra su un'altra pagina: un confine sottile al posto dell'incavo
+   grigio che il browser dà a ogni `iframe`. */
+.ui-webview {
+  max-width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+}
+
+/* ── Nei cassetti ────────────────────────────────────────────────────────── */
+
+/* **Una verticale sola.** Dentro un pannello una riga ha il nome rientrato di
+   `--space-4` rispetto al proprio fondo, e un testo sciolto no: nella stessa
+   view cadevano su due verticali. Il pannello prende quel rientro per tutti e
+   ciò che ha un fondo proprio — righe, intestazioni, schede, tabelle — lo
+   restituisce con un margine negativo: il fondo arriva al bordo del pannello,
+   il testo resta in colonna con il resto. Vale solo dove il contenitore è una
+   `.declared-view`: altrove il margine negativo uscirebbe dal suo spazio. */
+:where(.sidebar, .inspector-pane) .declared-view {
+  padding: 0 var(--space-4);
+}
+/* Nella modale il rientro c'è già — è il margine del pannello, e il titolo ci
+   sta a filo: lì le righe sporgono soltanto, dentro quel margine. */
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-list-item,
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-tree-label,
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-section > summary,
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-tab-bar {
+  margin-right: calc(var(--space-4) * -1);
+  margin-left: calc(var(--space-4) * -1);
+}
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-table {
+  width: calc(100% + var(--space-4) * 2);
+  margin-right: calc(var(--space-4) * -1);
+  margin-left: calc(var(--space-4) * -1);
+}
+/* Il vuoto di una sezione si rientra come il nome di una riga: dove le righe
+   sporgono, quel rientro è già quello del pannello. */
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-section .ui-empty-state {
+  padding-right: 0;
+  padding-left: 0;
+}
+/* Dentro una cella lo spazio è già quello della cella; in una pila in riga
+   sporge solo chi sta al bordo, e solo da quel lato. */
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view td > .ui-list-item,
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-stack[data-dir="row"] > .ui-list-item {
+  margin-right: 0;
+  margin-left: 0;
+}
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-stack[data-dir="row"] > .ui-list-item:first-child {
+  margin-left: calc(var(--space-4) * -1);
+}
+:where(.sidebar, .inspector-pane, .views-modal) .declared-view .ui-stack[data-dir="row"] > .ui-list-item:last-child {
+  margin-right: calc(var(--space-4) * -1);
+}
+
+/* Nei due cassetti la riga di una view è una riga come le altre: sotto il
+   puntatore prende lo stesso gradino pieno dell'albero dei file, non la
+   velatura. Sta in fondo perché deve vincere a parità di peso; le voci
+   correnti e le schede accese pesano di più e restano blu. */
+:where(.sidebar, .inspector-pane) .ui-row.clickable:hover,
+:where(.sidebar, .inspector-pane) .ui-list-item.clickable:hover,
+:where(.sidebar, .inspector-pane) .ui-tree-label.clickable:hover,
+:where(.sidebar, .inspector-pane) .ui-section > summary:hover,
+:where(.sidebar, .inspector-pane) .ui-tab-button:hover {
+  background: var(--bg-hover);
+}
+:where(.sidebar, .inspector-pane) .ui-row.clickable:active,
+:where(.sidebar, .inspector-pane) .ui-list-item.clickable:active,
+:where(.sidebar, .inspector-pane) .ui-tree-label.clickable:active,
+:where(.sidebar, .inspector-pane) .ui-section > summary:active {
+  background: var(--bg-active);
+}
+
+/* In colori forzati i fondi sono del sistema e le ombre non ci sono: ciò che
+   era detto con un fondo — un triangolo, una pastiglia, un guasto, la voce
+   scelta — torna a dirsi con un colore del sistema o con un contorno. */
+@media (forced-colors: active) {
+  .ui-section > summary::before,
+  .ui-tree-item[aria-expanded] > .ui-tree-label::before,
+  .ui-tree-item[aria-expanded][aria-selected="true"] > .ui-tree-label::before {
+    background: CanvasText;
+  }
+  /* Il contorno della voce scelta lo porta la riga: sul contenitore cingerebbe
+     anche il sottoalbero. */
+  .ui-tree-item[aria-selected="true"] > .ui-tree-label {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .ui-badge,
+  .ui-failed {
+    border: 1px solid CanvasText;
+  }
+  .ui-table th {
+    border-bottom: 1px solid CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-button,
+  .ui-section > summary::before,
+  .ui-tree-item[aria-expanded] > .ui-tree-label::before {
+    transition: none;
+  }
+}

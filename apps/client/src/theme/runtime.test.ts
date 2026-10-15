@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingEntry, ThemeInfo, ThemeManifest, ThemePayload } from "../host/contract";
 import { openLifetime, type Lifetime } from "../ui/lifetime";
-import sheetLight from "./serie/sheet-light.css?raw";
-import skin from "./serie/skin.css?raw";
+import sheetLight from "./scrittoio/sheet-light.css?raw";
+import skin from "./scrittoio/skin.css?raw";
 const thirdPartySheet = sheetLight.replace(
   "  color-scheme: light;",
   "  color-scheme: normal;",
@@ -33,7 +33,7 @@ const manifest: ThemeManifest = {
   id: "acme.paper",
   name: "Acme Paper",
   version: "1.0.0",
-  engine: "theme-1",
+  engine: "theme-2",
   lights: ["light"],
   asset_namespace: "theme://acme.paper/",
   motion: ["opacity", "transform"],
@@ -168,6 +168,21 @@ describe("tema runtime installato", () => {
     );
   });
 
+  // Un tema scritto per la shell di prima resta installato, ma i suoi hook non
+  // vestono questa anatomia: la shell torna alla serie e dice perché.
+  it("un tema theme-1 installato non si monta, e la diagnosi nomina il motore", async () => {
+    const older: ThemeManifest = { ...manifest, engine: "theme-1" };
+    box.listThemes.mockResolvedValue([{ manifest: older, trust: "community" }]);
+    box.readTheme.mockResolvedValue({ ...payload, manifest: older });
+    await mountFromCache(info.manifest.id);
+    await vi.waitFor(() =>
+      expect(JSON.parse(localStorage.getItem("fub.appearance.theme")!).id).toBe("fub.serie"),
+    );
+    expect(document.querySelector('style[data-fub="foglio"]')?.textContent).toBe(sheetLight);
+    const reasons = box.report.mock.calls.flatMap(([trouble]) => (trouble as { reasons: string[] }).reasons);
+    expect(reasons.some((reason) => reason.includes("engine") && reason.includes("theme-2"))).toBe(true);
+  });
+
   it("does not reactivate a removed theme after a restart", async () => {
     box.listThemes.mockResolvedValue([info]);
     box.readTheme.mockResolvedValue(payload);
@@ -214,6 +229,59 @@ describe("tema runtime installato", () => {
     box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "fub.serie", "default")]);
     theme.mountTheme(lifetime!, vi.fn());
     await vi.waitFor(() => expect(theme.currentThemeId()).toBe("acme.paper"));
+  });
+
+  // Le scelte che il tema dichiara si leggono dal registro delle impostazioni
+  // con la chiave dentro il suo id, e arrivano alla pelle sulla radice. Sono del
+  // tema montato: tornati a quello di serie non ne resta nessuna.
+  it("le scelte del tema montato arrivano sulla radice, e se ne vanno con lui", async () => {
+    const chosen: ThemeManifest = {
+      ...manifest,
+      settings: [
+        { name: "bordi", label: "Bordi", description: "", kind: { kind: "toggle", default: true } },
+        {
+          name: "trama",
+          label: "Trama",
+          description: "",
+          kind: {
+            kind: "choice",
+            default: "fine",
+            options: [
+              { value: "fine", label: "Fine" },
+              { value: "grossa", label: "Grossa" },
+            ],
+          },
+        },
+      ],
+    };
+    box.listThemes.mockResolvedValue([{ manifest: chosen, trust: "community" }]);
+    box.readTheme.mockResolvedValue({ ...payload, manifest: chosen });
+    const theme = await mountFromCache(chosen.id);
+    box.settings.mockResolvedValue([
+      ...settingsRows("light"),
+      row("appearance.theme-id", chosen.id),
+      { ...row("acme.paper:trama", "grossa"), spec: { ...row("acme.paper:trama", "grossa").spec, kind: chosen.settings![1]!.kind } },
+    ]);
+    theme.mountTheme(lifetime!, vi.fn());
+    const root = document.documentElement;
+    await vi.waitFor(() => expect(root.getAttribute("data-opt-trama")).toBe("grossa"));
+    // Mai scelta: vale il default dichiarato dal tema.
+    expect(root.getAttribute("data-opt-bordi")).toBe("true");
+    expect(theme.currentThemeOptions()).toMatchObject({
+      themeId: "acme.paper",
+      themeName: "Acme Paper",
+      options: [
+        { key: "acme.paper:bordi", value: true, declared: false, chosen: false },
+        { key: "acme.paper:trama", value: "grossa", declared: true, chosen: true },
+      ],
+    });
+
+    box.settings.mockResolvedValue([...settingsRows("light"), row("appearance.theme-id", "fub.serie")]);
+    theme.mountTheme(lifetime!, vi.fn());
+    await vi.waitFor(() => expect(theme.currentThemeId()).toBe("fub.serie"));
+    await vi.waitFor(() => expect(root.hasAttribute("data-opt-trama")).toBe(false));
+    expect(root.hasAttribute("data-opt-bordi")).toBe(false);
+    expect(theme.currentThemeOptions()).toMatchObject({ themeId: "fub.serie", options: [] });
   });
 
   it("le animazioni ridotte dalle impostazioni arrivano al documento", async () => {

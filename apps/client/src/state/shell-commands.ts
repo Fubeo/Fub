@@ -5,7 +5,7 @@
 // Rust, che è il presidio contro alias superflui (il workflow riusa i
 // comandi kernel). Ogni azione passa da tastiera+palette+menu con lo stesso
 // `run`, per la regola del §18.2.
-import { confirm } from "../host/dialog";
+import { confirm } from "../platform/confirm";
 import { promptText } from "../ui/dialogs";
 import { activeDoc, layout } from "./layout";
 import { applyWorkspace, deleteWorkspace, getWorkspace, renameWorkspace, updateWorkspace } from "./workspaces";
@@ -13,13 +13,13 @@ import { state } from "./store";
 import { registerShellCommand } from "../ui/commands";
 import { applyShellLayout } from "./shell-layout";
 import { addBookmark, type BookmarkTarget } from "./bookmarks";
-import { openDocument } from "../panels/document";
-import { searchFor } from "../panels/search";
+import { openDocument } from "./document-controller";
+import { searchFor } from "./search-port";
 import { openViewIn } from "./layout";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
 import { resolvedReference } from "../host/query";
-import { reveal } from "../panels/document";
+import { reveal } from "./document-controller";
 import { captureShellGeometry, restoreShellGeometry } from "./shell-geometry";
 import { saveActiveSpace, saveExpanded, emit } from "./store";
 import { errorText } from "../host/errors";
@@ -102,7 +102,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.pin.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ pinCurrentTab }) => pinCurrentTab(true));
+      void import("./document-controller").then(({ pinCurrentTab }) => pinCurrentTab(true));
     },
   });
   registerShellCommand({
@@ -111,7 +111,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.unpin.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ pinCurrentTab }) => pinCurrentTab(false));
+      void import("./document-controller").then(({ pinCurrentTab }) => pinCurrentTab(false));
     },
   });
   registerShellCommand({
@@ -120,7 +120,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.move.left.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ moveCurrentTab }) => moveCurrentTab(-1));
+      void import("./document-controller").then(({ moveCurrentTab }) => moveCurrentTab(-1));
     },
   });
   registerShellCommand({
@@ -129,7 +129,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.move.right.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ moveCurrentTab }) => moveCurrentTab(1));
+      void import("./document-controller").then(({ moveCurrentTab }) => moveCurrentTab(1));
     },
   });
   registerShellCommand({
@@ -138,7 +138,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.move.pane.previous.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ moveCurrentTabToPane }) => moveCurrentTabToPane(-1));
+      void import("./document-controller").then(({ moveCurrentTabToPane }) => moveCurrentTabToPane(-1));
     },
   });
   registerShellCommand({
@@ -147,7 +147,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.move.pane.next.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ moveCurrentTabToPane }) => moveCurrentTabToPane(1));
+      void import("./document-controller").then(({ moveCurrentTabToPane }) => moveCurrentTabToPane(1));
     },
   });
   registerShellCommand({
@@ -156,7 +156,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.close.others.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ closeOtherTabs }) => closeOtherTabs());
+      void import("./document-controller").then(({ closeOtherTabs }) => closeOtherTabs());
     },
   });
   registerShellCommand({
@@ -165,7 +165,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.tab.close.unpinned.desc",
     layer: "document",
     run: () => {
-      void import("../panels/document").then(({ closeUnpinnedTabs }) => closeUnpinnedTabs());
+      void import("./document-controller").then(({ closeUnpinnedTabs }) => closeUnpinnedTabs());
     },
   });
   registerShellCommand({
@@ -174,7 +174,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.pane.back.desc",
     layer: "pane",
     run: () => {
-      void import("../panels/document").then(({ paneBack }) => paneBack());
+      void import("./document-controller").then(({ paneBack }) => paneBack());
     },
   });
   registerShellCommand({
@@ -183,7 +183,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.pane.forward.desc",
     layer: "pane",
     run: () => {
-      void import("../panels/document").then(({ paneForward }) => paneForward());
+      void import("./document-controller").then(({ paneForward }) => paneForward());
     },
   });
   registerShellCommand({
@@ -192,7 +192,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.pane.link.desc",
     layer: "pane",
     run: () => {
-      void import("../panels/document").then(({ linkCurrentPane }) => linkCurrentPane(true));
+      void import("./document-controller").then(({ linkCurrentPane }) => linkCurrentPane(true));
     },
   });
   registerShellCommand({
@@ -201,7 +201,7 @@ export function mountShellOwnerCommands(): void {
     description: "commands.pane.unlink.desc",
     layer: "pane",
     run: () => {
-      void import("../panels/document").then(({ linkCurrentPane }) => linkCurrentPane(false));
+      void import("./document-controller").then(({ linkCurrentPane }) => linkCurrentPane(false));
     },
   });
   registerShellCommand({

@@ -20,7 +20,7 @@ const fixture = vi.hoisted(() => ({
 
 vi.mock("../state/store", () => ({ state: fixture.state }));
 vi.mock("../host/query", () => ({ matchingDocuments: fixture.matching }));
-vi.mock("../panels/document", () => ({ reveal: fixture.reveal }));
+vi.mock("../state/document-controller", () => ({ reveal: fixture.reveal }));
 vi.mock("../ui/commands", () => ({ registerShellCommand: vi.fn() }));
 vi.mock("../ui/a11y", () => ({
   trapFocus: (_root: HTMLElement, _close: () => void) => () => {},

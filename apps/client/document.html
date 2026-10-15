@@ -6,13 +6,42 @@
     <title>Fub — documento</title>
   </head>
   <body>
+    <!-- La finestra documento sui ganci dello Scrittoio: un foglio solo, con la
+         sua linguetta e la sua testata, come quelli della finestra principale.
+         Gli id di `document.html` ci sono tutti e fanno lo stesso mestiere; gli
+         altri sono del foglio. I testi li scrive l'ingresso. Il titolo della
+         pagina è per chi ascolta: prende il nome del documento. -->
     <main id="document-window" class="document-window-root">
-      <p id="document-window-state" role="status" aria-live="polite"></p>
-      <div id="document-window-conflict" class="document-window-conflict" hidden>
-        <button id="document-window-keep" type="button"></button>
-        <button id="document-window-discard" type="button"></button>
-      </div>
+      <h1 id="document-window-heading" class="sr-only">Fub</h1>
+      <section id="document-window-sheet" class="pane focus document-window-sheet">
+        <div class="pane-tabs">
+          <div id="document-window-tabs" role="tablist" aria-owns="document-window-tab"></div>
+          <div class="tab-entry">
+            <button
+              id="document-window-tab"
+              class="tab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="document-window-panel"
+            >
+              <span id="document-window-name" class="tab-name"></span>
+            </button>
+          </div>
+        </div>
+        <div class="pane-toolbar">
+          <span id="document-window-path" class="muted"></span>
+          <span class="pane-status-slot">
+            <span id="document-window-link" class="save-state document-window-link"></span>
+          </span>
+        </div>
+        <p id="document-window-state" class="document-window-notice" role="status" aria-live="polite"></p>
+        <div id="document-window-conflict" class="document-window-conflict" hidden>
+          <button id="document-window-keep" class="kit-button" data-kind="primary" type="button"></button>
+          <button id="document-window-discard" class="kit-button" type="button"></button>
+        </div>
+      </section>
     </main>
-    <script type="module" src="/src/shells/document/entry.ts"></script>
+    <script type="module" src="/src/shells/scrittoio/document/entry.ts"></script>
   </body>
 </html>

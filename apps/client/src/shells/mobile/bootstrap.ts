@@ -3,7 +3,7 @@
 // Entry: apps/client/src/entrypoints/mobile.ts (solo Main lo collega).
 
 import { documentSessions, flushPendingSave } from "../../state/document-session";
-import { recoverDrafts } from "../../panels/document";
+import { recoverDrafts } from "../../state/document-controller";
 import { notify } from "../../ui/notify";
 import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime, type Teardown } from "../../ui/lifetime";

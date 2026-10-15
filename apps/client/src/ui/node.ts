@@ -39,6 +39,21 @@
 // l'albero sta in `Montaggio.corrente` e ci si arriva attraverso la `Porta`.
 // Fuori da `mountTree` un `ActionHandler` non passa: dentro gira solo la porta,
 // che per un contenitore è una sola per sempre.
+//
+// # Chi muove ciò che cambia posto (`setNodeMotion`)
+//
+// Il riconciliatore non anima niente: mette il DOM nello stato nuovo, subito.
+// Ma è il solo a sapere, nell'istante in cui applica l'accoppiamento dei
+// figli, chi resta, chi esce e chi entra — e dopo quell'istante la
+// corrispondenza non si ricostruisce più da fuori, perché una foglia che resta
+// è un elemento nuovo. Per questo c'è una giuntura: un gancio facoltativo, di
+// serie assente, chiamato **prima** e **dopo** quel giro con i soli elementi.
+// Chi lo installa misura, e il movimento è affar suo.
+//
+// Tre cose la giuntura non concede: i dati della view (passano elementi, non
+// nodi `UiNode`), la facoltà di fermare o rimandare una patch (non torna
+// niente e non si aspetta nessuno), e quella di romperla (ciò che il gancio
+// lancia muore lì). Senza gancio `children` non fa un passo in più.
 import type { ActionRef, FieldValue, UiKind, UiNode, UiOption, UiValue } from "../host/contract";
 import { customRenderer, NO_RENDER_CONTEXT, type CustomRenderContext } from "./custom";
 import { setSanitizedHtml } from "./sanitize";
@@ -48,7 +63,7 @@ import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
 import { iconEl } from "./icons";
-import type { Lifetime } from "./lifetime";
+import type { Lifetime, Teardown } from "./lifetime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -524,6 +539,47 @@ export function pair(
   });
 }
 
+/// Ciò che la shell vuole sapere quando i figli di un contenitore vengono
+/// riaccoppiati, per muoverli. Riceve elementi e basta.
+///
+/// Le due chiamate valgono per **un** contenitore e vanno a coppie, ma si
+/// annidano: fra il `before` e l'`after` di un contenitore passano quelli dei
+/// contenitori che ha dentro. Al primo disegno non c'è accoppiamento, e non
+/// c'è chiamata; un nodo sostituito intero (la radice che cambia specie, una
+/// foglia colpita da una patch) non passa di qui.
+export interface NodeMotion {
+  /// Prima che `parent` venga toccato: il DOM è ancora quello vecchio.
+  /// `kept` sono i figli che restano, nell'ordine in cui staranno; `leaving`
+  /// quelli che escono, nell'ordine in cui stanno; `entering` quanti ne
+  /// nasceranno (non esistono ancora).
+  before?(
+    parent: HTMLElement,
+    kept: readonly HTMLElement[],
+    leaving: readonly HTMLElement[],
+    entering: number,
+  ): void;
+  /// A giro finito: il DOM è quello nuovo. `kept[i]` è ciò che ora sta per il
+  /// `kept[i]` di `before` — lo stesso elemento, o quello che lo ha sostituito
+  /// (le foglie si ricostruiscono); `entered` sono i nuovi, in ordine.
+  after?(
+    parent: HTMLElement,
+    kept: readonly HTMLElement[],
+    entered: readonly HTMLElement[],
+  ): void;
+}
+
+/// Il gancio installato. Uno solo: è un fatto della shell, non di un albero.
+let nodeMotion: NodeMotion | null = null;
+
+/// Installa il gancio di movimento (o lo toglie, con `null`). Il disfacimento
+/// toglie soltanto il proprio: chi è arrivato dopo resta.
+export function setNodeMotion(motion: NodeMotion | null): Teardown {
+  nodeMotion = motion;
+  return () => {
+    if (motion && nodeMotion === motion) nodeMotion = null;
+  };
+}
+
 /// Applica l'accoppiamento al DOM: riconcilia ciò che si reuse, disegna il
 /// resto, toglie ciò che non serve più e **sposta** invece di ricreare.
 function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
@@ -534,6 +590,24 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
     existing.map((el) => rendered.get(el)!.node.key),
     nodes.map((n) => n.key),
   );
+
+  // Letto una volta: un gancio tolto o cambiato a metà non spaia le chiamate.
+  const motion = nodeMotion;
+  if (motion?.before) {
+    const reused = new Set<number>();
+    const kept: HTMLElement[] = [];
+    for (const choice of plan) {
+      if (!("reuse" in choice)) continue;
+      reused.add(choice.reuse);
+      kept.push(existing[choice.reuse]!);
+    }
+    const leaving = existing.filter((_, i) => !reused.has(i));
+    try {
+      motion.before(parent, kept, leaving, plan.length - kept.length);
+    } catch {
+      // Un movimento mancato non ferma chi sta cambiando lo stato.
+    }
+  }
 
   const used = new Set<HTMLElement>();
   const finalNodes = nodes.map((node, i) => {
@@ -561,6 +635,17 @@ function children(parent: HTMLElement, nodes: UiNode[], onAction: Port): void {
       parent.insertBefore(el, reference);
     }
     reference = el;
+  }
+
+  if (motion?.after) {
+    const kept: HTMLElement[] = [];
+    const entered: HTMLElement[] = [];
+    finalNodes.forEach((el, i) => ("reuse" in plan[i]! ? kept : entered).push(el));
+    try {
+      motion.after(parent, kept, entered);
+    } catch {
+      // Come sopra: il DOM è già quello giusto.
+    }
   }
 }
 

@@ -24,13 +24,13 @@
 // davvero due.
 import { describe, expect, it } from "vitest";
 
-import { ORDER, assemble } from "./serie/skin/order";
-import skin from "./serie/skin.css?raw";
+import { ORDER, assemble } from "./scrittoio/skin/order";
+import skin from "./scrittoio/skin.css?raw";
 
 /// I pezzi come stanno sulla cartella: chiave = nome del file senza estensione.
 const ON_DISK: Record<string, string> = Object.fromEntries(
   Object.entries(
-    import.meta.glob("./serie/skin/*.css", { query: "?raw", import: "default", eager: true }),
+    import.meta.glob("./scrittoio/skin/*.css", { query: "?raw", import: "default", eager: true }),
   ).map(([assetPath, text]) => [
     assetPath.replace(/^.*\/(.+)\.css$/, "$1"),
     text as string,

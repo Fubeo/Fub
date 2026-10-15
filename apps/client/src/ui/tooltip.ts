@@ -1,5 +1,5 @@
 // Il suggerimento della shell: un solo elemento, acceso dal fuoco o dal puntatore.
-// Il testo è della shell; la pelle che lo veste sta in theme/serie/skin/tooltip.css.
+// Il testo è della shell; la pelle che lo veste sta in theme/scrittoio/skin/controls.css.
 
 export const TOOLTIP_DELAY_MS = 500;
 const TOOLTIP_ID = "fub-tooltip";

@@ -2,7 +2,7 @@
 // switcher del desktop, raggiunti dai gesti e dai link che il sistema apre.
 
 import { layout, openIn } from "../../state/layout";
-import { openDocument } from "../../panels/document";
+import { openDocument } from "../../state/document-controller";
 import { openQuickSwitcher } from "../../panels/quick-switcher";
 import { showPanel } from "../../panels/sidebar";
 import type { Lifetime } from "../../ui/lifetime";

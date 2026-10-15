@@ -36,10 +36,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { openLifetime } from "../ui/lifetime";
-import sheetScuro from "./serie/sheet-dark.css?raw";
-import sheetChiaro from "./serie/sheet-light.css?raw";
-import skin from "./serie/skin.css?raw";
-import fonts from "./serie/fonts.css?raw";
+import sheetScuro from "./scrittoio/sheet-dark.css?raw";
+import sheetChiaro from "./scrittoio/sheet-light.css?raw";
+import skin from "./scrittoio/skin.css?raw";
+import fonts from "./scrittoio/fonts.css?raw";
 import { count, mount, mountPreferences, type Layer } from "./loader";
 import { mountTheme } from "./theme";
 function mountedStyle(layer: Layer): HTMLStyleElement | null {
@@ -141,7 +141,7 @@ describe("il caricatore monta per sostituzione", () => {
   });
 
   it("rifiuta token e valori fuori dal canale chiuso", () => {
-    expect(() => mountPreferences({ "titlebar-h": "80px" })).toThrow(/non è una preferenza/);
+    expect(() => mountPreferences({ "z-modal": "1" })).toThrow(/non è una preferenza/);
     expect(() => mountPreferences({ "text-reading": "16px; --rail-w: 0" })).toThrow(
       /non è una dichiarazione CSS sicura/,
     );

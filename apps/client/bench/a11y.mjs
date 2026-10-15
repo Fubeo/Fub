@@ -11,12 +11,15 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
-import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
+import { openStage, openPage, prepareScene, OUTPUT, WINDOW } from "./stage.mjs";
 /// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
 /// ogni violazione fuori dal debito resta bloccante e viene riportata.
 const DEBT = [];
 
-const REPORT = join(OUTPUT, "accessibilita");
+/// Che cosa si esamina, e dove va il referto.
+const SET = { scenes: SCENE, report: join(OUTPUT, "accessibilita") };
+
+const REPORT = SET.report;
 const require = createRequire(import.meta.url);
 
 const OUTCOMES = {
@@ -37,7 +40,16 @@ async function main() {
   try {
     for (const light of LIGHTS) {
       const page = await openPage(stage.browser, light);
-      for (const scene of SCENE) {
+      let size = WINDOW;
+      for (const scene of SET.scenes) {
+        // La finestra è della scena, e chi ne chiede una stretta non la lascia
+        // in eredità a quella dopo. Si tocca solo quando cambia: un elenco che
+        // non ne dichiara nessuna gira come ha sempre girato.
+        const wanted = scene.viewport ?? WINDOW;
+        if (wanted.width !== size.width || wanted.height !== size.height) {
+          await page.setViewportSize(wanted);
+          size = wanted;
+        }
         report.push(await aScene(page, scene, light, stage.base, axeSource));
       }
       await page.context().close();
@@ -423,8 +435,16 @@ async function inspectKeyboard(page) {
             getComputedStyle(frameShell, "::before"),
             getComputedStyle(frameShell, "::after"),
           );
+        // Un `treeitem` contiene il suo sottoalbero: un anello attorno a lui
+        // cingerebbe la cartella aperta intera, e la pelle lo disegna sulla
+        // riga, la sua prima figlia. Solo la prima: una figlia qualunque col
+        // suo anello non dice niente del fuoco del padre.
+        const row = el.getAttribute("role") === "treeitem" ? el.firstElementChild : null;
+        const rowIndicator =
+          row !== null &&
+          hasIndicator(getComputedStyle(row), getComputedStyle(row, "::before"), getComputedStyle(row, "::after"));
         const indicator =
-          (el.matches(":focus-visible") && hasIndicator(style, pseudo, after)) ||
+          (el.matches(":focus-visible") && (hasIndicator(style, pseudo, after) || rowIndicator)) ||
           (el.tagName === "IFRAME" && shellIndicator);
         const descendantId = el.getAttribute("aria-activedescendant");
         const descendant = descendantId ? document.getElementById(descendantId) : null;

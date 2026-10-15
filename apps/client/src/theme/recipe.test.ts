@@ -14,34 +14,23 @@
 // Il confronto si fa qui e non solo in `tema/genera.mjs --verifica` perché
 // questo gira dentro `npm test`, cioè nel cancello che tutti attraversano.
 //
-// # Gli altri due sono proprietà, non valori
+// # Gli altri sono proprietà, non valori
 //
-// La monotonia e l'additività non guardano *quali* colori sono usciti: guardano
-// che la scala salga sempre nello stesso verso e che nessun ruolo abbia cambiato
-// nome. Sono le due cose che la generazione **non** può garantire da sola —
-// la prima perché un passo negativo si scriverebbe benissimo, la seconda perché
-// rinominare un ruolo è un'operazione perfettamente legale che rompe ogni tema
-// di terzi già scritto.
+// La gerarchia dei piani e l'additività non guardano *quali* colori sono
+// usciti: guardano che il foglio resti sopra la scrivania in ogni luce e che
+// nessun ruolo abbia cambiato nome. Sono le cose che la generazione **non** può
+// garantire da sola — la prima perché un foglio più scuro del piano si
+// scriverebbe benissimo, la seconda perché rinominare un ruolo è un'operazione
+// perfettamente legale che rompe ogni tema di terzi già scritto.
 import { describe, expect, it } from "vitest";
 
 import { contrast } from "./contrast";
 import { fromHex } from "./oklch";
-import {
-  SHEETS,
-  VARIANTS,
-  PAPER_BACKGROUNDS,
-  LIGHTS,
-  STEP,
-  SURFACE_SCALE,
-  sheet,
-  roles,
-  palette,
-  ELEVATION_LEVELS,
-} from "./serie/recipe";
-import darkHigh from "./serie/sheet-dark-high.css?raw";
-import dark from "./serie/sheet-dark.css?raw";
-import lightHigh from "./serie/sheet-light-high.css?raw";
-import light from "./serie/sheet-light.css?raw";
+import { CONTRASTS, LIGHTS, SHEETS, VARIANTS, palette, roles, sheet } from "./scrittoio/recipe";
+import darkHigh from "./scrittoio/sheet-dark-high.css?raw";
+import dark from "./scrittoio/sheet-dark.css?raw";
+import lightHigh from "./scrittoio/sheet-light-high.css?raw";
+import light from "./scrittoio/sheet-light.css?raw";
 
 const ON_DISK = {
   dark: { normal: dark, high: darkHigh },
@@ -52,7 +41,7 @@ describe("i quattro fogli sono quelli che la ricetta produce", () => {
   it.each(VARIANTS)("$light × $contrast: byte per byte", ({ light, contrast }) => {
     expect(
       sheet(light, contrast),
-      `${SHEETS[light][contrast]} non è quello che la ricetta produce: «npm run theme:genera».`,
+      `${SHEETS[light][contrast]} non è quello che la ricetta produce: «npm run theme:generate».`,
     ).toBe(ON_DISK[light][contrast]);
   });
 
@@ -63,66 +52,28 @@ describe("i quattro fogli sono quelli che la ricetta produce", () => {
   });
 });
 
-describe("la scala delle superfici sale, e sale sempre", () => {
-  // La distanza si misura in **chiarezza percettiva** e non in rapporto di
-  // contrasto, e la differenza non è un dettaglio: il rapporto della WCAG ha un
-  // `+0,05` al denominatore che vicino al nero domina tutto, quindi due
-  // superfici scure ben distinte danno 1,03:1 e due chiare appena diverse danno
-  // 1,07:1. Misurare i gradini con quel righello è ciò che ha fatto scrivere,
-  // nel conto della seduta, che le superfici stavano «a 1,06:1 dal fondo» — vero
-  // e inutile. In OKLab un gradino è un gradino.
-  //
-  // Il passo lo dichiara la ricetta e da lì si legge; quello che si concede
-  // qui è **solo** la quantizzazione. Un passo dichiarato di 0,014 può uscire
-  // dal foglio come 0,012 perché fra due chiarezze vicine al bianco non c'è
-  // sempre un codice a otto bit che le separi esattamente: si arrotonda, e
-  // l'arrotondamento accorcia. Tre millesimi sono il massimo che un
-  // arrotondamento possa togliere, misurato; di più vorrebbe dire che il passo
-  // non è quello dichiarato, ed è quello che questo presidio vuole sapere.
-  const QUANTIZATION = 0.003;
+describe("il foglio sta sopra la scrivania, in ogni luce", () => {
+  // È il primo principio dello Scrittoio: il contenuto è l'elemento più chiaro
+  // e più rialzato, e al buio la gerarchia non si inverte. Si misura in
+  // chiarezza percettiva (OKLab) e non in rapporto di contrasto: vicino al nero
+  // il `+0,05` della WCAG schiaccia ogni gradino.
+  const ORDER = ["bg", "bg-hover", "sheet-2", "sheet", "bg-elev"] as const;
 
-  it.each(LIGHTS)("%s: ogni gradino è più lontano dalla carta del precedente", (light) => {
-    const surfacePalette = palette(light);
-    const lightnesses = SURFACE_SCALE.map((n) => fromHex(surfacePalette.get(n)!).l);
-    const stepDifferences = lightnesses
-      .slice(1)
-      .map((l, i) => (light === "dark" ? l - lightnesses[i]! : lightnesses[i]! - l));
+  it.each(LIGHTS.flatMap((l) => CONTRASTS.map((c) => [l, c] as const)))(
+    "%s × %s: scrivania, foglio, rialzo",
+    (light, level) => {
+      const values = palette(light, level);
+      const l = (role: string): number => fromHex(values[role]!).l;
+      expect(l("sheet"), "il foglio è più chiaro della scrivania").toBeGreaterThan(l("bg"));
+      expect(l("bg-elev"), "ciò che galleggia non è più scuro del foglio").toBeGreaterThanOrEqual(l("sheet"));
+      for (const role of ORDER) expect(values[role], role).toMatch(/^#[0-9a-f]{6}$/);
+    },
+  );
 
-    const steady = stepDifferences
-      .map((d, i) => [`${SURFACE_SCALE[i]} → ${SURFACE_SCALE[i + 1]}`, d] as const)
-      .filter(([, d]) => d < STEP[light] - QUANTIZATION);
-    expect(
-      steady.map(([where, d]) => `${where}: ${d.toFixed(4)}`),
-      "due gradini adiacenti stanno più vicini del passo dichiarato: la scala " +
-        "smette di essere una scala e diventa un elenco di superfici",
-    ).toEqual([]);
-  });
-
-  it.each(LIGHTS)("%s: i fondi della carta salgono anche loro", (light) => {
-    // Sono tre — la pagina, la riga attiva, la selezione — e la selezione è il
-    // fondo più lontano su cui una specie di sintassi possa finire. Se
-    // scavalcassero l'ordine, la riga sotto il cursore sarebbe più lontana della
-    // selezione e il testo selezionato si vedrebbe meno di quello che non lo è.
-    const surfacePalette = palette(light);
-    const lightnesses = PAPER_BACKGROUNDS.map((n) => fromHex(surfacePalette.get(n)!).l);
-    const increasing = lightnesses.every(
-      (l, i) => i === 0 || (light === "dark" ? l > lightnesses[i - 1]! : l < lightnesses[i - 1]!),
-    );
-    expect(increasing, `i fondi della carta: ${PAPER_BACKGROUNDS.join(", ")}`).toBe(true);
-  });
-
-  it.each(LIGHTS)("%s: la carta è l'estremo della scala, ma non il nero o il bianco puri", (light) => {
-    // La carta è la superficie più lontana da tutto il resto — la più scura al
-    // buio, la più chiara in luce — e non è il nero o il bianco pieni: quelli
-    // affaticano chi legge a lungo, ed è la scelta del ridisegno quieto.
-    const values = palette(light);
-    const paper = fromHex(values.get("doc-bg")!).l;
-    const others = SURFACE_SCALE.filter((n) => n !== "doc-bg").map((n) => fromHex(values.get(n)!).l);
-    expect(
-      others.every((l) => (light === "dark" ? l > paper : l < paper)),
-      "la carta sta all'estremo della scala",
-    ).toBe(true);
-    expect(values.get("doc-bg")).not.toBe(light === "dark" ? "#000000" : "#ffffff");
+  it.each(LIGHTS)("%s: la carta del documento è il foglio, e non il nero o il bianco puri", (light) => {
+    const values = palette(light, "normal");
+    expect(values["doc-bg"]).toBe(values["sheet"]);
+    expect(values["doc-bg"]).not.toBe(light === "dark" ? "#000000" : "#ffffff");
   });
 });
 
@@ -135,10 +86,10 @@ describe("ogni pieno porta un controcolore che regge", () => {
   const SOLID_COLORS = ["accent", "danger", "warning", "success", "info"] as const;
 
   it.each(LIGHTS)("%s: il nero o il bianco reggono su ognuno dei cinque pieni", (light) => {
-    const surfacePalette = palette(light);
+    const surfacePalette = palette(light, "normal");
     const weakColors = SOLID_COLORS.map((p) => {
-      const solidColor = surfacePalette.get(p)!;
-      const above = surfacePalette.get(`${p}-contrast`)!;
+      const solidColor = surfacePalette[p]!;
+      const above = surfacePalette[`${p}-contrast`]!;
       return [p, contrast(above, solidColor)] as const;
     }).filter(([, v]) => v < 4.5);
     expect(
@@ -150,34 +101,24 @@ describe("ogni pieno porta un controcolore che regge", () => {
 });
 
 describe("i cinque livelli di elevazione", () => {
+  const LEVELS = ["paper", "base", "chrome", "floating", "dialog"] as const;
+
   it.each(LIGHTS)("%s: ogni livello deriva superficie, filetto e ombra", (light) => {
-    const values = palette(light);
-    expect(ELEVATION_LEVELS).toHaveLength(5);
-    for (const level of ELEVATION_LEVELS) {
-      expect(values.get(`elevation-${level}-surface`)).toBeDefined();
-      expect(values.get(`elevation-${level}-border`)).toBeDefined();
-      expect(values.get(`elevation-${level}-shadow`)).toBeDefined();
+    const values = palette(light, "normal");
+    for (const level of LEVELS) {
+      expect(values[`elevation-${level}-surface`], level).toBeDefined();
+      expect(values[`elevation-${level}-border`], level).toBeDefined();
+      expect(values[`elevation-${level}-shadow`], level).toBeDefined();
     }
   });
 
-  it("al buio sale la luce; l'ombra solleva ciò che galleggia in entrambe", () => {
-    const dark = palette("dark");
-    const light = palette("light");
-    const darkSurfaces = ELEVATION_LEVELS.map((level) => dark.get(`elevation-${level}-surface`));
-    const darkShadows = ELEVATION_LEVELS.map((level) => dark.get(`elevation-${level}-shadow`));
-    const lightShadows = ELEVATION_LEVELS.map((level) => light.get(`elevation-${level}-shadow`));
-
-    expect(new Set(darkSurfaces).size).toBe(5);
-    // La carta non ha ombra in nessuna luce; il flottante e il dialogo sì, e
-    // ognuno la propria: un menu e una modale non stanno alla stessa altezza.
-    expect(darkShadows[0]).toBe("none");
-    expect(lightShadows[0]).toBe("none");
-    for (const shadows of [darkShadows, lightShadows]) {
-      expect(shadows[3]).not.toBe("none");
-      expect(shadows[4]).not.toBe("none");
-      expect(shadows[3]).not.toBe(shadows[4]);
-    }
-    expect(new Set(lightShadows).size).toBe(5);
+  it.each(LIGHTS)("%s: il flottante e il dialogo hanno ognuno la sua ombra", (light) => {
+    // Un menu e una modale non stanno alla stessa altezza; il piano non ne ha.
+    const values = palette(light, "normal");
+    expect(values["elevation-base-shadow"]).toBe("none");
+    expect(values["elevation-floating-shadow"]).not.toBe("none");
+    expect(values["elevation-dialog-shadow"]).not.toBe("none");
+    expect(values["elevation-floating-shadow"]).not.toBe(values["elevation-dialog-shadow"]);
   });
 });
 

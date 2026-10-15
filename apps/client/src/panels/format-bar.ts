@@ -41,7 +41,7 @@ import { attachTooltip } from "../ui/tooltip";
 
 /// I gruppi, nell'ordine in cui si incontrano: un gruppo nuovo comincia dove
 /// cambia quello del pulsante, quindi l'ordine resta del plugin.
-type GroupId = "history" | "block" | "inline" | "links" | "lists" | "blocks" | "table" | "other";
+export type GroupId = "history" | "block" | "inline" | "links" | "lists" | "blocks" | "table" | "other";
 
 const GROUP_LABELS: Record<GroupId, Key> = {
   history: "format_bar.group.history",
@@ -191,6 +191,8 @@ export interface FormatBarHost {
   focusPane(): void;
   /// Esegue un comando che non è un'azione dell'editor, come la palette.
   runCommand(id: string): void;
+  /// Solo questi gruppi, nell'ordine dei comandi. Assente = tutti.
+  readonly only?: readonly GroupId[];
 }
 
 export interface FormatBar {
@@ -248,6 +250,9 @@ function hintOf(actions: SurfaceEditorActions | undefined, entry: Entry): string
 }
 
 /// Monta una barra vuota; `update` la riempie.
+///
+/// Con `only` la barra mostra soltanto quei gruppi: la bolla di selezione è la
+/// stessa barra ristretta ai gesti che si fanno su un testo scelto.
 export function createFormatBar(host: FormatBarHost): FormatBar {
   const element = document.createElement("div");
   element.className = "format-bar";
@@ -516,7 +521,9 @@ export function createFormatBar(host: FormatBarHost): FormatBar {
     update(specs) {
       if (life.closed) return;
       const surface = host.surface()?.editorActions;
-      const next = host.writing() ? toolbarGroups(specs, surface) : [];
+      const all = host.writing() ? toolbarGroups(specs, surface) : [];
+      const only = host.only;
+      const next = only ? all.filter((group) => only.includes(group.id)) : all;
       // La lingua fa parte della forma: gruppi ed etichette sono della shell.
       const shape = t("format_bar.label") + "#" + next.map((group) =>
         `${group.id}:${group.inline.map((e) => `${e.spec.id}=${e.spec.title}`).join(",")}` +

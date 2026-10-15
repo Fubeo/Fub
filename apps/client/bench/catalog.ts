@@ -20,16 +20,16 @@
 // Il tutto **senza la shell**: qui non gira `main.ts`. Ciò che è identico è ciò
 // che deve esserlo — i tre strati montati dallo stesso caricatore, e il renderer
 // vero per i componenti.
-import "../src/theme/structure.css";
-import darkSheet from "../src/theme/serie/sheet-dark.css?raw";
-import lightSheet from "../src/theme/serie/sheet-light.css?raw";
-import skin from "../src/theme/serie/skin.css?raw";
-import fonts from "../src/theme/serie/fonts.css?raw";
+import "../src/theme/scrittoio/structure.css";
+import darkSheet from "../src/theme/scrittoio/sheet-dark.css?raw";
+import lightSheet from "../src/theme/scrittoio/sheet-light.css?raw";
+import skin from "../src/theme/scrittoio/skin.css?raw";
+import fonts from "../src/theme/scrittoio/fonts.css?raw";
 import { mount as mount } from "../src/theme/loader";
 import { contrast } from "../src/theme/contrast";
 import { mountTree, mountWebviewFocusMonitor } from "../src/ui/node";
 import { openLifetime } from "../src/ui/lifetime";
-import { COMPONENTS } from "../src/theme/serie/anatomia";
+import { COMPONENTS } from "../src/theme/scrittoio/anatomia";
 import { SAMPLES } from "./samples";
 
 const params = new URLSearchParams(window.location.search);

@@ -1,0 +1,403 @@
+/* La struttura dello Scrittoio su un telefono.
+ *
+ * La importa soltanto l'ingresso mobile (`entrypoints/mobile-main.ts`),
+ * dopo `theme/scrittoio/structure.css`: qui sta soltanto ciò che su un telefono
+ * cambia, e ogni regola comincia da `:root[data-client-shell="mobile"]`, che la
+ * fa vincere sulla struttura comune senza contare sull'ordine dei fogli.
+ *
+ * Due misure di schermo, e la soglia è la stessa di `shells/mobile/viewport.ts`
+ * (`data-mobile-form-factor`):
+ *
+ * - **sotto i 600 px** (un telefono in piedi) la finestra è una colonna: barra
+ *   del titolo, foglio, barra inferiore. Il binario diventa la barra inferiore
+ *   e i cassetti salgono dal basso come fogli (`bottom-sheets.ts`);
+ * - **da 600 px** (un telefono sdraiato, un tablet) resta la disposizione
+ *   stretta del desktop — binario a sinistra, cassetti di lato — con i bersagli
+ *   a misura di dito: in orizzontale l'altezza è ciò che manca, e una barra in
+ *   più sotto il foglio la toglierebbe al testo.
+ *
+ * La soglia è una larghezza e non un orientamento: con la tastiera aperta un
+ * telefono in piedi può avere un viewport più largo che alto, e la finestra
+ * non deve ridisporsi mentre si scrive.
+ *
+ * **Si stringe la cornice, mai il foglio.** Le barre seguono lo «spazio
+ * dell'interfaccia» (`chrome.compactness`) come sul desktop, ma non scendono
+ * sotto il bersaglio al tocco.
+ */
+
+/* ── Le misure ───────────────────────────────────────────────────────────── */
+
+:root[data-client-shell="mobile"] {
+  /* Il bersaglio minimo sotto un dito. */
+  --touch: 44px;
+  /* Le misure della cornice del telefono, derivate da quelle che lo «spazio
+     dell'interfaccia» dichiara su `:root`. Stanno qui, un gradino sopra il
+     `body` che le consuma: un token non può leggere sé stesso. */
+  --mobile-top-h: max(var(--touch), var(--titlebar-h) + 12px);
+  --mobile-bar-h: max(var(--touch) + 4px, var(--rail-w) + 12px);
+  --mobile-rail-w: max(var(--touch) + 8px, var(--rail-w) + 8px);
+  --mobile-rail-icon: calc(var(--rail-icon) + 4px);
+  --mobile-drawer-head-h: max(var(--touch), var(--drawer-head-h));
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+:root[data-client-shell="mobile"] body {
+  --titlebar-h: var(--mobile-top-h);
+  --chrome-btn: var(--touch);
+  --rail-w: var(--mobile-rail-w);
+  --rail-target: var(--touch);
+  --rail-icon: var(--mobile-rail-icon);
+  --drawer-head-h: var(--mobile-drawer-head-h);
+  /* I fogli: le linguette, la testata e la barra di formattazione portano
+     bottoni, e un bottone sotto un dito è alto 44. */
+  --tab-h: calc(var(--touch) + var(--tab-air));
+  --sheet-head-h: var(--touch);
+  --format-bar-h: var(--touch);
+}
+
+/* La finestra occupa lo schermo meno le aree sicure e la tastiera: i margini
+   li dà `shells/mobile/mobile.css` a `#app`. */
+:root[data-client-shell="mobile"] #app {
+  height: 100dvh;
+  min-height: 0;
+}
+
+/* ── Le linguette e la testata, a misura di dito ─────────────────────────── */
+
+:root[data-client-shell="mobile"] .pane-tabs > .tab-new,
+:root[data-client-shell="mobile"] .pane-tabs > [data-tab-menu] {
+  margin-bottom: 0;
+  align-self: flex-end;
+  height: calc(var(--tab-h) - var(--tab-air));
+}
+
+/* La chiusura di una linguetta è larga un dito, non alta più della linguetta. */
+:root[data-client-shell="mobile"] .tab-entry > .tab-close {
+  min-height: 0;
+  height: 100%;
+}
+
+/* ── Ciò che la shell mobile appende al `body` ───────────────────────────── */
+
+/* Lo stato del backend WASM è una diagnosi: resta annunciato, non occupa lo
+   schermo sopra il foglio. */
+:root[data-client-shell="mobile"] .mobile-backend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Il pannello dello spazio mobile è il selettore del vault: chiuso non c'è,
+   aperto è un foglio che sale dal basso, sopra la cornice. */
+:root[data-client-shell="mobile"] .mobile-storage:not([open]) {
+  display: none;
+}
+
+:root[data-client-shell="mobile"] .mobile-storage[open] {
+  top: auto;
+  right: 0;
+  left: 0;
+  bottom: var(--mobile-keyboard-inset);
+  width: auto;
+  max-height: 70dvh;
+  z-index: var(--z-dialog);
+  border: 0;
+  border-radius: var(--radius-sheet, 12px) var(--radius-sheet, 12px) 0 0;
+  background: var(--bg-elev);
+  color: var(--text);
+  box-shadow: var(--shadow-5);
+  padding: var(--space-5, 12px) calc(var(--space-6, 16px) + var(--safe-right)) calc(var(--space-6, 16px) + var(--safe-bottom)) calc(var(--space-6, 16px) + var(--safe-left));
+}
+
+/* ── Da 600 px: la disposizione stretta del desktop, a misura di dito ────── */
+
+/* L'ispettore si apre dalla barra del titolo: il suo bottone nella barra
+   inferiore c'è soltanto dove la barra inferiore c'è. */
+@media (min-width: 600px) {
+  :root[data-client-shell="mobile"] .rail-btn-inspector {
+    display: none;
+  }
+}
+
+:root[data-client-shell="mobile"] #app[data-welcome] .rail-btn-inspector {
+  display: none;
+}
+
+/* La pillola torna a dire il titolo dove la barra del titolo ha posto: la
+   struttura comune la riduce a un'icona sotto gli 860 px, che su un desktop è
+   una finestra stretta e qui è lo schermo intero. */
+@media (min-width: 700px) and (max-width: 860px) {
+  :root[data-client-shell="mobile"] #pill {
+    width: min(420px, 38vw);
+  }
+
+  :root[data-client-shell="mobile"] #topbar .pill-title {
+    display: block;
+  }
+}
+
+/* Un telefono sdraiato: l'altezza è ciò che manca. La banda di stato si
+   ritira, e nel binario restano i pannelli e le impostazioni (aiuto e luce
+   stanno nel menu del marchio e nel lanciatore). */
+@media (min-width: 600px) and (max-height: 500px) {
+  :root[data-client-shell="mobile"] #status-band {
+    display: none;
+  }
+
+  :root[data-client-shell="mobile"] #app:not([data-welcome]) #open-help,
+  :root[data-client-shell="mobile"] #app:not([data-welcome]) #toggle-light {
+    display: none;
+  }
+
+  /* Con la tastiera aperta, sopra i tasti restano poche righe: la barra del
+     titolo e le linguette si ritirano, e del foglio restano la testata, gli
+     strumenti e il testo. */
+  :root[data-client-shell="mobile"][data-mobile-keyboard="visible"] body {
+    --titlebar-h: 0px;
+  }
+
+  :root[data-client-shell="mobile"][data-mobile-keyboard="visible"] #topbar,
+  :root[data-client-shell="mobile"][data-mobile-keyboard="visible"] .pane > .pane-tabs {
+    display: none;
+  }
+}
+
+/* ── Sotto i 600 px: una colonna ─────────────────────────────────────────── */
+
+@media (max-width: 599px) {
+  /* La barra del titolo: marchio, pillola, campanella. Il vault, indietro e
+     avanti, i lavori in corso e l'ispettore stanno nel menu del marchio, nel
+     lanciatore e nella barra inferiore. I lavori tornano a vista finché ce n'è
+     uno in corso. */
+  :root[data-client-shell="mobile"] #topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  :root[data-client-shell="mobile"] #vault-chip,
+  :root[data-client-shell="mobile"] #frame-nav,
+  :root[data-client-shell="mobile"] #toggle-inspector,
+  :root[data-client-shell="mobile"] #activity-button:not(.in-corso) {
+    display: none;
+  }
+
+  :root[data-client-shell="mobile"] #pill {
+    width: 100%;
+  }
+
+  :root[data-client-shell="mobile"] #topbar .pill-title {
+    display: block;
+  }
+
+  /* Nel piede del lanciatore gli accordi sono di chi ha una tastiera fisica:
+     sul telefono resta il conto dei risultati. */
+  :root[data-client-shell="mobile"] .launcher-hints {
+    display: none;
+  }
+
+  /* I sette modi non stanno in una riga, e una fila che scorre qui non ha
+     niente che prenda il fuoco (il Tab cambia modo dal campo): vanno a capo.
+     Il segno scorre lungo una riga sola; su due non saprebbe dove stare, e il
+     modo scelto resta detto dal suo colore. */
+  :root[data-client-shell="mobile"] .launcher-modes {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  :root[data-client-shell="mobile"] .launcher-modes > .kit-tab-indicator {
+    display: none;
+  }
+
+  /* Il corpo: il foglio sopra, il binario sotto. L'ordine del DOM resta
+     quello della shell (binario, poi scrivania). */
+  :root[data-client-shell="mobile"] #workspace {
+    flex-direction: column;
+  }
+
+  :root[data-client-shell="mobile"] #layout {
+    order: 1;
+    flex: 1 1 0;
+    width: 100%;
+  }
+
+  /* La barra inferiore. */
+  :root[data-client-shell="mobile"] #rail {
+    order: 2;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    height: var(--mobile-bar-h);
+    padding: 0 var(--space-2, 4px);
+    /* Sopra i fogli che salgono: entrano ed escono da dietro la barra. */
+    z-index: calc(var(--z-drawer) + 1);
+  }
+
+  :root[data-client-shell="mobile"] #views-ribbon {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    width: auto;
+    height: 100%;
+    padding: 0;
+    overflow: auto hidden;
+    overscroll-behavior: contain;
+  }
+
+  :root[data-client-shell="mobile"] #rail-foot {
+    flex-direction: row;
+    align-items: center;
+    width: auto;
+    height: 100%;
+    padding: 0;
+  }
+
+  /* La tacca scivola lungo una colonna: su una fila l'acceso è l'icona. */
+  :root[data-client-shell="mobile"] #rail-notch {
+    display: none;
+  }
+
+  /* Aiuto e luce stanno nel menu del marchio e nel lanciatore: nella barra
+     restano finché non c'è un vault, quando le icone dei pannelli non ci sono. */
+  :root[data-client-shell="mobile"] #app:not([data-welcome]) #open-help,
+  :root[data-client-shell="mobile"] #app:not([data-welcome]) #toggle-light {
+    display: none;
+  }
+
+  /* I fogli toccano i fianchi dello schermo: il margine attorno alla carta è
+     cornice, e qui si stringe a zero. */
+  :root[data-client-shell="mobile"] #layout > #panes,
+  :root[data-client-shell="mobile"] #layout.layout-compact > #panes {
+    padding: 0;
+  }
+
+  /* Il velo copre i fogli e nient'altro: barra del titolo e barra inferiore
+     restano vive, così si cambia pannello senza chiudere quello aperto. */
+  :root[data-client-shell="mobile"] .drawer-scrim {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* I cassetti salgono dal basso. */
+  :root[data-client-shell="mobile"] #layout.layout-compact #sidebar,
+  :root[data-client-shell="mobile"] #layout.layout-compact #right-pane,
+  :root[data-client-shell="mobile"] #layout.sheet-leaving-sidebar > #sidebar[hidden],
+  :root[data-client-shell="mobile"] #layout.sheet-leaving-inspector > #right-pane[hidden] {
+    position: absolute;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    height: min(78%, 640px);
+    max-height: calc(100% - var(--space-8, 24px));
+    padding-top: 0;
+    border-radius: var(--radius-sheet, 12px) var(--radius-sheet, 12px) 0 0;
+    z-index: var(--z-drawer);
+  }
+
+  /* Il foglio che scende resta `hidden` per la shell — è già chiuso — e si
+     vede finché dura la sua uscita (`bottom-sheets.ts`): la stessa eccezione
+     del cassetto che si affaccia. */
+  :root[data-client-shell="mobile"] #layout.sheet-leaving-sidebar > #sidebar[hidden],
+  :root[data-client-shell="mobile"] #layout.sheet-leaving-inspector > #right-pane[hidden] {
+    display: flex !important;
+    pointer-events: none;
+  }
+
+  /* Il velo se ne va con l'ultimo foglio, con una corsa sua. */
+  :root[data-client-shell="mobile"] #layout.veil-leaving-sidebar > #sidebar-scrim[hidden],
+  :root[data-client-shell="mobile"] #layout.veil-leaving-inspector > #inspector-scrim[hidden] {
+    display: block !important;
+    pointer-events: none;
+  }
+
+  /* La barra di formattazione sta in fondo al foglio, sopra la tastiera, e
+     c'è mentre si scrive. */
+  :root[data-client-shell="mobile"] .pane > .format-bar {
+    order: 9;
+    /* Il filo che la separa dal testo passa dal bordo di sotto a quello di sopra. */
+    box-shadow: inset 0 1px 0 var(--border);
+  }
+
+  :root[data-client-shell="mobile"] .pane:not(:has(.cm-focused)) > .format-bar:not(:focus-within):not(:has([aria-expanded="true"])) {
+    display: none;
+  }
+
+  /* Con la tastiera aperta la barra inferiore e la banda di stato cedono il
+     posto: sopra i tasti restano il foglio e i suoi strumenti. */
+  :root[data-client-shell="mobile"][data-mobile-keyboard="visible"] #rail,
+  :root[data-client-shell="mobile"][data-mobile-keyboard="visible"] #status-band {
+    display: none;
+  }
+
+  /* La banda di stato si ritira: lo stato del salvataggio è nella testata del
+     foglio, il resto nel lanciatore. */
+  :root[data-client-shell="mobile"] #status-band {
+    display: none;
+  }
+
+  :root[data-client-shell="mobile"] #key-pending {
+    bottom: calc(var(--mobile-bar-h) + var(--safe-bottom) + 16px);
+  }
+}
+
+/* ── La maniglia di un foglio ────────────────────────────────────────────── */
+
+.sheet-grip {
+  display: none;
+}
+
+@media (max-width: 599px) {
+  :root[data-client-shell="mobile"] .sheet-grip {
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    flex: none;
+    width: 100%;
+    min-height: 0;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: inherit;
+    color: inherit;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Il tratto: il colore è quello del testo del cassetto, attenuato. */
+  :root[data-client-shell="mobile"] .sheet-grip::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin: -2px 0 0 -18px;
+    border-radius: 2px;
+    background: currentColor;
+    opacity: 0.28;
+  }
+
+  /* La presa è più alta del tratto: sale di 16 px sopra il bordo del foglio. */
+  :root[data-client-shell="mobile"] .sheet-grip::after {
+    content: "";
+    position: absolute;
+    inset: -16px 0 0;
+  }
+}

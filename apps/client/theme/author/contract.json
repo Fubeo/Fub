@@ -1,9 +1,12 @@
 {
-  "engine": "theme-1",
+  "engine": "theme-2",
   "required_roles": [
     "accent",
     "accent-contrast",
     "accent-soft",
+    "accent-veil",
+    "accent-wash",
+    "amber",
     "bg",
     "bg-active",
     "bg-chrome",
@@ -12,7 +15,9 @@
     "bg-input",
     "bg-panel",
     "border",
+    "border-strong",
     "content-width",
+    "control-h",
     "danger",
     "danger-contrast",
     "danger-wash",
@@ -33,7 +38,9 @@
     "doc-tooltip-bg",
     "duration-fast",
     "duration-med",
+    "duration-scene",
     "duration-slow",
+    "duration-state",
     "ease",
     "ease-in",
     "ease-out",
@@ -61,6 +68,7 @@
     "graph-node",
     "graph-node-active",
     "graph-node-hover",
+    "highlight",
     "info",
     "info-contrast",
     "info-wash",
@@ -68,18 +76,36 @@
     "leading-relaxed",
     "leading-tight",
     "muted",
+    "outline",
+    "overlay-active",
     "overlay-hover",
+    "radius-chip",
+    "radius-control",
+    "radius-dialog",
     "radius-lg",
     "radius-md",
+    "radius-menu",
     "radius-pill",
+    "radius-sheet",
     "radius-sm",
     "radius-xs",
+    "row-h",
     "scrim",
+    "shadow-1",
+    "shadow-2",
+    "shadow-3",
+    "shadow-4",
+    "shadow-5",
+    "shadow-6",
+    "shadow-7",
     "shadow-lg",
     "shadow-md",
     "shadow-sm",
+    "sheet",
+    "sheet-2",
     "space-1",
     "space-10",
+    "space-11",
     "space-2",
     "space-3",
     "space-4",
@@ -88,6 +114,16 @@
     "space-7",
     "space-8",
     "space-9",
+    "spring-elastic-c",
+    "spring-elastic-k",
+    "spring-jelly-c",
+    "spring-jelly-k",
+    "spring-snap-c",
+    "spring-snap-k",
+    "spring-soft-c",
+    "spring-soft-k",
+    "spring-wide-c",
+    "spring-wide-k",
     "success",
     "success-contrast",
     "success-wash",
@@ -109,6 +145,7 @@
     "text-md",
     "text-reading",
     "text-sm",
+    "text-source",
     "text-xl",
     "text-xs",
     "tracking-caps",
@@ -116,7 +153,8 @@
     "warning-contrast",
     "warning-wash",
     "weight-bold",
-    "weight-medium"
+    "weight-medium",
+    "weight-regular"
   ],
   "hooks": [
     "app",
@@ -126,97 +164,340 @@
     "elevation-floating",
     "elevation-dialog",
     "skip-link",
-    "brand",
     "muted",
     "primary",
     "ui-button",
     "intent-primary",
     "intent-danger",
-    "intent-neutral",
-    "onboarding",
-    "onboarding-actions",
-    "onboarding-recent-item",
-    "onboarding-forget",
-    "onboarding-trouble",
-    "views-bottom",
     "sidebar",
     "inspector-pane",
+    "segmented",
+    "segmented--wide",
+    "segmented-option",
+    "shell-tooltip",
+    "titlebar-shortcut",
+    "kit-popover",
+    "kit-hover-card",
+    "link-card",
+    "link-card-head",
+    "link-card-title",
+    "link-card-where",
+    "link-card-body",
+    "link-card-note",
+    "link-card-actions",
+    "link-card-action",
+    "link-card-primary",
+    "kit-dialog-scrim",
+    "kit-dialog",
+    "kit-dialog-title",
+    "kit-dialog-description",
+    "kit-dialog-body",
+    "kit-dialog-actions",
+    "kit-button",
+    "kit-button--icon",
+    "kit-field",
+    "kit-field-label",
+    "kit-field-box",
+    "kit-field-icon",
+    "kit-field-input",
+    "kit-field-clear",
+    "kit-list",
+    "kit-list-item",
+    "kit-list-highlight",
+    "kit-tabs",
+    "kit-tab",
+    "kit-tab-label",
+    "kit-tab-indicator",
+    "kit-splitter",
+    "titlebar",
+    "titlebar-side",
+    "titlebar-side--left",
+    "titlebar-center",
+    "titlebar--darwin",
+    "window-controls",
+    "brand-mark",
+    "brand-glyph",
+    "vault-chip",
+    "vault-chip-icon",
+    "vault-chip-name",
+    "vault-chip-none",
+    "vault-chip-caret",
+    "frame-nav",
+    "titlebar-btn",
+    "titlebar-btn--icon",
+    "titlebar-badge",
+    "ha-novita",
+    "in-corso",
+    "pill",
+    "pill-icon",
+    "pill-path",
+    "pill-title",
+    "win-ctrl",
+    "win-ctrl--close",
+    "app-menu",
+    "app-menu-search-panel",
+    "app-menu-search-input",
+    "app-menu-search-list",
+    "app-menu-search-option",
+    "app-menu-search-group",
+    "app-menu-search-label",
+    "app-menu-search-hint",
+    "app-menu-search-status",
+    "desk",
+    "rail",
+    "rail-main",
+    "rail-foot",
+    "rail-btn",
+    "rail-btn-manage",
+    "rail-notch",
+    "inspector-tabs",
+    "inspector-tab",
+    "inspector-title",
+    "inspector-follows",
+    "status-band",
+    "status-side",
+    "status-item",
+    "status-item--button",
+    "files-panel",
+    "drawer-sidebar-open",
+    "drawer-inspector-open",
+    "peek-sidebar",
+    "peek-inspector",
     "drawer-scrim",
+    "views-bottom",
+    "layout-divider",
     "panel-title",
     "link-button",
     "danger",
-    "plain-list",
-    "tree-children",
-    "tree-row",
-    "row-name",
-    "row-icon",
-    "folder",
-    "has-note",
-    "chevron",
-    "tree-empty",
-    "leaf",
-    "no-icon",
-    "drop-before",
-    "drop-after",
+    "clickable",
+    "search-results",
     "drop-into",
     "space-strip",
     "space-chip",
     "add",
     "space-title",
-    "clickable",
+    "bookmarks-panel",
+    "workspaces-panel",
+    "search-result",
+    "palette-row",
+    "palette-title",
+    "palette-desc",
     "icon-picker",
     "icon-grid",
     "icon-none",
+    "views-status",
+    "declared-view-panel",
+    "declared-view",
+    "ui-stack",
+    "ui-text",
+    "views-modal",
+    "plain-list",
+    "tree-children",
+    "tree-row",
+    "row-name",
+    "row-icon",
+    "no-icon",
+    "leaf",
+    "chevron",
+    "troncata",
+    "new-folder",
+    "tree-rename-problem",
+    "drop-before",
+    "drop-after",
+    "tree-selection",
+    "tree-selection-count",
+    "tree-selection-action",
+    "tree-selection-trash",
+    "tree-empty",
     "search-input",
-    "search-results",
-    "search-result",
     "hit-title",
+    "hit-path",
+    "hit-snippet",
     "hit-occurrence",
     "hit-create",
-    "hit-snippet",
     "search-action",
     "search-tools",
     "search-syntax",
     "search-exclusions",
     "search-chip",
-    "segmented",
-    "segmented--titlebar",
-    "segmented--wide",
-    "segmented-option",
-    "panes",
+    "search-options",
+    "search-option",
+    "search-replace",
+    "search-replace-entry",
+    "search-replace-plan",
+    "search-replace-note",
+    "search-replace-docs",
+    "search-replace-actions",
+    "search-replace-apply",
+    "pane",
+    "focus",
+    "pane-editor",
     "pane-split",
     "row",
     "col",
+    "pane-divider",
+    "tab-drop-preview",
     "pane-tabs",
     "tab-entry",
     "tab",
     "tab-name",
+    "tab-pin",
+    "tab-pinned",
     "dirty",
     "tab-close",
-    "tab-pin",
-    "pane",
+    "tab-new",
     "pane-toolbar",
-    "conflict-banner",
-    "conflict-actions",
-    "compare-box",
-    "compare-lines",
-    "compare-line",
-    "pane-nav",
-    "pane-divider",
-    "pane-empty",
-    "pane-empty-title",
-    "pane-empty-actions",
+    "sheet-title",
+    "sheet-title-edit",
+    "sheet-title-error",
+    "sheet-save",
+    "sheet-save-panel",
+    "sheet-save-headline",
+    "sheet-save-detail",
+    "sheet-save-facts",
+    "sheet-save-mono",
+    "sheet-save-actions",
     "format-bar",
     "format-bar-group",
     "format-bar-button",
     "format-bar-menu",
     "format-bar-style",
     "format-bar-menu-label",
-    "focus",
+    "selection-bubble",
     "pane-preview",
+    "markdown-preview",
+    "pane-empty",
+    "pane-empty-title",
+    "pane-empty-actions",
+    "sheet-desk",
+    "sheet-desk-label",
+    "sheet-desk-row",
+    "sheet-desk-note",
+    "sheet-thread",
+    "sheet-thread-item",
+    "sheet-thread-notch",
+    "conflict-banner",
+    "conflict-actions",
+    "sheet-notices",
+    "sheet-notice",
+    "sheet-notice-text",
+    "markdown-rendered",
+    "cm-editor",
+    "cm-content",
+    "cm-line",
+    "cm-markdown-block",
+    "cm-fub-heading-line",
+    "cm-fub-h1",
+    "cm-fub-h2",
+    "cm-fub-h3",
+    "cm-fub-h4",
+    "cm-fub-h5",
+    "cm-fub-h6",
+    "cm-fub-h1-line",
+    "cm-fub-h2-line",
+    "cm-fub-h3-line",
+    "cm-fub-h4-line",
+    "cm-fub-h5-line",
+    "cm-fub-h6-line",
+    "cm-fub-strong",
+    "cm-fub-em",
+    "cm-fub-strike",
+    "cm-fub-highlight",
+    "inline-highlight",
+    "cm-fub-comment",
+    "cm-fub-code",
+    "math-inline",
+    "cm-fub-link",
+    "cm-fub-wikilink",
+    "unresolved",
+    "footnote-ref",
+    "footnote-backref",
+    "footnote-inline",
+    "tag",
+    "cm-fub-tag",
+    "cm-fub-quote",
+    "cm-fub-quote-mark",
+    "callout",
+    "callout-title",
+    "task",
+    "cm-fub-checkbox",
+    "cm-fub-done",
+    "cm-fub-code-line",
+    "cm-fub-codeblock",
+    "markdown-code-copy",
+    "cm-md-grid-block",
+    "cm-md-grid",
+    "cm-md-grid-corner",
+    "cm-md-grid-letter",
+    "cm-md-grid-rowhead",
+    "cm-md-grid-cell",
+    "cm-md-grid-head",
+    "cm-md-grid-adders",
+    "cm-md-grid-add",
+    "is-selected",
+    "is-active",
+    "cm-fub-hr",
+    "math-block",
+    "katex-display",
+    "image-missing",
+    "embed",
+    "embed-cycle",
+    "embed-too-deep",
+    "embed-media",
+    "mermaid-diagram",
+    "mermaid-bar",
+    "mermaid-action",
+    "mermaid-swatches",
+    "cm-fub-frontmatter",
+    "block-frontmatter-unparsed",
+    "block-footnote-definition",
+    "ui-slot",
+    "ui-heading",
+    "empty-note",
+    "ui-list-item",
+    "ui-list-item-title",
+    "ui-list-item-subtitle",
+    "link-preview",
+    "doc-preview",
+    "cm-focused",
+    "cm-scroller",
+    "cm-activeLine",
+    "cm-cursor",
+    "cm-dropCursor",
+    "cm-selectionLayer",
+    "cm-selectionBackground",
+    "cm-selectionMatch",
+    "cm-matchingBracket",
+    "cm-nonmatchingBracket",
+    "cm-foldPlaceholder",
+    "cm-placeholder",
+    "cm-gutters",
+    "cm-lineNumbers",
+    "cm-gutterElement",
+    "cm-activeLineGutter",
+    "cm-foldGutter",
+    "cm-panels",
+    "cm-panels-top",
+    "cm-panels-bottom",
+    "cm-panel",
+    "cm-search",
+    "cm-textfield",
+    "cm-button",
+    "cm-searchMatch",
+    "cm-searchMatch-selected",
+    "cm-tooltip",
+    "cm-tooltip-arrow",
+    "cm-tooltip-autocomplete",
+    "cm-completionMatchedText",
+    "cm-completionDetail",
+    "cm-completionInfo",
+    "document-surface-error",
+    "document-surface-viewer",
+    "media-surface",
     "grid-surface",
     "grid-formula-bar",
     "grid-cell-name",
+    "grid-formula-editor",
     "grid-viewport",
     "grid-cell",
     "grid-header",
@@ -224,76 +505,91 @@
     "grid-cell-editor",
     "selected",
     "active",
+    "base-surface",
+    "base-toolbar",
+    "base-status",
+    "base-body",
+    "base-summaries",
+    "base-table",
+    "base-cell",
+    "base-cell-error",
+    "base-cards",
+    "base-list",
+    "base-card",
+    "base-field",
+    "base-kanban",
+    "base-kanban-column",
+    "base-kanban-card",
+    "base-map-atlas",
+    "base-map-attribution",
+    "base-map-marker",
     "canvas-surface",
     "canvas-toolbar",
+    "canvas-intake-error",
+    "canvas-viewport",
+    "canvas-large-fallback",
+    "canvas-source",
     "canvas-node",
     "canvas-node-group",
     "canvas-node-handle",
     "canvas-connect",
+    "canvas-resize",
     "canvas-card-body",
     "canvas-markdown",
     "canvas-empty",
+    "canvas-group-label",
     "canvas-group-bg",
     "canvas-url-text",
+    "canvas-media-placeholder",
+    "canvas-convert-note",
+    "canvas-open-url",
+    "canvas-file-link",
     "canvas-text-editor",
     "canvas-field-editor",
-    "canvas-resize",
     "canvas-edge-hit",
     "canvas-edge-line",
     "canvas-edge-arrow",
     "canvas-edge-label",
-    "markdown-preview",
-    "markdown-rendered",
-    "markdown-code-copy",
-    "wikilink",
-    "unresolved",
-    "tag",
-    "callout",
-    "callout-title",
-    "task",
-    "cm-content",
-    "cm-markdown-block",
-    "block-footnote-definition",
-    "footnote-ref",
-    "block-frontmatter-unparsed",
-    "ui-heading",
-    "ui-list-item",
-    "ui-list-item-title",
-    "ui-list-item-subtitle",
-    "ui-slot",
-    "math-inline",
-    "math-block",
-    "katex-display",
-    "inline-highlight",
-    "embed",
-    "embed-cycle",
-    "embed-too-deep",
-    "embed-media",
-    "image-missing",
-    "empty-note",
-    "link-preview",
-    "doc-preview",
-    "base-surface",
-    "base-toolbar",
-    "base-status",
-    "base-table",
-    "base-card",
-    "base-kanban-card",
-    "base-kanban-column",
-    "base-cell-error",
-    "base-map-atlas",
-    "base-map-attribution",
-    "base-map-marker",
-    "mermaid-diagram",
-    "mermaid-bar",
-    "mermaid-action",
-    "mermaid-swatches",
-    "ui-section",
-    "ui-table",
-    "ui-row",
-    "ui-tree-item",
+    "canvas-edge-reconnect",
+    "media-image",
+    "zoom-view",
+    "zoom-stage",
+    "zoom-content",
+    "zoom-bar",
+    "zoom-button",
+    "zoom-level",
+    "zoom-info",
+    "modale",
+    "lightbox",
+    "lightbox-header",
+    "lightbox-caption",
+    "lightbox-close",
+    "lightbox-body",
+    "lightbox-error",
+    "svg-preview",
+    "svg-error",
+    "media-pdf",
+    "media-pdf-toolbar",
+    "media-pdf-page",
+    "media-audio",
+    "media-video",
+    "media-error",
+    "media-recorder",
+    "slide-deck",
+    "slide-status",
+    "slide-stage",
+    "slide",
+    "slide-controls",
     "ui-children",
+    "ui-submit",
+    "ui-section",
+    "ui-list",
+    "ui-tree",
+    "ui-tree-item",
     "ui-tree-label",
+    "ui-row",
+    "ui-table",
+    "ui-empty-cell",
     "ui-tab-bar",
     "ui-tab-button",
     "ui-badge",
@@ -304,112 +600,39 @@
     "ui-empty-title",
     "ui-empty-detail",
     "ui-key-value",
+    "ui-pending",
+    "ui-failed",
+    "ui-failed-message",
     "ui-field-label",
     "ui-text-input",
     "ui-date-picker",
     "ui-number",
     "ui-text-area",
     "ui-select",
-    "ui-checkbox",
-    "ui-radio-option",
     "ui-slider",
+    "ui-checkbox",
+    "ui-radio",
+    "ui-radio-option",
     "ui-form",
-    "ui-pending",
-    "ui-failed",
-    "ui-failed-message",
-    "titlebar",
-    "win-ctrl",
-    "win-ctrl--close",
-    "rail",
-    "inspector-tabs",
-    "inspector-tab",
-    "inspector-title",
-    "titlebar-side",
-    "titlebar-center",
-    "app-menu",
-    "titlebar-btn",
-    "titlebar-btn--wide",
-    "rail-shell",
-    "rail-btn",
-    "rail-btn-view",
-    "titlebar--darwin",
-    "window-controls",
-    "titlebar-side--left",
-    "titlebar-btn--icon",
-    "titlebar-btn-text",
-    "titlebar-badge",
-    "context-menu",
-    "menu-label",
-    "menu-hint",
-    "menu-separator",
-    "modale",
-    "palette-box",
-    "palette-input",
-    "palette-list",
-    "palette-row",
-    "palette-title",
-    "menu-swatches",
-    "menu-swatch",
-    "menu-body",
-    "menu-description",
-    "menu-check",
-    "palette-scope",
-    "palette-desc",
-    "palette-help",
-    "palette-empty",
-    "docsearch-summary",
-    "palette-heading",
-    "palette-form",
-    "palette-label",
-    "palette-summary",
-    "palette-plan",
-    "palette-actions",
-    "palette-error",
-    "media-surface",
-    "media-image",
-    "zoom-view",
-    "zoom-stage",
-    "zoom-content",
-    "zoom-bar",
-    "zoom-button",
-    "zoom-level",
-    "zoom-info",
-    "lightbox",
-    "lightbox-header",
-    "lightbox-caption",
-    "lightbox-close",
-    "lightbox-body",
-    "lightbox-error",
-    "svg-preview",
-    "svg-error",
-    "toast",
-    "toast-text",
-    "toast-action",
-    "toast-more",
-    "toast-close",
-    "pane-status",
-    "save-state",
-    "ha-novita",
-    "in-corso",
-    "key-pending",
-    "dock-panel",
-    "dock-panel--notify",
-    "dock-panel--activity",
-    "notify-list",
-    "notify-testo",
-    "notify-ora",
-    "activity-row",
-    "activity-label",
+    "ui-html",
+    "ui-custom",
+    "ui-webview",
+    "tab-view",
+    "graph-viewport",
     "graph-count",
-    "graph-panel",
-    "graph-panel-toggle",
-    "graph-panel-check",
+    "graph-empty",
+    "graph-status",
     "graph-toolbar",
     "graph-toolbar-field",
     "graph-refresh",
     "graph-legend",
+    "graph-legend-group",
+    "graph-zoom",
+    "graph-zoom-button",
     "graph-swatch",
     "graph-timeline",
+    "graph-panel",
+    "graph-panel-toggle",
     "graph-panel-popover",
     "graph-panel-titolo",
     "graph-panel-sezione",
@@ -419,10 +642,8 @@
     "graph-panel-campo",
     "graph-panel-nome",
     "graph-panel-valore",
+    "graph-panel-check",
     "graph-panel-azioni",
-    "tab-view",
-    "graph-empty",
-    "graph-status",
     "graph-list",
     "graph-list-summary",
     "graph-list-items",
@@ -431,22 +652,91 @@
     "graph-list-page",
     "graph-list-info",
     "graph-list-more",
+    "context-menu",
+    "menu-separator",
+    "menu-label",
+    "menu-hint",
+    "menu-body",
+    "menu-description",
+    "menu-swatches",
+    "menu-swatch",
+    "menu-check",
+    "palette-box",
+    "palette-heading",
+    "palette-input",
+    "palette-list",
+    "palette-scope",
+    "palette-favorite",
+    "palette-empty",
+    "docsearch-summary",
+    "palette-form",
+    "palette-label",
+    "palette-help",
+    "palette-summary",
+    "palette-plan",
+    "palette-error",
+    "palette-actions",
+    "compare-box",
+    "compare-lines",
+    "compare-line",
+    "launcher-veil",
+    "launcher",
+    "launcher-head",
+    "launcher-lens",
+    "launcher-input",
+    "launcher-wait",
+    "launcher-modes",
+    "launcher-mode-prefix",
+    "launcher-list",
+    "launcher-row",
+    "launcher-row-title",
+    "launcher-row-detail",
+    "launcher-row-meta",
+    "launcher-note",
+    "launcher-preview",
+    "launcher-preview-page",
+    "launcher-preview-note",
+    "launcher-foot",
+    "launcher-status",
+    "launcher-hints",
+    "launcher-hint",
+    "launcher-key",
+    "launcher-panel",
+    "toast",
+    "toast-stack",
+    "toast-text",
+    "toast-action",
+    "toast-more",
+    "toast-close",
+    "pane-status",
+    "save-state",
+    "key-pending",
+    "dock-panel",
+    "dock-panel--notify",
+    "dock-panel--activity",
+    "notify-list",
+    "notify-testo",
+    "notify-ora",
+    "activity-row",
+    "activity-label",
     "settings-panel",
+    "settings-scrim",
     "settings-header",
     "settings-title",
     "settings-close",
     "settings-layout",
+    "settings-main",
     "settings-nav",
     "settings-tabs",
     "settings-tab",
     "settings-tab-icon",
     "settings-tab-label",
+    "settings-toc",
     "settings-toc-title",
     "settings-toc-list",
     "settings-toc-link",
     "settings-toc-name",
     "settings-toc-badge",
-    "settings-main",
     "settings-toolbar",
     "settings-search",
     "settings-search-icon",
@@ -463,14 +753,23 @@
     "settings-section-body",
     "settings-card",
     "setting-row",
+    "setting-block",
     "setting-text",
     "setting-label",
+    "setting-description",
     "setting-source",
     "setting-meta",
     "setting-scope",
     "setting-scope-icon",
+    "setting-default",
     "setting-reset",
     "setting-control",
+    "setting-pending",
+    "setting-error",
+    "setting-error-message",
+    "setting-attempted",
+    "setting-diagnostic",
+    "setting-field-error",
     "setting-input",
     "setting-select",
     "setting-number",
@@ -483,41 +782,57 @@
     "setting-chip",
     "setting-chip-remove",
     "setting-list-add",
-    "setting-field-error",
-    "setting-block",
     "setting-code",
     "setting-snippet",
     "setting-path",
-    "settings-catalog-results",
-    "settings-catalog",
-    "setting-diagnostic",
-    "setting-pending",
-    "setting-error",
-    "setting-attempted",
+    "prefs-space-step",
+    "prefs-space-figure",
+    "prefs-space-bar",
+    "prefs-space-side",
+    "prefs-space-sheet",
+    "prefs-space-foot",
+    "prefs-space-stop",
+    "prefs-space-end",
+    "prefs-swatch",
+    "prefs-swatch--custom",
+    "prefs-swatch-mark",
+    "prefs-hue",
+    "prefs-hue-value",
+    "prefs-theme-entries",
+    "prefs-preview",
+    "prefs-preview-side",
+    "prefs-preview-row",
+    "prefs-preview-row--selected",
+    "prefs-preview-action",
+    "prefs-preview-sheet",
+    "prefs-preview-title",
+    "prefs-preview-link",
     "settings-actions",
     "settings-btn",
     "settings-btn--danger",
     "settings-star",
+    "settings-component",
+    "setting-permission",
+    "setting-component-note",
+    "settings-catalog",
+    "settings-catalog-results",
     "settings-details",
     "settings-details-body",
-    "setting-component-note",
     "settings-note",
     "settings-status",
     "settings-empty",
     "settings-empty-text",
     "settings-banner",
-    "settings-toc",
-    "views-status",
-    "declared-view-panel",
-    "declared-view",
-    "ui-stack",
-    "ui-text",
-    "views-ribbon",
-    "views-modal",
-    "cm-editor",
-    "pane-editor",
-    "shell-tooltip",
-    "titlebar-shortcut"
+    "onboarding",
+    "onboarding-status",
+    "onboarding-error",
+    "onboarding-actions",
+    "onboarding-recent",
+    "onboarding-recent-item",
+    "onboarding-forget",
+    "onboarding-extra",
+    "onboarding-trouble",
+    "sheet-ghost"
   ],
   "states": [
     "rest",
@@ -531,13 +846,9 @@
   "components": [
     {
       "name": "app-surface",
+      "part": "foundation",
       "hooks": [
-        "app",
-        "onboarding",
-        "onboarding-actions",
-        "onboarding-recent-item",
-        "onboarding-forget",
-        "onboarding-trouble"
+        "app"
       ],
       "states": [
         "rest"
@@ -545,6 +856,7 @@
     },
     {
       "name": "elevation-paper",
+      "part": "foundation",
       "hooks": [
         "elevation-paper"
       ],
@@ -554,6 +866,7 @@
     },
     {
       "name": "elevation-base",
+      "part": "foundation",
       "hooks": [
         "elevation-base"
       ],
@@ -563,6 +876,7 @@
     },
     {
       "name": "elevation-chrome",
+      "part": "foundation",
       "hooks": [
         "elevation-chrome"
       ],
@@ -572,6 +886,7 @@
     },
     {
       "name": "elevation-floating",
+      "part": "foundation",
       "hooks": [
         "elevation-floating"
       ],
@@ -581,6 +896,7 @@
     },
     {
       "name": "elevation-dialog",
+      "part": "foundation",
       "hooks": [
         "elevation-dialog"
       ],
@@ -590,6 +906,7 @@
     },
     {
       "name": "skip-link",
+      "part": "foundation",
       "hooks": [
         "skip-link"
       ],
@@ -599,9 +916,9 @@
       ]
     },
     {
-      "name": "brand-and-muted-copy",
+      "name": "muted-copy",
+      "part": "foundation",
       "hooks": [
-        "brand",
         "muted"
       ],
       "states": [
@@ -610,12 +927,12 @@
     },
     {
       "name": "button-intent",
+      "part": "foundation",
       "hooks": [
         "primary",
         "ui-button",
         "intent-primary",
-        "intent-danger",
-        "intent-neutral"
+        "intent-danger"
       ],
       "states": [
         "rest",
@@ -626,7 +943,210 @@
       ]
     },
     {
+      "name": "field-on-desk",
+      "part": "controls",
+      "hooks": [
+        "sidebar",
+        "inspector-pane"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "segmented-control",
+      "part": "controls",
+      "hooks": [
+        "segmented",
+        "segmented--wide",
+        "segmented-option"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "tooltip",
+      "part": "controls",
+      "hooks": [
+        "shell-tooltip"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "key-cap",
+      "part": "controls",
+      "hooks": [
+        "titlebar-shortcut"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "kit-popover",
+      "part": "kit",
+      "hooks": [
+        "kit-popover",
+        "kit-hover-card"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "link-card",
+      "part": "kit",
+      "hooks": [
+        "link-card",
+        "link-card-head",
+        "link-card-title",
+        "link-card-where",
+        "link-card-body",
+        "link-card-note",
+        "link-card-actions"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "link-card-action",
+      "part": "kit",
+      "hooks": [
+        "link-card-action",
+        "link-card-primary"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "kit-dialog",
+      "part": "kit",
+      "hooks": [
+        "kit-dialog-scrim",
+        "kit-dialog",
+        "kit-dialog-title",
+        "kit-dialog-description",
+        "kit-dialog-body",
+        "kit-dialog-actions"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "kit-button",
+      "part": "kit",
+      "hooks": [
+        "kit-button",
+        "kit-button--icon"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "kit-field",
+      "part": "kit",
+      "hooks": [
+        "kit-field",
+        "kit-field-label",
+        "kit-field-box",
+        "kit-field-icon",
+        "kit-field-input"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "kit-field-clear",
+      "part": "kit",
+      "hooks": [
+        "kit-field-clear"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "kit-list",
+      "part": "kit",
+      "hooks": [
+        "kit-list",
+        "kit-list-item",
+        "kit-list-highlight"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
+      "name": "kit-tabs",
+      "part": "kit",
+      "hooks": [
+        "kit-tabs",
+        "kit-tab",
+        "kit-tab-label",
+        "kit-tab-indicator"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "kit-splitter",
+      "part": "kit",
+      "hooks": [
+        "kit-splitter"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "dragging"
+      ]
+    },
+    {
       "name": "titlebar",
+      "part": "frame",
       "hooks": [
         "titlebar",
         "titlebar-side",
@@ -640,7 +1160,89 @@
       ]
     },
     {
+      "name": "brand-mark",
+      "part": "frame",
+      "hooks": [
+        "brand-mark",
+        "brand-glyph"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "vault-chip",
+      "part": "frame",
+      "hooks": [
+        "vault-chip",
+        "vault-chip-icon",
+        "vault-chip-name",
+        "vault-chip-none",
+        "vault-chip-caret"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "titlebar-button",
+      "part": "frame",
+      "hooks": [
+        "frame-nav",
+        "titlebar-btn",
+        "titlebar-btn--icon",
+        "titlebar-badge"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "notices",
+      "part": "frame",
+      "hooks": [
+        "ha-novita",
+        "in-corso"
+      ],
+      "states": [
+        "rest",
+        "selected"
+      ]
+    },
+    {
+      "name": "pill",
+      "part": "frame",
+      "hooks": [
+        "pill",
+        "pill-icon",
+        "pill-path",
+        "pill-title",
+        "titlebar-shortcut"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "window-control",
+      "part": "frame",
       "hooks": [
         "win-ctrl",
         "win-ctrl--close"
@@ -655,6 +1257,7 @@
     },
     {
       "name": "app-menu",
+      "part": "frame",
       "hooks": [
         "app-menu"
       ],
@@ -668,13 +1271,81 @@
       ]
     },
     {
-      "name": "titlebar-button",
+      "name": "app-menu-search",
+      "part": "frame",
       "hooks": [
-        "titlebar-btn",
-        "titlebar-btn--wide",
-        "titlebar-btn--icon",
-        "titlebar-btn-text",
-        "titlebar-badge"
+        "app-menu-search-panel",
+        "app-menu-search-input",
+        "app-menu-search-list",
+        "app-menu-search-option",
+        "app-menu-search-group",
+        "app-menu-search-label",
+        "app-menu-search-hint",
+        "app-menu-search-status"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected"
+      ]
+    },
+    {
+      "name": "desk",
+      "part": "frame",
+      "hooks": [
+        "desk"
+      ],
+      "states": [
+        "rest",
+        "selected"
+      ]
+    },
+    {
+      "name": "rail",
+      "part": "frame",
+      "hooks": [
+        "rail",
+        "rail-main",
+        "rail-foot",
+        "rail-btn",
+        "rail-btn-manage",
+        "rail-notch"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "inspector-tabs",
+      "part": "frame",
+      "hooks": [
+        "inspector-tabs",
+        "inspector-tab",
+        "inspector-title",
+        "inspector-follows"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "status-band",
+      "part": "frame",
+      "hooks": [
+        "status-band",
+        "status-side",
+        "status-item",
+        "status-item--button"
       ],
       "states": [
         "rest",
@@ -685,60 +1356,58 @@
       ]
     },
     {
-      "name": "rail",
+      "name": "panel",
+      "part": "drawers",
       "hooks": [
-        "rail",
-        "rail-shell",
-        "rail-btn",
-        "rail-btn-view"
+        "sidebar",
+        "inspector-pane",
+        "files-panel",
+        "drawer-sidebar-open",
+        "drawer-inspector-open",
+        "peek-sidebar",
+        "peek-inspector",
+        "drawer-scrim",
+        "views-bottom"
       ],
       "states": [
         "rest"
       ]
     },
     {
-      "name": "inspector-tabs",
+      "name": "divider",
+      "part": "drawers",
       "hooks": [
-        "inspector-tabs",
-        "inspector-tab",
-        "inspector-title"
+        "layout-divider"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "panel-title",
+      "part": "drawers",
+      "hooks": [
+        "panel-title",
+        "link-button",
+        "danger",
+        "clickable",
+        "search-results",
+        "drop-into"
       ],
       "states": [
         "rest",
         "hover",
         "pressed",
         "focused",
-        "disabled",
-        "selected"
-      ]
-    },
-    {
-      "name": "panel",
-      "hooks": [
-        "views-bottom",
-        "sidebar",
-        "inspector-pane",
-        "drawer-scrim"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "panel-title",
-      "hooks": [
-        "panel-title",
-        "link-button",
-        "danger"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "focused"
+        "dragging"
       ]
     },
     {
       "name": "space-strip",
+      "part": "drawers",
       "hooks": [
         "space-strip",
         "space-chip",
@@ -747,11 +1416,34 @@
         "clickable"
       ],
       "states": [
-        "rest"
+        "rest",
+        "hover",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "drawer-list",
+      "part": "drawers",
+      "hooks": [
+        "bookmarks-panel",
+        "workspaces-panel",
+        "search-result",
+        "palette-row",
+        "palette-title",
+        "palette-desc"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "selected",
+        "focused"
       ]
     },
     {
       "name": "icon-picker",
+      "part": "drawers",
       "hooks": [
         "icon-picker",
         "icon-grid",
@@ -759,23 +1451,43 @@
       ],
       "states": [
         "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "declared-view",
+      "part": "drawers",
+      "hooks": [
+        "views-status",
+        "declared-view-panel",
+        "declared-view",
+        "ui-stack",
+        "ui-text",
+        "views-modal"
+      ],
+      "states": [
+        "rest",
+        "selected",
         "focused"
       ]
     },
     {
       "name": "tree",
+      "part": "tree",
       "hooks": [
         "plain-list",
         "tree-children",
+        "files-panel",
         "tree-row",
         "row-name",
         "row-icon",
-        "folder",
-        "has-note",
-        "chevron",
-        "tree-empty",
+        "no-icon",
         "leaf",
-        "no-icon"
+        "chevron",
+        "troncata"
       ],
       "states": [
         "rest",
@@ -787,7 +1499,22 @@
       ]
     },
     {
+      "name": "tree-rename",
+      "part": "tree",
+      "hooks": [
+        "tree-row",
+        "new-folder",
+        "tree-rename-problem"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "tree-drop-target",
+      "part": "tree",
       "hooks": [
         "drop-before",
         "drop-after",
@@ -798,15 +1525,67 @@
       ]
     },
     {
-      "name": "search",
+      "name": "tree-selection",
+      "part": "tree",
       "hooks": [
-        "search-input",
+        "tree-selection",
+        "tree-selection-count",
+        "tree-selection-action",
+        "tree-selection-trash"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "tree-empty",
+      "part": "tree",
+      "hooks": [
+        "tree-empty",
+        "link-button"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "search-field",
+      "part": "search",
+      "hooks": [
+        "search-input"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "search",
+      "part": "search",
+      "hooks": [
         "search-results",
         "search-result",
         "hit-title",
-        "hit-occurrence",
-        "hit-create",
+        "hit-path",
         "hit-snippet",
+        "hit-occurrence",
+        "hit-create"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "search-actions",
+      "part": "search",
+      "hooks": [
         "search-action",
         "search-tools",
         "search-syntax",
@@ -823,12 +1602,11 @@
       ]
     },
     {
-      "name": "segmented-control",
+      "name": "search-options",
+      "part": "search",
       "hooks": [
-        "segmented",
-        "segmented--titlebar",
-        "segmented--wide",
-        "segmented-option"
+        "search-options",
+        "search-option"
       ],
       "states": [
         "rest",
@@ -840,26 +1618,32 @@
       ]
     },
     {
-      "name": "pane-tree",
+      "name": "search-replace",
+      "part": "search",
       "hooks": [
-        "panes",
+        "search-replace",
+        "search-replace-entry",
+        "search-replace-plan",
+        "search-replace-note",
+        "search-replace-docs",
+        "search-replace-actions",
+        "search-replace-apply"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "sheet",
+      "part": "sheets",
+      "hooks": [
+        "pane",
+        "focus",
+        "pane-editor",
         "pane-split",
         "row",
         "col",
-        "pane",
-        "focus",
-        "pane-preview",
-        "pane-toolbar",
-        "conflict-banner",
-        "conflict-actions",
-        "compare-box",
-        "compare-lines",
-        "compare-line",
-        "pane-nav",
-        "pane-divider",
-        "pane-empty",
-        "pane-empty-title",
-        "pane-empty-actions"
+        "pane-divider"
       ],
       "states": [
         "rest",
@@ -867,7 +1651,80 @@
       ]
     },
     {
+      "name": "tabs",
+      "part": "sheets",
+      "hooks": [
+        "tab-drop-preview",
+        "pane-tabs",
+        "tab-entry",
+        "tab",
+        "tab-name",
+        "tab-pin",
+        "tab-pinned",
+        "dirty",
+        "tab-close",
+        "tab-new"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "sheet-header",
+      "part": "sheets",
+      "hooks": [
+        "pane-toolbar",
+        "muted"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "sheet-title",
+      "part": "sheets",
+      "hooks": [
+        "sheet-title",
+        "sheet-title-edit",
+        "sheet-title-error",
+        "kit-field-box"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "save-state",
+      "part": "sheets",
+      "hooks": [
+        "sheet-save",
+        "sheet-save-panel",
+        "sheet-save-headline",
+        "sheet-save-detail",
+        "sheet-save-facts",
+        "sheet-save-mono",
+        "sheet-save-actions"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
       "name": "format-bar",
+      "part": "sheets",
       "hooks": [
         "format-bar",
         "format-bar-group",
@@ -886,16 +1743,251 @@
       ]
     },
     {
-      "name": "pane-tabs",
+      "name": "selection-bubble",
+      "part": "sheets",
       "hooks": [
-        "pane-tabs",
-        "tab-entry",
-        "tab",
-        "tab-name",
-        "dirty",
-        "tab-close",
-        "tab-pin",
-        "tab-view"
+        "selection-bubble"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "reading",
+      "part": "sheets",
+      "hooks": [
+        "pane-preview",
+        "markdown-preview"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "empty-pane",
+      "part": "sheets",
+      "hooks": [
+        "pane-empty",
+        "pane-empty-title",
+        "pane-empty-actions"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "desk",
+      "part": "sheets",
+      "hooks": [
+        "sheet-desk",
+        "sheet-desk-label",
+        "sheet-desk-row",
+        "sheet-desk-note"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "heading-thread",
+      "part": "sheets",
+      "hooks": [
+        "sheet-thread",
+        "sheet-thread-item",
+        "sheet-thread-notch"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "conflict",
+      "part": "sheets",
+      "hooks": [
+        "conflict-banner",
+        "conflict-actions"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "sheet-notices",
+      "part": "sheets",
+      "hooks": [
+        "sheet-notices",
+        "sheet-notice",
+        "sheet-notice-text"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-column",
+      "part": "document",
+      "hooks": [
+        "pane-editor",
+        "pane-preview",
+        "markdown-preview",
+        "markdown-rendered",
+        "cm-editor",
+        "cm-content",
+        "cm-line",
+        "cm-markdown-block"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-heading",
+      "part": "document",
+      "hooks": [
+        "cm-fub-heading-line",
+        "cm-fub-h1",
+        "cm-fub-h2",
+        "cm-fub-h3",
+        "cm-fub-h4",
+        "cm-fub-h5",
+        "cm-fub-h6",
+        "cm-fub-h1-line",
+        "cm-fub-h2-line",
+        "cm-fub-h3-line",
+        "cm-fub-h4-line",
+        "cm-fub-h5-line",
+        "cm-fub-h6-line"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-inline",
+      "part": "document",
+      "hooks": [
+        "cm-fub-strong",
+        "cm-fub-em",
+        "cm-fub-strike",
+        "cm-fub-highlight",
+        "inline-highlight",
+        "cm-fub-comment",
+        "cm-fub-code",
+        "math-inline"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-link",
+      "part": "document",
+      "hooks": [
+        "cm-fub-link",
+        "cm-fub-wikilink",
+        "unresolved",
+        "footnote-ref",
+        "footnote-backref",
+        "footnote-inline"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "document-tag",
+      "part": "document",
+      "hooks": [
+        "tag",
+        "cm-fub-tag"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-quote",
+      "part": "document",
+      "hooks": [
+        "cm-fub-quote",
+        "cm-fub-quote-mark"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-callout",
+      "part": "document",
+      "hooks": [
+        "callout",
+        "callout-title"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-task",
+      "part": "document",
+      "hooks": [
+        "task",
+        "cm-fub-checkbox",
+        "cm-fub-done"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "selected",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "document-code",
+      "part": "document",
+      "hooks": [
+        "cm-fub-code-line",
+        "cm-fub-codeblock",
+        "markdown-code-copy"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-table",
+      "part": "document",
+      "hooks": [
+        "cm-md-grid-block",
+        "cm-md-grid",
+        "cm-md-grid-corner",
+        "cm-md-grid-letter",
+        "cm-md-grid-rowhead",
+        "cm-md-grid-cell",
+        "cm-md-grid-head",
+        "cm-md-grid-adders",
+        "cm-md-grid-add",
+        "is-selected",
+        "is-active"
       ],
       "states": [
         "rest",
@@ -907,11 +1999,210 @@
       ]
     },
     {
+      "name": "document-figure",
+      "part": "document",
+      "hooks": [
+        "cm-fub-hr",
+        "math-block",
+        "katex-display",
+        "image-missing"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-embed",
+      "part": "document",
+      "hooks": [
+        "embed",
+        "embed-cycle",
+        "embed-too-deep",
+        "embed-media"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "document-diagram",
+      "part": "document",
+      "hooks": [
+        "mermaid-diagram",
+        "mermaid-bar",
+        "mermaid-action",
+        "mermaid-swatches"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "document-properties",
+      "part": "document",
+      "hooks": [
+        "cm-fub-frontmatter",
+        "block-frontmatter-unparsed",
+        "block-footnote-definition"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declarative-slot",
+      "part": "document",
+      "hooks": [
+        "ui-slot"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declarative-node-content",
+      "part": "document",
+      "hooks": [
+        "ui-heading",
+        "empty-note"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declarative-node-feedback",
+      "part": "document",
+      "hooks": [
+        "ui-list-item",
+        "ui-list-item-title",
+        "ui-list-item-subtitle",
+        "clickable"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed"
+      ]
+    },
+    {
+      "name": "link-preview",
+      "part": "document",
+      "hooks": [
+        "link-preview",
+        "doc-preview"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "text-editor",
+      "part": "editors",
+      "hooks": [
+        "pane-editor",
+        "cm-editor",
+        "cm-focused",
+        "cm-scroller",
+        "cm-content",
+        "cm-line",
+        "cm-activeLine",
+        "cm-cursor",
+        "cm-dropCursor",
+        "cm-selectionLayer",
+        "cm-selectionBackground",
+        "cm-selectionMatch",
+        "cm-matchingBracket",
+        "cm-nonmatchingBracket",
+        "cm-foldPlaceholder",
+        "cm-placeholder"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected"
+      ]
+    },
+    {
+      "name": "text-editor-gutter",
+      "part": "editors",
+      "hooks": [
+        "cm-gutters",
+        "cm-lineNumbers",
+        "cm-gutterElement",
+        "cm-activeLineGutter",
+        "cm-foldGutter"
+      ],
+      "states": [
+        "rest",
+        "selected"
+      ]
+    },
+    {
+      "name": "text-editor-search",
+      "part": "editors",
+      "hooks": [
+        "cm-panels",
+        "cm-panels-top",
+        "cm-panels-bottom",
+        "cm-panel",
+        "cm-search",
+        "cm-textfield",
+        "cm-button",
+        "cm-searchMatch",
+        "cm-searchMatch-selected"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "text-editor-tooltip",
+      "part": "editors",
+      "hooks": [
+        "cm-tooltip",
+        "cm-tooltip-arrow",
+        "cm-tooltip-autocomplete",
+        "cm-completionMatchedText",
+        "cm-completionDetail",
+        "cm-completionInfo"
+      ],
+      "states": [
+        "rest",
+        "selected"
+      ]
+    },
+    {
+      "name": "surface-fallback",
+      "part": "editors",
+      "hooks": [
+        "document-surface-error",
+        "document-surface-viewer",
+        "media-surface"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "grid-surface",
+      "part": "editors",
       "hooks": [
         "grid-surface",
         "grid-formula-bar",
         "grid-cell-name",
+        "grid-formula-editor",
         "grid-viewport",
         "grid-cell",
         "grid-header",
@@ -931,229 +2222,165 @@
     },
     {
       "name": "base-surface",
+      "part": "editors",
       "hooks": [
         "base-surface",
         "base-toolbar",
         "base-status",
+        "base-body",
+        "base-summaries"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "base-table",
+      "part": "editors",
+      "hooks": [
         "base-table",
+        "base-cell",
+        "base-cell-error"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "base-cards",
+      "part": "editors",
+      "hooks": [
+        "base-cards",
+        "base-list",
         "base-card",
-        "base-kanban-card",
+        "base-field"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "base-kanban",
+      "part": "editors",
+      "hooks": [
+        "base-kanban",
         "base-kanban-column",
-        "base-cell-error",
+        "base-kanban-card"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected",
+        "dragging"
+      ]
+    },
+    {
+      "name": "base-map",
+      "part": "editors",
+      "hooks": [
         "base-map-atlas",
         "base-map-attribution",
         "base-map-marker"
       ],
       "states": [
         "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled",
-        "selected"
+        "focused"
       ]
     },
     {
       "name": "canvas-surface",
+      "part": "editors",
       "hooks": [
         "canvas-surface",
         "canvas-toolbar",
+        "canvas-intake-error",
+        "canvas-viewport",
+        "canvas-large-fallback",
+        "canvas-source"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "canvas-node",
+      "part": "editors",
+      "hooks": [
         "canvas-node",
         "canvas-node-group",
         "canvas-node-handle",
         "canvas-connect",
+        "canvas-resize",
         "canvas-card-body",
         "canvas-markdown",
         "canvas-empty",
+        "canvas-group-label",
         "canvas-group-bg",
         "canvas-url-text",
+        "canvas-media-placeholder",
+        "canvas-convert-note",
+        "canvas-open-url",
+        "canvas-file-link",
         "canvas-text-editor",
-        "canvas-field-editor",
-        "canvas-resize",
+        "canvas-field-editor"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected",
+        "dragging"
+      ]
+    },
+    {
+      "name": "canvas-edge",
+      "part": "editors",
+      "hooks": [
         "canvas-edge-hit",
         "canvas-edge-line",
         "canvas-edge-arrow",
         "canvas-edge-label",
-        "selected"
+        "canvas-edge-reconnect"
       ],
       "states": [
         "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled",
-        "selected"
-      ]
-    },
-    {
-      "name": "fields",
-      "hooks": [
-        "ui-field-label",
-        "ui-text-input",
-        "ui-date-picker",
-        "ui-number",
-        "ui-text-area",
-        "ui-select",
-        "ui-checkbox",
-        "ui-radio-option",
-        "ui-slider"
-      ],
-      "states": [
-        "rest",
-        "focused",
-        "disabled"
-      ]
-    },
-    {
-      "name": "declarative-node-content",
-      "hooks": [
-        "ui-section",
-        "ui-table",
-        "ui-row",
-        "ui-tree-item",
-        "ui-children",
-        "ui-tree-label",
-        "ui-tab-bar",
-        "ui-tab-button",
-        "ui-heading"
-      ],
-      "states": [
-        "rest"
-      ]
-    },
-    {
-      "name": "declarative-node-feedback",
-      "hooks": [
-        "ui-list-item",
-        "ui-list-item-title",
-        "ui-list-item-subtitle",
-        "ui-badge",
-        "ui-icon",
-        "ui-progress",
-        "ui-progress-label",
-        "ui-empty-state",
-        "ui-empty-title",
-        "ui-empty-detail",
-        "ui-key-value",
-        "ui-pending",
-        "ui-failed",
-        "ui-failed-message"
-      ],
-      "states": [
-        "rest",
-        "selected"
-      ]
-    },
-    {
-      "name": "declarative-node-form",
-      "hooks": [
-        "ui-form"
-      ],
-      "states": [
-        "rest"
+        "selected",
+        "dragging"
       ]
     },
     {
       "name": "markdown-preview",
+      "part": "media",
       "hooks": [
         "markdown-preview",
         "markdown-rendered",
-        "markdown-code-copy",
-        "wikilink",
-        "unresolved",
-        "tag",
-        "callout",
-        "callout-title",
-        "task",
-        "math-inline",
-        "math-block",
-        "katex-display",
-        "inline-highlight",
-        "embed",
-        "embed-cycle",
-        "embed-too-deep",
-        "embed-media",
-        "image-missing",
-        "empty-note",
-        "block-footnote-definition",
-        "footnote-ref",
-        "block-frontmatter-unparsed",
-        "mermaid-diagram",
-        "mermaid-bar",
-        "mermaid-action",
-        "mermaid-swatches",
-        "cm-markdown-block",
-        "link-preview",
-        "doc-preview"
-      ],
-      "states": [
-        "rest",
-        "selected"
-      ]
-    },
-    {
-      "name": "declarative-slot",
-      "hooks": [
-        "ui-slot"
+        "mermaid-diagram"
       ],
       "states": [
         "rest"
       ]
     },
     {
-      "name": "context-menu",
-      "hooks": [
-        "context-menu",
-        "menu-label",
-        "menu-hint",
-        "menu-separator",
-        "menu-swatches",
-        "menu-swatch",
-        "menu-body",
-        "menu-description",
-        "menu-check"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled"
-      ]
-    },
-    {
-      "name": "modal-palette",
-      "hooks": [
-        "modale",
-        "palette-box",
-        "palette-input",
-        "palette-list",
-        "palette-row",
-        "palette-title",
-        "palette-scope",
-        "palette-desc",
-        "palette-help",
-        "palette-empty",
-        "docsearch-summary",
-        "palette-heading",
-        "palette-form",
-        "palette-label",
-        "palette-summary",
-        "palette-plan",
-        "palette-actions",
-        "palette-error"
-      ],
-      "states": [
-        "rest",
-        "hover",
-        "pressed",
-        "focused",
-        "disabled",
-        "selected"
-      ]
-    },
-    {
       "name": "media-viewer",
+      "part": "media",
       "hooks": [
         "media-surface",
         "media-image",
@@ -1176,7 +2403,9 @@
     },
     {
       "name": "lightbox",
+      "part": "media",
       "hooks": [
+        "modale",
         "lightbox",
         "lightbox-header",
         "lightbox-caption",
@@ -1194,7 +2423,9 @@
     },
     {
       "name": "svg-preview",
+      "part": "media",
       "hooks": [
+        "pane-editor",
         "svg-preview",
         "svg-error"
       ],
@@ -1203,132 +2434,300 @@
       ]
     },
     {
-      "name": "settings",
+      "name": "media-pdf",
+      "part": "media",
       "hooks": [
-        "settings-panel",
-        "settings-header",
-        "settings-title",
-        "settings-close",
-        "settings-layout",
-        "settings-nav",
-        "settings-tabs",
-        "settings-tab",
-        "settings-tab-icon",
-        "settings-tab-label",
-        "settings-toc-title",
-        "settings-toc-list",
-        "settings-toc-link",
-        "settings-toc-name",
-        "settings-toc-badge",
-        "settings-main",
-        "settings-toolbar",
-        "settings-search",
-        "settings-search-icon",
-        "settings-filter",
-        "settings-count",
-        "settings-scroll",
-        "settings-body",
-        "settings-section",
-        "settings-section-head",
-        "settings-section-title",
-        "settings-section-meta",
-        "settings-section-reset",
-        "settings-section-hint",
-        "settings-section-body",
-        "settings-card",
-        "setting-row",
-        "setting-text",
-        "setting-label",
-        "setting-source",
-        "setting-meta",
-        "setting-scope",
-        "setting-scope-icon",
-        "setting-reset",
-        "setting-control",
-        "setting-input",
-        "setting-select",
-        "setting-number",
-        "setting-range",
-        "setting-slider",
-        "setting-segmented",
-        "setting-switch",
-        "setting-list",
-        "setting-chips",
-        "setting-chip",
-        "setting-chip-remove",
-        "setting-list-add",
-        "setting-field-error",
-        "setting-block",
-        "setting-code",
-        "setting-snippet",
-        "setting-path",
-        "settings-catalog-results",
-        "settings-catalog",
-        "setting-diagnostic",
-        "setting-pending",
-        "setting-error",
-        "setting-attempted",
-        "settings-actions",
-        "settings-btn",
-        "settings-btn--danger",
-        "settings-star",
-        "settings-details",
-        "settings-details-body",
-        "setting-component-note",
-        "settings-note",
-        "settings-status",
-        "settings-empty",
-        "settings-empty-text",
-        "settings-banner",
-        "settings-toc"
+        "media-pdf",
+        "media-pdf-toolbar",
+        "media-pdf-page"
       ],
       "states": [
         "rest",
-        "selected",
-        "focused"
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
       ]
     },
     {
-      "name": "notices",
+      "name": "media-player",
+      "part": "media",
       "hooks": [
-        "toast",
-        "toast-text",
-        "toast-action",
-        "toast-more",
-        "toast-close",
-        "pane-status",
-        "save-state",
-        "ha-novita",
-        "in-corso",
-        "key-pending",
-        "dock-panel",
-        "dock-panel--notify",
-        "dock-panel--activity",
-        "notify-list",
-        "notify-testo",
-        "notify-ora",
-        "activity-row",
-        "activity-label"
+        "media-audio",
+        "media-video",
+        "media-error"
       ],
       "states": [
         "rest",
-        "selected",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "media-recorder",
+      "part": "media",
+      "hooks": [
+        "media-recorder"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "slide-deck",
+      "part": "media",
+      "hooks": [
+        "slide-deck",
+        "slide-status",
+        "slide-stage",
+        "slide",
+        "slide-controls",
+        "block-frontmatter-unparsed"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "declared-view",
+      "part": "nodes",
+      "hooks": [
+        "ui-stack",
+        "ui-text",
+        "ui-heading",
+        "ui-children"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declared-view-on-desk",
+      "part": "nodes",
+      "hooks": [
+        "sidebar",
+        "inspector-pane",
+        "views-modal",
+        "declared-view"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed"
+      ]
+    },
+    {
+      "name": "button-intent",
+      "part": "nodes",
+      "hooks": [
+        "primary",
+        "ui-button",
+        "ui-submit",
+        "intent-primary",
+        "intent-danger"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "declarative-node-section",
+      "part": "nodes",
+      "hooks": [
+        "ui-section"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "declarative-node-row",
+      "part": "nodes",
+      "hooks": [
+        "clickable",
+        "ui-list",
+        "ui-list-item",
+        "ui-list-item-subtitle",
+        "ui-tree",
+        "ui-tree-item",
+        "ui-tree-label",
+        "ui-row"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "declarative-node-table",
+      "part": "nodes",
+      "hooks": [
+        "ui-table",
+        "ui-empty-cell"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declarative-node-tabs",
+      "part": "nodes",
+      "hooks": [
+        "ui-tab-bar",
+        "ui-tab-button"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "declarative-node-feedback",
+      "part": "nodes",
+      "hooks": [
+        "ui-badge",
+        "ui-icon",
+        "ui-progress",
+        "ui-progress-label",
+        "ui-empty-state",
+        "ui-empty-title",
+        "ui-empty-detail",
+        "ui-key-value",
+        "ui-pending",
+        "ui-failed",
+        "ui-failed-message"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "fields",
+      "part": "nodes",
+      "hooks": [
+        "ui-field-label",
+        "ui-text-input",
+        "ui-date-picker",
+        "ui-number",
+        "ui-text-area",
+        "ui-select",
+        "ui-slider",
+        "ui-checkbox",
+        "ui-radio",
+        "ui-radio-option"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "declarative-node-form",
+      "part": "nodes",
+      "hooks": [
+        "ui-form"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declarative-node-guest",
+      "part": "nodes",
+      "hooks": [
+        "ui-html",
+        "ui-custom",
+        "ui-webview"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "pane-tabs",
+      "part": "graph",
+      "hooks": [
+        "tab-name",
+        "tab-view"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "graph-canvas",
+      "part": "graph",
+      "hooks": [
+        "graph-viewport",
+        "graph-count",
+        "graph-empty",
+        "graph-status"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "graph-controls",
+      "part": "graph",
+      "hooks": [
+        "graph-toolbar",
+        "graph-toolbar-field",
+        "graph-refresh",
+        "graph-legend",
+        "graph-legend-group",
+        "graph-zoom",
+        "graph-zoom-button",
+        "graph-swatch",
+        "graph-timeline"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
         "disabled"
       ]
     },
     {
       "name": "graph-panel",
+      "part": "graph",
       "hooks": [
-        "graph-count",
         "graph-panel",
         "graph-panel-toggle",
-        "graph-panel-check",
-        "graph-toolbar",
-        "graph-toolbar-field",
-        "graph-refresh",
-        "graph-legend",
-        "graph-swatch",
-        "graph-timeline",
         "graph-panel-popover",
         "graph-panel-titolo",
         "graph-panel-sezione",
@@ -1338,9 +2737,21 @@
         "graph-panel-campo",
         "graph-panel-nome",
         "graph-panel-valore",
-        "graph-panel-azioni",
-        "graph-empty",
-        "graph-status",
+        "graph-panel-check",
+        "graph-panel-azioni"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "graph-list",
+      "part": "graph",
+      "hooks": [
         "graph-list",
         "graph-list-summary",
         "graph-list-items",
@@ -1354,20 +2765,659 @@
         "rest",
         "hover",
         "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "context-menu",
+      "part": "menus",
+      "hooks": [
+        "context-menu",
+        "menu-separator"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "menu-item",
+      "part": "menus",
+      "hooks": [
+        "menu-label",
+        "menu-hint",
+        "menu-body",
+        "menu-description",
+        "menu-swatches",
+        "menu-swatch",
+        "menu-check"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
+      "name": "menu-item-danger",
+      "part": "menus",
+      "hooks": [
+        "danger"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "modal-surface",
+      "part": "launcher",
+      "hooks": [
+        "modale",
+        "palette-box",
+        "palette-heading"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "launcher-field",
+      "part": "launcher",
+      "hooks": [
+        "palette-input"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "launcher-rows",
+      "part": "launcher",
+      "hooks": [
+        "palette-list",
+        "palette-row",
+        "palette-title",
+        "palette-desc",
+        "palette-scope",
+        "palette-favorite",
+        "palette-empty",
+        "hit-occurrence",
+        "docsearch-summary"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "command-form",
+      "part": "launcher",
+      "hooks": [
+        "palette-form",
+        "palette-label",
+        "palette-help"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "command-plan",
+      "part": "launcher",
+      "hooks": [
+        "palette-summary",
+        "palette-plan",
+        "palette-error"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "dialog-actions",
+      "part": "launcher",
+      "hooks": [
+        "palette-actions",
+        "primary",
+        "danger"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "compare",
+      "part": "launcher",
+      "hooks": [
+        "compare-box",
+        "compare-lines",
+        "compare-line"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "unified-surface",
+      "part": "launcher",
+      "hooks": [
+        "launcher-veil",
+        "launcher"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "unified-head",
+      "part": "launcher",
+      "hooks": [
+        "launcher-head",
+        "launcher-lens",
+        "launcher-input",
+        "launcher-wait"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "unified-modes",
+      "part": "launcher",
+      "hooks": [
+        "launcher-modes",
+        "launcher-mode-prefix"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "unified-rows",
+      "part": "launcher",
+      "hooks": [
+        "launcher-list",
+        "launcher-row",
+        "launcher-row-title",
+        "launcher-row-detail",
+        "launcher-row-meta",
+        "launcher-note"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "unified-preview",
+      "part": "launcher",
+      "hooks": [
+        "launcher-preview",
+        "launcher-preview-page",
+        "launcher-preview-note"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "unified-foot",
+      "part": "launcher",
+      "hooks": [
+        "launcher-foot",
+        "launcher-status",
+        "launcher-hints",
+        "launcher-hint",
+        "launcher-key"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "unified-panel",
+      "part": "launcher",
+      "hooks": [
+        "launcher-panel"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "toast",
+      "part": "centres",
+      "hooks": [
+        "toast",
+        "toast-stack",
+        "toast-text",
+        "toast-action",
+        "toast-more",
+        "toast-close"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "document-state",
+      "part": "centres",
+      "hooks": [
+        "pane-status",
+        "save-state",
+        "key-pending"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "dock-panel",
+      "part": "centres",
+      "hooks": [
+        "dock-panel",
+        "dock-panel--notify",
+        "dock-panel--activity",
+        "panel-title",
+        "link-button",
+        "muted"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "notices",
+      "part": "centres",
+      "hooks": [
+        "notify-list",
+        "notify-testo",
+        "notify-ora"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "activities",
+      "part": "centres",
+      "hooks": [
+        "activity-row",
+        "activity-label"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "settings-window",
+      "part": "settings",
+      "hooks": [
+        "settings-panel",
+        "settings-scrim",
+        "settings-header",
+        "settings-title",
+        "settings-close",
+        "settings-layout",
+        "settings-main"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "settings-index",
+      "part": "settings",
+      "hooks": [
+        "settings-nav",
+        "settings-tabs",
+        "settings-tab",
+        "settings-tab-icon",
+        "settings-tab-label",
+        "settings-toc",
+        "settings-toc-title",
+        "settings-toc-list",
+        "settings-toc-link",
+        "settings-toc-name",
+        "settings-toc-badge"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
         "selected",
         "focused"
       ]
     },
     {
-      "name": "declared-view",
+      "name": "settings-toolbar",
+      "part": "settings",
       "hooks": [
-        "views-status",
-        "declared-view-panel",
-        "declared-view",
-        "ui-stack",
-        "ui-text",
-        "views-ribbon",
-        "views-modal"
+        "settings-toolbar",
+        "settings-search",
+        "settings-search-icon",
+        "settings-filter",
+        "settings-count"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "settings-sections",
+      "part": "settings",
+      "hooks": [
+        "settings-scroll",
+        "settings-body",
+        "settings-section",
+        "settings-section-head",
+        "settings-section-title",
+        "settings-section-meta",
+        "settings-section-reset",
+        "settings-section-hint",
+        "settings-section-body",
+        "settings-card"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "setting-row",
+      "part": "settings",
+      "hooks": [
+        "setting-row",
+        "setting-block",
+        "setting-text",
+        "setting-label",
+        "setting-description",
+        "setting-source",
+        "setting-meta",
+        "setting-scope",
+        "setting-scope-icon",
+        "setting-default",
+        "setting-reset",
+        "setting-control",
+        "setting-pending",
+        "setting-error",
+        "setting-error-message",
+        "setting-attempted",
+        "setting-diagnostic",
+        "setting-field-error",
+        "muted",
+        "link-button"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
+      "name": "setting-fields",
+      "part": "settings",
+      "hooks": [
+        "setting-input",
+        "setting-select",
+        "setting-number",
+        "setting-range",
+        "setting-slider",
+        "setting-segmented",
+        "setting-switch",
+        "setting-list",
+        "setting-chips",
+        "setting-chip",
+        "setting-chip-remove",
+        "setting-list-add",
+        "setting-code",
+        "setting-snippet",
+        "setting-path"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "setting-dresses",
+      "part": "settings",
+      "hooks": [
+        "prefs-space-step",
+        "prefs-space-figure",
+        "prefs-space-bar",
+        "prefs-space-side",
+        "prefs-space-sheet",
+        "prefs-space-foot",
+        "prefs-space-stop",
+        "prefs-space-end",
+        "prefs-swatch",
+        "prefs-swatch--custom",
+        "prefs-swatch-mark",
+        "prefs-hue",
+        "prefs-hue-value"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "settings-theme",
+      "part": "settings",
+      "hooks": [
+        "prefs-theme-entries",
+        "prefs-preview",
+        "prefs-preview-side",
+        "prefs-preview-row",
+        "prefs-preview-row--selected",
+        "prefs-preview-action",
+        "prefs-preview-sheet",
+        "prefs-preview-title",
+        "prefs-preview-link"
+      ],
+      "states": [
+        "rest",
+        "selected"
+      ]
+    },
+    {
+      "name": "settings-actions",
+      "part": "settings",
+      "hooks": [
+        "settings-actions",
+        "settings-btn",
+        "settings-btn--danger",
+        "settings-star"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "settings-components",
+      "part": "settings",
+      "hooks": [
+        "settings-component",
+        "setting-permission",
+        "setting-component-note",
+        "settings-catalog",
+        "settings-catalog-results",
+        "settings-details",
+        "settings-details-body"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "settings-notes",
+      "part": "settings",
+      "hooks": [
+        "settings-note",
+        "settings-status",
+        "settings-empty",
+        "settings-empty-text",
+        "settings-banner"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "welcome-surface",
+      "part": "welcome",
+      "hooks": [
+        "onboarding",
+        "onboarding-status",
+        "onboarding-error"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "welcome-actions",
+      "part": "welcome",
+      "hooks": [
+        "onboarding-actions",
+        "primary"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "recent-vaults",
+      "part": "welcome",
+      "hooks": [
+        "onboarding-recent",
+        "onboarding-recent-item",
+        "onboarding-forget",
+        "link-button",
+        "muted"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused"
+      ]
+    },
+    {
+      "name": "welcome-extras",
+      "part": "welcome",
+      "hooks": [
+        "onboarding-extra",
+        "onboarding-trouble"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "icon-picker",
+      "part": "motion",
+      "hooks": [
+        "icon-picker"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "context-menu",
+      "part": "motion",
+      "hooks": [
+        "context-menu"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "modal-palette",
+      "part": "motion",
+      "hooks": [
+        "modale",
+        "palette-box"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "settings",
+      "part": "motion",
+      "hooks": [
+        "settings-panel"
       ],
       "states": [
         "rest",
@@ -1377,9 +3427,9 @@
     },
     {
       "name": "editor-motion-surface",
+      "part": "motion",
       "hooks": [
         "cm-editor",
-        "cm-content",
         "pane-editor"
       ],
       "states": [
@@ -1388,14 +3438,13 @@
       ]
     },
     {
-      "name": "tooltip",
+      "name": "sheet-ghost",
+      "part": "motion",
       "hooks": [
-        "shell-tooltip",
-        "titlebar-shortcut"
+        "sheet-ghost"
       ],
       "states": [
-        "rest",
-        "disabled"
+        "rest"
       ]
     }
   ],
@@ -1783,14 +3832,349 @@
       "doc-selection",
       4.5,
       "la sintassi invalid sulla carta"
+    ],
+    [
+      "text",
+      "sheet",
+      4.5,
+      "il testo dell'interfaccia dentro un foglio"
+    ],
+    [
+      "muted",
+      "sheet",
+      4.5,
+      "il percorso nella testata del foglio"
+    ],
+    [
+      "text",
+      "sheet-2",
+      4.5,
+      "un campo dentro un foglio"
+    ],
+    [
+      "muted",
+      "sheet-2",
+      4.5,
+      "il segnaposto di un campo"
+    ],
+    [
+      "text",
+      "bg-active",
+      4.5,
+      "una riga premuta sulla scrivania"
+    ],
+    [
+      "muted",
+      "bg-active",
+      4.5,
+      "il sottotitolo di una riga premuta"
+    ],
+    [
+      "text",
+      "accent-wash",
+      4.5,
+      "una riga selezionata nel cassetto"
+    ],
+    [
+      "muted",
+      "accent-wash",
+      4.5,
+      "il sottotitolo di una riga selezionata"
+    ],
+    [
+      "accent",
+      "accent-wash",
+      4.5,
+      "l'etichetta di un controllo acceso"
+    ],
+    [
+      "accent-soft",
+      "accent-wash",
+      4.5,
+      "un collegamento dentro una riga selezionata"
+    ],
+    [
+      "accent",
+      "sheet",
+      4.5,
+      "un collegamento nella testata del foglio"
+    ],
+    [
+      "accent-soft",
+      "sheet",
+      4.5,
+      "lo stesso collegamento sotto il puntatore"
+    ],
+    [
+      "danger",
+      "sheet",
+      4.5,
+      "un errore dentro un foglio"
+    ],
+    [
+      "warning",
+      "bg",
+      4.5,
+      "un avviso sulla scrivania"
+    ],
+    [
+      "warning",
+      "sheet",
+      4.5,
+      "un avviso dentro un foglio"
+    ],
+    [
+      "success",
+      "bg",
+      4.5,
+      "un esito riuscito sulla scrivania"
+    ],
+    [
+      "success",
+      "sheet",
+      4.5,
+      "un esito riuscito dentro un foglio"
+    ],
+    [
+      "info",
+      "bg",
+      4.5,
+      "una nota informativa sulla scrivania"
+    ],
+    [
+      "info",
+      "sheet",
+      4.5,
+      "una nota informativa dentro un foglio"
+    ],
+    [
+      "warning-contrast",
+      "warning",
+      4.5,
+      "il testo sopra un avviso pieno"
+    ],
+    [
+      "success-contrast",
+      "success",
+      4.5,
+      "il testo sopra un esito pieno"
+    ],
+    [
+      "info-contrast",
+      "info",
+      4.5,
+      "il testo sopra una nota piena"
+    ],
+    [
+      "outline",
+      "bg",
+      3,
+      "il confine di un controllo sulla scrivania"
+    ],
+    [
+      "outline",
+      "sheet",
+      3,
+      "il confine di un controllo dentro un foglio"
+    ],
+    [
+      "outline",
+      "sheet-2",
+      3,
+      "il confine di un controllo dentro un campo"
+    ],
+    [
+      "outline",
+      "bg-elev",
+      3,
+      "il confine di un controllo dentro un menu"
+    ],
+    [
+      "focus-ring",
+      "sheet",
+      3,
+      "l'anello del fuoco dentro un foglio"
     ]
   ],
+  "preference_tokens": [
+    "space-1",
+    "space-2",
+    "space-3",
+    "space-4",
+    "space-5",
+    "space-6",
+    "space-7",
+    "space-8",
+    "space-9",
+    "space-10",
+    "control-h",
+    "row-h",
+    "font-reading",
+    "text-reading",
+    "leading-relaxed",
+    "content-width",
+    "titlebar-h",
+    "chrome-btn",
+    "win-ctrl-w",
+    "rail-w",
+    "rail-icon",
+    "rail-target",
+    "drawer-icon",
+    "tree-indent",
+    "drawer-pad",
+    "drawer-head-h",
+    "sidebar-w",
+    "sidebar-min",
+    "inspector-w",
+    "inspector-min",
+    "status-h",
+    "bg",
+    "bg-chrome",
+    "bg-panel",
+    "bg-hover",
+    "bg-active",
+    "sheet",
+    "sheet-2",
+    "bg-input",
+    "bg-elev",
+    "overlay-hover",
+    "overlay-active",
+    "scrim",
+    "text",
+    "muted",
+    "border",
+    "border-strong",
+    "outline",
+    "accent",
+    "accent-soft",
+    "accent-contrast",
+    "accent-wash",
+    "accent-veil",
+    "focus-ring",
+    "danger",
+    "danger-wash",
+    "danger-contrast",
+    "warning",
+    "warning-wash",
+    "warning-contrast",
+    "success",
+    "success-wash",
+    "success-contrast",
+    "info",
+    "info-wash",
+    "info-contrast",
+    "highlight",
+    "amber",
+    "shadow-1",
+    "shadow-2",
+    "shadow-3",
+    "shadow-4",
+    "shadow-5",
+    "shadow-6",
+    "shadow-7",
+    "shadow-sm",
+    "shadow-md",
+    "shadow-lg",
+    "elevation-paper-surface",
+    "elevation-paper-border",
+    "elevation-paper-shadow",
+    "elevation-base-surface",
+    "elevation-base-border",
+    "elevation-base-shadow",
+    "elevation-chrome-surface",
+    "elevation-chrome-border",
+    "elevation-chrome-shadow",
+    "elevation-floating-surface",
+    "elevation-floating-border",
+    "elevation-floating-shadow",
+    "elevation-dialog-surface",
+    "elevation-dialog-border",
+    "elevation-dialog-shadow",
+    "graph-node",
+    "graph-node-active",
+    "graph-node-hover",
+    "doc-bg",
+    "doc-active-line",
+    "doc-selection",
+    "doc-tooltip-bg",
+    "doc-fill",
+    "doc-fill-soft",
+    "doc-rule",
+    "doc-rule-soft",
+    "doc-highlight",
+    "doc-fg",
+    "doc-link",
+    "doc-heading",
+    "doc-danger",
+    "doc-gutter-fg",
+    "doc-caret",
+    "syn-keyword",
+    "syn-name",
+    "syn-function",
+    "syn-literal",
+    "syn-type",
+    "syn-operator",
+    "syn-comment",
+    "syn-string",
+    "syn-heading",
+    "syn-invalid"
+  ],
+  "vocabulary": {
+    "properties": [
+      "row-gap",
+      "translate",
+      "scale",
+      "rotate",
+      "isolation",
+      "object-fit",
+      "will-change",
+      "scrollbar-width",
+      "scrollbar-color",
+      "clip-path",
+      "mask-image",
+      "mask-size",
+      "mask-repeat",
+      "mask-position",
+      "-webkit-mask-image",
+      "-webkit-mask-size",
+      "-webkit-mask-repeat",
+      "-webkit-mask-position",
+      "font-variation-settings",
+      "font-optical-sizing",
+      "text-wrap",
+      "text-decoration-thickness",
+      "overflow-wrap",
+      "word-break",
+      "tab-size",
+      "-webkit-line-clamp",
+      "-webkit-box-orient",
+      "stroke-dasharray",
+      "stroke-dashoffset",
+      "stroke-linecap",
+      "stroke-linejoin"
+    ],
+    "functions": [
+      "minmax",
+      "fit-content",
+      "oklch",
+      "color-mix",
+      "inset",
+      "polygon",
+      "drop-shadow",
+      "conic-gradient",
+      "repeating-linear-gradient",
+      "env"
+    ],
+    "atRules": [
+      "container"
+    ]
+  },
   "counts": {
-    "required_roles": 116,
-    "hooks": 399,
+    "required_roles": 154,
+    "hooks": 676,
     "state_names": 7,
-    "assigned_states": 147,
-    "components": 46,
-    "unassigned_hooks": 0
+    "assigned_states": 543,
+    "components": 165,
+    "preference_tokens": 121
   }
 }

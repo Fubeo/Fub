@@ -2,7 +2,7 @@
   "id": "org.fub.theme-bench",
   "name": "Fub Theme Bench",
   "version": "1.0.0",
-  "engine": "theme-1",
+  "engine": "theme-2",
   "lights": [
     "dark",
     "light"

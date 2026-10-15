@@ -225,9 +225,46 @@ const BENCH_COMMANDS: CommandSpec[] = [
   command("stats.open", "Statistiche del documento", "Parole, caratteri, collegamenti", null),
 ];
 
+/// La barra di formattazione la fotografa solo il telefono (`mobile.html`),
+/// dove sta sopra la tastiera. Nelle altre pagine i comandi sono quelli del
+/// banco, e le loro foto con loro.
+const ON_MOBILE = globalThis.window.location.pathname.endsWith("/mobile.html");
+const FORMAT_COMMANDS: CommandSpec[] = (
+  [
+    ["text.undo", "Annulla"],
+    ["text.redo", "Ripeti"],
+    ["markdown.heading.1", "Titolo 1"],
+    ["markdown.heading.2", "Titolo 2"],
+    ["markdown.bold", "Grassetto"],
+    ["markdown.italic", "Corsivo"],
+    ["markdown.code", "Codice"],
+    ["markdown.link", "Collegamento"],
+    ["markdown.list.bullet", "Elenco puntato"],
+    ["markdown.list.task", "Elenco di cose da fare"],
+    ["markdown.quote", "Citazione"],
+  ] as const
+).map(([id, title]) => ({ ...command(id, title, title, null, true), surfaces: ["toolbar"] }));
+
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
 /// due fotograferebbe metà del form.
+/// Lo spazio dell'interfaccia lo mostra solo la finestra principale
+/// (`index.html`): il telefono e la finestra documento non hanno la riga.
+const ON_SHELL = globalThis.window.location.pathname.endsWith("/index.html");
+const CHROME_COMPACTNESS: SettingEntry = {
+  spec: {
+    key: "chrome.compactness",
+    label: "Spazio dell'interfaccia",
+    description: "Quanto posto prendono le barre attorno ai fogli: 0 comoda, 4 minima. I fogli non cambiano.",
+    group: "Aspetto",
+    scope: "machine",
+    kind: { kind: "number", default: 0, min: 0, max: 4 },
+    program_writable: false,
+  },
+  value: 0,
+  source: "default",
+};
+
 const SETTINGS: SettingEntry[] = [
   {
     spec: {
@@ -299,10 +336,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Dimensione del testo nelle superfici di lettura.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 16, min: 12, max: 28 },
+      kind: { kind: "number", default: 17, min: 12, max: 28 },
       program_writable: false,
     },
-    value: 16,
+    value: 17,
     source: "default",
   },
   {
@@ -312,10 +349,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Passo verticale della prosa lunga.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 1.7, min: 1.2, max: 2.4 },
+      kind: { kind: "number", default: 1.65, min: 1.2, max: 2.4 },
       program_writable: false,
     },
-    value: 1.7,
+    value: 1.65,
     source: "default",
   },
   {
@@ -325,10 +362,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Larghezza massima della colonna di lettura.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 70, min: 40, max: 100 },
+      kind: { kind: "number", default: 68, min: 40, max: 100 },
       program_writable: false,
     },
-    value: 70,
+    value: 68,
     source: "default",
   },
   {
@@ -340,8 +377,10 @@ const SETTINGS: SettingEntry[] = [
       scope: "machine",
       kind: {
         kind: "choice",
-        default: "literata",
+        default: "newsreader",
         options: [
+          { value: "newsreader", label: "Newsreader" },
+          { value: "hanken", label: "Hanken Grotesk" },
           { value: "literata", label: "Literata" },
           { value: "inter", label: "Inter" },
           { value: "system", label: "Del sistema" },
@@ -349,7 +388,7 @@ const SETTINGS: SettingEntry[] = [
       },
       program_writable: false,
     },
-    value: "literata",
+    value: "newsreader",
     source: "default",
   },
   {
@@ -359,12 +398,13 @@ const SETTINGS: SettingEntry[] = [
       description: "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 130, min: 0, max: 360 },
+      kind: { kind: "number", default: 265, min: 0, max: 360 },
       program_writable: false,
     },
-    value: 130,
+    value: 265,
     source: "default",
   },
+  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
   {
     spec: {
       key: "appearance.zoom",
@@ -827,7 +867,7 @@ const options: Options = {
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
-  commands: BENCH_COMMANDS,
+  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : BENCH_COMMANDS,
   settings: SETTINGS,
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
@@ -852,6 +892,8 @@ declare global {
       throttle: typeof host.throttle;
       calls: typeof host.calls;
       light: "dark" | "light";
+      /// Solo nello Scrittoio: dichiara le voci di un tema (vedi sotto).
+      themeSettings?: () => Promise<void>;
     };
   }
 }
@@ -863,6 +905,90 @@ globalThis.window.bench = {
   calls: host.calls,
   light: LIGHT,
 };
+
+/// Le voci di un tema, per la scena che fotografa la loro schermata. Il tema di
+/// serie non ne dichiara, e una schermata che non c'è non si fotografa: la
+/// scena le dichiara da fuori, dopo l'avvio, al posto della sorgente vera. Una
+/// voce per specie di controllo — interruttore, scelta breve, scelta lunga,
+/// numero — e una già cambiata, perché «azzera» si veda.
+///
+/// Solo nella finestra principale, e con un `import()`: il modulo della schermata porta
+/// con sé la sua geometria, che nelle altre pagine non deve entrare.
+if (ON_SHELL) {
+  globalThis.window.bench.themeSettings = async () => {
+    const { setThemeSettingsSource } = await import("../src/shells/scrittoio/preferences/theme-settings");
+    const specs = [
+      {
+        key: "fub.serie:trama",
+        label: "Trama della carta",
+        description: "Una grana leggera sul fondo dei fogli.",
+        kind: { kind: "toggle" as const, default: true },
+      },
+      {
+        key: "fub.serie:angoli",
+        label: "Angoli dei fogli",
+        description: "Quanto sono arrotondati i fogli e le schede.",
+        kind: {
+          kind: "choice" as const,
+          default: "morbidi",
+          options: [
+            { value: "vivi", label: "Vivi" },
+            { value: "morbidi", label: "Morbidi" },
+            { value: "tondi", label: "Tondi" },
+          ],
+        },
+      },
+      {
+        key: "fub.serie:scrivania",
+        label: "Fondo della scrivania",
+        description: "Che cosa si vede dietro i fogli.",
+        kind: {
+          kind: "choice" as const,
+          default: "tinta",
+          options: [
+            { value: "tinta", label: "Tinta unita" },
+            { value: "quadretti", label: "Carta a quadretti" },
+            { value: "righe", label: "Carta a righe" },
+            { value: "legno", label: "Venatura del legno" },
+          ],
+        },
+      },
+      {
+        key: "fub.serie:margine",
+        label: "Margine dei fogli",
+        description: "Lo spazio bianco attorno al testo, in pixel.",
+        kind: { kind: "number" as const, default: 24, min: 0, max: 48, step: 1 },
+      },
+    ];
+    const chosen = new Map<string, boolean | string | number>([["fub.serie:trama", false]]);
+    const listeners = new Set<() => void>();
+    const changed = (): void => {
+      for (const listener of [...listeners]) listener();
+    };
+    setThemeSettingsSource({
+      read: () =>
+        Promise.resolve({
+          themeId: "fub.serie",
+          themeName: "Scrittoio",
+          entries: specs.map((spec) => ({ spec, value: chosen.get(spec.key) ?? spec.kind.default })),
+        }),
+      write: (key, value) => {
+        chosen.set(key, value);
+        changed();
+        return Promise.resolve();
+      },
+      reset: (key) => {
+        chosen.delete(key);
+        changed();
+        return Promise.resolve();
+      },
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    });
+  };
+}
 
 const behind = host.module.api;
 
@@ -892,3 +1018,5 @@ export const api: typeof host.module.api = {
 export const onKernelEvent = host.module.onKernelEvent;
 export const onClose = host.module.onClose;
 export const window = host.module.window;
+// Il ponte mobile: lo chiede solo l'ingresso mobile (`mobile.html`).
+export { nativeMobileBridge } from "./fake-mobile-bridge";

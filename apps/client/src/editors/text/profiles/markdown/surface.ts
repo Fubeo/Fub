@@ -177,6 +177,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     event.stopPropagation();
     const text = engine.getDoc();
     const typed = cursor.empty;
+    const anchor = engine.anchorBox();
     void openSlashPalette(
       parent,
       engine.selections().primary.text,
@@ -187,6 +188,7 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       typed ? () => {
         if (!life.closed && engine.getDoc() === text) engine.insertAt(cursor.head, "/");
       } : undefined,
+      anchor,
     );
   }, { capture: true });
 
@@ -414,6 +416,9 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
         actionListeners.delete(listener);
       };
     },
+    // La bolla di selezione compare solo dove si scrive con la resa accanto:
+    // nella lettura la selezione non ha niente da formattare.
+    selectionBox: () => (editable() ? engine.selectionBox() : null),
   };
 
   return {

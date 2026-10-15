@@ -34,6 +34,14 @@ const REPLACEMENTS: Record<string, string> = {
   [here("./src/host/dialog.ts")]: here("./bench/fake-dialog.ts"),
 };
 
+/// Gli ingressi che esportano `startup`: la pagina che ne carica uno riceve
+/// l'ascoltatore del montaggio.
+const SHELL_ENTRIES = [
+  "/src/main.ts",
+  "/src/entrypoints/mobile-main.ts",
+  "/src/shells/scrittoio/document/entry.ts",
+];
+
 function seamForBench(): Plugin {
   return {
     name: "bench:seam",
@@ -67,12 +75,16 @@ function seamForBench(): Plugin {
     //
     // Sta nella config del banco e non in `index.html` perché `index.html` è
     // della shell: il banco non ci mette dentro niente che l'app debba portarsi.
+    //
+    // Gli ingressi sono tre, uno per pagina: la finestra principale, il
+    // telefono e la finestra documento. Esportano tutti la stessa promessa.
     transformIndexHtml(html) {
-      if (!html.includes("/src/main.ts")) return html;
+      const entry = SHELL_ENTRIES.find((candidate) => html.includes(candidate));
+      if (!entry) return html;
       return html.replace(
         "</body>",
         `  <script type="module">
-      import { startup } from "/src/main.ts";
+      import { startup } from "${entry}";
       await startup;
       document.documentElement.dataset.bench = "ready";
     </script>
@@ -88,7 +100,11 @@ export default defineConfig({
   server: {
     // Non 1420: quella è la porta di Tauri, e un banco che gira mentre l'app è
     // aperta non deve doverne chiudere una per fotografare l'altra.
-    port: 1431,
+    //
+    // `FUB_BENCH_PORT` la sposta per chi ha già un banco aperto da un altro
+    // worktree: la porta resta stretta, cioè due banchi non si fotografano mai
+    // l'un l'altro per sbaglio.
+    port: Number(process.env.FUB_BENCH_PORT) || 1431,
     strictPort: true,
   },
   build: {
@@ -98,7 +114,10 @@ export default defineConfig({
     rollupOptions: {
       input: {
         shell: here("./index.html"),
+        mobile: here("./mobile.html"),
+        document: here("./document.html"),
         catalogo: here("./bench/catalog.html"),
+        kit: here("./bench/kit.html"),
       },
     },
   },

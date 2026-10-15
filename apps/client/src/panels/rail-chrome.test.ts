@@ -73,6 +73,39 @@ describe("le icone nascoste della rail", () => {
     expect(localStorage.length).toBe(0);
   });
 
+  it("«ripristina» riporta ordine e icone a quelli di partenza e la macchina li dimentica", async () => {
+    fake.entries = [
+      entry("chrome.schema", 1),
+      entry("chrome.rail.order", ["search", "files"]),
+      entry("chrome.rail.hidden", ["files"]),
+    ];
+    unmount = (await import("./rail")).mountRail();
+    await vi.waitFor(() => expect(button("files").hidden).toBe(true));
+    document.querySelector<HTMLButtonElement>(".rail-btn-manage")!.click();
+    const reset = fake.menu.find((item) => item.label === "Ripristina ordine e icone predefiniti");
+    expect(reset).toBeDefined();
+    reset!.run!();
+    expect(button("files").hidden).toBe(false);
+    const order = [...document.querySelectorAll<HTMLButtonElement>("#views-ribbon .rail-btn[data-panel]")].map(
+      (each) => each.dataset.panel,
+    );
+    expect(order).toEqual(["files", "search"]);
+    await vi.waitFor(() =>
+      expect(fake.writes).toEqual([
+        ["chrome.rail.order", []],
+        ["chrome.rail.hidden", []],
+      ]),
+    );
+  });
+
+  it("senza nulla da riportare indietro la voce non c'è", async () => {
+    fake.entries = [entry("chrome.schema", 1)];
+    unmount = (await import("./rail")).mountRail();
+    await Promise.resolve();
+    document.querySelector<HTMLButtonElement>(".rail-btn-manage")!.click();
+    expect(fake.menu.some((item) => item.label === "Ripristina ordine e icone predefiniti")).toBe(false);
+  });
+
   it("la chiave di prima si adotta una volta, se l'impostazione è ancora al default", async () => {
     localStorage.setItem("fub.shell.rail.v1", JSON.stringify({ order: ["search", "files"], hidden: ["search"] }));
     fake.entries = [entry("chrome.schema", 1), entry("chrome.rail.hidden", [], "default")];

@@ -16,7 +16,7 @@
 export type Light = "dark" | "light";
 
 /// Una scena: cosa si guarda, come ci si arriva, e su quale delle due pagine
-/// del banco (la shell vera, oppure il catalogo).
+/// del banco (la shell vera, il telefono, la finestra documento, i cataloghi).
 export interface Scene {
   /// L'id, che è anche il nome del file della foto.
   id: string;
@@ -24,8 +24,12 @@ export interface Scene {
   title: string;
   /// La query string con cui si apre la pagina (vault vuoto, quale catalogo).
   query?: string;
-  /// `"catalog"` per le scene che non sono schermate ma cataloghi.
+  /// `"shell"` per la finestra principale, `"catalog"` per il catalogo del tema,
+  /// `"kit"` per quello delle primitive, `"mobile"` per il telefono e
+  /// `"document"` per la finestra documento.
   page?: string;
+  /// La finestra, quando la scena è uno stato che a 1280×800 non esiste.
+  viewport?: { width: number; height: number };
   /// I gesti che portano la pagina davanti all'obiettivo. Riceve la pagina di
   /// Playwright, che da questo lato del confine non ha un tipo — i tipi di
   /// Playwright sono di Node, e Node qui non c'è.

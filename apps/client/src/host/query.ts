@@ -13,6 +13,7 @@
 import { api } from "./ipc";
 import type {
   DraftInfo,
+  HealthIssue,
   EmbedContent,
   RenderedDocument,
   Organization,
@@ -35,6 +36,7 @@ import type {
   VaultFolder,
   VaultStatus,
 } from "./contract";
+import type { HealthCheck } from "./enums.generated";
 import { EVERY_DOCUMENT, nameQuery, theseDocuments } from "./contract";
 import { parseSearch, type SearchFault, type SearchFaultKind } from "../rules/search-syntax";
 import { t, type Key } from "../i18n/strings";
@@ -303,6 +305,13 @@ export async function activeJobs(): Promise<JobStatus[]> {
 /// non salvato è il dato più privato di un vault.
 export async function unsavedDrafts(): Promise<DraftInfo[]> {
   return runQuery({ kind: "drafts" }).then((page) => page.items);
+}
+
+/// I problemi che un controllo di salute trova nel vault (§7.2): una riga per
+/// problema, sul documento che lo porta. Si legge e basta — correggere è
+/// scrivere, e passa dai comandi.
+export async function vaultHealth(check: HealthCheck, window: PageWindow): Promise<Paged<HealthIssue>> {
+  return runQuery({ kind: "vault_health", check, page: pageOf(window) });
 }
 
 /// Com'è configurato questo vault (§11.1): schema, valore che vale adesso, e

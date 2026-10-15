@@ -177,6 +177,12 @@ esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
 richiede invece revisione del foglio, spiegazione delle scene coinvolte e
 rigenerazione nell'ambiente Ubuntu validato.
 
+Il banco del moto (`npm run bench:motion`) misura le coreografie dello
+Scrittoio nel browser: lo stato d'arrivo coincide con quello a moto ridotto,
+non resta nessuna animazione viva, i fotogrammi chiave toccano soltanto
+`transform` e `opacity`, e un gesto invertito a metà torna allo stato di
+partenza. È il solo banco che apre la pagina col movimento acceso.
+
 L'accessibilità verifica la pagina resa, non soltanto una tabella teorica di
 colori.
 Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;

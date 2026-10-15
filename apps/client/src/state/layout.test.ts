@@ -32,6 +32,7 @@ import {
   setPaneLink,
   setPinnedTab,
   setTabStack,
+  splitWithTab,
   type Layout,
   type SplitNode,
 } from "./layout";
@@ -572,5 +573,65 @@ describe("le proporzioni di una divisione", () => {
     split("main", "col", l);
     setSplitSizes(splitOf(l), [3, 1]);
     expect(splitOf(l).sizes).toEqual([0.75, 0.25]);
+  });
+});
+
+describe("una linguetta rilasciata sul bordo di un foglio", () => {
+  function twoTabs(): Layout {
+    const l = newItem();
+    openIn("main", "a.md", l);
+    openIn("main", "b.md", l);
+    return l;
+  }
+
+  it("a destra o sotto nasce un riquadro dopo, a sinistra o sopra prima", () => {
+    const l = twoTabs();
+    expect(splitWithTab("main", 1, "main", "left", l)).toBe("pane-2");
+    expect(l.tree).toEqual({
+      k: "split",
+      dir: "row",
+      children: [
+        { k: "leaf", pane: "pane-2" },
+        { k: "leaf", pane: "main" },
+      ],
+    });
+    expect(documents(l.panes["main"]!)).toEqual(["a.md"]);
+    expect(documents(l.panes["pane-2"]!)).toEqual(["b.md"]);
+    expect(l.focus).toBe("pane-2");
+
+    const k = twoTabs();
+    splitWithTab("main", 0, "main", "bottom", k);
+    expect(k.tree).toMatchObject({ k: "split", dir: "col" });
+    expect((k.tree as SplitNode).children[1]).toEqual({ k: "leaf", pane: "pane-2" });
+  });
+
+  it("il riquadro nuovo eredita le modalità e la linguetta è la sua attiva", () => {
+    const l = twoTabs();
+    setMode("main", "text", "source", l);
+    splitWithTab("main", 0, "main", "right", l);
+    expect(l.panes["pane-2"]!.modes).toEqual(l.panes["main"]!.modes);
+    expect(l.panes["pane-2"]!.active).toBe(0);
+    expect(l.panes["main"]!.active).toBe(0);
+  });
+
+  it("l'unica linguetta di un foglio non si separa da sé, e un'appuntata non si muove", () => {
+    const l = newItem();
+    openIn("main", "solo.md", l);
+    expect(splitWithTab("main", 0, "main", "right", l)).toBeNull();
+    const k = twoTabs();
+    setPinnedTab("main", 0, true, k);
+    expect(splitWithTab("main", 0, "main", "right", k)).toBeNull();
+    expect(splitWithTab("main", 7, "main", "right", k)).toBeNull();
+    expect(splitWithTab("main", 1, "assente", "right", k)).toBeNull();
+    expect(panes(k)).toEqual(["main"]);
+  });
+
+  it("da un altro riquadro si può anche lasciare quello vuoto: mostra la scrivania", () => {
+    const l = twoTabs();
+    const other = split("main", "row", l)!;
+    openIn(other, "c.md", l);
+    expect(splitWithTab(other, 0, "main", "top", l)).not.toBeNull();
+    expect(documents(l.panes[other]!)).toEqual([]);
+    expect(panes(l)).toHaveLength(3);
   });
 });

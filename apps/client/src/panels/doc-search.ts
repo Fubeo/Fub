@@ -44,7 +44,7 @@ import { setTooltip } from "../ui/tooltip";
 import { state } from "../state/store";
 import { highlighted } from "../ui/highlight";
 import { enterSurface, exitSurface } from "../ui/motion";
-import { reveal } from "./document";
+import { reveal } from "../state/document-controller";
 
 const OVERLAY_ID = "doc-search";
 

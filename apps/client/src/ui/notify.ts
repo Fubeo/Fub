@@ -135,11 +135,15 @@ function notifyText(key: P8Key, args: Record<string, string | number> = {}): str
 
 /// Dice un messaggio all'utente. È la porta di tutta la shell, e resta una
 /// riga: chi chiama non sa che esistono uno storico e un raggruppamento.
-export function notify(message: string, tone: Tone = "info", action?: NoticeAction): void {
+export function notify(
+  message: string,
+  tone: Tone = "info",
+  action?: NoticeAction | readonly NoticeAction[],
+): void {
   history = collect(history, { text: message, tone, when: Date.now(), times: 1 });
   if (!open) unreadCount += 1;
   announce(history[0]!);
-  show(history[0]!, action);
+  show(history[0]!, action === undefined ? [] : "label" in action ? [action] : action);
   redraw();
 }
 
@@ -147,6 +151,9 @@ export function notify(message: string, tone: Tone = "info", action?: NoticeActi
 /// Vive quanto il toast; lo storico conserva il testo, non il gesto.
 export interface NoticeAction {
   readonly label: string;
+  /// Che cosa farebbe il gesto, in una frase: il suggerimento del pulsante.
+  /// «Annulla» da solo non dice che cosa annulla.
+  readonly hint?: string;
   readonly run: () => void | Promise<void>;
 }
 
@@ -306,26 +313,38 @@ function hasDom(): boolean {
   return typeof document !== "undefined";
 }
 
-/// Il toast: l'avviso **mentre succede**. Sovrascrive il precedente di
-/// proposito — chi guarda lo schermo legge l'ultimo, e ciò che ha perso sta
-/// nello storico, che è la ragione per cui lo storico esiste.
+/// Quanti toast stanno insieme a schermo. Tre si leggono con un'occhiata; il
+/// quarto fa uscire il più vecchio, che resta nello storico e nel conto di
+/// «+N altri».
+export const TOAST_STACK_LIMIT = 3;
+
+/// Il toast: l'avviso **mentre succede**. Gli avvisi arrivati insieme stanno in
+/// **pila**, il più recente in basso, vicino all'angolo: ciascuno ha le sue
+/// azioni e il suo tempo, e nessuno cancella un altro che qualcuno sta ancora
+/// leggendo o che ha un «Annulla» da premere. Un avviso identico a quello in
+/// fondo non ne apre un altro: ne rinnova il contatore e il tempo.
 ///
 /// **Non interrompe chi sta già guardando lo storico.** Il toast e la lista
 /// occupano lo stesso angolo e dicono la stessa cosa: a pannello aperto la riga
 /// nuova compare in cima da sé, e un rettangolo sopra la lista coprirebbe
 /// proprio ciò che l'utente è andato a leggere.
-function show(notice: Notice, action?: NoticeAction): void {
+function show(notice: Notice, actions: readonly NoticeAction[]): void {
   if (open || !hasDom()) return;
-  const old = document.getElementById("toast");
-  if (old) old.remove();
-  clearToastTimer();
+  const stack = toastStack();
+  const newest = stack.querySelector<HTMLElement>(".toast:last-of-type");
+  if (newest && actions.length === 0 && newest.dataset["text"] === notice.text && newest.dataset.tone === notice.tone) {
+    const text = newest.querySelector(".toast-text");
+    if (text) text.textContent = lineOf(notice);
+    armToast(newest, notice);
+    return;
+  }
   const toast = document.createElement("div");
-  toast.id = "toast";
   toast.className = "toast";
   // Gli annunci passano dalla regione viva persistente (`announce`): una
   // regione inserita nel DOM insieme al suo testo molti lettori non la
   // leggono. Qui c'è ciò che si vede e i gesti.
   toast.dataset.tone = notice.tone;
+  toast.dataset["text"] = notice.text;
   // Una regione con un nome e non una regione viva: chi usa un lettore di
   // schermo ci arriva dai punti di riferimento per usarne i gesti (Annulla,
   // Riprova), senza che il testo venga letto due volte.
@@ -337,29 +356,20 @@ function show(notice: Notice, action?: NoticeAction): void {
   // (stessa regola di `SearchHit.snippet` e `UiNode` non fidato).
   text.textContent = lineOf(notice);
   toast.append(text);
-  if (action) {
+  for (const action of actions) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "toast-action";
     button.textContent = action.label;
+    if (action.hint) {
+      setTooltip(button, action.hint);
+      button.setAttribute("aria-label", `${action.label}: ${action.hint}`);
+    }
     button.addEventListener("click", () => {
       dismissToast(toast);
       void Promise.resolve(action.run()).catch((error: unknown) => notify(errorText(error), "guasto"));
     });
     toast.append(button);
-  }
-  // Gli altri avvisi arrivati mentre questo era a galla: non si perdono
-  // dietro all'ultimo, si contano e si aprono.
-  if (unreadCount > 1) {
-    const more = document.createElement("button");
-    more.type = "button";
-    more.className = "toast-more";
-    more.textContent = t("notices.more", { count: unreadCount - 1 });
-    more.addEventListener("click", () => {
-      dismissToast(toast);
-      openHistory(true);
-    });
-    toast.append(more);
   }
   const close = document.createElement("button");
   close.type = "button";
@@ -369,33 +379,89 @@ function show(notice: Notice, action?: NoticeAction): void {
   setTooltip(close, t("notices.dismiss"));
   close.addEventListener("click", () => dismissToast(toast));
   toast.append(close);
-  document.body.appendChild(toast);
-  // Un guasto resta finché non lo si chiude: sparire da solo dopo cinque
-  // secondi è il modo in cui un errore non viene letto. Un'informazione se ne
-  // va, ma non mentre la si sta leggendo (puntatore o fuoco sopra).
+  stack.appendChild(toast);
+  // Oltre il limite esce il più vecchio, senza gesto: ciò che diceva sta nello
+  // storico, e il conto lo ricorda.
+  const toasts = stack.querySelectorAll<HTMLElement>(".toast");
+  for (let i = 0; i < toasts.length - TOAST_STACK_LIMIT; i += 1) {
+    dismissToast(toasts[i]!);
+    evicted += 1;
+  }
+  armToast(toast, notice);
+  drawMore(stack);
+}
+
+/// Il contenitore della pila, creato alla prima necessità e tolto quando si
+/// svuota. Una regione senza nome: la pila è solo geometria, il nome sta sui
+/// toast.
+function toastStack(): HTMLElement {
+  const existing = document.getElementById("toasts");
+  if (existing) return existing;
+  const stack = document.createElement("div");
+  stack.id = "toasts";
+  stack.className = "toast-stack";
+  document.body.appendChild(stack);
+  return stack;
+}
+
+/// «+N altri»: i toast usciti dalla pila per fare posto, con un clic sullo
+/// storico. Sta in fondo alla pila solo finché serve.
+function drawMore(stack: HTMLElement): void {
+  stack.querySelector(".toast-more")?.remove();
+  if (evicted === 0) return;
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "toast-more";
+  more.textContent = t("notices.more", { count: evicted });
+  more.addEventListener("click", () => {
+    evicted = 0;
+    for (const toast of stack.querySelectorAll<HTMLElement>(".toast")) dismissToast(toast);
+    openHistory(true);
+  });
+  stack.prepend(more);
+}
+
+/// Un'informazione se ne va dopo cinque secondi, ma non mentre la si sta
+/// leggendo (puntatore o fuoco sopra); un guasto resta finché non lo si chiude:
+/// sparire da solo è il modo in cui un errore non viene letto. Ogni toast ha il
+/// suo tempo.
+function armToast(toast: HTMLElement, notice: Notice): void {
+  disarm(toast);
   if (notice.tone === "guasto") return;
   const arm = () => {
-    clearToastTimer();
-    toastTimer = window.setTimeout(() => dismissToast(toast), TOAST_DURATION_MS);
+    disarm(toast);
+    toastTimers.set(toast, window.setTimeout(() => dismissToast(toast), TOAST_DURATION_MS));
   };
-  toast.addEventListener("mouseenter", clearToastTimer);
-  toast.addEventListener("focusin", clearToastTimer);
-  toast.addEventListener("mouseleave", arm);
-  toast.addEventListener("focusout", arm);
+  if (!toast.dataset["armed"]) {
+    toast.dataset["armed"] = "1";
+    toast.addEventListener("mouseenter", () => disarm(toast));
+    toast.addEventListener("focusin", () => disarm(toast));
+    toast.addEventListener("mouseleave", arm);
+    toast.addEventListener("focusout", arm);
+  }
   arm();
 }
 
-let toastTimer: number | null = null;
+const toastTimers = new WeakMap<HTMLElement, number>();
+/// Quanti toast sono usciti dalla pila per il limite, dall'ultima volta che era
+/// vuota o che si è aperto lo storico.
+let evicted = 0;
 
-function clearToastTimer(): void {
-  if (toastTimer !== null) window.clearTimeout(toastTimer);
-  toastTimer = null;
+function disarm(toast: HTMLElement): void {
+  const timer = toastTimers.get(toast);
+  if (timer !== undefined) window.clearTimeout(timer);
+  toastTimers.delete(toast);
 }
 
 function dismissToast(toast: HTMLElement): void {
-  if (document.getElementById("toast") !== toast) return;
-  clearToastTimer();
+  if (!toast.isConnected) return;
+  disarm(toast);
+  const stack = toast.parentElement;
   toast.remove();
+  if (stack && stack.id === "toasts" && stack.querySelector(".toast") === null) {
+    evicted = 0;
+    stack.remove();
+  }
 }
 
 /// La regione viva: una sola, creata una volta e mai sostituita, a cui cambia
