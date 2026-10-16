@@ -25,8 +25,12 @@
 //!
 //! 1. il job si annuncia con un evento **dopo** aver preso l'istanza e prima di
 //!    aspettare il segnale;
-//! 2. il banco lancia il salvataggio e aspetta che il turno di scrittura sia in
-//!    mano a qualcuno: il job, che in quel momento legge soltanto, non lo ha;
+//! 2. il banco lancia il salvataggio su un thread suo e aspetta che **quel
+//!    thread** risulti in attesa dell'istanza (`waits::thread_waits_for_an_instance`):
+//!    per aspettarla ha il turno, e l'istanza la tiene il job. Il turno «in mano a
+//!    qualcuno» non basta: nei primi millisecondi lo tiene anche l'`emit` con cui
+//!    il job si è annunciato, a tratti, e il segnale arriverebbe prima che il
+//!    salvataggio sia partito (sotto carico, la variante degli eventi falliva così);
 //! 3. solo allora il banco crea il segnale **fuori dal workspace**, e il job,
 //!    che lo legge senza chiedere nessun turno, passa alla richiesta.
 //!
@@ -272,9 +276,9 @@ fn is_conflict(error: &PluginError) -> bool {
 /// Il job è dentro l'istanza; il salvataggio di `dato` parte; poi il segnale
 /// arriva e il job chiede il turno a sua volta.
 ///
-/// Con `await_turn` il segnale arriva solo quando il salvataggio **ha** il
-/// turno, ed è l'ordine che chiude il ciclo. Un salvataggio che non chiede
-/// l'istanza il turno lo rilascia troppo presto per osservarlo, e lì non
+/// Con `await_turn` il segnale arriva solo quando il salvataggio **sta già
+/// aspettando l'istanza** del job, col turno in mano: è l'ordine che chiude il
+/// ciclo. Un salvataggio che non chiede l'istanza non aspetta niente, e lì non
 /// serve: non c'è niente da incastrare.
 ///
 /// Rende l'identità del job e l'esito del salvataggio, o `Err` se il
@@ -301,14 +305,25 @@ fn salva_mentre_il_job_chiede(
     let (saved_tx, saved_rx) = mpsc::channel();
     let saver = Arc::clone(&host);
     let dato = DocId::new(dato.to_string());
-    std::thread::spawn(move || {
+    let salvataggio = std::thread::spawn(move || {
         let saved = saver.write_document(None, &dato, "dopo", WriteBase::Dictated);
         let _ = saved_tx.send(saved);
     });
     if await_turn {
-        wait_for("il salvataggio ha il turno di scrittura", || {
-            host.is_write_turn_held(None).unwrap_or(false)
+        // Il fatto che chiude il ciclo è questo: **quel** thread aspetta
+        // l'istanza, che il job tiene. Per aspettarla ha già il turno. Vedere
+        // soltanto «il turno è in mano a qualcuno» non basterebbe: nei primi
+        // millisecondi lo tiene anche l'`emit` con cui il job si è annunciato, e
+        // il segnale arriverebbe prima che il salvataggio sia partito.
+        let thread = salvataggio.thread().id();
+        wait_for("il salvataggio aspetta l'istanza del job", || {
+            fub_host::waits::thread_waits_for_an_instance(thread)
         });
+        assert!(
+            host.is_write_turn_held(None).unwrap_or(false),
+            "il salvataggio aspetta l'istanza senza il turno di scrittura: non è il ciclo \
+             che la prova vuole chiudere"
+        );
     }
 
     // 3. Il segnale, fuori dal workspace: il job passa alla richiesta.
