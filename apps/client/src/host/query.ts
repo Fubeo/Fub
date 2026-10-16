@@ -11,6 +11,7 @@
 // Anche le domande di rendering passano da questo modulo, così la risposta
 // viene aperta e gli errori di variante hanno una sola forma.
 import { api } from "./ipc";
+import { openVaultRoot, vaultArg } from "../state/store";
 import type {
   DraftInfo,
   EmbedContent,
@@ -104,7 +105,10 @@ type QueryOf<K extends QueryKind> = Extract<IndexQuery, { kind: K }>;
 async function runQuery<K extends QueryKind>(
   request: QueryOf<K>,
 ): Promise<PayloadForQuery<K>> {
-  const result = await api.queryIndex(request);
+  // Il vault è quello aperto quando parte la domanda: l'host risponde con il
+  // corrente soltanto se non lo si dice, e «corrente» cambia aprendone un altro
+  // (FUB-001).
+  const result = await api.queryIndex(request, ...vaultArg(openVaultRoot()));
   const expected = (request.kind === "resolve" ? "resolved" : request.kind) as keyof PayloadOf;
   return open(result, expected) as PayloadForQuery<K>;
 }
