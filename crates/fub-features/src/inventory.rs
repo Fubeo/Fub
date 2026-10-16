@@ -81,6 +81,7 @@ use fub_abi::custom::{CustomRenderer, SyntaxRule};
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::{CommandProvider, IndexProvider, ViewProvider};
+use fub_abi::transfer::ExportProvider;
 
 #[cfg(feature = "backlinks")]
 use crate::backlinks::{self, BacklinksView, BACKLINKS_ID};
@@ -97,6 +98,8 @@ use crate::blocks::{
 use crate::commands::{self, CoreCommands, COMMANDS_ID};
 #[cfg(feature = "dashboard")]
 use crate::dashboard::{self, DashboardView, DASHBOARD_ID};
+#[cfg(feature = "draw")]
+use crate::draw::{self, DRAW_ID};
 #[cfg(feature = "formatting")]
 use crate::formatting::{self, FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
@@ -124,6 +127,8 @@ use crate::versioning::{self, HistoryView, VersioningCommands, VERSIONING_ID};
 pub type SyntaxRules = fn() -> Vec<Box<dyn SyntaxRule>>;
 /// Costruisce i renderer di una feature.
 pub type Renderers = fn() -> Vec<Box<dyn CustomRenderer>>;
+/// Costruisce i provider di export di una feature.
+pub type Exports = fn() -> Vec<Box<dyn ExportProvider>>;
 
 /// Una riga dell'inventario: una feature ufficiale di questo repo.
 ///
@@ -150,7 +155,7 @@ pub struct OfficialFeature {
     /// sono scritte.
     pub catalog: fn() -> Vec<StringCatalog>,
     /// Come si costruisce il suo [`ViewProvider`], se ne registra uno. `None`
-    /// per ricerca, comandi, blocchi e base, che registrano altro.
+    /// per ricerca, comandi, blocchi, base e disegni, che registrano altro.
     ///
     /// Ne nasce uno per montaggio: un pannello non ha stato da condividere fra
     /// vault diversi, e se un giorno ne avesse sarebbe una ragione in più per
@@ -168,6 +173,11 @@ pub struct OfficialFeature {
     pub syntax: Option<SyntaxRules>,
     /// I renderer delle specie che quelle regole producono.
     pub renderers: Option<Renderers>,
+    /// I provider di export, cioè le destinazioni che la feature aggiunge al
+    /// dialogo di export. Un elenco e non un provider solo perché un provider
+    /// dichiara le proprie destinazioni, e due formati che non condividono
+    /// niente oltre al bundle sono più chiari come due provider.
+    pub exports: Option<Exports>,
     /// Le impostazioni che il componente dichiara nel proprio manifest.
     pub settings: Option<fn() -> Vec<SettingSpec>>,
     /// I servizi che il bundle fornisce ad altri bundle. È una dipendenza di
@@ -207,6 +217,7 @@ impl OfficialFeature {
             && self.index.is_none()
             && self.syntax.is_none()
             && self.renderers.is_none()
+            && self.exports.is_none()
             && self.wiring == HostWiring::None
     }
 }
@@ -229,6 +240,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: Some(search::settings),
         provides: &[],
         requires: &[],
@@ -248,6 +260,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -263,6 +276,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -278,6 +292,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -293,6 +308,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -308,6 +324,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         // `note.property.set`/`remove`, che template e Base invocano.
         provides: &[PROPERTIES_ID],
@@ -324,6 +341,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         // Le giornaliere e gli inserimenti leggono impostazioni che il loro
         // componente dichiara: senza questa riga `daily.folder` e compagne non
         // sarebbero di nessuno, il pannello non le mostrerebbe e ogni lettura
@@ -344,6 +362,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -359,6 +378,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -374,6 +394,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: Some(backup::settings),
         provides: &[],
         requires: &[],
@@ -389,6 +410,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         // Il pannello invoca `trash.restore`/`trash.empty`, che appartengono al
@@ -407,6 +429,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -423,6 +446,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -438,6 +462,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         provides: &[],
         requires: &[],
@@ -453,6 +478,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: Some(|| Box::new(BaseIndex::new())),
         syntax: Some(|| vec![Box::new(fub_format_base::BaseRule)]),
         renderers: Some(|| vec![Box::new(fub_format_base::BaseRenderer)]),
+        exports: None,
         settings: None,
         provides: &[],
         // Una cella modificata diventa `note.property.set`/`remove`.
@@ -469,6 +495,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         index: None,
         syntax: None,
         renderers: None,
+        exports: None,
         settings: None,
         // Il servizio che il cestino richiede. L'atomicità del registro
         // garantisce che non sopravviva a una registrazione fallita.
@@ -493,6 +520,25 @@ static OFFICIALS: &[OfficialFeature] = &[
             ]
         }),
         renderers: Some(|| vec![Box::new(DiagramRenderer), Box::new(MathRenderer)]),
+        exports: None,
+        settings: None,
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::None,
+    },
+    // Ultima, e non per caso: non registra né pannelli né comandi, quindi la sua
+    // posizione non sposta niente sotto gli occhi di chi usa l'app.
+    #[cfg(feature = "draw")]
+    OfficialFeature {
+        id: DRAW_ID,
+        name: "Drawings",
+        catalog: draw::catalog,
+        view: None,
+        commands: None,
+        index: None,
+        syntax: None,
+        renderers: None,
+        exports: Some(draw::exports),
         settings: None,
         provides: &[],
         requires: &[],

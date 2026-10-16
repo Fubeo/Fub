@@ -466,6 +466,9 @@ descrizione e riepilogo, con `truncated: true` (§11).
   disegno, con il frammento, già escapato per stare fra virgolette doppie. Un
   `image` si scrive come un `a`, e l'etichetta non conta. Wikilink e URL non si
   scrivono in un disegno; un percorso fuori dal vault è un errore.
+- **Export** in PNG e PDF (`fub.draw`, feature `draw`): il documento, le
+  immagini raster in data URI e i caratteri di Fub incorporati, mai quelli di
+  sistema; ogni altro riferimento resta fuori e il log dell'export lo elenca.
 
 ## 10. Versioni e compatibilità
 

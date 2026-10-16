@@ -62,6 +62,14 @@ const FUORI_DAL_DEFAULT = new Map([
     "job test, passo «le scene di FubDraw, con la feature `draw` dell'host»; " +
       "clippy nel job fmt",
   ],
+  // L'export dei disegni in PNG e PDF: va con il formato qui sopra, che
+  // `fub-host/draw` accende insieme a lei, e porta un rasterizzatore, un
+  // convertitore PDF e i caratteri di Fub che senza disegni non servono.
+  [
+    "crates/fub-features/Cargo.toml#draw",
+    "job test, passo «l'export dei disegni, con la feature `draw` delle feature»; " +
+      "clippy nel job fmt",
+  ],
 ]);
 
 /**

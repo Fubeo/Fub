@@ -9,8 +9,9 @@ description = "Official features as native trait implementations: backlink, sear
 # Una cargo feature per bundle, e i nomi sono gli stessi dell'inventario
 # (`src/inventory.rs`): una riga che sparisce dietro un `#[cfg]` sparisce da lì,
 # quindi non è mai il documento a dire cosa esiste. Il default è **tutto**, cioè
-# l'app che spediamo: spegnere è una scelta di chi compila, non un difetto da
-# ricordarsi di correggere.
+# l'app che spediamo, con una sola eccezione dichiarata (`draw`, più sotto):
+# spegnere è una scelta di chi compila, non un difetto da ricordarsi di
+# correggere.
 #
 # La ragione per cui questo file esiste in questa forma è una sola misura: senza
 # di esso `tantivy` è dipendenza dell'intero crate, quindi compilare il pannello
@@ -71,6 +72,14 @@ base = ["dep:fub-format-base", "properties"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
+# L'export dei disegni in PNG e in PDF. È l'unica feature **fuori** dal default,
+# ed è una scelta e non una dimenticanza: porta un rasterizzatore, un
+# convertitore PDF e i caratteri di Fub incorporati nel binario, e li porta
+# solo con il formato dei disegni, che sta dietro la feature `draw` di
+# `fub-host`. Chi compila senza disegni non paga niente di tutto questo; la
+# regola è presidiata da `.github/scripts/check-cargo-feature-default.mjs` e da
+# `tests/cargo_features.rs`.
+draw = ["dep:resvg", "dep:svg2pdf", "dep:png", "dep:image"]
 
 [dependencies]
 camino.workspace = true
@@ -86,6 +95,23 @@ jiff = { workspace = true, optional = true }
 # una feature sola.
 tantivy = { version = "0.26", optional = true }
 regex = { workspace = true, optional = true }
+# Dietro `draw`, e solo lì. `resvg` senza i default, che sono `system-fonts` e
+# `memmap-fonts`: i caratteri sono quelli di Fub, incorporati, e nient'altro.
+# Restano il testo e la decodifica delle immagini raster incorporate come
+# `data:`. `fontdb` sa comunque leggere dal disco, perché `svg2pdf` lo prende
+# con le sue feature di serie e le feature si sommano: che non lo faccia lo
+# garantisce il codice, che costruisce il database dai soli byte incorporati, e
+# lo prova un test.
+resvg = { version = "0.45.1", default-features = false, features = ["text", "raster-images"], optional = true }
+svg2pdf = { version = "0.13.0", optional = true }
+# L'encoder del PNG: quello di `tiny-skia` non scrive né la risoluzione
+# (`pHYs`) né il titolo (`iTXt`). È la stessa 0.18 che `image` porta già.
+png = { version = "0.18.1", optional = true }
+# Non lo chiama nessuno: c'è per accendere `webp` nella copia di `image` che usa
+# `svg2pdf`, che di suo decodifica solo JPEG, PNG e GIF. Senza questa riga
+# un'immagine WebP incorporata in un disegno uscirebbe nel PNG e mancherebbe
+# nel PDF. Il decoder è lo stesso `image-webp` che `resvg` porta già.
+image = { version = "0.25.10", default-features = false, features = ["webp"], optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.
@@ -108,6 +134,9 @@ fub-sdk = { workspace = true }
 fub-testkit = { workspace = true }
 fub-format-markdown.workspace = true
 tempfile = { workspace = true }
+# I test dell'export dei disegni confrontano i PDF per struttura, e per leggerne
+# i flussi devono decomprimerli.
+flate2 = { workspace = true }
 
 # Il banco della §21.9 (decisione 0074): quanto costa una query, e **dove** vanno
 # i millisecondi. `required-features` e non un `#![cfg]` in testa al file: un
