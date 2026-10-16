@@ -173,8 +173,16 @@ scrivono nel log (`tracing::warn!` per `emit`). Chi deve esserci a ogni costo
 usa `spawn-job`, che dice di no. Il job che riceve `host.turn.cycle` deve uscire
 dalla chiamata, restituendo l'istanza, e ritentare.
 
-Non sono coperti i cicli puri fra due istanze senza un turno di mezzo: nessun
-percorso noto li chiude, e il grafo non li scioglie.
+Anche un ciclo di **sole istanze**, senza un turno di mezzo (A tiene X e aspetta
+Y, B tiene Y e aspetta X), si scioglie: `lock_instance` controlla e registra
+l'attesa sotto lo stesso lucchetto del grafo (`waits::try_wait_instance`), quindi
+di due thread che si chiudono a vicenda l'ultimo a chiedere non si mette in fila
+e riceve `Conflict` con la chiave `host.instance.cycle`. Il primo prosegue
+appena l'altro restituisce la sua istanza. Un guest che ignora l'errore e
+ritenta trova lo stesso ciclo e lo stesso errore finché l'altro lato non ha
+restituito: non si ferma per sempre, ma deve uscire dalla chiamata per
+sbloccarlo. Un ciclo che passa da un turno resta di chi aspetta il turno (sopra):
+il salvataggio non è mai la vittima.
 
 ## Callback degli indici
 

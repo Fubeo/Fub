@@ -48,9 +48,7 @@ pub(crate) fn index_provider_from_inner(
     let _guard = crate::component::enter_instance(crate::component::instance_identity(&inner))
         .map_err(|_| "re-entrant component call".to_string())?;
     let routes = {
-        let mut locked = inner
-            .lock_instance()
-            .map_err(|_| "component instance is poisoned".to_string())?;
+        let mut locked = inner.lock_instance().map_err(|why| why.to_string())?;
         let instance = &mut *locked;
         let Some(index) = instance.interfaces.index.as_ref() else {
             return Ok(None);
@@ -82,9 +80,7 @@ pub(crate) fn event_handler_from_inner(
     let _guard = crate::component::enter_instance(crate::component::instance_identity(&inner))
         .map_err(|_| "re-entrant component call".to_string())?;
     let mask = {
-        let mut locked = inner
-            .lock_instance()
-            .map_err(|_| "component instance is poisoned".to_string())?;
+        let mut locked = inner.lock_instance().map_err(|why| why.to_string())?;
         let instance = &mut *locked;
         let Some(handler) = instance.interfaces.event_handler.as_ref() else {
             return Ok(None);
@@ -101,10 +97,6 @@ pub(crate) fn event_handler_from_inner(
         ic::from_event_mask(mask)
     };
     Ok(Some(WasmEventHandler { inner, mask }))
-}
-
-fn avvelenato() -> PluginError {
-    PluginError::Internal("component instance is poisoned".into())
 }
 
 fn rientro() -> PluginError {
@@ -160,10 +152,10 @@ impl IndexProvider for WasmIndexProvider {
         };
         let mut locked = match self.inner.lock_instance() {
             Ok(locked) => locked,
-            Err(_) => {
+            Err(why) => {
                 return docs
                     .iter()
-                    .map(|doc| IndexLoss::new(doc.id.clone(), avvelenato()))
+                    .map(|doc| IndexLoss::new(doc.id.clone(), PluginError::from(why)))
                     .collect()
             }
         };
@@ -211,10 +203,10 @@ impl IndexProvider for WasmIndexProvider {
         };
         let mut locked = match self.inner.lock_instance() {
             Ok(locked) => locked,
-            Err(_) => {
+            Err(why) => {
                 return ids
                     .iter()
-                    .map(|id| IndexLoss::new(id.clone(), avvelenato()))
+                    .map(|id| IndexLoss::new(id.clone(), PluginError::from(why)))
                     .collect()
             }
         };
@@ -257,10 +249,10 @@ impl IndexProvider for WasmIndexProvider {
         };
         let mut locked = match self.inner.lock_instance() {
             Ok(locked) => locked,
-            Err(_) => {
+            Err(why) => {
                 return ids
                     .iter()
-                    .map(|id| IndexLoss::new(id.clone(), avvelenato()))
+                    .map(|id| IndexLoss::new(id.clone(), PluginError::from(why)))
                     .collect()
             }
         };
@@ -319,7 +311,7 @@ impl IndexProvider for WasmIndexProvider {
             self.inner.as_ref(),
         ))
         .map_err(|_| rientro())?;
-        let mut locked = self.inner.lock_instance().map_err(|_| avvelenato())?;
+        let mut locked = self.inner.lock_instance().map_err(PluginError::from)?;
         let instance = &mut *locked;
         crate::limits::renew(&mut instance.store);
         let index = instance.interfaces.index.as_ref().ok_or_else(|| {

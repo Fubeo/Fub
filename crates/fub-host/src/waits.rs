@@ -46,6 +46,18 @@
 //! chiuso. Il thread che lo scopre è, per costruzione, uno che tiene
 //! un'istanza: è il guest, ed è lui a cedere.
 //!
+//! # Il ciclo puro fra istanze
+//!
+//! Se il turno non c'entra (A tiene X e aspetta Y, B tiene Y e aspetta X) nessuno
+//! riguarda il grafo mentre aspetta, e le due attese native non finiscono mai.
+//! Per questo chi aspetta un'istanza la chiede con [`try_wait_instance`], che
+//! **controlla e registra sotto lo stesso lucchetto**: di due thread che si
+//! chiudono a vicenda uno è l'ultimo a registrarsi, vede l'altro già in attesa e
+//! riceve [`InstanceCycle`]; l'altro non ha nulla da fare. Il controllo segue
+//! soltanto attese di istanze: un ciclo che passa da un turno resta di chi
+//! aspetta il turno, che ha un altro verso per cedere (il salvataggio non deve
+//! fallire).
+//!
 //! # Il lucchetto
 //!
 //! Il grafo sta dietro **un** mutex globale che è una **foglia**: chi lo prende
@@ -68,6 +80,35 @@ struct Graph {
     instance_waits: HashMap<ThreadId, usize>,
     /// Thread → thread che possiede il turno che sta aspettando.
     turn_waits: HashMap<ThreadId, ThreadId>,
+}
+
+impl Graph {
+    /// Partendo da chi tiene `token`, e seguendo **solo** le attese di
+    /// istanze, si arriva a `me`?
+    fn instances_lead_back_to(&self, token: usize, me: ThreadId) -> bool {
+        let mut seen = HashSet::new();
+        let Some(mut at) = self.held.get(&token).copied() else {
+            return false;
+        };
+        loop {
+            if at == me {
+                return true;
+            }
+            if !seen.insert(at) {
+                return false;
+            }
+            // Chi aspetta un turno, o niente, non prolunga la catena: un ciclo
+            // che passa da un turno lo scioglie chi aspetta quel turno.
+            let Some(next) = self
+                .instance_waits
+                .get(&at)
+                .and_then(|waited| self.held.get(waited))
+            else {
+                return false;
+            };
+            at = *next;
+        }
+    }
 }
 
 static GRAPH: LazyLock<Mutex<Graph>> = LazyLock::new(|| Mutex::new(Graph::default()));
@@ -105,12 +146,36 @@ pub struct InstanceWait {
     me: ThreadId,
 }
 
-/// Registra che il thread corrente sta per aspettare l'istanza `token`. Va
-/// preso **prima** di mettersi in attesa, e tenuto finché non si è ottenuta.
+/// Registra che il thread corrente sta per aspettare l'istanza `token`, **senza
+/// controllare** che l'attesa chiuda un ciclo. Serve a chi mette in scena un
+/// grafo nei banchi; chi aspetta davvero un'istanza usa [`try_wait_instance`].
+#[doc(hidden)]
 pub fn wait_instance(token: usize) -> InstanceWait {
     let me = std::thread::current().id();
     graph().instance_waits.insert(me, token);
     InstanceWait { me }
+}
+
+/// Aspettare l'istanza chiuderebbe un ciclo di sole istanze: chi la tiene
+/// aspetta, di seguito, qualcosa che questo thread tiene. Nessuno dei due si
+/// muoverebbe mai.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InstanceCycle;
+
+/// **Aspettare l'istanza `token`, se non chiude un ciclo.**
+///
+/// Il controllo e la registrazione stanno sotto lo stesso lucchetto del grafo:
+/// di due thread che si aspettano a vicenda, uno solo può vedere l'altro già in
+/// attesa, ed è lui a ricevere l'errore. Va preso **prima** di mettersi in
+/// attesa e tenuto finché l'istanza non si è ottenuta.
+pub fn try_wait_instance(token: usize) -> Result<InstanceWait, InstanceCycle> {
+    let me = std::thread::current().id();
+    let mut graph = graph();
+    if graph.instances_lead_back_to(token, me) {
+        return Err(InstanceCycle);
+    }
+    graph.instance_waits.insert(me, token);
+    Ok(InstanceWait { me })
 }
 
 impl Drop for InstanceWait {
@@ -294,6 +359,91 @@ mod tests {
         release_c.send(()).unwrap();
         handle_b.join().unwrap();
         handle_c.join().unwrap();
+    }
+
+    #[test]
+    fn the_last_of_two_instances_waiting_for_each_other_is_refused() {
+        // Io tengo 0x10 e aspetto 0x20; B tiene 0x20 e vorrebbe 0x10.
+        let _held = hold_instance(0x10);
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let (go_tx, go_rx) = mpsc::channel::<()>();
+        let b = std::thread::spawn(move || {
+            let _held = hold_instance(0x20);
+            ready_tx.send(()).unwrap();
+            go_rx.recv().unwrap();
+            // Io aspetto già 0x20: aspettare 0x10 chiude il ciclo.
+            let outcome = try_wait_instance(0x10).err();
+            let waits = thread_waits_for_an_instance(std::thread::current().id());
+            (outcome, waits)
+        });
+        ready_rx.recv().unwrap();
+        let _wait = try_wait_instance(0x20).expect("B non aspetta ancora niente");
+        go_tx.send(()).unwrap();
+        let (outcome, waits) = b.join().unwrap();
+        assert_eq!(outcome, Some(InstanceCycle), "l'ultimo a registrarsi cede");
+        assert!(!waits, "chi è stato rifiutato non resta nel grafo");
+        assert!(
+            thread_waits_for_an_instance(std::thread::current().id()),
+            "chi ha registrato per primo aspetta davvero"
+        );
+    }
+
+    #[test]
+    fn a_chain_of_instances_is_followed_to_the_end() {
+        // Io tengo 0x30; B tiene 0x31 e aspetta 0x32; C tiene 0x32 e aspetta 0x30.
+        // Io che aspetto 0x31 chiuderei il giro.
+        let _held = hold_instance(0x30);
+        let (_c, release_c, handle_c) = spawn_parked(|id, go| {
+            let _held = hold_instance(0x32);
+            let _wait = wait_instance(0x30);
+            id.send(std::thread::current().id()).unwrap();
+            go.recv().unwrap();
+        });
+        let (_b, release_b, handle_b) = spawn_parked(|id, go| {
+            let _held = hold_instance(0x31);
+            let _wait = wait_instance(0x32);
+            id.send(std::thread::current().id()).unwrap();
+            go.recv().unwrap();
+        });
+        assert_eq!(try_wait_instance(0x31).err(), Some(InstanceCycle));
+        release_b.send(()).unwrap();
+        release_c.send(()).unwrap();
+        handle_b.join().unwrap();
+        handle_c.join().unwrap();
+    }
+
+    #[test]
+    fn waiting_for_an_instance_nobody_holds_or_that_leads_elsewhere_is_allowed() {
+        assert!(try_wait_instance(0x40).is_ok(), "nessuno la tiene");
+        let (_c, release_c, handle_c) = spawn_parked(|id, go| {
+            let _held = hold_instance(0x41);
+            id.send(std::thread::current().id()).unwrap();
+            go.recv().unwrap();
+        });
+        assert!(
+            try_wait_instance(0x41).is_ok(),
+            "chi la tiene non aspetta me"
+        );
+        release_c.send(()).unwrap();
+        handle_c.join().unwrap();
+    }
+
+    #[test]
+    fn a_turn_in_the_chain_is_left_to_whoever_waits_for_the_turn() {
+        // B tiene 0x50 e aspetta il turno di un terzo: la catena istanza → turno
+        // non è una catena di sole istanze, e non è questo thread a sciogliere
+        // un ciclo che passa dal turno.
+        let me = std::thread::current().id();
+        let _held = hold_instance(0x51);
+        let (_b, release, handle) = spawn_parked(move |id, go| {
+            let _held = hold_instance(0x50);
+            let _turn = wait_turn(me);
+            id.send(std::thread::current().id()).unwrap();
+            go.recv().unwrap();
+        });
+        assert!(try_wait_instance(0x50).is_ok());
+        release.send(()).unwrap();
+        handle.join().unwrap();
     }
 
     #[test]
