@@ -19,7 +19,8 @@ flowchart LR
     CANVAS["fub-format-canvas"] --> ABI
     CANVAS --> MARKDOWN
     BASE["fub-format-base"] --> ABI
-    SCENE["fub-scene"]
+    INK["fub-ink"]
+    SCENE["fub-scene"] --> INK
     SVG["fub-format-svg"] --> ABI
     SVG --> SCENE
     IMPORTERS["fub-importers"] --> ABI
@@ -61,6 +62,7 @@ del repository verificano le eccezioni.
 | `fub-format-sheet` | workbook persistito, valutatore, sessioni derivate, provider grid e route di valutazione | host, storage, Tauri, Wasmtime |
 | `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
+| `fub-ink` | il nucleo dell'inchiostro, puro: campione del puntatore, ruoli (il palmo), curva della pressione, inclinazione, stabilizzatore e ciclo di vita del tratto, come riduttore di campioni in effetti; è la copia che fa fede del nucleo TypeScript di `apps/client/src/ink/` | DOM, Tauri, kernel, formati su disco, strumenti o interfaccia di un prodotto |
 | `fub-scene` | lettura dei disegni di FubDraw secondo il [formato della scena](../reference/scene-format.md), e delle annotazioni PDF secondo il [loro formato](../reference/annotation-format.md): classificazione, inchiostro, indice e diagnostica | `fub-abi`, host, qualunque I/O |
 | `fub-format-svg` | i formati `svg` e `fubann`: modello per l'indice, segnaposto HTML o elenco delle annotazioni, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell; verifica del PDF annotato |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
@@ -75,7 +77,8 @@ del repository verificano le eccezioni.
 - `fub-abi` → `fub-kernel`, Tauri, Wasmtime o Markdown;
 - `fub-kernel` → `fub-host`, Tauri, Wasmtime o `fub-format-markdown`;
 - `fub-host` → Tauri;
-- `fub-scene` → qualunque crate del workspace;
+- `fub-scene` → qualunque crate del workspace tranne `fub-ink`;
+- `fub-ink` → qualunque crate del workspace, Tauri, Wasmtime o un prodotto;
 - qualunque crate diverso da `fub-wasm-host` → Wasmtime;
 - dipendenza normale → `fub-testkit`;
 - file frontend arbitrario → `@tauri-apps`;
