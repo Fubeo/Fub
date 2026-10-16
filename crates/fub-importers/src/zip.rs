@@ -8,6 +8,13 @@
 //! carries the real sizes and CRC even when the local header does not, and
 //! the size/CRC check applies to every entry.
 //!
+//! The central directory is **authoritative, zero included**: a writer always
+//! knows the real values by the time it writes the directory, so a declared
+//! size or CRC of 0 means 0, not "unknown". An entry declared empty that
+//! inflates to bytes, or whose CRC is 0 but whose bytes are not, is refused;
+//! reading 0 as "unchecked" would let the archive switch the integrity check
+//! off for itself (FUB-014).
+//!
 //! All offsets and sizes are validated before any allocation; every entry
 //! body is capped ([`MAX_ENTRY_BYTES`]) and the archive total is capped
 //! ([`MAX_TOTAL_UNCOMPRESSED`]) with a ratio check for bombs.
@@ -238,7 +245,7 @@ pub fn extract_entry(
             entry.name
         ))));
     }
-    if entry.uncompressed_size > MAX_ENTRY_BYTES && entry.uncompressed_size != 0 {
+    if entry.uncompressed_size > MAX_ENTRY_BYTES {
         return Err(EntryFailure::Entry(bad_args(format!(
             "ZIP entry `{}` declares {} bytes (max {MAX_ENTRY_BYTES})",
             entry.name, entry.uncompressed_size
@@ -256,16 +263,9 @@ pub fn extract_entry(
             use flate2::FlushDecompress;
             use flate2::Status;
             let mut de = Decompress::new(false);
-            let cap = if declared == 0 {
-                MAX_ENTRY_BYTES.min(MAX_TOTAL_UNCOMPRESSED.saturating_sub(*total_so_far))
-            } else {
-                declared.min(MAX_ENTRY_BYTES)
-            };
-            if cap == 0 {
-                return Err(EntryFailure::Archive(bad_args(
-                    "ZIP archive exceeds the 256 MiB total budget",
-                )));
-            }
+            // The declared size is the cap: an entry declared empty may not
+            // inflate to anything.
+            let cap = declared.min(MAX_ENTRY_BYTES);
             let mut out = Vec::new();
             let mut input = body;
             let mut buf = vec![0u8; 256 * 1024];
@@ -354,7 +354,7 @@ pub fn extract_entry(
     };
     // Always checked: with a data descriptor the central directory still
     // carries the real size and CRC.
-    if out.len() as u64 != entry.uncompressed_size && entry.uncompressed_size != 0 {
+    if out.len() as u64 != entry.uncompressed_size {
         return Err(EntryFailure::Entry(bad_args(format!(
             "ZIP entry `{}` inflated to {} bytes, declared {}",
             entry.name,
@@ -362,7 +362,7 @@ pub fn extract_entry(
             entry.uncompressed_size
         ))));
     }
-    if entry.crc32 != 0 && crc32(&out) != entry.crc32 {
+    if crc32(&out) != entry.crc32 {
         return Err(EntryFailure::Entry(bad_args(format!(
             "ZIP entry `{}` fails its CRC check",
             entry.name
@@ -490,6 +490,62 @@ mod tests {
         for deflate in [false, true] {
             let zip = build("a.txt", body, deflate, true);
             assert_eq!(extract_first(&zip).unwrap(), body);
+        }
+    }
+
+    /// Where the central-directory record of the (only) entry starts.
+    fn central_record(zip: &[u8]) -> usize {
+        zip.windows(4)
+            .rposition(|w| w == b"PK\x01\x02")
+            .expect("one central-directory record")
+    }
+
+    /// Overwrite a 4-byte field of the central-directory record.
+    fn set_central(zip: &mut [u8], field: usize, value: u32) {
+        let at = central_record(zip) + field;
+        zip[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    const CENTRAL_CRC: usize = 16;
+    const CENTRAL_UNCOMPRESSED: usize = 24;
+
+    #[test]
+    fn an_entry_the_directory_declares_empty_cannot_carry_bytes() {
+        let body = b"hello from the source note\n";
+        for (deflate, descriptor) in [(false, false), (true, false), (false, true), (true, true)] {
+            let mut zip = build("a.txt", body, deflate, descriptor);
+            set_central(&mut zip, CENTRAL_UNCOMPRESSED, 0);
+            set_central(&mut zip, CENTRAL_CRC, 0);
+            assert!(
+                extract_first(&zip).is_err(),
+                "deflate={deflate} descriptor={descriptor}: a declared size of 0 is not \"unchecked\""
+            );
+        }
+    }
+
+    #[test]
+    fn a_zero_crc_in_the_directory_is_still_a_crc() {
+        let body = b"hello from the source note\n";
+        for deflate in [false, true] {
+            let mut zip = build("a.txt", body, deflate, false);
+            set_central(&mut zip, CENTRAL_CRC, 0);
+            let error = extract_first(&zip).expect_err("the CRC does not match");
+            assert!(
+                error.to_string().contains("CRC"),
+                "deflate={deflate}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_empty_entry_is_still_accepted() {
+        for (deflate, descriptor) in [(false, false), (true, false), (false, true), (true, true)] {
+            let zip = build("empty.txt", b"", deflate, descriptor);
+            assert_eq!(
+                extract_first(&zip).unwrap(),
+                b"",
+                "deflate={deflate} descriptor={descriptor}"
+            );
         }
     }
 
