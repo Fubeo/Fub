@@ -450,7 +450,7 @@ export async function openCommandPalette(host: PaletteHost) {
   // `null` se l'elenco è arrivato, l'errore altrimenti: un valore, così
   // l'attesa sotto non ha un rifiuto da perdere.
   const loaded: Promise<unknown> = Promise.resolve()
-    .then(() => api.listCommands())
+    .then(() => api.listCommands(...vaultArg(openVaultRoot())))
     .then(async (specs) => {
       setCommandSpecs(specs);
       await loadKeyOverrides();
@@ -511,7 +511,7 @@ export async function openSlashPalette(
   });
   let specs: CommandSpec[];
   try {
-    specs = await api.listCommands();
+    specs = await api.listCommands(...vaultArg(openVaultRoot()));
     await loadKeyOverrides();
   } catch (error) {
     if (generation === paletteGeneration) {

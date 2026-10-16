@@ -11,6 +11,8 @@ const world = vi.hoisted(() => {
     names: [] as string[],
     matches: { items: [] as { doc: string; snippet?: string; highlights?: unknown[]; occurrences?: { span: { start: number; end: number } }[] }[], total: 0 },
     asked: [] as unknown[],
+    /// Il vault con cui è arrivata ogni domanda all'indice (FUB-001).
+    askedVault: [] as (string | undefined)[],
     indexing: "idle",
     outline: [] as { level: number; text: string; span: { start: number; end: number } }[],
     tags: [] as { name: string; count: number }[],
@@ -27,8 +29,9 @@ vi.mock("../../../i18n/strings", () => ({
 }));
 vi.mock("../../../host/ipc", () => ({
   api: {
-    queryIndex: async (query: { kind: string; doc: string }) => {
+    queryIndex: async (query: { kind: string; doc: string }, vault?: string) => {
       world.asked.push(query);
+      world.askedVault.push(vault);
       return { kind: "outline", value: world.outline };
     },
   },
@@ -61,6 +64,9 @@ vi.mock("../../../state/recent", () => ({
   recentSearches: () => world.searches,
 }));
 vi.mock("../../../state/store", () => ({
+  // Le domande dei titoli nominano il vault aperto (FUB-001): come il vero.
+  openVaultRoot: () => world.vault || undefined,
+  vaultArg: (vault: string | null | undefined) => (vault ? [vault] : []),
   state: {
     get vaultRoot() {
       return world.vault;
@@ -91,6 +97,7 @@ beforeEach(() => {
   world.names = [];
   world.matches = { items: [], total: 0 };
   world.asked.length = 0;
+  world.askedVault.length = 0;
   world.indexing = "idle";
   world.outline = [];
   world.tags = [];
@@ -214,6 +221,11 @@ describe("le intestazioni", () => {
     ]);
     expect((await listing("headings", "tab")).rows.map((row) => row.key)).toEqual(["h:30"]);
     expect((await listing("headings", "zzz")).note).toBe('launcher.note.headings.none {"query":"zzz"}');
+  });
+
+  it("la domanda all'indice nomina il vault aperto", async () => {
+    await listing("headings", "");
+    expect(world.askedVault).toEqual(["/vault"]);
   });
 
   it("una nota senza intestazioni lo dice", async () => {

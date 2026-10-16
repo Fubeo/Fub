@@ -289,3 +289,23 @@ export function writeState(key: string, value: unknown): void {
     }),
   );
 }
+
+/// La radice del vault aperto adesso, o `undefined` se nessuno lo è: il **vault
+/// del gesto** (FUB-001). Un gesto lo legge quando parte e lo nomina nelle sue
+/// chiamate, così un comando che aspetta (una conferma, un'altra chiamata)
+/// raggiunge il vault in cui è nato anche se nel frattempo ne è stato aperto
+/// un altro: senza, l'host risponde con il vault corrente.
+///
+/// Sta qui, nel foglio da cui dipendono tutti, e non in `state/vault.ts`: le
+/// letture di `host/query.ts` lo nominano, e `state/vault.ts` importa quel
+/// modulo.
+export function openVaultRoot(): string | undefined {
+  return state.vaultRoot || undefined;
+}
+
+/// Il vault come **ultimo argomento** di una chiamata, o niente se non c'è: una
+/// chiamata senza vault resta identica a com'era, e chi l'ascolta non vede un
+/// `undefined` in coda. Si usa spalmandolo: `api.leggi(id, ...vaultArg(vault))`.
+export function vaultArg(vault: string | null | undefined): [string] | [] {
+  return vault ? [vault] : [];
+}

@@ -1022,20 +1022,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
       discardDraft: (id, vault) => gate("discardDraft", named([id], vault), Promise.resolve()),
       setActiveContext: (context) => gate("setActiveContext", [context], Promise.resolve([])),
       setSystemLocale: (locale) => gate("setSystemLocale", [locale], Promise.resolve(false)),
-      listViews: () => gate("listViews", [], Promise.resolve(view)),
-      renderView: (v, instance, params) => {
+      listViews: (vault) => gate("listViews", named([], vault), Promise.resolve(view)),
+      renderView: (v, instance, params, vault) => {
         const tree = viewTree(v);
-        return gate("renderView", [v, instance, params], Promise.resolve(tree));
+        return gate("renderView", named([v, instance, params], vault), Promise.resolve(tree));
       },
-      viewAction: (v, instance, params, action, payload, fields) => {
-        calls.push({ gate: "viewAction", args: [v, instance, params, action, payload, fields] });
+      viewAction: (v, instance, params, action, payload, fields, vault) => {
+        calls.push({
+          gate: "viewAction",
+          args: named([v, instance, params, action, payload, fields], vault),
+        });
         if (v === TRASH_VIEW && action === "restore") {
           command("trash.restore", { entry: String(payload) }, "apply");
           return Promise.resolve({ kind: "replace" as const, root: viewTree(v) });
         }
         throw new Error(`host fake: la view «${v}» non ha l'azione «${action}»`);
       },
-      listCommands: () => gate("listCommands", [], Promise.resolve(options.commands ?? [])),
+      listCommands: (vault) =>
+        gate("listCommands", named([], vault), Promise.resolve(options.commands ?? [])),
       invokeCommand: (commandId, args, mode, vault) => {
         const callArgs = named([commandId, args, mode], vault);
         calls.push({ gate: "invokeCommand", args: callArgs });
@@ -1053,7 +1057,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const throttle = throttles.get("invokeCommand");
         return throttle ? throttle.then(execute) : execute();
       },
-      queryIndex: (q) => {
+      queryIndex: (q, vault) => {
         // Anche una query non servita deve attraversare il gate e restituire
         // una Promise rifiutata, come l'IPC, non un'eccezione sincrona.
         let result: Promise<IndexResult>;
@@ -1065,9 +1069,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         // Il throttle può trattenere la consegna: osserva subito il rifiuto,
         // ma restituisce la Promise originale, con lo stesso errore al caller.
         void result.catch(() => {});
-        return gate("queryIndex", [q], result);
+        return gate("queryIndex", named([q], vault), result);
       },
-      cancelJob: (id) => gate("cancelJob", [id], Promise.resolve()),
+      cancelJob: (id, vault) => gate("cancelJob", named([id], vault), Promise.resolve()),
       setIcon: (path, icon) => gate("setIcon", [path, icon], Promise.resolve()),
       setPinned: (id, pinned) => gate("setPinned", [id, pinned], Promise.resolve()),
       setSpace: (path, space) => gate("setSpace", [path, space], Promise.resolve()),

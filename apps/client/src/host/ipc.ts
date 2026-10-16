@@ -253,11 +253,17 @@ export const api = {
     invoke<boolean>("set_system_locale", { locale }),
   // Le view offerte dai provider registrati: la shell le monta per
   // `placement`, senza cablare gli id — una view di plugin compare da sola.
-  listViews: () => invoke<ViewSpec[]>("list_views"),
+  //
+  // `vault` nomina il vault da cui si legge (vedi `toVault`): la shell lo sa
+  // quando monta, e l'host risponde col corrente soltanto se non lo dice.
+  listViews: (vault?: string | null) => invoke<ViewSpec[]>("list_views", toVault({}, vault)),
   // L'istanza e i suoi parametri viaggiano accanto all'id della view (§2.3):
   // assenti = l'esemplare unico, quello che la shell monta da sé.
-  renderView: (view: string, instance?: string, params?: unknown) =>
-    invoke<UiNode>("render_view", { view, instance: instance ?? null, params: params ?? null }),
+  renderView: (view: string, instance?: string, params?: unknown, vault?: string | null) =>
+    invoke<UiNode>(
+      "render_view",
+      toVault({ view, instance: instance ?? null, params: params ?? null }, vault),
+    ),
   // Le due metà di un'azione arrivano come due argomenti distinti, ed è ciò che
   // impedisce alla shell di riscrivere quella del provider (§2.7): `payload` è
   // suo, `fields` è ciò che l'utente ha compilato.
@@ -268,19 +274,29 @@ export const api = {
     action: string,
     payload?: unknown,
     fields?: FieldValue[],
+    // Il vault della view montata: un'azione può scrivere, e finirebbe nel
+    // corrente dell'host invece che in quello che la view mostra.
+    vault?: string | null,
   ) =>
-    invoke<ViewUpdate>("view_action", {
-      view,
-      instance,
-      params: params ?? null,
-      action,
-      payload: payload ?? null,
-      fields: fields ?? null,
-    }),
+    invoke<ViewUpdate>(
+      "view_action",
+      toVault(
+        {
+          view,
+          instance,
+          params: params ?? null,
+          action,
+          payload: payload ?? null,
+          fields: fields ?? null,
+        },
+        vault,
+      ),
+    ),
   // Comandi (protocollo generico, gemello di listViews/viewAction). La palette
   // legge questo elenco e non cabla nessun id: un comando di plugin comparirà
   // da solo, coi suoi parametri e il suo raggio.
-  listCommands: () => invoke<CommandSpec[]>("list_commands"),
+  listCommands: (vault?: string | null) =>
+    invoke<CommandSpec[]>("list_commands", toVault({}, vault)),
   // `mode` assente = `apply`: è la scelta di questo confine, non del contratto
   // (dove un default non esiste apposta).
   //
@@ -296,14 +312,16 @@ export const api = {
   // quarto scavalcava perfino il canale chiamando il grafo del kernel diretto.
   // Adesso la shell ha le stesse capacità di un plugin, e una variante nuova
   // del contratto non chiede un comando in più.
-  queryIndex: (query: IndexQuery) => invoke<IndexResult>("query_index", { query }),
+  queryIndex: (query: IndexQuery, vault?: string | null) =>
+    invoke<IndexResult>("query_index", toVault({ query }, vault)),
   // Ferma un lavoro lungo (§10.3). L'id viaggia come **stringa**: è un u64
   // pieno, e `JSON.parse` perde i bit oltre 2⁵³ in silenzio — un job che ogni
   // tanto non si annulla somiglierebbe a un job lento.
   //
   // Non c'è un «job sconosciuto» da gestire: annullare un job appena finito è la
   // cosa più normale che l'utente faccia, e il backend risponde di sì.
-  cancelJob: (id: string) => invoke<void>("cancel_job", { id }),
+  cancelJob: (id: string, vault?: string | null) =>
+    invoke<void>("cancel_job", toVault({ id }, vault)),
   // L'organizzazione del vault (§11.3): icone, appuntate, ordinamenti, spazi.
   //
   // **Leggerla non è qui**: passa da `queryIndex` (`organization`), come le

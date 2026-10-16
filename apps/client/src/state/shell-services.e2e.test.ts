@@ -543,6 +543,29 @@ describe("i gesti nominano il vault in cui nascono (FUB-001)", () => {
     expect(reads.length).toBeGreaterThan(0);
     for (const args of reads) expect(args[1]).toBe("/vault");
   });
+
+  /// Le letture che compongono la shell — l'elenco delle view, il disegno delle
+  /// view montate, l'elenco dei comandi e il canale dati — nominano il vault
+  /// aperto, come le scritture: l'host risponde con il corrente soltanto se non
+  /// gli si dice quale.
+  it("l'elenco delle view e dei comandi, il disegno e il canale dati nominano il vault aperto", async () => {
+    const shell = await start(VAULT);
+
+    // Prima dell'apertura non c'è un vault da nominare (le impostazioni di
+    // macchina si leggono all'avvio): contano le chiamate da quando il vault è
+    // aperto.
+    const calls = shell.host.calls;
+    const opened = calls.findIndex((call) => call.gate === "openVault");
+    expect(opened, "il vault non è stato aperto").toBeGreaterThan(-1);
+    const after = calls.slice(opened + 1);
+    for (const gate of ["listViews", "renderView", "listCommands", "queryIndex"] as const) {
+      const named = after.filter((call) => call.gate === gate);
+      expect(named.length, `${gate}: nessuna chiamata`).toBeGreaterThan(0);
+      for (const call of named) {
+        expect(call.args[call.args.length - 1], `${gate} non nomina il vault`).toBe("/vault");
+      }
+    }
+  });
 });
 
 describe("recuperare le bozze", () => {

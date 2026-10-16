@@ -1,6 +1,7 @@
 import { mountMarkdownSurface, type EditorSlashHost } from "../text/profiles/markdown/surface";
 import type { CompletionSources } from "../text/profiles/markdown/completions";
 import { api } from "../../host/ipc";
+import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import { currentTheme } from "../../theme/theme";
@@ -223,8 +224,10 @@ export function createDocumentSurfaceRegistry(
     formats: { [BASE_FORMAT]: BASE_PROFILE },
     factory: {
       mount(profile, context) {
+        // Il vault in cui la superficie nasce (FUB-001).
+        const vault = openVaultRoot();
         return mountBaseSurface(profile, context, {
-          queryIndex: api.queryIndex,
+          queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
           invokeCommand: api.invokeCommand,
           viewState: api.viewState,
           setViewState: api.setViewState,

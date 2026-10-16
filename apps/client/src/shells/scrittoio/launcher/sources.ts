@@ -23,7 +23,7 @@ import { paneOf } from "../../../state/document-controller";
 import { activeDoc, layout } from "../../../state/layout";
 import { paletteHost } from "../../../state/palette-host";
 import { existingRecentNotes, recentSearches } from "../../../state/recent";
-import { state } from "../../../state/store";
+import { openVaultRoot, state, vaultArg } from "../../../state/store";
 import { allCommands, type CommandEntry } from "../../../ui/commands";
 import { filterCommands, orderCommands, paletteHistoryForTest, viewEntries } from "../../../ui/palette";
 import { filterByText, linePlace, lineTarget, type Mode } from "./model";
@@ -129,7 +129,7 @@ async function search(text: string): Promise<Listing> {
 async function headings(text: string): Promise<Listing> {
   const doc = activeDoc();
   if (!doc) return nothing(t("launcher.note.no_doc"));
-  const answer = await api.queryIndex({ kind: "outline", doc });
+  const answer = await api.queryIndex({ kind: "outline", doc }, ...vaultArg(openVaultRoot()));
   const all = answer.kind === "outline" ? answer.value : [];
   if (all.length === 0) return nothing(t("launcher.note.headings"));
   const kept = filterByText(all, text, (heading) => heading.text);

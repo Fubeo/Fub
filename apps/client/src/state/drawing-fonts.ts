@@ -8,6 +8,7 @@ import { vaultEntries } from "../host/query";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import type { VaultFontFile, VaultFontPort } from "../editors/spatial/fonts/vault";
 import { onEvent } from "./kernel";
+import { openVaultRoot, vaultArg } from "./store";
 
 /// Lo spazio dell'indice dove l'host risponde alle domande dei disegni.
 const DRAW_QUERIES = "fub.draw";
@@ -46,7 +47,10 @@ export const drawingFonts: VaultFontPort = {
     }
   },
   ask: async (query) => {
-    const answer = await api.queryIndex({ kind: "custom", ns: DRAW_QUERIES, query });
+    const answer = await api.queryIndex(
+      { kind: "custom", ns: DRAW_QUERIES, query },
+      ...vaultArg(openVaultRoot()),
+    );
     if (answer.kind !== "custom") throw new Error(`${DRAW_QUERIES} answered a ${answer.kind} result`);
     return answer.value;
   },

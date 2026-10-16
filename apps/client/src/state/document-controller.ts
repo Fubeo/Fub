@@ -119,7 +119,7 @@ import {
   type LayoutNode,
   type Tab,
 } from "./layout";
-import { createNote, loadCommandSpecs, openVaultRoot } from "./vault";
+import { createNote, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
@@ -521,7 +521,7 @@ function refreshNoteClasses(r: Pane, doc: string): void {
     kind: "documents", matching: theseDocuments([doc]), sort: null,
     select: { kind: "keys", keys: ["cssclasses", "cssclass"] },
     page: { offset: 0, limit: 1 }, excerpts: "omit",
-  }).then((result) => {
+  }, ...vaultArg(openVaultRoot())).then((result) => {
     if (r.noteClassGeneration !== generation || r.shown?.k !== "doc" || r.shown.doc !== doc) return;
     if (result.kind !== "documents") throw new Error(`expected document properties, got ${result.kind}`);
     const properties = result.value.items[0]?.properties;

@@ -11,6 +11,7 @@ import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
 import { apply, exportArtifacts, exportNotes, mountActivity, noticeOf, labelOf, remember, PAST_LIMIT, type JobRow, type Past } from "./activity";
 import { api } from "../host/ipc";
+import { state } from "../state/store";
 import samples from "../__fixtures__/mirror-samples.json";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { clearHistory, recentNotices } from "../ui/notify";
@@ -366,5 +367,38 @@ describe("the notes of an export report", () => {
     expect(texts).toContain("Errore: La tavola b9 non c'è.");
     lifetime.close();
     query.mockRestore();
+  });
+});
+
+describe("fermare un lavoro (FUB-001)", () => {
+  /// Il job gira nel vault in cui è nato, e `cancel_job` senza il nome cerca fra
+  /// i lavori del vault **corrente**: dopo aver aperto un altro vault «Ferma»
+  /// direbbe di non conoscerlo, o fermerebbe un lavoro omonimo. La richiesta
+  /// nomina il vault aperto dalla shell.
+  it("cancelJob nomina il vault aperto", async () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    state.vaultRoot = "/a";
+    const cancel = vi.spyOn(api, "cancelJob").mockResolvedValue();
+    vi.spyOn(api, "queryIndex").mockResolvedValue({
+      kind: "jobs",
+      value: [{ id: "7", job: "export", progress: null }],
+    } as never);
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(STARTED);
+    document.getElementById("activity-button")!.click();
+    await vi.waitFor(() =>
+      expect(document.querySelector("#activity-list .link-button")).not.toBeNull(),
+    );
+
+    document.querySelector<HTMLButtonElement>("#activity-list .link-button")!.click();
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1));
+    expect(cancel).toHaveBeenCalledWith("7", "/a");
+
+    state.vaultRoot = "";
+    lifetime.close();
   });
 });

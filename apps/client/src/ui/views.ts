@@ -45,6 +45,7 @@ import { applyIntent } from "./intents";
 import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
 import { flushPendingSave } from "../state/document-session";
+import { openVaultRoot, vaultArg } from "../state/store";
 import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 import { notify } from "./notify";
 import { t } from "../i18n/strings";
@@ -86,6 +87,11 @@ interface Mounted {
   /// cosa**: quando la montata se ne va, i suoi giri in volo se ne vanno con
   /// lei, e non c'è una seconda mappa da ricordarsi di ripulire.
   race: Race;
+  /// Il vault in cui la view è stata montata (FUB-001). Le sue letture e le sue
+  /// azioni lo nominano: un'azione può scrivere, e senza il nome l'host la
+  /// manderebbe al vault **corrente**, che cambia aprendone un altro mentre
+  /// la view è ancora sullo schermo.
+  vault: string | undefined;
 }
 
 /// Le istanze montate, per **id di pannello**: il registro dei pannelli sa
@@ -162,6 +168,7 @@ export async function mountViewInPane(
       params,
       epoch: ++mountedEpoch,
       race: new Race(),
+      vault: openVaultRoot(),
     });
     registerPanel({
       id,
@@ -302,7 +309,9 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   // domanda non risponde, ciò che c'è sullo schermo è vecchio ma **vivo**, che
   // è la peggiore delle due cose che si possono avere e la migliore delle due
   // che si possono scegliere.
-  const specs = await mountRun.last(async (expected) => await expected(api.listViews()));
+  const specs = await mountRun.last(
+    async (expected) => await expected(api.listViews(...vaultArg(openVaultRoot()))),
+  );
   // Il giro è scaduto: un rimontaggio più nuovo sta già lavorando, e questo non
   // deve smontare ciò che quello ha montato. Una finestra chiusa non può
   // adottare una risposta arrivata tardi: il suo DOM appartiene già al mondo
@@ -517,6 +526,7 @@ function mountSpec(spec: ViewSpec, host: HTMLElement): void {
     params: null,
     epoch: ++mountedEpoch,
     race: new Race(),
+    vault: openVaultRoot(),
   });
 
   registerPanel({
@@ -561,7 +571,14 @@ async function renderDeclaredView(id: string): Promise<void> {
   // scoperti il ramo `replace` e ogni ridisegno che arriva da un evento, che
   // sono i più frequenti.
   await mountedView.race.last(async (expected) => {
-    const tree = await expected(api.renderView(mountedView.view, mountedView.instance, mountedView.params));
+    const tree = await expected(
+      api.renderView(
+        mountedView.view,
+        mountedView.instance,
+        mountedView.params,
+        ...vaultArg(mountedView.vault),
+      ),
+    );
     // La risposta ha attraversato un confine asincrono: nel frattempo il
     // pannello può essere stato smontato e rimontato nello stesso contenitore.
     // Servono tutti e tre i controlli: la mappa per l'identità, il contenitore
@@ -615,6 +632,7 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
       action.action,
       action.payload,
       fields,
+      ...vaultArg(mountedView.vault),
     );
     if (!isAuthoritative()) return;
     if (update.kind === "replace") {
