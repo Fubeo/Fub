@@ -24,7 +24,7 @@ const THRESHOLDS = {
   "fub-features": 80,
   "fub-host": 377,
   "fub-kernel": 166,
-  "fub-wasm-host": 55,
+  "fub-wasm-host": 49,
 };
 
 const LITERAL =
