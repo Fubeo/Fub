@@ -2487,29 +2487,51 @@ describe("la palette flussa prima di un comando che scrive", () => {
       surfaces: [],
     };
     const host = await start(VAULT, [], undefined, null, [specSearchOpen]);
-    typeInEditor("testo non ancora salvato");
+    // **Il tempo lo conta il test, non l'orologio.** Il salvataggio automatico
+    // scade dopo 400 ms: in un ambiente lento il giro della palette li supera,
+    // e il debounce passava per un flush della palette (la riga rossa di sotto
+    // non distingueva i due). Con i timer fermi il debounce non può scadere da
+    // solo, e `writeDocument` c'è soltanto se la palette l'ha chiesto.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const settleStill = async (): Promise<void> => {
+      for (let i = 0; i < 6; i += 1) await vi.advanceTimersByTimeAsync(0);
+    };
+    try {
+      typeInEditor("testo non ancora salvato");
 
-    document.dispatchEvent(
-      new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
-    );
-    await settle();
-    const input = document.querySelector<HTMLInputElement>(".palette-input")!;
-    input.value = "Cerca nel vault";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
-    await settle();
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
+      );
+      await settleStill();
+      const input = document.querySelector<HTMLInputElement>(".palette-input")!;
+      input.value = "Cerca nel vault";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+      await settleStill();
 
-    const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
-    field.value = "rust";
-    const form = document.querySelector<HTMLFormElement>(".palette-form")!;
-    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    await settle();
+      const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
+      field.value = "rust";
+      const form = document.querySelector<HTMLFormElement>(".palette-form")!;
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await settleStill();
 
-    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
-    expect(
-      host.atGate("writeDocument"),
-      "un comando di sola lettura non deve salvare i buffer",
-    ).toHaveLength(0);
+      expect(host.atGate("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
+      expect(
+        host.atGate("writeDocument"),
+        "un comando di sola lettura non deve salvare i buffer",
+      ).toHaveLength(0);
+
+      // Il controllo positivo: il buffer era davvero sporco, e il salvataggio
+      // automatico, lasciato scadere, lo scrive. Senza questa riga il test
+      // passerebbe anche con un editor che non ha mai ricevuto la battuta.
+      await vi.advanceTimersByTimeAsync(450);
+      expect(
+        host.atGate("writeDocument"),
+        "il buffer era sporco: il debounce lo avrebbe salvato",
+      ).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
