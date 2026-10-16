@@ -214,6 +214,16 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         1,
         Reason::AnotherSerialize,
     ),
+    (
+        // Le operazioni di un commit della sessione live: il testo JSON
+        // ricevuto dal tablet passa alla shell così com'è, e `serialize` lo
+        // scrive verbatim dentro il messaggio che lo porta. Serde, come gli
+        // altri.
+        "crates/fub-live/src/protocol/ops.rs",
+        ".serialize",
+        1,
+        Reason::AnotherSerialize,
+    ),
 ];
 
 /// L'allowlist per chiave, col rifiuto dei doppioni: due righe per lo stesso
@@ -237,8 +247,17 @@ fn allowlist() -> BTreeMap<(&'static str, &'static str), (usize, &'static Reason
 
 /// Le cartelle in cui non si entra: non contengono sorgenti del progetto, e una
 /// di esse (`target`) ne contiene di generati che direbbero il falso. Anche
-/// `legacy_tests` sta sotto `src/`, ma il modulo che lo dichiara è `#[cfg(test)]`.
-const EXCLUDED: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
+/// `legacy_tests` sta sotto `src/`, ma il modulo che lo dichiara è `#[cfg(test)]`,
+/// e lo stesso vale per una cartella `tests` dentro `src/`, come quella delle
+/// prove di `fub-live`.
+const EXCLUDED: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    ".fub",
+    "legacy_tests",
+    "tests",
+];
 
 /// La radice del repo, dedotta dal manifest di questo crate.
 fn root() -> PathBuf {

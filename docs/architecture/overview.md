@@ -40,6 +40,7 @@ flowchart TD
     importers["fub-importers"]
     cli["fub-cli"]
     services["fub-services"]
+    live["fub-live"]
     wasmhost["fub-wasm-host"]
     sdk["fub-sdk"]
     testkit["fub-testkit"]
@@ -95,7 +96,8 @@ flowchart TD
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
 `fub-app`, che adatta Tauri e IPC. `fub-host` compone provider e sessioni;
 `fub-wasm-host` dipende dall'host per montare bundle, ma l'host non dipende da
-Wasmtime.
+Wasmtime. `fub-live`, la sessione live di FubDraw, non ha archi: non vede il
+contratto, il kernel, l'host né Tauri, e la comporrà `fub-app`.
 
 ## Flusso di un comando
 
