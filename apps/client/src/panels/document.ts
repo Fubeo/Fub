@@ -1154,7 +1154,7 @@ function drawConflict(r: PaneFrame, doc: string | null): void {
   compare.addEventListener("click", () => {
     // Il testo su disco si legge adesso, non da una copia: è quello che la
     // scelta «usa la versione su disco» metterebbe al posto del mio.
-    void api.readDocument(current).then(
+    void api.readDocument(current, documentSessions.vaultFor(current)).then(
       (source) => openCompare(t("document.conflict.compare_title", { doc: docTitle(current) }), source.text, documentSessions.text(current) ?? ""),
       (error: unknown) => notify(t("document.reload_failed", { doc: current }) + ` ${errorText(error)}`, "guasto"),
     );

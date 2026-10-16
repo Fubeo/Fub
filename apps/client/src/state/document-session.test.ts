@@ -1349,3 +1349,137 @@ describe("la chiusura della finestra protegge ogni buffer sporco", () => {
     );
   });
 });
+
+describe("il vault delle sessioni (FUB-001)", () => {
+  const A = "/vault/A";
+  const B = "/vault/B";
+  let current: string | null;
+  let api: DocumentSessionApi;
+  let sessions: DocumentSessionCollection;
+  const base = { kind: "descends_from", value: "rev-1" } as const;
+
+  beforeEach(() => {
+    current = A;
+    api = fakeApi();
+    vi.stubGlobal("setTimeout", vi.fn(() => 1));
+    vi.stubGlobal("clearTimeout", vi.fn());
+    sessions = new DocumentSessionCollection(api, () => current);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("legge e scrive nel vault in cui il documento è stato aperto, anche se il corrente cambia", async () => {
+    await sessions.read("nota.md");
+    expect(api.readDocument).toHaveBeenCalledWith("nota.md", A);
+    acceptText(sessions, "nota.md", "testo mio");
+
+    current = B; // l'host ha aperto il vault nuovo e la shell non lo sa ancora
+    await sessions.flush("nota.md");
+
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo mio", base, A);
+    expect(api.writeDocument).not.toHaveBeenCalledWith("nota.md", "testo mio", base, B);
+  });
+
+  it("la bozza e il suo scarto nominano lo stesso vault della sessione", async () => {
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo mio");
+    current = B;
+
+    await sessions.flushDraft("nota.md");
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "testo mio", "rev-1", A);
+
+    // Salvato il testo, la bozza non serve più: anche il suo scarto va nel vault giusto.
+    await sessions.flush("nota.md");
+    await vi.waitFor(() => expect(api.discardDraft).toHaveBeenCalledWith("nota.md", A));
+  });
+
+  it("senza un vault noto le chiamate restano quelle di sempre", async () => {
+    current = null;
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo mio");
+    await sessions.flush("nota.md");
+
+    expect(api.readDocument).toHaveBeenCalledWith("nota.md");
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo mio", base);
+  });
+
+  it("una lettura in volo che finisce dopo il cambio di vault non crea una sessione", async () => {
+    let finish!: (source: DocumentSource) => void;
+    api.readDocument = vi.fn(
+      () =>
+        new Promise<DocumentSource>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const reading = sessions.read("nota.md");
+
+    current = B; // mentre la lettura aspetta, la shell passa all'altro vault
+    finish({ text: "dal vault A", revision: "rev-A", format_id: "markdown", source_kind: "text" });
+
+    await expect(reading).resolves.toBe("dal vault A");
+    expect(sessions.get("nota.md")).toBeUndefined();
+  });
+
+  it("dopo la chiusura delle sessioni lo stesso path riparte dal vault nuovo", async () => {
+    await sessions.read("nota.md");
+    current = B;
+    sessions.closeAll();
+
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo del vault B");
+    await sessions.flush("nota.md");
+
+    expect(api.writeDocument).toHaveBeenLastCalledWith("nota.md", "testo del vault B", base, B);
+  });
+
+  it("un file senza formato si salva a byte nel vault della sua sessione", async () => {
+    api.readDocument = vi.fn(
+      async (): Promise<DocumentSource> => ({
+        text: "<svg/>",
+        revision: "rev-s",
+        format_id: null,
+        source_kind: "text",
+      }),
+    );
+    await sessions.read("disegno.svg");
+    acceptText(sessions, "disegno.svg", "<svg>nuovo</svg>");
+
+    current = B;
+    await sessions.flush("disegno.svg");
+
+    expect(api.resourceWrite).toHaveBeenCalledWith("disegno.svg", expect.any(Uint8Array), "rev-s", A);
+    expect(api.writeDocument).not.toHaveBeenCalled();
+  });
+
+  it("la bozza di un file sparito dal disco resta nel vault in cui è sparito", async () => {
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "lavoro non salvato");
+    current = B;
+
+    const outcome = sessions.handleExternalRemoval("nota.md");
+
+    expect(outcome).toMatchObject({ kind: "removed", dirty: true, text: "lavoro non salvato" });
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "lavoro non salvato", "rev-1", A);
+  });
+
+  it("una bozza recuperata appartiene al vault corrente del recupero", async () => {
+    sessions.restore("bozza.md", "testo ritrovato", { kind: "dictated" });
+    current = B;
+
+    await sessions.flushDraft("bozza.md");
+
+    expect(api.saveDraft).toHaveBeenCalledWith("bozza.md", "testo ritrovato", null, A);
+  });
+
+  it("`vaultFor` dice il vault di un buffer aperto e, per il resto, il corrente", async () => {
+    await sessions.read("nota.md");
+    current = B;
+
+    expect(sessions.vaultFor("nota.md")).toBe(A);
+    expect(sessions.vaultFor("altra.md")).toBe(B);
+    current = null;
+    expect(sessions.vaultFor("altra.md")).toBeUndefined();
+  });
+});
