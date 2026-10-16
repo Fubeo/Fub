@@ -26,7 +26,13 @@ use fub_host::waits;
 use fub_host::{Custody, Host, JobHost, NoWatcher};
 use fub_kernel::Workspace;
 
+/// L'istanza del ciclo. Il grafo delle attese è del processo e le prove girano
+/// in parallelo nello stesso processo: due prove che tengono lo **stesso**
+/// token si sovrascrivono il proprietario e se lo cancellano a vicenda, e il
+/// ciclo smette di vedersi. Ogni prova ha il suo.
 const TOKEN: usize = 0xFB19;
+/// L'istanza del controllo senza ciclo.
+const TOKEN_WITHOUT_CYCLE: usize = 0xFB1A;
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 fn vault() -> (tempfile::TempDir, Host) {
@@ -135,7 +141,7 @@ fn in_a_cycle_the_capabilities_of_a_job_answer_instead_of_waiting() {
 fn without_a_cycle_the_same_calls_do_not_yield() {
     let (_dir, host) = vault();
     let workspace = host.debug_workspace(None).expect("il vault corrente");
-    let _held = waits::hold_instance(TOKEN);
+    let _held = waits::hold_instance(TOKEN_WITHOUT_CYCLE);
 
     // Il turno è libero: il job lo prende, anche se tiene un'istanza.
     let outcome = the_job_asks_for_the_turn(workspace);
