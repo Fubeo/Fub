@@ -7,6 +7,7 @@ import { api } from "../host/ipc";
 import { settings, vaultEntries } from "../host/query";
 import type { LibraryChange, LibraryFile, SymbolLibraryPort } from "../editors/spatial/tools/symbol-libraries";
 import { onEvent } from "./kernel";
+import { openVaultRoot } from "./vault";
 
 /// Il bundle che dichiara le impostazioni dei disegni.
 const DRAW_SETTINGS = "fub.draw";
@@ -29,7 +30,7 @@ async function folderFiles(folder: string): Promise<LibraryFile[]> {
 export const drawingSymbols: SymbolLibraryPort = {
   setting: async (key) => (await settings(DRAW_SETTINGS)).find((entry) => entry.spec.key === key)?.value,
   files: folderFiles,
-  read: async (path) => (await api.readDocument(path)).text,
+  read: async (path) => (await api.readDocument(path, openVaultRoot())).text,
   watch: (changed: (change: LibraryChange) => void) => {
     const stops = [
       onEvent("document_changed", (e) => changed({ path: e.id })),

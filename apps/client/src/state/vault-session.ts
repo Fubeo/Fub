@@ -84,6 +84,15 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     if (!alive()) return;
     const info = await api.openVault(dir);
     if (!alive()) return;
+    // **Ciò che è stato battuto mentre l'host apriva il vault nuovo** (FUB-001).
+    // Il vault di prima resta aperto nell'host finché non lo si chiude, e ogni
+    // sessione scrive nel vault in cui è nata (`document-session.ts`): questo
+    // flush lo raggiunge per nome anche se il corrente, adesso, è l'altro. Senza,
+    // quel testo si perdeva con la chiusura delle sessioni qui sotto — e un
+    // autosave o una bozza armati prima potevano finire nel vault nuovo.
+    // Ciò che nemmeno questo salva torna da `resetDocumentsForVault` e si dice.
+    await flushPendingSave();
+    if (!alive()) return;
     const unsaved = await resetDocumentsForVault();
     if (unsaved.length > 0) ports.notify(t("demo.unsaved", { files: unsaved.join(", ") }), "guasto");
     if (!alive()) return;
