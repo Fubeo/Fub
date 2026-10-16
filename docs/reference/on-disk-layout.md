@@ -320,6 +320,17 @@ Un journal scritto da una versione precedente non ha ricevute e, se è
 interrotto, non ha nemmeno l'impronta del dopo: i suoi bersagli diversi dalla
 preimmagine sono ambigui e il rollback si ferma sul primo.
 
+Il rollback è tutto o niente: li controlla **tutti** prima di cambiarne uno, perché
+un rollback a metà lascerebbe un import riportato indietro in parte. Un
+conflitto lascia journal e preimmagini, e ci sono due strade: sistemare a mano
+il bersaglio ambiguo e rilanciare `import.rollback`, oppure tenere il vault
+com'è con `import.abandon`, che toglie journal, ricevute e preimmagini del job
+senza toccare nessun bersaglio (il job torna `staged`, e un commit nuovo
+ricalcola il piano sul vault di adesso). Si abbandona anche un journal che non
+si legge più (schema sconosciuto, JSON rotto), che il rollback non userebbe. Un
+import già committato non si abbandona: il suo journal è ciò che rende
+possibile il rollback.
+
 Quindi `.fub/plugins/` non è né tutta cache né tutto dato autorevole.
 
 ## Cestino

@@ -21,6 +21,7 @@ pub const IMPORT_STATUS: &str = "import.status";
 pub const IMPORT_COMMIT: &str = "import.commit";
 pub const IMPORT_CANCEL: &str = "import.cancel";
 pub const IMPORT_ROLLBACK: &str = "import.rollback";
+pub const IMPORT_ABANDON: &str = "import.abandon";
 pub const EXPORT_RUN: &str = "export.run";
 pub const TRANSFER_JOB: &str = "import.transfer";
 
@@ -56,6 +57,8 @@ pub fn specs() -> Vec<CommandSpec> {
         spec(IMPORT_CANCEL, "Cancel staged import", "Remove uncommitted staged input. An active journal must be rolled back first.", true,
             vec![param("job", "Stable import ID")]),
         spec(IMPORT_ROLLBACK, "Roll back import", "Restore preimages if no later user edit conflicts.", true,
+            vec![param("job", "Stable import ID")]),
+        spec(IMPORT_ABANDON, "Abandon interrupted import", "Keep the vault as it is: discard the journal and preimages of an interrupted import without touching any target. Use it when rollback cannot prove which targets are the import's. A committed import is rolled back instead.", true,
             vec![param("job", "Stable import ID")]),
         spec(EXPORT_RUN, "Export documents", "Run a registered export target; job result contains portable artifact bytes. request_json is a serialized ExportRequest.", false,
             vec![param("request_json", "ExportRequest JSON")]),
@@ -200,6 +203,10 @@ pub fn run_job(
         "rollback" => {
             crate::migration::rollback(required(&payload, "job")?, host)?;
             serde_json::json!({"rolled_back":true})
+        }
+        "abandon" => {
+            crate::migration::abandon(required(&payload, "job")?, host)?;
+            serde_json::json!({"abandoned":true})
         }
         "export" => {
             let request: ExportRequest = serde_json::from_value(payload["request"].clone())
