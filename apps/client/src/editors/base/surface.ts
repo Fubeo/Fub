@@ -8,6 +8,7 @@ import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, t } from "../../i18n/strings";
 import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
+import { openVaultRoot } from "../../state/vault";
 import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import { uniformRowRange } from "../grid/engine";
 import {
@@ -665,7 +666,7 @@ export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Pro
       onOpenDocument,
     }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null });
     const source = embed.source === undefined
-      ? api.readDocument(embed.base!).then((document) => document.text)
+      ? api.readDocument(embed.base!, openVaultRoot()).then((document) => document.text)
       : Promise.resolve(embed.source);
     void source.then((text) => {
       if (!disposed) surface.buffer.setDoc(text);
