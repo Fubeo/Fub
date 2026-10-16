@@ -554,6 +554,9 @@ struct CompletedRenameSideData {
     ///
     /// [`Migration::undo`]: crate::docdata::Migration::undo
     doc_data: crate::docdata::Migration,
+    /// La mossa fatta alla bozza: il rollback disfa questa, non una
+    /// migrazione al contrario che porterebbe sotto `from` la bozza di `to`.
+    draft_move: crate::drafts::DraftMove,
     rollback: Option<PreparedRenameSideData>,
 }
 /// Handle owned per migrare soltanto i side-data che appartengono anche agli
@@ -1600,14 +1603,19 @@ impl PreparedRenameSideData {
         }
         let mut doc_data = crate::docdata::migrate(storage.as_ref(), &doc_data_roots, &from, &to);
         let mut errors = std::mem::take(&mut doc_data.messages);
-        if let Err(error) = drafts.migrate(&from, &to) {
-            errors.push(format!("bozza non migrata: {error}"));
-        }
+        let draft_move = match drafts.migrate_tracked(&from, &to) {
+            Ok(moved) => moved,
+            Err(error) => {
+                errors.push(format!("bozza non migrata: {error}"));
+                crate::drafts::DraftMove::Untouched
+            }
+        };
         CompletedRenameSideData {
             from,
             to,
             errors,
             doc_data,
+            draft_move,
             rollback: Some(rollback),
         }
     }
@@ -1646,7 +1654,9 @@ impl CompletedRenameSideData {
             errors.push(format!("organizzazione non ripristinata: {error}"));
         }
         errors.extend(std::mem::take(&mut self.doc_data).undo(storage.as_ref()));
-        if let Err(error) = drafts.migrate(&from, &to) {
+        // `from` e `to` del rollback sono invertiti: la mossa è stata fatta da
+        // `to` (qui) a `from`.
+        if let Err(error) = drafts.undo_move(&to, &from, &self.draft_move) {
             errors.push(format!("bozza non ripristinata: {error}"));
         }
         errors
@@ -13308,13 +13318,19 @@ impl Workspace {
                 .path_for(doc)
                 .is_ok_and(|path| !matches!(crate::error::optional(storage.stat(&path)), Ok(None)))
         };
-        crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
+        let collected = crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
             metas.contains_key(doc)
                 || entries.contains_key(doc)
                 || trashed.may_hold(doc)
                 || suspended.contains(doc)
                 || on_disk(doc)
-        })
+        })?;
+        // Lo spazio che una nota ha messo al sicuro cestinandosi vive quanto la
+        // sua voce: finché è nel cestino è recuperabile, e con lei il suo stato.
+        let parked = crate::docdata::collect_parked(storage.as_ref(), &roots, &|trash: &DocId| {
+            trashed.holds_entry(trash)
+        })?;
+        Ok(collected + parked)
     }
 
     /// I documenti da cui il cestino è passato: ciò che sta lì dentro **non è

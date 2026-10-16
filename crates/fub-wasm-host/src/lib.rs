@@ -38,6 +38,7 @@ mod guest;
 mod inbound;
 mod inbound_convert;
 pub mod installed;
+mod instance_lock;
 mod limits;
 pub mod managed;
 mod model;

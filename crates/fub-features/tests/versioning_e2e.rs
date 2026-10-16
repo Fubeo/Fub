@@ -192,17 +192,21 @@ fn a_notes_thrown_away_can_still_be_read_from_its_history() {
     )
     .unwrap();
 
-    ws.delete_document(&notes).unwrap();
+    let trashed = ws.delete_document(&notes).unwrap();
 
     assert!(!ws.documents().contains(&notes));
-    let versions = store.list(&notes);
+    // Il path torna libero, e con lui la sua storia: chi lo riprende comincia da
+    // capo. Quella della nota cestinata sta sotto l'identità che ha nel cestino.
+    assert!(store.list(&notes).is_empty());
+    let versions = store.list(&trashed);
     assert_eq!(
         versions.len(),
         1,
         "il cestino svuota il vault, non la storia"
     );
+    assert!(store.is_deleted(&trashed));
     assert_eq!(
-        version(&mut ws, &store, &notes, versions[0].ts),
+        version(&mut ws, &store, &trashed, versions[0].ts),
         "contenuto che vorrò rileggere\n"
     );
 }
@@ -259,7 +263,57 @@ fn a_restore_under_a_new_name_migrates_the_history() {
         contents.contains(&"prima vita\n".to_string()),
         "la prima vita deve stare nella storia migrata: {contents:?}"
     );
+    assert!(
+        !contents.contains(&"usurpatrice\n".to_string()),
+        "la storia della prima vita non è quella di chi ha preso il suo path \
+         (FUB-003): {contents:?}"
+    );
     assert!(!store.is_deleted(&DocId::new("Nota 1.md")));
+    // E la nota che ha preso il path tiene la propria, senza la prima vita.
+    let usurper: Vec<String> = store
+        .list(&notes)
+        .iter()
+        .map(|v| version(&mut ws, &store, &notes, v.ts))
+        .collect();
+    assert_eq!(
+        usurper,
+        vec!["usurpatrice\n".to_string()],
+        "la nota sul path d'origine ha perso la sua storia, o ha ricevuto quella \
+         della nota ripristinata"
+    );
+}
+
+#[test]
+fn a_note_that_takes_a_freed_path_does_not_inherit_the_history_of_the_trashed_one() {
+    let v = Vault::new();
+    let (mut ws, store) = v.open();
+    let notes = DocId::new("Nota.md");
+    ws.write_document(&notes, "prima vita\n", WriteBase::Dictated)
+        .unwrap();
+    ws.write_document(&notes, "prima vita, rivista\n", WriteBase::Dictated)
+        .unwrap();
+    let trashed = ws.delete_document(&notes).unwrap();
+
+    ws.write_document(&notes, "un'altra\n", WriteBase::Dictated)
+        .unwrap();
+
+    let contents: Vec<String> = store
+        .list(&notes)
+        .iter()
+        .map(|v| version(&mut ws, &store, &notes, v.ts))
+        .collect();
+    assert_eq!(
+        contents,
+        vec!["un'altra\n".to_string()],
+        "la nuova nota ha ereditato la storia di quella nel cestino: {contents:?}"
+    );
+    // La storia di quella cestinata non è persa: sta sotto l'identità che ha
+    // nel cestino, ed è lì che la rilegge chi la cerca.
+    assert_eq!(
+        store.list(&trashed).len(),
+        2,
+        "la storia della nota cestinata non si trova più"
+    );
 }
 
 #[test]

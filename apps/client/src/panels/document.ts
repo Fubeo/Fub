@@ -102,7 +102,7 @@ import {
   type SplitNode,
   type Tab,
 } from "../state/layout";
-import { createNote, loadCommandSpecs } from "../state/vault";
+import { createNote, loadCommandSpecs, openVaultRoot } from "../state/vault";
 import { $ } from "../ui/dom";
 import { showContextMenu } from "../ui/menu";
 import { confirm } from "../host/dialog";
@@ -202,10 +202,14 @@ let contextTimer: number | undefined;
 
 // --- montaggio --------------------------------------------------------------
 async function createCanvasNote(text: string): Promise<string> {
+  // Creazione, lettura e scrittura sono un gesto solo: stanno tutte nel vault
+  // in cui il gesto è partito, anche se `createNote` aspetta e ne viene aperto
+  // un altro (FUB-001).
+  const vault = openVaultRoot();
   const doc = await createNote();
   if (!doc) throw new Error("note.create did not return a created document");
-  const source = await api.readDocument(doc);
-  await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision });
+  const source = await api.readDocument(doc, vault);
+  await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision }, vault);
   return doc;
 }
 
@@ -226,12 +230,14 @@ async function pickCanvasFile(): Promise<string | null> {
 }
 
 async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
+  // Il vault del documento che riceve gli allegati, preso prima di aspettare.
+  const vault = openVaultRoot();
   const configured = (await settings()).find((entry) => entry.spec.key === "files.attachment-folder")?.value;
   const folder = typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER;
   return {
     folder,
     fromDocument: doc,
-    write: (id, bytes) => api.resourceWrite(id, bytes, null),
+    write: (id, bytes) => api.resourceWrite(id, bytes, null, vault),
   };
 }
 
@@ -501,7 +507,11 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       void applyExternalChange(id, outcome);
     });
   };
-  const removed = (id: string, recreate: (text: string) => Promise<unknown>): void => {
+  // `recreate` riceve il vault **in cui la rimozione è stata vista**: l'utente
+  // può cliccare «ricrea» dopo aver aperto un altro vault, e la nota deve
+  // tornare dove è sparita, non in un omonimo del vault nuovo (FUB-001).
+  const removed = (id: string, recreate: (text: string, vault: string | undefined) => Promise<unknown>): void => {
+    const vault = openVaultRoot();
     const outcome = documentSessions.handleExternalRemoval(id);
     invalidateDocumentCaches(id);
     invalidateLoads(id);
@@ -510,8 +520,10 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
       notify(t("document.deleted_dirty", { doc: id }), "guasto", {
         label: t("document.recreate"),
         run: async () => {
-          await recreate(text);
-          await openDocument(id);
+          await recreate(text, vault);
+          // Se nel frattempo si è aperto un altro vault, la nota è tornata nel
+          // suo: aprire `id` qui aprirebbe un documento omonimo.
+          if (openVaultRoot() === vault) await openDocument(id);
         },
       });
     }
@@ -532,13 +544,13 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   lifetime.add(onEvent("entry_changed", (e, origin) => changed(e.id, origin)));
   lifetime.add(
     onEvent("document_removed", (e) =>
-      removed(e.id, (text) => api.writeDocument(e.id, text, { kind: "dictated" }))),
+      removed(e.id, (text, vault) => api.writeDocument(e.id, text, { kind: "dictated" }, vault))),
   );
   // Ricreare un file senza formato è una creazione esclusiva a byte: se nel
   // frattempo qualcuno l'ha rifatto, la scrittura lo dice invece di coprirlo.
   lifetime.add(
     onEvent("entry_removed", (e) =>
-      removed(e.id, (text) => api.resourceWrite(e.id, new TextEncoder().encode(text), null))),
+      removed(e.id, (text, vault) => api.resourceWrite(e.id, new TextEncoder().encode(text), null, vault))),
   );
   lifetime.add(onEvent("document_renamed", (e) => renamed(e.from, e.to)));
   lifetime.add(onEvent("entry_renamed", (e) => renamed(e.from, e.to)));
@@ -2454,7 +2466,7 @@ function drawConflict(r: Pane, doc: string | null): void {
   compare.addEventListener("click", () => {
     // Il testo su disco si legge adesso, non da una copia: è quello che la
     // scelta «usa la versione su disco» metterebbe al posto del mio.
-    void api.readDocument(current).then(
+    void api.readDocument(current, documentSessions.vaultFor(current)).then(
       (source) => openCompare(t("document.conflict.compare_title", { doc: docTitle(current) }), source.text, documentSessions.text(current) ?? ""),
       (error: unknown) => notify(t("document.reload_failed", { doc: current }) + ` ${errorText(error)}`, "guasto"),
     );

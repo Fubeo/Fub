@@ -226,7 +226,13 @@ essere eliminata e ricostruita dai documenti.
 ```
 
 `versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
-autorevoli: eliminarli perde la memoria delle versioni. Ogni nuova versione
+autorevoli: eliminarli perde la memoria delle versioni. `meta.json` dice di
+chi è la cartella (`doc_id`, `deleted_at`) e registra dimensione e impronta di
+ogni versione (`versions`), scritte quando la versione nasce: la ricostruzione
+dell'indice le riprende da lì, quindi un blob alterato dopo la scrittura resta
+rifiutato in lettura. Una cartella scritta prima di questo campo si ricostruisce
+ancora, ricalcolando le impronte dai byte attuali; il primo salvataggio le
+registra. Ogni nuova versione
 pota le altre per fasce: tutte sotto le 24 ore, una per ora fino a 7 giorni,
 una per giorno fino a 90. Oltre resta solo la più recente. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
@@ -251,6 +257,13 @@ nuova e vuota. L'indice nuovo pubblica l'unione; se una copia fallisce, il
 rename fallisce, le copie già scritte si tolgono e la storia precedente resta
 leggibile.
 
+Cestinare una nota porta la sua storia sotto l'identità che la voce ha nel
+cestino (`doc_id` è l'id della voce, con `deleted_at`), perché il path torna
+libero e chi lo riprende è un'altra nota: il ripristino la riunisce al path
+d'arrivo, come una rinomina. Se la voce non si riconosce (una cancellazione che
+il cestino non ha visto, un cestino che non si elenca) la storia resta sotto il
+path col suo `deleted_at`, come prima.
+
 Se l'indice manca o non è leggibile, lo store lo ricostruisce dagli snapshot e
 prova a ripubblicarlo. Un errore di scrittura del solo indice genera un avviso:
 view e comandi possono ancora ricostruire e leggere la cronologia dai dati
@@ -270,6 +283,43 @@ Quando riesce, il ripristino è una scrittura normale: fotografa prima il
 contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
 esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
+### Importer
+
+`fub.importers` tiene, per ogni job di import che ha cominciato a scrivere:
+
+```text
+.fub/plugins/fub.importers/imports/
+├── commit/<job>.json              journal con la preimmagine di ogni bersaglio
+├── commit-receipts/<job>.json     lo stesso journal, a import committato
+├── preimages/<job>/<n>            i byte di ogni bersaglio che esisteva
+└── receipts/<job>/<impronta>.json ricevuta di un bersaglio scritto
+```
+
+Il journal è scritto prima dell'apply e nomina ogni bersaglio che il piano crea o
+sostituisce (schema 1). Una ricevuta la lascia l'importer subito dopo ogni
+scrittura riuscita, con la revisione che il bersaglio ha avuto in quell'istante;
+il commit le raccoglie nel journal e le toglie quando chiude. Un importer che non
+lascia ricevute (un componente di terzi) è ammesso: i suoi bersagli si provano
+con ciò che il suo rapporto dichiara scritto e con l'impronta riletta subito
+dopo l'apply.
+
+Il rollback riporta indietro soltanto ciò che l'import può provare scritto da
+sé: un bersaglio la cui revisione attuale è quella della ricevuta (o, senza
+ricevuta, quella dell'impronta del dopo). La scrittura che lo ripristina e il
+cestinamento di una nota creata sono condizionati a quella stessa revisione: se
+un altro scrittore è intervenuto, l'host risponde con un conflitto e la sua
+modifica resta. Un bersaglio che non è com'era e che nessuna prova attribuisce
+all'import — per esempio uno creato da un altro scrittore dopo il preflight, o
+uno scritto da un import interrotto senza ricevuta — ferma il rollback con un
+conflitto **prima** di cambiare qualsiasi altro bersaglio, e journal e
+preimmagini restano. Anche la sostituzione dell'apply è condizionata: un
+bersaglio che l'importer sostituisce si scrive solo se ha ancora la revisione
+vista dal preflight.
+
+Un journal scritto da una versione precedente non ha ricevute e, se è
+interrotto, non ha nemmeno l'impronta del dopo: i suoi bersagli diversi dalla
+preimmagine sono ambigui e il rollback si ferma sul primo.
+
 Quindi `.fub/plugins/` non è né tutta cache né tutto dato autorevole.
 
 ## Cestino
@@ -279,14 +329,33 @@ Quando Fub cestina `Appunti/Nota.md`:
 ```text
 .trash/Nota.md
 .fub/data/trash/Nota.md.json
+.fub/data/plugins/<plugin>/doc~trash/<voce codificata>/<nome>
 ```
 
 Il sidecar conserva provenienza e timbro. Se manca o non corrisponde, il file
 resta ripristinabile con il fallback sicuro previsto; il contenuto non viene
-scartato. La provenienza di quella voce è soltanto il nome: la raccolta degli
-spazi per-documento conserva quelli di ogni documento che si chiama così, in
-qualunque cartella. Per una voce che il nome da solo non riporta al suo path,
-cioè una nota di una cartella, la cestinatura non avviene senza sidecar.
+scartato. La provenienza di una voce senza sidecar è soltanto il nome: la
+raccolta degli spazi per-documento conserva quelli di ogni documento che si
+chiama così, in qualunque cartella. Per una voce che il nome da solo non riporta
+al suo path, cioè una nota di una cartella, la cestinatura non avviene senza
+sidecar.
+
+Lo stato per-documento di una nota cestinata non resta sotto il suo path, che
+torna libero: la cestinatura sposta `doc/<path>/` in `doc~trash/<voce>/`, dove
+`<voce>` è l'id della voce del cestino, codificato come ogni documento. Il
+ripristino lo riporta sotto il path d'arrivo. `doc~trash` sta accanto a `doc`,
+non dentro: una copia di Fub che non lo conosce non lo raccoglie né lo migra, e
+nessun plugin lo scrive. La raccolta lo toglie per le voci che non sono più nel
+cestino.
+
+Il sidecar ha un campo facoltativo `parked` con l'organizzazione della nota
+(`icon`, `pinned_at`, `ordered_at`, tutti facoltativi). Non cambia la versione
+dello schema: la sua presenza, anche vuota, dice che la voce è stata
+cestinata con lo stato parcheggiato, e un sidecar senza `parked` è una voce di
+una versione precedente, il cui stato sta ancora sotto il path d'origine. Una
+copia di Fub più vecchia ignora il campo: ripristinando una voce nuova lascia lo
+stato parcheggiato (che la raccolta toglie poi, perché la voce non c'è più) e
+non riporta l'organizzazione.
 
 Il comando esplicito `trash.os` (`doc` obbligatorio) tenta invece il cestino
 del sistema. Su Linux usa la directory Trash freedesktop sotto

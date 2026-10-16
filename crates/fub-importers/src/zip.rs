@@ -3,10 +3,10 @@
 //!
 //! Format coverage is deliberately narrow: local headers + central directory,
 //! no ZIP64, no multi-disk, no encryption (those entries are reported and
-//! skipped, never failed). Data descriptors (bit 3) are supported for
-//! deflated entries by scanning for the local header signature — correct for
-//! the exporters this crate targets; a false signature inside compressed data
-//! can only mis-size one entry, which the CRC/size check then rejects.
+//! skipped, never failed). Data descriptors (bit 3) are supported: the body is
+//! always delimited by the compressed size of the central directory, which
+//! carries the real sizes and CRC even when the local header does not, and
+//! the size/CRC check applies to every entry.
 //!
 //! All offsets and sizes are validated before any allocation; every entry
 //! body is capped ([`MAX_ENTRY_BYTES`]) and the archive total is capped
@@ -139,7 +139,12 @@ pub fn parse(data: &[u8]) -> Result<ZipArchive<'_>, PluginError> {
 }
 
 /// Locate the raw (possibly compressed) body of `entry`.
-fn entry_body<'a>(data: &'a [u8], entry: &ZipEntry) -> Result<(u64, &'a [u8], bool), PluginError> {
+///
+/// The body is delimited by the compressed size of the central directory: it
+/// stays authoritative when the local header defers sizes to a data
+/// descriptor (bit 3), and it avoids guessing the end from signatures that
+/// may also occur inside compressed data.
+fn entry_body<'a>(data: &'a [u8], entry: &ZipEntry) -> Result<(u64, &'a [u8]), PluginError> {
     let o = entry.header_offset as usize;
     if data.get(o..o + 4) != Some(b"PK\x03\x04".as_slice()) {
         return Err(bad_args(format!(
@@ -147,7 +152,6 @@ fn entry_body<'a>(data: &'a [u8], entry: &ZipEntry) -> Result<(u64, &'a [u8], bo
             entry.name
         )));
     }
-    let flags = u16le(data, o + 8)?;
     let name_len = u16le(data, o + 26)? as usize;
     let extra_len = u16le(data, o + 28)? as usize;
     let body_off = o
@@ -158,41 +162,16 @@ fn entry_body<'a>(data: &'a [u8], entry: &ZipEntry) -> Result<(u64, &'a [u8], bo
     if body_off > data.len() {
         return Err(bad_args("ZIP entry body starts past end of file"));
     }
-    let has_descriptor = flags & 0x08 != 0;
-    if has_descriptor {
-        // Lengths in both headers are zero; find the next local-header or
-        // central-directory signature from here. A false positive inside
-        // deflated data mis-sizes the entry — the CRC/size check rejects it.
-        let mut end = None;
-        let mut i = body_off;
-        while i + 4 <= data.len() {
-            if &data[i..i + 4] == b"PK\x03\x04"
-                || &data[i..i + 4] == b"PK\x01\x02"
-                || &data[i..i + 4] == b"PK\x05\x06"
-            {
-                end = Some(i);
-                break;
-            }
-            i += 1;
-        }
-        let end = end.unwrap_or(data.len());
-        Ok((entry.uncompressed_size, &data[body_off..end], true))
-    } else {
-        let end = (body_off as u64)
-            .checked_add(entry.compressed_size)
-            .ok_or_else(|| bad_args("ZIP entry body overflows"))?;
-        if end > data.len() as u64 {
-            return Err(bad_args(format!(
-                "ZIP entry `{}` extends past end of file",
-                entry.name
-            )));
-        }
-        Ok((
-            entry.uncompressed_size,
-            &data[body_off..end as usize],
-            false,
-        ))
+    let end = (body_off as u64)
+        .checked_add(entry.compressed_size)
+        .ok_or_else(|| bad_args("ZIP entry body overflows"))?;
+    if end > data.len() as u64 {
+        return Err(bad_args(format!(
+            "ZIP entry `{}` extends past end of file",
+            entry.name
+        )));
     }
+    Ok((entry.uncompressed_size, &data[body_off..end as usize]))
 }
 
 /// CRC-32 (IEEE) without a table: ~1 MiB/s per core is plenty for import
@@ -265,35 +244,19 @@ pub fn extract_entry(
             entry.name, entry.uncompressed_size
         ))));
     }
-    let (declared, body, descriptor) = entry_body(data, entry).map_err(EntryFailure::Entry)?;
+    let (declared, body) = entry_body(data, entry).map_err(EntryFailure::Entry)?;
     let out = match entry.method {
         0 => {
-            if descriptor {
-                // Stored + descriptor: no declared size; cap by remaining
-                // archive budget.
-                let cap = MAX_TOTAL_UNCOMPRESSED.saturating_sub(*total_so_far);
-                if body.len() as u64 > cap.min(MAX_ENTRY_BYTES) {
-                    return Err(EntryFailure::Archive(bad_args(format!(
-                        "ZIP entry `{}` exceeds the archive budget",
-                        entry.name
-                    ))));
-                }
-                body.to_vec()
-            } else {
-                if body.len() as u64 != entry.uncompressed_size
-                    && entry.compressed_size != entry.uncompressed_size
-                {
-                    // Tolerant: some writers disagree; the CRC decides.
-                }
-                body.to_vec()
-            }
+            // Tolerant on the stored length: the size and CRC checks below
+            // decide.
+            body.to_vec()
         }
         8 => {
             use flate2::Decompress;
             use flate2::FlushDecompress;
             use flate2::Status;
             let mut de = Decompress::new(false);
-            let cap = if descriptor || declared == 0 {
+            let cap = if declared == 0 {
                 MAX_ENTRY_BYTES.min(MAX_TOTAL_UNCOMPRESSED.saturating_sub(*total_so_far))
             } else {
                 declared.min(MAX_ENTRY_BYTES)
@@ -389,22 +352,23 @@ pub fn extract_entry(
             ))));
         }
     };
-    if !descriptor {
-        if out.len() as u64 != entry.uncompressed_size && entry.uncompressed_size != 0 {
-            return Err(EntryFailure::Entry(bad_args(format!(
-                "ZIP entry `{}` inflated to {} bytes, declared {}",
-                entry.name,
-                out.len(),
-                entry.uncompressed_size
-            ))));
-        }
-        if entry.crc32 != 0 && crc32(&out) != entry.crc32 {
-            return Err(EntryFailure::Entry(bad_args(format!(
-                "ZIP entry `{}` fails its CRC check",
-                entry.name
-            ))));
-        }
+    // Always checked: with a data descriptor the central directory still
+    // carries the real size and CRC.
+    if out.len() as u64 != entry.uncompressed_size && entry.uncompressed_size != 0 {
+        return Err(EntryFailure::Entry(bad_args(format!(
+            "ZIP entry `{}` inflated to {} bytes, declared {}",
+            entry.name,
+            out.len(),
+            entry.uncompressed_size
+        ))));
     }
+    if entry.crc32 != 0 && crc32(&out) != entry.crc32 {
+        return Err(EntryFailure::Entry(bad_args(format!(
+            "ZIP entry `{}` fails its CRC check",
+            entry.name
+        ))));
+    }
+
     *total_so_far = total_so_far.checked_add(out.len() as u64).ok_or_else(|| {
         EntryFailure::Archive(bad_args("ZIP archive exceeds the 256 MiB total budget"))
     })?;
@@ -423,4 +387,120 @@ pub fn looks_like_zip(prologue: &[u8]) -> bool {
             && prologue[1] == b'K'
             && (prologue[2] == 3 || prologue[2] == 5 || prologue[2] == 7)
             && (prologue[3] == 4 || prologue[3] == 6 || prologue[3] == 8))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::write::DeflateEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    /// One entry with its central directory. `descriptor` sets bit 3 and
+    /// zeroes the local-header sizes, as a streaming writer does.
+    fn build(name: &str, body: &[u8], deflate: bool, descriptor: bool) -> Vec<u8> {
+        let mut crc = !0u32;
+        for &byte in body {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = if crc & 1 == 0 {
+                    crc >> 1
+                } else {
+                    (crc >> 1) ^ 0xedb8_8320
+                };
+            }
+        }
+        let crc = !crc;
+        let payload = if deflate {
+            let mut enc = DeflateEncoder::new(Vec::new(), Compression::none());
+            enc.write_all(body).unwrap();
+            enc.finish().unwrap()
+        } else {
+            body.to_vec()
+        };
+        let (method, flags): (u16, u16) =
+            (if deflate { 8 } else { 0 }, if descriptor { 8 } else { 0 });
+        let mut z = Vec::new();
+        z.extend_from_slice(b"PK\x03\x04");
+        z.extend_from_slice(&20u16.to_le_bytes());
+        z.extend_from_slice(&flags.to_le_bytes());
+        z.extend_from_slice(&method.to_le_bytes());
+        z.extend_from_slice(&[0; 4]);
+        let local = if descriptor {
+            [0u32; 3]
+        } else {
+            [crc, payload.len() as u32, body.len() as u32]
+        };
+        for v in local {
+            z.extend_from_slice(&v.to_le_bytes());
+        }
+        z.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        z.extend_from_slice(&0u16.to_le_bytes());
+        z.extend_from_slice(name.as_bytes());
+        z.extend_from_slice(&payload);
+        if descriptor {
+            z.extend_from_slice(b"PK\x07\x08");
+            for v in [crc, payload.len() as u32, body.len() as u32] {
+                z.extend_from_slice(&v.to_le_bytes());
+            }
+        }
+        let dir = z.len() as u32;
+        z.extend_from_slice(b"PK\x01\x02");
+        z.extend_from_slice(&20u16.to_le_bytes());
+        z.extend_from_slice(&20u16.to_le_bytes());
+        z.extend_from_slice(&flags.to_le_bytes());
+        z.extend_from_slice(&method.to_le_bytes());
+        z.extend_from_slice(&[0; 4]);
+        for v in [crc, payload.len() as u32, body.len() as u32] {
+            z.extend_from_slice(&v.to_le_bytes());
+        }
+        z.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        z.extend_from_slice(&[0; 8]);
+        z.extend_from_slice(&0u32.to_le_bytes());
+        z.extend_from_slice(&0u32.to_le_bytes());
+        z.extend_from_slice(name.as_bytes());
+        let dir_size = z.len() as u32 - dir;
+        z.extend_from_slice(b"PK\x05\x06");
+        z.extend_from_slice(&[0; 4]);
+        z.extend_from_slice(&1u16.to_le_bytes());
+        z.extend_from_slice(&1u16.to_le_bytes());
+        z.extend_from_slice(&dir_size.to_le_bytes());
+        z.extend_from_slice(&dir.to_le_bytes());
+        z.extend_from_slice(&0u16.to_le_bytes());
+        z
+    }
+
+    fn extract_first(zip: &[u8]) -> Result<Vec<u8>, PluginError> {
+        let archive = parse(zip)?;
+        let mut total = 0;
+        extract(zip, &archive.entries[0], &mut total)
+    }
+
+    #[test]
+    fn deflated_entry_without_descriptor_survives_a_signature_in_its_payload() {
+        // Level 0 keeps the bytes verbatim inside the deflate stream.
+        let body = b"before PK\x03\x04 after\n";
+        let zip = build("a.txt", body, true, false);
+        assert_eq!(extract_first(&zip).unwrap(), body);
+    }
+
+    #[test]
+    fn descriptor_entry_is_accepted_when_intact() {
+        let body = b"hello from the source note\n";
+        for deflate in [false, true] {
+            let zip = build("a.txt", body, deflate, true);
+            assert_eq!(extract_first(&zip).unwrap(), body);
+        }
+    }
+
+    #[test]
+    fn descriptor_entry_with_altered_payload_fails_the_crc() {
+        let body = b"hello from the source note\n";
+        for deflate in [false, true] {
+            let mut zip = build("a.txt", body, deflate, true);
+            let at = zip.windows(5).position(|w| w == b"hello").unwrap();
+            zip[at] ^= 0x01;
+            assert!(extract_first(&zip).is_err(), "deflate={deflate}");
+        }
+    }
 }

@@ -54,6 +54,18 @@
 //!
 //! La riga fra le due cose è quindi netta e si può dire in una frase: *sotto
 //! `doc/` sta ciò che non ha senso senza il documento.*
+//!
+//! # La nota nel cestino non ha più il suo path
+//!
+//! Il path è l'identità di una nota **viva**. Una nota cestinata lascia il suo
+//! path libero, e chi lo riprende — un'altra nota, con lo stesso nome — non è
+//! lei: se lo spazio `doc/<path>/` restasse dov'era, la nuova nota erediterebbe
+//! lo stato della vecchia, e un ripristino altrove porterebbe via anche quello
+//! della nuova (FUB-003). Per questo il kernel, cestinando, **parcheggia** lo
+//! spazio sotto l'identità che la voce ha nel cestino ([`parked_space`]) e lo
+//! riporta sotto il path d'arrivo al ripristino. Un plugin non lo vede e non lo
+//! scrive: `doc~trash` è un nome riservato, e non è un [`encode`]-ato di niente
+//! perché la `~` la codifica.
 
 use crate::model::DocId;
 
@@ -64,6 +76,25 @@ use crate::model::DocId;
 /// tiene per sé — non ha bisogno di dichiararsi: tutto ciò che *non* sta sotto
 /// `doc/` è dello spazio del plugin e il kernel non lo tocca.
 pub const DOC_SPACE: &str = "doc";
+
+/// La cartella, accanto a [`DOC_SPACE`], dove il kernel tiene lo spazio delle
+/// note che sono nel cestino: `doc~trash/<voce del cestino codificata>/`.
+///
+/// Sta **fuori** da `doc/` per due ragioni. Una copia di Fub che non la
+/// conosce non la raccoglie né la migra (cammina soltanto `doc/`), quindi un
+/// ripristino fatto da lei non può mescolare lo stato parcheggiato con quello
+/// di una nota viva. E [`doc_of`] non la riconosce, quindi nessun plugin ne
+/// ricava il «documento» di uno spazio che non è di nessun documento vivo.
+pub const PARKED_SPACE: &str = "doc~trash";
+
+/// Il prefisso, con lo `/` finale, dello spazio che una nota tiene **mentre è nel
+/// cestino**: `trash` è l'id della voce (`.trash/Nota.2026-07-24T15-30-00.md`).
+///
+/// È l'identità che la nota ha lì dentro, distinta da quella di chi riprende il
+/// suo path.
+pub fn parked_space(trash: &DocId) -> String {
+    format!("{PARKED_SPACE}/{}/", encode(trash.as_str()))
+}
 
 /// Il prefisso di tutto ciò che appartiene a `doc`, con lo `/` finale.
 ///

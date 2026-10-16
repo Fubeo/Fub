@@ -407,23 +407,11 @@ impl ImportProvider for EnexImport {
                 };
             }
             let entry = format!("{}:{}", source.name, index + 1);
-            let wanted = request.destination(&name);
-            let (doc, outcome) =
-                resolve_destination(host, request, wanted, &entry, &mut report.log);
-            for w in &n.warnings {
-                report
-                    .log
-                    .push(TransferNote::warning(w.clone()).about(entry.clone()));
-            }
-            write_doc(
-                host,
-                request,
-                &doc,
-                &n.markdown,
-                outcome,
-                &entry,
-                &mut report,
-            )?;
+            // Attachments are resolved and written first: under `Rename` a
+            // taken name yields a different file, and the note must link to
+            // the file that actually holds the imported bytes.
+            let mut markdown = n.markdown;
+            let first_doc = report.documents.len();
             for asset in n.assets {
                 let asset_entry = format!("{entry}:{}", asset.name);
                 let wanted = request.destination(&match &folder {
@@ -437,6 +425,15 @@ impl ImportProvider for EnexImport {
                     &asset_entry,
                     &mut report.log,
                 )?;
+                if let Some((_, file)) = doc.as_str().rsplit_once('/') {
+                    if let Some((dir, _)) = asset.path.rsplit_once('/') {
+                        let effective = format!("{dir}/{file}");
+                        if effective != asset.path {
+                            markdown = markdown
+                                .replace(&format!("]({})", asset.path), &format!("]({effective})"));
+                        }
+                    }
+                }
                 write_asset(
                     host,
                     request,
@@ -447,6 +444,17 @@ impl ImportProvider for EnexImport {
                     &mut report,
                 )?;
             }
+            let wanted = request.destination(&name);
+            let (doc, outcome) =
+                resolve_destination(host, request, wanted, &entry, &mut report.log);
+            for w in &n.warnings {
+                report
+                    .log
+                    .push(TransferNote::warning(w.clone()).about(entry.clone()));
+            }
+            write_doc(host, request, &doc, &markdown, outcome, &entry, &mut report)?;
+            // The report keeps listing the note before its attachments.
+            report.documents[first_doc..].rotate_right(1);
         }
         Ok(report)
     }

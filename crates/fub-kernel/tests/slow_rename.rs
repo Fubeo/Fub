@@ -643,6 +643,63 @@ fn a_stale_commit_rolls_the_invoked_move_back_without_a_rename_fact() {
         .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
 }
 
+/// **Il rollback di una rinomina non porta una bozza sotto il nome sbagliato.**
+/// La sorgente non aveva una bozza e la destinazione sì: la mossa in avanti non
+/// sposta niente, quella al contrario non deve prendere la bozza della
+/// destinazione. Con entrambe, ognuna resta del proprio documento.
+#[test]
+fn a_rolled_back_rename_keeps_every_draft_with_its_own_note() {
+    for source_has_draft in [false, true] {
+        let mut fixture = internal_rename_fixture(false, false);
+        let from = DocId::new("a.txt");
+        let to = DocId::new("b.txt");
+        fixture
+            .ws
+            .save_draft(&to, "bozza di b", None)
+            .expect("draft of the destination");
+        if source_has_draft {
+            fixture
+                .ws
+                .save_draft(&from, "bozza di a", None)
+                .expect("draft of the source");
+        }
+        let prepared = fixture
+            .ws
+            .prepare_explicit_rename(&from, &to)
+            .expect("prepare")
+            .expect("documento");
+        let parsed = prepared.invoke().expect("invoke detached");
+        fixture
+            .ws
+            .sync_path(&fixture.root.join("a.txt"))
+            .expect("il core cambia dopo l'invoke");
+        let parsed = match fixture.ws.commit_explicit_rename(parsed) {
+            Err(failure) => failure.1,
+            Ok(_) => panic!("la fotografia stale non può essere committata"),
+        };
+        parsed.rollback().expect("rollback detached");
+
+        let drafts = fixture.ws.drafts().expect("drafts").drafts;
+        let text_of = |doc: &DocId| {
+            drafts
+                .iter()
+                .find(|draft| draft.doc == *doc)
+                .map(|draft| draft.text.clone())
+        };
+        assert_eq!(text_of(&to).as_deref(), Some("bozza di b"), "{drafts:?}");
+        assert_eq!(
+            text_of(&from).as_deref(),
+            source_has_draft.then_some("bozza di a"),
+            "{drafts:?}"
+        );
+        assert_eq!(
+            drafts.len(),
+            1 + usize::from(source_has_draft),
+            "{drafts:?}"
+        );
+    }
+}
+
 #[test]
 fn a_replaced_same_bytes_destination_makes_rollback_stale_without_a_rename_fact() {
     let mut fixture = internal_rename_fixture(false, false);

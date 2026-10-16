@@ -876,6 +876,83 @@ describe("scrivi", () => {
   });
 });
 
+describe("il vault di una scrittura (FUB-001)", () => {
+  /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host, e
+  /// l'utente può continuare a battere nel documento che sta lasciando. Il vault
+  /// di prima resta aperto nell'host, e la sessione scrive in quello in cui è
+  /// nata: la battuta arriva al disco **di quel vault**, non si perde con la
+  /// chiusura delle sessioni e non finisce in quello nuovo, che intanto è il
+  /// corrente dell'host.
+  it("una battuta arrivata mentre l'host apre il vault nuovo si salva nel vault che si lascia", async () => {
+    const host = await start(VAULT);
+    const unlock = host.throttle("openVault");
+    const { openVault } = await import("./desktop-shell");
+
+    const opening = openVault("/altro");
+    await waitFor("la richiesta arriva all'host", () => host.atGate("openVault").length === 2);
+    typeInEditor("battuta fuori tempo");
+    unlock();
+    await opening;
+
+    const writes = host.atGate("writeDocument");
+    const saved = writes[writes.length - 1]?.args;
+    expect(saved?.[0]).toBe("Benvenuto.md");
+    expect(String(saved?.[1])).toContain("battuta fuori tempo");
+    // Il quarto argomento è il vault: quello che si lascia, mai il nuovo.
+    expect(saved?.[3]).toBe("/vault");
+    expect(writes.map((call) => call.args[3])).not.toContain("/altro");
+  });
+
+  /// Se nemmeno il flush dopo l'apertura riesce a salvare, la battuta non si
+  /// perde in silenzio: la sequenza lo dice e va avanti.
+  it("una battuta che il vecchio vault rifiuta dopo l'apertura viene detta", async () => {
+    const host = await start(VAULT);
+    const { recentNotices } = await import("./ui/notify");
+    const unlock = host.throttle("openVault");
+    const { openVault } = await import("./desktop-shell");
+
+    const opening = openVault("/altro");
+    await waitFor("la richiesta arriva all'host", () => host.atGate("openVault").length === 2);
+    const repair = host.fault("writeDocument", "disco pieno");
+    typeInEditor("battuta che il disco rifiuta");
+    unlock();
+    await opening;
+    repair();
+
+    expect(recentNotices().map((notice) => notice.text)).toContain(
+      "Le modifiche in Benvenuto.md non sono state salvate: resta nel vault e riprova dopo averle sistemate.",
+    );
+  });
+
+  /// Crea e rinomina passano dal registro dei comandi, e senza `vault` l'host
+  /// risponde con il corrente: un gesto che aspetta mentre se ne apre un altro
+  /// finirebbe lì. Nominandolo, il comando raggiunge quello da cui è partito.
+  it("crea e rinomina raggiungono il vault aperto per nome", async () => {
+    const host = await start(VAULT);
+    const { createNote, renameNote } = await import("./state/vault");
+
+    await createNote("Nuova");
+    await renameNote("Benvenuto.md", "Altro.md");
+
+    const named = host
+      .atGate("invokeCommand")
+      .filter((call) => call.args[0] === "note.create" || call.args[0] === "note.rename")
+      .map((call) => [call.args[0], call.args[3]]);
+    expect(named).toEqual([
+      ["note.create", "/vault"],
+      ["note.rename", "/vault"],
+    ]);
+  });
+
+  it("la lettura di un documento aperto nomina il vault aperto", async () => {
+    const host = await start(VAULT);
+
+    const reads = host.atGate("readDocument").map((call) => call.args);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const args of reads) expect(args[1]).toBe("/vault");
+  });
+});
+
 describe("i confini del buffer", () => {
   it("accorpa le battute ravvicinate in un solo debounce", async () => {
     const host = await start(VAULT);

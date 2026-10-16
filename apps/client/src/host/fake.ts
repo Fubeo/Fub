@@ -334,6 +334,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// Le porte guaste, col motivo che rispondono.
   const faults = new Map<string, string>();
 
+  /// Gli argomenti di una porta con il **vault nominato** in coda, ma solo se la
+  /// chiamata lo nomina: le asserzioni sulle chiamate senza vault restano quelle
+  /// di sempre, e un banco che vuole provare «questa scrittura ha nominato il
+  /// suo vault» lo legge dall'ultimo argomento (FUB-001).
+  const named = (args: unknown[], vault?: string | null): unknown[] => (vault ? [...args, vault] : args);
+
   function gate<T>(name: string, args: unknown[], result: T): T {
     calls.push({ gate: name, args });
     const fault = faults.get(name);
@@ -730,10 +736,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
-      readDocument: (id) => {
+      readDocument: (id, vault) => {
         const doc = docs.get(id);
-        if (!doc) return gate("readDocument", [id], Promise.reject(new Error(`«${id}» non c'è`)));
-        return gate("readDocument", [id], Promise.resolve({
+        if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));
+        return gate("readDocument", named([id], vault), Promise.resolve({
           text: doc.text,
           revision: doc.revision,
           format_id: formatOf(id),
@@ -825,20 +831,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
       closeGrid: (_surface, instance) => gate("closeGrid", [instance], Promise.resolve().then(() => {
         gridInstances.delete(instance);
       })),
-      writeDocument: (id, source, base) => {
+      writeDocument: (id, source, base, vault) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
         // passasse dentro risponderebbe «no» avendo già scritto.
         const fault = faults.get("writeDocument");
         if (fault !== undefined) {
-          return gate("writeDocument", [id, source, base], Promise.reject(new Error(fault)));
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(new Error(fault)));
         }
         // Nessun provider serve un file senza formato: il kernel rifiuta la
         // scrittura (`NoProvider`), e lo fa anche il finto — chi salva un
         // `.svg` o un `.txt` passa da `resourceWrite`.
         if (formatOf(id) === null) {
           const unserved: PluginError = { kind: "unserved", message: `host fake: nessun formato serve «${id}»` };
-          return gate("writeDocument", [id, source, base], Promise.reject(unserved));
+          return gate("writeDocument", named([id, source, base], vault), Promise.reject(unserved));
         }
         const before = docs.get(id);
         if (base.kind === "descends_from" && before && before.revision !== base.value) {
@@ -848,19 +854,19 @@ export function createFakeHost(options: Options = {}): FakeHost {
           };
           return gate(
             "writeDocument",
-            [id, source, base],
+            named([id, source, base], vault),
             Promise.reject(conflict),
           );
         }
-        return gate("writeDocument", [id, source, base], Promise.resolve(write(id, source)));
+        return gate("writeDocument", named([id, source, base], vault), Promise.resolve(write(id, source)));
       },
       // La rete di sicurezza del §15.2: il testo che non si è salvato. Il
       // finto non ha un crash buffer — registra e basta — perché ciò che i
       // banchi guardano è CHE la bozza parta, con quale testo e in che ordine
       // rispetto al salvataggio; la tenuta del disco è del kernel, e ha i
       // suoi banchi dall'altra parte.
-      saveDraft: (id, text, base) => gate("saveDraft", [id, text, base], Promise.resolve()),
-      discardDraft: (id) => gate("discardDraft", [id], Promise.resolve()),
+      saveDraft: (id, text, base, vault) => gate("saveDraft", named([id, text, base], vault), Promise.resolve()),
+      discardDraft: (id, vault) => gate("discardDraft", named([id], vault), Promise.resolve()),
       setActiveContext: (context) => gate("setActiveContext", [context], Promise.resolve([])),
       setSystemLocale: (locale) => gate("setSystemLocale", [locale], Promise.resolve(false)),
       listViews: () => gate("listViews", [], Promise.resolve(view)),
@@ -877,8 +883,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
         throw new Error(`host fake: la view «${v}» non ha l'azione «${action}»`);
       },
       listCommands: () => gate("listCommands", [], Promise.resolve(options.commands ?? [])),
-      invokeCommand: (commandId, args, mode) => {
-        const callArgs = [commandId, args, mode];
+      invokeCommand: (commandId, args, mode, vault) => {
+        const callArgs = named([commandId, args, mode], vault);
         calls.push({ gate: "invokeCommand", args: callArgs });
         const execute = () => {
           const fault = faults.get("invokeCommand");

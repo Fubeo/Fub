@@ -1,0 +1,30 @@
+# Il componente dello stallo: formato e job con lo stesso mutex d'istanza.
+#
+# **Fuori dal workspace, come `format-wasm` e per la stessa ragione**: si
+# compila per `wasm32-wasip2`, che il workspace non ha. Lo compila il test
+# `the_instance_and_the_turn` di `fub-wasm-host`.
+[package]
+name = "stallo-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# **Una porta d'ingresso per variante.** Il componente esporta sempre indice,
+# handler di eventi e comando, ma li lascia vuoti: l'host non li chiama finché
+# una feature non li dichiara. Così una prova non è schermata da un'altra — il
+# primo ingresso che chiede l'istanza a un salvataggio è quello che il job
+# incontra, e se fossero tutti accesi si proverebbe sempre il primo.
+indice = []
+eventi = []
+comando = []
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"

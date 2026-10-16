@@ -9,6 +9,7 @@ use fub_abi::model::TaskMarker;
 use fub_abi::FormatError;
 
 use crate::component::{enter_instance, instance_identity, Instance};
+use crate::instance_lock::LockInstance;
 use crate::translate as tr;
 
 /// Assenza dell'export = capability assente, non fallback raw. Una risposta
@@ -26,7 +27,7 @@ pub(crate) fn call_rewrite_links(
     let _guard = enter_instance(instance_identity(inner))
         .map_err(|_| FormatError::Parse("re-entrant component call".into()))?;
     let mut locked = inner
-        .lock()
+        .lock_instance()
         .map_err(|_| FormatError::Parse("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *locked;
     let links = match interfaces.format_links.as_ref() {
@@ -67,7 +68,7 @@ pub(crate) fn call_format_link(
     let _guard = enter_instance(instance_identity(inner))
         .map_err(|_| FormatError::Serialize("re-entrant component call".into()))?;
     let mut locked = inner
-        .lock()
+        .lock_instance()
         .map_err(|_| FormatError::Serialize("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *locked;
     let Some(edits) = interfaces.format_edits.as_ref() else {
@@ -93,7 +94,7 @@ pub(crate) fn call_set_task_state(
     let _guard = enter_instance(instance_identity(inner))
         .map_err(|_| FormatError::Parse("re-entrant component call".into()))?;
     let mut locked = inner
-        .lock()
+        .lock_instance()
         .map_err(|_| FormatError::Parse("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *locked;
     let Some(edits) = interfaces.format_edits.as_ref() else {

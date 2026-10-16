@@ -16,7 +16,8 @@ import {
   type SaveState,
 } from "./saving";
 import { rejoinDrafts, type DraftBuffer, type DraftBufferStore } from "./drafts";
-import { renameNote } from "./vault";
+import { state as shellState } from "./store";
+import { renameNote, vaultArg } from "./vault";
 import { tryApplyOperation, type TextOperation } from "../editors/core/text-operation";
 
 const SAVE_MS = 400;
@@ -55,16 +56,26 @@ export type SurfaceChangeResult =
   | { kind: "realigned"; text: string }
   | { kind: "untracked" };
 
+/// Ogni porta accetta in coda il **vault** a cui rivolgersi (FUB-001). La
+/// sessione lo fissa quando nasce e lo ripete a ogni chiamata: «il vault
+/// corrente» dell'host cambia quando se ne apre un altro, e un salvataggio o
+/// una bozza partiti dopo non devono finire in quello nuovo. Assente: l'host
+/// risponde con il corrente, come prima.
 export interface DocumentSessionApi {
-  readDocument(id: string): Promise<DocumentSource>;
-  writeDocument(id: string, text: string, base: WriteBase): Promise<string>;
+  readDocument(id: string, vault?: string | null): Promise<DocumentSource>;
+  writeDocument(id: string, text: string, base: WriteBase, vault?: string | null): Promise<string>;
   /// I byte di un file che nessun formato serve — un `.svg`, un `.txt`. Il
   /// kernel rifiuta `writeDocument` su quei file, perché non c'è un modello
   /// da riparsare, e accetta i byte con la stessa guardia: `expected` è la
   /// revisione attesa sul disco (CAS), `null` una creazione esclusiva.
-  resourceWrite(id: string, bytes: Uint8Array, expected: string | null): Promise<{ readonly revision: string }>;
-  saveDraft(id: string, text: string, base: string | null): Promise<void>;
-  discardDraft(id: string): Promise<void>;
+  resourceWrite(
+    id: string,
+    bytes: Uint8Array,
+    expected: string | null,
+    vault?: string | null,
+  ): Promise<{ readonly revision: string }>;
+  saveDraft(id: string, text: string, base: string | null, vault?: string | null): Promise<void>;
+  discardDraft(id: string, vault?: string | null): Promise<void>;
 }
 
 export interface DocumentSurfaceDescriptor {
@@ -881,9 +892,33 @@ export class DocumentSessionCollection implements DraftBufferStore {
   #blindDraft = false;
   /// A pending open reserves this owner before any flush/read `await`.
   readonly #openIntents = new Map<string, number>();
+  /// Il vault in cui è nata ciascuna sessione (FUB-001), `null` se nessun vault
+  /// era aperto. Si fissa una volta e non cambia: la sessione scrive lì anche
+  /// quando l'host ha già aperto un altro vault.
+  readonly #vaults = new WeakMap<DocumentSession, string | null>();
+  readonly #currentVault: () => string | null;
 
-  constructor(api: DocumentSessionApi = defaultApi) {
+  /// `currentVault` dice qual è il vault della shell adesso. Il default è la
+  /// radice aperta; una prova o una shell che ne ha un'altra idea la passa.
+  constructor(
+    api: DocumentSessionApi = defaultApi,
+    currentVault: () => string | null = () => shellState.vaultRoot || null,
+  ) {
     this.#api = api;
+    this.#currentVault = currentVault;
+  }
+
+  /// Il vault della sessione di `id`, o quello corrente se non ce n'è una.
+  #vaultFor(id: string): string | null {
+    const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
+    return session ? (this.#vaults.get(session) ?? null) : this.#currentVault();
+  }
+
+  /// Il vault con cui parlare di `id`: quello in cui è nato il suo buffer, o il
+  /// corrente se il documento non è aperto. Per chi legge o scrive attorno a un
+  /// documento senza passare dalla sessione.
+  vaultFor(id: string): string | undefined {
+    return this.#vaultFor(id) ?? undefined;
   }
 
   subscribe(listener: SessionListener): () => void {
@@ -964,7 +999,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
       return existing.text();
     }
     const version = this.#identityVersion(id);
-    const source = await this.#api.readDocument(id);
+    // Il vault della lettura è quello di quando parte: se mentre aspetta ne
+    // viene aperto un altro, il testo è di prima e non deve diventare la
+    // sessione di un documento omonimo del vault nuovo.
+    const vault = this.#currentVault();
+    const source = await this.#api.readDocument(id, ...vaultArg(vault));
     const current = this.#sessions.get(id);
     if (current?.snapshot().lifecycle === "open") return current.text();
     const renamedPendingOwner = this.#pendingDeletionOwners.get(id);
@@ -976,10 +1015,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
       return this.read(id);
     }
     if (this.#renaming.has(id) || this.#identityVersion(id) !== version) return source.text;
+    if (this.#currentVault() !== vault) return source.text;
     const session = this.#create(id, source.text, {
       kind: "descends_from",
       value: source.revision,
-    });
+    }, vault);
     this.#describe(session, source);
     return session.text();
   }
@@ -996,7 +1036,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
     let source: DocumentSource;
     try {
-      source = await this.#api.readDocument(id);
+      source = await this.#api.readDocument(id, ...vaultArg(this.#vaultFor(id)));
     } catch (error) {
       // Una bozza ripristinata può essere l'unica copia rimasta. Se il backend
       // non sa più descriverne la sorgente, la superficie testuale generica la
@@ -1052,7 +1092,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
   }
 
   restore(id: string, text: string, base: WriteBase | null): void {
-    const session = this.#sessions.get(id) ?? this.#create(id, text, base ?? { kind: "dictated" });
+    const session =
+      this.#sessions.get(id) ?? this.#create(id, text, base ?? { kind: "dictated" }, this.#currentVault());
     session.restoreDraft(text, base);
   }
 
@@ -1181,9 +1222,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
     let outcome: DeletionResult | undefined;
     try {
       if (!session) {
+        // Il vault del gesto è quello di quando parte: `run` può durare.
+        const vault = this.#currentVault();
         await run(id);
         try {
-          await this.#api.discardDraft(id);
+          await this.#api.discardDraft(id, ...vaultArg(vault));
         } catch {
           // Keep the same best-effort cleanup as a live session.
         }
@@ -1239,7 +1282,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     }
     // Il file non c'è più, il lavoro sì: resta in bozza (la ritrova il
     // recupero al prossimo avvio) e torna a chi può offrire di ricrearlo.
-    void this.#api.saveDraft(session.id, text, base).catch(() => {
+    void this.#api.saveDraft(session.id, text, base, ...vaultArg(this.#vaults.get(session) ?? null)).catch(() => {
       this.#emit({ kind: "draft-blind", id: session.id });
     });
     return { kind: "removed", dirty, text };
@@ -1429,16 +1472,22 @@ export class DocumentSessionCollection implements DraftBufferStore {
   /// come per una nota. Una base dettata non attende niente: si rilegge la
   /// revisione del disco e il CAS si fa su quella; se il file non c'è più, lo
   /// si crea — e se nel frattempo qualcuno l'ha creato, è un conflitto.
-  async #writeFormatless(id: string, text: string, base: WriteBase): Promise<string> {
+  async #writeFormatless(
+    id: string,
+    text: string,
+    base: WriteBase,
+    vault: string | null,
+  ): Promise<string> {
     const expected =
       base.kind === "descends_from"
         ? base.value
-        : await this.#api.readDocument(id).then((source) => source.revision, () => null);
-    const receipt = await this.#api.resourceWrite(id, new TextEncoder().encode(text), expected);
+        : await this.#api.readDocument(id, ...vaultArg(vault)).then((source) => source.revision, () => null);
+    const receipt = await this.#api.resourceWrite(id, new TextEncoder().encode(text), expected, ...vaultArg(vault));
     return receipt.revision;
   }
 
-  #create(id: string, text: string, base: WriteBase): DocumentSession {
+  /// Crea la sessione legandola al `vault` in cui il documento è stato letto.
+  #create(id: string, text: string, base: WriteBase, vault: string | null): DocumentSession {
     const existing = this.#sessions.get(id);
     if (existing?.snapshot().lifecycle === "open") return existing;
     if (existing) this.#sessions.delete(id);
@@ -1446,14 +1495,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
     // formato, i byte per un file che nessun formato serve. La scelta è della
     // collezione, che sa cosa ha letto; la sessione vede una porta sola.
     const api: DocumentSessionApi = {
-      readDocument: (doc) => this.#api.readDocument(doc),
+      readDocument: (doc) => this.#api.readDocument(doc, ...vaultArg(vault)),
       writeDocument: (doc, source, writeBase) =>
         this.#formatless.has(session)
-          ? this.#writeFormatless(doc, source, writeBase)
-          : this.#api.writeDocument(doc, source, writeBase),
-      resourceWrite: (doc, bytes, expected) => this.#api.resourceWrite(doc, bytes, expected),
-      saveDraft: (doc, source, draftBase) => this.#api.saveDraft(doc, source, draftBase),
-      discardDraft: (doc) => this.#api.discardDraft(doc),
+          ? this.#writeFormatless(doc, source, writeBase, vault)
+          : this.#api.writeDocument(doc, source, writeBase, ...vaultArg(vault)),
+      resourceWrite: (doc, bytes, expected) => this.#api.resourceWrite(doc, bytes, expected, ...vaultArg(vault)),
+      saveDraft: (doc, source, draftBase) => this.#api.saveDraft(doc, source, draftBase, ...vaultArg(vault)),
+      discardDraft: (doc) => this.#api.discardDraft(doc, ...vaultArg(vault)),
     };
     const session = new DocumentSession(OWNER_TOKEN, id, text, base, api, {
       emit: (event) => this.#emit(event),
@@ -1466,6 +1515,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
         this.#emit({ kind: "draft-blind", id: doc });
       },
     });
+    this.#vaults.set(session, vault);
     this.#sessions.set(id, session);
     return session;
   }

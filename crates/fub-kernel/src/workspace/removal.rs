@@ -83,6 +83,7 @@ pub struct CommittedDocumentDeletion {
     trash: crate::vault::CompletedVaultTrash,
     drafts: Arc<Drafts>,
     journal: Arc<Journal>,
+    organization: Arc<crate::organization::OrganizationStore>,
     origin: fub_abi::event::Origin,
 }
 
@@ -92,6 +93,9 @@ pub struct FinalizedDocumentDeletion {
     sidecar_fault: Option<KernelError>,
     draft_fault: Option<String>,
     journal_fault: Option<String>,
+    /// Ciò che non è riuscito a seguire la nota nel cestino
+    /// ([`park_state`](crate::documents::park_state)).
+    parked_warnings: Vec<String>,
 }
 
 /// La variante OS conserva lo stesso snapshot dell'operazione interna, senza
@@ -228,7 +232,18 @@ impl CommittedDocumentDeletion {
     /// Notifica gli indici usando soltanto handle owned.
     pub fn invoke(self) -> FinalizedDocumentDeletion {
         let id = self.removal.id.clone();
+        let vault = self.trash.vault().clone();
         let (trashed, sidecar_fault) = self.trash.into_parts();
+        // Il path è libero: ciò che il kernel teneva attaccato a lui segue la
+        // nota nel cestino (FUB-003). Prima degli indici, che possono già
+        // vedere un'altra nota sullo stesso path.
+        let parked_warnings = crate::documents::park_state(
+            &vault,
+            &self.organization,
+            &id,
+            &trashed,
+            sidecar_fault.is_none(),
+        );
         let draft_fault = self
             .drafts
             .discard(&id)
@@ -250,6 +265,7 @@ impl CommittedDocumentDeletion {
             sidecar_fault,
             draft_fault,
             journal_fault,
+            parked_warnings,
         }
     }
 }
@@ -559,6 +575,7 @@ impl Workspace {
             trash: completed.trash,
             drafts: completed.drafts,
             journal: completed.journal,
+            organization: Arc::clone(&self.organization),
             origin: completed.origin,
         })
     }
@@ -746,10 +763,12 @@ impl Workspace {
             sidecar_fault,
             draft_fault,
             journal_fault,
+            parked_warnings,
         } = finalized;
         let id = removal.id.clone();
         self.apply_document_removal(removal);
         self.dispatch_pending();
+        self.doc_data_warnings.extend(parked_warnings);
         Ok(self.finish_deleted_document(&id, trashed, sidecar_fault, draft_fault, journal_fault))
     }
 }

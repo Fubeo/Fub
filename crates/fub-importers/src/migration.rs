@@ -2,9 +2,32 @@
 //! Staging remains authoritative until the caller explicitly commits. A journal
 //! is durable before the first target mutation, so interrupted work can be
 //! inspected and rolled back after reopening the vault.
+//!
+//! # Che cosa è dell'import
+//!
+//! Il journal è scritto **prima** dell'apply, e fra l'apply e il rollback un
+//! altro scrittore può creare un bersaglio o modificarne uno (FUB-007). Il
+//! rollback quindi agisce soltanto su ciò che può provare scritto dall'import:
+//!
+//! - la **ricevuta** che l'importer lascia dopo ogni scrittura ([`receipts`])
+//!   dice con quale revisione l'ha lasciato, e il rollback torna indietro solo
+//!   se la revisione attuale è quella;
+//! - per un importer senza ricevute vale ciò che il suo rapporto dichiara
+//!   scritto, con l'impronta riletta subito dopo l'apply;
+//! - ciò che non ha né l'una né l'altra, e non è com'era prima, è **ambiguo**: il
+//!   rollback non lo indovina, si ferma con un conflitto e tiene backup e
+//!   journal.
+//!
+//! Il confronto e la mutazione sono un'operazione sola dell'host (scrittura o
+//! cestinamento condizionati alla revisione controllata): rileggere una
+//! revisione dopo aver guardato il contenuto non proteggerebbe ciò che si è
+//! guardato.
+//!
+//! [`receipts`]: crate::receipts
 
 use std::collections::HashSet;
 
+use fub_abi::edit::Revision;
 use fub_abi::model::DocId;
 use fub_abi::traits::HostApi;
 use fub_abi::transfer::{
@@ -13,6 +36,7 @@ use fub_abi::transfer::{
 use fub_abi::PluginError;
 
 use crate::common::{bad_args, content_hash_hex, MAX_MANIFEST_BYTES, MAX_TOTAL_UNCOMPRESSED};
+use crate::receipts;
 use crate::template::{Importer, StagingManifest};
 
 const JOURNAL_SCHEMA: u32 = 1;
@@ -23,6 +47,14 @@ struct Preimage {
     existed: bool,
     before_sha: Option<String>,
     after_sha: Option<String>,
+    /// The apply did not write this target (skipped, failed or absent from
+    /// its report): whatever it holds belongs to someone else.
+    #[serde(default)]
+    untouched: bool,
+    /// La revisione che l'import ha lasciato sul bersaglio, dalla ricevuta
+    /// dell'importer. Senza, il bersaglio si prova con l'impronta del dopo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    receipt: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -96,6 +128,40 @@ fn save_receipt(job: &str, journal: &Journal, host: &mut dyn HostApi) -> Result<
         return Err(bad_args("commit receipt exceeds 1 MiB"));
     }
     host.data_write(&receipt_path(job), &raw)
+}
+
+/// Quante volte si riprova una lettura che cambia mentre la si fa.
+const STABLE_TRIES: usize = 4;
+
+/// Un documento com'è adesso: i byte e la revisione che li identifica, letti in
+/// modo che coincidano. La revisione si prende prima e dopo i byte, e vale solo
+/// se è la stessa: chi la usa come condizione di una scrittura sa che ciò che ha
+/// guardato è ciò che la condizione protegge. `None` = il documento non c'è.
+fn stable_read(
+    host: &dyn HostApi,
+    doc: &DocId,
+) -> Result<Option<(Vec<u8>, Revision)>, PluginError> {
+    for _ in 0..STABLE_TRIES {
+        let revision = match host.document_revision(doc) {
+            Ok(revision) => revision,
+            Err(PluginError::NotFound(_)) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        let bytes = match host.read_document_bytes(doc) {
+            Ok(bytes) => bytes,
+            Err(PluginError::NotFound(_)) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        match host.document_revision(doc) {
+            Ok(again) if again == revision => return Ok(Some((bytes, revision))),
+            Ok(_) => {}
+            Err(PluginError::NotFound(_)) => return Ok(None),
+            Err(error) => return Err(error),
+        }
+    }
+    Err(PluginError::Conflict(
+        format!("`{doc}` keeps changing; no stable read").into(),
+    ))
 }
 
 pub fn status(job: &str, host: &dyn HostApi) -> Result<&'static str, PluginError> {
@@ -182,6 +248,9 @@ fn commit_with(
         committed: None,
     };
     let mut total = 0u64;
+    // La revisione che il preflight ha visto su ogni bersaglio da sostituire:
+    // l'importer la usa come condizione della propria scrittura.
+    let mut expect = Vec::new();
     for document in &manifest.preview.documents {
         let existed = match document.outcome {
             ImportOutcome::Replaced => true,
@@ -194,15 +263,17 @@ fn commit_with(
                 document.doc
             )));
         }
-        let before = match host.read_document_bytes(&document.doc) {
-            Ok(bytes) => Some(bytes),
-            Err(PluginError::NotFound(_)) => None,
-            Err(error) => return Err(error),
+        let (before, before_revision) = match stable_read(host, &document.doc)? {
+            Some((bytes, revision)) => (Some(bytes), Some(revision)),
+            None => (None, None),
         };
         if before.is_some() != existed {
             return Err(PluginError::Conflict(
                 format!("`{}` changed since preview", document.doc).into(),
             ));
+        }
+        if let Some(revision) = before_revision {
+            expect.push((document.doc.clone(), revision));
         }
         total = total.saturating_add(before.as_ref().map_or(0, |b| b.len() as u64));
         if total > MAX_TOTAL_UNCOMPRESSED {
@@ -220,12 +291,24 @@ fn commit_with(
             existed,
             before_sha,
             after_sha: None,
+            untouched: false,
+            receipt: None,
         });
     }
     save(job, &journal, host)?;
     let mut apply = request.clone();
     apply.mode = ImportMode::Apply;
+    receipts::arm(&mut apply, job, expect);
     let result = importer.import(&source, &apply, host);
+    // Le ricevute che l'importer ha lasciato entrano nel journal: da qui in poi
+    // sono la prova di ciò che è dell'import. Una che non si legge vale come
+    // assente, cioè ambigua.
+    for entry in &mut journal.entries {
+        entry.receipt = receipts::read(host, job, &entry.doc)
+            .ok()
+            .flatten()
+            .map(|revision| revision.0);
+    }
     let mut persist_error = None;
     if let Ok(report) = &result {
         if report.documents == manifest.preview.documents
@@ -253,10 +336,45 @@ fn commit_with(
                 if let Err(e) = save_receipt(job, &journal, host) {
                     persist_error = Some(e);
                 } else {
+                    // Le ricevute sono ora nel journal committato: quelle
+                    // sciolte non servono più, e se non si tolgono restano
+                    // solo file orfani.
+                    let _ = receipts::clear(host, job, journal.entries.iter().map(|e| &e.doc));
                     return Ok(report.clone());
                 }
             }
         }
+    }
+    // Il rollback tocca soltanto ciò che l'apply ha scritto. Una ricevuta lo
+    // prova; senza, vale ciò che il rapporto dichiara scritto, e un bersaglio
+    // che nessuno dei due rivendica (per esempio uno che un altro scrittore ha
+    // creato dopo l'anteprima) non è dell'import e non si tocca. Quelli
+    // rivendicati dal solo rapporto si fissano all'impronta di adesso, perché
+    // le modifiche successive restino protette. Con un apply finito in errore
+    // non c'è rapporto: restano le ricevute, e il rollback ferma ciò che non sa
+    // provare.
+    journal.committed = None;
+    if let Ok(report) = &result {
+        for entry in &mut journal.entries {
+            let claimed = report.documents.iter().any(|d| {
+                d.doc == entry.doc
+                    && matches!(d.outcome, ImportOutcome::Created | ImportOutcome::Replaced)
+            });
+            entry.untouched = !claimed && entry.receipt.is_none();
+            entry.after_sha = if claimed && entry.receipt.is_none() {
+                host.read_document_bytes(&entry.doc)
+                    .ok()
+                    .map(|bytes| content_hash_hex(&bytes))
+            } else {
+                None
+            };
+        }
+    }
+    if let Err(error) = save(job, &journal, host) {
+        return Err(PluginError::Conflict(
+            format!("job `{job}` stopped and rollback needs recovery: {error}; preimages retained")
+                .into(),
+        ));
     }
     match rollback(job, host) {
         Ok(()) => {
@@ -280,81 +398,85 @@ fn commit_with(
     }
 }
 
-/// Restore every touched target, most recent first. Committed postimages are
-/// checked against their digest: later user edits are a conflict, never erased.
-/// For a crash during provider.import, only preimages are certain; the host
-/// cannot distinguish a concurrent external edit without its own batch journal.
+/// Che cosa fare di un bersaglio al rollback.
+enum Undo {
+    /// Non è dell'import, o è già com'era: non si tocca.
+    Leave,
+    /// È dell'import e ha ancora la revisione controllata: si riporta indietro
+    /// con una scrittura (o un cestinamento) condizionata a quella revisione.
+    Revert(Revision),
+}
+
+/// Decide, **senza cambiare niente**, che cosa il rollback fa di `entry`.
+fn decide(
+    entry: &Preimage,
+    receipt: Option<Revision>,
+    current: Option<(Vec<u8>, Revision)>,
+) -> Result<Undo, PluginError> {
+    let Some((bytes, revision)) = current else {
+        return if entry.existed {
+            Err(PluginError::Conflict(
+                format!("`{}` vanished before rollback", entry.doc).into(),
+            ))
+        } else {
+            // Creato e poi tolto da chi l'ha voluto: non c'è niente da riportare.
+            Ok(Undo::Leave)
+        };
+    };
+    let sha = content_hash_hex(&bytes);
+    if entry.before_sha.as_deref() == Some(sha.as_str()) {
+        return Ok(Undo::Leave);
+    }
+    let changed_after = || {
+        PluginError::Conflict(
+            format!(
+                "`{}` changed after import; refusing to erase user's edit",
+                entry.doc
+            )
+            .into(),
+        )
+    };
+    match (receipt, entry.after_sha.as_deref()) {
+        (Some(receipt), _) if receipt == revision => Ok(Undo::Revert(revision)),
+        (Some(_), _) => Err(changed_after()),
+        (None, Some(after)) if after == sha => Ok(Undo::Revert(revision)),
+        (None, Some(_)) => Err(changed_after()),
+        (None, None) => Err(PluginError::Conflict(
+            format!(
+                "`{}` is not as it was before the import, and nothing proves the import wrote \
+                 it: left as it is, preimages retained",
+                entry.doc
+            )
+            .into(),
+        )),
+    }
+}
+
+/// Restore every target the import can prove it wrote, most recent first.
+/// A target is the import's when its receipt names the revision it holds now,
+/// or, without a receipt, when the report claimed it and its digest is the one
+/// read right after the apply: later user edits are a conflict, never erased.
+/// A target that is neither as it was nor provably the import's (a crash during
+/// provider.import, a writer that raced the apply) stops the rollback with a
+/// conflict before anything changes: backups and journal stay.
 pub fn rollback(job: &str, host: &mut dyn HostApi) -> Result<(), PluginError> {
     let Some(journal) = load(job, host)? else {
         return Ok(());
     };
     // Check every target and backup before changing any of them. A later
     // user edit in one document must not make us partly roll back the others.
+    let mut undo = Vec::with_capacity(journal.entries.len());
     for (index, entry) in journal.entries.iter().enumerate() {
-        let current = match host.read_document_bytes(&entry.doc) {
-            Ok(bytes) => Some(bytes),
-            Err(PluginError::NotFound(_)) if !entry.existed => None,
-            Err(PluginError::NotFound(_)) => {
-                return Err(PluginError::Conflict(
-                    format!("`{}` vanished before rollback", entry.doc).into(),
-                ));
-            }
-            Err(error) => return Err(error),
+        let receipt = match &entry.receipt {
+            Some(revision) => Some(Revision::new(revision.clone())),
+            None => receipts::read(host, job, &entry.doc)?,
         };
-        if let Some(current) = current {
-            let sha = content_hash_hex(&current);
-            if entry.before_sha.as_deref() != Some(sha.as_str()) {
-                if let Some(after_sha) = &entry.after_sha {
-                    if after_sha != &sha {
-                        return Err(PluginError::Conflict(
-                            format!(
-                                "`{}` changed after import; refusing to erase user's edit",
-                                entry.doc
-                            )
-                            .into(),
-                        ));
-                    }
-                }
-            }
-        }
-        if entry.existed {
-            let original = host
-                .data_read(&backup_path(job, index))?
-                .ok_or_else(|| bad_args(format!("preimage for `{}` is missing", entry.doc)))?;
-            if entry.before_sha.as_deref() != Some(content_hash_hex(&original).as_str()) {
-                return Err(PluginError::Conflict(
-                    format!("preimage for `{}` is corrupt", entry.doc).into(),
-                ));
-            }
-        }
-    }
-    for (index, entry) in journal.entries.iter().enumerate().rev() {
-        let current = match host.read_document_bytes(&entry.doc) {
-            Ok(bytes) => bytes,
-            Err(PluginError::NotFound(_)) if !entry.existed => continue,
-            Err(PluginError::NotFound(_)) => {
-                return Err(PluginError::Conflict(
-                    format!("`{}` vanished before rollback", entry.doc).into(),
-                ));
-            }
-            Err(error) => return Err(error),
-        };
-        let current_sha = content_hash_hex(&current);
-        if entry.before_sha.as_deref() == Some(current_sha.as_str()) {
+        if entry.untouched && receipt.is_none() {
+            undo.push(Undo::Leave);
             continue;
         }
-        if let Some(after_sha) = &entry.after_sha {
-            if after_sha != &current_sha {
-                return Err(PluginError::Conflict(
-                    format!(
-                        "`{}` changed after import; refusing to erase user's edit",
-                        entry.doc
-                    )
-                    .into(),
-                ));
-            }
-        }
-        if entry.existed {
+        let step = decide(entry, receipt, stable_read(host, &entry.doc)?)?;
+        if matches!(step, Undo::Revert(_)) && entry.existed {
             let original = host
                 .data_read(&backup_path(job, index))?
                 .ok_or_else(|| bad_args(format!("preimage for `{}` is missing", entry.doc)))?;
@@ -363,10 +485,20 @@ pub fn rollback(job: &str, host: &mut dyn HostApi) -> Result<(), PluginError> {
                     format!("preimage for `{}` is corrupt", entry.doc).into(),
                 ));
             }
-            let revision = host.document_revision(&entry.doc)?;
-            host.write_document_bytes(&entry.doc, &original, Some(revision))?;
+        }
+        undo.push(step);
+    }
+    for (index, (entry, step)) in journal.entries.iter().zip(&undo).enumerate().rev() {
+        let Undo::Revert(revision) = step else {
+            continue;
+        };
+        if entry.existed {
+            let original = host
+                .data_read(&backup_path(job, index))?
+                .ok_or_else(|| bad_args(format!("preimage for `{}` is missing", entry.doc)))?;
+            host.write_document_bytes(&entry.doc, &original, Some(revision.clone()))?;
         } else {
-            host.trash_document(&entry.doc)?;
+            host.trash_document_if(&entry.doc, revision)?;
         }
     }
     // Removing the receipt then journal leaves only orphaned backup bytes if
@@ -378,5 +510,6 @@ pub fn rollback(job: &str, host: &mut dyn HostApi) -> Result<(), PluginError> {
             host.data_remove(&backup_path(job, index))?;
         }
     }
+    receipts::clear(host, job, journal.entries.iter().map(|entry| &entry.doc))?;
     Ok(())
 }

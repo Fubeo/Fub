@@ -53,7 +53,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use crate::custody::Custody;
+use crate::custody::{Custody, WriteTurn};
 use crate::query::query_workspace;
 
 use fub_abi::command::{CommandOutcome, Failure, InvokeMode, UndoStep};
@@ -65,6 +65,7 @@ use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
+use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{
     DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery,
     HostServices, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi,
@@ -219,6 +220,21 @@ impl JobHost {
         Ok(())
     }
 
+    /// Il turno di scrittura per **un job**, cioè per chi sta dentro il codice di
+    /// un componente e potrebbe tenerne l'istanza.
+    ///
+    /// Aspetta come [`Custody::write_turn`], ma può rinunciare: se l'attesa
+    /// chiude un ciclo con un salvataggio che aspetta quell'istanza risponde con
+    /// un conflitto, e se il job è stato annullato risponde di no invece di
+    /// restare in fila. Vedi [`crate::waits`].
+    fn turn<'a>(
+        &self,
+        workspace: &'a Custody<Workspace>,
+    ) -> Result<WriteTurn<'a, Workspace>, PluginError> {
+        self.stopped()?;
+        workspace.write_turn_yielding(&|| self.stopped())
+    }
+
     /// Applica la policy corrente del caller prima di staccare una callback dal
     /// workspace. La decisione resta quella unica di [`Policy`].
     fn authorize_caller(
@@ -268,7 +284,7 @@ impl JobHost {
         f: impl FnOnce(&mut dyn HostApi) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
         self.stopped()?;
-        self.writing(f)?
+        self.writing_until(&|| self.stopped(), f)?
     }
 
     fn prepare_data_io(
@@ -307,7 +323,7 @@ impl JobHost {
         self.stopped()?;
         let action = action.into();
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let prepared = {
             let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
@@ -345,7 +361,7 @@ impl JobHost {
     ) -> Result<Revision, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let prepared = {
             let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
@@ -397,7 +413,7 @@ impl JobHost {
         request: EditRequest,
     ) -> Result<EditReport, PluginError> {
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         self.apply_edit_detached_inner(id, request)
     }
 
@@ -566,7 +582,19 @@ impl JobHost {
     /// finché il guard non è stato rilasciato; il turno di scrittura conserva
     /// invece l'unità logica e consente il rientro sullo stesso thread.
     fn writing<R>(&self, f: impl FnOnce(&mut dyn HostApi) -> R) -> Result<R, PluginError> {
+        self.writing_until(&|| Ok(()), f)
+    }
+
+    /// Come [`writing`](Self::writing), ma l'attesa del turno si interrompe se
+    /// `stopped` dice di no. Il turno si prende dalla porta che sa cedere;
+    /// `with_event_drain` lo riprende subito dopo, rientrando senza aspettare.
+    fn writing_until<R>(
+        &self,
+        stopped: &dyn Fn() -> Result<(), PluginError>,
+        f: impl FnOnce(&mut dyn HostApi) -> R,
+    ) -> Result<R, PluginError> {
         let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn_yielding(stopped)?;
         with_event_drain(&workspace, |ws| {
             if let Some(instance) = self.instance.as_deref() {
                 ws.with_host_mode_instance(&self.plugin, self.mode, instance, f)
@@ -815,7 +843,7 @@ impl VaultWrite for JobHost {
     ) -> Result<Revision, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let prepared = {
             let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
@@ -882,6 +910,71 @@ impl VaultWrite for JobHost {
     }
 }
 
+impl JobHost {
+    /// Cestina `id`; con `expected`, soltanto se ha ancora quella revisione. Il
+    /// confronto sta sotto lo stesso turno di scrittura che cestina: un
+    /// salvataggio non può inserirsi fra l'uno e l'altro.
+    fn trash_checked(
+        &mut self,
+        id: &DocId,
+        expected: Option<&Revision>,
+    ) -> Result<DocId, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = self.turn(&workspace)?;
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    id.as_str(),
+                    || format!("trashing `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                id.as_str(),
+                || format!("trashing `{id}`"),
+            )?;
+            let id = fenced_doc_id(id)?;
+            if let Some(expected) = expected {
+                if ws.document_revision(&id).map_err(PluginError::from)? != *expected {
+                    return Err(PluginError::Conflict(Text::message(
+                        "host.vault.moved",
+                        vec![Arg::text("doc", id.as_str())],
+                    )));
+                }
+            }
+            ws.prepare_document_deletion(&id)
+                .map_err(PluginError::from)?
+        };
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let committed = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_deletion(completed)
+                .map_err(|failure| *failure)
+        };
+        let committed = match committed {
+            Ok(committed) => committed,
+            Err((error, completed)) => {
+                completed.rollback().map_err(PluginError::from)?;
+                return Err(PluginError::from(error));
+            }
+        };
+        let finalized = committed.invoke();
+        with_event_drain(&workspace, |ws| ws.finish_document_deletion(finalized))?.map_err(
+            |failure| {
+                let (error, _) = *failure;
+                error
+            },
+        )
+    }
+}
+
 impl VaultStructure for JobHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
         self.write_document_detached(
@@ -898,7 +991,7 @@ impl VaultStructure for JobHost {
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let (prepared_document, prepared_asset) = {
             let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
@@ -998,57 +1091,17 @@ impl VaultStructure for JobHost {
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.stopped()?;
-        let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
-        let prepared = {
-            let ws = workspace.read()?;
-            if self.mode == InvokeMode::DryRun {
-                authorize_path(
-                    &ReadOnly {
-                        why: "simulazione del comando",
-                    },
-                    Capability::VaultStructure,
-                    id.as_str(),
-                    || format!("trashing `{id}`"),
-                )?;
-            }
-            authorize_path(
-                &ws.granted_policy(&self.plugin),
-                Capability::VaultStructure,
-                id.as_str(),
-                || format!("trashing `{id}`"),
-            )?;
-            let id = fenced_doc_id(id)?;
-            ws.prepare_document_deletion(&id)
-                .map_err(PluginError::from)?
-        };
-        let completed = prepared.invoke().map_err(PluginError::from)?;
-        let committed = {
-            let mut ws = workspace.write()?;
-            ws.commit_document_deletion(completed)
-                .map_err(|failure| *failure)
-        };
-        let committed = match committed {
-            Ok(committed) => committed,
-            Err((error, completed)) => {
-                completed.rollback().map_err(PluginError::from)?;
-                return Err(PluginError::from(error));
-            }
-        };
-        let finalized = committed.invoke();
-        with_event_drain(&workspace, |ws| ws.finish_document_deletion(finalized))?.map_err(
-            |failure| {
-                let (error, _) = *failure;
-                error
-            },
-        )
+        self.trash_checked(id, None)
+    }
+
+    fn trash_document_if(&mut self, id: &DocId, expected: &Revision) -> Result<DocId, PluginError> {
+        self.trash_checked(id, Some(expected))
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let (policy, list_trash) = {
             let ws = workspace.read()?;
             let policy = ws.granted_policy(&self.plugin);
@@ -1124,7 +1177,7 @@ impl VaultStructure for JobHost {
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let prepared = {
             let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
@@ -1293,8 +1346,21 @@ impl HostEnv for JobHost {
 impl HostEvents for JobHost {
     /// Emettere prende il prestito **esclusivo**: un evento entra nella coda del
     /// dispatcher e da lì raggiunge gli handler, che scrivono.
+    ///
+    /// **Senza esito, e quindi senza modo di dire «non ora»**: se il turno non si
+    /// può avere perché chi lo ha aspetta l'istanza che questo job tiene, l'evento
+    /// non parte, come quando la policy lo nega — «il silenzio è il no» (§9.3).
+    /// Si scrive nel log perché non sia un silenzio muto: chi vuole *esserci* a
+    /// ogni costo usa `spawn-job`, che un esito lo ha. La cancellazione invece
+    /// non c'entra: un job annullato può ancora emettere.
     fn emit(&mut self, event: Event) {
-        let _ = self.writing(|h| h.emit(event));
+        if let Err(refusal) = self.writing(|h| h.emit(event)) {
+            tracing::warn!(
+                target: "fub.host",
+                "`{}`: un evento emesso dal componente non è partito: {refusal}",
+                self.plugin,
+            );
+        }
     }
 
     /// Un job può chiederne un altro: la coda è la stessa, e a drenarla è sempre
@@ -1319,6 +1385,12 @@ impl HostEvents for JobHost {
             return;
         };
         let workspace = self.workspace.clone();
+        // Un progresso è un'informazione, non un effetto: se un salvataggio
+        // aspetta l'istanza di questo job si rinuncia al timbro invece di
+        // tenere fermo il lavoro. Un job annullato lo può dare lo stesso.
+        let Ok(_turn) = workspace.write_turn_yielding(&|| Ok(())) else {
+            return;
+        };
         let _ = with_event_drain(&workspace, |ws| ws.notes_job_progress(id, progress));
     }
 }
@@ -1345,7 +1417,7 @@ impl HostCommands for JobHost {
         self.stopped()?;
         self.authorize_caller(Capability::Commands, || format!("invoking `{command}`"))?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let mut prepared = {
             let mut ws = workspace.write()?;
             match ws.prepare_nested_provider_command(command, args.clone(), self.mode)? {
@@ -1391,7 +1463,7 @@ impl HostCommands for JobHost {
     fn undo_last(&mut self) -> Result<Option<fub_abi::command::Undone>, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
 
         {
             let ws = workspace.read()?;
@@ -1559,7 +1631,7 @@ impl HostServices for JobHost {
             format!("calling `{service}.{method}`")
         })?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
+        let _turn = self.turn(&workspace)?;
         let mut prepared = {
             let mut ws = workspace.write()?;
             ws.prepare_service_call(service, method, args)?

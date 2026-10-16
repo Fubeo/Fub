@@ -2,6 +2,7 @@ import { api } from "../host/ipc";
 import type { CommandOutcome, CommandSpec, InvokeMode } from "../host/contract";
 import { activeDoc } from "./layout";
 import { state } from "./store";
+import { openVaultRoot, vaultArg } from "./vault";
 
 /// I comandi del menu `/`: quelli che lo dichiarano (`CommandSpec.surfaces`), e
 /// chi trasforma la selezione soltanto quando c'è. Nessun elenco della shell e
@@ -48,6 +49,9 @@ export async function invokeSlash(
   mode: InvokeMode = "apply",
 ): Promise<{ blocked: string[] } | { outcome: CommandOutcome } | { cancelled: true }> {
   if (!isCurrent()) return { cancelled: true };
+  // Il vault del gesto (FUB-001): il comando raggiunge quello in cui è stato
+  // digitato anche se, durante il flush, se ne apre un altro.
+  const vault = openVaultRoot();
   if (spec.scope.writes) {
     const pending = await flushPendingSave();
     if (!isCurrent()) return { cancelled: true };
@@ -55,7 +59,7 @@ export async function invokeSlash(
   }
   await publishCurrentContext?.();
   if (!isCurrent()) return { cancelled: true };
-  const outcome = await api.invokeCommand(spec.id, args, mode);
+  const outcome = await api.invokeCommand(spec.id, args, mode, ...vaultArg(vault));
   return { outcome };
 }
 

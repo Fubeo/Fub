@@ -5,13 +5,15 @@
 //! error. `Cancelled` always propagates as `Err` so a cancelled job never
 //! reports a partial success as complete.
 
-use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::edit::Revision;
 use fub_abi::model::DocId;
 use fub_abi::traits::HostApi;
 use fub_abi::transfer::{
     ConflictPolicy, ImportMode, ImportOutcome, ImportReport, ImportRequest, TransferNote,
 };
 use fub_abi::PluginError;
+
+use crate::receipts;
 
 /// Largest single source accepted without an explicit chunked path.
 pub const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
@@ -239,13 +241,28 @@ pub fn write_doc(
         && request.mode == ImportMode::Apply;
     let outcome = if writes {
         let res = match &outcome {
+            // Condizionata alla revisione che il preflight ha visto, se il
+            // commit l'ha detta: una modifica arrivata dopo non si copre.
             ImportOutcome::Replaced => host
-                .write_document(doc, text, WriteBase::Dictated)
-                .map(|_| ()),
-            _ => host.create_document(doc, text),
+                .write_document(doc, text, receipts::base_for(request, doc))
+                .map(Some),
+            _ => host.create_document(doc, text).map(|()| None),
         };
         match res {
-            Ok(()) => outcome,
+            Ok(revision) => {
+                // La ricevuta subito dopo la scrittura, prima del bersaglio
+                // dopo: è ciò che dice al rollback che questa nota è dell'import.
+                // Una creazione non rende la revisione; la si rilegge soltanto
+                // se qualcuno la chiede.
+                if receipts::armed(request) {
+                    let revision = match revision {
+                        Some(revision) => revision,
+                        None => host.document_revision(doc)?,
+                    };
+                    receipts::record(host, request, doc, &revision)?;
+                }
+                outcome
+            }
             Err(e) if is_cancelled(&e) => return Err(e),
             Err(e) => ImportOutcome::Failed(e.to_string()),
         }
@@ -274,16 +291,26 @@ pub fn write_asset(
     let outcome = if request.mode == ImportMode::Apply {
         match outcome {
             ImportOutcome::Created => match host.write_document_bytes(doc, bytes, None) {
-                Ok(_) => ImportOutcome::Created,
+                Ok(revision) => {
+                    receipts::record(host, request, doc, &revision)?;
+                    ImportOutcome::Created
+                }
                 Err(e) if is_cancelled(&e) => return Err(e),
                 Err(e) => ImportOutcome::Failed(e.to_string()),
             },
             ImportOutcome::Replaced => {
-                let result = host
-                    .document_revision(doc)
-                    .and_then(|revision| host.write_document_bytes(doc, bytes, Some(revision)));
+                // La revisione del preflight, se il commit l'ha detta; senza,
+                // quella di adesso (la guardia di sempre).
+                let result = match receipts::expected(request, doc) {
+                    Some(revision) => Ok(revision),
+                    None => host.document_revision(doc),
+                }
+                .and_then(|revision| host.write_document_bytes(doc, bytes, Some(revision)));
                 match result {
-                    Ok(_) => ImportOutcome::Replaced,
+                    Ok(revision) => {
+                        receipts::record(host, request, doc, &revision)?;
+                        ImportOutcome::Replaced
+                    }
                     Err(e) if is_cancelled(&e) => return Err(e),
                     Err(e) => ImportOutcome::Failed(e.to_string()),
                 }
@@ -331,45 +358,43 @@ pub fn frontmatter(
     out
 }
 
-/// Minimal base64 decoder (standard alphabet, `=` padding, whitespace
-/// rejected). Avoids a new dependency for the single ENEX `<data>` case;
-/// invalid input is an error, never silent truncation.
+/// Minimal base64 decoder (standard alphabet, mandatory `=` padding,
+/// whitespace rejected). Avoids a new dependency for the single ENEX `<data>`
+/// case; invalid input is an error, never silent truncation: the length must
+/// be a multiple of four and padding may only close the final group.
 pub fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
-    let mut vals: Vec<u8> = Vec::with_capacity(input.len() / 4 * 3);
+    let bytes = input.as_bytes();
+    if bytes.len() % 4 != 0 {
+        return Err("base64 length is not a multiple of 4".to_string());
+    }
+    let pad = bytes.iter().rev().take_while(|&&b| b == b'=').count();
+    if pad > 2 {
+        return Err("too much base64 padding".to_string());
+    }
+    let data_len = bytes.len() - pad;
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len() / 4 * 3);
     let mut buf: u32 = 0;
     let mut bits: u8 = 0;
-    let mut pad = 0usize;
-    for b in input.bytes() {
+    for (i, &b) in bytes.iter().enumerate() {
         let v = match b {
             b'A'..=b'Z' => b - b'A',
             b'a'..=b'z' => b - b'a' + 26,
             b'0'..=b'9' => b - b'0' + 52,
             b'+' => 62,
             b'/' => 63,
-            b'=' => {
-                pad += 1;
-                0
-            }
+            b'=' if i >= data_len => break,
+            b'=' => return Err("base64 padding before the end of the data".to_string()),
             _ => return Err(format!("invalid base64 character: {b:#04x}")),
         };
-        if pad > 0 && b != b'=' {
-            return Err("data after base64 padding".to_string());
-        }
         buf = (buf << 6) | u32::from(v);
         bits += 6;
         if bits >= 8 {
             bits -= 8;
-            vals.push((buf >> bits) as u8);
+            out.push((buf >> bits) as u8);
             buf &= (1 << bits) - 1;
         }
     }
-    if pad > 2 {
-        return Err("too much base64 padding".to_string());
-    }
-    for _ in 0..pad {
-        vals.pop();
-    }
-    Ok(vals)
+    Ok(out)
 }
 
 /// Fallback plain-text import: the contract's faithful minimum.
@@ -434,5 +459,25 @@ impl fub_abi::transfer::ImportProvider for TextImport {
             &mut report,
         )?;
         Ok(report)
+    }
+}
+
+#[cfg(test)]
+mod base64_tests {
+    use super::base64_decode;
+
+    #[test]
+    fn decodes_canonical_groups() {
+        assert_eq!(base64_decode("").unwrap(), b"");
+        assert_eq!(base64_decode("TQ==").unwrap(), b"M");
+        assert_eq!(base64_decode("TWE=").unwrap(), b"Ma");
+        assert_eq!(base64_decode("TWFu").unwrap(), b"Man");
+    }
+
+    #[test]
+    fn rejects_incomplete_or_misplaced_input() {
+        for bad in ["T", "TQ", "TWFu=", "TQ=A", "T===", "=TWF", "TW=u", "TWF\n"] {
+            assert!(base64_decode(bad).is_err(), "`{bad}` must be rejected");
+        }
     }
 }
