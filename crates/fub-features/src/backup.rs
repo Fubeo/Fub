@@ -22,6 +22,14 @@
 //! dichiarando di avercela fatta. Gli snapshot scritti prima dell'inventario si
 //! controllano sul numero di copie che il manifest ricorda.
 //!
+//! L'inventario deve anche **tornare con il resto**: tante voci quante ne dice
+//! il manifest (`n`) e nessuna copia nella cartella che lui non nomini. Una
+//! versione che non lo conosce (un downgrade) rifà lo snapshot senza
+//! aggiornarlo, e il manifest che riscrive si porta dietro `inventory: true`
+//! come campo sconosciuto: l'inventario che resta è di prima, descrive una
+//! cartella che non c'è più, e un ripristino che gli credesse salterebbe le
+//! note nuove senza dirlo.
+//!
 //! Gli snapshot ruotano: dopo ogni backup riuscito restano i più recenti
 //! [`BACKUP_KEEP_KEY`] (10 di serie, `0` li tiene tutti). Senza, crescevano
 //! dentro il vault per sempre, e ognuno è una copia di tutte le note.
@@ -514,6 +522,25 @@ fn restore(
         let inventory = read_inventory(host, dir)?.ok_or_else(|| {
             PluginError::Internal(Text::message(E_INVENTORY, vec![Arg::text(ID, &id)]))
         })?;
+        // L'inventario deve descrivere questa cartella: lo dicono il numero di
+        // voci che il manifest ricorda e le copie che ci stanno davvero. Ne
+        // basta una che non torni per non credergli: i byte sarebbero giusti,
+        // ma l'elenco delle note no.
+        if inventory.files.len() != snapshot.n as usize {
+            damaged.push(format!("{} su {}", inventory.files.len(), snapshot.n));
+        }
+        let known: std::collections::BTreeSet<&str> = inventory
+            .files
+            .iter()
+            .map(|copy| copy.path.as_str())
+            .collect();
+        for path in host.data_list(dir)? {
+            if let Some(rel) = path.strip_prefix(&prefix) {
+                if !known.contains(rel) {
+                    damaged.push(rel.to_owned());
+                }
+            }
+        }
         for copy in inventory.files {
             if existing.contains(&copy.path) {
                 continue;
