@@ -157,7 +157,14 @@ export const api = {
   // revisione arrivi da qui invece di essere ricalcolata di qua è la stessa
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
-  readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
+  //
+  // `vault` è la **radice** del vault a cui il documento appartiene, per chi lo
+  // tiene da prima dell'ultimo cambio di vault: senza, il backend risolve il
+  // vault corrente, e un `Nota.md` di A letto o scritto dopo l'apertura di B
+  // sarebbe il `Nota.md` di B. Con un vault che non è più aperto il backend
+  // risponde con un errore, e non scrive niente.
+  readDocument: (id: string, vault: string | null = null) =>
+    invoke<DocumentSource>("read_document", { id, vault }),
   resourceOpen: (id: string, vault: string | null = null) =>
     invoke<ResourceDescriptor>("resource_open", { id, vault }),
   resourceReadChunk: (handle: string, offset: number, len: number) =>
@@ -169,7 +176,7 @@ export const api = {
   /// e la sa soltanto Tauri: costruirla a mano rompeva le immagini delle note
   /// su Windows. L'handle è un numero: niente percorso, niente query.
   assetUrl: (handle: string) => convertFileSrc(handle, "fub-asset"),
-  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string) =>
+  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null) =>
     writeResource(mediaInvoke, id, bytes, expected, vault),
   viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>
     openViewer(mediaInvoke, url, title, policy),
@@ -199,8 +206,8 @@ export const api = {
   // `base: string | null = null`, cioè la guardia si perdeva non passandola —
   // e chi la perdeva non lo scriveva da nessuna parte. Torna la revisione
   // prodotta, cioè la base della scrittura dopo.
-  writeDocument: (id: string, source: string, base: WriteBase) =>
-    invoke<string>("write_document", { id, source, base }),
+  writeDocument: (id: string, source: string, base: WriteBase, vault: string | null = null) =>
+    invoke<string>("write_document", { id, source, base, vault }),
   // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
   // disco. Due porte e non due comandi del registro, ed è l'unica coppia di
   // questo file la cui capacità mancante è voluta per sempre: il testo non
@@ -209,9 +216,10 @@ export const api = {
   //
   // `base` è la revisione da cui il buffer si è discostato, quando chi lo tiene
   // la sa; `null` è «non lo so», e chi legge lo tratta come tale.
-  saveDraft: (id: string, text: string, base: string | null = null) =>
-    invoke<void>("save_draft", { id, text, base }),
-  discardDraft: (id: string) => invoke<void>("discard_draft", { id }),
+  saveDraft: (id: string, text: string, base: string | null = null, vault: string | null = null) =>
+    invoke<void>("save_draft", { id, text, base, vault }),
+  discardDraft: (id: string, vault: string | null = null) =>
+    invoke<void>("discard_draft", { id, vault }),
   // Crea, rinomina, cestina, ripristina e svuota NON hanno più un comando
   // Tauri: sono comandi del registro, e la shell li chiede con `invokeCommand`
   // (vedi `COMANDI` in `contract.ts`). Quelle due che restano restano perché
@@ -270,11 +278,23 @@ export const api = {
   listCommands: () => invoke<CommandSpec[]>("list_commands"),
   // `mode` assente = `apply`: è la scelta di questo confine, non del contratto
   // (dove un default non esiste apposta).
-  invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) =>
+  //
+  // `vault` è la radice del vault a cui il comando si rivolge, per chi lo emette
+  // da un vault che può non essere più il corrente (FUB-001): rinominare o
+  // cestinare `Nota.md` mentre la finestra passa da A a B non deve toccare quella
+  // di B. Assente = il corrente, com'è per ogni comando che non ha un vault di
+  // partenza da dire.
+  invokeCommand: (
+    command: string,
+    args?: Record<string, unknown>,
+    mode?: InvokeMode,
+    vault: string | null = null,
+  ) =>
     invoke<CommandOutcome>("invoke_command", {
       command,
       args: args ?? null,
       mode: mode ?? null,
+      vault,
     }),
   // Il canale dati, **generico**: il gemello di renderView/viewAction. Erano
   // quattro comandi (`search`, `list_tags`, `graph_data`, `backlinks`), e il

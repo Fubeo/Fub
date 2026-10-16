@@ -426,6 +426,9 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     expect(shell.store.state.vaultRoot).toBe("/vault");
     expect(shell.sessions.get("Benvenuto.md")).toBe(owner);
     expect(textToVideo()).toContain("Il primo documento");
+    // E il vault di prima si può ancora scrivere: il blocco è caduto.
+    typeInEditor("ancora scrivibile");
+    expect(shell.sessions.inspect("Benvenuto.md")).toMatchObject({ dirty: true });
   });
 
   /// Il caso che protegge il testo: se la coda di salvataggio non si svuota,
@@ -465,23 +468,67 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     await pending.abandon();
   });
 
-  /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host:
-  /// ciò che viene battuto lì dentro non ha più un salvataggio davanti. Lo
-  /// smontaggio lo restituisce e la sequenza lo dice, senza fermarsi.
-  it("una battuta arrivata mentre l'host apre il vault nuovo viene detta", async () => {
+  /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host, e
+  /// da lì l'host risolve il vault **nuovo**: una battuta accettata lì dentro
+  /// non avrebbe più un salvataggio davanti, e quello dell'autosave — che scatta
+  /// dopo 400 ms — scriverebbe la nota omonima dell'altro vault. Le sessioni
+  /// sono ferme: la battuta si respinge, e niente parte verso nessun vault.
+  it("una battuta mentre l'host apre il vault nuovo si respinge e non arriva a nessun vault", async () => {
     const shell = await start(VAULT);
+    const written = shell.host.atGate("writeDocument").length;
     const unlock = shell.host.throttle("openVault");
     const { openVault } = await import("../desktop-shell");
 
     const opening = openVault("/altro");
     await waitFor("la richiesta arriva all'host", () => shell.host.atGate("openVault").length === 2);
     typeInEditor("battuta fuori tempo");
+    // Più del ritardo dell'autosave: se la battuta fosse stata accettata, il
+    // salvataggio sarebbe già partito.
+    await new Promise((r) => setTimeout(r, 700));
+    expect(shell.host.atGate("writeDocument")).toHaveLength(written);
+    expect(shell.sessions.inspect("Benvenuto.md")).toMatchObject({ dirty: false });
     unlock();
     await opening;
 
-    expect(shell.notices()).toContain(shell.t("demo.unsaved", { files: "Benvenuto.md" }));
+    expect(shell.notices()).not.toContain(shell.t("demo.unsaved", { files: "Benvenuto.md" }));
+    expect(shell.host.atGate("writeDocument")).toHaveLength(written);
     expect(shell.store.state.vaultRoot).toBe("/altro");
     expect(box.trace).toContain("signal:vault:/altro");
+  });
+
+  /// L'host risolve «il vault» per chi non lo dice, e durante il passaggio il
+  /// corrente cambia sotto i piedi di chi aveva una nota aperta nel precedente.
+  /// Ogni scrittura porta quindi la radice del vault in cui la nota è stata
+  /// aperta, e ogni comando strutturale quella del vault in cui il gesto è
+  /// nato: la rinomina o il cestino chiesti mentre l'host apre l'altro non
+  /// possono toccare la nota omonima di B.
+  it("scritture e comandi del passaggio portano il vault di partenza; quelli dopo, il nuovo", async () => {
+    const shell = await start(VAULT);
+    typeInEditor("scritto nel primo vault");
+    await shell.sessions.flush("Benvenuto.md");
+    expect(shell.host.atGate("writeDocument").slice(-1)[0]?.args[3]).toBe("/vault");
+
+    const unlock = shell.host.throttle("openVault");
+    const { openVault } = await import("../desktop-shell");
+    const { createNote, renameNote, trashNote } = await import("./vault");
+    const opening = openVault("/altro");
+    await waitFor("la richiesta arriva all'host", () => shell.host.atGate("openVault").length === 2);
+    await renameNote("Benvenuto.md", "Rinominata.md");
+    await trashNote("Rinominata.md");
+    unlock();
+    await opening;
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+    await createNote("Dopo");
+
+    const asked = shell.host
+      .atGate("invokeCommand")
+      .map((call) => [call.args[0], call.args[3]])
+      .filter(([command]) => ["note.rename", "note.trash", "note.create"].includes(String(command)));
+    expect(asked).toEqual([
+      ["note.rename", "/vault"],
+      ["note.trash", "/vault"],
+      ["note.create", "/altro"],
+    ]);
   });
 });
 

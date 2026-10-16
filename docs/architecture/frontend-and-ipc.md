@@ -143,6 +143,24 @@ La `DocumentSession` è l'autorità della shell per il testo in memoria e per la
 scrittura del documento aperto; il core resta l'autorità del file persistente e
 della revisione verificata dalla scrittura.
 
+Una `DocumentSession` appartiene al vault in cui è nata. Ne tiene la radice e la
+passa a ogni lettura, scrittura, bozza e scarto di bozza (il parametro `vault`
+di `read_document`, `write_document`, `save_draft` e `discard_draft`), perché
+l'host risolve il vault corrente per chi non lo dice, e durante il passaggio da
+un vault all'altro il corrente è già quello nuovo. Una scrittura rimasta
+indietro raggiunge così il vault di partenza, e non la nota omonima dell'altro;
+se quel vault non è più aperto, l'host risponde con un errore e non scrive
+niente. Lo stesso vale per i comandi strutturali che nascono da un gesto della
+shell (crea, rinomina, cestina, annulla): portano il vault del gesto. I comandi
+che passano dalla palette o da un plugin non dicono il vault e parlano con il
+corrente.
+
+Per tutto il passaggio, da prima di `open_vault` allo smontaggio delle sessioni,
+`vault-session.ts` ferma le sessioni (`freezeSessions`): una battuta si respinge
+e la superficie si riallinea al testo di prima, e nessun salvataggio o bozza
+parte. Se resta testo non salvato, il passaggio si rinuncia con un avviso; se
+l'host rifiuta il vault, le sessioni riprendono (`thawSessions`).
+
 Per i temi, la selezione autorevole passa dalla porta settings; la cache browser
 è soltanto bootstrap del primo fotogramma. `previewTheme` monta invece una
 selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura
