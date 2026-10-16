@@ -17,10 +17,10 @@
 // applica l'inversa, che vale anche dopo cambiamenti altrui (§7).
 
 import { formatNumber } from "../number";
-import { BrushError, parseBrush } from "../ink/brush";
+import { BrushError, parseBrush } from "../../../ink/brush";
 import { decodeInk, inkToQuantized, unknownChannels } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
-import { InkError } from "../ink/sample";
+import { pf1 } from "../../../ink/pf1";
+import { InkError } from "../../../ink/sample";
 import type { TextOperation } from "../../core/text-operation";
 import { isContainer, len } from "./analysis";
 import {

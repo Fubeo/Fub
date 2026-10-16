@@ -3,10 +3,10 @@
 // condividono.
 
 import { symmetryMatrices } from "../symmetry";
-import { brushForInput, PF1_DEFAULTS } from "../../ink/brush";
-import { pf1Outline } from "../../ink/pf1";
-import { INK_MAX_SAMPLES, quantizeInk } from "../../ink/sample";
-import type { StrokeStart } from "../../pen/pen-input";
+import { brushForInput, PF1_DEFAULTS } from "../../../../ink/brush";
+import { pf1Outline } from "../../../../ink/pf1";
+import { INK_MAX_SAMPLES, quantizeInk } from "../../../../ink/sample";
+import type { StrokeStart } from "../../../../ink/dom/pen-input";
 import { compose, type Point } from "../../scene/matrix";
 import { ROOT } from "../../scene/ops";
 import { MAX_GUIDES, writeGuides, type RulerGuide } from "../../scene/rulers";

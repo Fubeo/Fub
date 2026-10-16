@@ -3,7 +3,7 @@
 
 import { polygonalKind } from "../../describe";
 import { clampSlices, isSymmetryKind, symmetryRays, type PenSymmetry } from "../symmetry";
-import type { InkPointerType } from "../../pen/pen-input";
+import type { InkPointerType } from "../../../../ink/dom/pen-input";
 import type { Bounds } from "../../scene/geometry";
 import { apply, compose, IDENTITY, invert, translate, type Matrix, type Point } from "../../scene/matrix";
 import type { Elem } from "../../scene/serialize";

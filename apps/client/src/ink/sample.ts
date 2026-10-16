@@ -9,7 +9,7 @@
 // calcola il contorno dagli stessi interi, così chi ricalcola `d` dal file
 // ottiene la stessa stringa di chi l'ha scritto.
 
-import { roundHalfUp } from "../number";
+import { roundHalfUp } from "./number";
 
 /// Le scale di `fub:ink`: `s100` tiene l'errore entro 0,005 unità.
 export type InkScale = 10 | 100;

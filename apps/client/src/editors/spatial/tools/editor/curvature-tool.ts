@@ -3,9 +3,9 @@
 // condividono.
 
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
-import type { InkSample } from "../../ink/sample";
-import { attachPenInput, type InkPointerType, type PenInputOptions, type PenInput } from "../../pen/pen-input";
-import { isDefaultCurve, pressureCurve, type PenCurve } from "../../pen/pressure";
+import type { InkSample } from "../../../../ink/sample";
+import { attachPenInput, type InkPointerType, type PenInputOptions, type PenInput } from "../../../../ink/dom/pen-input";
+import { isDefaultCurve, pressureCurve, type PenCurve } from "../../../../ink/input/pressure";
 import { apply, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import { plural, t } from "../../strings";

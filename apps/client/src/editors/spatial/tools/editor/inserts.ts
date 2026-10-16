@@ -2,10 +2,10 @@
 // pezzo di createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import { PF1_DEFAULTS } from "../../ink/brush";
-import { pf1Outline } from "../../ink/pf1";
-import { quantizeInk } from "../../ink/sample";
-import type { InkPointerType } from "../../pen/pen-input";
+import { PF1_DEFAULTS } from "../../../../ink/brush";
+import { pf1Outline } from "../../../../ink/pf1";
+import { quantizeInk } from "../../../../ink/sample";
+import type { InkPointerType } from "../../../../ink/dom/pen-input";
 import type { Bounds } from "../../scene/geometry";
 import { apply, IDENTITY, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";

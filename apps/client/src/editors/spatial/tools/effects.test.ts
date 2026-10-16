@@ -4,8 +4,8 @@
 // l'oggetto nello stesso passo.
 
 import { describe, expect, it } from "vitest";
-import { PF1_DEFAULTS } from "../ink/brush";
-import { quantizeInk, type InkSample } from "../ink/sample";
+import { PF1_DEFAULTS } from "../../../ink/brush";
+import { quantizeInk, type InkSample } from "../../../ink/sample";
 import { parsePath } from "../scene/geometry";
 import type { Elem } from "../scene/serialize";
 import { doc } from "../scene/test-support";

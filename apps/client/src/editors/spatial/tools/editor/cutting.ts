@@ -3,7 +3,7 @@
 // condividono.
 
 import { resolvedLanguage } from "../../../../i18n/strings";
-import type { InkPointerType } from "../../pen/pen-input";
+import type { InkPointerType } from "../../../../ink/dom/pen-input";
 import { pointAt } from "../../scene/curves";
 import { BoundsBuilder } from "../../scene/geometry";
 import { apply, invert, type Point } from "../../scene/matrix";

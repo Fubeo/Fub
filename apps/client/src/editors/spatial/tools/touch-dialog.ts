@@ -12,7 +12,7 @@
 
 import { actions, openFrame } from "../../../ui/dialogs";
 import { t as appT, resolvedLanguage } from "../../../i18n/strings";
-import { curvePath, DEFAULT_CURVE, isDefaultCurve, MAX_MIN, MIN_FULL, pressureCurve, type PenCurve } from "../pen/pressure";
+import { curvePath, DEFAULT_CURVE, isDefaultCurve, MAX_MIN, MIN_FULL, pressureCurve, type PenCurve } from "../../../ink/input/pressure";
 import { t } from "../strings";
 
 const SVG_NS = "http://www.w3.org/2000/svg";

@@ -1,9 +1,9 @@
 // L'editor del disegno: i tipi dei gesti e dello stato, che più pezzi di
 // createDrawEditor condividono.
 
-import type { Pf1Brush } from "../../ink/brush";
-import type { InkSample } from "../../ink/sample";
-import type { InkPointerType } from "../../pen/pen-input";
+import type { Pf1Brush } from "../../../../ink/brush";
+import type { InkSample } from "../../../../ink/sample";
+import type { InkPointerType } from "../../../../ink/dom/pen-input";
 import type { Bounds } from "../../scene/geometry";
 import type { Matrix, Point } from "../../scene/matrix";
 import type { ElementPart, LeafNode } from "../../scene/model";

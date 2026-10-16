@@ -53,10 +53,10 @@
 // cattura, così ruoli e stato sono già aggiornati quando gli ascoltatori della
 // camera, in bolla sullo stesso elemento, li leggono.
 
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { INK_MAX_SAMPLES, type InkSample } from "../ink/sample";
-import { classifyPointer, type PointerRole, type TouchPolicy } from "./roles";
-import { penAngles, reportsTilt, type PenAngles } from "./tilt";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { INK_MAX_SAMPLES, type InkSample } from "../sample";
+import { classifyPointer, type PointerRole, type TouchPolicy } from "../input/roles";
+import { penAngles, reportsTilt, type PenAngles } from "../input/tilt";
 
 export type InkPointerType = "pen" | "mouse" | "touch";
 

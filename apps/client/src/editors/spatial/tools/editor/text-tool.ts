@@ -2,9 +2,9 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import { INK_MAX_SAMPLES, type InkSample } from "../../ink/sample";
+import { INK_MAX_SAMPLES, type InkSample } from "../../../../ink/sample";
 import { formatNumber } from "../../number";
-import type { InkPointerType, StrokeStart } from "../../pen/pen-input";
+import type { InkPointerType, StrokeStart } from "../../../../ink/dom/pen-input";
 import { apply, compose, invert, rotate, translate, type Matrix, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import { plural, t } from "../../strings";

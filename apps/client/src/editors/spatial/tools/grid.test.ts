@@ -25,7 +25,7 @@ import {
   wholeSteps,
   withStep,
 } from "./grid";
-import { DEFAULT_CURVE } from "../pen/pressure";
+import { DEFAULT_CURVE } from "../../../ink/input/pressure";
 
 /// Le coordinate delle righe di un `d`, in ordine.
 const coordinates = (d: string, axis: "x" | "y"): number[] =>

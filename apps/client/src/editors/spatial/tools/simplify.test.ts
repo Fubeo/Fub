@@ -3,7 +3,7 @@
 // spigoli e le linee lunghe restano, e niente ha più nodi di prima.
 
 import { describe, expect, it } from "vitest";
-import { outlinePath } from "../ink/pf1";
+import { outlinePath } from "../../../ink/pf1";
 import { pointAt } from "../scene/curves";
 import { parsePath, rectPath, type Segment } from "../scene/geometry";
 import type { Point } from "../scene/matrix";

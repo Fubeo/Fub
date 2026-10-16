@@ -17,7 +17,7 @@
 // l'editor le prende quando il tratto comincia e le applica al tratto nelle
 // coordinate del suo livello.
 
-import type { InkSample } from "../ink/sample";
+import type { InkSample } from "../../../ink/sample";
 import { apply, compose, type Matrix, type Point } from "../scene/matrix";
 import { repeatMatrices } from "../scene/repeat";
 

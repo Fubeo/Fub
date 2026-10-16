@@ -19,7 +19,7 @@
 //   quello scelto: un documento in millimetri ha la griglia in millimetri, e
 //   quello in pixel accanto resta com'era.
 
-import { DEFAULT_CURVE, type PenCurve } from "../pen/pressure";
+import { DEFAULT_CURVE, type PenCurve } from "../../../ink/input/pressure";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";

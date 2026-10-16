@@ -3,8 +3,8 @@
 // scene vere, aperte dal motore.
 
 import { describe, expect, it } from "vitest";
-import { PF1_DEFAULTS } from "../ink/brush";
-import { quantizeInk, type InkSample } from "../ink/sample";
+import { PF1_DEFAULTS } from "../../../ink/brush";
+import { quantizeInk, type InkSample } from "../../../ink/sample";
 import type { Bounds } from "../scene/geometry";
 import { apply, compose, IDENTITY, rotate, translate } from "../scene/matrix";
 import { doc } from "../scene/test-support";

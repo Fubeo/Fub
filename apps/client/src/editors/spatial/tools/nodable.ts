@@ -33,9 +33,9 @@
 //   `marker-end`.
 
 import { formatNumber } from "../number";
-import { parseBrush, type Pf1Brush } from "../ink/brush";
+import { parseBrush, type Pf1Brush } from "../../../ink/brush";
 import { decodeInk, encodeInk, INK_MAX_BYTES, inkLength, inkPoint, inkToQuantized, type Ink } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
+import { pf1 } from "../../../ink/pf1";
 import { parsePath, Track, type Segment } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import type { ElementPart } from "../scene/model";

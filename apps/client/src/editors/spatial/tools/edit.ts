@@ -26,9 +26,9 @@
 //   porta attorno a tutto il disegno, con un margine.
 
 import { formatNumber } from "../number";
-import { formatBrush, type Pf1Brush } from "../ink/brush";
+import { formatBrush, type Pf1Brush } from "../../../ink/brush";
 import { encodeInk, inkFromQuantized } from "../ink/codec";
-import type { QuantizedInk } from "../ink/sample";
+import type { QuantizedInk } from "../../../ink/sample";
 import type { Tool } from "../scene/analysis";
 import type { Bounds } from "../scene/geometry";
 import { createId, type IdKind } from "../scene/ids";

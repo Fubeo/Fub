@@ -3,7 +3,7 @@
 
 import { resolvedLanguage } from "../../../../i18n/strings";
 import { promptForm, type FormField } from "../../../../ui/form-dialog";
-import type { InkPointerType } from "../../pen/pen-input";
+import type { InkPointerType } from "../../../../ink/dom/pen-input";
 import { widthsAt, type WidthPoint } from "../../scene/varwidth";
 import { apply, invert, type Point } from "../../scene/matrix";
 import { elementChildren, pathOf, type ElementPart, type LeafNode } from "../../scene/model";

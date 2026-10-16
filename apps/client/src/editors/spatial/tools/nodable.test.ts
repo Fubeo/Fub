@@ -6,8 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 import { decodeInk, inkToQuantized } from "../ink/codec";
-import { parseBrush } from "../ink/brush";
-import { pf1 } from "../ink/pf1";
+import { parseBrush } from "../../../ink/brush";
+import { pf1 } from "../../../ink/pf1";
 import { doc } from "../scene/test-support";
 import { nodeOf, Plan, plainAttributes } from "./arrange";
 import { joinAcross, joinEnds } from "./cut";

@@ -32,7 +32,7 @@
 // e nessuno confronta `d` calcolati da motori diversi.
 
 import { getStroke, type StrokeOptions } from "perfect-freehand";
-import { formatScaled, roundHalfUp } from "../number";
+import { formatScaled, roundHalfUp } from "./number";
 import { checkBrush, type Pf1Brush } from "./brush";
 import { INK_MAX_SAMPLES, PRESSURE_STEPS, type QuantizedInk } from "./sample";
 

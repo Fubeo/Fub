@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingEntry } from "../../host/contract";
 import type { FakeHost } from "../../host/fake";
-import { DEFAULT_CURVE } from "./pen/pressure";
+import { DEFAULT_CURVE } from "../../ink/input/pressure";
 
 const box = vi.hoisted(() => ({ host: null as FakeHost | null }));
 

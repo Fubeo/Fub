@@ -21,8 +21,8 @@
 //   lo diventa all'ultimo passo: il motore non scrive dentro ciò che è
 //   bloccato.
 
-import { PF1_DEFAULTS, type Pf1Brush } from "../ink/brush";
-import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../ink/sample";
+import { PF1_DEFAULTS, type Pf1Brush } from "../../../ink/brush";
+import { INK_MAX_SAMPLES, quantizeInk, type InkSample } from "../../../ink/sample";
 import { formatNumber } from "../number";
 import { PaintBuilder, type Page } from "../painter/paint";
 import { connectorSegments, MAX_ELBOW_POINTS, writeLabelPlace, type ConnectorEnd, type ConnectorKind, type LabelPlace } from "../scene/connectors";

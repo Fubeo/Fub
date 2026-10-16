@@ -20,9 +20,9 @@
 // ogni id. Il tracciato di un testo su tracciato è anch'esso una risorsa, un
 // `path` nelle `defs` della radice (formato della scena, testo).
 
-import { BrushError, parseBrush } from "../ink/brush";
+import { BrushError, parseBrush } from "../../../ink/brush";
 import { decodeInk, inkDuration, inkLength, unknownChannels, type Ink } from "../ink/codec";
-import { InkError } from "../ink/sample";
+import { InkError } from "../../../ink/sample";
 import { Context, isContainer, Tally, useTarget, type Role, type Stroke, type Swatches, type Tool } from "./analysis";
 import { diagnostic, type Code, type Diagnostic } from "./diagnostics";
 import { readConnectorEnd, readConnectorGeom, readLabelPlace, type ConnectorEnd, type ConnectorGeom, type LabelPlace } from "./connectors";

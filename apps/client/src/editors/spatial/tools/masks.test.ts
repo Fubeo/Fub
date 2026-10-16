@@ -3,9 +3,9 @@
 // un annulla le disfa al byte, e ciò che si vede resta dove era.
 
 import { describe, expect, it } from "vitest";
-import { parseBrush } from "../ink/brush";
+import { parseBrush } from "../../../ink/brush";
 import { decodeInk, inkToQuantized } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
+import { pf1 } from "../../../ink/pf1";
 import type { Bounds } from "../scene/geometry";
 import { doc } from "../scene/test-support";
 import type { Op } from "../scene/ops";

@@ -33,7 +33,7 @@
 //   nodi che lo strumento Nodi mostra, col colore dell'inchiostro come
 //   contorno e lo spessore del pennello, come «Rendi forma».
 
-import { parseBrush } from "../ink/brush";
+import { parseBrush } from "../../../ink/brush";
 import { formatNumber } from "../number";
 import { parsePath, type Segment } from "../scene/geometry";
 import { invert, type Matrix } from "../scene/matrix";

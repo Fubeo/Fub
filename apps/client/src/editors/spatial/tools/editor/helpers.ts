@@ -1,8 +1,8 @@
 // L'editor del disegno: le funzioni di servizio, che più pezzi di
 // createDrawEditor condividono.
 
-import { INK_MAX_SAMPLES, type InkSample } from "../../ink/sample";
-import { validCurve } from "../../pen/pressure";
+import { INK_MAX_SAMPLES, type InkSample } from "../../../../ink/sample";
+import { validCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
 import { apply, type Matrix, type Point } from "../../scene/matrix";
 import { elementChildren, type DocumentModel, type ElementPart } from "../../scene/model";

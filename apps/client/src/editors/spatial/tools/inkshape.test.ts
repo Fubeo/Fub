@@ -4,10 +4,10 @@
 // così come sono, e un annulla riporta l'inchiostro al byte.
 
 import { describe, expect, it } from "vitest";
-import { formatBrush, PF1_DEFAULTS } from "../ink/brush";
+import { formatBrush, PF1_DEFAULTS } from "../../../ink/brush";
 import { encodeInk, inkFromSamples } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
-import { quantizeInk, type InkSample } from "../ink/sample";
+import { pf1 } from "../../../ink/pf1";
+import { quantizeInk, type InkSample } from "../../../ink/sample";
 import type { Bounds } from "../scene/geometry";
 import { apply, rotate, type Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";

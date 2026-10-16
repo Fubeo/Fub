@@ -27,7 +27,7 @@ import { arrowPath } from "./shapes";
 import { inlineTracer } from "./trace-runner";
 import { appearance, LAYER } from "./test-support";
 import { DEFS, MARKER, markersIn, tipOf, written } from "./tip-support";
-import { DEFAULT_CURVE } from "../pen/pressure";
+import { DEFAULT_CURVE } from "../../../ink/input/pressure";
 import { closeRadial } from "./radial";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
 

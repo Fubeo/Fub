@@ -31,7 +31,7 @@ import { settings } from "../../host/query";
 import { t } from "../../i18n/strings";
 import { onEvent } from "../../state/kernel";
 import { notify } from "../../ui/notify";
-import { validCurve } from "./pen/pressure";
+import { validCurve } from "../../ink/input/pressure";
 import { exportMemoryOf, type ExportMemory } from "./tools/export-plan";
 import { DEFAULT_GRID, validClosed, validStep, validSteps, type Grid } from "./tools/grid";
 import { RECENT_COLORS } from "./tools/palette";

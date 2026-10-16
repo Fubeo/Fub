@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { INK_MAX_SAMPLES, type InkSample, quantizeInk } from "../ink/sample";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { INK_MAX_SAMPLES, type InkSample, quantizeInk } from "../sample";
 import {
   attachPenInput,
   type CancelReason,

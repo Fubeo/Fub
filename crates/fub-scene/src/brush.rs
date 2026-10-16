@@ -1,7 +1,7 @@
 //! La lettura di `fub:brush` (§5): `pf1` e coppie `chiave=valore`.
 //!
 //! È la stessa grammatica di `parseBrush` in TypeScript
-//! (`apps/client/src/editors/spatial/ink/brush.ts`), che ridisegna i tratti:
+//! (`apps/client/src/ink/brush.ts`), che ridisegna i tratti:
 //! un pennello che uno dei due lati rifiuta non si ridisegna, quindi devono
 //! rifiutare gli stessi.
 

@@ -28,7 +28,7 @@ import {
   type InkScale,
   type QuantizedInk,
   type QuantizedSample,
-} from "./sample";
+} from "../../../ink/sample";
 import { utf8Length } from "../scene/text";
 
 /// Quanti byte UTF-8 può avere un `fub:ink` (§5, §11).

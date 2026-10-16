@@ -8,7 +8,7 @@
 //! [`Ink`] tiene i valori assoluti, già quantizzati: è ciò che si rilegge da un
 //! file e ciò che si scrive. La quantizzazione dai numeri del dispositivo è
 //! [`Ink::quantize`], con la regola `floor(v × scala + 0,5)` che usa anche
-//! TypeScript (`apps/client/src/editors/spatial/ink/sample.ts`): i delta si
+//! TypeScript (`apps/client/src/ink/sample.ts`): i delta si
 //! calcolano sugli interi, e chi rilegge ottiene gli stessi interi di chi ha
 //! scritto.
 //!

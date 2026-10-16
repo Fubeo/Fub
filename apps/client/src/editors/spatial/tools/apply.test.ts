@@ -4,9 +4,9 @@
 // come sono, e un annulla le disfa al byte.
 
 import { describe, expect, it } from "vitest";
-import { parseBrush } from "../ink/brush";
+import { parseBrush } from "../../../ink/brush";
 import { decodeInk, inkToQuantized } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
+import { pf1 } from "../../../ink/pf1";
 import { parsePath, type Bounds } from "../scene/geometry";
 import { apply, toRadians, type Matrix } from "../scene/matrix";
 import { doc } from "../scene/test-support";

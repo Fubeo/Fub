@@ -124,7 +124,7 @@ import type { Lifetime } from "../../../ui/lifetime";
 import type { TextOperation } from "../../core/text-operation";
 import type { FontNotes, VaultFontPort } from "../fonts/vault";
 import type { SymbolLibraryPort } from "./symbol-libraries";
-import type { TouchPolicy } from "../pen/roles";
+import type { TouchPolicy } from "../../../ink/input/roles";
 import type { ContainerNode, DocumentModel } from "../scene/model";
 import type { SceneEngine } from "../scene/engine";
 import type { Op } from "../scene/ops";

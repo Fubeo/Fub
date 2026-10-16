@@ -3,9 +3,9 @@
 
 import { keyOf } from "../../describe";
 import { mappedSamples } from "../symmetry";
-import { pf1Outline } from "../../ink/pf1";
-import { quantizeInk } from "../../ink/sample";
-import type { FinishedStroke, InkPointerType } from "../../pen/pen-input";
+import { pf1Outline } from "../../../../ink/pf1";
+import { quantizeInk } from "../../../../ink/sample";
+import type { FinishedStroke, InkPointerType } from "../../../../ink/dom/pen-input";
 import { BoundsBuilder } from "../../scene/geometry";
 import { apply, compose, type Matrix, type Point } from "../../scene/matrix";
 import { pathOf } from "../../scene/model";

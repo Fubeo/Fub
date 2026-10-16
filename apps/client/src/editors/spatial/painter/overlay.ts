@@ -19,7 +19,7 @@
 import { arcToCubics } from "../scene/curves";
 import type { Bounds, Segment } from "../scene/geometry";
 import { compose, type Matrix, type Point } from "../scene/matrix";
-import type { OutlinePoint } from "../ink/pf1";
+import type { OutlinePoint } from "../../../ink/pf1";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { toScreen, viewMatrix } from "../view";
 import type { PainterView } from "./svg-dom";
