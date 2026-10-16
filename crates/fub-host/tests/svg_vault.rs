@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::model::DocId;
+use fub_abi::model::{DocId, LinkTarget};
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{
     EntryKind, Excerpts, IndexQuery, IndexResult, LinkDirection, Page, PropertySelect,
@@ -432,6 +432,144 @@ fn an_embedded_drawing_is_a_placeholder() {
     assert_eq!(preview.html, rendered.html);
     for html in [&rendered.html, &flusso.html, &preview.html] {
         assert!(!html.contains("<img") && !html.contains("src="), "{html}");
+    }
+}
+
+/// Un SVG che prova a fare di tutto: script, gestori d'evento, XHTML in un
+/// `foreignObject`, un'immagine remota, e un titolo che sembra markup.
+const OSTILE: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" onload="alert(1)">
+  <title>Ostile &lt;script&gt;alert(2)&lt;/script&gt;</title>
+  <script>alert(3)</script>
+  <foreignObject width="100" height="100"><div xmlns="http://www.w3.org/1999/xhtml"><img src="x" onerror="alert(4)"/></div></foreignObject>
+  <image href="https://esterno.example/traccia.png" width="10" height="10"/>
+  <rect width="10" height="10" onclick="alert(5)"/>
+</svg>
+"#;
+
+fn resolved(ws: &fub_kernel::Workspace, target: LinkTarget, from: &str) -> Option<String> {
+    match ws.query_index(IndexQuery::Resolve {
+        target,
+        from: Some(id(from)),
+    }) {
+        Ok(IndexResult::Resolved(found)) => found.map(|found| found.doc.to_string()),
+        other => panic!("{other:?}"),
+    }
+}
+
+fn outline(ws: &fub_kernel::Workspace, doc: &str) -> Vec<(u8, String)> {
+    match ws.query_index(IndexQuery::Outline { doc: id(doc) }) {
+        Ok(IndexResult::Outline(headings)) => headings
+            .into_iter()
+            .map(|heading| (heading.level, heading.text))
+            .collect(),
+        other => panic!("{other:?}"),
+    }
+}
+
+/// Ciò che la shell chiede per mostrare un disegno dentro una nota
+/// (`hydrateVaultMedia` in
+/// `apps/client/src/editors/text/profiles/markdown/media.ts`): la
+/// risoluzione del riferimento, un lease sul file come immagine, e il nome
+/// per l'`alt`.
+#[test]
+fn a_drawing_in_a_note_is_an_image_named_after_its_title() {
+    let (_dir, root) = vault();
+    write(&root, "disegni/ostile.svg", OSTILE);
+    let (mounted, _) = mount(&root);
+    let ws = &mounted.workspace;
+    let acqua = "disegni/acqua.svg";
+    let note = "note/Indice.md";
+
+    // `![[acqua.svg]]`, `![[acqua]]` e `![](../disegni/acqua.svg)` nominano
+    // lo stesso file.
+    assert_eq!(
+        resolved(ws, LinkTarget::wiki("acqua.svg"), note).as_deref(),
+        Some(acqua)
+    );
+    assert_eq!(
+        resolved(ws, LinkTarget::wiki("acqua"), note).as_deref(),
+        Some(acqua)
+    );
+    assert_eq!(
+        resolved(ws, LinkTarget::Path("../disegni/acqua.svg".into()), note).as_deref(),
+        Some(acqua)
+    );
+
+    // Il lease è quello di ogni immagine: come lo apre la sessione
+    // (`ResourceHost::resource_open`), con il MIME che il protocollo
+    // `fub-asset:` mette nella risposta accanto a `nosniff`. I byte sono il
+    // file, intatti: è l'`<img>` a non eseguirne niente.
+    for (doc, body) in [(acqua, ACQUA), ("disegni/ostile.svg", OSTILE)] {
+        let lease = ws
+            .prepare_resource_open(&id(doc))
+            .unwrap()
+            .invoke()
+            .unwrap();
+        let mut table = fub_host::resources::ResourceTable::default();
+        let mime = fub_host::resources::resource_mime_or_octet(&id(doc)).to_owned();
+        let descriptor = table.open(root.to_string(), id(doc), lease, mime).unwrap();
+        assert_eq!(descriptor.mime, "image/svg+xml", "{doc}");
+        assert_eq!(
+            descriptor.kind,
+            fub_host::resources::ResourceKind::Image,
+            "{doc}"
+        );
+        let lease = table.lease(descriptor.handle).unwrap();
+        let bytes = ws
+            .read_resource(&lease, 0, descriptor.len as usize)
+            .unwrap();
+        assert_eq!(bytes, body.as_bytes(), "{doc}");
+    }
+
+    // Il nome: il titolo dall'outline; senza titolo, un documento prende il
+    // nome del file; un'immagine che non è un documento non ne ha.
+    assert_eq!(outline(ws, acqua), [(1, "Ciclo dell'acqua".to_owned())]);
+    assert!(outline(ws, "diagrammi/flusso.svg").is_empty());
+    assert!(outline(ws, "disegni/foto/mare.png").is_empty());
+    assert!(outline(ws, "rotto.svg").is_empty());
+    let asked: Vec<String> = [
+        acqua,
+        "diagrammi/flusso.svg",
+        "disegni/foto/mare.png",
+        "rotto.svg",
+    ]
+    .map(str::to_owned)
+    .to_vec();
+    let mut found = existing(ws, &asked);
+    found.sort();
+    assert_eq!(found, ["diagrammi/flusso.svg", acqua]);
+
+    // Il segnaposto di un SVG ostile porta soltanto l'id e il titolo come
+    // testo: niente di quello che il file prova a fare arriva alla nota.
+    assert_eq!(
+        outline(ws, "disegni/ostile.svg"),
+        [(1, "Ostile <script>alert(2)</script>".to_owned())]
+    );
+    let (doc, rendered) = ws.render_embed("ostile", None, None).unwrap();
+    assert_eq!(doc, id("disegni/ostile.svg"));
+    assert_eq!(
+        rendered.html,
+        concat!(
+            r#"<figure class="fub-scene" data-embed-kind="scene" data-embed-doc="disegni/ostile.svg">"#,
+            "<figcaption>Ostile &lt;script&gt;alert(2)&lt;/script&gt;</figcaption></figure>"
+        )
+    );
+    for absent in [
+        "<script",
+        "alert(1)",
+        "alert(3)",
+        "alert(4)",
+        "alert(5)",
+        "foreignObject",
+        "esterno",
+        "<img",
+        "src=",
+    ] {
+        assert!(
+            !rendered.html.contains(absent),
+            "{absent}: {}",
+            rendered.html
+        );
     }
 }
 

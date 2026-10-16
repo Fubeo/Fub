@@ -20,6 +20,7 @@ import type {
   EntryKind,
   Excerpts,
   FolderScope,
+  Heading,
   IndexQuery,
   JobStatus,
   SettingEntry,
@@ -263,6 +264,15 @@ export async function existingDocuments(docs: string[]): Promise<Set<string>> {
   if (docs.length === 0) return new Set();
   const page = await matchingDocuments(theseDocuments(docs), WITHOUT_PAGE);
   return new Set(page.items.map((m) => m.doc));
+}
+
+/// I titoli di un documento come li ha letti l'indice, in ordine di sorgente.
+///
+/// Un id che non è un documento risponde con l'elenco vuoto, come un documento
+/// senza titoli: chi deve distinguere i due casi lo chiede a
+/// [`existingDocuments`].
+export async function documentOutline(doc: string): Promise<Heading[]> {
+  return runQuery({ kind: "outline", doc });
 }
 
 /// I tag del vault con la loro frequenza.

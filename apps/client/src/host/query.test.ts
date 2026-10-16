@@ -7,7 +7,7 @@ vi.mock("./ipc", () => ({
   api: { queryIndex },
 }));
 
-import { renderEmbed, renderPreview } from "./query";
+import { documentOutline, renderEmbed, renderPreview } from "./query";
 
 const rendered: RenderedDocument = { html: "<p>ciao</p>", parts: [] };
 const embedded: EmbedContent = { doc_id: "Nota.md", html: "<p>ritaglio</p>", parts: [] };
@@ -63,5 +63,24 @@ describe("helper tipizzati per la resa", () => {
       heading: "Sezione",
       block: "blocco",
     });
+  });
+});
+
+describe("i titoli di un documento", () => {
+  beforeEach(() => {
+    queryIndex.mockReset();
+  });
+
+  it("chiede l'outline del documento e ne apre la risposta", async () => {
+    const outline = [{ level: 1, text: "Ciclo dell'acqua", slug: "ciclo-dell-acqua", span: { start: 0, end: 0 }, explicit_anchor: null }];
+    queryIndex.mockResolvedValue({ kind: "outline", value: outline });
+
+    await expect(documentOutline("disegni/acqua.svg")).resolves.toBe(outline);
+    expect(queryIndex).toHaveBeenCalledWith({ kind: "outline", doc: "disegni/acqua.svg" });
+  });
+
+  it("rifiuta una risposta con discriminante diversa", async () => {
+    queryIndex.mockResolvedValue({ kind: "render_embed", value: embedded });
+    await expect(documentOutline("disegni/acqua.svg")).rejects.toThrow("atteso outline");
   });
 });
