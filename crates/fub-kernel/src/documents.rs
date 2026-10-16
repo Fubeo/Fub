@@ -123,6 +123,49 @@ pub(crate) fn park_state(
     warnings
 }
 
+/// **Libera lo stato di una nota che ha lasciato il vault per il cestino del
+/// sistema** (FUB-003).
+///
+/// Il path è libero come per [`park_state`], ma qui nessuno riporterà la nota
+/// indietro: il cestino del sistema è fuori da Fub, e ciò che ne torna è un file
+/// nuovo. Lo stato che il kernel teneva attaccato al path — lo spazio
+/// per-documento dei plugin e l'organizzazione — non è quindi di chi riprende il
+/// path, e non c'è una voce a cui tenerlo.
+///
+/// Lo spazio dei plugin passa di lato con la stessa meccanica del parcheggio, e
+/// non si cancella: sta sotto un'identità che nessuna voce del cestino del vault
+/// tiene (`os-trash-<impronta della destinazione>`), quindi la raccolta lo toglie
+/// al primo giro. L'organizzazione si dimentica. Tutto ciò che non riesce si
+/// dice, e lo stato resta sotto il path com'era: il comportamento di prima.
+pub(crate) fn release_state(
+    vault: &Vault,
+    organization: &crate::organization::OrganizationStore,
+    doc: &DocId,
+    destination: &camino::Utf8Path,
+) -> Vec<String> {
+    let roots = plugin_data_roots(vault);
+    let released = DocId::new(format!(
+        "os-trash-{:016x}",
+        fub_abi::edit::Fnv1a::hash(destination.as_str().as_bytes())
+    ));
+    let mut warnings: Vec<String> =
+        crate::docdata::park(vault.storage().as_ref(), &roots, doc, &released)
+            .messages
+            .into_iter()
+            .map(|error| {
+                format!(
+                    "lo stato per-documento di {doc} non ha potuto lasciare il path dopo il cestino di sistema — {error}"
+                )
+            })
+            .collect();
+    if let Err(error) = organization.forget(doc.as_str()) {
+        warnings.push(format!(
+            "l'organizzazione di {doc} è rimasta al suo path dopo il cestino di sistema: {error}"
+        ));
+    }
+    warnings
+}
+
 /// Il sorgente più grande che il kernel legge per intero e consegna a un
 /// provider di formato: 64 MiB.
 ///

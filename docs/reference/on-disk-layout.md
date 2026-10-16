@@ -345,7 +345,9 @@ torna libero: la cestinatura sposta `doc/<path>/` in `doc~trash/<voce>/`, dove
 `<voce>` è l'id della voce del cestino, codificato come ogni documento. Il
 ripristino lo riporta sotto il path d'arrivo. `doc~trash` sta accanto a `doc`,
 non dentro: una copia di Fub che non lo conosce non lo raccoglie né lo migra, e
-nessun plugin lo scrive. La raccolta lo toglie per le voci che non sono più nel
+nessun plugin lo scrive. Il nome è riservato davvero: un plugin che lo nomina in
+`data_read`, `data_write` o `data_remove` riceve `PermissionDenied`, e
+`data_list` non lo elenca. La raccolta lo toglie per le voci che non sono più nel
 cestino.
 
 Il sidecar ha un campo facoltativo `parked` con l'organizzazione della nota
@@ -368,6 +370,14 @@ registro, indici ed eventi restano quelli della cancellazione interna. Su
 Windows e macOS usano il fallback perché il backend OS segnala non supportato.
 Il registro marca il trasferimento OS come non annullabile dai
 comandi interni: il recupero avviene dal cestino del sistema.
+
+Anche per il cestino del sistema il path torna libero, ma nessuna voce del
+vault porta la nota indietro: ciò che il sistema ripristina è un file nuovo, che
+non eredita niente. Lo spazio per-documento dei plugin passa quindi di lato
+sotto `doc~trash/os-trash-<impronta della destinazione>/`, che nessuna voce del
+cestino del vault tiene, e la prima raccolta lo toglie; l'organizzazione
+(icona, appuntata, posto nell'ordine) si dimentica. Se una delle due mosse non
+riesce lo stato resta sotto il path e se ne dà notizia.
 
 ## Versioni di schema
 

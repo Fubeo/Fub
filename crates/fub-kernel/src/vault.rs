@@ -433,6 +433,13 @@ impl CompletedOsTrash {
                 .is_ok_and(|revision| revision == self.revision)
     }
 
+    /// Il vault da cui la nota è uscita: lo stato per-documento si mette al
+    /// sicuro dopo la mossa, fuori da ogni custodia, con ciò che il token
+    /// possiede.
+    pub(crate) fn vault(&self) -> &Vault {
+        &self.vault
+    }
+
     pub fn receipt(&self) -> crate::os_trash::OsTrashReceipt {
         crate::os_trash::OsTrashReceipt {
             id: self.original.clone(),
