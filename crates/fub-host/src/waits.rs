@@ -119,6 +119,17 @@ impl Drop for InstanceWait {
     }
 }
 
+/// Questo `thread` sta aspettando un'istanza adesso? Una sonda, non una porta:
+/// dice un fatto del grafo, non dà modo di cambiarlo. Serve ai banchi che
+/// fissano l'ordine fra due thread aspettando un fatto invece di un orologio.
+///
+/// Si chiede di **un thread** perché il grafo è del processo: più prove nello
+/// stesso processo non devono vedere le attese le une delle altre.
+#[doc(hidden)]
+pub fn thread_waits_for_an_instance(thread: ThreadId) -> bool {
+    graph().instance_waits.contains_key(&thread)
+}
+
 /// **Questo thread aspetta il turno di un altro** finché il valore vive.
 #[must_use = "il fatto dura finché il valore vive"]
 pub(crate) struct TurnWait {
