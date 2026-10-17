@@ -2080,6 +2080,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-ink"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "fub-kernel"
 version = "0.1.0"
 dependencies = [
@@ -2101,6 +2108,7 @@ dependencies = [
 name = "fub-scene"
 version = "0.1.0"
 dependencies = [
+ "fub-ink",
  "quick-xml",
  "serde",
  "serde_json",

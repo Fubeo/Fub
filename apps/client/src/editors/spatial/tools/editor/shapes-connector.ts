@@ -3,8 +3,8 @@
 // condividono.
 
 import { polygonalKind } from "../../describe";
-import type { InkSample } from "../../ink/sample";
-import type { InkPointerType } from "../../pen/pen-input";
+import type { InkSample } from "../../../../ink/sample";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import { apply, compose, IDENTITY, type Matrix, type Point } from "../../scene/matrix";
 import type { ElementPart } from "../../scene/model";
 import type { Op } from "../../scene/ops";

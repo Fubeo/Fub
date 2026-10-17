@@ -22,7 +22,7 @@
 //   bloccato non si mostra niente, e dentro uno nascosto non si sblocca
 //   niente, perché non si vedrebbe.
 
-import { parseBrush } from "../ink/brush";
+import { parseBrush } from "../../../ink/brush";
 import { elementChildren, type ContainerNode, type DocumentModel, type ElementPart } from "../scene/model";
 import { fubAttributes, nodeOf, Plan, type Arranged } from "./arrange";
 import type { NewIds } from "./edit";

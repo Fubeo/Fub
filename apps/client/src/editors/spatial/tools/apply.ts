@@ -51,9 +51,9 @@
 //   la sua geometria non è solo `d`.
 
 import { formatNumber } from "../number";
-import { checkBrush, formatBrush, parseBrush } from "../ink/brush";
+import { checkBrush, formatBrush, parseBrush } from "../../../ink/brush";
 import { createInk, decodeInk, encodeInk, INK_MAX_BYTES } from "../ink/codec";
-import { quantizeAzimuth, quantizeCoordinate } from "../ink/sample";
+import { quantizeAzimuth, quantizeCoordinate } from "../../../ink/sample";
 import { svgAttribute } from "../scene/classify";
 import { connectorAttrs } from "../scene/connectors";
 import { parsePath, type Segment } from "../scene/geometry";

@@ -4,10 +4,10 @@
 // byte.
 
 import { describe, expect, it } from "vitest";
-import { formatBrush, PF1_DEFAULTS } from "../ink/brush";
+import { formatBrush, PF1_DEFAULTS } from "../../../ink/brush";
 import { encodeInk, inkFromSamples } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
-import { quantizeInk, type InkSample } from "../ink/sample";
+import { pf1 } from "../../../ink/pf1";
+import { quantizeInk, type InkSample } from "../../../ink/sample";
 import { pointAt } from "../scene/curves";
 import { flatten, parsePath, winding, type Segment } from "../scene/geometry";
 import { IDENTITY, type Point } from "../scene/matrix";

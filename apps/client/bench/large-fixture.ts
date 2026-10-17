@@ -14,10 +14,10 @@
 // sotto quello dei byte. Chi lo apre ci può ancora disegnare: il banco lascia
 // il posto ai suoi tratti.
 
-import { formatBrush, PF1_DEFAULTS, brushForInput } from "../src/editors/spatial/ink/brush";
+import { formatBrush, PF1_DEFAULTS, brushForInput } from "../src/ink/brush";
 import { encodeInk, inkFromQuantized } from "../src/editors/spatial/ink/codec";
-import { pf1 } from "../src/editors/spatial/ink/pf1";
-import { quantizeInk, type InkSample } from "../src/editors/spatial/ink/sample";
+import { pf1 } from "../src/ink/pf1";
+import { quantizeInk, type InkSample } from "../src/ink/sample";
 import { MAX_EDIT_BYTES, MAX_ELEMENTS } from "../src/editors/spatial/scene/read";
 
 /// Dove sta il disegno nel vault del banco.

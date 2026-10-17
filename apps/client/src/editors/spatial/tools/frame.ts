@@ -29,7 +29,7 @@
 // Il modulo non sa niente del documento: dà posizioni, matrici e angoli, e
 // l'editor li scrive come scrive uno spostamento.
 
-import type { InkPointerType } from "../pen/pen-input";
+import type { InkPointerType } from "../../../ink/input/pointer";
 import type { Bounds } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, type Matrix, type Point } from "../scene/matrix";
 import { boxMatrix } from "./edit";

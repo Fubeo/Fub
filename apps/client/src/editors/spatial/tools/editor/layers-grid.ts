@@ -6,7 +6,7 @@ import { displayBinding, modifierName } from "../../../../ui/commands";
 import { promptForm } from "../../../../ui/form-dialog";
 import type { MenuItem } from "../../../../ui/menu";
 import { keyOf } from "../../describe";
-import { sameCurve } from "../../pen/pressure";
+import { sameCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
 import { ROOT } from "../../scene/ops";
 import { UNITS, type LengthUnit } from "../../scene/rulers";

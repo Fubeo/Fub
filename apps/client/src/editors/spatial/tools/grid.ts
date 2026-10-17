@@ -19,7 +19,7 @@
 //   quello scelto: un documento in millimetri ha la griglia in millimetri, e
 //   quello in pixel accanto resta com'era.
 
-import { DEFAULT_CURVE, type PenCurve } from "../pen/pressure";
+import { DEFAULT_CURVE, type PenCurve } from "../../../ink/input/pressure";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, UNITS, type LengthUnit } from "../scene/rulers";
@@ -61,7 +61,7 @@ export interface Grid {
   readonly twist: boolean;
   /// Un tocco di due dita annulla, uno di tre ripete.
   readonly taps: boolean;
-  /// La curva della pressione della penna (`pen/pressure.ts`).
+  /// La curva della pressione della penna (`ink/input/pressure.ts`).
   readonly pen: PenCurve;
 }
 

@@ -3,9 +3,10 @@
 // condividono.
 
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
-import type { InkSample } from "../../ink/sample";
-import { attachPenInput, type InkPointerType, type PenInputOptions, type PenInput } from "../../pen/pen-input";
-import { isDefaultCurve, pressureCurve, type PenCurve } from "../../pen/pressure";
+import type { InkSample } from "../../../../ink/sample";
+import type { InkPointerType } from "../../../../ink/input/pointer";
+import { attachInkInput, type InkInputOptions, type InkInput } from "../../../../ink/dom/pointer-adapter";
+import { isDefaultCurve, pressureCurve, type PenCurve } from "../../../../ink/input/pressure";
 import { apply, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import { plural, t } from "../../strings";
@@ -19,7 +20,8 @@ import { elemBounds, type ForeignBlock, type Unit } from "../hit";
 import { cornerCursor } from "../reshape";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, MADE, NO_KINDS, NODE_PX } from "./constants";
 import type { EditorContext } from "./context";
-import { comparePaths, holdsPath, innerNode, remapped, toLocal } from "./helpers";
+import { toLocal } from "../../../../ink/geometry";
+import { comparePaths, holdsPath, innerNode, remapped } from "./helpers";
 import type { BezierGesture, CurveDraft, CurveGrab, Drafting, Editing, EraseGesture, NodeChange } from "./types";
 
 /// Quanto dopo il tasto laterale della penna lasciato arriva il menu
@@ -44,8 +46,8 @@ export interface CurvatureToolContext {
   replayBezier: (draft: Drafting, origin: "undo" | "redo") => void;
   readModifiers: (event: PointerEvent) => void;
   radialHere: () => boolean;
-  handlers: PenInputOptions;
-  pen: PenInput;
+  handlers: InkInputOptions;
+  pen: InkInput;
 }
 
 /// Monta la Curvatura sui tracciati che ci sono già.
@@ -320,7 +322,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
   ctx.replayBezier = replayBezier;
 
   const finishErase = (g: EraseGesture): void => {
-    const units = [...g.marked.values()];
+    const units = g.sweep.marked();
     if (units.length === 0) {
       painter.setDraft(null);
       return;
@@ -594,7 +596,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
   };
 
   // I gestori della pipeline, che riceve anche il cursore del foglio.
-  const handlers: PenInputOptions = {
+  const handlers: InkInputOptions = {
     toScene: (clientX, clientY) => {
       const [x, y] = sceneAt(clientX, clientY);
       return { x, y };
@@ -620,11 +622,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
             moveHeld(g, toPoint(samples[samples.length - 1]!));
             break;
           }
+          // Il contorno si rifà in `onSettled`, una volta per evento.
           for (const sample of samples) {
             g.scene.push(sample);
             g.local.push(toLocal(sample, g.to.inverse));
           }
-          drawInk(g);
           watchStill(g, samples);
           break;
         case "shape":
@@ -719,7 +721,12 @@ export function installCurvatureTool(ctx: EditorContext): void {
       const g = ctx.current;
       if (g === null || g.stroke !== id || g.kind !== "ink" || g.held !== null) return;
       g.predicted = samples.map((sample) => toLocal(sample, g.to.inverse));
-      drawInk(g);
+    },
+    onSettled(id) {
+      // Campioni e predizione dello stesso evento: il contorno e il foglio si
+      // rifanno una volta sola.
+      const g = ctx.current;
+      if (g !== null && g.stroke === id && g.kind === "ink" && g.held === null) drawInk(g);
     },
     onEnd(stroke) {
       const g = ctx.current;
@@ -853,6 +860,6 @@ export function installCurvatureTool(ctx: EditorContext): void {
     ...(options.touch === undefined ? {} : { touch: options.touch }),
   };
   ctx.handlers = handlers;
-  const pen = attachPenInput(surface, handlers, life);
+  const pen = attachInkInput(surface, handlers, life);
   ctx.pen = pen;
 }

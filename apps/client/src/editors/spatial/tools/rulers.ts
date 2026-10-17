@@ -25,7 +25,7 @@
 //   freccia mostra dove sta l'alto del foglio.
 
 import { formatNumber } from "../number";
-import type { InkPointerType } from "../pen/pen-input";
+import type { InkPointerType } from "../../../ink/input/pointer";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import { UNIT_SIZE, type LengthUnit, type RulerGuide } from "../scene/rulers";

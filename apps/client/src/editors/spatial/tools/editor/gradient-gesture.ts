@@ -2,7 +2,7 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import type { InkPointerType } from "../../pen/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Segment } from "../../scene/geometry";
 import { translate, type Point } from "../../scene/matrix";
 import { t, type DrawKey } from "../../strings";

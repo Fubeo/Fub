@@ -4,7 +4,7 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { checkAccessibility, formatIssues } from "../../../ui/a11y-check";
-import { DEFAULT_CURVE } from "../pen/pressure";
+import { DEFAULT_CURVE } from "../../../ink/input/pressure";
 import { samplePath, touchDialog, type TouchChoice } from "./touch-dialog";
 
 const CHOICE: TouchChoice = { twist: true, taps: false, pen: DEFAULT_CURVE };

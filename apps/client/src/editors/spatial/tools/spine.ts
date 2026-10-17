@@ -23,7 +23,7 @@
 //   campioni e dalla tolleranza.
 
 import { createInk, inkChannel, inkLength, inkPoint, type Ink } from "../ink/codec";
-import { INK_MAX_SAMPLES, quantizeAzimuth, quantizeCoordinate } from "../ink/sample";
+import { INK_MAX_SAMPLES, quantizeAzimuth, quantizeCoordinate } from "../../../ink/sample";
 import { derivativeAt, pointAt, type Curve } from "../scene/curves";
 import { remEuclid } from "../scene/geometry";
 import type { Point } from "../scene/matrix";

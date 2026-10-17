@@ -18,6 +18,7 @@
     "bench:update": "node bench/photos.mjs --update",
     "bench:a11y": "node bench/a11y.mjs",
     "bench:motion": "node bench/motion.mjs",
+    "bench:ink": "vitest run --config bench/vitest.ink.config.mjs --reporter=verbose",
     "bench:fidelity": "node bench/fidelity.mjs",
     "bench:boards": "node bench/boards.mjs",
     "bench:connectors": "node bench/connectors.mjs",

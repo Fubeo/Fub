@@ -70,6 +70,7 @@ import type { Elem } from "../scene/serialize";
 import { fraction, length, letterSpacing, nonNegativeLength, numberList, points as parsePoints, reference, startOffset, transform as parseTransform } from "../scene/values";
 import { NS_NONE, NS_SVG, NS_XLINK, valueOf, type ElementNode, type NodeId, type XmlDocument } from "../scene/xml";
 import type { PaintAttr, PaintBuilder, PaintDef, PaintNode, PaintResource, PaintScene, PaintShape, TextPiece, TextRun } from "../painter/paint";
+import { BoxTree } from "./box-tree";
 import {
   Clip,
   clipSegment,
@@ -96,6 +97,10 @@ export const FLATNESS = 0.05;
 /// Il limite di pezzi per una curva: oltre, una curva enorme costerebbe più
 /// di quanto il puntatore possa distinguere.
 const MAX_STEPS = 256;
+
+/// Da quanti oggetti la gomma li cerca nell'albero dei loro riquadri: sotto,
+/// guardarli a uno a uno costa meno che costruirlo.
+const TREE_FROM = 256;
 
 /// Quante forme al più tocca un oggetto attraverso le istanze dei simboli:
 /// oltre, un'istanza si tocca nel riquadro del suo simbolo. Cento istanze di
@@ -463,6 +468,9 @@ export class SceneIndex {
   /// Gli oggetti di primo livello, per [`siblings`]: si raccolgono la prima
   /// volta che servono.
   private top: ReadonlySet<Unit> | null = null;
+  /// L'albero dei riquadri degli oggetti, per [`along`]: si costruisce la
+  /// prima volta che serve, e soltanto con molti oggetti.
+  private tree: BoxTree | null | undefined;
 
   private scoped: Unit | null | undefined;
 
@@ -558,9 +566,20 @@ export class SceneIndex {
     return found;
   }
 
-  /// Gli oggetti che il segmento da `a` a `b` tocca, in ordine di documento.
-  along(a: Point, b: Point, tolerance: number): Unit[] {
-    return this.units.filter((unit) => unit.touches(a, b, tolerance));
+  /// Gli oggetti che il segmento da `a` a `b` tocca, in ordine di documento,
+  /// tranne quelli che `marked` ha già sotto la loro chiave: la gomma li ha
+  /// segnati, e non serve provarli di nuovo. Con molti oggetti si provano
+  /// soltanto quelli che l'albero dei riquadri dà per il riquadro di `near`,
+  /// fatto con gli stessi conti: sono proprio quelli che `touches` non
+  /// scarterebbe subito.
+  along(a: Point, b: Point, tolerance: number, marked?: ReadonlyMap<string, Unit>): Unit[] {
+    if (this.tree === undefined) this.tree = this.units.length < TREE_FROM ? null : new BoxTree(this.units.map((unit) => unit.bounds));
+    const touched = (unit: Unit): boolean => marked?.get(unit.key) !== unit && unit.touches(a, b, tolerance);
+    if (this.tree === null) return this.units.filter(touched);
+    const found: Unit[] = [];
+    const near = this.tree.search(Math.min(a[0], b[0]) - tolerance, Math.min(a[1], b[1]) - tolerance, Math.max(a[0], b[0]) + tolerance, Math.max(a[1], b[1]) + tolerance);
+    for (const i of near) if (touched(this.units[i]!)) found.push(this.units[i]!);
+    return found;
   }
 
   /// Gli oggetti che stanno interi dentro il lazo `points`, un poligono della
@@ -2546,7 +2565,8 @@ function fixed(clips: readonly Clip[] | null): readonly Region[] | null {
 }
 
 /// Vero se il segmento da `a` a `b`, allargato di `tolerance`, incontra
-/// `bounds`.
+/// `bounds`. [`SceneIndex.along`] chiede all'albero dei riquadri lo stesso
+/// riquadro con gli stessi conti: cambiano insieme.
 function near(bounds: Bounds | null, a: Point, b: Point, tolerance: number): boolean {
   if (bounds === null) return false;
   return Math.max(a[0], b[0]) + tolerance >= bounds.min[0] && Math.min(a[0], b[0]) - tolerance <= bounds.max[0]

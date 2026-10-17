@@ -26,9 +26,9 @@
 //   porta attorno a tutto il disegno, con un margine.
 
 import { formatNumber } from "../number";
-import { formatBrush, type Pf1Brush } from "../ink/brush";
+import { formatBrush, type Pf1Brush } from "../../../ink/brush";
 import { encodeInk, inkFromQuantized } from "../ink/codec";
-import type { QuantizedInk } from "../ink/sample";
+import type { QuantizedInk } from "../../../ink/sample";
 import type { Tool } from "../scene/analysis";
 import type { Bounds } from "../scene/geometry";
 import { createId, type IdKind } from "../scene/ids";
@@ -38,7 +38,8 @@ import { ROOT, type AddOp, type Op, type Target } from "../scene/ops";
 import { formatTransform, type Elem } from "../scene/serialize";
 import type { Page } from "../painter/paint";
 import type { LayerInfo, SceneIndex, Unit } from "./hit";
-import { HIGHLIGHTER_OPACITY } from "./palette";
+import { formatShortest } from "../../../ink/number";
+import { INK_TOOLS } from "../../../ink/tools/registry";
 
 /// Il passo con cui la pagina si allarga.
 export const PAGE_STEP = 256;
@@ -132,7 +133,9 @@ export function strokeElem(id: string, color: string, brush: Pf1Brush, ink: Quan
   if (at !== null) attrs["fub:at"] = at;
   attrs["fub:brush"] = formatBrush(brush);
   attrs.fill = color;
-  if (tool === "highlighter") attrs["fill-opacity"] = HIGHLIGHTER_OPACITY;
+  // Lo strumento dice quanto copre; il file scrive l'opacità solo se è meno di tutto.
+  const opacity = INK_TOOLS.stroke(tool)?.opacity ?? 1;
+  if (opacity < 1) attrs["fill-opacity"] = formatShortest(opacity);
   attrs["fub:ink"] = encodeInk(inkFromQuantized(ink));
   return { tag: "path", attrs };
 }

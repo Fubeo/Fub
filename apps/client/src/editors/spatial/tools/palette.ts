@@ -72,10 +72,10 @@ export const HIGHLIGHTER_WIDTHS: readonly Width[] = [
 export const DEFAULT_COLOR = "#000000";
 export const DEFAULT_WIDTH = 4;
 
-/// L'evidenziatore parte giallo e medio; la sua opacità è quella del formato.
+/// L'evidenziatore parte giallo e medio; quanto copre lo dice lo strumento
+/// (`ink/tools/highlighter`).
 export const HIGHLIGHTER_COLOR = "#f0e442";
 export const HIGHLIGHTER_WIDTH = 16;
-export const HIGHLIGHTER_OPACITY = "0.4";
 
 /// La copertura delle annotazioni di un PDF parte nera, col suo colore, che
 /// non cambia quello della penna.

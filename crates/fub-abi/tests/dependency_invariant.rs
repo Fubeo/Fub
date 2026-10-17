@@ -573,7 +573,13 @@ const SCENE_FORBIDDEN: &[&str] = &["fub-abi", "fub-kernel", "tauri", "wasmtime"]
 
 /// Le dipendenze normali che `fub-scene` può dichiarare. Elenco chiuso, come
 /// quello di `fub-abi` e `fub-kernel`.
-const SCENE_ALLOWED_DIRECT: &[&str] = &["quick-xml", "serde"];
+///
+/// `fub-ink` è il nucleo dell'inchiostro: il campione del tratto che il codec
+/// di `fub:ink` quantizza è un tipo suo. È puro e senza dipendenze
+/// (`the_ink_core_stands_alone`), quindi un componente `wasm32-wasip2` che
+/// prenda `fub-scene` via Git prende anche lui dalla stessa `rev`, e non porta
+/// con sé il contratto né il kernel.
+const SCENE_ALLOWED_DIRECT: &[&str] = &["fub-ink", "quick-xml", "serde"];
 
 /// Il lettore delle scene sta da solo.
 ///
@@ -622,6 +628,49 @@ fn the_scene_reader_stands_alone() {
          ragione accanto."
     );
 }
+
+/// Il nucleo dell'inchiostro non ha dipendenze.
+///
+/// `fub-ink` è la parte dell'inchiostro che ogni prodotto di Fub deve poter
+/// usare — la scena di FubDraw, un editor futuro, un secondo client — e che un
+/// giorno può diventare un componente: per questo non nomina il contratto, il
+/// kernel, l'host, il toolkit dell'app, il runtime wasm né un formato, e non
+/// dipende da niente. La CI lo compila per `wasm32-wasip2`. Un prodotto non
+/// entra mai qui: è il prodotto a dipendere dal nucleo, mai il contrario.
+///
+/// Le dipendenze di sviluppo sono fuori: il banco dei test legge la fixture
+/// con `serde_json`, ma non finisce in nessun binario.
+#[test]
+fn the_ink_core_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let direct = graph.direct("fub-ink");
+    assert!(
+        direct.is_empty(),
+        "`fub-ink` dichiara {direct:?} fra le dipendenze normali. Il nucleo\n\
+         dell'inchiostro non dipende da niente: se serve un tipo, va nel nucleo;\n\
+         se serve un prodotto, è il prodotto che dipende dal nucleo."
+    );
+
+    let dependents: Vec<&str> = graph
+        .members()
+        .into_iter()
+        .filter(|m| *m != "fub-ink" && graph.direct(m).contains("fub-ink"))
+        .collect();
+    assert!(
+        dependents
+            .iter()
+            .all(|m| INK_ALLOWED_DEPENDENTS.contains(m)),
+        "{dependents:?} dipendono da `fub-ink`, ma solo {INK_ALLOWED_DEPENDENTS:?}\n\
+         possono. Aggiungere un cliente del nucleo è una decisione: scrivila\n\
+         nell'ADR dell'inchiostro condiviso (docs/decisions/0204-nucleo-inchiostro.md)\n\
+         e poi qui."
+    );
+}
+
+/// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso.
+const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene"];
 
 // ---------------------------------------------------------------------------
 // La quarta rete: il diagramma dei componenti.

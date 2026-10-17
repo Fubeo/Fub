@@ -13,12 +13,11 @@
 //   primo asse dello specchio è verticale, così due spicchi specchiati sono i
 //   quattro quadranti.
 //
-// Qui ci sono le trasformazioni, nella scena, e i campioni portati da una;
-// l'editor le prende quando il tratto comincia e le applica al tratto nelle
+// Qui ci sono le trasformazioni, nella scena (i campioni si portano con
+// `mappedSamples` di `ink/geometry`); l'editor le prende quando il tratto comincia e le applica al tratto nelle
 // coordinate del suo livello.
 
-import type { InkSample } from "../ink/sample";
-import { apply, compose, type Matrix, type Point } from "../scene/matrix";
+import { compose, type Matrix, type Point } from "../scene/matrix";
 import { repeatMatrices } from "../scene/repeat";
 
 /// I tipi di simmetria della penna, nell'ordine del menu.
@@ -102,21 +101,6 @@ export function symmetryRays(symmetry: PenSymmetry): number[] {
       return Array.from({ length: rays }, (_, k) => (270 + (360 * k) / rays) % 360);
     }
   }
-}
-
-/// I campioni `samples` portati da `m`, una trasformazione delle loro
-/// coordinate: i punti si muovono, e l'azimut della penna gira con loro, e
-/// si specchia se `m` specchia. Pressione, tempo e altitudine restano.
-export function mappedSamples(samples: readonly InkSample[], m: Matrix): InkSample[] {
-  return samples.map((sample): InkSample => {
-    const [x, y] = apply(m, [sample.x, sample.y]);
-    if (sample.a === undefined) return { ...sample, x, y };
-    const radians = (sample.z * Math.PI) / 180;
-    const dx = m[0] * Math.cos(radians) + m[2] * Math.sin(radians);
-    const dy = m[1] * Math.cos(radians) + m[3] * Math.sin(radians);
-    const z = dx === 0 && dy === 0 ? sample.z : ((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 360;
-    return { ...sample, x, y, z };
-  });
 }
 
 /// `m` senza gli scarti di virgola mobile vicino agli interi e senza `-0`:

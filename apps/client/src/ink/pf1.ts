@@ -32,9 +32,9 @@
 // e nessuno confronta `d` calcolati da motori diversi.
 
 import { getStroke, type StrokeOptions } from "perfect-freehand";
-import { formatScaled, roundHalfUp } from "../number";
+import { formatScaled, roundHalfUp } from "./number";
 import { checkBrush, type Pf1Brush } from "./brush";
-import { INK_MAX_SAMPLES, PRESSURE_STEPS, type QuantizedInk } from "./sample";
+import { INK_MAX_SAMPLES, PRESSURE_STEPS, type InkScale, type QuantizedInk, type QuantizedSample } from "./sample";
 
 /// Un vertice del contorno, in unità locali dell'elemento.
 export type OutlinePoint = readonly [x: number, y: number];
@@ -89,10 +89,15 @@ export function pf1Outline(ink: QuantizedInk, brush: Pf1Brush, options: Pf1Optio
   checkInk(ink);
   if (ink.samples.length === 0) return [];
   const { scale } = ink;
-  const points = ink.samples.map((sample) => sample.p === undefined
+  return getStroke(ink.samples.map((sample) => pf1Input(sample, scale)), strokeOptions(brush, options.last ?? true));
+}
+
+/// Un campione quantizzato come lo legge `getStroke`: `[x, y]`, o
+/// `[x, y, pressione]` con la pressione in 0…1.
+export function pf1Input(sample: QuantizedSample, scale: InkScale): number[] {
+  return sample.p === undefined
     ? [sample.x / scale, sample.y / scale]
-    : [sample.x / scale, sample.y / scale, sample.p / PRESSURE_STEPS]);
-  return getStroke(points, strokeOptions(brush, options.last ?? true));
+    : [sample.x / scale, sample.y / scale, sample.p / PRESSURE_STEPS];
 }
 
 /// `d` di un poligono: curve quadratiche per i punti medi, coordinate a due

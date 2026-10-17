@@ -22,7 +22,7 @@
 //   restano come sono, e non si contano. Un tratto a penna che non somiglia
 //   a una forma resta inchiostro, e il comando lo conta.
 
-import { parseBrush } from "../ink/brush";
+import { parseBrush } from "../../../ink/brush";
 import { decodeInk, inkLength, inkPoint } from "../ink/codec";
 import { BoundsBuilder, type Bounds } from "../scene/geometry";
 import { apply, compose, IDENTITY, invert, type Matrix, type Point } from "../scene/matrix";

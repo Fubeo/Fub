@@ -21,10 +21,10 @@
 // disegno salvato va nella cartella col suo nome, che non comincia con
 // `sintetico-`.
 
-import { formatBrush, brushForInput, PF1_DEFAULTS } from "../ink/brush";
+import { formatBrush, brushForInput, PF1_DEFAULTS } from "../../../ink/brush";
 import { encodeInk, inkFromSamples } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
-import { quantizeInk, type InkSample } from "../ink/sample";
+import { pf1 } from "../../../ink/pf1";
+import { quantizeInk, type InkSample } from "../../../ink/sample";
 import type { Point } from "../scene/matrix";
 import { FUB_NS, SVG_NS } from "../scene/xml";
 import { El, Mulberry32 } from "../scene/test-support";

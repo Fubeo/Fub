@@ -19,7 +19,7 @@ import {
   unknownChannels,
   type Ink,
 } from "./codec";
-import { INK_MAX_INTEGER, INK_MAX_SAMPLES, InkError, quantizeInk, type InkSample, type InkScale } from "./sample";
+import { INK_MAX_INTEGER, INK_MAX_SAMPLES, InkError, quantizeInk, type InkSample, type InkScale } from "../../../ink/sample";
 
 /// xorshift64*, come `Rng` di `tests/ink.rs`: stesso seme, stessi numeri.
 class Rng {

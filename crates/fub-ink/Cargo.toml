@@ -1,0 +1,15 @@
+[package]
+name = "fub-ink"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Il nucleo condiviso dell'inchiostro: campioni del puntatore, ruoli (il palmo), curva della pressione, stabilizzatore e ciclo di vita del tratto. Puro: niente DOM, niente Tauri, niente prodotti."
+
+[dev-dependencies]
+# `float_roundtrip`: la fixture si rilegge uguale, non a meno di un ulp.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+
+[[bench]]
+name = "pipeline"
+harness = false

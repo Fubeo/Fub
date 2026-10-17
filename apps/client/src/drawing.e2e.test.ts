@@ -12,7 +12,7 @@ import type { CommandSpec, SettingEntry } from "./host/contract";
 import type { FakeHost } from "./host/fake";
 import { checkAccessibility, formatIssues } from "./ui/a11y-check";
 import { mountedTextEditors } from "./editors/text/test-support";
-import { DEFAULT_CURVE } from "./editors/spatial/pen/pressure";
+import { DEFAULT_CURVE } from "./ink/input/pressure";
 
 vi.setConfig({ testTimeout: 20_000 });
 

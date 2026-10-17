@@ -1,7 +1,7 @@
 // La finestra «Penna e dita»: come le dita e la penna parlano al foglio su
 // questo dispositivo. Due interruttori per i gesti delle dita, la rotazione
 // e i tocchi che annullano e ripetono, e la curva della pressione della
-// penna con le sue tre manopole (`pen/pressure.ts`).
+// penna con le sue tre manopole (`ink/input/pressure.ts`).
 //
 // La curva si vede mentre si sceglie: il disegno della curva, con il punto
 // della pressione di adesso, un tratto d'esempio che va da leggero a pieno e
@@ -12,7 +12,7 @@
 
 import { actions, openFrame } from "../../../ui/dialogs";
 import { t as appT, resolvedLanguage } from "../../../i18n/strings";
-import { curvePath, DEFAULT_CURVE, isDefaultCurve, MAX_MIN, MIN_FULL, pressureCurve, type PenCurve } from "../pen/pressure";
+import { curvePath, DEFAULT_CURVE, isDefaultCurve, MAX_MIN, MIN_FULL, pressureCurve, type PenCurve } from "../../../ink/input/pressure";
 import { t } from "../strings";
 
 const SVG_NS = "http://www.w3.org/2000/svg";

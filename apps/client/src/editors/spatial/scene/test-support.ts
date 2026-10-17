@@ -5,7 +5,7 @@
 
 import { expect } from "vitest";
 import { encodeInk, decodeInk, inkDuration, inkFromSamples, inkLength, inkSample, type Ink } from "../ink/codec";
-import { INK_MAX_SAMPLES, type InkSample, type InkScale } from "../ink/sample";
+import { INK_MAX_SAMPLES, type InkSample, type InkScale } from "../../../ink/sample";
 import type { Role } from "./analysis";
 import type { ElementItem, ForeignItem, Item, Tags } from "./classify";
 import type { Diagnostic } from "./diagnostics";

@@ -27,7 +27,7 @@ import { arrowPath } from "./shapes";
 import { inlineTracer } from "./trace-runner";
 import { appearance, LAYER } from "./test-support";
 import { DEFS, MARKER, markersIn, tipOf, written } from "./tip-support";
-import { DEFAULT_CURVE } from "../pen/pressure";
+import { DEFAULT_CURVE } from "../../../ink/input/pressure";
 import { closeRadial } from "./radial";
 import { setReducedMotionPreference } from "../../../theme/reduced-motion";
 
@@ -263,6 +263,18 @@ describe("gli strumenti", () => {
     drag([[50, 70], [56, 70], [64, 70]]);
     expect(editor.engine.text).not.toContain("o1a2b3c4d");
     expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 0 oggetti.");
+  });
+
+  it("la gomma ferma mentre la rotella sposta la vista non cancella ciò che non ha toccato", () => {
+    mount();
+    editor.setTool("eraser");
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 20, clientY: 70, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 40, clientY: 70, timeStamp: (clock += 8) }));
+    // Sotto la gomma ferma la scena scorre fin oltre il rettangolo.
+    target.dispatchEvent(new WheelEvent("wheel", { deltaX: 40, deltaMode: 0, bubbles: true, cancelable: true, clientX: 40, clientY: 70 }));
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 40, clientY: 70, timeStamp: (clock += 8) }));
+    expect(editor.engine.text).toContain("o1a2b3c4d");
   });
 
   it("la selezione prende l'oggetto sotto il puntatore e lo sposta con `transform`", () => {

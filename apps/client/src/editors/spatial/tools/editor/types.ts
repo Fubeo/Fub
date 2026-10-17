@@ -1,9 +1,11 @@
 // L'editor del disegno: i tipi dei gesti e dello stato, che più pezzi di
 // createDrawEditor condividono.
 
-import type { Pf1Brush } from "../../ink/brush";
-import type { InkSample } from "../../ink/sample";
-import type { InkPointerType } from "../../pen/pen-input";
+import type { Pf1Brush } from "../../../../ink/brush";
+import type { InkSample } from "../../../../ink/sample";
+import type { InkPointerType } from "../../../../ink/input/pointer";
+import type { StrokePreview } from "../../../../ink/tools/stroke";
+import type { EraseSweep } from "../../../../ink/tools/sweep";
 import type { Bounds } from "../../scene/geometry";
 import type { Matrix, Point } from "../../scene/matrix";
 import type { ElementPart, LeafNode } from "../../scene/model";
@@ -130,6 +132,8 @@ export interface InkGesture extends GestureBase {
   readonly scene: InkSample[];
   readonly local: InkSample[];
   predicted: readonly InkSample[];
+  /// L'anteprima di `local`, che a ogni movimento rifà soltanto la coda.
+  readonly preview: StrokePreview;
   /// Quando è cominciato, sull'orologio di `performance.now()`.
   readonly began: number;
   /// Il tratto può diventare una forma tenendolo fermo alla fine: è a
@@ -537,8 +541,8 @@ export interface BezierGesture extends GestureBase {
 
 export interface EraseGesture extends GestureBase {
   readonly kind: "erase";
-  last: Point | null;
-  readonly marked: Map<string, Unit>;
+  /// Il cammino della gomma e ciò che ha segnato (`ink/tools/sweep`).
+  readonly sweep: EraseSweep<Unit>;
 }
 
 /// Un tocco dello strumento Testo: dove si alza il puntatore si scrive. Un

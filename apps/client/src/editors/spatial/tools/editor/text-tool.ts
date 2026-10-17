@@ -2,9 +2,10 @@
 // createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import { INK_MAX_SAMPLES, type InkSample } from "../../ink/sample";
+import { INK_MAX_SAMPLES, type InkSample } from "../../../../ink/sample";
 import { formatNumber } from "../../number";
-import type { InkPointerType, StrokeStart } from "../../pen/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
+import type { StrokeStart } from "../../../../ink/input/session";
 import { apply, compose, invert, rotate, translate, type Matrix, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import { plural, t } from "../../strings";
@@ -575,7 +576,10 @@ export function installTextTool(ctx: EditorContext): void {
     }
     g.at = p;
     g.samples.push(...samples);
-    if (samples.length > 0) handlers.onSamples(g.start.id, samples);
+    if (samples.length > 0) {
+      handlers.onSamples(g.start.id, samples);
+      handlers.onSettled?.(g.start.id);
+    }
     if (g.samples.length >= INK_MAX_SAMPLES) release();
   };
 
@@ -636,6 +640,7 @@ export function installTextTool(ctx: EditorContext): void {
     showCursor();
     handlers.onStart(start);
     handlers.onSamples(start.id, [first]);
+    handlers.onSettled?.(start.id);
     announce(t("draw.cursor.down"));
   };
   ctx.press = press;

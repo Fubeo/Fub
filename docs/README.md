@@ -1,13 +1,12 @@
 # Documentazione di Fub
 
-Questa è la mappa canonica del progetto.
-
-La documentazione descrive **ciò che esiste**. Le attività eseguibili vivono
-nelle GitHub Issues. Un prossimo passo approvato può avere un TODO operativo in
-`project/` quando richiede una sequenza tecnica estesa: il TODO deve essere
-collegato a un'issue, dichiarare stato e regola di uscita e sparire quando il
-lavoro è concluso. Le decisioni architetturali spiegano il perché delle scelte
-ancora rilevanti. La cronologia completa resta in Git.
+Questa è la mappa canonica del progetto. La documentazione descrive **ciò che
+esiste**. Le attività eseguibili vivono nelle GitHub Issues. Un prossimo passo
+approvato può avere un TODO operativo in `project/` quando richiede una
+sequenza tecnica estesa: il TODO deve essere collegato a un'issue, dichiarare
+stato e regola di uscita e sparire quando il lavoro è concluso. Le decisioni
+architetturali spiegano il perché delle scelte ancora rilevanti. La cronologia
+completa resta in Git.
 
 ```mermaid
 flowchart LR
@@ -88,12 +87,14 @@ flowchart LR
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
 - [Superfici dell'editor](architecture/editor-surfaces.md)
+- [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 
 ## Sviluppare
 
 - [Workflow](development/workflow.md)
 - [Test e qualità](development/testing-and-quality.md)
+- [Prova manuale dell'inchiostro](development/ink-input-smoke-test.md)
 - [Creare un plugin](development/plugin-authoring.md)
 - [Stile della documentazione](development/documentation-style.md)
 - [Versionamento e release](development/versioning-and-releases.md)
@@ -131,7 +132,6 @@ flowchart LR
 ## Capire le decisioni
 
 - [Indice ADR](decisions/README.md)
-- [Template ADR](decisions/template.md)
 
 ## Gerarchia delle fonti
 

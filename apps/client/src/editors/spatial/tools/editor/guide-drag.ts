@@ -3,10 +3,10 @@
 // condividono.
 
 import { symmetryMatrices } from "../symmetry";
-import { brushForInput, PF1_DEFAULTS } from "../../ink/brush";
-import { pf1Outline } from "../../ink/pf1";
-import { INK_MAX_SAMPLES, quantizeInk } from "../../ink/sample";
-import type { StrokeStart } from "../../pen/pen-input";
+import type { StrokeStart } from "../../../../ink/input/session";
+import { INK_TOOLS } from "../../../../ink/tools/registry";
+import { StrokePreview } from "../../../../ink/tools/stroke";
+import { EraseSweep } from "../../../../ink/tools/sweep";
 import { compose, type Point } from "../../scene/matrix";
 import { ROOT } from "../../scene/ops";
 import { MAX_GUIDES, writeGuides, type RulerGuide } from "../../scene/rulers";
@@ -19,10 +19,8 @@ import { guideDialog } from "../guide-dialog";
 import { touchDialog } from "../touch-dialog";
 import { GUIDE_HIT_PX, guideAt } from "../rulers";
 import { toScene, toScreen } from "../../view";
-import { HIGHLIGHTER_OPACITY } from "../palette";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, INK_KEY, inkCopyKey } from "./constants";
 import type { EditorContext } from "./context";
-import { straight } from "./helpers";
 import type { Gesture, GestureBase, GuideGesture, InkGesture, RefusedGesture } from "./types";
 
 /// Ciò che il gesto delle guide del documento dà agli altri pezzi dell'editor.
@@ -284,18 +282,16 @@ export function installGuideDrag(ctx: EditorContext): void {
     switch (ctx.tool) {
       case "pen":
       case "highlighter": {
+        // Che cosa fa lo strumento lo dice il registro dell'inchiostro
+        // (`ink/tools`): la ricetta del pennello, la simmetria, la forma
+        // tenendo fermo il tratto.
+        const tool = INK_TOOLS.stroke(ctx.tool);
+        if (tool === undefined) return { ...base, kind: "refused" };
         const ids = newIds();
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
         const { color, width } = style();
-        // L'evidenziatore ha lo spessore costante e le punte piatte, come un
-        // pennarello a scalpello: la pressione non lo cambia.
-        let brush = ctx.tool === "highlighter"
-          ? { ...PF1_DEFAULTS, size: width, thinning: 0, capStart: false, capEnd: false, sim: false }
-          : brushForInput({ ...PF1_DEFAULTS, size: width, sim: false }, start.pressure);
-        // Il seguito di un tratto chiuso al limite non si assottiglia alla
-        // giunzione.
-        if (start.continued) brush = { ...brush, taperStart: 0 };
+        const brush = tool.brush(width, { pressure: start.pressure, continued: start.continued });
         return {
           ...base,
           kind: "ink",
@@ -307,11 +303,12 @@ export function installGuideDrag(ctx: EditorContext): void {
           scene: [],
           local: [],
           predicted: [],
+          preview: new StrokePreview(brush),
           began: start.timeStamp,
-          holds: ctx.tool === "pen" && start.id >= 0 && !start.continued,
+          holds: tool.capabilities.holdsToShape && start.id >= 0 && !start.continued,
           still: null,
           held: null,
-          copies: ctx.symmetryShown() ? symmetryMatrices(ctx.symmetryNow()) : [],
+          copies: tool.capabilities.symmetry && ctx.symmetryShown() ? symmetryMatrices(ctx.symmetryNow()) : [],
         };
       }
       case "rect":
@@ -335,8 +332,10 @@ export function installGuideDrag(ctx: EditorContext): void {
         if (to === null) return { ...base, kind: "refused" };
         return { ...base, kind: "bezier", to, curve: ctx.curvature, mode: null, path: null, reshaped: null, index: -1, from: null, end: null, at: null, dragging: false };
       }
-      case "eraser":
-        return { ...base, kind: "erase", last: null, marked: new Map() };
+      case "eraser": {
+        const tool = INK_TOOLS.erase("eraser");
+        return tool === undefined ? { ...base, kind: "refused" } : { ...base, kind: "erase", sweep: new EraseSweep(tool, base.pointer) };
+      }
       case "note":
         return { ...base, kind: "note", at: null };
       case "select":
@@ -413,25 +412,14 @@ export function installGuideDrag(ctx: EditorContext): void {
   };
   ctx.begin = begin;
 
-  /// L'evidenziatore con Maiusc traccia dritto, dal primo punto all'ultimo.
-  const straightened = (g: InkGesture): boolean => g.tool === "highlighter" && ctx.shift;
+  /// Con lo strumento che lo prevede (l'evidenziatore) e Maiusc, il tratto va
+  /// dritto dal primo punto all'ultimo.
+  const straightened = (g: InkGesture): boolean => ctx.shift && INK_TOOLS.stroke(g.tool)?.capabilities.straightWithModifier === true;
   ctx.straightened = straightened;
 
   const drawInk = (g: InkGesture): void => {
-    const samples = straightened(g)
-      ? straight(g.local)
-      : g.local.length + g.predicted.length <= INK_MAX_SAMPLES
-        ? [...g.local, ...g.predicted]
-        : g.local;
-    let outline: ReturnType<typeof pf1Outline> = [];
-    if (samples.length > 0) {
-      try {
-        outline = pf1Outline(quantizeInk(samples), g.brush, { last: false });
-      } catch {
-        outline = [];
-      }
-    }
-    const opacity = g.tool === "highlighter" ? Number(HIGHLIGHTER_OPACITY) : 1;
+    const outline = g.preview.outline(g.local, g.predicted, straightened(g));
+    const opacity = INK_TOOLS.stroke(g.tool)?.opacity ?? 1;
     const ink = outline.length === 0 ? null : { outline, matrix: g.to.matrix, color: g.color, opacity };
     overlay.setInk(INK_KEY, ink);
     // Le copie in simmetria: lo stesso contorno, portato nella scena.

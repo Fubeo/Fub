@@ -8,9 +8,9 @@
 
 import { describe, expect, it } from "vitest";
 import { tryApplyOperation } from "../../core/text-operation";
-import { parseBrush } from "../ink/brush";
+import { parseBrush } from "../../../ink/brush";
 import { decodeInk, inkToQuantized } from "../ink/codec";
-import { pf1 } from "../ink/pf1";
+import { pf1 } from "../../../ink/pf1";
 import { FOLLOW_ROUNDS, mergeUndo, SceneEngine, type Applied, type Outcome } from "./engine";
 import { MAX_BATCH, MAX_NESTING, MAX_OP_BYTES, MAX_VALUE_BYTES, parseWireOp, type Op, type Reason } from "./ops";
 import { MAX_BOARDS, MAX_EDIT_BYTES, MAX_ELEMENTS, MAX_RESOURCES, readScene } from "./read";

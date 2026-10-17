@@ -167,8 +167,10 @@ disegno, non dello schermo ([Formato della scena](../reference/scene-format.md))
 
 La vista girata sta in `apps/client/src/editors/spatial/view.ts`, coi conti
 fra lo schermo e il disegno a ogni angolo; il menu radiale in
-`tools/radial.ts`, la curva della pressione in `pen/pressure.ts`, la finestra
-«Penna e dita» in `tools/touch-dialog.ts`, i gesti in `tools/editor/input.ts`.
+`tools/radial.ts`, la finestra «Penna e dita» in `tools/touch-dialog.ts`, i
+gesti in `tools/editor/input.ts`. La curva della pressione non è dell'editor:
+sta nel nucleo dell'inchiostro, in `apps/client/src/ink/input/pressure.ts`
+(vedi [Inchiostro e strumenti](../architecture/ink-and-tools.md)).
 Le due caselle e la curva sono `twist`, `taps` e `pen` nella griglia che
 l'editor riceve e restituisce con `onGridChange`.
 

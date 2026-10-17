@@ -8,7 +8,7 @@
 //! [`Ink`] tiene i valori assoluti, già quantizzati: è ciò che si rilegge da un
 //! file e ciò che si scrive. La quantizzazione dai numeri del dispositivo è
 //! [`Ink::quantize`], con la regola `floor(v × scala + 0,5)` che usa anche
-//! TypeScript (`apps/client/src/editors/spatial/ink/sample.ts`): i delta si
+//! TypeScript (`apps/client/src/ink/sample.ts`): i delta si
 //! calcolano sugli interi, e chi rilegge ottiene gli stessi interi di chi ha
 //! scritto.
 //!
@@ -18,8 +18,13 @@
 
 use std::fmt;
 
-/// Quanti campioni può avere un tratto (§5, §11).
-pub const INK_MAX_SAMPLES: usize = 10_000;
+/// Il campione di un tratto: lo produce il nucleo dell'inchiostro
+/// (`fub-ink`) e questo codec lo quantizza.
+pub use fub_ink::Sample;
+
+/// Quanti campioni può avere un tratto (§5, §11). È il limite oltre il quale
+/// il ciclo di vita del tratto (`fub-ink`) lo chiude e ne comincia un altro.
+pub const INK_MAX_SAMPLES: usize = fub_ink::MAX_SAMPLES;
 /// Quanti byte può avere un `fub:ink` (§5, §11).
 pub const INK_MAX_BYTES: usize = 512 * 1024;
 /// Il più grande intero che un `f64` rappresenta esatto insieme a tutti i
@@ -163,19 +168,6 @@ impl fmt::Display for InkError {
 }
 
 impl std::error::Error for InkError {}
-
-/// Un campione come arriva dal dispositivo, in unità locali dell'elemento.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Sample {
-    pub x: f64,
-    pub y: f64,
-    /// Pressione 0…1; `None` per mouse e tocco.
-    pub p: Option<f64>,
-    /// Millisecondi dal primo campione, che vale 0.
-    pub t: f64,
-    /// Altitudine e azimut in gradi, se il dispositivo li dà.
-    pub tilt: Option<(f64, f64)>,
-}
 
 /// I campioni di un tratto, quantizzati e assoluti.
 #[derive(Clone, Debug, PartialEq, Eq)]

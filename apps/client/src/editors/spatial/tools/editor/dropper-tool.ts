@@ -2,7 +2,7 @@
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
 import { describe } from "../../describe";
-import type { InkPointerType } from "../../pen/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Point } from "../../scene/matrix";
 import { tagName, type DocumentModel, type ElementPart, type LeafNode } from "../../scene/model";
 import { href as parseHref } from "../../scene/values";

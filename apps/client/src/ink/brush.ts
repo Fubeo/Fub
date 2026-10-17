@@ -23,7 +23,7 @@
 // `d` si calcola dal pennello, e il pennello riletto dal file deve essere lo
 // stesso numero per numero.
 
-import { formatShortest } from "../number";
+import { formatShortest } from "./number";
 
 /// Le opzioni di `pf1`, già lette e validate.
 export interface Pf1Brush {

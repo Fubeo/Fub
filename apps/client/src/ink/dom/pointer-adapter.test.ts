@@ -1,22 +1,17 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { openLifetime, type Lifetime } from "../../../ui/lifetime";
-import { INK_MAX_SAMPLES, type InkSample, quantizeInk } from "../ink/sample";
-import {
-  attachPenInput,
-  type CancelReason,
-  type FinishedStroke,
-  type PenInput,
-  type PenInputOptions,
-  type StrokeStart,
-} from "./pen-input";
+import { openLifetime, type Lifetime } from "../../ui/lifetime";
+import { INK_MAX_SAMPLES, type InkSample, quantizeInk } from "../sample";
+import type { CancelReason, FinishedStroke, StrokeStart } from "../input/session";
+import { attachInkInput, type InkInput, type InkInputOptions } from "./pointer-adapter";
 
 type Entry =
   | { readonly kind: "start"; readonly stroke: StrokeStart }
   | { readonly kind: "samples"; readonly id: number; readonly samples: InkSample[] }
   | { readonly kind: "predicted"; readonly id: number; readonly samples: InkSample[] }
   | { readonly kind: "end"; readonly stroke: FinishedStroke }
-  | { readonly kind: "cancel"; readonly id: number; readonly reason: CancelReason };
+  | { readonly kind: "cancel"; readonly id: number; readonly reason: CancelReason }
+  | { readonly kind: "settled"; readonly id: number };
 
 type Init = PointerEventInit & { readonly timeStamp?: number };
 
@@ -70,8 +65,8 @@ describe("pipeline della penna", () => {
     surface.remove();
   });
 
-  function attach(options: Partial<PenInputOptions> = {}): PenInput {
-    return attachPenInput(surface, {
+  function attach(options: Partial<InkInputOptions> = {}): InkInput {
+    return attachInkInput(surface, {
       // Una camera finta: la scena è a metà scala del client.
       toScene: (clientX, clientY) => ({ x: clientX / 2, y: clientY / 2 }),
       onStart: (stroke) => log.push({ kind: "start", stroke }),
@@ -189,6 +184,29 @@ describe("pipeline della penna", () => {
     expect(delivered(1)).toEqual(ends()[0]!.samples);
   });
 
+  it("un puntatore fermo resta dov'era nella scena anche se la vista si muove sotto", () => {
+    let dy = 0;
+    attach({ toScene: (clientX, clientY) => ({ x: clientX, y: clientY + dy }) });
+    dispatch(down({ ...MOUSE, clientX: 10, clientY: 10, timeStamp: 0 }));
+    dispatch(move({ ...MOUSE, clientX: 20, clientY: 10, timeStamp: 8 }));
+    // La rotella sposta la vista, e il puntatore si alza senza muoversi:
+    // nessun tratto fino a dove la scena è adesso.
+    dy = -300;
+    const before = log.length;
+    dispatch(up({ ...MOUSE, clientX: 20, clientY: 10, timeStamp: 16 }));
+    expect(log.slice(before).map((entry) => entry.kind)).toEqual(["end"]);
+    expect(ends()[0]!.samples).toEqual([{ x: 10, y: 10, t: 0 }, { x: 20, y: 10, t: 8 }]);
+    // Un tocco resta un punto tondo dove si è toccato.
+    dispatch(down({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 20 }));
+    dy = 0;
+    dispatch(up({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 30 }));
+    expect(ends()[1]!.samples).toEqual([{ x: 30, y: -260, t: 0 }, { x: 30, y: -260, t: 10 }]);
+    // Un contatto nuovo si porta nella scena con la vista di adesso.
+    dispatch(down({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 40 }));
+    dispatch(up({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 50 }));
+    expect(ends()[2]!.samples).toEqual([{ x: 30, y: 40, t: 0 }, { x: 30, y: 40, t: 10 }]);
+  });
+
   it("gli eventi coalescenti entrano nell'ordine, senza doppioni", () => {
     attach();
     dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 100 }));
@@ -265,6 +283,82 @@ describe("pipeline della penna", () => {
     dispatch(up({ ...PEN, clientX: 6, clientY: 0, timeStamp: 41 }));
     expect(log.slice(-2)).toEqual([{ kind: "predicted", id: 1, samples: [] }, expect.objectContaining({ kind: "end" })]);
     expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 1, 1.5, 2, 2.5, 3]);
+  });
+
+  describe("un ridisegno per evento", () => {
+    const settled = { onSettled: (id: number) => void log.push({ kind: "settled", id }) };
+
+    it("dopo campioni e predizione dello stesso evento, una volta sola", () => {
+      attach(settled);
+      dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+      expect(kinds()).toEqual(["start", "samples", "settled"]);
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8, predictedEvents: [move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 16 })] }));
+      expect(log).toEqual([
+        expect.objectContaining({ kind: "samples", id: 1 }),
+        expect.objectContaining({ kind: "predicted", id: 1 }),
+        { kind: "settled", id: 1 },
+      ]);
+      // Un doppione non porta campioni, ma cancella la predizione: anche
+      // quello è un cambiamento da ridisegnare.
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8 }));
+      expect(kinds()).toEqual(["predicted", "settled"]);
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8 }));
+      expect(kinds()).toEqual([]);
+      dispatch(move({ ...PEN, clientX: 3, clientY: 0, timeStamp: 12 }));
+      expect(kinds()).toEqual(["samples", "settled"]);
+    });
+
+    it("non dopo la fine né dopo un annullamento, né per chi non disegna", () => {
+      const input = attach(settled);
+      dispatch(move({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0, buttons: 0, pressure: 0 }));
+      dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 1 }));
+      dispatch(up({ ...PEN, clientX: 5, clientY: 0, timeStamp: 9 }));
+      expect(kinds()).toEqual(["start", "samples", "settled", "samples", "end"]);
+      log = [];
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 20 }));
+      input.cancel();
+      dispatch(move({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 24 }));
+      expect(kinds()).toEqual(["start", "samples", "settled", "cancel"]);
+    });
+
+    it("al limite dei campioni arriva al pezzo che continua", () => {
+      attach({ ...settled, maxSamples: 3 });
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+      log = [];
+      dispatch(move({
+        ...MOUSE,
+        clientX: 8,
+        clientY: 0,
+        timeStamp: 4,
+        coalescedEvents: [1, 2, 3, 4].map((t) => move({ ...MOUSE, clientX: t * 2, clientY: 0, timeStamp: t })),
+      }));
+      expect(log.filter((entry) => entry.kind === "settled")).toEqual([{ kind: "settled", id: 2 }]);
+      expect(latest()).toEqual({ kind: "settled", id: 2 });
+    });
+
+    it("non arriva se una callback ha interrotto, e se lancia l'errore risale", () => {
+      let input: InkInput | null = null;
+      input = attach({
+        ...settled,
+        onPredicted: () => input!.cancel(),
+      });
+      dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8, predictedEvents: [move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 16 })] }));
+      expect(kinds()).toEqual(["samples", "cancel"]);
+
+      owner.close();
+      owner = openLifetime();
+      log = [];
+      const boom = new Error("boom");
+      attach({ onSettled: () => { throw boom; } });
+      expect(() => surface.dispatchEvent(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 30 }))).toThrow(boom);
+      dispatch(up({ ...PEN, clientX: 0, clientY: 0, timeStamp: 31 }));
+      expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    });
   });
 
   it("pointercancel a metà annulla il tratto intero: nessuna fine, nessuna cattura", () => {
@@ -569,7 +663,7 @@ describe("pipeline della penna", () => {
 
   describe("callback che rientrano", () => {
     it("cancel dentro onSamples ferma il tratto subito", () => {
-      let input: PenInput | null = null;
+      let input: InkInput | null = null;
       input = attach({
         onSamples: (id, samples) => {
           log.push({ kind: "samples", id, samples: [...samples] });
@@ -591,7 +685,7 @@ describe("pipeline della penna", () => {
     });
 
     it("cancel dentro onStart non lascia campioni orfani", () => {
-      let input: PenInput | null = null;
+      let input: InkInput | null = null;
       input = attach({
         onStart: (stroke) => {
           log.push({ kind: "start", stroke });
@@ -604,7 +698,7 @@ describe("pipeline della penna", () => {
     });
 
     it("cancel dentro onEnd del primo pezzo ferma la continuazione prima che cominci", () => {
-      let input: PenInput | null = null;
+      let input: InkInput | null = null;
       input = attach({
         maxSamples: 2,
         onEnd: (stroke) => {
@@ -622,7 +716,7 @@ describe("pipeline della penna", () => {
     });
 
     it("destroy dentro una callback non consegna altro", () => {
-      let input: PenInput | null = null;
+      let input: InkInput | null = null;
       input = attach({
         onSamples: (id, samples) => {
           log.push({ kind: "samples", id, samples: [...samples] });
@@ -633,6 +727,101 @@ describe("pipeline della penna", () => {
       dispatch(move({ ...MOUSE, clientX: 2, clientY: 0, timeStamp: 1 }));
       expect(kinds()).toEqual(["start", "samples", "cancel"]);
       expect(latest()).toEqual({ kind: "cancel", id: 1, reason: "destroy" });
+    });
+  });
+
+  describe("callback che rientrano con un tratto diviso", () => {
+    it("cancel dentro onSamples del primo pezzo annulla il tratto che chi disegna ha visto", () => {
+      let input: InkInput | null = null;
+      input = attach({
+        maxSamples: 2,
+        onSamples: (id, samples) => {
+          log.push({ kind: "samples", id, samples: [...samples] });
+          if (samples.some((sample) => sample.x === 1)) input!.cancel();
+        },
+      });
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+      // Il primo pezzo si riempie e si divide dentro lo stesso evento, che porta
+      // tutti gli effetti insieme: il secondo pezzo non è mai nato per chi
+      // disegna, e il primo non ha una fine.
+      dispatch(move({
+        ...MOUSE,
+        clientX: 6,
+        clientY: 0,
+        timeStamp: 3,
+        coalescedEvents: [move({ ...MOUSE, clientX: 2, clientY: 0, timeStamp: 1 }), move({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 2 })],
+      }));
+      expect(kinds()).toEqual(["start", "samples", "samples", "cancel"]);
+      expect(latest()).toEqual({ kind: "cancel", id: 1, reason: "api" });
+      expect(surface.hasPointerCapture(1)).toBe(false);
+      // Il puntatore resta giù ma non disegna più: niente di quel che segue.
+      dispatch(move({ ...MOUSE, clientX: 8, clientY: 0, timeStamp: 4 }));
+      dispatch(up({ ...MOUSE, clientX: 8, clientY: 0, timeStamp: 5 }));
+      expect(kinds()).toEqual(["start", "samples", "samples", "cancel"]);
+    });
+  });
+
+  describe("stabilizzatore e vista", () => {
+    const string = { amount: 0.5, pulledString: true, catchUp: true, catchUpOnEnd: true };
+
+    it("la corda tiene fermo il pennino finché non è tesa, e il tratto finisce dov'è il puntatore", () => {
+      attach({ stabilizer: () => string });
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+      dispatch(move({
+        ...MOUSE,
+        clientX: 20,
+        clientY: 0,
+        timeStamp: 8,
+        predictedEvents: [move({ ...MOUSE, clientX: 30, clientY: 0, timeStamp: 16 })],
+      }));
+      // La scena è a metà scala: il puntatore è a 10 unità, la corda è lunga 50.
+      // Il pennino non si muove, e la predizione, che sarebbe davanti a un
+      // pennino fermo, non si consegna.
+      expect(kinds()).toEqual(["start", "samples"]);
+      dispatch(up({ ...MOUSE, clientX: 20, clientY: 0, timeStamp: 10 }));
+      expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+      expect(ends()[0]!.samples).toEqual([{ x: 0, y: 0, t: 0 }, { x: 10, y: 0, t: 10 }]);
+    });
+
+    it("la scala della vista accorcia la corda in unità della scena", () => {
+      attach({ stabilizer: () => string, scale: () => 4 });
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+      // 40 px di client sono 20 unità della scena; la corda è 50 / 4 = 12,5.
+      dispatch(move({ ...MOUSE, clientX: 40, clientY: 0, timeStamp: 8 }));
+      expect(delivered(1).map(({ x }) => x)).toEqual([0, 7.5]);
+    });
+
+    it("lo stabilizzatore si rilegge a ogni tratto, e quello in corso non cambia", () => {
+      let config = string;
+      attach({ stabilizer: () => config });
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+      config = { ...string, amount: 0 };
+      dispatch(move({ ...MOUSE, clientX: 20, clientY: 0, timeStamp: 8 }));
+      dispatch(up({ ...MOUSE, clientX: 20, clientY: 0, timeStamp: 10 }));
+      // Il primo tratto è ancora a corda, il secondo no.
+      expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 10]);
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 20 }));
+      dispatch(move({ ...MOUSE, clientX: 20, clientY: 0, timeStamp: 28 }));
+      expect(delivered(2).map(({ x }) => x)).toEqual([0, 10]);
+    });
+  });
+
+  describe("callback che lanciano", () => {
+    it("la consegna prosegue, l'errore risale in fondo e ogni tratto annunciato ha la sua fine", () => {
+      attach({
+        onStart: (stroke) => {
+          log.push({ kind: "start", stroke });
+          throw new Error("onStart lancia");
+        },
+      });
+      // L'errore risale (un browser lo riporta alla finestra) ma non ha tolto i
+      // campioni dello stesso evento.
+      expect(() => dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }))).toThrow("onStart lancia");
+      expect(kinds()).toEqual(["start", "samples"]);
+      dispatch(move({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 8 }));
+      dispatch(up({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 10 }));
+      expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+      expect(surface.hasPointerCapture(1)).toBe(false);
     });
   });
 

@@ -39,6 +39,7 @@ flowchart TD
     canvas["fub-format-canvas"]
     svg["fub-format-svg"]
     scene["fub-scene"]
+    ink["fub-ink"]
     importers["fub-importers"]
     cli["fub-cli"]
     services["fub-services"]
@@ -77,6 +78,7 @@ flowchart TD
     sheet --> abi
     svg --> abi
     svg --> scene
+    scene --> ink
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -105,8 +107,16 @@ Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
 `fub-wasm-host` dipende dall'host per montare bundle, ma l'host non dipende da
 Wasmtime.
 
-`fub-scene`, il lettore delle scene di FubDraw, non ha frecce in uscita di
-proposito: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
+`fub-ink`, il nucleo dell'inchiostro, non ha frecce in uscita: non dipende da
+niente, nemmeno da `fub-abi`, perché deve poterlo usare ogni prodotto che
+raccoglie inchiostro e, un domani, un componente `wasm32-wasip2`. Lo
+verificano `dependency_invariant.rs` e la compilazione per quel bersaglio nella
+CI. L'unica freccia in ingresso è quella di `fub-scene`, che ne usa il campione
+del tratto; chi altro può dipenderne è un elenco chiuso, deciso nell'[ADR
+0204](../decisions/0204-nucleo-inchiostro.md).
+
+`fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
+`fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
 deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
 `dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
 `fub-format-svg`, il provider del [formato della
