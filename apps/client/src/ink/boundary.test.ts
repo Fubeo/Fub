@@ -75,7 +75,9 @@ function code(text: string): string {
 }
 
 const modules = Object.entries(sources)
-  .filter(([key]) => !key.endsWith(".test.ts"))
+  // Né i test né il banco sono il componente: usano il browser e i moduli che
+  // vogliono per provarlo.
+  .filter(([key]) => !key.endsWith(".test.ts") && !key.endsWith(".bench.ts"))
   .map(([key, text]) => ({ file: fromSrc(key), text }));
 
 const core = modules.filter(({ file }) => !file.startsWith("ink/dom/"));
