@@ -142,6 +142,10 @@ enum CommittedOsDeletionState {
     Os {
         removal: PreparedDocumentRemoval,
         receipt: crate::os_trash::OsTrashReceipt,
+        /// Ciò che serve a mettere al sicuro lo stato per-documento fuori da
+        /// ogni custodia: il vault da cui la nota è uscita e l'organizzazione.
+        vault: crate::vault::Vault,
+        organization: Arc<crate::organization::OrganizationStore>,
         drafts: Arc<Drafts>,
         journal: Arc<Journal>,
         origin: fub_abi::event::Origin,
@@ -161,6 +165,7 @@ enum FinalizedOsDeletionState {
         receipt: crate::os_trash::OsTrashReceipt,
         draft_fault: Option<String>,
         journal_fault: Option<String>,
+        parked_warnings: Vec<String>,
     },
 }
 
@@ -286,10 +291,20 @@ impl CommittedOsDocumentDeletion {
             CommittedOsDeletionState::Os {
                 removal,
                 receipt,
+                vault,
+                organization,
                 drafts,
                 journal,
                 origin,
             } => {
+                // Il path è libero e la nota non tornerà dal cestino del vault:
+                // il suo stato non è di chi lo riprende (FUB-003).
+                let parked_warnings = crate::documents::release_state(
+                    &vault,
+                    &organization,
+                    &receipt.id,
+                    &receipt.dest,
+                );
                 let draft_fault = drafts
                     .discard(&receipt.id)
                     .err()
@@ -308,6 +323,7 @@ impl CommittedOsDocumentDeletion {
                     receipt,
                     draft_fault,
                     journal_fault,
+                    parked_warnings,
                 })
             }
         }
@@ -675,6 +691,8 @@ impl Workspace {
         Ok(CommittedOsDocumentDeletion(CommittedOsDeletionState::Os {
             removal,
             receipt: moved.receipt(),
+            vault: moved.vault().clone(),
+            organization: Arc::clone(&self.organization),
             drafts,
             journal,
             origin,
@@ -719,6 +737,7 @@ impl Workspace {
                 receipt,
                 draft_fault,
                 journal_fault,
+                parked_warnings,
             } => {
                 if removal.workspace_id != self.workspace_id {
                     return Err(Box::new((
@@ -730,11 +749,13 @@ impl Workspace {
                             receipt,
                             draft_fault,
                             journal_fault,
+                            parked_warnings,
                         }),
                     )));
                 }
                 self.apply_document_removal(removal);
                 self.dispatch_pending();
+                self.doc_data_warnings.extend(parked_warnings);
                 self.finish_deleted_document(
                     &receipt.id,
                     receipt.id.clone(),

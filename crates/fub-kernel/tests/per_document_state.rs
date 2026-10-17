@@ -1168,3 +1168,173 @@ fn empty_the_trash_and_reopen_collects() {
         "cancellata per sempre la nota, i suoi dati sono rimasti"
     );
 }
+
+// ---------------------------------------------------------------------------
+// FUB-003, il cestino del sistema e il nome riservato
+// ---------------------------------------------------------------------------
+
+/// Un cestino del sistema che sposta il file e basta.
+struct MovesTo(Utf8PathBuf);
+
+impl fub_kernel::os_trash::OsTrashBackend for MovesTo {
+    fn move_file_to_os_trash(&self, source: &Utf8Path) -> std::io::Result<Utf8PathBuf> {
+        std::fs::rename(source, &self.0)?;
+        Ok(self.0.clone())
+    }
+}
+
+fn send_to_the_system_trash(ws: &mut Workspace, doc: &DocId) {
+    let external = tempfile::tempdir().expect("il cestino del sistema");
+    let destination = Utf8PathBuf::from_path_buf(external.path().join("Nota.md")).expect("utf8");
+    let completed = ws
+        .prepare_document_deletion(doc)
+        .expect("prepara")
+        .invoke_os(&MovesTo(destination))
+        .expect("la mossa");
+    let committed = ws
+        .commit_os_document_deletion(completed)
+        .unwrap_or_else(|_| panic!("commit del fatto OS"));
+    ws.finish_os_document_deletion(committed.invoke())
+        .unwrap_or_else(|_| panic!("rimozione OS finalizzata"));
+}
+
+/// **Il cestino del sistema libera il path come quello del vault, e lo stato
+/// non resta ad aspettare chi lo riprende** (FUB-003). Il percorso OS non
+/// parcheggiava né dimenticava niente: la nota nuova allo stesso path
+/// ereditava lo spazio per-documento dei plugin, l'icona e il pin.
+#[test]
+fn the_note_that_takes_the_path_of_one_sent_to_the_system_trash_starts_clean() {
+    let (_g, root, mut ws) = vault();
+    let first = notes(&mut ws, "Nota.md", "prima");
+    write_data_item(
+        &root,
+        OFF,
+        &doc_data::path(&first, "stato.bin"),
+        b"della-prima",
+    );
+    ws.set_icon("Nota.md", Some("📌".into())).expect("icona");
+    ws.set_pinned("Nota.md", true).expect("pin");
+
+    send_to_the_system_trash(&mut ws, &first);
+
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&first, "stato.bin")),
+        None,
+        "lo stato è rimasto sotto il path che la nota ha lasciato"
+    );
+    let org = ws.organization();
+    assert!(
+        !org.icons.contains_key("Nota.md") && !org.pinned.iter().any(|p| p == "Nota.md"),
+        "icona e pin sono rimasti sul path libero: {org:?}"
+    );
+
+    let second = notes(&mut ws, "Nota.md", "seconda");
+    assert_eq!(second, first);
+    assert_eq!(
+        read_data_item(&root, OFF, &doc_data::path(&second, "stato.bin")),
+        None,
+        "la nota nuova ha ereditato lo stato di quella mandata al cestino del sistema"
+    );
+    let org = ws.organization();
+    assert!(
+        !org.icons.contains_key("Nota.md") && !org.pinned.iter().any(|p| p == "Nota.md"),
+        "la nota nuova ha ereditato icona o pin: {org:?}"
+    );
+}
+
+/// Ciò che è passato di lato non resta per sempre: nessuna voce del cestino del
+/// vault lo tiene, e la prima raccolta lo toglie.
+#[test]
+fn the_state_set_aside_for_the_system_trash_is_collected_at_the_next_pass() {
+    let (_g, root, mut ws) = vault();
+    let first = notes(&mut ws, "Nota.md", "prima");
+    write_data_item(&root, OFF, &doc_data::path(&first, "stato.bin"), b"dato");
+    send_to_the_system_trash(&mut ws, &first);
+
+    let parked = data_root(&root)
+        .join("plugins")
+        .join(OFF)
+        .join(doc_data::PARKED_SPACE);
+    // Le cartelle di stato: accanto stanno i lucchetti (`.<nome>.lock`) del
+    // supporto, che non sono stato di nessuno.
+    let folders = || -> usize {
+        std::fs::read_dir(&parked).map_or(0, |entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| entry.path().is_dir())
+                .count()
+        })
+    };
+    assert_eq!(
+        folders(),
+        1,
+        "lo stato è passato di lato, non è sparito di colpo"
+    );
+
+    ws.reindex().expect("il giro successivo");
+    assert_eq!(
+        folders(),
+        0,
+        "nessuna voce del cestino del vault tiene quello stato: va raccolto"
+    );
+}
+
+const PLUGIN: &str = "test.plugin";
+
+fn with_a_plugin(ws: &mut Workspace) {
+    ws.register_plugin(PluginManifest::core(PLUGIN, PLUGIN), Trust::Core)
+        .expect("registrato");
+}
+
+/// **`doc~trash` è del kernel**: dichiarato riservato, un plugin lo scriveva lo
+/// stesso, e la raccolta lo tratta come stato parcheggiato di una voce.
+#[test]
+fn a_plugin_cannot_write_read_or_remove_the_reserved_parking() {
+    use fub_abi::error::PluginError;
+    let (_g, _root, mut ws) = vault();
+    with_a_plugin(&mut ws);
+    let inside = format!("{}/qualcosa/x.json", doc_data::PARKED_SPACE);
+    let result = ws.with_host(PLUGIN, |host| {
+        (
+            host.data_write(&inside, b"mio"),
+            host.data_read(&inside),
+            host.data_remove(&inside),
+            host.data_write(doc_data::PARKED_SPACE, b"mio"),
+        )
+    });
+    for (what, outcome) in [
+        ("scrive", result.0),
+        ("legge", result.1.map(|_| ())),
+        ("toglie", result.2),
+        ("scrive il nome nudo", result.3),
+    ] {
+        assert!(
+            matches!(outcome, Err(PluginError::PermissionDenied(_))),
+            "un plugin che {what} sotto `doc~trash` non deve poterlo fare: {outcome:?}"
+        );
+    }
+
+    // Un nome che gli somiglia soltanto è di tutti.
+    let neighbour = ws.with_host(PLUGIN, |host| host.data_write("doc~trash2/x.json", b"mio"));
+    assert!(neighbour.is_ok(), "{neighbour:?}");
+}
+
+/// Elencare la radice non mostra il parcheggio del kernel.
+#[test]
+fn listing_the_root_of_a_plugin_does_not_show_the_parking() {
+    let (_g, root, mut ws) = vault();
+    with_a_plugin(&mut ws);
+    let trashed = DocId::new("Nota.md");
+    write_data_item(
+        &root,
+        PLUGIN,
+        &parked_rel(&trashed, "stato.bin"),
+        b"parcheggiato",
+    );
+    write_data_item(&root, PLUGIN, "suo.json", b"{}");
+
+    let listed = ws
+        .with_host(PLUGIN, |host| host.data_list(""))
+        .expect("l'elenco");
+    assert_eq!(listed, ["suo.json"], "{listed:?}");
+}

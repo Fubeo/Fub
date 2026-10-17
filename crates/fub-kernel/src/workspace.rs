@@ -3787,6 +3787,10 @@ impl PreparedPluginDataIo {
                 source,
             })
         })?;
+        // Il parcheggio del kernel non è dei plugin: elencare la radice non lo
+        // mostra (FUB-003), come nominarlo non lo apre.
+        let parked = format!("{}/", fub_abi::rules::doc_data::PARKED_SPACE);
+        paths.retain(|path| !path.starts_with(&parked));
         paths.sort_unstable();
         Ok(paths)
     }
@@ -13594,6 +13598,16 @@ impl Workspace {
         // di file illegale, non una via d'uscita.
         if rel.contains('\\') {
             return Err(denied("i separatori di path sono `/`"));
+        }
+        // `doc~trash` è il parcheggio del kernel (FUB-003): lo stato delle note
+        // cestinate sta lì, e la raccolta lo toglie per le voci che il cestino
+        // non tiene più. Un plugin che ci scrivesse metterebbe i suoi dati dove
+        // il kernel li butta, e uno che ci leggesse vedrebbe lo stato di una
+        // nota che non è sua.
+        if rel.split('/').next() == Some(fub_abi::rules::doc_data::PARKED_SPACE) {
+            return Err(denied(
+                "`doc~trash` è riservato al kernel: lì sta lo stato delle note cestinate",
+            ));
         }
         for comp in rel.split('/') {
             if !is_safe_component(comp) {
