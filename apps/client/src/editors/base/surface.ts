@@ -8,6 +8,7 @@ import { errorText, isErrorKind } from "../../host/errors";
 import { onLanguage, t } from "../../i18n/strings";
 import type { DocumentUpdate } from "../core/text-operation";
 import { onEvent } from "../../state/kernel";
+import { openVaultRoot, vaultArg } from "../../state/vault";
 import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import { uniformRowRange } from "../grid/engine";
 import {
@@ -653,19 +654,22 @@ export function registerBaseRenderer(onOpenDocument: (doc: string) => void | Pro
     // suo path `.base`: la nota la dice chi monta la resa.
     const embed = { ...parsed, container: context.container ?? parsed.container };
     let disposed = false;
+    // Il vault in cui la base è stata incorporata: le sue domande lo nominano
+    // anche se, nel frattempo, ne è stato aperto un altro (FUB-001).
+    const vault = openVaultRoot();
     const surface = mountBaseSurface("base", {
       paneId: `base:embed:${crypto.randomUUID()}`,
       documentId: embed.base ?? embed.container ?? "",
       parent: host,
     }, {
-      queryIndex: api.queryIndex,
+      queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
       invokeCommand: api.invokeCommand,
       viewState: api.viewState,
       setViewState: api.setViewState,
       onOpenDocument,
     }, { view: embed.view, persistSelection: false, container: embed.container ?? embed.base ?? null });
     const source = embed.source === undefined
-      ? api.readDocument(embed.base!).then((document) => document.text)
+      ? api.readDocument(embed.base!, openVaultRoot()).then((document) => document.text)
       : Promise.resolve(embed.source);
     void source.then((text) => {
       if (!disposed) surface.buffer.setDoc(text);

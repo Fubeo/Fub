@@ -14,10 +14,14 @@
 import { api } from "../host/ipc";
 import { settings, vaultEntries } from "../host/query";
 import { COMMANDS, type Undo } from "../host/contract";
-import { emit, setCommandSpecs } from "./store";
+import { emit, openVaultRoot, setCommandSpecs, vaultArg } from "./store";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
+
+// `openVaultRoot` e `vaultArg` vivono in `state/store.ts` e si ripresentano
+// qui, dove i gesti li cercano da sempre (FUB-001).
+export { openVaultRoot, vaultArg };
 
 /// Annuncia che l'elenco dei documenti è cambiato. Chi ne disegna uno si
 /// iscrive a `documents`; nessuno chiama nessuno per nome.
@@ -52,7 +56,12 @@ export async function createNote(name?: string, folder?: string): Promise<string
   const args: Record<string, string> = {};
   if (name) args.name = name;
   if (folder) args.folder = folder;
-  const outcome = await api.invokeCommand(COMMANDS.create, Object.keys(args).length > 0 ? args : undefined);
+  const outcome = await api.invokeCommand(
+    COMMANDS.create,
+    Object.keys(args).length > 0 ? args : undefined,
+    undefined,
+    openVaultRoot(),
+  );
   refreshDocuments();
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
 }
@@ -63,7 +72,7 @@ export async function createNote(name?: string, folder?: string): Promise<string
 /// differire da quello digitato: è quello che l'albero mostrerà. L'albero si
 /// aggiorna da sé con `index_updated`, come per ogni cambio del vault.
 export async function createFolder(path: string): Promise<string> {
-  const outcome = await api.invokeCommand(COMMANDS.createFolder, { path });
+  const outcome = await api.invokeCommand(COMMANDS.createFolder, { path }, undefined, openVaultRoot());
   const effect = outcome.effect;
   if (effect.kind === "custom" && effect.ns === "fub.folder.created") {
     const made = (effect.payload as { path?: unknown } | null)?.path;
@@ -80,7 +89,7 @@ export async function createFolder(path: string): Promise<string> {
 /// l'evento `document_renamed`, perché l'identità è il path e chi la migra deve
 /// essere un punto solo.
 export async function renameNote(from: string, to: string): Promise<void> {
-  await api.invokeCommand(COMMANDS.rename, { doc: from, to });
+  await api.invokeCommand(COMMANDS.rename, { doc: from, to }, undefined, openVaultRoot());
   refreshDocuments();
 }
 
@@ -90,13 +99,15 @@ export async function renameNote(from: string, to: string): Promise<void> {
 /// quello del vault senza perdere la nota: il ripiego si dice, perché chi ha
 /// scelto il cestino di sistema la cercherebbe lì.
 export async function trashNote(id: string): Promise<Undo | null> {
+  // Il vault è quello di quando parte il gesto: `settings()` aspetta.
+  const vault = openVaultRoot();
   const choice = (await settings()).find((entry) => entry.spec.key === "files.trash")?.value;
   if (choice !== "system") {
-    const outcome = await api.invokeCommand(COMMANDS.trash, { doc: id });
+    const outcome = await api.invokeCommand(COMMANDS.trash, { doc: id }, undefined, vault);
     refreshDocuments();
     return outcome.undo;
   }
-  const outcome = await api.invokeCommand(COMMANDS.osTrash, { doc: id });
+  const outcome = await api.invokeCommand(COMMANDS.osTrash, { doc: id }, undefined, vault);
   refreshDocuments();
   // Il ripiego lo dice l'host nel `notify`, la stessa frase che la palette
   // mostra: qui non si rilegge l'effetto per ricomporla.
@@ -117,7 +128,7 @@ export async function trashesToSystem(): Promise<boolean> {
 /// Annulla l'ultima operazione del vault (`vault.undo`), per il gesto
 /// «Annulla» accanto a un esito.
 export async function undoLastOperation(): Promise<void> {
-  await api.invokeCommand(COMMANDS.undo);
+  await api.invokeCommand(COMMANDS.undo, undefined, undefined, openVaultRoot());
   refreshDocuments();
 }
 
@@ -141,7 +152,7 @@ export async function loadCommandSpecs(): Promise<void> {
   // dei modi di usare l'app smette di rispondere — e non ne restava una riga da
   // nessuna parte. L'elenco vuoto resta la risposta giusta (un vault si apre
   // comunque, 0068); ciò che mancava è dirlo.
-  setCommandSpecs(await api.listCommands().catch((e: unknown) => {
+  setCommandSpecs(await api.listCommands(...vaultArg(openVaultRoot())).catch((e: unknown) => {
     notify(t("commands.list_failed", { reason: errorText(e) }), "guasto");
     return [];
   }));

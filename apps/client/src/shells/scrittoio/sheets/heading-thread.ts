@@ -36,7 +36,7 @@ import { pageName } from "../../../rules/mirrored";
 import { focusEditor, reveal } from "../../../state/document-controller";
 import { onEvent } from "../../../state/kernel";
 import { activeDoc, focusPane } from "../../../state/layout";
-import { on } from "../../../state/store";
+import { on, openVaultRoot, vaultArg } from "../../../state/store";
 import { openLifetime, type Lifetime } from "../../../ui/lifetime";
 import { notify } from "../../../ui/notify";
 import { Race } from "../../../ui/race";
@@ -152,7 +152,9 @@ export function mountHeadingThread(lifetime: Lifetime): void {
     const doc = thread.doc;
     if (doc === null || lifetime.closed || thread.own.closed) return;
     await thread.race.last(async (expected) => {
-      const answer = await expected(api.queryIndex({ kind: "outline", doc }).catch(() => null));
+      const answer = await expected(
+        api.queryIndex({ kind: "outline", doc }, ...vaultArg(openVaultRoot())).catch(() => null),
+      );
       if (lifetime.closed || thread.own.closed || thread.doc !== doc) return;
       thread.headings = answer?.kind === "outline" ? answer.value : [];
       paint(thread);

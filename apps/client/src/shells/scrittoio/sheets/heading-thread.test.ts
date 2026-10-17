@@ -41,6 +41,9 @@ vi.mock("../../../state/layout", () => ({
   focusPane: (pane: string) => void world.log.push(`focus ${pane}`),
 }));
 vi.mock("../../../state/store", () => ({
+  // Le domande dei titoli nominano il vault aperto (FUB-001); qui non ce n'è uno.
+  openVaultRoot: () => undefined,
+  vaultArg: () => [],
   on: (signal: string, listener: (...args: never[]) => void) => {
     const set = world.signals.get(signal) ?? new Set();
     world.signals.set(signal, set);

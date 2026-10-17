@@ -119,7 +119,7 @@ import {
   type LayoutNode,
   type Tab,
 } from "./layout";
-import { createNote, loadCommandSpecs } from "./vault";
+import { createNote, loadCommandSpecs, openVaultRoot, vaultArg } from "./vault";
 import { confirm } from "../platform/confirm";
 import { registerShellCommand } from "../ui/commands";
 import { EXPORT_COMMAND } from "../ui/shell-ids.generated";
@@ -298,10 +298,14 @@ export function paneOf(id: string): Pane | undefined {
 
 // --- montaggio --------------------------------------------------------------
 async function createCanvasNote(text: string): Promise<string> {
+  // Creazione, lettura e scrittura sono un gesto solo: stanno tutte nel vault
+  // in cui il gesto è partito, anche se `createNote` aspetta e ne viene aperto
+  // un altro (FUB-001).
+  const vault = openVaultRoot();
   const doc = await createNote();
   if (!doc) throw new Error("note.create did not return a created document");
-  const source = await api.readDocument(doc);
-  await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision });
+  const source = await api.readDocument(doc, vault);
+  await api.writeDocument(doc, text, { kind: "descends_from", value: source.revision }, vault);
   return doc;
 }
 
@@ -394,12 +398,14 @@ async function drawingImageId(path: string, from: string): Promise<string | null
 }
 
 async function attachmentDeposit(doc: string): Promise<AttachmentDeposit> {
+  // Il vault del documento che riceve gli allegati, preso prima di aspettare.
+  const vault = openVaultRoot();
   const configured = (await settings()).find((entry) => entry.spec.key === "files.attachment-folder")?.value;
   const folder = typeof configured === "string" ? configured : DEFAULT_ATTACHMENT_FOLDER;
   return {
     folder,
     fromDocument: doc,
-    write: (id, bytes) => api.resourceWrite(id, bytes, null),
+    write: (id, bytes) => api.resourceWrite(id, bytes, null, vault),
   };
 }
 
@@ -515,7 +521,7 @@ function refreshNoteClasses(r: Pane, doc: string): void {
     kind: "documents", matching: theseDocuments([doc]), sort: null,
     select: { kind: "keys", keys: ["cssclasses", "cssclass"] },
     page: { offset: 0, limit: 1 }, excerpts: "omit",
-  }).then((result) => {
+  }, ...vaultArg(openVaultRoot())).then((result) => {
     if (r.noteClassGeneration !== generation || r.shown?.k !== "doc" || r.shown.doc !== doc) return;
     if (result.kind !== "documents") throw new Error(`expected document properties, got ${result.kind}`);
     const properties = result.value.items[0]?.properties;
@@ -695,7 +701,11 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       void applyExternalChange(id, outcome);
     });
   };
-  const removed = (id: string, recreate: (text: string) => Promise<unknown>): void => {
+  // `recreate` riceve il vault **in cui la rimozione è stata vista**: l'utente
+  // può cliccare «ricrea» dopo aver aperto un altro vault, e la nota deve
+  // tornare dove è sparita, non in un omonimo del vault nuovo (FUB-001).
+  const removed = (id: string, recreate: (text: string, vault: string | undefined) => Promise<unknown>): void => {
+    const vault = openVaultRoot();
     const shownIn = panesWithDoc(id);
     const outcome = documentSessions.handleExternalRemoval(id);
     clearSheetNotices(id);
@@ -706,8 +716,10 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
       notify(t("document.deleted_dirty", { doc: id }), "guasto", {
         label: t("document.recreate"),
         run: async () => {
-          await recreate(text);
-          await openDocument(id);
+          await recreate(text, vault);
+          // Se nel frattempo si è aperto un altro vault, la nota è tornata nel
+          // suo: aprire `id` qui aprirebbe un documento omonimo.
+          if (openVaultRoot() === vault) await openDocument(id);
         },
       });
     }
@@ -715,7 +727,7 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     // La linguetta se n'è andata: l'avviso resta sul riquadro che la mostrava.
     const text = outcome.dirty ? outcome.text : undefined;
     for (const paneId of shownIn) {
-      setRemovedNotice(paneId, text === undefined ? { doc: id } : { doc: id, recreate: async () => void (await recreate(text)) });
+      setRemovedNotice(paneId, text === undefined ? { doc: id } : { doc: id, recreate: async () => void (await recreate(text, vault)) });
       const r = panes.get(paneId);
       if (r) view.drawConflict(r, activeDoc(paneId));
     }
@@ -736,13 +748,13 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   lifetime.add(onEvent("entry_changed", (e, origin) => changed(e.id, origin)));
   lifetime.add(
     onEvent("document_removed", (e) =>
-      removed(e.id, (text) => api.writeDocument(e.id, text, { kind: "dictated" }))),
+      removed(e.id, (text, vault) => api.writeDocument(e.id, text, { kind: "dictated" }, vault))),
   );
   // Ricreare un file senza formato è una creazione esclusiva a byte: se nel
   // frattempo qualcuno l'ha rifatto, la scrittura lo dice invece di coprirlo.
   lifetime.add(
     onEvent("entry_removed", (e) =>
-      removed(e.id, (text) => api.resourceWrite(e.id, new TextEncoder().encode(text), null))),
+      removed(e.id, (text, vault) => api.resourceWrite(e.id, new TextEncoder().encode(text), null, vault))),
   );
   lifetime.add(onEvent("document_renamed", (e) => renamed(e.from, e.to)));
   lifetime.add(onEvent("entry_renamed", (e) => renamed(e.from, e.to)));

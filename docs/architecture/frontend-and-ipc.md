@@ -143,6 +143,28 @@ La `DocumentSession` è l'autorità della shell per il testo in memoria e per la
 scrittura del documento aperto; il core resta l'autorità del file persistente e
 della revisione verificata dalla scrittura.
 
+Ogni sessione fissa alla nascita il vault in cui il documento è stato letto e lo
+nomina (`vault`) in ogni lettura, scrittura, bozza e scarto di bozza: il vault
+corrente dell'host cambia quando se ne apre un altro, e non decide dove scrive
+una sessione già nata. Aprire un vault non chiude il precedente nell'host, quindi
+la sequenza di apertura salva ciò che è stato battuto nel frattempo nel vault che
+lascia, dopo la risposta dell'host e prima di chiudere le sessioni. Una lettura
+che finisce dopo il cambio non crea una sessione. I gesti che passano dal
+registro dei comandi (crea, rinomina, cestina, annulla, palette, comandi slash)
+nominano il vault aperto quando partono: senza `vault` l'host risponde con il
+corrente.
+
+Le porte di lettura lo nominano come le altre. L'elenco delle view, l'elenco dei
+comandi e il canale dati (`host/query.ts`) dicono il vault aperto al momento
+della domanda; una view montata (`ui/views.ts`) fissa alla nascita il vault in
+cui è stata montata e lo nomina nel disegno e nelle azioni, perché un'azione può
+scrivere; le superfici Base fissano quello in cui nascono; «Ferma» di un lavoro
+nomina il vault aperto. `openVaultRoot()` e `vaultArg()` vivono in
+`state/store.ts` (e `state/vault.ts` le ripresenta) perché le letture di
+`host/query.ts` le usano e `state/vault.ts` importa quel modulo. Le chiamate
+fatte prima che un vault sia aperto — le impostazioni di macchina all'avvio —
+non ne hanno uno da nominare e restano com'erano.
+
 Per i temi, la selezione autorevole passa dalla porta settings; la cache browser
 è soltanto bootstrap del primo fotogramma. `previewTheme` monta invece una
 selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura

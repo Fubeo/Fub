@@ -122,6 +122,17 @@ export type SaveArtifactOutcome = { status: "saved"; path: string } | { status: 
 /** How «Print…» went: opened in the system PDF program, no such program, or not written. */
 export type PrintArtifactOutcome = { status: "opened" } | { status: "no_viewer" } | { status: "unwritable"; reason: string };
 
+/// Il vault a cui una chiamata si rivolge, quando chi chiama lo sa (FUB-001).
+///
+/// Senza `vault` l'host risponde con il vault **corrente**, e «corrente» cambia
+/// sotto i piedi di chi ha una chiamata in volo o un timer armato: il testo di
+/// un vault finisce nell'altro. Con `vault` la chiamata nomina la radice che
+/// ha aperto il suo documento o il suo gesto, e l'host la raggiunge anche se
+/// nel frattempo ne è stato aperto un altro. Assente, `null` o vuoto: il
+/// comportamento di sempre.
+function toVault<T extends object>(payload: T, vault?: string | null): T & { vault?: string } {
+  return vault ? { ...payload, vault } : payload;
+}
 
 export const api = {
   initialVault: () => invoke<string | null>("initial_vault"),
@@ -157,7 +168,8 @@ export const api = {
   // revisione arrivi da qui invece di essere ricalcolata di qua è la stessa
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
-  readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
+  readDocument: (id: string, vault?: string | null) =>
+    invoke<DocumentSource>("read_document", toVault({ id }, vault)),
   resourceOpen: (id: string, vault: string | null = null) =>
     invoke<ResourceDescriptor>("resource_open", { id, vault }),
   resourceReadChunk: (handle: string, offset: number, len: number) =>
@@ -169,8 +181,8 @@ export const api = {
   /// e la sa soltanto Tauri: costruirla a mano rompeva le immagini delle note
   /// su Windows. L'handle è un numero: niente percorso, niente query.
   assetUrl: (handle: string) => convertFileSrc(handle, "fub-asset"),
-  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string) =>
-    writeResource(mediaInvoke, id, bytes, expected, vault),
+  resourceWrite: (id: string, bytes: Uint8Array, expected: string | null, vault?: string | null) =>
+    writeResource(mediaInvoke, id, bytes, expected, vault ?? undefined),
   viewerOpen: (url: string, title: string, policy: { allowRemote: boolean; allowlist: readonly string[] }) =>
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
@@ -199,8 +211,8 @@ export const api = {
   // `base: string | null = null`, cioè la guardia si perdeva non passandola —
   // e chi la perdeva non lo scriveva da nessuna parte. Torna la revisione
   // prodotta, cioè la base della scrittura dopo.
-  writeDocument: (id: string, source: string, base: WriteBase) =>
-    invoke<string>("write_document", { id, source, base }),
+  writeDocument: (id: string, source: string, base: WriteBase, vault?: string | null) =>
+    invoke<string>("write_document", toVault({ id, source, base }, vault)),
   // Il **buffer di crash** (§15.2): ciò che è nell'editor e non è ancora sul
   // disco. Due porte e non due comandi del registro, ed è l'unica coppia di
   // questo file la cui capacità mancante è voluta per sempre: il testo non
@@ -209,9 +221,10 @@ export const api = {
   //
   // `base` è la revisione da cui il buffer si è discostato, quando chi lo tiene
   // la sa; `null` è «non lo so», e chi legge lo tratta come tale.
-  saveDraft: (id: string, text: string, base: string | null = null) =>
-    invoke<void>("save_draft", { id, text, base }),
-  discardDraft: (id: string) => invoke<void>("discard_draft", { id }),
+  saveDraft: (id: string, text: string, base: string | null = null, vault?: string | null) =>
+    invoke<void>("save_draft", toVault({ id, text, base }, vault)),
+  discardDraft: (id: string, vault?: string | null) =>
+    invoke<void>("discard_draft", toVault({ id }, vault)),
   // Crea, rinomina, cestina, ripristina e svuota NON hanno più un comando
   // Tauri: sono comandi del registro, e la shell li chiede con `invokeCommand`
   // (vedi `COMANDI` in `contract.ts`). Quelle due che restano restano perché
@@ -240,11 +253,17 @@ export const api = {
     invoke<boolean>("set_system_locale", { locale }),
   // Le view offerte dai provider registrati: la shell le monta per
   // `placement`, senza cablare gli id — una view di plugin compare da sola.
-  listViews: () => invoke<ViewSpec[]>("list_views"),
+  //
+  // `vault` nomina il vault da cui si legge (vedi `toVault`): la shell lo sa
+  // quando monta, e l'host risponde col corrente soltanto se non lo dice.
+  listViews: (vault?: string | null) => invoke<ViewSpec[]>("list_views", toVault({}, vault)),
   // L'istanza e i suoi parametri viaggiano accanto all'id della view (§2.3):
   // assenti = l'esemplare unico, quello che la shell monta da sé.
-  renderView: (view: string, instance?: string, params?: unknown) =>
-    invoke<UiNode>("render_view", { view, instance: instance ?? null, params: params ?? null }),
+  renderView: (view: string, instance?: string, params?: unknown, vault?: string | null) =>
+    invoke<UiNode>(
+      "render_view",
+      toVault({ view, instance: instance ?? null, params: params ?? null }, vault),
+    ),
   // Le due metà di un'azione arrivano come due argomenti distinti, ed è ciò che
   // impedisce alla shell di riscrivere quella del provider (§2.7): `payload` è
   // suo, `fields` è ciò che l'utente ha compilato.
@@ -255,40 +274,54 @@ export const api = {
     action: string,
     payload?: unknown,
     fields?: FieldValue[],
+    // Il vault della view montata: un'azione può scrivere, e finirebbe nel
+    // corrente dell'host invece che in quello che la view mostra.
+    vault?: string | null,
   ) =>
-    invoke<ViewUpdate>("view_action", {
-      view,
-      instance,
-      params: params ?? null,
-      action,
-      payload: payload ?? null,
-      fields: fields ?? null,
-    }),
+    invoke<ViewUpdate>(
+      "view_action",
+      toVault(
+        {
+          view,
+          instance,
+          params: params ?? null,
+          action,
+          payload: payload ?? null,
+          fields: fields ?? null,
+        },
+        vault,
+      ),
+    ),
   // Comandi (protocollo generico, gemello di listViews/viewAction). La palette
   // legge questo elenco e non cabla nessun id: un comando di plugin comparirà
   // da solo, coi suoi parametri e il suo raggio.
-  listCommands: () => invoke<CommandSpec[]>("list_commands"),
+  listCommands: (vault?: string | null) =>
+    invoke<CommandSpec[]>("list_commands", toVault({}, vault)),
   // `mode` assente = `apply`: è la scelta di questo confine, non del contratto
   // (dove un default non esiste apposta).
-  invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode) =>
-    invoke<CommandOutcome>("invoke_command", {
-      command,
-      args: args ?? null,
-      mode: mode ?? null,
-    }),
+  //
+  // `vault` nomina il vault del gesto (vedi `toVault`): il comando lo raggiunge
+  // anche se, fra il gesto e la chiamata, ne è stato aperto un altro.
+  invokeCommand: (command: string, args?: Record<string, unknown>, mode?: InvokeMode, vault?: string | null) =>
+    invoke<CommandOutcome>(
+      "invoke_command",
+      toVault({ command, args: args ?? null, mode: mode ?? null }, vault),
+    ),
   // Il canale dati, **generico**: il gemello di renderView/viewAction. Erano
   // quattro comandi (`search`, `list_tags`, `graph_data`, `backlinks`), e il
   // quarto scavalcava perfino il canale chiamando il grafo del kernel diretto.
   // Adesso la shell ha le stesse capacità di un plugin, e una variante nuova
   // del contratto non chiede un comando in più.
-  queryIndex: (query: IndexQuery) => invoke<IndexResult>("query_index", { query }),
+  queryIndex: (query: IndexQuery, vault?: string | null) =>
+    invoke<IndexResult>("query_index", toVault({ query }, vault)),
   // Ferma un lavoro lungo (§10.3). L'id viaggia come **stringa**: è un u64
   // pieno, e `JSON.parse` perde i bit oltre 2⁵³ in silenzio — un job che ogni
   // tanto non si annulla somiglierebbe a un job lento.
   //
   // Non c'è un «job sconosciuto» da gestire: annullare un job appena finito è la
   // cosa più normale che l'utente faccia, e il backend risponde di sì.
-  cancelJob: (id: string) => invoke<void>("cancel_job", { id }),
+  cancelJob: (id: string, vault?: string | null) =>
+    invoke<void>("cancel_job", toVault({ id }, vault)),
   // L'organizzazione del vault (§11.3): icone, appuntate, ordinamenti, spazi.
   //
   // **Leggerla non è qui**: passa da `queryIndex` (`organization`), come le

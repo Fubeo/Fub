@@ -33,7 +33,7 @@ import { type Key, t } from "../i18n/strings";
 import { allCommands, displayBinding, hasCommandForm, loadKeyOverrides, openCommandForm, type CommandEntry } from "./commands";
 import { enterSurface, exitSurface } from "./motion";
 import { readState, setCommandSpecs, writeState } from "../state/store";
-import { undoLastOperation } from "../state/vault";
+import { openVaultRoot, undoLastOperation, vaultArg } from "../state/vault";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { opensWithoutParams, primaryViews } from "./primary-views";
@@ -450,7 +450,7 @@ export async function openCommandPalette(host: PaletteHost) {
   // `null` se l'elenco è arrivato, l'errore altrimenti: un valore, così
   // l'attesa sotto non ha un rifiuto da perdere.
   const loaded: Promise<unknown> = Promise.resolve()
-    .then(() => api.listCommands())
+    .then(() => api.listCommands(...vaultArg(openVaultRoot())))
     .then(async (specs) => {
       setCommandSpecs(specs);
       await loadKeyOverrides();
@@ -511,7 +511,7 @@ export async function openSlashPalette(
   });
   let specs: CommandSpec[];
   try {
-    specs = await api.listCommands();
+    specs = await api.listCommands(...vaultArg(openVaultRoot()));
     await loadKeyOverrides();
   } catch (error) {
     if (generation === paletteGeneration) {
@@ -1161,6 +1161,9 @@ async function execute(
   box: HTMLElement,
   host: PaletteHost,
 ) {
+  // Il vault del gesto (FUB-001): il piano si calcola e si applica nello stesso
+  // vault, anche se fra la simulazione e il «Applica» ne viene aperto un altro.
+  const vault = openVaultRoot();
   // **Flush-before-patch** (M3): un comando che scrive documenti riscrive
   // file — il kernel muove i wikilink entranti, la rinomina sposta la nota — e
   // un buffer rimasto sporco li ricoprirebbe col testo di prima al salvataggio
@@ -1177,9 +1180,9 @@ async function execute(
   }
   if (needsPlan(spec)) {
     try {
-      const outcome = await api.invokeCommand(spec.id, args, "dry_run");
+      const outcome = await api.invokeCommand(spec.id, args, "dry_run", ...vaultArg(vault));
       if (outcome.effect.kind === "plan") {
-        showLayer(spec, args, outcome.effect, box, host);
+        showLayer(spec, args, outcome.effect, box, host, vault);
         return;
       }
       // Un comando che avrebbe dovuto dire cosa farebbe e ha fatto altro: si
@@ -1193,7 +1196,7 @@ async function execute(
     }
   }
   try {
-    const outcome = await api.invokeCommand(spec.id, args, "apply");
+    const outcome = await api.invokeCommand(spec.id, args, "apply", ...vaultArg(vault));
     closeCommandPalette();
     await deliverOutcome(outcome, host, spec.id);
   } catch (e) {
@@ -1207,6 +1210,7 @@ function showLayer(
   plan: CommandPlan,
   box: HTMLElement,
   host: PaletteHost,
+  vault: string | undefined,
 ) {
   box.innerHTML = "";
   const title = document.createElement("div");
@@ -1235,7 +1239,7 @@ function showLayer(
   apply.addEventListener("click", async () => {
     apply.disabled = true;
     try {
-      const outcome = await api.invokeCommand(spec.id, args, "apply");
+      const outcome = await api.invokeCommand(spec.id, args, "apply", ...vaultArg(vault));
       closeCommandPalette();
       await deliverOutcome(outcome, host, spec.id);
     } catch (e) {

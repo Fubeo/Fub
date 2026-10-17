@@ -465,10 +465,13 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     await pending.abandon();
   });
 
-  /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host:
-  /// ciò che viene battuto lì dentro non ha più un salvataggio davanti. Lo
-  /// smontaggio lo restituisce e la sequenza lo dice, senza fermarsi.
-  it("una battuta arrivata mentre l'host apre il vault nuovo viene detta", async () => {
+  /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host, e
+  /// l'utente può continuare a battere nel documento che sta lasciando. Il vault
+  /// di prima resta aperto nell'host, e la sessione scrive in quello in cui è
+  /// nata: la battuta arriva al disco **di quel vault** (FUB-001), non si perde
+  /// con la chiusura delle sessioni e non finisce in quello nuovo, che intanto
+  /// è il corrente dell'host.
+  it("una battuta arrivata mentre l'host apre il vault nuovo si salva nel vault che si lascia", async () => {
     const shell = await start(VAULT);
     const unlock = shell.host.throttle("openVault");
     const { openVault } = await import("../desktop-shell");
@@ -479,9 +482,89 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     unlock();
     await opening;
 
-    expect(shell.notices()).toContain(shell.t("demo.unsaved", { files: "Benvenuto.md" }));
+    const writes = shell.host.atGate("writeDocument");
+    const saved = writes[writes.length - 1]?.args;
+    expect(saved?.[0]).toBe("Benvenuto.md");
+    expect(saved?.[1]).toEqual(expect.stringContaining("battuta fuori tempo"));
+    // Il quarto argomento è il vault: quello che si lascia, mai il nuovo.
+    expect(saved?.[3]).toBe("/vault");
+    expect(writes.map((c) => c.args[3])).not.toContain("/altro");
+    expect(shell.notices()).not.toContain(shell.t("demo.unsaved", { files: "Benvenuto.md" }));
     expect(shell.store.state.vaultRoot).toBe("/altro");
     expect(box.trace).toContain("signal:vault:/altro");
+  });
+
+  /// Se nemmeno il flush dopo l'apertura riesce a salvare, la battuta non si
+  /// perde in silenzio: la sequenza lo dice e va avanti, com'è sempre stato.
+  it("una battuta che il vecchio vault rifiuta dopo l'apertura viene detta", async () => {
+    const shell = await start(VAULT);
+    const unlock = shell.host.throttle("openVault");
+    const { openVault } = await import("../desktop-shell");
+
+    const opening = openVault("/altro");
+    await waitFor("la richiesta arriva all'host", () => shell.host.atGate("openVault").length === 2);
+    const repair = shell.host.fault("writeDocument", "disco pieno");
+    typeInEditor("battuta che il disco rifiuta");
+    unlock();
+    await opening;
+    repair();
+
+    expect(shell.notices()).toContain(shell.t("demo.unsaved", { files: "Benvenuto.md" }));
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+  });
+});
+
+describe("i gesti nominano il vault in cui nascono (FUB-001)", () => {
+  /// Crea e rinomina passano dal registro dei comandi, e senza `vault` l'host
+  /// risponde con il corrente: un gesto che aspetta mentre se ne apre un altro
+  /// finirebbe lì. Nominandolo, il comando raggiunge quello da cui è partito.
+  it("crea e rinomina raggiungono il vault aperto per nome", async () => {
+    const shell = await start(VAULT);
+    const { createNote, renameNote } = await import("./vault");
+
+    await createNote("Nuova");
+    await renameNote("Benvenuto.md", "Altro.md");
+
+    const named = shell.host
+      .atGate("invokeCommand")
+      .filter((call) => call.args[0] === "note.create" || call.args[0] === "note.rename")
+      .map((call) => [call.args[0], call.args[3]]);
+    expect(named).toEqual([
+      ["note.create", "/vault"],
+      ["note.rename", "/vault"],
+    ]);
+  });
+
+  /// Le letture dei documenti nominano il vault della sessione fin dalla prima.
+  it("la lettura di un documento aperto nomina il vault aperto", async () => {
+    const shell = await start(VAULT);
+
+    const reads = shell.host.atGate("readDocument").map((call) => call.args);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const args of reads) expect(args[1]).toBe("/vault");
+  });
+
+  /// Le letture che compongono la shell — l'elenco delle view, il disegno delle
+  /// view montate, l'elenco dei comandi e il canale dati — nominano il vault
+  /// aperto, come le scritture: l'host risponde con il corrente soltanto se non
+  /// gli si dice quale.
+  it("l'elenco delle view e dei comandi, il disegno e il canale dati nominano il vault aperto", async () => {
+    const shell = await start(VAULT);
+
+    // Prima dell'apertura non c'è un vault da nominare (le impostazioni di
+    // macchina si leggono all'avvio): contano le chiamate da quando il vault è
+    // aperto.
+    const calls = shell.host.calls;
+    const opened = calls.findIndex((call) => call.gate === "openVault");
+    expect(opened, "il vault non è stato aperto").toBeGreaterThan(-1);
+    const after = calls.slice(opened + 1);
+    for (const gate of ["listViews", "renderView", "listCommands", "queryIndex"] as const) {
+      const named = after.filter((call) => call.gate === gate);
+      expect(named.length, `${gate}: nessuna chiamata`).toBeGreaterThan(0);
+      for (const call of named) {
+        expect(call.args[call.args.length - 1], `${gate} non nomina il vault`).toBe("/vault");
+      }
+    }
   });
 });
 
