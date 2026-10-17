@@ -906,7 +906,7 @@ const APP_OPTIONAL_KEYS = {
   },
 };
 
-// --- la sessione live (ADR 0204) ---------------------------------------------
+// --- la sessione live (ADR 0205) ---------------------------------------------
 //
 // Gli eventi e i messaggi sono unioni con il tag `t`, e i motivi stringhe; ogni
 // variante ha esattamente le chiavi del suo ramo TS, e ogni contatore `u64` è

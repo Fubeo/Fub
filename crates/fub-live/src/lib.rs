@@ -10,7 +10,7 @@
 //! la prova `dependency_invariant` di `fub-abi` lo controlla. Non tocca il
 //! documento: i commit arrivano alla shell come testo controllato solo nella
 //! forma, e la shell li valida come le operazioni locali. Nel disegno
-//! dell'ADR 0204 lo compone `fub-app`, sul runtime di Tauri, che è lo stesso
+//! dell'ADR 0205 lo compone `fub-app`, sul runtime di Tauri, che è lo stesso
 //! `tokio`.
 //!
 //! # Moduli

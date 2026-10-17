@@ -484,7 +484,7 @@ export const api = {
   onDocumentWindowClosed: (handler: (event: DocumentWindowEvent) => void): Promise<() => void> =>
     listen<DocumentWindowEvent>("fub://document-window-closed", ({ payload }) => handler(payload)),
 
-  // --- la sessione live (ADR 0204) ------------------------------------------
+  // --- la sessione live (ADR 0205) ------------------------------------------
   //
   // Un tablet scrive sul disegno di questa finestra. Gli eventi arrivano a
   // gruppi da un canale che nasce con `liveStart` e si chiude dopo `ended`:

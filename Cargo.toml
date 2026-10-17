@@ -22,7 +22,7 @@ members = [
     "crates/fub-host",
     "crates/fub-cli",
     "crates/fub-services",
-    # La sessione live (ADR 0204): protocollo, abbinamento, TLS, server e
+    # La sessione live (ADR 0205): protocollo, abbinamento, TLS, server e
     # client. Non dipende da nessun altro membro; lo compone `fub-app`.
     "crates/fub-live",
     "crates/fub-app",
@@ -164,7 +164,7 @@ parking_lot = "0.12.5"
 # `fub-services`; con `fub-live` i crate che la usano sono due, e la versione
 # torna in un posto solo.
 subtle = "2.6.1"
-# La sessione live (ADR 0204). Queste righe le nomina `fub-live`, e `tokio` anche
+# La sessione live (ADR 0205). Queste righe le nomina `fub-live`, e `tokio` anche
 # `fub-app`, che compone il servizio sul runtime di Tauri: è questo stesso
 # `tokio`, già nell'albero. `fub-host` resta senza runtime asincrono.
 #

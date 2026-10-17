@@ -1984,7 +1984,7 @@ fn mobile_shared_mount_mode(
     mobile::mobile_shared_mount_mode(grant, backend_cas, copy_accepted)
 }
 
-// --- La sessione live (ADR 0204) ---
+// --- La sessione live (ADR 0205) ---
 //
 // Il registro delle sessioni, la pompa degli eventi e le chiusure stanno in
 // `live.rs`. La sessione appartiene alla finestra che l'ha aperta, presa dal

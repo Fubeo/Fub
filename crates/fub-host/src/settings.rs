@@ -251,7 +251,7 @@ pub const SYNC_PAUSED: &str = "sync.paused";
 pub const SYNC_EXCLUDE: &str = "sync.exclude";
 /// Endpoint locale di pubblicazione; credenziali e segreti restano fuori dai settings.
 pub const PUBLISH_SERVER_URL: &str = "publish.server_url";
-/// La porta della sessione live (ADR 0204): 0 sceglie una porta libera a ogni
+/// La porta della sessione live (ADR 0205): 0 sceglie una porta libera a ogni
 /// sessione, un altro numero la fissa per le reti con regole del firewall.
 pub const LIVE_PORT: &str = "live.port";
 

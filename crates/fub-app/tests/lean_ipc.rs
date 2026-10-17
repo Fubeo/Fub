@@ -403,7 +403,7 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("apply_grid", Why::Grid),
     ("reload_grid", Why::Grid),
     ("close_grid", Why::Grid),
-    // --- la sessione live (0204): un servizio dell'app, con il suo canale ---
+    // --- la sessione live (0205): un servizio dell'app, con il suo canale ---
     //
     // Listener, TLS e scrittore vivono nel processo dell'app, sul runtime di
     // Tauri, e la sessione appartiene alla finestra che l'ha aperta: nessun

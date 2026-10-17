@@ -50,7 +50,7 @@ fub-kernel = { workspace = true }
 # `features = [...]` above does now.
 fub-host = { workspace = true, features = ["official-features"] }
 fub-wasm-host = { workspace = true }
-# La sessione live (ADR 0204): l'app la compone sul runtime di Tauri, che è lo
+# La sessione live (ADR 0205): l'app la compone sul runtime di Tauri, che è lo
 # stesso `tokio`, e la affaccia alla shell con i comandi `live_*`. `rt` serve a
 # chiudere le sessioni tutte insieme, `sync` a contare le chiusure in corso e
 # `time` a dare loro una scadenza quando l'app esce.

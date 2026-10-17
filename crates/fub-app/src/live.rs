@@ -1,4 +1,4 @@
-//! La sessione live (ADR 0204) affacciata alla shell.
+//! La sessione live (ADR 0205) affacciata alla shell.
 //!
 //! `fub-live` apre il listener, parla con lo scrittore e tiene i commit finché
 //! la shell non risponde; non sa niente di finestre né di Tauri. Qui c'è ciò

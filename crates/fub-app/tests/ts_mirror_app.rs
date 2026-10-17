@@ -333,7 +333,7 @@ fn expected() -> Value {
     })
 }
 
-/// La sessione live (ADR 0204): ciò che `live_*` restituisce e ciò che il
+/// La sessione live (ADR 0205): ciò che `live_*` restituisce e ciò che il
 /// canale porta. `u64` come stringhe decimali, come nel protocollo.
 fn live_samples() -> serde_json::Map<String, Value> {
     let ops = || Ops::from_values(&[json!({ "op": "add", "parent": "l1a2b3c4d" })], 16).unwrap();

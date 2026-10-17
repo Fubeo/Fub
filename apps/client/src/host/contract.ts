@@ -945,7 +945,7 @@ export interface DocumentWindowEvent {
   surface: "document";
 }
 
-// --- la sessione live (ADR 0204, rispecchia fub_live::host) -----------------
+// --- la sessione live (ADR 0205, rispecchia fub_live::host) -----------------
 //
 // Un tablet scrive sul disegno aperto in questa finestra. L'host tiene la rete
 // e controlla solo forma, misura e ritmo dei messaggi; le operazioni le valida
