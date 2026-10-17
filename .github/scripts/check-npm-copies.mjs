@@ -13,7 +13,7 @@ const ALLOWED_DUPLICATES = new Map([
     reason: "dipendenza opzionale esclusiva di macOS; le copie non condividono identità applicativa",
   }],
   ["commander", {
-    versions: ["7.2.0", "8.3.0"],
+    versions: ["15.0.0", "7.2.0"],
     reason: "CLI Node distinte di d3-dsv e KaTeX; nessuna copia entra nella shell",
   }],
   ["cose-base", {
