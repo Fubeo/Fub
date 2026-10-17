@@ -1,9 +1,13 @@
 # WordCraft vendorizzato
 
 Questa cartella contiene codice e dati di
-[WordCraft](https://github.com/storytold/wordcraft), copiati con due modifiche
-al sorgente, elencate qui sotto. Fub non dipende da WordCraft via Git: `deny.toml` ammette soltanto
-crates.io, e il crate non è pubblicato là.
+[WordCraft](https://github.com/storytold/wordcraft), copiati con le poche
+modifiche al sorgente elencate qui sotto. Fub non dipende da WordCraft via Git:
+`deny.toml` ammette soltanto crates.io, e i crate non sono pubblicati là.
+
+Quattro crate: il correttore (`proof`) e, per i documenti di Word, il modello
+del documento (`doc`), le sue unità di misura (`geom`) e il codec DOCX
+(`docx`).
 
 ## Riferimento
 
@@ -16,21 +20,53 @@ crates.io, e il crate non è pubblicato là.
 | Percorso qui | Percorso upstream | Modifiche |
 |---|---|---|
 | `crates/proof/src/` | `crates/proof/src/` | due, sotto |
-| `crates/proof/Cargo.toml` | `crates/proof/Cargo.toml` | campi del workspace scritti per esteso, lint dell'upstream, `rust-version = "1.89"`, `log` e `proptest` senza `workspace = true` |
+| `crates/proof/Cargo.toml` | `crates/proof/Cargo.toml` | manifest, sotto |
+| `crates/geom/` | `crates/geom/` | `src/lib.rs` (la condizione sui test), manifest |
+| `crates/doc/` | `crates/doc/` | `src/lib.rs` (la condizione sui test), manifest |
+| `crates/docx/` | `crates/docx/` | `src/lib.rs` (la condizione sui test), `src/package.rs` e sei file di `tests/` per `zip` 9, manifest |
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
 | `assets/spelling/` | `assets/spelling/` | nessuna |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 
 Le modifiche al sorgente servono soltanto a passare
 `cargo clippy --workspace --all-targets -- -D warnings` della CI di Fub, dove
-`-D warnings` sulla riga di comando vince sui `[lints]` del manifest:
+`-D warnings` sulla riga di comando vince sui `[lints]` del manifest, e
+`cargo deny check`:
 
-- `src/lib.rs`: il `#![deny(clippy::unwrap_used, …)]` dell'upstream diventa
+- `src/lib.rs` di ogni crate: il `#![deny(clippy::unwrap_used, …)]` dell'upstream diventa
   `#![cfg_attr(not(test), deny(…))]`. Il codice di libreria resta vietato come
   nell'upstream; i test dell'upstream usano `unwrap()` e senza la condizione non
   compilano sotto `--all-targets`;
 - `src/ru/mod.rs`: nel ramo `[prefix, rest]` di una parola col trattino, la
-  variabile mai letta `rest` diventa `_`. Il comportamento non cambia.
+  variabile mai letta `rest` diventa `_`. Il comportamento non cambia;
+- `docx/src/package.rs`: l'upstream usa `zip` 3, che ha tre avvisi di sicurezza
+  (RUSTSEC-2026-0367, -0368, -0369) corretti in `zip` 9. In `zip` 9 il nome di
+  una voce dell'archivio è un `Result`: una voce dal nome illeggibile si salta
+  con un avviso nel log, come l'upstream fa già con una voce illeggibile;
+- `docx/tests/*.rs`: per la stessa ragione `f.name()` diventa
+  `f.name().unwrap()` nei sei file di test che leggono l'archivio.
+
+I manifest scrivono per esteso i campi che l'upstream eredita dal suo
+workspace, tengono i lint dell'upstream e dichiarano `rust-version = "1.89"`,
+quella di Fub: i crate compilano e passano i test con la 1.89. Le dipendenze
+che Fub ha già, o che più crate copiati condividono, prendono la versione dal
+`[workspace.dependencies]` di Fub, come chiede `check-cargo-versions.mjs`.
+Rispetto all'upstream:
+
+- `zip` passa da 3 a 9.0.5, per gli avvisi qui sopra;
+- `serde_json` non accende `float_roundtrip`: le feature si unificano in tutto
+  il workspace, e la libreria lo usa solo per leggere un colore, senza numeri
+  in virgola mobile;
+- `image`, che serve solo ai test, accende soltanto `png`, l'unico formato che
+  i test scrivono;
+- manca la dipendenza di `getrandom` per `wasm32`: Fub compila questi crate
+  soltanto per il desktop.
+
+Le dipendenze crittografiche del codec (`aes`, `sha1`, `sha2`, `hmac`, `cfb`)
+servono ad aprire e scrivere documenti protetti da password e restano alle
+versioni dell'upstream. `tauri-codegen` e `infer` ne tirano versioni più vecchie
+solo in fase di compilazione di `fub-app`: `cargo deny` le segnala come doppie,
+con la politica `warn` di Fub.
 
 Un aggiornamento che porta avvisi nuovi fa fallire clippy nella CI: è il punto
 in cui leggerli, non un controllo da spegnere.
@@ -66,14 +102,15 @@ segni d'ortografia ma conserva le regole grammaticali.
 
 ## Aggiornare
 
-1. scegli un commit dell'upstream e confronta `crates/proof` e `assets/` con
+1. scegli un commit dell'upstream e confronta `crates/` e `assets/` con
    questa copia;
 2. copia i file cambiati e riapplica le modifiche elencate qui sopra, se
    l'upstream non le contiene già;
 3. riporta nel `Cargo.toml` qui le dipendenze nuove dell'upstream;
 4. aggiorna commit e impronte in questa pagina;
-5. esegui `cargo test -p wordcraft-proof` e i test di `fub-features` con la
-   feature `proof`.
+5. esegui `cargo test -p wordcraft-proof -p wordcraft-geom -p wordcraft-doc
+   -p wordcraft-docx`, i test di `fub-features` con la feature `proof` e
+   `cargo deny check`.
 
 Una correzione che serve a Fub va proposta all'upstream; finché non entra, va
 elencata nella tabella delle modifiche qui sopra.

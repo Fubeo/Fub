@@ -25,9 +25,12 @@ members = [
     # passo — «una cartella in `crates/` che nessun membro dichiara»: adesso la
     # cartella c'è, e la riga con lei.
     "crates/fub-wasm-host",
-    # Codice di WordCraft copiato senza modifiche al sorgente (vedi
-    # vendor/wordcraft/UPSTREAM.md): sta fuori da `crates/` perché non è
+    # Codice di WordCraft copiato, con le poche modifiche al sorgente elencate
+    # in vendor/wordcraft/UPSTREAM.md: sta fuori da `crates/` perché non è
     # codice di Fub, e i guard sui commenti e sugli errori non lo leggono.
+    "vendor/wordcraft/crates/geom",
+    "vendor/wordcraft/crates/doc",
+    "vendor/wordcraft/crates/docx",
     "vendor/wordcraft/crates/proof",
 ]
 # Il varco di `tools/varco-wasm` è fuori di proposito, non per dimenticanza: è
@@ -145,6 +148,13 @@ fub-format-base = { path = "crates/fub-format-base", version = "0.1.0" }
 fub-importers = { path = "crates/fub-importers", version = "0.1.0" }
 # Il correttore di WordCraft, vendorizzato (vendor/wordcraft/UPSTREAM.md).
 wordcraft-proof = { path = "vendor/wordcraft/crates/proof", version = "0.7.0" }
+# Il modello e il codec DOCX di WordCraft, vendorizzati con il correttore.
+wordcraft-geom = { path = "vendor/wordcraft/crates/geom", version = "0.7.0" }
+wordcraft-doc = { path = "vendor/wordcraft/crates/doc", version = "0.7.0" }
+wordcraft-docx = { path = "vendor/wordcraft/crates/docx", version = "0.7.0" }
+# Le due dipendenze di WordCraft condivise fra più crate vendorizzati.
+log = "0.4"
+proptest = "1"
 # Il YAML del frontmatter. Era scritta a mano in due crate con la stessa
 # versione, ed è la coppia che `check-cargo-versioni.mjs` esiste per
 # prendere: due `Cargo.toml` da toccare per un `cargo update` sono uno di
