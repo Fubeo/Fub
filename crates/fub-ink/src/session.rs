@@ -455,7 +455,7 @@ impl Session {
             Some(last) => event.time >= last.time,
         };
         let mut lifted = None;
-        if moved && fresh && event.x.is_finite() && event.y.is_finite() {
+        if moved && fresh && event.x.is_finite() && event.y.is_finite() && event.time.is_finite() {
             let carry = stroke.samples.last().copied();
             let sample = self.sample_of(&stroke, event, carry.as_ref());
             self.accept(&mut stroke, sample, &mut batch);
@@ -823,7 +823,9 @@ impl Session {
             if stroke.id.is_none() && stroke.kind == PointerKind::Pen && !pressing {
                 continue;
             }
-            if !event.x.is_finite() || !event.y.is_finite() {
+            // Un istante infinito farebbe scartare come vecchi tutti gli
+            // eventi dopo.
+            if !event.x.is_finite() || !event.y.is_finite() || !event.time.is_finite() {
                 continue;
             }
             if stroke.id.is_none() {
@@ -850,7 +852,9 @@ impl Session {
         }
         let samples: Vec<Sample> = predicted
             .iter()
-            .filter(|future| future.x.is_finite() && future.y.is_finite())
+            .filter(|future| {
+                future.x.is_finite() && future.y.is_finite() && future.time.is_finite()
+            })
             .map(|future| {
                 let raw = self.sample_of(stroke, future, None);
                 Sample {

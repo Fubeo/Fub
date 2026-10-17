@@ -628,6 +628,25 @@ fn i_valori_che_non_sono_numeri_non_rompono_il_tratto() {
         .all(|s| s.x.is_finite() && s.y.is_finite() && s.t.is_finite()));
 }
 
+#[test]
+fn gli_istanti_che_non_sono_numeri_non_rompono_il_tratto() {
+    let trace = run_named("times_that_are_not_numbers");
+    let done = &ends(&trace)[0].clone();
+    // Il tratto comincia dal primo evento con un istante, e gli eventi dopo
+    // quello infinito entrano.
+    assert_eq!(xs(&done.samples), [2.0, 8.0]);
+    assert_eq!(ts(&done.samples), [0.0, 8.0]);
+    let predicted: Vec<Vec<f64>> = trace
+        .all()
+        .into_iter()
+        .filter_map(|e| match e {
+            Effect::Predicted { samples, .. } => Some(ts(samples)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(predicted, [vec![16.0], vec![]]);
+}
+
 // --- Lo stabilizzatore ---------------------------------------------------------------
 
 #[test]

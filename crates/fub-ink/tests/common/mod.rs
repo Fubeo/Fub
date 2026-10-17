@@ -665,6 +665,28 @@ pub fn catalog() -> Vec<Script> {
         ],
     ));
 
+    // Un istante che non è un numero scarta l'evento come un punto: anche il
+    // primo, una predizione e l'alzata. Uno infinito non fa scartare come
+    // vecchi gli eventi dopo.
+    all.push(script(
+        "times_that_are_not_numbers",
+        vec![
+            Step::Down(pen(89, 0.0, 0.0, f64::NAN, 0.5)),
+            moved(pen(89, 2.0, 0.0, 8.0, 0.5)),
+            moved(pen(89, 4.0, 0.0, f64::NAN, 0.5)),
+            moved(pen(89, 6.0, 0.0, f64::INFINITY, 0.5)),
+            Step::Move {
+                coalesced: Vec::new(),
+                event: pen(89, 8.0, 0.0, 16.0, 0.5),
+                predicted: vec![
+                    pen(89, 10.0, 0.0, f64::NAN, 0.5),
+                    pen(89, 12.0, 0.0, 24.0, 0.5),
+                ],
+            },
+            Step::Up(pen(89, 14.0, 0.0, f64::INFINITY, 0.0)),
+        ],
+    ));
+
     // Lo stabilizzatore a corda: un tremito non muove il pennino, e il tratto
     // finisce dove è finito il puntatore.
     all.push(script_with(

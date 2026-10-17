@@ -339,7 +339,7 @@ export class Session {
     const moved = last === null || stroke.samples.length === 1 || event.x !== last.x || event.y !== last.y;
     const fresh = last === null || event.timeStamp >= last.timeStamp;
     let lifted: InkSample | null = null;
-    if (moved && fresh && Number.isFinite(event.x) && Number.isFinite(event.y)) {
+    if (moved && fresh && Number.isFinite(event.x) && Number.isFinite(event.y) && Number.isFinite(event.timeStamp)) {
       const sample = this.sampleOf(stroke, event, stroke.samples[stroke.samples.length - 1] ?? null);
       this.accept(stroke, sample, batch);
       stroke.last = event;
@@ -592,7 +592,8 @@ export class Session {
       // numero non preme.
       const pressing = event.pressure > 0;
       if (stroke.id === null && stroke.kind === "pen" && !pressing) continue;
-      if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) continue;
+      // Un istante infinito farebbe scartare come vecchi tutti gli eventi dopo.
+      if (!Number.isFinite(event.x) || !Number.isFinite(event.y) || !Number.isFinite(event.timeStamp)) continue;
       if (stroke.id === null) {
         stroke.origin = event.timeStamp;
         this.announce(stroke);
@@ -609,7 +610,7 @@ export class Session {
     if (id === null || stroke.stabilizer.active) return;
     const samples: InkSample[] = [];
     for (const future of predicted) {
-      if (!Number.isFinite(future.x) || !Number.isFinite(future.y)) continue;
+      if (!Number.isFinite(future.x) || !Number.isFinite(future.y) || !Number.isFinite(future.timeStamp)) continue;
       const raw = this.sampleOf(stroke, future, null);
       samples.push({ ...raw, t: raw.t - stroke.origin });
     }

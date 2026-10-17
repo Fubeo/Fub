@@ -88,7 +88,8 @@ pub struct PointerSample {
     pub buttons: u32,
     /// Il tasto che ha causato l'evento (`PointerEvent.button`).
     pub button: i32,
-    /// Il tempo dell'evento in millisecondi, su un orologio monotono.
+    /// Il tempo dell'evento in millisecondi, su un orologio monotono. Un
+    /// valore non finito scarta il campione.
     pub time: f64,
     pub view: View,
 }

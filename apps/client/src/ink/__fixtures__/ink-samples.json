@@ -7211,6 +7211,241 @@
       ]
     },
     {
+      "name": "times_that_are_not_numbers",
+      "config": {
+        "touch": "auto",
+        "maxSamples": 10000,
+        "curve": null,
+        "stabilizer": {
+          "amount": 0.0,
+          "pulledString": false,
+          "catchUp": true,
+          "catchUpOnEnd": true
+        }
+      },
+      "steps": [
+        {
+          "op": "down",
+          "event": {
+            "pointerId": 89,
+            "pointerType": "pen",
+            "x": 0.0,
+            "y": 0.0,
+            "timeStamp": "NaN"
+          }
+        },
+        {
+          "op": "move",
+          "coalesced": [],
+          "event": {
+            "pointerId": 89,
+            "pointerType": "pen",
+            "x": 2.0,
+            "y": 0.0,
+            "timeStamp": 8.0
+          },
+          "predicted": []
+        },
+        {
+          "op": "move",
+          "coalesced": [],
+          "event": {
+            "pointerId": 89,
+            "pointerType": "pen",
+            "x": 4.0,
+            "y": 0.0,
+            "timeStamp": "NaN"
+          },
+          "predicted": []
+        },
+        {
+          "op": "move",
+          "coalesced": [],
+          "event": {
+            "pointerId": 89,
+            "pointerType": "pen",
+            "x": 6.0,
+            "y": 0.0,
+            "timeStamp": "Infinity"
+          },
+          "predicted": []
+        },
+        {
+          "op": "move",
+          "coalesced": [],
+          "event": {
+            "pointerId": 89,
+            "pointerType": "pen",
+            "x": 8.0,
+            "y": 0.0,
+            "timeStamp": 16.0
+          },
+          "predicted": [
+            {
+              "pointerId": 89,
+              "pointerType": "pen",
+              "x": 10.0,
+              "y": 0.0,
+              "timeStamp": "NaN"
+            },
+            {
+              "pointerId": 89,
+              "pointerType": "pen",
+              "x": 12.0,
+              "y": 0.0,
+              "timeStamp": 24.0
+            }
+          ]
+        },
+        {
+          "op": "up",
+          "event": {
+            "pointerId": 89,
+            "pointerType": "pen",
+            "x": 14.0,
+            "y": 0.0,
+            "timeStamp": "Infinity",
+            "pressure": 0.0
+          }
+        }
+      ],
+      "out": [
+        {
+          "effects": [
+            {
+              "fx": "capture",
+              "pointer": 89
+            }
+          ],
+          "roles": {
+            "89": "ink"
+          },
+          "drawing": false,
+          "penSeen": true
+        },
+        {
+          "effects": [
+            {
+              "fx": "start",
+              "id": 1,
+              "pointerType": "pen",
+              "pressure": true,
+              "timeStamp": 8.0,
+              "continued": false
+            },
+            {
+              "fx": "samples",
+              "id": 1,
+              "samples": [
+                {
+                  "x": 2.0,
+                  "y": 0.0,
+                  "p": 0.5,
+                  "t": 0.0
+                }
+              ]
+            }
+          ],
+          "roles": {
+            "89": "ink"
+          },
+          "drawing": true,
+          "penSeen": true
+        },
+        {
+          "effects": [],
+          "roles": {
+            "89": "ink"
+          },
+          "drawing": true,
+          "penSeen": true
+        },
+        {
+          "effects": [],
+          "roles": {
+            "89": "ink"
+          },
+          "drawing": true,
+          "penSeen": true
+        },
+        {
+          "effects": [
+            {
+              "fx": "samples",
+              "id": 1,
+              "samples": [
+                {
+                  "x": 8.0,
+                  "y": 0.0,
+                  "p": 0.5,
+                  "t": 8.0
+                }
+              ]
+            },
+            {
+              "fx": "predicted",
+              "id": 1,
+              "samples": [
+                {
+                  "x": 12.0,
+                  "y": 0.0,
+                  "p": 0.5,
+                  "t": 16.0
+                }
+              ]
+            }
+          ],
+          "roles": {
+            "89": "ink"
+          },
+          "drawing": true,
+          "penSeen": true
+        },
+        {
+          "effects": [
+            {
+              "fx": "predicted",
+              "id": 1,
+              "samples": []
+            },
+            {
+              "fx": "release",
+              "pointer": 89
+            },
+            {
+              "fx": "end",
+              "id": 1,
+              "pointerType": "pen",
+              "pressure": true,
+              "timeStamp": 8.0,
+              "continued": false,
+              "samples": [
+                {
+                  "x": 2.0,
+                  "y": 0.0,
+                  "p": 0.5,
+                  "t": 0.0
+                },
+                {
+                  "x": 8.0,
+                  "y": 0.0,
+                  "p": 0.5,
+                  "t": 8.0
+                }
+              ],
+              "tilt": false,
+              "split": false
+            }
+          ],
+          "roles": {
+            "89": null
+          },
+          "drawing": false,
+          "penSeen": true
+        }
+      ]
+    },
+    {
       "name": "stabilizer_pulled_string",
       "config": {
         "touch": "auto",

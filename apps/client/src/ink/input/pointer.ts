@@ -26,7 +26,8 @@ export interface PointerSample {
   /// campione.
   readonly x: number;
   readonly y: number;
-  /// Il tempo dell'evento in millisecondi, su un orologio monotono.
+  /// Il tempo dell'evento in millisecondi, su un orologio monotono. Un valore
+  /// non finito scarta il campione.
   readonly timeStamp: number;
   /// La pressione come la dà il dispositivo, da 0 a 1. Pointer Events vuole
   /// 0,5 per un dispositivo che non la misura; un valore non finito vale 0,5.
