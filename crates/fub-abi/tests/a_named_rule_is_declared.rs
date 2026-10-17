@@ -62,6 +62,11 @@
 //! - **la shell TypeScript.** `apps/client/` ha le sue regole di nome, e nessun
 //!   attore le lega a queste; è la zona cieca che la 0115 aveva già nominata,
 //!   e resta.
+//! - **il codice di terzi in `vendor/`.** Piega il caso per le sue ragioni (il
+//!   correttore di WordCraft lo fa per l'ortografia), non decide quando due nomi
+//!   di Fub sono lo stesso nome; provenienza e modifiche stanno nel suo
+//!   `UPSTREAM.md`. Chi lo usa in Fub per confrontare nomi scrive la regola qui
+//!   fuori, e la regola si dichiara.
 //! - **una regola scritta senza uno di questi gesti.** `MemoryHost::data_list`
 //!   decide il contenimento con `starts_with(prefix + "/")` e non con un trim,
 //!   quindi passa. La maglia intercetta il gesto **comodo**, che è l'unico che
@@ -1508,7 +1513,14 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
 // Il cammino sui sorgenti
 // ---------------------------------------------------------------------------
 
-const NOT_IS_ENTERS: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
+const NOT_IS_ENTERS: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    ".fub",
+    "legacy_tests",
+    "vendor",
+];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
