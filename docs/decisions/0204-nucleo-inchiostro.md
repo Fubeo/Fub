@@ -84,9 +84,12 @@ limiti di tempo e memoria e un fallback.
 
 - due copie del nucleo da tenere uguali: il costo è la fixture generata e il
   test gemello, e ogni regola si scrive due volte;
-- l'anteprima rifà il contorno intero a ogni movimento, quindi il suo costo
-  cresce con la lunghezza del tratto; un'anteprima incrementale è lavoro
-  aperto;
+- l'anteprima incrementale (`ink/pf1-live.ts`) ripete gli interni di
+  perfect-freehand 1.2.3, non soltanto la sua interfaccia: la versione è
+  fissata, e cambiarla chiede che la prova di uguaglianza a ogni prefisso resti
+  verde;
+- di un tratto lungo l'anteprima paga ancora, a ogni movimento, la copia del
+  poligono e il suo riempimento sul canvas;
 - lo stabilizzatore è nel nucleo ma FubDraw non lo espone ancora;
 - l'adattatore del browser costa poco più del precedente per evento; il banco
   misura il percorso, senza imporre un tempo.
@@ -129,6 +132,9 @@ nuovo, con le sue varianti, e l'estrazione successiva dovrebbe riconciliarle.
 - compilazione di `fub-ink` per `wasm32-wasip2` nella CI;
 - `cargo test -p fub-ink --test ts_mirror` e `ink/mirror.test.ts`: le due
   copie rispondono uguale;
+- `ink/pf1-live.test.ts` e `ink/tools/stroke.test.ts`: l'anteprima
+  incrementale dà, a ogni prefisso e per ogni pennello provato, il contorno di
+  `getStroke`;
 - `ink/boundary.test.ts`: import ammessi, nucleo senza DOM, nessun prodotto;
 - `tools/ink-tools.test.ts`: barra di FubDraw e pacchetto di sistema hanno gli
   stessi id;

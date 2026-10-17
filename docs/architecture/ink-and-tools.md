@@ -42,7 +42,7 @@ e la geometria sono funzioni che il prodotto chiama.
 | nucleo, Rust | `crates/fub-ink` | campione, ruoli, pressione, inclinazione, stabilizzatore, sessione |
 | nucleo, TypeScript | `apps/client/src/ink/input/` | le stesse regole, per il percorso caldo |
 | formato dei campioni | `apps/client/src/ink/sample.ts` | `fub:ink`, quantizzazione, limite dei campioni |
-| pennello | `apps/client/src/ink/brush.ts`, `pf1.ts` | `fub:brush` e contorno |
+| pennello | `apps/client/src/ink/brush.ts`, `pf1.ts`, `pf1-live.ts` | `fub:brush`, contorno, contorno che cresce |
 | geometria | `apps/client/src/ink/geometry.ts` | trasformazioni dei campioni, tratto dritto |
 | strumenti | `apps/client/src/ink/tools/` | contratto, registro, penna, evidenziatore, gomma |
 | adattatore del browser | `apps/client/src/ink/dom/` | `attachInkInput` |
@@ -76,6 +76,9 @@ Le regole che la sessione garantisce:
 - i campioni nuovi si consegnano dentro l'evento che li porta;
 - gli eventi coalescenti entrano tutti, nell'ordine in cui sono avvenuti; un
   doppione o un evento più vecchio dell'ultimo accettato si scarta;
+- un evento con posizione o tempo non finiti non diventa un campione, nemmeno
+  il primo, un predetto o quello dell'alzata: un tempo infinito farebbe
+  scartare come vecchi gli eventi dopo;
 - gli eventi predetti vanno solo all'anteprima, ogni volta al posto dei
   precedenti, e non entrano mai nel tratto;
 - un tratto si conclude alzando il puntatore o chiudendosi al limite dei
@@ -131,6 +134,18 @@ consegna rende non più valida la lista in corso, di cui esegue solo i
 `release`. Il prodotto non riceve mai un tratto annullato come concluso né due
 volte lo stesso tratto.
 
+Dopo gli effetti di un evento l'adattatore chiama `onSettled(id)` una volta, se
+il tratto aperto `id` ha ricevuto campioni o una predizione, anche vuota: è il
+momento di rifare l'anteprima, una volta per evento anche quando l'evento porta
+molti coalescenti. Al limite dei campioni arriva al tratto che continua. Non
+arriva dopo la fine o l'annullamento del tratto, né dopo una consegna
+interrotta.
+
+Un evento nello stesso punto dello schermo dell'ultimo evento vero dello stesso
+puntatore riprende il suo punto nella scena, invece di rileggere la vista con
+`toScene`. Se la vista si muove sotto un puntatore fermo, alzarlo non aggiunge
+un tratto che non ha fatto, e la gomma non cancella ciò che non ha toccato.
+
 L'elemento deve avere `touch-action: none` e `user-select: none`: sono regole
 di presentazione e le mette la superficie.
 
@@ -165,12 +180,27 @@ un pulsante senza comportamento o un comportamento senza pulsante.
 
 ### Tratto e gomma
 
-Due funzioni pure in `ink/tools/stroke.ts` valgono per ogni strumento che
-scrive:
+In `ink/tools/stroke.ts` due funzioni pure e una classe valgono per ogni
+strumento che scrive:
 
 - `previewOutline` è il contorno del tratto in corso, a ogni movimento. Non
-  lancia mai: un campione che l'inchiostro non scrive dà un'anteprima vuota. Il
-  suo costo cresce con la lunghezza del tratto, perché rifà il contorno intero.
+  lancia mai: un campione che l'inchiostro non scrive dà un'anteprima vuota.
+  Rifà il contorno intero, quindi il suo costo cresce con la lunghezza del
+  tratto: è la definizione, non il percorso caldo.
+- `StrokePreview` dà, per gli stessi argomenti, lo stesso contorno di
+  `previewOutline`, ed è ciò che un prodotto usa mentre il tratto cresce.
+  Quantizza ogni campione una volta sola e affida il contorno a `Pf1Live`
+  (`ink/pf1-live.ts`), che ripete i due passi di `getStroke` di
+  perfect-freehand (avviso in
+  [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md)) e congela il
+  prefisso che nessun campione futuro cambia. Una chiamata rifà la coda e copia
+  il poligono in un vettore che si riusa. `local` può soltanto crescere in
+  coda: se si accorcia, o se cambia l'ultimo campione già letto, l'anteprima
+  ricomincia. I campioni più indietro non si ricontrollano, e chi ne cambia
+  uno crea uno `StrokePreview` nuovo. Il contorno vale fino alla chiamata dopo,
+  che può riscriverlo. L'uguaglianza è esatta, numero per numero, e dipende
+  dagli interni della versione fissata della libreria: `pf1-live.test.ts` la
+  prova a ogni prefisso.
 - `buildStroke` è il tratto finito: inchiostro quantizzato, contorno e le
   copie portate da altre trasformazioni (la simmetria). Una copia che esce dai
   numeri dell'inchiostro non c'è, le altre sì. Il fallimento ha due motivi:
@@ -179,20 +209,34 @@ scrive:
 `EraseSweep` in `ink/tools/sweep.ts` è il gesto della gomma: percorre il
 cammino a segmenti e segna una volta sola ogni unità che il prodotto trova a
 meno del raggio. Il prodotto implementa `EraseSource` con il suo indice e
-cancella ciò che è stato segnato quando il puntatore si alza.
+cancella ciò che è stato segnato quando il puntatore si alza. A ogni segmento
+`EraseSource.along` riceve anche ciò che la gomma ha già segnato (`marked`):
+un'unità che vi sta sotto la sua chiave, lo stesso oggetto, il prodotto può
+non riprovarla.
 
 ## Come lo usa FubDraw
 
 FubDraw è il primo consumatore e non il proprietario.
 
-- `tools/editor/curvature-tool.ts` attacca `attachInkInput` alla superficie e
-  passa la curva della pressione, l'angolo della vista e la politica del tocco.
+- `tools/editor/curvature-tool.ts` attacca `attachInkInput` alla superficie,
+  passa la curva della pressione, l'angolo della vista e la politica del tocco,
+  e rifà l'anteprima in `onSettled`, una volta per evento.
 - `tools/editor/guide-drag.ts` (`begin`, `drawInk`) sceglie lo strumento da
-  `INK_TOOLS`, ne prende il pennello e disegna l'anteprima con
-  `previewOutline`.
+  `INK_TOOLS`, ne prende il pennello e crea per ogni tratto uno
+  `StrokePreview`, con cui `drawInk` rifà l'anteprima e la disegna subito
+  sullo strato sopra la scena (`painter/overlay.ts`), dentro il gestore
+  dell'evento e senza aspettare il fotogramma.
+- `tools/editor/text-tool.ts`, il cursore da tastiera, chiama gli stessi
+  gestori senza l'adattatore, e chiama da sé `onSettled` dopo i campioni.
 - `tools/editor/node-gestures.ts` (`writeInk`, `eraseAlong`) costruisce il
   tratto con `buildStroke`, lo scrive in un'unica operazione nello storico e fa
-  correre la gomma con `EraseSweep`.
+  correre la gomma con `EraseSweep` sull'indice della scena.
+- `tools/hit.ts` (`SceneIndex.along`) è la fonte della gomma e non riprova ciò
+  che `marked` ha già segnato. Da 256 oggetti in su (`TREE_FROM`) prova
+  soltanto quelli che l'albero dei riquadri (`tools/box-tree.ts`) dà
+  vicini al segmento. L'albero è un R-tree impacchettato una volta per indice,
+  alla prima domanda, e dà gli oggetti che il confronto dei riquadri darebbe:
+  il risultato è quello della scansione.
 - `tools/edit.ts` (`strokeElem`) scrive nel file l'opacità dello strumento.
 
 Restano del prodotto il livello di destinazione, gli id, la simmetria, gli
@@ -208,6 +252,11 @@ annunci per lo screen reader, il passo di annulla e il formato della scena.
 | il nucleo non usa globali del DOM | `ink/boundary.test.ts` |
 | ogni ascoltatore ha owner e disposer | `check-listeners.mjs` |
 | barra e registro dell'inchiostro coincidono | `tools/ink-tools.test.ts` |
+| l'anteprima che cresce dà il contorno di `getStroke` | `ink/pf1-live.test.ts`, `ink/tools/stroke.test.ts` |
+| con l'albero dei riquadri la gomma prende ciò che prenderebbe la scansione | `tools/box-tree.test.ts`, `tools/hit.test.ts` |
+| la gomma non riprova ciò che ha già segnato | `ink/tools/sweep.test.ts`, `tools/hit.test.ts` |
+| un ridisegno per evento | `ink/dom/pointer-adapter.test.ts` |
+| un puntatore fermo resta fermo nella scena se la vista si muove | `ink/dom/pointer-adapter.test.ts`, `tools/editor.test.ts` |
 
 Il percorso caldo ha due banchi:
 
@@ -217,10 +266,13 @@ npm run bench:ink      # da apps/client/
 ```
 
 Misurano nanosecondi per evento e non asseriscono tempi. Il budget è quello
-dell'input: a 240 Hz un evento ha circa quattro millisecondi, e l'anteprima ne
-vuole la parte maggiore. Il riduttore costa una piccola frazione di quel
-budget; l'anteprima dipende dalla lunghezza del tratto. La procedura manuale
-per mouse, tocco e penna è in [Prova manuale dell'inchiostro](../development/ink-input-smoke-test.md).
+dell'input: a 240 Hz un evento ha circa quattro millisecondi. Il riduttore ne
+costa una piccola frazione. `StrokePreview` costa pochi microsecondi a cento
+campioni e decine a novemila, dove il contorno intero di `previewOutline` costa
+millisecondi: ordini di grandezza da confrontare fra versioni. I banchi non
+misurano il riempimento sul canvas, che cresce col tratto.
+La procedura manuale per mouse, tocco e penna è in [Prova manuale
+dell'inchiostro](../development/ink-input-smoke-test.md).
 
 ## Aggiungere uno strumento
 

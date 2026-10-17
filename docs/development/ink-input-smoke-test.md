@@ -102,7 +102,8 @@ un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
 1. **Tratto lunghissimo.** Con la penna, disegna una spirale continua per circa
    due minuti senza alzare. Oltre i 10 000 campioni il tratto si scrive a
    pezzi: il disegno non ha buchi alla giunzione, l'app non rallenta in modo
-   visibile e `Ctrl+Z` toglie un pezzo per volta, tutti col nome «Tratto». Se
+   visibile, la linea resta sotto la punta fino alla fine e `Ctrl+Z` toglie un
+   pezzo per volta, tutti col nome «Tratto». Se
    la giunzione si vede come uno scalino o un punto più spesso, annota dove.
 2. **Cambio di dispositivo.** Disegna con il mouse, poi con la penna, poi di nuovo
    con il mouse, senza ricaricare. Ogni strumento deve rispondere come nella
@@ -112,6 +113,10 @@ un segno prima che la penna tocchi, il ruolo è stato deciso troppo tardi.
    inclinazione non cambiano rispetto al foglio dritto.
 4. **Simmetria.** Accendi la penna in simmetria e disegna: le copie nascono
    insieme al tratto, e un solo `Ctrl+Z` toglie il tratto e le sue copie.
+5. **Vista che scorre sotto la punta.** Con la gomma giù e ferma accanto a un
+   oggetto, scorri la vista con la rotella o il trackpad fin oltre l'oggetto,
+   poi alza senza muovere: l'oggetto resta. Con la penna lo stesso gesto non
+   lascia una coda dritta.
 
 ## Che cosa annotare
 
