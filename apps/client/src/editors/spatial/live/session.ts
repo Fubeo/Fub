@@ -34,7 +34,7 @@ import type {
   LiveShellMessage,
   LiveStarted,
 } from "../../../host/contract";
-import { confirm } from "../../../host/dialog";
+import { confirm } from "../../../platform/confirm";
 import { errorText } from "../../../host/errors";
 import { api } from "../../../host/ipc";
 import { t } from "../../../i18n/strings";

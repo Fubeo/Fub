@@ -30,7 +30,7 @@ vi.mock("../../../host/ipc", () => ({
     },
   ),
 }));
-vi.mock("../../../host/dialog", () => ({ confirm: (...args: unknown[]) => box.confirm(...args) }));
+vi.mock("../../../platform/confirm", () => ({ confirm: (...args: unknown[]) => box.confirm(...args) }));
 vi.mock("../../../ui/notify", () => ({ notify: (...args: unknown[]) => box.notify(...args) }));
 
 const { createFakeHost } = await import("../../../host/fake");
