@@ -23,6 +23,18 @@
 //! revisione dopo aver guardato il contenuto non proteggerebbe ciò che si è
 //! guardato.
 //!
+//! # Il rollback è tutto o niente, e ha una via d'uscita
+//!
+//! Il rollback controlla **ogni** bersaglio prima di cambiarne uno: un
+//! rollback a metà lascerebbe un import riportato indietro in parte, che non è
+//! né quello che l'utente ha approvato né ciò che c'era prima. Quando un
+//! bersaglio non si può provare (un journal di prima delle ricevute, un import
+//! interrotto di un importer di terzi) il rollback si ferma e journal e
+//! preimmagini restano. L'utente ha due strade: sistemare a mano il bersaglio
+//! ambiguo e rilanciare il rollback, oppure decidere di tenere il vault com'è e
+//! [`abandon`]are il journal, che toglie journal, ricevute e preimmagini senza
+//! toccare nessun bersaglio.
+//!
 //! [`receipts`]: crate::receipts
 
 use std::collections::HashSet;
@@ -216,8 +228,11 @@ fn commit_with(
         }
         return journal.committed.ok_or_else(|| {
             PluginError::Conflict(
-                format!("job `{job}` has an interrupted commit; roll it back before retrying")
-                    .into(),
+                format!(
+                    "job `{job}` has an interrupted commit; roll it back (or abandon it) before \
+                     retrying"
+                )
+                .into(),
             )
         });
     }
@@ -511,5 +526,54 @@ pub fn rollback(job: &str, host: &mut dyn HostApi) -> Result<(), PluginError> {
         }
     }
     receipts::clear(host, job, journal.entries.iter().map(|entry| &entry.doc))?;
+    Ok(())
+}
+
+/// **Rinuncia al rollback di un import interrotto** (FUB-007): toglie il
+/// journal, la sua ricevuta, le preimmagini e le ricevute dei bersagli, e non
+/// tocca nessun bersaglio. Il job torna `staged`: un commit nuovo ricalcola il
+/// piano sul vault di adesso.
+///
+/// È la via d'uscita di un rollback che non può provare niente — un journal di
+/// prima delle ricevute, un import interrotto senza rapporto — e che per questo
+/// si ferma con un conflitto per sempre. Chi la sceglie dice di tenere il vault
+/// com'è, comprese le note che l'import ha scritto: non c'è modo di annullarle
+/// dopo.
+///
+/// Un import **committato** non si abbandona: il suo journal è ciò che permette
+/// il rollback, e il rollback c'è. Un journal che non si legge (schema
+/// sconosciuto, JSON rotto) invece sì: il rollback non lo userebbe comunque, e
+/// senza questa via resterebbe lì per sempre. Si cancella per elenco e non per
+/// voci, perché l'elenco delle voci è proprio ciò che non si legge.
+///
+/// Non c'è niente da abbandonare se il job non ha un journal: torna `Ok`.
+pub fn abandon(job: &str, host: &mut dyn HostApi) -> Result<(), PluginError> {
+    // Un journal che non si legge non ha un rollback da proteggere: si rifiuta
+    // soltanto quello committato.
+    if let Ok(Some(Journal {
+        committed: Some(_), ..
+    })) = load(job, host)
+    {
+        return Err(PluginError::Conflict(
+            format!("job `{job}` is committed; roll it back instead of abandoning it").into(),
+        ));
+    }
+    // Come il rollback: prima la ricevuta e il journal, poi i byte. Se si
+    // interrompe resta al più qualche byte orfano, mai un journal appeso.
+    host.data_remove(&receipt_path(job))?;
+    host.data_remove(&journal_path(job))?;
+    for dir in [
+        format!("imports/preimages/{job}"),
+        format!("imports/receipts/{job}"),
+    ] {
+        // L'elenco è della cartella; un altro job che ne condivide il prefisso
+        // (`a` e `ab`) non è di questo.
+        let under = format!("{dir}/");
+        for path in host.data_list(&dir)? {
+            if path.starts_with(&under) {
+                host.data_remove(&path)?;
+            }
+        }
+    }
     Ok(())
 }

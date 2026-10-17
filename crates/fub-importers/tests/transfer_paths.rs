@@ -1120,3 +1120,154 @@ fn a_user_edit_after_a_crash_is_not_rolled_back_over() {
         "recovery_required"
     );
 }
+
+/// Tutto ciò che il job `job` tiene nello spazio dati dell'importer: journal,
+/// ricevute, preimmagini.
+fn held_by(host: &MemoryHost, job: &str) -> Vec<String> {
+    host.data_list("imports")
+        .unwrap()
+        .into_iter()
+        .filter(|path| path.contains(&format!("/{job}.json")) || path.contains(&format!("/{job}/")))
+        .filter(|path| !path.starts_with("imports/staging"))
+        .collect()
+}
+
+/// **La via d'uscita di un rollback che non può provare niente** (FUB-007): chi
+/// decide di tenere il vault com'è abbandona il journal, e nessun bersaglio si
+/// tocca. Sia con le ricevute sia senza, come i due tipi di importer.
+#[test]
+fn abandoning_an_interrupted_import_keeps_the_vault_as_it_is_and_frees_the_job() {
+    for honest in [false, true] {
+        let mut host = MemoryHost::new();
+        let mut provider = Scripted {
+            targets: created(&["Mine.md", "Theirs.md"]),
+            others: Some((1, vec![("Theirs.md", "other writer")])),
+            fail_at: Some(1),
+            crash_at: None,
+            honest,
+        };
+        staged(&mut host, "stuck", &mut provider, false);
+        fub_importers::pipeline::commit("stuck", &mut provider, &mut host)
+            .expect_err("l'import si è fermato");
+        assert!(
+            fub_importers::pipeline::rollback("stuck", &mut host).is_err(),
+            "honest={honest}: il rollback non prova che Theirs.md sia dell'import"
+        );
+        assert_eq!(
+            fub_importers::migration::status("stuck", &host).unwrap(),
+            "recovery_required"
+        );
+        assert!(!held_by(&host, "stuck").is_empty(), "honest={honest}");
+
+        fub_importers::migration::abandon("stuck", &mut host).expect("si abbandona");
+
+        assert_eq!(
+            host.read_document(&DocId::new("Theirs.md")).unwrap(),
+            "other writer",
+            "honest={honest}: l'abbandono non tocca nessun bersaglio"
+        );
+        assert_eq!(
+            host.read_document(&DocId::new("Mine.md")).unwrap(),
+            "imported",
+            "honest={honest}: ciò che l'import ha scritto resta"
+        );
+        assert_eq!(
+            fub_importers::migration::status("stuck", &host).unwrap(),
+            "staged",
+            "honest={honest}"
+        );
+        assert_eq!(
+            held_by(&host, "stuck"),
+            Vec::<String>::new(),
+            "honest={honest}"
+        );
+        fub_importers::migration::abandon("stuck", &mut host).expect("ripetuto, non fa niente");
+    }
+}
+
+/// Un import committato ha un rollback: non si abbandona il suo journal.
+#[test]
+fn a_committed_import_is_not_abandoned() {
+    let mut host = MemoryHost::new();
+    let mut provider = Scripted {
+        targets: created(&["Mine.md"]),
+        others: None,
+        fail_at: None,
+        crash_at: None,
+        honest: true,
+    };
+    staged(&mut host, "done", &mut provider, false);
+    fub_importers::pipeline::commit("done", &mut provider, &mut host).expect("commit");
+
+    let error = fub_importers::migration::abandon("done", &mut host).expect_err("c'è il rollback");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
+    );
+    assert_eq!(
+        fub_importers::migration::status("done", &host).unwrap(),
+        "committed"
+    );
+    fub_importers::pipeline::rollback("done", &mut host).expect("il rollback c'è ancora");
+    assert!(host.read_document(&DocId::new("Mine.md")).is_err());
+}
+
+/// Un journal di una versione che non si legge più non lo usa nemmeno il
+/// rollback: senza questa via resterebbe lì, con le sue preimmagini, per sempre.
+#[test]
+fn a_journal_that_cannot_be_read_can_be_abandoned() {
+    let mut host = MemoryHost::new();
+    fub_abi::traits::DataWrite::data_write(&mut host, "imports/commit/old.json", b"{ non json")
+        .unwrap();
+    fub_abi::traits::DataWrite::data_write(
+        &mut host,
+        "imports/preimages/old/0",
+        b"byte di una nota",
+    )
+    .unwrap();
+    fub_abi::traits::DataWrite::data_write(&mut host, "imports/receipts/old/ab.json", b"{}")
+        .unwrap();
+    assert!(fub_importers::migration::status("old", &host).is_err());
+    assert!(fub_importers::pipeline::rollback("old", &mut host).is_err());
+
+    fub_importers::migration::abandon("old", &mut host).expect("si abbandona");
+    assert_eq!(held_by(&host, "old"), Vec::<String>::new());
+    assert_eq!(
+        fub_importers::migration::status("old", &host).unwrap(),
+        "staged"
+    );
+}
+
+/// Il comando è nel registro, scrive, e il job lo esegue.
+#[test]
+fn the_abandon_command_is_in_the_registry_and_runs_as_a_job() {
+    let spec = fub_importers::transfer_commands::specs()
+        .into_iter()
+        .find(|spec| spec.id == fub_importers::transfer_commands::IMPORT_ABANDON)
+        .expect("import.abandon è dichiarato");
+    assert!(spec.scope.writes, "abbandonare toglie dati: scrive");
+
+    let mut host = MemoryHost::new();
+    let mut provider = Scripted {
+        targets: created(&["Mine.md", "Theirs.md"]),
+        others: Some((1, vec![("Theirs.md", "other writer")])),
+        fail_at: Some(1),
+        crash_at: None,
+        honest: false,
+    };
+    staged(&mut host, "via-job", &mut provider, false);
+    fub_importers::pipeline::commit("via-job", &mut provider, &mut host).expect_err("fermo");
+
+    let outcome = ImportPlugin
+        .run_job(
+            "import.transfer",
+            serde_json::json!({"op":"abandon", "job":"via-job"}),
+            &mut host,
+        )
+        .expect("il job abbandona");
+    assert_eq!(outcome["abandoned"], true);
+    assert_eq!(
+        fub_importers::migration::status("via-job", &host).unwrap(),
+        "staged"
+    );
+}
