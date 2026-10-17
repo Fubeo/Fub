@@ -1914,6 +1914,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-format-rich"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "fub-abi",
+ "fub-format-markdown",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+ "wordcraft-doc",
+ "wordcraft-docx",
+]
+
+[[package]]
 name = "fub-format-sheet"
 version = "0.1.0"
 dependencies = [

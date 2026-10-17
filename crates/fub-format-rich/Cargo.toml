@@ -1,0 +1,18 @@
+[package]
+name = "fub-format-rich"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Documenti di Word (.docx) con il modello e il codec di WordCraft: FormatProvider a byte e proiezione modificabile senza perdite silenziose."
+
+[dependencies]
+fub-abi = { workspace = true }
+fub-format-markdown = { workspace = true }
+wordcraft-doc = { workspace = true }
+wordcraft-docx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+base64 = { workspace = true }
+
