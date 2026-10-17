@@ -151,6 +151,17 @@ registro dei comandi (crea, rinomina, cestina, annulla, palette, comandi slash)
 nominano il vault aperto quando partono: senza `vault` l'host risponde con il
 corrente.
 
+Le porte di lettura lo nominano come le altre. L'elenco delle view, l'elenco dei
+comandi e il canale dati (`host/query.ts`) dicono il vault aperto al momento
+della domanda; una view montata (`ui/views.ts`) fissa alla nascita il vault in
+cui è stata montata e lo nomina nel disegno e nelle azioni, perché un'azione può
+scrivere; le superfici Base fissano quello in cui nascono; «Ferma» di un lavoro
+nomina il vault aperto. `openVaultRoot()` e `vaultArg()` vivono in
+`state/store.ts` (e `state/vault.ts` le ripresenta) perché le letture di
+`host/query.ts` le usano e `state/vault.ts` importa quel modulo. Le chiamate
+fatte prima che un vault sia aperto — le impostazioni di macchina all'avvio —
+non ne hanno uno da nominare e restano com'erano.
+
 Per i temi, la selezione autorevole passa dalla porta settings; la cache browser
 è soltanto bootstrap del primo fotogramma. `previewTheme` monta invece una
 selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura

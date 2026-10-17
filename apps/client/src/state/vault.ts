@@ -14,26 +14,14 @@
 import { api } from "../host/ipc";
 import { settings, vaultEntries } from "../host/query";
 import { COMMANDS, type Undo } from "../host/contract";
-import { emit, setCommandSpecs, state } from "./store";
+import { emit, openVaultRoot, setCommandSpecs, vaultArg } from "./store";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
 
-/// La radice del vault aperto adesso, o `undefined` se nessuno lo è: il **vault
-/// del gesto** (FUB-001). Un gesto lo legge quando parte e lo nomina nelle sue
-/// chiamate, così un comando che aspetta (una conferma, un'altra chiamata)
-/// raggiunge il vault in cui è nato anche se nel frattempo ne è stato aperto
-/// un altro: senza, l'host risponde con il vault corrente.
-export function openVaultRoot(): string | undefined {
-  return state.vaultRoot || undefined;
-}
-
-/// Il vault come **ultimo argomento** di una chiamata, o niente se non c'è: una
-/// chiamata senza vault resta identica a com'era, e chi l'ascolta non vede un
-/// `undefined` in coda. Si usa spalmandolo: `api.leggi(id, ...vaultArg(vault))`.
-export function vaultArg(vault: string | null | undefined): [string] | [] {
-  return vault ? [vault] : [];
-}
+// `openVaultRoot` e `vaultArg` vivono in `state/store.ts` e si ripresentano
+// qui, dove i gesti li cercano da sempre (FUB-001).
+export { openVaultRoot, vaultArg };
 
 /// Annuncia che l'elenco dei documenti è cambiato. Chi ne disegna uno si
 /// iscrive a `documents`; nessuno chiama nessuno per nome.
@@ -164,7 +152,7 @@ export async function loadCommandSpecs(): Promise<void> {
   // dei modi di usare l'app smette di rispondere — e non ne restava una riga da
   // nessuna parte. L'elenco vuoto resta la risposta giusta (un vault si apre
   // comunque, 0068); ciò che mancava è dirlo.
-  setCommandSpecs(await api.listCommands().catch((e: unknown) => {
+  setCommandSpecs(await api.listCommands(...vaultArg(openVaultRoot())).catch((e: unknown) => {
     notify(t("commands.list_failed", { reason: errorText(e) }), "guasto");
     return [];
   }));

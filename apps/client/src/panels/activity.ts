@@ -27,6 +27,7 @@
 // [decisione 0035]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 import { api } from "../host/ipc";
 import { activeJobs } from "../host/query";
+import { openVaultRoot, vaultArg } from "../state/store";
 import type { ExportArtifact, JobProgress, JobStatus, KernelNotice } from "../host/contract";
 import { ARTIFACT_JOB } from "../ui/shell-ids.generated";
 import { onAnyEvent } from "../state/kernel";
@@ -533,7 +534,7 @@ function stopButton(job: JobRow): HTMLButtonElement {
 /// racconterebbe che si è fermato, quando invece si sta fermando.
 async function cancel(job: JobRow): Promise<void> {
   try {
-    await api.cancelJob(job.id);
+    await api.cancelJob(job.id, ...vaultArg(openVaultRoot()));
   } catch (e) {
     // C06: l'errore resta tipizzato fino alla presentazione — `kind` sceglie il
     // ramo, `message` la frase. `unknown_job` non toglie la riga: il job che non

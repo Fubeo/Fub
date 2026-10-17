@@ -518,3 +518,57 @@ describe("lifecycle delle view dichiarate", () => {
     expect(modal.hidden).toBe(true);
   });
 });
+
+describe("il vault di una view (FUB-001)", () => {
+  /// Senza il nome l'host risponde col vault **corrente**, e «corrente» cambia
+  /// aprendone un altro mentre una view è ancora sullo schermo: un'azione che
+  /// scrive (la cronologia che ripristina una versione, il cestino che
+  /// ripristina una nota) finirebbe nel vault sbagliato. La view nomina quello
+  /// in cui è stata montata, per l'elenco, per il disegno e per l'azione.
+  it("elenco, disegno e azione nominano il vault in cui la view è montata", async () => {
+    listViews.mockClear();
+    const { state } = await import("../state/store");
+    state.vaultRoot = "/a";
+    listViews.mockResolvedValueOnce([spec("graph", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    expect(listViews).toHaveBeenLastCalledWith("/a");
+
+    const tree: UiNode = {
+      node: "list_item",
+      title: "voce",
+      subtitle: null,
+      action: { action: "ripristina", payload: null },
+      selected: false,
+    };
+    renderView.mockImplementationOnce(async () => tree);
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("graph", "main", pane);
+    expect(renderView).toHaveBeenLastCalledWith("graph", "main", null, "/a");
+
+    // Fra il disegno e il click l'utente apre un altro vault.
+    state.vaultRoot = "/b";
+    pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await vi.waitFor(() => expect(viewAction).toHaveBeenCalledTimes(1));
+    const args = viewAction.mock.calls[0] as unknown as unknown[];
+    expect(args[0]).toBe("graph");
+    expect(args[args.length - 1], "l'azione va al vault della view, non al corrente").toBe("/a");
+    expect(args).not.toContain("/b");
+  });
+
+  it("senza un vault aperto le chiamate restano com'erano", async () => {
+    listViews.mockClear();
+    const { state } = await import("../state/store");
+    state.vaultRoot = "";
+    listViews.mockResolvedValueOnce([spec("graph", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+    expect(listViews).toHaveBeenLastCalledWith();
+
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    await views.mountViewInPane("graph", "main", pane);
+    expect(renderView).toHaveBeenLastCalledWith("graph", "main", null);
+  });
+});
