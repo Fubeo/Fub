@@ -322,7 +322,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
   ctx.replayBezier = replayBezier;
 
   const finishErase = (g: EraseGesture): void => {
-    const units = [...g.marked.values()];
+    const units = g.sweep.marked();
     if (units.length === 0) {
       painter.setDraft(null);
       return;

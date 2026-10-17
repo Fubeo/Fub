@@ -2,9 +2,9 @@
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
 import { keyOf } from "../../describe";
-import { mappedSamples, straight, toLocal } from "../../../../ink/geometry";
-import { pf1Outline } from "../../../../ink/pf1";
-import { quantizeInk } from "../../../../ink/sample";
+import { straight, toLocal } from "../../../../ink/geometry";
+import { closedAtLimit } from "../../../../ink/tools/tool";
+import { buildStroke } from "../../../../ink/tools/stroke";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { FinishedStroke } from "../../../../ink/input/session";
 import { BoundsBuilder } from "../../scene/geometry";
@@ -44,7 +44,6 @@ import { allNodes, holdsPath, innerNode, remapped, sameDestination, samePath } f
 import type { Editing, EraseGesture, InkGesture, NodeChange, NodeGrab, NodePick, NodesGesture } from "./types";
 
 /// Il raggio della gomma, in pixel.
-const ERASER_PX: Readonly<Record<InkPointerType, number>> = { pen: 8, mouse: 8, touch: 16 };
 
 /// Un tratto entrato nel disegno: il suo id, il livello che l'ha ricevuto
 /// e le sue copie in simmetria, ognuna con la trasformazione che porta il
@@ -659,16 +658,14 @@ export function installNodeGestures(ctx: EditorContext): void {
   };
 
   const eraseAlong = (g: EraseGesture, p: Point): void => {
-    const from = g.last ?? p;
-    g.last = p;
-    for (const unit of currentIndex().along(from, p, ERASER_PX[g.pointer] / ctx.camera.scale)) g.marked.set(unit.key, unit);
+    g.sweep.along(currentIndex(), p, ctx.camera.scale);
   };
   ctx.eraseAlong = eraseAlong;
 
   const showErased = (g: EraseGesture): void => {
     const faded = new Set<PaintNode>();
     const fadedContainers = new Set<object>();
-    for (const unit of g.marked.values()) {
+    for (const unit of g.sweep.marked()) {
       for (const paint of unit.paints) faded.add(paint);
       if (unit.node.kind === "container") fadedContainers.add(unit.node);
     }
@@ -687,44 +684,28 @@ export function installNodeGestures(ctx: EditorContext): void {
     const to = target(g.ids);
     if (to === null) return null;
     const local = sameDestination(to, g.to) ? g.local : g.scene.map((sample) => toLocal(sample, to.inverse));
-    let brush = g.brush;
-    if (split) brush = { ...brush, taperEnd: 0 };
+    const brush = closedAtLimit(g.brush, split);
     const samples = straightened(g) ? straight(local) : local;
-    let ink;
-    let outline;
-    try {
-      ink = quantizeInk(samples);
-      outline = pf1Outline(ink, brush);
-    } catch {
-      announce(t("draw.ink_failed"));
-      return null;
-    }
-    if (outline.length === 0) return null;
-    const bounds = new BoundsBuilder();
-    for (const point of outline) bounds.include(apply(to.matrix, point));
-    const id = g.ids.next("object");
-    const at = new Date(performance.timeOrigin + g.began).toISOString();
-    const paint = drawnPaint(g.color);
-    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, paint, brush, ink, at, g.tool))];
     // Ogni copia è il tratto portato dalla sua trasformazione, nelle
     // coordinate del livello: un tratto vero, col suo inchiostro. Una che
     // uscirebbe dai numeri dell'inchiostro non si scrive.
+    const built = buildStroke(samples, brush, g.copies.map((m) => compose(to.inverse, compose(m, to.matrix))));
+    if (!built.ok) {
+      if (built.reason === "failed") announce(t("draw.ink_failed"));
+      return null;
+    }
+    const bounds = new BoundsBuilder();
+    for (const point of built.outline) bounds.include(apply(to.matrix, point));
+    const id = g.ids.next("object");
+    const at = new Date(performance.timeOrigin + g.began).toISOString();
+    const paint = drawnPaint(g.color);
+    const ops: Op[] = [...to.prelude, addOp(to, strokeElem(id, paint, brush, built.ink, at, g.tool))];
     const copies: WrittenInk["copies"][number][] = [];
-    for (const m of g.copies) {
-      const matrix = compose(to.inverse, compose(m, to.matrix));
-      let copy;
-      let shape;
-      try {
-        copy = quantizeInk(mappedSamples(samples, matrix));
-        shape = pf1Outline(copy, brush);
-      } catch {
-        continue;
-      }
-      if (shape.length === 0) continue;
-      for (const point of shape) bounds.include(apply(to.matrix, point));
+    for (const copy of built.copies) {
+      for (const point of copy.outline) bounds.include(apply(to.matrix, point));
       const copyId = g.ids.next("object");
-      ops.push(addOp(to, strokeElem(copyId, paint, brush, copy, at, g.tool)));
-      copies.push({ id: copyId, matrix });
+      ops.push(addOp(to, strokeElem(copyId, paint, brush, copy.ink, at, g.tool)));
+      copies.push({ id: copyId, matrix: copy.matrix });
     }
     const page = grownPage(bounds.finish());
     if (page !== null) ops.push({ op: "page", viewBox: page });

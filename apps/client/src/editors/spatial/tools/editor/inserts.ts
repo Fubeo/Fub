@@ -2,9 +2,8 @@
 // pezzo di createDrawEditor (`../editor.ts`): lavora sul contesto che i pezzi
 // condividono.
 
-import { PF1_DEFAULTS } from "../../../../ink/brush";
-import { pf1Outline } from "../../../../ink/pf1";
-import { quantizeInk } from "../../../../ink/sample";
+import { INK_TOOLS } from "../../../../ink/tools/registry";
+import { buildStroke } from "../../../../ink/tools/stroke";
 import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { apply, IDENTITY, type Point } from "../../scene/matrix";
@@ -181,21 +180,17 @@ export function installInserts(ctx: EditorContext): void {
         if (to === null) return;
         const [x1, y1] = apply(to.inverse, [cx - half, cy]);
         const [x2, y2] = apply(to.inverse, [cx + half, cy]);
-        // I pennelli di un tratto del puntatore senza pressione.
-        const brush =
-          ctx.tool === "highlighter"
-            ? { ...PF1_DEFAULTS, size: width, thinning: 0, capStart: false, capEnd: false, sim: false }
-            : { ...PF1_DEFAULTS, size: width, sim: true };
-        let ink;
-        try {
-          ink = quantizeInk(straight([{ x: x1, y: y1, t: 0 }, { x: x2, y: y2, t: 250 }]));
-          if (pf1Outline(ink, brush).length === 0) return;
-        } catch {
-          announce(t("draw.ink_failed"));
+        // Il pennello di un tratto del puntatore senza pressione.
+        const tool = INK_TOOLS.stroke(ctx.tool);
+        if (tool === undefined) return;
+        const brush = tool.brush(width, { pressure: false, continued: false });
+        const built = buildStroke(straight([{ x: x1, y: y1, t: 0 }, { x: x2, y: y2, t: 250 }]), brush, []);
+        if (!built.ok) {
+          if (built.reason === "failed") announce(t("draw.ink_failed"));
           return;
         }
         const highlight = ctx.tool === "highlighter";
-        const elem = strokeElem(ids.next("object"), drawnPaint(color), brush, ink, new Date().toISOString(), ctx.tool);
+        const elem = strokeElem(ids.next("object"), drawnPaint(color), brush, built.ink, new Date().toISOString(), ctx.tool);
         placeNew(to, elem, highlight ? "draw.action.highlight" : "draw.action.stroke", highlight ? "draw.added.highlight" : "draw.added.stroke", true);
         return;
       }

@@ -4,6 +4,7 @@
 import type { Pf1Brush } from "../../../../ink/brush";
 import type { InkSample } from "../../../../ink/sample";
 import type { InkPointerType } from "../../../../ink/input/pointer";
+import type { EraseSweep } from "../../../../ink/tools/sweep";
 import type { Bounds } from "../../scene/geometry";
 import type { Matrix, Point } from "../../scene/matrix";
 import type { ElementPart, LeafNode } from "../../scene/model";
@@ -537,8 +538,8 @@ export interface BezierGesture extends GestureBase {
 
 export interface EraseGesture extends GestureBase {
   readonly kind: "erase";
-  last: Point | null;
-  readonly marked: Map<string, Unit>;
+  /// Il cammino della gomma e ciò che ha segnato (`ink/tools/sweep`).
+  readonly sweep: EraseSweep<Unit>;
 }
 
 /// Un tocco dello strumento Testo: dove si alza il puntatore si scrive. Un
