@@ -2,7 +2,7 @@
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
 import { formatNumber } from "../../number";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Matrix, Point } from "../../scene/matrix";
 import { pathData, type Elem } from "../../scene/serialize";
 import { t, type DrawKey } from "../../strings";

@@ -556,6 +556,24 @@ fn un_limite_di_due_campioni_non_gira_a_vuoto() {
 }
 
 #[test]
+fn la_sessione_dice_di_chi_e_il_tratto_in_corso() {
+    let mut session = Session::new(SessionConfig::default()).unwrap();
+    assert!(!session.tracks(1));
+    session.pointer_down(&mouse(1, 0.0, 0.0, 0.0));
+    assert!(session.tracks(1));
+    assert!(!session.tracks(2));
+    session.pointer_up(&mouse(1, 0.0, 0.0, 1.0));
+    assert!(!session.tracks(1));
+    // Una penna che si appoggia senza premere ha il tratto, non ancora
+    // annunciato: chi adatta una piattaforma deve raccoglierne gli eventi
+    // coalescenti lo stesso, perché la prima pressione è lì dentro.
+    let mut pen_session = Session::new(SessionConfig::default()).unwrap();
+    pen_session.pointer_down(&pen(7, 0.0, 0.0, 0.0, 0.0));
+    assert!(pen_session.tracks(7));
+    assert!(!pen_session.drawing());
+}
+
+#[test]
 fn il_limite_dei_campioni_ha_un_intervallo() {
     for bad in [0, 1, MAX_SAMPLES + 1] {
         let config = SessionConfig {

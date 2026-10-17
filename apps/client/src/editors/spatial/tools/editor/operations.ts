@@ -6,7 +6,7 @@ import { describe, keyOf } from "../../describe";
 import { editableDialog, fadedMarkup } from "../editable-dialog";
 import type { EditablePlan, EditableScope } from "../make-editable";
 import { selfContained } from "../../picture";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { IDENTITY, translate, type Point } from "../../scene/matrix";
 import { elementChildren, pathOf, tagName, titleOf, type ContainerNode, type ElementPart, type LeafNode } from "../../scene/model";

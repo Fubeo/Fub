@@ -292,6 +292,15 @@ impl Session {
         self.stroke.as_ref().is_some_and(|s| s.id.is_some())
     }
 
+    /// Il tratto in corso, annunciato o no, è di questo puntatore: chi adatta
+    /// una piattaforma lo chiede per non raccogliere eventi coalescenti e
+    /// predetti di un puntatore che non disegna.
+    pub fn tracks(&self, pointer_id: i64) -> bool {
+        self.stroke
+            .as_ref()
+            .is_some_and(|s| s.pointer_id == pointer_id)
+    }
+
     pub fn set_touch_policy(&mut self, policy: TouchPolicy) {
         self.touch = policy;
     }

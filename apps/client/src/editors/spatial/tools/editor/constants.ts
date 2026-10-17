@@ -2,7 +2,7 @@
 // condividono.
 
 import type { ScaleLimits } from "../../../../spatial/camera";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Role } from "../../scene/analysis";
 import type { LengthUnit } from "../../scene/rulers";
 import type { DrawKey } from "../../strings";

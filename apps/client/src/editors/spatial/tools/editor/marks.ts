@@ -5,7 +5,7 @@
 import { iconEl } from "../../../../ui/icons";
 import { linkName } from "../../describe";
 import type { Ink } from "../../ink/codec";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { apply, compose, IDENTITY, invert, type Matrix, type Point } from "../../scene/matrix";
 import { pathOf, type LeafNode } from "../../scene/model";

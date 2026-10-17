@@ -2,7 +2,7 @@
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
 import { promptForm } from "../../../../ui/form-dialog";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { IDENTITY, type Matrix, type Point } from "../../scene/matrix";
 import { elementChildren, type ElementPart } from "../../scene/model";

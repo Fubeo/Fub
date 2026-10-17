@@ -1,7 +1,7 @@
 // L'editor del disegno: le sfumature sul foglio. Un pezzo di createDrawEditor
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Point } from "../../scene/matrix";
 import type { DocumentModel, ElementPart } from "../../scene/model";
 import { t, type DrawKey } from "../../strings";

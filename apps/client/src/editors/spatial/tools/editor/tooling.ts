@@ -4,7 +4,7 @@
 
 import { promptForm } from "../../../../ui/form-dialog";
 import { formatNumber } from "../../number";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { apply, compose, type Point } from "../../scene/matrix";
 import type { ContainerNode } from "../../scene/model";

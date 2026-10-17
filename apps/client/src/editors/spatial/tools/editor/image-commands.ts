@@ -3,7 +3,7 @@
 // condividono.
 
 import type { MenuItem } from "../../../../ui/menu";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { apply, IDENTITY, invert, type Matrix, type Point } from "../../scene/matrix";
 import { elementsIn } from "../../scene/model";

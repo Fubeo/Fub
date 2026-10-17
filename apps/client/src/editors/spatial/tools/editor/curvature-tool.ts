@@ -4,7 +4,8 @@
 
 import { showContextMenu, type MenuItem } from "../../../../ui/menu";
 import type { InkSample } from "../../../../ink/sample";
-import { attachPenInput, type InkPointerType, type PenInputOptions, type PenInput } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
+import { attachInkInput, type InkInputOptions, type InkInput } from "../../../../ink/dom/pointer-adapter";
 import { isDefaultCurve, pressureCurve, type PenCurve } from "../../../../ink/input/pressure";
 import { apply, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
@@ -44,8 +45,8 @@ export interface CurvatureToolContext {
   replayBezier: (draft: Drafting, origin: "undo" | "redo") => void;
   readModifiers: (event: PointerEvent) => void;
   radialHere: () => boolean;
-  handlers: PenInputOptions;
-  pen: PenInput;
+  handlers: InkInputOptions;
+  pen: InkInput;
 }
 
 /// Monta la Curvatura sui tracciati che ci sono già.
@@ -594,7 +595,7 @@ export function installCurvatureTool(ctx: EditorContext): void {
   };
 
   // I gestori della pipeline, che riceve anche il cursore del foglio.
-  const handlers: PenInputOptions = {
+  const handlers: InkInputOptions = {
     toScene: (clientX, clientY) => {
       const [x, y] = sceneAt(clientX, clientY);
       return { x, y };
@@ -853,6 +854,6 @@ export function installCurvatureTool(ctx: EditorContext): void {
     ...(options.touch === undefined ? {} : { touch: options.touch }),
   };
   ctx.handlers = handlers;
-  const pen = attachPenInput(surface, handlers, life);
+  const pen = attachInkInput(surface, handlers, life);
   ctx.pen = pen;
 }

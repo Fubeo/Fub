@@ -5,7 +5,7 @@
 import { PF1_DEFAULTS } from "../../../../ink/brush";
 import { pf1Outline } from "../../../../ink/pf1";
 import { quantizeInk } from "../../../../ink/sample";
-import type { InkPointerType } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
 import type { Bounds } from "../../scene/geometry";
 import { apply, IDENTITY, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";

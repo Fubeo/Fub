@@ -21,7 +21,7 @@
 //   più vicino, e con `Alt` si misura la distanza fra due riquadri
 //   ([`measure`]).
 
-import type { InkPointerType } from "../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../ink/input/pointer";
 import type { Bounds } from "../scene/geometry";
 import type { Point } from "../scene/matrix";
 import type { Axis } from "./frame";

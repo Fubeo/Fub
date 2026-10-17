@@ -659,7 +659,9 @@ fn the_ink_core_stands_alone() {
         .filter(|m| *m != "fub-ink" && graph.direct(m).contains("fub-ink"))
         .collect();
     assert!(
-        dependents.iter().all(|m| INK_ALLOWED_DEPENDENTS.contains(m)),
+        dependents
+            .iter()
+            .all(|m| INK_ALLOWED_DEPENDENTS.contains(m)),
         "{dependents:?} dipendono da `fub-ink`, ma solo {INK_ALLOWED_DEPENDENTS:?}\n\
          possono. Aggiungere un cliente del nucleo è una decisione: scrivila\n\
          nell'ADR dell'inchiostro condiviso (docs/decisions/0204-nucleo-inchiostro.md)\n\

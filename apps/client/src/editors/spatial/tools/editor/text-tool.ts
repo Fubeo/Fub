@@ -4,7 +4,8 @@
 
 import { INK_MAX_SAMPLES, type InkSample } from "../../../../ink/sample";
 import { formatNumber } from "../../number";
-import type { InkPointerType, StrokeStart } from "../../../../ink/dom/pen-input";
+import type { InkPointerType } from "../../../../ink/input/pointer";
+import type { StrokeStart } from "../../../../ink/input/session";
 import { apply, compose, invert, rotate, translate, type Matrix, type Point } from "../../scene/matrix";
 import type { Op } from "../../scene/ops";
 import { plural, t } from "../../strings";
