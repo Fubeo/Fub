@@ -1,10 +1,9 @@
 // L'editor del disegno: le funzioni di servizio, che più pezzi di
 // createDrawEditor condividono.
 
-import { INK_MAX_SAMPLES, type InkSample } from "../../../../ink/sample";
 import { validCurve } from "../../../../ink/input/pressure";
 import type { Bounds } from "../../scene/geometry";
-import { apply, type Matrix, type Point } from "../../scene/matrix";
+import type { Matrix, Point } from "../../scene/matrix";
 import { elementChildren, type DocumentModel, type ElementPart } from "../../scene/model";
 import { t, type DrawKey } from "../../strings";
 import type { Destination } from "../edit";
@@ -36,21 +35,6 @@ export function holdsPath(outer: readonly number[], inner: readonly number[]): b
   return inner.length > outer.length && outer.every((step, at) => inner[at] === step);
 }
 
-/// Un tratto dritto dal primo all'ultimo campione: un campione ogni unità e
-/// mezza, con la pressione e il tempo distribuiti in mezzo.
-export function straight(samples: readonly InkSample[]): InkSample[] {
-  const first = samples[0];
-  const last = samples[samples.length - 1];
-  if (first === undefined || last === undefined || first === last) return [...samples];
-  const steps = Math.min(INK_MAX_SAMPLES - 1, Math.max(1, Math.ceil(Math.hypot(last.x - first.x, last.y - first.y) / 1.5)));
-  const out: InkSample[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const k = i / steps;
-    out.push({ ...first, x: first.x + (last.x - first.x) * k, y: first.y + (last.y - first.y) * k, t: first.t + (last.t - first.t) * k });
-  }
-  return out;
-}
-
 export function scaleOf(m: Matrix): number {
   return Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 }
@@ -75,11 +59,6 @@ export function translated(bounds: Bounds | null, dx: number, dy: number): Bound
 /// Vero se i riquadri `a` e `b` non si toccano.
 export function disjoint(a: Bounds, b: Bounds): boolean {
   return a.max[0] < b.min[0] || a.min[0] > b.max[0] || a.max[1] < b.min[1] || a.min[1] > b.max[1];
-}
-
-export function toLocal(sample: InkSample, inverse: Matrix): InkSample {
-  const [x, y] = apply(inverse, [sample.x, sample.y]);
-  return { ...sample, x, y };
 }
 
 export function samePath(a: readonly number[], b: readonly number[]): boolean {

@@ -22,7 +22,7 @@ import { toScene, toScreen } from "../../view";
 import { HIGHLIGHTER_OPACITY } from "../palette";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, INK_KEY, inkCopyKey } from "./constants";
 import type { EditorContext } from "./context";
-import { straight } from "./helpers";
+import { straight } from "../../../../ink/geometry";
 import type { Gesture, GestureBase, GuideGesture, InkGesture, RefusedGesture } from "./types";
 
 /// Ciò che il gesto delle guide del documento dà agli altri pezzi dell'editor.

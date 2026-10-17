@@ -2,7 +2,7 @@
 // (`../editor.ts`): lavora sul contesto che i pezzi condividono.
 
 import { keyOf } from "../../describe";
-import { mappedSamples } from "../symmetry";
+import { mappedSamples, straight, toLocal } from "../../../../ink/geometry";
 import { pf1Outline } from "../../../../ink/pf1";
 import { quantizeInk } from "../../../../ink/sample";
 import type { InkPointerType } from "../../../../ink/input/pointer";
@@ -40,7 +40,7 @@ import { draftOf } from "../nodable";
 import { viewMatrix } from "../../view";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, KIND_NAMES, NO_KINDS, NO_NODES, NODE_PX } from "./constants";
 import type { EditorContext } from "./context";
-import { allNodes, holdsPath, innerNode, remapped, sameDestination, samePath, straight, toLocal } from "./helpers";
+import { allNodes, holdsPath, innerNode, remapped, sameDestination, samePath } from "./helpers";
 import type { Editing, EraseGesture, InkGesture, NodeChange, NodeGrab, NodePick, NodesGesture } from "./types";
 
 /// Il raggio della gomma, in pixel.

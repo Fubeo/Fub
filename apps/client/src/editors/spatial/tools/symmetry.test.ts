@@ -1,5 +1,5 @@
-// La penna in simmetria: le trasformazioni delle copie, le guide e i
-// campioni portati da una trasformazione.
+// La penna in simmetria: le trasformazioni delle copie e le guide. I campioni
+// portati da una trasformazione sono di `ink/geometry`.
 
 import { describe, expect, it } from "vitest";
 import { apply, type Matrix, type Point } from "../scene/matrix";
@@ -7,7 +7,6 @@ import {
   clampSlices,
   DEFAULT_SYMMETRY,
   isSymmetryKind,
-  mappedSamples,
   MAX_SLICES,
   MIN_SLICES,
   strokeCount,
@@ -89,24 +88,5 @@ describe("le guide", () => {
     expect(symmetryRays(at({ kind: "horizontal" }))).toEqual([0, 180]);
     expect(symmetryRays(at({ kind: "radial", slices: 4, mirror: false }))).toEqual([270, 0, 90, 180]);
     expect(symmetryRays(at({ kind: "radial", slices: 3, mirror: true }))).toEqual([270, 330, 30, 90, 150, 210]);
-  });
-});
-
-describe("i campioni portati", () => {
-  it("muovono i punti e tengono pressione e tempo", () => {
-    expect(mappedSamples([{ x: 90, y: 20, t: 0, p: 0.5 }, { x: 80, y: 30, t: 16, p: 0.7 }], [-1, 0, 0, 1, 200, 0])).toEqual([
-      { x: 110, y: 20, t: 0, p: 0.5 },
-      { x: 120, y: 30, t: 16, p: 0.7 },
-    ]);
-  });
-
-  it("girano l'azimut della penna con loro, e lo specchiano", () => {
-    const [turned] = mappedSamples([{ x: 0, y: 0, t: 0, a: 40, z: 30 }], [0, 1, -1, 0, 0, 0]);
-    expect(turned!.a).toBe(40);
-    expect(turned!.z).toBeCloseTo(120, 9);
-    const [mirrored] = mappedSamples([{ x: 0, y: 0, t: 0, a: 40, z: 30 }], [-1, 0, 0, 1, 0, 0]);
-    expect(mirrored!.z).toBeCloseTo(150, 9);
-    const [flipped] = mappedSamples([{ x: 0, y: 0, t: 0, a: 40, z: 30 }], [1, 0, 0, -1, 0, 0]);
-    expect(flipped!.z).toBeCloseTo(330, 9);
   });
 });

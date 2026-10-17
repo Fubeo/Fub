@@ -20,7 +20,8 @@ import { elemBounds, type ForeignBlock, type Unit } from "../hit";
 import { cornerCursor } from "../reshape";
 import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, DRAG_PX, HIT_PX, MADE, NO_KINDS, NODE_PX } from "./constants";
 import type { EditorContext } from "./context";
-import { comparePaths, holdsPath, innerNode, remapped, toLocal } from "./helpers";
+import { toLocal } from "../../../../ink/geometry";
+import { comparePaths, holdsPath, innerNode, remapped } from "./helpers";
 import type { BezierGesture, CurveDraft, CurveGrab, Drafting, Editing, EraseGesture, NodeChange } from "./types";
 
 /// Quanto dopo il tasto laterale della penna lasciato arriva il menu

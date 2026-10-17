@@ -20,7 +20,8 @@ import { NOTE_SIZE, noteElem, noteLabel, promptNote, readNote, type NoteText } f
 import { shapeElem } from "../shapes";
 import { ADDED, HIT_PX } from "./constants";
 import type { EditorContext } from "./context";
-import { nodeAtPath, straight, translated } from "./helpers";
+import { straight } from "../../../../ink/geometry";
+import { nodeAtPath, translated } from "./helpers";
 import type { ShapeDrag } from "./types";
 
 /// Ciò che Invio aggiunge sul foglio delle annotazioni, in unità della
