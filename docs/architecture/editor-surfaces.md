@@ -339,6 +339,37 @@ Limiti, coordinate, fallback, diff UTF-8 e parità nativo/WASM sono normati in
 [ABI e WIT](../reference/abi-and-wit.md) e nel [contratto
 IPC](../reference/ipc-contract.md). Nessuna battuta genera IPC o WASM.
 
+### Correttore condiviso
+
+Il correttore ha un motore e un client per tutte le superfici di prosa, e un
+adattatore per formato.
+
+- Il motore è la feature `fub.proof`, una route `query_index` custom chiusa e
+  versionata (`languages`, `check`). Riceve segmenti di testo, una lingua, le
+  opzioni e le parole del dizionario personale; risponde con rilievi in byte
+  UTF-8 dentro ogni segmento. Il dizionario personale è l'impostazione del
+  vault `proof.words`, scritta soltanto dai comandi `proof.word.add` e
+  `proof.word.remove`. I dizionari Hunspell della macchina li legge soltanto
+  il collegamento dell'host (`HostWiring::MachineDictionaries`).
+- Il client, `apps/client/src/editors/core/proof.ts`, non conosce CodeMirror
+  né formati. Legge le impostazioni, spezza le richieste entro i limiti della
+  route, ricorda i segmenti già controllati, converte gli offset in code unit
+  UTF-16 e scarta le risposte arrivate dopo un cambio di configurazione. Senza
+  la feature (`unserved`) risponde `null`.
+- L'adattatore del formato estrae la prosa e tiene la mappa a pezzi verso il
+  buffer. Quello Markdown
+  (`apps/client/src/editors/text/profiles/markdown/proof.ts`) mette `U+FFFC`
+  al posto di codice, link, tag e formule, e offre una sostituzione soltanto
+  per un rilievo che sta in un pezzo copiato dal buffer. I segni sono
+  diagnostiche di `@codemirror/lint`; una correzione è una transazione
+  `input.proof`, quindi entra nella cronologia della superficie e nella coda
+  della `DocumentSession`.
+
+La superficie carica client e adattatore con un import dinamico e li monta con
+`MarkdownProfile.setProof` e `TextEngine.reconfigure()`; la sua `Lifetime`
+chiude il client. Le porte (`editors/core/proof-ports.ts`) le compone
+`editors/core/bootstrap.ts` sul vault in cui la superficie nasce.
+
 ## Confine CodeMirror
 
 Gli import `@codemirror/*` della shell sono confinati a
@@ -363,6 +394,8 @@ mantiene CodeMirror un servizio della shell testuale.
 - `apps/client/src/editors/text/profiles/markdown/table-grid.ts`
 - `apps/client/src/editors/text/profiles/markdown/table-widget.ts`
 - `apps/client/src/editors/core/editor-actions.ts`
+- `apps/client/src/editors/core/proof.ts` e `proof-ports.ts`
+- `apps/client/src/editors/text/profiles/markdown/proof.ts`
 - `apps/client/src/panels/format-bar.ts`
 - `apps/client/src/editors/text/profiles/markdown/completions.ts`
 - `apps/client/src/editors/text/profiles/markdown/livepreview.ts`

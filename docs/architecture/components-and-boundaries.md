@@ -22,6 +22,8 @@ flowchart LR
     IMPORTERS["fub-importers"] --> ABI
     FEATURES["fub-features"] --> ABI
     FEATURES -. "feature base" .-> BASE
+    PROOF["wordcraft-proof"]
+    FEATURES -. "feature proof" .-> PROOF
     HOST["fub-host"] --> KERNEL
     HOST --> ABI
     HOST --> FEATURES
@@ -58,6 +60,7 @@ del repository verificano le eccezioni.
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
+| `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |
@@ -120,8 +123,9 @@ id, nome, catalogo, impostazioni, servizi forniti e richiesti, e i provider che
 si costruiscono con una chiamata: view, comandi, indice, regole di sintassi e
 renderer. `fub-host` monta ogni riga con lo stesso ciclo e non confronta id.
 Ciò che soltanto chi monta sa collegare, cioè l'indice di ricerca nella cartella
-dati assegnata e lo store delle versioni dietro l'interruttore dell'host, è una
-variante di `HostWiring` dichiarata nella riga.
+dati assegnata, lo store delle versioni dietro l'interruttore dell'host e i
+dizionari Hunspell della macchina per il correttore, è una variante di
+`HostWiring` dichiarata nella riga.
 
 Una feature che non funziona senza un'altra lo dichiara due volte: la sua
 feature Cargo accende l'altra (`trash` → `commands`, `template` e `base` →
@@ -147,6 +151,7 @@ indipendenti.
 | foglio | `crates/fub-format-sheet/src/` |
 | lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
 | feature | `crates/fub-features/src/` |
+| codice di terzi vendorizzato | `vendor/` (provenienza in `UPSTREAM.md`) |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |
 | shell | `apps/client/src/main.ts`, `panels/`, `state/`, `ui/` |
