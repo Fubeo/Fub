@@ -122,6 +122,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
             "fub.maintenance",
             "fub.markdown",
             "fub.outline",
+            "fub.proof",
             "fub.properties",
             "fub.publish",
             "fub.queries",

@@ -550,6 +550,13 @@ fn register_feature(
             Ok(opened) => opened_versions = Some(opened),
             Err(failure) => return vec![failure],
         },
+        #[cfg(feature = "proof")]
+        HostWiring::MachineDictionaries => {
+            let index = fub_features::ProofIndex::with_machine_dictionaries();
+            if let Err(error) = registrar.register_index_provider(Box::new(index)) {
+                return vec![format!("proof index not registered: {error}")];
+            }
+        }
         #[allow(unreachable_patterns)]
         unwired => {
             return vec![format!(

@@ -35,6 +35,7 @@ default = [
     "blocks",
     "base",
     "formatting",
+    "proof",
 ]
 search = ["dep:tantivy", "dep:regex"]
 versioning = []
@@ -71,6 +72,8 @@ base = ["dep:fub-format-base", "properties"]
 # La barra dichiara i pulsanti; la modifica la esegue la shell. Nessuna
 # dipendenza, di compilazione o di funzionamento.
 formatting = []
+# Il correttore porta il motore di WordCraft, e nessun altro lo tira dentro.
+proof = ["dep:wordcraft-proof"]
 
 [dependencies]
 camino.workspace = true
@@ -86,6 +89,8 @@ jiff = { workspace = true, optional = true }
 # una feature sola.
 tantivy = { version = "0.26", optional = true }
 regex = { workspace = true, optional = true }
+# Dietro `proof`: ortografia e grammatica di WordCraft, vendorizzate.
+wordcraft-proof = { workspace = true, optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.
