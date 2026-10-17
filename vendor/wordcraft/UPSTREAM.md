@@ -23,15 +23,15 @@ del documento (`doc`), le sue unità di misura (`geom`) e il codec DOCX
 | `crates/proof/Cargo.toml` | `crates/proof/Cargo.toml` | manifest, sotto |
 | `crates/geom/` | `crates/geom/` | `src/lib.rs` (la condizione sui test), manifest |
 | `crates/doc/` | `crates/doc/` | `src/lib.rs` (la condizione sui test), manifest |
-| `crates/docx/` | `crates/docx/` | `src/lib.rs` (la condizione sui test), `src/package.rs` e sei file di `tests/` per `zip` 9, manifest |
+| `crates/docx/` | `crates/docx/` | `src/lib.rs` (la condizione sui test e due esportazioni), `src/package.rs` e sei file di `tests/` per `zip` 9, `src/write/settings_merge.rs` e `src/write/mod.rs` (una verifica in più), manifest |
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
 | `assets/spelling/` | `assets/spelling/` | nessuna |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
 
-Le modifiche al sorgente servono soltanto a passare
+Le modifiche al sorgente servono a passare
 `cargo clippy --workspace --all-targets -- -D warnings` della CI di Fub, dove
 `-D warnings` sulla riga di comando vince sui `[lints]` del manifest, e
-`cargo deny check`:
+`cargo deny check`; una sola aggiunge una funzione, ed è l'ultima della lista:
 
 - `src/lib.rs` di ogni crate: il `#![deny(clippy::unwrap_used, …)]` dell'upstream diventa
   `#![cfg_attr(not(test), deny(…))]`. Il codice di libreria resta vietato come
@@ -44,7 +44,14 @@ Le modifiche al sorgente servono soltanto a passare
   una voce dell'archivio è un `Result`: una voce dal nome illeggibile si salta
   con un avviso nel log, come l'upstream fa già con una voce illeggibile;
 - `docx/tests/*.rs`: per la stessa ragione `f.name()` diventa
-  `f.name().unwrap()` nei sei file di test che leggono l'archivio.
+  `f.name().unwrap()` nei sei file di test che leggono l'archivio;
+- `docx/src/write/settings_merge.rs`: la funzione nuova `kept_unowned`, con il
+  suo test, dice se una parte `settings.xml` scritta conserva, byte per byte,
+  ogni figlio di `w:settings` che il modello non tiene e che `merge` dichiara
+  di conservare. La esportano `src/write/mod.rs` e `src/lib.rs` come
+  `settings_kept_unowned`, insieme alla chiave `SETTINGS_ORIG` della copia
+  originale. Serve a `fub-format-rich`, che rifiuta di scrivere un documento
+  che perderebbe impostazioni in silenzio; il resto del codec non cambia.
 
 I manifest scrivono per esteso i campi che l'upstream eredita dal suo
 workspace, tengono i lint dell'upstream e dichiarano `rust-version = "1.89"`,
@@ -109,8 +116,8 @@ segni d'ortografia ma conserva le regole grammaticali.
 3. riporta nel `Cargo.toml` qui le dipendenze nuove dell'upstream;
 4. aggiorna commit e impronte in questa pagina;
 5. esegui `cargo test -p wordcraft-proof -p wordcraft-geom -p wordcraft-doc
-   -p wordcraft-docx`, i test di `fub-features` con la feature `proof` e
-   `cargo deny check`.
+   -p wordcraft-docx -p fub-format-rich`, i test di `fub-features` con la
+   feature `proof` e `cargo deny check`.
 
 Una correzione che serve a Fub va proposta all'upstream; finché non entra, va
 elencata nella tabella delle modifiche qui sopra.
