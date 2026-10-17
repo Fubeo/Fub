@@ -2,11 +2,11 @@
 // geometria è quella che il painter disegna, quindi i documenti qui sono
 // scene vere, aperte dal motore.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PF1_DEFAULTS } from "../../../ink/brush";
 import { quantizeInk, type InkSample } from "../../../ink/sample";
 import type { Bounds } from "../scene/geometry";
-import { apply, compose, IDENTITY, rotate, translate } from "../scene/matrix";
+import { apply, compose, IDENTITY, rotate, translate, type Point } from "../scene/matrix";
 import { doc } from "../scene/test-support";
 import { strokeElem } from "./edit";
 import { PaintBuilder } from "../painter/paint";
@@ -200,6 +200,80 @@ describe("toccare un oggetto", () => {
     const { index } = open(SHAPES);
     expect(index.along([20, 80], [20, 100], 1).map((unit) => unit.key)).toEqual(["@2.3"]);
     expect(index.along([0, 50], [100, 50], 1)).toEqual([]);
+  });
+
+  it("la gomma non riprova ciò che ha già segnato", () => {
+    const { index } = open(SHAPES);
+    const line = index.get("@2.3")!;
+    const touches = vi.spyOn(line, "touches");
+    expect(index.along([20, 80], [20, 100], 1, new Map([[line.key, line]]))).toEqual([]);
+    expect(touches).not.toHaveBeenCalled();
+    // Sotto la chiave c'è un altro oggetto: si prova.
+    expect(index.along([20, 80], [20, 100], 1, new Map([[line.key, index.get("r")!]]))).toEqual([line]);
+  });
+
+  it("con molti oggetti la gomma prende ciò che prenderebbe guardandoli tutti", () => {
+    // Un generatore con seme (mulberry32): la prova si ripete.
+    let state = 5;
+    const next = (): number => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(state ^ (state >>> 15), state | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const shapes = Array.from({ length: 700 }, (_, i) => {
+      const x = (i % 30) * 20 + next() * 10;
+      const y = Math.floor(i / 30) * 20 + next() * 10;
+      switch (i % 6) {
+        case 0:
+          return `<rect x="${x}" y="${y}" width="${4 + next() * 20}" height="${4 + next() * 8}" fill="none" stroke="#000" stroke-width="2"/>`;
+        case 1:
+          return `<circle cx="${x}" cy="${y}" r="${1 + next() * 6}"/>`;
+        case 2:
+          return `<path d="M${x} ${y} Q${x + 8} ${y + 12} ${x + 15} ${y + 3}" fill="none" stroke="#000" stroke-width="${next() * 4}"/>`;
+        case 3:
+          return `<g id="g${i}" transform="translate(${x} ${y}) rotate(${next() * 90})"><rect x="0" y="0" width="8" height="3"/></g>`;
+        case 4:
+          return `<line x1="${x}" y1="${y}" x2="${x + next() * 60}" y2="${y + next() * 30}" stroke="#000"/>`;
+        default:
+          return `<polyline points="${x},${y} ${x + 5},${y + 9} ${x + 11},${y}" fill="none" stroke="#000" stroke-width="3"/>`;
+      }
+    });
+    const { index } = open(doc(
+      `<defs id="fub-defs"><clipPath id="via" fub:role="private"><rect x="5000" y="5000" width="1" height="1"/></clipPath></defs>${LAYER}`
+        + '<rect id="sotto" x="-5" y="-5" width="620" height="500" fill="none" stroke="#000"/><g id="vuoto"/>'
+        + `${shapes.join("")}<rect id="nascosto" x="40" y="40" width="30" height="30" clip-path="url(#via)"/></g>`,
+    ));
+    expect(index.units.length).toBeGreaterThan(700);
+    expect(index.units.some((unit) => unit.bounds === null)).toBe(true);
+    let found = 0;
+    for (let k = 0; k < 600; k++) {
+      const a: Point = [next() * 640 - 20, next() * 520 - 20];
+      const reach = k % 10 === 0 ? 300 : 6;
+      const b: Point = [a[0] + (next() - 0.5) * reach, a[1] + (next() - 0.5) * reach];
+      const tolerance = [0, 0.5, 2, 10][k % 4]!;
+      const expected = index.units.filter((unit) => unit.touches(a, b, tolerance)).map((unit) => unit.key);
+      expect(index.along(a, b, tolerance).map((unit) => unit.key), `segmento ${k}`).toEqual(expected);
+      found += expected.length;
+    }
+    expect(found).toBeGreaterThan(600);
+    // Anche le domande strane danno ciò che darebbe la scansione.
+    const strange: Array<[Point, Point, number]> = [
+      [[Number.NaN, 0], [10, 10], 1],
+      [[0, 0], [10, 10], Number.NaN],
+      [[300, 200], [300, 200], Infinity],
+      [[-1e300, 0], [1e300, 0], 1],
+    ];
+    for (const [a, b, tolerance] of strange) {
+      expect(index.along(a, b, tolerance)).toEqual(index.units.filter((unit) => unit.touches(a, b, tolerance)));
+    }
+    // Ciò che la gomma ha già segnato non torna; il resto sì, nello stesso
+    // ordine.
+    const across = index.along([0, 0], [600, 480], 2);
+    expect(across.length).toBeGreaterThan(20);
+    const half = across.length >> 1;
+    const marked = new Map(across.slice(0, half).map((unit) => [unit.key, unit] as const));
+    expect(index.along([0, 0], [600, 480], 2, marked)).toEqual(across.slice(half));
   });
 
   it("col riquadro prende gli oggetti che ci stanno interi", () => {

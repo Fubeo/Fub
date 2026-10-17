@@ -19,9 +19,11 @@ export interface Erasable {
 }
 
 /// Il prodotto vede quali unità tocca il segmento da `from` a `to`, dentro
-/// `radius` (nelle sue coordinate).
+/// `radius` (nelle sue coordinate). `marked` è ciò che la gomma ha già
+/// segnato: un'unità che vi sta sotto la sua chiave, lo stesso oggetto, il
+/// prodotto può non provarla, perché segnarla di nuovo non cambierebbe niente.
 export interface EraseSource<U extends Erasable> {
-  along(from: Spot, to: Spot, radius: number): Iterable<U>;
+  along(from: Spot, to: Spot, radius: number, marked: ReadonlyMap<string, U>): Iterable<U>;
 }
 
 export class EraseSweep<U extends Erasable> {
@@ -39,7 +41,7 @@ export class EraseSweep<U extends Erasable> {
   along(source: EraseSource<U>, p: Spot, scale: number): void {
     const from = this.last ?? p;
     this.last = p;
-    for (const unit of source.along(from, p, this.radiusPx / scale)) this.seen.set(unit.key, unit);
+    for (const unit of source.along(from, p, this.radiusPx / scale, this.seen)) this.seen.set(unit.key, unit);
   }
 
   /// Le unità segnate, nell'ordine in cui sono state toccate.

@@ -65,6 +65,21 @@ describe("il gesto della gomma", () => {
     expect(sweep.marked()).toHaveLength(1);
   });
 
+  it("il prodotto sa che cosa la gomma ha già segnato", () => {
+    const sweep = new EraseSweep<Unit>(ERASER, "mouse");
+    const a = unit("a", 50, 0);
+    const asked: string[][] = [];
+    const source: EraseSource<Unit> = {
+      along(from, to, radius, marked) {
+        asked.push([...marked.keys()]);
+        return marked.get(a.key) === a || distance(a.at, from, to) > radius ? [] : [a];
+      },
+    };
+    for (const x of [0, 100, 0]) sweep.along(source, [x, 0], 1);
+    expect(asked).toEqual([[], [], ["a"]]);
+    expect(sweep.marked()).toEqual([a]);
+  });
+
   it("un cammino che non incontra niente non segna niente", () => {
     const sweep = new EraseSweep<Unit>(ERASER, "mouse");
     sweep.along(index([unit("a", 50, 50)]), [0, 0], 1);
