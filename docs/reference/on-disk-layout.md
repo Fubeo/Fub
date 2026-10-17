@@ -231,8 +231,13 @@ chi è la cartella (`doc_id`, `deleted_at`) e registra dimensione e impronta di
 ogni versione (`versions`), scritte quando la versione nasce: la ricostruzione
 dell'indice le riprende da lì, quindi un blob alterato dopo la scrittura resta
 rifiutato in lettura. Una cartella scritta prima di questo campo si ricostruisce
-ancora, ricalcolando le impronte dai byte attuali; il primo salvataggio le
-registra. Ogni nuova versione
+ancora, ricalcolando le impronte dai byte attuali. Per non lasciarla così
+l'indice porta il campo facoltativo `registered`: assente (o `false`) in un
+indice scritto prima, e alla prima apertura il versioning copia nel `meta.json`
+di ogni cartella le impronte che l'indice ricorda — quelle della scrittura —
+poi riscrive l'indice con `registered: true`. Si fa una volta sola e solo da un
+indice che c'è: un indice ricostruito dai byte non registra le impronte che ha
+appena ricalcolato. Il primo salvataggio le registra comunque. Ogni nuova versione
 pota le altre per fasce: tutte sotto le 24 ore, una per ora fino a 7 giorni,
 una per giorno fino a 90. Oltre resta solo la più recente. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
