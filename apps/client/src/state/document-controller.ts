@@ -734,15 +734,21 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
 
   lifetime.add(onEvent("document_changed", (e, origin) => changed(e.id, origin)));
   lifetime.add(onEvent("entry_changed", (e, origin) => changed(e.id, origin)));
+  // «Ricrea» lo sceglie l'utente più tardi: il vault è quello in cui la nota è
+  // sparita, non quello che sarà aperto allora.
   lifetime.add(
-    onEvent("document_removed", (e) =>
-      removed(e.id, (text) => api.writeDocument(e.id, text, { kind: "dictated" }))),
+    onEvent("document_removed", (e) => {
+      const vault = state.vaultRoot || null;
+      removed(e.id, (text) => api.writeDocument(e.id, text, { kind: "dictated" }, vault));
+    }),
   );
   // Ricreare un file senza formato è una creazione esclusiva a byte: se nel
   // frattempo qualcuno l'ha rifatto, la scrittura lo dice invece di coprirlo.
   lifetime.add(
-    onEvent("entry_removed", (e) =>
-      removed(e.id, (text) => api.resourceWrite(e.id, new TextEncoder().encode(text), null))),
+    onEvent("entry_removed", (e) => {
+      const vault = state.vaultRoot || null;
+      removed(e.id, (text) => api.resourceWrite(e.id, new TextEncoder().encode(text), null, vault));
+    }),
   );
   lifetime.add(onEvent("document_renamed", (e) => renamed(e.from, e.to)));
   lifetime.add(onEvent("entry_renamed", (e) => renamed(e.from, e.to)));

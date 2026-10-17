@@ -65,6 +65,7 @@ use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
+use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{
     DataRead, DataWrite, HostApi, HostCommands, HostEnv, HostEvents, HostNetwork, HostQuery,
     HostServices, IndexQuery, IndexResult, JobId, JobProgress, JobSpec, Page, Paged, ReadApi,
@@ -882,6 +883,71 @@ impl VaultWrite for JobHost {
     }
 }
 
+impl JobHost {
+    /// Cestina `id`; con `expected`, soltanto se ha ancora quella revisione. Il
+    /// confronto sta sotto lo stesso turno di scrittura che cestina: un
+    /// salvataggio non può inserirsi fra l'uno e l'altro.
+    fn trash_checked(
+        &mut self,
+        id: &DocId,
+        expected: Option<&Revision>,
+    ) -> Result<DocId, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    id.as_str(),
+                    || format!("trashing `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                id.as_str(),
+                || format!("trashing `{id}`"),
+            )?;
+            let id = fenced_doc_id(id)?;
+            if let Some(expected) = expected {
+                if ws.document_revision(&id).map_err(PluginError::from)? != *expected {
+                    return Err(PluginError::Conflict(Text::message(
+                        "host.vault.moved",
+                        vec![Arg::text("doc", id.as_str())],
+                    )));
+                }
+            }
+            ws.prepare_document_deletion(&id)
+                .map_err(PluginError::from)?
+        };
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let committed = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_deletion(completed)
+                .map_err(|failure| *failure)
+        };
+        let committed = match committed {
+            Ok(committed) => committed,
+            Err((error, completed)) => {
+                completed.rollback().map_err(PluginError::from)?;
+                return Err(PluginError::from(error));
+            }
+        };
+        let finalized = committed.invoke();
+        with_event_drain(&workspace, |ws| ws.finish_document_deletion(finalized))?.map_err(
+            |failure| {
+                let (error, _) = *failure;
+                error
+            },
+        )
+    }
+}
+
 impl VaultStructure for JobHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
         self.write_document_detached(
@@ -998,51 +1064,11 @@ impl VaultStructure for JobHost {
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.stopped()?;
-        let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
-        let prepared = {
-            let ws = workspace.read()?;
-            if self.mode == InvokeMode::DryRun {
-                authorize_path(
-                    &ReadOnly {
-                        why: "simulazione del comando",
-                    },
-                    Capability::VaultStructure,
-                    id.as_str(),
-                    || format!("trashing `{id}`"),
-                )?;
-            }
-            authorize_path(
-                &ws.granted_policy(&self.plugin),
-                Capability::VaultStructure,
-                id.as_str(),
-                || format!("trashing `{id}`"),
-            )?;
-            let id = fenced_doc_id(id)?;
-            ws.prepare_document_deletion(&id)
-                .map_err(PluginError::from)?
-        };
-        let completed = prepared.invoke().map_err(PluginError::from)?;
-        let committed = {
-            let mut ws = workspace.write()?;
-            ws.commit_document_deletion(completed)
-                .map_err(|failure| *failure)
-        };
-        let committed = match committed {
-            Ok(committed) => committed,
-            Err((error, completed)) => {
-                completed.rollback().map_err(PluginError::from)?;
-                return Err(PluginError::from(error));
-            }
-        };
-        let finalized = committed.invoke();
-        with_event_drain(&workspace, |ws| ws.finish_document_deletion(finalized))?.map_err(
-            |failure| {
-                let (error, _) = *failure;
-                error
-            },
-        )
+        self.trash_checked(id, None)
+    }
+
+    fn trash_document_if(&mut self, id: &DocId, expected: &Revision) -> Result<DocId, PluginError> {
+        self.trash_checked(id, Some(expected))
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {

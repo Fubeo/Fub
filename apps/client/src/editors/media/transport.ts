@@ -68,7 +68,7 @@ export async function writeResource(
   id: string,
   bytes: Uint8Array,
   expected: string | null,
-  vault?: string,
+  vault?: string | null,
 ): Promise<ResourceWriteReceipt> {
   const meta = encodeURIComponent(JSON.stringify({ id, vault: vault ?? null, expected }));
   return invoke<ResourceWriteReceipt>("resource_write", bytes, {

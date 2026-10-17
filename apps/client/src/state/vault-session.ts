@@ -11,13 +11,14 @@
 // ricerca, le view dichiarate, la rail, gli avvisi — sono **porte**: la shell
 // le dichiara quando crea la sessione, nella forma di `setSidePanelController`
 // (`ui/side-panels.ts`).
+import type { VaultInfo } from "../host/contract";
 import { api } from "../host/ipc";
 import { vaultStatus } from "../host/query";
 import { plural, t } from "../i18n/strings";
 import { allCommands, conflictMessage, keybindingKey, loadKeyOverrides } from "../ui/commands";
 import type { Tone } from "../ui/notify";
 import { openDocument, recoverDrafts, resetDocumentsForVault, synchronize } from "./document-controller";
-import { flushPendingSave } from "./document-session";
+import { flushPendingSave, freezeSessions, thawSessions } from "./document-session";
 import { drainDocumentWindows } from "./document-windows";
 import { activeDoc, loadLayout } from "./layout";
 import { loadOrganization } from "./organization";
@@ -82,7 +83,25 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
       }
     }
     if (!alive()) return;
-    const info = await api.openVault(dir);
+    // Da qui al vault nuovo le sessioni non accettano battute e non scrivono:
+    // `openVault` cambia il vault che le porte dell'host risolvono, e un
+    // salvataggio dell'autosave che partisse nell'attesa scriverebbe la nota
+    // omonima dell'altro vault. Ciò che è stato battuto fra il salvataggio di
+    // sopra e adesso si vede qui — e allora si rinuncia, senza perderlo.
+    const typedSince = state.vaultRoot ? freezeSessions() : [];
+    if (typedSince.length > 0) {
+      thawSessions();
+      ports.notify(t("demo.unsaved", { files: typedSince.join(", ") }), "guasto");
+      return;
+    }
+    let info: VaultInfo;
+    try {
+      info = await api.openVault(dir);
+    } catch (error) {
+      // Il vault di prima resta quello aperto, e si può continuare a scriverci.
+      thawSessions();
+      throw error;
+    }
     if (!alive()) return;
     const unsaved = await resetDocumentsForVault();
     if (unsaved.length > 0) ports.notify(t("demo.unsaved", { files: unsaved.join(", ") }), "guasto");

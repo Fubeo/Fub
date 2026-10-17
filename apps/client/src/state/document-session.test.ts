@@ -322,7 +322,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
 
     // «Mantieni il mio» è la scelta esplicita che detta.
     await sessions.resolveConflict("nota.md", "mine");
-    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo vecchio", { kind: "dictated" });
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo vecchio", { kind: "dictated" }, null);
   });
 
   it("un ascoltatore asincrono che fallisce non fa fallire il salvataggio", async () => {
@@ -495,7 +495,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
 
     expect(sessions.discardUnsaved("nota.md")).toEqual({ kind: "closed", dirty: true });
     expect(sessions.get("nota.md")).toBeUndefined();
-    await vi.waitFor(() => expect(vi.mocked(api.discardDraft)).toHaveBeenCalledWith("nota.md"));
+    await vi.waitFor(() => expect(vi.mocked(api.discardDraft)).toHaveBeenCalledWith("nota.md", null));
   });
 
   it("ritenta una bozza fallita mentre l'owner resta vivo", async () => {
@@ -566,7 +566,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     // Il file non si ricrea da solo, ma il lavoro resta in bozza.
     expect(vi.mocked(api.writeDocument).mock.calls).toHaveLength(0);
     // Con la sua base: al recupero è «orfana», non «nuova», e non risorge da sola.
-    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledWith("sparita.md", "lavoro da non resuscitare", expect.any(String));
+    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledWith("sparita.md", "lavoro da non resuscitare", expect.any(String), null);
   });
 
   it("una rimozione esterna chiude prima che un salvataggio accodato possa partire", async () => {
@@ -744,6 +744,149 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(vi.mocked(api.writeDocument)).not.toHaveBeenCalled();
     finishDelete();
     await deleting;
+  });
+
+  it("un cambio di vault ferma le sessioni: né battute accettate né scritture, finché non si scongela", async () => {
+    const timers: Array<() => void> = [];
+    vi.stubGlobal("setTimeout", vi.fn((callback: () => void) => {
+      timers.push(callback);
+      return ++nextTimer;
+    }));
+    vi.stubGlobal("clearTimeout", vi.fn());
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    await sessions.read("altra.md");
+    acceptText(sessions, "nota.md", "armata prima del blocco");
+
+    // La sessione che aveva testo non salvato lo dice: chi cambia vault rinuncia.
+    expect(sessions.freezeAll()).toEqual(["nota.md"]);
+
+    // Il salvataggio armato prima del blocco scatta e non scrive nell'altro vault.
+    for (const fire of timers.splice(0)) fire();
+    await sessions.flush("nota.md");
+    expect(api.writeDocument).not.toHaveBeenCalled();
+    // Una battuta nuova non si accetta: la superficie si riallinea al testo di prima.
+    const before = sessions.text("altra.md")!;
+    expect(
+      sessions.acceptSurfaceChange("altra.md", "test-surface", {
+        text: "x",
+        operation: operationFromText(before, "x"),
+      }),
+    ).toEqual({ kind: "realigned", text: before });
+    expect(sessions.inspect("altra.md")).toMatchObject({ dirty: false, text: before });
+    expect(api.saveDraft).not.toHaveBeenCalled();
+
+    // Il cambio non c'è stato: si riprende, e il testo armato torna a salvarsi.
+    sessions.thawAll();
+    acceptText(sessions, "altra.md", "ora si scrive");
+    await sessions.flush("nota.md");
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "armata prima del blocco", expect.anything(), null);
+  });
+
+  it("una sessione scrive, mette in bozza e rilegge nel vault in cui è nata, anche se il corrente è un altro (FUB-001)", async () => {
+    let vault: string | null = "/a";
+    const sessions = new DocumentSessionCollection(api, () => vault);
+    await sessions.read("nota.md");
+    expect(api.readDocument).toHaveBeenLastCalledWith("nota.md", "/a");
+    acceptText(sessions, "nota.md", "modifica fatta in A");
+
+    // L'host ha già aperto B e lo risolve per chi non dice il vault.
+    vault = "/b";
+    await sessions.flush("nota.md");
+    expect(api.writeDocument).toHaveBeenCalledTimes(1);
+    expect(api.writeDocument).toHaveBeenLastCalledWith("nota.md", "modifica fatta in A", expect.anything(), "/a");
+
+    // Il salvataggio che fallisce lascia la bozza, e la bozza è di A.
+    api.writeDocument = vi.fn(async () => {
+      throw new Error("disco pieno");
+    });
+    acceptText(sessions, "nota.md", "seconda modifica");
+    await sessions.flushBeforeClose();
+    expect(api.writeDocument).toHaveBeenLastCalledWith("nota.md", "seconda modifica", expect.anything(), "/a");
+    expect(api.saveDraft).toHaveBeenLastCalledWith("nota.md", "seconda modifica", expect.any(String), "/a");
+
+    // Una sessione nata dopo è di B.
+    await sessions.read("altra.md");
+    expect(api.readDocument).toHaveBeenLastCalledWith("altra.md", "/b");
+    acceptText(sessions, "altra.md", "modifica fatta in B");
+    await sessions.flush("altra.md");
+    expect(api.writeDocument).toHaveBeenLastCalledWith("altra.md", "modifica fatta in B", expect.anything(), "/b");
+  });
+
+  it("un file senza formato salva a byte nel vault in cui è nato (FUB-001)", async () => {
+    vi.mocked(api.readDocument).mockImplementation(async (): Promise<DocumentSource> => ({
+      text: "<svg/>",
+      revision: "rev-disco",
+      format_id: null,
+      source_kind: "text",
+    }));
+    let vault: string | null = "/a";
+    const sessions = new DocumentSessionCollection(api, () => vault);
+    await sessions.read("disegno.svg");
+    acceptText(sessions, "disegno.svg", "<svg><g/></svg>");
+
+    vault = "/b";
+    await sessions.flush("disegno.svg");
+
+    expect(api.writeDocument).not.toHaveBeenCalled();
+    expect(api.resourceWrite).toHaveBeenCalledWith(
+      "disegno.svg",
+      new TextEncoder().encode("<svg><g/></svg>"),
+      "rev-disco",
+      "/a",
+    );
+  });
+
+  it("una lettura in volo quando il vault cambia non apre una sessione sotto il vault nuovo (FUB-001)", async () => {
+    let finishRead!: (source: DocumentSource) => void;
+    api.readDocument = vi.fn(
+      () =>
+        new Promise<DocumentSource>((resolve) => {
+          finishRead = resolve;
+        }),
+    );
+    let vault: string | null = "/a";
+    const sessions = new DocumentSessionCollection(api, () => vault);
+
+    const reading = sessions.read("nota.md");
+    vault = "/b";
+    finishRead({ text: "nota di A", revision: "rev-a", format_id: "markdown", source_kind: "text" });
+
+    // Chi leggeva riceve il testo che ha chiesto; ma sotto `nota.md` non nasce
+    // una sessione che scriverebbe la nota di B con la base di A.
+    await expect(reading).resolves.toBe("nota di A");
+    expect(sessions.get("nota.md")).toBeUndefined();
+  });
+
+  it("rinomina ed eliminazione durante il passaggio restano nel vault della sessione (FUB-001)", async () => {
+    let vault: string | null = "/a";
+    const sessions = new DocumentSessionCollection(api, () => vault);
+    await sessions.read("a.md");
+    await sessions.read("b.md");
+
+    // Il passaggio comincia: le sessioni si fermano, l'host apre B.
+    expect(sessions.freezeAll()).toEqual([]);
+    vault = "/b";
+
+    // La rinomina dei file di A, che arriva come evento, sposta la sessione
+    // senza chiedere niente a nessun vault e senza sbloccarla.
+    expect(sessions.rename("a.md", "c.md")).toMatchObject({ kind: "renamed" });
+    expect(sessions.get("a.md")).toBeUndefined();
+    expect(sessions.get("c.md")).toBeDefined();
+    expect(api.writeDocument).not.toHaveBeenCalled();
+
+    // Un'eliminazione di A: la bozza della sessione si scarta in A, non in B.
+    await expect(sessions.delete("b.md", async () => {})).resolves.toMatchObject({ kind: "deleted" });
+    expect(api.discardDraft).toHaveBeenCalledWith("b.md", "/a");
+    expect(api.discardDraft).not.toHaveBeenCalledWith("b.md", "/b");
+
+    // Se il passaggio non avviene, la sessione rinominata riprende e scrive in A
+    // sotto il nome nuovo.
+    sessions.thawAll();
+    acceptText(sessions, "c.md", "dopo la rinomina");
+    await sessions.flush("c.md");
+    expect(api.writeDocument).toHaveBeenCalledTimes(1);
+    expect(api.writeDocument).toHaveBeenLastCalledWith("c.md", "dopo la rinomina", expect.anything(), "/a");
   });
 
   it("invalida timer e coda prima della cancellazione", async () => {
@@ -1182,6 +1325,7 @@ describe("il salvataggio di un file senza formato", () => {
       "disegno.svg",
       new TextEncoder().encode("<svg><title>però</title></svg>"),
       "rev-disco",
+      null,
     );
     expect(sessions.inspect("disegno.svg")).toMatchObject({
       dirty: false,
@@ -1216,6 +1360,7 @@ describe("il salvataggio di un file senza formato", () => {
       "disegno.svg",
       new TextEncoder().encode("<svg>bozza</svg>"),
       "rev-disco",
+      null,
     );
 
     vi.mocked(api.readDocument).mockRejectedValue(new Error("non c'è"));
@@ -1224,6 +1369,7 @@ describe("il salvataggio di un file senza formato", () => {
     expect(api.resourceWrite).toHaveBeenLastCalledWith(
       "disegno.svg",
       new TextEncoder().encode("<svg>ricreato</svg>"),
+      null,
       null,
     );
   });
@@ -1291,7 +1437,7 @@ describe("la chiusura della finestra protegge ogni buffer sporco", () => {
     acceptText(sessions, "Benvenuto.md", "testo in bozza");
 
     await expect(sessions.flushBeforeClose()).resolves.toEqual([]);
-    expect(api.saveDraft).toHaveBeenLastCalledWith("Benvenuto.md", "testo in bozza", "rev-1");
+    expect(api.saveDraft).toHaveBeenLastCalledWith("Benvenuto.md", "testo in bozza", "rev-1", null);
   });
 
   it("una bozza fallita prima della chiusura si riprova, e la riuscita la autorizza", async () => {
@@ -1339,13 +1485,14 @@ describe("la chiusura della finestra protegge ogni buffer sporco", () => {
     await inFlight;
 
     await expect(closing).resolves.toEqual([]);
-    expect(api.saveDraft).toHaveBeenCalledWith("DopoFlush.md", "ULTIMA BATTUTA", "rev-1");
+    expect(api.saveDraft).toHaveBeenCalledWith("DopoFlush.md", "ULTIMA BATTUTA", "rev-1", null);
     // Il salvataggio successivo va al nome nuovo, non a quello vecchio.
     await expect(sessions.flushPendingSave()).resolves.toEqual([]);
     expect(api.writeDocument).toHaveBeenLastCalledWith(
       "DopoFlush.md",
       "ULTIMA BATTUTA",
       { kind: "descends_from", value: "rev-1" },
+      null,
     );
   });
 });

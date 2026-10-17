@@ -400,7 +400,13 @@ nome dal giorno, e un secondo backup nello stesso giorno sostituisce il
 precedente soltanto a copia finita. La copia nuova si scrive nell'altra cartella
 del giorno (`<data>.1/`), il manifest `snapshots.json` passa a lei e solo allora
 la vecchia si cancella: un guasto a metà lascia intero lo snapshot precedente.
-Dopo ogni backup riuscito restano gli snapshot più recenti indicati da
+Accanto alla cartella di ogni snapshot sta il suo inventario
+(`<data>.files.json`, o `<data>.1.files.json`): path, dimensione e impronta di
+ogni nota copiata. Il ripristino lo confronta con le copie prima di creare
+qualsiasi nota: una copia mancante, troncata o alterata ferma il ripristino con
+un errore che la nomina, invece di riportare meno note dichiarando di esserci
+riuscito. Gli snapshot scritti prima dell'inventario si controllano sul numero
+di note che il manifest ricorda. Dopo ogni backup riuscito restano gli snapshot più recenti indicati da
 `backup.keep` (10 di serie; 0 li tiene tutti). Un manifest scritto da una
 versione più recente di Fub non si usa e non si riscrive; i campi che questa
 versione non conosce tornano su disco come erano.

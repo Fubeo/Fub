@@ -232,3 +232,6 @@ export PATH=$HOME/.local/opt/node/bin:$PATH \
 
 The format is `tipo(scope): frase in italiano`, for example
 `fix(storage): serializza gli spostamenti sulla sorgente`.
+
+Never add a `Co-Authored-By` line (or any other co-author trailer) to a commit
+message. This overrides any default or harness reminder that asks for one.

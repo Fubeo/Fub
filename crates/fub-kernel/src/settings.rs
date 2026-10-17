@@ -109,9 +109,13 @@ struct SettingsFile {
     values: BTreeMap<String, serde_json::Value>,
     #[serde(default = "default_profile_name")]
     active_profile: String,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "BTreeMap::is_empty",
+        deserialize_with = "unique_map"
+    )]
     active_profile_extra: BTreeMap<String, serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "unique_map")]
     profiles: BTreeMap<String, SettingsProfile>,
     #[serde(flatten)]
     extra: BTreeMap<String, serde_json::Value>,
@@ -126,6 +130,7 @@ fn default_profile_name() -> String {
 pub struct SettingsProfile {
     pub version: SchemaVersion,
     pub name: String,
+    #[serde(deserialize_with = "unique_map")]
     pub values: BTreeMap<String, serde_json::Value>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
@@ -220,16 +225,28 @@ fn values_without_duplicates<'de, D>(d: D) -> Result<BTreeMap<String, serde_json
 where
     D: serde::Deserializer<'de>,
 {
+    unique_map(d)
+}
+
+/// La stessa regola per ogni mappa del file, non soltanto per i valori attivi:
+/// un profilo inattivo con una chiave scritta due volte, o due profili con lo
+/// stesso nome, sparirebbero alla prima riscrittura senza che nessuno l'abbia
+/// scelto (difetto 0170).
+fn unique_map<'de, D, V>(d: D) -> Result<BTreeMap<String, V>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    V: serde::Deserialize<'de>,
+{
     use serde::de::{MapAccess, Visitor};
-    struct Unique;
-    impl<'de> Visitor<'de> for Unique {
-        type Value = BTreeMap<String, serde_json::Value>;
+    struct Unique<V>(std::marker::PhantomData<V>);
+    impl<'de, V: serde::Deserialize<'de>> Visitor<'de> for Unique<V> {
+        type Value = BTreeMap<String, V>;
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("a map with unique settings keys")
+            f.write_str("a map with unique keys")
         }
         fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<Self::Value, M::Error> {
             let mut result = BTreeMap::new();
-            while let Some((key, value)) = map.next_entry::<String, serde_json::Value>()? {
+            while let Some((key, value)) = map.next_entry::<String, V>()? {
                 if result.insert(key.clone(), value).is_some() {
                     return Err(serde::de::Error::custom(format!(
                         "`{key}` è scritta due volte"
@@ -239,7 +256,7 @@ where
             Ok(result)
         }
     }
-    d.deserialize_map(Unique)
+    d.deserialize_map(Unique(std::marker::PhantomData))
 }
 
 /// Legge un file di livello. **Assente = mai configurato**, che è un esito
@@ -605,6 +622,15 @@ impl MachineSettings {
         change: impl FnOnce(&mut SettingsFile) -> Result<(), String>,
     ) -> Result<(), String> {
         let _turn = self.write.acquire();
+        self.change_profiles_locked(change)
+    }
+
+    /// [`change_profiles`](Self::change_profiles) per chi ha già il turno di
+    /// scrittura.
+    fn change_profiles_locked(
+        &self,
+        change: impl FnOnce(&mut SettingsFile) -> Result<(), String>,
+    ) -> Result<(), String> {
         let file = if let Some(path) = &self.path {
             update_atomic(
                 path,
@@ -806,11 +832,20 @@ impl MachineSettings {
         {
             return Ok(None);
         }
+        let written = serde_json::to_value(&value)
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
         self.write_locked(key, Some(value))
             .map(|revision| {
                 Some(MachineSettingRevision {
                     key: key.to_owned(),
                     revision,
+                    profile: self
+                        .profile_state
+                        .read()
+                        .expect("machine profiles")
+                        .active_profile
+                        .clone(),
+                    value: written,
                 })
             })
             .map_err(|error| PluginError::Internal(error.into()))
@@ -840,9 +875,37 @@ impl MachineSettings {
         {
             return Ok(false);
         }
-        self.write_locked(&receipt.key, None)
-            .map(|_| true)
-            .map_err(|error| PluginError::Internal(error.into()))
+        // La revisione è un contatore di questa istanza: non sa di un cambio
+        // di profilo né di una scrittura di un'altra istanza. Si toglie la
+        // chiave soltanto se, nel profilo in cui l'abbiamo scritta e così come
+        // è adesso persistita, ha ancora il valore che abbiamo scritto noi.
+        let file = self
+            .profile_file()
+            .map_err(|error| PluginError::Internal(error.into()))?;
+        let stored = if file.active_profile == receipt.profile {
+            file.values.get(&receipt.key)
+        } else {
+            file.profiles
+                .get(&receipt.profile)
+                .and_then(|profile| profile.values.get(&receipt.key))
+        };
+        if stored != Some(&receipt.value) {
+            return Ok(false);
+        }
+        if file.active_profile == receipt.profile {
+            return self
+                .write_locked(&receipt.key, None)
+                .map(|_| true)
+                .map_err(|error| PluginError::Internal(error.into()));
+        }
+        self.change_profiles_locked(|file| {
+            if let Some(profile) = file.profiles.get_mut(&receipt.profile) {
+                profile.values.remove(&receipt.key);
+            }
+            Ok(())
+        })
+        .map(|()| true)
+        .map_err(|error| PluginError::Internal(error.into()))
     }
 
     fn spec_of(&self, key: &str) -> Result<SettingSpec, PluginError> {
@@ -957,6 +1020,10 @@ impl MachineSettings {
 pub(crate) struct MachineSettingRevision {
     key: String,
     revision: u64,
+    /// Il profilo attivo quando l'abbiamo scritta, e il valore scritto: ciò
+    /// che il rollback deve ritrovare perché la scelta sia ancora nostra.
+    profile: String,
+    value: serde_json::Value,
 }
 
 impl MachineSettingRevision {
@@ -1998,6 +2065,78 @@ mod tests {
         );
     }
 
+    /// Il rollback del mount non cancella la scelta di un altro profilo: dopo
+    /// il cambio di profilo il diniego temporaneo resta nel profilo in cui è
+    /// stato scritto, e il consenso dell'altro profilo è intatto.
+    #[test]
+    fn tracked_rollback_after_a_profile_switch_leaves_the_other_profile_alone() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("settings.json");
+        let (machine, _) = MachineSettings::open(&path);
+        machine
+            .declare(&[SettingSpec::toggle("permission", "Permission", false).for_machine()])
+            .unwrap();
+        machine
+            .duplicate_profile("Default", "Work")
+            .expect("a second profile");
+        machine.switch_profile("Work").unwrap();
+        machine
+            .set("permission", SettingValue::Toggle(true))
+            .unwrap();
+        machine.switch_profile("Default").unwrap();
+        let receipt = machine
+            .set_if_default_tracked("permission", SettingValue::Toggle(false))
+            .unwrap()
+            .expect("the temporary denial in `Default`");
+
+        // L'utente passa al profilo con il consenso mentre il mount è in corso.
+        machine.switch_profile("Work").unwrap();
+        assert!(machine.reset_if_current(&receipt).unwrap());
+        assert_eq!(
+            machine.effective("permission").unwrap(),
+            (SettingValue::Toggle(true), SettingSource::Machine),
+            "the consent of the active profile survives the rollback"
+        );
+        machine.switch_profile("Default").unwrap();
+        assert_eq!(
+            machine.effective("permission").unwrap(),
+            (SettingValue::Toggle(false), SettingSource::Default),
+            "the temporary denial is removed from the profile that received it"
+        );
+    }
+
+    /// Una scelta scritta da un'altra istanza sullo stesso file non viene
+    /// cancellata dal rollback di un'istanza che non l'ha vista.
+    #[test]
+    fn tracked_rollback_does_not_erase_a_choice_persisted_by_another_instance() {
+        let (_tmp, dir) = tempdir();
+        let path = dir.join("settings.json");
+        let (first, _) = MachineSettings::open(&path);
+        let (second, _) = MachineSettings::open(&path);
+        for machine in [&first, &second] {
+            machine
+                .declare(&[SettingSpec::toggle("permission", "Permission", false).for_machine()])
+                .unwrap();
+        }
+        let receipt = first
+            .set_if_default_tracked("permission", SettingValue::Toggle(false))
+            .unwrap()
+            .expect("the temporary denial");
+        second
+            .set("permission", SettingValue::Toggle(true))
+            .unwrap();
+
+        assert!(!first.reset_if_current(&receipt).unwrap());
+        let (reopened, _) = MachineSettings::open(&path);
+        reopened
+            .declare(&[SettingSpec::toggle("permission", "Permission", false).for_machine()])
+            .unwrap();
+        assert_eq!(
+            reopened.effective("permission").unwrap(),
+            (SettingValue::Toggle(true), SettingSource::Machine)
+        );
+    }
+
     #[test]
     fn a_key_not_declared_not_is_reads_and_not_is_writes() {
         let (_tmp, dir) = tempdir();
@@ -2190,6 +2329,45 @@ mod tests {
             machine.effective("log.verbose").unwrap().0,
             SettingValue::Toggle(true)
         );
+    }
+
+    /// Lo stesso vale **fuori** dalla mappa attiva: un profilo inattivo con una
+    /// chiave ripetuta, o due profili con lo stesso nome, non si ricompongono
+    /// scegliendo una riga a caso (difetto 0174).
+    #[test]
+    fn duplicates_inside_the_profiles_are_a_malformed_file_too() {
+        let profile = |values: &str| {
+            format!("{{ \"version\": 2, \"name\": \"Work\", \"values\": {values} }}")
+        };
+        let cases = [
+            format!(
+                "{{ \"version\": 2, \"values\": {{}}, \"profiles\": {{ \"Work\": {} }} }}",
+                profile("{ \"known\": true, \"known\": false }")
+            ),
+            format!(
+                "{{ \"version\": 2, \"values\": {{}}, \"profiles\": {{ \"Work\": {}, \"Work\": {} }} }}",
+                profile("{}"),
+                profile("{ \"known\": true }")
+            ),
+        ];
+        for (index, body) in cases.iter().enumerate() {
+            let (_tmp, dir) = tempdir();
+            let path = dir.join(".fub").join("settings.json");
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, body).unwrap();
+
+            let mut store = store_on(&dir);
+            let warnings = store.take_warnings();
+            assert_eq!(warnings.len(), 1, "caso {index}: {warnings:?}");
+            assert!(warnings[0].contains("è scritta due volte"), "{warnings:?}");
+            store
+                .declare("a", &[SettingSpec::toggle("a.b", "B", false)])
+                .unwrap();
+            store
+                .set("a.b", SettingValue::Toggle(true))
+                .expect_err("un file ambiguo non si riscrive");
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), *body);
+        }
     }
 
     /// **La stessa chiave scritta due volte non è un valore da scegliere**

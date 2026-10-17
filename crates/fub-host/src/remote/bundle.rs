@@ -1780,6 +1780,25 @@ fn apply_remote_op(
         if current.as_ref() != prior {
             return Ok(ApplyOutcome::Held);
         }
+        // L'operazione porta anche i byte autenticati: prima si applicano al
+        // nome di partenza, con la revisione appena confrontata come base, poi
+        // si rinomina. Se la rinomina fallisce il contenuto è già quello giusto
+        // e la ripresa ha da fare solo lo spostamento.
+        if let Some(revision) = current.as_ref() {
+            let bytes = host.read_document_bytes(&id)?;
+            if host.document_revision(&id)? != *revision {
+                return Ok(ApplyOutcome::Held);
+            }
+            if bytes != plain {
+                match host.write_document_bytes(&id, &plain, Some(revision.clone())) {
+                    Ok(written) => mark_synced(&state.root, &op.doc_id, written)?,
+                    Err(PluginError::Conflict(_)) | Err(PluginError::AlreadyExists(_)) => {
+                        return Ok(ApplyOutcome::Held)
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+        }
         match host.rename_document(&DocId::new(from.clone()), &to_id) {
             Ok(()) => {
                 let mut cursor = read_cursor(&state.root)?;
@@ -1803,7 +1822,19 @@ fn apply_remote_op(
         if current.as_ref() != prior {
             return Ok(ApplyOutcome::Held);
         }
-        host.trash_document(&id)?;
+        // La revisione confrontata sopra è quella che si cestina: se un
+        // salvataggio locale la supera fra il controllo e il cestino, la nota
+        // resta e l'operazione remota si trattiene.
+        let Some(revision) = current.as_ref() else {
+            return Ok(ApplyOutcome::Held);
+        };
+        match host.trash_document_if(&id, revision) {
+            Ok(_) => {}
+            Err(PluginError::Conflict(_)) | Err(PluginError::NotFound(_)) => {
+                return Ok(ApplyOutcome::Held)
+            }
+            Err(e) => return Err(e),
+        }
         let mut cursor = read_cursor(&state.root)?;
         cursor.synced.remove(&op.doc_id);
         write_cursor(&state.root, &cursor)?;
@@ -2218,5 +2249,102 @@ mod recovery_tests {
             "stable lock inode must stay"
         );
         drop(second);
+    }
+}
+
+#[cfg(test)]
+mod apply_tests {
+    use super::*;
+    use crate::remote::sync::{WireKind, WireOp};
+    use fub_abi::traits::{VaultRead, VaultWrite};
+    use fub_sdk::testing::MemoryHost;
+
+    const VDK: [u8; 32] = [7; 32];
+
+    fn state(root: &Path) -> JobState {
+        JobState {
+            root: root.to_path_buf(),
+            replica_id: "local".into(),
+            vault_id: "vault".into(),
+            key_epoch: 1,
+            user_exclude: Vec::new(),
+        }
+    }
+
+    fn op(kind: WireKind, doc_id: &str, plain: &[u8]) -> serde_json::Value {
+        let (rename_from, rename_to) = match &kind {
+            WireKind::Rename { from, to } => (Some(from.clone()), Some(to.clone())),
+            _ => (None, None),
+        };
+        let mut op = WireOp {
+            op_id: "op-1".into(),
+            replica_id: "remote".into(),
+            doc_id: doc_id.into(),
+            kind,
+            vv: BTreeMap::from([("remote".to_string(), 1)]),
+            ciphertext_b64: String::new(),
+            nonce_b64: String::new(),
+            aad: String::new(),
+            ts_ms: 1,
+            vault_id: "vault".into(),
+            key_epoch: 1,
+            rename_from,
+            rename_to,
+        };
+        let envelope = op.envelope();
+        op.aad = crate::remote::canonical_aad_json(&envelope);
+        let (nonce, ciphertext) = crate::remote::encrypt_envelope(&VDK, &envelope, plain).unwrap();
+        op.nonce_b64 = nonce;
+        op.ciphertext_b64 = ciphertext;
+        serde_json::to_value(op).unwrap()
+    }
+
+    /// Una rinomina remota porta i byte nuovi: il ricevente li applica, non
+    /// conserva i vecchi sotto il nome nuovo dichiarandoli sincronizzati.
+    #[test]
+    fn a_remote_rename_applies_its_payload_before_it_is_acknowledged() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = MemoryHost::new().with_document("a.md", "vecchio");
+        let revision = host.document_revision(&DocId::new("a.md")).unwrap();
+        mark_synced(dir.path(), "a.md", revision).unwrap();
+        let value = op(
+            WireKind::Rename {
+                from: "a.md".into(),
+                to: "b.md".into(),
+            },
+            "a.md",
+            b"nuovo",
+        );
+        let outcome = apply_remote_op(&mut host, &state(dir.path()), &VDK, &value).unwrap();
+        assert!(matches!(outcome, ApplyOutcome::Applied { .. }));
+        assert_eq!(host.read_document(&DocId::new("b.md")).unwrap(), "nuovo");
+        assert!(host.read_document(&DocId::new("a.md")).is_err());
+        let cursor = read_cursor(dir.path()).unwrap();
+        assert_eq!(
+            cursor.synced.get("b.md"),
+            Some(&host.document_revision(&DocId::new("b.md")).unwrap())
+        );
+        assert!(!cursor.synced.contains_key("a.md"));
+    }
+
+    /// Un delete remoto su una nota ancora ferma alla revisione sincronizzata
+    /// la cestina; su una già modificata in locale resta trattenuto.
+    #[test]
+    fn a_remote_delete_trashes_only_the_synced_revision() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut host = MemoryHost::new().with_document("n.md", "uno");
+        let id = DocId::new("n.md");
+        mark_synced(dir.path(), "n.md", host.document_revision(&id).unwrap()).unwrap();
+        let value = op(WireKind::Delete, "n.md", b"");
+        host.write_document_bytes(&id, b"due", Some(host.document_revision(&id).unwrap()))
+            .unwrap();
+        let held = apply_remote_op(&mut host, &state(dir.path()), &VDK, &value).unwrap();
+        assert!(matches!(held, ApplyOutcome::Held));
+        assert_eq!(host.read_document(&id).unwrap(), "due");
+
+        mark_synced(dir.path(), "n.md", host.document_revision(&id).unwrap()).unwrap();
+        let applied = apply_remote_op(&mut host, &state(dir.path()), &VDK, &value).unwrap();
+        assert!(matches!(applied, ApplyOutcome::Applied { .. }));
+        assert!(host.read_document(&id).is_err());
     }
 }
