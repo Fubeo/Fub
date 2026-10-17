@@ -5,7 +5,7 @@
 import { symmetryMatrices } from "../symmetry";
 import type { StrokeStart } from "../../../../ink/input/session";
 import { INK_TOOLS } from "../../../../ink/tools/registry";
-import { previewOutline } from "../../../../ink/tools/stroke";
+import { StrokePreview } from "../../../../ink/tools/stroke";
 import { EraseSweep } from "../../../../ink/tools/sweep";
 import { compose, type Point } from "../../scene/matrix";
 import { ROOT } from "../../scene/ops";
@@ -291,17 +291,19 @@ export function installGuideDrag(ctx: EditorContext): void {
         const to = target(ids);
         if (to === null) return { ...base, kind: "refused" };
         const { color, width } = style();
+        const brush = tool.brush(width, { pressure: start.pressure, continued: start.continued });
         return {
           ...base,
           kind: "ink",
           tool: ctx.tool,
           color,
-          brush: tool.brush(width, { pressure: start.pressure, continued: start.continued }),
+          brush,
           to,
           ids,
           scene: [],
           local: [],
           predicted: [],
+          preview: new StrokePreview(brush),
           began: start.timeStamp,
           holds: tool.capabilities.holdsToShape && start.id >= 0 && !start.continued,
           still: null,
@@ -416,7 +418,7 @@ export function installGuideDrag(ctx: EditorContext): void {
   ctx.straightened = straightened;
 
   const drawInk = (g: InkGesture): void => {
-    const outline = previewOutline(g.local, g.predicted, g.brush, straightened(g));
+    const outline = g.preview.outline(g.local, g.predicted, straightened(g));
     const opacity = INK_TOOLS.stroke(g.tool)?.opacity ?? 1;
     const ink = outline.length === 0 ? null : { outline, matrix: g.to.matrix, color: g.color, opacity };
     overlay.setInk(INK_KEY, ink);

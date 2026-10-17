@@ -4,6 +4,7 @@
 import type { Pf1Brush } from "../../../../ink/brush";
 import type { InkSample } from "../../../../ink/sample";
 import type { InkPointerType } from "../../../../ink/input/pointer";
+import type { StrokePreview } from "../../../../ink/tools/stroke";
 import type { EraseSweep } from "../../../../ink/tools/sweep";
 import type { Bounds } from "../../scene/geometry";
 import type { Matrix, Point } from "../../scene/matrix";
@@ -131,6 +132,8 @@ export interface InkGesture extends GestureBase {
   readonly scene: InkSample[];
   readonly local: InkSample[];
   predicted: readonly InkSample[];
+  /// L'anteprima di `local`, che a ogni movimento rifà soltanto la coda.
+  readonly preview: StrokePreview;
   /// Quando è cominciato, sull'orologio di `performance.now()`.
   readonly began: number;
   /// Il tratto può diventare una forma tenendolo fermo alla fine: è a

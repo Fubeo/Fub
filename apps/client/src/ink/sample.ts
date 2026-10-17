@@ -200,50 +200,54 @@ export function quantizeInk(samples: readonly InkSample[], scale: InkScale = DEF
   if (first === undefined) throw new InkError("no-samples");
   if (samples.length > INK_MAX_SAMPLES) throw new InkError("too-many-samples");
   if (first.t !== 0) throw new InkError("first-time");
-  const pressure = first.p !== undefined;
-  const tilt = first.a !== undefined;
   const quantized: QuantizedSample[] = new Array(samples.length);
-  for (let i = 0; i < samples.length; i++) {
-    const sample = samples[i]!;
-    if ((sample.p !== undefined) !== pressure || (sample.a !== undefined) !== tilt) {
-      throw new InkError("mixed-channels", i);
-    }
-    // Prima ogni valore finito, poi gli interi: l'ordine di `quantize`.
-    if (
-      !Number.isFinite(sample.x) || !Number.isFinite(sample.y) || !Number.isFinite(sample.t)
-      || (pressure && !Number.isFinite(sample.p)) || (tilt && (!Number.isFinite(sample.a) || !Number.isFinite(sample.z)))
-    ) {
-      throw new InkError("non-finite", i);
-    }
-    const integer = (value: number): number => {
-      if (Math.abs(value) > INK_MAX_INTEGER) throw new InkError("overflow", i);
-      return value;
-    };
-    const x = integer(roundHalfUp(sample.x, scale));
-    const y = integer(roundHalfUp(sample.y, scale));
-    const p = sample.p === undefined ? undefined : quantizePressure(sample.p);
-    const t = integer(roundHalfUp(sample.t, 1));
-    if (sample.a === undefined) {
-      quantized[i] = p === undefined ? { x, y, t } : { x, y, p, t };
-      continue;
-    }
-    const a = quantizeAltitude(sample.a);
-    integer(roundHalfUp(sample.z, 1));
-    const z = quantizeAzimuth(sample.z);
-    quantized[i] = p === undefined ? { x, y, t, a, z } : { x, y, p, t, a, z };
-  }
+  for (let i = 0; i < samples.length; i++) quantized[i] = quantizeInkSample(samples[i]!, i, first, scale);
   // `fub:ink` scrive le differenze: anche quelle devono restare esatte. Rust
   // le controlla dopo aver quantizzato tutto, in `Ink::new`.
-  for (let i = 1; i < quantized.length; i++) {
-    const sample = quantized[i]!;
-    const previous = quantized[i - 1]!;
-    if (
-      Math.abs(sample.x - previous.x) > INK_MAX_INTEGER
-      || Math.abs(sample.y - previous.y) > INK_MAX_INTEGER
-      || Math.abs(sample.t - previous.t) > INK_MAX_INTEGER
-    ) {
-      throw new InkError("overflow", i);
-    }
-  }
+  for (let i = 1; i < quantized.length; i++) checkInkStep(quantized[i]!, quantized[i - 1]!, i);
   return { scale, samples: quantized };
+}
+
+/// Il campione `i` di un tratto che comincia con `first`, quantizzato con le
+/// regole di `quantizeInk`: lancia `InkError` se ha canali diversi dal primo,
+/// un valore non finito o un intero oltre ±(2⁵³ − 1). Non controlla la
+/// differenza dal precedente (`checkInkStep`) né che il primo abbia `t = 0`.
+export function quantizeInkSample(sample: InkSample, i: number, first: InkSample, scale: InkScale): QuantizedSample {
+  const pressure = first.p !== undefined;
+  const tilt = first.a !== undefined;
+  if ((sample.p !== undefined) !== pressure || (sample.a !== undefined) !== tilt) {
+    throw new InkError("mixed-channels", i);
+  }
+  // Prima ogni valore finito, poi gli interi: l'ordine di `quantize`.
+  if (
+    !Number.isFinite(sample.x) || !Number.isFinite(sample.y) || !Number.isFinite(sample.t)
+    || (pressure && !Number.isFinite(sample.p)) || (tilt && (!Number.isFinite(sample.a) || !Number.isFinite(sample.z)))
+  ) {
+    throw new InkError("non-finite", i);
+  }
+  const integer = (value: number): number => {
+    if (Math.abs(value) > INK_MAX_INTEGER) throw new InkError("overflow", i);
+    return value;
+  };
+  const x = integer(roundHalfUp(sample.x, scale));
+  const y = integer(roundHalfUp(sample.y, scale));
+  const p = sample.p === undefined ? undefined : quantizePressure(sample.p);
+  const t = integer(roundHalfUp(sample.t, 1));
+  if (sample.a === undefined) return p === undefined ? { x, y, t } : { x, y, p, t };
+  const a = quantizeAltitude(sample.a);
+  integer(roundHalfUp(sample.z, 1));
+  const z = quantizeAzimuth(sample.z);
+  return p === undefined ? { x, y, t, a, z } : { x, y, p, t, a, z };
+}
+
+/// Lancia `InkError` se il campione quantizzato `i` è troppo lontano dal
+/// precedente perché `fub:ink`, che scrive le differenze, lo tenga esatto.
+export function checkInkStep(sample: QuantizedSample, previous: QuantizedSample, i: number): void {
+  if (
+    Math.abs(sample.x - previous.x) > INK_MAX_INTEGER
+    || Math.abs(sample.y - previous.y) > INK_MAX_INTEGER
+    || Math.abs(sample.t - previous.t) > INK_MAX_INTEGER
+  ) {
+    throw new InkError("overflow", i);
+  }
 }

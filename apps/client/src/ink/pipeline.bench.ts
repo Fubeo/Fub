@@ -16,8 +16,9 @@
 // - l'adattatore del browser sopra eventi veri di happy-dom, il cui costo di
 //   `dispatchEvent` è nel numero: confronta fra versioni dell'adattatore, non
 //   con Rust;
-// - l'anteprima (`previewOutline`), che a ogni movimento rifà il contorno di
-//   tutto il tratto: cresce con la sua lunghezza, ed è la parte che pesa.
+// - l'anteprima: `previewOutline`, che rifà il contorno di tutto il tratto e
+//   cresce con la sua lunghezza, e `StrokePreview`, che rifà soltanto la coda
+//   e paga del tratto soltanto la copia del poligono.
 
 import { describe, expect, it } from "vitest";
 import { openLifetime } from "../ui/lifetime";
@@ -27,7 +28,7 @@ import { Session } from "./input/session";
 import type { StabilizerConfig } from "./input/stabilizer";
 import type { InkSample } from "./sample";
 import { PEN } from "./tools/pen";
-import { previewOutline } from "./tools/stroke";
+import { previewOutline, StrokePreview } from "./tools/stroke";
 
 /// Misura `fn`, che fa il lavoro di `events` eventi: qualche giro per scaldare,
 /// poi giri per un secondo e mezzo almeno (e cinque in ogni caso); stampa la
@@ -161,12 +162,43 @@ describe("adattatore del browser (happy-dom), 500 eventi per iterazione", () => 
   measure("penna, 4 coalescenti", events, () => stroke(penEvents));
 });
 
+const brush = PEN.brush(4, { pressure: true, continued: false });
+const line = (n: number): InkSample[] =>
+  Array.from({ length: n }, (_, i): InkSample => ({ x: 400 + 300 * Math.cos(i * 0.01), y: 300 + 200 * Math.sin(i * 0.01), t: i * 4, p: 0.3 + ((i * 7) % 10) / 20 }));
+
 describe("anteprima: il contorno di tutto il tratto, a ogni movimento (ns per anteprima)", () => {
-  const brush = PEN.brush(4, { pressure: true, continued: false });
-  const line = (n: number): InkSample[] =>
-    Array.from({ length: n }, (_, i): InkSample => ({ x: 400 + 300 * Math.cos(i * 0.01), y: 300 + 200 * Math.sin(i * 0.01), t: i * 4, p: 0.3 + ((i * 7) % 10) / 20 }));
   for (const n of [100, 1_000, 5_000, 10_000]) {
     const samples = line(n);
     measure(`${n} campioni`, 1, () => previewOutline(samples, [], brush, false).length);
+  }
+});
+
+describe("anteprima che cresce (`StrokePreview`): un movimento a quella lunghezza (ns per movimento)", () => {
+  const MOVES = 200;
+  for (const n of [100, 1_000, 5_000, 9_000]) {
+    const samples = line(n + MOVES);
+    it(`${n} campioni, un campione e due predetti per movimento`, () => {
+      const runs: number[] = [];
+      let work = 0;
+      const end = performance.now() + 1_500;
+      while (performance.now() < end || runs.length < 5) {
+        // Il tratto arriva a `n` campioni fuori dalla misura; si misurano i
+        // movimenti dopo.
+        const preview = new StrokePreview(brush);
+        const local = samples.slice(0, n);
+        preview.outline(local, [], false);
+        const start = performance.now();
+        for (let i = n; i < n + MOVES; i++) {
+          local.push(samples[i]!);
+          const next = samples[i]!;
+          work += preview.outline(local, [{ ...next, t: next.t + 4 }, { ...next, t: next.t + 8 }], false).length;
+        }
+        runs.push(performance.now() - start);
+      }
+      runs.sort((a, b) => a - b);
+      const nanos = (ms: number): number => Math.round((ms * 1e6) / MOVES);
+      console.info(`${`${n} campioni`.padEnd(46)} ${String(nanos(runs[runs.length >> 1]!)).padStart(9)} ns/movimento (minimo ${nanos(runs[0]!)}, ${runs.length} giri)`);
+      expect(work).toBeGreaterThan(0);
+    }, 120_000);
   }
 });
