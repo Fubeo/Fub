@@ -317,7 +317,7 @@ impl ProofIndex {
                 };
                 let mut suggestions = issue.suggestions;
                 if kind == ProofIssueKind::Spelling {
-                    if personal.contains(&text.to_lowercase()) {
+                    if wordcraft_proof::custom_word(text).is_some_and(|w| personal.contains(&w)) {
                         continue;
                     }
                     if suggested < MAX_SUGGESTED_WORDS {
@@ -433,6 +433,12 @@ impl IndexProvider for ProofIndex {
     }
 }
 
+/// Se `stored` è la parola `word` già normalizzata: la regola di identità è
+/// quella del motore (`custom_word`), non una seconda scritta qui.
+fn same_word(stored: &str, word: &str) -> bool {
+    wordcraft_proof::custom_word(stored).as_deref() == Some(word)
+}
+
 /// I comandi del dizionario personale.
 pub struct ProofCommands;
 
@@ -479,7 +485,7 @@ impl CommandProvider for ProofCommands {
                 return Err(PluginError::Internal(Text::key(E_WORDS_SHAPE)));
             }
         };
-        let present = words.iter().any(|w| w.to_lowercase() == word);
+        let present = words.iter().any(|w| same_word(w, &word));
         let changed = if add {
             if !present && words.len() >= MAX_WORDS {
                 return Err(over(E_WORDS, MAX_WORDS));
@@ -504,7 +510,7 @@ impl CommandProvider for ProofCommands {
             words.push(word);
             words.sort();
         } else {
-            words.retain(|w| w.to_lowercase() != word);
+            words.retain(|w| !same_word(w, &word));
         }
         host.set_setting(WORDS_KEY, SettingValue::List(words))?;
         Ok(CommandOutcome::notify(summary))

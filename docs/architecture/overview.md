@@ -45,6 +45,7 @@ flowchart TD
     testkit["fub-testkit"]
     kernel["fub-kernel"]
     abi["fub-abi"]
+    proof["wordcraft-proof"]
 
     app --> abi
     app --> host
@@ -67,6 +68,7 @@ flowchart TD
     importers --> abi
     features --> abi
     features --> base
+    features --> proof
     markdown --> abi
     markdown --> sdk
     sheet --> abi
