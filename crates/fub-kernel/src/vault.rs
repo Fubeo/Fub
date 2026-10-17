@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{KernelError, Result};
 use crate::ignore::{parse_gitignore, GitignoreRules, IgnorePolicy, Kind, GITIGNORE_FILE};
+use crate::organization::ParkedOrganization;
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FileIdentity, Stat, VaultStorage};
 use crate::time::{stamp_from_unix, Clock, SystemClock};
@@ -223,6 +224,24 @@ struct TrashSidecar {
     /// cosa che si sa.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     deleted_at: Option<u64>,
+    /// **Chi ha scritto questo sidecar mette al sicuro lo stato della nota**, e
+    /// questo è ciò che ha messo al sicuro dell'organizzazione (FUB-003).
+    ///
+    /// Il path di una nota cestinata è libero, e chi lo riprende non è lei. Per
+    /// questo cestinando lo stato per-documento si sposta sotto l'identità che
+    /// la voce ha nel cestino (lo spazio dei plugin, `doc~trash/`) e
+    /// l'organizzazione — icona, pin, posto nell'ordine — sta qui, nel sidecar,
+    /// che vive e muore con la voce.
+    ///
+    /// La **presenza** del campo è l'informazione: dice al ripristino che lo
+    /// stato di questa voce non sta più sotto il suo path, e che quello che
+    /// ci sta è di qualcun altro. Un sidecar senza è di una copia di Fub che non
+    /// parcheggiava: lo stato è ancora sotto il path, e il ripristino lo tratta
+    /// come prima. Per questo è un `Option` e lo schema **non** cambia di
+    /// numero: lo snapshot accetta soltanto la versione esatta, e bumpare
+    /// renderebbe illeggibili i sidecar di chi aggiorna.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parked: Option<ParkedOrganization>,
 }
 
 /// Il timbro di un file: ciò che il supporto sa dirne **senza aprirlo**, e che
@@ -255,6 +274,10 @@ pub struct TrashOrigins {
     /// I nomi delle voci di cui nessuno sa dire la cartella: quello che hanno
     /// e quello de-timbrato, perché anche il timbro si legge dalla forma.
     unplaced: std::collections::HashSet<String>,
+    /// **Tutte** le voci del cestino, per id: ciò che lo spazio parcheggiato di
+    /// una nota ([`fub_abi::rules::doc_data::parked_space`]) chiede per sapere se
+    /// la sua voce c'è ancora.
+    entries: std::collections::HashSet<DocId>,
 }
 
 impl TrashOrigins {
@@ -268,6 +291,11 @@ impl TrashOrigins {
     /// recuperabile.
     pub fn may_hold(&self, doc: &DocId) -> bool {
         self.placed.contains(doc) || self.unplaced.contains(file_name_of(doc.as_str()))
+    }
+
+    /// Questa voce è ancora nel cestino?
+    pub fn holds_entry(&self, trash: &DocId) -> bool {
+        self.entries.contains(trash)
     }
 
     fn unplaced(&mut self, trashed: &DocId) {
@@ -403,6 +431,13 @@ impl CompletedOsTrash {
         !self.vault.exists(&self.original)
             && fingerprint_of(&crate::storage::FsStorage, &self.destination)
                 .is_ok_and(|revision| revision == self.revision)
+    }
+
+    /// Il vault da cui la nota è uscita: lo stato per-documento si mette al
+    /// sicuro dopo la mossa, fuori da ogni custodia, con ciò che il token
+    /// possiede.
+    pub(crate) fn vault(&self) -> &Vault {
+        &self.vault
     }
 
     pub fn receipt(&self) -> crate::os_trash::OsTrashReceipt {
@@ -553,6 +588,13 @@ impl CompletedVaultTrash {
     pub(crate) fn into_parts(self) -> (DocId, Option<KernelError>) {
         (self.trashed, self.sidecar_fault)
     }
+
+    /// Il vault da cui la voce è uscita: lo stato per-documento si mette al
+    /// sicuro dopo la mossa, fuori da ogni custodia, con ciò che il token
+    /// possiede.
+    pub(crate) fn vault(&self) -> &Vault {
+        &self.vault
+    }
 }
 /// Ripristino preparato senza I/O. La voce, la destinazione e la revisione
 /// letta dal parser sono owned, quindi la mossa può avvenire senza custodire il
@@ -576,6 +618,10 @@ pub struct CompletedVaultRestore {
     stat: Stat,
     identity: Option<FileIdentity>,
     sidecar: Option<Vec<u8>>,
+    /// Cosa la voce aveva messo al sicuro dell'organizzazione, **se** chi l'ha
+    /// cestinata metteva al sicuro lo stato (`None`: una voce di prima, o di
+    /// un'altra applicazione, o con un sidecar che non si comprende).
+    parked: Option<ParkedOrganization>,
 }
 
 impl PreparedVaultRestore {
@@ -641,6 +687,11 @@ impl PreparedVaultRestore {
             return Err(KernelError::Stale(entry.id.to_string()));
         }
         let sidecar = vault.read_raw_trash_sidecar(&entry.id)?;
+        // Con le stesse verifiche di `list_trash`: un sidecar di un altro file o
+        // di una versione che non si conosce vale come un sidecar che non c'è.
+        let parked = vault
+            .read_trash_sidecar(&entry.id, &stat_after)?
+            .and_then(|sidecar| sidecar.parked);
         vault.rename_no_replace(&entry.id, &target)?;
         Ok(CompletedVaultRestore {
             vault,
@@ -650,6 +701,7 @@ impl PreparedVaultRestore {
             stat: stat_after,
             identity: identity_after,
             sidecar,
+            parked,
         })
     }
 }
@@ -673,6 +725,13 @@ impl CompletedVaultRestore {
 
     pub fn identity(&self) -> Option<FileIdentity> {
         self.identity
+    }
+
+    /// L'organizzazione che la nota si era portata via cestinata, se la voce era
+    /// di chi metteva al sicuro lo stato: `None` vuol dire una voce di prima,
+    /// il cui stato sta ancora sotto il path d'origine.
+    pub fn parked_organization(&self) -> Option<&ParkedOrganization> {
+        self.parked.as_ref()
     }
 
     /// Rimette nel cestino soltanto il file ancora identico a quello mosso e
@@ -1417,12 +1476,53 @@ impl Vault {
             // il file non ha lasciato nessuna traccia dell'istante in cui è
             // successo (vedi [`TrashSidecar::deleted_at`]).
             deleted_at: Some(self.clock.now_unix_millis()),
+            // Chi cestina mette al sicuro lo stato della nota: l'organizzazione
+            // la aggiunge subito dopo ([`Vault::park_organization`]), ma il
+            // marcatore c'è da subito, anche se il passo dopo non riesce.
+            parked: Some(ParkedOrganization::default()),
         })
         .expect("a path is always serializable");
         self.storage
             .write(&path, json.as_bytes())
             .map(|_| ())
             .map_err(|and| KernelError::Io { path, source: and })
+    }
+
+    /// Aggiunge al sidecar di una voce l'organizzazione che la nota si è portata
+    /// via ([`ParkedOrganization`]).
+    ///
+    /// Un sidecar che non c'è o che non si capisce **non si inventa**: chi
+    /// parcheggia lascia allora l'organizzazione dov'è, e la nota la ritrova
+    /// sotto il suo path come prima.
+    pub fn park_organization(
+        &self,
+        trashed: &DocId,
+        organization: ParkedOrganization,
+    ) -> Result<()> {
+        let path = self.trash_sidecar_path(trashed);
+        let io = |source| KernelError::Io {
+            path: path.clone(),
+            source,
+        };
+        let raw = self.storage.read(&path).map_err(io)?;
+        let mut sidecar: TrashSidecar = serde_json::from_slice(&raw).map_err(|and| {
+            io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                and.to_string(),
+            ))
+        })?;
+        if sidecar.v != SCHEMA_VERSION {
+            return Err(io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("sidecar del cestino in versione {}", sidecar.v),
+            )));
+        }
+        sidecar.parked = Some(organization);
+        let json = serde_json::to_string(&sidecar).expect("a sidecar is always serializable");
+        self.storage
+            .write(&path, json.as_bytes())
+            .map(|_| ())
+            .map_err(io)
     }
 
     fn read_raw_trash_sidecar(&self, trashed: &DocId) -> Result<Option<Vec<u8>>> {
@@ -1614,6 +1714,7 @@ impl Vault {
         let mut files = Vec::new();
         self.trash_files(&dir, &mut files)?;
         for (id, stat) in files {
+            out.entries.insert(id.clone());
             let path = self.trash_sidecar_path(&id);
             let unreadable = |why: String| KernelError::Io {
                 path: path.clone(),

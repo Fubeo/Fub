@@ -86,6 +86,39 @@ struct OrganizationFile {
     organization: Organization,
 }
 
+/// L'organizzazione di una nota **mentre è nel cestino**: ciò che il sidecar del
+/// cestino tiene per lei finché non torna (FUB-003).
+///
+/// Icona, pin e posto nell'ordine stanno nell'organizzazione per **path**, e il
+/// path di una nota cestinata è libero: chi lo riprende non è la nota di prima, e
+/// non deve avere la sua icona né il suo pin — né portarglieli via al ripristino
+/// sotto un altro nome. Cestinando, la nota si porta via ciò che è suo
+/// ([`OrganizationStore::park`]) e al ritorno lo riprende
+/// ([`OrganizationStore::unpark`]).
+///
+/// Un valore vuoto è un valore, non un'assenza: nel sidecar vuol dire «questa
+/// copia di Fub ha messo al sicuro l'organizzazione della nota, e non ne aveva».
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ParkedOrganization {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    icon: Option<String>,
+    /// Il posto fra le appuntate, contando da zero.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pinned_at: Option<usize>,
+    /// Il posto fra i figli ordinati a mano della sua cartella, contando da zero.
+    /// Vale soltanto se la nota torna in quella cartella: un ordine è dei figli
+    /// di *quella* cartella.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ordered_at: Option<usize>,
+}
+
+impl ParkedOrganization {
+    /// La nota non aveva niente da mettere al sicuro.
+    pub fn is_empty(&self) -> bool {
+        *self == ParkedOrganization::default()
+    }
+}
+
 /// Dove sta il sidecar, data la radice del vault.
 ///
 /// In `.fub/`, che è un dot-dir: scansione, rilevatore e indice lo ignorano
@@ -237,6 +270,103 @@ impl OrganizationStore {
             // dalla sua chiave e l'evento arriva a chi può mostrarlo.
             self.warn(format!(
                 "collisione di icone durante la rinomina {from} → {to}: l'icona della destinazione resta, quella della sorgente è rimasta sotto il nome vecchio"
+            ));
+        }
+        Ok(changed)
+    }
+
+    /// Ciò che l'organizzazione dice di `doc` **adesso**, da mettere al sicuro
+    /// perché la nota sta per lasciare il suo path ([`ParkedOrganization`]).
+    ///
+    /// Non toglie niente: chi parcheggia scrive prima il sidecar del cestino, e
+    /// soltanto dopo [`forget`](Self::forget). Un guasto in mezzo lascia l'icona
+    /// in due posti, non in nessuno.
+    pub fn park(&self, doc: &str) -> ParkedOrganization {
+        let org = self.data.read().expect("organization");
+        ParkedOrganization {
+            icon: org.icons.get(doc).cloned(),
+            pinned_at: org.pinned.iter().position(|pinned| pinned == doc),
+            ordered_at: org
+                .order
+                .get(parent_of(doc))
+                .and_then(|names| names.iter().position(|name| name == child_name(doc))),
+        }
+    }
+
+    /// Toglie dall'organizzazione ciò che [`park`](Self::park) ha messo al
+    /// sicuro: da qui il path di `doc` è libero per chiunque lo riprenda.
+    ///
+    /// Torna `true` se ha tolto qualcosa — per il caso normale (una nota senza
+    /// icona né pin né posto) non si tocca il disco affatto.
+    pub fn forget(&self, doc: &str) -> Result<bool, String> {
+        let mut changed = false;
+        self.update(|org| {
+            changed = org.icons.remove(doc).is_some();
+            let pins = org.pinned.len();
+            org.pinned.retain(|pinned| pinned != doc);
+            changed |= org.pinned.len() != pins;
+            if let Some(names) = org.order.get_mut(parent_of(doc)) {
+                let before = names.len();
+                names.retain(|name| name != child_name(doc));
+                changed |= names.len() != before;
+                if names.is_empty() {
+                    org.order.remove(parent_of(doc));
+                }
+            }
+        })?;
+        Ok(changed)
+    }
+
+    /// Riporta a `target` l'organizzazione che la nota si era portata via
+    /// uscendo da `original`.
+    ///
+    /// Ciò che il path d'arrivo ha già vince, come in
+    /// [`migrate`](Self::migrate): l'icona non si sovrascrive, il pin non si
+    /// raddoppia. Il posto nell'ordine torna soltanto in **quella** cartella.
+    pub fn unpark(
+        &self,
+        original: &str,
+        target: &str,
+        parked: &ParkedOrganization,
+    ) -> Result<bool, String> {
+        if parked.is_empty() {
+            return Ok(false);
+        }
+        let mut changed = false;
+        let mut icon_collision = false;
+        self.update(|org| {
+            changed = false;
+            icon_collision = false;
+            if let Some(icon) = &parked.icon {
+                if org.icons.contains_key(target) {
+                    icon_collision = true;
+                } else {
+                    org.icons.insert(target.to_string(), icon.clone());
+                    changed = true;
+                }
+            }
+            if let Some(at) = parked.pinned_at {
+                if !org.pinned.iter().any(|pinned| pinned == target) {
+                    let at = at.min(org.pinned.len());
+                    org.pinned.insert(at, target.to_string());
+                    changed = true;
+                }
+            }
+            if let Some(at) = parked.ordered_at {
+                if parent_of(original) == parent_of(target) {
+                    if let Some(names) = org.order.get_mut(parent_of(target)) {
+                        if !names.iter().any(|name| name == child_name(target)) {
+                            let at = at.min(names.len());
+                            names.insert(at, child_name(target).to_string());
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        })?;
+        if icon_collision {
+            self.warn(format!(
+                "collisione di icone durante il ripristino {original} → {target}: l'icona della destinazione resta, quella della nota ripristinata non è tornata"
             ));
         }
         Ok(changed)

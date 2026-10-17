@@ -69,6 +69,103 @@ fn plugin_data_roots(vault: &Vault) -> Vec<Utf8PathBuf> {
     roots
 }
 
+/// **Mette al sicuro lo stato di una nota appena entrata nel cestino** (FUB-003).
+///
+/// Il path di `doc` da qui è libero, e chi lo riprende non è la nota di prima:
+/// ciò che il kernel tiene attaccato al path — lo spazio per-documento dei
+/// plugin e l'organizzazione — non gli appartiene più. Lo spazio dei plugin
+/// passa sotto l'identità che la voce ha nel cestino ([`crate::docdata::park`]);
+/// l'organizzazione entra nel sidecar della voce e solo dopo esce dal file
+/// dell'organizzazione, così un guasto in mezzo la lascia in due posti e non in
+/// nessuno.
+///
+/// Senza sidecar (`sidecar_written` falso) l'organizzazione resta dov'è: non ha
+/// dove andare, e la voce vale come una di prima. Tutto ciò che non riesce si
+/// dice, e lo stato resta sotto il path com'era: è il comportamento di prima,
+/// non una perdita.
+pub(crate) fn park_state(
+    vault: &Vault,
+    organization: &crate::organization::OrganizationStore,
+    doc: &DocId,
+    trashed: &DocId,
+    sidecar_written: bool,
+) -> Vec<String> {
+    let roots = plugin_data_roots(vault);
+    let mut warnings: Vec<String> =
+        crate::docdata::park(vault.storage().as_ref(), &roots, doc, trashed)
+            .messages
+            .into_iter()
+            .map(|error| {
+                format!(
+            "lo stato per-documento di {doc} non ha potuto seguire la nota nel cestino — {error}"
+        )
+            })
+            .collect();
+    if !sidecar_written {
+        return warnings;
+    }
+    let parked = organization.park(doc.as_str());
+    if parked.is_empty() {
+        return warnings;
+    }
+    match vault.park_organization(trashed, parked) {
+        Ok(()) => {
+            if let Err(error) = organization.forget(doc.as_str()) {
+                warnings.push(format!(
+                    "l'organizzazione di {doc} è nel cestino con la nota, ma è rimasta anche al suo path: {error}"
+                ));
+            }
+        }
+        Err(error) => warnings.push(format!(
+            "l'organizzazione di {doc} non ha potuto seguire la nota nel cestino e resta al suo path: {error}"
+        )),
+    }
+    warnings
+}
+
+/// **Libera lo stato di una nota che ha lasciato il vault per il cestino del
+/// sistema** (FUB-003).
+///
+/// Il path è libero come per [`park_state`], ma qui nessuno riporterà la nota
+/// indietro: il cestino del sistema è fuori da Fub, e ciò che ne torna è un file
+/// nuovo. Lo stato che il kernel teneva attaccato al path — lo spazio
+/// per-documento dei plugin e l'organizzazione — non è quindi di chi riprende il
+/// path, e non c'è una voce a cui tenerlo.
+///
+/// Lo spazio dei plugin passa di lato con la stessa meccanica del parcheggio, e
+/// non si cancella: sta sotto un'identità che nessuna voce del cestino del vault
+/// tiene (`os-trash-<impronta della destinazione>`), quindi la raccolta lo toglie
+/// al primo giro. L'organizzazione si dimentica. Tutto ciò che non riesce si
+/// dice, e lo stato resta sotto il path com'era: il comportamento di prima.
+pub(crate) fn release_state(
+    vault: &Vault,
+    organization: &crate::organization::OrganizationStore,
+    doc: &DocId,
+    destination: &camino::Utf8Path,
+) -> Vec<String> {
+    let roots = plugin_data_roots(vault);
+    let released = DocId::new(format!(
+        "os-trash-{:016x}",
+        fub_abi::edit::Fnv1a::hash(destination.as_str().as_bytes())
+    ));
+    let mut warnings: Vec<String> =
+        crate::docdata::park(vault.storage().as_ref(), &roots, doc, &released)
+            .messages
+            .into_iter()
+            .map(|error| {
+                format!(
+                    "lo stato per-documento di {doc} non ha potuto lasciare il path dopo il cestino di sistema — {error}"
+                )
+            })
+            .collect();
+    if let Err(error) = organization.forget(doc.as_str()) {
+        warnings.push(format!(
+            "l'organizzazione di {doc} è rimasta al suo path dopo il cestino di sistema: {error}"
+        ));
+    }
+    warnings
+}
+
 /// Il sorgente più grande che il kernel legge per intero e consegna a un
 /// provider di formato: 64 MiB.
 ///
@@ -241,6 +338,13 @@ impl DocumentStoreHandle {
     pub(crate) fn migrate_data(&self, from: &DocId, to: &DocId) -> Vec<String> {
         let roots = plugin_data_roots(&self.vault);
         crate::docdata::migrate_data(self.vault.storage().as_ref(), &roots, from, to)
+    }
+
+    /// Riporta sotto il path `to` lo spazio che la nota aveva messo al sicuro
+    /// nel cestino ([`park_state`]), in ogni spazio dati di plugin che ne ha uno.
+    pub(crate) fn unpark_data(&self, trash: &DocId, to: &DocId) -> Vec<String> {
+        let roots = plugin_data_roots(&self.vault);
+        crate::docdata::unpark(self.vault.storage().as_ref(), &roots, trash, to).messages
     }
     /// Osserva una revisione soltanto se metadati e identità del file restano
     /// uguali ai due lati della lettura. Il chiamante può così riconvalidare un

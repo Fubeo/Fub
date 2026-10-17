@@ -1,7 +1,8 @@
 use fub_abi::command::InvokeMode;
 use fub_abi::model::DocId;
 use fub_abi::traits::{
-    CommandProvider, DataRead, HostQuery, IndexQuery, IndexResult, Plugin, VaultRead, VaultWrite,
+    CommandProvider, DataRead, HostQuery, IndexQuery, IndexResult, Plugin, VaultRead,
+    VaultStructure, VaultWrite,
 };
 use fub_abi::transfer::{
     ArtifactHandle, ArtifactSink, ExportArtifact, ExportProvider, ExportRequest, ExportSelection,
@@ -678,4 +679,595 @@ fn notes_with_the_same_stem_print_to_distinct_pdfs() {
         panic!("in memoria l'artefatto porta i byte");
     };
     assert_eq!(String::from_utf8_lossy(index), names.join("\n"));
+}
+
+#[test]
+fn evernote_rename_links_the_note_to_the_attachment_it_actually_created() {
+    let mut host = MemoryHost::new();
+    let mut provider = EnexImport;
+    let source = ImportSource::text_source("meeting.enex", ENEX);
+    let first = provider
+        .import(&source, &ImportRequest::apply(), &mut host)
+        .unwrap();
+    let asset = first.documents[1].doc.clone();
+    // L'utente modifica l'allegato importato, poi reimporta con Rename.
+    let revision = host.document_revision(&asset).unwrap();
+    host.write_document_bytes(&asset, b"EDITED", Some(revision))
+        .unwrap();
+    let mut request = ImportRequest::apply();
+    request.on_conflict = fub_abi::transfer::ConflictPolicy::Rename;
+    let second = provider.import(&source, &request, &mut host).unwrap();
+    let new_note = second.documents[0].doc.clone();
+    let new_asset = second.documents[1].doc.clone();
+    assert_ne!(new_asset, asset);
+    assert_eq!(
+        host.read_document_bytes(&asset).unwrap(),
+        b"EDITED",
+        "the previous attachment stays intact"
+    );
+    assert_eq!(host.read_document_bytes(&new_asset).unwrap(), b"PNG");
+    let file = new_asset.as_str().rsplit('/').next().unwrap();
+    let note = host.read_document(&new_note).unwrap();
+    assert!(
+        note.contains(&format!("](assets/{file})")),
+        "the note must link `{file}`: {note}"
+    );
+}
+
+#[test]
+fn csv_rows_with_the_same_title_get_distinct_files_in_preview_and_apply() {
+    let source =
+        ImportSource::text_source("projects.csv", "project,status\nAlpha,todo\nAlpha,done\n");
+    let mut provider = fub_importers::CsvImport;
+    for policy in [
+        fub_abi::transfer::ConflictPolicy::Skip,
+        fub_abi::transfer::ConflictPolicy::Replace,
+        fub_abi::transfer::ConflictPolicy::Rename,
+    ] {
+        let mut host = MemoryHost::new();
+        let mut request = ImportRequest::preview();
+        request.on_conflict = policy;
+        let planned = provider.import(&source, &request, &mut host).unwrap();
+        request.mode = ImportMode::Apply;
+        let applied = provider.import(&source, &request, &mut host).unwrap();
+        assert_eq!(planned.documents, applied.documents, "{policy:?}");
+        let names: Vec<_> = applied.documents.iter().map(|d| d.doc.as_str()).collect();
+        assert_eq!(
+            names,
+            ["projects-Alpha.md", "projects-Alpha-2.md"],
+            "{policy:?}"
+        );
+        assert!(host
+            .read_document(&applied.documents[0].doc)
+            .unwrap()
+            .contains("todo"));
+        assert!(host
+            .read_document(&applied.documents[1].doc)
+            .unwrap()
+            .contains("done"));
+    }
+}
+
+/// Un importer che pianifica due note nuove; all'apply un altro scrittore ha
+/// già creato la seconda, e l'importer la salta.
+struct Racy;
+
+impl ImportProvider for Racy {
+    fn can_handle(&self, _: &ImportSource) -> bool {
+        true
+    }
+
+    fn import(
+        &mut self,
+        _: &ImportSource,
+        request: &ImportRequest,
+        host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<fub_abi::transfer::ImportReport, fub_abi::PluginError> {
+        let mut report = fub_abi::transfer::ImportReport::new(request.mode);
+        let applying = request.mode == ImportMode::Apply;
+        if applying {
+            host.create_document(&DocId::new("Mine.md"), "imported")?;
+            // L'altro scrittore arriva fra la registrazione del journal e
+            // l'apply.
+            host.create_document(&DocId::new("Theirs.md"), "other writer")?;
+        }
+        report.documents.push(fub_abi::transfer::ImportedDocument {
+            doc: DocId::new("Mine.md"),
+            outcome: ImportOutcome::Created,
+            entry: None,
+        });
+        report.documents.push(fub_abi::transfer::ImportedDocument {
+            doc: DocId::new("Theirs.md"),
+            outcome: if applying {
+                ImportOutcome::Skipped
+            } else {
+                ImportOutcome::Created
+            },
+            entry: None,
+        });
+        Ok(report)
+    }
+}
+
+#[test]
+fn diverged_apply_rolls_back_only_what_it_wrote() {
+    let mut host = MemoryHost::new();
+    let mut provider = Racy;
+    let source = ImportSource::text_source("racy.txt", "x");
+    StagingManifest::prepare(
+        "racy",
+        &source,
+        &ImportRequest::apply(),
+        &mut provider,
+        &mut host,
+        42,
+    )
+    .unwrap();
+    assert!(fub_importers::pipeline::commit("racy", &mut provider, &mut host).is_err());
+    assert!(host.read_document(&DocId::new("Mine.md")).is_err());
+    assert_eq!(
+        host.read_document(&DocId::new("Theirs.md")).unwrap(),
+        "other writer"
+    );
+}
+
+/// Un importer a copione, per provare che cosa fa il commit quando un altro
+/// scrittore si infila fra il journal e ciò che l'import lascia (FUB-007).
+///
+/// `honest` scrive come gli importer veri (`write_doc`, che lascia una
+/// ricevuta per ogni bersaglio che scrive); altrimenti scrive con chiamate
+/// dirette all'host, come un importer di terzi che non sa niente di ricevute.
+struct Scripted {
+    targets: Vec<(&'static str, ImportOutcome)>,
+    /// Prima del bersaglio `n`, un altro scrittore fa queste scritture.
+    others: Option<(usize, Vec<(&'static str, &'static str)>)>,
+    /// Prima del bersaglio `n` l'importer si ferma con un errore.
+    fail_at: Option<usize>,
+    /// Prima del bersaglio `n` il processo muore: niente errore, niente rapporto.
+    crash_at: Option<usize>,
+    honest: bool,
+}
+
+impl ImportProvider for Scripted {
+    fn can_handle(&self, _: &ImportSource) -> bool {
+        true
+    }
+
+    fn import(
+        &mut self,
+        _: &ImportSource,
+        request: &ImportRequest,
+        host: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<fub_abi::transfer::ImportReport, fub_abi::PluginError> {
+        let mut report = fub_abi::transfer::ImportReport::new(request.mode);
+        let applying = request.mode == ImportMode::Apply;
+        for (at, (name, outcome)) in self.targets.iter().enumerate() {
+            if applying {
+                if let Some((before, writes)) = &self.others {
+                    if *before == at {
+                        for (doc, text) in writes {
+                            host.write_document(
+                                &DocId::new(*doc),
+                                text,
+                                fub_abi::edit::WriteBase::Dictated,
+                            )?;
+                        }
+                    }
+                }
+                if self.fail_at == Some(at) {
+                    return Err(fub_abi::PluginError::Io("disk gone".into()));
+                }
+                if self.crash_at == Some(at) {
+                    panic!("the process died");
+                }
+            }
+            let doc = DocId::new(*name);
+            if self.honest {
+                fub_importers::common::write_doc(
+                    host,
+                    request,
+                    &doc,
+                    "imported",
+                    outcome.clone(),
+                    "entry",
+                    &mut report,
+                )?;
+                continue;
+            }
+            if applying {
+                match outcome {
+                    ImportOutcome::Created => host.create_document(&doc, "imported")?,
+                    _ => {
+                        host.write_document(&doc, "imported", fub_abi::edit::WriteBase::Dictated)?;
+                    }
+                }
+            }
+            report.documents.push(fub_abi::transfer::ImportedDocument {
+                doc,
+                outcome: outcome.clone(),
+                entry: None,
+            });
+        }
+        Ok(report)
+    }
+}
+
+fn staged(host: &mut MemoryHost, job: &str, provider: &mut Scripted, replace: bool) {
+    let request = if replace {
+        ImportRequest::apply().on_conflict(fub_abi::transfer::ConflictPolicy::Replace)
+    } else {
+        ImportRequest::apply()
+    };
+    StagingManifest::prepare(
+        job,
+        &ImportSource::text_source("scripted.txt", "x"),
+        &request,
+        provider,
+        host,
+        42,
+    )
+    .unwrap();
+}
+
+fn created(names: &[&'static str]) -> Vec<(&'static str, ImportOutcome)> {
+    names
+        .iter()
+        .map(|name| (*name, ImportOutcome::Created))
+        .collect()
+}
+
+/// L'import si ferma con un errore dopo che un altro scrittore ha creato un
+/// bersaglio che il piano dava per nuovo: il rollback non sa se l'ha scritto
+/// l'import, e non lo cestina. Si ferma con un conflitto e tiene il journal.
+#[test]
+fn a_failed_apply_never_trashes_a_note_it_cannot_prove_it_wrote() {
+    for honest in [false, true] {
+        let mut host = MemoryHost::new();
+        let mut provider = Scripted {
+            targets: created(&["Mine.md", "Theirs.md"]),
+            others: Some((1, vec![("Theirs.md", "other writer")])),
+            fail_at: Some(1),
+            crash_at: None,
+            honest,
+        };
+        staged(&mut host, "stopped", &mut provider, false);
+        let error = fub_importers::pipeline::commit("stopped", &mut provider, &mut host)
+            .expect_err("l'import si è fermato");
+        assert!(
+            matches!(error, fub_abi::PluginError::Conflict(_)),
+            "honest={honest}: {error:?}"
+        );
+        assert_eq!(
+            host.read_document(&DocId::new("Theirs.md")).unwrap(),
+            "other writer",
+            "honest={honest}"
+        );
+        assert_eq!(
+            fub_importers::migration::status("stopped", &host).unwrap(),
+            "recovery_required",
+            "honest={honest}: backup e journal restano"
+        );
+    }
+}
+
+/// La nota che l'import ha scritto è sua e si riporta com'era; quella che
+/// l'utente ha cambiato dopo no. Con le ricevute la distinzione non dipende da
+/// un'impronta presa a posteriori: è la revisione che l'import ha lasciato.
+#[test]
+fn a_user_edit_after_the_first_replacement_survives_a_failed_apply() {
+    for honest in [false, true] {
+        let mut host = MemoryHost::new().with_document("A.md", "original\n");
+        let mut provider = Scripted {
+            targets: vec![
+                ("A.md", ImportOutcome::Replaced),
+                ("B.md", ImportOutcome::Created),
+            ],
+            others: Some((1, vec![("A.md", "user edit")])),
+            fail_at: Some(1),
+            crash_at: None,
+            honest,
+        };
+        staged(&mut host, "edited", &mut provider, true);
+        assert!(fub_importers::pipeline::commit("edited", &mut provider, &mut host).is_err());
+        assert_eq!(
+            host.read_document(&DocId::new("A.md")).unwrap(),
+            "user edit",
+            "honest={honest}"
+        );
+        assert_eq!(
+            fub_importers::migration::status("edited", &host).unwrap(),
+            "recovery_required",
+            "honest={honest}"
+        );
+    }
+}
+
+/// Ciò che l'import ha scritto e nessun altro ha toccato torna com'era anche
+/// quando l'apply si ferma con un errore: la ricevuta è la prova che era suo.
+#[test]
+fn a_failed_apply_rolls_back_the_targets_it_proves_it_wrote() {
+    let mut host = MemoryHost::new().with_document("A.md", "original\n");
+    let mut provider = Scripted {
+        targets: vec![
+            ("A.md", ImportOutcome::Replaced),
+            ("B.md", ImportOutcome::Created),
+            ("C.md", ImportOutcome::Created),
+        ],
+        others: None,
+        fail_at: Some(2),
+        crash_at: None,
+        honest: true,
+    };
+    staged(&mut host, "proved", &mut provider, true);
+    assert!(fub_importers::pipeline::commit("proved", &mut provider, &mut host).is_err());
+    assert_eq!(
+        host.read_document(&DocId::new("A.md")).unwrap(),
+        "original\n"
+    );
+    assert!(host.read_document(&DocId::new("B.md")).is_err());
+    assert_eq!(
+        fub_importers::migration::status("proved", &host).unwrap(),
+        "staged",
+        "il rollback riuscito chiude il journal"
+    );
+}
+
+/// Il bersaglio da sostituire cambia fra il preflight e la scrittura
+/// dell'import: la scrittura è condizionata alla revisione vista dal preflight
+/// e non copre la modifica altrui.
+#[test]
+fn a_target_edited_before_the_apply_writes_it_is_not_overwritten() {
+    let mut host = MemoryHost::new().with_document("A.md", "original\n");
+    let mut provider = Scripted {
+        targets: vec![("A.md", ImportOutcome::Replaced)],
+        others: Some((0, vec![("A.md", "edited by someone else")])),
+        fail_at: None,
+        crash_at: None,
+        honest: true,
+    };
+    staged(&mut host, "stale", &mut provider, true);
+    assert!(fub_importers::pipeline::commit("stale", &mut provider, &mut host).is_err());
+    assert_eq!(
+        host.read_document(&DocId::new("A.md")).unwrap(),
+        "edited by someone else"
+    );
+}
+
+/// Dopo il conflitto, chi ha risolto a mano il bersaglio ambiguo può chiudere il
+/// rollback: il journal tenuto basta a riportare indietro ciò che era dell'import.
+#[test]
+fn a_conflicting_rollback_can_be_finished_once_the_ambiguous_target_is_resolved() {
+    let mut host = MemoryHost::new();
+    let mut provider = Scripted {
+        targets: created(&["Mine.md", "Theirs.md"]),
+        others: Some((1, vec![("Theirs.md", "other writer")])),
+        fail_at: Some(1),
+        crash_at: None,
+        honest: true,
+    };
+    staged(&mut host, "resolved", &mut provider, false);
+    assert!(fub_importers::pipeline::commit("resolved", &mut provider, &mut host).is_err());
+    assert!(fub_importers::pipeline::rollback("resolved", &mut host).is_err());
+    assert!(host.read_document(&DocId::new("Mine.md")).is_ok());
+    host.trash_document(&DocId::new("Theirs.md")).unwrap();
+    fub_importers::pipeline::rollback("resolved", &mut host).unwrap();
+    assert!(host.read_document(&DocId::new("Mine.md")).is_err());
+    assert_eq!(
+        fub_importers::migration::status("resolved", &host).unwrap(),
+        "staged"
+    );
+}
+
+/// Il processo muore a metà dell'apply: nessun errore, nessun rapporto, e il
+/// journal è quello del preflight. Le ricevute che l'importer aveva già lasciato
+/// bastano, alla riapertura, a riportare indietro ciò che era suo.
+fn crash_during_the_apply(host: &mut MemoryHost, job: &str) {
+    let mut provider = Scripted {
+        targets: vec![
+            ("A.md", ImportOutcome::Replaced),
+            ("B.md", ImportOutcome::Created),
+        ],
+        others: None,
+        fail_at: None,
+        crash_at: Some(1),
+        honest: true,
+    };
+    staged(host, job, &mut provider, true);
+    let died = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = fub_importers::pipeline::commit(job, &mut provider, host);
+    }));
+    assert!(died.is_err(), "l'importer doveva morire a metà");
+    assert_eq!(
+        fub_importers::migration::status(job, host).unwrap(),
+        "recovery_required"
+    );
+}
+
+#[test]
+fn a_crash_during_the_apply_is_rolled_back_from_the_receipts() {
+    let mut host = MemoryHost::new().with_document("A.md", "original\n");
+    crash_during_the_apply(&mut host, "crashed");
+    assert_eq!(host.read_document(&DocId::new("A.md")).unwrap(), "imported");
+    fub_importers::pipeline::rollback("crashed", &mut host).unwrap();
+    assert_eq!(
+        host.read_document(&DocId::new("A.md")).unwrap(),
+        "original\n"
+    );
+    assert!(host.read_document(&DocId::new("B.md")).is_err());
+    assert_eq!(
+        fub_importers::migration::status("crashed", &host).unwrap(),
+        "staged"
+    );
+}
+
+#[test]
+fn a_user_edit_after_a_crash_is_not_rolled_back_over() {
+    let mut host = MemoryHost::new().with_document("A.md", "original\n");
+    crash_during_the_apply(&mut host, "crashed-edit");
+    host.write_document(
+        &DocId::new("A.md"),
+        "user edit",
+        fub_abi::edit::WriteBase::Dictated,
+    )
+    .unwrap();
+    assert!(fub_importers::pipeline::rollback("crashed-edit", &mut host).is_err());
+    assert_eq!(
+        host.read_document(&DocId::new("A.md")).unwrap(),
+        "user edit"
+    );
+    assert_eq!(
+        fub_importers::migration::status("crashed-edit", &host).unwrap(),
+        "recovery_required"
+    );
+}
+
+/// Tutto ciò che il job `job` tiene nello spazio dati dell'importer: journal,
+/// ricevute, preimmagini.
+fn held_by(host: &MemoryHost, job: &str) -> Vec<String> {
+    host.data_list("imports")
+        .unwrap()
+        .into_iter()
+        .filter(|path| path.contains(&format!("/{job}.json")) || path.contains(&format!("/{job}/")))
+        .filter(|path| !path.starts_with("imports/staging"))
+        .collect()
+}
+
+/// **La via d'uscita di un rollback che non può provare niente** (FUB-007): chi
+/// decide di tenere il vault com'è abbandona il journal, e nessun bersaglio si
+/// tocca. Sia con le ricevute sia senza, come i due tipi di importer.
+#[test]
+fn abandoning_an_interrupted_import_keeps_the_vault_as_it_is_and_frees_the_job() {
+    for honest in [false, true] {
+        let mut host = MemoryHost::new();
+        let mut provider = Scripted {
+            targets: created(&["Mine.md", "Theirs.md"]),
+            others: Some((1, vec![("Theirs.md", "other writer")])),
+            fail_at: Some(1),
+            crash_at: None,
+            honest,
+        };
+        staged(&mut host, "stuck", &mut provider, false);
+        fub_importers::pipeline::commit("stuck", &mut provider, &mut host)
+            .expect_err("l'import si è fermato");
+        assert!(
+            fub_importers::pipeline::rollback("stuck", &mut host).is_err(),
+            "honest={honest}: il rollback non prova che Theirs.md sia dell'import"
+        );
+        assert_eq!(
+            fub_importers::migration::status("stuck", &host).unwrap(),
+            "recovery_required"
+        );
+        assert!(!held_by(&host, "stuck").is_empty(), "honest={honest}");
+
+        fub_importers::migration::abandon("stuck", &mut host).expect("si abbandona");
+
+        assert_eq!(
+            host.read_document(&DocId::new("Theirs.md")).unwrap(),
+            "other writer",
+            "honest={honest}: l'abbandono non tocca nessun bersaglio"
+        );
+        assert_eq!(
+            host.read_document(&DocId::new("Mine.md")).unwrap(),
+            "imported",
+            "honest={honest}: ciò che l'import ha scritto resta"
+        );
+        assert_eq!(
+            fub_importers::migration::status("stuck", &host).unwrap(),
+            "staged",
+            "honest={honest}"
+        );
+        assert_eq!(
+            held_by(&host, "stuck"),
+            Vec::<String>::new(),
+            "honest={honest}"
+        );
+        fub_importers::migration::abandon("stuck", &mut host).expect("ripetuto, non fa niente");
+    }
+}
+
+/// Un import committato ha un rollback: non si abbandona il suo journal.
+#[test]
+fn a_committed_import_is_not_abandoned() {
+    let mut host = MemoryHost::new();
+    let mut provider = Scripted {
+        targets: created(&["Mine.md"]),
+        others: None,
+        fail_at: None,
+        crash_at: None,
+        honest: true,
+    };
+    staged(&mut host, "done", &mut provider, false);
+    fub_importers::pipeline::commit("done", &mut provider, &mut host).expect("commit");
+
+    let error = fub_importers::migration::abandon("done", &mut host).expect_err("c'è il rollback");
+    assert!(
+        matches!(error, fub_abi::PluginError::Conflict(_)),
+        "{error:?}"
+    );
+    assert_eq!(
+        fub_importers::migration::status("done", &host).unwrap(),
+        "committed"
+    );
+    fub_importers::pipeline::rollback("done", &mut host).expect("il rollback c'è ancora");
+    assert!(host.read_document(&DocId::new("Mine.md")).is_err());
+}
+
+/// Un journal di una versione che non si legge più non lo usa nemmeno il
+/// rollback: senza questa via resterebbe lì, con le sue preimmagini, per sempre.
+#[test]
+fn a_journal_that_cannot_be_read_can_be_abandoned() {
+    let mut host = MemoryHost::new();
+    fub_abi::traits::DataWrite::data_write(&mut host, "imports/commit/old.json", b"{ non json")
+        .unwrap();
+    fub_abi::traits::DataWrite::data_write(
+        &mut host,
+        "imports/preimages/old/0",
+        b"byte di una nota",
+    )
+    .unwrap();
+    fub_abi::traits::DataWrite::data_write(&mut host, "imports/receipts/old/ab.json", b"{}")
+        .unwrap();
+    assert!(fub_importers::migration::status("old", &host).is_err());
+    assert!(fub_importers::pipeline::rollback("old", &mut host).is_err());
+
+    fub_importers::migration::abandon("old", &mut host).expect("si abbandona");
+    assert_eq!(held_by(&host, "old"), Vec::<String>::new());
+    assert_eq!(
+        fub_importers::migration::status("old", &host).unwrap(),
+        "staged"
+    );
+}
+
+/// Il comando è nel registro, scrive, e il job lo esegue.
+#[test]
+fn the_abandon_command_is_in_the_registry_and_runs_as_a_job() {
+    let spec = fub_importers::transfer_commands::specs()
+        .into_iter()
+        .find(|spec| spec.id == fub_importers::transfer_commands::IMPORT_ABANDON)
+        .expect("import.abandon è dichiarato");
+    assert!(spec.scope.writes, "abbandonare toglie dati: scrive");
+
+    let mut host = MemoryHost::new();
+    let mut provider = Scripted {
+        targets: created(&["Mine.md", "Theirs.md"]),
+        others: Some((1, vec![("Theirs.md", "other writer")])),
+        fail_at: Some(1),
+        crash_at: None,
+        honest: false,
+    };
+    staged(&mut host, "via-job", &mut provider, false);
+    fub_importers::pipeline::commit("via-job", &mut provider, &mut host).expect_err("fermo");
+
+    let outcome = ImportPlugin
+        .run_job(
+            "import.transfer",
+            serde_json::json!({"op":"abandon", "job":"via-job"}),
+            &mut host,
+        )
+        .expect("il job abbandona");
+    assert_eq!(outcome["abandoned"], true);
+    assert_eq!(
+        fub_importers::migration::status("via-job", &host).unwrap(),
+        "staged"
+    );
 }

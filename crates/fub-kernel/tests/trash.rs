@@ -649,12 +649,47 @@ fn restoring_under_a_new_name_announces_the_identity_migration() {
         restore_document(&mut ws, &trashed, Some(DocId::new("projects/Note 1.txt"))).unwrap();
 
     assert_eq!(restored, DocId::new("projects/Note 1.txt"));
-    // Lo stato per-documento (versioning, meta) vive sotto il path d'origine:
-    // chi lo tiene deve sapere che la chiave è migrata.
+    let events: Vec<_> = events.try_iter().map(|n| n.event).collect();
+    // Lo stato per-documento (versioning, meta) di una nota cestinata sta sotto
+    // l'identità che ha nel cestino, non sotto il suo vecchio path: chi lo tiene
+    // deve sapere che la chiave è migrata **da lì**.
+    assert!(
+        events.contains(&Event::DocumentRenamed {
+            from: trashed.clone(),
+            to: DocId::new("projects/Note 1.txt"),
+        }),
+        "{events:?}"
+    );
+    // E mai dal path d'origine: adesso è di un'altra nota, e annunciarne la
+    // migrazione la farebbe seguire alla nota ripristinata (FUB-003).
+    assert!(
+        !events.iter().any(|event| matches!(
+            event,
+            Event::DocumentRenamed { from, .. } if from == &DocId::new("projects/Note.txt")
+        )),
+        "il ripristino ha annunciato come migrato il path di una nota viva: {events:?}"
+    );
+}
+
+#[test]
+fn restoring_to_the_original_path_announces_the_return_from_the_trash() {
+    let fx = Fixture::new();
+    fx.put("projects/Note.txt", "first life");
+    let mut ws = fx.workspace();
+    let trashed = ws
+        .delete_document(&DocId::new("projects/Note.txt"))
+        .unwrap();
+
+    let events = ws.bus().subscribe();
+    let restored = restore_document(&mut ws, &trashed, None).unwrap();
+
+    assert_eq!(restored, DocId::new("projects/Note.txt"));
+    // Anche sul path d'origine lo stato torna da sotto l'identità del cestino:
+    // chi lo tiene lo sa dallo stesso evento.
     assert!(events.try_iter().any(|n| n.event
         == Event::DocumentRenamed {
-            from: DocId::new("projects/Note.txt"),
-            to: DocId::new("projects/Note 1.txt"),
+            from: trashed.clone(),
+            to: DocId::new("projects/Note.txt"),
         }));
 }
 

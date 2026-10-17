@@ -39,6 +39,19 @@
 //!   **a mentire**: nessun tombstone, quindi una nota cancellata risulterebbe
 //!   ancora viva.
 //!
+//! # Una nota cestinata non ha più il suo path
+//!
+//! La storia è per path, e il path di una nota cestinata torna libero: chi lo
+//! riprende è un'altra nota, e se la storia restasse sotto quel path
+//! comincerebbe da quella della prima (il primo salvataggio *«fa tornare in vita»*
+//! la chiave, e ci aggiunge le sue versioni). Quando arriva il
+//! [`Event::DocumentRemoved`] di una nota che il cestino ha preso, la storia
+//! passa quindi sotto l'identità che la voce ha lì dentro, la stessa con cui il
+//! kernel annuncerà il ritorno ([`Event::DocumentRenamed`] dalla voce al path
+//! d'arrivo): resta leggibile lì, e al ripristino segue la nota dovunque vada.
+//! Se la voce non si trova — una cancellazione che il cestino non ha visto, un
+//! cestino illeggibile — vale il comportamento di sempre: un tombstone sul path.
+//!
 //! Per questo l'handler è abbonato anche a [`EventKind::Overflow`] e riconcilia:
 //! `IndexQuery::Entries` elenca i file correnti, e ciò che lo store crede vivo e il
 //! vault non ha più prende un tombstone. La frattura da rename perso degrada a
@@ -53,7 +66,7 @@
 //!
 //! ```text
 //! versions.json                    indice: doc_id → versioni + tombstone
-//! <dir>/meta.json                  { doc_id, deleted_at }
+//! <dir>/meta.json                  { doc_id, deleted_at, versions: [{ts, hash, size}] }
 //! <dir>/<ts>.<ext>                 i byte originali di una versione
 //! ```
 //!
@@ -119,6 +132,12 @@ const INDEX_UNWRITABLE: &str = "index_unwritable";
 /// rete di sicurezza di chi scrive, e perderla vuol dire perdere la possibilità
 /// di tornare a quel punto.
 const VERSION_UNSAVED: &str = "version_unsaved";
+/// Quanto può essere vecchia una voce del cestino perché la si riconosca come
+/// quella di una cancellazione che l'handler sta ricevendo: gli eventi si
+/// consegnano subito dopo l'operazione, e una voce più vecchia di così è di
+/// un'altra nota.
+const TRASH_RECENT_SECS: u64 = 600;
+
 /// Il tombstone di un documento non è stato scritto: la sua storia resta viva
 /// quando dovrebbe essere chiusa. `Failure` (0052).
 const TOMBSTONE_UNWRITABLE: &str = "tombstone_unwritable";
@@ -442,6 +461,11 @@ struct DocVersions {
 #[derive(Deserialize)]
 struct Index {
     schema_version: SchemaVersion,
+    /// Le impronte che l'indice ricorda sono già nel `meta.json` di ogni
+    /// cartella (vedi [`Inner::register_fingerprints`]). Manca negli indici
+    /// scritti prima: vale `false`, e il primo `open` lo fa.
+    #[serde(default)]
+    registered: bool,
     docs: BTreeMap<String, DocVersions>,
 }
 
@@ -461,6 +485,7 @@ struct Index {
 #[derive(Serialize)]
 struct IndexToWrite<D: Serialize> {
     schema_version: SchemaVersion,
+    registered: bool,
     docs: D,
 }
 
@@ -547,6 +572,15 @@ impl Serialize for PlanDocs<'_> {
 struct Meta {
     doc_id: String,
     deleted_at: Option<u64>,
+    /// Le impronte **registrate** di ogni versione della cartella, scritte
+    /// quando la versione nasce. Sono ciò che rende la ricostruzione
+    /// dell'indice un confronto e non un'autocertificazione: un blob alterato
+    /// dopo la sua scrittura non si fa passare per sano ricalcolandogli
+    /// l'impronta. Manca nelle cartelle scritte prima che esistesse (e
+    /// `#[serde(default)]` le legge lo stesso): lì la ricostruzione ricalcola
+    /// dai byte, come faceva, e il primo salvataggio le registra.
+    #[serde(default)]
+    versions: Vec<VersionRef>,
 }
 
 /// Che cosa una cartella dello store **rivendica**, e i due modi diversi in cui
@@ -579,6 +613,9 @@ struct Inner {
     /// eredita senza saperlo, e un lotto che valesse solo per `snapshot`
     /// riscriverebbe di nuovo l'indice a ogni tombstone della riconciliazione.
     batch: bool,
+    /// Il `meta.json` di ogni cartella ha già le impronte delle sue versioni?
+    /// Lo dice l'indice ([`Index::registered`]) e lo riscrive com'è.
+    registered: bool,
 }
 
 /// Lo store delle versioni.
@@ -610,14 +647,14 @@ pub struct VersionStore {
 impl VersionStore {
     /// Apre (o crea) lo store nello spazio dati del plugin.
     pub fn open(host: &mut dyn HostApi) -> Result<Self, PluginError> {
-        let docs = match load_index(host) {
-            Some(docs) => docs,
+        let (docs, registered, from_index) = match load_index(host) {
+            Some(index) => (index.docs, index.registered, true),
             None => {
                 let rebuilt = rebuild_from_store(host)?;
                 if !rebuilt.is_empty() {
                     // Ripubblica il derivato quando possibile. Se il cache non
                     // si può scrivere, i lettori ricostruiscono dagli snapshot.
-                    if let Err(error) = write_index(&rebuilt, host) {
+                    if let Err(error) = write_index(&rebuilt, true, host) {
                         host.emit(Event::Trouble {
                             severity: Severity::Warning,
                             subject: None,
@@ -633,11 +670,22 @@ impl VersionStore {
                         if rebuilt.len() == 1 { "o" } else { "i" }
                     );
                 }
-                rebuilt
+                // Un indice ricostruito dai byte non ha impronte che valga la
+                // pena registrare: le ha ricalcolate lui, e metterle nel
+                // `meta.json` le farebbe passare per quelle della scrittura.
+                (rebuilt, true, false)
             }
         };
+        let mut inner = Inner {
+            docs,
+            batch: false,
+            registered,
+        };
+        if from_index && !registered {
+            inner.register_fingerprints(host);
+        }
         Ok(VersionStore {
-            inner: Arc::new(Mutex::new(Inner { docs, batch: false })),
+            inner: Arc::new(Mutex::new(inner)),
         })
     }
 
@@ -704,7 +752,7 @@ impl VersionStore {
         // salvataggio che entrasse qui scriverebbe il suo indice e poi questo ci
         // scriverebbe sopra il proprio, più vecchio di una versione.
         let inner = self.inner.lock().expect("mutex");
-        write_index(&inner.docs, host)?;
+        write_index(&inner.docs, inner.registered, host)?;
         Ok(result)
     }
 
@@ -901,6 +949,15 @@ impl VersionStore {
             .is_some_and(|d| !d.versions.is_empty())
     }
 
+    /// Lo store conserva qualcosa per questo documento?
+    pub fn holds(&self, id: &DocId) -> bool {
+        self.inner
+            .lock()
+            .expect("mutex")
+            .docs
+            .contains_key(id.as_str())
+    }
+
     /// I documenti di cui lo store conserva qualcosa. Utile alle diagnostiche e
     /// (in una seconda passata) alla vista "vault al tempo T".
     pub fn documents(&self) -> Vec<DocId> {
@@ -910,6 +967,45 @@ impl VersionStore {
 }
 
 impl Inner {
+    /// **Mette nel `meta.json` le impronte che l'indice ricorda** (FUB-004).
+    ///
+    /// Le storie scritte prima che il `meta.json` le registrasse non le hanno:
+    /// se l'indice andasse perso, la ricostruzione le ricalcolerebbe dai byte e
+    /// un blob alterato nel frattempo passerebbe per sano. Finché l'indice c'è,
+    /// invece, le impronte che ricorda sono quelle della scrittura: questa è
+    /// l'ultima occasione di salvarle, e si fa una volta sola (`registered`
+    /// torna nell'indice e il prossimo `open` non guarda più).
+    ///
+    /// Una cartella che non si può leggere o scrivere non ferma le altre e non
+    /// fa dichiarare la cosa finita: il prossimo `open` ci riprova. Una che non
+    /// è di nessuno (senza `meta.json`, o di un altro documento) non c'entra.
+    fn register_fingerprints(&mut self, host: &mut dyn HostApi) {
+        let mut complete = true;
+        for (id, doc) in &self.docs {
+            if let Err(error) = register_in_meta(id, doc, host) {
+                complete = false;
+                host.emit(Event::Trouble {
+                    severity: Severity::Warning,
+                    subject: Some(DocId::new(id)),
+                    error,
+                    gate: None,
+                });
+            }
+        }
+        if !complete {
+            return;
+        }
+        self.registered = true;
+        if let Err(error) = write_index(&self.docs, true, host) {
+            host.emit(Event::Trouble {
+                severity: Severity::Warning,
+                subject: None,
+                error,
+                gate: None,
+            });
+        }
+    }
+
     /// Dove sta il blob di **questa** versione, secondo l'anagrafe in memoria.
     ///
     /// Esiste per una ragione sola, ed è la stessa per cui [`Inner::apply`] è
@@ -1059,6 +1155,7 @@ impl Inner {
                     live: &self.docs,
                     plan: &plan,
                 },
+                self.registered,
                 host,
             )?;
         }
@@ -1098,6 +1195,41 @@ impl Drop for Batch<'_> {
     }
 }
 
+/// Le versioni di `doc` che il `meta.json` della sua cartella non nomina
+/// ancora, ci entrano con l'impronta che l'indice ricorda. Ciò che il
+/// `meta.json` già dice non si tocca: l'autorità è lui.
+fn register_in_meta(
+    id: &str,
+    doc: &DocVersions,
+    host: &mut dyn HostApi,
+) -> Result<(), PluginError> {
+    let Claim::Owned(mut metadata) = claim_of(&doc.dir, host)? else {
+        return Ok(());
+    };
+    if metadata.doc_id != id {
+        return Ok(());
+    }
+    let known: std::collections::BTreeSet<u64> = metadata.versions.iter().map(|v| v.ts).collect();
+    let missing: Vec<VersionRef> = doc
+        .versions
+        .iter()
+        .filter(|version| !known.contains(&version.ts))
+        .copied()
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    metadata.versions.extend(missing);
+    metadata.versions.sort_by_key(|version| version.ts);
+    let raw = serde_json::to_vec(&metadata).map_err(|and| {
+        PluginError::Internal(Text::message(
+            METADATA_UNWRITABLE,
+            vec![Arg::text(REASON, and.to_string())],
+        ))
+    })?;
+    host.data_write(&blob(&doc.dir, METADATA_FILE), &raw)
+}
+
 fn write_metadata(
     id: &DocId,
     doc: &DocVersions,
@@ -1106,6 +1238,7 @@ fn write_metadata(
     let metadata = Meta {
         doc_id: id.to_string(),
         deleted_at: doc.deleted_at,
+        versions: doc.versions.clone(),
     };
     let raw = serde_json::to_vec(&metadata).map_err(|and| {
         PluginError::Internal(Text::message(
@@ -1116,9 +1249,14 @@ fn write_metadata(
     host.data_write(&blob(&doc.dir, METADATA_FILE), &raw)
 }
 
-fn write_index(docs: impl Serialize, host: &mut dyn HostApi) -> Result<(), PluginError> {
+fn write_index(
+    docs: impl Serialize,
+    registered: bool,
+    host: &mut dyn HostApi,
+) -> Result<(), PluginError> {
     let index = IndexToWrite {
         schema_version: SCHEMA_VERSION,
+        registered,
         docs,
     };
     let raw = serde_json::to_vec(&index).map_err(|and| {
@@ -1423,15 +1561,15 @@ fn snapshot_name(ts: u64, doc_id: &str) -> String {
 /// Prende un `&dyn ReadApi` e non un `&dyn HostApi`: leggere l'indice è una
 /// lettura, e da quando il pannello cronologia lo rilegge dal percorso di
 /// render — dove di scritture non ce ne sono — il tipo lo dice.
-fn load_index(host: &dyn ReadApi) -> Option<BTreeMap<String, DocVersions>> {
+fn load_index(host: &dyn ReadApi) -> Option<Index> {
     let raw = host.data_read(INDEX_FILE).ok()??;
     let index: Index = serde_json::from_slice(&raw).ok()?;
-    (index.schema_version == SCHEMA_VERSION).then_some(index.docs)
+    (index.schema_version == SCHEMA_VERSION).then_some(index)
 }
 
 fn read_index(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
     match load_index(host) {
-        Some(docs) => Ok(docs),
+        Some(index) => Ok(index.docs),
         None => rebuild_from_store(host),
     }
 }
@@ -1453,12 +1591,15 @@ fn claim_of(dir: &str, host: &dyn ReadApi) -> Result<Claim, PluginError> {
 /// ma succede solo quando l'indice è perso — e un indice perso, senza questo,
 /// renderebbe le versioni irraggiungibili per sempre.
 ///
-/// Quella lettura non si può togliere: [`VersionRef::hash`] è l'impronta FNV-1a
-/// **del contenuto** e `size` è la sua lunghezza, e l'unico posto in cui erano
-/// già scritti è `versions.json`, cioè proprio l'indice che qui manca. Caricare
-/// gli snapshot non è il prezzo per calcolare l'impronta: è il calcolo. Il conto
-/// — 400 letture per 200 documenti, un `meta.json` e uno snapshot ciascuno,
-/// niente riletto — sta in `fub-features/tests/chi_risponde_apre_i_byte.rs`.
+/// [`VersionRef::hash`] è l'impronta FNV-1a **del contenuto** e `size` è la sua
+/// lunghezza. Il `meta.json` di ogni cartella le registra quando la versione
+/// nasce, e la ricostruzione le prende da lì senza aprire gli snapshot: così un
+/// blob alterato dopo la scrittura resta alterato per `read_snapshot`, invece di
+/// diventare "sano" perché gli si è ricalcolata l'impronta. Solo per le versioni
+/// che il `meta.json` non nomina (cartelle di prima, scrittura interrotta) lo
+/// snapshot si apre e l'impronta si ricalcola. I conti — una lettura per
+/// documento con le impronte registrate, due senza — stanno in
+/// `fub-features/tests/who_answers_opens_the_bytes.rs`.
 fn rebuild_from_store(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions>, PluginError> {
     // I blob sono ordinati, quindi quelli di una stessa cartella sono contigui.
     let mut for_dir: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
@@ -1495,12 +1636,26 @@ fn rebuild_from_store(host: &dyn ReadApi) -> Result<BTreeMap<String, DocVersions
                 continue;
             }
         };
+        let registered: BTreeMap<u64, VersionRef> =
+            metadata.versions.iter().map(|v| (v.ts, *v)).collect();
         let mut versions = Vec::new();
         for name in names {
             let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
             let Ok(ts) = stem.parse::<u64>() else {
                 continue; // meta.json e tutto ciò che non è uno snapshot
             };
+            // Un'impronta registrata dalla scrittura vale più di una
+            // calcolata adesso: se il blob è stato alterato nel frattempo,
+            // `read_snapshot` lo vedrà. Il blob nemmeno si apre — l'elenco
+            // dello store dice già che c'è.
+            if let Some(version) = registered.get(&ts) {
+                versions.push(*version);
+                continue;
+            }
+            // Una versione che `meta.json` non nomina: o la cartella è di
+            // prima delle impronte registrate, o la scrittura si è interrotta
+            // fra il blob e il `meta.json`. Si ricalcola dai byte, e non si
+            // può fare di meglio.
             let Some(bytes) = host.data_read(&blob(dir, name))? else {
                 continue;
             };
@@ -1753,6 +1908,37 @@ impl VersioningHandler {
         }
     }
 
+    /// Una nota che non c'è più: se l'ha presa il cestino, la sua storia le va
+    /// dietro (vedi «Una nota cestinata non ha più il suo path» in testa).
+    fn bury(&self, id: &DocId, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        let Some(trashed) = self.trash_entry_of(id, host) else {
+            return self.store.tombstone(id, host);
+        };
+        self.store.rename(id, &trashed, host)?;
+        self.store.tombstone(&trashed, host)
+    }
+
+    /// La voce del cestino che ha appena preso `id`, se si riconosce.
+    ///
+    /// Il cestino può avere più voci con lo stesso path d'origine: serve quella
+    /// **di adesso**, e le altre sono già state prese da chi le ha viste
+    /// arrivare (la loro chiave sta nello store) oppure sono vecchie. Una
+    /// cancellazione senza voce — il file è sparito da fuori, mentre nel cestino
+    /// c'è una nota più vecchia che veniva dallo stesso path — non deve
+    /// attribuire la storia di una nota alla voce di un'altra: per questo la voce
+    /// dev'essere recente, e nessuno deve già averla presa.
+    fn trash_entry_of(&self, id: &DocId, host: &dyn HostApi) -> Option<DocId> {
+        let now = host.now_unix_millis() / 1_000;
+        host.list_trash()
+            .ok()?
+            .into_iter()
+            .filter(|entry| &entry.original == id)
+            .filter(|entry| now.saturating_sub(entry.deleted_at) <= TRASH_RECENT_SECS)
+            .filter(|entry| !self.store.holds(&entry.id))
+            .max_by_key(|entry| entry.deleted_at)
+            .map(|entry| entry.id)
+    }
+
     /// Riconciliazione dopo un [`Event::Overflow`]: la coda è stata troncata e
     /// non si sa *cosa* si è perso, quindi si riparte dalla verità.
     ///
@@ -1856,7 +2042,7 @@ impl EventHandler for VersioningHandler {
                 self.store.rename(from, to, host)?;
             }
             Event::DocumentRemoved { id } | Event::EntryRemoved { id, .. } => {
-                self.store.tombstone(id, host)?;
+                self.bury(id, host)?;
             }
             Event::Overflow { .. } => self.reconcile_after_overflow(host)?,
             _ => {}
@@ -3111,6 +3297,186 @@ mod tests {
         }
     }
 
+    /// L'impronta registrata alla scrittura sopravvive alla perdita dell'indice:
+    /// un blob alterato nel frattempo non diventa "sano" perché lo si
+    /// ricalcola, e la lettura lo rifiuta.
+    #[test]
+    fn a_blob_altered_before_the_rebuild_is_still_refused() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "originale".as_bytes(), &mut host)
+            .unwrap();
+        let version = store.list(&id("a.md"))[0];
+        let path = blob(
+            &store.inner.lock().unwrap().docs["a.md"].dir,
+            &snapshot_name(version.ts, "a.md"),
+        );
+
+        // Il blob cambia sul disco, l'indice si perde.
+        host.data_write(&path, "alterato!".as_bytes()).unwrap();
+        host.data_remove(INDEX_FILE).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        assert_eq!(
+            store.list(&id("a.md")),
+            vec![version],
+            "la ricostruzione ridà l'impronta registrata, non quella dei byte di adesso"
+        );
+        let refused = store.read(&id("a.md"), version.ts, &host);
+        assert!(
+            matches!(&refused, Err(PluginError::Internal(_))),
+            "il contenuto alterato non si consegna: {refused:?}"
+        );
+    }
+
+    /// Una cartella scritta prima che il `meta.json` registrasse le impronte
+    /// si ricostruisce ancora, ricalcolandole dai byte.
+    #[test]
+    fn a_folder_without_registered_fingerprints_is_still_rebuilt() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "vecchio".as_bytes(), &mut host)
+            .unwrap();
+        let expected = store.list(&id("a.md"));
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+
+        // Il `meta.json` di prima: solo `doc_id` e `deleted_at`.
+        host.data_write(
+            &blob(&dir, METADATA_FILE),
+            br#"{"doc_id":"a.md","deleted_at":null}"#,
+        )
+        .unwrap();
+        host.data_remove(INDEX_FILE).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+
+        assert_eq!(store.list(&id("a.md")), expected);
+        assert_eq!(
+            store.read(&id("a.md"), expected[0].ts, &host).unwrap(),
+            "vecchio"
+        );
+    }
+
+    /// Porta una cartella allo stato di prima delle impronte registrate: il
+    /// `meta.json` di una volta (solo `doc_id` e `deleted_at`) e un indice
+    /// scritto da chi non conosceva `registered`.
+    fn make_legacy(host: &mut MemoryHost, dir: &str, doc: &str) {
+        host.data_write(
+            &blob(dir, METADATA_FILE),
+            format!(r#"{{"doc_id":"{doc}","deleted_at":null}}"#).as_bytes(),
+        )
+        .unwrap();
+        let mut index: serde_json::Value =
+            serde_json::from_slice(&host.data_read(INDEX_FILE).unwrap().unwrap()).unwrap();
+        index.as_object_mut().unwrap().remove("registered");
+        host.data_write(INDEX_FILE, &serde_json::to_vec(&index).unwrap())
+            .unwrap();
+    }
+
+    fn registered_versions(host: &MemoryHost, dir: &str) -> Vec<VersionRef> {
+        let raw = host.data_read(&blob(dir, METADATA_FILE)).unwrap().unwrap();
+        serde_json::from_slice::<Meta>(&raw).unwrap().versions
+    }
+
+    fn index_says_registered(host: &MemoryHost) -> bool {
+        let index: serde_json::Value =
+            serde_json::from_slice(&host.data_read(INDEX_FILE).unwrap().unwrap()).unwrap();
+        index["registered"].as_bool().unwrap_or(false)
+    }
+
+    /// **Una storia di prima delle impronte le riceve alla prima apertura**
+    /// (FUB-004): finché l'indice c'è, le impronte che ricorda sono quelle della
+    /// scrittura, ed è l'ultima occasione di salvarle. Poi un blob alterato non
+    /// diventa "sano" quando l'indice va perso.
+    #[test]
+    fn opening_registers_the_fingerprints_a_legacy_history_never_had() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "originale".as_bytes(), &mut host)
+            .unwrap();
+        let version = store.list(&id("a.md"))[0];
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+        make_legacy(&mut host, &dir, "a.md");
+        assert!(registered_versions(&host, &dir).is_empty());
+        assert!(!index_says_registered(&host));
+
+        let _store = VersionStore::open(&mut host).unwrap();
+        assert_eq!(registered_versions(&host, &dir), vec![version]);
+        assert!(index_says_registered(&host));
+
+        // Il blob cambia sul disco e l'indice si perde: la ricostruzione ridà
+        // l'impronta della scrittura, e la lettura rifiuta il contenuto.
+        let path = blob(&dir, &snapshot_name(version.ts, "a.md"));
+        host.data_write(&path, "alterato!".as_bytes()).unwrap();
+        host.data_remove(INDEX_FILE).unwrap();
+        let store = VersionStore::open(&mut host).unwrap();
+        assert_eq!(store.list(&id("a.md")), vec![version]);
+        let refused = store.read(&id("a.md"), version.ts, &host);
+        assert!(
+            matches!(&refused, Err(PluginError::Internal(_))),
+            "il contenuto alterato non si consegna: {refused:?}"
+        );
+    }
+
+    /// La registrazione si fa una volta: dopo, l'indice lo dice e `open` non
+    /// guarda più i `meta.json`.
+    #[test]
+    fn the_registration_of_fingerprints_happens_once() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "originale".as_bytes(), &mut host)
+            .unwrap();
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+        make_legacy(&mut host, &dir, "a.md");
+        let _ = VersionStore::open(&mut host).unwrap();
+        assert!(index_says_registered(&host));
+
+        // Se `open` guardasse ancora, riscriverebbe questo.
+        host.data_write(
+            &blob(&dir, METADATA_FILE),
+            br#"{"doc_id":"a.md","deleted_at":null}"#,
+        )
+        .unwrap();
+        let _ = VersionStore::open(&mut host).unwrap();
+        assert!(
+            registered_versions(&host, &dir).is_empty(),
+            "la seconda apertura non ha rifatto la registrazione"
+        );
+    }
+
+    /// Un indice ricostruito dai byte non registra le impronte che ha appena
+    /// ricalcolato: sarebbero un'autocertificazione scritta come se fosse della
+    /// scrittura.
+    #[test]
+    fn a_rebuilt_index_does_not_register_the_fingerprints_it_just_computed() {
+        let mut host = MemoryHost::new();
+        let store = VersionStore::open(&mut host).unwrap();
+        store
+            .snapshot(&id("a.md"), "originale".as_bytes(), &mut host)
+            .unwrap();
+        let dir = store.inner.lock().unwrap().docs["a.md"].dir.clone();
+        make_legacy(&mut host, &dir, "a.md");
+        host.data_remove(INDEX_FILE).unwrap();
+
+        let store = VersionStore::open(&mut host).unwrap();
+        assert_eq!(
+            store.list(&id("a.md")).len(),
+            1,
+            "la storia si ricostruisce"
+        );
+        assert!(
+            registered_versions(&host, &dir).is_empty(),
+            "le impronte ricalcolate non finiscono nel meta.json"
+        );
+        assert!(
+            index_says_registered(&host),
+            "e l'indice nuovo non rifà la registrazione alla prossima apertura"
+        );
+    }
+
     #[test]
     fn a_deletion_leaves_a_tombstone_and_the_content_stays_readable() {
         let mut host = MemoryHost::new();
@@ -3599,6 +3965,7 @@ mod tests {
             inner: Arc::new(Mutex::new(Inner {
                 docs: BTreeMap::new(),
                 batch: false,
+                registered: true,
             })),
         });
         assert!(handler.subscribed().contains(EventKind::Overflow));
@@ -3905,7 +4272,7 @@ mod tests {
             .snapshot(&doc, b"original", &mut host)
             .unwrap()
             .unwrap();
-        let docs = load_index(&host).unwrap();
+        let docs = load_index(&host).unwrap().docs;
         let path = blob(
             &docs[doc.as_str()].dir,
             &snapshot_name(version.ts, doc.as_str()),

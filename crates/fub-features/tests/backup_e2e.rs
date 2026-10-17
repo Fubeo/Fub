@@ -427,7 +427,12 @@ mod in_memory {
         let paths: Vec<String> = blobs(&host).into_iter().map(|(path, _)| path).collect();
         assert_eq!(
             paths,
-            [format!("{id}.1/a.md"), "snapshots.json".to_string()]
+            [
+                format!("{id}.1.files.json"),
+                format!("{id}.1/a.md"),
+                "snapshots.json".to_string()
+            ],
+            "l'inventario della cartella vecchia se ne va con lei"
         );
         assert_eq!(manifest(&host)["snapshots"][0]["n"], 1);
         trash(&mut host, "a.md");
@@ -437,7 +442,14 @@ mod in_memory {
         let mut host = host.with_document("a.md", "A3");
         backup(&mut host).expect("il terzo torna nella prima cartella");
         let paths: Vec<String> = blobs(&host).into_iter().map(|(path, _)| path).collect();
-        assert_eq!(paths, [format!("{id}/a.md"), "snapshots.json".to_string()]);
+        assert_eq!(
+            paths,
+            [
+                format!("{id}.files.json"),
+                format!("{id}/a.md"),
+                "snapshots.json".to_string()
+            ]
+        );
 
         trash(&mut host, "a.md");
         restore(&mut host, &id).unwrap();
@@ -526,5 +538,170 @@ mod in_memory {
         trash(&mut host, "a.md");
         restore(&mut host, "2023-01-01").expect("lo snapshot vecchio sta dov'era");
         assert_eq!(read(&host, "a.md"), "# A vecchia\n");
+    }
+
+    /// Un backup di due note, entrambe cestinate dopo: ciò che serve per
+    /// provare un ripristino che deve fermarsi.
+    fn backed_up_and_trashed() -> (MemoryHost, String) {
+        let mut host = MemoryHost::new()
+            .with_document("a.md", "Nota A, intera")
+            .with_document("b.md", "Nota B, intera");
+        backup(&mut host).expect("il backup riesce");
+        let id = manifest(&host)["snapshots"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        trash(&mut host, "a.md");
+        trash(&mut host, "b.md");
+        (host, id)
+    }
+
+    /// Il ripristino che si ferma non ha creato niente, e lo dice con il nome
+    /// della copia che non torna: in prova come in esecuzione.
+    fn assert_the_restore_stops(host: &mut MemoryHost, id: &str, culprit: &str) {
+        for mode in [InvokeMode::DryRun, InvokeMode::Apply] {
+            let error = BackupCommands
+                .invoke(VAULT_BACKUP_RESTORE, json!({ "id": id }), mode, host)
+                .expect_err("lo snapshot non torna");
+            assert!(error.to_string().contains(culprit), "{error}");
+        }
+        assert!(
+            host.read_document(&DocId::new("a.md")).is_err(),
+            "un ripristino fermato non crea niente a metà"
+        );
+        assert!(host.read_document(&DocId::new("b.md")).is_err());
+    }
+
+    /// **Una copia sparita dallo snapshot non si salta in silenzio.** Spariva
+    /// anche dall'elenco dei file, e il ripristino riportava una nota in meno
+    /// dicendo di esserci riuscito.
+    #[test]
+    fn a_copy_missing_from_the_snapshot_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_remove(&format!("{id}/b.md")).unwrap();
+        assert_the_restore_stops(&mut host, &id, "b.md");
+    }
+
+    /// Un testo troncato ma ancora UTF-8 passava: veniva ricreato com'era
+    /// rimasto.
+    #[test]
+    fn a_truncated_copy_that_is_still_text_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_write(&format!("{id}/b.md"), b"Nota B").unwrap();
+        assert_the_restore_stops(&mut host, &id, "b.md");
+    }
+
+    /// Stessa lunghezza, altri byte: la dimensione sola non basta.
+    #[test]
+    fn a_copy_of_the_same_length_but_other_bytes_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_write(&format!("{id}/a.md"), b"Nota X, intera")
+            .unwrap();
+        assert_the_restore_stops(&mut host, &id, "a.md");
+    }
+
+    /// Una copia che non è più testo non si ricrea, e non si salta.
+    #[test]
+    fn a_copy_that_is_no_longer_text_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_write(&format!("{id}/b.md"), &[0xff, 0xfe, 0x00])
+            .unwrap();
+        assert_the_restore_stops(&mut host, &id, "b.md");
+    }
+
+    /// Un inventario che il manifest nomina e non c'è più non si scambia per
+    /// «snapshot di prima»: lo snapshot non si può verificare, e lo si dice.
+    #[test]
+    fn a_snapshot_that_lost_its_inventory_is_not_restored_blind() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_remove(&format!("{id}.files.json")).unwrap();
+        assert_the_restore_stops(&mut host, &id, &id);
+    }
+
+    /// Il manifest di uno snapshot, con il numero di note che ricorda cambiato.
+    fn remember_notes(host: &mut MemoryHost, n: u64) {
+        let mut manifest = manifest(host);
+        manifest["snapshots"][0]["n"] = json!(n);
+        host.data_write("snapshots.json", &serde_json::to_vec(&manifest).unwrap())
+            .unwrap();
+    }
+
+    /// **Un inventario di prima non descrive una cartella rifatta** (FUB-005).
+    /// Una versione che non conosce l'inventario rifà lo snapshot — una nota in
+    /// più nella cartella, `n` aggiornato — e il manifest che riscrive porta
+    /// ancora `inventory: true`: l'inventario che resta è quello vecchio, tutti
+    /// i suoi byte tornano, e il ripristino saltava la nota nuova senza dirlo.
+    #[test]
+    fn a_snapshot_whose_copies_outgrew_its_inventory_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_write(&format!("{id}/c.md"), b"Nota C, nuova")
+            .unwrap();
+        remember_notes(&mut host, 3);
+        assert_the_restore_stops(&mut host, &id, "c.md");
+    }
+
+    /// Anche il solo numero che non torna basta: l'inventario ha due voci e il
+    /// manifest ne ricorda tre.
+    #[test]
+    fn an_inventory_with_another_number_of_entries_than_the_manifest_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        remember_notes(&mut host, 3);
+        assert_the_restore_stops(&mut host, &id, "2 su 3");
+    }
+
+    /// Una copia che l'inventario non nomina ferma il ripristino anche quando
+    /// il numero torna (una nota tolta e una messa).
+    #[test]
+    fn a_copy_the_inventory_does_not_name_stops_the_restore_even_if_the_count_matches() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_write(&format!("{id}/c.md"), b"Nota C, nuova")
+            .unwrap();
+        host.data_remove(&format!("{id}/b.md")).unwrap();
+        assert_the_restore_stops(&mut host, &id, "c.md");
+    }
+
+    /// Uno snapshot di prima dell'inventario non ha impronte da confrontare, ma
+    /// il manifest ricorda quante note aveva: una copia in meno si vede.
+    #[test]
+    fn a_snapshot_from_before_the_inventory_counts_its_copies() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_remove(&format!("{id}.files.json")).unwrap();
+        let mut old = manifest(&host);
+        old["snapshots"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("inventory");
+        host.data_write("snapshots.json", &serde_json::to_vec(&old).unwrap())
+            .unwrap();
+
+        // Intero: si ripristina come sempre.
+        restore(&mut host, &id).expect("uno snapshot di prima si ripristina");
+        assert_eq!(read(&host, "a.md"), "Nota A, intera");
+        assert_eq!(read(&host, "b.md"), "Nota B, intera");
+
+        // Con una copia in meno: no.
+        trash(&mut host, "a.md");
+        trash(&mut host, "b.md");
+        host.data_remove(&format!("{id}/b.md")).unwrap();
+        assert_the_restore_stops(&mut host, &id, "1 su 2");
+    }
+
+    /// Le note vive non contano: una copia rovinata di una nota che nel vault
+    /// c'è ancora non impedisce di ripristinare quelle che mancano davvero.
+    #[test]
+    fn a_damaged_copy_of_a_note_still_in_the_vault_does_not_matter() {
+        let mut host = MemoryHost::new()
+            .with_document("a.md", "Nota A, intera")
+            .with_document("b.md", "Nota B, intera");
+        backup(&mut host).expect("il backup riesce");
+        let id = manifest(&host)["snapshots"][0]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        host.data_write(&format!("{id}/a.md"), b"Nota A").unwrap();
+        trash(&mut host, "b.md");
+        restore(&mut host, &id).expect("b.md si ripristina");
+        assert_eq!(read(&host, "b.md"), "Nota B, intera");
+        assert_eq!(read(&host, "a.md"), "Nota A, intera", "a.md non si tocca");
     }
 }

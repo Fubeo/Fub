@@ -14,6 +14,22 @@
 //! non si usa né si riscrive, e i campi che questa versione non conosce tornano
 //! su disco come erano.
 //!
+//! Accanto alla cartella di ogni snapshot sta il suo **inventario**
+//! (`<cartella>.files.json`): per ogni nota il path, la dimensione e l'impronta
+//! dei byte copiati. Il ripristino lo confronta con ciò che trova *prima* di
+//! creare qualsiasi nota: una copia mancante, troncata o alterata ferma tutto
+//! con un errore che la nomina, invece di riportare meno note — o note a metà —
+//! dichiarando di avercela fatta. Gli snapshot scritti prima dell'inventario si
+//! controllano sul numero di copie che il manifest ricorda.
+//!
+//! L'inventario deve anche **tornare con il resto**: tante voci quante ne dice
+//! il manifest (`n`) e nessuna copia nella cartella che lui non nomini. Una
+//! versione che non lo conosce (un downgrade) rifà lo snapshot senza
+//! aggiornarlo, e il manifest che riscrive si porta dietro `inventory: true`
+//! come campo sconosciuto: l'inventario che resta è di prima, descrive una
+//! cartella che non c'è più, e un ripristino che gli credesse salterebbe le
+//! note nuove senza dirlo.
+//!
 //! Gli snapshot ruotano: dopo ogni backup riuscito restano i più recenti
 //! [`BACKUP_KEEP_KEY`] (10 di serie, `0` li tiene tutti). Senza, crescevano
 //! dentro il vault per sempre, e ognuno è una copia di tutte le note.
@@ -21,6 +37,7 @@
 use fub_abi::command::{
     Args, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
 };
+use fub_abi::edit::Fnv1a;
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
 use fub_abi::locale::civil_from_days;
@@ -67,6 +84,9 @@ const P_RESTORE: &str = "p_restore";
 const FAILED: &str = "failed";
 const E_SCHEMA: &str = "e_schema";
 const E_DIR: &str = "e_dir";
+const E_DAMAGED: &str = "e_damaged";
+const E_INVENTORY: &str = "e_inventory";
+const E_PARTIAL: &str = "e_partial";
 const S_GROUP: &str = "s_group";
 const S_KEEP: &str = "s_keep";
 const S_KEEP_DESC: &str = "s_keep_desc";
@@ -112,6 +132,21 @@ pub fn catalog() -> Vec<StringCatalog> {
                 E_DIR,
                 "Lo snapshot «{id}» nomina una cartella non sua: «{dir}».",
             )
+            .with(
+                E_DAMAGED,
+                "Lo snapshot «{id}» è incompleto o alterato, non ripristino niente: \
+                 {n} copie non tornano ({files}).",
+            )
+            .with(
+                E_INVENTORY,
+                "Lo snapshot «{id}» ha perso l'elenco delle sue copie: non posso \
+                 verificarlo, non ripristino niente.",
+            )
+            .with(
+                E_PARTIAL,
+                "Ripristino interrotto da «{id}»: create {done} note su {total}, \
+                 le altre no. {reason}",
+            )
             .with(S_GROUP, "Backup")
             .with(S_KEEP, "Snapshot da tenere")
             .with(
@@ -152,6 +187,21 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 E_DIR,
                 "Snapshot «{id}» names a folder that is not its own: «{dir}».",
+            )
+            .with(
+                E_DAMAGED,
+                "Snapshot «{id}» is incomplete or altered, nothing restored: {n} \
+                 copies do not match ({files}).",
+            )
+            .with(
+                E_INVENTORY,
+                "Snapshot «{id}» lost the list of its copies: it cannot be \
+                 verified, nothing restored.",
+            )
+            .with(
+                E_PARTIAL,
+                "Restore from «{id}» stopped: {done} of {total} notes created, the \
+                 rest were not. {reason}",
             )
             .with(S_GROUP, "Backup")
             .with(S_KEEP, "Snapshots to keep")
@@ -365,19 +415,36 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
     };
     // Ciò che c'è già lì è una copia interrotta, o la cartella che l'ultimo
     // backup non ha finito di cancellare: nessuno snapshot la nomina.
-    remove_dir(host, &dir)?;
+    remove_snapshot_files(host, &dir)?;
+    let mut copies = Vec::with_capacity(docs.len());
     for doc in &docs {
         let src = host.read_document(doc)?;
         host.data_write(&format!("{dir}/{}", doc.as_str()), src.as_bytes())?;
+        copies.push(Saved {
+            path: doc.as_str().to_owned(),
+            size: src.len() as u64,
+            hash: Fnv1a::hash(src.as_bytes()),
+        });
     }
+    // L'inventario va prima del manifest, come le copie: il manifest che lo
+    // nomina non deve mai arrivare prima di ciò che nomina.
+    let inventory = serde_json::to_vec(&Inventory { files: copies }).map_err(|and| {
+        PluginError::Internal(Text::message(
+            FAILED,
+            vec![Arg::text("reason", and.to_string())],
+        ))
+    })?;
+    host.data_write(&inventory_path(&dir), &inventory)?;
     if let Some(existing) = store.snapshots.iter_mut().find(|s| s.id == id) {
         existing.n = docs.len() as u32;
         existing.dir = Some(dir);
+        existing.inventory = true;
     } else {
         store.snapshots.push(Snapshot {
             id: id.clone(),
             n: docs.len() as u32,
             dir: Some(dir),
+            inventory: true,
             rest: serde_json::Map::new(),
         });
     }
@@ -387,7 +454,7 @@ fn backup(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcome, Pl
     // Le cartelle che il manifest non nomina più si cancellano dopo: un errore
     // lascia file orfani, mai un manifest che nomina uno snapshot sparito.
     for old in &stale {
-        remove_dir(host, old)?;
+        remove_snapshot_files(host, old)?;
     }
     Ok(CommandOutcome::notify(Text::message(
         P_BACKUP,
@@ -405,6 +472,19 @@ fn remove_dir(host: &mut dyn HostApi, dir: &str) -> Result<(), PluginError> {
         host.data_remove(&path)?;
     }
     Ok(())
+}
+
+/// Le copie di uno snapshot e il suo inventario: vanno e restano insieme.
+fn remove_snapshot_files(host: &mut dyn HostApi, dir: &str) -> Result<(), PluginError> {
+    remove_dir(host, dir)?;
+    host.data_remove(&inventory_path(dir))
+}
+
+/// Dove sta l'inventario dello snapshot nella cartella `dir`: accanto alla
+/// cartella e non dentro, o un file dello stesso nome nel vault lo scambierebbe
+/// con una nota.
+fn inventory_path(dir: &str) -> String {
+    format!("{dir}.files.json")
 }
 
 fn restore(
@@ -426,31 +506,90 @@ fn restore(
         )));
     };
     let dir = snapshot.dir();
-    let files = host.data_list(dir)?;
+    let prefix = format!("{dir}/");
     let existing: std::collections::BTreeSet<String> = host
         .list_documents(None)?
         .items
         .into_iter()
         .map(|d| d.0)
         .collect();
-    let prefix = format!("{dir}/");
+    // Che cosa lo snapshot dice di contenere, e che cosa se ne può rileggere
+    // adesso. Tutto si decide **prima** di creare una nota: un ripristino
+    // fermato non lascia niente a metà.
     let mut from_create: Vec<(DocId, String)> = Vec::new();
-    for path in &files {
-        let Some(rel) = path.strip_prefix(&prefix) else {
-            continue;
-        };
-        if existing.contains(rel) {
-            continue;
+    let mut damaged: Vec<String> = Vec::new();
+    if snapshot.inventory {
+        let inventory = read_inventory(host, dir)?.ok_or_else(|| {
+            PluginError::Internal(Text::message(E_INVENTORY, vec![Arg::text(ID, &id)]))
+        })?;
+        // L'inventario deve descrivere questa cartella: lo dicono il numero di
+        // voci che il manifest ricorda e le copie che ci stanno davvero. Ne
+        // basta una che non torni per non credergli: i byte sarebbero giusti,
+        // ma l'elenco delle note no.
+        if inventory.files.len() != snapshot.n as usize {
+            damaged.push(format!("{} su {}", inventory.files.len(), snapshot.n));
         }
-        // Una copia che non si legge ferma il ripristino prima che crei
-        // qualcosa: saltata, il ripristino riportava meno note dicendo di
-        // esserci riuscito.
-        let Some(bytes) = host.data_read(path)? else {
-            continue;
-        };
-        if let Ok(src) = String::from_utf8(bytes) {
-            from_create.push((DocId::new(rel), src));
+        let known: std::collections::BTreeSet<&str> = inventory
+            .files
+            .iter()
+            .map(|copy| copy.path.as_str())
+            .collect();
+        for path in host.data_list(dir)? {
+            if let Some(rel) = path.strip_prefix(&prefix) {
+                if !known.contains(rel) {
+                    damaged.push(rel.to_owned());
+                }
+            }
         }
+        for copy in inventory.files {
+            if existing.contains(&copy.path) {
+                continue;
+            }
+            let bytes = host.data_read(&format!("{prefix}{}", copy.path))?;
+            match bytes {
+                Some(bytes)
+                    if bytes.len() as u64 == copy.size && Fnv1a::hash(&bytes) == copy.hash =>
+                {
+                    match String::from_utf8(bytes) {
+                        Ok(src) => from_create.push((DocId::new(&copy.path), src)),
+                        Err(_) => damaged.push(copy.path),
+                    }
+                }
+                _ => damaged.push(copy.path),
+            }
+        }
+    } else {
+        // Uno snapshot di prima dell'inventario: non si sa di che impronta
+        // fossero i byte, ma il manifest ricorda quante note aveva.
+        let listed: Vec<String> = host
+            .data_list(dir)?
+            .into_iter()
+            .filter_map(|path| path.strip_prefix(&prefix).map(str::to_owned))
+            .collect();
+        if listed.len() != snapshot.n as usize {
+            return Err(damaged_error(
+                &id,
+                &[format!("{} su {}", listed.len(), snapshot.n)],
+            ));
+        }
+        for rel in listed {
+            if existing.contains(&rel) {
+                continue;
+            }
+            // Una copia che non si legge ferma il ripristino prima che crei
+            // qualcosa: saltata, il ripristino riportava meno note dicendo di
+            // esserci riuscito.
+            match host.data_read(&format!("{prefix}{rel}"))? {
+                Some(bytes) => match String::from_utf8(bytes) {
+                    Ok(src) => from_create.push((DocId::new(&rel), src)),
+                    Err(_) => damaged.push(rel),
+                },
+                None => damaged.push(rel),
+            }
+        }
+    }
+    if !damaged.is_empty() {
+        return Err(damaged_error(&id, &damaged));
     }
     let n = from_create.len() as i64;
     if mode.is_dry_run() {
@@ -459,8 +598,24 @@ fn restore(
             vec![Arg::int("n", n), Arg::text(ID, &id)],
         )));
     }
-    for (doc, src) in from_create {
-        host.create_document(&doc, &src)?;
+    for (done, (doc, src)) in from_create.iter().enumerate() {
+        if let Err(mut and) = host.create_document(doc, src) {
+            if done > 0 {
+                // Ciò che è già stato creato resta: lo si dice, o il resto del
+                // vault sembrerebbe intatto. La variante dell'errore non
+                // cambia, cambia la prosa.
+                *and.message_mut() = Text::message(
+                    E_PARTIAL,
+                    vec![
+                        Arg::text(ID, &id),
+                        Arg::int("done", done as i64),
+                        Arg::int("total", n),
+                        Arg::text("reason", and.to_string()),
+                    ],
+                );
+            }
+            return Err(and);
+        }
     }
     Ok(CommandOutcome::notify(Text::message(
         P_RESTORE,
@@ -503,6 +658,38 @@ fn rotate(store: &mut Store, fresh: &str, keep: usize) -> Vec<String> {
     dirs
 }
 
+/// L'errore di uno snapshot che non torna, con i primi path che non tornano:
+/// l'elenco intero in un messaggio non lo legge nessuno.
+fn damaged_error(id: &str, files: &[String]) -> PluginError {
+    const SHOWN: usize = 5;
+    let mut shown = files
+        .iter()
+        .take(SHOWN)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    if files.len() > SHOWN {
+        shown.push_str(", …");
+    }
+    PluginError::Internal(Text::message(
+        E_DAMAGED,
+        vec![
+            Arg::text(ID, id),
+            Arg::int("n", files.len() as i64),
+            Arg::text("files", shown),
+        ],
+    ))
+}
+
+/// L'inventario di `dir`. Assente → `None`; illeggibile come JSON è un errore
+/// dello stesso genere dell'assenza, e lo decide chi chiama.
+fn read_inventory(host: &dyn ReadApi, dir: &str) -> Result<Option<Inventory>, PluginError> {
+    let Some(bytes) = host.data_read(&inventory_path(dir))? else {
+        return Ok(None);
+    };
+    Ok(serde_json::from_slice(&bytes).ok())
+}
+
 fn today(host: &dyn ReadApi) -> String {
     let locale = host.user_locale();
     let civil = locale.to_civil_millis(host.now_unix_millis());
@@ -529,8 +716,28 @@ struct Snapshot {
     /// La cartella dei file: l'id o [`staging_dir`]. Assente nello schema 1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dir: Option<String>,
+    /// Se accanto alla cartella c'è l'inventario delle sue copie
+    /// ([`inventory_path`]). Assente negli snapshot di prima: lì il ripristino
+    /// si ferma al numero di note `n`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    inventory: bool,
     #[serde(flatten)]
     rest: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Le copie di uno snapshot come il backup le ha scritte.
+#[derive(Debug, Serialize, Deserialize)]
+struct Inventory {
+    files: Vec<Saved>,
+}
+
+/// Una nota copiata: dove, quanto è lunga e che impronta aveva.
+#[derive(Debug, Serialize, Deserialize)]
+struct Saved {
+    path: String,
+    size: u64,
+    #[serde(with = "fub_abi::ipc::u64_string")]
+    hash: u64,
 }
 
 impl Snapshot {

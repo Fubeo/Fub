@@ -356,15 +356,37 @@ impl ArtifactSink for DirectorySink {
         // Il nome del file lo dà il provider ed è già passato da
         // `check_artifact_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
-        let name = crate::storage::temp_name(
-            dest.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("artefatto"),
-        );
-        let of_side = dest.with_file_name(name);
-        let file = File::create(&of_side).map_err(|and| {
-            PluginError::Io(format!("cannot write to `{}`: {and}", dest.display()).into())
-        })?;
+        let file_name = dest
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("artefatto");
+        // Creazione esclusiva: un temporaneo che coincide con un file già
+        // presente (un artefatto consegnato prima, un collegamento) non lo
+        // tronca né lo attraversa, si sceglie un altro nome.
+        //
+        // Se la destinazione esiste, il temporaneo nasce con i suoi permessi
+        // (FUB-012): i byte di un export riservato non passano per un file
+        // leggibile da altri nemmeno per il tempo della scrittura. La umask può
+        // solo togliere bit, quindi `close_artifact` li rimette com'erano.
+        let existing_permissions = std::fs::metadata(&dest)
+            .ok()
+            .filter(std::fs::Metadata::is_file)
+            .map(|existing| existing.permissions());
+        let mut attempts = 0;
+        let (of_side, file) = loop {
+            let of_side = dest.with_file_name(crate::storage::temp_name(file_name));
+            match create_temporary(&of_side, existing_permissions.as_ref()) {
+                Ok(file) => break (of_side, file),
+                Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists && attempts < 64 => {
+                    attempts += 1;
+                }
+                Err(and) => {
+                    return Err(PluginError::Io(
+                        format!("cannot write to `{}`: {and}", dest.display()).into(),
+                    ));
+                }
+            }
+        };
         self.opened.insert(artifact_key(path));
         self.next += 1;
         self.open.insert(
@@ -417,6 +439,15 @@ impl ArtifactSink for DirectorySink {
             let _ = std::fs::remove_file(&of_side);
             return Err(artifact_already_open(&a.path));
         }
+        // Riesportare sopra un file esistente non ne allarga i permessi: il
+        // sostitutivo nasce con la umask, quindi eredita quelli della
+        // destinazione. Best-effort come nel vault: un filesystem senza
+        // permessi non è una ragione per non consegnare.
+        if let Ok(existing) = std::fs::metadata(&a.dest) {
+            if existing.is_file() {
+                let _ = std::fs::set_permissions(&of_side, existing.permissions());
+            }
+        }
         if let Err(and) = std::fs::rename(&of_side, &a.dest) {
             return Err(failure(&of_side, and, "rename to destination failed"));
         }
@@ -438,6 +469,22 @@ impl ArtifactSink for DirectorySink {
             content: ArtifactContent::Delivered(a.written),
         })
     }
+}
+
+/// Crea il temporaneo di un artefatto, in modo esclusivo, con i permessi che la
+/// destinazione ha già (dove il sistema li ha: su Windows non c'è una modalità
+/// da portare).
+fn create_temporary(path: &Path, existing: Option<&std::fs::Permissions>) -> std::io::Result<File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    if let Some(existing) = existing {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        options.mode(existing.mode() & 0o7777);
+    }
+    #[cfg(not(unix))]
+    let _ = existing;
+    options.open(path)
 }
 
 /// Un sink che se ne va con degli artefatti ancora aperti non lascia i loro
@@ -684,6 +731,102 @@ mod tests {
                 .count(),
             0,
             "the export placed something outside the folder the user chose"
+        );
+    }
+
+    /// **Il temporaneo non tronca un file già presente.** Un artefatto
+    /// consegnato prima può chiamarsi come il prossimo temporaneo: l'apertura
+    /// esclusiva sceglie un altro nome e il primo resta com'è.
+    #[test]
+    fn a_temp_name_that_collides_never_destroys_a_delivered_artifact() {
+        let folder = tempfile::tempdir().expect("the folder chosen in the dialog");
+        let pid = std::process::id();
+        // Il contatore è del processo: si occupano i nomi che seguiranno.
+        let next: u64 = crate::storage::temp_name("a.md")
+            .rsplit('-')
+            .next()
+            .and_then(|n| n.parse().ok())
+            .expect("the sequence number");
+        let taken: Vec<_> = (next + 1..next + 33)
+            .map(|n| folder.path().join(format!(".a.md.tmp{pid}-{n}")))
+            .collect();
+        for path in &taken {
+            std::fs::write(path, b"consegnato").expect("an earlier artifact");
+        }
+        let mut sink = DirectorySink::new(folder.path());
+        let handle = sink.open_artifact("a.md", "text/markdown").expect("open");
+        sink.write_artifact(handle, b"nuovo").expect("write");
+        sink.close_artifact(handle).expect("close");
+        assert_eq!(std::fs::read(folder.path().join("a.md")).unwrap(), b"nuovo");
+        for path in &taken {
+            assert_eq!(
+                std::fs::read(path).expect("still there"),
+                b"consegnato",
+                "{}",
+                path.display()
+            );
+        }
+    }
+
+    /// **Riesportare sopra un file privato non ne amplia i permessi.**
+    #[cfg(unix)]
+    #[test]
+    fn re_exporting_over_a_private_file_keeps_it_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let folder = tempfile::tempdir().expect("the folder chosen in the dialog");
+        let report = folder.path().join("report.md");
+        std::fs::write(&report, b"vecchio").unwrap();
+        std::fs::set_permissions(&report, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let mut sink = DirectorySink::new(folder.path());
+        let handle = sink.open_artifact("report.md", "text/markdown").unwrap();
+        sink.write_artifact(handle, b"nuovo").unwrap();
+        sink.close_artifact(handle).unwrap();
+        assert_eq!(std::fs::read(&report).unwrap(), b"nuovo");
+        assert_eq!(
+            std::fs::metadata(&report).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    }
+
+    /// **Il temporaneo di una riesportazione sopra un file privato è privato
+    /// già mentre si scrive** (FUB-012): i permessi si rimettevano alla
+    /// chiusura, e per tutto il tempo della scrittura il file nascosto aveva
+    /// quelli della umask, leggibili da altri.
+    #[cfg(unix)]
+    #[test]
+    fn the_temporary_of_a_re_export_over_a_private_file_is_private_while_it_is_written() {
+        use std::os::unix::fs::PermissionsExt;
+        let folder = tempfile::tempdir().expect("the folder chosen in the dialog");
+        let report = folder.path().join("report.md");
+        std::fs::write(&report, b"vecchio").unwrap();
+        std::fs::set_permissions(&report, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let mut sink = DirectorySink::new(folder.path());
+        let handle = sink.open_artifact("report.md", "text/markdown").unwrap();
+        sink.write_artifact(handle, b"riservato").unwrap();
+
+        // L'artefatto è ancora aperto: l'unico altro file della cartella è il
+        // suo temporaneo.
+        let temporaries: Vec<_> = std::fs::read_dir(folder.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| *path != report)
+            .collect();
+        assert_eq!(temporaries.len(), 1, "{temporaries:?}");
+        assert_eq!(
+            std::fs::metadata(&temporaries[0])
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600,
+            "il temporaneo nasce con i permessi della destinazione"
+        );
+
+        sink.close_artifact(handle).unwrap();
+        assert_eq!(std::fs::read(&report).unwrap(), b"riservato");
+        assert_eq!(
+            std::fs::metadata(&report).unwrap().permissions().mode() & 0o777,
+            0o600
         );
     }
 

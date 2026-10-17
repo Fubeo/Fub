@@ -83,6 +83,7 @@ pub struct CommittedDocumentDeletion {
     trash: crate::vault::CompletedVaultTrash,
     drafts: Arc<Drafts>,
     journal: Arc<Journal>,
+    organization: Arc<crate::organization::OrganizationStore>,
     origin: fub_abi::event::Origin,
 }
 
@@ -92,6 +93,9 @@ pub struct FinalizedDocumentDeletion {
     sidecar_fault: Option<KernelError>,
     draft_fault: Option<String>,
     journal_fault: Option<String>,
+    /// Ciò che non è riuscito a seguire la nota nel cestino
+    /// ([`park_state`](crate::documents::park_state)).
+    parked_warnings: Vec<String>,
 }
 
 /// La variante OS conserva lo stesso snapshot dell'operazione interna, senza
@@ -138,6 +142,10 @@ enum CommittedOsDeletionState {
     Os {
         removal: PreparedDocumentRemoval,
         receipt: crate::os_trash::OsTrashReceipt,
+        /// Ciò che serve a mettere al sicuro lo stato per-documento fuori da
+        /// ogni custodia: il vault da cui la nota è uscita e l'organizzazione.
+        vault: crate::vault::Vault,
+        organization: Arc<crate::organization::OrganizationStore>,
         drafts: Arc<Drafts>,
         journal: Arc<Journal>,
         origin: fub_abi::event::Origin,
@@ -157,6 +165,7 @@ enum FinalizedOsDeletionState {
         receipt: crate::os_trash::OsTrashReceipt,
         draft_fault: Option<String>,
         journal_fault: Option<String>,
+        parked_warnings: Vec<String>,
     },
 }
 
@@ -228,7 +237,18 @@ impl CommittedDocumentDeletion {
     /// Notifica gli indici usando soltanto handle owned.
     pub fn invoke(self) -> FinalizedDocumentDeletion {
         let id = self.removal.id.clone();
+        let vault = self.trash.vault().clone();
         let (trashed, sidecar_fault) = self.trash.into_parts();
+        // Il path è libero: ciò che il kernel teneva attaccato a lui segue la
+        // nota nel cestino (FUB-003). Prima degli indici, che possono già
+        // vedere un'altra nota sullo stesso path.
+        let parked_warnings = crate::documents::park_state(
+            &vault,
+            &self.organization,
+            &id,
+            &trashed,
+            sidecar_fault.is_none(),
+        );
         let draft_fault = self
             .drafts
             .discard(&id)
@@ -250,6 +270,7 @@ impl CommittedDocumentDeletion {
             sidecar_fault,
             draft_fault,
             journal_fault,
+            parked_warnings,
         }
     }
 }
@@ -270,10 +291,20 @@ impl CommittedOsDocumentDeletion {
             CommittedOsDeletionState::Os {
                 removal,
                 receipt,
+                vault,
+                organization,
                 drafts,
                 journal,
                 origin,
             } => {
+                // Il path è libero e la nota non tornerà dal cestino del vault:
+                // il suo stato non è di chi lo riprende (FUB-003).
+                let parked_warnings = crate::documents::release_state(
+                    &vault,
+                    &organization,
+                    &receipt.id,
+                    &receipt.dest,
+                );
                 let draft_fault = drafts
                     .discard(&receipt.id)
                     .err()
@@ -292,6 +323,7 @@ impl CommittedOsDocumentDeletion {
                     receipt,
                     draft_fault,
                     journal_fault,
+                    parked_warnings,
                 })
             }
         }
@@ -559,6 +591,7 @@ impl Workspace {
             trash: completed.trash,
             drafts: completed.drafts,
             journal: completed.journal,
+            organization: Arc::clone(&self.organization),
             origin: completed.origin,
         })
     }
@@ -658,6 +691,8 @@ impl Workspace {
         Ok(CommittedOsDocumentDeletion(CommittedOsDeletionState::Os {
             removal,
             receipt: moved.receipt(),
+            vault: moved.vault().clone(),
+            organization: Arc::clone(&self.organization),
             drafts,
             journal,
             origin,
@@ -702,6 +737,7 @@ impl Workspace {
                 receipt,
                 draft_fault,
                 journal_fault,
+                parked_warnings,
             } => {
                 if removal.workspace_id != self.workspace_id {
                     return Err(Box::new((
@@ -713,11 +749,13 @@ impl Workspace {
                             receipt,
                             draft_fault,
                             journal_fault,
+                            parked_warnings,
                         }),
                     )));
                 }
                 self.apply_document_removal(removal);
                 self.dispatch_pending();
+                self.doc_data_warnings.extend(parked_warnings);
                 self.finish_deleted_document(
                     &receipt.id,
                     receipt.id.clone(),
@@ -746,10 +784,12 @@ impl Workspace {
             sidecar_fault,
             draft_fault,
             journal_fault,
+            parked_warnings,
         } = finalized;
         let id = removal.id.clone();
         self.apply_document_removal(removal);
         self.dispatch_pending();
+        self.doc_data_warnings.extend(parked_warnings);
         Ok(self.finish_deleted_document(&id, trashed, sidecar_fault, draft_fault, journal_fault))
     }
 }

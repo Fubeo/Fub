@@ -701,6 +701,24 @@ pub trait VaultStructure: VaultRead {
     /// distrugge è [`empty_trash`](VaultStructure::empty_trash), e si chiama così.
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError>;
 
+    /// Come [`trash_document`](VaultStructure::trash_document), ma soltanto se
+    /// il documento ha ancora la revisione `expected`: chi ha deciso di
+    /// cestinare guardando una revisione non deve cestinarne una più nuova.
+    /// Se è cambiata, il risultato è [`PluginError::Conflict`] e il documento
+    /// resta dov'è.
+    ///
+    /// Un host che serializza le scritture fa il confronto e il cestinamento
+    /// sotto lo stesso turno; questo default li compone soltanto, quindi
+    /// regge fra chi non scrive in parallelo.
+    fn trash_document_if(&mut self, id: &DocId, expected: &Revision) -> Result<DocId, PluginError> {
+        if self.document_revision(id)? != *expected {
+            return Err(PluginError::Conflict(
+                format!("`{id}` changed since its revision was read").into(),
+            ));
+        }
+        self.trash_document(id)
+    }
+
     /// Riporta nel vault una voce del cestino (`entry` è il suo
     /// [`TrashEntry::id`]) e restituisce il [`DocId`] con cui è tornata: il suo
     /// path d'origine, oppure `to` se il chiamante ne sceglie un altro.

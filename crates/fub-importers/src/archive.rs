@@ -19,8 +19,8 @@ use std::collections::HashSet;
 
 use fub_abi::traits::HostApi;
 use fub_abi::transfer::{
-    ConflictPolicy, ImportMode, ImportOutcome, ImportProvider, ImportReport, ImportRequest,
-    ImportSource, TransferNote,
+    ConflictPolicy, ImportOutcome, ImportProvider, ImportReport, ImportRequest, ImportSource,
+    TransferNote,
 };
 use fub_abi::PluginError;
 
@@ -565,29 +565,7 @@ impl ArchiveImport {
                 (free, ImportOutcome::Created)
             }
         };
-        let writes = matches!(outcome, ImportOutcome::Created | ImportOutcome::Replaced)
-            && request.mode == ImportMode::Apply;
-        let outcome = if writes {
-            let res = match &outcome {
-                ImportOutcome::Replaced => host
-                    .write_document(&doc, text, fub_abi::edit::WriteBase::Dictated)
-                    .map(|_| ()),
-                _ => host.create_document(&doc, text),
-            };
-            match res {
-                Ok(()) => outcome,
-                Err(e) if is_cancelled(&e) => return Err(e),
-                Err(e) => ImportOutcome::Failed(e.to_string()),
-            }
-        } else {
-            outcome
-        };
-        report.documents.push(fub_abi::transfer::ImportedDocument {
-            doc,
-            outcome,
-            entry: Some(label.to_string()),
-        });
-        Ok(())
+        crate::common::write_doc(host, request, &doc, text, outcome, label, report)
     }
 }
 

@@ -59,6 +59,7 @@ pub mod migration;
 pub mod normalize;
 pub mod onenote;
 pub mod pipeline;
+pub mod receipts;
 mod tar;
 pub mod template;
 pub mod textpack;

@@ -34,6 +34,30 @@ pub struct CompletedDocumentRestore {
     moved: crate::vault::CompletedVaultRestore,
 }
 
+/// **Da dove torna lo stato per-documento** di una nota ripristinata (FUB-003).
+///
+/// Il path d'origine di una nota cestinata è libero, e può essere stato
+/// ripreso da un'altra nota: quello che sta sotto quel path non è per forza
+/// suo. Ciò che sa dire di chi è, è la voce stessa.
+enum RestoredState {
+    /// La voce è di chi metteva al sicuro lo stato cestinando: lo spazio dei
+    /// plugin torna da sotto l'identità del cestino, l'organizzazione dal
+    /// sidecar. Il path d'origine non si guarda: o è libero, o è di un'altra
+    /// nota che ha lo stato suo.
+    Parked {
+        original: DocId,
+        organization: crate::organization::ParkedOrganization,
+    },
+    /// Una voce di prima del parcheggio, il cui path d'origine è ancora libero:
+    /// lo stato sta sotto quel path, e nessun altro può averlo scritto. Segue
+    /// la rinomina come ha sempre fatto.
+    Legacy { from: DocId },
+    /// Niente da portare: il path non è cambiato, o è cambiato e non si sa di
+    /// chi sia lo stato che ci sta sotto (una voce di prima, con il path
+    /// occupato da un'altra nota).
+    Nothing,
+}
+
 /// Ripristino già committato sul disco e nel core, con indici, migrazioni e
 /// finalizzazione del sidecar ancora da eseguire fuori dalla guardia.
 #[must_use = "il ripristino deve essere invocato e finalizzato"]
@@ -43,7 +67,7 @@ pub struct PendingDocumentRestore {
     target: DocId,
     documents: crate::documents::DocumentStoreHandle,
     organization: Arc<crate::organization::OrganizationStore>,
-    rename_from: Option<DocId>,
+    state: RestoredState,
     doc_data_warnings: Vec<String>,
     moved: Option<crate::vault::CompletedVaultRestore>,
     restored_identity: Option<crate::storage::FileIdentity>,
@@ -151,32 +175,65 @@ impl PendingDocumentRestore {
     /// infine rimuove best-effort il sidecar, sempre senza custodire il
     /// workspace.
     pub fn invoke_indexes(mut self) -> Self {
-        // Lo stato per-documento segue la chiave anche qui, e va fatto nel
+        // Lo stato per-documento segue la nota anche qui, e va fatto nel
         // kernel per la ragione di sempre: l'evento dice la stessa cosa, ma
         // la coda ha un budget e può troncare (decisione 0034), e chi tiene
         // stato autorevole non può dipendere da una consegna best-effort.
-        if let Some(from) = self.rename_from.as_ref() {
-            if let Err(error) = self
-                .organization
-                .migrate(from.as_str(), self.target.as_str())
-            {
-                self.organization.warn(format!(
-                    "l'organizzazione di {from} non ha potuto seguire la rinomina in {}: {error}",
-                    self.target
-                ));
+        //
+        // Lo spazio che la nota aveva messo al sicuro cestinando torna **sempre**
+        // (è un controllo per plugin, e non fa niente dove non c'è): una voce
+        // il cui sidecar non si è scritto può avere lo spazio parcheggiato e
+        // nessun marcatore che lo dica.
+        self.doc_data_warnings.extend(
+            self.documents
+                .unpark_data(&self.trash_id, &self.target)
+                .into_iter()
+                .map(|error| {
+                    format!(
+                        "lo stato per-documento di {} non ha potuto tornare con la nota in {} — {error}",
+                        self.trash_id, self.target
+                    )
+                }),
+        );
+        match &self.state {
+            RestoredState::Parked {
+                original,
+                organization,
+            } => {
+                if let Err(error) =
+                    self.organization
+                        .unpark(original.as_str(), self.target.as_str(), organization)
+                {
+                    self.organization.warn(format!(
+                        "l'organizzazione di {original} non ha potuto tornare con la nota in {}: {error}",
+                        self.target
+                    ));
+                }
             }
-            self.doc_data_warnings.extend(
-                self.documents
-                    .migrate_data(from, &self.target)
-                    .into_iter()
-                    .map(|error| {
-                        format!(
-                            "lo stato per-documento di {from} non ha potuto seguire la rinomina \
-                             in {} — {error}",
-                            self.target
-                        )
-                    }),
-            );
+            RestoredState::Legacy { from } => {
+                if let Err(error) = self
+                    .organization
+                    .migrate(from.as_str(), self.target.as_str())
+                {
+                    self.organization.warn(format!(
+                        "l'organizzazione di {from} non ha potuto seguire la rinomina in {}: {error}",
+                        self.target
+                    ));
+                }
+                self.doc_data_warnings.extend(
+                    self.documents
+                        .migrate_data(from, &self.target)
+                        .into_iter()
+                        .map(|error| {
+                            format!(
+                                "lo stato per-documento di {from} non ha potuto seguire la rinomina \
+                                 in {} — {error}",
+                                self.target
+                            )
+                        }),
+                );
+            }
+            RestoredState::Nothing => {}
         }
         if let Some(mut feed) = self.feed.take().map(PreparedDocumentFeed::invoke_indexes) {
             self.observed_target = match self.documents.observe_revision_stable(&self.target) {
@@ -330,6 +387,50 @@ impl Workspace {
             trash: entry.id.clone(),
             doc: target.clone(),
         };
+        // **Di chi è lo stato che sta sotto il path d'origine?** Prima, se il
+        // ripristino approdava su un path diverso, si migrava tutto ciò che
+        // stava sotto il path d'origine: ma quel path, nel frattempo, può essere
+        // di un'altra nota, e il suo stato — o ciò che aveva ereditato da questa
+        // — finiva alla nota ripristinata (FUB-003). Adesso una nota cestinata
+        // porta con sé il proprio stato, sotto l'identità che ha nel cestino, e
+        // al ripristino è quella che si annuncia come migrata: mai il path
+        // d'origine, che può essere di un'altra.
+        let original_taken = target != entry.original
+            && (self.indexes.core.entries.contains_key(&entry.original)
+                || self.indexes.core.metas.contains_key(&entry.original));
+        let state = match completed.moved.parked_organization() {
+            Some(organization) => RestoredState::Parked {
+                original: entry.original.clone(),
+                organization: organization.clone(),
+            },
+            None if target == entry.original => RestoredState::Nothing,
+            None if original_taken => {
+                self.doc_data_warnings.push(format!(
+                    "lo stato per-documento di {} non è stato spostato su {target}: il path è \
+                     di un'altra nota, e la voce del cestino è di una copia di Fub che non \
+                     teneva lo stato a parte, quindi non si sa a quale delle due appartiene",
+                    entry.original
+                ));
+                RestoredState::Nothing
+            }
+            None => RestoredState::Legacy {
+                from: entry.original.clone(),
+            },
+        };
+        // L'annuncio **prima** di ciò che il ripristino fa nascere sul path
+        // d'arrivo: chi tiene la storia deve averla già spostata, o la nota
+        // ripristinata ne comincerebbe una sua accanto a quella vera.
+        match &state {
+            RestoredState::Parked { .. } => self.emit_event(Event::DocumentRenamed {
+                from: entry.id.clone(),
+                to: target.clone(),
+            }),
+            RestoredState::Legacy { from } => self.emit_event(Event::DocumentRenamed {
+                from: from.clone(),
+                to: target.clone(),
+            }),
+            RestoredState::Nothing => {}
+        }
         let routing_generation = self.indexes.routing_generation();
         let (feed, previous_provider_call) = match completed.model {
             Some(model) => {
@@ -354,26 +455,13 @@ impl Workspace {
                 (None, None)
             }
         };
-        // Se il ripristino approda su un path diverso dall'origine (il path
-        // era di nuovo occupato e l'utente ha scelto un altro nome), lo stato
-        // per-documento — storia del versioning, meta del frontend — vive
-        // ancora sotto la chiave d'origine: è un rename a tutti gli effetti,
-        // anche se il documento non era indicizzato, e chi tiene stato migra
-        // la chiave sull'evento.
-        let rename_from = (target != entry.original).then(|| entry.original.clone());
-        if let Some(from) = rename_from.as_ref() {
-            self.emit_event(Event::DocumentRenamed {
-                from: from.clone(),
-                to: target.clone(),
-            });
-        }
         Ok(PendingDocumentRestore {
             workspace_id: completed.workspace_id,
             trash_id: entry.id,
             target,
             documents: completed.documents,
             organization: Arc::clone(&self.organization),
-            rename_from,
+            state,
             doc_data_warnings: Vec::new(),
             moved: Some(completed.moved),
             restored_identity,

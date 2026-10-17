@@ -412,12 +412,19 @@ impl Drafts {
     /// stato a metà della voce — la bozza al nome nuovo con dentro scritto
     /// quello vecchio.
     pub(crate) fn migrate(&self, from: &DocId, to: &DocId) -> std::io::Result<()> {
+        self.migrate_tracked(from, to).map(|_| ())
+    }
+
+    /// [`migrate`](Self::migrate) che dice **che cosa ha fatto**: chi deve
+    /// disfare la mossa disfa soltanto quella, e non una migrazione al
+    /// contrario che prenderebbe la bozza di chi occupava già il nome.
+    pub(crate) fn migrate_tracked(&self, from: &DocId, to: &DocId) -> std::io::Result<DraftMove> {
         let old = self.path(from);
         let new = self.path(to);
         // Soltanto un «non c'è» del supporto vuol dire «niente da migrare»:
         // ogni altro errore lascerebbe la bozza sotto l'id morto con un Ok.
         if crate::error::optional(self.storage.stat(&old))?.is_none() {
-            return Ok(());
+            return Ok(DraftMove::Untouched);
         }
         if !self.storage.same_file(&old, &new) {
             // La destinazione non si sovrascrive, mai: se ha già una bozza sua
@@ -428,21 +435,49 @@ impl Drafts {
             // `rename_no_replace`, e non `exists` seguito da `rename` — fra i
             // due non c'è un concorrente che possa farsi sovrascrivere.
             return match self.storage.rename_no_replace(&old, &new) {
-                Ok(()) => Ok(()),
+                Ok(()) => Ok(DraftMove::Moved),
                 Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => {
-                    self.recovery_name(from, &old)?;
-                    Ok(())
+                    Ok(DraftMove::Recovered(self.recovery_name(from, &old)?))
                 }
                 Err(and) => Err(and),
             };
         }
         let Some(mut draft) = self.get(from)? else {
-            return self.storage.rename(&old, &new);
+            self.storage.rename(&old, &new)?;
+            return Ok(DraftMove::Moved);
         };
         draft.doc = to.clone();
         let bytes = serde_json::to_vec(&draft).map_err(std::io::Error::other)?;
         self.storage.write(&old, &bytes)?;
-        self.storage.rename(&old, &new)
+        self.storage.rename(&old, &new)?;
+        Ok(DraftMove::Moved)
+    }
+
+    /// Disfa ciò che [`migrate_tracked`](Self::migrate_tracked) ha fatto da
+    /// `from` a `to`. Non tocca nient'altro: la bozza che `to` aveva già resta
+    /// sua, e se `from` non ne aveva una non se ne prende una.
+    pub(crate) fn undo_move(
+        &self,
+        from: &DocId,
+        to: &DocId,
+        moved: &DraftMove,
+    ) -> std::io::Result<()> {
+        match moved {
+            DraftMove::Untouched => Ok(()),
+            DraftMove::Moved => self.migrate(to, from),
+            DraftMove::Recovered(recovery) => {
+                let old = self.path(from);
+                match self.storage.rename_no_replace(recovery, &old) {
+                    Ok(()) => Ok(()),
+                    // `from` ha ricevuto una bozza nuova nel frattempo: quella
+                    // di prima torna sotto un nome di recupero, mai sopra.
+                    Err(and) if and.kind() == std::io::ErrorKind::AlreadyExists => {
+                        self.recovery_name(from, recovery).map(|_| ())
+                    }
+                    Err(and) => Err(and),
+                }
+            }
+        }
     }
 
     /// Sposta il file di bozza sotto un **nome di recupero** libero, e torna
@@ -496,6 +531,18 @@ impl Drafts {
         }
         unreachable!("i nomi di recupero non finiscono: a ogni giro l'encode è diverso")
     }
+}
+
+/// Ciò che una migrazione di bozza ha davvero fatto.
+#[derive(Debug)]
+pub(crate) enum DraftMove {
+    /// La sorgente non aveva una bozza: nessuna mossa.
+    Untouched,
+    /// La bozza di `from` ora sta sotto `to`.
+    Moved,
+    /// `to` aveva già una bozza sua: quella di `from` sta sotto questo nome di
+    /// recupero.
+    Recovered(Utf8PathBuf),
 }
 
 /// La bozza in questi byte, se è una che questa versione sa leggere: JSON
