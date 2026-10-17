@@ -19,6 +19,10 @@
 //   due callback per lo stesso tratto. `onSettled` arriva una volta, dopo
 //   l'ultima, se il tratto è ancora aperto: è lì che chi disegna rifà
 //   l'anteprima, invece che a ogni callback.
+// - **Fermo sullo schermo, fermo nella scena.** Un evento nello stesso punto
+//   dello schermo dell'ultimo evento vero dello stesso puntatore riprende il
+//   suo punto nella scena. Se intanto la vista si è mossa, alzarsi senza
+//   muoversi non aggiunge un tratto che il puntatore non ha fatto.
 // - **Gli eventi, in cattura.** Gli ascoltatori sono in fase di cattura, così
 //   ruoli e stato sono già aggiornati quando gli ascoltatori della camera, in
 //   bolla sullo stesso elemento, li leggono. Il `pointerup` e il
@@ -161,9 +165,20 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     };
   }
 
-  /// Il campione di un evento, con la vista letta una volta per evento.
-  function pointerOf(event: PointerEvent, turn: number, scale: number): PointerSample {
-    const point = options.toScene(event.clientX, event.clientY);
+  /// Dov'era, sullo schermo e nella scena, l'ultimo evento vero di ogni
+  /// puntatore giù.
+  const seen = new Map<number, { readonly clientX: number; readonly clientY: number; readonly x: number; readonly y: number }>();
+
+  /// Il campione di un evento, con la vista letta una volta per evento. Un
+  /// puntatore fermo sullo schermo resta dov'era nella scena anche se intanto
+  /// la vista si è mossa: alzarlo senza muoverlo non aggiunge un tratto che non
+  /// ha fatto. Una predizione (`real` falso) non conta come ultimo evento.
+  function pointerOf(event: PointerEvent, turn: number, scale: number, real = true): PointerSample {
+    const last = seen.get(event.pointerId);
+    const point = last !== undefined && last.clientX === event.clientX && last.clientY === event.clientY
+      ? last
+      : options.toScene(event.clientX, event.clientY);
+    if (real) seen.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY, x: point.x, y: point.y });
     return sampleOf(event, point.x, point.y, turn, scale);
   }
 
@@ -293,6 +308,8 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
 
   life.listen(element, "pointerdown", (event) => {
     if (options.stabilizer) session.setStabilizer(options.stabilizer());
+    // Un contatto nuovo si porta nella scena con la vista di adesso.
+    seen.delete(event.pointerId);
     run(session.pointerDown(pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1)));
   }, { capture: true });
 
@@ -309,7 +326,7 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
       ? event.getCoalescedEvents().map((one) => pointerOf(one, turn, scale))
       : [];
     const predicted = options.onPredicted !== undefined && typeof event.getPredictedEvents === "function"
-      ? event.getPredictedEvents().map((one) => pointerOf(one, turn, scale))
+      ? event.getPredictedEvents().map((one) => pointerOf(one, turn, scale, false))
       : [];
     run(session.pointerMove(coalesced, pointerOf(event, turn, scale), predicted));
   }, { capture: true });
@@ -320,10 +337,12 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     const sample = session.tracks(event.pointerId)
       ? pointerOf(event, options.turn?.() ?? 0, options.scale?.() ?? 1)
       : bare(event);
+    seen.delete(event.pointerId);
     run(session.pointerUp(sample));
   }, { capture: true });
 
   life.listen(doc, "pointercancel", (event) => {
+    seen.delete(event.pointerId);
     run(session.pointerCancel(event.pointerId));
   }, { capture: true });
 

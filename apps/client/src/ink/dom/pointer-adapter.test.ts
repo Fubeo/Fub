@@ -184,6 +184,29 @@ describe("pipeline della penna", () => {
     expect(delivered(1)).toEqual(ends()[0]!.samples);
   });
 
+  it("un puntatore fermo resta dov'era nella scena anche se la vista si muove sotto", () => {
+    let dy = 0;
+    attach({ toScene: (clientX, clientY) => ({ x: clientX, y: clientY + dy }) });
+    dispatch(down({ ...MOUSE, clientX: 10, clientY: 10, timeStamp: 0 }));
+    dispatch(move({ ...MOUSE, clientX: 20, clientY: 10, timeStamp: 8 }));
+    // La rotella sposta la vista, e il puntatore si alza senza muoversi:
+    // nessun tratto fino a dove la scena è adesso.
+    dy = -300;
+    const before = log.length;
+    dispatch(up({ ...MOUSE, clientX: 20, clientY: 10, timeStamp: 16 }));
+    expect(log.slice(before).map((entry) => entry.kind)).toEqual(["end"]);
+    expect(ends()[0]!.samples).toEqual([{ x: 10, y: 10, t: 0 }, { x: 20, y: 10, t: 8 }]);
+    // Un tocco resta un punto tondo dove si è toccato.
+    dispatch(down({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 20 }));
+    dy = 0;
+    dispatch(up({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 30 }));
+    expect(ends()[1]!.samples).toEqual([{ x: 30, y: -260, t: 0 }, { x: 30, y: -260, t: 10 }]);
+    // Un contatto nuovo si porta nella scena con la vista di adesso.
+    dispatch(down({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 40 }));
+    dispatch(up({ ...MOUSE, clientX: 30, clientY: 40, timeStamp: 50 }));
+    expect(ends()[2]!.samples).toEqual([{ x: 30, y: 40, t: 0 }, { x: 30, y: 40, t: 10 }]);
+  });
+
   it("gli eventi coalescenti entrano nell'ordine, senza doppioni", () => {
     attach();
     dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 100 }));

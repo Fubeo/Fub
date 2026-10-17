@@ -265,6 +265,18 @@ describe("gli strumenti", () => {
     expect(spoken()).toBe("1 oggetto cancellato. Il disegno ha 0 oggetti.");
   });
 
+  it("la gomma ferma mentre la rotella sposta la vista non cancella ciò che non ha toccato", () => {
+    mount();
+    editor.setTool("eraser");
+    const target = surface();
+    target.dispatchEvent(pointer("pointerdown", { ...MOUSE, button: 0, buttons: 1, pressure: 0.5, clientX: 20, clientY: 70, timeStamp: (clock += 8) }));
+    target.dispatchEvent(pointer("pointermove", { ...MOUSE, button: -1, buttons: 1, pressure: 0.5, clientX: 40, clientY: 70, timeStamp: (clock += 8) }));
+    // Sotto la gomma ferma la scena scorre fin oltre il rettangolo.
+    target.dispatchEvent(new WheelEvent("wheel", { deltaX: 40, deltaMode: 0, bubbles: true, cancelable: true, clientX: 40, clientY: 70 }));
+    target.dispatchEvent(pointer("pointerup", { ...MOUSE, button: 0, buttons: 0, pressure: 0, clientX: 40, clientY: 70, timeStamp: (clock += 8) }));
+    expect(editor.engine.text).toContain("o1a2b3c4d");
+  });
+
   it("la selezione prende l'oggetto sotto il puntatore e lo sposta con `transform`", () => {
     mount();
     editor.setTool("select");
