@@ -622,11 +622,11 @@ export function installCurvatureTool(ctx: EditorContext): void {
             moveHeld(g, toPoint(samples[samples.length - 1]!));
             break;
           }
+          // Il contorno si rifà in `onSettled`, una volta per evento.
           for (const sample of samples) {
             g.scene.push(sample);
             g.local.push(toLocal(sample, g.to.inverse));
           }
-          drawInk(g);
           watchStill(g, samples);
           break;
         case "shape":
@@ -721,7 +721,12 @@ export function installCurvatureTool(ctx: EditorContext): void {
       const g = ctx.current;
       if (g === null || g.stroke !== id || g.kind !== "ink" || g.held !== null) return;
       g.predicted = samples.map((sample) => toLocal(sample, g.to.inverse));
-      drawInk(g);
+    },
+    onSettled(id) {
+      // Campioni e predizione dello stesso evento: il contorno e il foglio si
+      // rifanno una volta sola.
+      const g = ctx.current;
+      if (g !== null && g.stroke === id && g.kind === "ink" && g.held === null) drawInk(g);
     },
     onEnd(stroke) {
       const g = ctx.current;

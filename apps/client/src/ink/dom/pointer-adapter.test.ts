@@ -10,7 +10,8 @@ type Entry =
   | { readonly kind: "samples"; readonly id: number; readonly samples: InkSample[] }
   | { readonly kind: "predicted"; readonly id: number; readonly samples: InkSample[] }
   | { readonly kind: "end"; readonly stroke: FinishedStroke }
-  | { readonly kind: "cancel"; readonly id: number; readonly reason: CancelReason };
+  | { readonly kind: "cancel"; readonly id: number; readonly reason: CancelReason }
+  | { readonly kind: "settled"; readonly id: number };
 
 type Init = PointerEventInit & { readonly timeStamp?: number };
 
@@ -259,6 +260,82 @@ describe("pipeline della penna", () => {
     dispatch(up({ ...PEN, clientX: 6, clientY: 0, timeStamp: 41 }));
     expect(log.slice(-2)).toEqual([{ kind: "predicted", id: 1, samples: [] }, expect.objectContaining({ kind: "end" })]);
     expect(ends()[0]!.samples.map(({ x }) => x)).toEqual([0, 1, 1.5, 2, 2.5, 3]);
+  });
+
+  describe("un ridisegno per evento", () => {
+    const settled = { onSettled: (id: number) => void log.push({ kind: "settled", id }) };
+
+    it("dopo campioni e predizione dello stesso evento, una volta sola", () => {
+      attach(settled);
+      dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+      expect(kinds()).toEqual(["start", "samples", "settled"]);
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8, predictedEvents: [move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 16 })] }));
+      expect(log).toEqual([
+        expect.objectContaining({ kind: "samples", id: 1 }),
+        expect.objectContaining({ kind: "predicted", id: 1 }),
+        { kind: "settled", id: 1 },
+      ]);
+      // Un doppione non porta campioni, ma cancella la predizione: anche
+      // quello è un cambiamento da ridisegnare.
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8 }));
+      expect(kinds()).toEqual(["predicted", "settled"]);
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8 }));
+      expect(kinds()).toEqual([]);
+      dispatch(move({ ...PEN, clientX: 3, clientY: 0, timeStamp: 12 }));
+      expect(kinds()).toEqual(["samples", "settled"]);
+    });
+
+    it("non dopo la fine né dopo un annullamento, né per chi non disegna", () => {
+      const input = attach(settled);
+      dispatch(move({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0, buttons: 0, pressure: 0 }));
+      dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 1 }));
+      dispatch(up({ ...PEN, clientX: 5, clientY: 0, timeStamp: 9 }));
+      expect(kinds()).toEqual(["start", "samples", "settled", "samples", "end"]);
+      log = [];
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 20 }));
+      input.cancel();
+      dispatch(move({ ...MOUSE, clientX: 4, clientY: 0, timeStamp: 24 }));
+      expect(kinds()).toEqual(["start", "samples", "settled", "cancel"]);
+    });
+
+    it("al limite dei campioni arriva al pezzo che continua", () => {
+      attach({ ...settled, maxSamples: 3 });
+      dispatch(down({ ...MOUSE, clientX: 0, clientY: 0, timeStamp: 0 }));
+      log = [];
+      dispatch(move({
+        ...MOUSE,
+        clientX: 8,
+        clientY: 0,
+        timeStamp: 4,
+        coalescedEvents: [1, 2, 3, 4].map((t) => move({ ...MOUSE, clientX: t * 2, clientY: 0, timeStamp: t })),
+      }));
+      expect(log.filter((entry) => entry.kind === "settled")).toEqual([{ kind: "settled", id: 2 }]);
+      expect(latest()).toEqual({ kind: "settled", id: 2 });
+    });
+
+    it("non arriva se una callback ha interrotto, e se lancia l'errore risale", () => {
+      let input: InkInput | null = null;
+      input = attach({
+        ...settled,
+        onPredicted: () => input!.cancel(),
+      });
+      dispatch(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 0 }));
+      log = [];
+      dispatch(move({ ...PEN, clientX: 2, clientY: 0, timeStamp: 8, predictedEvents: [move({ ...PEN, clientX: 4, clientY: 0, timeStamp: 16 })] }));
+      expect(kinds()).toEqual(["samples", "cancel"]);
+
+      owner.close();
+      owner = openLifetime();
+      log = [];
+      const boom = new Error("boom");
+      attach({ onSettled: () => { throw boom; } });
+      expect(() => surface.dispatchEvent(down({ ...PEN, clientX: 0, clientY: 0, timeStamp: 30 }))).toThrow(boom);
+      dispatch(up({ ...PEN, clientX: 0, clientY: 0, timeStamp: 31 }));
+      expect(kinds()).toEqual(["start", "samples", "samples", "end"]);
+    });
   });
 
   it("pointercancel a metà annulla il tratto intero: nessuna fine, nessuna cattura", () => {

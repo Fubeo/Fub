@@ -15,6 +15,10 @@
 //
 // - **Subito.** Gli effetti di un evento si consegnano dentro il gestore
 //   dell'evento, mai al fotogramma dopo.
+// - **Un ridisegno per evento.** Un movimento può dare campioni e predizione,
+//   due callback per lo stesso tratto. `onSettled` arriva una volta, dopo
+//   l'ultima, se il tratto è ancora aperto: è lì che chi disegna rifà
+//   l'anteprima, invece che a ogni callback.
 // - **Gli eventi, in cattura.** Gli ascoltatori sono in fase di cattura, così
 //   ruoli e stato sono già aggiornati quando gli ascoltatori della camera, in
 //   bolla sullo stesso elemento, li leggono. Il `pointerup` e il
@@ -65,6 +69,11 @@ export interface InkInputOptions {
   /// La predizione corrente: sostituisce la precedente; vuota la cancella.
   /// Senza, gli eventi predetti non si raccolgono.
   readonly onPredicted?: (id: number, samples: readonly InkSample[]) => void;
+  /// Gli effetti di un evento sono consegnati e il tratto `id`, ancora aperto,
+  /// ha avuto campioni o predizione: il momento di ridisegnarlo, una volta per
+  /// evento. Non arriva dopo `onEnd` né `onCancel`, né se una callback ha
+  /// interrotto la consegna.
+  readonly onSettled?: (id: number) => void;
   readonly onEnd: (stroke: FinishedStroke) => void;
   /// Il tratto non esiste più: l'anteprima si cancella, niente si scrive.
   readonly onCancel: (id: number, reason: CancelReason) => void;
@@ -224,7 +233,8 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     }
   }
 
-  /// Consegna gli effetti nell'ordine. Se una callback interrompe (`cancel`,
+  /// Consegna gli effetti nell'ordine, poi `onSettled` al tratto aperto che ha
+  /// avuto campioni o predizione. Se una callback interrompe (`cancel`,
   /// `destroy`), gli effetti che restano non valgono più, salvo i rilasci della
   /// cattura, che sono sempre dovuti. Se una callback lancia, si consegna il
   /// resto e l'errore risale in fondo.
@@ -233,12 +243,24 @@ export function attachInkInput(element: HTMLElement, options: InkInputOptions, o
     const mine = generation;
     let failed = false;
     let failure: unknown;
+    let touched: number | null = null;
     depth++;
     try {
       for (const effect of effects) {
         if (mine !== generation && effect.fx !== "release") continue;
+        if ((effect.fx === "samples" || effect.fx === "predicted") && effect.id === open) touched = effect.id;
         try {
           deliver(effect);
+        } catch (error) {
+          if (!failed) {
+            failed = true;
+            failure = error;
+          }
+        }
+      }
+      if (touched !== null && touched === open && mine === generation && options.onSettled !== undefined) {
+        try {
+          options.onSettled(touched);
         } catch (error) {
           if (!failed) {
             failed = true;

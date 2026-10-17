@@ -576,7 +576,10 @@ export function installTextTool(ctx: EditorContext): void {
     }
     g.at = p;
     g.samples.push(...samples);
-    if (samples.length > 0) handlers.onSamples(g.start.id, samples);
+    if (samples.length > 0) {
+      handlers.onSamples(g.start.id, samples);
+      handlers.onSettled?.(g.start.id);
+    }
     if (g.samples.length >= INK_MAX_SAMPLES) release();
   };
 
@@ -637,6 +640,7 @@ export function installTextTool(ctx: EditorContext): void {
     showCursor();
     handlers.onStart(start);
     handlers.onSamples(start.id, [first]);
+    handlers.onSettled?.(start.id);
     announce(t("draw.cursor.down"));
   };
   ctx.press = press;
