@@ -28,7 +28,7 @@ pub(crate) fn call_rewrite_links(
         .map_err(|_| FormatError::Parse("re-entrant component call".into()))?;
     let mut locked = inner
         .lock_instance()
-        .map_err(|_| FormatError::Parse("component instance is poisoned".into()))?;
+        .map_err(|why| FormatError::Parse(why.to_string()))?;
     let Instance { store, interfaces } = &mut *locked;
     let links = match interfaces.format_links.as_ref() {
         Some(links) => links,
@@ -69,7 +69,7 @@ pub(crate) fn call_format_link(
         .map_err(|_| FormatError::Serialize("re-entrant component call".into()))?;
     let mut locked = inner
         .lock_instance()
-        .map_err(|_| FormatError::Serialize("component instance is poisoned".into()))?;
+        .map_err(|why| FormatError::Serialize(why.to_string()))?;
     let Instance { store, interfaces } = &mut *locked;
     let Some(edits) = interfaces.format_edits.as_ref() else {
         return Ok(None);
@@ -95,7 +95,7 @@ pub(crate) fn call_set_task_state(
         .map_err(|_| FormatError::Parse("re-entrant component call".into()))?;
     let mut locked = inner
         .lock_instance()
-        .map_err(|_| FormatError::Parse("component instance is poisoned".into()))?;
+        .map_err(|why| FormatError::Parse(why.to_string()))?;
     let Instance { store, interfaces } = &mut *locked;
     let Some(edits) = interfaces.format_edits.as_ref() else {
         return Ok(None);
