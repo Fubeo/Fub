@@ -618,6 +618,48 @@ mod in_memory {
         assert_the_restore_stops(&mut host, &id, &id);
     }
 
+    /// Il manifest di uno snapshot, con il numero di note che ricorda cambiato.
+    fn remember_notes(host: &mut MemoryHost, n: u64) {
+        let mut manifest = manifest(host);
+        manifest["snapshots"][0]["n"] = json!(n);
+        host.data_write("snapshots.json", &serde_json::to_vec(&manifest).unwrap())
+            .unwrap();
+    }
+
+    /// **Un inventario di prima non descrive una cartella rifatta** (FUB-005).
+    /// Una versione che non conosce l'inventario rifà lo snapshot — una nota in
+    /// più nella cartella, `n` aggiornato — e il manifest che riscrive porta
+    /// ancora `inventory: true`: l'inventario che resta è quello vecchio, tutti
+    /// i suoi byte tornano, e il ripristino saltava la nota nuova senza dirlo.
+    #[test]
+    fn a_snapshot_whose_copies_outgrew_its_inventory_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_write(&format!("{id}/c.md"), b"Nota C, nuova")
+            .unwrap();
+        remember_notes(&mut host, 3);
+        assert_the_restore_stops(&mut host, &id, "c.md");
+    }
+
+    /// Anche il solo numero che non torna basta: l'inventario ha due voci e il
+    /// manifest ne ricorda tre.
+    #[test]
+    fn an_inventory_with_another_number_of_entries_than_the_manifest_stops_the_restore() {
+        let (mut host, id) = backed_up_and_trashed();
+        remember_notes(&mut host, 3);
+        assert_the_restore_stops(&mut host, &id, "2 su 3");
+    }
+
+    /// Una copia che l'inventario non nomina ferma il ripristino anche quando
+    /// il numero torna (una nota tolta e una messa).
+    #[test]
+    fn a_copy_the_inventory_does_not_name_stops_the_restore_even_if_the_count_matches() {
+        let (mut host, id) = backed_up_and_trashed();
+        host.data_write(&format!("{id}/c.md"), b"Nota C, nuova")
+            .unwrap();
+        host.data_remove(&format!("{id}/b.md")).unwrap();
+        assert_the_restore_stops(&mut host, &id, "c.md");
+    }
+
     /// Uno snapshot di prima dell'inventario non ha impronte da confrontare, ma
     /// il manifest ricorda quante note aveva: una copia in meno si vede.
     #[test]
