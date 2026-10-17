@@ -36,3 +36,4 @@ Nuove decisioni usano il [template](template.md).
 | [0201 — Le superfici strutturate usano sessioni, finestre e patch coordinate](0201-superfici-strutturate-a-finestre.md) | accolta | contratto | — |
 | [0202 — Snapshot globali offline recuperabili](0202-snapshot-globali-recuperabili.md) | accolta | storage | — |
 | [0203 — Le superfici spaziali modificano sorgenti SVG con operazioni testuali](0203-superfici-spaziali.md) | proposta | frontend | — |
+| [0204 — L'inchiostro è un componente di sistema, non di un prodotto](0204-nucleo-inchiostro.md) | proposta | frontend | 0203 |

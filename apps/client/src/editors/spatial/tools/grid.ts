@@ -61,7 +61,7 @@ export interface Grid {
   readonly twist: boolean;
   /// Un tocco di due dita annulla, uno di tre ripete.
   readonly taps: boolean;
-  /// La curva della pressione della penna (`pen/pressure.ts`).
+  /// La curva della pressione della penna (`ink/input/pressure.ts`).
   readonly pen: PenCurve;
 }
 
