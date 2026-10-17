@@ -3,7 +3,9 @@ import type { CompletionSources } from "../text/profiles/markdown/completions";
 import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
-import { onLanguage, t, type Key } from "../../i18n/strings";
+import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { onEvent } from "../../state/kernel";
+import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
 import { mountBaseSurface } from "../base/surface";
@@ -45,6 +47,30 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
     documentId: string,
     forms: readonly SyntaxForm[] | undefined,
   ) => (() => void) | void;
+}
+
+/// Le porte del correttore legate al vault in cui la superficie nasce: le
+/// impostazioni e il dizionario personale sono di quel vault.
+function proofPorts(vault: string | null | undefined): ProofPorts {
+  return {
+    queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
+    invokeCommand: (command, args) => api.invokeCommand(command, args, undefined, ...vaultArg(vault)),
+    settings: async () => {
+      const response = await api.queryIndex({ kind: "settings", plugin: PROOF_NS }, ...vaultArg(vault));
+      return response.kind === "settings" ? response.value : [];
+    },
+    interfaceLanguage: resolvedLanguage,
+    watch: (changed) => {
+      const stops = [
+        onEvent("setting_changed", ({ key }) => {
+          if (key.startsWith("proof.") || key === "locale.language") changed();
+        }),
+        onEvent("vault_opened", changed),
+        onLanguage(changed),
+      ];
+      return () => stops.forEach((stop) => stop());
+    },
+  };
 }
 
 const PLAIN_TEXT_MODES = [
@@ -164,6 +190,10 @@ export function createDocumentSurfaceRegistry(
             onSearchTag: options.onSearchTag,
             completions: options.completions,
             slash: options.slash,
+            proof: {
+              ports: proofPorts(openVaultRoot()),
+              notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+            },
           });
         }
         if (profile !== "plain-text") {

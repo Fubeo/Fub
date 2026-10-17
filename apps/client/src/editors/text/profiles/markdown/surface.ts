@@ -40,6 +40,7 @@ import {
 } from "../../../core/editor-actions";
 import { markdownReference } from "./references";
 import { renderMarkdown } from "./render";
+import type { ProofPorts } from "../../../core/proof-ports";
 
 /// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
 /// scrivono nella stessa vista; `reading` la nasconde e mostra il reso.
@@ -70,6 +71,12 @@ export interface MarkdownSurfaceOptions {
   completions: CompletionSources;
   /// La slash palette è disponibile solo se la shell ne fornisce le capacità.
   slash?: EditorSlashHost;
+  /// Il correttore: le porte verso `fub.proof` del vault del documento. Senza,
+  /// la superficie non segna niente.
+  proof?: {
+    readonly ports: ProofPorts;
+    notify?(message: string): void;
+  };
 }
 
 /// La superficie montata, con tutte le capacità che dichiara. Annullare e
@@ -377,6 +384,21 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   /// Le azioni dell'editor: il catalogo del profilo più annulla e ripeti, che
   /// sono del motore. Si scrive soltanto in una modalità di scrittura e fuori
   /// dalla sola lettura; negli altri casi ogni azione è spenta, non assente.
+  // Il correttore si carica dopo la superficie: la scrittura non lo aspetta,
+  // e un guasto nel caricarlo lascia l'editor com'era.
+  const proof = opts.proof;
+  if (proof) {
+    void import("./proof").then(
+      ({ mountMarkdownProof }) => {
+        if (life.closed) return;
+        const mounted = mountMarkdownProof(proof.ports, { notify: proof.notify, forms: () => forms });
+        life.add(() => mounted.dispose());
+        profile.setProof(mounted.extension);
+        engine.reconfigure();
+      },
+      () => {},
+    );
+  }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
   const editorActions: SurfaceEditorActions = {
     has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo",
