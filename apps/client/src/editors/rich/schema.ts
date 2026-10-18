@@ -206,6 +206,15 @@ const ATOM_NAMES: Readonly<Record<AtomKind, Key>> = {
   marker: "rich.atom.opaque",
 };
 
+/// Il tipo di un'immagine dai primi byte del suo base64: PNG, JPEG o GIF, le
+/// sole che un'immagine nuova può essere.
+export function imageMime(data: string): string | null {
+  if (data.startsWith("iVBORw0KGgo")) return "image/png";
+  if (data.startsWith("/9j/")) return "image/jpeg";
+  if (data.startsWith("R0lGODdh") || data.startsWith("R0lGODlh")) return "image/gif";
+  return null;
+}
+
 /// Il segno di un oggetto senza etichetta.
 const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
   image: "▣",
@@ -294,7 +303,18 @@ const nodes: Record<string, NodeSpec> = {
     group: "inline",
     inline: true,
     atom: true,
-    attrs: { k: {}, kind: {}, label: { default: "" }, w: { default: null }, h: { default: null } },
+    // Senza `k` l'oggetto è nuovo: `data` sono i byte di un'immagine, `note`
+    // il testo di una nota (di chiusura se `end`).
+    attrs: {
+      k: { default: null },
+      kind: {},
+      label: { default: "" },
+      w: { default: null },
+      h: { default: null },
+      data: { default: null },
+      note: { default: null },
+      end: { default: false },
+    },
     selectable: true,
     parseDOM: [
       {
@@ -305,12 +325,18 @@ const nodes: Record<string, NodeSpec> = {
             const value = el.getAttribute(name);
             return value === null ? null : Number(value);
           };
+          // I byte di un'immagine nuova sono già nella sua sorgente.
+          const src = el.querySelector("img")?.getAttribute("src") ?? "";
+          const comma = src.indexOf(";base64,");
           return {
-            k: el.getAttribute("data-rich-atom"),
+            k: el.getAttribute("data-rich-atom") || null,
             kind: el.getAttribute("data-kind"),
             label: el.getAttribute("data-label") ?? "",
             w: number("data-w"),
             h: number("data-h"),
+            data: src.startsWith("data:image/") && comma > 0 ? src.slice(comma + 8) : null,
+            note: el.getAttribute("data-note"),
+            end: el.hasAttribute("data-end"),
           };
         },
       },
@@ -319,10 +345,14 @@ const nodes: Record<string, NodeSpec> = {
       const kind = node.attrs.kind as AtomKind;
       const attrs: Record<string, string> = {
         class: `rich-atom rich-atom-${kind}`,
-        "data-rich-atom": node.attrs.k as string,
+        "data-rich-atom": (node.attrs.k as string | null) ?? "",
         "data-kind": kind,
         contenteditable: "false",
       };
+      const data = node.attrs.data as string | null;
+      const note = node.attrs.note as string | null;
+      if (note !== null) attrs["data-note"] = note;
+      if (node.attrs.end) attrs["data-end"] = "";
       const label = node.attrs.label as string;
       if (label) attrs["data-label"] = label;
       const w = node.attrs.w as number | null;
@@ -338,8 +368,15 @@ const nodes: Record<string, NodeSpec> = {
       // senza un'etichetta si vede un segno della sua specie.
       const name = t(ATOM_NAMES[kind]);
       attrs.role = "img";
-      attrs["aria-label"] = label ? `${name}: ${label}` : name;
+      const told = note ?? label;
+      attrs["aria-label"] = told ? `${name}: ${told}` : name;
       attrs.title = attrs["aria-label"];
+      // Un'immagine nuova si vede: i suoi byte sono qui.
+      const mime = data !== null ? imageMime(data) : null;
+      if (mime !== null) {
+        const img = { src: `data:${mime};base64,${data}`, alt: "", style: "display: block; width: 100%; height: 100%" };
+        return ["span", attrs, ["img", img]];
+      }
       return ["span", attrs, label || ATOM_GLYPHS[kind]];
     },
   },
@@ -448,11 +485,14 @@ function inlineNodes(c: readonly Inline[]): PmNode[] {
     if (inline.t === "atom") {
       out.push(
         richSchema.nodes.atom.create({
-          k: inline.k,
+          k: inline.k ?? null,
           kind: inline.kind,
           label: inline.label ?? "",
           w: inline.w ?? null,
           h: inline.h ?? null,
+          data: inline.data ?? null,
+          note: inline.note ?? null,
+          end: inline.end === true,
         }),
       );
       continue;
@@ -586,13 +626,19 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
       const label = child.attrs.label as string;
       const w = child.attrs.w as number | null;
       const h = child.attrs.h as number | null;
+      const k = child.attrs.k as string | null;
+      const data = child.attrs.data as string | null;
+      const note = child.attrs.note as string | null;
       out.push({
         t: "atom",
-        k: child.attrs.k as string,
+        ...(k !== null ? { k } : {}),
         kind: child.attrs.kind as AtomKind,
         ...(label ? { label } : {}),
         ...(w !== null ? { w } : {}),
         ...(h !== null ? { h } : {}),
+        ...(data !== null ? { data } : {}),
+        ...(note !== null ? { note } : {}),
+        ...(child.attrs.end ? { end: true } : {}),
       });
       return;
     }

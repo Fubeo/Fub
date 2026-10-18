@@ -114,13 +114,19 @@ export interface TextInline {
   readonly f?: Look;
 }
 
+/// Un oggetto. Senza `k` è nuovo: un'immagine con i suoi byte (`data`, base64)
+/// e la sua misura in punti, o una nota con il suo testo (`note`), di chiusura
+/// se `end`. Il formato lo scrive alla sua maniera.
 export interface AtomInline {
   readonly t: "atom";
-  readonly k: string;
+  readonly k?: string;
   readonly kind: AtomKind;
   readonly label?: string;
   readonly w?: number;
   readonly h?: number;
+  readonly data?: string;
+  readonly note?: string;
+  readonly end?: boolean;
 }
 
 export type Inline = TextInline | AtomInline;
@@ -335,20 +341,35 @@ function readInline(value: unknown, where: string): Inline {
     };
   }
   if (inline.t === "atom") {
-    closed(inline, ["t", "k", "kind", "label", "w", "h"], where);
+    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end"], where);
     if (!(ATOM_KINDS as readonly unknown[]).includes(inline.kind)) {
       throw new ProjectionError(`${where}: oggetto sconosciuto`);
     }
     const label = optionalText(inline.label, `${where}.label`);
     const w = optionalNumber(inline.w, `${where}.w`);
     const h = optionalNumber(inline.h, `${where}.h`);
+    const k = optionalText(inline.k, `${where}.k`);
+    const data = optionalText(inline.data, `${where}.data`);
+    const note = optionalText(inline.note, `${where}.note`);
+    if (inline.end !== undefined && typeof inline.end !== "boolean") {
+      throw new ProjectionError(`${where}.end: atteso un sì o un no`);
+    }
+    // Un oggetto o si tiene (`k`) o è nuovo: un'immagine o una nota.
+    const fresh = (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
+      || (inline.kind === "note" && note !== undefined && data === undefined);
+    if (k !== undefined ? data !== undefined || note !== undefined || inline.end === true : !fresh) {
+      throw new ProjectionError(`${where}: oggetto né tenuto né nuovo`);
+    }
     return {
       t: "atom",
-      k: text(inline.k, `${where}.k`),
+      ...(k !== undefined ? { k } : {}),
       kind: inline.kind as AtomKind,
       ...(label ? { label } : {}),
       ...(w !== undefined ? { w } : {}),
       ...(h !== undefined ? { h } : {}),
+      ...(data !== undefined ? { data } : {}),
+      ...(note !== undefined ? { note } : {}),
+      ...(inline.end === true ? { end: true } : {}),
     };
   }
   throw new ProjectionError(`${where}: elemento sconosciuto`);
@@ -492,10 +513,15 @@ function writeInline(inline: Inline): string {
     out += writeLook(inline.f);
     return out + "}";
   }
-  let out = `{"t":"atom","k":${JSON.stringify(inline.k)},"kind":"${inline.kind}"`;
+  let out = `{"t":"atom"`;
+  if (inline.k !== undefined) out += `,"k":${JSON.stringify(inline.k)}`;
+  out += `,"kind":"${inline.kind}"`;
   if (inline.label) out += `,"label":${JSON.stringify(inline.label)}`;
   if (inline.w !== undefined) out += `,"w":${float(inline.w)}`;
   if (inline.h !== undefined) out += `,"h":${float(inline.h)}`;
+  if (inline.data !== undefined) out += `,"data":${JSON.stringify(inline.data)}`;
+  if (inline.note !== undefined) out += `,"note":${JSON.stringify(inline.note)}`;
+  if (inline.end) out += `,"end":true`;
   return out + "}";
 }
 

@@ -36,6 +36,7 @@ use wordcraft_doc::Document;
 mod blob;
 pub mod export;
 mod fidelity;
+mod fresh;
 mod model;
 mod odt;
 pub mod projection;

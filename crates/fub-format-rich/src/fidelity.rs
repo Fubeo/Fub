@@ -2,17 +2,21 @@
 //!
 //! Il codec non riscrive il file com'era: rinumera le parti (intestazioni, piè
 //! di pagina, note, caselle di testo) nell'ordine in cui le scrive, fonde la
-//! copia delle impostazioni originali con quelle che genera, e lascia le
-//! immagini che nessuno mostra. Niente di questo perde contenuto, ma rende
+//! copia delle impostazioni originali con quelle che genera, lascia le
+//! immagini che nessuno mostra, e dà i separatori predefiniti alle note di un
+//! documento che non ne ha di suoi. Niente di questo perde contenuto, ma rende
 //! diverso il modello riletto. Questo modulo toglie esattamente quelle
 //! differenze, e ciascuna con la propria prova: tutto il resto deve essere
 //! uguale campo per campo.
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
+use wordcraft_doc::para::NoteKind;
 use wordcraft_doc::section::HeaderSet;
-use wordcraft_doc::{Block, Document, InlineObject, Paragraph};
+use wordcraft_doc::{
+    para_block, Block, CharProps, Document, InlineObject, NoteSeparators, Paragraph, PartKind,
+};
 use wordcraft_docx::{settings_kept_unowned, SETTINGS_ORIG};
 
 /// Lo stesso documento, salvo il numero che ha ogni parte.
@@ -48,6 +52,16 @@ pub(crate) fn reads_back(wanted: &Document, reread: &Document) -> bool {
     kept.passthrough.remove(SETTINGS_ORIG);
     let mut reread = reread.clone();
     reread.passthrough.remove(SETTINGS_ORIG);
+    // I separatori delle note: senza quelli del documento il codec scrive i
+    // propri, che riletti sembrano del documento. Soltanto quelli.
+    if let Some((foot, end)) = written_separators() {
+        if kept.footnote_separators.is_empty() && reread.footnote_separators == *foot {
+            reread.footnote_separators = NoteSeparators::default();
+        }
+        if kept.endnote_separators.is_empty() && reread.endnote_separators == *end {
+            reread.endnote_separators = NoteSeparators::default();
+        }
+    }
     let (mut kept, mut reread) = (canonical(kept), canonical(reread));
     if kept == reread {
         return true;
@@ -67,6 +81,40 @@ pub(crate) fn reads_back(wanted: &Document, reread: &Document) -> bool {
         (Ok(kept), Ok(reread)) => close(&kept, &reread),
         _ => false,
     }
+}
+
+/// I separatori che il codec scrive per le note a piè di pagina e di
+/// chiusura di un documento che non ne ha di suoi, come si rileggono.
+fn written_separators() -> Option<&'static (NoteSeparators, NoteSeparators)> {
+    static WRITTEN: OnceLock<Option<(NoteSeparators, NoteSeparators)>> = OnceLock::new();
+    WRITTEN
+        .get_or_init(|| {
+            let mut document = Document::new();
+            let mut paragraph = Paragraph::new();
+            for (kind, part) in [
+                (NoteKind::Footnote, PartKind::Footnote),
+                (NoteKind::Endnote, PartKind::Endnote),
+            ] {
+                let id = document.add_part(part, Vec::new());
+                let at = paragraph.len();
+                paragraph
+                    .insert_object(
+                        at,
+                        InlineObject::NoteRef {
+                            kind,
+                            id,
+                            custom: String::new(),
+                        },
+                        &CharProps::default(),
+                    )
+                    .ok()?;
+            }
+            document.body = vec![para_block(paragraph)];
+            let bytes = wordcraft_docx::write(&document).ok()?;
+            let reread = wordcraft_docx::read(&bytes).ok()?;
+            Some((reread.footnote_separators, reread.endnote_separators))
+        })
+        .as_ref()
 }
 
 /// Mezzo twip in punti: la più piccola differenza che il file sa scrivere è

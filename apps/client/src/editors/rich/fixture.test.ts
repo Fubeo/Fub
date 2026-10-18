@@ -12,7 +12,7 @@ import projectionFixture from "../../__fixtures__/rich-projection.json";
 import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
 import { parseProjection, writeProjection } from "./projection";
-import { insertTable, setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
+import { insertImage, insertNote, insertTable, setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
 import { BlockWriter, toDoc } from "./schema";
 
 const SOURCE = projectionFixture.source;
@@ -43,6 +43,9 @@ function find(doc: PmNode, needle: string, offset = 0): number {
   if (found < 0) throw new Error(`${needle} non c'è`);
   return found;
 }
+
+/// Un PNG di un pixel, in base64: quello dell'esempio comune di Rust.
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
 
 describe("la proiezione del codec", () => {
   it("si legge e si riscrive identica", () => {
@@ -120,6 +123,11 @@ describe("la proiezione del codec", () => {
     // cella, aperti cella e paragrafo, quattro posizioni più avanti.
     e.select(e.state.selection.from, e.state.selection.from + 4);
     expect(e.run("rich.table.merge")).toBe(true);
+    // Un'immagine nuova e due note nuove in fondo al paragrafo del salto.
+    e.select(find(e.state.doc, "dopo il salto") + "dopo il salto".length);
+    expect(e.apply(insertImage(PNG, 72, 36))).toBe(true);
+    expect(e.apply(insertNote("Una nota della shell.", false))).toBe(true);
+    expect(e.apply(insertNote("In chiusura.", true))).toBe(true);
     // L'ultimo paragrafo diventa un titolo.
     e.select(find(e.state.doc, "Fine."));
     expect(e.run("markdown.heading.2")).toBe(true);

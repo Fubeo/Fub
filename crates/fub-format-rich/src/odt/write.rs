@@ -32,12 +32,12 @@ use super::read::{self, inner, Body, Unit};
 use super::styles::{
     self as odt_styles, Def, LevelKind, ParaChange, Position, Size, Styles, TextProps,
 };
-use super::xml::{self, Tree};
-use crate::blob;
+use super::xml::{self, escape_text, Tree};
 use crate::projection::{
     self, Align, AtomKind, Block, Cell, Inline, Line, Look, Mark, Para, Role, Row, Table,
 };
 use crate::RichError;
+use crate::{blob, fresh};
 
 /// Oltre questo prodotto di lunghezze l'allineamento non cerca la
 /// sottosequenza comune nel mezzo: accoppia per posizione.
@@ -59,6 +59,8 @@ pub(crate) struct Output {
     /// Ciò che il file nuovo deve mostrare: i blocchi voluti, con l'enfasi che
     /// gli stili scritti danno davvero.
     pub expected: Vec<Block>,
+    /// Le immagini nuove da mettere nel pacchetto: percorso, tipo e byte.
+    pub pictures: Vec<(String, &'static str, Vec<u8>)>,
 }
 
 /// Scrive `blocks` sul documento `base`. Con `force` non riusa niente e
@@ -74,6 +76,7 @@ pub(crate) fn write(base: &Base, blocks: &[Block], force: bool) -> Result<Output
         content,
         styles,
         expected: writer.expected,
+        pictures: writer.pictures,
     })
 }
 
@@ -95,6 +98,12 @@ struct Writer<'a> {
     grid_cell: Option<String>,
     /// Le tabelle nuove già nominate.
     named: usize,
+    /// Le immagini e le note nuove già nominate.
+    framed: usize,
+    noted: usize,
+    /// Le note nuove a piè di pagina e di chiusura già scritte.
+    cited: [usize; 2],
+    pictures: Vec<(String, &'static str, Vec<u8>)>,
     expected: Vec<Block>,
 }
 
@@ -624,6 +633,10 @@ impl<'a> Writer<'a> {
             atoms: HashMap::new(),
             used: HashMap::new(),
             tables: Vec::new(),
+            framed: 0,
+            noted: 0,
+            cited: [0; 2],
+            pictures: Vec::new(),
             expected: Vec::new(),
         };
         let blocks = base.body.blocks();
@@ -637,7 +650,7 @@ impl<'a> Writer<'a> {
             match block {
                 Block::Para(p) => {
                     for inline in &p.c {
-                        if let Inline::Atom { k, .. } = inline {
+                        if let Inline::Atom { k: Some(k), .. } = inline {
                             if let Ok(key) = blob::decode::<AtomKey>(k) {
                                 *self.atoms.entry(key.xml).or_default() += 1;
                             }
@@ -1520,12 +1533,31 @@ impl<'a> Writer<'a> {
                         f: got_look,
                     });
                 }
-                Inline::Atom { k, .. } => {
+                Inline::Atom { k: Some(k), .. } => {
                     let key: AtomKey = blob::decode(k)?;
                     sync(&mut stack, &key.wrap, out);
                     out.push_str(&key.xml);
                     space_ok = false;
                     expected.push(inline.clone());
+                }
+                Inline::Atom { k: None, .. } => {
+                    let (kind, xml) = self.new_atom(inline)?;
+                    sync(&mut stack, &[], out);
+                    out.push_str(&xml);
+                    space_ok = false;
+                    expected.push(Inline::Atom {
+                        k: Some(blob::encode(&AtomKey {
+                            wrap: Vec::new(),
+                            xml,
+                        })?),
+                        kind,
+                        label: String::new(),
+                        w: None,
+                        h: None,
+                        data: None,
+                        note: None,
+                        end: false,
+                    });
                 }
             }
         }
@@ -1587,7 +1619,11 @@ impl<'a> Writer<'a> {
             match block {
                 Block::Para(p) => {
                     for inline in &p.c {
-                        if let Inline::Atom { k, kind, .. } = inline {
+                        // Uno nuovo lo controlla chi lo scrive.
+                        if let Inline::Atom {
+                            k: Some(k), kind, ..
+                        } = inline
+                        {
                             self.check_atom(&blob::decode(k)?, *kind)?;
                         }
                     }
@@ -1761,6 +1797,96 @@ impl<'a> Writer<'a> {
             open: format!("<table:table table:name=\"{name}\">"),
             head: format!("<table:table-column{repeated}/>"),
             rows: true,
+        }
+    }
+
+    /// L'XML di un oggetto nuovo: un'immagine in una cornice nel testo, con
+    /// il file fra le immagini del pacchetto, o una nota con il suo testo.
+    fn new_atom(&mut self, atom: &Inline) -> Result<(AtomKind, String), RichError> {
+        let source = String::from_utf8_lossy(&self.base.content.source).into_owned();
+        match atom {
+            Inline::Atom {
+                kind: AtomKind::Image,
+                data: Some(data),
+                note: None,
+                end: false,
+                label,
+                w,
+                h,
+                ..
+            } => {
+                let image = fresh::image(data, *w, *h)?;
+                let path = format!("Pictures/{}", image.name());
+                let name = loop {
+                    self.framed += 1;
+                    let name = format!("Immagine{}", self.framed);
+                    if !source.contains(&format!("draw:name=\"{name}\"")) {
+                        break name;
+                    }
+                };
+                let mut xml = format!(
+                    "<draw:frame draw:name=\"{name}\" text:anchor-type=\"as-char\" \
+                     svg:width=\"{:.2}pt\" svg:height=\"{:.2}pt\" draw:z-index=\"0\">\
+                     <draw:image xlink:href=\"{path}\" xlink:type=\"simple\" \
+                     xlink:show=\"embed\" xlink:actuate=\"onLoad\"/>",
+                    image.w, image.h
+                );
+                if !label.is_empty() {
+                    xml.push_str("<svg:title>");
+                    escape_text(label, &mut xml);
+                    xml.push_str("</svg:title>");
+                }
+                xml.push_str("</draw:frame>");
+                if !self.pictures.iter().any(|(p, ..)| *p == path) {
+                    self.pictures.push((path, image.mime, image.bytes));
+                }
+                Ok((AtomKind::Image, xml))
+            }
+            Inline::Atom {
+                kind: AtomKind::Note,
+                data: None,
+                note: Some(text),
+                end,
+                ..
+            } => {
+                let text = fresh::note(text)?;
+                let (class, prefix, style) = if *end {
+                    ("endnote", "edn", "Endnote")
+                } else {
+                    ("footnote", "ftn", "Footnote")
+                };
+                let id = loop {
+                    self.noted += 1;
+                    let id = format!("{prefix}{}", self.noted);
+                    if !source.contains(&format!("text:id=\"{id}\"")) {
+                        break id;
+                    }
+                };
+                // Il numero lo ricalcola chi apre il file: qui basta che ci sia.
+                let cited = &mut self.cited[usize::from(*end)];
+                *cited += 1;
+                let citation = source
+                    .matches(&format!("text:note-class=\"{class}\""))
+                    .count()
+                    + *cited;
+                let style = if self.styles.common("paragraph", style) {
+                    format!(" text:style-name=\"{style}\"")
+                } else {
+                    String::new()
+                };
+                let mut xml = format!(
+                    "<text:note text:id=\"{id}\" text:note-class=\"{class}\">\
+                     <text:note-citation>{citation}</text:note-citation>\
+                     <text:note-body><text:p{style}>"
+                );
+                let mut space_ok = false;
+                self::text(text, &mut space_ok, &mut xml)?;
+                xml.push_str("</text:p></text:note-body></text:note>");
+                Ok((AtomKind::Note, xml))
+            }
+            _ => Err(RichError::Malformed(
+                "an object that is neither kept nor a new image or note".into(),
+            )),
         }
     }
 

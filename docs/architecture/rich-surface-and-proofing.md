@@ -39,7 +39,13 @@ l'IPC.
   un id del buffer nominerebbe la storia di un altro. Al salvataggio ogni
   storia riprende l'id che ha nel documento se lì è identica, altrimenti un
   id nuovo (`fub-format-rich/src/stories.rs`); le parti che il documento
-  mostrava e non mostra più si tolgono.
+  mostrava e non mostra più si tolgono. Un oggetto senza `k` è nuovo:
+  un'immagine con i suoi byte in base64 (`data`, PNG, JPEG o GIF) e la sua
+  misura in punti (`w`, `h`), o una nota con il suo testo (`note`), di
+  chiusura se `end`; il formato lo scrive alla sua maniera e lo rilegge con
+  un `k`. Finché la shell tiene il proprio buffer l'oggetto resta nuovo e ogni
+  salvataggio lo riscrive: l'immagine prende il nome dei suoi byte, e una
+  nota uguale si riconosce a meno del numero della parte.
   L'enfasi (`m`) e l'aspetto
   del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
   sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
@@ -63,7 +69,9 @@ l'IPC.
   paragrafo, spaziature) non sono gesti che commutano e non passano dalla
   barra di formattazione dei plugin. «Copia formato» lo tiene
   il motore e lo applica alla prossima selezione finita (puntatore o Maiusc
-  rilasciati).
+  rilasciati). **Immagine** sceglie un'immagine del vault con la porta delle
+  immagini del disegno (`DrawingImagePort`: `pick`, poi `read` dal documento
+  con il tetto di 16 MB), senza IPC propria.
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

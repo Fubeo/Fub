@@ -1,14 +1,15 @@
 // @vitest-environment happy-dom
 //
-// Ciò che si inserisce nella superficie ricca: link, tabelle e salti di
-// pagina e di colonna.
-import { afterEach, describe, expect, it } from "vitest";
+// Ciò che si inserisce nella superficie ricca: link, tabelle, immagini, note
+// e salti di pagina e di colonna.
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Fragment, Slice } from "prosemirror-model";
 import { t } from "../../i18n/strings";
-import { insertTable, linkAt, setLink } from "./commands";
+import { insertImage, insertNote, insertTable, linkAt, setLink } from "./commands";
 import { RichEngine } from "./engine";
-import { parseProjection, type Block, type Para, type Table, type TextInline } from "./projection";
-import { mountStrip } from "./strip";
+import { parseProjection, writeBlock, type AtomInline, type Block, type Para, type Table, type TextInline } from "./projection";
+import { filterSlice } from "./paste";
+import { base64, fitImage, mountStrip } from "./strip";
 
 let engines: RichEngine[] = [];
 afterEach(() => {
@@ -251,5 +252,115 @@ describe("le celle unite", () => {
     expect(e.run("rich.table.merge")).toBe(false);
     e.select(at(e, "a"), at(e, "a") + 1);
     expect(e.run("rich.table.merge")).toBe(false);
+  });
+});
+
+/// Un PNG di un pixel, in base64.
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
+
+function atoms(e: RichEngine): AtomInline[] {
+  const first = parseProjection(e.getDoc()).blocks[0] as Para;
+  return (first.c ?? []).filter((inline): inline is AtomInline => inline.t === "atom");
+}
+
+describe("le immagini e le note nuove", () => {
+  it("entrano senza k, con i loro byte o il loro testo, e si scrivono nell'ordine di serde", () => {
+    const e = engine([para([{ t: "text", x: "qui" }])]);
+    e.select(at(e, "qui") + 3);
+    expect(e.apply(insertImage(PNG, 72, 36))).toBe(true);
+    expect(e.apply(insertNote("  Vedi sopra. ", false))).toBe(true);
+    expect(e.apply(insertNote("In fondo.", true))).toBe(true);
+    expect(atoms(e)).toEqual([
+      { t: "atom", kind: "image", w: 72, h: 36, data: PNG },
+      { t: "atom", kind: "note", note: "Vedi sopra." },
+      { t: "atom", kind: "note", note: "In fondo.", end: true },
+    ]);
+    const written = writeBlock(parseProjection(e.getDoc()).blocks[0]!);
+    expect(written).toContain(`{"t":"atom","kind":"image","w":72.0,"h":36.0,"data":"${PNG}"}`);
+    expect(written).toContain(`{"t":"atom","kind":"note","note":"In fondo.","end":true}`);
+    // L'immagine nuova si vede; la nota si annuncia col suo testo.
+    const img = document.querySelector<HTMLImageElement>(".rich-atom-image img")!;
+    expect(img.getAttribute("src")).toBe(`data:image/png;base64,${PNG}`);
+    expect(document.querySelector(".rich-atom-note")!.getAttribute("aria-label")).toBe(`${t("rich.atom.note")}: Vedi sopra.`);
+  });
+
+  it("una nota vuota o su più righe non entra", () => {
+    const e = engine([para([{ t: "text", x: "qui" }])]);
+    e.select(at(e, "qui"));
+    expect(e.apply(insertNote("   ", false))).toBe(false);
+    expect(e.apply(insertNote("due\nrighe", false))).toBe(false);
+    expect(atoms(e)).toEqual([]);
+  });
+
+  it("la proiezione rifiuta un oggetto né tenuto né nuovo", () => {
+    const doc = (atom: unknown) => JSON.stringify({ format: "fub-rich", version: 1, blocks: [para([atom])] });
+    expect(() => parseProjection(doc({ t: "atom", kind: "image", data: PNG, w: 1, h: 1 }))).not.toThrow();
+    for (const bad of [
+      { t: "atom", kind: "field", data: PNG },
+      { t: "atom", kind: "image" },
+      { t: "atom", k: "x", kind: "note", note: "e anche tenuta" },
+      { t: "atom", kind: "note", note: "n", end: "sì" },
+    ]) {
+      expect(() => parseProjection(doc(bad)), JSON.stringify(bad)).toThrow();
+    }
+  });
+
+  it("incollate restano, e un oggetto senza k che non è nuovo cade", () => {
+    const e = engine([para([{ t: "text", x: "qui" }])]);
+    const { atom } = e.state.schema.nodes;
+    const slice = new Slice(Fragment.from([
+      atom.create({ kind: "image", data: PNG, w: 1, h: 1 }),
+      atom.create({ kind: "note", note: "Nota" }),
+      atom.create({ kind: "field" }),
+      atom.create({ kind: "image", data: btoa("<svg/>"), w: 1, h: 1 }),
+    ]), 0, 0);
+    const kept = filterSlice(slice, { known: new Set(), present: new Set(), moving: false });
+    const kinds: string[] = [];
+    kept.content.forEach((node) => kinds.push(node.attrs.kind as string));
+    expect(kinds).toEqual(["image", "note"]);
+  });
+
+  it("la striscia sceglie un'immagine e la riduce alla colonna; scrive una nota dal modulo", async () => {
+    const bytes = Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0));
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 1248, height: 312, close() {} }));
+    try {
+      const e = engine([para([{ t: "text", x: "qui" }])]);
+      e.select(at(e, "qui") + 3);
+      let answer: Blob | "unreadable" | null = new Blob([bytes], { type: "image/png" });
+      const strip = mountStrip(e, () => null, { pickImage: async () => answer });
+      document.body.append(strip.element);
+      const press = (key: Parameters<typeof t>[0]) => strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t(key)}"]`)!.click();
+      press("rich.image");
+      await vi.waitFor(() => expect(atoms(e)).toHaveLength(1));
+      expect(atoms(e)[0]).toEqual({ t: "atom", kind: "image", w: 468, h: 117, data: PNG });
+      answer = "unreadable";
+      press("rich.image");
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(atoms(e)).toHaveLength(1);
+      press("rich.note");
+      const field = document.querySelector<HTMLInputElement>("form input")!;
+      const kind = document.querySelector<HTMLSelectElement>("form select")!;
+      field.value = "Di chiusura.";
+      kind.value = "end";
+      field.form!.requestSubmit();
+      expect(atoms(e)[1]).toEqual({ t: "atom", kind: "note", note: "Di chiusura.", end: true });
+      expect(document.querySelector("form")).toBeNull();
+      strip.destroy();
+      // Senza chi sceglie, niente pulsante dell'immagine.
+      const bare = mountStrip(e, () => null);
+      expect(bare.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.image")}"]`)!.hidden).toBe(true);
+      bare.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("la misura e i byte", () => {
+    expect(fitImage(96, 48)).toEqual({ w: 72, h: 36 });
+    expect(fitImage(2000, 4000)).toEqual({ w: 324, h: 648 });
+    expect(fitImage(0, 10)).toBeNull();
+    const big = new Uint8Array(100_000).map((_, i) => i % 251);
+    expect(atob(base64(big)).length).toBe(big.length);
+    expect(base64(Uint8Array.from([0x89, 0x50]))).toBe(btoa("\x89\x50"));
   });
 });

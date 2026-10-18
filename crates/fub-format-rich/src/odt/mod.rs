@@ -172,7 +172,7 @@ pub(crate) fn save(current: &[u8], json: &str) -> Result<Saved, RichError> {
     if let Some(styles) = &output.styles {
         parts.push((package::STYLES, styles));
     }
-    let bytes = package::replace(current, &parts)?;
+    let bytes = package::replace(current, &parts, &output.pictures)?;
     let (_, reread) = parse(&bytes).map_err(|_| RichError::Fidelity)?;
     if visible(&reread.body.blocks()) != visible(&output.expected) {
         return Err(RichError::Fidelity);
@@ -268,7 +268,9 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
                             )),
                         },
                         Inline::Atom { k, .. } => {
-                            let xml = crate::blob::decode::<keys::AtomKey>(k)
+                            let xml = k
+                                .as_deref()
+                                .and_then(|k| crate::blob::decode::<keys::AtomKey>(k).ok())
                                 .map(|key| key.xml)
                                 .unwrap_or_default();
                             out.push(SeenInline::Atom(xml));

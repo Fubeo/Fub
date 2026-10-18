@@ -3,7 +3,8 @@
 //! Il codec legge `content.xml`, `styles.xml`, `settings.xml` e il manifesto,
 //! e ne riscrive al più le prime due. Ogni altra voce passa nel file nuovo così
 //! com'è, compressa come prima e nello stesso ordine: `mimetype` resta la
-//! prima, non compressa, come vuole il formato.
+//! prima, non compressa, come vuole il formato. Un'immagine nuova si aggiunge
+//! in fondo, con la sua voce nel manifesto.
 
 use std::io::{Cursor, Read, Write};
 
@@ -80,10 +81,37 @@ fn part(
     Ok(Some(out))
 }
 
-/// Il pacchetto `bytes` con queste parti al posto delle loro: ogni altra voce
-/// si copia grezza, senza decomprimerla.
-pub(crate) fn replace(bytes: &[u8], parts: &[(&str, &[u8])]) -> Result<Vec<u8>, RichError> {
+/// Il pacchetto `bytes` con queste parti al posto delle loro, e i file
+/// `added` (percorso, tipo, byte) che ancora non ha: ogni altra voce si copia
+/// grezza, senza decomprimerla.
+pub(crate) fn replace(
+    bytes: &[u8],
+    parts: &[(&str, &[u8])],
+    added: &[(String, &'static str, Vec<u8>)],
+) -> Result<Vec<u8>, RichError> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(codec)?;
+    let names = archive
+        .file_names()
+        .map(|name| name.map(|name| name.into_owned()))
+        .collect::<Result<Vec<String>, _>>()
+        .map_err(codec)?;
+    let added: Vec<_> = added
+        .iter()
+        .filter(|(path, ..)| !names.contains(path))
+        .collect();
+    let manifest = match added.is_empty() {
+        true => None,
+        false => {
+            let old = part(&mut archive, MANIFEST)?
+                .ok_or_else(|| RichError::Codec("odt package without a manifest".into()))?;
+            Some(manifest_with(&old, &added)?)
+        }
+    };
+    let mut parts = parts.to_vec();
+    if let Some(manifest) = &manifest {
+        parts.push((MANIFEST, manifest));
+    }
+    let parts = &parts[..];
     let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let deflated = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);
@@ -107,7 +135,38 @@ pub(crate) fn replace(bytes: &[u8], parts: &[(&str, &[u8])]) -> Result<Vec<u8>, 
             parts[missing].0
         )));
     }
+    // Un'immagine è già compressa: si conserva com'è.
+    let stored =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (path, _, bytes) in &added {
+        writer.start_file(path.as_str(), stored).map_err(codec)?;
+        writer.write_all(bytes).map_err(codec)?;
+    }
     Ok(writer.finish().map_err(codec)?.into_inner())
+}
+
+/// Il manifesto con una voce per ogni file aggiunto.
+fn manifest_with(
+    old: &[u8],
+    added: &[&(String, &'static str, Vec<u8>)],
+) -> Result<Vec<u8>, RichError> {
+    const END: &[u8] = b"</manifest:manifest>";
+    let at = old
+        .windows(END.len())
+        .rposition(|w| w == END)
+        .ok_or_else(|| RichError::Codec("odt manifest without its end".into()))?;
+    let mut out = old[..at].to_vec();
+    for (path, mime, _) in added {
+        out.extend_from_slice(
+            format!(
+                "<manifest:file-entry manifest:full-path=\"{path}\" \
+                 manifest:media-type=\"{mime}\"/>"
+            )
+            .as_bytes(),
+        );
+    }
+    out.extend_from_slice(&old[at..]);
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -136,7 +195,7 @@ mod tests {
             ("content.xml", b"<a/>", false),
             ("Pictures/x.png", b"\x89PNG....", false),
         ]);
-        let out = replace(&bytes, &[(CONTENT, b"<b/>")]).unwrap();
+        let out = replace(&bytes, &[(CONTENT, b"<b/>")], &[]).unwrap();
         let mut archive = zip::ZipArchive::new(Cursor::new(out.as_slice())).unwrap();
         let names: Vec<String> = archive
             .file_names()
@@ -148,6 +207,49 @@ mod tests {
         drop(mimetype);
         let read = Package::read(&out).unwrap();
         assert_eq!(read.content, b"<b/>");
+    }
+
+    #[test]
+    fn un_immagine_nuova_entra_in_fondo_e_nel_manifesto_una_volta() {
+        let bytes = package(&[
+            ("mimetype", b"application/vnd.oasis.opendocument.text", true),
+            (
+                MANIFEST,
+                b"<manifest:manifest><manifest:file-entry manifest:full-path=\"/\"/></manifest:manifest>",
+                false,
+            ),
+            ("content.xml", b"<a/>", false),
+            ("Pictures/x.png", b"vecchia", false),
+        ]);
+        let added = [
+            ("Pictures/y.png".to_string(), "image/png", b"nuova".to_vec()),
+            ("Pictures/x.png".to_string(), "image/png", b"altra".to_vec()),
+        ];
+        let out = replace(&bytes, &[(CONTENT, b"<b/>")], &added).unwrap();
+        let mut archive = zip::ZipArchive::new(Cursor::new(out.as_slice())).unwrap();
+        let names: Vec<String> = archive
+            .file_names()
+            .map(|n| n.unwrap().into_owned())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "mimetype",
+                MANIFEST,
+                "content.xml",
+                "Pictures/x.png",
+                "Pictures/y.png"
+            ]
+        );
+        let manifest = part(&mut archive, MANIFEST).unwrap().unwrap();
+        let manifest = String::from_utf8(manifest).unwrap();
+        assert_eq!(manifest.matches("Pictures/").count(), 1, "{manifest}");
+        assert!(manifest.ends_with(
+            "<manifest:file-entry manifest:full-path=\"Pictures/y.png\" \
+             manifest:media-type=\"image/png\"/></manifest:manifest>"
+        ));
+        let old = part(&mut archive, "Pictures/x.png").unwrap().unwrap();
+        assert_eq!(old, b"vecchia");
     }
 
     #[test]

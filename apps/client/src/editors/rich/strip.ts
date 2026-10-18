@@ -1,7 +1,8 @@
 // La striscia del carattere della superficie ricca: tipo e dimensione del
 // carattere, colori, sottolineato, apice e pedice, maiuscole, «Copia formato»;
 // e del paragrafo: stile, allineamento, rientri, interlinea e spaziature;
-// ciò che si inserisce: link e salti di pagina e di colonna.
+// ciò che si inserisce: link, tabelle, immagini, note e salti di pagina e di
+// colonna.
 //
 // La barra di formattazione della shell porta gesti che commutano, dichiarati
 // dai plugin per id; un carattere o un colore sono valori, e la loro scelta è
@@ -12,9 +13,13 @@
 import { labelButton, openPopover, setPressed, type PopoverHandle } from "../../kit";
 import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
+import { notify } from "../../ui/notify";
+import { errorText } from "../../host/errors";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import {
   FONT_SIZES,
+  insertImage,
+  insertNote,
   insertTable,
   LINE_SPACINGS,
   linkAt,
@@ -32,6 +37,55 @@ import {
 } from "./commands";
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
+import { imageMime } from "./schema";
+
+/// Ciò che la striscia chiede alla shell.
+export interface RichMedia {
+  /// Un'immagine del vault scelta da chi scrive: i suoi byte, `null` se la
+  /// scelta è annullata, `"unreadable"` se non si legge o pesa troppo.
+  readonly pickImage?: () => Promise<Blob | "unreadable" | null>;
+}
+
+/// La colonna del testo di una pagina Letter con i margini di Word, in punti:
+/// un'immagine nuova più grande si riduce a starci, come la riduce Word.
+const TEXT_WIDTH_PT = 468;
+const TEXT_HEIGHT_PT = 648;
+
+/// La misura in punti di un'immagine di `width` × `height` pixel CSS, entro la
+/// colonna del testo e senza deformarla.
+export function fitImage(width: number, height: number): { w: number; h: number } | null {
+  if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height))) return null;
+  const w = width * 0.75;
+  const h = height * 0.75;
+  const scale = Math.min(1, TEXT_WIDTH_PT / w, TEXT_HEIGHT_PT / h);
+  const round = (n: number) => Math.max(1, Math.round(n * 100) / 100);
+  return { w: round(w * scale), h: round(h * scale) };
+}
+
+/// I byte in base64, a pezzi: `String.fromCharCode` non regge un'immagine
+/// intera in una chiamata.
+export function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let at = 0; at < bytes.length; at += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
+  }
+  return btoa(binary);
+}
+
+/// Un'immagine pronta da inserire: i byte di un PNG, JPEG o GIF e la misura.
+async function placedImage(blob: Blob): Promise<{ data: string; w: number; h: number } | null> {
+  const data = base64(new Uint8Array(await blob.arrayBuffer()));
+  if (imageMime(data) === null) return null;
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(blob);
+  } catch {
+    return null;
+  }
+  const size = fitImage(bitmap.width, bitmap.height);
+  bitmap.close();
+  return size && { data, ...size };
+}
 
 /// I caratteri proposti sempre, oltre a quelli del documento.
 export const COMMON_FONTS: readonly string[] = [
@@ -141,7 +195,7 @@ function icon(paths: readonly string[]): SVGElement {
   return svg;
 }
 
-export function mountStrip(engine: RichEngine, chord: (id: string) => string | null): RichStrip {
+export function mountStrip(engine: RichEngine, chord: (id: string) => string | null, media: RichMedia = {}): RichStrip {
   const life = openLifetime();
   const element = document.createElement("div");
   element.className = "rich-strip";
@@ -290,7 +344,13 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   merge.append(icon(["M4 5h16v14H4z", "M7 12h4", "M9 10l2 2-2 2", "M17 12h-4", "M15 10l-2 2 2 2"]));
   const split = button(() => t("rich.table.split"), "rich.table.split", () => engine.run("rich.table.split"));
   split.append(icon(["M4 5h16v14H4z", "M12 5v14", "M9 12H6", "M7.5 10.5 6 12l1.5 1.5", "M15 12h3", "M16.5 10.5 18 12l-1.5 1.5"]));
-  insert.append(link, table, merge, split, pageBreak, columnBreak);
+  const image = button(() => t("rich.image"), null, () => void addImage());
+  image.append(icon(["M4 5h16v14H4z", "M4 16l5-5 4 4 2-2 5 5", "M15.5 9.5h.01"]));
+  image.hidden = media.pickImage === undefined;
+  const note = button(() => t("rich.note"), null, (anchor) => openNote(anchor));
+  note.append(icon(["M5 4h14v10l-5 6H5z", "M14 20v-6h5", "M8 8h8", "M8 11h5"]));
+  note.setAttribute("aria-haspopup", "dialog");
+  insert.append(link, table, merge, split, image, note, pageBreak, columnBreak);
   life.add(engine.onLinkAsk(() => openLink(link)));
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
@@ -371,6 +431,88 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
       },
     });
     anchor.setAttribute("aria-expanded", "true");
+  }
+
+  /// Un'immagine del vault, alla sua misura entro la colonna del testo.
+  async function addImage(): Promise<void> {
+    const pick = media.pickImage;
+    if (!pick) return;
+    let picked: Blob | "unreadable" | null;
+    try {
+      picked = await pick();
+    } catch (error) {
+      if (!life.closed) notify(errorText(error), "guasto");
+      return;
+    }
+    if (picked === null || life.closed) return;
+    const placed = picked === "unreadable" ? null : await placedImage(picked).catch(() => null);
+    // La superficie può essersi chiusa mentre l'immagine si leggeva.
+    if (life.closed) return;
+    if (!placed) {
+      notify(t("rich.image.unreadable"), "guasto");
+      return;
+    }
+    engine.apply(insertImage(placed.data, placed.w, placed.h));
+  }
+
+  /// Il testo di una nota nuova e dove va: a piè di pagina o in chiusura.
+  function openNote(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const form = document.createElement("form");
+    form.className = "rich-strip-swatches";
+    form.style.display = "grid";
+    form.style.gridTemplateColumns = "auto 220px";
+    form.style.alignItems = "center";
+    const caption = (control: HTMLElement, label: Key) => {
+      control.id = `${prefix}-note-${form.childElementCount}`;
+      control.className = "rich-strip-select";
+      const text = document.createElement("label");
+      text.htmlFor = control.id;
+      text.textContent = t(label);
+      form.append(text, control);
+    };
+    const text = document.createElement("input");
+    text.type = "text";
+    text.required = true;
+    text.maxLength = 4000;
+    caption(text, "rich.note.text");
+    const kind = document.createElement("select");
+    for (const [value, label] of [["foot", "rich.note.foot"], ["end", "rich.note.end"]] as const) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = t(label);
+      kind.append(option);
+    }
+    caption(kind, "rich.note.kind");
+    const actions = document.createElement("div");
+    actions.style.gridColumn = "1 / -1";
+    actions.style.display = "flex";
+    actions.style.justifyContent = "flex-end";
+    const apply = document.createElement("button");
+    apply.type = "submit";
+    apply.className = "rich-strip-swatch-none";
+    apply.textContent = t("rich.note.apply");
+    actions.append(apply);
+    form.append(actions);
+    life.listen(form, "submit", (event) => {
+      event.preventDefault();
+      if (!engine.apply(insertNote(text.value, kind.value === "end"), false)) return;
+      popover?.close();
+      engine.focus();
+    });
+    popover = openPopover({
+      anchor,
+      content: form,
+      label: t("rich.note"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+    text.focus();
   }
 
   /// L'indirizzo del link sulla selezione o al cursore; senza selezione,
@@ -675,6 +817,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     pageBreak.disabled = !engine.actionState("rich.break.page").enabled;
     columnBreak.disabled = !engine.actionState("rich.break.column").enabled;
     table.disabled = !engine.editable() || !engine.read(insertTable(1, 1));
+    image.disabled = note.disabled = !engine.read(insertNote("·", false));
     merge.disabled = !engine.actionState("rich.table.merge").enabled;
     split.disabled = !engine.actionState("rich.table.split").enabled;
     dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;

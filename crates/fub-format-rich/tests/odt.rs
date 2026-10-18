@@ -1230,3 +1230,122 @@ fn un_odt_di_wordcraft_si_apre_modificabile() {
     let reopened = self::projection(&saved(&bytes, &projection));
     assert!(words(para(&reopened, index)).ends_with(" (rivisto)"));
 }
+
+fn new_atom(kind: AtomKind, data: Option<&[u8]>, note: Option<&str>, end: bool) -> Inline {
+    use base64::Engine;
+    Inline::Atom {
+        k: None,
+        kind,
+        label: if data.is_some() {
+            "Il logo".into()
+        } else {
+            String::new()
+        },
+        w: data.map(|_| 72.0),
+        h: data.map(|_| 36.0),
+        data: data.map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
+        note: note.map(str::to_string),
+        end,
+    }
+}
+
+#[test]
+fn immagini_e_note_nuove_entrano_nel_pacchetto_e_nel_testo() {
+    let bytes = odt(PROSE);
+    let mut projection = projection(&bytes);
+    let other = para_mut(&mut projection, 2);
+    other
+        .c
+        .push(new_atom(AtomKind::Image, Some(common::PNG), None, false));
+    other.c.push(new_atom(
+        AtomKind::Note,
+        None,
+        Some("Una nota <nuova>."),
+        false,
+    ));
+    other
+        .c
+        .push(new_atom(AtomKind::Note, None, Some("In fondo."), true));
+    let out = saved(&bytes, &projection);
+    let after = body(&out);
+    // Il resto del corpo non si muove: il paragrafo cresce in coda.
+    assert!(after.starts_with(&body(&bytes)[..body(&bytes).find("Un&apos;altra").unwrap()]));
+    let names: Vec<String> = zip::ZipArchive::new(Cursor::new(&out[..]))
+        .unwrap()
+        .file_names()
+        .map(|n| n.unwrap().into_owned())
+        .collect();
+    let picture = names
+        .iter()
+        .find(|n| n.starts_with("Pictures/fub-") && n.ends_with(".png"))
+        .expect("l'immagine nuova nel pacchetto")
+        .clone();
+    assert_eq!(raw(&out, &picture), common::PNG);
+    assert_eq!(names.last(), Some(&picture), "in fondo al pacchetto");
+    let manifest = part(&out, "META-INF/manifest.xml");
+    assert_eq!(
+        manifest
+            .matches(&format!(
+                "manifest:full-path=\"{picture}\" manifest:media-type=\"image/png\""
+            ))
+            .count(),
+        1,
+        "{manifest}"
+    );
+    assert!(after.contains(&format!(
+        "svg:width=\"72.00pt\" svg:height=\"36.00pt\" draw:z-index=\"0\"><draw:image xlink:href=\"{picture}\""
+    )));
+    assert!(after.contains("<svg:title>Il logo</svg:title>"));
+    assert!(
+        after.contains("text:note-class=\"footnote\"><text:note-citation>2</text:note-citation>")
+    );
+    assert!(after.contains("Una nota &lt;nuova&gt;."));
+    assert!(after.contains("text:note-class=\"endnote\""));
+    // Riaperto: tre oggetti nuovi, che si tengono come gli altri.
+    let reopened = self::projection(&out);
+    let kinds: Vec<AtomKind> = para(&reopened, 2)
+        .c
+        .iter()
+        .filter_map(|i| match i {
+            Inline::Atom { kind, k, .. } => Some((*kind, k.is_some())),
+            Inline::Text { .. } => None,
+        })
+        .map(|(kind, kept)| {
+            assert!(kept);
+            kind
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        [
+            AtomKind::Note,
+            AtomKind::Image,
+            AtomKind::Image,
+            AtomKind::Note,
+            AtomKind::Note
+        ]
+    );
+    // Il buffer della shell ha ancora gli oggetti nuovi: salvarlo di nuovo
+    // non raddoppia né l'immagine né le note.
+    let again = saved(&out, &projection);
+    let reread = self::projection(&again);
+    assert_eq!(words(para(&reread, 2)), words(para(&reopened, 2)));
+    let manifest = part(&again, "META-INF/manifest.xml");
+    assert_eq!(manifest.matches(&picture).count(), 1, "{manifest}");
+    assert_eq!(body(&again).matches("<text:note ").count(), 3);
+}
+
+#[test]
+fn un_oggetto_nuovo_che_odf_non_sa_scrivere_è_rifiutato() {
+    let bytes = odt(PROSE);
+    for atom in [
+        new_atom(AtomKind::Image, Some(b"<svg/>"), None, false),
+        new_atom(AtomKind::Note, None, Some("due\nrighe"), false),
+        new_atom(AtomKind::Field, Some(common::PNG), None, false),
+    ] {
+        let mut projection = projection(&bytes);
+        para_mut(&mut projection, 2).c.push(atom);
+        let result = save(Codec::Odt, &bytes, &projection.to_json().unwrap());
+        assert!(matches!(result, Err(RichError::Malformed(_))), "{result:?}");
+    }
+}

@@ -11,6 +11,8 @@
 //   paragrafo e il tratto prendono le proprietà del posto in cui arrivano,
 //   come «unisci formattazione» di Word;
 // - un oggetto con un `k` sconosciuto cade: non c'è niente a cui rimandare;
+//   uno nuovo, senza `k`, entra se è un'immagine o una nota che il formato
+//   sa scrivere;
 // - un oggetto che il documento può mostrare una volta sola (una nota, una
 //   casella di testo, un segno di commento o di segnalibro) e una sezione
 //   entrano soltanto se non ci sono già: tagliare e incollare li sposta,
@@ -21,7 +23,7 @@
 //   documento: il salvataggio lo scriverebbe nel file com'è, e un altro
 //   programma lo aprirebbe.
 import { Fragment, Slice, type Node as PmNode } from "prosemirror-model";
-import { richSchema, UNIQUE_ATOMS } from "./schema";
+import { imageMime, richSchema, UNIQUE_ATOMS } from "./schema";
 import type { AtomKind } from "./projection";
 
 export interface PasteContext {
@@ -51,7 +53,7 @@ export function uniqueKeys(doc: PmNode): Set<string> {
   const out = new Set<string>();
   doc.descendants((child) => {
     if (child.type === richSchema.nodes.section) out.add(child.attrs.sect as string);
-    else if (child.type === richSchema.nodes.atom && UNIQUE_ATOMS.has(child.attrs.kind as AtomKind)) {
+    else if (child.type === richSchema.nodes.atom && UNIQUE_ATOMS.has(child.attrs.kind as AtomKind) && child.attrs.k !== null) {
       out.add(child.attrs.k as string);
     }
     return true;
@@ -67,6 +69,12 @@ export function safeHref(href: string): boolean {
   } catch {
     return false;
   }
+}
+
+function newAtom(node: PmNode): boolean {
+  const { kind, data, note } = node.attrs;
+  if (kind === "image") return typeof data === "string" && imageMime(data) !== null && note === null;
+  return kind === "note" && typeof note === "string" && data === null;
 }
 
 class Filter {
@@ -87,7 +95,11 @@ class Filter {
     const { known } = this.context;
     const schema = richSchema;
     if (node.type === schema.nodes.atom) {
-      const k = node.attrs.k as string;
+      const k = node.attrs.k as string | null;
+      // Un oggetto nuovo porta tutto con sé: un'immagine che il formato sa
+      // scrivere o il testo di una nota. Copiato, è un oggetto nuovo in più,
+      // come in Word.
+      if (k === null) return newAtom(node) ? node : null;
       const unique = UNIQUE_ATOMS.has(node.attrs.kind as AtomKind);
       if (unique ? !this.#admitsUnique(k) : !known.has(k)) return null;
       return node;

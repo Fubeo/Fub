@@ -26,6 +26,7 @@ import {
   HIGHLIGHT_DEFAULT,
   plainLayout,
   type Align,
+  type AtomKind,
   type Layout,
   type LayoutLength,
   type Line,
@@ -360,6 +361,28 @@ export function insertBreak(ch: "\n" | "\u000c" | "\u000e"): Command {
     }
     return true;
   };
+}
+
+/// Un oggetto nuovo al posto della selezione, senza le marche del testo
+/// intorno: il formato lo scrive con le sue proprietà.
+function insertAtom(attrs: { kind: AtomKind; data?: string; note?: string; end?: boolean; w?: number; h?: number }): Command {
+  return (state, dispatch) => {
+    if (!state.selection.$from.parent.inlineContent) return false;
+    if (dispatch) dispatch(state.tr.replaceSelectionWith(richSchema.nodes.atom.create(attrs), false).scrollIntoView());
+    return true;
+  };
+}
+
+/// Un'immagine nuova: i suoi byte in base64 e la sua misura in punti.
+export function insertImage(data: string, w: number, h: number): Command {
+  return insertAtom({ kind: "image", data, w, h });
+}
+
+/// Una nota nuova a piè di pagina, o di chiusura se `end`, con il suo testo.
+export function insertNote(text: string, end: boolean): Command {
+  const note = text.trim();
+  if (note === "" || /[\p{Cc}\uFFFC]/u.test(note)) return () => false;
+  return insertAtom({ kind: "note", note, end });
 }
 
 /// Inserisce una tabulazione dove sta il cursore.

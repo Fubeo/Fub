@@ -794,11 +794,14 @@ impl<'a> Inlines<'_, 'a> {
         };
         let (kind, label, size) = describe(tree, id);
         Ok(Inline::Atom {
-            k: blob::encode(&key)?,
+            k: Some(blob::encode(&key)?),
             kind,
             label,
             w: size.map(|(w, _)| w),
             h: size.map(|(_, h)| h),
+            data: None,
+            note: None,
+            end: false,
         })
     }
 }

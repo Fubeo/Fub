@@ -11,29 +11,32 @@
 //!   suo ruolo o il suo stile sono cambiati; allineamento, rientri,
 //!   spaziature e interlinea diversi da quelli mostrati diventano
 //!   formattazione diretta con la regola delle enfasi;
-//! - un oggetto riprende sé stesso, purché ciò che nomina ci sia ancora.
+//! - un oggetto riprende sé stesso, purché ciò che nomina ci sia ancora;
+//! - un'immagine nuova entra fra le immagini del documento, col nome dei suoi
+//!   byte, e una nota nuova diventa una storia con lo stile delle note, come
+//!   la inserisce WordCraft.
 //!
 //! Ciò che la shell ha tolto si toglie come lo toglie WordCraft: i segni di
 //! campi e controlli rimasti senza compagno se ne vanno, e così le caselle di
-//! testo che nessuno mostra più.
+//! testo e le note che nessuno mostra più.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 use wordcraft_doc::numbering::ListKind;
-use wordcraft_doc::para::{Run, OBJ};
+use wordcraft_doc::para::{NoteKind, Run, OBJ};
 use wordcraft_doc::props::{Highlight, NumRef, Underline, VertAlign};
 use wordcraft_doc::{
     Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
-    Part, SectionProps, StyleKind, StyleSheet,
+    Part, PartKind, SectionProps, StyleKind, StyleSheet,
 };
 
 use crate::projection::{
-    self, Align, AtomKeep, Block, Inline, Layout, Line, Look, Mark, Para, ParaKeep, Projection,
-    Role, SectKeep,
+    self, Align, AtomKeep, AtomKind, Block, Inline, Layout, Line, Look, Mark, Para, ParaKeep,
+    Projection, Role, SectKeep,
 };
 use crate::RichError;
-use crate::{blob, fidelity, stories};
+use crate::{blob, fidelity, fresh, stories};
 
 /// Il documento che la proiezione descrive, a partire da `base`.
 pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Document, RichError> {
@@ -42,12 +45,14 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         stories: HashSet::new(),
         last_list: [None, None],
         own: Dangling::of(base),
+        notes: Vec::new(),
         claimed: HashSet::new(),
         sections: Vec::new(),
     };
     let body = blocks(&projection.blocks, &mut document, &mut state)?;
     document.body = body;
     prune(base, &mut document);
+    add_notes(&mut document, state.notes)?;
     document.ensure_nonempty();
     document.balance_field_ranges();
     document.balance_controls();
@@ -63,11 +68,19 @@ struct State {
     /// che diventa voce d'elenco continua quello vicino, come in Word.
     last_list: [Option<u32>; 2],
     own: Dangling,
+    /// Le note nuove, nell'ordine del testo: il loro riferimento porta per
+    /// ora l'id provvisorio [`placeholder`].
+    notes: Vec<(NoteKind, String)>,
     /// Gli id del documento che un oggetto ha già preso per le sue storie.
     claimed: HashSet<u32>,
     /// Le storie portate dalle sezioni già incontrate, con il loro posto: più
     /// sezioni possono mostrare la stessa intestazione.
     sections: Vec<(BTreeMap<u32, Part>, BTreeMap<u32, u32>)>,
+}
+
+/// L'id provvisorio della nota nuova `index`: nessun documento ne ha tanti.
+fn placeholder(index: usize) -> u32 {
+    u32::MAX - index as u32
 }
 
 /// Gli stili e gli elenchi che il documento stesso nomina senza averli. Un
@@ -301,7 +314,13 @@ fn paragraph(
                 let props = with_look(props, m, f, shown_style.as_deref(), &document.styles);
                 push(&mut out, x, props);
             }
-            Inline::Atom { k, .. } => {
+            Inline::Atom {
+                k: Some(k),
+                data: None,
+                note: None,
+                end: false,
+                ..
+            } => {
                 let AtomKeep {
                     props,
                     mut object,
@@ -327,6 +346,65 @@ fn paragraph(
                 let props = known_char(props, &document.styles, &state.own);
                 push(&mut out, &OBJ.to_string(), props);
                 out.objects.push(object);
+            }
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Image,
+                data: Some(data),
+                note: None,
+                end: false,
+                label,
+                w,
+                h,
+            } => {
+                let image = fresh::image(data, *w, *h)?;
+                let (w, h) = (image.w, image.h);
+                let media = media_key(document, image);
+                push(&mut out, &OBJ.to_string(), CharProps::default());
+                out.objects.push(InlineObject::Image {
+                    media,
+                    w,
+                    h,
+                    alt: label.clone(),
+                    float: Default::default(),
+                    crop: [0.0; 4],
+                    ole: None,
+                });
+            }
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Note,
+                data: None,
+                note: Some(text),
+                end,
+                ..
+            } => {
+                let kind = if *end {
+                    NoteKind::Endnote
+                } else {
+                    NoteKind::Footnote
+                };
+                let id = placeholder(state.notes.len());
+                state.notes.push((kind, fresh::note(text)?.to_string()));
+                let style = builtin_style(&mut document.styles, note_styles(kind).1);
+                push(
+                    &mut out,
+                    &OBJ.to_string(),
+                    CharProps {
+                        style,
+                        ..CharProps::default()
+                    },
+                );
+                out.objects.push(InlineObject::NoteRef {
+                    kind,
+                    id,
+                    custom: String::new(),
+                });
+            }
+            Inline::Atom { .. } => {
+                return Err(RichError::Malformed(
+                    "an object that is neither kept nor a new image or note".into(),
+                ));
             }
         }
     }
@@ -360,6 +438,35 @@ fn section(
     Ok(known_section(&section, document).then(|| Box::new(section)))
 }
 
+/// La chiave dell'immagine nuova fra le immagini del documento: quella dei
+/// byte uguali, se ci sono già, altrimenti il nome dei byte.
+fn media_key(document: &mut Document, image: fresh::Image) -> String {
+    if let Some((key, _)) = document
+        .media
+        .iter()
+        .find(|(_, bytes)| bytes.as_slice() == image.bytes.as_slice())
+    {
+        return key.clone();
+    }
+    let name = image.name();
+    let mut key = name.clone();
+    let mut n = 1;
+    while document.media.contains_key(&key) {
+        n += 1;
+        key = name.replacen('.', &format!("_{n}."), 1);
+    }
+    document.media.insert(key.clone(), Arc::new(image.bytes));
+    key
+}
+
+/// Lo stile del testo e quello del riferimento di una nota.
+fn note_styles(kind: NoteKind) -> (&'static str, &'static str) {
+    match kind {
+        NoteKind::Footnote => ("FootnoteText", "FootnoteReference"),
+        NoteKind::Endnote => ("EndnoteText", "EndnoteReference"),
+    }
+}
+
 /// Le parti che il documento di partenza mostrava e la proiezione non mostra
 /// più: la shell ne ha tolto il riferimento, o un oggetto le ha riportate con
 /// un altro id, e una nota senza riferimento non si legge da nessuna parte.
@@ -371,6 +478,60 @@ fn prune(base: &Document, document: &mut Document) {
             document.parts.remove(&id);
         }
     }
+}
+
+/// Le storie delle note nuove, e il loro id al posto di quello provvisorio.
+/// Si aggiungono dopo aver tolto le note scomparse: una nota nuova salvata di
+/// nuovo riprende così l'id che aveva.
+fn add_notes(document: &mut Document, notes: Vec<(NoteKind, String)>) -> Result<(), RichError> {
+    let mut ids = Vec::with_capacity(notes.len());
+    for (kind, text) in notes {
+        let (style, reference) = note_styles(kind);
+        let part = match kind {
+            NoteKind::Footnote => PartKind::Footnote,
+            NoteKind::Endnote => PartKind::Endnote,
+        };
+        let id = document
+            .try_add_part(part, Vec::new())
+            .map_err(|error| RichError::Codec(error.to_string()))?;
+        let style = builtin_style(&mut document.styles, style);
+        let reference = builtin_style(&mut document.styles, reference);
+        let mut paragraph = Paragraph::new();
+        paragraph.props.style = style;
+        push(
+            &mut paragraph,
+            &OBJ.to_string(),
+            CharProps {
+                style: reference,
+                ..CharProps::default()
+            },
+        );
+        paragraph.objects.push(InlineObject::NoteRef {
+            kind,
+            id,
+            custom: String::new(),
+        });
+        push(&mut paragraph, &format!(" {text}"), CharProps::default());
+        paragraph.normalize();
+        if let Some(story) = document.parts.get_mut(&id) {
+            story.blocks = vec![Arc::new(WcBlock::Para(paragraph))];
+        }
+        ids.push(id);
+    }
+    if !ids.is_empty() {
+        let first = placeholder(ids.len() - 1);
+        document.objects_mut(
+            &|object| matches!(object, InlineObject::NoteRef { id, .. } if *id >= first),
+            &mut |object| {
+                if let InlineObject::NoteRef { id, .. } = object {
+                    if let Some(real) = ids.get((u32::MAX - *id) as usize) {
+                        *id = *real;
+                    }
+                }
+            },
+        );
+    }
+    Ok(())
 }
 
 fn push(paragraph: &mut Paragraph, text: &str, props: CharProps) {

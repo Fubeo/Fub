@@ -18,6 +18,8 @@ import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
 import type { RichStrip } from "./strip";
 import type { ReadOnlyReason } from "./projection";
+import type { DrawingImagePort } from "../canvas/surface";
+import { relativeRef } from "../../rules/mirrored";
 
 export const RICH_OWNER = "fub.shell.rich";
 export const RICH_FAMILY = "rich";
@@ -131,6 +133,9 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "markdown.table.column.delete": "Mod-Alt-Shift-Backspace",
 };
 
+/// L'immagine più pesante che un documento accoglie, come il codec.
+export const RICH_IMAGE_LIMIT = 16 * 1024 * 1024;
+
 const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {
   revisions: "rich.readonly.revisions",
   track_changes: "rich.readonly.track_changes",
@@ -144,6 +149,8 @@ export interface RichSurfaceCallbacks {
   readonly onChange: (paneId: string, change: EditorChange) => void;
   readonly onSelectionChange: (paneId: string) => void;
   readonly proof?: { readonly ports: ProofPorts; readonly notify?: (message: string) => void };
+  /// Le immagini del vault, per inserirne una nel documento.
+  readonly images?: DrawingImagePort;
   /// Per i test: il modulo del motore. Di solito è `import("./engine")`.
   readonly loadEngine?: () => Promise<typeof import("./engine")>;
 }
@@ -186,6 +193,20 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     root.dataset.readonly = String(!(engine?.editable() ?? false));
   }
 
+  /// L'immagine scelta nel vault, letta dal documento come un suo link.
+  function pickImage(): (() => Promise<Blob | "unreadable" | null>) | undefined {
+    const images = callbacks.images;
+    const pick = images?.pick;
+    if (!images || !pick) return undefined;
+    return async () => {
+      const doc = await pick(context.documentId);
+      if (doc === null) return null;
+      const ref = relativeRef(context.documentId, doc);
+      const blob = await images.read(ref.startsWith(".") ? ref : `./${ref}`, context.documentId, RICH_IMAGE_LIMIT);
+      return blob ?? "unreadable";
+    };
+  }
+
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
     ({ RichEngine, mountStrip }) => {
@@ -197,7 +218,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
       });
-      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null);
+      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null, { pickImage: pickImage() });
       root.insertBefore(strip.element, page);
       stopEngine = engine.subscribe(() => {
         showNotice();

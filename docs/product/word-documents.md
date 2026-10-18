@@ -45,7 +45,13 @@ Si modificano:
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
   di prima, nelle proporzioni delle colonne. Dalla striscia le celle che la
   selezione tocca in una riga si uniscono (i loro paragrafi, tranne i vuoti,
-  vanno nella prima) e una cella unita si divide.
+  vanno nella prima) e una cella unita si divide;
+- le immagini e le note nuove, dal gruppo **Inserisci** della striscia:
+  **Immagine** sceglie un PNG, un JPEG o un GIF del vault (fino a 16 MB) e lo
+  mette al cursore, nel testo, alla sua misura (un pixel CSS è tre quarti di
+  punto) ridotta se serve alla colonna di una pagina Letter; **Nota** chiede il
+  testo, una riga, e se va a piè di pagina o in chiusura, e la scrive con gli
+  stili delle note di Word.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
@@ -62,7 +68,11 @@ ciò che si voleva scrivere non scrive, e il testo resta nel buffer.
 
 Limiti attuali:
 
-- le immagini non si disegnano, e un oggetto non si modifica dalla superficie;
+- le immagini del file non si disegnano: si vede soltanto un'immagine appena
+  inserita, finché il documento resta aperto; un oggetto non si modifica dalla
+  superficie, e il testo di una nota esistente non si cambia;
+- una nota nuova è testo semplice su una riga, senza formattazione; copiata e
+  incollata, è una seconda nota con lo stesso testo;
 - l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
   striscia si sceglie soltanto un multiplo; rientri, spazi e interlinea che
   vengono dallo stile non si disegnano (il foglio usa quelli del tema), e un
@@ -104,7 +114,9 @@ superficie non saprebbe riscriverlo identico, per esempio con due elenchi uguali
 uno dopo l'altro. Uno che il codec non sa rappresentare (voci d'elenco vuote,
 righe ripetute, commenti XML dentro un paragrafo) si legge con l'importatore di
 WordCraft, come un `.rtf`. Una nota, un segnalibro o un commento non si
-incollano due volte: il salvataggio lo rifiuta.
+incollano due volte: il salvataggio lo rifiuta. Un'immagine nuova entra in
+`Pictures/` col nome dei suoi byte (`fub-….png`) e nel manifesto, e una nota
+nuova prende lo stile `Footnote` o `Endnote` del documento, se c'è.
 
 ## RTF e Word 97-2003
 

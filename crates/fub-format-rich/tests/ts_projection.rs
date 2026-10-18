@@ -19,11 +19,11 @@ use std::path::PathBuf;
 
 use common::{bytes, sample, text};
 use fub_format_rich::projection::{
-    Align, Block, Inline, Layout, Line, Look, Mark, Projection, Role,
+    Align, AtomKind, Block, Inline, Layout, Line, Look, Mark, Projection, Role,
 };
 use fub_format_rich::{open, save, Codec, Saved};
 use serde_json::{json, Value};
-use wordcraft_doc::{para_block, CharProps, Document, SectionProps};
+use wordcraft_doc::{para_block, CharProps, Document, PartKind, SectionProps};
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -216,6 +216,43 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
     assert_eq!(href("Prima").as_deref(), Some("https://fub.app/prima"));
     // Il paragrafo del salto ha lo stile Sottotitolo.
     assert_eq!(para_of(&p, "dopo il salto").s.as_deref(), Some("Subtitle"));
+    // In fondo al paragrafo del salto: l'immagine e le due note della shell,
+    // ora tenute come ogni altro oggetto.
+    let shell: Vec<(AtomKind, bool)> = para_of(&p, "dopo il salto")
+        .c
+        .iter()
+        .filter_map(|i| match i {
+            Inline::Atom { kind, k, .. } => Some((*kind, k.is_some())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        shell,
+        [
+            (AtomKind::Image, true),
+            (AtomKind::Note, true),
+            (AtomKind::Note, true)
+        ]
+    );
+    let document = wordcraft_docx::read(&out).unwrap();
+    let story = |kind: PartKind| {
+        document
+            .parts
+            .values()
+            .filter(|part| part.kind == kind)
+            .map(|part| part.blocks[0].as_para().unwrap().plain_text())
+            .collect::<Vec<_>>()
+    };
+    assert!(story(PartKind::Footnote)
+        .iter()
+        .any(|t| t.ends_with(" Una nota della shell.")));
+    assert!(story(PartKind::Endnote)
+        .iter()
+        .any(|t| t.ends_with(" In chiusura.")));
+    assert!(document
+        .media
+        .values()
+        .any(|bytes| bytes.as_slice() == common::PNG));
     // Il paragrafo della sezione: centrato, rientrato, interlinea e spazio.
     let section = para_of(&p, "Fine della prima sezione");
     assert_eq!(section.align, Some(Align::Center));

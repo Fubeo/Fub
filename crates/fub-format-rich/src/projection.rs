@@ -251,17 +251,31 @@ pub enum Inline {
         f: Look,
     },
     Atom {
-        /// Le proprietà del carattere e l'oggetto, opachi.
-        k: String,
+        /// Le proprietà del carattere e l'oggetto, opachi. Assenti in un
+        /// oggetto nuovo: un'immagine con i suoi byte (`data`) o una nota con
+        /// il suo testo (`note`), che il formato scrive alla sua maniera.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        k: Option<String>,
         kind: AtomKind,
-        /// Suggerimento: ciò che l'oggetto mostra o descrive.
+        /// Suggerimento: ciò che l'oggetto mostra o descrive. In un'immagine
+        /// nuova è il testo alternativo.
         #[serde(default, skip_serializing_if = "String::is_empty")]
         label: String,
-        /// Suggerimento: dimensioni in punti, per ciò che occupa spazio.
+        /// Suggerimento: dimensioni in punti, per ciò che occupa spazio. In
+        /// un'immagine nuova sono la sua misura.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         w: Option<f32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         h: Option<f32>,
+        /// I byte di un'immagine nuova (PNG, JPEG o GIF), in base64.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        data: Option<String>,
+        /// Il testo di una nota nuova.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+        /// Una nota nuova di chiusura, invece che a piè di pagina.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        end: bool,
     },
 }
 
@@ -620,15 +634,18 @@ fn atom(
         _ => (AtomKind::Opaque, object.plain_text().to_string(), None),
     };
     Ok(Inline::Atom {
-        k: blob::encode(&AtomKeep {
+        k: Some(blob::encode(&AtomKeep {
             props: props.clone(),
             object: object.clone(),
             parts: stories::of_object(document, object),
-        })?,
+        })?),
         kind,
         label,
         w: size.map(|(w, _)| w),
         h: size.map(|(_, h)| h),
+        data: None,
+        note: None,
+        end: false,
     })
 }
 
