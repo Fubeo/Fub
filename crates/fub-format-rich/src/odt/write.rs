@@ -1575,6 +1575,7 @@ impl<'a> Writer<'a> {
                         data: None,
                         note: None,
                         end: false,
+                        toc: None,
                         comment: None,
                         ins: None,
                         del: None,
@@ -1837,6 +1838,7 @@ impl<'a> Writer<'a> {
                 data: Some(data),
                 note: None,
                 end: false,
+                toc: None,
                 label,
                 w,
                 h,
@@ -1874,6 +1876,7 @@ impl<'a> Writer<'a> {
                 data: None,
                 note: Some(text),
                 end,
+                toc: None,
                 ..
             } => {
                 let text = fresh::note(text)?;

@@ -43,6 +43,7 @@ import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComme
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, PAGE_FIELDS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
+import { insertToc } from "./toc";
 import {
   columns,
   FIELD_CODES,
@@ -397,7 +398,9 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   const runningButton = button(() => t("rich.hf"), null, (anchor) => openRunning(anchor));
   runningButton.append(icon(["M6 3h12v18H6z", "M9 6h6", "M9 18h6", "M6 9h12", "M6 15h12"]));
   runningButton.setAttribute("aria-haspopup", "dialog");
-  layout.append(pageButton, runningButton);
+  const tocButton = button(() => t("rich.toc"), null, () => engine.apply(insertToc(t("rich.toc.title"))));
+  tocButton.append(icon(["M4 6h2", "M9 6h11", "M6 11h2", "M11 11h9", "M6 16h2", "M11 16h9"]));
+  layout.append(pageButton, runningButton, tocButton);
 
   // ── Revisione ─────────────────────────────────────────────────────────
   const review = group();
@@ -1507,7 +1510,8 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     track.hidden = !media.review && !engine.tracking();
     setPressed(track, engine.tracking());
     layout.hidden = engine.read(pageAt) === null;
-    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing, pageButton, runningButton]) control.disabled = !free;
+    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing, pageButton, runningButton, tocButton]) control.disabled = !free;
+    if (free) tocButton.disabled = !engine.read(insertToc(""));
     if (!free) table.disabled = true;
     const tracked = engine.read(goToRevision(1));
     for (const control of revisionButtons) {

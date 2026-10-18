@@ -1345,6 +1345,7 @@ fn new_atom(kind: AtomKind, data: Option<&[u8]>, note: Option<&str>, end: bool) 
         data: data.map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
         note: note.map(str::to_string),
         end,
+        toc: None,
         comment: None,
     }
 }
@@ -1442,6 +1443,14 @@ fn un_oggetto_nuovo_che_odf_non_sa_scrivere_è_rifiutato() {
         new_atom(AtomKind::Image, Some(b"<svg/>"), None, false),
         new_atom(AtomKind::Note, None, Some("due\nrighe"), false),
         new_atom(AtomKind::Field, Some(common::PNG), None, false),
+        // Un sommario: ODF lo scrive con le sue voci, che qui non ci sono.
+        {
+            let mut atom = new_atom(AtomKind::Field, None, None, false);
+            if let Inline::Atom { toc, .. } = &mut atom {
+                *toc = Some(3);
+            }
+            atom
+        },
     ] {
         let mut projection = projection(&bytes);
         para_mut(&mut projection, 2).c.push(atom);

@@ -618,6 +618,7 @@ fn new_image(bytes: &[u8], alt: &str) -> Inline {
         data: Some(base64::engine::general_purpose::STANDARD.encode(bytes)),
         note: None,
         end: false,
+        toc: None,
         comment: None,
     }
 }
@@ -635,6 +636,7 @@ fn new_note(text: &str, end: bool) -> Inline {
         data: None,
         note: Some(text.into()),
         end,
+        toc: None,
         comment: None,
     }
 }
@@ -738,6 +740,7 @@ fn un_oggetto_nuovo_che_non_si_sa_scrivere_è_rifiutato() {
         data,
         note: None,
         end: false,
+        toc: None,
         comment: None,
     });
 }
@@ -1458,6 +1461,7 @@ fn new_anchor(id: u32, end: bool) -> Inline {
         data: None,
         note: None,
         end: false,
+        toc: None,
         comment: Some(fub_format_rich::projection::Anchor { id, end }),
     }
 }
@@ -1948,4 +1952,50 @@ fn un_intestazione_che_le_righe_non_dicono_resta_com_è() {
             Err(RichError::Malformed(_))
         ));
     }
+}
+
+#[test]
+fn un_sommario_nuovo_si_scrive_da_rifare_in_word() {
+    let file = bytes(&sample());
+    let p = projection(&file);
+    let block = |json: &str| serde_json::from_str::<Block>(json).unwrap();
+    let mut changed = p.clone();
+    changed.blocks.splice(
+        0..0,
+        [
+            block(
+                r#"{"t":"para","role":{"kind":"body"},"s":"TOCHeading","c":[{"t":"text","x":"Sommario"},{"t":"atom","kind":"field","toc":3}]}"#,
+            ),
+            block(r#"{"t":"para","role":{"kind":"body"},"s":"TOC1","c":[{"t":"text","x":"Il titolo"}]}"#),
+            block(r#"{"t":"para","role":{"kind":"body"},"s":"TOC2","c":[{"t":"text","x":"Un paragrafo"}]}"#),
+        ],
+    );
+    let out = saved(&file, &changed);
+    let reread = read(&out);
+    let head = paragraph(&reread, 0);
+    assert_eq!(head.props.style.as_deref(), Some("TOCHeading"));
+    assert!(matches!(
+        head.objects.last(),
+        Some(InlineObject::Field { instr, dirty: true, .. }) if instr == "TOC \\o \"1-3\" \\h \\z \\u"
+    ));
+    // Le voci hanno gli stili di Word, che il documento ora ha.
+    assert_eq!(paragraph(&reread, 1).props.style.as_deref(), Some("TOC1"));
+    assert_eq!(paragraph(&reread, 2).props.style.as_deref(), Some("TOC2"));
+    assert!(reread.styles.get("TOC3").is_some());
+    // Riletto, il sommario è un campo come gli altri, e non si riscrive.
+    let again = projection(&out);
+    assert_eq!(
+        save(Codec::Docx, &out, &again.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    );
+    // Un sommario senza livelli non c'è.
+    let mut bad = p.clone();
+    bad.blocks.insert(
+        0,
+        block(r#"{"t":"para","role":{"kind":"body"},"c":[{"t":"atom","kind":"field","toc":0}]}"#),
+    );
+    assert!(matches!(
+        save(Codec::Docx, &file, &bad.to_json().unwrap()),
+        Err(RichError::Malformed(_))
+    ));
 }

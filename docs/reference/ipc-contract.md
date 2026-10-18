@@ -309,6 +309,11 @@ sezione prima. Uno `locked` non si cambia; una riga che va a capo, un elenco
 di righe vuoto o un `locked` cambiato sono una proiezione malformata. Il
 codec ODT li rifiuta.
 
+Un oggetto nuovo (`"t": "atom"` senza `k`) di specie `field` con `"toc": N`,
+dopo `end`, è un sommario dei titoli fino al livello N (1–9): il codec Word
+lo scrive come campo `TOC` da ricalcolare all'apertura, e rifiuta un `toc`
+fuori da 1–9 o su un'altra specie; il codec ODT lo rifiuta.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo

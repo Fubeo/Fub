@@ -386,6 +386,25 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         .media
         .values()
         .any(|bytes| bytes.as_slice() == common::PNG));
+    // Il sommario: il suo titolo finisce con il campo da rifare, e le voci
+    // hanno gli stili di Word.
+    let styled = |style: &str| {
+        document
+            .body
+            .iter()
+            .filter_map(|block| block.as_para())
+            .filter(|para| para.props.style.as_deref() == Some(style))
+            .collect::<Vec<_>>()
+    };
+    let [head] = styled("TOCHeading")[..] else {
+        panic!("il sommario non c'è");
+    };
+    assert!(matches!(
+        head.objects.last(),
+        Some(InlineObject::Field { instr, dirty: true, .. }) if instr.starts_with("TOC \\o \"1-3\"")
+    ));
+    assert_eq!(styled("TOC1").len(), 1);
+    assert!(!styled("TOC2").is_empty());
     // Il paragrafo della sezione: centrato, rientrato, interlinea e spazio.
     let section = para_of(&p, "Fine della prima sezione");
     assert_eq!(section.align, Some(Align::Center));

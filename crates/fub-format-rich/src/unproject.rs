@@ -53,6 +53,7 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         projection.footer.as_ref(),
     )?;
     document.last_section = last;
+    toc_styles(&projection.blocks, &mut document.styles);
     let mut state = State {
         stories: HashSet::new(),
         last_list: [None, None],
@@ -409,6 +410,7 @@ fn paragraph(
                 data: Some(data),
                 note: None,
                 end: false,
+                toc: None,
                 comment: None,
                 label,
                 w,
@@ -437,6 +439,7 @@ fn paragraph(
                 data: None,
                 note: Some(text),
                 end,
+                toc: None,
                 ins,
                 del,
                 ..
@@ -461,9 +464,37 @@ fn paragraph(
                     custom: String::new(),
                 });
             }
+            Inline::Atom {
+                k: None,
+                kind: AtomKind::Field,
+                data: None,
+                note: None,
+                toc: Some(levels),
+                ins,
+                del,
+                ..
+            } => {
+                if !(1..=9).contains(levels) {
+                    return Err(RichError::Malformed(
+                        "a table of contents of no levels".into(),
+                    ));
+                }
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                // Senza pagine calcolate: Word lo rifà aprendo il file.
+                out.objects.push(InlineObject::Field {
+                    instr: format!("TOC \\o \"1-{levels}\" \\h \\z \\u"),
+                    result: String::new(),
+                    locked: false,
+                    dirty: true,
+                    code: false,
+                    form: String::new(),
+                });
+            }
             Inline::Atom { .. } => {
                 return Err(RichError::Malformed(
-                    "an object that is neither kept nor a new image or note".into(),
+                    "an object that is neither kept nor a new image, note or table of contents"
+                        .into(),
                 ));
             }
         }
@@ -547,6 +578,35 @@ fn note_styles(kind: NoteKind) -> (&'static str, &'static str) {
 /// più: la shell ne ha tolto il riferimento, o un oggetto le ha riportate con
 /// un altro id, e una nota senza riferimento non si legge da nessuna parte.
 /// Quelle che nessuno mostrava restano com'erano.
+/// Gli stili di Word del sommario, se la proiezione ne mette uno nuovo: il
+/// suo titolo e le sue voci li nominano prima che il sommario si incontri.
+fn toc_styles(blocks: &[Block], styles: &mut StyleSheet) {
+    for block in blocks {
+        match block {
+            Block::Para(para) => {
+                for inline in &para.c {
+                    if let Inline::Atom {
+                        k: None,
+                        toc: Some(levels),
+                        ..
+                    } = inline
+                    {
+                        builtin_style(styles, "TOCHeading");
+                        for level in 1..=(*levels).min(9) {
+                            builtin_style(styles, &format!("TOC{level}"));
+                        }
+                    }
+                }
+            }
+            Block::Table(table) => {
+                for cell in table.rows.iter().flat_map(|row| &row.cells) {
+                    toc_styles(&cell.blocks, styles);
+                }
+            }
+        }
+    }
+}
+
 /// Le intestazioni e i piè di pagina rimessi da una sezione e poi sostituiti
 /// da quelli nuovi: nessuno li mostra, e non erano del documento.
 fn drop_lost_stories(base: &Document, document: &mut Document) {

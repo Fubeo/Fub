@@ -328,8 +328,8 @@ const nodes: Record<string, NodeSpec> = {
     inline: true,
     atom: true,
     // Senza `k` l'oggetto è nuovo: `data` sono i byte di un'immagine, `note`
-    // il testo di una nota (di chiusura se `end`), `comment` il segno di un
-    // commento.
+    // il testo di una nota (di chiusura se `end`), `toc` i livelli di un
+    // sommario, `comment` il segno di un commento.
     attrs: {
       k: { default: null },
       kind: {},
@@ -339,6 +339,7 @@ const nodes: Record<string, NodeSpec> = {
       data: { default: null },
       note: { default: null },
       end: { default: false },
+      toc: { default: null },
       comment: { default: null },
     },
     selectable: true,
@@ -363,6 +364,7 @@ const nodes: Record<string, NodeSpec> = {
             data: src.startsWith("data:image/") && comma > 0 ? src.slice(comma + 8) : null,
             note: el.getAttribute("data-note"),
             end: el.hasAttribute("data-end"),
+            toc: number("data-toc"),
             comment: el.hasAttribute("data-comment")
               ? { id: Number(el.getAttribute("data-comment")), ...(el.hasAttribute("data-comment-end") ? { end: true } : {}) }
               : null,
@@ -382,6 +384,7 @@ const nodes: Record<string, NodeSpec> = {
       const note = node.attrs.note as string | null;
       if (note !== null) attrs["data-note"] = note;
       if (node.attrs.end) attrs["data-end"] = "";
+      if (node.attrs.toc !== null) attrs["data-toc"] = String(node.attrs.toc);
       const comment = node.attrs.comment as Anchor | null;
       if (comment) {
         attrs["data-comment"] = String(comment.id);
@@ -576,6 +579,7 @@ function inlineNodes(c: readonly Inline[]): PmNode[] {
           data: inline.data ?? null,
           note: inline.note ?? null,
           end: inline.end === true,
+          toc: inline.toc ?? null,
           comment: inline.comment ?? null,
         }, null, revisionMarks(inline)),
       );
@@ -753,6 +757,7 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
         ...(data !== null ? { data } : {}),
         ...(note !== null ? { note } : {}),
         ...(child.attrs.end ? { end: true } : {}),
+        ...(child.attrs.toc !== null ? { toc: child.attrs.toc as number } : {}),
         ...(comment ? { comment } : {}),
         ...trackedOf(child.marks),
       });

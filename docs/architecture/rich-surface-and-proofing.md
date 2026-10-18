@@ -41,8 +41,10 @@ l'IPC.
   id nuovo (`fub-format-rich/src/stories.rs`); le parti che il documento
   mostrava e non mostra più si tolgono. Un oggetto senza `k` è nuovo:
   un'immagine con i suoi byte in base64 (`data`, PNG, JPEG o GIF) e la sua
-  misura in punti (`w`, `h`), o una nota con il suo testo (`note`), di
-  chiusura se `end`; il formato lo scrive alla sua maniera e lo rilegge con
+  misura in punti (`w`, `h`), una nota con il suo testo (`note`), di
+  chiusura se `end`, o un campo sommario dei titoli fino al livello `toc`
+  (1–9), che il codec Word scrive da ricalcolare all'apertura e il codec ODT
+  rifiuta; il formato lo scrive alla sua maniera e lo rilegge con
   un `k`. Finché la shell tiene il proprio buffer l'oggetto resta nuovo e ogni
   salvataggio lo riscrive: l'immagine prende il nome dei suoi byte, e una
   nota uguale si riconosce a meno del numero della parte.
@@ -138,6 +140,11 @@ l'IPC.
   `Footer`. Nello schema sono attributi del nodo `section` e del documento;
   `page.ts` li scrive come testo con i codici `{PAGE}` e `{NUMPAGES}`
   (`runningText`, `runningOf`, `setRunning`).
+- `editors/rich/toc.ts` (`insertToc`) mette prima del blocco del cursore, o
+  al posto del sommario che c'è, un paragrafo `TOCHeading` che finisce con il
+  campo `toc` e una voce `TOC1`…`TOC3` per titolo, come li scrive Word; il
+  codec aggiunge al documento gli stili che mancano. Un sommario scritto da
+  Word senza il campo nel suo titolo non si riconosce e resta.
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

@@ -113,7 +113,11 @@ Dal gruppo **Revisione** della striscia:
   prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
   mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
   pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
-  legge ma si modifica in Word. Mentre si registra non si cambiano.
+  legge ma si modifica in Word. Mentre si registra non si cambiano;
+- **Sommario** in un `.docx` mette prima del paragrafo del cursore il
+  sommario dei titoli fino al terzo livello, o rifà quello già messo da Fub
+  con i titoli di adesso. I numeri di pagina li calcola Word aprendo il file.
+  Senza titoli il bottone è spento; mentre si registra non si usa.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, il resto delle sezioni,

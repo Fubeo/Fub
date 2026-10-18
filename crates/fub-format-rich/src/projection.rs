@@ -479,8 +479,9 @@ pub enum Inline {
     },
     Atom {
         /// Le proprietà del carattere e l'oggetto, opachi. Assenti in un
-        /// oggetto nuovo: un'immagine con i suoi byte (`data`) o una nota con
-        /// il suo testo (`note`), che il formato scrive alla sua maniera.
+        /// oggetto nuovo: un'immagine con i suoi byte (`data`), una nota con
+        /// il suo testo (`note`) o un sommario (`toc`), che il formato scrive
+        /// alla sua maniera.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         k: Option<String>,
         kind: AtomKind,
@@ -503,6 +504,11 @@ pub enum Inline {
         /// Una nota nuova di chiusura, invece che a piè di pagina.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         end: bool,
+        /// Un sommario nuovo (`field`) dei titoli fino a quel livello, da 1 a
+        /// 9: sta in fondo al paragrafo del titolo del sommario, prima delle
+        /// sue voci, e Word ne rifà voci e pagine aprendo il file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        toc: Option<u8>,
         /// Il segno di un commento: in un oggetto nuovo (`marker`) è tutto
         /// ciò che lo descrive, in uno che c'è già è un suggerimento.
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -959,6 +965,7 @@ fn atom(
         data: None,
         note: None,
         end: false,
+        toc: None,
         comment: match object {
             InlineObject::CommentStart { id } => Some(Anchor {
                 id: *id,

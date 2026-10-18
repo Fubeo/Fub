@@ -148,6 +148,8 @@ export interface AtomInline extends Tracked {
   readonly data?: string;
   readonly note?: string;
   readonly end?: boolean;
+  /// Un sommario nuovo (`field`) dei titoli fino a quel livello.
+  readonly toc?: number;
   readonly comment?: Anchor;
 }
 
@@ -477,7 +479,7 @@ function readInline(value: unknown, where: string): Inline {
     };
   }
   if (inline.t === "atom") {
-    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "comment", "ins", "del"], where);
+    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "toc", "comment", "ins", "del"], where);
     if (!(ATOM_KINDS as readonly unknown[]).includes(inline.kind)) {
       throw new ProjectionError(`${where}: oggetto sconosciuto`);
     }
@@ -488,16 +490,20 @@ function readInline(value: unknown, where: string): Inline {
     const data = optionalText(inline.data, `${where}.data`);
     const note = optionalText(inline.note, `${where}.note`);
     const comment = readAnchor(inline.comment, `${where}.comment`);
+    const toc = optionalNumber(inline.toc, `${where}.toc`);
+    if (toc !== undefined && (!Number.isInteger(toc) || toc < 1 || toc > 9)) throw new ProjectionError(`${where}.toc: livelli non validi`);
     if (inline.end !== undefined && typeof inline.end !== "boolean") {
       throw new ProjectionError(`${where}.end: atteso un sì o un no`);
     }
-    // Un oggetto o si tiene (`k`) o è nuovo: un'immagine, una nota o il segno
-    // di un commento.
-    const fresh = comment !== undefined
-      ? inline.kind === "marker" && data === undefined && note === undefined && inline.end !== true
-      : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
-        || (inline.kind === "note" && note !== undefined && data === undefined);
-    if (k !== undefined ? data !== undefined || note !== undefined || inline.end === true : !fresh) {
+    // Un oggetto o si tiene (`k`) o è nuovo: un'immagine, una nota, un
+    // sommario o il segno di un commento.
+    const fresh = toc !== undefined
+      ? inline.kind === "field" && comment === undefined && data === undefined && note === undefined && inline.end !== true
+      : comment !== undefined
+        ? inline.kind === "marker" && data === undefined && note === undefined && inline.end !== true
+        : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
+          || (inline.kind === "note" && note !== undefined && data === undefined);
+    if (k !== undefined ? data !== undefined || note !== undefined || inline.end === true || toc !== undefined : !fresh) {
       throw new ProjectionError(`${where}: oggetto né tenuto né nuovo`);
     }
     return {
@@ -510,6 +516,7 @@ function readInline(value: unknown, where: string): Inline {
       ...(data !== undefined ? { data } : {}),
       ...(note !== undefined ? { note } : {}),
       ...(inline.end === true ? { end: true } : {}),
+      ...(toc !== undefined ? { toc } : {}),
       ...(comment ? { comment } : {}),
       ...readTracked(inline, where),
     };
@@ -750,6 +757,7 @@ function writeInline(inline: Inline): string {
   if (inline.data !== undefined) out += `,"data":${JSON.stringify(inline.data)}`;
   if (inline.note !== undefined) out += `,"note":${JSON.stringify(inline.note)}`;
   if (inline.end) out += `,"end":true`;
+  if (inline.toc !== undefined) out += `,"toc":${inline.toc}`;
   if (inline.comment) out += `,"comment":${writeAnchor(inline.comment)}`;
   return out + writeTracked(inline) + "}";
 }

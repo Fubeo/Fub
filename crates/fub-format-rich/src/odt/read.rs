@@ -811,6 +811,7 @@ impl<'a> Inlines<'_, 'a> {
             data: None,
             note: None,
             end: false,
+            toc: None,
             comment: None,
             ins: None,
             del: None,
