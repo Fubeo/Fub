@@ -198,3 +198,5 @@ fub-sdk = { workspace = true }
 # Gli `.odt` dei test dei documenti di videoscrittura, scritti dall'esportatore
 # di WordCraft: l'host non lo usa.
 wordcraft-formats = { workspace = true }
+# Per cambiare una parte di quei pacchetti.
+zip = { workspace = true }

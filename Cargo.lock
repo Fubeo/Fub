@@ -1983,6 +1983,7 @@ dependencies = [
  "ureq",
  "uuid",
  "wordcraft-formats",
+ "zip",
 ]
 
 [[package]]

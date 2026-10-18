@@ -326,7 +326,7 @@ fn denied(result: Result<Revision, PluginError>) -> String {
 }
 
 #[test]
-fn un_odt_si_legge_e_si_cerca_ma_non_si_scrive() {
+fn un_odt_si_legge_si_cerca_e_si_scrive() {
     let vault = Vault::with_docx(&["Word."]);
     let verbale = DocId::new("Verbale.odt");
     let bytes = odt();
@@ -339,10 +339,54 @@ fn un_odt_si_legge_e_si_cerca_ma_non_si_scrive() {
     assert_eq!(format.unwrap().descriptor.id, "odt");
     assert_eq!(revision, Revision::of_bytes(&bytes));
     let mut projection = Projection::from_json(&text).unwrap();
-    assert_eq!(projection.readonly, Some(fub_format_rich::ReadOnly::Import));
+    assert_eq!(projection.readonly, None);
     assert_eq!(texts(&projection), ["Verbale", "Presenti tutti."]);
     let model = format!("{:?}", vault.host.read_model(None, &verbale).unwrap().body);
     assert!(model.contains("Presenti tutti."), "{model}");
+
+    projection.blocks.push(paragraph("Aggiunto."));
+    let written = vault
+        .host
+        .write_document(
+            None,
+            &verbale,
+            &projection.to_json().unwrap(),
+            WriteBase::DescendsFrom(revision),
+        )
+        .unwrap();
+    let on_disk = std::fs::read(vault.root.join("Verbale.odt")).unwrap();
+    assert_eq!(written, Revision::of_bytes(&on_disk));
+    let (text, _, _) = vault
+        .host
+        .read_document_with_format(None, &verbale)
+        .unwrap();
+    assert_eq!(
+        texts(&Projection::from_json(&text).unwrap()),
+        ["Verbale", "Presenti tutti.", "Aggiunto."]
+    );
+}
+
+#[test]
+fn un_odt_che_il_codec_non_rappresenta_non_si_scrive() {
+    let vault = Vault::with_docx(&["Word."]);
+    // Una voce d'elenco vuota: il codec di Fub non la rappresenta e il file si
+    // apre con l'importatore di WordCraft.
+    let verbale = DocId::new("Verbale.odt");
+    let content = String::from_utf8(part(&odt(), "content.xml"))
+        .unwrap()
+        .replacen(
+            "<office:text>",
+            "<office:text><text:list><text:list-item/></text:list>",
+            1,
+        );
+    let bytes = with_part(&odt(), "content.xml", content.as_bytes());
+    std::fs::write(vault.root.join("Verbale.odt"), &bytes).unwrap();
+    let (text, revision, _) = vault
+        .host
+        .read_document_with_format(None, &verbale)
+        .unwrap();
+    let mut projection = Projection::from_json(&text).unwrap();
+    assert_eq!(projection.readonly, Some(fub_format_rich::ReadOnly::Import));
 
     // Senza il campo `readonly` è il file stesso a rifiutare la scrittura.
     projection.readonly = None;
@@ -360,22 +404,66 @@ fn un_odt_si_legge_e_si_cerca_ma_non_si_scrive() {
     );
 }
 
-#[test]
-fn un_odt_nuovo_non_si_crea_e_lo_dice() {
-    let vault = Vault::with_docx(&["Word."]);
-    let projection = vault
-        .host
-        .read_document_with_format(None, &lettera())
+fn part(bytes: &[u8], name: &str) -> Vec<u8> {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut out = Vec::new();
+    archive
+        .by_name(name)
         .unwrap()
-        .0;
-    let result = vault.host.write_document(
-        None,
-        &DocId::new("Nuovo.odt"),
-        &projection,
-        WriteBase::Dictated,
+        .read_to_end(&mut out)
+        .unwrap();
+    out
+}
+
+/// Il pacchetto `bytes` con questa parte al posto della sua.
+fn with_part(bytes: &[u8], name: &str, data: &[u8]) -> Vec<u8> {
+    use std::io::{Read, Write};
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut writer = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for index in 0..archive.len() {
+        let mut file = archive.by_index(index).unwrap();
+        let entry = file.name().unwrap().to_string();
+        let mut old = Vec::new();
+        file.read_to_end(&mut old).unwrap();
+        let options =
+            zip::write::SimpleFileOptions::default().compression_method(file.compression());
+        writer.start_file(entry.as_str(), options).unwrap();
+        writer
+            .write_all(if entry == name { data } else { &old })
+            .unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
+#[test]
+fn un_odt_nuovo_nasce_dalla_sua_proiezione() {
+    let vault = Vault::with_docx(&["Word."]);
+    let mut projection = Projection::from_json(
+        &vault
+            .host
+            .read_document_with_format(None, &lettera())
+            .unwrap()
+            .0,
+    )
+    .unwrap();
+    projection.blocks = vec![paragraph("Appena nato.")];
+    vault
+        .host
+        .write_document(
+            None,
+            &DocId::new("Nuovo.odt"),
+            &projection.to_json().unwrap(),
+            WriteBase::Dictated,
+        )
+        .unwrap();
+    let bytes = std::fs::read(vault.root.join("Nuovo.odt")).unwrap();
+    let opened = fub_format_rich::open(Codec::Odt, &bytes).unwrap();
+    assert_eq!(opened.readonly, None);
+    assert_eq!(
+        texts(&Projection::from_json(&opened.projection).unwrap()),
+        ["Appena nato."]
     );
-    assert_eq!(denied(result), "host.rich.no_writer");
-    assert!(!vault.root.join("Nuovo.odt").exists());
 }
 
 #[test]
