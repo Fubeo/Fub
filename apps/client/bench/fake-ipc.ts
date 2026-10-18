@@ -54,6 +54,13 @@ import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture"
 import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
 import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
+// Solo nella copia d'anteprima: i disegni di prova nel vault, e la feature
+// `draw` che li apre come disegni.
+import { DISEGNI } from "../anteprima/disegni";
+import { CARATTERI, rispostaCaratteri } from "../anteprima/caratteri";
+import { FIDELITY } from "./fidelity-corpus";
+import { CUSTOM_DEFAULT } from "../src/editors/spatial/tools/registry";
+import { drawingCreateSpec } from "../src/host/fake";
 import {
   generateGraphFixture as graphFixture,
   type GraphFixture,
@@ -594,6 +601,82 @@ const SETTINGS: SettingEntry[] = [
     value: "warn",
     source: "default",
   },
+  // Solo nella copia d'anteprima: il livello dell'editor dei disegni e le
+  // parti del Personalizzato, come le dichiara il bundle `fub.draw`.
+  {
+    spec: {
+      key: "draw.level",
+      label: "Livello d'interfaccia",
+      description: "Quanti strumenti offre l'editor dei disegni. Il disegno resta lo stesso a ogni livello.",
+      group: "Disegni",
+      scope: "vault",
+      kind: {
+        kind: "choice",
+        default: "essential",
+        options: [
+          { value: "essential", label: "Essenziale" },
+          { value: "standard", label: "Standard" },
+          { value: "expert", label: "Esperto" },
+          { value: "custom", label: "Personalizzato" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "essential",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "draw.custom",
+      label: "Parti del Personalizzato",
+      description: "Le parti dell'editor che il livello Personalizzato offre.",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "list", default: [...CUSTOM_DEFAULT] },
+      program_writable: false,
+    },
+    value: [...CUSTOM_DEFAULT],
+    source: "default",
+  },
+  {
+    spec: {
+      key: "draw.templates",
+      label: "Cartella dei modelli",
+      description: "La cartella del vault con i disegni che «Nuovo disegno» offre come modelli, sotto «Dal vault». Se non c'è, il vault non ha modelli suoi: quelli di Fub restano.",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "text", default: "Templates" },
+      program_writable: true,
+    },
+    value: "Templates",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "draw.symbols",
+      label: "Cartella delle librerie di simboli",
+      description: "La cartella del vault con i disegni i cui simboli il pannello «Simboli» offre. Se non c'è, il pannello mostra soltanto i simboli del disegno.",
+      group: "Disegni",
+      scope: "vault",
+      kind: { kind: "text", default: "Symbols" },
+      program_writable: true,
+    },
+    value: "Symbols",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "draw.suggestions",
+      label: "Suggerimenti brevi",
+      description: "Mostra nell'editor dei disegni brevi suggerimenti su ciò che si può fare in quel momento. Si spengono anche dalla casella «Non mostrare più suggerimenti» che accompagna ognuno, e valgono per questa macchina.",
+      group: "Disegni",
+      scope: "machine",
+      kind: { kind: "toggle", default: true },
+      program_writable: false,
+    },
+    value: true,
+    source: "default",
+  },
 ];
 
 /// Il livello dell'editor dei disegni come lo dichiara il bundle `fub.draw`,
@@ -989,15 +1072,33 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: DRAWING === null ? CORPUS : { ...CORPUS, [DRAWING.doc]: DRAWING.text },
-  resources: RESOURCES,
+  file: {
+    ...CORPUS,
+    ...DISEGNI,
+    ...Object.fromEntries(FIDELITY.map((scene) => [`Disegni/Prove di fedeltà/${scene.id}.svg`, scene.text])),
+    ...(DRAWING === null ? {} : { [DRAWING.doc]: DRAWING.text }),
+  },
+  // Anteprima: Liberation Serif fra i caratteri del vault, e l'indice
+  // `fub.draw` che ne descrive le facce.
+  resources: { ...RESOURCES, ...CARATTERI },
+  customQueries: { "fub.draw": rispostaCaratteri },
   root: ROOT,
   view: VIEWS,
-  commands: BENCH_COMMANDS,
+  // Anteprima: `export.run` come lo dichiarano i trasferimenti del kernel,
+  // così la finestra «Esporta» si apre; il lavoro non gira e il file non arriva.
+  commands: [...BENCH_COMMANDS, drawingCreateSpec(), {
+    id: "export.run",
+    title: "Export documents",
+    description: "",
+    keybinding: null,
+    params: [{ name: "request_json", title: "ExportRequest JSON", description: "", kind: { kind: "text" }, required: true }] as never,
+    scope: { writes: false, reach: "session", reversible: true },
+    surfaces: [],
+  }],
   settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
-  ...(DRAWING === null ? {} : { draw: true }),
+  draw: true,
 };
 
 const host = createFakeHost(options);
