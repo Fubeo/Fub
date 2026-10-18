@@ -1152,6 +1152,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
+      closeVault: (path) => gate("closeVault", [path], Promise.resolve([])),
       readDocument: (id, vault) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", named([id], vault), Promise.reject(new Error(`«${id}» non c'è`)));

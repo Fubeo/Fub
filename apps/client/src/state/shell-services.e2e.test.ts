@@ -414,6 +414,74 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     });
   });
 
+  /// #216: il vault lasciato si chiude nell'host, dopo il flush e dopo le sue
+  /// sessioni, prima che il layout del nuovo rimetta in piedi le linguette.
+  it("il vault lasciato si chiude nell'host dopo le sue sessioni, una volta per cambio", async () => {
+    const shell = await start(VAULT);
+    let sessionAtClose: boolean | null = null;
+    box.probes.set("closeVault", () => {
+      sessionAtClose = shell.sessions.get("Benvenuto.md") !== undefined;
+    });
+    typeInEditor("battuta da salvare in A");
+    const from = box.trace.length;
+    const { openVault } = await import("../desktop-shell");
+
+    await openVault("/altro");
+
+    const trace = box.trace.slice(from);
+    expect(firstOccurrences(trace, ["writeDocument", "openVault", "closeVault", "viewState:layout"])).toEqual(["writeDocument", "openVault", "closeVault", "viewState:layout"]);
+    expect(shell.host.atGate("closeVault").map((c) => c.args[0])).toEqual(["/vault"]);
+    expect(sessionAtClose).toBe(false);
+    expect(shell.host.files()["Benvenuto.md"]).toContain("battuta da salvare in A");
+
+    // Cambi in fila: ognuno chiude quello che lascia, e riaprire lo stesso
+    // vault non lo chiude.
+    await openVault("/terzo");
+    await openVault("/terzo");
+    expect(shell.host.atGate("closeVault").map((c) => c.args[0])).toEqual(["/vault", "/altro"]);
+  });
+
+  /// La demo torna al vault di prima rendendolo corrente nell'host: aprirla
+  /// non lo chiude, e tornare da una demo che l'host ha già chiuso non avvisa.
+  it("aprire la demo lascia aperto il vault di prima, e chiuderla non avvisa di niente", async () => {
+    const shell = await start(VAULT, (shell) => {
+      // La demo c'è su questa macchina: l'host finto da solo non la conosce.
+      const api = shell.host.module.api as unknown as Record<string, unknown>;
+      api.demoRoot = () => Promise.resolve("/demo");
+      api.openDemo = () => Promise.resolve({ root: "/demo", previous: "/vault" });
+      api.closeDemo = () => Promise.resolve({ errors: [], current: "/vault" });
+      api.closeVault = (path: string) =>
+        path === "/demo" ? Promise.reject({ kind: "not_found", message: "vault non aperto" }) : Promise.resolve([]);
+    });
+    const press = async (label: string): Promise<void> => {
+      const target = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === shell.t(label as never) && !b.disabled && !b.hidden);
+      expect(target, label).toBeDefined();
+      const since = box.trace.length;
+      target!.click();
+      await vi.waitFor(() => expect(box.trace.slice(since)).toContain(label === "demo.open" ? "signal:vault:/demo" : "signal:vault:/vault"));
+    };
+    const from = box.trace.length;
+    await press("demo.open");
+    expect(box.trace.slice(from)).not.toContain("closeVault");
+    expect(shell.store.state.vaultRoot).toBe("/demo");
+    const before = shell.notices().length;
+    await press("demo.close");
+    expect(shell.store.state.vaultRoot).toBe("/vault");
+    expect(shell.notices().slice(before).filter((n) => n.includes("vault non aperto"))).toEqual([]);
+  });
+
+  it("un vault lasciato che non si chiude lo dice, e il nuovo resta aperto", async () => {
+    const shell = await start(VAULT);
+    const repair = shell.host.fault("closeVault", "indice non scritto");
+    const { openVault } = await import("../desktop-shell");
+
+    await openVault("/altro");
+    repair();
+
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+    expect(shell.notices().some((n) => n.includes("indice non scritto"))).toBe(true);
+  });
+
   it("un vault che l'host rifiuta lascia in piedi quello di prima", async () => {
     const shell = await start(VAULT);
     const owner = shell.sessions.get("Benvenuto.md");

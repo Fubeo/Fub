@@ -165,6 +165,10 @@ export const api = {
   recoverConfig: (path: string, action: RecoverAction) =>
     invoke<RecoverOutcome>("recover_config", { path, action }),
   openVault: (path: string) => invoke<VaultInfo>("open_vault", { path }),
+  // Chiude un vault nell'host: flush, indici, plugin, watcher e lock di
+  // scrittura. Torna ciò che è andato storto chiudendo, con la specie di
+  // ciascuno (#216).
+  closeVault: (path: string) => invoke<PluginError[]>("close_vault", { path }),
   // `listDocuments` **non c'è più** (§14.4): restituiva l'intero vault in un
   // `string[]`, senza finestra e senza saper dire *quale cartella*. Chi vuole
   // l'elenco lo chiede dal canale dati (`vociDelVault`, `contenutoDiCartella`),

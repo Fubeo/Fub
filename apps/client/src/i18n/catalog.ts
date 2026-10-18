@@ -1520,6 +1520,8 @@ export const IT = { // --- la scocca -------------------------------------------
   "{count} note non si sono lette all'apertura: la ricerca non le trova e il grafo non le collega.",
 "vault.partial.one":
   "Una nota non si è letta all'apertura: la ricerca non la trova e il grafo non la collega.",
+"vault.close.trouble":
+  "Il vault lasciato non si è chiuso del tutto: {error}",
 
 // --- il buffer di crash (§15.2) ----------------------------------------
 //
@@ -3239,6 +3241,8 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
   "{count} notes could not be read while opening: search does not find them and the graph does not link them.",
 "vault.partial.one":
   "One note could not be read while opening: search does not find it and the graph does not link it.",
+"vault.close.trouble":
+  "The vault you left did not close cleanly: {error}",
 
 "draft.found":
   "{count} notes had unsaved text: it has been put back. Where the file changed in the meantime, or the note is gone, you will choose which text to keep.",

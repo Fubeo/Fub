@@ -548,8 +548,10 @@ function mountAdaptiveShell(): void {
     emit("vault", "");
   };
   mountOnboarding({
+    // La demo: il vault di prima resta aperto nell'host, perché chiudendo la
+    // demo l'host lo rende di nuovo corrente.
     openPath: async (path) => {
-      await openVaultPath(path, () => !life.closed, true);
+      await openVaultPath(path, () => !life.closed, true, true);
       if (life.closed) return;
       syncOnboarding();
       applyAdaptive();
