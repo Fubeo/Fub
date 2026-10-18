@@ -430,12 +430,60 @@ fn ink_fixture_is_in_sync_with_the_rust_core() {
     });
     let committed: Value = serde_json::from_str(&committed).expect("valid JSON fixture");
 
-    assert_eq!(
-        committed, expected,
+    let mut found = Vec::new();
+    differences(&committed, &expected, "$", &mut found);
+    assert!(
+        found.is_empty(),
         "the ink fixture is stale: a Rust rule changed without regenerating it. \
          Regenerate with `UPDATE_MIRROR=1 cargo test -p fub-ink --test ts_mirror`, \
-         then update the TypeScript twin until `ink/mirror.test.ts` turns green."
+         then update the TypeScript twin until `ink/mirror.test.ts` turns green.\n{}",
+        found.join("\n")
     );
+}
+
+/// Quanto due numeri della fixture possono differire, come nel gemello TS: la
+/// trigonometria della libreria matematica di sistema cambia l'ultima cifra da
+/// una piattaforma all'altra (su macOS `atan2` dell'azimut), e una regola che
+/// cambia sposta i numeri ben più in là.
+const EPSILON: f64 = 1e-9;
+
+/// Il confronto della fixture: stessa forma, stesse chiavi, numeri entro
+/// [`EPSILON`].
+fn differences(committed: &Value, expected: &Value, path: &str, found: &mut Vec<String>) {
+    match (committed, expected) {
+        (Value::Number(a), Value::Number(b)) => match (a.as_f64(), b.as_f64()) {
+            (Some(x), Some(y)) if (x - y).abs() <= EPSILON => {}
+            _ => found.push(format!("{path}: committed {a}, expected {b}")),
+        },
+        (Value::Array(a), Value::Array(b)) => {
+            if a.len() != b.len() {
+                found.push(format!(
+                    "{path}: committed {} items, expected {}",
+                    a.len(),
+                    b.len()
+                ));
+                return;
+            }
+            for (index, (x, y)) in a.iter().zip(b).enumerate() {
+                differences(x, y, &format!("{path}[{index}]"), found);
+            }
+        }
+        (Value::Object(a), Value::Object(b)) => {
+            for (key, x) in a {
+                match b.get(key) {
+                    Some(y) => differences(x, y, &format!("{path}.{key}"), found),
+                    None => found.push(format!("{path}.{key}: only committed")),
+                }
+            }
+            for key in b.keys().filter(|key| !a.contains_key(*key)) {
+                found.push(format!("{path}.{key}: only expected"));
+            }
+        }
+        _ if committed == expected => {}
+        _ => found.push(format!(
+            "{path}: committed {committed}, expected {expected}"
+        )),
+    }
 }
 
 /// Il test del test: una fixture di casi che non distinguono niente non
