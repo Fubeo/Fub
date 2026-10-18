@@ -345,6 +345,23 @@ chiave interessata e conservano commenti, ordine, virgolette, terminatori e
 corpo non coinvolti. YAML incompatibile o non rappresentabile resta disponibile
 in modalità sorgente.
 
+## Esportare in Markdown
+
+Il provider Markdown offre due destinazioni: `markdown.files`, un file per
+nota al suo path, e `markdown.single`, la selezione concatenata in un documento.
+L'opzione `frontmatter` (predefinita `true`) tiene o toglie i metadati.
+
+- Nella cartella esportata gli allegati viaggiano con le note, al loro path,
+  così i link relativi puntano ancora al file. Una cartella o il vault intero
+  portano ogni file che contengono; delle note scelte una per una, o da una
+  query, si portano gli allegati che citano. Con `attachments: false` restano
+  fuori, e il rapporto ne nomina ciascuno.
+- Un documento che non è Markdown (canvas, base, foglio) si copia nella
+  cartella byte per byte. Nel documento unico resta fuori, invece di diventare
+  JSON o YAML fra le note.
+- Il documento unico non può contenere allegati: ogni allegato citato è un
+  avviso nel rapporto, col documento che lo cita.
+
 ## Snapshot globale e backup
 
 Lo snapshot globale offline comprende l'intero stato autorevole del vault:

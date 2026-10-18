@@ -1668,3 +1668,112 @@ fn losing_the_free_name_race_fails_the_import_instead_of_overwriting() {
         Some("quella che c'era già")
     );
 }
+
+// --- allegati e rapporto delle perdite ----------------------------------------
+
+/// Un vault con un'immagine accanto a una nota e una in una cartella degli
+/// allegati, citate da link markdown e da un wikilink incorporato.
+fn vault_with_attachments() -> (tempfile::TempDir, Workspace) {
+    let (dir, mut ws) = vault_with(&[
+        (
+            "Progetti/Alpha.md".to_string(),
+            "# Alpha\n\n![schema](img/schema.png)\n".to_string(),
+        ),
+        (
+            "Diario.md".to_string(),
+            "Oggi: ![[allegati/foto.png]]\n".to_string(),
+        ),
+    ]);
+    let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).unwrap();
+    for (rel, bytes) in [
+        ("Progetti/img/schema.png", &[1u8, 2, 3][..]),
+        ("allegati/foto.png", &[4u8, 5][..]),
+        ("allegati/orfana.png", &[6u8][..]),
+    ] {
+        std::fs::create_dir_all(root.join(rel).parent().unwrap()).unwrap();
+        std::fs::write(root.join(rel), bytes).unwrap();
+    }
+    ws.reindex().expect("reindex");
+    (dir, ws)
+}
+
+#[test]
+fn a_folder_export_carries_its_attachments_at_their_paths() {
+    let (_g, ws) = vault_with_attachments();
+    let report = ws
+        .export(&ExportRequest::new(
+            TARGET_FILES,
+            ExportSelection::Folder(String::new()),
+        ))
+        .expect("export");
+    let paths: Vec<&str> = report.artifacts.iter().map(|a| a.path.as_str()).collect();
+    for wanted in [
+        "Progetti/img/schema.png",
+        "allegati/foto.png",
+        "allegati/orfana.png",
+    ] {
+        assert!(paths.contains(&wanted), "{wanted} manca: {paths:?}");
+    }
+    assert_eq!(
+        artifact(&report, "allegati/foto.png").as_bytes(),
+        Some(&[4u8, 5][..]),
+        "i byte dell'allegato, non una sua lettura come testo"
+    );
+    assert!(report.log.is_empty(), "{:?}", report.log);
+}
+
+#[test]
+fn chosen_notes_carry_the_attachments_they_cite_and_only_those() {
+    let (_g, ws) = vault_with_attachments();
+    let report = ws
+        .export(&ExportRequest::new(
+            TARGET_FILES,
+            ExportSelection::Documents(vec![DocId::new("Diario.md")]),
+        ))
+        .expect("export");
+    let paths: Vec<&str> = report.artifacts.iter().map(|a| a.path.as_str()).collect();
+    assert_eq!(paths, vec!["Diario.md", "allegati/foto.png"]);
+}
+
+#[test]
+fn attachments_left_out_on_request_are_named_in_the_report() {
+    let (_g, ws) = vault_with_attachments();
+    let report = ws
+        .export(
+            &ExportRequest::new(
+                TARGET_FILES,
+                ExportSelection::Documents(vec![DocId::new("Progetti/Alpha.md")]),
+            )
+            .with_options(serde_json::json!({ "attachments": false })),
+        )
+        .expect("export");
+    let paths: Vec<&str> = report.artifacts.iter().map(|a| a.path.as_str()).collect();
+    assert_eq!(paths, vec!["Progetti/Alpha.md"]);
+    assert_eq!(report.log.len(), 1);
+    assert!(report.log[0].message.contains("Progetti/img/schema.png"));
+    assert_eq!(report.log[0].entry.as_deref(), Some("Progetti/Alpha.md"));
+}
+
+#[test]
+fn a_single_document_says_which_attachments_it_cannot_hold() {
+    let (_g, ws) = vault_with_attachments();
+    let report = ws
+        .export(&ExportRequest::new(
+            TARGET_SINGLE,
+            ExportSelection::Documents(vec![
+                DocId::new("Diario.md"),
+                DocId::new("Progetti/Alpha.md"),
+            ]),
+        ))
+        .expect("export");
+    assert_eq!(report.artifacts.len(), 1);
+    let warned: Vec<&str> = report
+        .log
+        .iter()
+        .filter(|note| note.level == NoteLevel::Warning)
+        .map(|note| note.message.as_str())
+        .collect();
+    assert_eq!(warned.len(), 2, "{warned:?}");
+    assert!(warned.iter().any(|m| m.contains("allegati/foto.png")));
+    assert!(warned.iter().any(|m| m.contains("Progetti/img/schema.png")));
+}
