@@ -1,10 +1,11 @@
-//! I formati che WordCraft importa — OpenDocument, RTF, Word 97-2003 — si
-//! leggono come un `.docx`, per la ricerca, l'outline e il correttore, e non si
-//! scrivono: l'importatore lascia indietro ciò che non conosce.
+//! I formati che WordCraft importa — RTF, Word 97-2003, e per il modello comune
+//! OpenDocument — si leggono come un `.docx`, per la ricerca, l'outline e il
+//! correttore. RTF e Word 97-2003 non si scrivono: l'importatore lascia indietro
+//! ciò che non conosce. L'OpenDocument modificabile è in `odt.rs`.
 
 mod common;
 
-use common::{sample, styled, text};
+use common::{styled, text};
 use fub_abi::{DocumentSource, FormatProvider, ParseContext};
 use fub_format_rich::projection::{Block, Inline, Projection};
 use fub_format_rich::{blank, open, save, Codec, ReadOnly, RichError, RichProvider};
@@ -62,32 +63,6 @@ fn encrypted_container() -> Vec<u8> {
     }
     comp.flush().unwrap();
     comp.into_inner().into_inner()
-}
-
-#[test]
-fn an_odt_opens_readable_and_read_only() {
-    let bytes = odt(&sample());
-    let (projection, readonly) = projection(Codec::Odt, &bytes);
-    assert_eq!(readonly, Some(ReadOnly::Import));
-    assert_eq!(projection.readonly, Some(ReadOnly::Import));
-    let words = words(&projection);
-    for expected in ["Il titolo", "Una prosa forte con un link.", "prima voce"] {
-        assert!(words.contains(expected), "manca «{expected}» in {words:?}");
-    }
-}
-
-#[test]
-fn an_odt_is_never_written() {
-    let bytes = odt(&plain());
-    let opened = open(Codec::Odt, &bytes).unwrap();
-    // Anche togliendo il campo dalla proiezione, è il file a dire di no.
-    let mut projection = Projection::from_json(&opened.projection).unwrap();
-    projection.readonly = None;
-    assert_eq!(
-        save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
-        Err(RichError::ReadOnly(ReadOnly::Import))
-    );
-    assert_eq!(blank(Codec::Odt), Err(RichError::NoWriter("odt")));
 }
 
 #[test]

@@ -11,6 +11,9 @@
 //! rileggersi identico dopo una scrittura del codec. Se uno dei due fallisce,
 //! la proiezione esce lo stesso, con [`ReadOnly`]: si legge, non si scrive.
 //!
+//! L'OpenDocument fa eccezione: apre e salva con il codec di Fub (`odt`), che
+//! lavora sull'XML del file e fa le proprie prove, con le stesse specie.
+//!
 //! **Salvare** rilegge sempre ciò che sta per scrivere: se i byte nuovi non
 //! descrivono il documento voluto non si scrive niente, e chi scrive tiene il
 //! proprio buffer.
@@ -61,6 +64,9 @@ pub enum Saved {
 
 /// Apre i byte di un file come proiezione.
 pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
+    if codec == Codec::Odt {
+        return crate::odt::open(bytes);
+    }
     let document = codec.read(bytes)?;
     let normal = normalized(&document);
     let mut projection = projection::project(&normal)?;
@@ -79,6 +85,9 @@ pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
 /// Scrive la proiezione `json` sul documento `current`, i byte del file alla
 /// revisione su cui la shell ha lavorato.
 pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError> {
+    if codec == Codec::Odt {
+        return crate::odt::save(current, json);
+    }
     let base = normalized(&codec.read(current)?);
     if let Some(reason) = policy(&base) {
         return Err(RichError::ReadOnly(reason));
@@ -108,6 +117,9 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
 /// I byte di un documento vuoto: la base di chi scrive una proiezione in un
 /// file che ancora non c'è.
 pub fn blank(codec: Codec) -> Result<Vec<u8>, RichError> {
+    if codec == Codec::Odt {
+        return crate::odt::blank();
+    }
     codec.write(&Document::new())
 }
 

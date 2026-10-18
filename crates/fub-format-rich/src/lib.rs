@@ -6,8 +6,11 @@
 //!
 //! - il **codec**, [`Codec`]: byte del file ↔ [`wordcraft_doc::Document`]. Il
 //!   codec Word riporta il file intero; gli altri sono **importatori** che
-//!   leggono il modello di WordCraft e lasciano indietro ciò che non conoscono,
-//!   quindi i loro documenti si leggono e non si scrivono ([`Codec::lossless`]);
+//!   leggono il modello di WordCraft e lasciano indietro ciò che non conoscono
+//!   ([`Codec::lossless`]). L'OpenDocument ha in più un codec di Fub, che legge
+//!   e riscrive `content.xml` senza passare da quel modello: un `.odt` si
+//!   scrive con quello, e l'importatore resta per l'indice e per i file che il
+//!   codec di Fub non sa rappresentare;
 //! - il **provider di formato**, [`RichProvider`]: un formato a byte che dà al
 //!   kernel il modello comune (titoli, paragrafi, elenchi, tabelle, link) per
 //!   la ricerca, l'outline e l'anteprima;
@@ -30,6 +33,7 @@ use wordcraft_doc::Document;
 mod blob;
 mod fidelity;
 mod model;
+mod odt;
 pub mod projection;
 pub mod session;
 mod unproject;
@@ -53,8 +57,10 @@ pub const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
 pub enum Codec {
     /// WordprocessingML (`.docx`).
     Docx,
-    /// OpenDocument Text (`.odt`): l'importatore di WordCraft, che non riporta
-    /// note, commenti, caselle, forme e gran parte degli stili del file.
+    /// OpenDocument Text (`.odt`). [`Codec::read`] è l'importatore di
+    /// WordCraft, che non riporta note, commenti, caselle, forme e gran parte
+    /// degli stili; la proiezione modificabile ([`session`]) usa invece il
+    /// codec di Fub, che conserva l'XML originale.
     Odt,
     /// Rich Text Format (`.rtf`): l'importatore di WordCraft.
     Rtf,
@@ -116,9 +122,10 @@ impl Codec {
         Ok(document)
     }
 
-    /// Scrive un documento nei byte del file. Soltanto il codec Word scrive:
-    /// gli esportatori di WordCraft per gli altri formati riscrivono il file
-    /// dal modello, e ciò che l'importatore ha lasciato indietro andrebbe perso.
+    /// Scrive un documento nei byte del file. Soltanto il codec Word scrive un
+    /// modello di WordCraft: gli esportatori per gli altri formati riscrivono il
+    /// file dal modello, e ciò che l'importatore ha lasciato indietro andrebbe
+    /// perso. Un `.odt` si scrive dalla proiezione, con il codec di Fub.
     pub fn write(self, document: &Document) -> Result<Vec<u8>, RichError> {
         match self {
             Codec::Docx => {
