@@ -128,6 +128,11 @@ describe("la proiezione del codec", () => {
     expect(e.apply(insertImage(PNG, 72, 36))).toBe(true);
     expect(e.apply(insertNote("Una nota della shell.", false))).toBe(true);
     expect(e.apply(insertNote("In chiusura.", true))).toBe(true);
+    // Le revisioni: si accetta l'inserimento, poi l'eliminazione che segue.
+    e.select(find(e.state.doc, "Revisione: ", "Revisione: n".length));
+    expect(e.run("rich.rev.accept")).toBe(true);
+    expect(e.state.doc.textBetween(e.state.selection.from, e.state.selection.to)).toBe("vecchia");
+    expect(e.run("rich.rev.accept")).toBe(true);
     // L'ultimo paragrafo diventa un titolo.
     e.select(find(e.state.doc, "Fine."));
     expect(e.run("markdown.heading.2")).toBe(true);

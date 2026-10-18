@@ -272,6 +272,12 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 - `save_draft` conserva la proiezione come testo del buffer, come per ogni
   altro documento.
 
+Un tratto, un oggetto e un paragrafo (per il suo segno di fine) portano
+`ins` e `del` quando sono una revisione tracciata: `{"by", "at", "mv"}`,
+autore, data e nome dello spostamento, ciascuno assente se vuoto. Due
+revisioni con gli stessi campi sono la stessa; togliere `ins` o `del` la
+accetta o la rifiuta.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo

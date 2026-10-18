@@ -445,6 +445,8 @@ impl Reader<'_> {
                 .then(|| self.styles.common_of(style))
                 .flatten(),
             f: self.styles.text(style, &[]).base(),
+            ins: None,
+            del: None,
             c,
         })
     }
@@ -769,6 +771,7 @@ impl<'a> Inlines<'_, 'a> {
             m: pm,
             href: ph,
             f: pf,
+            ..
         }) = self.out.last_mut()
         {
             if *pk == k && *pm == m && *ph == href && *pf == f {
@@ -782,6 +785,8 @@ impl<'a> Inlines<'_, 'a> {
             m,
             href,
             f,
+            ins: None,
+            del: None,
         });
         Ok(())
     }
@@ -802,6 +807,8 @@ impl<'a> Inlines<'_, 'a> {
             data: None,
             note: None,
             end: false,
+            ins: None,
+            del: None,
         })
     }
 }

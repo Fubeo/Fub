@@ -19,9 +19,9 @@
 //! proprio buffer.
 
 use serde::{Deserialize, Serialize};
-use wordcraft_doc::Document;
+use wordcraft_doc::{Document, RevisionKind};
 
-use crate::fidelity::{reads_back, same};
+use crate::fidelity::{reads_back, revisions_outside_body, same};
 use crate::projection::{self, Projection};
 use crate::unproject::unproject;
 use crate::{Codec, RichError};
@@ -30,8 +30,10 @@ use crate::{Codec, RichError};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadOnly {
-    /// Ha revisioni tracciate: la superficie non le mostra, e scriverci sopra
-    /// le accetterebbe o le perderebbe.
+    /// Ha revisioni tracciate che la superficie non mostra (modifiche di
+    /// formato, o revisioni in note, intestazioni, commenti e caselle di
+    /// testo): scriverci sopra le accetterebbe o le perderebbe. Gli
+    /// inserimenti e le eliminazioni del testo si mostrano e si scrivono.
     Revisions,
     /// Registra le modifiche: ogni scrittura dovrebbe diventare una revisione.
     TrackChanges,
@@ -133,7 +135,11 @@ fn normalized(document: &Document) -> Document {
 
 /// Ciò che il documento stesso dice di sé.
 fn policy(document: &Document) -> Option<ReadOnly> {
-    if !document.revisions.is_empty() {
+    let format = document
+        .revisions
+        .iter()
+        .any(|revision| revision.kind == RevisionKind::Format);
+    if format || revisions_outside_body(document) {
         return Some(ReadOnly::Revisions);
     }
     if document.settings.track_changes {

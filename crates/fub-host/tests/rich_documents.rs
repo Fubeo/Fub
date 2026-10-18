@@ -76,12 +76,16 @@ fn paragraph(text: &str) -> Block {
         p: Layout::default(),
         s: None,
         f: Look::default(),
+        ins: None,
+        del: None,
         c: vec![Inline::Text {
             x: text.to_string(),
             k: None,
             m: Vec::new(),
             href: None,
             f: Look::default(),
+            ins: None,
+            del: None,
         }],
     })
 }

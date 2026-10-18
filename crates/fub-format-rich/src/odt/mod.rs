@@ -200,15 +200,33 @@ fn normalized(blocks: &[Block]) -> Vec<Block> {
                     match (c.last_mut(), inline) {
                         (_, Inline::Text { x, .. }) if x.is_empty() => {}
                         (
-                            Some(Inline::Text { x, k, m, href, f }),
+                            Some(Inline::Text {
+                                x,
+                                k,
+                                m,
+                                href,
+                                f,
+                                ins,
+                                del,
+                            }),
                             Inline::Text {
                                 x: nx,
                                 k: nk,
                                 m: nm,
                                 href: nh,
                                 f: nf,
+                                ins: ni,
+                                del: nd,
                             },
-                        ) if *k == nk && *m == nm && *href == nh && *f == nf => x.push_str(&nx),
+                        ) if *k == nk
+                            && *m == nm
+                            && *href == nh
+                            && *f == nf
+                            && *ins == ni
+                            && *del == nd =>
+                        {
+                            x.push_str(&nx)
+                        }
                         (_, inline) => c.push(inline),
                     }
                 }

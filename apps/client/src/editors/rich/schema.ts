@@ -13,6 +13,9 @@
 //   con le stesse marche, perché ProseMirror normalizza gli spazi che legge
 //   dal DOM e un `\n` dentro un nodo di testo non sopravvivrebbe;
 // - un oggetto è una foglia `atom` con il suo `k`, non modificabile dentro;
+// - una revisione tracciata è la marca `ins` o `del` con chi e quando, su un
+//   tratto o un oggetto, e l'attributo `ins` o `del` del paragrafo per il suo
+//   segno di fine;
 // - una tabella ha righe e celle, ciascuna col suo `k`.
 //
 // `fromDoc` riscrive il documento nella forma della proiezione; un blocco già
@@ -38,8 +41,10 @@ import {
   type Mark,
   type Para,
   type Projection,
+  type Rev,
   type Role,
   type Row,
+  type Tracked,
 } from "./projection";
 
 /// I caratteri del testo di WordCraft che diventano una foglia `brk`.
@@ -126,6 +131,8 @@ const para: NodeSpec = {
     p: { default: null },
     s: { default: null },
     f: { default: null },
+    ins: { default: null },
+    del: { default: null },
   },
   parseDOM: [
     {
@@ -137,6 +144,8 @@ const para: NodeSpec = {
         p: jsonAttr<Layout>(dom as HTMLElement, "data-rich-p"),
         s: (dom as HTMLElement).getAttribute("data-rich-s"),
         f: baseAttr(dom as HTMLElement),
+        ins: jsonAttr<Rev>(dom as HTMLElement, "data-rich-ins"),
+        del: jsonAttr<Rev>(dom as HTMLElement, "data-rich-del"),
       }),
     },
     ...[1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, attrs: { role: { kind: "heading", level } } })),
@@ -187,6 +196,9 @@ const para: NodeSpec = {
         if (base.size !== undefined) style.push(`font-size: calc(1em * ${base.size} / var(--rich-doc-pt, ${base.size}))`);
       }
     }
+    // Il segno di fine revisionato lo disegna una decorazione (`review.ts`).
+    if (node.attrs.ins) attrs["data-rich-ins"] = JSON.stringify(node.attrs.ins);
+    if (node.attrs.del) attrs["data-rich-del"] = JSON.stringify(node.attrs.del);
     if (style.length > 0) attrs.style = style.join("; ");
     return [tag, attrs, 0];
   },
@@ -382,7 +394,49 @@ const nodes: Record<string, NodeSpec> = {
   },
 };
 
+/// Chi ha fatto una revisione e quando, come lo legge chi passa sopra.
+export function revTitle(kind: "ins" | "del", rev: Rev): string {
+  const by = rev.by || t("rich.rev.anonymous");
+  const at = rev.at ? new Date(rev.at) : null;
+  const when = at && !Number.isNaN(at.getTime()) ? at.toLocaleString() : (rev.at ?? "");
+  return t(kind === "ins" ? "rich.rev.inserted" : "rich.rev.deleted", { by, at: when }).trim();
+}
+
+/// L'aspetto di Word: inserito sottolineato, eliminato barrato.
+export const REV_STYLE = {
+  ins: "color: var(--accent); text-decoration-line: underline",
+  del: "color: var(--danger); text-decoration-line: line-through",
+} as const;
+
+/// Una revisione: non si allarga a ciò che si scrive accanto, e ciò che si
+/// scrive dentro la perde (`review.ts`), perché non è di chi l'ha fatta.
+function revisionMark(kind: "ins" | "del"): MarkSpec {
+  return {
+    attrs: { rev: {} },
+    inclusive: false,
+    parseDOM: [
+      {
+        tag: `${kind}[data-rich-rev]`,
+        priority: 60,
+        getAttrs: (dom) => {
+          try {
+            return { rev: JSON.parse((dom as HTMLElement).getAttribute("data-rich-rev") ?? "") as Rev };
+          } catch {
+            return false;
+          }
+        },
+      },
+    ],
+    toDOM: (mark) => {
+      const rev = mark.attrs.rev as Rev;
+      return [kind, { "data-rich-rev": JSON.stringify(rev), class: `rich-${kind}`, title: revTitle(kind, rev), style: REV_STYLE[kind] }, 0];
+    },
+  };
+}
+
 const marks: Record<string, MarkSpec> = {
+  ins: revisionMark("ins"),
+  del: revisionMark("del"),
   link: {
     attrs: { href: {} },
     inclusive: false,
@@ -465,8 +519,15 @@ export const richSchema = new Schema({ nodes, marks });
 
 const EMPHASIS: readonly Mark[] = MARKS;
 
-function marksOf(inline: { k?: string; m?: readonly Mark[]; href?: string; f?: Look }): PmMark[] {
+function revisionMarks(tracked: Tracked): PmMark[] {
   const out: PmMark[] = [];
+  if (tracked.ins) out.push(richSchema.marks.ins.create({ rev: tracked.ins }));
+  if (tracked.del) out.push(richSchema.marks.del.create({ rev: tracked.del }));
+  return out;
+}
+
+function marksOf(inline: { k?: string; m?: readonly Mark[]; href?: string; f?: Look } & Tracked): PmMark[] {
+  const out: PmMark[] = revisionMarks(inline);
   if (inline.href !== undefined) out.push(richSchema.marks.link.create({ href: inline.href }));
   if (inline.k !== undefined) out.push(richSchema.marks.run.create({ k: inline.k }));
   for (const mark of inline.m ?? []) {
@@ -493,7 +554,7 @@ function inlineNodes(c: readonly Inline[]): PmNode[] {
           data: inline.data ?? null,
           note: inline.note ?? null,
           end: inline.end === true,
-        }),
+        }, null, revisionMarks(inline)),
       );
       continue;
     }
@@ -523,6 +584,8 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
             p: block.p ?? null,
             s: block.s ?? null,
             f: block.f ?? null,
+            ins: block.ins ?? null,
+            del: block.del ?? null,
           },
           inlineNodes(block.c ?? []),
         ),
@@ -551,12 +614,28 @@ export function toDoc(projection: Projection): PmNode {
   return richSchema.nodes.doc.create(null, content.length > 0 ? content : [richSchema.nodes.para.create()]);
 }
 
-interface Segment {
+interface Segment extends Tracked {
   k?: string;
   m: Mark[];
   href?: string;
   f?: Look;
   x: string;
+}
+
+/// Le revisioni che le marche di un nodo dicono.
+export function trackedOf(marks: readonly PmMark[]): Tracked {
+  let ins: Rev | undefined;
+  let del: Rev | undefined;
+  for (const mark of marks) {
+    if (mark.type.name === "ins") ins = mark.attrs.rev as Rev;
+    else if (mark.type.name === "del") del = mark.attrs.rev as Rev;
+  }
+  return { ...(ins ? { ins } : {}), ...(del ? { del } : {}) };
+}
+
+export function sameRev(a: Rev | undefined | null, b: Rev | undefined | null): boolean {
+  if (!a || !b) return !a && !b;
+  return (a.by ?? "") === (b.by ?? "") && (a.at ?? "") === (b.at ?? "") && a.mv === b.mv;
 }
 
 /// L'aspetto che le marche di un tratto dicono.
@@ -585,7 +664,7 @@ function segmentOf(node: PmNode): Omit<Segment, "x"> {
     else if (name === "link") href = mark.attrs.href as string;
     else if ((EMPHASIS as readonly string[]).includes(name)) m.push(name as Mark);
   }
-  return { k, m: canonicalMarks(m), href, f: lookOf(node.marks) };
+  return { k, m: canonicalMarks(m), href, f: lookOf(node.marks), ...trackedOf(node.marks) };
 }
 
 function sameLook(a: Look | undefined, b: Look | undefined): boolean {
@@ -597,6 +676,8 @@ function sameSegment(a: Omit<Segment, "x">, b: Omit<Segment, "x">): boolean {
     a.k === b.k &&
     a.href === b.href &&
     sameLook(a.f, b.f) &&
+    sameRev(a.ins, b.ins) &&
+    sameRev(a.del, b.del) &&
     a.m.length === b.m.length &&
     a.m.every((mark, i) => mark === b.m[i])
   );
@@ -616,6 +697,8 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
         ...(open.m.length > 0 ? { m: open.m } : {}),
         ...(open.href !== undefined ? { href: open.href } : {}),
         ...(open.f !== undefined ? { f: open.f } : {}),
+        ...(open.ins ? { ins: open.ins } : {}),
+        ...(open.del ? { del: open.del } : {}),
       });
     }
     open = null;
@@ -639,6 +722,7 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
         ...(data !== null ? { data } : {}),
         ...(note !== null ? { note } : {}),
         ...(child.attrs.end ? { end: true } : {}),
+        ...trackedOf(child.marks),
       });
       return;
     }
@@ -661,6 +745,8 @@ function paraOf(node: PmNode, sect: string | undefined): Para {
   const p = plainLayout((node.attrs.p as Layout | null) ?? {});
   const s = node.attrs.s as string | null;
   const f = node.attrs.f as Look | null;
+  const ins = node.attrs.ins as Rev | null;
+  const del = node.attrs.del as Rev | null;
   return {
     t: "para",
     role: node.attrs.role as Role,
@@ -670,6 +756,8 @@ function paraOf(node: PmNode, sect: string | undefined): Para {
     ...(p !== undefined ? { p } : {}),
     ...(s ? { s } : {}),
     ...(f !== null ? { f } : {}),
+    ...(ins ? { ins } : {}),
+    ...(del ? { del } : {}),
     ...(c.length > 0 ? { c } : {}),
   };
 }

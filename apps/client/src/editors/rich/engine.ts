@@ -38,7 +38,7 @@ import {
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
 import { parseProjection, writeHead, type Look, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
 import { richProof } from "./proof";
-import { findPlugin, showMatches, type FindQuery } from "./review";
+import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, richSchema, toDoc } from "./schema";
 
 export { mountStrip } from "./strip";
@@ -128,6 +128,7 @@ export class RichEngine {
       history(),
       fillTableKeys,
       findPlugin,
+      revisionPlugin,
       keymap(this.#keys()),
       keymap(baseKeymap),
     ];

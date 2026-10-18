@@ -28,12 +28,12 @@ use wordcraft_doc::para::{NoteKind, Run, OBJ};
 use wordcraft_doc::props::{Highlight, NumRef, Underline, VertAlign};
 use wordcraft_doc::{
     Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
-    Part, PartKind, SectionProps, StyleKind, StyleSheet,
+    Part, PartKind, Revision, RevisionKind, SectionProps, StyleKind, StyleSheet,
 };
 
 use crate::projection::{
     self, Align, AtomKeep, AtomKind, Block, Inline, Layout, Line, Look, Mark, Para, ParaKeep,
-    Projection, Role, SectKeep,
+    Projection, Rev, Role, SectKeep,
 };
 use crate::RichError;
 use crate::{blob, fidelity, fresh, stories};
@@ -290,10 +290,23 @@ fn paragraph(
 
     let mut out = Paragraph::new();
     out.props = keep.props;
-    out.mark = keep.mark.clone();
+    out.mark = tracked(
+        keep.mark.clone(),
+        para.ins.as_deref(),
+        para.del.as_deref(),
+        document,
+    );
     for inline in &para.c {
         match inline {
-            Inline::Text { x, k, m, href, f } => {
+            Inline::Text {
+                x,
+                k,
+                m,
+                href,
+                f,
+                ins,
+                del,
+            } => {
                 if x.contains(OBJ) {
                     return Err(RichError::Malformed("object marker inside text".into()));
                 }
@@ -312,6 +325,7 @@ fn paragraph(
                     &mut document.styles,
                 );
                 let props = with_look(props, m, f, shown_style.as_deref(), &document.styles);
+                let props = tracked(props, ins.as_ref(), del.as_ref(), document);
                 push(&mut out, x, props);
             }
             Inline::Atom {
@@ -319,6 +333,8 @@ fn paragraph(
                 data: None,
                 note: None,
                 end: false,
+                ins,
+                del,
                 ..
             } => {
                 let AtomKeep {
@@ -344,6 +360,7 @@ fn paragraph(
                     continue;
                 };
                 let props = known_char(props, &document.styles, &state.own);
+                let props = tracked(props, ins.as_ref(), del.as_ref(), document);
                 push(&mut out, &OBJ.to_string(), props);
                 out.objects.push(object);
             }
@@ -356,11 +373,14 @@ fn paragraph(
                 label,
                 w,
                 h,
+                ins,
+                del,
             } => {
                 let image = fresh::image(data, *w, *h)?;
                 let (w, h) = (image.w, image.h);
                 let media = media_key(document, image);
-                push(&mut out, &OBJ.to_string(), CharProps::default());
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
                 out.objects.push(InlineObject::Image {
                     media,
                     w,
@@ -377,6 +397,8 @@ fn paragraph(
                 data: None,
                 note: Some(text),
                 end,
+                ins,
+                del,
                 ..
             } => {
                 let kind = if *end {
@@ -387,14 +409,12 @@ fn paragraph(
                 let id = placeholder(state.notes.len());
                 state.notes.push((kind, fresh::note(text)?.to_string()));
                 let style = builtin_style(&mut document.styles, note_styles(kind).1);
-                push(
-                    &mut out,
-                    &OBJ.to_string(),
-                    CharProps {
-                        style,
-                        ..CharProps::default()
-                    },
-                );
+                let props = CharProps {
+                    style,
+                    ..CharProps::default()
+                };
+                let props = tracked(props, ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
                 out.objects.push(InlineObject::NoteRef {
                     kind,
                     id,
@@ -564,8 +584,43 @@ fn known_para(mut props: ParaProps, document: &Document, own: &Dangling) -> Para
     props
 }
 
-/// Le proprietà di un tratto, con la stessa regola. Le revisioni tracciate non
-/// passano: un documento che ne ha si apre in sola lettura.
+/// Le proprietà con le revisioni che la proiezione dice: quelle del dato
+/// opaco non valgono, perché la shell accetta e rifiuta togliendo `ins` e
+/// `del`, e il file riletto rinumera le revisioni.
+fn tracked(
+    mut props: CharProps,
+    ins: Option<&Rev>,
+    del: Option<&Rev>,
+    document: &mut Document,
+) -> CharProps {
+    props.ins = ins.map(|rev| revision(document, RevisionKind::Insert, rev));
+    props.del = del.map(|rev| revision(document, RevisionKind::Delete, rev));
+    props
+}
+
+/// L'indice della revisione `rev` nel documento: quella uguale che c'è già,
+/// o una nuova in fondo.
+fn revision(document: &mut Document, kind: RevisionKind, rev: &Rev) -> u32 {
+    let wanted = Revision {
+        kind,
+        author: rev.by.clone(),
+        date: rev.at.clone(),
+        move_name: rev.mv.clone(),
+    };
+    let index = match document.revisions.iter().position(|r| *r == wanted) {
+        Some(index) => index,
+        None => {
+            document.revisions.push(wanted);
+            document.revisions.len() - 1
+        }
+    };
+    index as u32
+}
+
+/// Le proprietà di un tratto, con la stessa regola. Le revisioni del dato
+/// opaco non passano: le dice la proiezione (vedi [`tracked`]). Una modifica
+/// di formato tracciata non passa: un documento che ne ha si apre in sola
+/// lettura.
 fn known_char(mut props: CharProps, styles: &StyleSheet, own: &Dangling) -> CharProps {
     if props
         .style

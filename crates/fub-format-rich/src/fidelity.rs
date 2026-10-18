@@ -16,7 +16,10 @@ use wordcraft_doc::para::NoteKind;
 use wordcraft_doc::section::HeaderSet;
 use wordcraft_doc::{
     para_block, Block, CharProps, Document, InlineObject, NoteSeparators, Paragraph, PartKind,
+    Revision, RevisionKind,
 };
+
+use crate::stories::each_paragraph_mut;
 use wordcraft_docx::{settings_kept_unowned, SETTINGS_ORIG};
 
 /// Lo stesso documento, salvo il numero che ha ogni parte.
@@ -225,7 +228,77 @@ pub(crate) fn canonical(mut document: Document) -> Document {
             (map(id), part)
         })
         .collect();
+    canonical_revisions(&mut document);
     document
+}
+
+/// Le revisioni numerate nell'ordine in cui il testo le usa (il corpo, poi
+/// le parti), ciascuna una volta, e senza quelle che nessuno usa più: il
+/// codec scrive soltanto quelle usate, e il file riletto le rinumera. Con una
+/// modifica di formato tracciata, che le nomina da molti altri posti, il
+/// documento resta com'è: si apre soltanto in lettura.
+fn canonical_revisions(document: &mut Document) {
+    if document
+        .revisions
+        .iter()
+        .any(|revision| revision.kind == RevisionKind::Format)
+    {
+        return;
+    }
+    let old = std::mem::take(&mut document.revisions);
+    let mut new: Vec<Revision> = Vec::new();
+    let mut paragraph = |paragraph: &mut Paragraph| {
+        let indices = [&mut paragraph.mark.ins, &mut paragraph.mark.del]
+            .into_iter()
+            .chain(
+                paragraph
+                    .runs
+                    .iter_mut()
+                    .flat_map(|run| [&mut run.props.ins, &mut run.props.del]),
+            );
+        for index in indices {
+            let Some(at) = *index else {
+                continue;
+            };
+            // Un indice senza la sua revisione resta distinto da ognuna.
+            let Some(revision) = old.get(at as usize) else {
+                *index = Some(u32::MAX - at.min(u32::MAX / 2));
+                continue;
+            };
+            let found = new.iter().position(|r| r == revision).unwrap_or_else(|| {
+                new.push(revision.clone());
+                new.len() - 1
+            });
+            *index = Some(found as u32);
+        }
+    };
+    let parts = document
+        .parts
+        .values_mut()
+        .flat_map(|part| part.blocks.iter_mut());
+    for block in document.body.iter_mut().chain(parts) {
+        each_paragraph_mut(Arc::make_mut(block), &mut paragraph);
+    }
+    document.revisions = new;
+}
+
+/// Le revisioni tracciate fuori dal corpo (note, intestazioni, commenti,
+/// caselle di testo): la superficie non le mostra.
+pub(crate) fn revisions_outside_body(document: &Document) -> bool {
+    let mut found = false;
+    for part in document.parts.values() {
+        for block in &part.blocks {
+            each_paragraph(block, &mut |paragraph| {
+                found |= paragraph.mark.ins.is_some()
+                    || paragraph.mark.del.is_some()
+                    || paragraph
+                        .runs
+                        .iter()
+                        .any(|run| run.props.ins.is_some() || run.props.del.is_some());
+            });
+        }
+    }
+    found
 }
 
 /// Gli id delle parti nell'ordine canonico: ciascuno una volta.

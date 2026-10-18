@@ -23,7 +23,9 @@ use fub_format_rich::projection::{
 };
 use fub_format_rich::{open, save, Codec, Saved};
 use serde_json::{json, Value};
-use wordcraft_doc::{para_block, CharProps, Document, PartKind, SectionProps};
+use wordcraft_doc::{
+    para_block, CharProps, Document, Paragraph, PartKind, Revision, RevisionKind, SectionProps,
+};
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -32,7 +34,8 @@ fn fixture(name: &str) -> PathBuf {
 }
 
 /// L'esempio comune, con ciò che serve in più alla superficie: un salto
-/// pagina in un paragrafo, la fine di una sezione e un ultimo paragrafo.
+/// pagina in un paragrafo, la fine di una sezione, un paragrafo con
+/// revisioni tracciate e un ultimo paragrafo.
 fn document() -> Document {
     let mut d = sample();
     d.body.push(para_block(text(
@@ -42,6 +45,27 @@ fn document() -> Document {
     let mut end = text("Fine della prima sezione", CharProps::default());
     end.section = Some(Box::new(SectionProps::default()));
     d.body.push(para_block(end));
+    d.revisions = vec![
+        Revision::new(RevisionKind::Insert, "Ada", "2026-10-18T10:00:00Z"),
+        Revision::new(RevisionKind::Delete, "Bea", "2026-10-18T11:00:00Z"),
+    ];
+    let mut tracked = Paragraph::new();
+    tracked.mark.ins = Some(0);
+    for (piece, ins, del) in [
+        ("Revisione: ", None, None),
+        ("nuova", Some(0), None),
+        (" ", None, None),
+        ("vecchia", None, Some(1)),
+    ] {
+        let props = CharProps {
+            ins,
+            del,
+            ..Default::default()
+        };
+        let at = tracked.len();
+        tracked.insert_text(at, piece, &props).unwrap();
+    }
+    d.body.push(para_block(tracked));
     d.body.push(para_block(text("Fine.", CharProps::default())));
     d
 }
@@ -214,6 +238,14 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
     };
     assert_eq!(href("link").as_deref(), Some("https://fub.app/nuovo"));
     assert_eq!(href("Prima").as_deref(), Some("https://fub.app/prima"));
+    // Le revisioni della shell: l'inserimento accettato resta testo,
+    // l'eliminazione accettata se ne va; il segno di fine inserito resta.
+    let tracked = para_of(&p, "Revisione");
+    assert_eq!(tracked.ins.as_ref().map(|rev| rev.by.as_str()), Some("Ada"));
+    assert!(matches!(
+        &tracked.c[..],
+        [Inline::Text { x, ins: None, del: None, .. }] if x == "Revisione: nuova "
+    ));
     // Il paragrafo del salto ha lo stile Sottotitolo.
     assert_eq!(para_of(&p, "dopo il salto").s.as_deref(), Some("Subtitle"));
     // In fondo al paragrafo del salto: l'immagine e le due note della shell,

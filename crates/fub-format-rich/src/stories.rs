@@ -125,7 +125,7 @@ pub(crate) fn remap_section(section: &mut SectionProps, moved: &BTreeMap<u32, u3
 }
 
 /// Come [`each_paragraph`], per modificare.
-fn each_paragraph_mut(block: &mut Block, f: &mut dyn FnMut(&mut Paragraph)) {
+pub(crate) fn each_paragraph_mut(block: &mut Block, f: &mut dyn FnMut(&mut Paragraph)) {
     let mut todo = vec![block];
     while let Some(block) = todo.pop() {
         match block {

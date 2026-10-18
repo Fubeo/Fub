@@ -105,7 +105,21 @@ export const ATOM_KINDS = [
 ] as const;
 export type AtomKind = (typeof ATOM_KINDS)[number];
 
-export interface TextInline {
+/// Una revisione tracciata: chi l'ha fatta e quando. Due con gli stessi campi
+/// sono la stessa revisione. `mv` è il nome dello spostamento di cui è un capo.
+export interface Rev {
+  readonly by?: string;
+  readonly at?: string;
+  readonly mv?: string;
+}
+
+/// Inserito (`ins`) o eliminato (`del`) con le revisioni tracciate.
+export interface Tracked {
+  readonly ins?: Rev;
+  readonly del?: Rev;
+}
+
+export interface TextInline extends Tracked {
   readonly t: "text";
   readonly x: string;
   readonly k?: string;
@@ -117,7 +131,7 @@ export interface TextInline {
 /// Un oggetto. Senza `k` è nuovo: un'immagine con i suoi byte (`data`, base64)
 /// e la sua misura in punti, o una nota con il suo testo (`note`), di chiusura
 /// se `end`. Il formato lo scrive alla sua maniera.
-export interface AtomInline {
+export interface AtomInline extends Tracked {
   readonly t: "atom";
   readonly k?: string;
   readonly kind: AtomKind;
@@ -143,6 +157,10 @@ export interface Para {
   /// Suggerimento: il carattere e la dimensione del testo che non ne sceglie
   /// altri.
   readonly f?: Look;
+  /// Il segno di fine paragrafo inserito o eliminato: accettarlo o rifiutarlo
+  /// può unire il paragrafo al seguente.
+  readonly ins?: Rev;
+  readonly del?: Rev;
   readonly c?: readonly Inline[];
 }
 
@@ -313,6 +331,23 @@ export function plainLayout(layout: Layout): Layout | undefined {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+function readRev(value: unknown, where: string): Rev | undefined {
+  if (value === undefined) return undefined;
+  const rev = record(value, where);
+  closed(rev, ["by", "at", "mv"], where);
+  const by = optionalText(rev.by, `${where}.by`);
+  const at = optionalText(rev.at, `${where}.at`);
+  const mv = optionalText(rev.mv, `${where}.mv`);
+  // Un campo vuoto è un campo assente, come lo scrive serde.
+  return { ...(by ? { by } : {}), ...(at ? { at } : {}), ...(mv !== undefined ? { mv } : {}) };
+}
+
+function readTracked(value: Json, where: string): Tracked {
+  const ins = readRev(value.ins, `${where}.ins`);
+  const del = readRev(value.del, `${where}.del`);
+  return { ...(ins ? { ins } : {}), ...(del ? { del } : {}) };
+}
+
 function readStyle(value: unknown, where: string): ParaStyle {
   const style = record(value, where);
   closed(style, ["id", "name", "f"], where);
@@ -326,7 +361,7 @@ function readStyle(value: unknown, where: string): ParaStyle {
 function readInline(value: unknown, where: string): Inline {
   const inline = record(value, where);
   if (inline.t === "text") {
-    closed(inline, ["t", "x", "k", "m", "href", "f"], where);
+    closed(inline, ["t", "x", "k", "m", "href", "f", "ins", "del"], where);
     const marks = inline.m === undefined ? undefined : list(inline.m, `${where}.m`).map((mark) => {
       if (!(MARKS as readonly unknown[]).includes(mark)) throw new ProjectionError(`${where}: enfasi sconosciuta`);
       return mark as Mark;
@@ -338,10 +373,11 @@ function readInline(value: unknown, where: string): Inline {
       ...(marks && marks.length > 0 ? { m: canonicalMarks(marks) } : {}),
       ...(inline.href !== undefined ? { href: text(inline.href, `${where}.href`) } : {}),
       ...withLook(readLook(inline.f, `${where}.f`)),
+      ...readTracked(inline, where),
     };
   }
   if (inline.t === "atom") {
-    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end"], where);
+    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "ins", "del"], where);
     if (!(ATOM_KINDS as readonly unknown[]).includes(inline.kind)) {
       throw new ProjectionError(`${where}: oggetto sconosciuto`);
     }
@@ -370,6 +406,7 @@ function readInline(value: unknown, where: string): Inline {
       ...(data !== undefined ? { data } : {}),
       ...(note !== undefined ? { note } : {}),
       ...(inline.end === true ? { end: true } : {}),
+      ...readTracked(inline, where),
     };
   }
   throw new ProjectionError(`${where}: elemento sconosciuto`);
@@ -378,7 +415,7 @@ function readInline(value: unknown, where: string): Inline {
 function readBlock(value: unknown, where: string): Block {
   const block = record(value, where);
   if (block.t === "para") {
-    closed(block, ["t", "role", "align", "k", "sect", "p", "s", "f", "c"], where);
+    closed(block, ["t", "role", "align", "k", "sect", "p", "s", "f", "ins", "del", "c"], where);
     const align = block.align;
     if (align !== undefined && !["left", "center", "right", "justify"].includes(align as string)) {
       throw new ProjectionError(`${where}: allineamento sconosciuto`);
@@ -393,6 +430,7 @@ function readBlock(value: unknown, where: string): Block {
       ...withLayout(readLayout(block.p, `${where}.p`)),
       ...(block.s !== undefined ? { s: text(block.s, `${where}.s`) } : {}),
       ...withLook(readLook(block.f, `${where}.f`)),
+      ...readTracked(block, where),
       ...(c.length > 0 ? { c } : {}),
     };
   }
@@ -504,6 +542,19 @@ function writeLayout(layout: Layout | undefined): string {
   return fields.length > 0 ? `,"p":{${fields.join(",")}}` : "";
 }
 
+function writeRev(name: "ins" | "del", rev: Rev | undefined): string {
+  if (!rev) return "";
+  const fields: string[] = [];
+  if (rev.by) fields.push(`"by":${JSON.stringify(rev.by)}`);
+  if (rev.at) fields.push(`"at":${JSON.stringify(rev.at)}`);
+  if (rev.mv !== undefined) fields.push(`"mv":${JSON.stringify(rev.mv)}`);
+  return `,"${name}":{${fields.join(",")}}`;
+}
+
+function writeTracked(tracked: Tracked): string {
+  return writeRev("ins", tracked.ins) + writeRev("del", tracked.del);
+}
+
 function writeInline(inline: Inline): string {
   if (inline.t === "text") {
     let out = `{"t":"text","x":${JSON.stringify(inline.x)}`;
@@ -511,7 +562,7 @@ function writeInline(inline: Inline): string {
     if (inline.m && inline.m.length > 0) out += `,"m":${JSON.stringify(inline.m)}`;
     if (inline.href !== undefined) out += `,"href":${JSON.stringify(inline.href)}`;
     out += writeLook(inline.f);
-    return out + "}";
+    return out + writeTracked(inline) + "}";
   }
   let out = `{"t":"atom"`;
   if (inline.k !== undefined) out += `,"k":${JSON.stringify(inline.k)}`;
@@ -522,7 +573,7 @@ function writeInline(inline: Inline): string {
   if (inline.data !== undefined) out += `,"data":${JSON.stringify(inline.data)}`;
   if (inline.note !== undefined) out += `,"note":${JSON.stringify(inline.note)}`;
   if (inline.end) out += `,"end":true`;
-  return out + "}";
+  return out + writeTracked(inline) + "}";
 }
 
 /// Un blocco in JSON, con i campi nell'ordine di serde.
@@ -535,6 +586,7 @@ export function writeBlock(block: Block): string {
     out += writeLayout(block.p);
     if (block.s !== undefined) out += `,"s":${JSON.stringify(block.s)}`;
     out += writeLook(block.f);
+    out += writeTracked(block);
     if (block.c && block.c.length > 0) out += `,"c":[${block.c.map(writeInline).join(",")}]`;
     return out + "}";
   }

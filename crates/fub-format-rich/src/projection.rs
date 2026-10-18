@@ -94,8 +94,31 @@ pub struct Para {
     /// sceglie altri, come li dà lo stile del paragrafo.
     #[serde(default, skip_serializing_if = "Look::is_plain")]
     pub f: Look,
+    /// Il segno di fine del paragrafo inserito o eliminato con le revisioni
+    /// tracciate: accettarlo o rifiutarlo unisce il paragrafo al seguente.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ins: Option<Box<Rev>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub del: Option<Box<Rev>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub c: Vec<Inline>,
+}
+
+/// Una revisione tracciata: chi l'ha fatta e quando. Un inserimento e
+/// un'eliminazione con lo stesso autore, la stessa data e lo stesso
+/// spostamento sono la stessa revisione: il ritorno la ritrova così, non per
+/// indice, perché il file riletto rinumera le revisioni.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Rev {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub by: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub at: String,
+    /// Il nome dello spostamento di cui è un capo: l'eliminazione è da dove
+    /// il testo parte, l'inserimento dove arriva.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mv: Option<String>,
 }
 
 /// L'aspetto di un carattere che non è un'enfasi, **risolto**. In un tratto
@@ -249,6 +272,11 @@ pub enum Inline {
         /// L'aspetto del carattere dove differisce da quello del paragrafo.
         #[serde(default, skip_serializing_if = "Look::is_plain")]
         f: Look,
+        /// Testo inserito o eliminato con le revisioni tracciate.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ins: Option<Rev>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        del: Option<Rev>,
     },
     Atom {
         /// Le proprietà del carattere e l'oggetto, opachi. Assenti in un
@@ -276,6 +304,11 @@ pub enum Inline {
         /// Una nota nuova di chiusura, invece che a piè di pagina.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         end: bool,
+        /// Un oggetto inserito o eliminato con le revisioni tracciate.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        ins: Option<Rev>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        del: Option<Rev>,
     },
 }
 
@@ -582,6 +615,8 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
                     m: m.clone(),
                     href: href.clone(),
                     f: f.clone(),
+                    ins: rev(document, props.ins),
+                    del: rev(document, props.del),
                 });
             }
         }
@@ -611,7 +646,19 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
             .then(|| style_of(document, &paragraph.props))
             .flatten(),
         f: base(styles, style),
+        ins: rev(document, paragraph.mark.ins).map(Box::new),
+        del: rev(document, paragraph.mark.del).map(Box::new),
         c,
+    })
+}
+
+/// La revisione `index` del documento, come la proiezione la mostra.
+fn rev(document: &Document, index: Option<u32>) -> Option<Rev> {
+    let revision = document.revisions.get(index? as usize)?;
+    Some(Rev {
+        by: revision.author.clone(),
+        at: revision.date.clone(),
+        mv: revision.move_name.clone(),
     })
 }
 
@@ -646,6 +693,8 @@ fn atom(
         data: None,
         note: None,
         end: false,
+        ins: rev(document, props.ins),
+        del: rev(document, props.del),
     })
 }
 

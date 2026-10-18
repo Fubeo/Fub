@@ -34,6 +34,7 @@ import {
   type Role,
 } from "./projection";
 import { safeHref } from "./paste";
+import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -343,8 +344,13 @@ export const splitParagraph: Command = (state, dispatch) => {
   const leavesHeading = atEnd && role.kind === "heading";
   const marks = state.storedMarks ?? $pos.marks();
   tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, role: leavesHeading ? BODY : role } }]);
-  // L'enfasi di un titolo viene dal suo stile: non segue nel testo normale.
-  if (!leavesHeading) tr.ensureMarks(marks.filter((mark) => mark.type.name !== "link"));
+  // Il segno di fine revisionato resta in fondo, al secondo: il primo ne ha
+  // uno nuovo, di chi scrive.
+  if (tracksMark(paragraph)) tr.setNodeMarkup($pos.before(), null, { ...tr.doc.nodeAt($pos.before())!.attrs, ins: null, del: null });
+  // L'enfasi di un titolo viene dal suo stile: non segue nel testo normale;
+  // un link e una revisione non seguono mai.
+  const carried = marks.filter((mark) => !["link", "ins", "del"].includes(mark.type.name));
+  if (!leavesHeading) tr.ensureMarks(carried);
   dispatch(tr.scrollIntoView());
   return true;
 };
@@ -412,10 +418,69 @@ function selectSection(dir: -1 | 1): Command {
   };
 }
 
+const tracksMark = (node: PmNode | null | undefined) => !!node && (!!node.attrs.ins || !!node.attrs.del);
+
+/// Unendo due paragrafi resta il segno di fine del secondo: le sue revisioni
+/// (o nessuna) passano al paragrafo unito, che ProseMirror fa col primo.
+function carryMark(command: Command, dir: -1 | 1): Command {
+  return (state, dispatch, view) => {
+    const { $from, $to, empty } = state.selection;
+    let first: number | null = null;
+    let last: PmNode | null | undefined = null;
+    let end = 0;
+    if (!empty) {
+      if ($from.parent.isTextblock && $to.parent.isTextblock && $from.parent !== $to.parent) {
+        first = $from.before();
+        last = $to.parent;
+        end = $to.after();
+      }
+    } else if ($from.parent.isTextblock && dir < 0 && $from.parentOffset === 0) {
+      const before = state.doc.resolve($from.before()).nodeBefore;
+      if (before?.isTextblock) {
+        first = $from.before() - before.nodeSize;
+        last = $from.parent;
+        end = $from.after();
+      }
+    } else if ($from.parent.isTextblock && dir > 0 && $from.parentOffset === $from.parent.content.size) {
+      last = state.doc.resolve($from.after()).nodeAfter;
+      if (last?.isTextblock) {
+        first = $from.before();
+        end = $from.after() + last.nodeSize;
+      }
+    }
+    if (first === null || !last || !dispatch || (!tracksMark(last) && !tracksMark(state.doc.nodeAt(first)))) {
+      return command(state, dispatch, view);
+    }
+    const at = first;
+    const mark = last;
+    return command(
+      state,
+      (tr) => {
+        const merged = tr.doc.nodeAt(at);
+        if (merged?.isTextblock && tr.mapping.map(end) === at + merged.nodeSize) {
+          tr.setNodeMarkup(at, null, { ...merged.attrs, ins: mark.attrs.ins, del: mark.attrs.del });
+        }
+        dispatch(tr);
+      },
+      view,
+    );
+  };
+}
+
 /// Backspace: cancella la selezione, seleziona una sezione prima invece di
 /// toglierla, unisce al paragrafo prima, oppure seleziona l'oggetto prima.
-export const backspace: Command = chainCommands(deleteSelection, selectSection(-1), joinBackward, selectNodeBackward);
-export const deleteForward: Command = chainCommands(deleteSelection, selectSection(1), joinForward, selectNodeForward);
+export const backspace: Command = chainCommands(
+  carryMark(deleteSelection, -1),
+  selectSection(-1),
+  carryMark(joinBackward, -1),
+  selectNodeBackward,
+);
+export const deleteForward: Command = chainCommands(
+  carryMark(deleteSelection, 1),
+  selectSection(1),
+  carryMark(joinForward, 1),
+  selectNodeForward,
+);
 
 // ── Le righe di una tabella ──────────────────────────────────────────────────
 
@@ -1052,6 +1117,12 @@ export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, Ric
   [LINK_ACTION, { run: (state) => state.selection.$from.parent.inlineContent, active: (state) => linkAt(state) !== null, chord: LINK_CHORD }],
   ["rich.link.remove", { run: setLink(null) }],
   [FIND_ACTION, { run: () => true, chord: "Mod-h" }],
+  ["rich.rev.previous", { run: goToRevision(-1) }],
+  ["rich.rev.next", { run: goToRevision(1) }],
+  ["rich.rev.accept", { run: resolveRevision(true) }],
+  ["rich.rev.reject", { run: resolveRevision(false) }],
+  ["rich.rev.accept_all", { run: resolveAll(true) }],
+  ["rich.rev.reject_all", { run: resolveAll(false) }],
   ["markdown.table", { run: insertTable(2, 2) }],
   ["markdown.table.row.before", { run: insertRow("before"), chord: "Mod-Alt-Shift-ArrowUp" }],
   ["markdown.table.row.after", { run: insertRow("after"), chord: "Mod-Alt-Shift-ArrowDown" }],

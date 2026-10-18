@@ -376,6 +376,8 @@ fn una_tabella_nuova_si_scrive_con_le_colonne_e_il_bordo() {
         span: None,
         blocks: vec![Block::Para(Para {
             c: vec![Inline::Text {
+                ins: None,
+                del: None,
                 x: x.into(),
                 k: None,
                 m: Vec::new(),
@@ -456,6 +458,8 @@ fn gli_spazi_seguono_la_regola_di_odf() {
     // Spazi doppi, iniziali e finali si scrivono e si rileggono uguali.
     let mut edited = projection.clone();
     para_mut(&mut edited, 0).c = vec![Inline::Text {
+        ins: None,
+        del: None,
         x: "  due  spazi \t e \n poi ".into(),
         k: None,
         m: Vec::new(),
@@ -719,6 +723,8 @@ fn invio_in_un_elenco_aggiunge_una_voce_allo_stesso_elenco() {
     // ProseMirror spezza il paragrafo: le due metà portano lo stesso `k`.
     let mut copy = para(&projection, 3).clone();
     copy.c = vec![Inline::Text {
+        ins: None,
+        del: None,
         x: "due e mezzo".into(),
         k: None,
         m: Vec::new(),
@@ -960,6 +966,8 @@ fn le_righe_di_una_tabella_si_aggiungono_e_si_tolgono() {
     let mut row = table.rows[2].clone();
     if let Block::Para(p) = &mut row.cells[0].blocks[0] {
         p.c = vec![Inline::Text {
+            ins: None,
+            del: None,
             x: "2".into(),
             k: None,
             m: Vec::new(),
@@ -1096,6 +1104,8 @@ fn le_parti_che_la_proiezione_non_mostra_restano_al_loro_posto() {
     }
     let mut copy = para(&projection, 1).clone();
     copy.c = vec![Inline::Text {
+        ins: None,
+        del: None,
         x: "nuovo".into(),
         k: None,
         m: Vec::new(),
@@ -1194,11 +1204,34 @@ fn un_salto_pagina_nel_testo_non_si_scrive() {
 }
 
 #[test]
+fn una_revisione_tracciata_non_si_scrive() {
+    let bytes = odt("<text:p>x</text:p>");
+    let rev = fub_format_rich::projection::Rev {
+        by: "Ada".into(),
+        ..Default::default()
+    };
+    let mut text = projection(&bytes);
+    if let Inline::Text { ins, .. } = &mut para_mut(&mut text, 0).c[0] {
+        *ins = Some(rev.clone());
+    }
+    let mut mark = projection(&bytes);
+    para_mut(&mut mark, 0).del = Some(Box::new(rev));
+    for projection in [text, mark] {
+        assert!(matches!(
+            save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
+            Err(RichError::Codec(_))
+        ));
+    }
+}
+
+#[test]
 fn un_documento_nuovo_si_crea_e_si_scrive() {
     let bytes = blank(Codec::Odt).unwrap();
     let mut projection = projection(&bytes);
     let first = para_mut(&mut projection, 0);
     first.c = vec![Inline::Text {
+        ins: None,
+        del: None,
         x: "Ciao".into(),
         k: None,
         m: vec![Mark::I],
@@ -1221,6 +1254,8 @@ fn un_odt_di_wordcraft_si_apre_modificabile() {
         .position(|b| matches!(b, Block::Para(p) if !p.c.is_empty() && p.role == Role::Body))
         .unwrap();
     para_mut(&mut projection, index).c.push(Inline::Text {
+        ins: None,
+        del: None,
         x: " (rivisto)".into(),
         k: None,
         m: Vec::new(),
@@ -1234,6 +1269,8 @@ fn un_odt_di_wordcraft_si_apre_modificabile() {
 fn new_atom(kind: AtomKind, data: Option<&[u8]>, note: Option<&str>, end: bool) -> Inline {
     use base64::Engine;
     Inline::Atom {
+        ins: None,
+        del: None,
         k: None,
         kind,
         label: if data.is_some() {

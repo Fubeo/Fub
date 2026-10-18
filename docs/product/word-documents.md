@@ -64,7 +64,17 @@ Dal gruppo **Revisione** della striscia:
   una battuta sola, che si annulla in una volta;
 - **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
   del documento e, se c'è, della selezione: una parola è ciò che sta fra due
-  spazi, un oggetto separa senza contare, il testo delle note non conta.
+  spazi, un oggetto separa senza contare, il testo delle note non conta;
+- le **revisioni tracciate** di un `.docx` si vedono: il testo inserito
+  sottolineato, quello eliminato barrato, un segno di paragrafo inserito o
+  eliminato come `¶`, con autore e data al passaggio del puntatore. In un
+  documento che ne ha, la striscia le scorre (precedente, successiva) e le
+  **accetta** o **rifiuta**, una alla volta (quella del cursore o quelle
+  della selezione) o tutte insieme. Tratti vicini con la stessa revisione
+  sono una modifica sola, e i due capi di uno spostamento vanno insieme.
+  Accettare un segno di paragrafo eliminato, o rifiutarne uno inserito,
+  unisce il paragrafo al seguente, che gli dà le sue proprietà. Ciò che si
+  scrive dentro o accanto a una revisione non ne fa parte.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
@@ -74,7 +84,9 @@ alternativo; la fine di una sezione è un filo doppio che non si cancella con un
 Backspace.
 
 Un documento si apre **soltanto in lettura**, con il motivo in testa, quando
-ha revisioni tracciate, registra le modifiche, è protetto, oppure quando la
+ha modifiche di formato tracciate o revisioni fuori dal corpo (note,
+intestazioni, piè di pagina, commenti, caselle di testo), registra le
+modifiche, è protetto, oppure quando la
 superficie o il codec non saprebbero riscriverlo identico. Un documento cifrato
 o più grande di 256 MiB non si apre. Un salvataggio che non si rilegge uguale a
 ciò che si voleva scrivere non scrive, e il testo resta nel buffer.
@@ -99,6 +111,8 @@ Limiti attuali:
   le cui righe hanno tutte le stesse celle, senza celle unite in larghezza;
   le celle si uniscono soltanto in larghezza, e una cella unita in altezza si
   mostra come una cella per riga;
+- con le revisioni registrate (`track_changes`) il documento resta in sola
+  lettura: una modifica fatta qui non diventerebbe una revisione;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
   del documento, che resta quella del file;
 - il codec riscrive il file in forma propria: rinumera intestazioni, piè di
@@ -120,7 +134,9 @@ ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
 per byte com'erano. Un ruolo, un'enfasi, un aspetto del carattere o una
 disposizione del paragrafo nuovi aggiungono gli stili automatici che servono
 (`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei titoli e della
-citazione, senza toccare gli altri. Le lunghezze nuove si scrivono in punti.
+citazione, senza toccare gli altri. Le lunghezze nuove si scrivono in punti. Le revisioni tracciate di un `.odt`
+non si scrivono: un testo che ne porta (incollato da un `.docx`) non si
+salva.
 
 Oltre ai motivi del `.docx`, un `.odt` si apre **in sola lettura** quando la
 superficie non saprebbe riscriverlo identico, per esempio con due elenchi uguali

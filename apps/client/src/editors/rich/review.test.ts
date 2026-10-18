@@ -1,12 +1,14 @@
 // @vitest-environment happy-dom
 //
-// La revisione nella superficie ricca: trova e sostituisci, e il conteggio
-// delle parole.
+// La revisione nella superficie ricca: trova e sostituisci, il conteggio
+// delle parole e le revisioni tracciate.
 import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../i18n/strings";
+import { backspace, deleteForward, splitParagraph } from "./commands";
 import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para, type TextInline } from "./projection";
-import { countText, findKey, findMatches, replaceAll, replaceMatch } from "./review";
+import type { EditorView } from "prosemirror-view";
+import { countText, findKey, findMatches, replaceAll, replaceMatch, revisionPlugin, revisions } from "./review";
 import { mountStrip } from "./strip";
 
 let engines: RichEngine[] = [];
@@ -152,5 +154,164 @@ describe("il conteggio", () => {
       ]),
     ]);
     expect(countText(e.state.doc)).toEqual({ words: 2, characters: 11, visible: 11, paragraphs: 1 });
+  });
+});
+
+describe("le revisioni tracciate", () => {
+  const ada = { by: "Ada", at: "2026-10-18T10:00:00Z" };
+  const bea = { by: "Bea", at: "2026-10-18T11:00:00Z" };
+  const tracked = () => [
+    para([
+      { t: "text", x: "fisso " },
+      { t: "text", x: "aggiunto", ins: ada },
+      { t: "text", x: " " },
+      { t: "text", x: "tolto", del: bea },
+    ]),
+  ];
+  const source = (blocks: readonly Block[]) => JSON.stringify({ format: "fub-rich", version: 1, blocks });
+  const caretIn = (e: RichEngine, word: string) => {
+    const at = findMatches(e.state.doc, { ...plain, text: word })[0]!;
+    e.select(at.from + 1);
+  };
+
+  it("si leggono e si riscrivono identiche, con il segno di fine", () => {
+    const blocks = [
+      { t: "para", role: { kind: "body" }, ins: ada, c: [{ t: "text", x: "nuovo", ins: ada }, { t: "atom", k: "i", kind: "image", ins: ada, del: bea }] },
+      para([{ t: "text", x: "dopo", del: { ...bea, mv: "m1" } }]),
+    ] as Block[];
+    const e = engine(blocks);
+    expect(e.getDoc()).toBe(
+      '{"format":"fub-rich","version":1,"blocks":[' +
+        '{"t":"para","role":{"kind":"body"},"ins":{"by":"Ada","at":"2026-10-18T10:00:00Z"},"c":[' +
+        '{"t":"text","x":"nuovo","ins":{"by":"Ada","at":"2026-10-18T10:00:00Z"}},' +
+        '{"t":"atom","k":"i","kind":"image","ins":{"by":"Ada","at":"2026-10-18T10:00:00Z"},"del":{"by":"Bea","at":"2026-10-18T11:00:00Z"}}]},' +
+        '{"t":"para","role":{"kind":"body"},"c":[{"t":"text","x":"dopo","del":{"by":"Bea","at":"2026-10-18T11:00:00Z","mv":"m1"}}]}]}',
+    );
+    // Inserito sottolineato, eliminato barrato, e il segno di fine si vede.
+    const root = document.body;
+    expect(root.querySelector("ins.rich-ins")?.getAttribute("title")).toContain("Ada");
+    expect([...root.querySelectorAll("del.rich-del")].map((el) => el.textContent)).toEqual(["▣", "dopo"]);
+    expect(root.querySelector(".rich-ins-mark")?.textContent).toBe("¶");
+    // Il testo, l'oggetto e il segno di fine nuovi fanno una modifica sola;
+    // l'eliminazione dello spostamento è un'altra revisione.
+    expect(revisions(e.state.doc).map((c) => [c.kind, c.rev.by, c.pieces.length])).toEqual([
+      ["ins", "Ada", 3],
+      ["del", "Bea", 1],
+      ["del", "Bea", 1],
+    ]);
+  });
+
+  it("accettare e rifiutare tengono o tolgono il testo, e vanno alla seguente", () => {
+    const e = engine(tracked());
+    caretIn(e, "aggiunto");
+    expect(e.run("rich.rev.accept")).toBe(true);
+    expect(texts(e)).toEqual([
+      { t: "text", x: "fisso aggiunto " },
+      { t: "text", x: "tolto", del: bea },
+    ]);
+    // La selezione è sulla seguente: rifiutare l'eliminazione la tiene.
+    expect(e.state.doc.textBetween(e.state.selection.from, e.state.selection.to)).toBe("tolto");
+    expect(e.run("rich.rev.reject")).toBe(true);
+    expect(texts(e)).toEqual([{ t: "text", x: "fisso aggiunto tolto" }]);
+    expect(e.run("rich.rev.accept")).toBe(false);
+    expect(e.run("text.undo")).toBe(true);
+    expect(e.run("text.undo")).toBe(true);
+    expect(e.getDoc()).toBe(source(tracked()));
+
+    // Il contrario toglie il testo, tutto in una battuta.
+    expect(e.run("rich.rev.reject_all")).toBe(true);
+    expect(texts(e)).toEqual([{ t: "text", x: "fisso  tolto" }]);
+    expect(e.run("text.undo")).toBe(true);
+    expect(e.run("rich.rev.accept_all")).toBe(true);
+    expect(texts(e)).toEqual([{ t: "text", x: "fisso aggiunto " }]);
+  });
+
+  it("rifiutare un segno di fine inserito unisce il paragrafo al seguente, che dà le sue proprietà", () => {
+    const e = engine([
+      { t: "para", role: { kind: "body" }, k: "A", ins: ada, c: [{ t: "text", x: "uno" }] },
+      { t: "para", role: { kind: "heading", level: 2 }, k: "B", c: [{ t: "text", x: "due" }] },
+    ] as Block[]);
+    // Il segno sta in fondo al paragrafo.
+    e.select(2);
+    expect(e.run("rich.rev.reject")).toBe(false);
+    e.select(4);
+    expect(e.run("rich.rev.reject")).toBe(true);
+    expect(parseProjection(e.getDoc()).blocks).toEqual([
+      { t: "para", role: { kind: "heading", level: 2 }, k: "B", c: [{ t: "text", x: "unodue" }] },
+    ]);
+    expect(e.run("text.undo")).toBe(true);
+    e.select(4);
+    expect(e.run("rich.rev.accept")).toBe(true);
+    expect((parseProjection(e.getDoc()).blocks[0] as Para).ins).toBeUndefined();
+  });
+
+  it("i due capi di uno spostamento vanno insieme", () => {
+    const mv = { ...ada, mv: "m" };
+    const e = engine([
+      para([{ t: "text", x: "via", del: mv }, { t: "text", x: " resta" }]),
+      para([{ t: "text", x: "qui " }, { t: "text", x: "via", ins: mv }]),
+    ]);
+    e.select(2);
+    expect(e.run("rich.rev.accept")).toBe(true);
+    expect(texts(e, 0)).toEqual([{ t: "text", x: " resta" }]);
+    expect(texts(e, 1)).toEqual([{ t: "text", x: "qui via" }]);
+  });
+
+  it("si scorrono in ordine, girando in fondo", () => {
+    const e = engine(tracked());
+    const selected = () => e.state.doc.textBetween(e.state.selection.from, e.state.selection.to);
+    e.select(1);
+    expect(e.run("rich.rev.next")).toBe(true);
+    expect(selected()).toBe("aggiunto");
+    expect(e.run("rich.rev.next")).toBe(true);
+    expect(selected()).toBe("tolto");
+    expect(e.run("rich.rev.next")).toBe(true);
+    expect(selected()).toBe("aggiunto");
+    expect(e.run("rich.rev.previous")).toBe(true);
+    expect(selected()).toBe("tolto");
+  });
+
+  it("ciò che si scrive dentro una revisione o dopo non la prende", () => {
+    const e = engine(tracked());
+    const write = (text: string) => {
+      const { from, to } = e.state.selection;
+      const view = { state: e.state, dispatch: (tr: Parameters<RichEngine["dispatch"]>[0]) => e.dispatch(tr) } as unknown as EditorView;
+      const handled = revisionPlugin.props.handleTextInput!.call(revisionPlugin, view, from, to, text, () => e.state.tr.insertText(text, from, to));
+      if (!handled) e.dispatch(e.state.tr.insertText(text, from, to));
+    };
+    caretIn(e, "aggiunto");
+    write("X");
+    expect(texts(e).slice(0, 4)).toEqual([
+      { t: "text", x: "fisso " },
+      { t: "text", x: "a", ins: ada },
+      { t: "text", x: "X" },
+      { t: "text", x: "ggiunto", ins: ada },
+    ]);
+    // In coda a un tratto inserito, la marca non si allarga.
+    const end = findMatches(e.state.doc, { ...plain, text: "ggiunto" })[0]!.to;
+    e.select(end);
+    write("Y");
+    expect(texts(e)[4]).toEqual({ t: "text", x: "Y " });
+  });
+
+  it("il segno di fine revisionato resta quello che chiude il testo", () => {
+    const marked = (e: RichEngine) => parseProjection(e.getDoc()).blocks.map((b) => (b as Para).ins?.by ?? null);
+    const e = engine([
+      { t: "para", role: { kind: "body" }, ins: ada, c: [{ t: "text", x: "unodue" }] },
+      para([{ t: "text", x: "tre" }]),
+    ] as Block[]);
+    // A capo: il primo pezzo ha un segno nuovo, di chi scrive.
+    e.select(4);
+    expect(e.apply(splitParagraph)).toBe(true);
+    expect(marked(e)).toEqual([null, "Ada", null]);
+    // Unire due paragrafi lascia il segno del secondo.
+    e.select(11);
+    expect(e.apply(backspace)).toBe(true);
+    expect(marked(e)).toEqual([null, null]);
+    expect(texts(e, 1)).toEqual([{ t: "text", x: "duetre" }]);
+    expect(e.run("text.undo")).toBe(true);
+    e.select(4);
+    expect(e.apply(deleteForward)).toBe(true);
+    expect(marked(e)).toEqual(["Ada", null]);
   });
 });

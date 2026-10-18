@@ -40,7 +40,17 @@ import {
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
-import { countText, findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
+import { countText, findMatches, goToRevision, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
+
+/// I gesti delle revisioni tracciate, con il loro segno.
+const REVISION_BUTTONS: readonly { id: string; lines: readonly string[] }[] = [
+  { id: "rich.rev.previous", lines: ["M15 6l-6 6 6 6"] },
+  { id: "rich.rev.next", lines: ["M9 6l6 6-6 6"] },
+  { id: "rich.rev.accept", lines: ["M5 12l5 5 9-10"] },
+  { id: "rich.rev.reject", lines: ["M6 6l12 12", "M18 6 6 18"] },
+  { id: "rich.rev.accept_all", lines: ["M2 12l5 5 9-10", "M12 16l1 1 9-10"] },
+  { id: "rich.rev.reject_all", lines: ["M4 4h16v16H4z", "M8 8l8 8", "M16 8l-8 8"] },
+];
 
 /// Ciò che la striscia chiede alla shell.
 export interface RichMedia {
@@ -366,6 +376,14 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   count.setAttribute("aria-haspopup", "dialog");
   review.append(find, count);
   life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
+  // Le revisioni tracciate: si vedono soltanto in un documento che ne ha.
+  const revisionButtons = REVISION_BUTTONS.map((spec) => {
+    const control = button(() => t(spec.id as Key), spec.id, () => engine.run(spec.id));
+    control.append(icon(spec.lines));
+    control.dataset.action = spec.id;
+    review.append(control);
+    return control;
+  });
 
   /// Trova e sostituisci: le occorrenze si vedono nel testo mentre si scrive
   /// ciò che si cerca; Invio va alla prossima, Maiusc+Invio alla precedente.
@@ -1014,6 +1032,11 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     image.disabled = note.disabled = !engine.read(insertNote("·", false));
     merge.disabled = !engine.actionState("rich.table.merge").enabled;
     split.disabled = !engine.actionState("rich.table.split").enabled;
+    const tracked = engine.read(goToRevision(1));
+    for (const control of revisionButtons) {
+      control.hidden = !tracked;
+      control.disabled = !tracked || !engine.actionState(control.dataset.action!).enabled;
+    }
     dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;
     indent.disabled = !engine.actionState("rich.indent.increase").enabled;
     colorBar.style.backgroundColor = look.color && look.color !== COLOR_AUTO ? look.color : "currentColor";

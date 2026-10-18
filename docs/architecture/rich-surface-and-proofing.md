@@ -79,6 +79,18 @@ l'IPC.
   motore tiene sempre e la striscia accende con `RichEngine.find`; trova e
   sostituisci è un'azione che chiede (`ASK_ACTIONS`, come il link), aperta
   da chi la sa chiedere.
+- Le revisioni tracciate attraversano la proiezione come `ins` e `del`
+  (chi, quando, spostamento) su un tratto, un oggetto e il segno di fine di
+  un paragrafo: nello schema sono le marche `ins` e `del` e gli attributi
+  omonimi del paragrafo. Il ritorno al documento ritrova una revisione per
+  uguaglianza, non per indice, e il confronto canonico le rinumera per uso:
+  il file riletto le rinumera, e un'accettata non lascia indici vecchi. Il
+  documento resta in sola lettura (`revisions`) soltanto per ciò che la
+  superficie non mostra: modifiche di formato e revisioni fuori dal corpo.
+  Accettare e rifiutare sono comandi di `review.ts` (`rich.rev.*`); il
+  plugin `revisionPlugin` disegna il segno di fine revisionato e toglie la
+  revisione da ciò che si scrive dentro, e a capo e unione di due paragrafi
+  lasciano il segno revisionato a chi chiude il testo.
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

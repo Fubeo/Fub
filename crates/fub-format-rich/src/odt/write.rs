@@ -1489,6 +1489,20 @@ impl<'a> Writer<'a> {
     }
 
     fn para(&mut self, para: &Para, plan: &Plan, out: &mut String) -> Result<Para, RichError> {
+        // Le revisioni tracciate un `.odt` di Fub non le legge e non le
+        // scrive: una proiezione che ne porta non viene da qui.
+        if para.ins.is_some()
+            || para.del.is_some()
+            || para.c.iter().any(|inline| match inline {
+                Inline::Text { ins, del, .. } | Inline::Atom { ins, del, .. } => {
+                    ins.is_some() || del.is_some()
+                }
+            })
+        {
+            return Err(RichError::Codec(
+                "odt: tracked changes are not written".into(),
+            ));
+        }
         let tag = self.fresh(&plan.tag, false);
         out.push_str(&tag);
         let mut stack: Vec<String> = Vec::new();
@@ -1496,7 +1510,9 @@ impl<'a> Writer<'a> {
         let mut expected = Vec::new();
         for inline in &para.c {
             match inline {
-                Inline::Text { x, k, m, href, f } => {
+                Inline::Text {
+                    x, k, m, href, f, ..
+                } => {
                     if x.is_empty() {
                         continue;
                     }
@@ -1531,6 +1547,8 @@ impl<'a> Writer<'a> {
                         m: got,
                         href: href_of(&wrap),
                         f: got_look,
+                        ins: None,
+                        del: None,
                     });
                 }
                 Inline::Atom { k: Some(k), .. } => {
@@ -1557,6 +1575,8 @@ impl<'a> Writer<'a> {
                         data: None,
                         note: None,
                         end: false,
+                        ins: None,
+                        del: None,
                     });
                 }
             }
@@ -1574,6 +1594,8 @@ impl<'a> Writer<'a> {
                 .then(|| self.styles.common_of(style))
                 .flatten(),
             f: Look::default(),
+            ins: None,
+            del: None,
             c: expected,
         })
     }
