@@ -40,6 +40,7 @@ mod model;
 mod odt;
 pub mod projection;
 pub mod session;
+mod stories;
 mod unproject;
 
 pub use session::{blank, open, save, Opened, ReadOnly, Saved};

@@ -32,7 +32,14 @@ l'IPC.
   predefinite (la griglia di Word, le colonne e un bordo in ODF), e una riga
   che ProseMirror crea riparando una tabella esistente prende il `k` della
   vicina (`fillTableKeys`). Una cella unita in larghezza porta le colonne che
-  copre (`span`), che la superficie disegna e il formato scrive.
+  copre (`span`), che la superficie disegna e il formato scrive. Un oggetto
+  e la fine di una sezione portano nel `k` anche le storie che mostrano
+  (note, caselle di testo, intestazioni e piè di pagina) con il loro
+  contenuto: il file riletto dopo un salvataggio numera le parti di nuovo, e
+  un id del buffer nominerebbe la storia di un altro. Al salvataggio ogni
+  storia riprende l'id che ha nel documento se lì è identica, altrimenti un
+  id nuovo (`fub-format-rich/src/stories.rs`); le parti che il documento
+  mostrava e non mostra più si tolgono.
   L'enfasi (`m`) e l'aspetto
   del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
   sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;

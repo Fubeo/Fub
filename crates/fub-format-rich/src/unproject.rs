@@ -17,7 +17,7 @@
 //! campi e controlli rimasti senza compagno se ne vanno, e così le caselle di
 //! testo che nessuno mostra più.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 use wordcraft_doc::numbering::ListKind;
@@ -25,15 +25,15 @@ use wordcraft_doc::para::{Run, OBJ};
 use wordcraft_doc::props::{Highlight, NumRef, Underline, VertAlign};
 use wordcraft_doc::{
     Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
-    SectionProps, StyleKind, StyleSheet,
+    Part, SectionProps, StyleKind, StyleSheet,
 };
 
-use crate::blob;
 use crate::projection::{
     self, Align, AtomKeep, Block, Inline, Layout, Line, Look, Mark, Para, ParaKeep, Projection,
-    Role,
+    Role, SectKeep,
 };
 use crate::RichError;
+use crate::{blob, fidelity, stories};
 
 /// Il documento che la proiezione descrive, a partire da `base`.
 pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Document, RichError> {
@@ -42,9 +42,12 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         stories: HashSet::new(),
         last_list: [None, None],
         own: Dangling::of(base),
+        claimed: HashSet::new(),
+        sections: Vec::new(),
     };
     let body = blocks(&projection.blocks, &mut document, &mut state)?;
     document.body = body;
+    prune(base, &mut document);
     document.ensure_nonempty();
     document.balance_field_ranges();
     document.balance_controls();
@@ -60,6 +63,11 @@ struct State {
     /// che diventa voce d'elenco continua quello vicino, come in Word.
     last_list: [Option<u32>; 2],
     own: Dangling,
+    /// Gli id del documento che un oggetto ha già preso per le sue storie.
+    claimed: HashSet<u32>,
+    /// Le storie portate dalle sezioni già incontrate, con il loro posto: più
+    /// sezioni possono mostrare la stessa intestazione.
+    sections: Vec<(BTreeMap<u32, Part>, BTreeMap<u32, u32>)>,
 }
 
 /// Gli stili e gli elenchi che il documento stesso nomina senza averli. Un
@@ -294,8 +302,26 @@ fn paragraph(
                 push(&mut out, x, props);
             }
             Inline::Atom { k, .. } => {
-                let AtomKeep { props, object } = blob::decode(k)?;
-                let Some(object) = known_object(object, document, state)? else {
+                let AtomKeep {
+                    props,
+                    mut object,
+                    parts,
+                } = blob::decode(k)?;
+                let mut carried = BTreeMap::new();
+                if !parts.is_empty() {
+                    // Le storie portate: ciascuna da un oggetto solo, come
+                    // quelle nominate per id.
+                    for id in parts.keys() {
+                        if !state.stories.insert(*id) {
+                            return Err(RichError::DuplicateStory(*id));
+                        }
+                    }
+                    let claimed = &state.claimed;
+                    carried = stories::restore(document, parts, &|id| !claimed.contains(&id))?;
+                    state.claimed.extend(carried.values().copied());
+                    stories::remap_object(&mut object, &carried);
+                }
+                let Some(object) = known_object(object, document, state, &carried)? else {
                     continue;
                 };
                 let props = known_char(props, &document.styles, &state.own);
@@ -304,15 +330,47 @@ fn paragraph(
             }
         }
     }
-    out.section = para
-        .sect
-        .as_deref()
-        .map(blob::decode::<SectionProps>)
-        .transpose()?
-        .filter(|section| known_section(section, document))
-        .map(Box::new);
+    out.section = match para.sect.as_deref() {
+        Some(blob) => section(blob, document, state)?,
+        None => None,
+    };
     out.normalize();
     Ok(out)
+}
+
+/// La sezione di un paragrafo, con le sue intestazioni al loro posto; nessuna
+/// se nomina parti che il documento non ha.
+fn section(
+    blob: &str,
+    document: &mut Document,
+    state: &mut State,
+) -> Result<Option<Box<SectionProps>>, RichError> {
+    let SectKeep { mut section, parts } = SectKeep::decode(blob)?;
+    if !parts.is_empty() {
+        let moved = match state.sections.iter().find(|(seen, _)| *seen == parts) {
+            Some((_, moved)) => moved.clone(),
+            None => {
+                let moved = stories::restore(document, parts.clone(), &|_| true)?;
+                state.sections.push((parts, moved.clone()));
+                moved
+            }
+        };
+        stories::remap_section(&mut section, &moved);
+    }
+    Ok(known_section(&section, document).then(|| Box::new(section)))
+}
+
+/// Le parti che il documento di partenza mostrava e la proiezione non mostra
+/// più: la shell ne ha tolto il riferimento, o un oggetto le ha riportate con
+/// un altro id, e una nota senza riferimento non si legge da nessuna parte.
+/// Quelle che nessuno mostrava restano com'erano.
+fn prune(base: &Document, document: &mut Document) {
+    let kept: BTreeSet<u32> = fidelity::referenced(document).into_iter().collect();
+    for id in fidelity::referenced(base) {
+        if !kept.contains(&id) {
+            document.parts.remove(&id);
+        }
+    }
 }
 
 fn push(paragraph: &mut Paragraph, text: &str, props: CharProps) {
@@ -376,12 +434,21 @@ fn known_object(
     object: InlineObject,
     document: &Document,
     state: &mut State,
+    carried: &BTreeMap<u32, u32>,
 ) -> Result<Option<InlineObject>, RichError> {
+    // Le storie portate dall'oggetto sono già al loro posto.
+    let story = |id: u32, state: &mut State| {
+        if carried.values().any(|new| *new == id) {
+            Ok(())
+        } else {
+            story(id, document, state)
+        }
+    };
     match &object {
         InlineObject::Image { media, .. } if !document.media.contains_key(media) => {
             return Err(RichError::Missing(format!("image {media}")));
         }
-        InlineObject::NoteRef { id, .. } => story(*id, document, state)?,
+        InlineObject::NoteRef { id, .. } => story(*id, state)?,
         InlineObject::CommentStart { id } | InlineObject::CommentEnd { id }
             if !document.comments.contains_key(id) =>
         {
@@ -390,7 +457,7 @@ fn known_object(
         _ => {}
     }
     for id in object.text_boxes() {
-        story(id, document, state)?;
+        story(id, state)?;
     }
     Ok(Some(object))
 }
@@ -402,6 +469,7 @@ fn story(id: u32, document: &Document, state: &mut State) -> Result<(), RichErro
     if !state.stories.insert(id) {
         return Err(RichError::DuplicateStory(id));
     }
+    state.claimed.insert(id);
     Ok(())
 }
 

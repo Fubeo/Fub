@@ -21,7 +21,7 @@
 use serde::{Deserialize, Serialize};
 use wordcraft_doc::Document;
 
-use crate::fidelity::reads_back;
+use crate::fidelity::{reads_back, same};
 use crate::projection::{self, Projection};
 use crate::unproject::unproject;
 use crate::{Codec, RichError};
@@ -104,7 +104,9 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
         return Err(RichError::ReadOnly(reason));
     }
     let wanted = unproject(&projection, &base)?;
-    if wanted == base {
+    // Uguale a meno del numero delle parti: una storia che un oggetto ha
+    // riportato con un altro id è la stessa storia.
+    if same(&wanted, &base) {
         return Ok(Saved::Unchanged);
     }
     let bytes = codec.write(&wanted)?;

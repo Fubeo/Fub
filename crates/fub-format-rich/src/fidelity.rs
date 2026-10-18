@@ -15,6 +15,11 @@ use wordcraft_doc::section::HeaderSet;
 use wordcraft_doc::{Block, Document, InlineObject, Paragraph};
 use wordcraft_docx::{settings_kept_unowned, SETTINGS_ORIG};
 
+/// Lo stesso documento, salvo il numero che ha ogni parte.
+pub(crate) fn same(a: &Document, b: &Document) -> bool {
+    a == b || canonical(a.clone()) == canonical(b.clone())
+}
+
 /// `reread` è `wanted` dopo una scrittura e una lettura del codec.
 pub(crate) fn reads_back(wanted: &Document, reread: &Document) -> bool {
     // Le immagini: il codec scrive soltanto quelle che il testo mostra, e
@@ -177,6 +182,20 @@ pub(crate) fn canonical(mut document: Document) -> Document {
 
 /// Gli id delle parti nell'ordine canonico: ciascuno una volta.
 fn reference_order(document: &Document) -> Vec<u32> {
+    let mut order = referenced(document);
+    let mut seen: std::collections::BTreeSet<u32> = order.iter().copied().collect();
+    for id in document.parts.keys() {
+        if seen.insert(*id) {
+            order.push(*id);
+        }
+    }
+    order
+}
+
+/// Gli id delle parti che il documento nomina, nell'ordine di una lettura:
+/// il corpo con le sue sezioni, le intestazioni dell'ultima, i commenti, poi
+/// in largo ciò che quelle parti nominano a loro volta.
+pub(crate) fn referenced(document: &Document) -> Vec<u32> {
     let mut order: Vec<u32> = Vec::new();
     let mut seen = std::collections::BTreeSet::new();
     let mut push = |id: u32, order: &mut Vec<u32>| {
@@ -220,14 +239,11 @@ fn reference_order(document: &Document) -> Vec<u32> {
             push(id, &mut order);
         }
     }
-    for id in document.parts.keys() {
-        push(*id, &mut order);
-    }
     order
 }
 
 /// Le parti che un paragrafo mostra: le note e le caselle di testo.
-fn shown(paragraph: &Paragraph) -> Vec<u32> {
+pub(crate) fn shown(paragraph: &Paragraph) -> Vec<u32> {
     paragraph
         .objects
         .iter()
@@ -240,7 +256,7 @@ fn shown(paragraph: &Paragraph) -> Vec<u32> {
 
 /// Ogni paragrafo di un blocco, in ordine di documento, per quanto annidate
 /// siano le tabelle: una pila al posto della ricorsione.
-fn each_paragraph<'a>(block: &'a Block, f: &mut dyn FnMut(&'a Paragraph)) {
+pub(crate) fn each_paragraph<'a>(block: &'a Block, f: &mut dyn FnMut(&'a Paragraph)) {
     let mut todo = vec![block];
     while let Some(block) = todo.pop() {
         match block {

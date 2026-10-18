@@ -13,17 +13,17 @@
 //! salto colonna. U+FFFC non compare mai nel testo: un oggetto è un [`Inline::Atom`].
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use wordcraft_doc::para::OBJ;
 
 use wordcraft_doc::props::{Highlight, LineSpacing, TextColor, Underline, VertAlign};
 use wordcraft_doc::{
     Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
-    StyleKind, StyleSheet, Table as WcTable,
+    Part, SectionProps, StyleKind, StyleSheet, Table as WcTable,
 };
 
-use crate::blob;
 use crate::RichError;
+use crate::{blob, stories};
 
 /// Il nome del formato della proiezione.
 pub const FORMAT: &str = "fub-rich";
@@ -351,11 +351,36 @@ pub(crate) struct ParaKeep {
     pub mark: CharProps,
 }
 
-/// Un oggetto opaco: le proprietà del suo carattere e l'oggetto.
+/// Un oggetto opaco: le proprietà del suo carattere, l'oggetto e le storie
+/// che mostra (vedi [`crate::stories`]). Un dato di prima delle storie non le
+/// ha, e il suo oggetto nomina le parti soltanto per id.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct AtomKeep {
     pub props: CharProps,
     pub object: InlineObject,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub parts: BTreeMap<u32, Part>,
+}
+
+/// La fine di una sezione, con le sue intestazioni e i suoi piè di pagina.
+/// Un dato di prima delle storie è soltanto la sezione.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SectKeep {
+    pub section: SectionProps,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub parts: BTreeMap<u32, Part>,
+}
+
+impl SectKeep {
+    pub(crate) fn decode(blob: &str) -> Result<SectKeep, RichError> {
+        blob::decode::<SectKeep>(blob).or_else(|_| {
+            blob::decode::<SectionProps>(blob).map(|section| SectKeep {
+                section,
+                parts: BTreeMap::new(),
+            })
+        })
+    }
 }
 
 impl Projection {
@@ -534,7 +559,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
                 let object = objects.next().ok_or_else(|| {
                     RichError::Codec("paragraph has fewer objects than markers".into())
                 })?;
-                c.push(atom(props, object)?);
+                c.push(atom(document, props, object)?);
             }
             if !piece.is_empty() {
                 c.push(Inline::Text {
@@ -557,7 +582,16 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
         } else {
             Some(blob::encode(&keep)?)
         },
-        sect: paragraph.section.as_deref().map(blob::encode).transpose()?,
+        sect: paragraph
+            .section
+            .as_deref()
+            .map(|section| {
+                blob::encode(&SectKeep {
+                    section: section.clone(),
+                    parts: stories::of_section(document, section),
+                })
+            })
+            .transpose()?,
         p: layout(styles, &paragraph.props),
         s: (role == Role::Body)
             .then(|| style_of(document, &paragraph.props))
@@ -567,7 +601,11 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
     })
 }
 
-fn atom(props: &CharProps, object: &InlineObject) -> Result<Inline, RichError> {
+fn atom(
+    document: &Document,
+    props: &CharProps,
+    object: &InlineObject,
+) -> Result<Inline, RichError> {
     let (kind, label, size) = match object {
         InlineObject::Image { w, h, alt, .. } => (AtomKind::Image, alt.clone(), Some((*w, *h))),
         InlineObject::Graphic { w, h, alt, .. } => (AtomKind::Graphic, alt.clone(), Some((*w, *h))),
@@ -585,6 +623,7 @@ fn atom(props: &CharProps, object: &InlineObject) -> Result<Inline, RichError> {
         k: blob::encode(&AtomKeep {
             props: props.clone(),
             object: object.clone(),
+            parts: stories::of_object(document, object),
         })?,
         kind,
         label,
