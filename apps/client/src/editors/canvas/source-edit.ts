@@ -131,7 +131,12 @@ function splice(source: string, span: JsonSpan, edits: readonly { span: JsonSpan
 
 /** Preserve source bytes for every unchanged JSON member, including unknown members. */
 export function patchCanvasSource(source: string, before: CanvasDocument, after: CanvasDocument): string {
-  if (!source.trim()) return JSON.stringify(after, null, 2) + "\n";
+  if (!source.trim()) {
+    // Una tela vuota tiene il BOM e il terminatore che il file aveva già.
+    const fresh = JSON.stringify(after, null, 2) + "\n";
+    const bom = source.charCodeAt(0) === 0xfeff ? "\ufeff" : "";
+    return bom + (source.includes("\r\n") ? fresh.replace(/\n/g, "\r\n") : fresh);
+  }
   const root = scanJson(source);
   const render = (span: JsonSpan, old: unknown, next: unknown): string => {
     if (same(old, next)) return source.slice(span.start, span.end);

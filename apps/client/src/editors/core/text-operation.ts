@@ -7,6 +7,13 @@
 
 export type TextOffset = number;
 
+/// Il testo coi terminatori di riga ridotti a `\n`: lo spazio in cui si
+/// contano gli offset di un'operazione. Senza un `\r` il testo resta quello:
+/// un testo grande non si ripassa tutto per niente.
+export function lineFeeds(text: string): string {
+  return text.indexOf("\r") < 0 ? text : text.replace(/\r\n?/g, "\n");
+}
+
 export interface TextEdit {
   readonly from: TextOffset;
   readonly to: TextOffset;
