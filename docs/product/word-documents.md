@@ -94,10 +94,18 @@ Dal gruppo **Revisione** della striscia:
   modifica sola. Mentre si registra il formato non si cambia (aspetto, stile,
   spaziatura, tabelle), perché non ha una revisione da scrivere; commenti,
   accettare e rifiutare restano liberi. Un `.docx` che registra già si apre
-  così, non più in sola lettura.
+  così, non più in sola lettura;
+- **Pagina** in un `.docx` cambia la pagina della sezione dove sta il
+  cursore: la dimensione della carta (quelle di Word), l'orientamento, i
+  margini (già pronti o in centimetri) e le colonne. Una pagina girata tiene
+  la sua carta; margini che non lasciano spazio al testo non si prendono, e
+  l'avviso lo dice. Il resto della sezione (la rilegatura, la larghezza delle
+  colonne, le intestazioni) resta com'è, ma cambiare il numero di colonne le
+  rende uguali. Mentre si registra la pagina non si cambia. Un `.odt` non
+  offre la pagina.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
-definizione degli stili, sezioni,
+definizione degli stili, il resto delle sezioni,
 intestazioni, immagini, forme, campi, note, formule, il testo dei commenti) resta nel file
 così com'è. Un oggetto si vede come una casella con il suo nome o il suo testo
 alternativo; la fine di una sezione è un filo doppio che non si cancella con un

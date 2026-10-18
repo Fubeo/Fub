@@ -384,6 +384,18 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         inline,
         Inline::Text { x, ins: Some(rev), .. } if x == " rivista" && rev.by == "Bea"
     )));
+    // La prima sezione è girata, con due colonne; l'ultima ha i margini stretti.
+    let page = section
+        .page
+        .as_deref()
+        .expect("la pagina della prima sezione");
+    assert!(page.w > page.h, "{page:?}");
+    assert_eq!(page.cols, 2);
+    let last = p.page.expect("la pagina dell'ultima sezione");
+    assert_eq!(
+        (last.top, last.bottom, last.left, last.right),
+        (36.0, 36.0, 36.0, 36.0)
+    );
     // L'ultimo paragrafo è un titolo di secondo livello, e la sezione resta.
     let (role, last, _) = plain(&p.blocks, p.blocks.len() - 1);
     assert_eq!((role, last.as_str()), (Role::Heading { level: 2 }, "Fine."));

@@ -117,6 +117,17 @@ l'IPC.
   già eliminato. L'autore è della sessione (`reviewAuthor`), condiviso con i
   commenti. Il codec ODT rifiuta `track`, e un `.odt` che registra resta in
   sola lettura (`track_changes`).
+- La pagina di una sezione è il campo `page` della proiezione: sul paragrafo
+  che la chiude, accanto a `sect`, e in testa per l'ultima
+  (`document.last_section`). Nello schema è l'attributo `page` del nodo
+  `section` e del documento; `page.ts` la legge per la sezione del cursore e
+  la cambia con le regole del codec (`Page::write`): lati fra 7,2 e 1584 pt,
+  margini che lasciano 36 pt al testo, da 1 a 12 colonne, valori al
+  ventesimo di punto come li conserva un `.docx`. Le carte vengono da
+  `wordcraft_geom::PAPER_SIZES` attraverso `paper.generated.ts`
+  (`UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_paper`). Non è una
+  sostituzione, quindi mentre si registra si rifiuta. Il codec ODT rifiuta
+  una pagina.
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

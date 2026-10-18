@@ -292,6 +292,15 @@ modifiche (assente quando non lo fa): la shell scrive ciò che cambia come
 revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il
 codec ODT rifiuta `track`.
 
+`page` è la pagina di una sezione in punti, `{"w", "h", "top", "bottom",
+"left", "right", "cols"}`, con `w` e `h` già nel verso della pagina e `cols`
+assente quando è una. La porta il paragrafo che chiude la sezione, dopo
+`sect`, e la testa della proiezione per l'ultima, fra `styles` e `comments`.
+Il codec la rilegge al ventesimo di punto e rifiuta lati fuori da 7,2–1584,
+margini negativi o che lasciano meno di 36 punti al testo, `cols` fuori da
+1–12 e una pagina su un paragrafo senza `sect`; cambiare `cols` rende uguali
+le colonne. Il codec ODT rifiuta `page`.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo

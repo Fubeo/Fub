@@ -73,6 +73,7 @@ fn paragraph(text: &str) -> Block {
         align: None,
         k: None,
         sect: None,
+        page: None,
         p: Layout::default(),
         s: None,
         f: Look::default(),
@@ -456,6 +457,8 @@ fn un_odt_nuovo_nasce_dalla_sua_proiezione() {
     )
     .unwrap();
     projection.blocks = vec![paragraph("Appena nato.")];
+    // La pagina di un `.docx` non si scrive in un `.odt`: il codec la rifiuta.
+    projection.page = None;
     vault
         .host
         .write_document(

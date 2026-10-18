@@ -10,6 +10,7 @@
 // si carica col motore. È una barra degli strumenti WAI-ARIA: un solo
 // controllo nel Tab, le frecce fra gli altri, Esc torna al testo. Il puntatore
 // non prende il fuoco ai pulsanti, così la selezione del testo resta dov'è.
+import type { Command } from "prosemirror-state";
 import { labelButton, openPopover, setPressed, type PopoverHandle } from "../../kit";
 import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
@@ -42,6 +43,7 @@ import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComme
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
+import { columns, landscape, MARGIN_PRESETS, pageAt, PAPER_SIZES, paperName, setColumns, setLandscape, setMargins, setPaper } from "./page";
 import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
 import { countText, findMatches, goToRevision, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
 
@@ -370,6 +372,14 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   note.setAttribute("aria-haspopup", "dialog");
   insert.append(link, table, merge, split, image, note, pageBreak, columnBreak);
   life.add(engine.onAsk(LINK_ACTION, () => openLink(link)));
+
+  // ── Pagina ────────────────────────────────────────────────────────────
+  // Soltanto in un formato che ha una pagina (il docx, non l'odt).
+  const layout = group();
+  const pageButton = button(() => t("rich.page"), null, (anchor) => openPage(anchor));
+  pageButton.append(icon(["M6 3h9l4 4v14H6z", "M14 3v5h5", "M9 12h7", "M9 15h7", "M9 18h4"]));
+  pageButton.setAttribute("aria-haspopup", "dialog");
+  layout.append(pageButton);
 
   // ── Revisione ─────────────────────────────────────────────────────────
   const review = group();
@@ -1153,6 +1163,110 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     anchor.setAttribute("aria-expanded", "true");
   }
 
+  /// La pagina della sezione del cursore: carta, verso, margini (in
+  /// centimetri) e colonne. Ogni scelta si applica subito, e i campi si
+  /// rileggono da ciò che il documento ha preso.
+  function openPage(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const form = document.createElement("div");
+    form.className = "rich-strip-swatches";
+    form.style.display = "grid";
+    form.style.gridTemplateColumns = "auto 132px";
+    form.style.alignItems = "center";
+    const field = <T extends HTMLElement>(control: T, label: () => string): T => {
+      control.id = `${prefix}-page-${form.childElementCount}`;
+      control.classList.add("rich-strip-select");
+      const caption = document.createElement("label");
+      caption.htmlFor = control.id;
+      caption.textContent = label();
+      form.append(caption, control);
+      return control;
+    };
+    const choice = (values: readonly [string, string][]): HTMLSelectElement => {
+      const control = document.createElement("select");
+      for (const [value, text] of values) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = text;
+        control.append(option);
+      }
+      return control;
+    };
+    // Una pagina che il codec rifiuterebbe non si prende: i campi tornano a
+    // ciò che c'è, e l'avviso dice perché.
+    const apply = (command: Command) => {
+      const applied = engine.apply(command, false);
+      fill();
+      problem.hidden = applied;
+    };
+    const paper = field(choice([...PAPER_SIZES.map((s): [string, string] => [s.name, s.name]), ["", t("rich.page.custom")]]), () => t("rich.page.size"));
+    life.listen(paper, "change", () => {
+      const size = PAPER_SIZES.find((s) => s.name === paper.value);
+      if (size) apply(setPaper(size.w, size.h));
+    });
+    const turn = field(
+      choice([
+        ["portrait", t("rich.page.portrait")],
+        ["landscape", t("rich.page.landscape")],
+      ]),
+      () => t("rich.page.orientation"),
+    );
+    life.listen(turn, "change", () => apply(setLandscape(turn.value === "landscape")));
+    const preset = field(choice([...MARGIN_PRESETS.map((m): [string, string] => [m.id, t(`rich.page.margins.${m.id}` as Key)]), ["", t("rich.page.custom")]]), () => t("rich.page.margins"));
+    life.listen(preset, "change", () => {
+      const margins = MARGIN_PRESETS.find((m) => m.id === preset.value);
+      if (margins) apply(setMargins(margins));
+    });
+    const sides = (["top", "bottom", "left", "right"] as const).map((side) => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "0.1";
+      input.min = "0";
+      life.listen(input, "change", () => {
+        const cm = Number(input.value);
+        const page = engine.read(pageAt)?.page;
+        if (input.value.trim() === "" || !Number.isFinite(cm) || !page) return fill();
+        apply(setMargins({ top: page.top, bottom: page.bottom, left: page.left, right: page.right, [side]: (cm * 72) / 2.54 }));
+      });
+      return { side, input: field(input, () => t(`rich.page.${side}` as Key)) };
+    });
+    const cols = field(choice([1, 2, 3].map((n): [string, string] => [String(n), String(n)])), () => t("rich.page.columns"));
+    life.listen(cols, "change", () => apply(setColumns(Number(cols.value))));
+    const problem = document.createElement("p");
+    problem.setAttribute("role", "alert");
+    problem.style.gridColumn = "1 / -1";
+    problem.style.margin = "0";
+    problem.textContent = t("rich.page.too_large");
+    form.append(problem);
+    const fill = () => {
+      problem.hidden = true;
+      const page = engine.read(pageAt)?.page;
+      if (!page) return void popover?.close();
+      paper.value = paperName(page, PAPER_SIZES) ?? "";
+      turn.value = landscape(page) ? "landscape" : "portrait";
+      const near = (a: number, b: number) => Math.abs(a - b) < 0.5;
+      preset.value =
+        MARGIN_PRESETS.find((m) => near(m.top, page.top) && near(m.bottom, page.bottom) && near(m.left, page.left) && near(m.right, page.right))?.id ?? "";
+      for (const { side, input } of sides) input.value = String(Math.round((page[side] * 2.54 * 100) / 72) / 100);
+      const n = columns(page);
+      if (![...cols.options].some((o) => o.value === String(n))) cols.append(choice([[String(n), String(n)]]).options[0]!);
+      cols.value = String(n);
+    };
+    fill();
+    popover = openPopover({
+      anchor,
+      content: form,
+      label: t("rich.page"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+  }
+
   function openColors(anchor: HTMLButtonElement, kind: "color" | "highlight"): void {
     popover?.close();
     const grid = document.createElement("div");
@@ -1300,7 +1414,8 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     comments.hidden = !media.review && engine.read((state) => commentsOf(state.doc).length === 0);
     track.hidden = !media.review && !engine.tracking();
     setPressed(track, engine.tracking());
-    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing]) control.disabled = !free;
+    layout.hidden = engine.read(pageAt) === null;
+    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing, pageButton]) control.disabled = !free;
     if (!free) table.disabled = true;
     const tracked = engine.read(goToRevision(1));
     for (const control of revisionButtons) {

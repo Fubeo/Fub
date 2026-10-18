@@ -6,8 +6,8 @@ mod common;
 use base64::Engine;
 use common::{bytes, sample, styled, text, PNG};
 use fub_format_rich::projection::{
-    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Para, Projection, Role, Row,
-    Table,
+    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Page, Para, Projection, Role,
+    Row, Table,
 };
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
@@ -434,6 +434,7 @@ fn new_table(rows: usize, cols: usize) -> Block {
                             align: None,
                             k: None,
                             sect: None,
+                            page: None,
                             p: Layout::default(),
                             s: None,
                             f: Look::default(),
@@ -1665,4 +1666,111 @@ fn un_documento_che_registra_le_modifiche_si_scrive_con_le_sue_revisioni() {
     assert!(!started.track);
     started.track = true;
     assert!(read(&saved(&plain, &started)).settings.track_changes);
+}
+
+#[test]
+fn la_pagina_di_ogni_sezione_va_e_torna() {
+    let mut d = sample();
+    let mut first = text("Prima sezione", CharProps::default());
+    first.section = Some(Box::new(d.last_section.clone()));
+    d.body.insert(0, para_block(first));
+    let file = bytes(&d);
+    let p = projection(&file);
+    // Letter con margini di un pollice, come Word.
+    let letter = Page {
+        w: 612.0,
+        h: 792.0,
+        top: 72.0,
+        bottom: 72.0,
+        left: 72.0,
+        right: 72.0,
+        cols: 1,
+    };
+    assert_eq!(p.page, Some(letter));
+    assert_eq!(para_mut(&mut p.clone(), 0).page.as_deref(), Some(&letter));
+    assert_eq!(para_mut(&mut p.clone(), 1).page, None);
+
+    // La prima sezione A4 orizzontale su due colonne, l'ultima con i
+    // margini stretti.
+    let mut changed = p.clone();
+    let a4 = Page {
+        w: 841.89,
+        h: 595.28,
+        cols: 2,
+        ..letter
+    };
+    para_mut(&mut changed, 0).page = Some(Box::new(a4));
+    changed.page = Some(Page {
+        top: 36.0,
+        bottom: 36.0,
+        left: 36.0,
+        right: 36.0,
+        ..letter
+    });
+    let out = saved(&file, &changed);
+    let reread = read(&out);
+    let section = paragraph(&reread, 0).section.as_deref().unwrap();
+    assert!(section.landscape);
+    // In ventesimi di punto, come li scrive il `.docx`.
+    assert_eq!((section.page_w, section.page_h), (841.9, 595.3));
+    assert_eq!(section.columns.count, 2);
+    assert_eq!(reread.last_section.margin_left, 36.0);
+    assert!(!reread.last_section.landscape);
+    let again = projection(&out);
+    let a4_twips = Page {
+        w: 841.9,
+        h: 595.3,
+        ..a4
+    };
+    assert_eq!(
+        para_mut(&mut again.clone(), 0).page.as_deref(),
+        Some(&a4_twips)
+    );
+    // Riscritta com'è, non scrive; nemmeno con le misure di prima.
+    assert_eq!(
+        save(Codec::Docx, &out, &again.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    );
+    assert_eq!(
+        save(Codec::Docx, &out, &changed.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    );
+}
+
+#[test]
+fn una_pagina_senza_spazio_per_il_testo_è_rifiutata() {
+    let file = bytes(&sample());
+    let p = projection(&file);
+    let page = p.page.unwrap();
+    for wrong in [
+        Page {
+            left: 300.0,
+            right: 300.0,
+            ..page
+        },
+        Page { w: 5.0, ..page },
+        Page {
+            top: f32::NAN,
+            ..page
+        },
+        Page { cols: 0, ..page },
+        Page { cols: 13, ..page },
+    ] {
+        let mut bad = p.clone();
+        bad.page = Some(wrong);
+        assert!(
+            matches!(
+                save(Codec::Docx, &file, &bad.to_json().unwrap_or_default()),
+                Err(RichError::Malformed(_))
+            ),
+            "{wrong:?}"
+        );
+    }
+    // Una pagina su un paragrafo che non chiude una sezione.
+    let mut stray = p.clone();
+    para_mut(&mut stray, 0).page = Some(Box::new(page));
+    assert!(matches!(
+        save(Codec::Docx, &file, &stray.to_json().unwrap()),
+        Err(RichError::Malformed(_))
+    ));
 }

@@ -42,6 +42,9 @@ use crate::{blob, fidelity, fresh, stories};
 pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Document, RichError> {
     let mut document = base.clone();
     document.settings.track_changes = projection.track;
+    if let Some(page) = &projection.page {
+        page.apply(&mut document.last_section)?;
+    }
     let mut state = State {
         stories: HashSet::new(),
         last_list: [None, None],
@@ -458,8 +461,16 @@ fn paragraph(
     }
     out.section = match para.sect.as_deref() {
         Some(blob) => section(blob, document, state)?,
+        None if para.page.is_some() => {
+            return Err(RichError::Malformed(
+                "a page on a paragraph that ends no section".into(),
+            ))
+        }
         None => None,
     };
+    if let (Some(section), Some(page)) = (out.section.as_deref_mut(), para.page.as_deref()) {
+        page.apply(section)?;
+    }
     out.normalize();
     Ok(out)
 }

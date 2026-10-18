@@ -15,6 +15,7 @@ import { parseProjection, writeProjection } from "./projection";
 import { insertImage, insertNote, insertTable, setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
 import { addComment, replyComment, resolveComment } from "./comments";
 import { BlockWriter, toDoc } from "./schema";
+import { setColumns, setLandscape, setMargins } from "./page";
 import { setReviewAuthor, setTracking } from "./track";
 
 const SOURCE = projectionFixture.source;
@@ -146,6 +147,12 @@ describe("la proiezione del codec", () => {
     expect(e.run("markdown.heading.2")).toBe(true);
     e.select(last, last + "Fine".length);
     expect(e.apply(addComment("Un commento nuovo.", "Bea", at))).toBe(true);
+    // La prima sezione si gira con due colonne; l'ultima stringe i margini.
+    e.select(find(e.state.doc, "Fine della prima sezione"));
+    expect(e.apply(setLandscape(true))).toBe(true);
+    expect(e.apply(setColumns(2))).toBe(true);
+    e.select(last);
+    expect(e.apply(setMargins({ top: 36, bottom: 36, left: 36, right: 36 }))).toBe(true);
     // Registra le modifiche: ciò che Bea scrive in fondo alla sezione è un
     // suo inserimento, con l'ora fissa del test.
     vi.useFakeTimers({ toFake: ["Date"] });

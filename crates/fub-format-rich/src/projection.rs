@@ -54,9 +54,121 @@ pub struct Projection {
     pub styles: Vec<ParaStyle>,
     /// I commenti del documento, per id: le risposte nominano il commento a
     /// cui rispondono, l'intervallo lo segnano due oggetti del testo.
+    /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<Page>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<CommentView>,
     pub blocks: Vec<Block>,
+}
+
+/// La pagina di una sezione, in punti: i lati (già scambiati se è
+/// orizzontale), i margini e le colonne, di uguale larghezza quando la shell
+/// ne cambia il numero.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Page {
+    pub w: f32,
+    pub h: f32,
+    pub top: f32,
+    pub bottom: f32,
+    pub left: f32,
+    pub right: f32,
+    #[serde(default = "one_column", skip_serializing_if = "is_one_column")]
+    pub cols: u32,
+}
+
+fn one_column() -> u32 {
+    1
+}
+
+fn is_one_column(cols: &u32) -> bool {
+    *cols == 1
+}
+
+/// Il lato più piccolo e il più grande di una pagina, come in Word (0,1" e
+/// 22"), e lo spazio che i margini lasciano al testo, in ogni verso.
+pub const MIN_PAGE_SIDE: f32 = 7.2;
+pub const MAX_PAGE_SIDE: f32 = 1584.0;
+pub const MIN_TEXT_ROOM: f32 = 36.0;
+/// Le colonne di una sezione, al più.
+pub const MAX_COLUMNS: u32 = 12;
+
+impl Page {
+    pub(crate) fn of(section: &SectionProps) -> Page {
+        Page {
+            w: section.page_w,
+            h: section.page_h,
+            top: section.margin_top,
+            bottom: section.margin_bottom,
+            left: section.margin_left,
+            right: section.margin_right,
+            cols: section.columns.count.max(1),
+        }
+    }
+
+    /// Scrive la pagina nella sezione, se è cambiata. I margini devono
+    /// lasciare spazio al testo, rilegatura compresa, come in WordCraft.
+    pub(crate) fn apply(&self, section: &mut SectionProps) -> Result<(), RichError> {
+        let page = self.in_twips();
+        if page == Page::of(section) {
+            return Ok(());
+        }
+        page.write(section)
+    }
+
+    /// Le misure come le tiene un `.docx`, in ventesimi di punto: un A4 di
+    /// 595,28 × 841,89 punti si rilegge 595,3 × 841,9.
+    fn in_twips(&self) -> Page {
+        let twips = |n: f32| (n * 20.0).round() / 20.0;
+        Page {
+            w: twips(self.w),
+            h: twips(self.h),
+            top: twips(self.top),
+            bottom: twips(self.bottom),
+            left: twips(self.left),
+            right: twips(self.right),
+            cols: self.cols,
+        }
+    }
+
+    fn write(&self, section: &mut SectionProps) -> Result<(), RichError> {
+        let bad = |what: &str| Err(RichError::Malformed(format!("page: {what}")));
+        let sides = [self.w, self.h];
+        let margins = [self.top, self.bottom, self.left, self.right];
+        if sides.iter().chain(&margins).any(|n| !n.is_finite()) {
+            return bad("not a finite number");
+        }
+        if sides
+            .iter()
+            .any(|n| !(MIN_PAGE_SIDE..=MAX_PAGE_SIDE).contains(n))
+        {
+            return bad("a side out of range");
+        }
+        if margins.iter().any(|n| *n < 0.0)
+            || self.left + self.right + section.gutter > self.w - MIN_TEXT_ROOM.min(self.w)
+            || self.top + self.bottom > self.h - MIN_TEXT_ROOM.min(self.h)
+        {
+            return bad("the margins leave no room for text");
+        }
+        if !(1..=MAX_COLUMNS).contains(&self.cols) {
+            return bad("columns out of range");
+        }
+        section.page_w = self.w;
+        section.page_h = self.h;
+        if self.w != self.h {
+            section.landscape = self.w > self.h;
+        }
+        section.margin_top = self.top;
+        section.margin_bottom = self.bottom;
+        section.margin_left = self.left;
+        section.margin_right = self.right;
+        if self.cols != section.columns.count.max(1) {
+            section.columns.count = self.cols;
+            section.columns.widths.clear();
+        }
+        Ok(())
+    }
 }
 
 /// Un commento. Senza `k` è nuovo: il formato lo scrive con autore, data e
@@ -124,7 +236,10 @@ pub struct Para {
     pub k: Option<String>,
     /// La sezione che il paragrafo chiude, opaca.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sect: Option<String>,
+    pub sect: Option<Box<str>>,
+    /// La pagina della sezione che il paragrafo chiude.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<Box<Page>>,
     /// Rientri, spaziature e interlinea dove differiscono da quelli dello stile.
     #[serde(default, skip_serializing_if = "Layout::is_plain")]
     pub p: Layout,
@@ -521,6 +636,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         lang: document.styles.default_chr.lang.clone(),
         f: base(&document.styles, None),
         styles: gallery(document, &used),
+        page: Some(Page::of(&document.last_section)),
         comments: comments(document)?,
         blocks,
     })
@@ -729,8 +845,13 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
                     section: section.clone(),
                     parts: stories::of_section(document, section),
                 })
+                .map(String::into_boxed_str)
             })
             .transpose()?,
+        page: paragraph
+            .section
+            .as_deref()
+            .map(|section| Box::new(Page::of(section))),
         p: layout(styles, &paragraph.props),
         s: (role == Role::Body)
             .then(|| style_of(document, &paragraph.props))

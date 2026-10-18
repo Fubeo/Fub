@@ -99,6 +99,7 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
             doc.styles.gallery(&used)
         },
         track: false,
+        page: None,
         comments: Vec::new(),
         blocks,
     };
@@ -169,6 +170,11 @@ pub(crate) fn save(current: &[u8], json: &str) -> Result<Saved, RichError> {
         return Err(RichError::Codec(
             "odt: recording changes is not written".into(),
         ));
+    }
+    // La pagina di un `.odt` sta nei suoi stili, che il codec tiene come
+    // sono: una pagina nella proiezione viene da un altro formato.
+    if projection.page.is_some() || has_page(&projection.blocks) {
+        return Err(RichError::Codec("odt: page setup is not written".into()));
     }
     // I commenti di un `.odt` sono oggetti del testo, tenuti come sono: un
     // elenco di commenti viene da un altro formato, e qui non si scrive.
@@ -319,4 +325,15 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
             ),
         })
         .collect()
+}
+
+/// Una pagina in un paragrafo, anche dentro una tabella.
+fn has_page(blocks: &[Block]) -> bool {
+    blocks.iter().any(|block| match block {
+        Block::Para(para) => para.page.is_some(),
+        Block::Table(table) => table
+            .rows
+            .iter()
+            .any(|row| row.cells.iter().any(|cell| has_page(&cell.blocks))),
+    })
 }

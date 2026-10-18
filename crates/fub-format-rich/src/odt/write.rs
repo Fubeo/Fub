@@ -1590,6 +1590,7 @@ impl<'a> Writer<'a> {
             align: self.styles.align(style),
             k: None,
             sect: None,
+            page: None,
             p: self.styles.layout(style),
             s: (para.role == Role::Body)
                 .then(|| self.styles.common_of(style))

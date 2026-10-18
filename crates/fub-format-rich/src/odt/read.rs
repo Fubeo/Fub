@@ -440,6 +440,7 @@ impl Reader<'_> {
             align: self.styles.align(style),
             k: Some(blob::encode(&key)?),
             sect: None,
+            page: None,
             p: self.styles.layout(style),
             s: (role == Role::Body)
                 .then(|| self.styles.common_of(style))

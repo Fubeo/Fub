@@ -1257,6 +1257,26 @@ fn registrare_le_modifiche_non_si_scrive() {
 }
 
 #[test]
+fn la_pagina_non_si_scrive() {
+    let bytes = odt("<text:p>x</text:p>");
+    let mut projection = projection(&bytes);
+    assert_eq!(projection.page, None);
+    projection.page = Some(fub_format_rich::projection::Page {
+        w: 595.28,
+        h: 841.89,
+        top: 72.0,
+        bottom: 72.0,
+        left: 72.0,
+        right: 72.0,
+        cols: 1,
+    });
+    assert!(matches!(
+        save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
+        Err(RichError::Codec(_))
+    ));
+}
+
+#[test]
 fn un_documento_nuovo_si_crea_e_si_scrive() {
     let bytes = blank(Codec::Odt).unwrap();
     let mut projection = projection(&bytes);

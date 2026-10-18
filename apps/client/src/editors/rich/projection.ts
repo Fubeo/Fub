@@ -159,6 +159,8 @@ export interface Para {
   readonly align?: Align;
   readonly k?: string;
   readonly sect?: string;
+  /// La pagina della sezione che il paragrafo chiude.
+  readonly page?: Page;
   readonly p?: Layout;
   /// Lo stile di un paragrafo di corpo, quando non è il predefinito.
   readonly s?: string;
@@ -218,9 +220,25 @@ export interface Projection {
   /// Suggerimento: il carattere e la dimensione di un paragrafo senza stile.
   readonly f?: Look;
   readonly styles?: readonly ParaStyle[];
+  /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
+  readonly page?: Page;
   readonly comments?: readonly CommentView[];
   readonly blocks: readonly Block[];
 }
+
+/// La pagina di una sezione, in punti: i lati (già scambiati se è
+/// orizzontale), i margini e le colonne (una, se manca).
+export interface Page {
+  readonly w: number;
+  readonly h: number;
+  readonly top: number;
+  readonly bottom: number;
+  readonly left: number;
+  readonly right: number;
+  readonly cols?: number;
+}
+
+const PAGE_LENGTHS = ["w", "h", "top", "bottom", "left", "right"] as const;
 
 export const BODY: Role = { kind: "body" };
 
@@ -480,10 +498,31 @@ function readInline(value: unknown, where: string): Inline {
   throw new ProjectionError(`${where}: elemento sconosciuto`);
 }
 
+function readPage(value: unknown, where: string): Page {
+  const page = record(value, where);
+  closed(page, [...PAGE_LENGTHS, "cols"], where);
+  const out: Record<string, number> = {};
+  for (const key of PAGE_LENGTHS) {
+    const n = optionalNumber(page[key], `${where}.${key}`);
+    if (n === undefined) throw new ProjectionError(`${where}: manca ${key}`);
+    out[key] = n;
+  }
+  const cols = optionalNumber(page.cols, `${where}.cols`);
+  if (cols !== undefined && (!Number.isInteger(cols) || cols < 1)) throw new ProjectionError(`${where}: colonne non valide`);
+  return { ...(out as Omit<Page, "cols">), ...(cols !== undefined && cols !== 1 ? { cols } : {}) };
+}
+
+/// Una pagina in JSON, con i campi nell'ordine di serde.
+export function writePage(page: Page): string {
+  const fields = PAGE_LENGTHS.map((key) => `"${key}":${float(page[key])}`);
+  if (page.cols !== undefined && page.cols !== 1) fields.push(`"cols":${page.cols}`);
+  return `{${fields.join(",")}}`;
+}
+
 function readBlock(value: unknown, where: string): Block {
   const block = record(value, where);
   if (block.t === "para") {
-    closed(block, ["t", "role", "align", "k", "sect", "p", "s", "f", "ins", "del", "c"], where);
+    closed(block, ["t", "role", "align", "k", "sect", "page", "p", "s", "f", "ins", "del", "c"], where);
     const align = block.align;
     if (align !== undefined && !["left", "center", "right", "justify"].includes(align as string)) {
       throw new ProjectionError(`${where}: allineamento sconosciuto`);
@@ -495,6 +534,7 @@ function readBlock(value: unknown, where: string): Block {
       ...(align !== undefined ? { align: align as Align } : {}),
       ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}),
       ...(block.sect !== undefined ? { sect: text(block.sect, `${where}.sect`) } : {}),
+      ...(block.page !== undefined ? { page: readPage(block.page, `${where}.page`) } : {}),
       ...withLayout(readLayout(block.p, `${where}.p`)),
       ...(block.s !== undefined ? { s: text(block.s, `${where}.s`) } : {}),
       ...withLook(readLook(block.f, `${where}.f`)),
@@ -538,7 +578,7 @@ export function parseProjection(source: string): Projection {
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
   if (root.version !== PROJECTION_VERSION) throw new ProjectionError(`versione ${String(root.version)}`);
-  closed(root, ["format", "version", "readonly", "track", "lang", "f", "styles", "comments", "blocks"], "proiezione");
+  closed(root, ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "comments", "blocks"], "proiezione");
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
@@ -552,6 +592,7 @@ export function parseProjection(source: string): Projection {
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
     ...withLook(readLook(root.f, "f")),
     ...(root.styles !== undefined ? { styles: list(root.styles, "styles").map((s, i) => readStyle(s, `styles[${i}]`)) } : {}),
+    ...(root.page !== undefined ? { page: readPage(root.page, "page") } : {}),
     ...(root.comments !== undefined ? { comments: list(root.comments, "comments").map((c, i) => readComment(c, `comments[${i}]`)) } : {}),
     blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, `blocks[${i}]`)),
   };
@@ -671,6 +712,7 @@ export function writeBlock(block: Block): string {
     if (block.align !== undefined) out += `,"align":"${block.align}"`;
     if (block.k !== undefined) out += `,"k":${JSON.stringify(block.k)}`;
     if (block.sect !== undefined) out += `,"sect":${JSON.stringify(block.sect)}`;
+    if (block.page !== undefined) out += `,"page":${writePage(block.page)}`;
     out += writeLayout(block.p);
     if (block.s !== undefined) out += `,"s":${JSON.stringify(block.s)}`;
     out += writeLook(block.f);
@@ -691,7 +733,7 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "readonly" | "track" | "lang" | "f" | "styles" | "comments">): string {
+export function writeHead(projection: Pick<Projection, "readonly" | "track" | "lang" | "f" | "styles" | "page" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${PROJECTION_VERSION}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
   if (projection.track) out += `,"track":true`;
@@ -703,6 +745,7 @@ export function writeHead(projection: Pick<Projection, "readonly" | "track" | "l
     );
     out += `,"styles":[${styles.join(",")}]`;
   }
+  if (projection.page) out += `,"page":${writePage(projection.page)}`;
   if (projection.comments && projection.comments.length > 0) {
     out += `,"comments":[${projection.comments.map(writeComment).join(",")}]`;
   }
