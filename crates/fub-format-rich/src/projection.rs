@@ -18,8 +18,8 @@ use wordcraft_doc::para::OBJ;
 
 use wordcraft_doc::props::{Highlight, LineSpacing, TextColor, Underline, VertAlign};
 use wordcraft_doc::{
-    Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
-    Part, SectionProps, StyleKind, StyleSheet, Table as WcTable,
+    Align as WcAlign, Block as WcBlock, CharProps, Comment, Document, InlineObject, ParaProps,
+    Paragraph, Part, SectionProps, StyleKind, StyleSheet, Table as WcTable,
 };
 
 use crate::RichError;
@@ -48,7 +48,45 @@ pub struct Projection {
     /// loro ordine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub styles: Vec<ParaStyle>,
+    /// I commenti del documento, per id: le risposte nominano il commento a
+    /// cui rispondono, l'intervallo lo segnano due oggetti del testo.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comments: Vec<CommentView>,
     pub blocks: Vec<Block>,
+}
+
+/// Un commento. Senza `k` è nuovo: il formato lo scrive con autore, data e
+/// testo, una riga per paragrafo. Di uno che c'è già, autore, data e testo
+/// sono suggerimenti: si cambia soltanto se è risolto.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommentView {
+    /// L'id del commento nel documento: lo stesso nel file riletto.
+    pub id: u32,
+    /// Il commento e la sua storia, opachi.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k: Option<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub by: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub at: String,
+    /// Il commento a cui risponde.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<u32>,
+    /// Risolto.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub done: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+}
+
+/// Il segno di inizio (o di fine, `end`) dell'intervallo di un commento.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Anchor {
+    pub id: u32,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub end: bool,
 }
 
 /// Uno stile di paragrafo che chi scrive può scegliere.
@@ -304,6 +342,10 @@ pub enum Inline {
         /// Una nota nuova di chiusura, invece che a piè di pagina.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         end: bool,
+        /// Il segno di un commento: in un oggetto nuovo (`marker`) è tutto
+        /// ciò che lo descrive, in uno che c'è già è un suggerimento.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        comment: Option<Anchor>,
         /// Un oggetto inserito o eliminato con le revisioni tracciate.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         ins: Option<Rev>,
@@ -409,6 +451,14 @@ pub(crate) struct AtomKeep {
     pub parts: BTreeMap<u32, Part>,
 }
 
+/// Un commento con la sua storia (e quelle che questa mostra).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct CommentKeep {
+    pub comment: Comment,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub parts: BTreeMap<u32, Part>,
+}
+
 /// La fine di una sezione, con le sue intestazioni e i suoi piè di pagina.
 /// Un dato di prima delle storie è soltanto la sezione.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -466,8 +516,43 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         lang: document.styles.default_chr.lang.clone(),
         f: base(&document.styles, None),
         styles: gallery(document, &used),
+        comments: comments(document)?,
         blocks,
     })
+}
+
+/// I commenti del documento, nell'ordine dei loro id.
+fn comments(document: &Document) -> Result<Vec<CommentView>, RichError> {
+    document
+        .comments
+        .iter()
+        .map(|(id, comment)| {
+            let text = document
+                .parts
+                .get(&comment.part)
+                .map(|part| {
+                    part.blocks
+                        .iter()
+                        .filter_map(|block| block.as_para())
+                        .map(|paragraph| paragraph.plain_text().to_string())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default();
+            Ok(CommentView {
+                id: *id,
+                k: Some(blob::encode(&CommentKeep {
+                    comment: comment.clone(),
+                    parts: stories::closure(document, vec![comment.part]),
+                })?),
+                by: comment.author.clone(),
+                at: comment.date.clone(),
+                parent: comment.parent,
+                done: comment.resolved,
+                text,
+            })
+        })
+        .collect()
 }
 
 /// Gli stili che i paragrafi di corpo portano.
@@ -693,6 +778,14 @@ fn atom(
         data: None,
         note: None,
         end: false,
+        comment: match object {
+            InlineObject::CommentStart { id } => Some(Anchor {
+                id: *id,
+                end: false,
+            }),
+            InlineObject::CommentEnd { id } => Some(Anchor { id: *id, end: true }),
+            _ => None,
+        },
         ins: rev(document, props.ins),
         del: rev(document, props.del),
     })

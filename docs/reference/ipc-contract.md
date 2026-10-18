@@ -278,6 +278,15 @@ autore, data e nome dello spostamento, ciascuno assente se vuoto. Due
 revisioni con gli stessi campi sono la stessa; togliere `ins` o `del` la
 accetta o la rifiuta.
 
+I commenti sono l'elenco `comments`, fra `styles` e `blocks`: `{"id", "k",
+"by", "at", "parent", "done", "text"}`, con `parent` l'id del commento a cui
+risponde e `done` risolto. Di un commento con `k` cambia soltanto `done`; uno
+senza `k` è nuovo, e `text` ne è il testo semplice, un paragrafo per riga.
+L'intervallo è segnato da due oggetti `marker` con `"comment": {"id", "end"}`:
+uno nuovo non ha `k`. Un segno senza il suo commento si toglie; due commenti
+con lo stesso id, o una risposta senza il suo, sono una proiezione malformata.
+Il codec ODT rifiuta un elenco non vuoto.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo

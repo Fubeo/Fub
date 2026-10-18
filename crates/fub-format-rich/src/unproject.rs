@@ -27,13 +27,13 @@ use wordcraft_doc::numbering::ListKind;
 use wordcraft_doc::para::{NoteKind, Run, OBJ};
 use wordcraft_doc::props::{Highlight, NumRef, Underline, VertAlign};
 use wordcraft_doc::{
-    Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
-    Part, PartKind, Revision, RevisionKind, SectionProps, StyleKind, StyleSheet,
+    Align as WcAlign, Block as WcBlock, CharProps, Comment, Document, InlineObject, ParaProps,
+    Paragraph, Part, PartKind, Revision, RevisionKind, SectionProps, StyleKind, StyleSheet,
 };
 
 use crate::projection::{
-    self, Align, AtomKeep, AtomKind, Block, Inline, Layout, Line, Look, Mark, Para, ParaKeep,
-    Projection, Rev, Role, SectKeep,
+    self, Align, AtomKeep, AtomKind, Block, CommentKeep, Inline, Layout, Line, Look, Mark, Para,
+    ParaKeep, Projection, Rev, Role, SectKeep,
 };
 use crate::RichError;
 use crate::{blob, fidelity, fresh, stories};
@@ -49,8 +49,11 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
         claimed: HashSet::new(),
         sections: Vec::new(),
     };
+    // Prima i commenti: un segno del testo resta soltanto se il suo c'è.
+    comments(projection, &mut document, &mut state)?;
     let body = blocks(&projection.blocks, &mut document, &mut state)?;
     document.body = body;
+    drop_lost_anchors(&mut document);
     prune(base, &mut document);
     add_notes(&mut document, state.notes)?;
     document.ensure_nonempty();
@@ -366,10 +369,34 @@ fn paragraph(
             }
             Inline::Atom {
                 k: None,
+                kind: AtomKind::Marker,
+                data: None,
+                note: None,
+                end: false,
+                comment: Some(anchor),
+                ins,
+                del,
+                ..
+            } => {
+                let object = if anchor.end {
+                    InlineObject::CommentEnd { id: anchor.id }
+                } else {
+                    InlineObject::CommentStart { id: anchor.id }
+                };
+                let Some(object) = known_object(object, document, state, &BTreeMap::new())? else {
+                    continue;
+                };
+                let props = tracked(CharProps::default(), ins.as_ref(), del.as_ref(), document);
+                push(&mut out, &OBJ.to_string(), props);
+                out.objects.push(object);
+            }
+            Inline::Atom {
+                k: None,
                 kind: AtomKind::Image,
                 data: Some(data),
                 note: None,
                 end: false,
+                comment: None,
                 label,
                 w,
                 h,
@@ -496,6 +523,123 @@ fn prune(base: &Document, document: &mut Document) {
     for id in fidelity::referenced(base) {
         if !kept.contains(&id) {
             document.parts.remove(&id);
+        }
+    }
+}
+
+/// I commenti che la proiezione elenca, al posto di quelli del documento:
+/// uno tenuto riprende la sua storia (con l'id che ha nel documento, se lì è
+/// identica) e prende soltanto lo stato di risolto; uno nuovo ha una storia
+/// nuova, un paragrafo per riga.
+fn comments(
+    projection: &Projection,
+    document: &mut Document,
+    state: &mut State,
+) -> Result<(), RichError> {
+    let mut out = BTreeMap::new();
+    for view in &projection.comments {
+        let comment = match &view.k {
+            Some(k) => {
+                let CommentKeep { mut comment, parts } = blob::decode(k)?;
+                for id in parts.keys() {
+                    if !state.stories.insert(*id) {
+                        return Err(RichError::DuplicateStory(*id));
+                    }
+                }
+                let claimed = &state.claimed;
+                let carried = stories::restore(document, parts, &|id| !claimed.contains(&id))?;
+                state.claimed.extend(carried.values().copied());
+                if let Some(new) = carried.get(&comment.part) {
+                    comment.part = *new;
+                }
+                if !document.parts.contains_key(&comment.part) {
+                    return Err(RichError::Missing(format!("comment {}", view.id)));
+                }
+                comment.resolved = view.done;
+                comment
+            }
+            None => {
+                let blocks = fresh::comment(&view.text)?
+                    .map(|line| {
+                        Arc::new(WcBlock::Para(Paragraph::with_text(
+                            line,
+                            CharProps::default(),
+                        )))
+                    })
+                    .collect();
+                let part = document
+                    .try_add_part(PartKind::Comment, blocks)
+                    .map_err(|error| RichError::Codec(error.to_string()))?;
+                state.stories.insert(part);
+                state.claimed.insert(part);
+                Comment {
+                    author: view.by.clone(),
+                    initials: initials(&view.by),
+                    date: view.at.clone(),
+                    parent: view.parent,
+                    resolved: view.done,
+                    part,
+                    ..Default::default()
+                }
+            }
+        };
+        if out.insert(view.id, comment).is_some() {
+            return Err(RichError::Malformed(format!("comment {} twice", view.id)));
+        }
+    }
+    // Una risposta senza il suo commento non ha più un filo.
+    if let Some((id, _)) = out
+        .iter()
+        .find(|(_, c)| c.parent.is_some_and(|parent| !out.contains_key(&parent)))
+    {
+        return Err(RichError::Malformed(format!(
+            "comment {id} replies to a missing comment"
+        )));
+    }
+    document.comments = out;
+    Ok(())
+}
+
+/// Le iniziali di un autore, come le scrive Word: la prima lettera di ogni
+/// parola.
+fn initials(author: &str) -> String {
+    author
+        .split_whitespace()
+        .filter_map(|word| word.chars().next())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+/// I segni dei commenti tolti, nelle storie che il corpo non mostra con i
+/// suoi oggetti: note, intestazioni, caselle di testo, altri commenti.
+fn drop_lost_anchors(document: &mut Document) {
+    let comments: BTreeSet<u32> = document.comments.keys().copied().collect();
+    let lost = |object: &InlineObject| {
+        matches!(object, InlineObject::CommentStart { id } | InlineObject::CommentEnd { id }
+            if !comments.contains(id))
+    };
+    for story in document.parts.values_mut() {
+        for block in &mut story.blocks {
+            let mut found = false;
+            fidelity::each_paragraph(block, &mut |paragraph| {
+                found |= paragraph.objects.iter().any(lost);
+            });
+            if !found {
+                continue;
+            }
+            stories::each_paragraph_mut(Arc::make_mut(block), &mut |paragraph| {
+                let offsets: Vec<usize> = paragraph
+                    .object_offsets()
+                    .into_iter()
+                    .zip(paragraph.objects.iter())
+                    .filter(|(_, object)| lost(object))
+                    .map(|(at, _)| at)
+                    .collect();
+                for at in offsets.into_iter().rev() {
+                    // Un oggetto è un carattere del testo: si toglie sempre.
+                    let _ = paragraph.delete(at, at + OBJ.len_utf8());
+                }
+            });
         }
     }
 }

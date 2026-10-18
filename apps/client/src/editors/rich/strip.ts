@@ -34,9 +34,11 @@ import {
   setSize,
   setStyle,
   type StylePick,
+  COMMENT_ACTION,
   FIND_ACTION,
   LINK_ACTION,
 } from "./commands";
+import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComment, replyComment, resolveComment } from "./comments";
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
@@ -52,11 +54,16 @@ const REVISION_BUTTONS: readonly { id: string; lines: readonly string[] }[] = [
   { id: "rich.rev.reject_all", lines: ["M4 4h16v16H4z", "M8 8l8 8", "M16 8l-8 8"] },
 ];
 
+/// Chi scrive i commenti nuovi: lo ricorda la sessione, non il documento.
+let commentAuthor = "";
+
 /// Ciò che la striscia chiede alla shell.
 export interface RichMedia {
   /// Un'immagine del vault scelta da chi scrive: i suoi byte, `null` se la
   /// scelta è annullata, `"unreadable"` se non si legge o pesa troppo.
   readonly pickImage?: () => Promise<Blob | "unreadable" | null>;
+  /// Il formato scrive commenti nuovi.
+  readonly comments?: boolean;
 }
 
 /// La colonna del testo di una pagina Letter con i margini di Word, in punti:
@@ -374,8 +381,12 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   const count = button(() => t("rich.count"), null, (anchor) => openCount(anchor));
   count.append(icon(["M4 6h10", "M4 10h16", "M4 14h12", "M4 18h7", "M17 16v4", "M15 18h4"]));
   count.setAttribute("aria-haspopup", "dialog");
-  review.append(find, count);
+  const comments = button(() => t("rich.comments"), null, (anchor) => openComments(anchor, false));
+  comments.append(icon(["M4 5h16v11H9l-5 4z", "M8 9h8", "M8 12h5"]));
+  comments.setAttribute("aria-haspopup", "dialog");
+  review.append(find, count, comments);
   life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
+  life.add(engine.onAsk(COMMENT_ACTION, () => openComments(comments, true)));
   // Le revisioni tracciate: si vedono soltanto in un documento che ne ha.
   const revisionButtons = REVISION_BUTTONS.map((spec) => {
     const control = button(() => t(spec.id as Key), spec.id, () => engine.run(spec.id));
@@ -562,6 +573,203 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
       },
     });
     anchor.setAttribute("aria-expanded", "true");
+  }
+
+  /// I commenti del documento, con le risposte sotto, e uno nuovo sulla
+  /// selezione. Ogni gesto è una battuta del documento.
+  function openComments(anchor: HTMLButtonElement, writing: boolean): void {
+    popover?.close();
+    const box = document.createElement("div");
+    box.className = "rich-strip-swatches";
+    box.style.display = "grid";
+    box.style.gridTemplateColumns = "auto";
+    box.style.width = "320px";
+    const row = (gap = "4px") => {
+      const el = document.createElement("div");
+      el.style.display = "flex";
+      el.style.flexWrap = "wrap";
+      el.style.gap = gap;
+      el.style.alignItems = "center";
+      return el;
+    };
+    const action = (label: Key, onPress: () => void, submit = false) => {
+      const control = document.createElement("button");
+      control.type = submit ? "submit" : "button";
+      control.className = "rich-strip-swatch-none";
+      control.textContent = t(label);
+      if (!submit) life.listen(control, "click", onPress);
+      return control;
+    };
+    let fields = 0;
+    const field = (form: HTMLElement, control: HTMLInputElement | HTMLTextAreaElement, label: Key) => {
+      control.id = `${prefix}-comment-${(fields += 1)}`;
+      control.className = "rich-strip-select";
+      control.style.width = "100%";
+      control.style.boxSizing = "border-box";
+      const caption = document.createElement("label");
+      caption.htmlFor = control.id;
+      caption.textContent = t(label);
+      form.append(caption, control);
+    };
+    const area = (rows: number) => {
+      const text = document.createElement("textarea");
+      text.rows = rows;
+      text.required = true;
+      text.maxLength = 4000;
+      text.style.resize = "vertical";
+      return text;
+    };
+    const author = document.createElement("input");
+    author.type = "text";
+    author.required = true;
+    author.maxLength = 200;
+    author.value = commentAuthor;
+    life.listen(author, "input", () => {
+      commentAuthor = author.value.trim();
+    });
+    const by = () => author.value.trim();
+    const done = (applied: boolean) => {
+      if (!applied) return false;
+      render();
+      return true;
+    };
+
+    // Un commento nuovo, sulla selezione.
+    const form = document.createElement("form");
+    form.style.display = "grid";
+    form.style.gap = "4px";
+    const text = area(3);
+    const hint = document.createElement("p");
+    hint.style.margin = "0";
+    if (media.comments) {
+      field(form, text, "rich.comment.text");
+      field(form, author, "rich.comment.author");
+      const actions = row();
+      actions.style.justifyContent = "flex-end";
+      actions.append(hint, action("rich.comment.apply", () => {}, true));
+      form.append(actions);
+    } else {
+      hint.textContent = t("rich.comment.unsupported");
+      form.append(hint);
+    }
+    life.listen(form, "submit", (event) => {
+      event.preventDefault();
+      if (!by()) {
+        author.focus();
+        return;
+      }
+      if (done(engine.apply(addComment(text.value, by()), false))) text.value = "";
+    });
+
+    const list = document.createElement("div");
+    list.style.display = "grid";
+    list.style.gap = "8px";
+    list.style.maxHeight = "320px";
+    list.style.overflowY = "auto";
+    box.append(form, list);
+
+    const when = (at: string | undefined) => {
+      const date = at ? new Date(at) : null;
+      return date && !Number.isNaN(date.getTime()) ? date.toLocaleString() : (at ?? "");
+    };
+    /// Il commento con le sue risposte, ciascuna rientrata sotto.
+    function thread(id: number, depth: number, all: ReturnType<typeof commentsOf>, placed: ReadonlySet<number>, into: HTMLElement): void {
+      const comment = all.find((c) => c.id === id)!;
+      const item = document.createElement("article");
+      item.style.display = "grid";
+      item.style.gap = "2px";
+      item.style.paddingInlineStart = `${depth * 12}px`;
+      if (depth > 0) item.style.borderInlineStart = "2px solid var(--border)";
+      if (comment.done) item.style.opacity = "0.7";
+      const head = document.createElement("strong");
+      head.textContent = [comment.by || t("rich.rev.anonymous"), when(comment.at), comment.done ? t("rich.comment.resolved") : ""]
+        .filter(Boolean)
+        .join(" · ");
+      const body = document.createElement("p");
+      body.style.margin = "0";
+      body.style.whiteSpace = "pre-wrap";
+      body.textContent = comment.text ?? "";
+      item.append(head, body);
+      if (depth === 0) {
+        const actions = row();
+        const go = action("rich.comment.go", () => {
+          if (engine.apply(goToComment(id))) popover?.close();
+        });
+        go.disabled = !placed.has(id);
+        const reply = action("rich.comment.reply", () => {
+          reply.disabled = true;
+          const answer = document.createElement("form");
+          answer.style.display = "grid";
+          answer.style.gap = "4px";
+          const said = area(2);
+          field(answer, said, "rich.comment.reply.text");
+          if (!by()) field(answer, author, "rich.comment.author");
+          const send = row();
+          send.style.justifyContent = "flex-end";
+          send.append(action("rich.comment.reply", () => {}, true));
+          answer.append(send);
+          life.listen(answer, "submit", (event) => {
+            event.preventDefault();
+            if (!by()) {
+              author.focus();
+              return;
+            }
+            done(engine.apply(replyComment(id, said.value, by()), false));
+          });
+          item.append(answer);
+          said.focus();
+        });
+        reply.disabled = !media.comments;
+        const resolve = action(comment.done ? "rich.comment.reopen" : "rich.comment.resolve", () => {
+          done(engine.apply(resolveComment(id, !comment.done), false));
+        });
+        const remove = action("rich.comment.delete", () => {
+          done(engine.apply(deleteComment(id), false));
+        });
+        actions.append(go, reply, resolve, remove);
+        item.append(actions);
+      }
+      into.append(item);
+      for (const child of all) if (child.parent === id) thread(child.id, depth + 1, all, placed, into);
+    }
+
+    function render(): void {
+      const all = engine.read((state) => commentsOf(state.doc));
+      const placed = engine.read((state) => {
+        const out = new Set<number>();
+        for (const [id, place] of anchorsOf(state.doc)) if (place.start !== undefined && place.end !== undefined) out.add(id);
+        return out;
+      });
+      const can = media.comments === true && engine.read(canComment);
+      text.disabled = !can;
+      hint.textContent = media.comments ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
+      list.replaceChildren();
+      const ids = new Set(all.map((c) => c.id));
+      for (const comment of all) {
+        if (comment.parent === undefined || !ids.has(comment.parent)) thread(comment.id, 0, all, placed, list);
+      }
+      if (all.length === 0) {
+        const none = document.createElement("p");
+        none.style.margin = "0";
+        none.textContent = t("rich.comment.none");
+        list.append(none);
+      }
+    }
+    render();
+    popover = openPopover({
+      anchor,
+      content: box,
+      label: t("rich.comments"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+    if (writing && !text.disabled) text.focus();
+    else list.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
@@ -1032,6 +1240,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     image.disabled = note.disabled = !engine.read(insertNote("·", false));
     merge.disabled = !engine.actionState("rich.table.merge").enabled;
     split.disabled = !engine.actionState("rich.table.split").enabled;
+    comments.hidden = !media.comments && engine.read((state) => commentsOf(state.doc).length === 0);
     const tracked = engine.read(goToRevision(1));
     for (const control of revisionButtons) {
       control.hidden = !tracked;

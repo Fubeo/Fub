@@ -32,6 +32,7 @@ import {
   plainLayout,
   plainLook,
   writeBlock,
+  type Anchor,
   type AtomKind,
   type Block,
   type Cell,
@@ -242,7 +243,9 @@ const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
 };
 
 const nodes: Record<string, NodeSpec> = {
-  doc: { content: "(block | section)+" },
+  // I commenti del documento: l'elenco della proiezione, che una battuta
+  // cambia insieme ai segni nel testo (`comments.ts`).
+  doc: { content: "(block | section)+", attrs: { comments: { default: [] } } },
   para,
   /// La fine di una sezione: chiude il paragrafo prima di lei.
   section: {
@@ -316,7 +319,8 @@ const nodes: Record<string, NodeSpec> = {
     inline: true,
     atom: true,
     // Senza `k` l'oggetto è nuovo: `data` sono i byte di un'immagine, `note`
-    // il testo di una nota (di chiusura se `end`).
+    // il testo di una nota (di chiusura se `end`), `comment` il segno di un
+    // commento.
     attrs: {
       k: { default: null },
       kind: {},
@@ -326,6 +330,7 @@ const nodes: Record<string, NodeSpec> = {
       data: { default: null },
       note: { default: null },
       end: { default: false },
+      comment: { default: null },
     },
     selectable: true,
     parseDOM: [
@@ -349,6 +354,9 @@ const nodes: Record<string, NodeSpec> = {
             data: src.startsWith("data:image/") && comma > 0 ? src.slice(comma + 8) : null,
             note: el.getAttribute("data-note"),
             end: el.hasAttribute("data-end"),
+            comment: el.hasAttribute("data-comment")
+              ? { id: Number(el.getAttribute("data-comment")), ...(el.hasAttribute("data-comment-end") ? { end: true } : {}) }
+              : null,
           };
         },
       },
@@ -365,6 +373,11 @@ const nodes: Record<string, NodeSpec> = {
       const note = node.attrs.note as string | null;
       if (note !== null) attrs["data-note"] = note;
       if (node.attrs.end) attrs["data-end"] = "";
+      const comment = node.attrs.comment as Anchor | null;
+      if (comment) {
+        attrs["data-comment"] = String(comment.id);
+        if (comment.end) attrs["data-comment-end"] = "";
+      }
       const label = node.attrs.label as string;
       if (label) attrs["data-label"] = label;
       const w = node.attrs.w as number | null;
@@ -554,6 +567,7 @@ function inlineNodes(c: readonly Inline[]): PmNode[] {
           data: inline.data ?? null,
           note: inline.note ?? null,
           end: inline.end === true,
+          comment: inline.comment ?? null,
         }, null, revisionMarks(inline)),
       );
       continue;
@@ -611,7 +625,10 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
 /// Il documento ProseMirror di una proiezione.
 export function toDoc(projection: Projection): PmNode {
   const content = blockNodes(projection.blocks);
-  return richSchema.nodes.doc.create(null, content.length > 0 ? content : [richSchema.nodes.para.create()]);
+  return richSchema.nodes.doc.create(
+    projection.comments ? { comments: projection.comments } : null,
+    content.length > 0 ? content : [richSchema.nodes.para.create()],
+  );
 }
 
 interface Segment extends Tracked {
@@ -712,6 +729,7 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
       const k = child.attrs.k as string | null;
       const data = child.attrs.data as string | null;
       const note = child.attrs.note as string | null;
+      const comment = child.attrs.comment as Anchor | null;
       out.push({
         t: "atom",
         ...(k !== null ? { k } : {}),
@@ -722,6 +740,7 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
         ...(data !== null ? { data } : {}),
         ...(note !== null ? { note } : {}),
         ...(child.attrs.end ? { end: true } : {}),
+        ...(comment ? { comment } : {}),
         ...trackedOf(child.marks),
       });
       return;

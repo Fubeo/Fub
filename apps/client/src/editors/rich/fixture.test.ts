@@ -13,6 +13,7 @@ import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
 import { parseProjection, writeProjection } from "./projection";
 import { insertImage, insertNote, insertTable, setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
+import { addComment, replyComment, resolveComment } from "./comments";
 import { BlockWriter, toDoc } from "./schema";
 
 const SOURCE = projectionFixture.source;
@@ -133,9 +134,17 @@ describe("la proiezione del codec", () => {
     expect(e.run("rich.rev.accept")).toBe(true);
     expect(e.state.doc.textBetween(e.state.selection.from, e.state.selection.to)).toBe("vecchia");
     expect(e.run("rich.rev.accept")).toBe(true);
+    // I commenti: una risposta al commento su «questo passo», che poi si
+    // risolve con la risposta di prima; un commento nuovo su «Fine».
+    const at = "2026-10-18T13:00:00Z";
+    expect(e.apply(replyComment(1, "Risposta\ndella shell.", "Bea", at))).toBe(true);
+    expect(e.apply(resolveComment(1, true))).toBe(true);
     // L'ultimo paragrafo diventa un titolo.
-    e.select(find(e.state.doc, "Fine."));
+    const last = find(e.state.doc, "Fine.");
+    e.select(last);
     expect(e.run("markdown.heading.2")).toBe(true);
+    e.select(last, last + "Fine".length);
+    expect(e.apply(addComment("Un commento nuovo.", "Bea", at))).toBe(true);
 
     const edited = e.getDoc();
     expect(changes[changes.length - 1]?.text).toBe(edited);

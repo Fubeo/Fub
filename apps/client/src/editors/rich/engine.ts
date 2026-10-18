@@ -36,8 +36,9 @@ import {
   splitParagraph,
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
-import { parseProjection, writeHead, type Look, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
+import { parseProjection, writeComment, writeHead, type Look, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
 import { richProof } from "./proof";
+import { commentPlugin, commentsOf } from "./comments";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, richSchema, toDoc } from "./schema";
 
@@ -129,6 +130,7 @@ export class RichEngine {
       fillTableKeys,
       findPlugin,
       revisionPlugin,
+      commentPlugin,
       keymap(this.#keys()),
       keymap(baseKeymap),
     ];
@@ -205,25 +207,29 @@ export class RichEngine {
     }
     const next = toDoc(projection);
     const current = this.#view.state.doc;
+    const tr = this.#view.state.tr;
     const start = current.content.findDiffStart(next.content);
-    if (start === null) {
+    if (start !== null) {
+      const end = current.content.findDiffEnd(next.content);
+      let a = end ? end.a : current.content.size;
+      let b = end ? end.b : next.content.size;
+      // Le due estremità si sovrappongono quando il cambio ripete testo vicino.
+      const overlap = start - Math.min(a, b);
+      if (overlap > 0) {
+        a += overlap;
+        b += overlap;
+      }
+      tr.replace(start, a, next.slice(start, b));
+    }
+    const comments = commentsOf(next);
+    if (comments.map(writeComment).join() !== commentsOf(current).map(writeComment).join()) {
+      tr.setDocAttribute("comments", comments);
+    }
+    if (!tr.docChanged) {
       this.#notify();
       return;
     }
-    const end = current.content.findDiffEnd(next.content);
-    let a = end ? end.a : current.content.size;
-    let b = end ? end.b : next.content.size;
-    // Le due estremità si sovrappongono quando il cambio ripete testo vicino.
-    const overlap = start - Math.min(a, b);
-    if (overlap > 0) {
-      a += overlap;
-      b += overlap;
-    }
-    const tr = this.#view.state.tr
-      .replace(start, a, next.slice(start, b))
-      .setMeta("addToHistory", false)
-      .setMeta(SYNC, true);
-    this.#view.dispatch(tr);
+    this.#view.dispatch(tr.setMeta("addToHistory", false).setMeta(SYNC, true));
     this.#notify();
   }
 
@@ -257,7 +263,7 @@ export class RichEngine {
       // Ciò che il documento ha, l'ha avuto: un taglia e incolla lo ritrova.
       collectKeys(state.doc, this.#known);
       const previous = this.#source;
-      this.#source = writeHead(this.#head) + this.#writer.write(state.doc).join(",") + "]}";
+      this.#source = writeHead({ ...this.#head, comments: commentsOf(state.doc) }) + this.#writer.write(state.doc).join(",") + "]}";
       if (this.#source !== previous) {
         this.#options.onChange({
           text: this.#source,

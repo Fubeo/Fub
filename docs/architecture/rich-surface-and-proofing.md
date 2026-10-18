@@ -91,6 +91,17 @@ l'IPC.
   plugin `revisionPlugin` disegna il segno di fine revisionato e toglie la
   revisione da ciò che si scrive dentro, e a capo e unione di due paragrafi
   lasciano il segno revisionato a chi chiude il testo.
+- I commenti attraversano la proiezione come elenco `comments` in testa e
+  come segni `marker` con `comment` (`id`, `end`) nel testo. Uno tenuto porta
+  il commento e le sue parti in `k`, e di lui cambia soltanto `done`; uno
+  nuovo è testo semplice, e il ritorno al documento ne fa la parte con un
+  paragrafo per riga. Un segno il cui commento non c'è più se ne va con lui.
+  Nello schema l'elenco è l'attributo `comments` del documento, così un gesto
+  di `comments.ts` cambia segni ed elenco in una battuta (`setDocAttribute`);
+  `commentPlugin` dà lo sfondo agli intervalli aperti. Il controllo di
+  rilettura accetta l'id durevole e la data UTC che il codec dà a un
+  commento nuovo. La striscia offre commenti nuovi soltanto ai formati di
+  `RICH_COMMENT_FORMATS` (`docx`).
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

@@ -74,11 +74,20 @@ Dal gruppo **Revisione** della striscia:
   sono una modifica sola, e i due capi di uno spostamento vanno insieme.
   Accettare un segno di paragrafo eliminato, o rifiutarne uno inserito,
   unisce il paragrafo al seguente, che gli dà le sue proprietà. Ciò che si
-  scrive dentro o accanto a una revisione non ne fa parte.
+  scrive dentro o accanto a una revisione non ne fa parte;
+- i **commenti** di un `.docx` si leggono nel pannello **Commenti**, con
+  autore, data e risposte sotto, e il testo che commentano ha uno sfondo, con
+  il commento al passaggio del puntatore. Un commento nuovo (`Ctrl+Alt+M`)
+  segna la selezione, con testo semplice (una riga per paragrafo) e l'autore,
+  che la sessione ricorda. Ogni commento si mostra nel testo, riceve una
+  risposta, si **risolve** o si riapre con le sue risposte, e si elimina con
+  loro e con i loro segni; ogni gesto è una battuta, che l'annulla disfa. Il
+  testo di un commento che c'era resta com'è. Il segno di un commento nuovo
+  si sposta trascinandolo, ma non si copia.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
-intestazioni, immagini, forme, campi, note, formule, commenti) resta nel file
+intestazioni, immagini, forme, campi, note, formule, il testo dei commenti) resta nel file
 così com'è. Un oggetto si vede come una casella con il suo nome o il suo testo
 alternativo; la fine di una sezione è un filo doppio che non si cancella con un
 Backspace.
@@ -134,9 +143,9 @@ ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
 per byte com'erano. Un ruolo, un'enfasi, un aspetto del carattere o una
 disposizione del paragrafo nuovi aggiungono gli stili automatici che servono
 (`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei titoli e della
-citazione, senza toccare gli altri. Le lunghezze nuove si scrivono in punti. Le revisioni tracciate di un `.odt`
+citazione, senza toccare gli altri. Le lunghezze nuove si scrivono in punti. Le revisioni tracciate e i commenti di un `.odt`
 non si scrivono: un testo che ne porta (incollato da un `.docx`) non si
-salva.
+salva, e la striscia non offre commenti nuovi.
 
 Oltre ai motivi del `.docx`, un `.odt` si apre **in sola lettura** quando la
 superficie non saprebbe riscriverlo identico, per esempio con due elenchi uguali

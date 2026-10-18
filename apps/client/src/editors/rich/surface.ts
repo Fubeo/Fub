@@ -33,6 +33,9 @@ export const RICH_FORMATS: Readonly<Record<string, string>> = {
   doc: RICH_PROFILE,
 };
 
+/// I formati che scrivono commenti nuovi: il codec ODT non li scrive ancora.
+export const RICH_COMMENT_FORMATS: ReadonlySet<string> = new Set(["docx"]);
+
 /// Gli id delle azioni che la superficie esegue, noti prima che il motore
 /// arrivi: la barra disegna i pulsanti subito, spenti finché non scrive.
 export const RICH_ACTION_IDS: ReadonlySet<string> = new Set([
@@ -85,6 +88,7 @@ export const RICH_ACTION_IDS: ReadonlySet<string> = new Set([
   "rich.rev.reject",
   "rich.rev.accept_all",
   "rich.rev.reject_all",
+  "rich.comment",
   "markdown.table.row.before",
   "markdown.table.row.after",
   "markdown.table.row.up",
@@ -129,6 +133,7 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "rich.break.column": "Mod-Shift-Enter",
   "rich.link": "Mod-k",
   "rich.find": "Mod-h",
+  "rich.comment": "Mod-Alt-m",
   "markdown.table.row.before": "Mod-Alt-Shift-ArrowUp",
   "markdown.table.row.after": "Mod-Alt-Shift-ArrowDown",
   "markdown.table.row.up": "Mod-Alt-ArrowUp",
@@ -226,7 +231,10 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
       });
-      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null, { pickImage: pickImage() });
+      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null, {
+        pickImage: pickImage(),
+        comments: RICH_COMMENT_FORMATS.has(context.formatId ?? ""),
+      });
       root.insertBefore(strip.element, page);
       stopEngine = engine.subscribe(() => {
         showNotice();

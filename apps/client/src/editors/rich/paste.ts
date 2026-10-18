@@ -98,8 +98,9 @@ class Filter {
       const k = node.attrs.k as string | null;
       // Un oggetto nuovo porta tutto con sé: un'immagine che il formato sa
       // scrivere o il testo di una nota. Copiato, è un oggetto nuovo in più,
-      // come in Word.
-      if (k === null) return newAtom(node) ? node : null;
+      // come in Word. Il segno di un commento nuovo si trascina, non si copia:
+      // il commento ne ha uno solo.
+      if (k === null) return newAtom(node) || (this.context.moving && node.attrs.comment !== null) ? node : null;
       const unique = UNIQUE_ATOMS.has(node.attrs.kind as AtomKind);
       if (unique ? !this.#admitsUnique(k) : !known.has(k)) return null;
       return node;

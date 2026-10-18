@@ -128,9 +128,16 @@ export interface TextInline extends Tracked {
   readonly f?: Look;
 }
 
+/// Il segno di inizio (o di fine, `end`) dell'intervallo di un commento.
+export interface Anchor {
+  readonly id: number;
+  readonly end?: boolean;
+}
+
 /// Un oggetto. Senza `k` è nuovo: un'immagine con i suoi byte (`data`, base64)
-/// e la sua misura in punti, o una nota con il suo testo (`note`), di chiusura
-/// se `end`. Il formato lo scrive alla sua maniera.
+/// e la sua misura in punti, una nota con il suo testo (`note`), di chiusura
+/// se `end`, o il segno di un commento (`marker` con `comment`). Il formato lo
+/// scrive alla sua maniera. In un oggetto tenuto `comment` è un suggerimento.
 export interface AtomInline extends Tracked {
   readonly t: "atom";
   readonly k?: string;
@@ -141,6 +148,7 @@ export interface AtomInline extends Tracked {
   readonly data?: string;
   readonly note?: string;
   readonly end?: boolean;
+  readonly comment?: Anchor;
 }
 
 export type Inline = TextInline | AtomInline;
@@ -186,6 +194,20 @@ export interface Table {
 
 export type Block = Para | Table;
 
+/// Un commento. Il testo di uno tenuto (`k`) è un suggerimento: si cambia
+/// soltanto `done`, risolto. Uno nuovo è testo semplice, una riga per
+/// paragrafo.
+export interface CommentView {
+  readonly id: number;
+  readonly k?: string;
+  readonly by?: string;
+  readonly at?: string;
+  /// Il commento a cui risponde.
+  readonly parent?: number;
+  readonly done?: boolean;
+  readonly text?: string;
+}
+
 export interface Projection {
   readonly format: typeof PROJECTION_FORMAT;
   readonly version: typeof PROJECTION_VERSION;
@@ -194,6 +216,7 @@ export interface Projection {
   /// Suggerimento: il carattere e la dimensione di un paragrafo senza stile.
   readonly f?: Look;
   readonly styles?: readonly ParaStyle[];
+  readonly comments?: readonly CommentView[];
   readonly blocks: readonly Block[];
 }
 
@@ -348,6 +371,44 @@ function readTracked(value: Json, where: string): Tracked {
   return { ...(ins ? { ins } : {}), ...(del ? { del } : {}) };
 }
 
+function readId(value: unknown, where: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 0xffff_ffff) {
+    throw new ProjectionError(`${where}: atteso un id`);
+  }
+  return value;
+}
+
+function readAnchor(value: unknown, where: string): Anchor | undefined {
+  if (value === undefined) return undefined;
+  const anchor = record(value, where);
+  closed(anchor, ["id", "end"], where);
+  if (anchor.end !== undefined && typeof anchor.end !== "boolean") {
+    throw new ProjectionError(`${where}.end: atteso un sì o un no`);
+  }
+  return { id: readId(anchor.id, `${where}.id`), ...(anchor.end === true ? { end: true } : {}) };
+}
+
+function readComment(value: unknown, where: string): CommentView {
+  const comment = record(value, where);
+  closed(comment, ["id", "k", "by", "at", "parent", "done", "text"], where);
+  if (comment.done !== undefined && typeof comment.done !== "boolean") {
+    throw new ProjectionError(`${where}.done: atteso un sì o un no`);
+  }
+  const k = optionalText(comment.k, `${where}.k`);
+  const by = optionalText(comment.by, `${where}.by`);
+  const at = optionalText(comment.at, `${where}.at`);
+  const text = optionalText(comment.text, `${where}.text`);
+  return {
+    id: readId(comment.id, `${where}.id`),
+    ...(k !== undefined ? { k } : {}),
+    ...(by ? { by } : {}),
+    ...(at ? { at } : {}),
+    ...(comment.parent !== undefined ? { parent: readId(comment.parent, `${where}.parent`) } : {}),
+    ...(comment.done === true ? { done: true } : {}),
+    ...(text ? { text } : {}),
+  };
+}
+
 function readStyle(value: unknown, where: string): ParaStyle {
   const style = record(value, where);
   closed(style, ["id", "name", "f"], where);
@@ -377,7 +438,7 @@ function readInline(value: unknown, where: string): Inline {
     };
   }
   if (inline.t === "atom") {
-    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "ins", "del"], where);
+    closed(inline, ["t", "k", "kind", "label", "w", "h", "data", "note", "end", "comment", "ins", "del"], where);
     if (!(ATOM_KINDS as readonly unknown[]).includes(inline.kind)) {
       throw new ProjectionError(`${where}: oggetto sconosciuto`);
     }
@@ -387,12 +448,16 @@ function readInline(value: unknown, where: string): Inline {
     const k = optionalText(inline.k, `${where}.k`);
     const data = optionalText(inline.data, `${where}.data`);
     const note = optionalText(inline.note, `${where}.note`);
+    const comment = readAnchor(inline.comment, `${where}.comment`);
     if (inline.end !== undefined && typeof inline.end !== "boolean") {
       throw new ProjectionError(`${where}.end: atteso un sì o un no`);
     }
-    // Un oggetto o si tiene (`k`) o è nuovo: un'immagine o una nota.
-    const fresh = (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
-      || (inline.kind === "note" && note !== undefined && data === undefined);
+    // Un oggetto o si tiene (`k`) o è nuovo: un'immagine, una nota o il segno
+    // di un commento.
+    const fresh = comment !== undefined
+      ? inline.kind === "marker" && data === undefined && note === undefined && inline.end !== true
+      : (inline.kind === "image" && data !== undefined && note === undefined && inline.end !== true)
+        || (inline.kind === "note" && note !== undefined && data === undefined);
     if (k !== undefined ? data !== undefined || note !== undefined || inline.end === true : !fresh) {
       throw new ProjectionError(`${where}: oggetto né tenuto né nuovo`);
     }
@@ -406,6 +471,7 @@ function readInline(value: unknown, where: string): Inline {
       ...(data !== undefined ? { data } : {}),
       ...(note !== undefined ? { note } : {}),
       ...(inline.end === true ? { end: true } : {}),
+      ...(comment ? { comment } : {}),
       ...readTracked(inline, where),
     };
   }
@@ -470,7 +536,7 @@ export function parseProjection(source: string): Projection {
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
   if (root.version !== PROJECTION_VERSION) throw new ProjectionError(`versione ${String(root.version)}`);
-  closed(root, ["format", "version", "readonly", "lang", "f", "styles", "blocks"], "proiezione");
+  closed(root, ["format", "version", "readonly", "lang", "f", "styles", "comments", "blocks"], "proiezione");
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
@@ -482,6 +548,7 @@ export function parseProjection(source: string): Projection {
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
     ...withLook(readLook(root.f, "f")),
     ...(root.styles !== undefined ? { styles: list(root.styles, "styles").map((s, i) => readStyle(s, `styles[${i}]`)) } : {}),
+    ...(root.comments !== undefined ? { comments: list(root.comments, "comments").map((c, i) => readComment(c, `comments[${i}]`)) } : {}),
     blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, `blocks[${i}]`)),
   };
 }
@@ -555,6 +622,22 @@ function writeTracked(tracked: Tracked): string {
   return writeRev("ins", tracked.ins) + writeRev("del", tracked.del);
 }
 
+function writeAnchor(anchor: Anchor): string {
+  return `{"id":${anchor.id}${anchor.end ? `,"end":true` : ""}}`;
+}
+
+/// Un commento in JSON, con i campi nell'ordine di serde.
+export function writeComment(comment: CommentView): string {
+  let out = `{"id":${comment.id}`;
+  if (comment.k !== undefined) out += `,"k":${JSON.stringify(comment.k)}`;
+  if (comment.by) out += `,"by":${JSON.stringify(comment.by)}`;
+  if (comment.at) out += `,"at":${JSON.stringify(comment.at)}`;
+  if (comment.parent !== undefined) out += `,"parent":${comment.parent}`;
+  if (comment.done) out += `,"done":true`;
+  if (comment.text) out += `,"text":${JSON.stringify(comment.text)}`;
+  return out + "}";
+}
+
 function writeInline(inline: Inline): string {
   if (inline.t === "text") {
     let out = `{"t":"text","x":${JSON.stringify(inline.x)}`;
@@ -573,6 +656,7 @@ function writeInline(inline: Inline): string {
   if (inline.data !== undefined) out += `,"data":${JSON.stringify(inline.data)}`;
   if (inline.note !== undefined) out += `,"note":${JSON.stringify(inline.note)}`;
   if (inline.end) out += `,"end":true`;
+  if (inline.comment) out += `,"comment":${writeAnchor(inline.comment)}`;
   return out + writeTracked(inline) + "}";
 }
 
@@ -603,7 +687,7 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "readonly" | "lang" | "f" | "styles">): string {
+export function writeHead(projection: Pick<Projection, "readonly" | "lang" | "f" | "styles" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${PROJECTION_VERSION}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
   if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;
@@ -613,6 +697,9 @@ export function writeHead(projection: Pick<Projection, "readonly" | "lang" | "f"
       (s) => `{"id":${JSON.stringify(s.id)},"name":${JSON.stringify(s.name)}${writeLook(s.f)}}`,
     );
     out += `,"styles":[${styles.join(",")}]`;
+  }
+  if (projection.comments && projection.comments.length > 0) {
+    out += `,"comments":[${projection.comments.map(writeComment).join(",")}]`;
   }
   return out + `,"blocks":[`;
 }

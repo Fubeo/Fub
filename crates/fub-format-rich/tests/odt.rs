@@ -1225,6 +1225,27 @@ fn una_revisione_tracciata_non_si_scrive() {
 }
 
 #[test]
+fn un_commento_non_si_scrive() {
+    let bytes = odt("<text:p>x</text:p>");
+    let mut projection = projection(&bytes);
+    projection
+        .comments
+        .push(fub_format_rich::projection::CommentView {
+            id: 1,
+            k: None,
+            by: "Ada".into(),
+            at: String::new(),
+            parent: None,
+            done: false,
+            text: "Da rivedere.".into(),
+        });
+    assert!(matches!(
+        save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
+        Err(RichError::Codec(_))
+    ));
+}
+
+#[test]
 fn un_documento_nuovo_si_crea_e_si_scrive() {
     let bytes = blank(Codec::Odt).unwrap();
     let mut projection = projection(&bytes);
@@ -1283,6 +1304,7 @@ fn new_atom(kind: AtomKind, data: Option<&[u8]>, note: Option<&str>, end: bool) 
         data: data.map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
         note: note.map(str::to_string),
         end,
+        comment: None,
     }
 }
 

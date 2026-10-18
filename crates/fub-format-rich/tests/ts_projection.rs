@@ -24,7 +24,8 @@ use fub_format_rich::projection::{
 use fub_format_rich::{open, save, Codec, Saved};
 use serde_json::{json, Value};
 use wordcraft_doc::{
-    para_block, CharProps, Document, Paragraph, PartKind, Revision, RevisionKind, SectionProps,
+    para_block, CharProps, Comment, Document, InlineObject, Paragraph, PartKind, Revision,
+    RevisionKind, SectionProps,
 };
 
 fn fixture(name: &str) -> PathBuf {
@@ -35,7 +36,7 @@ fn fixture(name: &str) -> PathBuf {
 
 /// L'esempio comune, con ciò che serve in più alla superficie: un salto
 /// pagina in un paragrafo, la fine di una sezione, un paragrafo con
-/// revisioni tracciate e un ultimo paragrafo.
+/// revisioni tracciate, uno con un commento e un ultimo paragrafo.
 fn document() -> Document {
     let mut d = sample();
     d.body.push(para_block(text(
@@ -66,6 +67,44 @@ fn document() -> Document {
         tracked.insert_text(at, piece, &props).unwrap();
     }
     d.body.push(para_block(tracked));
+    // Un commento su «questo passo», con una risposta.
+    for (id, author, said, parent) in [
+        (1, "Redazione", "Da rivedere.", None),
+        (2, "Ada", "Fatto.", Some(1)),
+    ] {
+        let part = d.add_part(
+            PartKind::Comment,
+            vec![para_block(text(said, CharProps::default()))],
+        );
+        d.comments.insert(
+            id,
+            Comment {
+                author: author.into(),
+                date: "2026-10-18T12:00:00Z".into(),
+                parent,
+                part,
+                ..Default::default()
+            },
+        );
+    }
+    let mut commented = text("Commento: questo passo.", CharProps::default());
+    let start = "Commento: ".len();
+    commented
+        .insert_object(
+            start,
+            InlineObject::CommentStart { id: 1 },
+            &CharProps::default(),
+        )
+        .unwrap();
+    let end = commented.len() - 1;
+    commented
+        .insert_object(
+            end,
+            InlineObject::CommentEnd { id: 1 },
+            &CharProps::default(),
+        )
+        .unwrap();
+    d.body.push(para_block(commented));
     d.body.push(para_block(text("Fine.", CharProps::default())));
     d
 }
@@ -246,6 +285,48 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         &tracked.c[..],
         [Inline::Text { x, ins: None, del: None, .. }] if x == "Revisione: nuova "
     ));
+    // I commenti della shell: una risposta e il filo risolto, un commento
+    // nuovo su «Fine»; riletti, sono commenti come gli altri.
+    let comments: Vec<_> = p
+        .comments
+        .iter()
+        .map(|c| {
+            (
+                c.id,
+                c.by.as_str(),
+                c.parent,
+                c.done,
+                c.text.as_str(),
+                c.k.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        comments,
+        [
+            (1, "Redazione", None, true, "Da rivedere.", true),
+            (2, "Ada", Some(1), true, "Fatto.", true),
+            (3, "Bea", Some(1), true, "Risposta\ndella shell.", true),
+            (4, "Bea", None, false, "Un commento nuovo.", true),
+        ]
+    );
+    let anchors = |para: &fub_format_rich::projection::Para| -> Vec<(u32, bool)> {
+        para.c
+            .iter()
+            .filter_map(|i| match i {
+                Inline::Atom { comment, .. } => comment.map(|a| (a.id, a.end)),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(
+        anchors(para_of(&p, "questo passo")),
+        [(1, false), (3, false), (1, true), (3, true)]
+    );
+    let Some(Block::Para(last)) = p.blocks.last() else {
+        panic!("l'ultimo blocco non è un paragrafo");
+    };
+    assert_eq!(anchors(last), [(4, false), (4, true)]);
     // Il paragrafo del salto ha lo stile Sottotitolo.
     assert_eq!(para_of(&p, "dopo il salto").s.as_deref(), Some("Subtitle"));
     // In fondo al paragrafo del salto: l'immagine e le due note della shell,

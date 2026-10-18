@@ -98,6 +98,7 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
             projection::used_styles(&blocks, &mut used);
             doc.styles.gallery(&used)
         },
+        comments: Vec::new(),
         blocks,
     };
     if readonly.is_none() && Projection::from_json(&projection.to_json()?)? != projection {
@@ -161,6 +162,11 @@ pub(crate) fn save(current: &[u8], json: &str) -> Result<Saved, RichError> {
     let projection = Projection::from_json(json)?;
     if let Some(reason) = projection.readonly {
         return Err(RichError::ReadOnly(reason));
+    }
+    // I commenti di un `.odt` sono oggetti del testo, tenuti come sono: un
+    // elenco di commenti viene da un altro formato, e qui non si scrive.
+    if !projection.comments.is_empty() {
+        return Err(RichError::Codec("odt: comments are not written".into()));
     }
     let wanted = normalized(&projection.blocks);
     let base = doc.body.blocks();

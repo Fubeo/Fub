@@ -79,6 +79,23 @@ pub(crate) fn note(text: &str) -> Result<&str, RichError> {
     Ok(text)
 }
 
+/// Il testo di un commento nuovo, una riga per paragrafo, con le stesse
+/// regole di una nota.
+pub(crate) fn comment(text: &str) -> Result<impl Iterator<Item = &str>, RichError> {
+    if text.len() > MAX_NOTE_BYTES {
+        return Err(RichError::Malformed("a new comment too long".into()));
+    }
+    if text
+        .chars()
+        .any(|c| (c.is_control() && c != '\n') || c == wordcraft_doc::para::OBJ)
+    {
+        return Err(RichError::Malformed(
+            "a new comment with control characters".into(),
+        ));
+    }
+    Ok(text.split('\n'))
+}
+
 fn sniff(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some(("png", "image/png"))

@@ -65,6 +65,18 @@ pub(crate) fn reads_back(wanted: &Document, reread: &Document) -> bool {
             reread.endnote_separators = NoteSeparators::default();
         }
     }
+    // Un commento fatto qui non ha l'id durevole di Word né la data UTC: il
+    // codec li assegna scrivendo. Soltanto quelli che mancavano.
+    for (id, comment) in kept.comments.iter_mut() {
+        if let Some(written) = reread.comments.get(id) {
+            if comment.durable_id.is_none() {
+                comment.durable_id.clone_from(&written.durable_id);
+            }
+            if comment.date_utc.is_none() {
+                comment.date_utc.clone_from(&written.date_utc);
+            }
+        }
+    }
     let (mut kept, mut reread) = (canonical(kept), canonical(reread));
     if kept == reread {
         return true;
