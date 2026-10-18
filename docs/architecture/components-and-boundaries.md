@@ -19,6 +19,10 @@ flowchart LR
     CANVAS["fub-format-canvas"] --> ABI
     CANVAS --> MARKDOWN
     BASE["fub-format-base"] --> ABI
+    RICH["fub-format-rich"] --> ABI
+    RICH --> MARKDOWN
+    WDOCX["wordcraft-docx"] --> WDOC["wordcraft-doc"]
+    RICH --> WDOCX
     IMPORTERS["fub-importers"] --> ABI
     FEATURES["fub-features"] --> ABI
     FEATURES -. "feature base" .-> BASE
@@ -32,6 +36,7 @@ flowchart LR
     HOST --> CANVAS
     HOST --> BASE
     HOST --> IMPORTERS
+    HOST -. "feature rich" .-> RICH
     WASM["fub-wasm-host"] --> ABI
     WASM --> HOST
     APP["fub-app"] --> HOST
@@ -58,9 +63,11 @@ del repository verificano le eccezioni.
 | `fub-format-sheet` | workbook persistito, valutatore, sessioni derivate, provider grid e route di valutazione | host, storage, Tauri, Wasmtime |
 | `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
+| `fub-format-rich` | documenti di videoscrittura (`.docx`): codec, provider a byte e proiezione modificabile senza perdite silenziose; l'HTML lo disegna il provider Markdown dal modello comune | host, storage, Tauri, Wasmtime, superficie della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
+| `wordcraft-doc`, `-docx`, `-geom` | modello del documento, codec DOCX e unità di misura di WordCraft, vendorizzati in `vendor/wordcraft/`, usati soltanto da `fub-format-rich` | dipendenze da Fub |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |

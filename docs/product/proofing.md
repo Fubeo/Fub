@@ -21,6 +21,12 @@ Una correzione si offre soltanto quando la parola sta tutta in un tratto di
 testo semplice: un segno che attraversa il markup (`**`, `_`) si mostra ma non
 si corregge. In sola lettura le correzioni non ci sono.
 
+Nei documenti di Word il correttore segna allo stesso modo il testo di ogni
+paragrafo, anche nelle celle; immagini, campi e note contano come separatori.
+Le correzioni, «Aggiungi al dizionario» e «Ignora» stanno nel menu contestuale
+del segno, dal clic destro o dal tasto del menu contestuale. La lingua
+dichiarata dal documento vale come il `lang` di una nota.
+
 La lingua è quella dell'impostazione «Lingua del testo» (di serie quella
 dell'interfaccia); una nota la cambia per sé con `lang` nel frontmatter. Le
 lingue sono italiano, inglese, portoghese, polacco, ceco, croato, russo e
@@ -48,6 +54,8 @@ dopo una modifica.
   superfici.
 - `apps/client/src/editors/text/profiles/markdown/proof.ts`: l'adattatore
   Markdown.
+- `apps/client/src/editors/rich/proof.ts`: l'adattatore dei documenti di
+  Word.
 
 Il disegno del confine è in
 [Superfici dell'editor](../architecture/editor-surfaces.md#correttore-condiviso).
