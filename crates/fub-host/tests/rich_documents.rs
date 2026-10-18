@@ -12,7 +12,7 @@ use camino::Utf8PathBuf;
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
-use fub_format_rich::projection::{Block, Inline, Projection, Role};
+use fub_format_rich::projection::{Block, Inline, Look, Projection, Role};
 use fub_format_rich::Codec;
 use fub_host::Host;
 
@@ -73,11 +73,13 @@ fn paragraph(text: &str) -> Block {
         align: None,
         k: None,
         sect: None,
+        f: Look::default(),
         c: vec![Inline::Text {
             x: text.to_string(),
             k: None,
             m: Vec::new(),
             href: None,
+            f: Look::default(),
         }],
     })
 }

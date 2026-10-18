@@ -1424,6 +1424,26 @@ body {
   min-height: 0;
 }
 .rich-notice { flex: none; margin: 0; }
+.rich-strip {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.rich-strip-group { display: flex; align-items: center; }
+.rich-strip-field { display: inline-flex; }
+.rich-strip-button { position: relative; }
+.rich-strip-bar {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 3px;
+  height: 3px;
+}
+.rich-strip-swatches { display: grid; grid-template-columns: repeat(6, 24px); }
+.rich-strip-swatch-none,
+.rich-strip-swatch-custom { grid-column: 1 / -1; }
 .rich-page { flex: 1; min-height: 0; overflow-y: auto; }
 .rich-content {
   position: relative;

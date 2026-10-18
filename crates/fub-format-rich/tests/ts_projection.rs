@@ -18,7 +18,7 @@ mod common;
 use std::path::PathBuf;
 
 use common::{bytes, sample, text};
-use fub_format_rich::projection::{Block, Inline, Mark, Projection, Role};
+use fub_format_rich::projection::{Block, Inline, Look, Mark, Projection, Role};
 use fub_format_rich::{open, save, Codec, Saved};
 use serde_json::{json, Value};
 use wordcraft_doc::{para_block, CharProps, Document, SectionProps};
@@ -107,6 +107,30 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
     // La parola scritta in fondo al secondo paragrafo.
     let (_, prose, _) = plain(&p.blocks, 1);
     assert!(prose.ends_with("link. Scritto dalla shell."), "{prose}");
+    // L'aspetto messo su «dalla shell».
+    let Block::Para(para) = &p.blocks[1] else {
+        unreachable!()
+    };
+    let styled = para
+        .c
+        .iter()
+        .find_map(|i| match i {
+            Inline::Text { x, m, f, .. } if x == "dalla shell" => Some((m.clone(), f.clone())),
+            _ => None,
+        })
+        .expect("il tratto con l'aspetto della shell");
+    assert_eq!(
+        styled,
+        (
+            vec![Mark::H, Mark::SmallCaps],
+            Look {
+                font: Some("Courier New".into()),
+                size: Some(18.0),
+                color: Some("#c00000".into()),
+                hl: Some("#00ffff".into()),
+            }
+        )
+    );
     // Il grassetto messo su «Figura».
     let figure = p
         .blocks

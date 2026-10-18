@@ -27,7 +27,11 @@ l'IPC.
   import dinamico; una superficie smontata prima che arrivi non monta niente.
 - `editors/rich/schema.ts` traduce la proiezione in un documento ProseMirror
   e ritorno. Ogni nodo porta con sé il proprio `k`, i dati originali opachi
-  che la shell non legge e copia così come sono; `BlockWriter` riscrive
+  che la shell non legge e copia così come sono. L'enfasi (`m`) e l'aspetto
+  del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
+  sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
+  il ritorno al documento ne fa formattazione diretta, o la toglie quando
+  basta toglierla; `BlockWriter` riscrive
   soltanto i blocchi cambiati. Il filtro di ciò che si incolla
   (`editors/rich/paste.ts`) toglie i `k` che il documento non ha e i link non
   web.
@@ -36,6 +40,11 @@ l'IPC.
   l'intento `fub.editor.action` le usano senza saperlo. Ogni superficie ha la
   propria cronologia `prosemirror-history`; ciò che arriva da un altro riquadro
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
+- `editors/rich/strip.ts` è la striscia del carattere, caricata col motore:
+  i valori (tipo, dimensione, colori) non sono gesti che commutano e non
+  passano dalla barra di formattazione dei plugin. «Copia formato» lo tiene
+  il motore e lo applica alla prossima selezione finita (puntatore o Maiusc
+  rilasciati).
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

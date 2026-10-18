@@ -14,14 +14,18 @@
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, isHistoryTransaction, redo, undo, undoDepth } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
-import type { Node as PmNode, Slice } from "prosemirror-model";
-import { EditorState, Plugin, Selection, TextSelection, type Transaction } from "prosemirror-state";
+import type { Mark as PmMark, Node as PmNode, Slice } from "prosemirror-model";
+import { EditorState, Plugin, Selection, TextSelection, type Command, type Transaction } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { operationFromText, type EditorChange, type EditorChangeOrigin } from "../core/text-operation";
 import { ProofClient, type ProofPorts } from "../core/proof";
 import {
+  applyFormat,
   backspace,
   deleteForward,
+  formatAt,
+  selectedLook,
+  type LookState,
   fillTableKeys,
   insertBreak,
   insertTab,
@@ -34,6 +38,8 @@ import { collectKeys, filterSlice, uniqueKeys } from "./paste";
 import { parseProjection, writeHead, type Projection, type ReadOnlyReason } from "./projection";
 import { richProof } from "./proof";
 import { BlockWriter, richSchema, toDoc } from "./schema";
+
+export { mountStrip } from "./strip";
 
 export interface RichEngineOptions {
   readonly onChange: (change: EditorChange) => void;
@@ -63,6 +69,11 @@ export class RichEngine {
   #intake: Intake = { kind: "invalid", reason: "" };
   #shellReadOnly = false;
   #destroyed = false;
+  /// «Copia formato»: l'aspetto preso, che va sulla prossima selezione finita.
+  #painter: readonly PmMark[] | null = null;
+  /// Una selezione col puntatore o con Maiusc non è finita finché si tiene.
+  #pointerDown = false;
+  #shiftDown = false;
 
   constructor(parent: HTMLElement, options: RichEngineOptions) {
     this.#options = options;
@@ -80,6 +91,27 @@ export class RichEngine {
       }),
       dispatchTransaction: (tr) => this.#dispatch(tr),
       transformPasted: (slice, view) => this.#filter(slice, view),
+      handleDOMEvents: {
+        pointerdown: () => {
+          this.#pointerDown = true;
+          return false;
+        },
+        pointerup: () => {
+          this.#pointerDown = false;
+          this.#paint();
+          return false;
+        },
+        keydown: (_view, event) => {
+          if (event.key === "Shift") this.#shiftDown = true;
+          return false;
+        },
+        keyup: (_view, event) => {
+          if (event.key !== "Shift") return false;
+          this.#shiftDown = false;
+          this.#paint();
+          return false;
+        },
+      },
     });
   }
 
@@ -112,8 +144,11 @@ export class RichEngine {
       "Mod-y": redo,
       Tab: chainCommands(shiftListLevel(1), insertTab),
       "Shift-Tab": shiftListLevel(-1),
-      // Il sottolineato non ha un'azione nella barra, ma l'accordo di Word sì.
-      "Mod-u": toggleUnderline,
+      Escape: () => {
+        if (!this.#painter) return false;
+        this.disarmPainter();
+        return true;
+      },
     };
     for (const [, action] of RICH_ACTIONS) {
       if (action.chord && !(action.chord in keys)) keys[action.chord] = action.run;
@@ -226,6 +261,60 @@ export class RichEngine {
       this.#options.onSelectionChange();
       this.#notify();
     }
+    if (tr.selectionSet && !tr.docChanged) this.#paint();
+  }
+
+  /// Dà l'aspetto preso alla selezione, se ce n'è una finita.
+  #paint(): void {
+    const marks = this.#painter;
+    if (!marks || this.#pointerDown || this.#shiftDown || this.#view.state.selection.empty) return;
+    this.#painter = null;
+    applyFormat(marks)(this.#view.state, (tr) => this.#view.dispatch(tr));
+    this.#notify();
+  }
+
+  /// «Copia formato»: prende l'aspetto della selezione per la prossima. Un
+  /// secondo tocco lo lascia.
+  togglePainter(): void {
+    if (!this.editable()) return;
+    this.#painter = this.#painter ? null : formatAt(this.#view.state);
+    this.#notify();
+    this.#view.focus();
+  }
+
+  disarmPainter(): void {
+    if (!this.#painter) return;
+    this.#painter = null;
+    this.#notify();
+  }
+
+  painterArmed(): boolean {
+    return this.#painter !== null;
+  }
+
+  /// L'aspetto della selezione, per chi lo mostra.
+  look(): LookState {
+    return selectedLook(this.#view.state);
+  }
+
+  /// I caratteri che il documento usa: i suoi paragrafi e i suoi tratti.
+  fonts(): string[] {
+    const out = new Set<string>();
+    this.#view.state.doc.descendants((node) => {
+      const base = (node.attrs.f as { font?: string } | null | undefined)?.font;
+      if (base) out.add(base);
+      for (const mark of node.marks) if (mark.type.name === "font") out.add(mark.attrs.family as string);
+      return true;
+    });
+    return [...out];
+  }
+
+  /// Esegue un comando come una battuta.
+  apply(command: Command): boolean {
+    if (!this.editable()) return false;
+    const done = command(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
+    if (done) this.#view.focus();
+    return done;
   }
 
   #filter(slice: Slice, view: EditorView): Slice {
@@ -263,6 +352,7 @@ export class RichEngine {
   setReadOnly(readOnly: boolean): void {
     if (this.#shellReadOnly === readOnly) return;
     this.#shellReadOnly = readOnly;
+    if (readOnly) this.#painter = null;
     // `editable` è una funzione: ProseMirror la rilegge a ogni aggiornamento.
     this.#view.setProps({});
     this.#notify();
@@ -324,21 +414,6 @@ export class RichEngine {
 }
 
 const SYNC = "fub-rich-sync";
-
-const toggleUnderline = (state: EditorState, dispatch?: (tr: Transaction) => void): boolean => {
-  const type = richSchema.marks.u;
-  const { from, to, empty, $from } = state.selection;
-  if (empty) {
-    const marks = state.storedMarks ?? $from.marks();
-    if (dispatch) dispatch(state.tr.setStoredMarks(type.isInSet(marks) ? type.removeFromSet(marks) : type.create().addToSet(marks)));
-    return true;
-  }
-  if (dispatch) {
-    const has = state.doc.rangeHasMark(from, to, type);
-    dispatch(has ? state.tr.removeMark(from, to, type) : state.tr.addMark(from, to, type.create()));
-  }
-  return true;
-};
 
 /// La cronologia dice che una sua transazione è sua, non se annulla o
 /// ripete: lo dice la profondità degli annullamenti che scende.

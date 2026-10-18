@@ -31,7 +31,7 @@ use self::package::Package;
 use self::read::Body;
 use self::styles::Styles;
 use self::xml::Tree;
-use crate::projection::{self, Block, Inline, Mark, Projection, Role, FORMAT, VERSION};
+use crate::projection::{self, Block, Inline, Look, Mark, Projection, Role, FORMAT, VERSION};
 use crate::session::{Opened, Saved};
 use crate::{ReadOnly, RichError};
 
@@ -191,14 +191,15 @@ fn normalized(blocks: &[Block]) -> Vec<Block> {
                     match (c.last_mut(), inline) {
                         (_, Inline::Text { x, .. }) if x.is_empty() => {}
                         (
-                            Some(Inline::Text { x, k, m, href }),
+                            Some(Inline::Text { x, k, m, href, f }),
                             Inline::Text {
                                 x: nx,
                                 k: nk,
                                 m: nm,
                                 href: nh,
+                                f: nf,
                             },
-                        ) if *k == nk && *m == nm && *href == nh => x.push_str(&nx),
+                        ) if *k == nk && *m == nm && *href == nh && *f == nf => x.push_str(&nx),
                         (_, inline) => c.push(inline),
                     }
                 }
@@ -231,7 +232,7 @@ enum Seen {
 
 #[derive(Debug, PartialEq)]
 enum SeenInline {
-    Text(String, Vec<Mark>, Option<String>),
+    Text(String, Vec<Mark>, Option<String>, Look),
     Atom(String),
 }
 
@@ -243,12 +244,19 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
                 let mut out: Vec<SeenInline> = Vec::new();
                 for inline in &para.c {
                     match inline {
-                        Inline::Text { x, m, href, .. } => match out.last_mut() {
-                            Some(SeenInline::Text(px, pm, ph)) if pm == m && ph == href => {
+                        Inline::Text { x, m, href, f, .. } => match out.last_mut() {
+                            Some(SeenInline::Text(px, pm, ph, pf))
+                                if pm == m && ph == href && pf == f =>
+                            {
                                 px.push_str(x)
                             }
                             _ if x.is_empty() => {}
-                            _ => out.push(SeenInline::Text(x.clone(), m.clone(), href.clone())),
+                            _ => out.push(SeenInline::Text(
+                                x.clone(),
+                                m.clone(),
+                                href.clone(),
+                                f.clone(),
+                            )),
                         },
                         Inline::Atom { k, .. } => {
                             let xml = crate::blob::decode::<keys::AtomKey>(k)

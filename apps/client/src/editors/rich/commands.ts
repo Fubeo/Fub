@@ -18,9 +18,9 @@
 //   due è un blocco a sé, e il Backspace la seleziona prima di toglierla.
 import { chainCommands, deleteSelection, joinBackward, joinForward, selectNodeBackward, selectNodeForward, toggleMark } from "prosemirror-commands";
 import { redo, redoDepth, undo, undoDepth } from "prosemirror-history";
-import type { MarkType, Node as PmNode, ResolvedPos } from "prosemirror-model";
+import type { Mark as PmMark, MarkType, Node as PmNode, ResolvedPos } from "prosemirror-model";
 import { NodeSelection, Plugin, TextSelection, type Command, type EditorState } from "prosemirror-state";
-import { BODY, type Role } from "./projection";
+import { BODY, COLOR_AUTO, HIGHLIGHT_DEFAULT, type Look, type Role } from "./projection";
 import { richSchema } from "./schema";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -107,12 +107,16 @@ export function markActive(state: EditorState, type: MarkType): boolean {
   return any && all;
 }
 
-/// Toglie la formattazione dei tratti selezionati: l'enfasi e le proprietà del
-/// tratto, che tornano quelle del paragrafo (come «Cancella formattazione» di
-/// Word). Il link resta: è contenuto, non aspetto.
+/// Le marche dell'aspetto di un tratto: ciò che «Copia formato» porta e
+/// «Cancella formattazione» toglie. Il link e le proprietà opache no.
+export const FORMAT_MARKS: readonly string[] = ["b", "i", "u", "s", "h", "sup", "sub", "caps", "small_caps", "font", "size", "color"];
+
+/// Toglie la formattazione dei tratti selezionati: l'enfasi, l'aspetto e le
+/// proprietà del tratto, che tornano quelle del paragrafo (come «Cancella
+/// formattazione» di Word). Il link resta: è contenuto, non aspetto.
 export const clearFormatting: Command = (state, dispatch) => {
   const { from, to, empty } = state.selection;
-  const types = ["run", "b", "i", "u", "s", "h", "sup", "sub"].map((name) => richSchema.marks[name]);
+  const types = ["run", ...FORMAT_MARKS].map((name) => richSchema.marks[name]);
   if (empty) {
     const marks = state.storedMarks ?? state.selection.$from.marks();
     if (!marks.some((mark) => types.includes(mark.type))) return false;
@@ -132,6 +136,180 @@ export const clearFormatting: Command = (state, dispatch) => {
   }
   return true;
 };
+
+// ── L'aspetto del carattere ─────────────────────────────────────────────────
+
+/// Le dimensioni che i menu propongono e su cui «Ingrandisci» e «Riduci»
+/// fanno un passo, come in Word.
+export const FONT_SIZES: readonly number[] = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+export const MIN_FONT_SIZE = 1;
+export const MAX_FONT_SIZE = 1638;
+
+/// L'aspetto del testo selezionato: un campo è `null` dove la selezione ne
+/// mescola più d'uno. `hl` è `null` anche dove il testo non è evidenziato.
+export interface LookState {
+  readonly font: string | null;
+  readonly size: number | null;
+  readonly color: string | null;
+  readonly hl: string | null;
+}
+
+/// L'aspetto di un testo con queste marche nel paragrafo `paragraph`.
+function lookAt(marks: readonly PmMark[], paragraph: PmNode | null): { font?: string; size?: number; color: string; hl: string | null } {
+  const base = (paragraph?.attrs.f as Look | null) ?? null;
+  let font = base?.font;
+  let size = base?.size;
+  let color = COLOR_AUTO;
+  let hl: string | null = null;
+  for (const mark of marks) {
+    const name = mark.type.name;
+    if (name === "font") font = mark.attrs.family as string;
+    else if (name === "size") size = mark.attrs.pt as number;
+    else if (name === "color") color = mark.attrs.value as string;
+    else if (name === "h") hl = (mark.attrs.color as string | null) ?? HIGHLIGHT_DEFAULT;
+  }
+  return { font, size, color, hl };
+}
+
+export function selectedLook(state: EditorState): LookState {
+  const { from, to, empty, $from } = state.selection;
+  if (empty) {
+    const look = lookAt(state.storedMarks ?? $from.marks(), $from.parent.type === para ? $from.parent : null);
+    return { font: look.font ?? null, size: look.size ?? null, color: look.color, hl: look.hl };
+  }
+  const seen: ReturnType<typeof lookAt>[] = [];
+  state.doc.nodesBetween(from, to, (node, _pos, parent) => {
+    if (!node.isInline) return true;
+    if (node.type.name !== "atom") seen.push(lookAt(node.marks, parent));
+    return false;
+  });
+  if (seen.length === 0) return { font: null, size: null, color: null, hl: null };
+  const common = <T>(pick: (look: ReturnType<typeof lookAt>) => T): T | null =>
+    seen.every((look) => pick(look) === pick(seen[0])) ? pick(seen[0]) : null;
+  return {
+    font: common((look) => look.font ?? null),
+    size: common((look) => look.size ?? null),
+    color: common((look) => look.color),
+    hl: common((look) => look.hl),
+  };
+}
+
+/// I tratti di testo della selezione, ciascuno col suo paragrafo.
+function selectedRuns(state: EditorState): { from: number; to: number; paragraph: PmNode; node: PmNode }[] {
+  const out: { from: number; to: number; paragraph: PmNode; node: PmNode }[] = [];
+  const { from, to } = state.selection;
+  state.doc.nodesBetween(from, to, (node, pos, parent) => {
+    if (!node.isInline) return true;
+    if (node.type.name !== "atom" && parent) {
+      out.push({ from: Math.max(from, pos), to: Math.min(to, pos + node.nodeSize), paragraph: parent, node });
+    }
+    return false;
+  });
+  return out;
+}
+
+/// Mette su ogni tratto selezionato la marca che `make` sceglie per lui
+/// (`null`: nessuna). Senza selezione vale per ciò che si scrive dopo.
+function setMarkPerRun(type: MarkType, make: (run: { paragraph: PmNode; marks: readonly PmMark[] }) => PmMark | null): Command {
+  return (state, dispatch) => {
+    const { empty, $from } = state.selection;
+    if (empty) {
+      if ($from.parent.type !== para) return false;
+      if (dispatch) {
+        const marks = type.removeFromSet(state.storedMarks ?? $from.marks());
+        const mark = make({ paragraph: $from.parent, marks: state.storedMarks ?? $from.marks() });
+        dispatch(state.tr.setStoredMarks(mark ? mark.addToSet(marks) : marks));
+      }
+      return true;
+    }
+    const runs = selectedRuns(state);
+    if (runs.length === 0) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      for (const run of runs) {
+        tr.removeMark(run.from, run.to, type);
+        const mark = make({ paragraph: run.paragraph, marks: run.node.marks });
+        if (mark) tr.addMark(run.from, run.to, mark);
+      }
+      dispatch(tr);
+    }
+    return true;
+  };
+}
+
+/// Il carattere della selezione. Quello del paragrafo non si scrive: il
+/// tratto torna a seguirlo.
+export function setFont(family: string | null): Command {
+  const type = richSchema.marks.font;
+  return setMarkPerRun(type, ({ paragraph }) => {
+    const base = (paragraph.attrs.f as Look | null)?.font;
+    return family && family !== base ? type.create({ family }) : null;
+  });
+}
+
+function clampSize(pt: number): number {
+  return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.round(pt * 2) / 2));
+}
+
+/// La dimensione della selezione, in punti.
+export function setSize(pt: number | null): Command {
+  const type = richSchema.marks.size;
+  return setMarkPerRun(type, ({ paragraph }) => {
+    if (pt === null || !Number.isFinite(pt)) return null;
+    const size = clampSize(pt);
+    const base = (paragraph.attrs.f as Look | null)?.size;
+    return size !== base ? type.create({ pt: size }) : null;
+  });
+}
+
+/// Un passo della scala `FONT_SIZES` per ogni tratto, dalla sua dimensione.
+export function stepSize(direction: 1 | -1): Command {
+  const type = richSchema.marks.size;
+  return setMarkPerRun(type, ({ paragraph, marks }) => {
+    const base = (paragraph.attrs.f as Look | null)?.size;
+    const current = (type.isInSet(marks)?.attrs.pt as number | undefined) ?? base ?? 11;
+    const next =
+      direction > 0
+        ? FONT_SIZES.find((size) => size > current) ?? clampSize(current + 10)
+        : [...FONT_SIZES].reverse().find((size) => size < current) ?? clampSize(current - 1);
+    return next !== base ? type.create({ pt: next }) : null;
+  });
+}
+
+/// Il colore del testo selezionato; `null` lo riporta a quello del paragrafo.
+export function setColor(value: string | null): Command {
+  const type = richSchema.marks.color;
+  return setMarkPerRun(type, () => (value ? type.create({ value }) : null));
+}
+
+/// L'evidenziatore sulla selezione, nel colore dato; `null` lo toglie.
+export function setHighlight(color: string | null): Command {
+  const type = richSchema.marks.h;
+  return setMarkPerRun(type, () => (color ? type.create({ color: color === HIGHLIGHT_DEFAULT ? null : color }) : null));
+}
+
+/// Le marche d'aspetto all'inizio della selezione: ciò che «Copia formato»
+/// prende.
+export function formatAt(state: EditorState): PmMark[] {
+  const { $from, empty } = state.selection;
+  const marks = empty ? state.storedMarks ?? $from.marks() : (state.doc.nodeAt($from.pos)?.marks ?? $from.marks());
+  return marks.filter((mark) => FORMAT_MARKS.includes(mark.type.name));
+}
+
+/// Dà alla selezione l'aspetto `marks`, al posto del suo.
+export function applyFormat(marks: readonly PmMark[]): Command {
+  return (state, dispatch) => {
+    const { from, to, empty } = state.selection;
+    if (empty) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      for (const name of FORMAT_MARKS) tr.removeMark(from, to, richSchema.marks[name]);
+      for (const mark of marks) tr.addMark(from, to, mark);
+      dispatch(tr);
+    }
+    return true;
+  };
+}
 
 /// A capo dentro un paragrafo, con le regole di Word.
 export const splitParagraph: Command = (state, dispatch) => {
@@ -397,6 +575,13 @@ export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, Ric
   ["markdown.italic", mark("i", "Mod-i")],
   ["markdown.strikethrough", mark("s", "Mod-Shift-x")],
   ["markdown.highlight", mark("h")],
+  ["rich.underline", mark("u", "Mod-u")],
+  ["rich.superscript", mark("sup", "Mod-Shift-=")],
+  ["rich.subscript", mark("sub", "Mod-=")],
+  ["rich.caps", mark("caps", "Mod-Shift-a")],
+  ["rich.small_caps", mark("small_caps", "Mod-Shift-k")],
+  ["rich.font.grow", { run: stepSize(1), chord: "Mod-]" }],
+  ["rich.font.shrink", { run: stepSize(-1), chord: "Mod-[" }],
   ["markdown.clear", { run: clearFormatting }],
   ["markdown.list.bullet", list(false, "Mod-Shift-8")],
   ["markdown.list.ordered", list(true, "Mod-Shift-7")],

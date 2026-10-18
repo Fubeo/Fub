@@ -9,13 +9,13 @@
 use std::collections::{BTreeSet, HashMap};
 
 use super::xml::{Element, Tree};
-use crate::projection::{Align, Mark};
+use crate::projection::{self, Align, Look, Mark};
 
 /// Le profondità oltre cui una catena di stili si considera un ciclo.
 const MAX_CHAIN: usize = 32;
 
-/// L'enfasi che uno stile scrive: `None` dove eredita.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// L'enfasi e l'aspetto che uno stile scrive: `None` dove eredita.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct TextProps {
     pub bold: Option<bool>,
     pub italic: Option<bool>,
@@ -23,6 +23,22 @@ pub(crate) struct TextProps {
     pub strike: Option<bool>,
     pub highlight: Option<bool>,
     pub position: Option<Position>,
+    pub caps: Option<bool>,
+    pub small_caps: Option<bool>,
+    /// La famiglia del carattere.
+    pub font: Option<String>,
+    /// La dimensione in punti; una percentuale si risolve su quella ereditata.
+    pub size: Option<Size>,
+    /// `#rrggbb` minuscolo, o `auto`.
+    pub color: Option<String>,
+    /// Il colore dello sfondo, `#rrggbb` minuscolo, quando c'è.
+    pub background: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Size {
+    Points(f32),
+    Percent(f32),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,6 +56,64 @@ impl TextProps {
         self.strike = top.strike.or(self.strike);
         self.highlight = top.highlight.or(self.highlight);
         self.position = top.position.or(self.position);
+        self.caps = top.caps.or(self.caps);
+        self.small_caps = top.small_caps.or(self.small_caps);
+        if top.font.is_some() {
+            self.font.clone_from(&top.font);
+        }
+        self.size = match (top.size, self.size) {
+            (Some(Size::Percent(p)), Some(Size::Points(pt))) => Some(Size::Points(pt * p / 100.0)),
+            (Some(size), _) => Some(size),
+            (None, size) => size,
+        };
+        if top.color.is_some() {
+            self.color.clone_from(&top.color);
+        }
+        if top.highlight.is_some() {
+            self.background.clone_from(&top.background);
+        }
+    }
+
+    /// I punti di una dimensione risolta; `None` se non è nota.
+    pub fn points(&self) -> Option<f32> {
+        match self.size {
+            Some(Size::Points(pt)) => Some(pt),
+            _ => None,
+        }
+    }
+
+    /// Il carattere e la dimensione: la base di un paragrafo.
+    pub fn base(&self) -> Look {
+        Look {
+            font: self.font.clone(),
+            size: self.points(),
+            ..Look::default()
+        }
+    }
+
+    /// L'aspetto di questo testo dove differisce da quello di `plain`, il
+    /// testo del suo paragrafo senza involucri.
+    pub fn look(&self, plain: &TextProps) -> Look {
+        let color = |p: &TextProps| {
+            p.color
+                .clone()
+                .unwrap_or_else(|| projection::COLOR_AUTO.into())
+        };
+        let same_size = match (self.points(), plain.points()) {
+            (Some(a), Some(b)) => projection::same_size(a, b),
+            (a, b) => a.is_none() && b.is_none(),
+        };
+        Look {
+            font: (self.font != plain.font)
+                .then(|| self.font.clone())
+                .flatten(),
+            size: (!same_size).then(|| self.points()).flatten(),
+            color: (color(self) != color(plain)).then(|| color(self)),
+            hl: (self.highlight == Some(true))
+                .then(|| self.background.clone())
+                .flatten()
+                .filter(|hex| hex != projection::HIGHLIGHT_DEFAULT),
+        }
     }
 
     pub fn marks(&self) -> Vec<Mark> {
@@ -65,10 +139,18 @@ impl TextProps {
             Some(Position::Sub) => out.push(Mark::Sub),
             _ => {}
         }
+        if on(self.caps) {
+            out.push(Mark::Caps);
+        }
+        if on(self.small_caps) {
+            out.push(Mark::SmallCaps);
+        }
         out
     }
 
-    fn read(props: &Element) -> TextProps {
+    /// Le proprietà di `style:text-properties`. `faces` dà la famiglia di
+    /// ogni carattere dichiarato, che `style:font-name` nomina.
+    fn read(props: &Element, faces: &HashMap<String, String>) -> TextProps {
         let attr = |name: &str| props.attr(name).map(str::trim);
         let bold = attr("fo:font-weight").map(|w| match w {
             "bold" | "bolder" => true,
@@ -81,7 +163,29 @@ impl TextProps {
             Some("none") => Some(false),
             _ => attr("style:text-line-through-style").map(|s| s != "none"),
         };
-        let highlight = attr("fo:background-color").map(|c| c != "transparent");
+        let background = attr("fo:background-color");
+        let highlight = background.map(|c| c != "transparent");
+        let background = background.and_then(hex);
+        let caps = attr("fo:text-transform").map(|t| t == "uppercase");
+        let small_caps = attr("fo:font-variant").map(|v| v == "small-caps");
+        let font = attr("fo:font-family")
+            .map(unquote)
+            .or_else(|| {
+                attr("style:font-name")
+                    .map(|name| faces.get(name).cloned().unwrap_or_else(|| name.to_string()))
+            })
+            .filter(|f| !f.is_empty());
+        let size = attr("fo:font-size").and_then(|s| {
+            if let Some(p) = s.strip_suffix('%') {
+                return p.trim().parse().ok().map(Size::Percent);
+            }
+            length_points(s).map(Size::Points)
+        });
+        let color = if attr("style:use-window-font-color") == Some("true") {
+            Some(projection::COLOR_AUTO.to_string())
+        } else {
+            attr("fo:color").and_then(hex)
+        };
         let position = attr("style:text-position").map(|p| {
             let first = p.split_whitespace().next().unwrap_or("");
             match first {
@@ -101,8 +205,48 @@ impl TextProps {
             strike,
             highlight,
             position,
+            caps,
+            small_caps,
+            font,
+            size,
+            color,
+            background,
         }
     }
+}
+
+/// Una famiglia senza le virgolette che XSL ammette attorno al nome.
+fn unquote(family: &str) -> String {
+    family
+        .trim()
+        .trim_matches(|c| c == '\'' || c == '"')
+        .to_string()
+}
+
+/// Un colore `#rrggbb`, in minuscolo.
+fn hex(value: &str) -> Option<String> {
+    let digits = value.strip_prefix('#')?;
+    (digits.len() == 6 && digits.bytes().all(|b| b.is_ascii_hexdigit()))
+        .then(|| value.to_ascii_lowercase())
+}
+
+/// Una lunghezza ODF in punti.
+fn length_points(value: &str) -> Option<f32> {
+    let value = value.trim();
+    let split = value
+        .find(|c: char| c.is_ascii_alphabetic())
+        .unwrap_or(value.len());
+    let n: f32 = value[..split].trim().parse().ok()?;
+    let per = match &value[split..] {
+        "pt" => 1.0,
+        "pc" => 12.0,
+        "in" => 72.0,
+        "cm" => 72.0 / 2.54,
+        "mm" => 72.0 / 25.4,
+        "px" => 0.75,
+        _ => return None,
+    };
+    Some(n * per)
 }
 
 #[derive(Clone, Debug, Default)]
@@ -134,11 +278,24 @@ pub(crate) struct Styles {
     /// Ogni nome di stile dei due file, di qualunque famiglia.
     pub names: BTreeSet<String>,
     pub lang: Option<String>,
+    /// I caratteri dichiarati (`style:font-face`): nome → famiglia.
+    faces: HashMap<String, String>,
 }
 
 impl Styles {
     pub fn read(content: &Tree, styles: Option<&Tree>) -> Styles {
         let mut out = Styles::default();
+        for tree in styles.into_iter().chain([content]) {
+            if let Some(decls) = tree.child(tree.root, "office:font-face-decls") {
+                for (_, face) in tree.elements(decls) {
+                    if let (Some(name), Some(family)) =
+                        (face.attr("style:name"), face.attr("svg:font-family"))
+                    {
+                        out.faces.insert(name.to_string(), unquote(family));
+                    }
+                }
+            }
+        }
         // Prima i comuni, poi gli automatici, che li coprono.
         if let Some(tree) = styles {
             if let Some(common) = tree.child(tree.root, "office:styles") {
@@ -182,7 +339,7 @@ impl Styles {
                     for (_, props) in tree.elements(id) {
                         match props.name.as_str() {
                             "style:text-properties" => {
-                                def.text = TextProps::read(props);
+                                def.text = TextProps::read(props, &self.faces);
                                 if element.name == "style:default-style" && family == "paragraph" {
                                     self.lang = lang(props);
                                 }

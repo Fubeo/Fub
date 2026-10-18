@@ -2,9 +2,10 @@
 //! scrive la superficie ricca della shell.
 //!
 //! È JSON chiuso (`deny_unknown_fields`) e versionato. Mostra in chiaro ciò che
-//! la superficie modifica — testo, enfasi, link, ruolo dei paragrafi — e porta
-//! tutto il resto come dati opachi (vedi `blob`). I campi `align`, `label`, `w`
-//! e `h` sono soltanto suggerimenti di resa: il ritorno al documento li ignora.
+//! la superficie modifica — testo, enfasi, aspetto del carattere, link, ruolo
+//! dei paragrafi — e porta tutto il resto come dati opachi (vedi `blob`). I
+//! campi `align`, l'aspetto `f` di un paragrafo, `label`, `w` e `h` sono
+//! soltanto suggerimenti di resa: il ritorno al documento li ignora.
 //!
 //! Il testo di un tratto è quello del modello di WordCraft: `\n` è un a-capo
 //! nel paragrafo, `\t` una tabulazione, U+000C un salto pagina e U+000E un
@@ -12,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 use wordcraft_doc::para::OBJ;
-use wordcraft_doc::props::{Underline, VertAlign};
+use wordcraft_doc::props::{Highlight, TextColor, Underline, VertAlign};
 use wordcraft_doc::{
     Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
     StyleSheet, Table as WcTable,
@@ -60,8 +61,50 @@ pub struct Para {
     /// La sezione che il paragrafo chiude, opaca.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sect: Option<String>,
+    /// Suggerimento: il carattere e la dimensione del testo che non ne
+    /// sceglie altri, come li dà lo stile del paragrafo.
+    #[serde(default, skip_serializing_if = "Look::is_plain")]
+    pub f: Look,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub c: Vec<Inline>,
+}
+
+/// L'aspetto di un carattere che non è un'enfasi, **risolto**. In un tratto
+/// ogni campo c'è soltanto dove differisce da quello del paragrafo
+/// ([`Para::f`] per carattere e dimensione, il colore automatico e il giallo
+/// per i colori): un tratto senza `f` si scrive come il suo paragrafo.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Look {
+    /// La famiglia del carattere.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    /// La dimensione, in punti.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<f32>,
+    /// Il colore del testo, `#rrggbb` minuscolo, o `auto`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Il colore dell'evidenziatore, `#rrggbb`, quando il tratto è
+    /// evidenziato ([`Mark::H`]) e non in giallo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hl: Option<String>,
+}
+
+impl Look {
+    pub fn is_plain(&self) -> bool {
+        *self == Look::default()
+    }
+}
+
+/// Il giallo dell'evidenziatore, che un tratto evidenziato senza `hl` porta.
+pub const HIGHLIGHT_DEFAULT: &str = "#ffff00";
+/// Il colore del testo che segue lo sfondo.
+pub const COLOR_AUTO: &str = "auto";
+
+/// Due dimensioni che chi legge non distingue.
+pub(crate) fn same_size(a: f32, b: f32) -> bool {
+    (a - b).abs() < 0.01
 }
 
 /// Che cosa è un paragrafo per chi scrive. Il ritorno al documento cambia lo
@@ -105,6 +148,9 @@ pub enum Inline {
         m: Vec<Mark>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         href: Option<String>,
+        /// L'aspetto del carattere dove differisce da quello del paragrafo.
+        #[serde(default, skip_serializing_if = "Look::is_plain")]
+        f: Look,
     },
     Atom {
         /// Le proprietà del carattere e l'oggetto, opachi.
@@ -136,6 +182,10 @@ pub enum Mark {
     H,
     Sup,
     Sub,
+    /// Tutto maiuscolo, senza cambiare il testo.
+    Caps,
+    /// Maiuscoletto.
+    SmallCaps,
 }
 
 /// La specie di un oggetto, perché la superficie sappia come mostrarlo. I
@@ -298,6 +348,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
         let text = &paragraph.text[range];
         let k = blob::encode(props)?;
         let (m, href) = (marks(styles, style, props), props.link.clone());
+        let f = look(styles, style, props);
         for (i, piece) in text.split(OBJ).enumerate() {
             if i > 0 {
                 let object = objects.next().ok_or_else(|| {
@@ -311,6 +362,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
                     k: Some(k.clone()),
                     m: m.clone(),
                     href: href.clone(),
+                    f: f.clone(),
                 });
             }
         }
@@ -325,6 +377,7 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
             Some(blob::encode(&keep)?)
         },
         sect: paragraph.section.as_deref().map(blob::encode).transpose()?,
+        f: base(styles, style),
         c,
     })
 }
@@ -379,7 +432,66 @@ pub(crate) fn marks(styles: &StyleSheet, para_style: Option<&str>, props: &CharP
         VertAlign::Subscript => out.push(Mark::Sub),
         VertAlign::Baseline => {}
     }
+    if resolved.caps {
+        out.push(Mark::Caps);
+    }
+    if resolved.small_caps {
+        out.push(Mark::SmallCaps);
+    }
     out
+}
+
+/// Il carattere e la dimensione del testo di un paragrafo con questo stile.
+pub(crate) fn base(styles: &StyleSheet, para_style: Option<&str>) -> Look {
+    let resolved = styles.resolve_char(para_style, &CharProps::default());
+    Look {
+        font: Some(resolved.font).filter(|font| !font.is_empty()),
+        size: Some(resolved.size),
+        ..Look::default()
+    }
+}
+
+/// L'aspetto che chi legge vede, dove differisce da quello del paragrafo.
+pub(crate) fn look(styles: &StyleSheet, para_style: Option<&str>, props: &CharProps) -> Look {
+    let plain = styles.resolve_char(para_style, &CharProps::default());
+    let resolved = styles.resolve_char(para_style, props);
+    Look {
+        font: (resolved.font != plain.font && !resolved.font.is_empty())
+            .then(|| resolved.font.clone()),
+        size: (!same_size(resolved.size, plain.size)).then_some(resolved.size),
+        color: (resolved.color != plain.color).then(|| color_name(resolved.color)),
+        hl: resolved
+            .highlight
+            .map(|rgb| format!("#{}", rgb.hex().to_ascii_lowercase()))
+            .filter(|hex| hex != HIGHLIGHT_DEFAULT),
+    }
+}
+
+/// Un colore del testo come lo scrive la proiezione.
+pub(crate) fn color_name(color: TextColor) -> String {
+    match color {
+        TextColor::Auto => COLOR_AUTO.to_string(),
+        TextColor::Rgb(rgb) => format!("#{}", rgb.hex().to_ascii_lowercase()),
+    }
+}
+
+/// Il colore del testo di un nome della proiezione; `None` se non si legge.
+pub(crate) fn color_of(name: &str) -> Option<TextColor> {
+    if name == COLOR_AUTO {
+        return Some(TextColor::Auto);
+    }
+    parse_hex(name).map(TextColor::Rgb)
+}
+
+/// L'evidenziatore di Word col colore dato; `None` se Word non lo ha.
+pub(crate) fn highlight_of(name: &str) -> Option<Highlight> {
+    let rgb = parse_hex(name)?;
+    Highlight::ALL.into_iter().find(|h| h.rgb() == Some(rgb))
+}
+
+fn parse_hex(name: &str) -> Option<wordcraft_doc::props::Rgb> {
+    name.strip_prefix('#')?;
+    wordcraft_doc::props::Rgb::parse(name)
 }
 
 fn align(styles: &StyleSheet, props: &ParaProps) -> Option<Align> {

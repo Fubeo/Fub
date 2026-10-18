@@ -4,10 +4,10 @@
 mod common;
 
 use common::{bytes, sample, styled, text};
-use fub_format_rich::projection::{Block, Inline, Mark, Para, Projection, Role};
+use fub_format_rich::projection::{Block, Inline, Look, Mark, Para, Projection, Role};
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
-use wordcraft_doc::props::NumRef;
+use wordcraft_doc::props::{Highlight, NumRef, Rgb, TextColor};
 use wordcraft_doc::{
     para_block, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
 };
@@ -164,6 +164,73 @@ fn il_grassetto_si_toglie_e_si_mette_come_formattazione_diretta() {
         paragraph(&after, 0).props_at(1).style.as_deref(),
         Some("Strong")
     );
+}
+
+#[test]
+fn carattere_dimensione_colori_e_maiuscole_vanno_e_tornano() {
+    let file = bytes(&sample());
+    let mut p = projection(&file);
+    let base = para_mut(&mut p, 1).f.clone();
+    assert!(base.size.is_some(), "il paragrafo dice la sua dimensione");
+    let look = Look {
+        font: Some("Courier New".into()),
+        size: Some(18.0),
+        color: Some("#c00000".into()),
+        hl: Some("#00ff00".into()),
+    };
+    for inline in &mut para_mut(&mut p, 1).c {
+        if let Inline::Text { x, m, f, .. } = inline {
+            if x == "forte" {
+                m.extend([Mark::H, Mark::Caps]);
+                *f = look.clone();
+            }
+            if x == "Una prosa " {
+                assert_eq!(
+                    f.font.as_deref(),
+                    Some("Georgia"),
+                    "il carattere diretto si vede"
+                );
+                // Senza carattere proprio, il tratto torna a quello del paragrafo.
+                f.font = None;
+                m.push(Mark::SmallCaps);
+            }
+        }
+    }
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let prose = paragraph(&after, 1);
+    let props = |t: &str| prose.props_at(prose.text.find(t).unwrap() + 1).clone();
+    let strong = props("forte");
+    assert_eq!(strong.font.as_deref(), Some("Courier New"));
+    assert_eq!(strong.size, Some(18.0));
+    assert_eq!(strong.color, Some(TextColor::Rgb(Rgb(0xc0, 0, 0))));
+    assert_eq!(strong.highlight, Some(Highlight::BrightGreen));
+    assert_eq!(strong.caps, Some(true));
+    let plain = props("Una prosa");
+    assert_eq!(
+        plain.font, None,
+        "il carattere diretto si toglie, non si copia"
+    );
+    assert_eq!(plain.small_caps, Some(true));
+
+    let reopened = projection(&out);
+    let Block::Para(prose) = &reopened.blocks[1] else {
+        panic!()
+    };
+    let seen = |t: &str| {
+        prose
+            .c
+            .iter()
+            .find_map(|i| match i {
+                Inline::Text { x, m, f, .. } if x == t => Some((m.clone(), f.clone())),
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert_eq!(seen("forte"), (vec![Mark::B, Mark::H, Mark::Caps], look));
+    assert_eq!(seen("Una prosa ").0, vec![Mark::SmallCaps]);
+    assert_eq!(seen("Una prosa ").1.font, None);
+    assert_eq!(prose.f, base, "la base del paragrafo non cambia");
 }
 
 #[test]
@@ -600,6 +667,7 @@ fn una_nota_mostrata_due_volte_apre_in_sola_lettura() {
         k: None,
         m: Vec::new(),
         href: None,
+        f: Look::default(),
     });
     assert_eq!(
         save(Codec::Docx, &file, &projection.to_json().unwrap()),

@@ -5,7 +5,7 @@ mod common;
 
 use std::io::{Cursor, Read, Write};
 
-use fub_format_rich::projection::{AtomKind, Block, Inline, Mark, Para, Projection, Role};
+use fub_format_rich::projection::{AtomKind, Block, Inline, Look, Mark, Para, Projection, Role};
 use fub_format_rich::{blank, open, save, Codec, ReadOnly, RichError, Saved};
 
 const NAMESPACES: &str = concat!(
@@ -54,6 +54,8 @@ struct Fixture {
     common: String,
     settings: Option<String>,
     manifest_extra: String,
+    /// `style:font-face` di `content.xml`.
+    faces: String,
 }
 
 impl Fixture {
@@ -64,15 +66,17 @@ impl Fixture {
             common: COMMON.to_string(),
             settings: None,
             manifest_extra: String::new(),
+            faces: String::new(),
         }
     }
 
     fn bytes(&self) -> Vec<u8> {
         let content = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<office:document-content {NAMESPACES}>\
+             <office:font-face-decls>{}</office:font-face-decls>\
              <office:automatic-styles>{}</office:automatic-styles><office:body><office:text>\
              {}</office:text></office:body></office:document-content>",
-            self.auto, self.body
+            self.faces, self.auto, self.body
         );
         let styles = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<office:document-styles {NAMESPACES}>\
@@ -326,6 +330,7 @@ fn gli_spazi_seguono_la_regola_di_odf() {
         k: None,
         m: Vec::new(),
         href: None,
+        f: Look::default(),
     }];
     let out = saved(&bytes, &edited);
     assert_eq!(
@@ -363,6 +368,80 @@ fn un_enfasi_cambiata_diventa_uno_stile_automatico_riusato() {
     }
     let reopened = self::projection(&saved(&bytes, &projection));
     assert_eq!(texts(para(&reopened, 1))[3], ("forte", &[][..]));
+}
+
+#[test]
+fn carattere_dimensione_colori_e_maiuscole_diventano_uno_stile_automatico() {
+    let bytes = odt("<text:p>uno</text:p><text:p>due</text:p>");
+    let mut projection = projection(&bytes);
+    let look = Look {
+        font: Some("Courier New".into()),
+        size: Some(18.0),
+        color: Some("#c00000".into()),
+        hl: Some("#00ff00".into()),
+    };
+    if let Inline::Text { m, f, .. } = &mut para_mut(&mut projection, 0).c[0] {
+        *m = vec![Mark::H, Mark::Caps, Mark::SmallCaps];
+        *f = look.clone();
+    }
+    let out = saved(&bytes, &projection);
+    let content = part(&out, "content.xml");
+    for attr in [
+        "fo:font-family=\"&#39;Courier New&#39;\"",
+        "fo:font-size=\"18pt\"",
+        "fo:color=\"#c00000\"",
+        "fo:background-color=\"#00ff00\"",
+        "fo:text-transform=\"uppercase\"",
+        "fo:font-variant=\"small-caps\"",
+    ] {
+        assert!(content.contains(attr), "{attr} in {content}");
+    }
+    let reopened = self::projection(&out);
+    let Inline::Text { m, f, .. } = &para(&reopened, 0).c[0] else {
+        panic!()
+    };
+    assert_eq!(
+        (m.as_slice(), f),
+        (&[Mark::H, Mark::Caps, Mark::SmallCaps][..], &look)
+    );
+    let Inline::Text { f, .. } = &para(&reopened, 1).c[0] else {
+        panic!()
+    };
+    assert_eq!(*f, Look::default(), "l'altro paragrafo resta com'era");
+
+    // Il colore automatico si scrive come il colore della finestra.
+    let mut projection = reopened;
+    if let Inline::Text { f, .. } = &mut para_mut(&mut projection, 0).c[0] {
+        f.color = Some("auto".into());
+    }
+    let out = saved(&out, &projection);
+    assert!(part(&out, "content.xml").contains("style:use-window-font-color=\"true\""));
+    let reopened = self::projection(&out);
+    let Inline::Text { f, .. } = &para(&reopened, 0).c[0] else {
+        panic!()
+    };
+    assert_eq!(f.color, None, "il colore torna quello del paragrafo");
+}
+
+#[test]
+fn un_carattere_dichiarato_si_legge_con_la_sua_famiglia() {
+    let mut fixture =
+        Fixture::new("<text:p>uno <text:span text:style-name=\"T2\">due</text:span></text:p>");
+    fixture.faces = "<style:font-face style:name=\"Liberation Serif1\" \
+                     svg:font-family=\"&apos;Liberation Serif&apos;\"/>"
+        .into();
+    fixture.auto.push_str(
+        "<style:style style:name=\"T2\" style:family=\"text\">\
+         <style:text-properties style:font-name=\"Liberation Serif1\" fo:font-size=\"14pt\"/>\
+         </style:style>",
+    );
+    let projection = projection(&fixture.bytes());
+    let Inline::Text { x, f, .. } = &para(&projection, 0).c[1] else {
+        panic!()
+    };
+    assert_eq!(x, "due");
+    assert_eq!(f.font.as_deref(), Some("Liberation Serif"));
+    assert_eq!(f.size, Some(14.0));
 }
 
 #[test]
@@ -449,6 +528,7 @@ fn invio_in_un_elenco_aggiunge_una_voce_allo_stesso_elenco() {
         k: None,
         m: Vec::new(),
         href: None,
+        f: Look::default(),
     }];
     projection.blocks.insert(4, Block::Para(copy));
     let out = saved(&bytes, &projection);
@@ -586,6 +666,7 @@ fn le_righe_di_una_tabella_si_aggiungono_e_si_tolgono() {
             k: None,
             m: Vec::new(),
             href: None,
+            f: Look::default(),
         }];
     }
     table.rows.push(row);
@@ -721,6 +802,7 @@ fn le_parti_che_la_proiezione_non_mostra_restano_al_loro_posto() {
         k: None,
         m: Vec::new(),
         href: None,
+        f: Look::default(),
     }];
     projection.blocks.insert(2, Block::Para(copy));
     let out = saved(&bytes, &projection);
@@ -823,6 +905,7 @@ fn un_documento_nuovo_si_crea_e_si_scrive() {
         k: None,
         m: vec![Mark::I],
         href: None,
+        f: Look::default(),
     }];
     first.role = Role::Heading { level: 1 };
     let reopened = self::projection(&saved(&bytes, &projection));
@@ -844,6 +927,7 @@ fn un_odt_di_wordcraft_si_apre_modificabile() {
         k: None,
         m: Vec::new(),
         href: None,
+        f: Look::default(),
     });
     let reopened = self::projection(&saved(&bytes, &projection));
     assert!(words(para(&reopened, index)).ends_with(" (rivisto)"));

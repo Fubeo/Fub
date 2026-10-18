@@ -27,7 +27,9 @@ use wordcraft_doc::{
 };
 
 use crate::blob;
-use crate::projection::{self, AtomKeep, Block, Inline, Mark, Para, ParaKeep, Projection, Role};
+use crate::projection::{
+    self, AtomKeep, Block, Inline, Look, Mark, Para, ParaKeep, Projection, Role,
+};
 use crate::RichError;
 
 /// Il documento che la proiezione descrive, a partire da `base`.
@@ -200,7 +202,7 @@ fn paragraph(
     out.mark = keep.mark.clone();
     for inline in &para.c {
         match inline {
-            Inline::Text { x, k, m, href } => {
+            Inline::Text { x, k, m, href, f } => {
                 if x.contains(OBJ) {
                     return Err(RichError::Malformed("object marker inside text".into()));
                 }
@@ -218,6 +220,7 @@ fn paragraph(
                     shown_style.as_deref(),
                     &mut document.styles,
                 );
+                let props = with_look(props, m, f, shown_style.as_deref(), &document.styles);
                 push(&mut out, x, props);
             }
             Inline::Atom { k, .. } => {
@@ -470,6 +473,8 @@ fn with_marks(
         Mark::H,
         Mark::Sup,
         Mark::Sub,
+        Mark::Caps,
+        Mark::SmallCaps,
     ] {
         let on = want.contains(&mark);
         if on == shown.contains(&mark) {
@@ -499,6 +504,61 @@ fn with_marks(
 }
 
 /// Scrive o toglie (`None`) la formattazione diretta di un'enfasi.
+/// Riporta sul tratto l'aspetto voluto con la stessa regola delle enfasi: un
+/// valore che differisce da quello mostrato si toglie se basta toglierlo, se
+/// no si scrive diretto. Quello che il tratto non nomina è quello del
+/// paragrafo.
+fn with_look(
+    mut props: CharProps,
+    marks: &[Mark],
+    look: &Look,
+    shown_style: Option<&str>,
+    styles: &StyleSheet,
+) -> CharProps {
+    let plain = styles.resolve_char(shown_style, &CharProps::default());
+    let shown = |props: &CharProps| styles.resolve_char(shown_style, props);
+
+    let font = look.font.clone().unwrap_or_else(|| plain.font.clone());
+    if shown(&props).font != font {
+        props.font = None;
+        if shown(&props).font != font {
+            props.font = Some(font);
+        }
+    }
+    let size = look.size.unwrap_or(plain.size);
+    if !projection::same_size(shown(&props).size, size) {
+        props.size = None;
+        if !projection::same_size(shown(&props).size, size) {
+            props.size = Some(size);
+        }
+    }
+    let color = look
+        .color
+        .as_deref()
+        .and_then(projection::color_of)
+        .unwrap_or(plain.color);
+    if shown(&props).color != color {
+        props.color = None;
+        if shown(&props).color != color {
+            props.color = Some(color);
+        }
+    }
+    if marks.contains(&Mark::H) {
+        let highlight = look
+            .hl
+            .as_deref()
+            .and_then(projection::highlight_of)
+            .unwrap_or(Highlight::Yellow);
+        if shown(&props).highlight != highlight.rgb() {
+            props.highlight = None;
+            if shown(&props).highlight != highlight.rgb() {
+                props.highlight = Some(highlight);
+            }
+        }
+    }
+    props
+}
+
 fn set(props: &mut CharProps, mark: Mark, on: Option<bool>) {
     match mark {
         Mark::B => props.bold = on,
@@ -539,5 +599,7 @@ fn set(props: &mut CharProps, mark: Mark, on: Option<bool>) {
                 Some(false) => Some(VertAlign::Baseline),
             };
         }
+        Mark::Caps => props.caps = on,
+        Mark::SmallCaps => props.small_caps = on,
     }
 }

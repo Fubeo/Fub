@@ -10,8 +10,10 @@
 //   rompe il salvataggio, quindi la superficie non ne inventa;
 // - `m` è l'enfasi **risolta**: cambiarla chiede al documento formattazione
 //   diretta, non toccarla lascia il tratto com'era;
-// - `align`, `label`, `w` e `h` sono suggerimenti di resa che il ritorno
-//   ignora.
+// - `f` di un tratto è l'aspetto **risolto** dove differisce da quello del
+//   paragrafo: come `m`, cambiarlo chiede formattazione diretta;
+// - `align`, `f` di un paragrafo, `label`, `w` e `h` sono suggerimenti di
+//   resa che il ritorno ignora.
 //
 // La scrittura segue l'ordine e le omissioni di serde (campi assenti quando
 // vuoti), così un blocco non toccato si riscrive com'era arrivato.
@@ -38,8 +40,24 @@ export type Role =
 export type Align = "left" | "center" | "right" | "justify";
 
 /// L'enfasi, nell'ordine canonico della proiezione.
-export const MARKS = ["b", "i", "u", "s", "h", "sup", "sub"] as const;
+export const MARKS = ["b", "i", "u", "s", "h", "sup", "sub", "caps", "small_caps"] as const;
 export type Mark = (typeof MARKS)[number];
+
+/// L'aspetto di un carattere che non è un'enfasi: in un tratto ogni campo c'è
+/// soltanto dove differisce da quello del paragrafo.
+export interface Look {
+  readonly font?: string;
+  /// Punti.
+  readonly size?: number;
+  /// `#rrggbb` minuscolo, o `auto`.
+  readonly color?: string;
+  /// Il colore dell'evidenziatore quando non è il giallo.
+  readonly hl?: string;
+}
+
+/// Il giallo che un tratto evidenziato senza `hl` porta.
+export const HIGHLIGHT_DEFAULT = "#ffff00";
+export const COLOR_AUTO = "auto";
 
 export const ATOM_KINDS = [
   "image",
@@ -61,6 +79,7 @@ export interface TextInline {
   readonly k?: string;
   readonly m?: readonly Mark[];
   readonly href?: string;
+  readonly f?: Look;
 }
 
 export interface AtomInline {
@@ -80,6 +99,9 @@ export interface Para {
   readonly align?: Align;
   readonly k?: string;
   readonly sect?: string;
+  /// Suggerimento: il carattere e la dimensione del testo che non ne sceglie
+  /// altri.
+  readonly f?: Look;
   readonly c?: readonly Inline[];
 }
 
@@ -184,10 +206,37 @@ function readRole(value: unknown, where: string): Role {
   }
 }
 
+const COLOR = /^#[0-9a-f]{6}$/;
+
+function readLook(value: unknown, where: string): Look | undefined {
+  if (value === undefined) return undefined;
+  const look = record(value, where);
+  closed(look, ["font", "size", "color", "hl"], where);
+  const font = optionalText(look.font, `${where}.font`);
+  const size = optionalNumber(look.size, `${where}.size`);
+  const color = optionalText(look.color, `${where}.color`);
+  const hl = optionalText(look.hl, `${where}.hl`);
+  if (color !== undefined && color !== COLOR_AUTO && !COLOR.test(color)) {
+    throw new ProjectionError(`${where}: colore non valido`);
+  }
+  if (hl !== undefined && !COLOR.test(hl)) throw new ProjectionError(`${where}: evidenziatore non valido`);
+  return plainLook({ font, size, color, hl });
+}
+
+/// L'aspetto senza i campi assenti; `undefined` se non ne resta nessuno.
+export function plainLook(look: Look): Look | undefined {
+  const out: { font?: string; size?: number; color?: string; hl?: string } = {};
+  if (look.font !== undefined) out.font = look.font;
+  if (look.size !== undefined) out.size = look.size;
+  if (look.color !== undefined) out.color = look.color;
+  if (look.hl !== undefined) out.hl = look.hl;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function readInline(value: unknown, where: string): Inline {
   const inline = record(value, where);
   if (inline.t === "text") {
-    closed(inline, ["t", "x", "k", "m", "href"], where);
+    closed(inline, ["t", "x", "k", "m", "href", "f"], where);
     const marks = inline.m === undefined ? undefined : list(inline.m, `${where}.m`).map((mark) => {
       if (!(MARKS as readonly unknown[]).includes(mark)) throw new ProjectionError(`${where}: enfasi sconosciuta`);
       return mark as Mark;
@@ -198,6 +247,7 @@ function readInline(value: unknown, where: string): Inline {
       ...(inline.k !== undefined ? { k: text(inline.k, `${where}.k`) } : {}),
       ...(marks && marks.length > 0 ? { m: canonicalMarks(marks) } : {}),
       ...(inline.href !== undefined ? { href: text(inline.href, `${where}.href`) } : {}),
+      ...withLook(readLook(inline.f, `${where}.f`)),
     };
   }
   if (inline.t === "atom") {
@@ -223,7 +273,7 @@ function readInline(value: unknown, where: string): Inline {
 function readBlock(value: unknown, where: string): Block {
   const block = record(value, where);
   if (block.t === "para") {
-    closed(block, ["t", "role", "align", "k", "sect", "c"], where);
+    closed(block, ["t", "role", "align", "k", "sect", "f", "c"], where);
     const align = block.align;
     if (align !== undefined && !["left", "center", "right", "justify"].includes(align as string)) {
       throw new ProjectionError(`${where}: allineamento sconosciuto`);
@@ -235,6 +285,7 @@ function readBlock(value: unknown, where: string): Block {
       ...(align !== undefined ? { align: align as Align } : {}),
       ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}),
       ...(block.sect !== undefined ? { sect: text(block.sect, `${where}.sect`) } : {}),
+      ...withLook(readLook(block.f, `${where}.f`)),
       ...(c.length > 0 ? { c } : {}),
     };
   }
@@ -285,6 +336,10 @@ export function parseProjection(source: string): Projection {
   };
 }
 
+function withLook(f: Look | undefined): { f?: Look } {
+  return f ? { f } : {};
+}
+
 /// L'enfasi senza doppioni, nell'ordine canonico.
 export function canonicalMarks(marks: Iterable<Mark>): Mark[] {
   const set = new Set(marks);
@@ -309,12 +364,23 @@ function float(n: number): string {
   return Number.isInteger(n) && Math.abs(n) < 1e16 ? `${n}.0` : String(n);
 }
 
+function writeLook(look: Look | undefined): string {
+  if (!look) return "";
+  const fields: string[] = [];
+  if (look.font !== undefined) fields.push(`"font":${JSON.stringify(look.font)}`);
+  if (look.size !== undefined) fields.push(`"size":${float(look.size)}`);
+  if (look.color !== undefined) fields.push(`"color":${JSON.stringify(look.color)}`);
+  if (look.hl !== undefined) fields.push(`"hl":${JSON.stringify(look.hl)}`);
+  return fields.length > 0 ? `,"f":{${fields.join(",")}}` : "";
+}
+
 function writeInline(inline: Inline): string {
   if (inline.t === "text") {
     let out = `{"t":"text","x":${JSON.stringify(inline.x)}`;
     if (inline.k !== undefined) out += `,"k":${JSON.stringify(inline.k)}`;
     if (inline.m && inline.m.length > 0) out += `,"m":${JSON.stringify(inline.m)}`;
     if (inline.href !== undefined) out += `,"href":${JSON.stringify(inline.href)}`;
+    out += writeLook(inline.f);
     return out + "}";
   }
   let out = `{"t":"atom","k":${JSON.stringify(inline.k)},"kind":"${inline.kind}"`;
@@ -331,6 +397,7 @@ export function writeBlock(block: Block): string {
     if (block.align !== undefined) out += `,"align":"${block.align}"`;
     if (block.k !== undefined) out += `,"k":${JSON.stringify(block.k)}`;
     if (block.sect !== undefined) out += `,"sect":${JSON.stringify(block.sect)}`;
+    out += writeLook(block.f);
     if (block.c && block.c.length > 0) out += `,"c":[${block.c.map(writeInline).join(",")}]`;
     return out + "}";
   }

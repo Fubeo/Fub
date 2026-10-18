@@ -16,6 +16,7 @@ import type { EditorChange } from "../core/text-operation";
 import type { ProofPorts } from "../core/proof-ports";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import type { RichEngine } from "./engine";
+import type { RichStrip } from "./strip";
 import type { ReadOnlyReason } from "./projection";
 
 export const RICH_OWNER = "fub.shell.rich";
@@ -46,6 +47,13 @@ export const RICH_ACTION_IDS: ReadonlySet<string> = new Set([
   "markdown.italic",
   "markdown.strikethrough",
   "markdown.highlight",
+  "rich.underline",
+  "rich.superscript",
+  "rich.subscript",
+  "rich.caps",
+  "rich.small_caps",
+  "rich.font.grow",
+  "rich.font.shrink",
   "markdown.clear",
   "markdown.list.bullet",
   "markdown.list.ordered",
@@ -65,6 +73,13 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "markdown.bold": "Mod-b",
   "markdown.italic": "Mod-i",
   "markdown.strikethrough": "Mod-Shift-x",
+  "rich.underline": "Mod-u",
+  "rich.superscript": "Mod-Shift-=",
+  "rich.subscript": "Mod-=",
+  "rich.caps": "Mod-Shift-a",
+  "rich.small_caps": "Mod-Shift-k",
+  "rich.font.grow": "Mod-]",
+  "rich.font.shrink": "Mod-[",
   "markdown.list.bullet": "Mod-Shift-8",
   "markdown.list.ordered": "Mod-Shift-7",
   "markdown.list.indent": "Tab",
@@ -110,6 +125,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
   parent.append(root);
 
   let engine: RichEngine | null = null;
+  let strip: RichStrip | null = null;
   let pending: string | null = null;
   let readOnly = false;
   let closed = false;
@@ -132,7 +148,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
 
   const load = callbacks.loadEngine ?? (() => import("./engine"));
   load().then(
-    ({ RichEngine }) => {
+    ({ RichEngine, mountStrip }) => {
       if (closed) return;
       page.removeAttribute("aria-busy");
       engine = new RichEngine(page, {
@@ -141,6 +157,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
         onSelectionChange: () => callbacks.onSelectionChange(context.paneId),
         proof: callbacks.proof,
       });
+      strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null);
+      root.insertBefore(strip.element, page);
       stopEngine = engine.subscribe(() => {
         showNotice();
         notify();
@@ -226,6 +244,8 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       closed = true;
       stopLanguage();
       stopEngine?.();
+      strip?.destroy();
+      strip = null;
       listeners.clear();
       engine?.destroy();
       engine = null;

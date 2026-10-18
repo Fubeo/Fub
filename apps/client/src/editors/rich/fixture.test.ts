@@ -12,6 +12,7 @@ import projectionFixture from "../../__fixtures__/rich-projection.json";
 import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
 import { parseProjection, writeProjection } from "./projection";
+import { setColor, setFont, setHighlight, setSize } from "./commands";
 import { BlockWriter, toDoc } from "./schema";
 
 const SOURCE = projectionFixture.source;
@@ -76,6 +77,15 @@ describe("la proiezione del codec", () => {
     const figure = find(e.state.doc, "Figura");
     e.select(figure, figure + "Figura".length);
     expect(e.run("markdown.bold")).toBe(true);
+    // L'aspetto di «dalla shell»: carattere, dimensione, colori, maiuscoletto.
+    const shell = find(e.state.doc, "dalla shell");
+    e.select(shell, shell + "dalla shell".length);
+    expect(e.apply(setFont("Courier New"))).toBe(true);
+    expect(e.apply(setSize(18))).toBe(true);
+    expect(e.apply(setColor("#c00000"))).toBe(true);
+    expect(e.apply(setHighlight("#00ffff"))).toBe(true);
+    expect(e.run("rich.small_caps")).toBe(true);
+    expect(e.look()).toEqual({ font: "Courier New", size: 18, color: "#c00000", hl: "#00ffff" });
     // Una riga dopo la prima della tabella.
     e.select(find(e.state.doc, "cella 00"));
     expect(e.run("markdown.table.row.after")).toBe(true);

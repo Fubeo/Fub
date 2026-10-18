@@ -8,7 +8,7 @@
 //   dopo, visibile e cancellabile soltanto apposta: un attributo nascosto lo
 //   porterebbe via un Backspace qualunque che unisce due paragrafi;
 // - un tratto di testo ha la marca `run` con il suo `k`, l'enfasi (`b`, `i`,
-//   …) e il link; gli a-capo, i salti pagina e di colonna sono foglie `brk`
+//   …), l'aspetto (`font`, `size`, `color` e il colore di `h`) e il link; gli a-capo, i salti pagina e di colonna sono foglie `brk`
 //   con le stesse marche, perché ProseMirror normalizza gli spazi che legge
 //   dal DOM e un `\n` dentro un nodo di testo non sopravvivrebbe;
 // - un oggetto è una foglia `atom` con il suo `k`, non modificabile dentro;
@@ -22,10 +22,15 @@ import { Fragment, Schema, type Mark as PmMark, type Node as PmNode, type NodeSp
 import {
   BODY,
   canonicalMarks,
+  COLOR_AUTO,
+  HIGHLIGHT_DEFAULT,
+  MARKS,
+  plainLook,
   writeBlock,
   type AtomKind,
   type Block,
   type Inline,
+  type Look,
   type Mark,
   type Para,
   type Projection,
@@ -52,6 +57,23 @@ function roleAttr(dom: HTMLElement): Role | null {
   }
 }
 
+function baseAttr(dom: HTMLElement): Look | null {
+  const raw = dom.getAttribute("data-rich-f");
+  if (!raw) return null;
+  try {
+    return plainLook(JSON.parse(raw) as Look) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/// Un colore che la proiezione accetta: `#rrggbb` minuscolo.
+export function colorValue(value: string | null): string | null {
+  if (!value) return null;
+  const lower = value.trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(lower) ? lower : null;
+}
+
 function headingTag(level: number): string {
   return level <= 6 ? `h${level}` : "p";
 }
@@ -59,7 +81,7 @@ function headingTag(level: number): string {
 const para: NodeSpec = {
   group: "block",
   content: "inline*",
-  attrs: { role: { default: BODY }, align: { default: null }, k: { default: null } },
+  attrs: { role: { default: BODY }, align: { default: null }, k: { default: null }, f: { default: null } },
   parseDOM: [
     {
       tag: "[data-rich-role]",
@@ -67,6 +89,7 @@ const para: NodeSpec = {
         role: roleAttr(dom as HTMLElement) ?? BODY,
         k: (dom as HTMLElement).getAttribute("data-rich-k"),
         align: (dom as HTMLElement).getAttribute("data-rich-align"),
+        f: baseAttr(dom as HTMLElement),
       }),
     },
     ...[1, 2, 3, 4, 5, 6].map((level) => ({ tag: `h${level}`, attrs: { role: { kind: "heading", level } } })),
@@ -93,10 +116,19 @@ const para: NodeSpec = {
       attrs["data-list"] = role.ordered ? "ordered" : "bullet";
     }
     if (node.attrs.k) attrs["data-rich-k"] = node.attrs.k as string;
+    const style: string[] = [];
     if (node.attrs.align) {
       attrs["data-rich-align"] = node.attrs.align as string;
-      attrs.style = `text-align: ${node.attrs.align as string}`;
+      style.push(`text-align: ${node.attrs.align as string}`);
     }
+    // La dimensione del paragrafo non si disegna (la dà il tema), ma un tratto
+    // di altra dimensione la misura rispetto a questa.
+    const base = node.attrs.f as Look | null;
+    if (base) {
+      attrs["data-rich-f"] = JSON.stringify(base);
+      if (base.size !== undefined) style.push(`--rich-base-pt: ${base.size}`);
+    }
+    if (style.length > 0) attrs.style = style.join("; ");
     return [tag, attrs, 0];
   },
 };
@@ -264,20 +296,78 @@ const marks: Record<string, MarkSpec> = {
   i: { parseDOM: [{ tag: "em" }, { tag: "i" }, { style: "font-style=italic" }], toDOM: () => ["em", 0] },
   u: { parseDOM: [{ tag: "u" }], toDOM: () => ["u", 0] },
   s: { parseDOM: [{ tag: "s" }, { tag: "del" }, { tag: "strike" }], toDOM: () => ["s", 0] },
-  h: { parseDOM: [{ tag: "mark" }], toDOM: () => ["mark", 0] },
+  /// L'evidenziatore; `color` nullo è il giallo.
+  h: {
+    attrs: { color: { default: null } },
+    parseDOM: [{ tag: "mark", getAttrs: (dom) => ({ color: colorValue((dom as HTMLElement).getAttribute("data-rich-hl")) }) }],
+    toDOM: (mark) => {
+      const color = mark.attrs.color as string | null;
+      return color ? ["mark", { "data-rich-hl": color, style: `background-color: ${color}` }, 0] : ["mark", 0];
+    },
+  },
   sup: { excludes: "sup sub", parseDOM: [{ tag: "sup" }], toDOM: () => ["sup", 0] },
   sub: { excludes: "sup sub", parseDOM: [{ tag: "sub" }], toDOM: () => ["sub", 0] },
+  caps: {
+    parseDOM: [{ tag: "span[data-rich-caps]" }],
+    toDOM: () => ["span", { "data-rich-caps": "", style: "text-transform: uppercase" }, 0],
+  },
+  small_caps: {
+    parseDOM: [{ tag: "span[data-rich-small-caps]" }],
+    toDOM: () => ["span", { "data-rich-small-caps": "", style: "font-variant-caps: small-caps" }, 0],
+  },
+  /// L'aspetto dove differisce da quello del paragrafo: valori, non enfasi.
+  font: {
+    attrs: { family: {} },
+    parseDOM: [{ tag: "span[data-rich-font]", getAttrs: (dom) => ({ family: (dom as HTMLElement).getAttribute("data-rich-font") }) }],
+    toDOM: (mark) => {
+      const family = mark.attrs.family as string;
+      return ["span", { "data-rich-font": family, style: `font-family: ${JSON.stringify(family)}, serif` }, 0];
+    },
+  },
+  size: {
+    attrs: { pt: {} },
+    parseDOM: [
+      {
+        tag: "span[data-rich-size]",
+        getAttrs: (dom) => {
+          const pt = Number((dom as HTMLElement).getAttribute("data-rich-size"));
+          return Number.isFinite(pt) && pt > 0 ? { pt } : false;
+        },
+      },
+    ],
+    // In proporzione al paragrafo, che il tema disegna alla sua misura.
+    toDOM: (mark) => {
+      const pt = mark.attrs.pt as number;
+      return ["span", { "data-rich-size": String(pt), style: `font-size: calc(1em * ${pt} / var(--rich-base-pt, 11))` }, 0];
+    },
+  },
+  color: {
+    attrs: { value: {} },
+    parseDOM: [{ tag: "span[data-rich-color]", getAttrs: (dom) => ({ value: (dom as HTMLElement).getAttribute("data-rich-color") }) }],
+    toDOM: (mark) => {
+      const value = mark.attrs.value as string;
+      const attrs: Record<string, string> = { "data-rich-color": value };
+      if (value !== COLOR_AUTO) attrs.style = `color: ${value}`;
+      return ["span", attrs, 0];
+    },
+  },
 };
 
 export const richSchema = new Schema({ nodes, marks });
 
-const EMPHASIS: readonly Mark[] = ["b", "i", "u", "s", "h", "sup", "sub"];
+const EMPHASIS: readonly Mark[] = MARKS;
 
-function marksOf(inline: { k?: string; m?: readonly Mark[]; href?: string }): PmMark[] {
+function marksOf(inline: { k?: string; m?: readonly Mark[]; href?: string; f?: Look }): PmMark[] {
   const out: PmMark[] = [];
   if (inline.href !== undefined) out.push(richSchema.marks.link.create({ href: inline.href }));
   if (inline.k !== undefined) out.push(richSchema.marks.run.create({ k: inline.k }));
-  for (const mark of inline.m ?? []) out.push(richSchema.marks[mark].create());
+  for (const mark of inline.m ?? []) {
+    out.push(richSchema.marks[mark].create(mark === "h" ? { color: inline.f?.hl ?? null } : null));
+  }
+  const f = inline.f;
+  if (f?.font !== undefined) out.push(richSchema.marks.font.create({ family: f.font }));
+  if (f?.size !== undefined) out.push(richSchema.marks.size.create({ pt: f.size }));
+  if (f?.color !== undefined) out.push(richSchema.marks.color.create({ value: f.color }));
   return out;
 }
 
@@ -315,7 +405,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
     if (block.t === "para") {
       out.push(
         richSchema.nodes.para.create(
-          { role: block.role, align: block.align ?? null, k: block.k ?? null },
+          { role: block.role, align: block.align ?? null, k: block.k ?? null, f: block.f ?? null },
           inlineNodes(block.c ?? []),
         ),
       );
@@ -347,7 +437,24 @@ interface Segment {
   k?: string;
   m: Mark[];
   href?: string;
+  f?: Look;
   x: string;
+}
+
+/// L'aspetto che le marche di un tratto dicono.
+export function lookOf(marks: readonly PmMark[]): Look | undefined {
+  let font: string | undefined;
+  let size: number | undefined;
+  let color: string | undefined;
+  let hl: string | undefined;
+  for (const mark of marks) {
+    const name = mark.type.name;
+    if (name === "font") font = mark.attrs.family as string;
+    else if (name === "size") size = mark.attrs.pt as number;
+    else if (name === "color") color = mark.attrs.value as string;
+    else if (name === "h") hl = (mark.attrs.color as string | null) ?? undefined;
+  }
+  return plainLook({ font, size, color, hl: hl === HIGHLIGHT_DEFAULT ? undefined : hl });
 }
 
 function segmentOf(node: PmNode): Omit<Segment, "x"> {
@@ -360,11 +467,21 @@ function segmentOf(node: PmNode): Omit<Segment, "x"> {
     else if (name === "link") href = mark.attrs.href as string;
     else if ((EMPHASIS as readonly string[]).includes(name)) m.push(name as Mark);
   }
-  return { k, m: canonicalMarks(m), href };
+  return { k, m: canonicalMarks(m), href, f: lookOf(node.marks) };
+}
+
+function sameLook(a: Look | undefined, b: Look | undefined): boolean {
+  return a?.font === b?.font && a?.size === b?.size && a?.color === b?.color && a?.hl === b?.hl;
 }
 
 function sameSegment(a: Omit<Segment, "x">, b: Omit<Segment, "x">): boolean {
-  return a.k === b.k && a.href === b.href && a.m.length === b.m.length && a.m.every((mark, i) => mark === b.m[i]);
+  return (
+    a.k === b.k &&
+    a.href === b.href &&
+    sameLook(a.f, b.f) &&
+    a.m.length === b.m.length &&
+    a.m.every((mark, i) => mark === b.m[i])
+  );
 }
 
 /// Il contenuto di un paragrafo nella forma della proiezione: tratti uguali
@@ -380,6 +497,7 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
         ...(open.k !== undefined ? { k: open.k } : {}),
         ...(open.m.length > 0 ? { m: open.m } : {}),
         ...(open.href !== undefined ? { href: open.href } : {}),
+        ...(open.f !== undefined ? { f: open.f } : {}),
       });
     }
     open = null;
@@ -416,12 +534,14 @@ function paraOf(node: PmNode, sect: string | undefined): Para {
   const c = inlinesOf(node);
   const align = node.attrs.align as Para["align"] | null;
   const k = node.attrs.k as string | null;
+  const f = node.attrs.f as Look | null;
   return {
     t: "para",
     role: node.attrs.role as Role,
     ...(align ? { align } : {}),
     ...(k !== null ? { k } : {}),
     ...(sect !== undefined ? { sect } : {}),
+    ...(f !== null ? { f } : {}),
     ...(c.length > 0 ? { c } : {}),
   };
 }

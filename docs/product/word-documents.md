@@ -13,8 +13,15 @@ delle note. Si salva nel file stesso, senza conversioni e senza copie a lato.
 Si modificano:
 
 - il testo, con a-capo, tabulazioni e salti di pagina o di colonna;
-- grassetto, corsivo, barrato ed evidenziato dalla barra; sottolineato, apice
-  e pedice restano dove sono e si copiano col testo;
+- grassetto, corsivo, barrato ed evidenziato dalla barra;
+- l'aspetto del carattere dalla striscia **Carattere** sopra il foglio: tipo e
+  dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
+  dell'evidenziatore, sottolineato (`Ctrl+U`), apice (`Ctrl+Maiusc+=`), pedice
+  (`Ctrl+=`), tutto maiuscolo (`Ctrl+Maiusc+A`) e maiuscoletto
+  (`Ctrl+Maiusc+K`). **Copia formato** prende l'aspetto del punto in cui sta
+  il cursore e lo dà alla prossima selezione, una volta; Esc lo lascia.
+  Un valore uguale a quello del paragrafo non si scrive: il tratto torna a
+  seguire il suo stile;
 - lo stile del paragrafo: testo, titoli da 1 a 6, citazione;
 - elenchi puntati e numerati su nove livelli;
 - le righe delle tabelle: aggiungere, spostare, togliere.
@@ -34,6 +41,9 @@ ciò che si voleva scrivere non scrive, e il testo resta nel buffer.
 Limiti attuali:
 
 - le immagini non si disegnano, e un oggetto non si modifica dalla superficie;
+- un carattere che la macchina non ha si mostra con uno di ripiego, ma nel
+  file resta quello scelto; in un `.docx` l'evidenziatore ha soltanto i sedici
+  colori di Word;
 - i link si conservano ma non si creano né si modificano; le colonne delle
   tabelle non si aggiungono né si tolgono;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
@@ -49,8 +59,8 @@ Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con
 gli stessi limiti; un salto di pagina o di colonna però non si scrive. Il
 salvataggio riscrive soltanto i blocchi toccati: il resto di `content.xml` e
 ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
-per byte com'erano. Un ruolo o un'enfasi nuovi aggiungono gli stili automatici
-che servono (`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei
+per byte com'erano. Un ruolo, un'enfasi o un aspetto del carattere nuovi aggiungono
+gli stili automatici che servono (`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei
 titoli e della citazione, senza toccare gli altri.
 
 Oltre ai motivi del `.docx`, un `.odt` si apre **in sola lettura** quando la

@@ -27,10 +27,10 @@ use super::keys::{
     self, name_of, opening, AtomKey, CellKey, Level, ParaKey, RowKey, RunKey, TableKey,
 };
 use super::read::{self, inner, Body, Unit};
-use super::styles::{Def, LevelKind, Position, Styles, TextProps};
+use super::styles::{Def, LevelKind, Position, Size, Styles, TextProps};
 use super::xml::{self, Tree};
 use crate::blob;
-use crate::projection::{AtomKind, Block, Cell, Inline, Mark, Para, Role, Row, Table};
+use crate::projection::{self, AtomKind, Block, Cell, Inline, Look, Mark, Para, Role, Row, Table};
 use crate::RichError;
 
 /// Oltre questo prodotto di lunghezze l'allineamento non cerca la
@@ -174,8 +174,71 @@ fn href_of(wrap: &[String]) -> Option<String> {
     })
 }
 
-/// Le proprietà che portano l'enfasi da `shown` a `want`.
-fn diff(want: &BTreeSet<Mark>, shown: &BTreeSet<Mark>) -> TextProps {
+/// L'aspetto voluto, senza i valori che sono già quelli di `plain`, il testo
+/// del paragrafo senza involucri: due forme dello stesso aspetto diventano una.
+fn relative(look: &Look, plain: &TextProps) -> Look {
+    let plain_color = plain
+        .color
+        .clone()
+        .unwrap_or_else(|| projection::COLOR_AUTO.into());
+    Look {
+        font: look
+            .font
+            .clone()
+            .filter(|font| Some(font) != plain.font.as_ref()),
+        size: look.size.filter(|size| {
+            !plain
+                .points()
+                .is_some_and(|p| projection::same_size(*size, p))
+        }),
+        color: look.color.clone().filter(|color| *color != plain_color),
+        hl: look
+            .hl
+            .clone()
+            .filter(|hl| hl != projection::HIGHLIGHT_DEFAULT),
+    }
+}
+
+/// Le proprietà che portano il testo da `shown` all'enfasi `want` e
+/// all'aspetto `look`, relativo a `plain`.
+fn diff(want: &BTreeSet<Mark>, look: &Look, plain: &TextProps, shown: &TextProps) -> TextProps {
+    let mut out = diff_marks(want, &shown.marks().into_iter().collect());
+    let target = look.clone();
+    let font = target.font.or_else(|| plain.font.clone());
+    if font.is_some() && font != shown.font {
+        out.font = font;
+    }
+    let size = target.size.or_else(|| plain.points());
+    if let Some(size) = size {
+        if !shown
+            .points()
+            .is_some_and(|p| projection::same_size(p, size))
+        {
+            out.size = Some(Size::Points(size));
+        }
+    }
+    let color_of = |p: &TextProps| {
+        p.color
+            .clone()
+            .unwrap_or_else(|| projection::COLOR_AUTO.into())
+    };
+    let color = target.color.unwrap_or_else(|| color_of(plain));
+    if color != color_of(shown) {
+        out.color = Some(color);
+    }
+    if want.contains(&Mark::H) {
+        let hl = target
+            .hl
+            .unwrap_or_else(|| projection::HIGHLIGHT_DEFAULT.into());
+        if shown.highlight != Some(true) || shown.background.as_deref() != Some(hl.as_str()) {
+            out.highlight = Some(true);
+            out.background = Some(hl);
+        }
+    }
+    out
+}
+
+fn diff_marks(want: &BTreeSet<Mark>, shown: &BTreeSet<Mark>) -> TextProps {
     let flip =
         |mark: Mark| (want.contains(&mark) != shown.contains(&mark)).then(|| want.contains(&mark));
     let position = [Mark::Sup, Mark::Sub]
@@ -197,6 +260,9 @@ fn diff(want: &BTreeSet<Mark>, shown: &BTreeSet<Mark>) -> TextProps {
         strike: flip(Mark::S),
         highlight: flip(Mark::H),
         position,
+        caps: flip(Mark::Caps),
+        small_caps: flip(Mark::SmallCaps),
+        ..TextProps::default()
     }
 }
 
@@ -233,7 +299,13 @@ fn text_properties(props: &TextProps) -> String {
         None => {}
     }
     match props.highlight {
-        Some(true) => add("fo:background-color", "#ffff00"),
+        Some(true) => add(
+            "fo:background-color",
+            props
+                .background
+                .as_deref()
+                .unwrap_or(projection::HIGHLIGHT_DEFAULT),
+        ),
         Some(false) => add("fo:background-color", "transparent"),
         None => {}
     }
@@ -241,6 +313,33 @@ fn text_properties(props: &TextProps) -> String {
         Some(Position::Super) => add("style:text-position", "super 58%"),
         Some(Position::Sub) => add("style:text-position", "sub 58%"),
         Some(Position::Baseline) => add("style:text-position", "0% 100%"),
+        None => {}
+    }
+    if let Some(on) = props.caps {
+        add("fo:text-transform", if on { "uppercase" } else { "none" });
+    }
+    if let Some(on) = props.small_caps {
+        add("fo:font-variant", if on { "small-caps" } else { "normal" });
+    }
+    if let Some(font) = &props.font {
+        let family = if font.contains(' ') {
+            format!("'{font}'")
+        } else {
+            font.clone()
+        };
+        add("fo:font-family", &family);
+    }
+    match props.size {
+        Some(Size::Points(pt)) => add(
+            "fo:font-size",
+            &format!("{}pt", (pt * 100.0).round() / 100.0),
+        ),
+        Some(Size::Percent(p)) => add("fo:font-size", &format!("{p}%")),
+        None => {}
+    }
+    match props.color.as_deref() {
+        Some(projection::COLOR_AUTO) => add("style:use-window-font-color", "true"),
+        Some(color) => add("fo:color", color),
         None => {}
     }
     xml::open_tag("style:text-properties", &attrs, true)
@@ -1006,7 +1105,7 @@ impl<'a> Writer<'a> {
         let mut expected = Vec::new();
         for inline in &para.c {
             match inline {
-                Inline::Text { x, k, m, href } => {
+                Inline::Text { x, k, m, href, f } => {
                     if x.is_empty() {
                         continue;
                     }
@@ -1016,21 +1115,21 @@ impl<'a> Writer<'a> {
                     };
                     self.link(&mut wrap, href.as_deref());
                     let want: BTreeSet<Mark> = m.iter().copied().collect();
-                    let shown: BTreeSet<Mark> = self
-                        .styles
-                        .text(plan.shown.as_deref(), &layers(&wrap))
-                        .marks()
-                        .into_iter()
-                        .collect();
-                    if want != shown {
-                        let name = self.text_style(diff(&want, &shown));
+                    let plain = self.styles.text(plan.shown.as_deref(), &[]);
+                    let look = relative(f, &plain);
+                    let shown = self.styles.text(plan.shown.as_deref(), &layers(&wrap));
+                    let change = diff(&want, &look, &plain, &shown);
+                    if change != TextProps::default() {
+                        let name = self.text_style(change);
                         wrap.push(format!("<text:span text:style-name=\"{}\">", quoted(&name)));
                     }
-                    let got = self
-                        .styles
-                        .text(plan.style.as_deref(), &layers(&wrap))
-                        .marks();
-                    if plan.kept && got.iter().copied().collect::<BTreeSet<_>>() != want {
+                    let got_props = self.styles.text(plan.style.as_deref(), &layers(&wrap));
+                    let got_look = got_props.look(&self.styles.text(plan.style.as_deref(), &[]));
+                    let got = got_props.marks();
+                    if plan.kept
+                        && (got.iter().copied().collect::<BTreeSet<_>>() != want
+                            || got_look != look)
+                    {
                         return Err(RichError::Fidelity);
                     }
                     sync(&mut stack, &wrap, out);
@@ -1040,6 +1139,7 @@ impl<'a> Writer<'a> {
                         k: None,
                         m: got,
                         href: href_of(&wrap),
+                        f: got_look,
                     });
                 }
                 Inline::Atom { k, .. } => {
@@ -1058,6 +1158,7 @@ impl<'a> Writer<'a> {
             align: None,
             k: None,
             sect: None,
+            f: Look::default(),
             c: expected,
         })
     }
