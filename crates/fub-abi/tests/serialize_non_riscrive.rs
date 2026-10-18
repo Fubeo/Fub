@@ -238,7 +238,18 @@ fn allowlist() -> BTreeMap<(&'static str, &'static str), (usize, &'static Reason
 /// Le cartelle in cui non si entra: non contengono sorgenti del progetto, e una
 /// di esse (`target`) ne contiene di generati che direbbero il falso. Anche
 /// `legacy_tests` sta sotto `src/`, ma il modulo che lo dichiara è `#[cfg(test)]`.
-const EXCLUDED: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
+/// `vendor` è codice di terzi che non dipende da `fub-abi`, quindi non chiama
+/// `serialize`: il grafo di `docs/architecture/overview.md` lo disegna senza
+/// archi verso Fub, e `dependency_invariant.rs` lo confronta con Cargo. I suoi
+/// test stanno anche sotto `src/tests/`, che qui sembrerebbero produzione.
+const EXCLUDED: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    ".fub",
+    "legacy_tests",
+    "vendor",
+];
 
 /// La radice del repo, dedotta dal manifest di questo crate.
 fn root() -> PathBuf {
