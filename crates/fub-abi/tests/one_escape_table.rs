@@ -33,6 +33,10 @@
 //! - **i moduli `#[cfg(test)]` dentro i `src/`.** Un banco che asserisce
 //!   `contains("&amp;")` sta verificando un'uscita, non costruendo una tabella.
 //! - **i `tests/`.** Stessa ragione.
+//! - **il codice di terzi in `vendor/`.** Il codec DOCX di WordCraft scrive
+//!   XML con il suo escape, che non è una tabella HTML di Fub; provenienza e
+//!   modifiche stanno nel suo `UPSTREAM.md`. Chi in Fub emette HTML passa di
+//!   qui come tutti.
 //!
 //! Gli sfugge, ed è dichiarato: una tabella scritta coi code point
 //! (`\u{26}amp;`), una costruita concatenando pezzi, e un escape che usa le
@@ -64,8 +68,16 @@ fn entities() -> Vec<String> {
 const THE_TABLE: &str = "crates/fub-abi/src/html.rs";
 
 /// Le cartelle in cui non si entra. `legacy_tests` è sotto `src/`, ma il modulo
-/// che lo dichiara è `#[cfg(test)]`, quindi non è sorgente di produzione.
-const EXCLUDED: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
+/// che lo dichiara è `#[cfg(test)]`, quindi non è sorgente di produzione;
+/// `vendor` è codice di terzi (vedi sopra).
+const EXCLUDED: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    ".fub",
+    "legacy_tests",
+    "vendor",
+];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
