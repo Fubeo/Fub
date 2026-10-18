@@ -1485,6 +1485,17 @@ body {
 .rich-list[data-level="5"] + .rich-list[data-level="6"] { counter-reset: rich-list-6; }
 .rich-list[data-level="6"] + .rich-list[data-level="7"] { counter-reset: rich-list-7; }
 .rich-list[data-level="7"] + .rich-list[data-level="8"] { counter-reset: rich-list-8; }
+/* Un numerato dopo un puntato dello stesso livello è un altro elenco, e
+   ricomincia da uno. */
+.rich-list[data-list="bullet"][data-level="0"] + .rich-list[data-list="ordered"][data-level="0"] { counter-reset: rich-list-0; }
+.rich-list[data-list="bullet"][data-level="1"] + .rich-list[data-list="ordered"][data-level="1"] { counter-reset: rich-list-1; }
+.rich-list[data-list="bullet"][data-level="2"] + .rich-list[data-list="ordered"][data-level="2"] { counter-reset: rich-list-2; }
+.rich-list[data-list="bullet"][data-level="3"] + .rich-list[data-list="ordered"][data-level="3"] { counter-reset: rich-list-3; }
+.rich-list[data-list="bullet"][data-level="4"] + .rich-list[data-list="ordered"][data-level="4"] { counter-reset: rich-list-4; }
+.rich-list[data-list="bullet"][data-level="5"] + .rich-list[data-list="ordered"][data-level="5"] { counter-reset: rich-list-5; }
+.rich-list[data-list="bullet"][data-level="6"] + .rich-list[data-list="ordered"][data-level="6"] { counter-reset: rich-list-6; }
+.rich-list[data-list="bullet"][data-level="7"] + .rich-list[data-list="ordered"][data-level="7"] { counter-reset: rich-list-7; }
+.rich-list[data-list="bullet"][data-level="8"] + .rich-list[data-list="ordered"][data-level="8"] { counter-reset: rich-list-8; }
 .rich-list[data-list="ordered"][data-level="0"]::before { content: counter(rich-list-0) "."; }
 .rich-list[data-list="ordered"][data-level="1"]::before { content: counter(rich-list-1) "."; }
 .rich-list[data-list="ordered"][data-level="2"]::before { content: counter(rich-list-2) "."; }
