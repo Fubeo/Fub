@@ -5,8 +5,22 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../i18n/strings";
 import { RichEngine } from "./engine";
-import { MARGIN_PRESETS, pageAt, pageStyle, PAPER_SIZES, paperName, setColumns, setLandscape, setMargins, setPaper, validPage } from "./page";
-import { parseProjection, type Block, type Page, type Para } from "./projection";
+import {
+  MARGIN_PRESETS,
+  pageAt,
+  pageStyle,
+  PAPER_SIZES,
+  paperName,
+  runningOf,
+  runningText,
+  setColumns,
+  setLandscape,
+  setMargins,
+  setPaper,
+  setRunning,
+  validPage,
+} from "./page";
+import { parseProjection, type Block, type Page, type Para, type RunningText } from "./projection";
 import { mountStrip } from "./strip";
 
 let engines: RichEngine[] = [];
@@ -20,12 +34,12 @@ const LETTER: Page = { w: 612, h: 792, top: 72, bottom: 72, left: 72, right: 72 
 const para = (x: string, extra: object = {}): Block => ({ t: "para", role: { kind: "body" }, ...extra, c: [{ t: "text", x }] }) as Block;
 
 /// Due sezioni: la prima chiusa dal suo paragrafo, l'ultima sul documento.
-function engine(page: Page | null = LETTER, track = false): RichEngine {
+function engine(page: Page | null = LETTER, track = false, head: { header?: RunningText; footer?: RunningText } = {}): RichEngine {
   const parent = document.createElement("div");
   document.body.append(parent);
   const made = new RichEngine(parent, { label: () => "documento", onChange: () => {}, onSelectionChange: () => {} });
   const blocks = [para("uno", page ? { sect: "s1", page } : { sect: "s1" }), para("due")];
-  made.setDoc(JSON.stringify({ format: "fub-rich", version: 1, ...(track ? { track: true } : {}), ...(page ? { page } : {}), blocks }));
+  made.setDoc(JSON.stringify({ format: "fub-rich", version: 1, ...(track ? { track: true } : {}), ...(page ? { page } : {}), ...head, blocks }));
   engines.push(made);
   return made;
 }
@@ -153,6 +167,64 @@ describe("pagina", () => {
     const alert = document.querySelector<HTMLElement>("[role=alert]")!;
     expect(alert.hidden).toBe(false);
     expect(alert.textContent).toBe(t("rich.page.too_large"));
+    strip.destroy();
+  });
+
+  it("un'intestazione si scrive come testo, con i numeri di pagina come codici", () => {
+    const header: RunningText = { lines: [["Lettera — pagina ", { field: "page" }, " di ", { field: "pages" }], []] };
+    expect(runningText(header)).toBe("Lettera — pagina {PAGE} di {NUMPAGES}\n");
+    expect(runningOf("Lettera — pagina {PAGE} di {NUMPAGES}\n")).toEqual(header);
+    expect(runningOf("{PAGE}")).toEqual({ lines: [[{ field: "page" }]] });
+    expect(runningOf("")).toBeNull();
+    // Bloccata, o con un codice scritto come testo, non si modifica.
+    expect(runningText({ ...header, locked: true })).toBeNull();
+    expect(runningText({ lines: [["scrivi {PAGE} qui"]] })).toBeNull();
+  });
+
+  it("si mette, si cambia e si toglie per la sezione del cursore", () => {
+    const locked: RunningText = { lines: [["logo"]], locked: true };
+    const e = engine(LETTER, false, { footer: locked });
+    e.select(2);
+    expect(e.apply(setRunning("header", { lines: [["Prima"]] }))).toBe(true);
+    expect((parseProjection(e.getDoc()).blocks[0] as Para).header).toEqual({ lines: [["Prima"]] });
+    expect(parseProjection(e.getDoc()).header).toBeUndefined();
+    e.select(e.state.doc.content.size - 2);
+    expect(e.apply(setRunning("header", runningOf("Pagina {PAGE}")))).toBe(true);
+    expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
+    // Quella bloccata resta.
+    const before = e.getDoc();
+    expect(e.apply(setRunning("footer", null))).toBe(false);
+    expect(e.getDoc()).toBe(before);
+    expect(e.apply(setRunning("header", null))).toBe(true);
+    expect(parseProjection(e.getDoc()).header).toBeUndefined();
+    e.run("text.undo");
+    expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
+  });
+
+  it("la striscia scrive l'intestazione e mette il numero di pagina dove si scriveva", () => {
+    const e = engine(LETTER, false, { footer: { lines: [["logo"]], locked: true } });
+    e.select(e.state.doc.content.size - 2);
+    const strip = mountStrip(e, () => null);
+    document.body.append(strip.element);
+    const button = [...strip.element.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.getAttribute("aria-label") === t("rich.hf"))!;
+    button.click();
+    const area = (label: string) => {
+      const caption = [...document.querySelectorAll("label")].find((l) => l.textContent === label)!;
+      return document.getElementById(caption.htmlFor) as HTMLTextAreaElement;
+    };
+    const header = area(t("rich.hf.header"));
+    const footer = area(t("rich.hf.footer"));
+    expect(header.value).toBe("");
+    expect(footer.readOnly).toBe(true);
+    expect(footer.value).toBe("logo");
+    header.focus();
+    header.value = "Pagina ";
+    header.setSelectionRange(7, 7);
+    header.dispatchEvent(new Event("input"));
+    const page = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === t("rich.hf.page"))!;
+    page.click();
+    expect(header.value).toBe("Pagina {PAGE}");
+    expect(parseProjection(e.getDoc()).header).toEqual({ lines: [["Pagina ", { field: "page" }]] });
     strip.destroy();
   });
 });

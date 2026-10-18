@@ -980,7 +980,7 @@ impl<'a> Writer<'a> {
         let shown_s = (before == Some(Role::Body))
             .then(|| self.styles.common_of(shown.as_deref()))
             .flatten();
-        if para.role == Role::Body && para.s != shown_s {
+        if para.role == Role::Body && para.s.as_deref() != shown_s.as_deref() {
             let target = match para.s.as_deref() {
                 Some(id) if self.styles.common("paragraph", id) => Some(Some(id.to_string())),
                 Some(_) => None,
@@ -1591,11 +1591,14 @@ impl<'a> Writer<'a> {
             k: None,
             sect: None,
             page: None,
+            header: None,
+            footer: None,
             p: self.styles.layout(style),
             s: (para.role == Role::Body)
                 .then(|| self.styles.common_of(style))
-                .flatten(),
-            f: Look::default(),
+                .flatten()
+                .map(String::into_boxed_str),
+            f: Box::default(),
             ins: None,
             del: None,
             c: expected,

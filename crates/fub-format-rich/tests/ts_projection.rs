@@ -19,7 +19,7 @@ use std::path::PathBuf;
 
 use common::{bytes, sample, text};
 use fub_format_rich::projection::{
-    Align, AtomKind, Block, Inline, Layout, Line, Look, Mark, Projection, Role,
+    Align, AtomKind, Block, Inline, Layout, Line, Look, Mark, PageField, Piece, Projection, Role,
 };
 use fub_format_rich::{open, save, Codec, Saved};
 use serde_json::{json, Value};
@@ -36,9 +36,29 @@ fn fixture(name: &str) -> PathBuf {
 
 /// L'esempio comune, con ciò che serve in più alla superficie: un salto
 /// pagina in un paragrafo, la fine di una sezione, un paragrafo con
-/// revisioni tracciate, uno con un commento e un ultimo paragrafo.
+/// revisioni tracciate, uno con un commento, un ultimo paragrafo e
+/// l'intestazione con il numero di pagina.
 fn document() -> Document {
     let mut d = sample();
+    // L'intestazione dell'ultima sezione, con il numero di pagina.
+    let mut header = text("Lettera — pagina ", CharProps::default());
+    let at = header.len();
+    header
+        .insert_object(
+            at,
+            InlineObject::Field {
+                instr: "PAGE".into(),
+                result: "1".into(),
+                locked: false,
+                dirty: false,
+                code: false,
+                form: String::new(),
+            },
+            &CharProps::default(),
+        )
+        .unwrap();
+    let header = d.add_part(PartKind::Header, vec![para_block(header)]);
+    d.last_section.headers.default = Some(header);
     d.body.push(para_block(text(
         "Prima\u{c}dopo il salto",
         CharProps::default(),
@@ -395,6 +415,28 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
     assert_eq!(
         (last.top, last.bottom, last.left, last.right),
         (36.0, 36.0, 36.0, 36.0)
+    );
+    // L'intestazione dell'ultima sezione ha il testo nuovo e i suoi numeri; la
+    // prima sezione ha un piè di pagina di due righe.
+    let page = Piece::Field {
+        field: PageField::Page,
+    };
+    assert_eq!(
+        p.header.as_ref().map(|header| &header.lines[..]),
+        Some(
+            &[vec![
+                Piece::Text("Lettera, pagina ".into()),
+                page.clone(),
+                Piece::Text(" di ".into()),
+                Piece::Field {
+                    field: PageField::Pages
+                },
+            ]][..]
+        )
+    );
+    assert_eq!(
+        section.footer.as_ref().map(|footer| &footer.lines[..]),
+        Some(&[vec![Piece::Text("Prima sezione".into())], vec![page]][..])
     );
     // L'ultimo paragrafo è un titolo di secondo livello, e la sezione resta.
     let (role, last, _) = plain(&p.blocks, p.blocks.len() - 1);

@@ -74,9 +74,11 @@ fn paragraph(text: &str) -> Block {
         k: None,
         sect: None,
         page: None,
+        header: None,
+        footer: None,
         p: Layout::default(),
         s: None,
-        f: Look::default(),
+        f: Box::default(),
         ins: None,
         del: None,
         c: vec![Inline::Text {

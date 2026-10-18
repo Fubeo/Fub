@@ -301,6 +301,14 @@ margini negativi o che lasciano meno di 36 punti al testo, `cols` fuori da
 1–12 e una pagina su un paragrafo senza `sect`; cambiare `cols` rende uguali
 le colonne. Il codec ODT rifiuta `page`.
 
+`header` e `footer`, dopo `page`, sono l'intestazione e il piè di pagina
+della stessa sezione (quelli delle pagine senza uno proprio): `{"lines":
+[[…]], "locked"}`, una riga per paragrafo, ogni pezzo una stringa o
+`{"field": "page" | "pages"}`. Assenti, la sezione mostra quelli della
+sezione prima. Uno `locked` non si cambia; una riga che va a capo, un elenco
+di righe vuoto o un `locked` cambiato sono una proiezione malformata. Il
+codec ODT li rifiuta.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo

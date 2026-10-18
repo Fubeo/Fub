@@ -36,7 +36,7 @@ use crate::projection::{
     ParaKeep, Projection, Rev, Role, SectKeep,
 };
 use crate::RichError;
-use crate::{blob, fidelity, fresh, stories};
+use crate::{blob, fidelity, fresh, running, stories};
 
 /// Il documento che la proiezione descrive, a partire da `base`.
 pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Document, RichError> {
@@ -45,6 +45,14 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
     if let Some(page) = &projection.page {
         page.apply(&mut document.last_section)?;
     }
+    let mut last = std::mem::take(&mut document.last_section);
+    running::apply(
+        &mut document,
+        &mut last,
+        projection.header.as_ref(),
+        projection.footer.as_ref(),
+    )?;
+    document.last_section = last;
     let mut state = State {
         stories: HashSet::new(),
         last_list: [None, None],
@@ -59,6 +67,7 @@ pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Docu
     document.body = body;
     drop_lost_anchors(&mut document);
     prune(base, &mut document);
+    drop_lost_stories(base, &mut document);
     add_notes(&mut document, state.notes)?;
     document.ensure_nonempty();
     document.balance_field_ranges();
@@ -280,7 +289,7 @@ fn paragraph(
     if before != para.role {
         keep.props = with_role(keep.props, before, para.role, document, state);
     }
-    if para.role == Role::Body && para.s != shown_s {
+    if para.role == Role::Body && para.s.as_deref() != shown_s.as_deref() {
         keep.props = with_style(keep.props, para.s.as_deref(), &document.styles);
     }
     keep.props = with_layout(
@@ -461,15 +470,23 @@ fn paragraph(
     }
     out.section = match para.sect.as_deref() {
         Some(blob) => section(blob, document, state)?,
-        None if para.page.is_some() => {
+        None if para.page.is_some() || para.header.is_some() || para.footer.is_some() => {
             return Err(RichError::Malformed(
                 "a page on a paragraph that ends no section".into(),
             ))
         }
         None => None,
     };
-    if let (Some(section), Some(page)) = (out.section.as_deref_mut(), para.page.as_deref()) {
-        page.apply(section)?;
+    if let Some(section) = out.section.as_deref_mut() {
+        if let Some(page) = para.page.as_deref() {
+            page.apply(section)?;
+        }
+        running::apply(
+            document,
+            section,
+            para.header.as_deref(),
+            para.footer.as_deref(),
+        )?;
     }
     out.normalize();
     Ok(out)
@@ -530,6 +547,17 @@ fn note_styles(kind: NoteKind) -> (&'static str, &'static str) {
 /// più: la shell ne ha tolto il riferimento, o un oggetto le ha riportate con
 /// un altro id, e una nota senza riferimento non si legge da nessuna parte.
 /// Quelle che nessuno mostrava restano com'erano.
+/// Le intestazioni e i piè di pagina rimessi da una sezione e poi sostituiti
+/// da quelli nuovi: nessuno li mostra, e non erano del documento.
+fn drop_lost_stories(base: &Document, document: &mut Document) {
+    let kept: BTreeSet<u32> = fidelity::referenced(document).into_iter().collect();
+    document.parts.retain(|id, part| {
+        kept.contains(id)
+            || base.parts.contains_key(id)
+            || !matches!(part.kind, PartKind::Header | PartKind::Footer)
+    });
+}
+
 fn prune(base: &Document, document: &mut Document) {
     let kept: BTreeSet<u32> = fidelity::referenced(document).into_iter().collect();
     for id in fidelity::referenced(base) {
@@ -1087,7 +1115,7 @@ fn fit(table: &mut wordcraft_doc::Table) {
 /// `id` nel documento, copiato dagli stili predefiniti di WordCraft (con la
 /// catena da cui deriva) se il documento non lo ha; `None` se non c'è nemmeno
 /// fra quelli.
-fn builtin_style(styles: &mut StyleSheet, id: &str) -> Option<String> {
+pub(crate) fn builtin_style(styles: &mut StyleSheet, id: &str) -> Option<String> {
     if styles.get(id).is_some() {
         return Some(id.to_string());
     }

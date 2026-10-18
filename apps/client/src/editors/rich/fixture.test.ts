@@ -15,7 +15,7 @@ import { parseProjection, writeProjection } from "./projection";
 import { insertImage, insertNote, insertTable, setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
 import { addComment, replyComment, resolveComment } from "./comments";
 import { BlockWriter, toDoc } from "./schema";
-import { setColumns, setLandscape, setMargins } from "./page";
+import { runningOf, setColumns, setLandscape, setMargins, setRunning } from "./page";
 import { setReviewAuthor, setTracking } from "./track";
 
 const SOURCE = projectionFixture.source;
@@ -153,6 +153,11 @@ describe("la proiezione del codec", () => {
     expect(e.apply(setColumns(2))).toBe(true);
     e.select(last);
     expect(e.apply(setMargins({ top: 36, bottom: 36, left: 36, right: 36 }))).toBe(true);
+    // L'intestazione dell'ultima sezione cambia testo; la prima ha un piè di
+    // pagina suo.
+    expect(e.apply(setRunning("header", runningOf("Lettera, pagina {PAGE} di {NUMPAGES}")))).toBe(true);
+    e.select(find(e.state.doc, "Fine della prima sezione"));
+    expect(e.apply(setRunning("footer", runningOf("Prima sezione\n{PAGE}")))).toBe(true);
     // Registra le modifiche: ciò che Bea scrive in fondo alla sezione è un
     // suo inserimento, con l'ora fissa del test.
     vi.useFakeTimers({ toFake: ["Date"] });

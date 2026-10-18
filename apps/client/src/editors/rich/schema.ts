@@ -39,6 +39,7 @@ import {
   type Inline,
   type Layout,
   type Page,
+  type RunningText,
   type Look,
   type Mark,
   type Para,
@@ -247,13 +248,17 @@ const nodes: Record<string, NodeSpec> = {
   // I commenti del documento: l'elenco della proiezione, che una battuta
   // cambia insieme ai segni nel testo (`comments.ts`).
   // `track`: il documento registra le modifiche (`track.ts`).
-  // `page`: la pagina dell'ultima sezione, se il formato ne ha una (`page.ts`).
-  doc: { content: "(block | section)+", attrs: { comments: { default: [] }, track: { default: false }, page: { default: null } } },
+  // `page`, `header`, `footer`: la pagina dell'ultima sezione, se il formato
+  // ne ha una, con l'intestazione e il piè di pagina (`page.ts`).
+  doc: {
+    content: "(block | section)+",
+    attrs: { comments: { default: [] }, track: { default: false }, page: { default: null }, header: { default: null }, footer: { default: null } },
+  },
   para,
-  /// La fine di una sezione: chiude il paragrafo prima di lei. `page` è la
-  /// pagina della sezione che chiude.
+  /// La fine di una sezione: chiude il paragrafo prima di lei. `page`,
+  /// `header` e `footer` sono quelli della sezione che chiude.
   section: {
-    attrs: { sect: {}, page: { default: null } },
+    attrs: { sect: {}, page: { default: null }, header: { default: null }, footer: { default: null } },
     atom: true,
     selectable: true,
     parseDOM: [{ tag: "hr[data-rich-sect]", getAttrs: (dom) => ({ sect: (dom as HTMLElement).getAttribute("data-rich-sect") }) }],
@@ -608,7 +613,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
           inlineNodes(block.c ?? []),
         ),
       );
-      if (block.sect !== undefined) out.push(richSchema.nodes.section.create({ sect: block.sect, page: block.page ?? null }));
+      if (block.sect !== undefined) out.push(richSchema.nodes.section.create({ sect: block.sect, page: block.page ?? null, header: block.header ?? null, footer: block.footer ?? null }));
       continue;
     }
     const rows = block.rows.map((row) =>
@@ -630,7 +635,11 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
 export function toDoc(projection: Projection): PmNode {
   const content = blockNodes(projection.blocks);
   return richSchema.nodes.doc.create(
-    { comments: projection.comments ?? [], track: projection.track === true, page: projection.page ?? null },
+    { comments: projection.comments ?? [], track: projection.track === true,
+      page: projection.page ?? null,
+      header: projection.header ?? null,
+      footer: projection.footer ?? null,
+    },
     content.length > 0 ? content : [richSchema.nodes.para.create()],
   );
 }
@@ -761,9 +770,17 @@ export function inlinesOf(paragraph: PmNode): Inline[] {
   return out;
 }
 
+/// La pagina, l'intestazione e il piè di pagina di un segno di sezione.
+function sectionOwn(section: PmNode): Pick<Para, "page" | "header" | "footer"> {
+  const page = section.attrs.page as Page | null;
+  const header = section.attrs.header as RunningText | null;
+  const footer = section.attrs.footer as RunningText | null;
+  return { ...(page ? { page } : {}), ...(header ? { header } : {}), ...(footer ? { footer } : {}) };
+}
+
 function paraOf(node: PmNode, section: PmNode | null): Para {
   const sect = section ? (section.attrs.sect as string) : undefined;
-  const page = section ? (section.attrs.page as Page | null) : null;
+  const own = section ? sectionOwn(section) : {};
   const c = inlinesOf(node);
   const align = node.attrs.align as Para["align"] | null;
   const k = node.attrs.k as string | null;
@@ -778,7 +795,7 @@ function paraOf(node: PmNode, section: PmNode | null): Para {
     ...(align ? { align } : {}),
     ...(k !== null ? { k } : {}),
     ...(sect !== undefined ? { sect } : {}),
-    ...(page ? { page } : {}),
+    ...own,
     ...(p !== undefined ? { p } : {}),
     ...(s ? { s } : {}),
     ...(f !== null ? { f } : {}),
@@ -804,8 +821,7 @@ export function blocksOf(parent: PmNode): Block[] {
       out.push(paraOf(child, section));
       if (section) i += 1;
     } else if (child.type.name === "section") {
-      const page = child.attrs.page as Page | null;
-      out.push({ t: "para", role: BODY, sect: child.attrs.sect as string, ...(page ? { page } : {}) });
+      out.push({ t: "para", role: BODY, sect: child.attrs.sect as string, ...sectionOwn(child) });
     } else if (child.type.name === "table") {
       out.push(tableOf(child));
     }

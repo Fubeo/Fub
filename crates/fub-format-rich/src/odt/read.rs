@@ -441,11 +441,14 @@ impl Reader<'_> {
             k: Some(blob::encode(&key)?),
             sect: None,
             page: None,
+            header: None,
+            footer: None,
             p: self.styles.layout(style),
             s: (role == Role::Body)
                 .then(|| self.styles.common_of(style))
-                .flatten(),
-            f: self.styles.text(style, &[]).base(),
+                .flatten()
+                .map(String::into_boxed_str),
+            f: Box::new(self.styles.text(style, &[]).base()),
             ins: None,
             del: None,
             c,

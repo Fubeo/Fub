@@ -41,9 +41,24 @@ import {
 } from "./commands";
 import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComment, replyComment, resolveComment } from "./comments";
 import type { RichEngine } from "./engine";
-import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
+import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, PAGE_FIELDS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
-import { columns, landscape, MARGIN_PRESETS, pageAt, PAPER_SIZES, paperName, setColumns, setLandscape, setMargins, setPaper } from "./page";
+import {
+  columns,
+  FIELD_CODES,
+  landscape,
+  MARGIN_PRESETS,
+  pageAt,
+  PAPER_SIZES,
+  paperName,
+  runningOf,
+  runningText,
+  setColumns,
+  setLandscape,
+  setMargins,
+  setPaper,
+  setRunning,
+} from "./page";
 import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
 import { countText, findMatches, goToRevision, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
 
@@ -379,7 +394,10 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   const pageButton = button(() => t("rich.page"), null, (anchor) => openPage(anchor));
   pageButton.append(icon(["M6 3h9l4 4v14H6z", "M14 3v5h5", "M9 12h7", "M9 15h7", "M9 18h4"]));
   pageButton.setAttribute("aria-haspopup", "dialog");
-  layout.append(pageButton);
+  const runningButton = button(() => t("rich.hf"), null, (anchor) => openRunning(anchor));
+  runningButton.append(icon(["M6 3h12v18H6z", "M9 6h6", "M9 18h6", "M6 9h12", "M6 15h12"]));
+  runningButton.setAttribute("aria-haspopup", "dialog");
+  layout.append(pageButton, runningButton);
 
   // ── Revisione ─────────────────────────────────────────────────────────
   const review = group();
@@ -1267,6 +1285,80 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     anchor.setAttribute("aria-expanded", "true");
   }
 
+  /// L'intestazione e il piè di pagina della sezione del cursore, come
+  /// testo: una riga per paragrafo, i numeri di pagina con il loro codice.
+  /// Ogni battuta si applica subito; vuoto, la sezione mostra quello della
+  /// sezione prima.
+  function openRunning(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const at = engine.read(pageAt);
+    if (!at) return;
+    const form = document.createElement("div");
+    form.className = "rich-strip-swatches";
+    form.style.display = "grid";
+    form.style.gridTemplateColumns = "1fr";
+    form.style.width = "320px";
+    let last: HTMLTextAreaElement | null = null;
+    const areas = (["header", "footer"] as const).map((kind) => {
+      const area = document.createElement("textarea");
+      area.id = `${prefix}-hf-${kind}`;
+      area.className = "rich-strip-select";
+      area.rows = 2;
+      area.style.resize = "vertical";
+      area.placeholder = t("rich.hf.inherit");
+      const caption = document.createElement("label");
+      caption.htmlFor = area.id;
+      caption.textContent = t(`rich.hf.${kind}`);
+      const running = at[kind];
+      const text = running ? runningText(running) : "";
+      area.value = text ?? running!.lines.map((line) => line.map((piece) => (typeof piece === "string" ? piece : FIELD_CODES[piece.field])).join("")).join("\n");
+      area.readOnly = text === null;
+      if (area.readOnly) area.title = t("rich.hf.locked");
+      life.listen(area, "focus", () => {
+        last = area;
+      });
+      life.listen(area, "input", () => engine.apply(setRunning(kind, runningOf(area.value)), false));
+      form.append(caption, area);
+      return area;
+    });
+    const locked = document.createElement("p");
+    locked.style.margin = "0";
+    locked.textContent = t("rich.hf.locked");
+    locked.hidden = !areas.some((area) => area.readOnly);
+    const fields = document.createElement("div");
+    fields.style.display = "flex";
+    fields.style.gap = "var(--space-2)";
+    for (const field of PAGE_FIELDS) {
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "rich-strip-select";
+      add.textContent = t(`rich.hf.${field}`);
+      // Il campo va dove si scriveva: il bottone non prende il fuoco.
+      life.listen(add, "mousedown", (event) => event.preventDefault());
+      life.listen(add, "click", () => {
+        const area = last ?? areas.find((a) => !a.readOnly);
+        if (!area || area.readOnly) return;
+        area.setRangeText(FIELD_CODES[field], area.selectionStart, area.selectionEnd, "end");
+        area.focus();
+        area.dispatchEvent(new Event("input"));
+      });
+      fields.append(add);
+    }
+    form.append(fields, locked);
+    popover = openPopover({
+      anchor,
+      content: form,
+      label: t("rich.hf"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+  }
+
   function openColors(anchor: HTMLButtonElement, kind: "color" | "highlight"): void {
     popover?.close();
     const grid = document.createElement("div");
@@ -1415,7 +1507,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     track.hidden = !media.review && !engine.tracking();
     setPressed(track, engine.tracking());
     layout.hidden = engine.read(pageAt) === null;
-    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing, pageButton]) control.disabled = !free;
+    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing, pageButton, runningButton]) control.disabled = !free;
     if (!free) table.disabled = true;
     const tracked = engine.read(goToRevision(1));
     for (const control of revisionButtons) {

@@ -6,8 +6,8 @@ mod common;
 use base64::Engine;
 use common::{bytes, sample, styled, text, PNG};
 use fub_format_rich::projection::{
-    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Page, Para, Projection, Role,
-    Row, Table,
+    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Page, PageField, Para, Piece,
+    Projection, Role, Row, RunningText, Table,
 };
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
@@ -435,9 +435,11 @@ fn new_table(rows: usize, cols: usize) -> Block {
                             k: None,
                             sect: None,
                             page: None,
+                            header: None,
+                            footer: None,
                             p: Layout::default(),
                             s: None,
-                            f: Look::default(),
+                            f: Box::default(),
                             c: vec![Inline::Text {
                                 ins: None,
                                 del: None,
@@ -1773,4 +1775,177 @@ fn una_pagina_senza_spazio_per_il_testo_è_rifiutata() {
         save(Codec::Docx, &file, &stray.to_json().unwrap()),
         Err(RichError::Malformed(_))
     ));
+}
+
+fn page_number(instr: &str) -> InlineObject {
+    InlineObject::Field {
+        instr: instr.into(),
+        result: "1".into(),
+        locked: false,
+        dirty: false,
+        code: false,
+        form: String::new(),
+    }
+}
+
+/// Un'intestazione centrata in corsivo, «Relazione — pagina N di M».
+fn header_paragraph() -> Paragraph {
+    let italic = CharProps {
+        italic: Some(true),
+        ..CharProps::default()
+    };
+    let mut p = Paragraph::with_text("Relazione — pagina ", italic.clone());
+    p.props.align = Some(wordcraft_doc::Align::Center);
+    let at = p.text.len();
+    p.insert_object(at, page_number("PAGE"), &italic).unwrap();
+    let at = p.text.len();
+    p.insert_text(at, " di ", &italic).unwrap();
+    let at = p.text.len();
+    p.insert_object(at, page_number(" NUMPAGES \\* MERGEFORMAT "), &italic)
+        .unwrap();
+    p
+}
+
+fn lines(text: &[&[Piece]]) -> RunningText {
+    RunningText {
+        lines: text.iter().map(|line| line.to_vec()).collect(),
+        locked: false,
+    }
+}
+
+fn words(text: &str) -> Piece {
+    Piece::Text(text.into())
+}
+
+const PAGE: Piece = Piece::Field {
+    field: PageField::Page,
+};
+
+#[test]
+fn intestazioni_e_piè_di_pagina_vanno_e_tornano() {
+    let mut d = sample();
+    let header = d.add_part(PartKind::Header, vec![para_block(header_paragraph())]);
+    d.last_section.headers.default = Some(header);
+    let mut first = text("Prima sezione", CharProps::default());
+    first.section = Some(Box::new(d.last_section.clone()));
+    d.body.insert(0, para_block(first));
+    let file = bytes(&d);
+    let p = projection(&file);
+    let pages = Piece::Field {
+        field: PageField::Pages,
+    };
+    let shown = lines(&[&[
+        words("Relazione — pagina "),
+        PAGE,
+        words(" di "),
+        pages.clone(),
+    ]]);
+    // Le due sezioni mostrano la stessa intestazione, e nessun piè di pagina.
+    assert_eq!(p.header.as_ref(), Some(&shown));
+    assert_eq!(para_mut(&mut p.clone(), 0).header.as_deref(), Some(&shown));
+    assert_eq!(p.footer, None);
+    assert_eq!(
+        save(Codec::Docx, &file, &p.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    );
+
+    // L'ultima sezione cambia il testo e aggiunge un piè di pagina; la prima
+    // perde l'intestazione.
+    let mut changed = p.clone();
+    changed.header = Some(lines(&[
+        &[
+            words("Verbale, pagina "),
+            PAGE,
+            words(" di "),
+            pages.clone(),
+        ],
+        &[words("bozza")],
+    ]));
+    changed.footer = Some(lines(&[&[PAGE]]));
+    para_mut(&mut changed, 0).header = None;
+    let out = saved(&file, &changed);
+    let reread = read(&out);
+    assert_eq!(
+        paragraph(&reread, 0)
+            .section
+            .as_ref()
+            .unwrap()
+            .headers
+            .default,
+        None
+    );
+    let id = reread.last_section.headers.default.unwrap();
+    let blocks = &reread.parts[&id].blocks;
+    assert_eq!(blocks.len(), 2);
+    let line = blocks[0].as_para().unwrap();
+    // L'aspetto e i campi sono quelli di prima.
+    assert_eq!(line.props.align, Some(wordcraft_doc::Align::Center));
+    assert!(line.runs.iter().all(|run| run.props.italic == Some(true)));
+    assert!(line.objects.iter().any(|object| matches!(
+        object,
+        InlineObject::Field { instr, .. } if instr.contains("NUMPAGES")
+    )));
+    // Il piè di pagina nuovo è quello di Word.
+    let footer = reread.last_section.footers.default.unwrap();
+    let footer = reread.parts[&footer].blocks[0].as_para().unwrap();
+    assert_eq!(footer.props.style.as_deref(), Some("Footer"));
+    assert!(reread.styles.get("Footer").is_some());
+    let again = projection(&out);
+    assert_eq!(again.header, changed.header);
+    assert_eq!(again.footer, changed.footer);
+    assert_eq!(para_mut(&mut again.clone(), 0).header, None);
+    assert_eq!(
+        save(Codec::Docx, &out, &again.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    );
+}
+
+#[test]
+fn un_intestazione_che_le_righe_non_dicono_resta_com_è() {
+    let mut d = sample();
+    let mut mixed = header_paragraph();
+    let at = mixed.text.len();
+    mixed
+        .insert_text(
+            at,
+            " grassetto",
+            &CharProps {
+                bold: Some(true),
+                ..CharProps::default()
+            },
+        )
+        .unwrap();
+    let header = d.add_part(PartKind::Header, vec![para_block(mixed)]);
+    d.last_section.headers.default = Some(header);
+    let file = bytes(&d);
+    let p = projection(&file);
+    let shown = p.header.clone().unwrap();
+    assert!(shown.locked);
+    // Si mostra comunque, con il testo che ha.
+    assert_eq!(shown.lines[0].last(), Some(&words(" grassetto")));
+    // Cambiarla è una proiezione malformata; toglierla no.
+    let mut bad = p.clone();
+    bad.header = Some(RunningText {
+        lines: vec![vec![words("altro")]],
+        locked: false,
+    });
+    assert!(matches!(
+        save(Codec::Docx, &file, &bad.to_json().unwrap()),
+        Err(RichError::Malformed(_))
+    ));
+    let mut gone = p.clone();
+    gone.header = None;
+    assert_eq!(
+        read(&saved(&file, &gone)).last_section.headers.default,
+        None
+    );
+    // Una riga che va a capo, o un'intestazione senza righe, nemmeno.
+    for wrong in [lines(&[&[words("a\nb")]]), lines(&[])] {
+        let mut bad = p.clone();
+        bad.footer = Some(wrong);
+        assert!(matches!(
+            save(Codec::Docx, &file, &bad.to_json().unwrap()),
+            Err(RichError::Malformed(_))
+        ));
+    }
 }

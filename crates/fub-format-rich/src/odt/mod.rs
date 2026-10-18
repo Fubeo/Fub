@@ -100,6 +100,8 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
         },
         track: false,
         page: None,
+        header: None,
+        footer: None,
         comments: Vec::new(),
         blocks,
     };
@@ -171,9 +173,14 @@ pub(crate) fn save(current: &[u8], json: &str) -> Result<Saved, RichError> {
             "odt: recording changes is not written".into(),
         ));
     }
-    // La pagina di un `.odt` sta nei suoi stili, che il codec tiene come
-    // sono: una pagina nella proiezione viene da un altro formato.
-    if projection.page.is_some() || has_page(&projection.blocks) {
+    // La pagina di un `.odt`, intestazioni comprese, sta nei suoi stili, che
+    // il codec tiene come sono: una pagina nella proiezione viene da un altro
+    // formato.
+    if projection.page.is_some()
+        || projection.header.is_some()
+        || projection.footer.is_some()
+        || has_page(&projection.blocks)
+    {
         return Err(RichError::Codec("odt: page setup is not written".into()));
     }
     // I commenti di un `.odt` sono oggetti del testo, tenuti come sono: un
@@ -314,7 +321,13 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
                         }
                     }
                 }
-                Seen::Para(para.role, para.align, para.p.clone(), para.s.clone(), out)
+                Seen::Para(
+                    para.role,
+                    para.align,
+                    para.p.clone(),
+                    para.s.as_deref().map(str::to_string),
+                    out,
+                )
             }
             Block::Table(table) => Seen::Table(
                 table
@@ -327,10 +340,10 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
         .collect()
 }
 
-/// Una pagina in un paragrafo, anche dentro una tabella.
+/// Una pagina (o un'intestazione) in un paragrafo, anche dentro una tabella.
 fn has_page(blocks: &[Block]) -> bool {
     blocks.iter().any(|block| match block {
-        Block::Para(para) => para.page.is_some(),
+        Block::Para(para) => para.page.is_some() || para.header.is_some() || para.footer.is_some(),
         Block::Table(table) => table
             .rows
             .iter()

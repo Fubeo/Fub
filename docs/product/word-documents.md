@@ -105,11 +105,19 @@ Dal gruppo **Revisione** della striscia:
   offre la pagina. Il foglio di un `.docx` è la pagina dell'ultima sezione,
   larga quanto la carta e con i suoi margini, e la si cambia vedendola; in un
   riquadro più stretto il foglio si stringe con i margini in proporzione. Le
-  colonne e le pagine delle altre sezioni non si vedono sul foglio.
+  colonne e le pagine delle altre sezioni non si vedono sul foglio;
+- **Intestazione e piè di pagina** in un `.docx` scrivono quelli della
+  sezione del cursore come testo, una riga per paragrafo, con il numero di
+  pagina (`{PAGE}`) e il numero delle pagine (`{NUMPAGES}`) messi dai loro
+  bottoni. Una riga riscritta tiene l'aspetto di quella di prima; una nuova
+  prende gli stili Intestazione e Piè di pagina di Word. Vuoti, la sezione
+  mostra quelli della sezione prima. Quelli della prima pagina e delle pagine
+  pari restano come sono, e uno con immagini, tabelle o aspetti diversi si
+  legge ma si modifica in Word. Mentre si registra non si cambiano.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, il resto delle sezioni,
-intestazioni, immagini, forme, campi, note, formule, il testo dei commenti) resta nel file
+le intestazioni che non sono testo semplice, immagini, forme, campi, note, formule, il testo dei commenti) resta nel file
 così com'è. Un oggetto si vede come una casella con il suo nome o il suo testo
 alternativo; la fine di una sezione è un filo doppio che non si cancella con un
 Backspace.

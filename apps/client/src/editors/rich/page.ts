@@ -6,7 +6,7 @@
 // Le regole sono quelle del codec (`Page::write` in `fub-format-rich`): qui
 // servono a non offrire una pagina che il salvataggio rifiuterebbe.
 import type { Command, EditorState } from "prosemirror-state";
-import type { Page } from "./projection";
+import { writeRunning, type Page, type PageField, type Piece, type RunningText } from "./projection";
 
 export { PAPER_SIZES } from "./paper.generated";
 
@@ -26,10 +26,13 @@ export const MARGIN_PRESETS: readonly { readonly id: string; readonly top: numbe
 ];
 
 /// Dove sta la pagina della sezione del cursore: la posizione del suo segno
-/// di fine, o `null` per l'ultima sezione (quella del documento).
+/// di fine, o `null` per l'ultima sezione (quella del documento), con
+/// l'intestazione e il piè di pagina della sezione.
 export interface PageAt {
   readonly page: Page;
   readonly pos: number | null;
+  readonly header: RunningText | null;
+  readonly footer: RunningText | null;
 }
 
 /// La pagina della sezione dove sta il cursore, se il formato ne ha una.
@@ -39,14 +42,16 @@ export function pageAt(state: EditorState): PageAt | null {
   let pos = 0;
   for (let i = 0; i < doc.childCount; i += 1) {
     const child = doc.child(i);
-    if (i >= index && child.type.name === "section") {
-      const page = child.attrs.page as Page | null;
-      return page ? { page, pos } : null;
-    }
+    if (i >= index && child.type.name === "section") return own(child.attrs, pos);
     pos += child.nodeSize;
   }
-  const page = doc.attrs.page as Page | null;
-  return page ? { page, pos: null } : null;
+  return own(doc.attrs, null);
+}
+
+function own(attrs: Record<string, unknown>, pos: number | null): PageAt | null {
+  const page = attrs.page as Page | null;
+  if (!page) return null;
+  return { page, pos, header: attrs.header as RunningText | null, footer: attrs.footer as RunningText | null };
 }
 
 export function columns(page: Page): number {
@@ -152,4 +157,60 @@ export function pageStyle(page: Page | null): string[] {
     "margin-block: var(--space-7)",
     "box-shadow: 0 0 0 1px var(--doc-rule-soft)",
   ];
+}
+
+/// Come un numero di pagina si scrive nel testo di un'intestazione: con il
+/// codice di campo di Word.
+export const FIELD_CODES: Readonly<Record<PageField, string>> = { page: "{PAGE}", pages: "{NUMPAGES}" };
+const CODE = /\{(PAGE|NUMPAGES)\}/g;
+
+/// Un'intestazione come testo da modificare: una riga per paragrafo, i
+/// numeri con il loro codice. `null` se non si modifica: bloccata, o con un
+/// codice scritto come testo, che si rileggerebbe come un numero.
+export function runningText(running: RunningText): string | null {
+  if (running.locked) return null;
+  let out = "";
+  for (const [i, line] of running.lines.entries()) {
+    if (i > 0) out += "\n";
+    for (const piece of line) {
+      if (typeof piece !== "string") out += FIELD_CODES[piece.field];
+      else if (new RegExp(CODE.source).test(piece)) return null;
+      else out += piece;
+    }
+  }
+  return out;
+}
+
+/// Le righe di un testo scritto: i codici tornano numeri. Un testo vuoto
+/// non ha righe: l'intestazione si toglie.
+export function runningOf(text: string): RunningText | null {
+  if (text === "") return null;
+  const lines = text.split(/\r?\n/).map((line) => {
+    const pieces: Piece[] = [];
+    let at = 0;
+    for (const match of line.matchAll(CODE)) {
+      if (match.index > at) pieces.push(line.slice(at, match.index));
+      pieces.push({ field: match[1] === "PAGE" ? "page" : "pages" });
+      at = match.index + match[0].length;
+    }
+    if (at < line.length) pieces.push(line.slice(at));
+    return pieces;
+  });
+  return { lines };
+}
+
+/// Mette l'intestazione (o il piè di pagina) della sezione del cursore;
+/// `null` la toglie, e la sezione mostra quella della sezione prima. Una
+/// bloccata non si cambia.
+export function setRunning(kind: "header" | "footer", running: RunningText | null): Command {
+  return (state, dispatch) => {
+    const at = pageAt(state);
+    if (!at || at[kind]?.locked || running?.locked) return false;
+    const same = (at[kind] ? writeRunning(at[kind]) : "") === (running ? writeRunning(running) : "");
+    if (dispatch && !same) {
+      const tr = at.pos === null ? state.tr.setDocAttribute(kind, running) : state.tr.setNodeAttribute(at.pos, kind, running);
+      dispatch(tr);
+    }
+    return true;
+  };
 }

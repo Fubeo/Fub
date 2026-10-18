@@ -161,6 +161,9 @@ export interface Para {
   readonly sect?: string;
   /// La pagina della sezione che il paragrafo chiude.
   readonly page?: Page;
+  /// L'intestazione e il piè di pagina della sezione che il paragrafo chiude.
+  readonly header?: RunningText;
+  readonly footer?: RunningText;
   readonly p?: Layout;
   /// Lo stile di un paragrafo di corpo, quando non è il predefinito.
   readonly s?: string;
@@ -222,6 +225,8 @@ export interface Projection {
   readonly styles?: readonly ParaStyle[];
   /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
   readonly page?: Page;
+  readonly header?: RunningText;
+  readonly footer?: RunningText;
   readonly comments?: readonly CommentView[];
   readonly blocks: readonly Block[];
 }
@@ -239,6 +244,20 @@ export interface Page {
 }
 
 const PAGE_LENGTHS = ["w", "h", "top", "bottom", "left", "right"] as const;
+
+/// Un numero che Word calcola: la pagina o il numero delle pagine.
+export type PageField = "page" | "pages";
+export const PAGE_FIELDS: readonly PageField[] = ["page", "pages"];
+
+/// Un pezzo di riga di un'intestazione: testo o un numero.
+export type Piece = string | { readonly field: PageField };
+
+/// L'intestazione o il piè di pagina di una sezione, una riga per
+/// paragrafo. Uno `locked` si mostra ma non si cambia.
+export interface RunningText {
+  readonly lines: readonly (readonly Piece[])[];
+  readonly locked?: boolean;
+}
 
 export const BODY: Role = { kind: "body" };
 
@@ -512,6 +531,32 @@ function readPage(value: unknown, where: string): Page {
   return { ...(out as Omit<Page, "cols">), ...(cols !== undefined && cols !== 1 ? { cols } : {}) };
 }
 
+function readRunning(value: unknown, where: string): RunningText {
+  const running = record(value, where);
+  closed(running, ["lines", "locked"], where);
+  if (!Array.isArray(running.lines)) throw new ProjectionError(`${where}.lines: atteso un elenco`);
+  const lines = running.lines.map((line: unknown, i: number) => {
+    if (!Array.isArray(line)) throw new ProjectionError(`${where}.lines[${i}]: atteso un elenco`);
+    return line.map((piece: unknown, j: number): Piece => {
+      if (typeof piece === "string") return piece;
+      const field = record(piece, `${where}.lines[${i}][${j}]`);
+      closed(field, ["field"], `${where}.lines[${i}][${j}]`);
+      if (!PAGE_FIELDS.includes(field.field as PageField)) throw new ProjectionError(`${where}.lines[${i}][${j}]: campo sconosciuto`);
+      return { field: field.field as PageField };
+    });
+  });
+  if (running.locked !== undefined && typeof running.locked !== "boolean") throw new ProjectionError(`${where}.locked: atteso un booleano`);
+  return { lines, ...(running.locked === true ? { locked: true } : {}) };
+}
+
+/// Un'intestazione in JSON, come la scrive serde.
+export function writeRunning(running: RunningText): string {
+  const lines = running.lines.map(
+    (line) => `[${line.map((piece) => (typeof piece === "string" ? JSON.stringify(piece) : `{"field":"${piece.field}"}`)).join(",")}]`,
+  );
+  return `{"lines":[${lines.join(",")}]${running.locked ? `,"locked":true` : ""}}`;
+}
+
 /// Una pagina in JSON, con i campi nell'ordine di serde.
 export function writePage(page: Page): string {
   const fields = PAGE_LENGTHS.map((key) => `"${key}":${float(page[key])}`);
@@ -522,7 +567,7 @@ export function writePage(page: Page): string {
 function readBlock(value: unknown, where: string): Block {
   const block = record(value, where);
   if (block.t === "para") {
-    closed(block, ["t", "role", "align", "k", "sect", "page", "p", "s", "f", "ins", "del", "c"], where);
+    closed(block, ["t", "role", "align", "k", "sect", "page", "header", "footer", "p", "s", "f", "ins", "del", "c"], where);
     const align = block.align;
     if (align !== undefined && !["left", "center", "right", "justify"].includes(align as string)) {
       throw new ProjectionError(`${where}: allineamento sconosciuto`);
@@ -535,6 +580,8 @@ function readBlock(value: unknown, where: string): Block {
       ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}),
       ...(block.sect !== undefined ? { sect: text(block.sect, `${where}.sect`) } : {}),
       ...(block.page !== undefined ? { page: readPage(block.page, `${where}.page`) } : {}),
+      ...(block.header !== undefined ? { header: readRunning(block.header, `${where}.header`) } : {}),
+      ...(block.footer !== undefined ? { footer: readRunning(block.footer, `${where}.footer`) } : {}),
       ...withLayout(readLayout(block.p, `${where}.p`)),
       ...(block.s !== undefined ? { s: text(block.s, `${where}.s`) } : {}),
       ...withLook(readLook(block.f, `${where}.f`)),
@@ -578,7 +625,7 @@ export function parseProjection(source: string): Projection {
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
   if (root.version !== PROJECTION_VERSION) throw new ProjectionError(`versione ${String(root.version)}`);
-  closed(root, ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "comments", "blocks"], "proiezione");
+  closed(root, ["format", "version", "readonly", "track", "lang", "f", "styles", "page", "header", "footer", "comments", "blocks"], "proiezione");
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
@@ -593,6 +640,8 @@ export function parseProjection(source: string): Projection {
     ...withLook(readLook(root.f, "f")),
     ...(root.styles !== undefined ? { styles: list(root.styles, "styles").map((s, i) => readStyle(s, `styles[${i}]`)) } : {}),
     ...(root.page !== undefined ? { page: readPage(root.page, "page") } : {}),
+    ...(root.header !== undefined ? { header: readRunning(root.header, "header") } : {}),
+    ...(root.footer !== undefined ? { footer: readRunning(root.footer, "footer") } : {}),
     ...(root.comments !== undefined ? { comments: list(root.comments, "comments").map((c, i) => readComment(c, `comments[${i}]`)) } : {}),
     blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, `blocks[${i}]`)),
   };
@@ -713,6 +762,8 @@ export function writeBlock(block: Block): string {
     if (block.k !== undefined) out += `,"k":${JSON.stringify(block.k)}`;
     if (block.sect !== undefined) out += `,"sect":${JSON.stringify(block.sect)}`;
     if (block.page !== undefined) out += `,"page":${writePage(block.page)}`;
+    if (block.header !== undefined) out += `,"header":${writeRunning(block.header)}`;
+    if (block.footer !== undefined) out += `,"footer":${writeRunning(block.footer)}`;
     out += writeLayout(block.p);
     if (block.s !== undefined) out += `,"s":${JSON.stringify(block.s)}`;
     out += writeLook(block.f);
@@ -733,7 +784,7 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "readonly" | "track" | "lang" | "f" | "styles" | "page" | "comments">): string {
+export function writeHead(projection: Pick<Projection, "readonly" | "track" | "lang" | "f" | "styles" | "page" | "header" | "footer" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${PROJECTION_VERSION}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
   if (projection.track) out += `,"track":true`;
@@ -746,6 +797,8 @@ export function writeHead(projection: Pick<Projection, "readonly" | "track" | "l
     out += `,"styles":[${styles.join(",")}]`;
   }
   if (projection.page) out += `,"page":${writePage(projection.page)}`;
+  if (projection.header) out += `,"header":${writeRunning(projection.header)}`;
+  if (projection.footer) out += `,"footer":${writeRunning(projection.footer)}`;
   if (projection.comments && projection.comments.length > 0) {
     out += `,"comments":[${projection.comments.map(writeComment).join(",")}]`;
   }

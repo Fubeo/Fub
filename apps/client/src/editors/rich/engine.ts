@@ -39,7 +39,7 @@ import {
   splitParagraph,
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
-import { parseProjection, writeComment, writeHead, type Look, type Page, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
+import { parseProjection, writeComment, writeHead, writeRunning, type Look, type Page, type RunningText, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
 import { pageStyle, samePage } from "./page";
 import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
@@ -235,6 +235,10 @@ export class RichEngine {
     }
     if (tracking(next) !== tracking(current)) tr.setDocAttribute("track", tracking(next));
     if (!samePage(next.attrs.page as Page | null, current.attrs.page as Page | null)) tr.setDocAttribute("page", next.attrs.page);
+    for (const key of ["header", "footer"] as const) {
+      const [a, b] = [next.attrs[key] as RunningText | null, current.attrs[key] as RunningText | null];
+      if ((a ? writeRunning(a) : "") !== (b ? writeRunning(b) : "")) tr.setDocAttribute(key, a);
+    }
     if (!tr.docChanged) {
       this.#notify();
       return;
@@ -283,7 +287,10 @@ export class RichEngine {
       // Ciò che il documento ha, l'ha avuto: un taglia e incolla lo ritrova.
       collectKeys(state.doc, this.#known);
       const previous = this.#source;
-      this.#source = writeHead({ ...this.#head, track: tracking(state.doc), page: (state.doc.attrs.page as Page | null) ?? undefined, comments: commentsOf(state.doc) }) + this.#writer.write(state.doc).join(",") + "]}";
+      this.#source = writeHead({ ...this.#head, track: tracking(state.doc), page: (state.doc.attrs.page as Page | null) ?? undefined,
+          header: (state.doc.attrs.header as RunningText | null) ?? undefined,
+          footer: (state.doc.attrs.footer as RunningText | null) ?? undefined,
+          comments: commentsOf(state.doc) }) + this.#writer.write(state.doc).join(",") + "]}";
       if (this.#source !== previous) {
         this.#options.onChange({
           text: this.#source,

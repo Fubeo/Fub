@@ -23,7 +23,7 @@ use wordcraft_doc::{
 };
 
 use crate::RichError;
-use crate::{blob, stories};
+use crate::{blob, running, stories};
 
 /// Il nome del formato della proiezione.
 pub const FORMAT: &str = "fub-rich";
@@ -52,11 +52,16 @@ pub struct Projection {
     /// loro ordine.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub styles: Vec<ParaStyle>,
-    /// I commenti del documento, per id: le risposte nominano il commento a
-    /// cui rispondono, l'intervallo lo segnano due oggetti del testo.
     /// La pagina dell'ultima sezione, quella che nessun paragrafo chiude.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<Page>,
+    /// L'intestazione e il piè di pagina dell'ultima sezione.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<RunningText>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footer: Option<RunningText>,
+    /// I commenti del documento, per id: le risposte nominano il commento a
+    /// cui rispondono, l'intervallo lo segnano due oggetti del testo.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub comments: Vec<CommentView>,
     pub blocks: Vec<Block>,
@@ -171,6 +176,37 @@ impl Page {
     }
 }
 
+/// L'intestazione o il piè di pagina di una sezione, quello delle pagine che
+/// non ne hanno uno proprio (la prima e le pari possono averlo): una riga per
+/// paragrafo, con il testo e i numeri di pagina. Assente, la sezione mostra
+/// quello della sezione prima, come in Word. Uno `locked` ha qualcosa che le
+/// righe non dicono (un'immagine, una tabella, un altro campo, aspetti
+/// diversi): si mostra, ma non si cambia.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunningText {
+    pub lines: Vec<Vec<Piece>>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
+}
+
+/// Un pezzo di riga: testo, o un numero che Word calcola.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Piece {
+    Text(String),
+    Field { field: PageField },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PageField {
+    /// Il numero della pagina (`PAGE`).
+    Page,
+    /// Il numero delle pagine (`NUMPAGES`).
+    Pages,
+}
+
 /// Un commento. Senza `k` è nuovo: il formato lo scrive con autore, data e
 /// testo, una riga per paragrafo. Di uno che c'è già, autore, data e testo
 /// sono suggerimenti: si cambia soltanto se è risolto.
@@ -240,17 +276,23 @@ pub struct Para {
     /// La pagina della sezione che il paragrafo chiude.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<Box<Page>>,
+    /// L'intestazione e il piè di pagina della sezione che il paragrafo chiude.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub header: Option<Box<RunningText>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub footer: Option<Box<RunningText>>,
     /// Rientri, spaziature e interlinea dove differiscono da quelli dello stile.
     #[serde(default, skip_serializing_if = "Layout::is_plain")]
     pub p: Layout,
     /// Lo stile di un paragrafo di corpo, quando non è quello predefinito: gli
     /// altri ruoli hanno lo stile che il ruolo dice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub s: Option<String>,
+    pub s: Option<Box<str>>,
     /// Suggerimento: il carattere e la dimensione del testo che non ne
-    /// sceglie altri, come li dà lo stile del paragrafo.
+    /// sceglie altri, come li dà lo stile del paragrafo. In una scatola, come
+    /// gli altri campi rari, perché un paragrafo resti piccolo.
     #[serde(default, skip_serializing_if = "Look::is_plain")]
-    pub f: Look,
+    pub f: Box<Look>,
     /// Il segno di fine del paragrafo inserito o eliminato con le revisioni
     /// tracciate: accettarlo o rifiutarlo unisce il paragrafo al seguente.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -637,6 +679,8 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         f: base(&document.styles, None),
         styles: gallery(document, &used),
         page: Some(Page::of(&document.last_section)),
+        header: running::of(document, document.last_section.headers.default),
+        footer: running::of(document, document.last_section.footers.default),
         comments: comments(document)?,
         blocks,
     })
@@ -680,7 +724,7 @@ fn comments(document: &Document) -> Result<Vec<CommentView>, RichError> {
 pub(crate) fn used_styles(blocks: &[Block], out: &mut BTreeSet<String>) {
     for block in blocks {
         match block {
-            Block::Para(para) => out.extend(para.s.clone()),
+            Block::Para(para) => out.extend(para.s.as_deref().map(str::to_string)),
             Block::Table(table) => {
                 for cell in table.rows.iter().flat_map(|row| &row.cells) {
                     used_styles(&cell.blocks, out);
@@ -852,11 +896,22 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
             .section
             .as_deref()
             .map(|section| Box::new(Page::of(section))),
+        header: paragraph
+            .section
+            .as_deref()
+            .and_then(|section| running::of(document, section.headers.default))
+            .map(Box::new),
+        footer: paragraph
+            .section
+            .as_deref()
+            .and_then(|section| running::of(document, section.footers.default))
+            .map(Box::new),
         p: layout(styles, &paragraph.props),
         s: (role == Role::Body)
             .then(|| style_of(document, &paragraph.props))
-            .flatten(),
-        f: base(styles, style),
+            .flatten()
+            .map(String::into_boxed_str),
+        f: Box::new(base(styles, style)),
         ins: rev(document, paragraph.mark.ins).map(Box::new),
         del: rev(document, paragraph.mark.del).map(Box::new),
         c,

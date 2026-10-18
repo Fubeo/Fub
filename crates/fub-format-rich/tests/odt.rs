@@ -1274,6 +1274,16 @@ fn la_pagina_non_si_scrive() {
         save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
         Err(RichError::Codec(_))
     ));
+    // Nemmeno un'intestazione.
+    projection.page = None;
+    projection.header = Some(fub_format_rich::projection::RunningText {
+        lines: vec![vec![fub_format_rich::projection::Piece::Text("x".into())]],
+        locked: false,
+    });
+    assert!(matches!(
+        save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
+        Err(RichError::Codec(_))
+    ));
 }
 
 #[test]
