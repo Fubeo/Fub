@@ -12,7 +12,8 @@
 // per questo che qui non c'è quasi nulla — la logica sta nelle feature, e
 // questo modulo è solo il posto dove la shell smette di avere scorciatoie.
 import { api } from "../host/ipc";
-import { settings, vaultEntries } from "../host/query";
+import { settings, vaultEntries, vaultFolders, WITHOUT_PAGE } from "../host/query";
+import { importDropped, type Dropped, type ImportOutcome } from "../ui/vault-transfer";
 import { COMMANDS, type CommandOutcome, type Undo } from "../host/contract";
 import { emit, openVaultRoot, setCommandSpecs, vaultArg } from "./store";
 import { notify } from "../ui/notify";
@@ -106,6 +107,29 @@ export async function renameFolder(from: string, to: string): Promise<CommandOut
 /// Manda nel cestino del vault una cartella intera (`folder.trash`).
 export async function trashFolder(folder: string): Promise<CommandOutcome> {
   const outcome = await api.invokeCommand(COMMANDS.trashFolder, { folder }, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome;
+}
+
+/// Porta nel vault, sotto `folder`, file e cartelle arrivati da fuori (un
+/// rilascio dal sistema o il selettore dei file). Il vault è quello aperto
+/// quando il gesto è cominciato: un cambio di vault a metà non devia le
+/// scritture che restano.
+export async function importIntoVault(dropped: Dropped, folder: string): Promise<ImportOutcome> {
+  const vault = openVaultRoot();
+  const scope = { path: folder, descendants: false };
+  const outcome = await importDropped(dropped, folder, {
+    taken: async () => {
+      const [folders, entries] = await Promise.all([
+        vaultFolders(WITHOUT_PAGE, scope),
+        vaultEntries(WITHOUT_PAGE, undefined, scope),
+      ]);
+      const name = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+      return new Set([...folders.items.map((f) => name(f.path)), ...entries.items.map((e) => name(e.id))]);
+    },
+    write: (id, bytes) => api.resourceWrite(id, bytes, null, vault),
+    createFolder: (path) => api.invokeCommand(COMMANDS.createFolder, { path }, undefined, vault),
+  }, errorText);
   refreshDocuments();
   return outcome;
 }

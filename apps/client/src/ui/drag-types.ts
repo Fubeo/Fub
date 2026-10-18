@@ -6,3 +6,27 @@
 
 /// Una nota trascinata dall'albero dei file: il valore è il suo id nel vault.
 export const NOTE_DRAG_TYPE = "application/x-fub-note";
+
+/// Le voci trascinate dall'albero, note e file insieme (la scelta multipla, o
+/// un file solo): il valore è un JSON `[{ id, note }]`. Una nota diventa un
+/// collegamento, un file un rimando all'allegato.
+export const ENTRIES_DRAG_TYPE = "application/x-fub-entries";
+
+export interface DraggedEntry {
+  readonly id: string;
+  readonly note: boolean;
+}
+
+/// Le voci di un trascinamento dell'albero, o nessuna se il valore non è
+/// della forma attesa (un'altra app che usa lo stesso tipo).
+export function draggedEntries(raw: string | undefined): DraggedEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((each): each is DraggedEntry =>
+      !!each && typeof each === "object" && typeof (each as DraggedEntry).id === "string" && typeof (each as DraggedEntry).note === "boolean");
+  } catch {
+    return [];
+  }
+}

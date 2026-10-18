@@ -294,7 +294,7 @@ describe("i contestuali dell'albero", () => {
     await start(VAULT, []);
     expect(openContextMenu(folderRow("rete.drawio"))).not.toContain("Importa in un disegno…");
     expect(openContextMenu(folderRow("note"))).not.toContain("Importa un disegno qui…");
-    expect(openContextMenu(title())).toEqual(["Nuova cartella"]);
+    expect(openContextMenu(title())).toEqual(["Nuova cartella", "Importa file…", "Importa una cartella…"]);
   });
 });
 

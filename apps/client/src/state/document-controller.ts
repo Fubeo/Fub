@@ -43,7 +43,7 @@ import {
   type SurfaceRequest,
 } from "../editors/core/registry";
 import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
-import { NOTE_DRAG_TYPE } from "../ui/drag-types";
+import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
 import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
@@ -51,7 +51,7 @@ import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
 import { openResourcePort, type ResourceTransport } from "../editors/media/resource-port";
 import { vaultImageSource } from "../editors/text/profiles/markdown/media";
 import { renderMarkdown } from "../editors/text/profiles/markdown/render";
-import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, type AttachmentDeposit } from "../editors/media/attachment-target";
+import { depositAttachment, depositFiles, DEFAULT_ATTACHMENT_FOLDER, relativeUrl, type AttachmentDeposit } from "../editors/media/attachment-target";
 import { createViewStateCrashDeposit } from "../editors/media/recorder-store";
 import { mountRecorderSurface } from "../editors/media/recorder-surface";
 import { printDocument } from "../editors/media/print-view";
@@ -485,7 +485,7 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
   };
   life.listen(r.editorEl, "dragover", (event) => {
     const types = event.dataTransfer?.types ?? [];
-    if (!types.includes("Files") && !types.includes(NOTE_DRAG_TYPE)) return;
+    if (!types.includes("Files") && !types.includes(NOTE_DRAG_TYPE) && !types.includes(ENTRIES_DRAG_TYPE)) return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer!.dropEffect = "copy";
@@ -501,6 +501,23 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
       void wikiReference(note).then((reference) => {
         if (life.closed || r.surface !== surface) return;
         surface.insertReferences?.([{ kind: "note", name: reference }], { x, y });
+      });
+      return;
+    }
+    // Più voci, o un file del vault: ogni nota un collegamento, ogni file un
+    // rimando relativo al documento che lo riceve, nell'ordine dell'albero.
+    const entries = draggedEntries(event.dataTransfer?.getData(ENTRIES_DRAG_TYPE));
+    if (entries.length) {
+      event.preventDefault();
+      event.stopPropagation();
+      const { clientX: x, clientY: y } = event;
+      // Senza un punto vero (un rilascio sintetico) si scrive al cursore.
+      const at = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+      void Promise.all(entries.map(async (each): Promise<SurfaceReference> =>
+        each.note ? { kind: "note", name: await wikiReference(each.id) } : { kind: "attachment", link: relativeUrl(doc, each.id) },
+      )).then((references) => {
+        if (life.closed || r.surface !== surface) return;
+        surface.insertReferences?.(references, at);
       });
       return;
     }

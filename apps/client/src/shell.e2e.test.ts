@@ -1379,6 +1379,134 @@ describe("nuova cartella", () => {
   });
 });
 
+describe("trascinare nell'albero e da e verso gli altri programmi", () => {
+  const row = (path: string) =>
+    document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"] > .tree-row`);
+  /// Un evento di trascinamento col suo `DataTransfer` finto: `types` e
+  /// `files` per un rilascio dal sistema, `set` raccoglie ciò che la shell
+  /// offre fuori.
+  const dragEvent = (type: string, data: { types?: string[]; files?: File[]; set?: Map<string, string> } = {}, clientY = 10): Event => {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(e, "clientY", { value: clientY });
+    Object.defineProperty(e, "dataTransfer", {
+      value: {
+        effectAllowed: "",
+        dropEffect: "",
+        types: data.types ?? [],
+        files: data.files ?? [],
+        items: [],
+        setData: (kind: string, value: string) => data.set?.set(kind, value),
+      },
+    });
+    return e;
+  };
+  /// La riga sotto il cursore, alta 20 px: a metà è «dentro».
+  const sized = (el: HTMLElement): HTMLElement => {
+    el.getBoundingClientRect = () => ({ top: 0, height: 20, bottom: 20, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) });
+    return el;
+  };
+  const commands = (host: FakeHost, id: string) =>
+    host.atGate("invokeCommand").filter((call) => call.args[0] === id).map((call) => call.args[1]);
+
+  it("una cartella si rinomina con F2 e si sposta trascinandola su un'altra", async () => {
+    const host = await start({ ...VAULT, "Archivio/vecchio.md": "x" });
+    const folder = document.querySelector<HTMLElement>('#file-list li[data-path="note"]')!;
+    folder.focus();
+    const f2 = new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true });
+    folder.dispatchEvent(f2);
+    expect(f2.defaultPrevented).toBe(true);
+    const field = row("note")!.querySelector<HTMLInputElement>("input")!;
+    expect(field.value).toBe("note");
+    field.value = "Appunti";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await waitFor("la cartella ha il nome nuovo", () => !!row("Appunti"));
+    expect(commands(host, "folder.rename")).toEqual([{ folder: "note", to: "Appunti" }]);
+
+    row("Appunti")!.dispatchEvent(dragEvent("dragstart"));
+    const target = sized(row("Archivio")!);
+    target.dispatchEvent(dragEvent("dragover"));
+    expect(target.classList.contains("drop-into")).toBe(true);
+    target.dispatchEvent(dragEvent("drop"));
+    await waitFor("la cartella è dentro l'altra", () => commands(host, "folder.rename").length === 2);
+    expect(commands(host, "folder.rename")[1]).toEqual({ folder: "Appunti", to: "Archivio/Appunti" });
+    expect((await host.module.api.readDocument("Archivio/Appunti/Spesa.md")).text).toBe("pane, latte, arance\n");
+  });
+
+  it("una cartella non entra in una sua figlia", async () => {
+    const host = await start({ ...VAULT, "note/dentro/x.md": "x" });
+    row("note")!.click();
+    await waitFor("la cartella si apre", () => !!row("note/dentro"));
+    row("note")!.dispatchEvent(dragEvent("dragstart"));
+    const child = sized(row("note/dentro")!);
+    const over = dragEvent("dragover");
+    child.dispatchEvent(over);
+    expect(over.defaultPrevented).toBe(false);
+    child.dispatchEvent(dragEvent("drop"));
+    await settle();
+    expect(commands(host, "folder.rename")).toEqual([]);
+  });
+
+  it("le note scelte insieme si trascinano insieme", async () => {
+    const host = await start({ ...VAULT, "Altro.md": "y" });
+    row("Benvenuto.md")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    row("Altro.md")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
+    const offered = new Map<string, string>();
+    row("Altro.md")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    expect(offered.get("text/uri-list")).toBe("file:///vault/Benvenuto.md\r\nfile:///vault/Altro.md");
+    const folder = sized(row("note")!);
+    folder.dispatchEvent(dragEvent("dragover"));
+    folder.dispatchEvent(dragEvent("drop"));
+    await waitFor("entrambe sono nella cartella", () => !!host.module && commands(host, "note.rename").length === 2);
+    expect(commands(host, "note.rename")).toEqual([
+      expect.objectContaining({ doc: "Benvenuto.md", to: "note/Benvenuto.md" }),
+      expect.objectContaining({ doc: "Altro.md", to: "note/Altro.md" }),
+    ]);
+  });
+
+  it("una nota trascinata fuori porta il file vero: uri-list, path e DownloadURL", async () => {
+    await start(VAULT);
+    const offered = new Map<string, string>();
+    row("Benvenuto.md")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    expect(offered.get("text/uri-list")).toBe("file:///vault/Benvenuto.md");
+    expect(offered.get("text/plain")).toBe("/vault/Benvenuto.md");
+    expect(offered.get("DownloadURL")).toBe("text/markdown:Benvenuto.md:file:///vault/Benvenuto.md");
+  });
+
+  it("un file dell'albero lasciato in una nota diventa un rimando relativo, non il suo path", async () => {
+    await start({ ...VAULT, "img/foto.png": "png" });
+    row("img")!.click();
+    await waitFor("la cartella si apre", () => !!row("img/foto.png"));
+    const offered = new Map<string, string>();
+    row("img/foto.png")!.dispatchEvent(dragEvent("dragstart", { set: offered }));
+    const entries = offered.get("application/x-fub-entries")!;
+    expect(JSON.parse(entries)).toEqual([{ id: "img/foto.png", note: false }]);
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: { types: ["application/x-fub-entries"], files: [], getData: (kind: string) => (kind === "application/x-fub-entries" ? entries : "") },
+    });
+    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor("il rimando è nel testo", () => editorTexts().some((text) => text.includes("img/foto.png")));
+    expect(editorTexts().join("\n")).not.toContain("/vault/");
+  });
+
+  it("i file del sistema lasciati su una cartella entrano lì, e un nome preso non si sovrascrive", async () => {
+    const host = await start(VAULT);
+    const folder = row("note")!;
+    const files = [new File(["altro"], "Spesa.md"), new File([new Uint8Array([1, 2, 3])], "foto.png")];
+    const over = dragEvent("dragover", { types: ["Files"], files });
+    folder.dispatchEvent(over);
+    expect(over.defaultPrevented).toBe(true);
+    folder.dispatchEvent(dragEvent("drop", { types: ["Files"], files }));
+    await waitFor("i due file sono scritti", () => host.atGate("resourceWrite").length === 2);
+    expect(host.atGate("resourceWrite").map((call) => [call.args[0], call.args[2]])).toEqual([
+      ["note/Spesa 1.md", null],
+      ["note/foto.png", null],
+    ]);
+    expect((await host.module.api.readDocument("note/Spesa.md")).text).toBe("pane, latte, arance\n");
+  });
+});
+
 describe("rinomina durante un salvataggio in volo", () => {
   it("aspetta il salvataggio e non ricrea il nome vecchio", async () => {
     const host = await start(VAULT);

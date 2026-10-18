@@ -561,6 +561,11 @@ export const IT = { // --- la scocca -------------------------------------------
 "explorer.folder_trashed": "Cartella {folder} nel cestino",
 "explorer.folder_trash_failed": "Non riesco a mettere la cartella {folder} nel cestino: {reason}",
 "explorer.root": "radice",
+"explorer.import_files": "Importa file…",
+"explorer.import_folder": "Importa una cartella…",
+"explorer.import_failed": "L'importazione non è riuscita: {reason}",
+"explorer.imported": "Voci importate in {folder}: {count}",
+"explorer.import_skipped": "Voci non importate: {count} · {list}",
 
 // --- i nomi che non si possono usare (§15.5) ----------------------------
 // Il kernel risponde con un'**etichetta** (`NameFault::tag()`), non con una
@@ -2382,6 +2387,11 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "explorer.folder_trashed": "Folder {folder} moved to the trash",
 "explorer.folder_trash_failed": "Cannot move the folder {folder} to the trash: {reason}",
 "explorer.root": "the root",
+"explorer.import_files": "Import files…",
+"explorer.import_folder": "Import a folder…",
+"explorer.import_failed": "The import failed: {reason}",
+"explorer.imported": "Items imported into {folder}: {count}",
+"explorer.import_skipped": "Items not imported: {count} · {list}",
 
 "explorer.bad_name": "“{name}” cannot be used: {reason}",
 "name_fault.empty": "the name is missing",

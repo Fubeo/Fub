@@ -5,7 +5,7 @@
 // la logica dell'alberatura (cosa è una cartella, cosa è una folder note, che
 // ordine hanno i fratelli) sta in `rules/organizer.ts`, ed è pura e provata; il
 // dato sta nel sidecar (`state/organization.ts`). Qui c'è il DOM.
-import { NOTE_DRAG_TYPE } from "../ui/drag-types";
+import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
 import { revealSidePanel } from "../ui/side-panels";
 import { pickFromList } from "../ui/dialogs";
 import { vaultFolders, folderContent, existingDocuments } from "../host/query";
@@ -20,7 +20,8 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
-import { createFolder, createNote, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
+import { createFolder, createNote, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
+import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
 import { confirm } from "../platform/confirm";
 import {
   LEVEL_PAGE,
@@ -62,7 +63,9 @@ const pinnedTitleEl = $("#pinned-title");
 const pinnedListEl = $("#pinned-list");
 
 /// Il drag in corso nella sidebar, se c'è.
-let drag: { path: string; kind: "note" | "folder"; parent: string } | null = null;
+/// Il trascinamento in corso dentro l'albero: la voce presa e, se era nella
+/// scelta multipla, tutte le scelte (`group`, la presa compresa).
+let drag: { path: string; kind: "note" | "folder"; parent: string; group: string[] } | null = null;
 
 /// Sostando su una cartella chiusa durante un trascinamento la si apre, come in
 /// ogni file manager: così si arriva a una destinazione annidata senza mollare
@@ -135,6 +138,8 @@ export function mountExplorer(lifetime: Lifetime): void {
         ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(state.activeSpace ?? "") }]
         : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
+      { separator: true, label: t("explorer.import_files"), run: () => pickImport(state.activeSpace ?? "", false) },
+      { label: t("explorer.import_folder"), run: () => pickImport(state.activeSpace ?? "", true) },
     ]);
   });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
@@ -176,6 +181,7 @@ export function mountExplorer(lifetime: Lifetime): void {
   });
   treeArrows(lifetime);
   wireRootDropTarget(lifetime);
+  wireOutsideDrops(lifetime);
   lifetime.add(cancelHoverOpen);
   selection = mountTreeSelection({
     list: fileListEl,
@@ -731,6 +737,7 @@ function fileRow(id: string): HTMLElement {
   name.className = "row-name";
   name.textContent = childName(id);
   row.appendChild(name);
+  wireDrag(row, id, "note", false);
   // Un file di Excalidraw o di draw.io che Fub non mostra si apre
   // importandolo: la finestra lo prepara, e niente si scrive prima di
   // «Importa».
@@ -1015,6 +1022,8 @@ function folderMenu(at: MouseEvent, path: string): void {
         ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(path) }]
         : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
+      { label: t("explorer.import_files"), run: () => pickImport(path, false) },
+      { label: t("explorer.import_folder"), run: () => pickImport(path, true) },
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
@@ -1666,14 +1675,24 @@ async function convertToFolder(id: string): Promise<void> {
 // seconda superficie che trascina. Il giorno che ci sarà, la forma è un campo
 // in fondo a `ui-node` e il carico nel `payload` di `ui-action`.
 
-function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void {
+function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder", isNote = kind === "note"): void {
   row.draggable = true;
   row.addEventListener("dragstart", (e) => {
-    drag = { path, kind, parent: parentOf(path) };
-    // Spostare dentro l'albero, o lasciarla cadere in una nota per collegarla.
-    e.dataTransfer!.effectAllowed = kind === "note" ? "copyMove" : "move";
-    e.dataTransfer!.setData("text/plain", path);
-    if (kind === "note") e.dataTransfer!.setData(NOTE_DRAG_TYPE, path);
+    // Una voce della scelta multipla porta con sé tutte le scelte.
+    const picked = selection?.paths() ?? [];
+    const group = picked.length > 1 && picked.includes(path) ? picked : [path];
+    drag = { path, kind, parent: parentOf(path), group };
+    // Spostare dentro l'albero, lasciarla cadere in una nota per collegarla,
+    // o fuori, in un altro programma, come il file vero che è sul disco.
+    e.dataTransfer!.effectAllowed = "copyMove";
+    e.dataTransfer!.setData("text/plain", group.join("\n"));
+    offerOutside(e.dataTransfer!, openVaultRoot(), group);
+    if (isNote && group.length === 1) e.dataTransfer!.setData(NOTE_DRAG_TYPE, path);
+    // Le voci per un documento che le riceve: le cartelle non ci entrano.
+    const entries: DraggedEntry[] = group
+      .filter((each) => !folderRowOf(each))
+      .map((each) => ({ id: each, note: each === path ? isNote : !entry(each)?.querySelector(":scope > .tree-row.file") }));
+    if (entries.length) e.dataTransfer!.setData(ENTRIES_DRAG_TYPE, JSON.stringify(entries));
   });
   row.addEventListener("dragend", () => {
     drag = null;
@@ -1705,10 +1724,8 @@ function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void
     clearDropMarks();
     if (!gesture || !drag) return;
     e.preventDefault();
-    if (gesture === "into") {
-      if (drag.kind === "folder") await moveFolderInto(drag.path, path);
-      else await moveIntoFolder(drag.path, path);
-    } else applyReorder(drag.parent, childName(drag.path), childName(path), gesture === "before");
+    if (gesture === "into") await moveGroupInto(drag, path);
+    else applyReorder(drag.parent, childName(drag.path), childName(path), gesture === "before");
     drag = null;
   });
 }
@@ -1725,7 +1742,7 @@ function dropGesture(
   if (!drag || drag.path === path) return null;
   const siblings = drag.kind === kind && drag.parent === parentOf(path);
   // Una cartella entra in un'altra, ma non in sé stessa né in una sua figlia.
-  const ownSubtree = drag.kind === "folder" && path.startsWith(`${drag.path}/`);
+  const ownSubtree = drag.group.some((each) => path === each || path.startsWith(`${each}/`));
   const inside = kind === "folder" && drag.parent !== path && !ownSubtree;
   // `offsetY` sarebbe relativo all'elemento più interno sotto il cursore (uno
   // span, magari): la frazione va calcolata sulla riga intera.
@@ -1828,8 +1845,110 @@ function wireRootDropTarget(lifetime: Lifetime): void {
     filesTitleEl.classList.remove("drop-into");
     if (!drag) return;
     e.preventDefault();
-    if (drag.kind === "folder") await moveFolderInto(drag.path, state.activeSpace ?? "");
-    else await moveIntoFolder(drag.path, state.activeSpace ?? "");
+    await moveGroupInto(drag, state.activeSpace ?? "");
     drag = null;
   });
+}
+
+/// Sposta ciò che si trascina dentro una cartella: la voce presa o, se era
+/// nella scelta, tutte le scelte, una alla volta e con lo stesso comando del
+/// menu. Una cartella non entra in sé stessa né in una figlia: la si salta.
+async function moveGroupInto(dragged: NonNullable<typeof drag>, folder: string): Promise<void> {
+  for (const path of dragged.group) {
+    if (path === folder || folder.startsWith(`${path}/`) || parentOf(path) === folder) continue;
+    if (folderRowOf(path) || (path === dragged.path && dragged.kind === "folder")) await moveFolderInto(path, folder);
+    else await moveIntoFolder(path, folder);
+  }
+  if (dragged.group.length > 1) selection?.clear();
+}
+
+/// La cartella che riceve un rilascio da fuori sotto `target`: la cartella
+/// stessa se è la sua riga, la madre se è una nota o un file, la radice
+/// visibile (vault o spazio attivo) altrimenti.
+function outsideTarget(target: EventTarget | null): string {
+  const row = target instanceof Element ? target.closest<HTMLElement>(".tree-row") : null;
+  const path = row?.closest<HTMLElement>("li[data-path]")?.dataset.path ?? row?.dataset.path;
+  if (!row || path === undefined) return state.activeSpace ?? "";
+  return row.classList.contains("folder") ? path : parentOf(path);
+}
+
+/// File e cartelle del sistema lasciati cadere sull'albero o sul titolo del
+/// pannello. Una cartella chiusa sotto il cursore si apre dopo una sosta, come
+/// per un trascinamento interno.
+function wireOutsideDrops(lifetime: Lifetime): void {
+  const over = (e: DragEvent) => {
+    if (drag || !carriesFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = "copy";
+    const folder = e.currentTarget === filesTitleEl ? state.activeSpace ?? "" : outsideTarget(e.target);
+    clearDropMarks();
+    const row = folder ? folderRowOf(folder) : null;
+    (row ?? filesTitleEl).classList.add("drop-into");
+    if (row && !state.expanded.has(folder)) scheduleHoverOpen(folder);
+  };
+  const drop = async (e: DragEvent) => {
+    if (drag || !carriesFiles(e.dataTransfer)) return;
+    e.preventDefault();
+    cancelHoverOpen();
+    clearDropMarks();
+    filesTitleEl.classList.remove("drop-into");
+    const folder = e.currentTarget === filesTitleEl ? state.activeSpace ?? "" : outsideTarget(e.target);
+    let dropped: Dropped;
+    try {
+      dropped = await readDropped(e.dataTransfer!);
+    } catch (error) {
+      notify(t("explorer.import_failed", { reason: errorText(error) }), "guasto");
+      return;
+    }
+    await importHere(dropped, folder);
+  };
+  const leave = (e: DragEvent) => {
+    const into = e.relatedTarget instanceof Node ? e.relatedTarget : null;
+    if (into && (fileListEl.contains(into) || filesTitleEl.contains(into))) return;
+    clearDropMarks();
+    filesTitleEl.classList.remove("drop-into");
+    cancelHoverOpen();
+  };
+  for (const target of [fileListEl, filesTitleEl]) {
+    lifetime.listen(target, "dragover", over);
+    lifetime.listen(target, "dragleave", leave);
+    lifetime.listen(target, "drop", (e) => void drop(e));
+  }
+}
+
+/// Il selettore dei file del sistema, per chi non trascina: «Importa file…»
+/// sceglie dei file, «Importa una cartella…» una cartella intera.
+function pickImport(folder: string, wholeFolder: boolean): void {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.multiple = true;
+  if (wholeFolder) input.webkitdirectory = true;
+  input.addEventListener("change", () => {
+    if (input.files?.length) void importHere(pickedFiles(input.files), folder);
+  }, { once: true });
+  input.click();
+}
+
+/// Importa e racconta: quante voci sono entrate e, una per una, quelle che
+/// non sono entrate col loro perché.
+async function importHere(dropped: Dropped, folder: string): Promise<void> {
+  if (!dropped.files.length && !dropped.folders.length) return;
+  let outcome;
+  try {
+    outcome = await importIntoVault(dropped, folder);
+  } catch (error) {
+    notify(t("explorer.import_failed", { reason: errorText(error) }), "guasto");
+    return;
+  }
+  if (folder) state.expanded.add(folder);
+  saveExpanded();
+  const where = folder || t("explorer.root");
+  if (outcome.imported.length) {
+    notify(t("explorer.imported", { count: String(outcome.imported.length), folder: where }), "info");
+  }
+  if (outcome.skipped.length) {
+    const list = outcome.skipped.map((each) => `${each.name}: ${each.reason}`).join("; ");
+    notify(t("explorer.import_skipped", { count: String(outcome.skipped.length), list }), "guasto");
+  }
+  await refreshFromKernel(true);
 }

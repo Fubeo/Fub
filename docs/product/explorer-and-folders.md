@@ -67,6 +67,38 @@ un'altra, o sul fondo del pannello, ci entra con `folder.rename`, mai dentro sé
 stessa. Prima del comando la shell salva i buffer aperti; le cartelle espanse e
 lo spazio attivo seguono il path nuovo, e l'esito offre «Annulla».
 
+## Trascinare
+
+Dentro l'albero una nota, un file o una cartella lasciati su una cartella ci
+entrano: è la stessa rinomina del menu «Sposta in…», con i link riscritti e
+l'annullamento. Lasciati fra due fratelli dello stesso tipo cambiano l'ordine
+manuale. Una cartella non entra in sé stessa né in una sua figlia. Le voci
+della scelta multipla (Ctrl-clic, Maiusc-clic) si trascinano insieme. Una
+cartella chiusa sotto il cursore si apre dopo una breve sosta.
+
+Una nota lasciata in un documento diventa un collegamento, un file un rimando
+relativo al documento; più voci entrano nell'ordine dell'albero.
+
+Da e verso gli altri programmi:
+
+- file e cartelle del sistema lasciati su una cartella dell'albero, o sul
+  titolo del pannello per la radice, entrano nel vault con la loro struttura.
+  Su una nota o su un file entrano nella sua cartella. La scrittura è «solo
+  creazione»: un nome preso, anche soltanto per maiuscole, diventa il primo
+  libero (`foto 1.png`, `Viaggio 1/`) e niente si sovrascrive. Un file oltre
+  64 MiB, un nome inservibile o una scrittura rifiutata restano fuori e
+  l'esito li elenca uno per uno col perché;
+- «Importa file…» e «Importa una cartella…», nel menu di una cartella e del
+  titolo, fanno lo stesso con il selettore del sistema, senza trascinare;
+- una voce trascinata fuori offre il file vero sul disco: `text/uri-list` con
+  l'URL `file://`, il path in `text/plain` e, per una voce sola, `DownloadURL`.
+  Un file manager o un altro programma lo riceve da lì; Fub non ne fa una
+  copia.
+
+Perché la webview riceva i file rilasciati, la finestra Tauri ha
+`dragDropEnabled: false`: con il valore predefinito il rilascio lo
+intercetterebbe Tauri, e su Windows la pagina non lo vedrebbe.
+
 ## Approfondimenti
 
 - [Vault e file](vault-and-files.md)

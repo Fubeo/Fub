@@ -297,7 +297,7 @@ describe("il contestuale del titolo dell'albero", () => {
     await start(VAULT, [drawingCreateSpec()]);
     const opened = await registerForm();
     const labels = openContextMenu(title());
-    expect(labels).toEqual(["Nuovo disegno qui…", "Importa un disegno qui…", "Nuova cartella"]);
+    expect(labels).toEqual(["Nuovo disegno qui…", "Importa un disegno qui…", "Nuova cartella", "Importa file…", "Importa una cartella…"]);
     await choose("Nuovo disegno qui…");
     expect(opened).toEqual([{}]);
 
@@ -310,7 +310,7 @@ describe("il contestuale del titolo dell'albero", () => {
 
   it("senza il comando ha soltanto la cartella", async () => {
     await start(VAULT, []);
-    expect(openContextMenu(title())).toEqual(["Nuova cartella"]);
+    expect(openContextMenu(title())).toEqual(["Nuova cartella", "Importa file…", "Importa una cartella…"]);
   });
 });
 
