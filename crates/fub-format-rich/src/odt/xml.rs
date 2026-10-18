@@ -282,26 +282,18 @@ fn push_text(nodes: &mut Vec<Node>, open: &[NodeId], text: &str, span: Range<usi
     }
 }
 
-/// Il testo per un nodo di testo XML: `&`, `<` e `>` come entità.
+/// Il testo per un nodo di testo XML, con la tabella di `fub_abi::html`:
+/// virgolette e apici come entità sono XML valido e si rileggono uguali.
 pub(crate) fn escape_text(text: &str, out: &mut String) {
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            c => out.push(c),
-        }
-    }
+    out.push_str(&fub_abi::html::escape(text));
 }
 
-/// Il valore di un attributo fra virgolette doppie.
+/// Il valore di un attributo fra virgolette doppie. Tabulazione e a capo
+/// restano riferimenti numerici: letterali, chi legge l'XML li normalizza in
+/// spazi, e quella tabella non li conosce perché in HTML non serve.
 pub(crate) fn escape_attr(value: &str, out: &mut String) {
-    for c in value.chars() {
+    for c in fub_abi::html::escape(value).chars() {
         match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
             '\t' => out.push_str("&#9;"),
             '\n' => out.push_str("&#10;"),
             '\r' => out.push_str("&#13;"),
