@@ -91,6 +91,9 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
             fub_importers::PLUGIN_ID.to_string(),
         ])
         .collect();
+    // Le copie dei documenti di videoscrittura vengono col loro codec.
+    #[cfg(feature = "rich")]
+    expected.insert("fub.rich".to_string());
     #[cfg(feature = "http-client")]
     {
         expected.insert(fub_host::remote::views::SYNC_ID.to_string());

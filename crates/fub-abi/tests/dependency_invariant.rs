@@ -745,7 +745,7 @@ struct Diagram {
     dev: BTreeSet<(String, String)>,
 }
 
-/// Legge il blocco marcato e lo traduce in insiemi confrontabili.
+/// Legge i blocchi marcati e li traduce in insiemi confrontabili.
 ///
 /// Il dialetto ammesso è minuscolo di proposito — dichiarazioni
 /// `id["nome"]:::classe`, archi `a --> b` e `a -.-> b`, commenti `%%`, e le
@@ -769,23 +769,35 @@ fn read_diagram(source: &str) -> Diagram {
         "in {DIAGRAM_DOC} c'è un blocco ```mermaid che nessuna riga chiude"
     );
 
-    let mut marked: Vec<Vec<&str>> = blocks
+    let marked: Vec<Vec<&str>> = blocks
         .into_iter()
         .filter(|b| b.iter().any(|the| the.contains(DIAGRAM_MARKER)))
         .collect();
-    assert_eq!(
-        marked.len(),
-        1,
-        "in {DIAGRAM_DOC} i blocchi mermaid marcati `{DIAGRAM_MARKER}` sono {},\n\
-         e deve essercene esattamente uno: è il grafo che questo test confronta\n\
-         con `cargo metadata`.",
-        marked.len()
+    assert!(
+        !marked.is_empty(),
+        "in {DIAGRAM_DOC} nessun blocco mermaid è marcato `{DIAGRAM_MARKER}`: è il\n\
+         grafo che questo test confronta con `cargo metadata`."
     );
 
+    // Più blocchi marcati sono un grafo solo, disegnato a pezzi perché ogni
+    // figura resti leggibile: si legge ciascuno con i propri riquadri e se ne
+    // prende l'unione. Un crate può comparire in più pezzi.
+    let mut out = Diagram::default();
+    for block in marked {
+        let piece = read_block(&block);
+        out.crates.extend(piece.crates);
+        out.normal.extend(piece.normal);
+        out.dev.extend(piece.dev);
+    }
+    out
+}
+
+/// Un blocco marcato: i riquadri valgono soltanto nel blocco che li dichiara.
+fn read_block(block: &[&str]) -> Diagram {
     let mut names: BTreeMap<&str, String> = BTreeMap::new();
     let mut out = Diagram::default();
 
-    for line in marked.remove(0) {
+    for line in block {
         let the = line.trim();
         if the.is_empty()
             || the.starts_with("%%")
@@ -1002,6 +1014,64 @@ flowchart TD\n\
     assert_eq!(
         d.dev,
         BTreeSet::from([("fub-beta".to_string(), "fub-alfa".to_string())])
+    );
+}
+
+/// Un grafo disegnato in due pezzi è la loro unione: lo stesso crate può stare
+/// in entrambi, e un riquadro vale soltanto nel pezzo che lo dichiara.
+#[test]
+fn the_diagram_parser_joins_the_marked_pieces() {
+    let source = "\
+```mermaid\n\
+flowchart TD\n\
+    %% @grafo-dipendenze\n\
+    a[\"fub-alfa\"]\n\
+    b[\"fub-beta\"]\n\
+    a --> b\n\
+```\n\
+```mermaid\n\
+flowchart LR\n\
+    %% @grafo-dipendenze\n\
+    x[\"fub-beta\"]\n\
+    y[\"terzi-gamma\"]\n\
+    x --> y\n\
+```\n";
+    let d = read_diagram(source);
+    assert_eq!(
+        d.crates,
+        BTreeSet::from([
+            "fub-alfa".to_string(),
+            "fub-beta".to_string(),
+            "terzi-gamma".to_string()
+        ])
+    );
+    assert_eq!(
+        d.normal,
+        BTreeSet::from([
+            ("fub-alfa".to_string(), "fub-beta".to_string()),
+            ("fub-beta".to_string(), "terzi-gamma".to_string())
+        ])
+    );
+}
+
+/// Un arco che nomina un riquadro dichiarato soltanto nell'altro pezzo è un
+/// errore, non un arco: ogni figura si deve leggere da sola.
+#[test]
+#[should_panic(expected = "non è un riquadro dichiarato")]
+fn a_piece_does_not_see_the_boxes_of_another() {
+    read_diagram(
+        "\
+```mermaid\n\
+flowchart TD\n\
+    %% @grafo-dipendenze\n\
+    a[\"fub-alfa\"]\n\
+```\n\
+```mermaid\n\
+flowchart TD\n\
+    %% @grafo-dipendenze\n\
+    b[\"fub-beta\"]\n\
+    a --> b\n\
+```\n",
     );
 }
 

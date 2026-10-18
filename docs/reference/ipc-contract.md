@@ -241,9 +241,48 @@ uno spegne il pulsante di chi lo nomina. La superficie Markdown conosce:
   `.column.right`, `.column.delete`, `.sort.ascending`, `.sort.descending`
   (tutti col prefisso `markdown.table`).
 
+La superficie ricca dei documenti di videoscrittura conosce un sottoinsieme
+degli stessi id, con lo stesso significato: `text.undo`, `text.redo`,
+`markdown.paragraph`, `markdown.heading.1` … `.6`, `markdown.bold`,
+`markdown.italic`, `markdown.strikethrough`, `markdown.highlight`,
+`markdown.clear`, `markdown.list.bullet`, `markdown.list.ordered`,
+`markdown.list.indent`, `markdown.list.dedent`, `markdown.quote` e
+`markdown.table.row.before`, `.row.after`, `.row.up`, `.row.down`,
+`.row.delete`. Il prefisso è storico: l'id nomina il gesto, non il formato.
+
 Icona, gruppo e menu a tendina di ogni azione sono della shell
 (`panels/format-bar.ts`), come le icone della rail: il contratto porta soltanto
 l'id, il titolo e la descrizione del comando.
+
+## Documenti di videoscrittura
+
+Un documento di un formato di `fub-format-rich` (`docx`, `odt`, `rtf` e
+`doc`, quest'ultimo per `.doc` e `.dot`, con la feature `rich` di `fub-host`)
+passa dalle stesse porte dei documenti, senza una porta in più:
+
+- `read_document` restituisce in `text` la **proiezione** del file: JSON
+  chiuso e versionato (`"format": "fub-rich"`, `"version": 1`), con
+  `format_id` `"docx"` e `source_kind` `"bytes"`. `revision` è quella dei
+  byte del file, non del testo restituito;
+- `write_document` riceve una proiezione in `source` e la `base` letta
+  insieme a essa. L'host riparte dai byte del file a quella revisione, salva
+  con il codec e scrive con il CAS della stessa revisione. Una proiezione che
+  descrive il file com'è non scrive e restituisce la revisione corrente; senza
+  un file, la proiezione crea un documento nuovo;
+- `save_draft` conserva la proiezione come testo del buffer, come per ogni
+  altro documento.
+
+Un documento che il codec o la proiezione non riportano identico si apre con
+`"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
+`projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
+motivo. `import` è il motivo di ogni documento `rtf` e `doc`, e di un `odt`
+che il codec OpenDocument non sa rappresentare: lo legge un importatore che non
+riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
+(`host.rich.no_writer`); un `odt` sì.
+Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
+La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
+fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
+shell nei due versi (`crates/fub-format-rich/tests/ts_projection.rs`).
 
 ## Percorsi
 

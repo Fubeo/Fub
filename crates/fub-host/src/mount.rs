@@ -283,7 +283,7 @@ pub(crate) fn mount_with_formats(
     // feature un `.fubann` è un file di specie sconosciuta.
     #[cfg(feature = "draw")]
     builtin.push(fub_format_svg::FubannProvider::boxed());
-    for provider in builtin {
+    for provider in builtin.into_iter().chain(crate::rich::providers()) {
         if let Err(error) = formats.register(provider) {
             return Err(mount_error_with_resource_disposal(
                 format!("format provider conflict: {error}"),
@@ -395,6 +395,21 @@ pub(crate) fn mount_with_formats(
             },
         )),
     ];
+
+    // Le copie dei documenti di videoscrittura: l'esportatore e il comando
+    // vengono col codec, e un vault senza la feature non li vede.
+    #[cfg(feature = "rich")]
+    bundles.push(Arc::new(
+        CoreBundle::new(
+            crate::rich::RICH_ID,
+            "Word processing",
+            crate::rich::register,
+        )
+        .speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            fub_format_rich::export::catalog(),
+        ),
+    ));
 
     // Ogni feature ufficiale si monta con lo stesso ciclo: ciò che registra, le
     // impostazioni, i servizi forniti e richiesti e il collegamento che solo
@@ -560,6 +575,13 @@ fn register_feature(
             Ok(opened) => opened_versions = Some(opened),
             Err(failure) => return vec![failure],
         },
+        #[cfg(feature = "proof")]
+        HostWiring::MachineDictionaries => {
+            let index = fub_features::ProofIndex::with_machine_dictionaries();
+            if let Err(error) = registrar.register_index_provider(Box::new(index)) {
+                return vec![format!("proof index not registered: {error}")];
+            }
+        }
         #[allow(unreachable_patterns)]
         unwired => {
             return vec![format!(

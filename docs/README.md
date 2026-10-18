@@ -30,7 +30,7 @@ flowchart LR
 
 - [Panoramica](product/overview.md)
 - [Vault e file](product/vault-and-files.md)
-- [Editor e anteprima](product/editor-and-preview.md)
+- [Editor e anteprima](product/editor-and-preview.md), [correttore](product/proofing.md) e [documenti di Word](product/word-documents.md)
 - [Disegni](product/drawing.md)
 - [Disegni, modelli e suggerimenti](product/drawing-new.md)
 - [Disegni, importare da Excalidraw e draw.io](product/drawing-import.md)
@@ -86,7 +86,7 @@ flowchart LR
 - [Storage e identità](architecture/storage-and-identity.md)
 - [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
 - [Frontend e IPC](architecture/frontend-and-ipc.md)
-- [Superfici dell'editor](architecture/editor-surfaces.md)
+- [Superfici dell'editor](architecture/editor-surfaces.md) e [superficie ricca e correttore](architecture/rich-surface-and-proofing.md)
 - [Inchiostro e strumenti](architecture/ink-and-tools.md)
 - [Runtime dei plugin](architecture/plugin-runtime.md)
 

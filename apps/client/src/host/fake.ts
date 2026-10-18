@@ -126,6 +126,8 @@ interface Lease {
 
 /// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
 const CHUNK_MAX = 64 * 1024;
+/// I formati di `fub-format-rich` con la feature `rich` dell'host.
+const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 
 /// Una voce del cestino finto.
 interface Trashed {
@@ -411,7 +413,18 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
     if (options.draw === true && id.toLowerCase().endsWith(".svg")) return "svg";
     if (options.draw === true && id.toLowerCase().endsWith(".fubann")) return "fubann";
+    if (id.endsWith(".docx")) return "docx";
+    if (id.endsWith(".odt")) return "odt";
+    if (id.endsWith(".rtf")) return "rtf";
+    if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
     return null;
+  }
+
+  /// Come il registro dei formati dell'host: un documento di videoscrittura il
+  /// provider lo vuole a byte, e la shell ne riceve la proiezione
+  /// (`fub-format-rich`).
+  function sourceKindOf(id: string): "text" | "bytes" {
+    return RICH_FAKE_FORMATS.has(formatOf(id) ?? "") ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -676,7 +689,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
   /// legge dalla risposta e non dalla propria testa.
   function entryKind(id: string): VaultEntry["kind"] {
-    return id.endsWith(".md") || id.endsWith(".markdown") || id.endsWith(".fubsheet") ? "document" : "asset";
+    const format = formatOf(id);
+    return format !== null && format !== "canvas" && format !== "base" ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -1134,7 +1148,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const extensions = ["md", "markdown", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
         const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
@@ -1145,7 +1159,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           text: doc.text,
           revision: doc.revision,
           format_id: formatOf(id),
-          source_kind: "text",
+          source_kind: sourceKindOf(id),
         }));
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {

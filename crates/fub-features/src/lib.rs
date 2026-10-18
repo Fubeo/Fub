@@ -83,6 +83,8 @@ pub mod graph;
 pub mod inventory;
 #[cfg(feature = "outline")]
 pub mod outline;
+#[cfg(feature = "proof")]
+pub mod proof;
 #[cfg(feature = "properties")]
 pub mod properties;
 #[cfg(feature = "queries")]
@@ -139,6 +141,8 @@ pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_
 pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};
 #[cfg(feature = "outline")]
 pub use outline::{build_outline_view, OutlineView, FOOTNOTES_VIEW, OUTLINE_ID, OUTLINE_VIEW};
+#[cfg(feature = "proof")]
+pub use proof::{ProofCommands, ProofIndex, PROOF_ID, WORDS_KEY, WORD_ADD, WORD_REMOVE};
 #[cfg(feature = "properties")]
 pub use properties::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_PROPERTY_REMOVE,

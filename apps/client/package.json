@@ -50,6 +50,13 @@
     "mermaid": "11.17.2",
     "pdfjs-dist": "6.3.289",
     "perfect-freehand": "1.2.3",
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-history": "1.5.1",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.12",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-transform": "1.12.2",
+    "prosemirror-view": "1.42.6",
     "turndown": "^7.2.4"
   },
   "devDependencies": {

@@ -546,6 +546,30 @@
     "canvas-file-link",
     "canvas-text-editor",
     "canvas-field-editor",
+    "rich-surface",
+    "rich-notice",
+    "rich-content",
+    "rich-para",
+    "rich-heading",
+    "rich-list",
+    "rich-quote",
+    "rich-link",
+    "rich-section",
+    "rich-break-page",
+    "rich-break-column",
+    "rich-table",
+    "rich-cell",
+    "rich-atom",
+    "rich-atom-image",
+    "rich-atom-graphic",
+    "rich-atom-shape",
+    "rich-atom-group",
+    "rich-atom-note",
+    "rich-atom-field",
+    "rich-atom-marker",
+    "ProseMirror-selectednode",
+    "rich-proof-spelling",
+    "rich-proof-grammar",
     "canvas-edge-hit",
     "canvas-edge-line",
     "canvas-edge-arrow",
@@ -2699,6 +2723,52 @@
         "disabled",
         "selected",
         "dragging"
+      ]
+    },
+    {
+      "name": "rich-surface",
+      "part": "editors",
+      "hooks": [
+        "rich-surface",
+        "rich-notice",
+        "rich-content",
+        "rich-para",
+        "rich-heading",
+        "rich-list",
+        "rich-quote",
+        "rich-link",
+        "rich-section",
+        "rich-break-page",
+        "rich-break-column",
+        "rich-table",
+        "rich-cell"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
+      "name": "rich-atom",
+      "part": "editors",
+      "hooks": [
+        "rich-atom",
+        "rich-atom-image",
+        "rich-atom-graphic",
+        "rich-atom-shape",
+        "rich-atom-group",
+        "rich-atom-note",
+        "rich-atom-field",
+        "rich-atom-marker",
+        "ProseMirror-selectednode",
+        "rich-proof-spelling",
+        "rich-proof-grammar"
+      ],
+      "states": [
+        "rest",
+        "selected"
       ]
     },
     {
@@ -5056,10 +5126,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1027,
+    "hooks": 1051,
     "state_names": 7,
-    "assigned_states": 608,
-    "components": 179,
+    "assigned_states": 614,
+    "components": 181,
     "preference_tokens": 121
   }
 }

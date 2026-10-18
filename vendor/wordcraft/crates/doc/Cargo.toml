@@ -1,0 +1,33 @@
+# Copia vendorizzata di `crates/doc/Cargo.toml` di WordCraft (vedi
+# ../../UPSTREAM.md). I campi che là ereditava dal workspace di WordCraft sono
+# scritti per esteso, con le stesse versioni; i lint sono quelli dell'upstream,
+# non quelli di Fub, perché il sorgente resta quello dell'upstream.
+[package]
+name = "wordcraft-doc"
+version = "0.7.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+# WordCraft dichiara 1.95 per il proprio workspace; questo crate compila e
+# passa i propri test con 1.89, il toolchain di Fub.
+rust-version = "1.89"
+repository = "https://github.com/storytold/wordcraft"
+description = "WordCraft document model: stories, paragraphs, runs, tables, sections, styles, numbering, fields, notes, comments, revisions; edit primitives"
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
+# Codice di terzi: gli avvisi li corregge l'upstream, non una copia.
+warnings = "allow"
+
+[lints.clippy]
+all = "allow"
+
+[dependencies]
+wordcraft-geom = { workspace = true }
+serde = { workspace = true, features = ["rc"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+unicode-segmentation = "1"
+
+[dev-dependencies]
+proptest = { workspace = true }

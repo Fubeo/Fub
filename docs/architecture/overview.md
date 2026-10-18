@@ -19,11 +19,12 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-Il diagramma seguente è la fotografia completa delle dipendenze dichiarate fra
-i crate del workspace. Le frecce continue indicano dipendenze normali; quelle
-tratteggiate esistono soltanto in `[dev-dependencies]`. Un test confronta il
-blocco con `cargo metadata`, quindi un crate o un arco non può restare fuori
-senza far fallire la CI.
+I due diagrammi seguenti sono, insieme, la fotografia completa delle
+dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
+dipendenze normali; quelle tratteggiate esistono soltanto in
+`[dev-dependencies]`. Un test confronta l'unione dei due blocchi con
+`cargo metadata`, quindi un crate o un arco non può restare fuori senza far
+fallire la CI.
 
 ```mermaid
 flowchart TD
@@ -40,6 +41,7 @@ flowchart TD
     svg["fub-format-svg"]
     scene["fub-scene"]
     ink["fub-ink"]
+    rich["fub-format-rich"]
     importers["fub-importers"]
     cli["fub-cli"]
     services["fub-services"]
@@ -61,6 +63,7 @@ flowchart TD
     host --> features
     host --> importers
     host --> markdown
+    host --> rich
     host --> sheet
     host --> svg
     host --> kernel
@@ -70,6 +73,8 @@ flowchart TD
     base --> abi
     canvas --> abi
     canvas --> markdown
+    rich --> abi
+    rich --> markdown
     importers --> abi
     features --> abi
     features --> base
@@ -102,6 +107,43 @@ flowchart TD
     importers -.-> markdown
     importers -.-> sdk
     svg -.-> sdk
+    rich -.-> sdk
+```
+
+I crate di WordCraft vendorizzati in `vendor/wordcraft/` sono codice di terzi:
+li usano soltanto il correttore della feature `proof` e `fub-format-rich` (più
+i test di `fub-host`, che scrivono `.odt` con l'esportatore), e nessuno di loro
+dipende da Fub. Il secondo blocco è lo stesso grafo, confrontato
+con lo stesso test.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo qui sopra: i crate di WordCraft e chi li usa.
+
+    features["fub-features"]
+    host["fub-host"]
+    rich["fub-format-rich"]
+    proof["wordcraft-proof"]
+    wdoc["wordcraft-doc"]
+    wdocbin["wordcraft-docbin"]
+    wdocx["wordcraft-docx"]
+    wformats["wordcraft-formats"]
+    wgeom["wordcraft-geom"]
+
+    features --> proof
+    host -.-> wformats
+    rich --> wdoc
+    rich --> wdocbin
+    rich --> wdocx
+    rich --> wformats
+    wdoc --> wgeom
+    wdocx --> wdoc
+    wdocx --> wgeom
+    wdocbin --> wdoc
+    wdocbin --> wgeom
+    wformats --> wdoc
+    wformats --> wgeom
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso

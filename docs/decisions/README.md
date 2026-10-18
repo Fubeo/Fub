@@ -41,3 +41,6 @@ Nuove decisioni usano il [template](template.md).
 | [0206 — Un tema dichiara il proprio motore e, da `theme-2`, le proprie impostazioni](0206-motori-dei-temi-e-impostazioni.md) | accolta | contratto | — |
 | [0207 — La domanda sì/no passa da una porta, e chi non risponde ha detto no](0207-conferma-presentata-dalla-shell.md) | accolta | frontend | — |
 | [0208 — La finestra è lo Scrittoio, e la serie di serie è `theme-2`](0208-la-finestra-e-lo-scrittoio.md) | accolta | frontend | — |
+| [0209 — I documenti di videoscrittura si modificano come proiezione](0209-videoscrittura-come-proiezione.md) | accolta | contratto | — |
+| [0210 — Un OpenDocument si scrive con un codec di Fub che conserva l'XML](0210-opendocument-con-un-codec-di-fub.md) | accolta | storage | — |
+| [0211 — HTML, testo, LaTeX e Word XML sono copie esportate, con la perdita misurata](0211-copie-esportate-con-la-perdita-misurata.md) | accolta | contratto | — |

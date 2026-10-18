@@ -85,10 +85,16 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
     // Con la feature `draw` ci sono anche i formati delle scene e delle
     // annotazioni dei PDF (ADR 0203), e la shell riconosce da qui le note di
-    // cartella `.svg`. L'anagrafe le dà in ordine alfabetico.
+    // cartella `.svg`. `docx`, `odt`, `rtf`, `doc` e `dot` ci sono quando
+    // l'host è costruito con i documenti di videoscrittura (feature `rich`), e
+    // allora li dichiarano i loro provider come gli altri. L'anagrafe le dà in
+    // ordine alfabetico.
     let mut extensions = vec!["base", "canvas", "fubsheet", "markdown", "md"];
     #[cfg(feature = "draw")]
     extensions.extend(["fubann", "svg"]);
+    if cfg!(feature = "rich") {
+        extensions.extend(["doc", "docx", "dot", "odt", "rtf"]);
+    }
     extensions.sort_unstable();
     assert_eq!(
         info.extensions, extensions,
@@ -112,6 +118,11 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // renderebbe questo test una tautologia dell'altro.
     let mut plugins: Vec<&str> = info.plugins.iter().map(|p| p.id.as_str()).collect();
     plugins.sort();
+    // Le copie dei documenti di videoscrittura vengono col loro codec.
+    if cfg!(feature = "rich") {
+        plugins.retain(|id| *id != "fub.rich");
+        assert!(info.plugins.iter().any(|p| p.id == "fub.rich"));
+    }
     #[cfg_attr(not(feature = "draw"), allow(unused_mut))]
     let mut expected = vec![
         "fub.backlinks",
@@ -127,6 +138,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
         "fub.maintenance",
         "fub.markdown",
         "fub.outline",
+        "fub.proof",
         "fub.properties",
         "fub.publish",
         "fub.queries",

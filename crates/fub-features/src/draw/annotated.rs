@@ -638,7 +638,14 @@ fn read_pdf(
     if count == 0 {
         return Err(damaged(&pdf, doc, "it has no pages".to_string()));
     }
-    let digest = format!("sha256:{:x}", Sha256::digest(&bytes));
+    // L'impronta si scrive in esadecimale minuscolo, un byte per volta: il
+    // digest di `sha2` 0.11 non sa formattarsi da sé.
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .fold(String::from("sha256:"), |mut text, byte| {
+            text.push_str(&format!("{byte:02x}"));
+            text
+        });
     let changed = match &annotations.digest {
         Some(written) => *written != digest,
         None => annotations

@@ -36,6 +36,7 @@ default = [
     "blocks",
     "base",
     "formatting",
+    "proof",
 ]
 search = ["dep:tantivy", "dep:regex"]
 versioning = []
@@ -99,6 +100,8 @@ draw = [
     "dep:kurbo",
     "dep:wuff",
 ]
+# Il correttore porta il motore di WordCraft, e nessun altro lo tira dentro.
+proof = ["dep:wordcraft-proof"]
 
 [dependencies]
 camino.workspace = true
@@ -138,7 +141,7 @@ png = { version = "0.18.1", optional = true }
 # decodifica solo JPEG, PNG e GIF: senza, un'immagine WebP in un disegno
 # uscirebbe nel PNG e mancherebbe nel PDF. Il decoder è lo stesso
 # `image-webp` che `resvg` porta già.
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "webp"], optional = true }
+image = { workspace = true, features = ["jpeg", "webp"], optional = true }
 # La misura di un'immagine raster, presa come la prende `usvg`, che è la stessa
 # crate: un'immagine che `usvg` non sa misurare la scarta senza dirlo, e il
 # risolutore la lascia fuori prima, così il log la nomina.
@@ -165,7 +168,7 @@ hayro = { version = "0.5.0", optional = true }
 # L'immagine di una pagina redatta, compressa come un PNG dentro il PDF.
 flate2 = { workspace = true, optional = true }
 # L'impronta del PDF, per dire se è cambiato da quando è stato annotato.
-sha2 = { version = "0.10.9", optional = true }
+sha2 = { workspace = true, optional = true }
 # I caratteri del vault: `skrifa` legge gli assi e disegna i contorni di un
 # carattere variabile in un punto, `write-fonts` ne scrive l'istanza statica e
 # `kurbo` porta i contorni dall'uno all'altro. Sono le stesse versioni che
@@ -177,6 +180,8 @@ kurbo = { version = "0.13.1", optional = true }
 # Il WOFF e il WOFF2, scritti in Rust senza `unsafe`. È il solo crate nuovo dei
 # caratteri del vault: il Brotli e lo zlib che usa sono già nel grafo.
 wuff = { version = "0.2.9", optional = true }
+# Dietro `proof`: ortografia e grammatica di WordCraft, vendorizzate.
+wordcraft-proof = { workspace = true, optional = true }
 # La facciata del log (§17.3). Non il collettore: quello sta nel kernel, e
 # questo crate il kernel non lo vede per invariante — che è esattamente il
 # motivo per cui `tracing` è diviso in due crate.

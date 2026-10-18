@@ -1,0 +1,45 @@
+# Copia vendorizzata di `crates/docx/Cargo.toml` di WordCraft (vedi
+# ../../UPSTREAM.md). I campi che là ereditava dal workspace di WordCraft sono
+# scritti per esteso, con le stesse versioni; i lint sono quelli dell'upstream,
+# non quelli di Fub, perché il sorgente resta quello dell'upstream.
+[package]
+name = "wordcraft-docx"
+version = "0.7.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+# WordCraft dichiara 1.95 per il proprio workspace; questo crate compila e
+# passa i propri test con 1.89, il toolchain di Fub.
+rust-version = "1.89"
+repository = "https://github.com/storytold/wordcraft"
+description = "WordCraft DOCX (OOXML WordprocessingML) reader and writer"
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
+# Codice di terzi: gli avvisi li corregge l'upstream, non una copia.
+warnings = "allow"
+
+[lints.clippy]
+all = "allow"
+
+[dependencies]
+wordcraft-doc = { workspace = true }
+wordcraft-geom = { workspace = true }
+quick-xml = { workspace = true }
+zip = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+cfb = { workspace = true }
+aes = "0.9"
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+hmac = "0.13"
+base64 = { workspace = true }
+getrandom = "0.3"
+zeroize = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+# L'upstream accende png, jpeg, webp, gif, bmp e tiff; i test di questo crate
+# scrivono soltanto PNG.
+image = { workspace = true, features = ["png"] }

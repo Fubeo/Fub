@@ -49,6 +49,20 @@ flowchart LR
 La figura mostra il verso concettuale. I manifest sono la fonte esatta e i guard
 del repository verificano le eccezioni.
 
+Il codice copiato da WordCraft (`vendor/wordcraft/`) non dipende da Fub, e lo
+raggiungono soltanto due crate, ciascuno dietro la propria feature:
+
+```mermaid
+flowchart LR
+    HOST["fub-host"] -. "feature rich" .-> RICH["fub-format-rich"]
+    RICH --> ABI["fub-abi"]
+    RICH --> MARKDOWN["fub-format-markdown"]
+    RICH --> WDOCX["wordcraft-docx e formats"]
+    WDOCX --> WDOC["wordcraft-doc"]
+    HOST --> FEATURES["fub-features"]
+    FEATURES -. "feature proof" .-> PROOF["wordcraft-proof"]
+```
+
 ## Tabella dei componenti
 
 | Componente | Possiede | Non deve possedere |
@@ -67,8 +81,11 @@ del repository verificano le eccezioni.
 | `apps/client/src/ink/` | la copia TypeScript del nucleo dell'inchiostro, per il percorso caldo, e l'adattatore del browser (`dom/`); il formato dei campioni e del pennello, la geometria dei campioni e gli strumenti: penna, evidenziatore e gomma, con il loro registro; vedi [Inchiostro e strumenti](ink-and-tools.md) | prodotti (FubDraw, shell, stato), formati su disco, Tauri, CodeMirror, globali del DOM nel nucleo |
 | `fub-scene` | lettura dei disegni di FubDraw secondo il [formato della scena](../reference/scene-format.md), e delle annotazioni PDF secondo il [loro formato](../reference/annotation-format.md): classificazione, inchiostro, indice e diagnostica | `fub-abi`, host, qualunque I/O |
 | `fub-format-svg` | i formati `svg` e `fubann`: modello per l'indice, segnaposto HTML o elenco delle annotazioni, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell; verifica del PDF annotato |
+| `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`): codec, provider a byte, proiezione modificabile senza perdite silenziose e copie esportate con la perdita misurata; l'HTML lo disegna il provider Markdown dal modello comune | host, storage, Tauri, Wasmtime, superficie della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
+| `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
+| `wordcraft-doc`, `-docx`, `-geom` | modello del documento, codec DOCX e unità di misura di WordCraft, vendorizzati in `vendor/wordcraft/`, usati soltanto da `fub-format-rich` | dipendenze da Fub |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |
@@ -135,8 +152,9 @@ id, nome, catalogo, impostazioni, servizi forniti e richiesti, e i provider che
 si costruiscono con una chiamata: view, comandi, indice, regole di sintassi e
 renderer. `fub-host` monta ogni riga con lo stesso ciclo e non confronta id.
 Ciò che soltanto chi monta sa collegare, cioè l'indice di ricerca nella cartella
-dati assegnata e lo store delle versioni dietro l'interruttore dell'host, è una
-variante di `HostWiring` dichiarata nella riga.
+dati assegnata, lo store delle versioni dietro l'interruttore dell'host e i
+dizionari Hunspell della macchina per il correttore, è una variante di
+`HostWiring` dichiarata nella riga.
 
 Una feature che non funziona senza un'altra lo dichiara due volte: la sua
 feature Cargo accende l'altra (`trash` → `commands`, `template` e `base` →
@@ -163,6 +181,7 @@ indipendenti.
 | lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
 | disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/`, `crates/fub-features/src/draw.rs`, `crates/fub-features/src/draw/` |
 | feature | `crates/fub-features/src/` |
+| codice di terzi vendorizzato | `vendor/` (provenienza in `UPSTREAM.md`) |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |
 | shell | `apps/client/src/main.ts`, `desktop-shell.ts`, `panels/`, `state/`, `ui/` |

@@ -982,3 +982,155 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-bold);
 }
+
+/* ── I documenti di videoscrittura ───────────────────────────────────────── */
+
+/* La superficie dei documenti di videoscrittura (`editors/rich/`): lo stesso
+   foglio, la stessa colonna e lo stesso corpo di lettura della nota, perché
+   scrivere un documento di Word e scrivere una nota sono lo stesso gesto. Ciò
+   che il documento ha in più — oggetti, salti, sezioni — si vede come segno
+   muto, non come contenuto. */
+.rich-surface {
+  background: var(--sheet);
+  color: var(--doc-fg);
+}
+.rich-notice {
+  padding: var(--space-3) var(--space-9);
+  background: var(--info-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.rich-content {
+  max-width: calc(var(--content-width) + 2 * var(--space-9));
+  margin-inline: auto;
+  padding: var(--space-9) var(--space-9) var(--space-11);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+  caret-color: var(--accent);
+}
+.rich-para {
+  margin-block: 0 var(--space-4);
+}
+.rich-heading {
+  color: var(--doc-heading);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  margin: var(--space-7) 0 var(--space-3);
+}
+.rich-heading[data-level="1"] {
+  font-size: max(1.75em, var(--text-3xl));
+  letter-spacing: -0.01em;
+  margin-top: var(--space-8);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--doc-rule-soft);
+}
+.rich-heading[data-level="2"] {
+  font-size: max(1.45em, var(--text-2xl));
+}
+.rich-heading[data-level="3"] {
+  font-size: 1.22em;
+  font-weight: 650;
+}
+.rich-heading[data-level="4"] {
+  font-size: 1.08em;
+  font-weight: 650;
+}
+.rich-heading[data-level="5"],
+.rich-heading[data-level="6"] {
+  font-size: 1em;
+  font-weight: 650;
+  color: var(--muted);
+}
+@container sheet (max-width: 560px) {
+  .rich-content {
+    padding: var(--space-8) var(--space-7) var(--space-10);
+  }
+}
+.rich-content > .rich-para:first-child {
+  margin-top: 0;
+}
+.rich-list {
+  margin-block: 0 var(--space-2);
+}
+.rich-list::before {
+  color: var(--muted);
+}
+.rich-quote {
+  border-left: 3px solid var(--doc-rule);
+  padding-left: var(--space-5);
+  color: var(--muted);
+}
+.rich-content mark {
+  background: var(--doc-highlight);
+  color: inherit;
+}
+.rich-link {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* La fine di una sezione: un filo doppio a tutta colonna, che si seleziona
+   come un oggetto e non si cancella per sbaglio. */
+.rich-section {
+  margin-block: var(--space-6);
+  border-top: 3px double var(--doc-rule);
+}
+.rich-break-page {
+  border-top: 1px dashed var(--doc-rule);
+}
+.rich-break-column {
+  border-top: 1px dotted var(--doc-rule-soft);
+}
+.rich-table {
+  margin-block: 0 var(--space-4);
+}
+.rich-cell {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--doc-rule-soft);
+}
+.rich-cell > .rich-para:last-child {
+  margin-bottom: 0;
+}
+/* Un oggetto del documento (un'immagine, un campo, una nota) è una casella:
+   la sua misura viene dal documento, il suo contenuto resta nel file. */
+.rich-atom {
+  min-width: 1.2em;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.rich-atom-image,
+.rich-atom-graphic,
+.rich-atom-shape,
+.rich-atom-group {
+  border-style: dashed;
+}
+.rich-atom-note,
+.rich-atom-field {
+  border-radius: 1em;
+}
+.rich-atom-marker {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.rich-content .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.rich-proof-spelling {
+  text-decoration: underline wavy var(--danger) 1px;
+  text-underline-offset: 3px;
+}
+.rich-proof-grammar {
+  text-decoration: underline wavy var(--warning) 1px;
+  text-underline-offset: 3px;
+}

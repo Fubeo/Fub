@@ -106,6 +106,8 @@ use crate::formatting::{self, FormattingCommands, FORMATTING_ID};
 use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
 #[cfg(feature = "outline")]
 use crate::outline::{self, OutlineView, OUTLINE_ID};
+#[cfg(feature = "proof")]
+use crate::proof::{self, ProofCommands, PROOF_ID};
 #[cfg(feature = "properties")]
 use crate::properties::{self, PropertiesCommands, PropertiesView, PROPERTIES_ID};
 #[cfg(feature = "queries")]
@@ -206,6 +208,10 @@ pub enum HostWiring {
     /// quando tutti i provider della riga sono entrati. L'interruttore è
     /// dell'host: spento, la feature si dichiara e non registra niente.
     VersionStore,
+    /// Il correttore legge i dizionari Hunspell installati sulla macchina,
+    /// fuori dal vault. Concedere quella lettura è di chi monta, che registra
+    /// l'indice del correttore costruito con quell'accesso.
+    MachineDictionaries,
 }
 
 impl OfficialFeature {
@@ -451,6 +457,24 @@ static OFFICIALS: &[OfficialFeature] = &[
         provides: &[],
         requires: &[],
         wiring: HostWiring::None,
+    },
+    #[cfg(feature = "proof")]
+    OfficialFeature {
+        id: PROOF_ID,
+        name: "Proofing",
+        catalog: proof::catalog,
+        view: None,
+        // Aggiungere e togliere parole dal dizionario personale.
+        commands: Some(|| Box::new(ProofCommands)),
+        // L'indice lo costruisce chi monta: vedi `wiring`.
+        index: None,
+        syntax: None,
+        renderers: None,
+        exports: None,
+        settings: Some(proof::settings),
+        provides: &[],
+        requires: &[],
+        wiring: HostWiring::MachineDictionaries,
     },
     #[cfg(feature = "stats")]
     OfficialFeature {

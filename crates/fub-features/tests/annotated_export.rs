@@ -100,7 +100,12 @@ fn source_pdf() -> Vec<u8> {
 }
 
 fn digest(bytes: &[u8]) -> String {
-    format!("sha256:{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes)
+        .iter()
+        .fold(String::from("sha256:"), |mut text, byte| {
+            text.push_str(&format!("{byte:02x}"));
+            text
+        })
 }
 
 /// Le annotazioni del PDF: una copertura sul testo della prima pagina e una
