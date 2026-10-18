@@ -31,6 +31,7 @@ import {
   writeBlock,
   type AtomKind,
   type Block,
+  type Cell,
   type Inline,
   type Layout,
   type Look,
@@ -38,6 +39,7 @@ import {
   type Para,
   type Projection,
   type Role,
+  type Row,
 } from "./projection";
 
 /// I caratteri del testo di WordCraft che diventano una foglia `brk`.
@@ -68,6 +70,11 @@ function baseAttr(dom: HTMLElement): Look | null {
   } catch {
     return null;
   }
+}
+
+/// Il `k` di tabella, riga e cella dal DOM: vuoto in una nuova.
+function keyOf(dom: HTMLElement | string): { k: string | null } {
+  return { k: (dom as HTMLElement).getAttribute("data-rich-k") || null };
 }
 
 function jsonAttr<T>(dom: HTMLElement, name: string): T | null {
@@ -224,13 +231,15 @@ const nodes: Record<string, NodeSpec> = {
     parseDOM: [{ tag: "hr[data-rich-sect]", getAttrs: (dom) => ({ sect: (dom as HTMLElement).getAttribute("data-rich-sect") }) }],
     toDOM: (node) => ["hr", { class: "rich-section", "data-rich-sect": node.attrs.sect as string }],
   },
+  // Una tabella nuova non ha `k` (`null`, scritto vuoto nel DOM): il formato
+  // la scrive con le sue proprietà predefinite.
   table: {
     group: "block",
     content: "row+",
-    attrs: { k: {} },
+    attrs: { k: { default: null } },
     isolating: true,
-    parseDOM: [{ tag: "table[data-rich-k]", getAttrs: (dom) => ({ k: (dom as HTMLElement).getAttribute("data-rich-k") }) }],
-    toDOM: (node) => ["table", { class: "rich-table", "data-rich-k": node.attrs.k as string }, ["tbody", 0]],
+    parseDOM: [{ tag: "table[data-rich-k]", getAttrs: keyOf }],
+    toDOM: (node) => ["table", { class: "rich-table", "data-rich-k": (node.attrs.k as string | null) ?? "" }, ["tbody", 0]],
   },
   // Riga e cella hanno un `k` che ProseMirror può lasciare vuoto quando ripara
   // una tabella (una selezione che taglia righe intere): lo riempie dai vicini
@@ -238,15 +247,15 @@ const nodes: Record<string, NodeSpec> = {
   row: {
     content: "cell+",
     attrs: { k: { default: null } },
-    parseDOM: [{ tag: "tr[data-rich-k]", getAttrs: (dom) => ({ k: (dom as HTMLElement).getAttribute("data-rich-k") }) }],
-    toDOM: (node) => ["tr", { "data-rich-k": node.attrs.k as string }, 0],
+    parseDOM: [{ tag: "tr[data-rich-k]", getAttrs: keyOf }],
+    toDOM: (node) => ["tr", { "data-rich-k": (node.attrs.k as string | null) ?? "" }, 0],
   },
   cell: {
     content: "(block | section)+",
     attrs: { k: { default: null } },
     isolating: true,
-    parseDOM: [{ tag: "td[data-rich-k]", getAttrs: (dom) => ({ k: (dom as HTMLElement).getAttribute("data-rich-k") }) }],
-    toDOM: (node) => ["td", { class: "rich-cell", "data-rich-k": node.attrs.k as string }, 0],
+    parseDOM: [{ tag: "td[data-rich-k]", getAttrs: keyOf }],
+    toDOM: (node) => ["td", { class: "rich-cell", "data-rich-k": (node.attrs.k as string | null) ?? "" }, 0],
   },
   text: { group: "inline" },
   brk: {
@@ -473,15 +482,15 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
     }
     const rows = block.rows.map((row) =>
       richSchema.nodes.row.create(
-        { k: row.k },
+        { k: row.k ?? null },
         row.cells.map((cell) => {
           const content = blockNodes(cell.blocks);
           // Una cella vuota nella proiezione ha comunque un paragrafo in Word.
-          return richSchema.nodes.cell.create({ k: cell.k }, content.length > 0 ? content : [richSchema.nodes.para.create()]);
+          return richSchema.nodes.cell.create({ k: cell.k ?? null }, content.length > 0 ? content : [richSchema.nodes.para.create()]);
         }),
       ),
     );
-    out.push(richSchema.nodes.table.create({ k: block.k }, rows));
+    out.push(richSchema.nodes.table.create({ k: block.k ?? null }, rows));
   }
   return out;
 }
@@ -634,13 +643,14 @@ export function blocksOf(parent: PmNode): Block[] {
 }
 
 function tableOf(table: PmNode): Block {
-  const rows: { k: string; cells: { k: string; blocks: Block[] }[] }[] = [];
+  const key = (node: PmNode) => (node.attrs.k ? { k: node.attrs.k as string } : {});
+  const rows: Row[] = [];
   table.forEach((row) => {
-    const cells: { k: string; blocks: Block[] }[] = [];
-    row.forEach((cell) => cells.push({ k: cell.attrs.k as string, blocks: blocksOf(cell) }));
-    rows.push({ k: row.attrs.k as string, cells });
+    const cells: Cell[] = [];
+    row.forEach((cell) => cells.push({ ...key(cell), blocks: blocksOf(cell) }));
+    rows.push({ ...key(row), cells });
   });
-  return { t: "table", k: table.attrs.k as string, rows };
+  return { t: "table", ...key(table), rows };
 }
 
 /// I blocchi del documento in JSON, uno per figlio del documento che porta un

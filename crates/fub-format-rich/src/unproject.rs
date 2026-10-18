@@ -134,7 +134,26 @@ fn blocks(
                 paragraph(para, document, state).map(|p| Arc::new(WcBlock::Para(p)))
             }
             Block::Table(table) => {
-                let mut out: wordcraft_doc::Table = blob::decode(&table.k)?;
+                let mut out: wordcraft_doc::Table = match &table.k {
+                    Some(k) => blob::decode(k)?,
+                    // Una tabella nuova è quella di Word: la griglia a tutta
+                    // riga, a colonne uguali, con i bordi.
+                    None => {
+                        let cols = table.rows.iter().map(|row| row.cells.len()).max();
+                        let cols = cols.unwrap_or(0);
+                        if cols > wordcraft_doc::table::MAX_COLS {
+                            return Err(RichError::Malformed(
+                                "a table with too many columns".into(),
+                            ));
+                        }
+                        let mut fresh =
+                            wordcraft_doc::Table::new(1, cols, document.last_section.text_width());
+                        fresh.rows.clear();
+                        fresh.props.style = builtin_style(&mut document.styles, "TableGrid");
+                        fresh
+                    }
+                };
+                let grid = out.grid.clone();
                 if out
                     .props
                     .style
@@ -147,12 +166,23 @@ fn blocks(
                     .rows
                     .iter()
                     .map(|row| {
-                        let mut out: wordcraft_doc::Row = blob::decode(&row.k)?;
+                        let mut out: wordcraft_doc::Row = match &row.k {
+                            Some(k) => blob::decode(k)?,
+                            None => wordcraft_doc::Row::default(),
+                        };
                         out.cells = row
                             .cells
                             .iter()
-                            .map(|cell| {
-                                let mut out: wordcraft_doc::Cell = blob::decode(&cell.k)?;
+                            .enumerate()
+                            .map(|(c, cell)| {
+                                let mut out: wordcraft_doc::Cell = match &cell.k {
+                                    Some(k) => blob::decode(k)?,
+                                    None => {
+                                        let mut fresh = wordcraft_doc::Cell::empty();
+                                        fresh.props.width = grid.get(c).copied();
+                                        fresh
+                                    }
+                                };
                                 out.blocks = self::blocks(&cell.blocks, document, state)?;
                                 if !out.blocks.iter().any(|b| matches!(**b, WcBlock::Para(_))) {
                                     // Word vuole un paragrafo in fondo a ogni cella.

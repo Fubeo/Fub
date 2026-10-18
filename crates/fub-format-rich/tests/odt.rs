@@ -6,7 +6,8 @@ mod common;
 use std::io::{Cursor, Read, Write};
 
 use fub_format_rich::projection::{
-    Align, AtomKind, Block, Inline, Layout, Line, Look, Mark, Para, Projection, Role,
+    Align, AtomKind, Block, Cell, Inline, Layout, Line, Look, Mark, Para, Projection, Role, Row,
+    Table,
 };
 use fub_format_rich::{blank, open, save, Codec, ReadOnly, RichError, Saved};
 
@@ -358,6 +359,87 @@ fn un_link_si_crea_si_cambia_e_si_toglie() {
         set(inline, None);
     }
     assert!(links(&self::projection(&saved(&out, &cleared))).is_empty());
+}
+
+#[test]
+fn una_tabella_nuova_si_scrive_con_le_colonne_e_il_bordo() {
+    let bytes = odt(PROSE);
+    let mut projection = projection(&bytes);
+    // Un paragrafo di corpo nuovo, come lo scrive la shell.
+    let body = Para {
+        role: Role::Body,
+        k: None,
+        ..para(&projection, 1).clone()
+    };
+    let cell = |x: &str| Cell {
+        k: None,
+        blocks: vec![Block::Para(Para {
+            c: vec![Inline::Text {
+                x: x.into(),
+                k: None,
+                m: Vec::new(),
+                href: None,
+                f: Look::default(),
+            }],
+            ..body.clone()
+        })],
+    };
+    let rows = vec![
+        Row {
+            k: None,
+            cells: vec![cell("a"), cell("b")],
+        },
+        Row {
+            k: None,
+            cells: vec![
+                cell("c"),
+                Cell {
+                    k: None,
+                    blocks: Vec::new(),
+                },
+            ],
+        },
+    ];
+    projection
+        .blocks
+        .insert(1, Block::Table(Table { k: None, rows }));
+    projection.blocks.insert(
+        2,
+        Block::Table(Table {
+            k: None,
+            rows: vec![Row {
+                k: None,
+                cells: vec![cell("sola")],
+            }],
+        }),
+    );
+    let out = saved(&bytes, &projection);
+    let content = part(&out, "content.xml");
+    assert!(content.contains(concat!(
+        "<table:table table:name=\"Tabella1\">",
+        "<table:table-column table:number-columns-repeated=\"2\"/>"
+    )));
+    assert!(content.contains("<table:table table:name=\"Tabella2\"><table:table-column/>"));
+    assert!(content.contains("style:family=\"table-cell\""));
+    assert!(content.contains("fo:border=\"0.5pt solid #000000\""));
+    let reopened = self::projection(&out);
+    let Block::Table(table) = &reopened.blocks[1] else {
+        panic!("not a table");
+    };
+    assert_eq!(table.rows.len(), 2);
+    assert_eq!(words(cell_para(table, 0, 1)), "b");
+    assert!(table.rows[1].cells[1].blocks.is_empty());
+    assert!(matches!(
+        save(Codec::Odt, &out, &reopened.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    ));
+}
+
+fn cell_para(table: &Table, row: usize, cell: usize) -> &Para {
+    match &table.rows[row].cells[cell].blocks[0] {
+        Block::Para(para) => para,
+        Block::Table(_) => panic!("a nested table"),
+    }
 }
 
 #[test]

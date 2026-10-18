@@ -5,7 +5,7 @@ mod common;
 
 use common::{bytes, sample, styled, text};
 use fub_format_rich::projection::{
-    Align, Block, Inline, Layout, Line, Look, Mark, Para, Projection, Role,
+    Align, Block, Cell, Inline, Layout, Line, Look, Mark, Para, Projection, Role, Row, Table,
 };
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
@@ -411,6 +411,79 @@ fn le_celle_si_scrivono_e_la_tabella_resta() {
             .plain_text(),
         ""
     );
+}
+
+/// Una tabella `rows × cols` che la shell inserisce: senza proprietà, con il
+/// testo della cella in ogni cella.
+fn new_table(rows: usize, cols: usize) -> Block {
+    Block::Table(Table {
+        k: None,
+        rows: (0..rows)
+            .map(|r| Row {
+                k: None,
+                cells: (0..cols)
+                    .map(|c| Cell {
+                        k: None,
+                        blocks: vec![Block::Para(Para {
+                            role: Role::Body,
+                            align: None,
+                            k: None,
+                            sect: None,
+                            p: Layout::default(),
+                            s: None,
+                            f: Look::default(),
+                            c: vec![Inline::Text {
+                                x: format!("{r}.{c}"),
+                                k: None,
+                                m: Vec::new(),
+                                href: None,
+                                f: Look::default(),
+                            }],
+                        })],
+                    })
+                    .collect(),
+            })
+            .collect(),
+    })
+}
+
+#[test]
+fn una_tabella_nuova_è_la_griglia_di_word() {
+    let file = bytes(&sample());
+    let mut p = projection(&file);
+    p.blocks.insert(1, new_table(2, 3));
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let WcBlock::Table(table) = &*after.body[1] else {
+        panic!("non è una tabella")
+    };
+    assert_eq!(table.props.style.as_deref(), Some("TableGrid"));
+    assert!(after.styles.get("TableGrid").is_some());
+    let width = after.last_section.text_width();
+    assert_eq!(table.grid.len(), 3);
+    assert!((table.grid.iter().sum::<f32>() - width).abs() < 0.5);
+    assert_eq!(table.rows.len(), 2);
+    for (r, row) in table.rows.iter().enumerate() {
+        assert_eq!(row.cells.len(), 3);
+        for (c, cell) in row.cells.iter().enumerate() {
+            assert_eq!(cell.span(), 1);
+            assert_eq!(cell.props.width, Some(table.grid[c]));
+            assert_eq!(
+                cell.blocks[0].as_para().unwrap().plain_text(),
+                format!("{r}.{c}")
+            );
+        }
+    }
+    // Riaperta, la tabella ha le sue proprietà e si salva senza cambiare.
+    let reopened = projection(&out);
+    let Block::Table(table) = &reopened.blocks[1] else {
+        panic!()
+    };
+    assert!(table.k.is_some() && table.rows[0].cells[0].k.is_some());
+    assert!(matches!(
+        save(Codec::Docx, &out, &reopened.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    ));
 }
 
 #[test]

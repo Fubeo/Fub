@@ -89,7 +89,11 @@ struct Writer<'a> {
     seen: HashSet<String>,
     atoms: HashMap<String, usize>,
     used: HashMap<String, usize>,
-    tables: Vec<(String, Vec<String>)>,
+    tables: Vec<(Option<String>, Vec<Option<String>>)>,
+    /// Lo stile delle celle delle tabelle nuove, una volta scritto.
+    grid_cell: Option<String>,
+    /// Le tabelle nuove già nominate.
+    named: usize,
     expected: Vec<Block>,
 }
 
@@ -497,6 +501,8 @@ impl<'a> Writer<'a> {
             base,
             styles: base.styles.clone(),
             auto_xml: String::new(),
+            grid_cell: None,
+            named: 0,
             common_xml: String::new(),
             clones: HashMap::new(),
             seen: HashSet::new(),
@@ -1503,14 +1509,18 @@ impl<'a> Writer<'a> {
     // ── Tabelle ─────────────────────────────────────────────────────────────
 
     fn table(&mut self, table: &Table, out: &mut String) -> Result<Table, RichError> {
-        let key: TableKey = blob::decode(&table.k)?;
+        let fresh = table.k.is_none();
+        let key: TableKey = match &table.k {
+            Some(k) => blob::decode(k)?,
+            None => self.new_table(table),
+        };
         if !key.rows {
             let base = self
                 .tables
                 .iter()
                 .find(|(k, _)| *k == table.k)
                 .ok_or_else(|| RichError::Missing("a table".into()))?;
-            let rows: Vec<&String> = table.rows.iter().map(|r| &r.k).collect();
+            let rows: Vec<&Option<String>> = table.rows.iter().map(|r| &r.k).collect();
             if rows.len() != base.1.len() || rows.iter().zip(&base.1).any(|(a, b)| *a != b) {
                 return Err(RichError::Codec(
                     "odt: rows of a table with cells merged across rows cannot be added, \
@@ -1528,7 +1538,14 @@ impl<'a> Writer<'a> {
         let mut headers_done = false;
         let mut rows = Vec::new();
         for row in &table.rows {
-            let rk: RowKey = blob::decode(&row.k)?;
+            let rk: RowKey = match &row.k {
+                Some(k) => blob::decode(k)?,
+                None => RowKey {
+                    open: "<table:table-row>".into(),
+                    header: false,
+                    lead: String::new(),
+                },
+            };
             if rk.header != header {
                 if rk.header {
                     if headers_done {
@@ -1547,7 +1564,20 @@ impl<'a> Writer<'a> {
             out.push_str(&rk.lead);
             let mut cells = Vec::new();
             for cell in &row.cells {
-                let ck: CellKey = blob::decode(&cell.k)?;
+                let ck: CellKey = match &cell.k {
+                    Some(k) => blob::decode(k)?,
+                    None => CellKey {
+                        open: match fresh {
+                            true => format!(
+                                "<table:table-cell table:style-name=\"{}\" \
+                                 office:value-type=\"string\">",
+                                self.grid_cell()
+                            ),
+                            false => "<table:table-cell office:value-type=\"string\">".into(),
+                        },
+                        tail: String::new(),
+                    },
+                };
                 let blocks = if bare_cell(&cell.blocks) {
                     if ck.open.ends_with("/>") {
                         out.push_str(&ck.open);
@@ -1582,6 +1612,45 @@ impl<'a> Writer<'a> {
             k: table.k.clone(),
             rows,
         })
+    }
+
+    /// Una tabella nuova: un nome che il documento non ha, una colonna per
+    /// cella della riga più lunga, come la griglia di Word.
+    fn new_table(&mut self, table: &Table) -> TableKey {
+        let cols = table.rows.iter().map(|row| row.cells.len()).max();
+        let repeated = match cols.unwrap_or(1) {
+            0 | 1 => String::new(),
+            n => format!(" table:number-columns-repeated=\"{n}\""),
+        };
+        let source = String::from_utf8_lossy(&self.base.content.source);
+        let name = loop {
+            self.named += 1;
+            let name = format!("Tabella{}", self.named);
+            if !source.contains(&format!("table:name=\"{name}\"")) {
+                break name;
+            }
+        };
+        TableKey {
+            open: format!("<table:table table:name=\"{name}\">"),
+            head: format!("<table:table-column{repeated}/>"),
+            rows: true,
+        }
+    }
+
+    /// Lo stile delle celle di una tabella nuova: il bordo sottile della
+    /// griglia di Word.
+    fn grid_cell(&mut self) -> String {
+        if let Some(name) = &self.grid_cell {
+            return name.clone();
+        }
+        let name = self.styles.fresh("FubC");
+        self.auto_xml.push_str(&format!(
+            "<style:style style:name=\"{name}\" style:family=\"table-cell\">\
+             <style:table-cell-properties fo:padding=\"0.04in\" \
+             fo:border=\"0.5pt solid #000000\"/></style:style>"
+        ));
+        self.grid_cell = Some(name.clone());
+        name
     }
 
     // ── Le parti ───────────────────────────────────────────────────────────

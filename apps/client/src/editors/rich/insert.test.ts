@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 //
-// Ciò che si inserisce nella superficie ricca: link e salti di pagina e di
-// colonna.
+// Ciò che si inserisce nella superficie ricca: link, tabelle e salti di
+// pagina e di colonna.
 import { afterEach, describe, expect, it } from "vitest";
+import { Fragment, Slice } from "prosemirror-model";
 import { t } from "../../i18n/strings";
-import { linkAt, setLink } from "./commands";
+import { insertTable, linkAt, setLink } from "./commands";
 import { RichEngine } from "./engine";
-import { parseProjection, type Block, type Para, type TextInline } from "./projection";
+import { parseProjection, type Block, type Para, type Table, type TextInline } from "./projection";
 import { mountStrip } from "./strip";
 
 let engines: RichEngine[] = [];
@@ -104,5 +105,64 @@ describe("i salti", () => {
     expect(e.run("rich.break.page")).toBe(true);
     expect(e.run("rich.break.column")).toBe(true);
     expect(texts(e)).toEqual([{ t: "text", x: "prima\u000c\u000edopo" }]);
+  });
+});
+
+describe("le tabelle nuove", () => {
+  const shape = (e: RichEngine) => parseProjection(e.getDoc()).blocks.map((b) => (b.t === "table" ? `${b.rows.length}x${b.rows[0]!.cells.length}` : "p"));
+
+  it("vanno dopo il paragrafo del cursore, senza k, e un paragrafo le segue", () => {
+    const e = engine([para([{ t: "text", x: "sopra" }])]);
+    e.select(at(e, "sopra") + 2);
+    expect(e.apply(insertTable(2, 3))).toBe(true);
+    expect(shape(e)).toEqual(["p", "2x3", "p"]);
+    const table = parseProjection(e.getDoc()).blocks[1] as Table;
+    expect(table.k).toBeUndefined();
+    expect(table.rows.every((row) => row.k === undefined && row.cells.every((cell) => cell.k === undefined))).toBe(true);
+    // Il cursore è nella prima cella: si scrive lì, e una riga nuova resta senza k.
+    expect(e.run("markdown.table.row.after")).toBe(true);
+    const grown = parseProjection(e.getDoc()).blocks[1] as Table;
+    expect(grown.rows).toHaveLength(3);
+    expect(grown.rows[1]!.k).toBeUndefined();
+    // Dentro una tabella non se ne crea un'altra.
+    expect(e.apply(insertTable(1, 1))).toBe(false);
+    // Copiata e incollata resta una tabella, anche senza k.
+    e.select(e.state.doc.content.size - 1);
+    e.paste(new Slice(Fragment.from(e.state.doc.child(1)), 0, 0));
+    expect(shape(e).filter((b) => b !== "p")).toEqual(["3x3", "3x3"]);
+  });
+
+  it("prendono il posto prima di un paragrafo vuoto, e il limite delle colonne vale", () => {
+    const e = engine([para([{ t: "text", x: "uno" }]), para([])]);
+    e.select(e.state.doc.content.size - 1);
+    expect(e.apply(insertTable(1, 64))).toBe(false);
+    expect(e.apply(insertTable(1, 2))).toBe(true);
+    expect(shape(e)).toEqual(["p", "1x2", "p"]);
+  });
+
+  it("la striscia le dimensiona con la griglia, col mouse e con le frecce", () => {
+    const e = engine([para([{ t: "text", x: "testo" }])]);
+    e.select(at(e, "testo"));
+    const strip = mountStrip(e, () => null);
+    document.body.append(strip.element);
+    const open = () => strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table")}"]`)!.click();
+    open();
+    const cell = (rows: number, cols: number) =>
+      document.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.table.cells", { rows: String(rows), cols: String(cols) })}"]`)!;
+    cell(2, 3).dispatchEvent(new Event("pointerover", { bubbles: true }));
+    expect(cell(1, 2).style.backgroundColor).not.toBe("");
+    expect(cell(3, 1).style.backgroundColor).toBe("");
+    cell(2, 3).click();
+    expect(shape(e)).toEqual(["p", "2x3", "p"]);
+    // Con le frecce: una a destra e una in giù.
+    e.select(at(e, "testo"));
+    open();
+    cell(1, 1).focus();
+    cell(1, 1).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    (document.activeElement as HTMLElement).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(document.activeElement).toBe(cell(2, 2));
+    cell(2, 2).click();
+    expect(shape(e)).toEqual(["p", "2x2", "p", "2x3", "p"]);
+    strip.destroy();
   });
 });

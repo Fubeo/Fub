@@ -140,19 +140,21 @@ export interface Para {
   readonly c?: readonly Inline[];
 }
 
+/// Tabella, riga e cella nuove non hanno `k`: il formato le scrive con le
+/// sue proprietà predefinite.
 export interface Cell {
-  readonly k: string;
+  readonly k?: string;
   readonly blocks: readonly Block[];
 }
 
 export interface Row {
-  readonly k: string;
+  readonly k?: string;
   readonly cells: readonly Cell[];
 }
 
 export interface Table {
   readonly t: "table";
-  readonly k: string;
+  readonly k?: string;
   readonly rows: readonly Row[];
 }
 
@@ -381,13 +383,13 @@ function readBlock(value: unknown, where: string): Block {
         const cell = record(value, at);
         closed(cell, ["k", "blocks"], at);
         return {
-          k: text(cell.k, `${at}.k`),
+          ...(cell.k !== undefined ? { k: text(cell.k, `${at}.k`) } : {}),
           blocks: list(cell.blocks, `${at}.blocks`).map((b, i) => readBlock(b, `${at}.blocks[${i}]`)),
         };
       });
-      return { k: text(row.k, `${where}.rows[${r}].k`), cells };
+      return { ...(row.k !== undefined ? { k: text(row.k, `${where}.rows[${r}].k`) } : {}), cells };
     });
-    return { t: "table", k: text(block.k, `${where}.k`), rows };
+    return { t: "table", ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}), rows };
   }
   throw new ProjectionError(`${where}: blocco sconosciuto`);
 }
@@ -505,11 +507,13 @@ export function writeBlock(block: Block): string {
     if (block.c && block.c.length > 0) out += `,"c":[${block.c.map(writeInline).join(",")}]`;
     return out + "}";
   }
+  // Una tabella, una riga o una cella nuova non ha `k`.
+  const key = (k: string | undefined, comma: string) => (k === undefined ? "" : `"k":${JSON.stringify(k)}${comma}`);
   const rows = block.rows.map((row) => {
-    const cells = row.cells.map((cell) => `{"k":${JSON.stringify(cell.k)},"blocks":[${cell.blocks.map(writeBlock).join(",")}]}`);
-    return `{"k":${JSON.stringify(row.k)},"cells":[${cells.join(",")}]}`;
+    const cells = row.cells.map((cell) => `{${key(cell.k, ",")}"blocks":[${cell.blocks.map(writeBlock).join(",")}]}`);
+    return `{${key(row.k, ",")}"cells":[${cells.join(",")}]}`;
   });
-  return `{"t":"table","k":${JSON.stringify(block.k)},"rows":[${rows.join(",")}]}`;
+  return `{"t":"table",${key(block.k, ",")}"rows":[${rows.join(",")}]}`;
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.

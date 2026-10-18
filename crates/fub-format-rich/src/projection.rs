@@ -313,24 +313,28 @@ impl AtomKind {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Table {
-    /// La tabella senza righe, opaca.
-    pub k: String,
+    /// La tabella senza righe, opaca. Assente in una tabella nuova, che il
+    /// formato scrive con le sue proprietà predefinite.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k: Option<String>,
     pub rows: Vec<Row>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Row {
-    /// La riga senza celle, opaca.
-    pub k: String,
+    /// La riga senza celle, opaca; assente in una riga nuova.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k: Option<String>,
     pub cells: Vec<Cell>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Cell {
-    /// La cella senza contenuto, opaca.
-    pub k: String,
+    /// La cella senza contenuto, opaca; assente in una cella nuova.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub k: Option<String>,
     pub blocks: Vec<Block>,
 }
 
@@ -489,19 +493,19 @@ fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
                         ..cell.clone()
                     };
                     Ok(Cell {
-                        k: blob::encode(&bare)?,
+                        k: Some(blob::encode(&bare)?),
                         blocks: blocks(document, &cell.blocks)?,
                     })
                 })
                 .collect::<Result<_, RichError>>()?;
             Ok(Row {
-                k: blob::encode(&bare)?,
+                k: Some(blob::encode(&bare)?),
                 cells,
             })
         })
         .collect::<Result<_, RichError>>()?;
     Ok(Table {
-        k: blob::encode(&bare)?,
+        k: Some(blob::encode(&bare)?),
         rows,
     })
 }

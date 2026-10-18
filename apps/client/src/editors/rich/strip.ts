@@ -15,6 +15,7 @@ import { openLifetime } from "../../ui/lifetime";
 import { onLanguage, t, type Key } from "../../i18n/strings";
 import {
   FONT_SIZES,
+  insertTable,
   LINE_SPACINGS,
   linkAt,
   selectedLayout,
@@ -282,8 +283,91 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   pageBreak.append(icon(["M5 3v5h14V3", "M5 21v-5h14v5", "M4 12h2", "M9 12h2", "M13 12h2", "M18 12h2"]));
   const columnBreak = button(() => t("rich.break.column"), "rich.break.column", () => engine.run("rich.break.column"));
   columnBreak.append(icon(["M4 5h6", "M4 9h6", "M4 13h6", "M14 11h6", "M14 15h6", "M14 19h6", "M12 3v18"]));
-  insert.append(link, pageBreak, columnBreak);
+  const table = button(() => t("rich.table"), null, (anchor) => openTable(anchor));
+  table.append(icon(["M4 5h16v14H4z", "M4 10h16", "M4 15h16", "M10 5v14"]));
+  table.setAttribute("aria-haspopup", "dialog");
+  insert.append(link, table, pageBreak, columnBreak);
   life.add(engine.onLinkAsk(() => openLink(link)));
+
+  /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
+  /// col mouse o con le frecce.
+  function openTable(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const ROWS = 8;
+    const COLS = 10;
+    const box = document.createElement("div");
+    box.className = "rich-strip-swatches";
+    // Una colonna sola: la griglia, sotto le sue dimensioni.
+    box.style.gridTemplateColumns = "auto";
+    const grid = document.createElement("div");
+    grid.style.display = "grid";
+    grid.style.gridTemplateColumns = `repeat(${COLS}, 20px)`;
+    grid.style.gap = "2px";
+    const size = document.createElement("p");
+    size.setAttribute("aria-hidden", "true");
+    size.style.margin = "0";
+    size.style.textAlign = "center";
+    const cells: HTMLButtonElement[] = [];
+    for (let r = 1; r <= ROWS; r += 1) {
+      for (let c = 1; c <= COLS; c += 1) {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.className = "rich-strip-swatch";
+        cell.style.width = cell.style.height = "20px";
+        cell.dataset.rows = String(r);
+        cell.dataset.cols = String(c);
+        cell.setAttribute("aria-label", t("rich.table.cells", { rows: String(r), cols: String(c) }));
+        cell.tabIndex = r === 1 && c === 1 ? 0 : -1;
+        cells.push(cell);
+      }
+    }
+    grid.append(...cells);
+    box.append(grid, size);
+    const at = (target: EventTarget | null) => (target instanceof HTMLButtonElement && cells.includes(target) ? target : null);
+    const show = (rows: number, cols: number) => {
+      for (const cell of cells) {
+        const inside = Number(cell.dataset.rows) <= rows && Number(cell.dataset.cols) <= cols;
+        cell.style.backgroundColor = inside ? "var(--accent-wash)" : "";
+      }
+      size.textContent = t("rich.table.size", { rows: String(rows), cols: String(cols) });
+    };
+    const point = (target: EventTarget | null) => {
+      const cell = at(target);
+      if (cell) show(Number(cell.dataset.rows), Number(cell.dataset.cols));
+    };
+    show(1, 1);
+    life.listen(grid, "pointerover", (event) => point(event.target));
+    life.listen(grid, "focusin", (event) => point(event.target));
+    life.listen(grid, "click", (event) => {
+      const cell = at(event.target);
+      if (!cell) return;
+      popover?.close();
+      engine.apply(insertTable(Number(cell.dataset.rows), Number(cell.dataset.cols)));
+    });
+    life.listen(grid, "keydown", (event) => {
+      const cell = at(event.target);
+      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -COLS, ArrowDown: COLS }[event.key];
+      if (!cell || step === undefined) return;
+      const next = cells[cells.indexOf(cell) + step];
+      event.preventDefault();
+      if (!next) return;
+      cell.tabIndex = -1;
+      next.tabIndex = 0;
+      next.focus();
+    });
+    popover = openPopover({
+      anchor,
+      content: box,
+      label: t("rich.table"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+  }
 
   /// L'indirizzo del link sulla selezione o al cursore; senza selezione,
   /// anche il testo da scrivere.
@@ -586,6 +670,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     setPressed(link, linkState.active === true);
     pageBreak.disabled = !engine.actionState("rich.break.page").enabled;
     columnBreak.disabled = !engine.actionState("rich.break.column").enabled;
+    table.disabled = !engine.editable() || !engine.read(insertTable(1, 1));
     dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;
     indent.disabled = !engine.actionState("rich.indent.increase").enabled;
     colorBar.style.backgroundColor = look.color && look.color !== COLOR_AUTO ? look.color : "currentColor";

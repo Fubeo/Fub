@@ -27,7 +27,11 @@ l'IPC.
   import dinamico; una superficie smontata prima che arrivi non monta niente.
 - `editors/rich/schema.ts` traduce la proiezione in un documento ProseMirror
   e ritorno. Ogni nodo porta con sé il proprio `k`, i dati originali opachi
-  che la shell non legge e copia così come sono. L'enfasi (`m`) e l'aspetto
+  che la shell non legge e copia così come sono. Una tabella, una riga o una
+  cella nuova non ha `k`: il formato la scrive con le sue proprietà
+  predefinite (la griglia di Word, le colonne e un bordo in ODF), e una riga
+  che ProseMirror crea riparando una tabella esistente prende il `k` della
+  vicina (`fillTableKeys`). L'enfasi (`m`) e l'aspetto
   del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
   sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
   il ritorno al documento ne fa formattazione diretta, o la toglie quando

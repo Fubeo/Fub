@@ -12,7 +12,7 @@ import projectionFixture from "../../__fixtures__/rich-projection.json";
 import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
 import { parseProjection, writeProjection } from "./projection";
-import { setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
+import { insertTable, setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
 import { BlockWriter, toDoc } from "./schema";
 
 const SOURCE = projectionFixture.source;
@@ -108,6 +108,11 @@ describe("la proiezione del codec", () => {
     const before = find(e.state.doc, "Prima");
     e.select(before, before + "Prima".length);
     expect(e.apply(setLink("https://fub.app/prima"))).toBe(true);
+    // Una tabella nuova 2 × 3 dopo il paragrafo del salto, con una parola
+    // nella prima cella.
+    e.select(find(e.state.doc, "dopo il salto"));
+    expect(e.apply(insertTable(2, 3))).toBe(true);
+    expect(e.apply((state, dispatch) => (dispatch?.(state.tr.insertText("nuova")), true))).toBe(true);
     // L'ultimo paragrafo diventa un titolo.
     e.select(find(e.state.doc, "Fine."));
     expect(e.run("markdown.heading.2")).toBe(true);

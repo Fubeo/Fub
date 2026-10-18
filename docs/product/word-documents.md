@@ -36,7 +36,11 @@ Si modificano:
   dello stile, e come per il carattere un valore uguale a quello dello stile
   non si scrive;
 - elenchi puntati e numerati su nove livelli;
-- le righe delle tabelle: aggiungere, spostare, togliere.
+- le tabelle: una nuova dal pulsante **Tabella** della striscia, scegliendo
+  righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
+  del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
+  colonne uguali e con i bordi. Le righe si aggiungono, si spostano e si
+  tolgono.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
@@ -74,7 +78,9 @@ Limiti attuali:
 ## OpenDocument
 
 Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con
-gli stessi limiti; un salto di pagina o di colonna però non si scrive. Il
+gli stessi limiti; un salto di pagina o di colonna però non si scrive, e una
+tabella nuova ha una colonna per cella della riga più lunga e celle con un
+bordo sottile (lo stile automatico `FubC…`). Il
 salvataggio riscrive soltanto i blocchi toccati: il resto di `content.xml` e
 ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
 per byte com'erano. Un ruolo, un'enfasi, un aspetto del carattere o una

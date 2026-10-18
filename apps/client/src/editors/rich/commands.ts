@@ -482,11 +482,46 @@ export const deleteRow: Command = (state, dispatch) => {
   return true;
 };
 
+// ── Le tabelle nuove ─────────────────────────────────────────────────────────
+
+/// Le colonne che una tabella di Word può avere.
+export const TABLE_MAX_COLS = 63;
+
+/// Una tabella `rows × cols` vuota, senza `k`: il formato la scrive con le sue
+/// proprietà predefinite (in Word, la griglia a tutta riga). Va dopo il blocco
+/// del cursore, o prima di un paragrafo vuoto, come in Word; un paragrafo la
+/// segue sempre, perché due tabelle accostate Word le fonde. Non dentro una
+/// tabella: le tabelle annidate non si creano qui.
+export function insertTable(rows: number, cols: number): Command {
+  return (state, dispatch) => {
+    const fits = (n: number, max: number) => Number.isInteger(n) && n >= 1 && n <= max;
+    if (!fits(rows, 1000) || !fits(cols, TABLE_MAX_COLS)) return false;
+    const { $from } = state.selection;
+    if ($from.depth < 1 || !$from.parent.inlineContent || rowAt($from)) return false;
+    if (dispatch) {
+      const block = $from.node(1);
+      const empty = block.type === para && block.content.size === 0;
+      const pos = empty ? $from.before(1) : $from.after(1);
+      const cells = () => Array.from({ length: cols }, () => cellType.create(null, para.create()));
+      const table = tableType.create(
+        null,
+        Array.from({ length: rows }, () => rowType.create(null, cells())),
+      );
+      const tr = state.tr.insert(pos, table);
+      const after = pos + table.nodeSize;
+      if (tr.doc.resolve(after).nodeAfter?.type !== para) tr.insert(after, para.create());
+      // Tabella, riga, cella, paragrafo: il cursore nella prima cella.
+      dispatch(tr.setSelection(TextSelection.create(tr.doc, pos + 4)).scrollIntoView());
+    }
+    return true;
+  };
+}
+
 /// Ridà un `k` alle righe e alle celle che ProseMirror ha creato riparando
 /// una tabella: quello della riga accanto, e per una cella quello della cella
 /// alla stessa colonna nella riga accanto, o della cella accanto. Una tabella
 /// non ha mai righe senza proprietà: le avrebbe il file, e qui non si
-/// inventano.
+/// inventano; una tabella nuova non ne ha in nessuna riga, e resta così.
 export const fillTableKeys = new Plugin({
   appendTransaction(transactions, _old, state) {
     if (!transactions.some((tr) => tr.docChanged)) return null;

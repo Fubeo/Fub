@@ -501,7 +501,7 @@ impl Reader<'_> {
             rows: movable,
         };
         Ok(Table {
-            k: blob::encode(&key)?,
+            k: Some(blob::encode(&key)?),
             rows,
         })
     }
@@ -565,13 +565,13 @@ impl Reader<'_> {
                     tail: self.src(tail)?,
                 };
                 Ok(Cell {
-                    k: blob::encode(&key)?,
+                    k: Some(blob::encode(&key)?),
                     blocks: self.cell_blocks(cell)?,
                 })
             })
             .collect::<Result<_, RichError>>()?;
         Ok(Row {
-            k: blob::encode(&key)?,
+            k: Some(blob::encode(&key)?),
             cells,
         })
     }

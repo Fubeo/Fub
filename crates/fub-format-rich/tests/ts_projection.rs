@@ -168,6 +168,23 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         })
         .expect("la tabella");
     assert_eq!(table.rows.len(), 3);
+    // La tabella nuova, dopo il paragrafo del salto: ora ha le sue proprietà.
+    let fresh = p
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            Block::Table(table) => Some(table),
+            _ => None,
+        })
+        .nth(1)
+        .expect("la tabella nuova");
+    assert_eq!(fresh.rows.len(), 2);
+    assert!(fresh.rows.iter().all(|row| row.cells.len() == 3));
+    assert!(fresh.k.is_some() && fresh.rows[1].cells[2].k.is_some());
+    let Block::Para(first) = &fresh.rows[0].cells[0].blocks[0] else {
+        panic!("la prima cella")
+    };
+    assert!(matches!(&first.c[..], [Inline::Text { x, .. }] if x == "nuova"));
     // La prosa torna alla prima riga dello stile e tiene lo spazio dopo.
     assert_eq!(
         para_of(&p, "Una prosa").p,

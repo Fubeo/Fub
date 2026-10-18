@@ -125,7 +125,8 @@ class Filter {
       return this.#admitsUnique(node.attrs.sect as string) ? [node] : [];
     }
     if (node.type === schema.nodes.table) {
-      const keysKnown = (n: PmNode) => this.context.known.has(n.attrs.k as string);
+      // Una tabella nuova non ha ancora `k`: resta una tabella.
+      const keysKnown = (n: PmNode) => n.attrs.k === null || this.context.known.has(n.attrs.k as string);
       let whole = keysKnown(node);
       node.forEach((row) => {
         whole &&= keysKnown(row);
