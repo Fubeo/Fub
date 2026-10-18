@@ -188,37 +188,27 @@ export const PACCHETTI: readonly Pacchetto[] = [
     nota: "Il comando della palette che crea un disegno vuoto nel vault e lo apre.",
   },
   {
-    codice: "FD-304",
-    titolo: "La sessione live nella shell",
-    stato: "shell",
-    pr: 117,
-    nota:
-      "Nella shell: apri Disegni/Casa.svg, poi la palette (Ctrl+Maiusc+P) e «Avvia la sessione live». Compare il QR; " +
-      "dopo cinque secondi un tablet finto dell'anteprima si collega e disegna tre tratti: l'inchiostro arriva prima del commit, " +
-      "«Segui il tablet» porta la vista dove disegna, e l'indicatore dice latenze e commit. Il tablet vero è FD-305.",
-  },
-  {
     codice: "FD-502",
     titolo: "Profilo pdf",
-    stato: "revisione",
-    pr: 118,
-    nota:
-      "Annotare un PDF del vault: le pagine come sfondo, e il PDF resta com'è. Non è ancora in questa pagina: " +
-      "usa gli stessi tasti di FD-207 (Invio, frecce, PagSu e PagGiù), e come si dividono lo decide la revisione.",
+    stato: "corso",
+    nota: "Annotare un PDF del vault: le pagine come sfondo, e il PDF resta com'è.",
+  },
+  {
+    codice: "FD-304",
+    titolo: "La sessione live nella shell",
+    stato: "corso",
+    nota: "Il tablet come penna del PC: l'inchiostro effimero, il QR, «Segui il tablet».",
   },
   {
     codice: "FD-210",
     titolo: "Banco del disegno",
-    stato: "revisione",
-    pr: 120,
-    nota:
-      "Prestazioni, fotografie e accessibilità della superficie misurate nella CI. Per aprire i disegni del banco: " +
-      "/index.html?drawFixtures=sparse,dense,ink mette nel vault Banco/sparse.svg, Banco/dense.svg (5 MB) e Banco/ink.svg (2 000 tratti a inchiostro).",
+    stato: "corso",
+    nota: "Prestazioni, fotografie e accessibilità della superficie misurate nella CI.",
   },
   {
     codice: "FD-503",
     titolo: "Export del PDF annotato",
-    stato: "corso",
+    stato: "prossimo",
     nota: "Un PDF nuovo con le annotazioni; l'originale non si scrive mai.",
   },
 ];
