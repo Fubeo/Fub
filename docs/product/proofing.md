@@ -21,8 +21,9 @@ Una correzione si offre soltanto quando la parola sta tutta in un tratto di
 testo semplice: un segno che attraversa il markup (`**`, `_`) si mostra ma non
 si corregge. In sola lettura le correzioni non ci sono.
 
-Nei documenti di Word il correttore segna allo stesso modo il testo di ogni
-paragrafo, anche nelle celle; immagini, campi e note contano come separatori.
+Nei documenti di videoscrittura il correttore segna allo stesso modo il testo
+di ogni paragrafo, anche nelle celle; immagini, campi e note contano come
+separatori.
 Le correzioni, «Aggiungi al dizionario» e «Ignora» stanno nel menu contestuale
 del segno, dal clic destro o dal tasto del menu contestuale. La lingua
 dichiarata dal documento vale come il `lang` di una nota.

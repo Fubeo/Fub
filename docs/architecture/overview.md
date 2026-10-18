@@ -98,8 +98,9 @@ flowchart TD
 ```
 
 I crate di WordCraft vendorizzati in `vendor/wordcraft/` sono codice di terzi:
-li usano soltanto il correttore della feature `proof` e `fub-format-rich`, e
-nessuno di loro dipende da Fub. Il secondo blocco è lo stesso grafo, confrontato
+li usano soltanto il correttore della feature `proof` e `fub-format-rich` (più
+i test di `fub-host`, che scrivono `.odt` con l'esportatore), e nessuno di loro
+dipende da Fub. Il secondo blocco è lo stesso grafo, confrontato
 con lo stesso test.
 
 ```mermaid
@@ -108,6 +109,7 @@ flowchart LR
     %% Il seguito del grafo qui sopra: i crate di WordCraft e chi li usa.
 
     features["fub-features"]
+    host["fub-host"]
     rich["fub-format-rich"]
     proof["wordcraft-proof"]
     wdoc["wordcraft-doc"]
@@ -117,8 +119,11 @@ flowchart LR
     wgeom["wordcraft-geom"]
 
     features --> proof
+    host -.-> wformats
     rich --> wdoc
+    rich --> wdocbin
     rich --> wdocx
+    rich --> wformats
     wdoc --> wgeom
     wdocx --> wdoc
     wdocx --> wgeom

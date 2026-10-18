@@ -113,6 +113,8 @@ interface Lease {
 
 /// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
 const CHUNK_MAX = 64 * 1024;
+/// I formati di `fub-format-rich` con la feature `rich` dell'host.
+const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 
 /// Una voce del cestino finto.
 interface Trashed {
@@ -324,13 +326,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
     if (id.endsWith(".docx")) return "docx";
+    if (id.endsWith(".odt")) return "odt";
+    if (id.endsWith(".rtf")) return "rtf";
+    if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
     return null;
   }
 
-  /// Come il registro dei formati dell'host: un documento di Word il provider
-  /// lo vuole a byte, e la shell ne riceve la proiezione (`fub-format-rich`).
+  /// Come il registro dei formati dell'host: un documento di videoscrittura il
+  /// provider lo vuole a byte, e la shell ne riceve la proiezione
+  /// (`fub-format-rich`).
   function sourceKindOf(id: string): "text" | "bytes" {
-    return formatOf(id) === "docx" ? "bytes" : "text";
+    return RICH_FAKE_FORMATS.has(formatOf(id) ?? "") ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -416,9 +422,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
   /// legge dalla risposta e non dalla propria testa.
   function entryKind(id: string): VaultEntry["kind"] {
-    return id.endsWith(".md") || id.endsWith(".markdown") || id.endsWith(".fubsheet") || id.endsWith(".docx")
-      ? "document"
-      : "asset";
+    const format = formatOf(id);
+    return format !== null && format !== "canvas" && format !== "base" ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -742,7 +747,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "docx", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
+        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id, vault) => {

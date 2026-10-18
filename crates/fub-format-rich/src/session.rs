@@ -3,7 +3,10 @@
 //! Le due operazioni sono pure: byte in, byte o JSON out, senza stato fra una
 //! chiamata e l'altra. Chi le compone (l'host) tiene la revisione e il CAS.
 //!
-//! **Aprire** controlla due andate e ritorni prima di permettere di scrivere:
+//! **Aprire** chiede prima al codec se il documento letto descrive tutto il
+//! file ([`Codec::lossless`]): un importatore apre in sola lettura con
+//! [`ReadOnly::Import`]. Poi controlla due andate e ritorni prima di permettere
+//! di scrivere:
 //! la proiezione deve tornare al documento identico, e il documento deve
 //! rileggersi identico dopo una scrittura del codec. Se uno dei due fallisce,
 //! la proiezione esce lo stesso, con [`ReadOnly`]: si legge, non si scrive.
@@ -35,6 +38,8 @@ pub enum ReadOnly {
     Projection,
     /// Non si rilegge identico dopo una scrittura del codec.
     Codec,
+    /// È stato letto da un importatore che non riporta il file intero.
+    Import,
 }
 
 /// Un documento aperto.
@@ -61,6 +66,7 @@ pub fn open(codec: Codec, bytes: &[u8]) -> Result<Opened, RichError> {
     let mut projection = projection::project(&normal)?;
     let readonly = match policy(&normal) {
         Some(reason) => Some(reason),
+        None if !codec.lossless() => Some(ReadOnly::Import),
         None => fidelity(codec, &projection, &normal)?,
     };
     projection.readonly = readonly;
@@ -76,6 +82,9 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
     let base = normalized(&codec.read(current)?);
     if let Some(reason) = policy(&base) {
         return Err(RichError::ReadOnly(reason));
+    }
+    if !codec.lossless() {
+        return Err(RichError::ReadOnly(ReadOnly::Import));
     }
     let projection = Projection::from_json(json)?;
     // Aperto in sola lettura per una ragione che l'apertura ha misurato: come

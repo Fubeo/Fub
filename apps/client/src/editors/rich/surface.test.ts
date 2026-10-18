@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RICH_ACTIONS } from "./commands";
 import * as engineModule from "./engine";
 import { mountRichSurface, RICH_ACTION_IDS, RICH_CHORDS, RICH_PROFILE } from "./surface";
+import { t } from "../../i18n/strings";
 
 afterEach(() => document.body.replaceChildren());
 
@@ -101,6 +102,16 @@ describe("la superficie ricca", () => {
     expect(notice.hidden).toBe(false);
     expect(surface.editorActions!.editable()).toBe(false);
     expect(parent.querySelector(".rich-content")?.getAttribute("contenteditable")).toBe("false");
+    surface.destroy();
+  });
+
+  it("un documento importato si legge e dice perché non si scrive", async () => {
+    const { parent, surface } = mount(() => Promise.resolve(engineModule));
+    await flush();
+    surface.buffer!.setDoc(JSON.stringify({ ...JSON.parse(SOURCE), readonly: "import" }));
+    expect(parent.querySelector<HTMLElement>(".rich-notice")!.textContent).toBe(t("rich.readonly.import"));
+    expect(parent.querySelector(".rich-content")?.textContent).toContain("ciao");
+    expect(surface.editorActions!.editable()).toBe(false);
     surface.destroy();
   });
 

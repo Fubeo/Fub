@@ -242,6 +242,7 @@ const IT = { // --- la scocca --------------------------------------------------
 "rich.readonly.protected": "Sola lettura: il documento è protetto contro le modifiche.",
 "rich.readonly.projection": "Sola lettura: una parte del documento non tornerebbe identica salvandolo da qui.",
 "rich.readonly.codec": "Sola lettura: il documento non si rileggerebbe identico dopo un salvataggio da qui.",
+"rich.readonly.import": "Sola lettura: Fub legge questo formato ma non ne riporta tutto il contenuto, e salvandolo da qui si perderebbe il resto.",
 
 // --- la ricerca --------------------------------------------------------
 "search.placeholder": "Cerca nel vault…",
@@ -1655,6 +1656,7 @@ const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the editor",
 "rich.readonly.protected": "Read-only: the document is protected against editing.",
 "rich.readonly.projection": "Read-only: part of the document would not come back identical if saved from here.",
 "rich.readonly.codec": "Read-only: the document would not read back identical after saving from here.",
+"rich.readonly.import": "Read-only: Fub reads this format but does not carry all of its content, and saving from here would lose the rest.",
 
 "search.placeholder": "Search the vault…",
 "search.hint": "Search the vault",

@@ -32,7 +32,10 @@ pub(crate) enum Codec {}
 pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
     #[cfg(feature = "rich")]
     {
-        vec![fub_format_rich::RichProvider::boxed(Codec::Docx)]
+        Codec::ALL
+            .into_iter()
+            .map(fub_format_rich::RichProvider::boxed)
+            .collect()
     }
     #[cfg(not(feature = "rich"))]
     {
@@ -152,6 +155,9 @@ fn plugin_error(doc: &DocId, error: fub_format_rich::RichError) -> PluginError {
         RichError::DuplicateStory(_) => {
             PluginError::BadArgs(Text::message("host.rich.duplicate", vec![doc_arg()]))
         }
+        RichError::NoWriter(_) => {
+            PluginError::PermissionDenied(Text::message("host.rich.no_writer", vec![doc_arg()]))
+        }
         RichError::Fidelity => {
             PluginError::Internal(Text::message("host.rich.fidelity", vec![doc_arg()]))
         }
@@ -171,5 +177,6 @@ fn read_only_name(reason: fub_format_rich::ReadOnly) -> &'static str {
         ReadOnly::Protected => "protected",
         ReadOnly::Projection => "projection",
         ReadOnly::Codec => "codec",
+        ReadOnly::Import => "import",
     }
 }

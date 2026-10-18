@@ -150,3 +150,53 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         .iter()
         .any(|b| matches!(b, Block::Para(para) if para.sect.is_some())));
 }
+
+/// Ogni motivo di sola lettura, una volta: il `match` senza ramo di riserva
+/// non compila finché un motivo nuovo non entra anche qui.
+fn every_read_only_reason() -> Vec<fub_format_rich::ReadOnly> {
+    use fub_format_rich::ReadOnly;
+    let all = [
+        ReadOnly::Revisions,
+        ReadOnly::TrackChanges,
+        ReadOnly::Protected,
+        ReadOnly::Projection,
+        ReadOnly::Codec,
+        ReadOnly::Import,
+    ];
+    for reason in all {
+        match reason {
+            ReadOnly::Revisions
+            | ReadOnly::TrackChanges
+            | ReadOnly::Protected
+            | ReadOnly::Projection
+            | ReadOnly::Codec
+            | ReadOnly::Import => {}
+        }
+    }
+    all.to_vec()
+}
+
+#[test]
+fn la_shell_conosce_ogni_motivo_di_sola_lettura() {
+    // `READ_ONLY_REASONS` in `projection.ts` è la lista con cui la shell
+    // accetta il campo: un motivo che manca lì rende illeggibile la proiezione.
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/editors/rich/projection.ts");
+    let source = std::fs::read_to_string(&path).unwrap();
+    let start = source
+        .find("export const READ_ONLY_REASONS")
+        .expect("READ_ONLY_REASONS in projection.ts");
+    let list = &source[start..start + source[start..].find("];").unwrap()];
+    let listed: Vec<&str> = list.split('"').skip(1).step_by(2).collect();
+    let wanted: Vec<String> = every_read_only_reason()
+        .into_iter()
+        .map(|reason| {
+            serde_json::to_value(reason)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string()
+        })
+        .collect();
+    assert_eq!(listed, wanted, "{}", path.display());
+}

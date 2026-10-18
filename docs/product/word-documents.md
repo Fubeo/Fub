@@ -2,8 +2,9 @@
 
 > **Per chi:** chi scrive documenti di Word in un vault e chi modifica la loro
 > superficie.
-> **Risultato:** sapere cosa si modifica in un `.docx`, cosa resta nel file e
-> quando un documento si apre soltanto in lettura.
+> **Risultato:** sapere cosa si modifica in un `.docx`, cosa resta nel file,
+> quando un documento si apre soltanto in lettura e come si leggono `.odt`,
+> `.rtf` e `.doc`.
 
 Un `.docx` si apre in una superficie di scrittura, con la stessa carta, la
 stessa barra di formattazione, le stesse scorciatoie e lo stesso correttore
@@ -42,13 +43,28 @@ Limiti attuali:
   originali e toglie le immagini che il testo non mostra più. Il contenuto non
   cambia, ma il file salvato non è identico byte per byte.
 
+## OpenDocument, RTF e Word 97-2003
+
+Un `.odt`, un `.rtf`, un `.doc` o un `.dot` si aprono nella stessa superficie,
+sempre **in sola lettura**: si leggono, si cercano, compaiono nell'outline e
+passano dal correttore. Li legge un importatore di WordCraft, che porta testo,
+titoli, enfasi, elenchi, tabelle e link e lascia indietro il resto (note,
+commenti, caselle di testo, forme, gran parte degli stili). Riscrivere il file
+da lì perderebbe ciò che l'importatore non ha letto, quindi la superficie lo
+dice in testa e non scrive; un file nuovo di questi formati non si crea.
+
+Un `.doc` si legge per la sua firma: un `.docx` o un RTF rinominati si aprono
+come tali, sempre in sola lettura. Un `.doc` cifrato con una password non si
+apre.
+
 ## Dove si trova
 
-- `crates/fub-format-rich/`: codec, provider e proiezione modificabile.
+- `crates/fub-format-rich/`: codec e importatori, provider e proiezione
+  modificabile.
 - `crates/fub-host/src/rich.rs`: la composizione alle porte dei documenti.
 - `apps/client/src/editors/rich/`: la superficie.
-- `vendor/wordcraft/`: modello e codec di WordCraft, con provenienza e licenza
-  in `UPSTREAM.md`.
+- `vendor/wordcraft/`: modello, codec e importatori di WordCraft, con
+  provenienza e licenza in `UPSTREAM.md`.
 
 Il disegno del confine è in
 [Superfici dell'editor](../architecture/editor-surfaces.md#documenti-di-videoscrittura-la-superficie-ricca),

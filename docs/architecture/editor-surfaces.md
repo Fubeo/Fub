@@ -341,10 +341,11 @@ IPC](../reference/ipc-contract.md). Nessuna battuta genera IPC o WASM.
 
 ### Documenti di videoscrittura: la superficie ricca
 
-I documenti di Word (`format_id` `docx`) hanno una famiglia propria, `rich`
-(owner `fub.shell.rich`, profilo `document`), risolta per formato esatto prima
-della specie `bytes`. La sorgente della sessione è la **proiezione** che l'host
-dà del file ([contratto IPC](../reference/ipc-contract.md#documenti-di-videoscrittura)):
+I documenti di videoscrittura (formati `docx`, `odt`, `rtf`, `doc`) hanno una
+famiglia propria, `rich` (owner `fub.shell.rich`, profilo `document`), risolta
+per formato esatto prima della specie `bytes`. La sorgente della sessione è la
+**proiezione** che l'host dà del file
+([contratto IPC](../reference/ipc-contract.md#documenti-di-videoscrittura)):
 la `DocumentSession`, il salvataggio, le bozze, i conflitti e gli eventi
 esterni sono quelli di ogni documento testuale, e nessuna battuta attraversa
 l'IPC.
@@ -366,10 +367,9 @@ l'IPC.
   propria cronologia `prosemirror-history`; ciò che arriva da un altro riquadro
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
 
-Gli import `prosemirror-*` stanno sotto `editors/rich/`, come CodeMirror sotto
-`editors/text/`; a differenza di CodeMirror, nessun guard lo verifica ancora.
-Il Markdown non dipende da niente di questa famiglia, e
-spenta la feature `rich` dell'host un `.docx` torna un file a byte.
+Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
+verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;
+senza la feature `rich` dell'host questi documenti tornano file a byte.
 
 ### Correttore condiviso
 

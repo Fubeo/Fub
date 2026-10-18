@@ -1,5 +1,5 @@
 // La proiezione modificabile dei documenti di videoscrittura, versione 1: il
-// testo che il buffer della sessione porta per un `.docx`.
+// testo che il buffer della sessione porta per uno di quei documenti.
 //
 // La forma la possiede `fub-format-rich` (`crates/fub-format-rich/src/projection.rs`):
 // qui c'è il suo specchio, senza ProseMirror, perché leggerla e riscriverla
@@ -19,13 +19,14 @@
 export const PROJECTION_FORMAT = "fub-rich";
 export const PROJECTION_VERSION = 1;
 
-export type ReadOnlyReason = "revisions" | "track_changes" | "protected" | "projection" | "codec";
+export type ReadOnlyReason = "revisions" | "track_changes" | "protected" | "projection" | "codec" | "import";
 export const READ_ONLY_REASONS: readonly ReadOnlyReason[] = [
   "revisions",
   "track_changes",
   "protected",
   "projection",
   "codec",
+  "import",
 ];
 
 export type Role =

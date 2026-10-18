@@ -21,8 +21,14 @@ import type { ReadOnlyReason } from "./projection";
 export const RICH_OWNER = "fub.shell.rich";
 export const RICH_FAMILY = "rich";
 export const RICH_PROFILE = "document";
-/// I formati che questa superficie scrive, con il loro profilo.
-export const RICH_FORMATS: Readonly<Record<string, string>> = { docx: RICH_PROFILE };
+/// I formati che questa superficie apre, con il loro profilo. Se un documento
+/// si scrive lo dice la sua proiezione (`readonly`), non il formato.
+export const RICH_FORMATS: Readonly<Record<string, string>> = {
+  docx: RICH_PROFILE,
+  odt: RICH_PROFILE,
+  rtf: RICH_PROFILE,
+  doc: RICH_PROFILE,
+};
 
 /// Gli id delle azioni che la superficie esegue, noti prima che il motore
 /// arrivi: la barra disegna i pulsanti subito, spenti finché non scrive.
@@ -76,6 +82,7 @@ const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {
   protected: "rich.readonly.protected",
   projection: "rich.readonly.projection",
   codec: "rich.readonly.codec",
+  import: "rich.readonly.import",
 };
 
 export interface RichSurfaceCallbacks {

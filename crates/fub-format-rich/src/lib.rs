@@ -1,9 +1,13 @@
-//! I documenti di videoscrittura — per ora Word (`.docx`) — letti e scritti con
-//! il modello e il codec di WordCraft (`vendor/wordcraft`).
+//! I documenti di videoscrittura — Word (`.docx`), OpenDocument (`.odt`), RTF e
+//! Word 97-2003 (`.doc`, `.dot`) — letti, e dove si può scritti, con il modello
+//! e i codec di WordCraft (`vendor/wordcraft`).
 //!
 //! Il crate possiede tre cose, e l'host le compone senza possederle:
 //!
-//! - il **codec**, [`Codec`]: byte del file ↔ [`wordcraft_doc::Document`];
+//! - il **codec**, [`Codec`]: byte del file ↔ [`wordcraft_doc::Document`]. Il
+//!   codec Word riporta il file intero; gli altri sono **importatori** che
+//!   leggono il modello di WordCraft e lasciano indietro ciò che non conoscono,
+//!   quindi i loro documenti si leggono e non si scrivono ([`Codec::lossless`]);
 //! - il **provider di formato**, [`RichProvider`]: un formato a byte che dà al
 //!   kernel il modello comune (titoli, paragrafi, elenchi, tabelle, link) per
 //!   la ricerca, l'outline e l'anteprima;
@@ -34,6 +38,12 @@ pub use session::{blank, open, save, Opened, ReadOnly, Saved};
 
 /// L'id del formato Word.
 pub const DOCX_FORMAT_ID: &str = "docx";
+/// L'id del formato OpenDocument Text.
+pub const ODT_FORMAT_ID: &str = "odt";
+/// L'id del formato RTF.
+pub const RTF_FORMAT_ID: &str = "rtf";
+/// L'id del formato Word 97-2003, documenti e modelli.
+pub const DOC_FORMAT_ID: &str = "doc";
 /// Il file più grande che si apre: lo stesso ordine di grandezza dei limiti di
 /// WordCraft sulle parti del pacchetto.
 pub const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
@@ -43,31 +53,47 @@ pub const MAX_SOURCE_BYTES: usize = 256 * 1024 * 1024;
 pub enum Codec {
     /// WordprocessingML (`.docx`).
     Docx,
+    /// OpenDocument Text (`.odt`): l'importatore di WordCraft, che non riporta
+    /// note, commenti, caselle, forme e gran parte degli stili del file.
+    Odt,
+    /// Rich Text Format (`.rtf`): l'importatore di WordCraft.
+    Rtf,
+    /// Word 97-2003 (`.doc`, `.dot`): si legge, non si scrive.
+    Doc,
 }
 
 impl Codec {
+    /// Tutti i codec, nell'ordine in cui l'host li registra.
+    pub const ALL: [Codec; 4] = [Codec::Docx, Codec::Odt, Codec::Rtf, Codec::Doc];
+
     /// Il codec dell'id di formato, se è uno di questi.
     pub fn of_format(format_id: &str) -> Option<Codec> {
-        match format_id {
-            DOCX_FORMAT_ID => Some(Codec::Docx),
-            _ => None,
-        }
+        Codec::ALL
+            .into_iter()
+            .find(|codec| codec.format_id() == format_id)
     }
 
     pub fn format_id(self) -> &'static str {
         match self {
             Codec::Docx => DOCX_FORMAT_ID,
+            Codec::Odt => ODT_FORMAT_ID,
+            Codec::Rtf => RTF_FORMAT_ID,
+            Codec::Doc => DOC_FORMAT_ID,
         }
     }
 
     fn descriptor(self) -> FormatDescriptor {
-        match self {
-            Codec::Docx => FormatDescriptor {
-                id: DOCX_FORMAT_ID.to_string(),
-                name: "Word".to_string(),
-                extensions: vec!["docx".to_string()],
-                source: SourceKind::Bytes,
-            },
+        let (name, extensions): (&str, &[&str]) = match self {
+            Codec::Docx => ("Word", &["docx"]),
+            Codec::Odt => ("OpenDocument", &["odt"]),
+            Codec::Rtf => ("RTF", &["rtf"]),
+            Codec::Doc => ("Word 97-2003", &["doc", "dot"]),
+        };
+        FormatDescriptor {
+            id: self.format_id().to_string(),
+            name: name.to_string(),
+            extensions: extensions.iter().map(|e| e.to_string()).collect(),
+            source: SourceKind::Bytes,
         }
     }
 
@@ -76,23 +102,67 @@ impl Codec {
         if bytes.len() > MAX_SOURCE_BYTES {
             return Err(RichError::TooLarge(bytes.len()));
         }
-        match self {
-            Codec::Docx => wordcraft_docx::read(bytes).map_err(|error| match error {
-                wordcraft_docx::DocxError::PasswordRequired
-                | wordcraft_docx::DocxError::WrongPassword => RichError::Encrypted,
-                other => RichError::Codec(other.to_string()),
-            }),
+        let mut document = match self {
+            Codec::Docx => read_docx(bytes)?,
+            Codec::Odt => wordcraft_formats::odt::import(bytes).map_err(RichError::Codec)?,
+            Codec::Rtf => wordcraft_formats::rtf::import(bytes).map_err(RichError::Codec)?,
+            Codec::Doc => read_doc(bytes)?,
+        };
+        if self != Codec::Docx {
+            // Come quando WordCraft apre un file importato: un documento
+            // senza blocchi ha comunque un paragrafo dove scrivere.
+            document.ensure_nonempty();
         }
+        Ok(document)
     }
 
-    /// Scrive un documento nei byte del file.
+    /// Scrive un documento nei byte del file. Soltanto il codec Word scrive:
+    /// gli esportatori di WordCraft per gli altri formati riscrivono il file
+    /// dal modello, e ciò che l'importatore ha lasciato indietro andrebbe perso.
     pub fn write(self, document: &Document) -> Result<Vec<u8>, RichError> {
         match self {
             Codec::Docx => {
                 wordcraft_docx::write(document).map_err(|error| RichError::Codec(error.to_string()))
             }
+            Codec::Odt | Codec::Rtf | Codec::Doc => Err(RichError::NoWriter(self.format_id())),
         }
     }
+
+    /// Se il documento letto descrive tutto il file. Il codec Word lo dimostra
+    /// a ogni apertura rileggendo (vedi [`session`]); un importatore non lo
+    /// promette mai.
+    pub fn lossless(self) -> bool {
+        matches!(self, Codec::Docx)
+    }
+}
+
+fn read_docx(bytes: &[u8]) -> Result<Document, RichError> {
+    wordcraft_docx::read(bytes).map_err(|error| match error {
+        wordcraft_docx::DocxError::PasswordRequired | wordcraft_docx::DocxError::WrongPassword => {
+            RichError::Encrypted
+        }
+        other => RichError::Codec(other.to_string()),
+    })
+}
+
+/// Un file `.doc` è spesso altro sotto lo stesso nome: un Word cifrato (OOXML
+/// in un contenitore OLE), un `.docx` o un RTF rinominati. Come WordCraft, lo
+/// legge chi ne riconosce la firma.
+fn read_doc(bytes: &[u8]) -> Result<Document, RichError> {
+    if wordcraft_docx::is_encrypted(bytes) || wordcraft_docbin::is_encrypted(bytes) {
+        return Err(RichError::Encrypted);
+    }
+    if bytes.starts_with(b"PK\x03\x04") {
+        return read_docx(bytes);
+    }
+    if bytes.starts_with(b"{\\rtf") {
+        return wordcraft_formats::rtf::import(bytes).map_err(RichError::Codec);
+    }
+    wordcraft_docbin::read(bytes).map_err(|error| match error {
+        wordcraft_docbin::DocbinError::PasswordRequired
+        | wordcraft_docbin::DocbinError::WrongPassword => RichError::Encrypted,
+        other => RichError::Codec(other.to_string()),
+    })
 }
 
 /// Perché un documento non si legge, non si proietta o non si salva.
@@ -123,6 +193,9 @@ pub enum RichError {
     /// Due oggetti della proiezione mostrano la stessa nota o casella di testo.
     #[error("rich projection shows story {0} twice")]
     DuplicateStory(u32),
+    /// Il formato si legge ma non si scrive.
+    #[error("rich format {0} has no writer")]
+    NoWriter(&'static str),
     /// Il documento da scrivere non si rilegge uguale: non si scrive.
     #[error("rich document would not read back as written")]
     Fidelity,

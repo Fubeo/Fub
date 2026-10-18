@@ -309,3 +309,92 @@ fn una_proiezione_in_sola_lettura_non_si_salva_e_lo_dice() {
     assert_eq!(message.key, "host.rich.readonly.projection");
     assert_eq!(vault.on_disk(), before);
 }
+
+/// Un `.odt` con due paragrafi, scritto dall'esportatore di WordCraft da un
+/// RTF: l'host non conosce il modello di WordCraft, e il test nemmeno.
+fn odt() -> Vec<u8> {
+    let rtf = br"{\rtf1\ansi\pard Verbale\par\pard Presenti tutti.\par}";
+    let document = wordcraft_formats::rtf::import(rtf).unwrap();
+    wordcraft_formats::odt::export(&document).unwrap()
+}
+
+fn denied(result: Result<Revision, PluginError>) -> String {
+    let Err(PluginError::PermissionDenied(fub_abi::Text::Message(message))) = result else {
+        panic!("{result:?}")
+    };
+    message.key
+}
+
+#[test]
+fn un_odt_si_legge_e_si_cerca_ma_non_si_scrive() {
+    let vault = Vault::with_docx(&["Word."]);
+    let verbale = DocId::new("Verbale.odt");
+    let bytes = odt();
+    std::fs::write(vault.root.join("Verbale.odt"), &bytes).unwrap();
+    vault.host.wait_indexed(None).expect("indexed");
+    let (text, revision, format) = vault
+        .host
+        .read_document_with_format(None, &verbale)
+        .unwrap();
+    assert_eq!(format.unwrap().descriptor.id, "odt");
+    assert_eq!(revision, Revision::of_bytes(&bytes));
+    let mut projection = Projection::from_json(&text).unwrap();
+    assert_eq!(projection.readonly, Some(fub_format_rich::ReadOnly::Import));
+    assert_eq!(texts(&projection), ["Verbale", "Presenti tutti."]);
+    let model = format!("{:?}", vault.host.read_model(None, &verbale).unwrap().body);
+    assert!(model.contains("Presenti tutti."), "{model}");
+
+    // Senza il campo `readonly` è il file stesso a rifiutare la scrittura.
+    projection.readonly = None;
+    projection.blocks.push(paragraph("Aggiunto."));
+    let result = vault.host.write_document(
+        None,
+        &verbale,
+        &projection.to_json().unwrap(),
+        WriteBase::DescendsFrom(revision),
+    );
+    assert_eq!(denied(result), "host.rich.readonly.import");
+    assert_eq!(
+        std::fs::read(vault.root.join("Verbale.odt")).unwrap(),
+        bytes
+    );
+}
+
+#[test]
+fn un_odt_nuovo_non_si_crea_e_lo_dice() {
+    let vault = Vault::with_docx(&["Word."]);
+    let projection = vault
+        .host
+        .read_document_with_format(None, &lettera())
+        .unwrap()
+        .0;
+    let result = vault.host.write_document(
+        None,
+        &DocId::new("Nuovo.odt"),
+        &projection,
+        WriteBase::Dictated,
+    );
+    assert_eq!(denied(result), "host.rich.no_writer");
+    assert!(!vault.root.join("Nuovo.odt").exists());
+}
+
+#[test]
+fn un_rtf_e_un_doc_si_leggono_in_sola_lettura() {
+    let vault = Vault::with_docx(&["Word."]);
+    let rtf = br"{\rtf1\ansi\pard Appunto\par}";
+    std::fs::write(vault.root.join("Appunto.rtf"), rtf).unwrap();
+    // Un `.doc` che è un RTF rinominato, come capita: lo legge chi ne
+    // riconosce la firma.
+    std::fs::write(vault.root.join("Vecchio.doc"), rtf).unwrap();
+    vault.host.wait_indexed(None).expect("indexed");
+    for (name, id) in [("Appunto.rtf", "rtf"), ("Vecchio.doc", "doc")] {
+        let (text, _, format) = vault
+            .host
+            .read_document_with_format(None, &DocId::new(name))
+            .unwrap();
+        assert_eq!(format.unwrap().descriptor.id, id);
+        let projection = Projection::from_json(&text).unwrap();
+        assert_eq!(projection.readonly, Some(fub_format_rich::ReadOnly::Import));
+        assert_eq!(texts(&projection), ["Appunto"]);
+    }
+}

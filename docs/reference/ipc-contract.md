@@ -212,9 +212,9 @@ l'id, il titolo e la descrizione del comando.
 
 ## Documenti di videoscrittura
 
-Un documento di un formato di `fub-format-rich` (`docx`, con la feature
-`rich` di `fub-host`) passa dalle stesse porte dei documenti, senza una porta
-in più:
+Un documento di un formato di `fub-format-rich` (`docx`, `odt`, `rtf` e
+`doc`, quest'ultimo per `.doc` e `.dot`, con la feature `rich` di `fub-host`)
+passa dalle stesse porte dei documenti, senza una porta in più:
 
 - `read_document` restituisce in `text` la **proiezione** del file: JSON
   chiuso e versionato (`"format": "fub-rich"`, `"version": 1`), con
@@ -230,7 +230,10 @@ in più:
 
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
-`projection`, `codec`) e ogni scrittura viene rifiutata con il suo motivo.
+`projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
+motivo. `import` è il motivo di ogni documento `odt`, `rtf` e `doc`: lo legge
+un importatore che non riporta il file intero. Un file nuovo di questi formati
+non si crea (`host.rich.no_writer`).
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla

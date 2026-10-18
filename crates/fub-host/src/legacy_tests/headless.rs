@@ -83,11 +83,13 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     let mut docs = open.read().unwrap().documents();
     docs.sort();
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
-    // `docx` c'è quando l'host è costruito con i documenti di Word (feature
-    // `rich`), e allora lo dichiara il suo provider come gli altri.
+    // `docx`, `odt`, `rtf`, `doc` e `dot` ci sono quando l'host è costruito
+    // con i documenti di videoscrittura (feature `rich`), e allora li
+    // dichiarano i loro provider come gli altri.
     let mut extensions = vec!["base", "canvas", "fubsheet", "markdown", "md"];
     if cfg!(feature = "rich") {
-        extensions.insert(2, "docx");
+        extensions.extend(["doc", "docx", "dot", "odt", "rtf"]);
+        extensions.sort();
     }
     assert_eq!(
         info.extensions, extensions,
