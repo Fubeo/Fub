@@ -487,6 +487,51 @@ fn una_tabella_nuova_è_la_griglia_di_word() {
 }
 
 #[test]
+fn una_colonna_aggiunta_o_tolta_rifà_la_griglia() {
+    let file = bytes(&sample());
+    let before = read(&file);
+    let WcBlock::Table(was) = &*before.body[4] else {
+        panic!()
+    };
+    let total: f32 = was.grid.iter().sum();
+    let mut p = projection(&file);
+    let Block::Table(table) = &mut p.blocks[4] else {
+        panic!()
+    };
+    // Una colonna in mezzo, come la aggiunge la shell: copia della vicina.
+    for row in &mut table.rows {
+        let mut cell = row.cells[0].clone();
+        cell.blocks.clear();
+        row.cells.insert(1, cell);
+    }
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let WcBlock::Table(now) = &*after.body[4] else {
+        panic!()
+    };
+    assert_eq!(now.grid.len(), was.grid.len() + 1);
+    assert!((now.grid.iter().sum::<f32>() - total).abs() < 0.5);
+    for row in &now.rows {
+        for (c, cell) in row.cells.iter().enumerate() {
+            assert!((cell.props.width.unwrap() - now.grid[c]).abs() < 0.01);
+        }
+    }
+    // E di nuovo via: la griglia torna a due colonne, larga uguale.
+    let mut p = projection(&out);
+    let Block::Table(table) = &mut p.blocks[4] else {
+        panic!()
+    };
+    for row in &mut table.rows {
+        row.cells.remove(1);
+    }
+    let WcBlock::Table(back) = &*read(&saved(&out, &p)).body[4] else {
+        panic!()
+    };
+    assert_eq!(back.grid.len(), was.grid.len());
+    assert!((back.grid.iter().sum::<f32>() - total).abs() < 0.5);
+}
+
+#[test]
 fn togliere_un_oggetto_lo_toglie_e_un_oggetto_estraneo_è_rifiutato() {
     let file = bytes(&sample());
     let mut p = projection(&file);

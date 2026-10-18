@@ -89,6 +89,9 @@ describe("la proiezione del codec", () => {
     // Una riga dopo la prima della tabella.
     e.select(find(e.state.doc, "cella 00"));
     expect(e.run("markdown.table.row.after")).toBe(true);
+    // E una colonna a destra della prima.
+    e.select(find(e.state.doc, "cella 00"));
+    expect(e.run("markdown.table.column.after")).toBe(true);
     // Il paragrafo della sezione: centrato, rientrato, interlinea 1,5 e
     // spazio prima; la prosa torna alla prima riga dello stile.
     e.select(find(e.state.doc, "Fine della prima sezione"));

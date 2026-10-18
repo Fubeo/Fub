@@ -81,6 +81,12 @@ export const RICH_ACTION_IDS: ReadonlySet<string> = new Set([
   "markdown.table.row.up",
   "markdown.table.row.down",
   "markdown.table.row.delete",
+  "markdown.table",
+  "markdown.table.column.before",
+  "markdown.table.column.after",
+  "markdown.table.column.left",
+  "markdown.table.column.right",
+  "markdown.table.column.delete",
 ]);
 
 export const RICH_CHORDS: Readonly<Record<string, string>> = {
@@ -116,6 +122,11 @@ export const RICH_CHORDS: Readonly<Record<string, string>> = {
   "markdown.table.row.up": "Mod-Alt-ArrowUp",
   "markdown.table.row.down": "Mod-Alt-ArrowDown",
   "markdown.table.row.delete": "Mod-Alt-Backspace",
+  "markdown.table.column.before": "Mod-Alt-Shift-ArrowLeft",
+  "markdown.table.column.after": "Mod-Alt-Shift-ArrowRight",
+  "markdown.table.column.left": "Mod-Alt-ArrowLeft",
+  "markdown.table.column.right": "Mod-Alt-ArrowRight",
+  "markdown.table.column.delete": "Mod-Alt-Shift-Backspace",
 };
 
 const READ_ONLY_KEYS: Readonly<Record<ReadOnlyReason, Key>> = {

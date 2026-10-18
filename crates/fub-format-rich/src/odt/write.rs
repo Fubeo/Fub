@@ -89,7 +89,8 @@ struct Writer<'a> {
     seen: HashSet<String>,
     atoms: HashMap<String, usize>,
     used: HashMap<String, usize>,
-    tables: Vec<(Option<String>, Vec<Option<String>>)>,
+    /// Le tabelle di partenza: chiave, chiavi delle righe e colonne.
+    tables: Vec<(Option<String>, Vec<Option<String>>, usize)>,
     /// Lo stile delle celle delle tabelle nuove, una volta scritto.
     grid_cell: Option<String>,
     /// Le tabelle nuove già nominate.
@@ -118,6 +119,68 @@ fn style_attr(attrs: &[(String, String)]) -> Option<String> {
         .iter()
         .find(|(k, _)| k == "text:style-name")
         .map(|(_, v)| v.clone())
+}
+
+/// Le colonne che le righe di una tabella occupano, celle coperte comprese.
+fn width(table: &Table) -> Result<usize, RichError> {
+    let covered = |xml: &str| xml.matches("<table:covered-table-cell").count();
+    let mut width = 0;
+    for row in &table.rows {
+        let mut n = match &row.k {
+            Some(k) => covered(&blob::decode::<RowKey>(k)?.lead),
+            None => 0,
+        };
+        for cell in &row.cells {
+            n += 1 + match &cell.k {
+                Some(k) => covered(&blob::decode::<CellKey>(k)?.tail),
+                None => 0,
+            };
+        }
+        width = width.max(n);
+    }
+    Ok(width)
+}
+
+/// Le colonne di una tabella a cui la shell ne ha aggiunte (`delta` positivo)
+/// o tolte. Colonne tutte uguali si riscrivono, quante servono; fra colonne
+/// diverse non si sa quale sia cambiata, e il salvataggio lo rifiuta.
+fn columns(head: &str, delta: isize) -> Result<String, RichError> {
+    let mut had = 0;
+    let mut same: Option<Option<Vec<(String, String)>>> = None;
+    let mut rest = head.trim_start();
+    while let Some(end) = rest.starts_with('<').then(|| rest.find('>')).flatten() {
+        let tag = &rest[..=end];
+        rest = rest[end + 1..].trim_start();
+        let Some((name, mut attrs)) = keys::tag(tag) else {
+            same = Some(None);
+            continue;
+        };
+        if name != "table:table-column" {
+            same = Some(None);
+            continue;
+        }
+        had += attr(&attrs, "table:number-columns-repeated")
+            .and_then(|n| n.parse::<usize>().ok())
+            .unwrap_or(1);
+        set_attr(&mut attrs, "table:number-columns-repeated", None);
+        let plain = tag.ends_with("/>").then_some(attrs);
+        same = match same {
+            None => Some(plain),
+            Some(seen) => Some(seen.filter(|seen| Some(seen) == plain.as_ref())),
+        };
+    }
+    let width = had as isize + delta;
+    match same {
+        Some(Some(mut attrs)) if rest.is_empty() && width >= 1 => {
+            if width > 1 {
+                attrs.push(("table:number-columns-repeated".into(), width.to_string()));
+            }
+            Ok(xml::open_tag("table:table-column", &attrs, true))
+        }
+        _ => Err(RichError::Codec(
+            "odt: columns of a table whose columns differ cannot be added or removed".into(),
+        )),
+    }
 }
 
 fn set_attr(attrs: &mut Vec<(String, String)>, key: &str, value: Option<String>) {
@@ -530,8 +593,8 @@ impl<'a> Writer<'a> {
                     }
                 }
                 Block::Table(t) => {
-                    self.tables
-                        .push((t.k.clone(), t.rows.iter().map(|r| r.k.clone()).collect()));
+                    let rows = t.rows.iter().map(|r| r.k.clone()).collect();
+                    self.tables.push((t.k.clone(), rows, width(t).unwrap_or(0)));
                     for row in &t.rows {
                         for cell in &row.cells {
                             self.inventory(&cell.blocks);
@@ -1518,7 +1581,7 @@ impl<'a> Writer<'a> {
             let base = self
                 .tables
                 .iter()
-                .find(|(k, _)| *k == table.k)
+                .find(|(k, ..)| *k == table.k)
                 .ok_or_else(|| RichError::Missing("a table".into()))?;
             let rows: Vec<&Option<String>> = table.rows.iter().map(|r| &r.k).collect();
             if rows.len() != base.1.len() || rows.iter().zip(&base.1).any(|(a, b)| *a != b) {
@@ -1533,7 +1596,17 @@ impl<'a> Writer<'a> {
             return Err(RichError::Malformed("table without rows or cells".into()));
         }
         out.push_str(&self.fresh(&key.open, false));
-        out.push_str(&key.head);
+        // Le colonne cambiano se la shell ne ha aggiunte o tolte rispetto alla
+        // tabella di partenza, non se il file le dichiarava male.
+        let had = self.tables.iter().find(|(k, ..)| *k == table.k);
+        let delta = match had {
+            Some((.., had)) if !fresh => width(table)? as isize - *had as isize,
+            _ => 0,
+        };
+        match delta {
+            0 => out.push_str(&key.head),
+            delta => out.push_str(&columns(&key.head, delta)?),
+        }
         let mut header = false;
         let mut headers_done = false;
         let mut rows = Vec::new();

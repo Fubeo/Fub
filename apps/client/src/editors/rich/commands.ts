@@ -19,7 +19,7 @@
 import { chainCommands, deleteSelection, joinBackward, joinForward, selectNodeBackward, selectNodeForward, toggleMark } from "prosemirror-commands";
 import { redo, redoDepth, undo, undoDepth } from "prosemirror-history";
 import type { Mark as PmMark, MarkType, Node as PmNode, ResolvedPos } from "prosemirror-model";
-import { NodeSelection, Plugin, TextSelection, type Command, type EditorState } from "prosemirror-state";
+import { NodeSelection, Plugin, TextSelection, type Command, type EditorState, type Transaction } from "prosemirror-state";
 import {
   BODY,
   COLOR_AUTO,
@@ -402,6 +402,7 @@ interface InRow {
   readonly row: PmNode;
   readonly rowIndex: number;
   readonly rowPos: number;
+  readonly depth: number;
 }
 
 function rowAt($pos: ResolvedPos): InRow | null {
@@ -413,21 +414,25 @@ function rowAt($pos: ResolvedPos): InRow | null {
         row: $pos.node(depth),
         rowIndex: $pos.index(depth - 1),
         rowPos: $pos.before(depth),
+        depth,
       };
     }
   }
   return null;
 }
 
+/// Una cella vuota come `cell`: stesse proprietà di cella e del paragrafo.
+function emptyCellLike(cell: PmNode): PmNode {
+  const first = cell.firstChild;
+  const attrs = first?.type === para ? { ...first.attrs, role: BODY } : undefined;
+  return cellType.create(cell.attrs, para.create(attrs));
+}
+
 /// Una riga nuova come quella del cursore: stesse proprietà di riga e di
 /// cella (come «Inserisci riga» di Word), celle vuote.
 function emptyRowLike(row: PmNode): PmNode {
   const cells: PmNode[] = [];
-  row.forEach((cell) => {
-    const first = cell.firstChild;
-    const attrs = first?.type === para ? { ...first.attrs, role: BODY } : undefined;
-    cells.push(cellType.create(cell.attrs, para.create(attrs)));
-  });
+  row.forEach((cell) => cells.push(emptyCellLike(cell)));
   return rowType.create(row.attrs, cells);
 }
 
@@ -478,6 +483,106 @@ export const deleteRow: Command = (state, dispatch) => {
     const tr = state.tr.delete(at.rowPos, at.rowPos + at.row.nodeSize);
     const near = Math.min(at.rowPos, tr.doc.content.size);
     dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(near), -1)).scrollIntoView());
+  }
+  return true;
+};
+
+// ── Le colonne di una tabella ────────────────────────────────────────────────
+
+interface InColumn extends InRow {
+  readonly cellIndex: number;
+  /// Il cursore dall'inizio del contenuto della sua cella.
+  readonly offset: number;
+}
+
+/// Le colonne si toccano soltanto dove ogni riga ha le stesse celle: con
+/// celle unite in larghezza non si sa di quale colonna sia una cella.
+function columnAt(state: EditorState): InColumn | null {
+  const { $from } = state.selection;
+  const at = rowAt($from);
+  if (!at) return null;
+  let even = true;
+  at.table.forEach((row) => {
+    even &&= row.childCount === at.row.childCount;
+  });
+  if (!even) return null;
+  return { ...at, cellIndex: $from.index(at.depth), offset: $from.pos - $from.start(at.depth + 1) };
+}
+
+/// Rifà le righe della tabella del cursore con `cells` e mette il cursore
+/// nella cella `cell` della sua riga, `offset` dopo il suo inizio.
+function rebuildColumns(
+  state: EditorState,
+  dispatch: (tr: Transaction) => void,
+  at: InColumn,
+  cells: (row: PmNode) => PmNode[],
+  cell: number,
+  offset: number,
+): void {
+  const rows: PmNode[] = [];
+  at.table.forEach((row) => rows.push(rowType.create(row.attrs, cells(row))));
+  const table = tableType.create(at.table.attrs, rows);
+  const tr = state.tr.replaceWith(at.tablePos, at.tablePos + at.table.nodeSize, table);
+  let pos = at.tablePos + 1;
+  for (let r = 0; r < at.rowIndex; r += 1) pos += table.child(r).nodeSize;
+  const row = table.child(at.rowIndex);
+  pos += 1;
+  for (let c = 0; c < cell; c += 1) pos += row.child(c).nodeSize;
+  const inside = Math.min(pos + 1 + offset, pos + row.child(cell).nodeSize - 1);
+  dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(inside))).scrollIntoView());
+}
+
+/// Una colonna vuota accanto a quella del cursore: ogni cella copia le
+/// proprietà di quella accanto, come in Word.
+export function insertColumn(where: "before" | "after"): Command {
+  return (state, dispatch) => {
+    const at = columnAt(state);
+    if (!at || at.row.childCount >= TABLE_MAX_COLS) return false;
+    if (dispatch) {
+      const index = where === "before" ? at.cellIndex : at.cellIndex + 1;
+      const cells = (row: PmNode) => {
+        const out: PmNode[] = [];
+        row.forEach((cell) => out.push(cell));
+        out.splice(index, 0, emptyCellLike(row.child(at.cellIndex)));
+        return out;
+      };
+      rebuildColumns(state, dispatch, at, cells, index, 0);
+    }
+    return true;
+  };
+}
+
+export function moveColumn(delta: -1 | 1): Command {
+  return (state, dispatch) => {
+    const at = columnAt(state);
+    const target = (at?.cellIndex ?? -2) + delta;
+    if (!at || target < 0 || target >= at.row.childCount) return false;
+    if (dispatch) {
+      const cells = (row: PmNode) => {
+        const out: PmNode[] = [];
+        row.forEach((cell) => out.push(cell));
+        [out[at.cellIndex], out[target]] = [out[target]!, out[at.cellIndex]!];
+        return out;
+      };
+      rebuildColumns(state, dispatch, at, cells, target, at.offset);
+    }
+    return true;
+  };
+}
+
+/// Toglie la colonna del cursore; l'ultima no, come l'ultima riga.
+export const deleteColumn: Command = (state, dispatch) => {
+  const at = columnAt(state);
+  if (!at || at.row.childCount <= 1) return false;
+  if (dispatch) {
+    const cells = (row: PmNode) => {
+      const out: PmNode[] = [];
+      row.forEach((cell, _offset, c) => {
+        if (c !== at.cellIndex) out.push(cell);
+      });
+      return out;
+    };
+    rebuildColumns(state, dispatch, at, cells, Math.min(at.cellIndex, at.row.childCount - 2), 0);
   }
   return true;
 };
@@ -853,11 +958,17 @@ export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, Ric
   ["rich.break.column", { run: insertBreak("\u000e"), chord: "Mod-Shift-Enter" }],
   [LINK_ACTION, { run: (state) => state.selection.$from.parent.inlineContent, active: (state) => linkAt(state) !== null, chord: LINK_CHORD }],
   ["rich.link.remove", { run: setLink(null) }],
+  ["markdown.table", { run: insertTable(2, 2) }],
   ["markdown.table.row.before", { run: insertRow("before"), chord: "Mod-Alt-Shift-ArrowUp" }],
   ["markdown.table.row.after", { run: insertRow("after"), chord: "Mod-Alt-Shift-ArrowDown" }],
   ["markdown.table.row.up", { run: moveRow(-1), chord: "Mod-Alt-ArrowUp" }],
   ["markdown.table.row.down", { run: moveRow(1), chord: "Mod-Alt-ArrowDown" }],
   ["markdown.table.row.delete", { run: deleteRow, chord: "Mod-Alt-Backspace" }],
+  ["markdown.table.column.before", { run: insertColumn("before"), chord: "Mod-Alt-Shift-ArrowLeft" }],
+  ["markdown.table.column.after", { run: insertColumn("after"), chord: "Mod-Alt-Shift-ArrowRight" }],
+  ["markdown.table.column.left", { run: moveColumn(-1), chord: "Mod-Alt-ArrowLeft" }],
+  ["markdown.table.column.right", { run: moveColumn(1), chord: "Mod-Alt-ArrowRight" }],
+  ["markdown.table.column.delete", { run: deleteColumn, chord: "Mod-Alt-Shift-Backspace" }],
 ]);
 
 /// Lo stato di un'azione: si può eseguire adesso, ed è già applicata.

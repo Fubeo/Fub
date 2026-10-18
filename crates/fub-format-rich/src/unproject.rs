@@ -141,11 +141,6 @@ fn blocks(
                     None => {
                         let cols = table.rows.iter().map(|row| row.cells.len()).max();
                         let cols = cols.unwrap_or(0);
-                        if cols > wordcraft_doc::table::MAX_COLS {
-                            return Err(RichError::Malformed(
-                                "a table with too many columns".into(),
-                            ));
-                        }
                         let mut fresh =
                             wordcraft_doc::Table::new(1, cols, document.last_section.text_width());
                         fresh.rows.clear();
@@ -196,6 +191,18 @@ fn blocks(
                     .collect::<Result<_, RichError>>()?;
                 if out.rows.is_empty() || out.rows.iter().any(|row| row.cells.is_empty()) {
                     return Err(RichError::Malformed("table without rows or cells".into()));
+                }
+                let cols = out
+                    .rows
+                    .iter()
+                    .map(|row| row.cells.iter().map(|c| c.span()).sum());
+                let cols: usize = cols.max().unwrap_or(0);
+                if cols > wordcraft_doc::table::MAX_COLS {
+                    return Err(RichError::Malformed("a table with too many columns".into()));
+                }
+                if cols != out.grid.len() {
+                    let width = document.last_section.text_width();
+                    regrid(&mut out, cols, width);
                 }
                 Ok(Arc::new(WcBlock::Table(out)))
             }
@@ -578,6 +585,42 @@ fn heading_style(styles: &mut StyleSheet, level: u8) -> Option<String> {
         return Some(found.id.clone());
     }
     builtin_style(styles, &id)
+}
+
+/// Una tabella a cui la shell ha aggiunto o tolto colonne: la griglia si
+/// rifà dalle larghezze della prima riga senza celle unite, riportate alla
+/// larghezza di prima (o del testo); senza una riga così, a colonne uguali.
+/// Ogni cella prende la larghezza delle colonne che copre.
+fn regrid(table: &mut wordcraft_doc::Table, cols: usize, text: f32) {
+    let total = match table.grid.iter().sum::<f32>() {
+        sum if sum > 0.0 => sum,
+        _ => text,
+    };
+    let widths = table
+        .rows
+        .iter()
+        .filter(|row| row.cells.len() == cols && row.cells.iter().all(|c| c.span() == 1))
+        .find_map(|row| {
+            let widths = row.cells.iter().map(|c| c.props.width.filter(|w| *w > 0.0));
+            widths.collect::<Option<Vec<f32>>>()
+        });
+    let grid: Vec<f32> = match widths {
+        Some(widths) => {
+            let sum: f32 = widths.iter().sum();
+            widths.iter().map(|w| w * total / sum).collect()
+        }
+        None => vec![total / cols as f32; cols],
+    };
+    for row in &mut table.rows {
+        let mut at = 0;
+        for cell in &mut row.cells {
+            let end = (at + cell.span()).min(cols);
+            cell.props.width = Some(grid[at.min(end)..end].iter().sum());
+            cell.props.width_pct = None;
+            at = end;
+        }
+    }
+    table.grid = grid;
 }
 
 /// `id` nel documento, copiato dagli stili predefiniti di WordCraft (con la

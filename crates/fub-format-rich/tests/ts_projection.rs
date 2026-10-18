@@ -168,6 +168,11 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         })
         .expect("la tabella");
     assert_eq!(table.rows.len(), 3);
+    // E la colonna aggiunta: tre celle in ogni riga, con le proprietà.
+    assert!(table
+        .rows
+        .iter()
+        .all(|row| row.cells.len() == 3 && row.cells.iter().all(|c| c.k.is_some())));
     // La tabella nuova, dopo il paragrafo del salto: ora ha le sue proprietà.
     let fresh = p
         .blocks

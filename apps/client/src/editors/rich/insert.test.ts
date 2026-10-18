@@ -166,3 +166,56 @@ describe("le tabelle nuove", () => {
     strip.destroy();
   });
 });
+
+describe("le colonne", () => {
+  const cell = (x: string, k = `K${x}`) => ({ k, blocks: [para([{ t: "text", x }])] });
+  const grid = (e: RichEngine) =>
+    (parseProjection(e.getDoc()).blocks.find((b) => b.t === "table") as Table).rows.map((row) =>
+      row.cells.map((c) => {
+        const first = c.blocks[0] as Para;
+        return `${(first.c?.[0] as TextInline | undefined)?.x ?? ""}${c.k ? `:${c.k}` : ""}`;
+      }),
+    );
+  const table = (rows: ReturnType<typeof cell>[][]): Block => ({ t: "table", k: "T", rows: rows.map((cells, i) => ({ k: `R${i}`, cells })) });
+
+  it("si aggiungono copiando la cella accanto, si spostano e si tolgono", () => {
+    const e = engine([table([[cell("a"), cell("b")], [cell("c"), cell("d")]])]);
+    e.select(at(e, "a") + 1);
+    expect(e.run("markdown.table.column.after")).toBe(true);
+    expect(grid(e)).toEqual([["a:Ka", ":Ka", "b:Kb"], ["c:Kc", ":Kc", "d:Kd"]]);
+    // Il cursore è nella colonna nuova: si scrive lì.
+    expect(e.apply((state, dispatch) => (dispatch?.(state.tr.insertText("n")), true))).toBe(true);
+    expect(grid(e)[0]).toEqual(["a:Ka", "n:Ka", "b:Kb"]);
+    expect(e.run("markdown.table.column.before")).toBe(true);
+    expect(grid(e)[1]).toEqual(["c:Kc", ":Kc", ":Kc", "d:Kd"]);
+    expect(e.run("markdown.table.column.delete")).toBe(true);
+    expect(grid(e)[0]).toEqual(["a:Ka", "n:Ka", "b:Kb"]);
+    // Sposta la colonna di «b» a sinistra, e il cursore la segue.
+    e.select(at(e, "b") + 1);
+    expect(e.run("markdown.table.column.left")).toBe(true);
+    expect(grid(e)).toEqual([["a:Ka", "b:Kb", "n:Ka"], ["c:Kc", "d:Kd", ":Kc"]]);
+    expect(e.state.selection.$from.parent.textContent).toBe("b");
+    expect(e.run("markdown.table.column.right")).toBe(true);
+    expect(e.run("markdown.table.column.right")).toBe(false);
+    expect(e.state.selection.$from.parent.textContent).toBe("b");
+  });
+
+  it("non si toccano con righe di celle diverse, e l'ultima resta", () => {
+    const e = engine([table([[cell("a"), cell("b")], [cell("unite")]])]);
+    e.select(at(e, "a"));
+    for (const id of ["markdown.table.column.before", "markdown.table.column.after", "markdown.table.column.delete"]) {
+      expect(e.actionState(id).enabled).toBe(false);
+    }
+    const single = engine([table([[cell("x")]])]);
+    single.select(at(single, "x"));
+    expect(single.run("markdown.table.column.delete")).toBe(false);
+    expect(single.run("markdown.table.column.after")).toBe(true);
+  });
+
+  it("«Inserisci tabella» della barra fa una tabella 2 × 2", () => {
+    const e = engine([para([{ t: "text", x: "testo" }])]);
+    e.select(at(e, "testo"));
+    expect(e.run("markdown.table")).toBe(true);
+    expect(grid(e)).toEqual([["", ""], ["", ""]]);
+  });
+});

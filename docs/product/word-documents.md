@@ -39,8 +39,11 @@ Si modificano:
 - le tabelle: una nuova dal pulsante **Tabella** della striscia, scegliendo
   righe e colonne sulla griglia (col mouse o con le frecce), dopo il paragrafo
   del cursore o al posto di uno vuoto; è la griglia di Word, a tutta riga, a
-  colonne uguali e con i bordi. Le righe si aggiungono, si spostano e si
-  tolgono.
+  colonne uguali e con i bordi (anche **Inserisci tabella** della barra, 2 × 2).
+  Righe e colonne si aggiungono, si spostano e si tolgono dal menu tabella
+  della barra o con le scorciatoie della tabella Markdown; una colonna nuova
+  copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
+  di prima, nelle proporzioni delle colonne.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
@@ -66,8 +69,10 @@ Limiti attuali:
   file resta quello scelto; in un `.docx` l'evidenziatore ha soltanto i sedici
   colori di Word;
 - un link porta soltanto a un indirizzo web, di posta o a un segnalibro
-  già nel documento; le colonne delle tabelle non si aggiungono né si
-  tolgono;
+  già nel documento;
+- le colonne si aggiungono, si spostano e si tolgono soltanto in una tabella
+  le cui righe hanno tutte le stesse celle, senza celle unite in larghezza;
+  le celle non si uniscono né si dividono;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
   del documento, che resta quella del file;
 - il codec riscrive il file in forma propria: rinumera intestazioni, piè di
@@ -80,7 +85,9 @@ Limiti attuali:
 Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con
 gli stessi limiti; un salto di pagina o di colonna però non si scrive, e una
 tabella nuova ha una colonna per cella della riga più lunga e celle con un
-bordo sottile (lo stile automatico `FubC…`). Il
+bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
+tolgono soltanto in una tabella con le colonne tutte uguali; altrimenti il
+salvataggio lo rifiuta e il testo resta nel buffer. Il
 salvataggio riscrive soltanto i blocchi toccati: il resto di `content.xml` e
 ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
 per byte com'erano. Un ruolo, un'enfasi, un aspetto del carattere o una

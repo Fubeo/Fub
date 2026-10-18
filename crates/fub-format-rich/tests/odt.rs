@@ -842,6 +842,54 @@ const TABLE: &str = concat!(
 );
 
 #[test]
+fn le_colonne_uguali_si_aggiungono_e_si_tolgono_quelle_diverse_no() {
+    let bytes = odt(TABLE);
+    let mut projection = projection(&bytes);
+    let Block::Table(table) = &mut projection.blocks[0] else {
+        panic!("not a table");
+    };
+    // Una colonna in fondo, come la aggiunge la shell: soltanto dove le righe
+    // hanno tutte le stesse celle, e la cella copia la vicina.
+    table.rows.remove(1);
+    for row in &mut table.rows {
+        let mut cell = row.cells[0].clone();
+        cell.blocks.clear();
+        row.cells.push(cell);
+    }
+    let out = saved(&bytes, &projection);
+    assert!(body(&out).contains("<table:table-column table:number-columns-repeated=\"3\"/>"));
+    let mut reopened = self::projection(&out);
+    let Block::Table(table) = &mut reopened.blocks[0] else {
+        panic!("not a table");
+    };
+    assert_eq!(table.rows[0].cells.len(), 3);
+    for row in &mut table.rows {
+        row.cells.pop();
+    }
+    let back = saved(&out, &reopened);
+    assert!(body(&back).contains("<table:table-column table:number-columns-repeated=\"2\"/>"));
+    // Colonne di larghezze diverse: quale sia cambiata non si sa.
+    let differ = TABLE.replace(
+        "<table:table-column table:number-columns-repeated=\"2\"/>",
+        "<table:table-column table:style-name=\"Tabella1.A\"/><table:table-column table:style-name=\"Tabella1.B\"/>",
+    );
+    let bytes = odt(&differ);
+    let mut projection = self::projection(&bytes);
+    let Block::Table(table) = &mut projection.blocks[0] else {
+        panic!("not a table");
+    };
+    table.rows.remove(1);
+    for row in &mut table.rows {
+        let cell = row.cells[0].clone();
+        row.cells.push(cell);
+    }
+    assert!(matches!(
+        save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
+        Err(RichError::Codec(reason)) if reason.contains("columns differ")
+    ));
+}
+
+#[test]
 fn le_righe_di_una_tabella_si_aggiungono_e_si_tolgono() {
     let bytes = odt(TABLE);
     let mut projection = projection(&bytes);
