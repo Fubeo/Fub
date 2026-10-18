@@ -14,7 +14,7 @@ Si modificano:
 
 - il testo, con a-capo, tabulazioni e salti di pagina o di colonna;
 - grassetto, corsivo, barrato ed evidenziato dalla barra;
-- l'aspetto del carattere dalla striscia **Carattere** sopra il foglio: tipo e
+- l'aspetto del carattere dalla striscia sopra il foglio: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
   dell'evidenziatore, sottolineato (`Ctrl+U`), apice (`Ctrl+Maiusc+=`), pedice
   (`Ctrl+=`), tutto maiuscolo (`Ctrl+Maiusc+A`) e maiuscoletto
@@ -22,11 +22,20 @@ Si modificano:
   il cursore e lo dà alla prossima selezione, una volta; Esc lo lascia.
   Un valore uguale a quello del paragrafo non si scrive: il tratto torna a
   seguire il suo stile;
-- lo stile del paragrafo: testo, titoli da 1 a 6, citazione;
+- lo stile del paragrafo: testo, titoli da 1 a 6, citazione e, dalla
+  striscia, gli stili di paragrafo che il documento propone o usa;
+- il paragrafo, dalla stessa striscia: allineamento a sinistra (`Ctrl+L`),
+  centrato, a destra (`Ctrl+R`) e giustificato (`Ctrl+J`); rientro sinistro a
+  passi di mezzo pollice (`Ctrl+M`, `Ctrl+Maiusc+M`); interlinea singola,
+  1,5 e doppia (`Ctrl+1`, `Ctrl+5`, `Ctrl+2`) o 1,15, 2,5 e tripla; rientri,
+  prima riga e spazi prima e dopo in punti. Un campo vuoto torna al valore
+  dello stile, e come per il carattere un valore uguale a quello dello stile
+  non si scrive;
 - elenchi puntati e numerati su nove livelli;
 - le righe delle tabelle: aggiungere, spostare, togliere.
 
-Il resto del documento (proprietà dei paragrafi e dei tratti, stili, sezioni,
+Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
+definizione degli stili, sezioni,
 intestazioni, immagini, forme, campi, note, formule, commenti) resta nel file
 così com'è. Un oggetto si vede come una casella con il suo nome o il suo testo
 alternativo; la fine di una sezione è un filo doppio che non si cancella con un
@@ -41,6 +50,10 @@ ciò che si voleva scrivere non scrive, e il testo resta nel buffer.
 Limiti attuali:
 
 - le immagini non si disegnano, e un oggetto non si modifica dalla superficie;
+- l'interlinea «almeno» ed «esattamente» si mostra e si conserva, ma dalla
+  striscia si sceglie soltanto un multiplo; rientri, spazi e interlinea che
+  vengono dallo stile non si disegnano (il foglio usa quelli del tema), e un
+  campo vuoto della spaziatura non dice quanto valgono;
 - un carattere che la macchina non ha si mostra con uno di ripiego, ma nel
   file resta quello scelto; in un `.docx` l'evidenziatore ha soltanto i sedici
   colori di Word;
@@ -59,9 +72,10 @@ Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con
 gli stessi limiti; un salto di pagina o di colonna però non si scrive. Il
 salvataggio riscrive soltanto i blocchi toccati: il resto di `content.xml` e
 ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
-per byte com'erano. Un ruolo, un'enfasi o un aspetto del carattere nuovi aggiungono
-gli stili automatici che servono (`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei
-titoli e della citazione, senza toccare gli altri.
+per byte com'erano. Un ruolo, un'enfasi, un aspetto del carattere o una
+disposizione del paragrafo nuovi aggiungono gli stili automatici che servono
+(`FubP…`, `FubT…`, `FubL…`) e, se mancano, gli stili comuni dei titoli e della
+citazione, senza toccare gli altri. Le lunghezze nuove si scrivono in punti.
 
 Oltre ai motivi del `.docx`, un `.odt` si apre **in sola lettura** quando la
 superficie non saprebbe riscriverlo identico, per esempio con due elenchi uguali

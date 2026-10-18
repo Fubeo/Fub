@@ -31,18 +31,24 @@ l'IPC.
   del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
   sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
   il ritorno al documento ne fa formattazione diretta, o la toglie quando
-  basta toglierla; `BlockWriter` riscrive
+  basta toglierla. Allo stesso modo un paragrafo porta l'allineamento
+  risolto (`align`), la disposizione (`p`: rientri, prima riga, spazi,
+  interlinea, in punti) dove differisce da quella del suo stile, e lo stile
+  di un paragrafo di corpo (`s`). Il carattere del documento (`f` in testa)
+  e la galleria degli stili (`styles`) sono suggerimenti di resa che il
+  ritorno ignora. `BlockWriter` riscrive
   soltanto i blocchi cambiati. Il filtro di ciò che si incolla
   (`editors/rich/paste.ts`) toglie i `k` che il documento non ha e i link non
-  web.
+  web; allineamento e disposizione di un paragrafo incollato restano.
 - `editors/rich/commands.ts` esegue le azioni dell'editor con gli id della
   superficie Markdown che hanno lo stesso gesto; la barra di formattazione e
   l'intento `fub.editor.action` le usano senza saperlo. Ogni superficie ha la
   propria cronologia `prosemirror-history`; ciò che arriva da un altro riquadro
   o dal disco sostituisce i blocchi diversi fuori dalla cronologia.
-- `editors/rich/strip.ts` è la striscia del carattere, caricata col motore:
-  i valori (tipo, dimensione, colori) non sono gesti che commutano e non
-  passano dalla barra di formattazione dei plugin. «Copia formato» lo tiene
+- `editors/rich/strip.ts` è la striscia del carattere e del paragrafo,
+  caricata col motore: i valori (tipo, dimensione, colori, stile del
+  paragrafo, spaziature) non sono gesti che commutano e non passano dalla
+  barra di formattazione dei plugin. «Copia formato» lo tiene
   il motore e lo applica alla prossima selezione finita (puntatore o Maiusc
   rilasciati).
 

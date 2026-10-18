@@ -3,7 +3,8 @@
 //
 // Lo schema non inventa niente che la proiezione non porti:
 //
-// - un paragrafo ha `role` (ciò che chi scrive cambia), `k` e `align`; la
+// - un paragrafo ha `role` (ciò che chi scrive cambia), `k`, `align`, la
+//   disposizione `p` e lo stile `s`; la
 //   sezione che chiude non è un suo attributo ma un blocco `section` subito
 //   dopo, visibile e cancellabile soltanto apposta: un attributo nascosto lo
 //   porterebbe via un Backspace qualunque che unisce due paragrafi;
@@ -25,11 +26,13 @@ import {
   COLOR_AUTO,
   HIGHLIGHT_DEFAULT,
   MARKS,
+  plainLayout,
   plainLook,
   writeBlock,
   type AtomKind,
   type Block,
   type Inline,
+  type Layout,
   type Look,
   type Mark,
   type Para,
@@ -67,6 +70,34 @@ function baseAttr(dom: HTMLElement): Look | null {
   }
 }
 
+function jsonAttr<T>(dom: HTMLElement, name: string): T | null {
+  const raw = dom.getAttribute(name);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+/// Lo stile in linea di una disposizione: lunghezze in punti, un multiplo
+/// d'interlinea rispetto alla riga singola del tema.
+export function layoutStyle(layout: Layout): string[] {
+  const style: string[] = [];
+  if (layout.left !== undefined) style.push(`margin-left: ${layout.left}pt`);
+  if (layout.right !== undefined) style.push(`margin-right: ${layout.right}pt`);
+  if (layout.first !== undefined) style.push(`text-indent: ${layout.first}pt`);
+  if (layout.before !== undefined) style.push(`margin-top: ${layout.before}pt`);
+  if (layout.after !== undefined) style.push(`margin-bottom: ${layout.after}pt`);
+  const line = layout.line;
+  if (line) {
+    if ("multiple" in line) style.push(`line-height: calc(1.2 * ${line.multiple})`);
+    else if ("at_least" in line) style.push(`line-height: max(1.2em, ${line.at_least}pt)`);
+    else style.push(`line-height: ${line.exactly}pt`);
+  }
+  return style;
+}
+
 /// Un colore che la proiezione accetta: `#rrggbb` minuscolo.
 export function colorValue(value: string | null): string | null {
   if (!value) return null;
@@ -81,7 +112,14 @@ function headingTag(level: number): string {
 const para: NodeSpec = {
   group: "block",
   content: "inline*",
-  attrs: { role: { default: BODY }, align: { default: null }, k: { default: null }, f: { default: null } },
+  attrs: {
+    role: { default: BODY },
+    align: { default: null },
+    k: { default: null },
+    p: { default: null },
+    s: { default: null },
+    f: { default: null },
+  },
   parseDOM: [
     {
       tag: "[data-rich-role]",
@@ -89,6 +127,8 @@ const para: NodeSpec = {
         role: roleAttr(dom as HTMLElement) ?? BODY,
         k: (dom as HTMLElement).getAttribute("data-rich-k"),
         align: (dom as HTMLElement).getAttribute("data-rich-align"),
+        p: jsonAttr<Layout>(dom as HTMLElement, "data-rich-p"),
+        s: (dom as HTMLElement).getAttribute("data-rich-s"),
         f: baseAttr(dom as HTMLElement),
       }),
     },
@@ -121,12 +161,24 @@ const para: NodeSpec = {
       attrs["data-rich-align"] = node.attrs.align as string;
       style.push(`text-align: ${node.attrs.align as string}`);
     }
+    const layout = node.attrs.p as Layout | null;
+    if (layout) {
+      attrs["data-rich-p"] = JSON.stringify(layout);
+      style.push(...layoutStyle(layout));
+    }
     // La dimensione del paragrafo non si disegna (la dà il tema), ma un tratto
-    // di altra dimensione la misura rispetto a questa.
+    // di altra dimensione la misura rispetto a questa. Un paragrafo di corpo
+    // con uno stile suo la disegna, rispetto a quella del documento.
     const base = node.attrs.f as Look | null;
+    const named = node.attrs.s as string | null;
+    if (named) attrs["data-rich-s"] = named;
     if (base) {
       attrs["data-rich-f"] = JSON.stringify(base);
       if (base.size !== undefined) style.push(`--rich-base-pt: ${base.size}`);
+      if (named && role.kind === "body") {
+        if (base.font !== undefined) style.push(`font-family: ${JSON.stringify(base.font)}, serif`);
+        if (base.size !== undefined) style.push(`font-size: calc(1em * ${base.size} / var(--rich-doc-pt, ${base.size}))`);
+      }
     }
     if (style.length > 0) attrs.style = style.join("; ");
     return [tag, attrs, 0];
@@ -405,7 +457,14 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
     if (block.t === "para") {
       out.push(
         richSchema.nodes.para.create(
-          { role: block.role, align: block.align ?? null, k: block.k ?? null, f: block.f ?? null },
+          {
+            role: block.role,
+            align: block.align ?? null,
+            k: block.k ?? null,
+            p: block.p ?? null,
+            s: block.s ?? null,
+            f: block.f ?? null,
+          },
           inlineNodes(block.c ?? []),
         ),
       );
@@ -534,6 +593,8 @@ function paraOf(node: PmNode, sect: string | undefined): Para {
   const c = inlinesOf(node);
   const align = node.attrs.align as Para["align"] | null;
   const k = node.attrs.k as string | null;
+  const p = plainLayout((node.attrs.p as Layout | null) ?? {});
+  const s = node.attrs.s as string | null;
   const f = node.attrs.f as Look | null;
   return {
     t: "para",
@@ -541,6 +602,8 @@ function paraOf(node: PmNode, sect: string | undefined): Para {
     ...(align ? { align } : {}),
     ...(k !== null ? { k } : {}),
     ...(sect !== undefined ? { sect } : {}),
+    ...(p !== undefined ? { p } : {}),
+    ...(s ? { s } : {}),
     ...(f !== null ? { f } : {}),
     ...(c.length > 0 ? { c } : {}),
   };

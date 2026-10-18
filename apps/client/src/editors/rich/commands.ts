@@ -20,7 +20,18 @@ import { chainCommands, deleteSelection, joinBackward, joinForward, selectNodeBa
 import { redo, redoDepth, undo, undoDepth } from "prosemirror-history";
 import type { Mark as PmMark, MarkType, Node as PmNode, ResolvedPos } from "prosemirror-model";
 import { NodeSelection, Plugin, TextSelection, type Command, type EditorState } from "prosemirror-state";
-import { BODY, COLOR_AUTO, HIGHLIGHT_DEFAULT, type Look, type Role } from "./projection";
+import {
+  BODY,
+  COLOR_AUTO,
+  HIGHLIGHT_DEFAULT,
+  plainLayout,
+  type Align,
+  type Layout,
+  type LayoutLength,
+  type Line,
+  type Look,
+  type Role,
+} from "./projection";
 import { richSchema } from "./schema";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -530,6 +541,130 @@ export const fillTableKeys = new Plugin({
   },
 });
 
+// ── Il paragrafo ─────────────────────────────────────────────────────────────
+
+/// Il passo di «Aumenta rientro» e «Riduci rientro»: mezzo pollice, come Word.
+export const INDENT_STEP = 36;
+/// Le interlinee che il menu propone, in multipli della riga singola.
+export const LINE_SPACINGS: readonly number[] = [1, 1.15, 1.5, 2, 2.5, 3];
+
+/// Cambia gli attributi dei paragrafi selezionati con `change`; `false` se
+/// nessuno cambierebbe.
+function updateParas(change: (node: PmNode) => Record<string, unknown> | null): Command {
+  return (state, dispatch) => {
+    const edits: { pos: number; attrs: Record<string, unknown> }[] = [];
+    for (const { node, pos } of selectedParas(state)) {
+      const attrs = change(node);
+      if (attrs && Object.entries(attrs).some(([key, value]) => JSON.stringify(node.attrs[key]) !== JSON.stringify(value))) {
+        edits.push({ pos, attrs: { ...node.attrs, ...attrs } });
+      }
+    }
+    if (edits.length === 0) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      for (const { pos, attrs } of edits) tr.setNodeMarkup(pos, null, attrs);
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
+
+/// Il valore comune ai paragrafi selezionati, o `null` se sono diversi.
+function common<T>(state: EditorState, pick: (node: PmNode) => T): T | null {
+  const paras = selectedParas(state);
+  if (paras.length === 0) return null;
+  const first = JSON.stringify(pick(paras[0].node));
+  return paras.every(({ node }) => JSON.stringify(pick(node)) === first) ? pick(paras[0].node) : null;
+}
+
+/// L'allineamento comune ai paragrafi selezionati; senza, è a sinistra.
+export function selectedAlign(state: EditorState): Align | null {
+  return common(state, (node) => (node.attrs.align as Align | null) ?? "left");
+}
+
+/// Allinea i paragrafi selezionati. Se lo sono già tutti, tornano a
+/// sinistra, come in Word.
+export function setAlign(align: Align): Command {
+  return (state, dispatch) => {
+    const next = align !== "left" && selectedAlign(state) === align ? "left" : align;
+    return updateParas(() => ({ align: next === "left" ? null : next }))(state, dispatch);
+  };
+}
+
+function layoutOf(node: PmNode): Layout {
+  return (node.attrs.p as Layout | null) ?? {};
+}
+
+/// Un campo della disposizione comune ai paragrafi selezionati: `undefined`
+/// dove tutti seguono lo stile, `null` dove sono diversi.
+export function selectedLayout<K extends LayoutLength | "line">(state: EditorState, key: K): Layout[K] | null {
+  if (selectedParas(state).length === 0) return null;
+  const value = common(state, (node) => layoutOf(node)[key] ?? "style");
+  return value === "style" ? undefined : (value as Layout[K] | null);
+}
+
+/// Cambia la disposizione dei paragrafi selezionati; un campo `null` torna a
+/// quello dello stile.
+export function setLayout(change: { readonly [K in LayoutLength]?: number | null } & { readonly line?: Line | null }): Command {
+  return updateParas((node) => {
+    const next: Record<string, unknown> = { ...layoutOf(node) };
+    for (const [key, value] of Object.entries(change)) {
+      if (value === null) delete next[key];
+      else if (value !== undefined) next[key] = value;
+    }
+    return { p: plainLayout(next as Layout) ?? null };
+  });
+}
+
+/// Sposta di `delta` punti il rientro sinistro dei paragrafi selezionati, non
+/// oltre il margine.
+export function shiftIndent(delta: number): Command {
+  return updateParas((node) => {
+    const layout = layoutOf(node);
+    const left = Math.max(0, (layout.left ?? 0) + delta);
+    return { p: plainLayout({ ...layout, left }) ?? null };
+  });
+}
+
+/// L'interlinea dei paragrafi selezionati, in multipli della riga singola.
+export function setLineSpacing(multiple: number | null): Command {
+  return setLayout({ line: multiple === null ? null : { multiple } });
+}
+
+function lineIs(state: EditorState, multiple: number): boolean {
+  const line = selectedLayout(state, "line");
+  return !!line && "multiple" in line && line.multiple === multiple;
+}
+
+/// Uno stile della galleria: un ruolo, o uno stile di paragrafo del documento.
+export type StylePick = { readonly role: Role } | { readonly s: string; readonly f?: Look };
+
+/// Lo stile comune ai paragrafi selezionati, come la galleria lo nomina:
+/// `body`, `h:<livello>`, `quote`, `s:<id>`; `null` se sono diversi o in un
+/// elenco.
+export function selectedStyle(state: EditorState): string | null {
+  return common(state, (node) => {
+    const role = node.attrs.role as Role;
+    if (role.kind === "heading") return `h:${role.level}`;
+    if (role.kind === "quote") return "quote";
+    if (role.kind === "list") return "list";
+    const s = node.attrs.s as string | null;
+    return s ? `s:${s}` : "body";
+  }) as string | null;
+}
+
+/// Dà ai paragrafi selezionati uno stile della galleria. Uno stile del
+/// documento li fa testo normale con quello stile; un ruolo toglie lo stile.
+/// `look` è l'aspetto del testo senza stile: quello che un paragrafo di corpo
+/// torna a mostrare.
+export function setStyle(pick: StylePick, look: Look | undefined): Command {
+  return updateParas(() => {
+    if ("s" in pick) return { role: BODY, s: pick.s, f: pick.f ?? look ?? null };
+    if (pick.role.kind === "body") return { role: BODY, s: null, f: look ?? null };
+    return { role: pick.role, s: null };
+  });
+}
+
 // ── Il catalogo ──────────────────────────────────────────────────────────────
 
 export interface RichAction {
@@ -560,6 +695,10 @@ function list(ordered: boolean, chord: string): RichAction {
   );
 }
 
+function align(value: Align, chord?: string): RichAction {
+  return { run: setAlign(value), active: (state) => selectedAlign(state) === value, chord };
+}
+
 /// Id → azione. Gli accordi sono quelli del profilo Markdown per lo stesso id.
 export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, RichAction>([
   ["text.undo", { run: undo, chord: "Mod-z" }],
@@ -588,6 +727,20 @@ export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, Ric
   ["markdown.list.indent", { run: shiftListLevel(1), chord: "Tab" }],
   ["markdown.list.dedent", { run: shiftListLevel(-1), chord: "Shift-Tab" }],
   ["markdown.quote", roleAction({ kind: "quote" }, (role) => role?.kind === "quote")],
+  ["rich.align.left", align("left", "Mod-l")],
+  ["rich.align.center", align("center")],
+  ["rich.align.right", align("right", "Mod-r")],
+  ["rich.align.justify", align("justify", "Mod-j")],
+  ["rich.indent.increase", { run: shiftIndent(INDENT_STEP), chord: "Mod-m" }],
+  ["rich.indent.decrease", { run: shiftIndent(-INDENT_STEP), chord: "Mod-Shift-m" }],
+  ...LINE_SPACINGS.map((multiple): [string, RichAction] => [
+    `rich.line.${multiple}`,
+    {
+      run: setLineSpacing(multiple),
+      active: (state) => lineIs(state, multiple),
+      chord: multiple === 1 ? "Mod-1" : multiple === 1.5 ? "Mod-5" : multiple === 2 ? "Mod-2" : undefined,
+    },
+  ]),
   ["markdown.table.row.before", { run: insertRow("before"), chord: "Mod-Alt-Shift-ArrowUp" }],
   ["markdown.table.row.after", { run: insertRow("after"), chord: "Mod-Alt-Shift-ArrowDown" }],
   ["markdown.table.row.up", { run: moveRow(-1), chord: "Mod-Alt-ArrowUp" }],

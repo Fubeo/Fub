@@ -8,7 +8,9 @@
 //! - un tratto riprende le proprie proprietà opache, e un'enfasi diversa da
 //!   quella che chi legge vedeva diventa formattazione diretta;
 //! - un paragrafo riprende le proprie, e cambia stile o elenco soltanto se il
-//!   suo ruolo è cambiato;
+//!   suo ruolo o il suo stile sono cambiati; allineamento, rientri,
+//!   spaziature e interlinea diversi da quelli mostrati diventano
+//!   formattazione diretta con la regola delle enfasi;
 //! - un oggetto riprende sé stesso, purché ciò che nomina ci sia ancora.
 //!
 //! Ciò che la shell ha tolto si toglie come lo toglie WordCraft: i segni di
@@ -22,13 +24,14 @@ use wordcraft_doc::numbering::ListKind;
 use wordcraft_doc::para::{Run, OBJ};
 use wordcraft_doc::props::{Highlight, NumRef, Underline, VertAlign};
 use wordcraft_doc::{
-    Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph, SectionProps,
-    StyleKind, StyleSheet,
+    Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
+    SectionProps, StyleKind, StyleSheet,
 };
 
 use crate::blob;
 use crate::projection::{
-    self, AtomKeep, Block, Inline, Look, Mark, Para, ParaKeep, Projection, Role,
+    self, Align, AtomKeep, Block, Inline, Layout, Line, Look, Mark, Para, ParaKeep, Projection,
+    Role,
 };
 use crate::RichError;
 
@@ -188,9 +191,23 @@ fn paragraph(
     // L'enfasi che la shell mostrava era risolta con lo stile di prima.
     let shown_style = keep.props.style.clone();
     let before = projection::role(document, &keep.props);
+    let shown_align = projection::align(&document.styles, &keep.props);
+    let shown_layout = projection::layout(&document.styles, &keep.props);
+    let shown_s = (before == Role::Body)
+        .then(|| projection::style_of(document, &keep.props))
+        .flatten();
     if before != para.role {
         keep.props = with_role(keep.props, before, para.role, document, state);
     }
+    if para.role == Role::Body && para.s != shown_s {
+        keep.props = with_style(keep.props, para.s.as_deref(), &document.styles);
+    }
+    keep.props = with_layout(
+        keep.props,
+        (para.align, &para.p),
+        (shown_align, &shown_layout),
+        &document.styles,
+    );
     if let Role::List { ordered, .. } = para.role {
         if let Some(n) = document.styles.resolve_para(&keep.props).numbering {
             state.last_list[usize::from(ordered)] = Some(n.num);
@@ -400,6 +417,114 @@ fn with_role(
     props
 }
 
+/// Le proprietà di un paragrafo di corpo con lo stile `style`; `None` è
+/// quello predefinito. Uno stile che il documento non ha lascia le cose come
+/// sono.
+fn with_style(mut props: ParaProps, style: Option<&str>, styles: &StyleSheet) -> ParaProps {
+    match style {
+        Some(id)
+            if styles
+                .get(id)
+                .is_some_and(|s| s.kind == StyleKind::Paragraph) =>
+        {
+            props.style = Some(id.to_string());
+        }
+        Some(_) => {}
+        None => props.style = None,
+    }
+    props
+}
+
+/// Le proprietà di un paragrafo con l'allineamento e la disposizione voluti,
+/// con la regola delle enfasi: un valore diverso da quello mostrato si toglie
+/// se basta toglierlo, se no si scrive diretto. Ciò che la disposizione non
+/// nomina è quello dello stile.
+fn with_layout(
+    mut props: ParaProps,
+    (align, want): (Option<Align>, &Layout),
+    (shown_align, shown): (Option<Align>, &Layout),
+    styles: &StyleSheet,
+) -> ParaProps {
+    let left = |a: Option<Align>| a.filter(|a| *a != Align::Left);
+    let (align, shown_align) = (left(align), left(shown_align));
+    if align != shown_align {
+        props.align = None;
+        if projection::align(styles, &props) != align {
+            props.align = Some(match align {
+                None | Some(Align::Left) => WcAlign::Left,
+                Some(Align::Center) => WcAlign::Center,
+                Some(Align::Right) => WcAlign::Right,
+                Some(Align::Justify) => WcAlign::Justify,
+            });
+        }
+    }
+    let plain = styles.resolve_para(&projection::bare_layout(&props));
+    let same = projection::same_size;
+    if want.left != shown.left {
+        let target = want.left.unwrap_or(plain.indent_left);
+        props.indent_left = None;
+        props.indent_left_chars = None;
+        if !same(styles.resolve_para(&props).indent_left, target) {
+            props.indent_left = Some(target);
+            if !same(styles.resolve_para(&props).indent_left, target) {
+                props.indent_left_chars = Some(0.0);
+            }
+        }
+    }
+    if want.right != shown.right {
+        let target = want.right.unwrap_or(plain.indent_right);
+        props.indent_right = None;
+        props.indent_right_chars = None;
+        if !same(styles.resolve_para(&props).indent_right, target) {
+            props.indent_right = Some(target);
+            if !same(styles.resolve_para(&props).indent_right, target) {
+                props.indent_right_chars = Some(0.0);
+            }
+        }
+    }
+    if want.first != shown.first {
+        let target = want.first.unwrap_or(plain.indent_first);
+        props.indent_first = None;
+        props.indent_first_chars = None;
+        if !same(styles.resolve_para(&props).indent_first, target) {
+            props.indent_first = Some(target);
+            if !same(styles.resolve_para(&props).indent_first, target) {
+                props.indent_first_chars = Some(0.0);
+            }
+        }
+    }
+    if want.before != shown.before {
+        let target = want.before.unwrap_or(plain.space_before);
+        props.space_before = None;
+        props.space_before_auto = None;
+        if !same(styles.resolve_para(&props).space_before, target) {
+            props.space_before = Some(target);
+            if !same(styles.resolve_para(&props).space_before, target) {
+                props.space_before_auto = Some(false);
+            }
+        }
+    }
+    if want.after != shown.after {
+        let target = want.after.unwrap_or(plain.space_after);
+        props.space_after = None;
+        props.space_after_auto = None;
+        if !same(styles.resolve_para(&props).space_after, target) {
+            props.space_after = Some(target);
+            if !same(styles.resolve_para(&props).space_after, target) {
+                props.space_after_auto = Some(false);
+            }
+        }
+    }
+    if want.line != shown.line {
+        let target = want.line.unwrap_or_else(|| Line::of(plain.line_spacing));
+        props.line_spacing = None;
+        if !Line::of(styles.resolve_para(&props).line_spacing).same(target) {
+            props.line_spacing = Some(target.spacing());
+        }
+    }
+    props
+}
+
 fn kind(ordered: bool) -> ListKind {
     if ordered {
         ListKind::Numbered
@@ -503,7 +628,6 @@ fn with_marks(
     props
 }
 
-/// Scrive o toglie (`None`) la formattazione diretta di un'enfasi.
 /// Riporta sul tratto l'aspetto voluto con la stessa regola delle enfasi: un
 /// valore che differisce da quello mostrato si toglie se basta toglierlo, se
 /// no si scrive diretto. Quello che il tratto non nomina è quello del
@@ -559,6 +683,7 @@ fn with_look(
     props
 }
 
+/// Scrive o toglie (`None`) la formattazione diretta di un'enfasi.
 fn set(props: &mut CharProps, mark: Mark, on: Option<bool>) {
     match mark {
         Mark::B => props.bold = on,

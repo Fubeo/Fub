@@ -18,7 +18,9 @@ mod common;
 use std::path::PathBuf;
 
 use common::{bytes, sample, text};
-use fub_format_rich::projection::{Block, Inline, Look, Mark, Projection, Role};
+use fub_format_rich::projection::{
+    Align, Block, Inline, Layout, Line, Look, Mark, Projection, Role,
+};
 use fub_format_rich::{open, save, Codec, Saved};
 use serde_json::{json, Value};
 use wordcraft_doc::{para_block, CharProps, Document, SectionProps};
@@ -166,6 +168,28 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         })
         .expect("la tabella");
     assert_eq!(table.rows.len(), 3);
+    // La prosa torna alla prima riga dello stile e tiene lo spazio dopo.
+    assert_eq!(
+        para_of(&p, "Una prosa").p,
+        Layout {
+            after: Some(14.0),
+            ..Layout::default()
+        }
+    );
+    // Il paragrafo del salto ha lo stile Sottotitolo.
+    assert_eq!(para_of(&p, "dopo il salto").s.as_deref(), Some("Subtitle"));
+    // Il paragrafo della sezione: centrato, rientrato, interlinea e spazio.
+    let section = para_of(&p, "Fine della prima sezione");
+    assert_eq!(section.align, Some(Align::Center));
+    assert_eq!(
+        section.p,
+        Layout {
+            left: Some(36.0),
+            before: Some(6.0),
+            line: Some(Line::Multiple(1.5)),
+            ..Layout::default()
+        }
+    );
     // L'ultimo paragrafo è un titolo di secondo livello, e la sezione resta.
     let (role, last, _) = plain(&p.blocks, p.blocks.len() - 1);
     assert_eq!((role, last.as_str()), (Role::Heading { level: 2 }, "Fine."));
@@ -173,6 +197,24 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         .blocks
         .iter()
         .any(|b| matches!(b, Block::Para(para) if para.sect.is_some())));
+}
+
+/// Il paragrafo del documento che contiene `text`.
+fn para_of<'a>(p: &'a Projection, text: &str) -> &'a fub_format_rich::projection::Para {
+    p.blocks
+        .iter()
+        .find_map(|b| match b {
+            Block::Para(para)
+                if para
+                    .c
+                    .iter()
+                    .any(|i| matches!(i, Inline::Text { x, .. } if x.contains(text))) =>
+            {
+                Some(para)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("il paragrafo con «{text}»"))
 }
 
 /// Ogni motivo di sola lettura, una volta: il `match` senza ramo di riserva

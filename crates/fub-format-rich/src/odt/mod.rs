@@ -16,7 +16,8 @@
 //! [`ReadOnly::Import`].
 //!
 //! **Salvare** rilegge il file nuovo e lo confronta con ciò che si voleva
-//! scrivere: testo, ruoli, enfasi, link, oggetti e struttura delle tabelle.
+//! scrivere: testo, ruoli, stili, disposizione dei paragrafi, enfasi, link,
+//! oggetti e struttura delle tabelle.
 
 mod keys;
 mod package;
@@ -31,7 +32,9 @@ use self::package::Package;
 use self::read::Body;
 use self::styles::Styles;
 use self::xml::Tree;
-use crate::projection::{self, Block, Inline, Look, Mark, Projection, Role, FORMAT, VERSION};
+use crate::projection::{
+    self, Align, Block, Inline, Layout, Look, Mark, Projection, Role, FORMAT, VERSION,
+};
 use crate::session::{Opened, Saved};
 use crate::{ReadOnly, RichError};
 
@@ -89,6 +92,12 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
         version: VERSION,
         readonly,
         lang: doc.styles.lang.clone(),
+        f: doc.styles.text(None, &[]).base(),
+        styles: {
+            let mut used = std::collections::BTreeSet::new();
+            projection::used_styles(&blocks, &mut used);
+            doc.styles.gallery(&used)
+        },
         blocks,
     };
     if readonly.is_none() && Projection::from_json(&projection.to_json()?)? != projection {
@@ -226,7 +235,7 @@ fn normalized(blocks: &[Block]) -> Vec<Block> {
 /// Ciò che chi legge vede di un blocco.
 #[derive(Debug, PartialEq)]
 enum Seen {
-    Para(Role, Vec<SeenInline>),
+    Para(Role, Option<Align>, Layout, Option<String>, Vec<SeenInline>),
     Table(Vec<Vec<Vec<Seen>>>),
 }
 
@@ -266,7 +275,7 @@ fn visible(blocks: &[Block]) -> Vec<Seen> {
                         }
                     }
                 }
-                Seen::Para(para.role, out)
+                Seen::Para(para.role, para.align, para.p.clone(), para.s.clone(), out)
             }
             Block::Table(table) => Seen::Table(
                 table

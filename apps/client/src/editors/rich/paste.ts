@@ -107,7 +107,7 @@ class Filter {
       if (kept) children.push(kept);
     });
     const k = node.attrs.k as string | null;
-    const attrs = k !== null && !this.context.known.has(k) ? { ...node.attrs, k: null, align: null } : node.attrs;
+    const attrs = k !== null && !this.context.known.has(k) ? { ...node.attrs, k: null } : node.attrs;
     return node.type.create(attrs, children, node.marks);
   }
 

@@ -12,8 +12,11 @@
 //   diretta, non toccarla lascia il tratto com'era;
 // - `f` di un tratto è l'aspetto **risolto** dove differisce da quello del
 //   paragrafo: come `m`, cambiarlo chiede formattazione diretta;
-// - `align`, `f` di un paragrafo, `label`, `w` e `h` sono suggerimenti di
-//   resa che il ritorno ignora.
+// - `align` di un paragrafo è risolto, `p` è la disposizione risolta dove
+//   differisce da quella dello stile, `s` lo stile di un paragrafo di corpo:
+//   anche questi, cambiati, chiedono formattazione diretta o un altro stile;
+// - `f` di un paragrafo e del documento, gli stili proposti, `label`, `w` e
+//   `h` sono suggerimenti di resa che il ritorno ignora.
 //
 // La scrittura segue l'ordine e le omissioni di serde (campi assenti quando
 // vuoti), così un blocco non toccato si riscrive com'era arrivato.
@@ -53,6 +56,35 @@ export interface Look {
   readonly color?: string;
   /// Il colore dell'evidenziatore quando non è il giallo.
   readonly hl?: string;
+}
+
+/// L'interlinea: un multiplo della riga singola, o almeno o esattamente tanti
+/// punti.
+export type Line =
+  | { readonly multiple: number }
+  | { readonly at_least: number }
+  | { readonly exactly: number };
+
+/// Rientri, spaziature e interlinea dove differiscono da quelli dello stile.
+/// Punti; `first` è la prima riga rispetto al rientro sinistro, negativa se
+/// sporge.
+export interface Layout {
+  readonly left?: number;
+  readonly right?: number;
+  readonly first?: number;
+  readonly before?: number;
+  readonly after?: number;
+  readonly line?: Line;
+}
+
+export const LAYOUT_LENGTHS = ["left", "right", "first", "before", "after"] as const;
+export type LayoutLength = (typeof LAYOUT_LENGTHS)[number];
+
+/// Uno stile di paragrafo da proporre oltre ai ruoli.
+export interface ParaStyle {
+  readonly id: string;
+  readonly name: string;
+  readonly f?: Look;
 }
 
 /// Il giallo che un tratto evidenziato senza `hl` porta.
@@ -99,6 +131,9 @@ export interface Para {
   readonly align?: Align;
   readonly k?: string;
   readonly sect?: string;
+  readonly p?: Layout;
+  /// Lo stile di un paragrafo di corpo, quando non è il predefinito.
+  readonly s?: string;
   /// Suggerimento: il carattere e la dimensione del testo che non ne sceglie
   /// altri.
   readonly f?: Look;
@@ -128,6 +163,9 @@ export interface Projection {
   readonly version: typeof PROJECTION_VERSION;
   readonly readonly?: ReadOnlyReason;
   readonly lang?: string;
+  /// Suggerimento: il carattere e la dimensione di un paragrafo senza stile.
+  readonly f?: Look;
+  readonly styles?: readonly ParaStyle[];
   readonly blocks: readonly Block[];
 }
 
@@ -233,6 +271,48 @@ export function plainLook(look: Look): Look | undefined {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+function readLine(value: unknown, where: string): Line {
+  const line = record(value, where);
+  const keys = Object.keys(line);
+  const kind = keys[0];
+  if (keys.length !== 1 || (kind !== "multiple" && kind !== "at_least" && kind !== "exactly")) {
+    throw new ProjectionError(`${where}: interlinea sconosciuta`);
+  }
+  const n = optionalNumber(line[kind], `${where}.${kind}`) ?? 0;
+  return { [kind]: n } as Line;
+}
+
+function readLayout(value: unknown, where: string): Layout | undefined {
+  if (value === undefined) return undefined;
+  const layout = record(value, where);
+  closed(layout, [...LAYOUT_LENGTHS, "line"], where);
+  const out: { -readonly [K in keyof Layout]: Layout[K] } = {};
+  for (const key of LAYOUT_LENGTHS) {
+    const n = optionalNumber(layout[key], `${where}.${key}`);
+    if (n !== undefined) out[key] = n;
+  }
+  if (layout.line !== undefined) out.line = readLine(layout.line, `${where}.line`);
+  return plainLayout(out);
+}
+
+/// La disposizione senza i campi assenti; `undefined` se non ne resta nessuno.
+export function plainLayout(layout: Layout): Layout | undefined {
+  const out: { -readonly [K in keyof Layout]: Layout[K] } = {};
+  for (const key of LAYOUT_LENGTHS) if (layout[key] !== undefined) out[key] = layout[key];
+  if (layout.line !== undefined) out.line = layout.line;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function readStyle(value: unknown, where: string): ParaStyle {
+  const style = record(value, where);
+  closed(style, ["id", "name", "f"], where);
+  return {
+    id: text(style.id, `${where}.id`),
+    name: text(style.name, `${where}.name`),
+    ...withLook(readLook(style.f, `${where}.f`)),
+  };
+}
+
 function readInline(value: unknown, where: string): Inline {
   const inline = record(value, where);
   if (inline.t === "text") {
@@ -273,7 +353,7 @@ function readInline(value: unknown, where: string): Inline {
 function readBlock(value: unknown, where: string): Block {
   const block = record(value, where);
   if (block.t === "para") {
-    closed(block, ["t", "role", "align", "k", "sect", "f", "c"], where);
+    closed(block, ["t", "role", "align", "k", "sect", "p", "s", "f", "c"], where);
     const align = block.align;
     if (align !== undefined && !["left", "center", "right", "justify"].includes(align as string)) {
       throw new ProjectionError(`${where}: allineamento sconosciuto`);
@@ -285,6 +365,8 @@ function readBlock(value: unknown, where: string): Block {
       ...(align !== undefined ? { align: align as Align } : {}),
       ...(block.k !== undefined ? { k: text(block.k, `${where}.k`) } : {}),
       ...(block.sect !== undefined ? { sect: text(block.sect, `${where}.sect`) } : {}),
+      ...withLayout(readLayout(block.p, `${where}.p`)),
+      ...(block.s !== undefined ? { s: text(block.s, `${where}.s`) } : {}),
       ...withLook(readLook(block.f, `${where}.f`)),
       ...(c.length > 0 ? { c } : {}),
     };
@@ -322,7 +404,7 @@ export function parseProjection(source: string): Projection {
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
   if (root.version !== PROJECTION_VERSION) throw new ProjectionError(`versione ${String(root.version)}`);
-  closed(root, ["format", "version", "readonly", "lang", "blocks"], "proiezione");
+  closed(root, ["format", "version", "readonly", "lang", "f", "styles", "blocks"], "proiezione");
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
@@ -332,12 +414,18 @@ export function parseProjection(source: string): Projection {
     version: PROJECTION_VERSION,
     ...(readonly !== undefined ? { readonly: readonly as ReadOnlyReason } : {}),
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
+    ...withLook(readLook(root.f, "f")),
+    ...(root.styles !== undefined ? { styles: list(root.styles, "styles").map((s, i) => readStyle(s, `styles[${i}]`)) } : {}),
     blocks: list(root.blocks, "blocks").map((b, i) => readBlock(b, `blocks[${i}]`)),
   };
 }
 
 function withLook(f: Look | undefined): { f?: Look } {
   return f ? { f } : {};
+}
+
+function withLayout(p: Layout | undefined): { p?: Layout } {
+  return p ? { p } : {};
 }
 
 /// L'enfasi senza doppioni, nell'ordine canonico.
@@ -374,6 +462,20 @@ function writeLook(look: Look | undefined): string {
   return fields.length > 0 ? `,"f":{${fields.join(",")}}` : "";
 }
 
+function writeLayout(layout: Layout | undefined): string {
+  if (!layout) return "";
+  const fields: string[] = [];
+  for (const key of LAYOUT_LENGTHS) {
+    const n = layout[key];
+    if (n !== undefined) fields.push(`"${key}":${float(n)}`);
+  }
+  if (layout.line) {
+    const [kind, n] = Object.entries(layout.line)[0] as [string, number];
+    fields.push(`"line":{"${kind}":${float(n)}}`);
+  }
+  return fields.length > 0 ? `,"p":{${fields.join(",")}}` : "";
+}
+
 function writeInline(inline: Inline): string {
   if (inline.t === "text") {
     let out = `{"t":"text","x":${JSON.stringify(inline.x)}`;
@@ -397,6 +499,8 @@ export function writeBlock(block: Block): string {
     if (block.align !== undefined) out += `,"align":"${block.align}"`;
     if (block.k !== undefined) out += `,"k":${JSON.stringify(block.k)}`;
     if (block.sect !== undefined) out += `,"sect":${JSON.stringify(block.sect)}`;
+    out += writeLayout(block.p);
+    if (block.s !== undefined) out += `,"s":${JSON.stringify(block.s)}`;
     out += writeLook(block.f);
     if (block.c && block.c.length > 0) out += `,"c":[${block.c.map(writeInline).join(",")}]`;
     return out + "}";
@@ -409,10 +513,17 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "readonly" | "lang">): string {
+export function writeHead(projection: Pick<Projection, "readonly" | "lang" | "f" | "styles">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${PROJECTION_VERSION}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
   if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;
+  out += writeLook(projection.f);
+  if (projection.styles && projection.styles.length > 0) {
+    const styles = projection.styles.map(
+      (s) => `{"id":${JSON.stringify(s.id)},"name":${JSON.stringify(s.name)}${writeLook(s.f)}}`,
+    );
+    out += `,"styles":[${styles.join(",")}]`;
+  }
   return out + `,"blocks":[`;
 }
 

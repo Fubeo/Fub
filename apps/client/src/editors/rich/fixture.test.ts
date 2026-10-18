@@ -12,7 +12,7 @@ import projectionFixture from "../../__fixtures__/rich-projection.json";
 import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
 import { parseProjection, writeProjection } from "./projection";
-import { setColor, setFont, setHighlight, setSize } from "./commands";
+import { setColor, setFont, setHighlight, setLayout, setSize, setStyle } from "./commands";
 import { BlockWriter, toDoc } from "./schema";
 
 const SOURCE = projectionFixture.source;
@@ -89,6 +89,19 @@ describe("la proiezione del codec", () => {
     // Una riga dopo la prima della tabella.
     e.select(find(e.state.doc, "cella 00"));
     expect(e.run("markdown.table.row.after")).toBe(true);
+    // Il paragrafo della sezione: centrato, rientrato, interlinea 1,5 e
+    // spazio prima; la prosa torna alla prima riga dello stile.
+    e.select(find(e.state.doc, "Fine della prima sezione"));
+    expect(e.run("rich.align.center")).toBe(true);
+    expect(e.run("rich.indent.increase")).toBe(true);
+    expect(e.run("rich.line.1.5")).toBe(true);
+    expect(e.apply(setLayout({ before: 6 }))).toBe(true);
+    e.select(find(e.state.doc, "Una prosa"));
+    expect(e.apply(setLayout({ first: null }))).toBe(true);
+    // Il salto pagina sta in un paragrafo con lo stile Sottotitolo.
+    e.select(find(e.state.doc, "dopo il salto"));
+    const subtitle = e.styles().find((style) => style.id === "Subtitle")!;
+    expect(e.apply(setStyle({ s: subtitle.id, f: subtitle.f }, e.documentLook()))).toBe(true);
     // L'ultimo paragrafo diventa un titolo.
     e.select(find(e.state.doc, "Fine."));
     expect(e.run("markdown.heading.2")).toBe(true);

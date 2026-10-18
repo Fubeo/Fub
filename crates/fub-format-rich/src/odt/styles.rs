@@ -1,6 +1,6 @@
 //! Gli stili di un OpenDocument, quanto basta per vedere il documento come lo
-//! vede chi legge: l'enfasi risolta di un tratto, l'allineamento e il ruolo di
-//! un paragrafo, la specie di un elenco.
+//! vede chi legge: l'enfasi risolta di un tratto, l'allineamento, la
+//! disposizione e il ruolo di un paragrafo, la specie di un elenco.
 //!
 //! Gli stili automatici di `content.xml` vengono prima di quelli comuni di
 //! `styles.xml`, come in ogni lettore ODF. Una catena di stili genitori è
@@ -9,7 +9,7 @@
 use std::collections::{BTreeSet, HashMap};
 
 use super::xml::{Element, Tree};
-use crate::projection::{self, Align, Look, Mark};
+use crate::projection::{self, Align, Layout, Line, Look, Mark};
 
 /// Le profondità oltre cui una catena di stili si considera un ciclo.
 const MAX_CHAIN: usize = 32;
@@ -249,11 +249,137 @@ fn length_points(value: &str) -> Option<f32> {
     Some(n * per)
 }
 
+/// Rientri, spaziature e interlinea che uno stile scrive: `None` dove eredita.
+/// Lunghezze in punti.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ParaProps {
+    pub left: Option<f32>,
+    pub right: Option<f32>,
+    pub first: Option<f32>,
+    pub before: Option<f32>,
+    pub after: Option<f32>,
+    pub line: Option<Line>,
+}
+
+impl ParaProps {
+    fn over(&mut self, top: &ParaProps) {
+        self.left = top.left.or(self.left);
+        self.right = top.right.or(self.right);
+        self.first = top.first.or(self.first);
+        self.before = top.before.or(self.before);
+        self.after = top.after.or(self.after);
+        self.line = top.line.or(self.line);
+    }
+
+    /// Le proprietà di `style:paragraph-properties`. Una lunghezza in
+    /// percentuale non si legge.
+    fn read(props: &Element) -> ParaProps {
+        let length = |name: &str| props.attr(name).and_then(length_points);
+        let all = length("fo:margin");
+        let line = match props.attr("fo:line-height").map(str::trim) {
+            Some("normal") => Some(Line::Multiple(1.0)),
+            Some(p) if p.ends_with('%') => p
+                .trim_end_matches('%')
+                .trim()
+                .parse::<f32>()
+                .ok()
+                .map(|p| Line::Multiple(p / 100.0)),
+            Some(l) => length_points(l).map(Line::Exactly),
+            None => length("style:line-height-at-least").map(Line::AtLeast),
+        };
+        ParaProps {
+            left: length("fo:margin-left").or(all),
+            right: length("fo:margin-right").or(all),
+            first: length("fo:text-indent"),
+            before: length("fo:margin-top").or(all),
+            after: length("fo:margin-bottom").or(all),
+            line,
+        }
+    }
+
+    /// Queste proprietà con i cambiamenti di `change` sopra.
+    pub fn changed(&self, change: &ParaChange) -> ParaProps {
+        ParaProps {
+            left: change.left.unwrap_or(self.left),
+            right: change.right.unwrap_or(self.right),
+            first: change.first.unwrap_or(self.first),
+            before: change.before.unwrap_or(self.before),
+            after: change.after.unwrap_or(self.after),
+            line: change.line.unwrap_or(self.line),
+        }
+    }
+}
+
+/// Un cambiamento della disposizione di uno stile automatico: per ogni campo
+/// `Some` se cambia, col valore nuovo o `None` per ereditarlo.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct ParaChange {
+    pub align: Option<Option<Align>>,
+    pub left: Option<Option<f32>>,
+    pub right: Option<Option<f32>>,
+    pub first: Option<Option<f32>>,
+    pub before: Option<Option<f32>>,
+    pub after: Option<Option<f32>>,
+    pub line: Option<Option<Line>>,
+}
+
+impl ParaChange {
+    pub fn is_empty(&self) -> bool {
+        *self == ParaChange::default()
+    }
+
+    /// Nessun valore da scrivere: soltanto da togliere.
+    pub fn only_clears(&self) -> bool {
+        self.align.is_none_or(|a| a.is_none())
+            && [self.left, self.right, self.first, self.before, self.after]
+                .iter()
+                .all(|c| c.is_none_or(|v| v.is_none()))
+            && self.line.is_none_or(|l| l.is_none())
+    }
+}
+
+/// Una lunghezza in punti come la scrive il codec: in punti, perché si
+/// rilegge identica.
+pub(crate) fn points(pt: f32) -> String {
+    format!("{}pt", (pt * 100.0).round() / 100.0)
+}
+
+pub(crate) fn align_value(align: Align) -> &'static str {
+    match align {
+        Align::Left => "start",
+        Align::Center => "center",
+        Align::Right => "end",
+        Align::Justify => "justify",
+    }
+}
+
+/// La disposizione risolta di `full` dove differisce da quella di `plain`.
+fn difference(full: &ParaProps, plain: &ParaProps) -> Layout {
+    let length = |a: Option<f32>, b: Option<f32>| {
+        let a = a.unwrap_or(0.0);
+        (!projection::same_size(a, b.unwrap_or(0.0))).then_some(a)
+    };
+    let line = |l: Option<Line>| l.unwrap_or(Line::Multiple(1.0));
+    Layout {
+        left: length(full.left, plain.left),
+        right: length(full.right, plain.right),
+        first: length(full.first, plain.first),
+        before: length(full.before, plain.before),
+        after: length(full.after, plain.after),
+        line: (!line(full.line).same(line(plain.line))).then(|| line(full.line)),
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Def {
     pub parent: Option<String>,
     pub text: TextProps,
     pub align: Option<Align>,
+    pub para: ParaProps,
+    /// Il nome da mostrare (`style:display-name`), quando non è il nome.
+    pub display: Option<String>,
+    /// `style:class`: `text`, `chapter`, `list`, `extra`, `index`, `html`.
+    pub class: Option<String>,
     pub list_style: Option<String>,
     pub outline_level: Option<u8>,
     /// Uno stile automatico di `content.xml`.
@@ -330,6 +456,8 @@ impl Styles {
                     let mut def = Def {
                         parent: element.attr("style:parent-style-name").map(str::to_string),
                         list_style: element.attr("style:list-style-name").map(str::to_string),
+                        display: element.attr("style:display-name").map(str::to_string),
+                        class: element.attr("style:class").map(str::to_string),
                         outline_level: element
                             .attr("style:default-outline-level")
                             .and_then(|l| l.trim().parse().ok()),
@@ -346,6 +474,7 @@ impl Styles {
                             }
                             "style:paragraph-properties" => {
                                 def.align = props.attr("fo:text-align").and_then(align);
+                                def.para = ParaProps::read(props);
                             }
                             _ => {}
                         }
@@ -429,11 +558,78 @@ impl Styles {
         out
     }
 
+    /// L'allineamento di un paragrafo di stile `para`; `None` a sinistra.
     pub fn align(&self, para: Option<&str>) -> Option<Align> {
         self.chain("paragraph", para)
             .iter()
             .find_map(|(_, def)| def.align)
             .or_else(|| self.defaults.get("paragraph").and_then(|d| d.align))
+            .filter(|align| *align != Align::Left)
+    }
+
+    /// Rientri, spaziature e interlinea di un paragrafo di stile `para`.
+    pub fn para(&self, para: Option<&str>) -> ParaProps {
+        let mut out = ParaProps::default();
+        if let Some(def) = self.defaults.get("paragraph") {
+            out.over(&def.para);
+        }
+        for (_, def) in self.chain("paragraph", para).iter().rev() {
+            out.over(&def.para);
+        }
+        out
+    }
+
+    /// Il primo stile comune della catena di `para`: quello che uno stile
+    /// automatico, la formattazione diretta del paragrafo, deriva.
+    pub fn common_of(&self, para: Option<&str>) -> Option<String> {
+        self.chain("paragraph", para)
+            .into_iter()
+            .find(|(_, def)| !def.automatic)
+            .map(|(name, _)| name.to_string())
+    }
+
+    /// La disposizione di un paragrafo di stile `para` dove differisce da
+    /// quella del suo stile comune.
+    pub fn layout(&self, para: Option<&str>) -> Layout {
+        let common = self.common_of(para);
+        difference(&self.para(para), &self.para(common.as_deref()))
+    }
+
+    /// Gli stili comuni di paragrafo da proporre a un paragrafo di corpo:
+    /// quelli di testo e di capitolo, e quelli in uso, tranne titoli,
+    /// citazioni e quelli che portano un elenco; in ordine di nome mostrato.
+    pub fn gallery(&self, used: &BTreeSet<String>) -> Vec<projection::ParaStyle> {
+        let mut out: Vec<projection::ParaStyle> = self
+            .styles
+            .iter()
+            .filter(|((family, name), def)| {
+                family == "paragraph"
+                    && !def.automatic
+                    && (matches!(def.class.as_deref(), Some("text" | "chapter"))
+                        || used.contains(name))
+                    && self.body_style(Some(name))
+            })
+            .map(|((_, name), def)| projection::ParaStyle {
+                id: name.clone(),
+                name: def
+                    .display
+                    .clone()
+                    .unwrap_or_else(|| name.replace("_20_", " ")),
+                f: self.text(Some(name), &[]).base(),
+            })
+            .collect();
+        out.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
+        out
+    }
+
+    /// Uno stile che lascia un paragrafo nel corpo.
+    pub fn body_style(&self, para: Option<&str>) -> bool {
+        !self.is_quote(para)
+            && self.para_list_style(para).is_none()
+            && self
+                .chain("paragraph", para)
+                .iter()
+                .all(|(_, def)| def.outline_level.is_none())
     }
 
     /// Uno stile di citazione, o uno che ne eredita: `Quotations` è il nome
@@ -532,6 +728,34 @@ impl Styles {
         found.first().map(|name| name.to_string())
     }
 
+    /// Uno stile di paragrafo automatico già scritto dal codec con questo
+    /// genitore e soltanto questa disposizione, da riusare.
+    pub fn find_para(
+        &self,
+        prefix: &str,
+        parent: Option<&str>,
+        para: &ParaProps,
+        align: Option<Align>,
+    ) -> Option<String> {
+        let mut found: Vec<&str> = self
+            .styles
+            .iter()
+            .filter(|((family, name), def)| {
+                family == "paragraph"
+                    && name.starts_with(prefix)
+                    && def.automatic
+                    && def.parent.as_deref() == parent
+                    && def.para == *para
+                    && def.align == align
+                    && def.text == TextProps::default()
+                    && def.list_style.is_none()
+            })
+            .map(|((_, name), _)| name.as_str())
+            .collect();
+        found.sort_unstable();
+        found.first().map(|name| name.to_string())
+    }
+
     pub fn define_list(&mut self, name: &str, kind: LevelKind) {
         self.names.insert(name.to_string());
         self.lists
@@ -554,6 +778,7 @@ fn lang(props: &Element) -> Option<String> {
 
 fn align(value: &str) -> Option<Align> {
     match value.trim() {
+        "start" | "left" => Some(Align::Left),
         "center" => Some(Align::Center),
         "end" | "right" => Some(Align::Right),
         "justify" => Some(Align::Justify),

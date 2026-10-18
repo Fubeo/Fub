@@ -35,7 +35,7 @@ import {
   splitParagraph,
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
-import { parseProjection, writeHead, type Projection, type ReadOnlyReason } from "./projection";
+import { parseProjection, writeHead, type Look, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
 import { richProof } from "./proof";
 import { BlockWriter, richSchema, toDoc } from "./schema";
 
@@ -62,7 +62,7 @@ export class RichEngine {
   readonly #known = new Set<string>();
   readonly #listeners = new Set<() => void>();
   readonly #proofClient: ProofClient | null;
-  #head: Pick<Projection, "readonly" | "lang"> = {};
+  #head: Pick<Projection, "readonly" | "lang" | "f" | "styles"> = {};
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
   /// nessuno lo cambia, poi quello riscritto.
   #source = "";
@@ -83,6 +83,9 @@ export class RichEngine {
       editable: () => this.editable(),
       attributes: () => ({
         class: "rich-content",
+        // La dimensione di un paragrafo senza stile: quella di uno con uno
+        // stile proprio si misura su questa.
+        ...(this.#head.f?.size !== undefined ? { style: `--rich-doc-pt: ${this.#head.f.size}` } : {}),
         role: "textbox",
         "aria-multiline": "true",
         "aria-label": options.label(),
@@ -223,7 +226,7 @@ export class RichEngine {
   #read(source: string): Projection | null {
     try {
       const projection = parseProjection(source);
-      this.#head = { readonly: projection.readonly, lang: projection.lang };
+      this.#head = { readonly: projection.readonly, lang: projection.lang, f: projection.f, styles: projection.styles };
       this.#intake = { kind: "ok", readonly: projection.readonly ?? null };
       // Un aggiornamento da fuori aggiunge ciò che porta: quello che l'utente
       // ha tagliato prima resta noto, e si può incollare.
@@ -297,6 +300,21 @@ export class RichEngine {
     return selectedLook(this.#view.state);
   }
 
+  /// Legge lo stato dell'editor con `read`, per chi mostra la selezione.
+  read<T>(read: (state: EditorState) => T): T {
+    return read(this.#view.state);
+  }
+
+  /// Gli stili di paragrafo che il documento propone oltre ai ruoli.
+  styles(): readonly ParaStyle[] {
+    return this.#head.styles ?? [];
+  }
+
+  /// Il carattere e la dimensione di un paragrafo senza stile.
+  documentLook(): Look | undefined {
+    return this.#head.f;
+  }
+
   /// I caratteri che il documento usa: i suoi paragrafi e i suoi tratti.
   fonts(): string[] {
     const out = new Set<string>();
@@ -309,11 +327,12 @@ export class RichEngine {
     return [...out];
   }
 
-  /// Esegue un comando come una battuta.
-  apply(command: Command): boolean {
+  /// Esegue un comando come una battuta. `focus`: il fuoco torna al testo
+  /// (non da un modulo che resta aperto).
+  apply(command: Command, focus = true): boolean {
     if (!this.editable()) return false;
     const done = command(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
-    if (done) this.#view.focus();
+    if (done && focus) this.#view.focus();
     return done;
   }
 

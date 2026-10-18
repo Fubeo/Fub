@@ -1,5 +1,6 @@
 // La striscia del carattere della superficie ricca: tipo e dimensione del
-// carattere, colori, sottolineato, apice e pedice, maiuscole, «Copia formato».
+// carattere, colori, sottolineato, apice e pedice, maiuscole, «Copia formato»;
+// e del paragrafo: stile, allineamento, rientri, interlinea e spaziature.
 //
 // La barra di formattazione della shell porta gesti che commutano, dichiarati
 // dai plugin per id; un carattere o un colore sono valori, e la loro scelta è
@@ -11,9 +12,22 @@ import { labelButton, openPopover, setPressed, type PopoverHandle } from "../../
 import { ariaBinding, displayBinding } from "../../ui/commands";
 import { openLifetime } from "../../ui/lifetime";
 import { onLanguage, t, type Key } from "../../i18n/strings";
-import { FONT_SIZES, setColor, setFont, setHighlight, setSize } from "./commands";
+import {
+  FONT_SIZES,
+  LINE_SPACINGS,
+  selectedLayout,
+  selectedStyle,
+  setColor,
+  setFont,
+  setHighlight,
+  setLayout,
+  setLineSpacing,
+  setSize,
+  setStyle,
+  type StylePick,
+} from "./commands";
 import type { RichEngine } from "./engine";
-import { COLOR_AUTO, HIGHLIGHT_DEFAULT } from "./projection";
+import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 
 /// I caratteri proposti sempre, oltre a quelli del documento.
 export const COMMON_FONTS: readonly string[] = [
@@ -82,6 +96,17 @@ const TOGGLES: readonly { id: string; label: Key; glyph: string; className?: str
   { id: "rich.small_caps", label: "rich.small_caps", glyph: "Aa", smallCaps: true },
 ];
 
+/// Gli allineamenti, con l'id del catalogo e le righe che li disegnano.
+const ALIGNS: readonly { id: string; label: Key; lines: readonly string[] }[] = [
+  { id: "rich.align.left", label: "rich.align.left", lines: ["M4 6h16", "M4 10h10", "M4 14h16", "M4 18h10"] },
+  { id: "rich.align.center", label: "rich.align.center", lines: ["M4 6h16", "M7 10h10", "M4 14h16", "M7 18h10"] },
+  { id: "rich.align.right", label: "rich.align.right", lines: ["M4 6h16", "M10 10h10", "M4 14h16", "M10 18h10"] },
+  { id: "rich.align.justify", label: "rich.align.justify", lines: ["M4 6h16", "M4 10h16", "M4 14h16", "M4 18h16"] },
+];
+
+/// I ruoli della galleria degli stili, prima degli stili del documento.
+const ROLE_STYLES: readonly string[] = ["body", "h:1", "h:2", "h:3", "h:4", "h:5", "h:6", "quote"];
+
 export interface RichStrip {
   readonly element: HTMLElement;
   /// Rilegge l'aspetto della selezione e lo stato dei gesti.
@@ -91,8 +116,8 @@ export interface RichStrip {
 
 let ids = 0;
 
-/// Il pennello di «Copia formato», disegnato col tratto delle icone della shell.
-function brush(): SVGElement {
+/// Un'icona disegnata col tratto delle icone della shell.
+function icon(paths: readonly string[]): SVGElement {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
@@ -104,7 +129,7 @@ function brush(): SVGElement {
   svg.setAttribute("stroke-linecap", "round");
   svg.setAttribute("stroke-linejoin", "round");
   svg.setAttribute("aria-hidden", "true");
-  for (const d of ["M5 3h12v6H5z", "M17 6h2v5h-8v3", "M10 14h2v7h-2z"]) {
+  for (const d of paths) {
     const path = document.createElementNS(ns, "path");
     path.setAttribute("d", d);
     svg.append(path);
@@ -213,10 +238,117 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   // ── Copia formato ─────────────────────────────────────────────────────
   const tools = group();
   const painter = button(() => t("rich.painter"), null, () => engine.togglePainter());
-  painter.append(brush());
+  // Il pennello.
+  painter.append(icon(["M5 3h12v6H5z", "M17 6h2v5h-8v3", "M10 14h2v7h-2z"]));
   painter.classList.add("rich-strip-painter");
   setPressed(painter, false);
   tools.append(painter);
+
+  // ── Il paragrafo ──────────────────────────────────────────────────────
+  const paragraph = group();
+  const style = select("rich-strip-style", "rich.style", (value) => {
+    const pick = stylePick(value);
+    if (pick) engine.apply(setStyle(pick, engine.documentLook()));
+  });
+  style.style.width = "148px";
+  paragraph.append(style.parentElement!);
+  const alignButtons = ALIGNS.map((spec) => {
+    const control = button(() => t(spec.label), spec.id, () => engine.run(spec.id));
+    control.append(icon(spec.lines));
+    control.dataset.action = spec.id;
+    setPressed(control, false);
+    paragraph.append(control);
+    return { spec, control };
+  });
+  const dedent = button(() => t("rich.indent.decrease"), "rich.indent.decrease", () => engine.run("rich.indent.decrease"));
+  dedent.append(icon(["M11 6h9", "M11 10h9", "M11 14h9", "M11 18h9", "M7 9l-3 3 3 3"]));
+  const indent = button(() => t("rich.indent.increase"), "rich.indent.increase", () => engine.run("rich.indent.increase"));
+  indent.append(icon(["M11 6h9", "M11 10h9", "M11 14h9", "M11 18h9", "M4 9l3 3-3 3"]));
+  const spacing = button(() => t("rich.spacing"), null, (anchor) => openSpacing(anchor));
+  spacing.append(icon(["M11 6h9", "M11 12h9", "M11 18h9", "M5 4v16", "M3 6l2-2 2 2", "M3 18l2 2 2-2"]));
+  spacing.setAttribute("aria-haspopup", "dialog");
+  paragraph.append(dedent, indent, spacing);
+
+  function stylePick(value: string): StylePick | null {
+    if (value === "body") return { role: { kind: "body" } };
+    if (value === "quote") return { role: { kind: "quote" } };
+    if (value.startsWith("h:")) return { role: { kind: "heading", level: Number(value.slice(2)) } };
+    if (value.startsWith("s:")) {
+      const found = engine.styles().find((s) => s.id === value.slice(2));
+      if (found) return { s: found.id, ...(found.f ? { f: found.f } : {}) };
+    }
+    return null;
+  }
+
+  function styleName(value: string): string {
+    if (value === "body") return t("rich.style.body");
+    if (value === "quote") return t("rich.style.quote");
+    if (value.startsWith("h:")) return t("rich.style.heading", { n: value.slice(2) });
+    return engine.styles().find((s) => s.id === value.slice(2))?.name ?? value.slice(2);
+  }
+
+  /// La spaziatura del paragrafo: interlinea, rientri e spazi prima e dopo,
+  /// in punti. Un campo vuoto segue lo stile.
+  function openSpacing(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const form = document.createElement("div");
+    form.className = "rich-strip-swatches";
+    form.style.display = "grid";
+    form.style.gridTemplateColumns = "auto 96px";
+    form.style.alignItems = "center";
+    const field = (control: HTMLElement, label: string) => {
+      control.id = `${prefix}-spacing-${form.childElementCount}`;
+      control.classList.add("rich-strip-select");
+      const caption = document.createElement("label");
+      caption.htmlFor = control.id;
+      caption.textContent = label;
+      form.append(caption, control);
+    };
+    const line = document.createElement("select");
+    const current = engine.read((state) => selectedLayout(state, "line"));
+    const shown = current && "multiple" in current ? String(current.multiple) : current ? "other" : current === undefined ? "" : "mixed";
+    const values = ["", ...LINE_SPACINGS.map(String), ...(shown === "other" || shown === "mixed" ? [shown] : [])];
+    for (const value of values) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent =
+        value === "" ? t("rich.spacing.style") : value === "other" ? t("rich.spacing.other") : value === "mixed" ? "" : value;
+      line.append(option);
+    }
+    line.value = shown;
+    life.listen(line, "change", () => {
+      if (line.value === "other" || line.value === "mixed") return;
+      engine.apply(setLineSpacing(line.value === "" ? null : Number(line.value)), false);
+    });
+    field(line, t("rich.spacing.line"));
+    for (const key of LAYOUT_LENGTHS) {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "1";
+      if (key !== "first") input.min = "0";
+      input.placeholder = t("rich.spacing.style");
+      const value = engine.read((state) => selectedLayout(state, key));
+      input.value = typeof value === "number" ? String(value) : "";
+      life.listen(input, "change", () => {
+        const n = input.value.trim() === "" ? null : Number(input.value);
+        if (n !== null && !Number.isFinite(n)) return;
+        engine.apply(setLayout({ [key]: n } as { [K in LayoutLength]?: number | null }), false);
+      });
+      field(input, t(`rich.spacing.${key}` as Key));
+    }
+    popover = openPopover({
+      anchor,
+      content: form,
+      label: t("rich.spacing"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+  }
 
   function openColors(anchor: HTMLButtonElement, kind: "color" | "highlight"): void {
     popover?.close();
@@ -342,6 +474,16 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
       setPressed(control, state.active === true);
     }
     for (const control of [grow, shrink]) control.disabled = !engine.actionState(control === grow ? "rich.font.grow" : "rich.font.shrink").enabled;
+    const styleValues = [...ROLE_STYLES, ...engine.styles().map((s) => `s:${s.id}`)];
+    const chosen = engine.read(selectedStyle);
+    options(style, styleValues, chosen !== null && styleValues.includes(chosen) ? chosen : null, styleName);
+    for (const { spec, control } of alignButtons) {
+      const state = engine.actionState(spec.id);
+      control.disabled = !state.enabled;
+      setPressed(control, state.active === true);
+    }
+    dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;
+    indent.disabled = !engine.actionState("rich.indent.increase").enabled;
     colorBar.style.backgroundColor = look.color && look.color !== COLOR_AUTO ? look.color : "currentColor";
     highlightBar.style.backgroundColor = look.hl ?? "transparent";
     highlightBar.dataset.empty = String(look.hl === null);

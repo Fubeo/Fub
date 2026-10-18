@@ -3,8 +3,9 @@
 //!
 //! È JSON chiuso (`deny_unknown_fields`) e versionato. Mostra in chiaro ciò che
 //! la superficie modifica — testo, enfasi, aspetto del carattere, link, ruolo
-//! dei paragrafi — e porta tutto il resto come dati opachi (vedi `blob`). I
-//! campi `align`, l'aspetto `f` di un paragrafo, `label`, `w` e `h` sono
+//! dei paragrafi, allineamento, rientri, spaziature, interlinea e stile — e
+//! porta tutto il resto come dati opachi (vedi `blob`). L'aspetto `f` di un
+//! paragrafo e del documento, gli stili proposti, `label`, `w` e `h` sono
 //! soltanto suggerimenti di resa: il ritorno al documento li ignora.
 //!
 //! Il testo di un tratto è quello del modello di WordCraft: `\n` è un a-capo
@@ -12,11 +13,13 @@
 //! salto colonna. U+FFFC non compare mai nel testo: un oggetto è un [`Inline::Atom`].
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use wordcraft_doc::para::OBJ;
-use wordcraft_doc::props::{Highlight, TextColor, Underline, VertAlign};
+
+use wordcraft_doc::props::{Highlight, LineSpacing, TextColor, Underline, VertAlign};
 use wordcraft_doc::{
     Align as WcAlign, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
-    StyleSheet, Table as WcTable,
+    StyleKind, StyleSheet, Table as WcTable,
 };
 
 use crate::blob;
@@ -38,7 +41,26 @@ pub struct Projection {
     /// La lingua predefinita del documento, per il correttore.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
+    /// Suggerimento: il carattere e la dimensione di un paragrafo senza stile.
+    #[serde(default, skip_serializing_if = "Look::is_plain")]
+    pub f: Look,
+    /// Suggerimento: gli stili di paragrafo da proporre oltre ai ruoli, nel
+    /// loro ordine.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub styles: Vec<ParaStyle>,
     pub blocks: Vec<Block>,
+}
+
+/// Uno stile di paragrafo che chi scrive può scegliere.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ParaStyle {
+    pub id: String,
+    /// Il nome che il documento gli dà.
+    pub name: String,
+    /// Il carattere e la dimensione del suo testo.
+    #[serde(default, skip_serializing_if = "Look::is_plain")]
+    pub f: Look,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -52,7 +74,7 @@ pub enum Block {
 #[serde(deny_unknown_fields)]
 pub struct Para {
     pub role: Role,
-    /// Suggerimento: l'allineamento risolto.
+    /// L'allineamento risolto, stile compreso; assente a sinistra.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub align: Option<Align>,
     /// Proprietà del paragrafo e del suo segno di fine, opache.
@@ -61,6 +83,13 @@ pub struct Para {
     /// La sezione che il paragrafo chiude, opaca.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sect: Option<String>,
+    /// Rientri, spaziature e interlinea dove differiscono da quelli dello stile.
+    #[serde(default, skip_serializing_if = "Layout::is_plain")]
+    pub p: Layout,
+    /// Lo stile di un paragrafo di corpo, quando non è quello predefinito: gli
+    /// altri ruoli hanno lo stile che il ruolo dice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub s: Option<String>,
     /// Suggerimento: il carattere e la dimensione del testo che non ne
     /// sceglie altri, come li dà lo stile del paragrafo.
     #[serde(default, skip_serializing_if = "Look::is_plain")]
@@ -94,6 +123,75 @@ pub struct Look {
 impl Look {
     pub fn is_plain(&self) -> bool {
         *self == Look::default()
+    }
+}
+
+/// La disposizione di un paragrafo, **risolta**, dove differisce da quella
+/// del suo stile: ogni campo c'è soltanto dove la formattazione diretta la
+/// cambia. Le lunghezze sono in punti.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Layout {
+    /// Il rientro sinistro.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right: Option<f32>,
+    /// La prima riga, rispetto al rientro sinistro: negativa se sporge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first: Option<f32>,
+    /// Lo spazio prima del paragrafo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<Line>,
+}
+
+impl Layout {
+    pub fn is_plain(&self) -> bool {
+        *self == Layout::default()
+    }
+}
+
+/// L'interlinea.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Line {
+    /// Un multiplo della riga singola.
+    Multiple(f32),
+    /// Almeno tanti punti.
+    AtLeast(f32),
+    /// Esattamente tanti punti.
+    Exactly(f32),
+}
+
+impl Line {
+    /// La stessa interlinea, a meno di ciò che chi legge non distingue.
+    pub(crate) fn same(self, other: Line) -> bool {
+        match (self, other) {
+            (Line::Multiple(a), Line::Multiple(b))
+            | (Line::AtLeast(a), Line::AtLeast(b))
+            | (Line::Exactly(a), Line::Exactly(b)) => same_size(a, b),
+            _ => false,
+        }
+    }
+
+    pub(crate) fn of(spacing: LineSpacing) -> Line {
+        match spacing {
+            LineSpacing::Multiple(m) => Line::Multiple(m),
+            LineSpacing::AtLeast(pt) => Line::AtLeast(pt),
+            LineSpacing::Exactly(pt) => Line::Exactly(pt),
+        }
+    }
+
+    pub(crate) fn spacing(self) -> LineSpacing {
+        match self {
+            Line::Multiple(m) => LineSpacing::Multiple(m),
+            Line::AtLeast(pt) => LineSpacing::AtLeast(pt),
+            Line::Exactly(pt) => LineSpacing::Exactly(pt),
+        }
     }
 }
 
@@ -278,13 +376,86 @@ impl Projection {
 /// (`Document::normalize_runs`): due tratti uguali vicini sono uno solo, come
 /// la superficie li mostra.
 pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
+    let blocks = blocks(document, &document.body)?;
+    let mut used = BTreeSet::new();
+    used_styles(&blocks, &mut used);
     Ok(Projection {
         format: FORMAT.to_string(),
         version: VERSION,
         readonly: None,
         lang: document.styles.default_chr.lang.clone(),
-        blocks: blocks(document, &document.body)?,
+        f: base(&document.styles, None),
+        styles: gallery(document, &used),
+        blocks,
     })
+}
+
+/// Gli stili che i paragrafi di corpo portano.
+pub(crate) fn used_styles(blocks: &[Block], out: &mut BTreeSet<String>) {
+    for block in blocks {
+        match block {
+            Block::Para(para) => out.extend(para.s.clone()),
+            Block::Table(table) => {
+                for cell in table.rows.iter().flat_map(|row| &row.cells) {
+                    used_styles(&cell.blocks, out);
+                }
+            }
+        }
+    }
+}
+
+/// Gli stili di paragrafo da proporre: quelli della galleria di Word e quelli
+/// in uso, tranne il predefinito e quelli che un ruolo già dice (titoli,
+/// citazioni, voci d'elenco).
+fn gallery(document: &Document, used: &BTreeSet<String>) -> Vec<ParaStyle> {
+    let styles = &document.styles;
+    let mut found: Vec<_> = styles
+        .styles
+        .iter()
+        .filter(|s| (s.quick && !s.hidden) || used.contains(&s.id))
+        .filter(|s| plain_style(document, &s.id))
+        .collect();
+    found.sort_by(|a, b| {
+        (a.priority.unwrap_or(u32::MAX), &a.name).cmp(&(b.priority.unwrap_or(u32::MAX), &b.name))
+    });
+    found
+        .into_iter()
+        .map(|s| ParaStyle {
+            id: s.id.clone(),
+            name: if s.name.is_empty() {
+                s.id.clone()
+            } else {
+                s.name.clone()
+            },
+            f: base(styles, Some(&s.id)),
+        })
+        .collect()
+}
+
+/// Uno stile che un paragrafo di corpo può avere: non il predefinito, e
+/// nessuno che ne faccia un titolo, una citazione o una voce d'elenco.
+fn plain_style(document: &Document, id: &str) -> bool {
+    let Some(style) = document.styles.get(id) else {
+        return false;
+    };
+    let props = ParaProps {
+        style: Some(id.to_string()),
+        ..ParaProps::default()
+    };
+    style.kind == StyleKind::Paragraph
+        && !style.default
+        && id != "Normal"
+        && id != "ListParagraph"
+        && role(document, &props) == Role::Body
+}
+
+/// Lo stile di un paragrafo di corpo, se non è quello predefinito.
+pub(crate) fn style_of(document: &Document, props: &ParaProps) -> Option<String> {
+    props
+        .style
+        .as_deref()
+        .filter(|id| plain_style(document, id))
+        .map(str::to_string)
 }
 
 fn blocks(document: &Document, body: &[std::sync::Arc<WcBlock>]) -> Result<Vec<Block>, RichError> {
@@ -368,8 +539,9 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
         }
     }
     let empty = ParaKeep::default() == keep;
+    let role = role(document, &paragraph.props);
     Ok(Para {
-        role: role(document, &paragraph.props),
+        role,
         align: align(styles, &paragraph.props),
         k: if empty {
             None
@@ -377,6 +549,10 @@ fn para(document: &Document, paragraph: &Paragraph) -> Result<Para, RichError> {
             Some(blob::encode(&keep)?)
         },
         sect: paragraph.section.as_deref().map(blob::encode).transpose()?,
+        p: layout(styles, &paragraph.props),
+        s: (role == Role::Body)
+            .then(|| style_of(document, &paragraph.props))
+            .flatten(),
         f: base(styles, style),
         c,
     })
@@ -494,7 +670,41 @@ fn parse_hex(name: &str) -> Option<wordcraft_doc::props::Rgb> {
     wordcraft_doc::props::Rgb::parse(name)
 }
 
-fn align(styles: &StyleSheet, props: &ParaProps) -> Option<Align> {
+/// Le proprietà del paragrafo senza la sua disposizione diretta.
+pub(crate) fn bare_layout(props: &ParaProps) -> ParaProps {
+    ParaProps {
+        indent_left: None,
+        indent_right: None,
+        indent_first: None,
+        indent_left_chars: None,
+        indent_right_chars: None,
+        indent_first_chars: None,
+        space_before: None,
+        space_after: None,
+        space_before_auto: None,
+        space_after_auto: None,
+        line_spacing: None,
+        ..props.clone()
+    }
+}
+
+/// La disposizione che chi legge vede, dove differisce da quella dello stile.
+pub(crate) fn layout(styles: &StyleSheet, props: &ParaProps) -> Layout {
+    let full = styles.resolve_para(props);
+    let plain = styles.resolve_para(&bare_layout(props));
+    let length = |a: f32, b: f32| (!same_size(a, b)).then_some(a);
+    let (line, plain_line) = (Line::of(full.line_spacing), Line::of(plain.line_spacing));
+    Layout {
+        left: length(full.indent_left, plain.indent_left),
+        right: length(full.indent_right, plain.indent_right),
+        first: length(full.indent_first, plain.indent_first),
+        before: length(full.space_before, plain.space_before),
+        after: length(full.space_after, plain.space_after),
+        line: (!line.same(plain_line)).then_some(line),
+    }
+}
+
+pub(crate) fn align(styles: &StyleSheet, props: &ParaProps) -> Option<Align> {
     match styles.resolve_para(props).align {
         WcAlign::Center => Some(Align::Center),
         WcAlign::Right => Some(Align::Right),

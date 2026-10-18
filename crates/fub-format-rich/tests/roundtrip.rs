@@ -4,10 +4,12 @@
 mod common;
 
 use common::{bytes, sample, styled, text};
-use fub_format_rich::projection::{Block, Inline, Look, Mark, Para, Projection, Role};
+use fub_format_rich::projection::{
+    Align, Block, Inline, Layout, Line, Look, Mark, Para, Projection, Role,
+};
 use fub_format_rich::{open, save, Codec, ReadOnly, RichError, Saved};
 use wordcraft_doc::para::NoteKind;
-use wordcraft_doc::props::{Highlight, NumRef, Rgb, TextColor};
+use wordcraft_doc::props::{Highlight, LineSpacing, NumRef, Rgb, TextColor};
 use wordcraft_doc::{
     para_block, Block as WcBlock, CharProps, Document, InlineObject, ParaProps, Paragraph,
 };
@@ -231,6 +233,72 @@ fn carattere_dimensione_colori_e_maiuscole_vanno_e_tornano() {
     assert_eq!(seen("Una prosa ").0, vec![Mark::SmallCaps]);
     assert_eq!(seen("Una prosa ").1.font, None);
     assert_eq!(prose.f, base, "la base del paragrafo non cambia");
+}
+
+#[test]
+fn allineamento_disposizione_e_stile_vanno_e_tornano() {
+    let file = bytes(&sample());
+    let mut p = projection(&file);
+    assert!(
+        p.styles.iter().any(|s| s.id == "Title"),
+        "la galleria propone gli stili del documento: {:?}",
+        p.styles
+    );
+    assert!(
+        p.styles
+            .iter()
+            .all(|s| s.id != "Normal" && s.id != "Heading1"),
+        "non il predefinito né quelli dei ruoli"
+    );
+    let prose = para_mut(&mut p, 1);
+    assert_eq!(
+        (prose.p.first, prose.p.after),
+        (Some(18.0), Some(14.0)),
+        "la formattazione diretta si vede"
+    );
+    assert_eq!((prose.align, prose.s.as_deref()), (None, None));
+    prose.align = Some(Align::Center);
+    prose.p.left = Some(36.0);
+    prose.p.first = None;
+    prose.p.line = Some(Line::Multiple(1.5));
+    prose.s = Some("Title".into());
+    let out = saved(&file, &p);
+    let after = read(&out);
+    let props = &paragraph(&after, 1).props;
+    assert_eq!(props.style.as_deref(), Some("Title"));
+    assert_eq!(props.align, Some(wordcraft_doc::Align::Center));
+    assert_eq!(props.indent_left, Some(36.0));
+    assert_eq!(
+        props.indent_first, None,
+        "il rientro torna quello dello stile"
+    );
+    assert_eq!(props.line_spacing, Some(LineSpacing::Multiple(1.5)));
+    assert_eq!(props.space_after, Some(14.0), "ciò che non cambia resta");
+
+    let mut reopened = projection(&out);
+    let prose = para_mut(&mut reopened, 1);
+    assert_eq!(prose.align, Some(Align::Center));
+    assert_eq!(prose.s.as_deref(), Some("Title"));
+    assert_eq!(prose.p.left, Some(36.0));
+    assert_eq!(prose.p.line, Some(Line::Multiple(1.5)));
+    assert_eq!(prose.p.first, None);
+
+    // Tutto come lo stile predefinito: la formattazione diretta se ne va.
+    prose.align = None;
+    prose.p = Layout::default();
+    prose.s = None;
+    let after = read(&saved(&out, &reopened));
+    let props = &paragraph(&after, 1).props;
+    assert_eq!(
+        (
+            props.style.as_deref(),
+            props.align,
+            props.indent_left,
+            props.line_spacing,
+            props.space_after
+        ),
+        (None, None, None, None, None)
+    );
 }
 
 #[test]

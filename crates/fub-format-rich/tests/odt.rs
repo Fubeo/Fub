@@ -5,7 +5,9 @@ mod common;
 
 use std::io::{Cursor, Read, Write};
 
-use fub_format_rich::projection::{AtomKind, Block, Inline, Look, Mark, Para, Projection, Role};
+use fub_format_rich::projection::{
+    Align, AtomKind, Block, Inline, Layout, Line, Look, Mark, Para, Projection, Role,
+};
 use fub_format_rich::{blank, open, save, Codec, ReadOnly, RichError, Saved};
 
 const NAMESPACES: &str = concat!(
@@ -421,6 +423,71 @@ fn carattere_dimensione_colori_e_maiuscole_diventano_uno_stile_automatico() {
         panic!()
     };
     assert_eq!(f.color, None, "il colore torna quello del paragrafo");
+}
+
+#[test]
+fn allineamento_disposizione_e_stile_diventano_stili_automatici() {
+    let mut fixture = Fixture::new(
+        "<text:p text:style-name=\"P1\">uno</text:p><text:p>due</text:p>\
+         <text:p text:style-name=\"Standard\">tre</text:p>",
+    );
+    fixture.common.push_str(
+        "<style:style style:name=\"Title\" style:family=\"paragraph\" \
+         style:parent-style-name=\"Standard\" style:class=\"chapter\">\
+         <style:text-properties fo:font-size=\"28pt\"/></style:style>",
+    );
+    let bytes = fixture.bytes();
+    let mut projection = projection(&bytes);
+    let names: Vec<&str> = projection.styles.iter().map(|s| s.id.as_str()).collect();
+    assert_eq!(
+        names,
+        ["Standard", "Title"],
+        "gli stili in uso e quelli di capitolo"
+    );
+    assert_eq!(projection.styles[1].f.size, Some(28.0));
+    assert_eq!(para(&projection, 0).align, Some(Align::Center));
+    assert_eq!(para(&projection, 0).s.as_deref(), Some("Standard"));
+    assert_eq!(para(&projection, 1).s, None);
+
+    let first = para_mut(&mut projection, 0);
+    first.align = Some(Align::Right);
+    first.p.left = Some(36.0);
+    let second = para_mut(&mut projection, 1);
+    second.p.before = Some(12.0);
+    second.p.line = Some(Line::Multiple(1.5));
+    para_mut(&mut projection, 2).s = Some("Title".into());
+    let out = saved(&bytes, &projection);
+    let content = part(&out, "content.xml");
+    for attr in [
+        "fo:text-align=\"end\"",
+        "fo:margin-left=\"36pt\"",
+        "fo:margin-top=\"12pt\"",
+        "fo:line-height=\"150%\"",
+        "text:style-name=\"Title\"",
+    ] {
+        assert!(content.contains(attr), "{attr} in {content}");
+    }
+    let mut reopened = self::projection(&out);
+    let first = para(&reopened, 0);
+    assert_eq!(
+        (first.align, first.p.left, first.s.as_deref()),
+        (Some(Align::Right), Some(36.0), Some("Standard")),
+        "la copia dello stile automatico tiene il genitore"
+    );
+    assert_eq!(para(&reopened, 1).p.before, Some(12.0));
+    assert_eq!(para(&reopened, 1).p.line, Some(Line::Multiple(1.5)));
+    assert_eq!(para(&reopened, 2).s.as_deref(), Some("Title"));
+
+    // Di nuovo come lo stile: a sinistra, senza rientro.
+    let first = para_mut(&mut reopened, 0);
+    first.align = None;
+    first.p = Layout::default();
+    let out = saved(&out, &reopened);
+    let reopened = self::projection(&out);
+    assert_eq!(
+        (para(&reopened, 0).align, &para(&reopened, 0).p),
+        (None, &Layout::default())
+    );
 }
 
 #[test]

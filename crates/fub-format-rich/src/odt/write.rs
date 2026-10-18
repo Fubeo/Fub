@@ -9,7 +9,9 @@
 //! - un paragrafo riprende il proprio tag; se il ruolo cambia cambiano
 //!   l'elemento (`text:p`, `text:h`), lo stile (uno stile automatico si copia
 //!   con il genitore nuovo, così la sua formattazione diretta resta) e gli
-//!   elenchi che lo contengono;
+//!   elenchi che lo contengono; uno stile scelto cambia allo stesso modo, e
+//!   un allineamento o una disposizione diversi da quelli mostrati diventano
+//!   uno stile automatico `FubP<n>`, o la copia di quello che c'era;
 //! - un tratto riprende i propri involucri; un'enfasi diversa da quella che
 //!   chi scrive vedeva diventa uno stile automatico `FubT<n>` attorno al testo;
 //! - un oggetto riprende il proprio XML, purché il documento lo avesse;
@@ -27,10 +29,14 @@ use super::keys::{
     self, name_of, opening, AtomKey, CellKey, Level, ParaKey, RowKey, RunKey, TableKey,
 };
 use super::read::{self, inner, Body, Unit};
-use super::styles::{Def, LevelKind, Position, Size, Styles, TextProps};
+use super::styles::{
+    self as odt_styles, Def, LevelKind, ParaChange, Position, Size, Styles, TextProps,
+};
 use super::xml::{self, Tree};
 use crate::blob;
-use crate::projection::{self, AtomKind, Block, Cell, Inline, Look, Mark, Para, Role, Row, Table};
+use crate::projection::{
+    self, Align, AtomKind, Block, Cell, Inline, Line, Look, Mark, Para, Role, Row, Table,
+};
 use crate::RichError;
 
 /// Oltre questo prodotto di lunghezze l'allineamento non cerca la
@@ -343,6 +349,64 @@ fn text_properties(props: &TextProps) -> String {
         None => {}
     }
     xml::open_tag("style:text-properties", &attrs, true)
+}
+
+/// Centimetri in punti.
+fn cm(cm: f32) -> f32 {
+    cm * 72.0 / 2.54
+}
+
+/// Porta gli attributi di `style:paragraph-properties` al cambiamento. Un
+/// `fo:margin` si scioglie nei quattro lati prima di cambiarne uno.
+fn apply(attrs: &mut Vec<(String, String)>, change: &ParaChange) {
+    let sides = [
+        ("fo:margin-left", change.left),
+        ("fo:margin-right", change.right),
+        ("fo:margin-top", change.before),
+        ("fo:margin-bottom", change.after),
+    ];
+    if sides.iter().any(|(_, c)| c.is_some()) {
+        if let Some(all) = attr(attrs, "fo:margin").map(str::to_string) {
+            set_attr(attrs, "fo:margin", None);
+            for (name, _) in sides {
+                if attr(attrs, name).is_none() {
+                    set_attr(attrs, name, Some(all.clone()));
+                }
+            }
+        }
+    }
+    for (name, c) in sides.into_iter().chain([("fo:text-indent", change.first)]) {
+        if let Some(value) = c {
+            set_attr(attrs, name, value.map(odt_styles::points));
+        }
+    }
+    if let Some(line) = change.line {
+        set_attr(attrs, "fo:line-height", None);
+        set_attr(attrs, "style:line-height-at-least", None);
+        match line {
+            Some(Line::Multiple(m)) => set_attr(
+                attrs,
+                "fo:line-height",
+                Some(format!("{}%", (m * 1000.0).round() / 10.0)),
+            ),
+            Some(Line::Exactly(pt)) => {
+                set_attr(attrs, "fo:line-height", Some(odt_styles::points(pt)))
+            }
+            Some(Line::AtLeast(pt)) => set_attr(
+                attrs,
+                "style:line-height-at-least",
+                Some(odt_styles::points(pt)),
+            ),
+            None => {}
+        }
+    }
+    if let Some(align) = change.align {
+        set_attr(
+            attrs,
+            "fo:text-align",
+            align.map(|a| odt_styles::align_value(a).to_string()),
+        );
+    }
 }
 
 /// Un paragrafo che la shell mostra vuoto in una cella vuota: ProseMirror ne
@@ -769,7 +833,84 @@ impl<'a> Writer<'a> {
 
     // ── Paragrafi ───────────────────────────────────────────────────────────
 
+    /// Il piano di un paragrafo: quello del ruolo, poi lo stile scelto, poi
+    /// allineamento e disposizione.
     fn plan(&mut self, para: &Para, prev: Option<&[Level]>) -> Result<Plan, RichError> {
+        let key: Option<ParaKey> = para.k.as_deref().map(blob::decode).transpose()?;
+        let before = key.as_ref().map(|key| read::role(&self.styles, key));
+        let mut plan = self.plan_role(para, prev)?;
+        let (name, mut attrs) = keys::tag(&plan.tag)
+            .ok_or_else(|| RichError::Malformed("odt: paragraph tag".into()))?;
+        let shown = plan.shown.clone();
+
+        let shown_s = (before == Some(Role::Body))
+            .then(|| self.styles.common_of(shown.as_deref()))
+            .flatten();
+        if para.role == Role::Body && para.s != shown_s {
+            let target = match para.s.as_deref() {
+                Some(id) if self.styles.common("paragraph", id) => Some(Some(id.to_string())),
+                Some(_) => None,
+                None => Some(None),
+            };
+            if let Some(target) = target {
+                self.restyle(&mut attrs, target)?;
+                plan.kept = false;
+            }
+        }
+
+        let current = style_attr(&attrs);
+        let common = self.styles.common_of(current.as_deref());
+        let plain = self.styles.para(common.as_deref());
+        let plain_align = self.styles.align(common.as_deref());
+        let shown_layout = self.styles.layout(shown.as_deref());
+        let left = |a: Option<Align>| a.filter(|a| *a != Align::Left);
+        let mut change = ParaChange::default();
+        if left(para.align) != self.styles.align(shown.as_deref()) {
+            let want = left(para.align);
+            change.align = Some((want != plain_align).then(|| want.unwrap_or(Align::Left)));
+        }
+        let length = |want: Option<f32>, shown: Option<f32>, plain: Option<f32>| {
+            (want != shown).then(|| {
+                let plain = plain.unwrap_or(0.0);
+                let target = want.unwrap_or(plain);
+                (!projection::same_size(target, plain)).then_some(target)
+            })
+        };
+        let want = &para.p;
+        change.left = length(want.left, shown_layout.left, plain.left);
+        change.right = length(want.right, shown_layout.right, plain.right);
+        change.first = length(want.first, shown_layout.first, plain.first);
+        change.before = length(want.before, shown_layout.before, plain.before);
+        change.after = length(want.after, shown_layout.after, plain.after);
+        if want.line != shown_layout.line {
+            let plain = plain.line.unwrap_or(Line::Multiple(1.0));
+            let target = want.line.unwrap_or(plain);
+            change.line = Some((!target.same(plain)).then_some(target));
+        }
+        if !change.is_empty() {
+            let automatic = current
+                .as_deref()
+                .filter(|c| self.styles.get("paragraph", c).is_some_and(|d| d.automatic))
+                .map(str::to_string);
+            let value = match automatic {
+                Some(auto) => {
+                    let parent = self
+                        .styles
+                        .get("paragraph", &auto)
+                        .and_then(|d| d.parent.clone());
+                    Some(self.clone_para_with(&auto, parent, Some(&change))?)
+                }
+                None if change.only_clears() => current,
+                None => Some(self.para_style(current, &change)),
+            };
+            set_attr(&mut attrs, "text:style-name", value);
+        }
+        plan.style = style_attr(&attrs);
+        plan.tag = keys::rebuild(&name, &attrs);
+        Ok(plan)
+    }
+
+    fn plan_role(&mut self, para: &Para, prev: Option<&[Level]>) -> Result<Plan, RichError> {
         let key: Option<ParaKey> = para.k.as_deref().map(blob::decode).transpose()?;
         let before = key.as_ref().map(|key| read::role(&self.styles, key));
         if let (Some(key), Some(before)) = (&key, before) {
@@ -926,17 +1067,26 @@ impl<'a> Writer<'a> {
             .filter(|c| self.styles.get("paragraph", c).is_some_and(|d| d.automatic))
             .map(str::to_string);
         let value = match automatic {
-            Some(auto) => Some(self.clone_para(&auto, target)?),
+            Some(auto) => Some(self.clone_para_with(&auto, target, None)?),
             None => target,
         };
         set_attr(attrs, "text:style-name", value);
         Ok(())
     }
 
-    fn clone_para(&mut self, auto: &str, parent: Option<String>) -> Result<String, RichError> {
+    /// Copia lo stile automatico `auto` col genitore `parent` e, se c'è, la
+    /// disposizione cambiata.
+    fn clone_para_with(
+        &mut self,
+        auto: &str,
+        parent: Option<String>,
+        change: Option<&ParaChange>,
+    ) -> Result<String, RichError> {
         let key = (auto.to_string(), parent.clone());
-        if let Some(name) = self.clones.get(&key) {
-            return Ok(name.clone());
+        if change.is_none() {
+            if let Some(name) = self.clones.get(&key) {
+                return Ok(name.clone());
+            }
         }
         let tree = self.base.content;
         let container = tree
@@ -955,15 +1105,57 @@ impl<'a> Writer<'a> {
         set_attr(&mut attrs, "style:name", Some(name.clone()));
         set_attr(&mut attrs, "style:parent-style-name", parent.clone());
         let span = tree.nodes[id].span.clone();
-        if element.open == span {
-            self.auto_xml
-                .push_str(&xml::open_tag("style:style", &attrs, true));
-        } else {
-            self.auto_xml
-                .push_str(&xml::open_tag("style:style", &attrs, false));
-            self.auto_xml.push_str(&String::from_utf8_lossy(
-                &tree.source[element.open.end..span.end],
-            ));
+        let raw = |range: Range<usize>| String::from_utf8_lossy(&tree.source[range]).into_owned();
+        match change {
+            None if element.open == span => {
+                self.auto_xml
+                    .push_str(&xml::open_tag("style:style", &attrs, true))
+            }
+            None => {
+                self.auto_xml
+                    .push_str(&xml::open_tag("style:style", &attrs, false));
+                self.auto_xml.push_str(&raw(element.open.end..span.end));
+            }
+            Some(change) => {
+                let mut out = xml::open_tag("style:style", &attrs, false);
+                let props = tree
+                    .elements(id)
+                    .find(|(_, e)| e.name == "style:paragraph-properties");
+                match props {
+                    Some((pid, props)) => {
+                        let pspan = tree.nodes[pid].span.clone();
+                        let mut pattrs = props.attrs.clone();
+                        apply(&mut pattrs, change);
+                        out.push_str(&raw(element.open.end..pspan.start));
+                        if props.open == pspan {
+                            out.push_str(&xml::open_tag(
+                                "style:paragraph-properties",
+                                &pattrs,
+                                true,
+                            ));
+                        } else {
+                            out.push_str(&xml::open_tag(
+                                "style:paragraph-properties",
+                                &pattrs,
+                                false,
+                            ));
+                            out.push_str(&raw(props.open.end..pspan.end));
+                        }
+                        out.push_str(&raw(pspan.end..span.end));
+                    }
+                    None => {
+                        let mut pattrs = Vec::new();
+                        apply(&mut pattrs, change);
+                        out.push_str(&xml::open_tag("style:paragraph-properties", &pattrs, true));
+                        if element.open == span {
+                            out.push_str("</style:style>");
+                        } else {
+                            out.push_str(&raw(element.open.end..span.end));
+                        }
+                    }
+                }
+                self.auto_xml.push_str(&out);
+            }
         }
         let mut def = self
             .styles
@@ -972,9 +1164,54 @@ impl<'a> Writer<'a> {
             .unwrap_or_default();
         def.parent = parent;
         def.automatic = true;
+        if let Some(change) = change {
+            def.para = def.para.changed(change);
+            def.align = change.align.unwrap_or(def.align);
+        } else {
+            self.clones.insert(key, name.clone());
+        }
         self.styles.define("paragraph", &name, def);
-        self.clones.insert(key, name.clone());
         Ok(name)
+    }
+
+    /// Uno stile automatico nuovo di genitore `parent` con soltanto la
+    /// disposizione `change`, o quello uguale già scritto.
+    fn para_style(&mut self, parent: Option<String>, change: &ParaChange) -> String {
+        let para = odt_styles::ParaProps::default().changed(change);
+        let align = change.align.flatten();
+        if let Some(name) = self
+            .styles
+            .find_para("FubP", parent.as_deref(), &para, align)
+        {
+            return name;
+        }
+        let name = self.styles.fresh("FubP");
+        let mut attrs = vec![
+            ("style:name".to_string(), name.clone()),
+            ("style:family".to_string(), "paragraph".to_string()),
+        ];
+        if let Some(parent) = &parent {
+            attrs.push(("style:parent-style-name".into(), parent.clone()));
+        }
+        let mut pattrs = Vec::new();
+        apply(&mut pattrs, change);
+        self.auto_xml.push_str(&format!(
+            "{}{}</style:style>",
+            xml::open_tag("style:style", &attrs, false),
+            xml::open_tag("style:paragraph-properties", &pattrs, true)
+        ));
+        self.styles.define(
+            "paragraph",
+            &name,
+            Def {
+                parent,
+                para,
+                align,
+                automatic: true,
+                ..Def::default()
+            },
+        );
+        name
     }
 
     fn body_style(&self) -> Option<String> {
@@ -1023,6 +1260,11 @@ impl<'a> Writer<'a> {
                 ..TextProps::default()
             },
             outline_level: Some(level),
+            para: odt_styles::ParaProps {
+                before: Some(cm(0.423)),
+                after: Some(cm(0.212)),
+                ..odt_styles::ParaProps::default()
+            },
             ..Def::default()
         };
         self.styles.define("paragraph", &name, def);
@@ -1041,7 +1283,22 @@ impl<'a> Writer<'a> {
              fo:margin-right=\"1cm\" fo:margin-top=\"0cm\" fo:margin-bottom=\"0.283cm\" \
              fo:text-indent=\"0cm\" style:auto-text-indent=\"false\"/></style:style>",
         );
-        self.styles.define("paragraph", name, Def::default());
+        let para = odt_styles::ParaProps {
+            left: Some(cm(1.0)),
+            right: Some(cm(1.0)),
+            first: Some(0.0),
+            before: Some(0.0),
+            after: Some(cm(0.283)),
+            line: None,
+        };
+        self.styles.define(
+            "paragraph",
+            name,
+            Def {
+                para,
+                ..Def::default()
+            },
+        );
         Ok(name.to_string())
     }
 
@@ -1153,11 +1410,16 @@ impl<'a> Writer<'a> {
         }
         sync(&mut stack, &[], out);
         out.push_str(&format!("</{}>", name_of(&plan.tag)));
+        let style = plan.style.as_deref();
         Ok(Para {
             role: para.role,
-            align: None,
+            align: self.styles.align(style),
             k: None,
             sect: None,
+            p: self.styles.layout(style),
+            s: (para.role == Role::Body)
+                .then(|| self.styles.common_of(style))
+                .flatten(),
             f: Look::default(),
             c: expected,
         })
