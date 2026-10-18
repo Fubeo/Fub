@@ -321,3 +321,39 @@ describe("il menu File e le creazioni", () => {
     teardown();
   });
 });
+
+describe("il menu File e il vault intero", () => {
+  afterEach(() => {
+    closeContextMenu();
+    document.body.replaceChildren();
+  });
+
+  it("snapshot e ripristino stanno subito dopo «Apri vault…», e ci sono solo se la shell li offre", () => {
+    const menubar = document.createElement("nav");
+    menubar.id = "app-menu";
+    document.body.replaceChildren(menubar);
+    const ran: string[] = [];
+    let offered = true;
+    const teardown = mountAppMenu({
+      run: () => {},
+      vault: () => (offered ? [
+        { label: "Snapshot completo del vault…", run: () => ran.push("crea") },
+        { label: "Ripristina uno snapshot…", run: () => ran.push("ripristina") },
+      ] : []),
+    });
+    const labels = (): string[] => {
+      document.querySelector<HTMLButtonElement>("#app-menu-0")!.click();
+      return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].map((item) => item.textContent ?? "");
+    };
+    const shown = labels();
+    const open = shown.indexOf("Apri vault…");
+    expect(shown.slice(open + 1, open + 3)).toEqual(["Snapshot completo del vault…", "Ripristina uno snapshot…"]);
+    [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")]
+      .find((entry) => entry.textContent === "Ripristina uno snapshot…")!
+      .click();
+    expect(ran).toEqual(["ripristina"]);
+    offered = false;
+    expect(labels()).not.toContain("Snapshot completo del vault…");
+    teardown();
+  });
+});

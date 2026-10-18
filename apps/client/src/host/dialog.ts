@@ -61,3 +61,11 @@ export async function pickSupportDestination(): Promise<string | null> {
   });
   return typeof choice === "string" && choice.trim() ? choice : null;
 }
+
+/// Il nome di una cartella **nuova**, dove una copia del vault deve nascere: è
+/// il dialogo di salvataggio, perché è l'unico che lascia scrivere un nome che
+/// non esiste ancora. Che la cartella non ci sia lo controlla comunque l'host.
+export async function pickNewFolder(title: string, defaultName: string): Promise<string | null> {
+  const choice = await tauriSave({ title, defaultPath: defaultName });
+  return typeof choice === "string" && choice.trim() ? choice : null;
+}

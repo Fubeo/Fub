@@ -3,7 +3,7 @@
 // Il nome lo scrive la shell comune dentro `#vault-path`; qui lo si segue per
 // dare al chip il suo nome accessibile e il suo stato vuoto. L'elenco viene dal
 // registro dei vault conosciuti, preferiti in testa.
-import { openVault } from "../../../desktop-shell";
+import { openVault, vaultGestures } from "../../../desktop-shell";
 import { errorText } from "../../../host/errors";
 import { api } from "../../../host/ipc";
 import type { KnownVault } from "../../../host/contract";
@@ -79,6 +79,7 @@ export function mountVaultChip(lifetime: Lifetime): void {
       },
     }));
     items.push({ label: t("app.open_vault"), separator: items.length > 0, run: () => run("shell.vault.open") });
+    vaultGestures().forEach((gesture, index) => items.push({ ...gesture, separator: index === 0 }));
     menu.show(below(chip), items);
   };
   lifetime.listen(chip, "click", (event) => {

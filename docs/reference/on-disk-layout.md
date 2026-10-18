@@ -506,6 +506,11 @@ dello snapshot su quella appena catturata prima di applicarlo. La prova a vuoto
 esegue gli stessi controlli di destinazione e di lettura senza chiudere niente.
 Dopo il ripristino la shell ricarica la finestra, perché ogni stato in memoria
 appartiene al contenuto sostituito.
+La shell offre i due comandi nel menu File e nel menu del chip del vault. Nel
+loro modulo ogni path ha un «Scegli…» che apre il dialogo di sistema: una
+cartella esistente per `source`, il dialogo di salvataggio per un nome nuovo in
+`target` e `backup`. Il path scelto resta nel campo e arriva al comando di
+sempre: non esiste una porta IPC dedicata.
 
 Il drill backup/restore dell'issue #7 resta una prova offline separata del
 fixture storico e del restore completo con `Host`; non è l'applicatore globale

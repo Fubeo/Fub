@@ -37,6 +37,7 @@ import { openVaultRoot, undoLastOperation, vaultArg } from "../state/vault";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { opensWithoutParams, primaryViews } from "./primary-views";
+import { withPathPicker } from "./path-fields";
 
 /// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
 /// all'utente, e mettere in salvo i buffer prima di un comando che scrive. Il
@@ -665,7 +666,7 @@ export async function openSlashPalette(
       const field = fieldFor(param, "palette-docs");
       if (param.required) field.required = true;
       fields.set(param.name, field);
-      label.append(name, field);
+      label.append(name, withPathPicker(spec.id, param.name, param.title, field));
       form.append(label);
     }
     const actions = document.createElement("div");
@@ -1064,7 +1065,7 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, pref
     const known = prefill[param.name];
     if (known !== undefined && !(field instanceof HTMLInputElement && field.type === "checkbox")) field.value = known;
     fields.set(param.name, field);
-    label.appendChild(field);
+    label.appendChild(withPathPicker(spec.id, param.name, param.title, field));
     if (param.description) {
       const help = document.createElement("span");
       help.className = "palette-help";

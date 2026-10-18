@@ -925,6 +925,7 @@ async function init(): Promise<Teardown> {
       ...(canCreateDrawing() ? [{ label: t("menu.file.new_drawing"), run: () => void newDrawing() }] : []),
       ...(canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
     ],
+    vault: vaultGestures,
   }));
   refreshTitlebarShortcuts();
   pageWindowLifetime.add(onLanguage(refreshTitlebarShortcuts));
@@ -1046,6 +1047,23 @@ async function init(): Promise<Teardown> {
   const reloaded = takeNoticeAfterReload();
   if (reloaded) notify(reloaded);
   return teardown;
+}
+
+/// I gesti sul vault intero che il menu File e il chip del vault offrono:
+/// snapshot completo e ripristino, cioè i comandi dell'host con il loro modulo
+/// (che ora sceglie le cartelle col dialogo di sistema). Senza vault aperto, o
+/// senza il comando nel registro, la voce non c'è.
+const VAULT_GESTURES = [
+  { command: "vault.snapshot.create", label: "menu.file.snapshot_create" },
+  { command: "vault.snapshot.apply", label: "menu.file.snapshot_apply" },
+] as const;
+
+export function vaultGestures(): { label: string; run(): void }[] {
+  if (!state.vaultRoot) return [];
+  return VAULT_GESTURES.flatMap(({ command, label }) => {
+    const entry = allCommands().find((candidate) => candidate.id === command);
+    return entry ? [{ label: t(label), run: () => startCommand(entry, paletteHost) }] : [];
+  });
 }
 
 /// Come si esce dalla concentrazione lo si dice una volta per finestra: chi

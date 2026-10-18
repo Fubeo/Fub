@@ -10685,6 +10685,20 @@ h6.ui-heading {
   color: var(--muted);
   font-size: var(--text-sm);
 }
+/* Un path del disco col suo «Scegli…»: il campo prende la riga, il bottone
+   resta della sua misura accanto. */
+.modale .palette-path {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.modale .palette-path > input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.modale .palette-path > button {
+  flex: none;
+}
 .modale .palette-label {
   color: var(--text);
   font-size: var(--text-sm);

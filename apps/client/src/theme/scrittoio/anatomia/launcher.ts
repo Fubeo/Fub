@@ -9,7 +9,7 @@ export const LAUNCHER: PartAnatomy = {
     { name: "launcher-field", states: [S("rest"), S("focused")], hooks: ["palette-input"] },
     // Gli esiti: la riga scelta la dice `aria-selected`, il puntatore ha la sua.
     { name: "launcher-rows", states: SELECTABLE, hooks: ["palette-list", "palette-row", "palette-title", "palette-desc", "palette-scope", "palette-favorite", "palette-empty", "hit-occurrence", "docsearch-summary"] },
-    { name: "command-form", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["palette-form", "palette-label", "palette-help"] },
+    { name: "command-form", states: [S("rest"), S("hover"), S("focused"), S("disabled")], hooks: ["palette-form", "palette-label", "palette-help", "palette-path"] },
     { name: "command-plan", states: REST, hooks: ["palette-summary", "palette-plan", "palette-error"] },
     { name: "dialog-actions", states: INTERACTIVE, hooks: ["palette-actions", "primary", "danger"] },
     { name: "compare", states: REST, hooks: ["compare-box", "compare-lines", "compare-line"] },

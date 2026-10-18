@@ -17,6 +17,7 @@ const world = vi.hoisted(() => ({
   openVault: (_root: string): Promise<void> => Promise.resolve(),
   opened: [] as string[],
   notices: [] as { text: string; tone: string }[],
+  gestures: [] as { label: string; run(): void }[],
 }));
 
 vi.mock("../../../desktop-shell", () => ({
@@ -24,6 +25,7 @@ vi.mock("../../../desktop-shell", () => ({
     world.opened.push(root);
     return world.openVault(root);
   },
+  vaultGestures: () => world.gestures,
 }));
 vi.mock("../../../host/ipc", () => ({
   api: {
@@ -315,6 +317,22 @@ describe("il chip premuto con un vault aperto", () => {
     expect(world.started).toEqual([OPEN]);
     expect(world.opened).toEqual([]);
     expect(chip().getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("dopo l'apertura di una cartella vengono lo snapshot e il ripristino del vault", async () => {
+    const run: string[] = [];
+    world.gestures = [
+      { label: "Snapshot", run: () => run.push("crea") },
+      { label: "Ripristino", run: () => run.push("ripristina") },
+    ];
+    mountVaultChip(lifetime);
+    await openChipMenu();
+    const items = [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].map((item) => item.textContent ?? "");
+    const open = items.findIndex((label) => label.includes("app.open_vault") || label.includes("Apri vault"));
+    expect(items.slice(open + 1).map((label) => label.trim())).toEqual(["Snapshot", "Ripristino"]);
+    [...document.querySelectorAll<HTMLElement>('[role^="menuitem"]')].find((item) => item.textContent?.includes("Ripristino"))!.click();
+    expect(run).toEqual(["ripristina"]);
+    world.gestures = [];
   });
 
   it("Escape lo richiude, e il chip lo sa", async () => {
