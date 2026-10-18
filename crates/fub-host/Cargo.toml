@@ -17,6 +17,7 @@ fub-format-markdown = { workspace = true }
 fub-format-sheet = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }
+fub-format-rich = { workspace = true, optional = true }
 fub-importers = { workspace = true }
 fub-kernel = { workspace = true }
 serde = { workspace = true }
@@ -132,8 +133,13 @@ ureq = { version = "3", default-features = false, features = [
 rustix = { workspace = true }
 
 [features]
-default = ["notify-watcher", "http-client", "official-features"]
+default = ["notify-watcher", "http-client", "official-features", "rich"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
+
+# I documenti di videoscrittura (`fub-format-rich`, oggi Word): il formato a
+# byte e la proiezione che la superficie ricca modifica. Spento, un `.docx` è
+# un file come un altro, e il resto dei formati e delle feature non cambia.
+rich = ["dep:fub-format-rich"]
 
 # Il client HTTP: acceso di default come il watcher, e per la stessa ragione —
 # i client desktop previsti (CLI 27.1, API locale 27.2, l'app) lo vogliono, e

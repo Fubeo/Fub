@@ -3349,17 +3349,37 @@ impl Host {
         self.with_session(vault, |session| session.workspace.clone())
     }
     /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
+    ///
+    /// Per un documento di videoscrittura la sorgente è la sua proiezione e la
+    /// revisione è quella dei byte del file ([`crate::rich`]): i byte si
+    /// leggono nella fotografia, la proiezione si calcola fuori.
     pub fn read_document_with_format(
         &self,
         vault: Option<&str>,
         id: &DocId,
     ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
-        self.read_workspace(vault, |workspace| {
-            let source = workspace.read_source(id).map_err(PluginError::from)?;
-            let revision = Revision::of(&source);
+        let (read, format) = self.read_workspace(vault, |workspace| {
             let format = workspace.format_of(id);
-            Ok((source, revision, format))
-        })
+            let read = match crate::rich::codec(format.as_ref()) {
+                Some(codec) => {
+                    let bytes = workspace.read_source_bytes(id).map_err(PluginError::from)?;
+                    Err((codec, bytes))
+                }
+                None => Ok(workspace.read_source(id).map_err(PluginError::from)?),
+            };
+            Ok((read, format))
+        })?;
+        match read {
+            Ok(source) => {
+                let revision = Revision::of(&source);
+                Ok((source, revision, format))
+            }
+            Err((codec, bytes)) => {
+                let revision = Revision::of_bytes(&bytes);
+                let projection = crate::rich::open(codec, id, &bytes)?;
+                Ok((projection, revision, format))
+            }
+        }
     }
 
     /// Il formato che il vault riconosce a `id`, anche per un nome che non
@@ -3524,6 +3544,53 @@ impl Host {
         expected: Option<Revision>,
     ) -> Result<Revision, PluginError> {
         let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        Self::write_bytes_in(&workspace, id, bytes, expected)
+    }
+
+    /// Scrive la proiezione `source` di un documento di videoscrittura.
+    ///
+    /// Tutto dentro il turno di scrittura, che è rientrante: i byte su cui la
+    /// shell ha lavorato si leggono e si confrontano con la base, il codec
+    /// salva fuori dal lucchetto, e i byte nuovi passano dal CAS della stessa
+    /// revisione. Una proiezione che descrive il file com'è non scrive niente.
+    fn write_rich_in(
+        &self,
+        workspace: &Custody<Workspace>,
+        codec: crate::rich::Codec,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision, PluginError> {
+        let _turn = workspace.write_turn();
+        let current = {
+            let ws = workspace.read()?;
+            fub_kernel::error::optional(ws.read_source_bytes(id)).map_err(PluginError::from)?
+        };
+        let revision = current.as_deref().map(Revision::of_bytes);
+        if let Some(want) = base.expected() {
+            if revision.as_ref() != Some(want) {
+                return Err(PluginError::from(fub_kernel::KernelError::Stale(
+                    id.to_string(),
+                )));
+            }
+        }
+        match crate::rich::save(codec, id, current.as_deref(), source)? {
+            crate::rich::Save::Unchanged => revision.ok_or_else(|| {
+                PluginError::Internal(format!("{id}: an unchanged save without a file").into())
+            }),
+            crate::rich::Save::Bytes(bytes) => {
+                Self::write_bytes_in(workspace, id, &bytes, revision)
+            }
+        }
+    }
+
+    /// [`Host::write_document_bytes`] sul workspace già risolto.
+    fn write_bytes_in(
+        workspace: &Custody<Workspace>,
+        id: &DocId,
+        bytes: &[u8],
+        expected: Option<Revision>,
+    ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
         let prepared = {
             let ws = workspace.read()?;
@@ -3545,7 +3612,7 @@ impl Host {
             let mut ws = workspace.write()?;
             ws.finish_document_write_deferred(pending)
         };
-        finish_events(&workspace, deferred)
+        finish_events(workspace, deferred)
     }
 
     /// Scrive sul vault già risolto dal chiamante. Le operazioni composte
@@ -3559,6 +3626,10 @@ impl Host {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
+        let codec = crate::rich::codec(workspace.read()?.format_of(id).as_ref());
+        if let Some(codec) = codec {
+            return self.write_rich_in(&workspace, codec, id, source, base);
+        }
         let prepared = {
             let ws = workspace.read()?;
             ws.prepare_document_write(id, base)

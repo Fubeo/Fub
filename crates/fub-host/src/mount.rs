@@ -269,11 +269,12 @@ pub(crate) fn mount_with_formats(
     let (providers, resources) = prepared_formats.into_parts();
     let mut format_resources = Some(resources);
     let mut formats = FormatRegistry::new();
-    for provider in [
+    let core_formats = [
         MarkdownProvider::boxed(),
         fub_format_canvas::CanvasProvider::boxed(),
         fub_format_base::BaseProvider::boxed(),
-    ] {
+    ];
+    for provider in core_formats.into_iter().chain(crate::rich::providers()) {
         if let Err(error) = formats.register(provider) {
             return Err(mount_error_with_resource_disposal(
                 format!("format provider conflict: {error}"),

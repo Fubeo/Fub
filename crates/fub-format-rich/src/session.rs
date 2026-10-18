@@ -78,6 +78,13 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
         return Err(RichError::ReadOnly(reason));
     }
     let projection = Projection::from_json(json)?;
+    // Aperto in sola lettura per una ragione che l'apertura ha misurato: come
+    // per quelle che il documento dice di sé, nessun salvataggio, con la sua
+    // specie. La rilettura qui sotto resta la garanzia per chi quel campo lo
+    // togliesse.
+    if let Some(reason) = projection.readonly {
+        return Err(RichError::ReadOnly(reason));
+    }
     let wanted = unproject(&projection, &base)?;
     if wanted == base {
         return Ok(Saved::Unchanged);
@@ -87,6 +94,12 @@ pub fn save(codec: Codec, current: &[u8], json: &str) -> Result<Saved, RichError
         return Err(RichError::Fidelity);
     }
     Ok(Saved::Bytes(bytes))
+}
+
+/// I byte di un documento vuoto: la base di chi scrive una proiezione in un
+/// file che ancora non c'è.
+pub fn blank(codec: Codec) -> Result<Vec<u8>, RichError> {
+    codec.write(&Document::new())
 }
 
 fn normalized(document: &Document) -> Document {

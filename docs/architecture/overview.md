@@ -37,6 +37,7 @@ flowchart TD
     sheet["fub-format-sheet"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
+    rich["fub-format-rich"]
     importers["fub-importers"]
     cli["fub-cli"]
     services["fub-services"]
@@ -46,6 +47,9 @@ flowchart TD
     kernel["fub-kernel"]
     abi["fub-abi"]
     proof["wordcraft-proof"]
+    wdoc["wordcraft-doc"]
+    wdocx["wordcraft-docx"]
+    wgeom["wordcraft-geom"]
 
     app --> abi
     app --> host
@@ -57,6 +61,7 @@ flowchart TD
     host --> features
     host --> importers
     host --> markdown
+    host --> rich
     host --> sheet
     host --> kernel
     cli --> abi
@@ -65,6 +70,13 @@ flowchart TD
     base --> abi
     canvas --> abi
     canvas --> markdown
+    rich --> abi
+    rich --> markdown
+    rich --> wdoc
+    rich --> wdocx
+    wdoc --> wgeom
+    wdocx --> wdoc
+    wdocx --> wgeom
     importers --> abi
     features --> abi
     features --> base

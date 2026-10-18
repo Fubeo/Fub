@@ -30,7 +30,7 @@ pub mod projection;
 pub mod session;
 mod unproject;
 
-pub use session::{open, save, Opened, ReadOnly, Saved};
+pub use session::{blank, open, save, Opened, ReadOnly, Saved};
 
 /// L'id del formato Word.
 pub const DOCX_FORMAT_ID: &str = "docx";

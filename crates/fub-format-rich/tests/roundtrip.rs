@@ -709,6 +709,20 @@ fn una_nota_mostrata_due_volte_apre_in_sola_lettura() {
     let file = bytes(&d);
     let opened = open(Codec::Docx, &file).unwrap();
     assert_eq!(opened.readonly, Some(ReadOnly::Projection));
-    let projection = Projection::from_json(&opened.projection).unwrap();
+    let mut projection = Projection::from_json(&opened.projection).unwrap();
     assert_eq!(projection.readonly, Some(ReadOnly::Projection));
+    // Una modifica si rifiuta con il motivo misurato all'apertura; e chi
+    // togliesse quel campo trova comunque la rilettura a dire di no.
+    para_mut(&mut projection, 0).c.push(Inline::Text {
+        x: " cambiato".into(),
+        k: None,
+        m: Vec::new(),
+        href: None,
+    });
+    assert_eq!(
+        save(Codec::Docx, &file, &projection.to_json().unwrap()),
+        Err(RichError::ReadOnly(ReadOnly::Projection))
+    );
+    projection.readonly = None;
+    assert!(save(Codec::Docx, &file, &projection.to_json().unwrap()).is_err());
 }

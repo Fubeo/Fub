@@ -1949,6 +1949,7 @@ dependencies = [
  "fub-format-base",
  "fub-format-canvas",
  "fub-format-markdown",
+ "fub-format-rich",
  "fub-format-sheet",
  "fub-importers",
  "fub-kernel",
