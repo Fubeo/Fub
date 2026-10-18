@@ -127,7 +127,9 @@ l'IPC.
   `wordcraft_geom::PAPER_SIZES` attraverso `paper.generated.ts`
   (`UPDATE_MIRROR=1 cargo test -p fub-format-rich --test ts_paper`). Non è una
   sostituzione, quindi mentre si registra si rifiuta. Il codec ODT rifiuta
-  una pagina.
+  una pagina. Il foglio (`.rich-content`) prende da `pageStyle` la pagina
+  del documento come stile in linea: larghezza della carta, margini (i
+  laterali in proporzione quando il riquadro è più stretto) e un bordo.
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

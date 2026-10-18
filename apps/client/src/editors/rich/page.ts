@@ -137,3 +137,19 @@ export function setMargins(margins: { top: number; bottom: number; left: number;
 export function setColumns(cols: number): Command {
   return changePage((page) => ({ ...page, cols }));
 }
+
+/// Il foglio con la pagina del documento: largo quanto la carta, con i suoi
+/// margini, e il bordo che la mostra. In un riquadro più stretto della carta
+/// il foglio si stringe, lasciando vedere il bordo, e i margini laterali con
+/// lui in proporzione. Senza
+/// una pagina resta il foglio del tema.
+export function pageStyle(page: Page | null): string[] {
+  if (!page) return [];
+  const side = (margin: number) => `min(${margin}pt, ${((margin / page.w) * 100).toFixed(3)}%)`;
+  return [
+    `max-width: min(${page.w}pt, calc(100% - 2 * var(--space-7)))`,
+    `padding: ${page.top}pt ${side(page.right)} ${page.bottom}pt ${side(page.left)}`,
+    "margin-block: var(--space-7)",
+    "box-shadow: 0 0 0 1px var(--doc-rule-soft)",
+  ];
+}

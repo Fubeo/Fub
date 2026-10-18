@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { t } from "../../i18n/strings";
 import { RichEngine } from "./engine";
-import { MARGIN_PRESETS, pageAt, PAPER_SIZES, paperName, setColumns, setLandscape, setMargins, setPaper, validPage } from "./page";
+import { MARGIN_PRESETS, pageAt, pageStyle, PAPER_SIZES, paperName, setColumns, setLandscape, setMargins, setPaper, validPage } from "./page";
 import { parseProjection, type Block, type Page, type Para } from "./projection";
 import { mountStrip } from "./strip";
 
@@ -82,6 +82,17 @@ describe("pagina", () => {
     expect(validPage({ ...LETTER, w: 5 })).toBe(false);
     expect(validPage({ ...LETTER, top: Number.NaN })).toBe(false);
     expect(MARGIN_PRESETS.every((m) => validPage({ ...LETTER, ...m }))).toBe(true);
+  });
+
+  it("il foglio prende la carta e i margini del documento", () => {
+    const e = engine({ ...LETTER, left: 90 });
+    const sheet = document.querySelector<HTMLElement>(".rich-content")!;
+    expect(sheet.style.maxWidth).toContain("612pt");
+    expect(pageStyle({ ...LETTER, left: 90 })).toContain("padding: 72pt min(72pt, 11.765%) 72pt min(90pt, 14.706%)");
+    e.select(e.state.doc.content.size - 2);
+    e.apply(setLandscape(true));
+    expect(sheet.style.maxWidth).toContain("792pt");
+    expect(pageStyle(null)).toEqual([]);
   });
 
   it("senza una pagina nel formato non c'è niente da cambiare, e la striscia non la offre", () => {

@@ -40,7 +40,7 @@ import {
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
 import { parseProjection, writeComment, writeHead, type Look, type Page, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
-import { samePage } from "./page";
+import { pageStyle, samePage } from "./page";
 import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
@@ -92,11 +92,14 @@ export class RichEngine {
     this.#view = new EditorView(parent, {
       state: this.#state(richSchema.nodes.doc.create(null, richSchema.nodes.para.create())),
       editable: () => this.editable(),
-      attributes: () => ({
+      attributes: (state) => ({
         class: "rich-content",
-        // La dimensione di un paragrafo senza stile: quella di uno con uno
-        // stile proprio si misura su questa.
-        ...(this.#head.f?.size !== undefined ? { style: `--rich-doc-pt: ${this.#head.f.size}` } : {}),
+        // La dimensione di un paragrafo senza stile (quella di uno con uno
+        // stile proprio si misura su questa) e la pagina del documento.
+        style: [
+          ...(this.#head.f?.size !== undefined ? [`--rich-doc-pt: ${this.#head.f.size}`] : []),
+          ...pageStyle(state.doc.attrs.page as Page | null),
+        ].join("; "),
         role: "textbox",
         "aria-multiline": "true",
         "aria-label": options.label(),

@@ -102,7 +102,10 @@ Dal gruppo **Revisione** della striscia:
   l'avviso lo dice. Il resto della sezione (la rilegatura, la larghezza delle
   colonne, le intestazioni) resta com'è, ma cambiare il numero di colonne le
   rende uguali. Mentre si registra la pagina non si cambia. Un `.odt` non
-  offre la pagina.
+  offre la pagina. Il foglio di un `.docx` è la pagina dell'ultima sezione,
+  larga quanto la carta e con i suoi margini, e la si cambia vedendola; in un
+  riquadro più stretto il foglio si stringe con i margini in proporzione. Le
+  colonne e le pagine delle altre sezioni non si vedono sul foglio.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, il resto delle sezioni,
