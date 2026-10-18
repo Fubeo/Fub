@@ -17,6 +17,7 @@
 // `fromDoc` riscrive il documento nella forma della proiezione; un blocco già
 // scritto si ritrova nella cache per nodo (i nodi sono immutabili), così una
 // battuta riscrive un paragrafo e non il documento.
+import { t, type Key } from "../../i18n/strings";
 import { Fragment, Schema, type Mark as PmMark, type Node as PmNode, type NodeSpec, type MarkSpec } from "prosemirror-model";
 import {
   BODY,
@@ -98,6 +99,34 @@ const para: NodeSpec = {
     }
     return [tag, attrs, 0];
   },
+};
+
+/// Il nome di ogni specie di oggetto, per chi legge con la sintesi vocale.
+const ATOM_NAMES: Readonly<Record<AtomKind, Key>> = {
+  image: "rich.atom.image",
+  graphic: "rich.atom.graphic",
+  shape: "rich.atom.shape",
+  group: "rich.atom.group",
+  field: "rich.atom.field",
+  note: "rich.atom.note",
+  equation: "rich.atom.equation",
+  ruby: "rich.atom.ruby",
+  opaque: "rich.atom.opaque",
+  marker: "rich.atom.opaque",
+};
+
+/// Il segno di un oggetto senza etichetta.
+const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
+  image: "▣",
+  graphic: "◇",
+  shape: "◇",
+  group: "◇",
+  field: "{ }",
+  note: "*",
+  equation: "∑",
+  ruby: "ア",
+  opaque: "◆",
+  marker: "",
 };
 
 const nodes: Record<string, NodeSpec> = {
@@ -202,7 +231,13 @@ const nodes: Record<string, NodeSpec> = {
         attrs.style = `width: ${Math.max(8, w * (4 / 3))}px; aspect-ratio: ${Math.max(w, 1)} / ${Math.max(h, 1)}`;
       }
       if (kind === "marker") return ["span", attrs];
-      return ["span", attrs, label || "​"];
+      // Un oggetto si annuncia per specie (e per testo alternativo, se ne ha);
+      // senza un'etichetta si vede un segno della sua specie.
+      const name = t(ATOM_NAMES[kind]);
+      attrs.role = "img";
+      attrs["aria-label"] = label ? `${name}: ${label}` : name;
+      attrs.title = attrs["aria-label"];
+      return ["span", attrs, label || ATOM_GLYPHS[kind]];
     },
   },
 };

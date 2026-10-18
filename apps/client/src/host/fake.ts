@@ -323,7 +323,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".canvas")) return "canvas";
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
+    if (id.endsWith(".docx")) return "docx";
     return null;
+  }
+
+  /// Come il registro dei formati dell'host: un documento di Word il provider
+  /// lo vuole a byte, e la shell ne riceve la proiezione (`fub-format-rich`).
+  function sourceKindOf(id: string): "text" | "bytes" {
+    return formatOf(id) === "docx" ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -409,7 +416,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
   /// legge dalla risposta e non dalla propria testa.
   function entryKind(id: string): VaultEntry["kind"] {
-    return id.endsWith(".md") || id.endsWith(".markdown") || id.endsWith(".fubsheet") ? "document" : "asset";
+    return id.endsWith(".md") || id.endsWith(".markdown") || id.endsWith(".fubsheet") || id.endsWith(".docx")
+      ? "document"
+      : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -733,7 +742,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
+        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "docx", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id, vault) => {
@@ -743,7 +752,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           text: doc.text,
           revision: doc.revision,
           format_id: formatOf(id),
-          source_kind: "text",
+          source_kind: sourceKindOf(id),
         }));
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {

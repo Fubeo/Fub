@@ -57,6 +57,32 @@ describe("il motore ricco", () => {
     expect(changes).toEqual([]);
   });
 
+  it("un oggetto si annuncia per specie e testo alternativo, e senza etichetta mostra un segno", () => {
+    engine(
+      source([
+        {
+          t: "para",
+          role: { kind: "body" },
+          k: "P",
+          c: [
+            { t: "atom", k: "I", kind: "image", label: "Un pino" },
+            { t: "atom", k: "N", kind: "note" },
+            { t: "atom", k: "M", kind: "marker" },
+          ],
+        } as Block,
+      ]),
+    );
+    const [image, note, marker] = [...document.body.querySelectorAll<HTMLElement>(".rich-atom")];
+    expect(image.getAttribute("role")).toBe("img");
+    expect(image.getAttribute("aria-label")).toMatch(/: Un pino$/);
+    expect(image.textContent).toBe("Un pino");
+    expect(note.getAttribute("aria-label")).not.toBe("");
+    expect(note.getAttribute("aria-label")).not.toContain(":");
+    expect(note.textContent).toBe("*");
+    expect(marker.hasAttribute("role")).toBe(false);
+    expect(marker.textContent).toBe("");
+  });
+
   it("una proiezione in sola lettura non si scrive", () => {
     const e = engine(source([para("ciao")], { readonly: "revisions" }));
     expect(e.intake()).toEqual({ kind: "ok", readonly: "revisions" });
