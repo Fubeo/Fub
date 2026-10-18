@@ -245,7 +245,8 @@ const ATOM_GLYPHS: Readonly<Record<AtomKind, string>> = {
 const nodes: Record<string, NodeSpec> = {
   // I commenti del documento: l'elenco della proiezione, che una battuta
   // cambia insieme ai segni nel testo (`comments.ts`).
-  doc: { content: "(block | section)+", attrs: { comments: { default: [] } } },
+  // `track`: il documento registra le modifiche (`track.ts`).
+  doc: { content: "(block | section)+", attrs: { comments: { default: [] }, track: { default: false } } },
   para,
   /// La fine di una sezione: chiude il paragrafo prima di lei.
   section: {
@@ -626,7 +627,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
 export function toDoc(projection: Projection): PmNode {
   const content = blockNodes(projection.blocks);
   return richSchema.nodes.doc.create(
-    projection.comments ? { comments: projection.comments } : null,
+    { comments: projection.comments ?? [], track: projection.track === true },
     content.length > 0 ? content : [richSchema.nodes.para.create()],
   );
 }

@@ -98,6 +98,7 @@ pub(crate) fn open(bytes: &[u8]) -> Result<Opened, RichError> {
             projection::used_styles(&blocks, &mut used);
             doc.styles.gallery(&used)
         },
+        track: false,
         comments: Vec::new(),
         blocks,
     };
@@ -162,6 +163,12 @@ pub(crate) fn save(current: &[u8], json: &str) -> Result<Saved, RichError> {
     let projection = Projection::from_json(json)?;
     if let Some(reason) = projection.readonly {
         return Err(RichError::ReadOnly(reason));
+    }
+    // Registrare le modifiche viene da un altro formato: qui non si scrive.
+    if projection.track {
+        return Err(RichError::Codec(
+            "odt: recording changes is not written".into(),
+        ));
     }
     // I commenti di un `.odt` sono oggetti del testo, tenuti come sono: un
     // elenco di commenti viene da un altro formato, e qui non si scrive.

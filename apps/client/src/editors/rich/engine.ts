@@ -11,6 +11,9 @@
 // soltanto i blocchi diversi e non entra nella cronologia locale. Il motore
 // non scrive mai `k` che il documento non abbia già: lo garantisce il filtro
 // di ciò che si incolla (`paste.ts`).
+//
+// Mentre il documento registra le modifiche, ogni transazione dell'utente
+// passa da `track.ts` prima di applicarsi: ciò che non si registra non entra.
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, isHistoryTransaction, redo, undo, undoDepth } from "prosemirror-history";
 import { keymap } from "prosemirror-keymap";
@@ -41,6 +44,7 @@ import { richProof } from "./proof";
 import { commentPlugin, commentsOf } from "./comments";
 import { findPlugin, revisionPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, richSchema, toDoc } from "./schema";
+import { deleteChar, reviewAuthor, trackable, trackTransaction, tracking } from "./track";
 
 export { mountStrip } from "./strip";
 
@@ -151,8 +155,8 @@ export class RichEngine {
       Enter: splitParagraph,
       "Shift-Enter": insertBreak("\n"),
       "Mod-Enter": insertBreak("\u000c"),
-      Backspace: backspace,
-      Delete: deleteForward,
+      Backspace: chainCommands(backspace, deleteChar(-1)),
+      Delete: chainCommands(deleteForward, deleteChar(1)),
       "Mod-y": redo,
       Tab: chainCommands(shiftListLevel(1), insertTab),
       "Shift-Tab": shiftListLevel(-1),
@@ -225,6 +229,7 @@ export class RichEngine {
     if (comments.map(writeComment).join() !== commentsOf(current).map(writeComment).join()) {
       tr.setDocAttribute("comments", comments);
     }
+    if (tracking(next) !== tracking(current)) tr.setDocAttribute("track", tracking(next));
     if (!tr.docChanged) {
       this.#notify();
       return;
@@ -254,16 +259,26 @@ export class RichEngine {
     }
   }
 
-  #dispatch(tr: Transaction): void {
+  #dispatch(given: Transaction): void {
     if (this.#destroyed) return;
     const before = this.#view.state;
+    let tr = given;
+    if (tracking(before.doc) && tr.docChanged && !tr.getMeta(SYNC)) {
+      const tracked = trackTransaction(before, tr, reviewAuthor());
+      // Ciò che non ha una revisione da scrivere non cambia il documento.
+      if (!tracked) {
+        this.#notify();
+        return;
+      }
+      tr = tracked;
+    }
     const state = before.apply(tr);
     this.#view.updateState(state);
     if (tr.docChanged && !tr.getMeta(SYNC)) {
       // Ciò che il documento ha, l'ha avuto: un taglia e incolla lo ritrova.
       collectKeys(state.doc, this.#known);
       const previous = this.#source;
-      this.#source = writeHead({ ...this.#head, comments: commentsOf(state.doc) }) + this.#writer.write(state.doc).join(",") + "]}";
+      this.#source = writeHead({ ...this.#head, track: tracking(state.doc), comments: commentsOf(state.doc) }) + this.#writer.write(state.doc).join(",") + "]}";
       if (this.#source !== previous) {
         this.#options.onChange({
           text: this.#source,
@@ -371,7 +386,21 @@ export class RichEngine {
 
   actionState(id: string): { enabled: boolean; active: boolean | null } {
     if (!this.editable()) return { enabled: false, active: null };
-    return richActionState(id, this.#view.state);
+    const state = richActionState(id, this.#view.state);
+    // Mentre si registra, un'azione che non si registra non si offre.
+    if (state.enabled && this.tracking() && !ASK_ACTIONS.has(id)) {
+      let recorded = true;
+      RICH_ACTIONS.get(id)!.run(this.#view.state, (tr) => {
+        recorded = trackable(tr);
+      });
+      if (!recorded) return { ...state, enabled: false };
+    }
+    return state;
+  }
+
+  /// Il documento registra le modifiche.
+  tracking(): boolean {
+    return tracking(this.#view.state.doc);
   }
 
   /// Mostra le occorrenze di una ricerca (nessuna con `null`) e seleziona

@@ -41,6 +41,7 @@ use crate::{blob, fidelity, fresh, stories};
 /// Il documento che la proiezione descrive, a partire da `base`.
 pub(crate) fn unproject(projection: &Projection, base: &Document) -> Result<Document, RichError> {
     let mut document = base.clone();
+    document.settings.track_changes = projection.track;
     let mut state = State {
         stories: HashSet::new(),
         last_list: [None, None],

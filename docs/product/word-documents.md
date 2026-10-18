@@ -83,7 +83,18 @@ Dal gruppo **Revisione** della striscia:
   risposta, si **risolve** o si riapre con le sue risposte, e si elimina con
   loro e con i loro segni; ogni gesto è una battuta, che l'annulla disfa. Il
   testo di un commento che c'era resta com'è. Il segno di un commento nuovo
-  si sposta trascinandolo, ma non si copia.
+  si sposta trascinandolo, ma non si copia;
+- **Registra modifiche** in un `.docx` chiede l'autore (lo stesso dei
+  commenti) e accende l'impostazione del documento, che il file conserva: da
+  lì ciò che si scrive, si cancella, si incolla o si sostituisce diventa una
+  revisione tracciata di quell'autore, con la data. Il testo eliminato resta
+  barrato e Backspace e Canc lo scavalcano; Invio fa un segno di paragrafo
+  inserito, unire due paragrafi ne elimina uno. Ciò che l'autore aveva
+  inserito si toglie davvero, e un tratto battuto di seguito resta una
+  modifica sola. Mentre si registra il formato non si cambia (aspetto, stile,
+  spaziatura, tabelle), perché non ha una revisione da scrivere; commenti,
+  accettare e rifiutare restano liberi. Un `.docx` che registra già si apre
+  così, non più in sola lettura.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
@@ -94,8 +105,8 @@ Backspace.
 
 Un documento si apre **soltanto in lettura**, con il motivo in testa, quando
 ha modifiche di formato tracciate o revisioni fuori dal corpo (note,
-intestazioni, piè di pagina, commenti, caselle di testo), registra le
-modifiche, è protetto, oppure quando la
+intestazioni, piè di pagina, commenti, caselle di testo), è protetto,
+oppure quando la
 superficie o il codec non saprebbero riscriverlo identico. Un documento cifrato
 o più grande di 256 MiB non si apre. Un salvataggio che non si rilegge uguale a
 ciò che si voleva scrivere non scrive, e il testo resta nel buffer.
@@ -120,8 +131,6 @@ Limiti attuali:
   le cui righe hanno tutte le stesse celle, senza celle unite in larghezza;
   le celle si uniscono soltanto in larghezza, e una cella unita in altezza si
   mostra come una cella per riga;
-- con le revisioni registrate (`track_changes`) il documento resta in sola
-  lettura: una modifica fatta qui non diventerebbe una revisione;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
   del documento, che resta quella del file;
 - il codec riscrive il file in forma propria: rinumera intestazioni, piè di

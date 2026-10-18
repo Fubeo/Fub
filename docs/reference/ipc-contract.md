@@ -287,6 +287,11 @@ uno nuovo non ha `k`. Un segno senza il suo commento si toglie; due commenti
 con lo stesso id, o una risposta senza il suo, sono una proiezione malformata.
 Il codec ODT rifiuta un elenco non vuoto.
 
+`"track": true`, fra `readonly` e `lang`, dice che il documento registra le
+modifiche (assente quando non lo fa): la shell scrive ciò che cambia come
+revisioni `ins` e `del`, e il codec salva l'impostazione con il documento. Il
+codec ODT rifiuta `track`.
+
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo

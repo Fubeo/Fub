@@ -1618,3 +1618,51 @@ fn un_commento_sbagliato_è_rifiutato() {
     control.comments.push(new_comment(9, "a\u{7}b", None));
     assert!(matches!(refused(&control), Err(RichError::Malformed(_))));
 }
+
+#[test]
+fn un_documento_che_registra_le_modifiche_si_scrive_con_le_sue_revisioni() {
+    let mut d = sample();
+    d.settings.track_changes = true;
+    let file = bytes(&d);
+    let p = projection(&file);
+    assert!(p.track);
+    assert_eq!(
+        save(Codec::Docx, &file, &p.to_json().unwrap()),
+        Ok(Saved::Unchanged)
+    );
+
+    // Una parola scritta registrando: un inserimento di chi scrive.
+    let mut typed = p.clone();
+    let para = para_mut(&mut typed, 1);
+    para.c.push(Inline::Text {
+        x: " aggiunta".into(),
+        k: None,
+        m: Vec::new(),
+        href: None,
+        f: Look::default(),
+        ins: rev("Bea"),
+        del: None,
+    });
+    let out = saved(&file, &typed);
+    let d = read(&out);
+    assert!(d.settings.track_changes);
+    let last = paragraph(&d, 1).runs.last().unwrap();
+    assert_eq!(
+        last.props
+            .ins
+            .map(|i| d.revisions[i as usize].author.clone()),
+        Some("Bea".into())
+    );
+    assert!(projection(&out).track);
+
+    // Smettere di registrare si scrive nelle impostazioni.
+    let mut stopped = p.clone();
+    stopped.track = false;
+    assert!(!read(&saved(&file, &stopped)).settings.track_changes);
+    // E cominciare anche.
+    let plain = bytes(&sample());
+    let mut started = projection(&plain);
+    assert!(!started.track);
+    started.track = true;
+    assert!(read(&saved(&plain, &started)).settings.track_changes);
+}

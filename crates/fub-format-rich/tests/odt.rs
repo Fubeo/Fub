@@ -1246,6 +1246,17 @@ fn un_commento_non_si_scrive() {
 }
 
 #[test]
+fn registrare_le_modifiche_non_si_scrive() {
+    let bytes = odt("<text:p>x</text:p>");
+    let mut projection = projection(&bytes);
+    projection.track = true;
+    assert!(matches!(
+        save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
+        Err(RichError::Codec(_))
+    ));
+}
+
+#[test]
 fn un_documento_nuovo_si_crea_e_si_scrive() {
     let bytes = blank(Codec::Odt).unwrap();
     let mut projection = projection(&bytes);

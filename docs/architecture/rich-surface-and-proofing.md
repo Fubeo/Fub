@@ -101,7 +101,22 @@ l'IPC.
   `commentPlugin` dà lo sfondo agli intervalli aperti. Il controllo di
   rilettura accetta l'id durevole e la data UTC che il codec dà a un
   commento nuovo. La striscia offre commenti nuovi soltanto ai formati di
-  `RICH_COMMENT_FORMATS` (`docx`).
+  `RICH_REVIEW_FORMATS` (`docx`).
+- Registrare le modifiche è il campo `track` della proiezione
+  (`settings.track_changes` del documento), nello schema l'attributo `track`
+  del documento. Mentre è acceso, il motore passa ogni transazione
+  dell'utente che cambia il documento da `track.ts`, che ne applica la
+  versione registrata: si registra soltanto una transazione di sole
+  sostituzioni dentro paragrafi dello stesso contenitore, passo per passo,
+  con ciò che entra marcato `ins` e ciò che esce lasciato con `del` (o tolto,
+  se era un inserimento dello stesso autore); ogni altra si rifiuta, e
+  `actionState` spegne le azioni che ne farebbero una. Passano senza
+  registrarsi la cronologia, la sincronizzazione e le transazioni segnate da
+  `untracked` (commenti, accettare e rifiutare, l'interruttore). Backspace e
+  Canc cancellano un carattere da sé (`deleteChar`), per scavalcare il testo
+  già eliminato. L'autore è della sessione (`reviewAuthor`), condiviso con i
+  commenti. Il codec ODT rifiuta `track`, e un `.odt` che registra resta in
+  sola lettura (`track_changes`).
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

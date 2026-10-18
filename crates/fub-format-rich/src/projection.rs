@@ -38,6 +38,10 @@ pub struct Projection {
     /// Perché il documento non si modifica, quando non si modifica.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub readonly: Option<crate::ReadOnly>,
+    /// Registra le modifiche: ciò che si scrive diventa una revisione
+    /// tracciata, e la shell la scrive come tale.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub track: bool,
     /// La lingua predefinita del documento, per il correttore.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
@@ -513,6 +517,7 @@ pub(crate) fn project(document: &Document) -> Result<Projection, RichError> {
         format: FORMAT.to_string(),
         version: VERSION,
         readonly: None,
+        track: document.settings.track_changes,
         lang: document.styles.default_chr.lang.clone(),
         f: base(&document.styles, None),
         styles: gallery(document, &used),

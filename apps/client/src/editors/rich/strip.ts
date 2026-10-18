@@ -42,6 +42,7 @@ import { addComment, anchorsOf, canComment, commentsOf, deleteComment, goToComme
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
+import { reviewAuthor, setReviewAuthor, setTracking } from "./track";
 import { countText, findMatches, goToRevision, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
 
 /// I gesti delle revisioni tracciate, con il loro segno.
@@ -54,16 +55,13 @@ const REVISION_BUTTONS: readonly { id: string; lines: readonly string[] }[] = [
   { id: "rich.rev.reject_all", lines: ["M4 4h16v16H4z", "M8 8l8 8", "M16 8l-8 8"] },
 ];
 
-/// Chi scrive i commenti nuovi: lo ricorda la sessione, non il documento.
-let commentAuthor = "";
-
 /// Ciò che la striscia chiede alla shell.
 export interface RichMedia {
   /// Un'immagine del vault scelta da chi scrive: i suoi byte, `null` se la
   /// scelta è annullata, `"unreadable"` se non si legge o pesa troppo.
   readonly pickImage?: () => Promise<Blob | "unreadable" | null>;
-  /// Il formato scrive commenti nuovi.
-  readonly comments?: boolean;
+  /// Il formato scrive commenti nuovi e registra le modifiche.
+  readonly review?: boolean;
 }
 
 /// La colonna del testo di una pagina Letter con i margini di Word, in punti:
@@ -384,7 +382,10 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   const comments = button(() => t("rich.comments"), null, (anchor) => openComments(anchor, false));
   comments.append(icon(["M4 5h16v11H9l-5 4z", "M8 9h8", "M8 12h5"]));
   comments.setAttribute("aria-haspopup", "dialog");
-  review.append(find, count, comments);
+  const track = button(() => t("rich.track"), null, (anchor) => openTrack(anchor));
+  track.append(icon(["M4 20h4L19 9l-4-4L4 16z", "M13 7l4 4", "M14 20h6"]));
+  track.setAttribute("aria-haspopup", "dialog");
+  review.append(find, count, comments, track);
   life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
   life.add(engine.onAsk(COMMENT_ACTION, () => openComments(comments, true)));
   // Le revisioni tracciate: si vedono soltanto in un documento che ne ha.
@@ -623,10 +624,8 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     author.type = "text";
     author.required = true;
     author.maxLength = 200;
-    author.value = commentAuthor;
-    life.listen(author, "input", () => {
-      commentAuthor = author.value.trim();
-    });
+    author.value = reviewAuthor();
+    life.listen(author, "input", () => setReviewAuthor(author.value));
     const by = () => author.value.trim();
     const done = (applied: boolean) => {
       if (!applied) return false;
@@ -641,7 +640,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     const text = area(3);
     const hint = document.createElement("p");
     hint.style.margin = "0";
-    if (media.comments) {
+    if (media.review) {
       field(form, text, "rich.comment.text");
       field(form, author, "rich.comment.author");
       const actions = row();
@@ -719,7 +718,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
           item.append(answer);
           said.focus();
         });
-        reply.disabled = !media.comments;
+        reply.disabled = !media.review;
         const resolve = action(comment.done ? "rich.comment.reopen" : "rich.comment.resolve", () => {
           done(engine.apply(resolveComment(id, !comment.done), false));
         });
@@ -740,9 +739,9 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
         for (const [id, place] of anchorsOf(state.doc)) if (place.start !== undefined && place.end !== undefined) out.add(id);
         return out;
       });
-      const can = media.comments === true && engine.read(canComment);
+      const can = media.review === true && engine.read(canComment);
       text.disabled = !can;
-      hint.textContent = media.comments ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
+      hint.textContent = media.review ? (can ? "" : t("rich.comment.need_selection")) : t("rich.comment.unsupported");
       list.replaceChildren();
       const ids = new Set(all.map((c) => c.id));
       for (const comment of all) {
@@ -770,6 +769,62 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     anchor.setAttribute("aria-expanded", "true");
     if (writing && !text.disabled) text.focus();
     else list.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }
+
+  /// Registra le modifiche: chi le scrive, e l'interruttore. Mentre si
+  /// registra, ciò che si scrive è una revisione di quell'autore.
+  function openTrack(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const form = document.createElement("form");
+    form.className = "rich-strip-swatches";
+    form.style.display = "grid";
+    form.style.gridTemplateColumns = "auto";
+    form.style.gap = "4px";
+    form.style.width = "260px";
+    const on = engine.tracking();
+    const hint = document.createElement("p");
+    hint.style.margin = "0";
+    hint.textContent = t(on ? "rich.track.on" : "rich.track.off");
+    const author = document.createElement("input");
+    author.type = "text";
+    author.maxLength = 200;
+    author.id = `${prefix}-track-author`;
+    author.className = "rich-strip-select";
+    author.style.width = "100%";
+    author.style.boxSizing = "border-box";
+    author.value = reviewAuthor();
+    life.listen(author, "input", () => setReviewAuthor(author.value));
+    const caption = document.createElement("label");
+    caption.htmlFor = author.id;
+    caption.textContent = t("rich.comment.author");
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "rich-strip-swatch-none";
+    submit.textContent = t(on ? "rich.track.stop" : "rich.track.start");
+    submit.style.justifySelf = "end";
+    form.append(hint, caption, author, submit);
+    life.listen(form, "submit", (event) => {
+      event.preventDefault();
+      if (!on && author.value.trim() === "") {
+        author.focus();
+        return;
+      }
+      engine.apply(setTracking(!on));
+      popover?.close();
+    });
+    popover = openPopover({
+      anchor,
+      content: form,
+      label: t("rich.track"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+    (on ? submit : author).focus();
   }
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
@@ -1210,6 +1265,8 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
       return;
     }
     const look = engine.look();
+    // Mentre si registra, il formato non si cambia: non ha una revisione.
+    const free = !engine.tracking();
     const fonts = [...new Set([...COMMON_FONTS, ...engine.fonts(), ...(look.font ? [look.font] : [])])].sort((a, b) =>
       a.localeCompare(b),
     );
@@ -1240,7 +1297,11 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     image.disabled = note.disabled = !engine.read(insertNote("·", false));
     merge.disabled = !engine.actionState("rich.table.merge").enabled;
     split.disabled = !engine.actionState("rich.table.split").enabled;
-    comments.hidden = !media.comments && engine.read((state) => commentsOf(state.doc).length === 0);
+    comments.hidden = !media.review && engine.read((state) => commentsOf(state.doc).length === 0);
+    track.hidden = !media.review && !engine.tracking();
+    setPressed(track, engine.tracking());
+    for (const control of [font, size, style, colorButton, highlightButton, painter, spacing]) control.disabled = !free;
+    if (!free) table.disabled = true;
     const tracked = engine.read(goToRevision(1));
     for (const control of revisionButtons) {
       control.hidden = !tracked;

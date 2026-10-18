@@ -139,7 +139,7 @@ describe("i commenti", () => {
 
   it("la striscia li elenca, ne aggiunge uno sulla selezione e ricorda l'autore", () => {
     const e = engine([para([{ t: "text", x: "il " }, keptMarker(false), { t: "text", x: "passo" }, keptMarker(true), { t: "text", x: " e altro" }])], [kept]);
-    const strip = mountStrip(e, () => null, { comments: true });
+    const strip = mountStrip(e, () => null, { review: true });
     document.body.append(strip.element);
     const from = at(e, "altro");
     e.select(from, from + "altro".length);
@@ -164,7 +164,7 @@ describe("i commenti", () => {
     expect(listed(e)[0]!.done).toBe(true);
     strip.destroy();
     // L'autore resta per il prossimo pannello.
-    const again = mountStrip(e, () => null, { comments: true });
+    const again = mountStrip(e, () => null, { review: true });
     document.body.append(again.element);
     e.select(at(e, "il"), at(e, "il") + 2);
     e.run("rich.comment");

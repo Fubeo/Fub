@@ -5,7 +5,7 @@
 // modifiche fatte con i comandi della superficie danno la proiezione che il
 // codec salva. Questa seconda è uno snapshot su file di questo test: si
 // rigenera con `npx vitest run src/editors/rich/fixture.test.ts -u`.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Node as PmNode } from "prosemirror-model";
 import { TextSelection } from "prosemirror-state";
 import projectionFixture from "../../__fixtures__/rich-projection.json";
@@ -15,6 +15,7 @@ import { parseProjection, writeProjection } from "./projection";
 import { insertImage, insertNote, insertTable, setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
 import { addComment, replyComment, resolveComment } from "./comments";
 import { BlockWriter, toDoc } from "./schema";
+import { setReviewAuthor, setTracking } from "./track";
 
 const SOURCE = projectionFixture.source;
 
@@ -145,6 +146,16 @@ describe("la proiezione del codec", () => {
     expect(e.run("markdown.heading.2")).toBe(true);
     e.select(last, last + "Fine".length);
     expect(e.apply(addComment("Un commento nuovo.", "Bea", at))).toBe(true);
+    // Registra le modifiche: ciò che Bea scrive in fondo alla sezione è un
+    // suo inserimento, con l'ora fissa del test.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(at));
+    setReviewAuthor("Bea");
+    expect(e.apply(setTracking(true))).toBe(true);
+    e.select(find(e.state.doc, "Fine della prima sezione") + "Fine della prima sezione".length);
+    e.dispatch(e.state.tr.insertText(" rivista"));
+    setReviewAuthor("");
+    vi.useRealTimers();
 
     const edited = e.getDoc();
     expect(changes[changes.length - 1]?.text).toBe(edited);

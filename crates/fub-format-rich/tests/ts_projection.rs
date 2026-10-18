@@ -378,6 +378,12 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
             ..Layout::default()
         }
     );
+    // Registrando, Bea ha scritto in fondo alla sezione: un suo inserimento.
+    assert!(p.track, "il documento registra le modifiche");
+    assert!(section.c.iter().any(|inline| matches!(
+        inline,
+        Inline::Text { x, ins: Some(rev), .. } if x == " rivista" && rev.by == "Bea"
+    )));
     // L'ultimo paragrafo è un titolo di secondo livello, e la sezione resta.
     let (role, last, _) = plain(&p.blocks, p.blocks.len() - 1);
     assert_eq!((role, last.as_str()), (Role::Heading { level: 2 }, "Fine."));

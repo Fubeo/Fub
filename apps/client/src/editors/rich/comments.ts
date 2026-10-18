@@ -14,6 +14,7 @@ import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type 
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Anchor, CommentView } from "./projection";
 import { richSchema } from "./schema";
+import { untracked } from "./track";
 
 /// Il testo più lungo di un commento nuovo, in byte UTF-8, come il codec.
 export const MAX_COMMENT_BYTES = 64 * 1024;
@@ -86,8 +87,9 @@ function now(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
+/// Un commento non è testo scritto: non si registra come revisione.
 function withComments(tr: Transaction, comments: readonly CommentView[]): Transaction {
-  return tr.setDocAttribute("comments", comments);
+  return untracked(tr.setDocAttribute("comments", comments));
 }
 
 /// Un commento nuovo di `by` sulla selezione, che non sia vuota.

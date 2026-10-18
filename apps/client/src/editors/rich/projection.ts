@@ -212,6 +212,8 @@ export interface Projection {
   readonly format: typeof PROJECTION_FORMAT;
   readonly version: typeof PROJECTION_VERSION;
   readonly readonly?: ReadOnlyReason;
+  /// Registra le modifiche: ciò che si scrive diventa una revisione tracciata.
+  readonly track?: boolean;
   readonly lang?: string;
   /// Suggerimento: il carattere e la dimensione di un paragrafo senza stile.
   readonly f?: Look;
@@ -536,15 +538,17 @@ export function parseProjection(source: string): Projection {
   const root = record(value, "proiezione");
   if (root.format !== PROJECTION_FORMAT) throw new ProjectionError("formato sconosciuto");
   if (root.version !== PROJECTION_VERSION) throw new ProjectionError(`versione ${String(root.version)}`);
-  closed(root, ["format", "version", "readonly", "lang", "f", "styles", "comments", "blocks"], "proiezione");
+  closed(root, ["format", "version", "readonly", "track", "lang", "f", "styles", "comments", "blocks"], "proiezione");
   const readonly = root.readonly;
   if (readonly !== undefined && !(READ_ONLY_REASONS as readonly unknown[]).includes(readonly)) {
     throw new ProjectionError("motivo di sola lettura sconosciuto");
   }
+  if (root.track !== undefined && typeof root.track !== "boolean") throw new ProjectionError("track: atteso un sì o no");
   return {
     format: PROJECTION_FORMAT,
     version: PROJECTION_VERSION,
     ...(readonly !== undefined ? { readonly: readonly as ReadOnlyReason } : {}),
+    ...(root.track === true ? { track: true } : {}),
     ...(root.lang !== undefined ? { lang: text(root.lang, "lang") } : {}),
     ...withLook(readLook(root.f, "f")),
     ...(root.styles !== undefined ? { styles: list(root.styles, "styles").map((s, i) => readStyle(s, `styles[${i}]`)) } : {}),
@@ -687,9 +691,10 @@ export function writeBlock(block: Block): string {
 }
 
 /// L'intestazione della proiezione fino all'elenco dei blocchi escluso.
-export function writeHead(projection: Pick<Projection, "readonly" | "lang" | "f" | "styles" | "comments">): string {
+export function writeHead(projection: Pick<Projection, "readonly" | "track" | "lang" | "f" | "styles" | "comments">): string {
   let out = `{"format":"${PROJECTION_FORMAT}","version":${PROJECTION_VERSION}`;
   if (projection.readonly !== undefined) out += `,"readonly":"${projection.readonly}"`;
+  if (projection.track) out += `,"track":true`;
   if (projection.lang !== undefined) out += `,"lang":${JSON.stringify(projection.lang)}`;
   out += writeLook(projection.f);
   if (projection.styles && projection.styles.length > 0) {

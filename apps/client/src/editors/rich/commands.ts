@@ -37,6 +37,7 @@ import { safeHref } from "./paste";
 import { canComment } from "./comments";
 import { goToRevision, resolveAll, resolveRevision } from "./review";
 import { richSchema } from "./schema";
+import { tracking } from "./track";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
 
@@ -332,7 +333,10 @@ export const splitParagraph: Command = (state, dispatch) => {
   if ($from.parent.type !== para || !$from.sameParent($to)) return false;
   const paragraph = $from.parent;
   const role = paragraph.attrs.role as Role;
-  if (paragraph.content.size === 0 && role.kind === "list") {
+  // Mentre si registra, il segno di fine nuovo lo segna la registrazione
+  // (`track.ts`), e una voce vuota non cambia ruolo: non ha una revisione.
+  const recording = tracking(state.doc);
+  if (paragraph.content.size === 0 && role.kind === "list" && !recording) {
     // Una voce vuota esce dall'elenco invece di farne un'altra.
     if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY }));
     return true;
@@ -347,7 +351,7 @@ export const splitParagraph: Command = (state, dispatch) => {
   tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, role: leavesHeading ? BODY : role } }]);
   // Il segno di fine revisionato resta in fondo, al secondo: il primo ne ha
   // uno nuovo, di chi scrive.
-  if (tracksMark(paragraph)) tr.setNodeMarkup($pos.before(), null, { ...tr.doc.nodeAt($pos.before())!.attrs, ins: null, del: null });
+  if (tracksMark(paragraph) && !recording) tr.setNodeMarkup($pos.before(), null, { ...tr.doc.nodeAt($pos.before())!.attrs, ins: null, del: null });
   // L'enfasi di un titolo viene dal suo stile: non segue nel testo normale;
   // un link e una revisione non seguono mai.
   const carried = marks.filter((mark) => !["link", "ins", "del"].includes(mark.type.name));
@@ -449,7 +453,8 @@ function carryMark(command: Command, dir: -1 | 1): Command {
         end = $from.after() + last.nodeSize;
       }
     }
-    if (first === null || !last || !dispatch || (!tracksMark(last) && !tracksMark(state.doc.nodeAt(first)))) {
+    // Mentre si registra, i paragrafi non si uniscono: lo fa la registrazione.
+    if (tracking(state.doc) || first === null || !last || !dispatch || (!tracksMark(last) && !tracksMark(state.doc.nodeAt(first)))) {
       return command(state, dispatch, view);
     }
     const at = first;

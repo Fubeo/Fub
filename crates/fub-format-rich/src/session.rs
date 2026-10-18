@@ -35,7 +35,9 @@ pub enum ReadOnly {
     /// testo): scriverci sopra le accetterebbe o le perderebbe. Gli
     /// inserimenti e le eliminazioni del testo si mostrano e si scrivono.
     Revisions,
-    /// Registra le modifiche: ogni scrittura dovrebbe diventare una revisione.
+    /// Registra le modifiche, in un formato in cui la superficie non le
+    /// registra (l'OpenDocument): ogni scrittura dovrebbe diventare una
+    /// revisione. Un `.docx` che le registra si apre con `track`.
     TrackChanges,
     /// È protetto contro le modifiche.
     Protected,
@@ -141,9 +143,6 @@ fn policy(document: &Document) -> Option<ReadOnly> {
         .any(|revision| revision.kind == RevisionKind::Format);
     if format || revisions_outside_body(document) {
         return Some(ReadOnly::Revisions);
-    }
-    if document.settings.track_changes {
-        return Some(ReadOnly::TrackChanges);
     }
     if document
         .settings

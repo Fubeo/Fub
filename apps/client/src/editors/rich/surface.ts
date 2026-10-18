@@ -33,8 +33,9 @@ export const RICH_FORMATS: Readonly<Record<string, string>> = {
   doc: RICH_PROFILE,
 };
 
-/// I formati che scrivono commenti nuovi: il codec ODT non li scrive ancora.
-export const RICH_COMMENT_FORMATS: ReadonlySet<string> = new Set(["docx"]);
+/// I formati che scrivono commenti nuovi e registrano le modifiche: il codec
+/// ODT non li scrive ancora.
+export const RICH_REVIEW_FORMATS: ReadonlySet<string> = new Set(["docx"]);
 
 /// Gli id delle azioni che la superficie esegue, noti prima che il motore
 /// arrivi: la barra disegna i pulsanti subito, spenti finché non scrive.
@@ -201,6 +202,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
     let text = failed ? t("rich.unavailable") : "";
     if (intake?.kind === "invalid") text = t("rich.invalid");
     else if (intake?.kind === "ok" && intake.readonly) text = t(READ_ONLY_KEYS[intake.readonly]);
+    else if (engine?.editable() && engine.tracking()) text = t("rich.track.notice");
     notice.textContent = text;
     notice.hidden = text === "";
     root.dataset.readonly = String(!(engine?.editable() ?? false));
@@ -233,7 +235,7 @@ export function mountRichSurface(profile: string, context: SurfaceMountContext, 
       });
       strip = mountStrip(engine, (id) => RICH_CHORDS[id] ?? null, {
         pickImage: pickImage(),
-        comments: RICH_COMMENT_FORMATS.has(context.formatId ?? ""),
+        review: RICH_REVIEW_FORMATS.has(context.formatId ?? ""),
       });
       root.insertBefore(strip.element, page);
       stopEngine = engine.subscribe(() => {

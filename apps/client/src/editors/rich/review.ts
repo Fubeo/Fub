@@ -24,6 +24,7 @@ import { Plugin, PluginKey, TextSelection, type Command, type EditorState, type 
 import { Decoration, DecorationSet } from "prosemirror-view";
 import type { Rev } from "./projection";
 import { REV_STYLE, revTitle, richSchema, sameRev } from "./schema";
+import { untracked } from "./track";
 
 export interface FindQuery {
   readonly text: string;
@@ -367,7 +368,8 @@ export function resolveRevision(accept: boolean): Command {
       const next = revisions(tr.doc).find((c) => c.from >= after);
       if (next) select(tr, next);
       else tr.setSelection(TextSelection.near(tr.doc.resolve(Math.min(after, tr.doc.content.size))));
-      dispatch(tr.scrollIntoView());
+      // Accettare o rifiutare non è una modifica da registrare.
+      dispatch(untracked(tr.scrollIntoView()));
     }
     return true;
   };
@@ -381,7 +383,7 @@ export function resolveAll(accept: boolean): Command {
     if (dispatch) {
       const tr = state.tr;
       resolve(tr, all, accept);
-      dispatch(tr.scrollIntoView());
+      dispatch(untracked(tr.scrollIntoView()));
     }
     return true;
   };
