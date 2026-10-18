@@ -195,6 +195,35 @@ export function exportArtifacts(notice: KernelNotice): ExportArtifact[] | null {
   return parsed;
 }
 
+/** One line of an export's journal: what the exporter says about the copy —
+ * above all what it could not carry. Without it a lossy copy would look like
+ * a faithful one. */
+export interface ExportNote {
+  level: "info" | "warning" | "error";
+  message: string;
+  entry: string | null;
+}
+
+/** The journal of a successful export, or `null` when it is not well formed.
+ * Bounded like the artifacts: a report is data from a provider, not markup. */
+export function exportNotes(notice: KernelNotice): ExportNote[] | null {
+  const report = exportReport(notice) as { log?: unknown } | null;
+  if (!report) return null;
+  const log = report.log ?? [];
+  if (!Array.isArray(log) || log.length > 256) return null;
+  const notes: ExportNote[] = [];
+  for (const note of log) {
+    if (!note || typeof note !== "object") return null;
+    const value = note as Record<string, unknown>;
+    const entry = value.entry ?? null;
+    if ((value.level !== "info" && value.level !== "warning" && value.level !== "error") ||
+        typeof value.message !== "string" || value.message.length > 4096 ||
+        (entry !== null && typeof entry !== "string")) return null;
+    notes.push({ level: value.level, message: value.message, entry });
+  }
+  return notes;
+}
+
 interface FinishedArtifact extends ExportArtifact {
   state: "ready" | "saving" | "saved" | "failed";
   detail: string;
@@ -202,6 +231,7 @@ interface FinishedArtifact extends ExportArtifact {
 interface FinishedExport {
   id: string;
   artifacts: FinishedArtifact[];
+  notes: ExportNote[];
 }
 // --- da qui in giù è disegno ------------------------------------------------
 
@@ -293,16 +323,18 @@ export function mountActivity(lifetime: Lifetime): void {
       const completed = eventNotice.event;
       if (completed.type === "job_done") {
         const artifacts = exportArtifacts(eventNotice);
-        if (artifacts && artifacts.length > 0 &&
+        const notes = exportNotes(eventNotice);
+        if (artifacts && notes && artifacts.length > 0 &&
             !finished.some((report) => report.id === completed.id)) {
           finished.push({
             id: completed.id,
             artifacts: artifacts.map((artifact) => ({ ...artifact, state: "ready", detail: "" })),
+            notes,
           });
           // Keep at most two completed exports; byte-bearing reports are
           // bounded by the producer's 32 MiB cap and released on vault close.
           if (finished.length > 2) finished.shift();
-        } else if (artifacts === null && exportReport(eventNotice)) {
+        } else if ((artifacts === null || notes === null) && exportReport(eventNotice)) {
           // Un export riuscito i cui artefatti non passano la validazione:
           // tacere vorrebbe dire un file promesso che non arriva mai.
           notify(t("activity.artifact_invalid"), "guasto");
@@ -431,7 +463,20 @@ function redraw(): void {
       item.append(status);
       list.append(item);
     }
+    for (const note of report.notes) list.append(noteRow(note));
   }
+}
+
+/// Una riga del giornale, come testo: l'avviso si legge come tale anche senza
+/// colori, e il documento a cui si riferisce sta davanti.
+function noteRow(note: ExportNote): HTMLLIElement {
+  const item = document.createElement("li");
+  item.className = note.level === "info" ? "muted" : "activity-row";
+  const text = note.level === "info"
+    ? t("activity.note_info", { message: note.message })
+    : t("activity.note_warning", { message: note.message });
+  item.textContent = note.entry ? t("activity.note_about", { entry: note.entry, note: text }) : text;
+  return item;
 }
 
 async function persistArtifact(report: FinishedExport, artifact: FinishedArtifact): Promise<void> {

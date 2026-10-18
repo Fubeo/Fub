@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
 import { openLifetime } from "../ui/lifetime";
 import { forwardNotice, onAnyEvent } from "../state/kernel";
-import { apply, exportArtifacts, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
+import { apply, exportArtifacts, exportNotes, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
 import { api } from "../host/ipc";
 import { state } from "../state/store";
 import samples from "../__fixtures__/mirror-samples.json";
@@ -208,6 +208,43 @@ describe("export artifacts from completed transfer jobs", () => {
       path: "out.csv", media_type: "text/csv",
       content: { kind: "delivered", value: 9007199254740993 },
     }))).toBeNull();
+  });
+
+  it("reads the journal as Rust serializes it, and refuses one that is not well formed", () => {
+    const [report] = (samples as unknown as Record<string, unknown[]>).ExportReport;
+    const done = notice({ type: "job_done", id: "3", job: ARTIFACT_JOB, result: { Ok: report } });
+    const log = (report as { log: unknown[] }).log;
+    expect(exportNotes(done)).toHaveLength(log.length);
+    const withLog = (log: unknown): KernelNotice =>
+      notice({ type: "job_done", id: "5", job: ARTIFACT_JOB, result: { Ok: { artifacts: [], log } } });
+    expect(exportNotes(withLog([{ level: "warning", message: "perde", entry: "A.docx" }])))
+      .toEqual([{ level: "warning", message: "perde", entry: "A.docx" }]);
+    expect(exportNotes(withLog([{ level: "loud", message: "x", entry: null }]))).toBeNull();
+    expect(exportNotes(withLog([{ level: "info", message: 3, entry: null }]))).toBeNull();
+    expect(exportNotes(withLog("non un elenco"))).toBeNull();
+  });
+
+  it("shows what the copy does not carry next to the copy", () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+    const query = vi.spyOn(api, "queryIndex").mockResolvedValue({ kind: "jobs", value: [] });
+    const lifetime = openLifetime();
+    mountActivity(lifetime);
+    forwardNotice(notice({ type: "job_done", id: "6", job: ARTIFACT_JOB, result: { Ok: {
+      artifacts: [{ path: "Lettera.txt", media_type: "text/plain", content: { kind: "bytes", value: [65] } }],
+      log: [
+        { level: "warning", message: "la copia non porta: 1 tabella", entry: "Lettera.docx" },
+        { level: "info", message: "il confronto non misura i caratteri", entry: null },
+      ],
+    } } }));
+    document.getElementById("activity-button")!.click();
+    const rows = [...document.querySelectorAll("#activity-list li")].map((row) => row.textContent);
+    expect(rows).toContain("Lettera.docx — Attenzione: la copia non porta: 1 tabella");
+    expect(rows).toContain("il confronto non misura i caratteri");
+    lifetime.close();
+    query.mockRestore();
   });
 
   it("offers Save only for bytes; native cancellation leaves bytes available and no success claim", async () => {
