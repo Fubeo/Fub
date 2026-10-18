@@ -4,7 +4,7 @@
 > superficie.
 > **Risultato:** sapere cosa si modifica in un `.docx`, cosa resta nel file,
 > quando un documento si apre soltanto in lettura, cosa si modifica in un
-> `.odt` e come si leggono `.rtf` e `.doc`.
+> `.odt`, come si leggono `.rtf` e `.doc` e come se ne esporta una copia.
 
 Un `.docx` si apre in una superficie di scrittura, con la stessa carta, la
 stessa barra di formattazione, le stesse scorciatoie e lo stesso correttore
@@ -74,10 +74,34 @@ Un `.doc` si legge per la sua firma: un `.docx` o un RTF rinominati si aprono
 come tali, sempre in sola lettura. Un `.doc` cifrato con una password non si
 apre.
 
+## Esportare una copia
+
+**Esporta una copia** (`rich.export-copy`, dalla palette) scrive un documento
+di videoscrittura in HTML, testo semplice, LaTeX, RTF, OpenDocument o Word XML
+(un `.docx` in un file XML solo, Flat OPC), con gli esportatori di WordCraft.
+Il documento non si tocca: la copia arriva nell'attività e si salva dove si
+vuole. Una copia nello stesso formato del documento (un `.rtf` in RTF, un
+`.odt` in OpenDocument) non si fa: sarebbe il file riscritto da un modello che
+ne porta meno.
+
+Accanto alla copia l'attività dice **cosa non porta**. La copia si rilegge con
+l'importatore del suo formato e si confronta con il documento: parole, titoli,
+voci d'elenco, tabelle, link, enfasi, note, commenti, intestazioni e piè di
+pagina, immagini, grafici, forme, equazioni, campi, segnalibri, revisioni e
+oggetti non interpretati. Ciò che manca o diminuisce è un avviso, con il
+numero. Impaginazione, caratteri, colori e stili dei paragrafi non si misurano,
+e l'avviso lo dice. Un documento letto da un importatore (`.rtf`, `.doc`,
+`.odt`) parte già da meno del file, e anche questo è un avviso. In HTML e nel
+testo semplice i commenti si possono mettere in fondo alla copia.
+
+`.html`, `.txt`, `.tex` e `.xml` restano file di testo: si aprono e si
+modificano come sorgente, anche quando sono nati da una copia.
+
 ## Dove si trova
 
 - `crates/fub-format-rich/`: codec e importatori, provider e proiezione
-  modificabile; `src/odt/` è il codec OpenDocument.
+  modificabile; `src/odt/` è il codec OpenDocument, `src/export.rs`
+  l'esportazione delle copie e la misura di ciò che perdono.
 - `crates/fub-host/src/rich.rs`: la composizione alle porte dei documenti.
 - `apps/client/src/editors/rich/`: la superficie.
 - `vendor/wordcraft/`: modello, codec e importatori di WordCraft, con
@@ -86,5 +110,6 @@ apre.
 Il disegno del confine è in
 [Superfici dell'editor](../architecture/editor-surfaces.md#documenti-di-videoscrittura-la-superficie-ricca),
 la forma alle porte nel [contratto IPC](../reference/ipc-contract.md#documenti-di-videoscrittura)
-e il perché nelle decisioni [0203](../decisions/0203-videoscrittura-come-proiezione.md)
-e [0204](../decisions/0204-opendocument-con-un-codec-di-fub.md).
+e il perché nelle decisioni [0203](../decisions/0203-videoscrittura-come-proiezione.md),
+[0204](../decisions/0204-opendocument-con-un-codec-di-fub.md) e
+[0205](../decisions/0205-copie-esportate-con-la-perdita-misurata.md).
