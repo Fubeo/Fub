@@ -387,6 +387,21 @@ pub(crate) fn mount_with_formats(
         )),
     ];
 
+    // Le copie dei documenti di videoscrittura: l'esportatore e il comando
+    // vengono col codec, e un vault senza la feature non li vede.
+    #[cfg(feature = "rich")]
+    bundles.push(Arc::new(
+        CoreBundle::new(
+            crate::rich::RICH_ID,
+            "Word processing",
+            crate::rich::register,
+        )
+        .speaking(
+            crate::settings::CORE_DEFAULT_LOCALE,
+            fub_format_rich::export::catalog(),
+        ),
+    ));
+
     // Ogni feature ufficiale si monta con lo stesso ciclo: ciò che registra, le
     // impostazioni, i servizi forniti e richiesti e il collegamento che solo
     // l'host sa fare sono campi della sua riga d'inventario, non rami per id.

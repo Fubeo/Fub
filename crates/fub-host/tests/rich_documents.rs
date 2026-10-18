@@ -486,3 +486,107 @@ fn un_rtf_e_un_doc_si_leggono_in_sola_lettura() {
         assert_eq!(texts(&projection), ["Appunto"]);
     }
 }
+
+/// L'esito del prossimo job di trasferimento finito.
+fn transfer_done(events: &fub_kernel::bus::Subscription) -> Result<serde_json::Value, PluginError> {
+    loop {
+        let notice = events
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("the job ends");
+        if let fub_abi::Event::JobDone { job, result, .. } = notice.event {
+            if job == "import.transfer" {
+                return result;
+            }
+        }
+    }
+}
+
+#[test]
+fn esportare_una_copia_accoda_l_export_e_il_documento_resta() {
+    let vault = Vault::with_docx(&["Primo paragrafo.", "Secondo."]);
+    let before = vault.on_disk();
+    let events = vault.host.subscribe(None).unwrap();
+    let outcome = vault
+        .host
+        .invoke_user_command(
+            None,
+            "rich.export-copy",
+            serde_json::json!({"doc": "Lettera.docx", "format": "txt"}),
+            fub_abi::InvokeMode::Apply,
+        )
+        .expect("the command queues the export");
+    assert!(
+        format!("{:?}", outcome.notify).contains("export.run queued"),
+        "{outcome:?}"
+    );
+    let report: fub_abi::transfer::ExportReport =
+        serde_json::from_value(transfer_done(&events).expect("the export runs")).unwrap();
+    assert_eq!(report.artifacts.len(), 1);
+    assert_eq!(report.artifacts[0].path, "Lettera.txt");
+    assert_eq!(report.artifacts[0].media_type, "text/plain");
+    let text = String::from_utf8(report.artifacts[0].as_bytes().unwrap().to_vec()).unwrap();
+    assert_eq!(text, "Primo paragrafo.\r\nSecondo.");
+    // Il rapporto dice ciò che il confronto non misura; nessuna perdita qui.
+    assert!(report
+        .log
+        .iter()
+        .all(|note| note.level == fub_abi::transfer::NoteLevel::Info));
+    assert_eq!(vault.on_disk(), before);
+}
+
+#[test]
+fn una_nota_non_si_esporta_come_copia_di_videoscrittura() {
+    let vault = Vault::with_docx(&["Word."]);
+    let refused = vault.host.invoke_user_command(
+        None,
+        "rich.export-copy",
+        serde_json::json!({"doc": "Nota.md", "format": "html"}),
+        fub_abi::InvokeMode::Apply,
+    );
+    assert!(
+        matches!(refused, Err(PluginError::BadArgs(_))),
+        "{refused:?}"
+    );
+}
+
+#[test]
+fn spento_il_bundle_il_comando_e_le_destinazioni_spariscono() {
+    let vault = Vault::with_docx(&["Word."]);
+    let targets = |vault: &Vault| -> Vec<String> {
+        vault
+            .host
+            .commands(None)
+            .unwrap()
+            .into_iter()
+            .map(|spec| spec.id)
+            .filter(|id| id == "rich.export-copy")
+            .collect()
+    };
+    assert_eq!(targets(&vault), ["rich.export-copy"]);
+    let errors = vault
+        .host
+        .set_plugin_enabled(None, "fub.rich", false)
+        .expect("the bundle unmounts");
+    assert!(errors.is_empty(), "{errors:?}");
+    assert!(targets(&vault).is_empty());
+    let request = fub_abi::transfer::ExportRequest::new(
+        "rich.copy.html",
+        fub_abi::transfer::ExportSelection::Documents(vec![lettera()]),
+    );
+    let refused = vault.host.invoke_user_command(
+        None,
+        "export.run",
+        serde_json::json!({"request_json": serde_json::to_string(&request).unwrap()}),
+        fub_abi::InvokeMode::DryRun,
+    );
+    assert!(
+        matches!(refused, Err(PluginError::BadArgs(_))),
+        "{refused:?}"
+    );
+    // Il documento si apre come prima: il codec non è del bundle.
+    let (text, _, _) = vault
+        .host
+        .read_document_with_format(None, &lettera())
+        .unwrap();
+    assert_eq!(texts(&Projection::from_json(&text).unwrap()), ["Word."]);
+}

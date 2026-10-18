@@ -113,6 +113,11 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // renderebbe questo test una tautologia dell'altro.
     let mut plugins: Vec<&str> = info.plugins.iter().map(|p| p.id.as_str()).collect();
     plugins.sort();
+    // Le copie dei documenti di videoscrittura vengono col loro codec.
+    if cfg!(feature = "rich") {
+        plugins.retain(|id| *id != "fub.rich");
+        assert!(info.plugins.iter().any(|p| p.id == "fub.rich"));
+    }
     assert_eq!(
         plugins,
         vec![

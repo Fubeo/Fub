@@ -16,7 +16,10 @@
 //!   la ricerca, l'outline e l'anteprima;
 //! - la **proiezione modificabile**, [`session`]: il documento come JSON chiuso
 //!   e versionato che la superficie ricca della shell modifica, e il ritorno da
-//!   quel JSON ai byte.
+//!   quel JSON ai byte;
+//! - l'**esportazione di una copia**, [`export`]: il documento in HTML, testo
+//!   semplice, LaTeX, RTF, OpenDocument o Word XML con gli esportatori di
+//!   WordCraft, e l'elenco misurato di ciò che la copia non porta.
 //!
 //! La regola che tiene insieme le tre è **nessuna perdita silenziosa**: un
 //! documento che non torna identico da sé stesso (codec o proiezione) si apre in
@@ -31,6 +34,7 @@ use fub_abi::{
 use wordcraft_doc::Document;
 
 mod blob;
+pub mod export;
 mod fidelity;
 mod model;
 mod odt;

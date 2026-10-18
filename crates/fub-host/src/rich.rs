@@ -10,6 +10,10 @@
 //!   revisione su cui la shell ha lavorato, e li scrive con il CAS della
 //!   revisione grezza.
 //!
+//! Le **copie** in altri formati passano invece dalla porta di export del
+//! contratto: il bundle [`RICH_ID`] registra l'esportatore e il comando
+//! «Esporta una copia» di `fub-format-rich`.
+//!
 //! Il codec gira fuori dal lucchetto del workspace: si leggono i byte, si
 //! rilascia, si proietta o si salva, poi si rientra per scrivere. Senza la
 //! feature `rich` nessun formato è di questi, e ogni funzione qui lo dice.
@@ -41,6 +45,29 @@ pub(crate) fn providers() -> Vec<Box<dyn FormatProvider>> {
     {
         Vec::new()
     }
+}
+
+/// Il bundle che esporta le copie dei documenti di videoscrittura.
+#[cfg(feature = "rich")]
+pub(crate) const RICH_ID: &str = "fub.rich";
+
+/// Registra l'esportatore delle copie e il comando che le chiede: il comando
+/// passa da `export.run`, quindi senza gli importatori dice che il comando non
+/// c'è, invece di accodare un lavoro che nessuno esegue.
+#[cfg(feature = "rich")]
+pub(crate) fn register(registrar: &mut crate::registry::Registrar<'_>) -> Vec<String> {
+    let mut failures = Vec::new();
+    if let Err(error) =
+        registrar.register_export_provider(fub_format_rich::export::RichExport::boxed())
+    {
+        failures.push(format!("rich export not registered: {error}"));
+    }
+    if let Err(error) =
+        registrar.register_command_provider(fub_format_rich::export::RichCommands::boxed())
+    {
+        failures.push(format!("rich commands not registered: {error}"));
+    }
+    failures
 }
 
 /// Il codec del formato di un documento, se è un documento di videoscrittura.

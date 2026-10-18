@@ -23,3 +23,4 @@ zip = { workspace = true }
 
 [dev-dependencies]
 cfb = { workspace = true }
+fub-sdk = { workspace = true }
