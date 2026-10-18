@@ -108,6 +108,13 @@ disturbare chi scrive. La scheda legge dal canale dati come gli embed, non apre
 sessioni né buffer, e si chiude uscendo dal link e dalla scheda o con Esc. Un
 link che non si risolve non apre niente.
 
+Un merge che cestina una sorgente citata da altre note porta i loro link sulla
+destinazione, con alias e frammenti intatti. Il piano lo calcola il kernel come
+per una rinomina (`VaultRead::link_retarget_edits`), il testo lo scrive il
+formato di ciascuna nota e la simulazione mostra anche quelle note. Se un link
+non passa, la sorgente resta al suo posto e l'esito lo dice; un host che non sa
+fare il piano, come un componente WASM, rifiuta il merge.
+
 ## Backlink e vicini
 
 Un backlink parte dal documento sorgente e conserva un contesto leggibile. Le

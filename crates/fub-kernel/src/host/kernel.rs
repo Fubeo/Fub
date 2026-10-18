@@ -300,6 +300,25 @@ impl VaultStructure for KernelHost<'_> {
         })
     }
 
+    fn create_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.ws
+            .create_folder(folder)
+            .map(drop)
+            .map_err(PluginError::from)
+    }
+
+    fn remove_empty_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.ws
+            .remove_empty_folder(folder)
+            .map_err(PluginError::from)
+    }
+
+    fn migrate_folder_organization(&mut self, from: &str, to: &str) -> Result<(), PluginError> {
+        self.ws
+            .migrate_folder_organization(from, to)
+            .map_err(PluginError::from)
+    }
+
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
         self.ws
             .empty_trash()

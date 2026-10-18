@@ -53,7 +53,9 @@ use fub_abi::error::PluginError;
 use fub_abi::model::{Block, DocId, DocumentModel, Span, TaskMarker};
 use fub_abi::settings::{SettingEntry, SettingKind, SettingSource, SettingValue};
 use fub_abi::text::{Arg, StringCatalog, Text};
-use fub_abi::traits::{BacklinkRef, CommandProvider, HostApi, IndexQuery, IndexResult};
+use fub_abi::traits::{
+    BacklinkRef, CommandProvider, FolderScope, HostApi, IndexQuery, IndexResult,
+};
 use serde::{Deserialize, Serialize};
 
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
@@ -77,6 +79,10 @@ pub const TRASH_RESTORE: &str = "trash.restore";
 pub const TRASH_EMPTY: &str = "trash.empty";
 /// Sposta N note in una cartella con intento durevole e recupero.
 pub const VAULT_ARCHIVE: &str = "vault.archive";
+/// Rinomina o sposta una cartella intera, con ciò che contiene.
+pub const FOLDER_RENAME: &str = "folder.rename";
+/// Manda nel cestino una cartella intera, voce per voce.
+pub const FOLDER_TRASH: &str = "folder.trash";
 /// Spunta (o de-spunta) un task.
 pub const NOTES_TASK_TOGGLE: &str = "note.task.toggle";
 /// Cambia un'impostazione (§11.1).
@@ -188,6 +194,9 @@ const AND_TASK_NOT_FOUND: &str = "err.task_not_found";
 const AND_TASK_CHANGED: &str = "err.task_changed";
 const AND_NOT_A_TOGGLE: &str = "err.not_a_toggle";
 const AND_NOT_A_NUMBER: &str = "err.not_a_number";
+const E_EMPTY_FOLDER: &str = "err.empty_folder";
+const E_FOLDER_INTO_ITSELF: &str = "err.folder_into_itself";
+const E_FOLDER_ROLLBACK: &str = "err.folder_rollback";
 const E_UNDECLARED_KEY: &str = "err.undeclared_key";
 const E_NOT_PROGRAM_WRITABLE: &str = "err.not_program_writable";
 const E_NOT_JSON: &str = "err.not_json";
@@ -202,6 +211,8 @@ const P_TRASH: &str = "plan.trash";
 const P_RESTORE: &str = "plan.restore";
 const P_EMPTY_TRASH: &str = "plan.empty_trash";
 const P_ARCHIVE: &str = "plan.archive";
+const P_FOLDER_RENAME: &str = "plan.folder_rename";
+const P_FOLDER_TRASH: &str = "plan.folder_trash";
 const P_TASK_DONE: &str = "plan.task_done";
 const P_TASK_TODO: &str = "plan.task_todo";
 const P_SETTINGS_SET: &str = "plan.settings_set";
@@ -222,6 +233,10 @@ const D_RESTORE: &str = "done.restore";
 const D_EMPTY_TRASH: &str = "done.empty_trash";
 const D_ARCHIVE: &str = "done.archive";
 const D_ARCHIVE_PARTIAL: &str = "done.archive_partial";
+const D_FOLDER_RENAME: &str = "done.folder_rename";
+const D_FOLDER_RENAME_PARTIAL: &str = "done.folder_rename_partial";
+const D_FOLDER_TRASH: &str = "done.folder_trash";
+const D_FOLDER_TRASH_PARTIAL: &str = "done.folder_trash_partial";
 const D_SETTINGS_SET: &str = "done.settings_set";
 const D_SETTINGS_RESET: &str = "done.settings_reset";
 const D_SETTINGS_EXPORT: &str = "done.settings_export";
@@ -247,6 +262,8 @@ const U_RENAME: &str = "undo.rename";
 const U_TRASH: &str = "undo.trash";
 const U_RESTORE: &str = "undo.restore";
 const U_ARCHIVE: &str = "undo.archive";
+const U_FOLDER_RENAME: &str = "undo.folder_rename";
+const U_FOLDER_TRASH: &str = "undo.folder_trash";
 const U_TASK: &str = "undo.task";
 
 /// I nomi degli argomenti.
@@ -424,6 +441,28 @@ fn catalog_it() -> StringCatalog {
             "vault.archive.folder.desc",
             "Dove spostarle. Assente = «Archivio».",
         )
+        .with("folder.rename.title", "Rinomina o sposta la cartella")
+        .with(
+            "folder.rename.desc",
+            "Porta una cartella, con tutto ciò che contiene, a un path nuovo: \
+             ogni nota passa dalla rinomina di sempre, quindi i link che la \
+             nominano vengono riscritti.",
+        )
+        .with("folder.rename.folder.title", "Cartella")
+        .with("folder.rename.folder.desc", "Il path della cartella da spostare.")
+        .with("folder.rename.to.title", "Nuovo path")
+        .with(
+            "folder.rename.to.desc",
+            "Il path intero della cartella nuova, per esempio «Archivio/Progetti».",
+        )
+        .with("folder.trash.title", "Sposta la cartella nel cestino")
+        .with(
+            "folder.trash.desc",
+            "Manda nel cestino ogni nota e allegato della cartella, poi toglie \
+             le cartelle rimaste vuote. Si annulla come un cestino qualunque.",
+        )
+        .with("folder.trash.folder.title", "Cartella")
+        .with("folder.trash.folder.desc", "Il path della cartella da cestinare.")
         .with("note.task.toggle.title", "Spunta il task")
         .with(
             "note.task.toggle.desc",
@@ -557,6 +596,16 @@ fn catalog_it() -> StringCatalog {
             "`{value}` non è un interruttore (`true` o `false`).",
         )
         .with(AND_NOT_A_NUMBER, "`{value}` non è un numero.")
+        .with(E_EMPTY_FOLDER, "Manca la cartella.")
+        .with(
+            E_FOLDER_INTO_ITSELF,
+            "«{folder}» non si sposta in «{to}», che sta dentro di lei.",
+        )
+        .with(
+            E_FOLDER_ROLLBACK,
+            "«{folder}» si è fermata a metà ({reason}), e non tutto è tornato \
+             indietro: {failed}",
+        )
         .with(
             E_UNDECLARED_KEY,
             "Nessuno ha dichiarato l'impostazione `{key}`.",
@@ -582,6 +631,8 @@ fn catalog_it() -> StringCatalog {
         .with(P_RESTORE, "«{entry}» torna come «{doc}»")
         .with(P_EMPTY_TRASH, "Voci da cancellare per sempre: {count}")
         .with(P_ARCHIVE, "Note da archiviare in «{folder}»: {count}")
+        .with(P_FOLDER_RENAME, "«{folder}» diventa «{to}» · Voci: {count}")
+        .with(P_FOLDER_TRASH, "Nel cestino «{folder}» · Voci: {count}")
         .with(P_TASK_DONE, "Task spuntata in {doc}")
         .with(P_TASK_TODO, "Task da fare in {doc}")
         .with(P_SETTINGS_SET, "Cambia `{key}`")
@@ -612,6 +663,16 @@ fn catalog_it() -> StringCatalog {
             "Cestino svuotato · Voci cancellate per sempre: {count}",
         )
         .with(D_ARCHIVE, "Note archiviate in «{folder}»: {count}")
+        .with(D_FOLDER_RENAME, "«{folder}» è diventata «{to}» · Voci: {count}")
+        .with(
+            D_FOLDER_RENAME_PARTIAL,
+            "«{folder}» è diventata «{to}» · Voci: {count} · Da guardare: {failed}",
+        )
+        .with(D_FOLDER_TRASH, "«{folder}» è nel cestino · Voci: {count}")
+        .with(
+            D_FOLDER_TRASH_PARTIAL,
+            "«{folder}» è nel cestino · Voci: {count} · Da guardare: {failed}",
+        )
         .with(
             D_ARCHIVE_PARTIAL,
             "Note archiviate in «{folder}»: {count} · Non spostate: {failed}",
@@ -661,6 +722,8 @@ fn catalog_it() -> StringCatalog {
         .with(U_TRASH, "«{doc}» nel cestino")
         .with(U_RESTORE, "il ripristino di «{doc}»")
         .with(U_ARCHIVE, "l'archiviazione in «{folder}» · Note: {count}")
+        .with(U_FOLDER_RENAME, "lo spostamento di «{folder}» in «{to}»")
+        .with(U_FOLDER_TRASH, "il cestino di «{folder}» · Voci: {count}")
         .with(U_TASK, "la task spuntata in {doc}")
 }
 
@@ -799,6 +862,28 @@ fn catalog_en() -> StringCatalog {
             "vault.archive.folder.desc",
             "Where to move them. Absent = «Archive».",
         )
+        .with("folder.rename.title", "Rename or move folder")
+        .with(
+            "folder.rename.desc",
+            "Moves a folder, with everything in it, to a new path: every note \
+             goes through the usual rename, so the links that name it are \
+             rewritten.",
+        )
+        .with("folder.rename.folder.title", "Folder")
+        .with("folder.rename.folder.desc", "The path of the folder to move.")
+        .with("folder.rename.to.title", "New path")
+        .with(
+            "folder.rename.to.desc",
+            "The full path of the new folder, for example “Archive/Projects”.",
+        )
+        .with("folder.trash.title", "Move folder to trash")
+        .with(
+            "folder.trash.desc",
+            "Sends every note and attachment in the folder to the trash, then \
+             removes the folders left empty. Undone like any other trash.",
+        )
+        .with("folder.trash.folder.title", "Folder")
+        .with("folder.trash.folder.desc", "The path of the folder to trash.")
         .with("note.task.toggle.title", "Toggle the task")
         .with(
             "note.task.toggle.desc",
@@ -929,6 +1014,16 @@ fn catalog_en() -> StringCatalog {
             "`{value}` is not a toggle (`true` or `false`).",
         )
         .with(AND_NOT_A_NUMBER, "`{value}` is not a number.")
+        .with(E_EMPTY_FOLDER, "The folder is missing.")
+        .with(
+            E_FOLDER_INTO_ITSELF,
+            "“{folder}” cannot move into “{to}”, which is inside it.",
+        )
+        .with(
+            E_FOLDER_ROLLBACK,
+            "“{folder}” stopped halfway ({reason}), and not everything came \
+             back: {failed}",
+        )
         .with(E_UNDECLARED_KEY, "Nobody has declared the setting `{key}`.")
         .with(
             E_NOT_PROGRAM_WRITABLE,
@@ -948,6 +1043,8 @@ fn catalog_en() -> StringCatalog {
         .with(P_RESTORE, "«{entry}» comes back as «{doc}»")
         .with(P_EMPTY_TRASH, "Entries to delete for good: {count}")
         .with(P_ARCHIVE, "Notes to archive in «{folder}»: {count}")
+        .with(P_FOLDER_RENAME, "“{folder}” becomes “{to}” · Entries: {count}")
+        .with(P_FOLDER_TRASH, "To the trash: “{folder}” · Entries: {count}")
         .with(P_TASK_DONE, "Task ticked in {doc}")
         .with(P_TASK_TODO, "Task to do in {doc}")
         .with(P_SETTINGS_SET, "Change `{key}`")
@@ -977,6 +1074,16 @@ fn catalog_en() -> StringCatalog {
             "Trash emptied · Entries deleted for good: {count}",
         )
         .with(D_ARCHIVE, "Notes archived in «{folder}»: {count}")
+        .with(D_FOLDER_RENAME, "“{folder}” is now “{to}” · Entries: {count}")
+        .with(
+            D_FOLDER_RENAME_PARTIAL,
+            "“{folder}” is now “{to}” · Entries: {count} · To check: {failed}",
+        )
+        .with(D_FOLDER_TRASH, "“{folder}” is in the trash · Entries: {count}")
+        .with(
+            D_FOLDER_TRASH_PARTIAL,
+            "“{folder}” is in the trash · Entries: {count} · To check: {failed}",
+        )
         .with(
             D_ARCHIVE_PARTIAL,
             "Notes archived in «{folder}»: {count} · Not moved: {failed}",
@@ -1020,6 +1127,8 @@ fn catalog_en() -> StringCatalog {
         .with(U_TRASH, "sending “{doc}” to the trash")
         .with(U_RESTORE, "restoring “{doc}”")
         .with(U_ARCHIVE, "archiving into “{folder}” · Notes: {count}")
+        .with(U_FOLDER_RENAME, "moving “{folder}” to “{to}”")
+        .with(U_FOLDER_TRASH, "trashing “{folder}” · Entries: {count}")
         .with(U_TASK, "the task ticked in {doc}")
 }
 
@@ -1082,6 +1191,16 @@ impl CoreCommands {
             command(VAULT_ARCHIVE)
                 .with_param(parameter(VAULT_ARCHIVE, "docs", ParamKind::Documents).required())
                 .with_param(parameter(VAULT_ARCHIVE, "folder", ParamKind::Text))
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
+            // Una cartella è le sue voci: si spostano e si cestinano una alla
+            // volta coi verbi di una nota sola, e il raggio è quello di una
+            // rinomina — le voci e chi le linka.
+            command(FOLDER_RENAME)
+                .with_param(parameter(FOLDER_RENAME, "folder", ParamKind::Text).required())
+                .with_param(parameter(FOLDER_RENAME, "to", ParamKind::Text).required())
+                .with_scope(CommandScope::writing(CommandReach::Documents)),
+            command(FOLDER_TRASH)
+                .with_param(parameter(FOLDER_TRASH, "folder", ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
             // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
             // quella la tiene l'editor, che spunta le todo delle righe
@@ -1175,6 +1294,8 @@ impl CommandProvider for CoreCommands {
             TRASH_RESTORE => trash_restore(args, mode, host),
             TRASH_EMPTY => trash_empty(mode, host),
             VAULT_ARCHIVE => vault_archive(args, mode, host),
+            FOLDER_RENAME => folder_rename(args, mode, host),
+            FOLDER_TRASH => folder_trash(args, mode, host),
             NOTES_TASK_TOGGLE => notes_task_toggle(args, mode, host),
             VAULT_UNDO => vault_undo(mode, host),
             SETTINGS_SET => settings_set(args, mode, host),
@@ -2147,6 +2268,430 @@ fn vault_archive(
         .partially(count))
 }
 // ---------------------------------------------------------------------------
+// folder.rename / folder.trash — una cartella intera, una voce alla volta
+// ---------------------------------------------------------------------------
+
+/// Una cartella detta da chi invoca, senza spazi e senza gli slash di
+/// cortesia ([`folders`](fub_abi::rules::folders)). La radice non è una
+/// cartella che si sposta o si cestina.
+fn folder_arg(args: &Args<'_>, name: &str) -> Result<String, PluginError> {
+    let folder = args
+        .text(name)
+        .map(|f| fub_abi::rules::folders::normalized(f.trim()).trim())
+        .unwrap_or_default();
+    if folder.is_empty() {
+        return Err(PluginError::BadArgs(Text::key(E_EMPTY_FOLDER)));
+    }
+    Ok(folder.to_string())
+}
+
+/// Ciò che una cartella contiene secondo il vault: le voci a ogni profondità e
+/// le sottocartelle, entrambe in ordine. `None` se la cartella non c'è.
+struct FolderTree {
+    entries: Vec<DocId>,
+    folders: Vec<String>,
+}
+
+fn folder_tree(host: &dyn HostApi, folder: &str) -> Result<Option<FolderTree>, PluginError> {
+    let parent = folder.rsplit_once('/').map_or("", |(parent, _)| parent);
+    let siblings = match host.query_index(IndexQuery::Folders {
+        under: Some(FolderScope::direct(parent)),
+        page: None,
+    })? {
+        IndexResult::Folders(siblings) => siblings,
+        other => return Err(off_topic("cartelle", &other)),
+    };
+    if !siblings.items.iter().any(|f| f.path == folder) {
+        return Ok(None);
+    }
+    let within = FolderScope {
+        path: folder.to_string(),
+        descendants: true,
+    };
+    let entries = match host.query_index(IndexQuery::Entries {
+        of_kind: None,
+        within: Some(within.clone()),
+        page: None,
+    })? {
+        IndexResult::Entries(entries) => entries,
+        other => return Err(off_topic("voci", &other)),
+    };
+    let folders = match host.query_index(IndexQuery::Folders {
+        under: Some(within),
+        page: None,
+    })? {
+        IndexResult::Folders(folders) => folders,
+        other => return Err(off_topic("cartelle", &other)),
+    };
+    Ok(Some(FolderTree {
+        entries: entries.items.into_iter().map(|e| e.id).collect(),
+        folders: folders.items.into_iter().map(|f| f.path).collect(),
+    }))
+}
+
+/// Lo stesso path, portato da sotto `from` a sotto `to`.
+fn rebased(path: &str, from: &str, to: &str) -> String {
+    format!("{to}{}", &path[from.len()..])
+}
+
+/// Toglie dal disco le cartelle date, le figlie prima delle madri, e dice
+/// quali sono rimaste perché contengono ancora qualcosa — un file nascosto o
+/// escluso dal vault, che non si cancella per far posto a una rinomina.
+fn remove_folders(host: &mut dyn HostApi, mut folders: Vec<String>) -> Vec<String> {
+    // Una discendente è sempre più lunga della sua antenata, quindi l'ordine
+    // lessicale al contrario la mette prima.
+    folders.sort();
+    folders.dedup();
+    let mut kept = Vec::new();
+    for folder in folders.into_iter().rev() {
+        match host.remove_empty_folder(&folder) {
+            Ok(()) | Err(PluginError::NotFound(_)) => {}
+            Err(_) => kept.push(folder),
+        }
+    }
+    kept.reverse();
+    kept
+}
+
+/// Un nome di cartella libero accanto a `to`, per la tappa intermedia di una
+/// rinomina che cambia solo le maiuscole: su un disco che non le distingue,
+/// `Foo` → `foo` direttamente sarebbe spostare ogni voce dove già sta.
+fn free_hop(host: &dyn HostApi, to: &str) -> Result<String, PluginError> {
+    for n in 1.. {
+        let hop = format!("{to}.~{n}");
+        if folder_tree(host, &hop)?.is_none()
+            && archive_revision(host, &DocId::new(&*hop))?.is_none()
+        {
+            return Ok(hop);
+        }
+    }
+    unreachable!("la sequenza dei candidati è infinita")
+}
+
+/// L'esito di uno spostamento di cartella andato in porto.
+struct FolderMove {
+    count: usize,
+    /// Voci spostate i cui link entranti non si sono riscritti tutti.
+    warnings: Vec<Failure>,
+    /// Cartelle d'origine rimaste perché non erano vuote sul disco.
+    kept: Vec<String>,
+}
+
+/// Sposta l'albero di `from` sotto `to`, **tutto o niente**: se una voce non
+/// si sposta, quelle già spostate tornano dov'erano prima che l'errore risalga.
+/// Solo se anche il ritorno fallisce lo stato resta a metà, e l'errore elenca
+/// cosa è rimasto dove.
+fn move_folder(
+    host: &mut dyn HostApi,
+    from: &str,
+    to: &str,
+    tree: &FolderTree,
+) -> Result<FolderMove, PluginError> {
+    // Prima le cartelle: la destinazione e le sottocartelle, comprese quelle
+    // vuote che nessuna voce porterebbe con sé. Crearle per prime è anche ciò
+    // che giudica il nome nuovo (riservato, escluso dal vault) prima che una
+    // sola voce si muova. Una che c'è già si riusa: la destinazione è libera o
+    // fatta solo di cartelle senza voci, quindi non si mescola niente.
+    let mut created = Vec::new();
+    let mut wanted = vec![to.to_string()];
+    wanted.extend(tree.folders.iter().map(|f| rebased(f, from, to)));
+    for folder in wanted {
+        match host.create_folder(&folder) {
+            Ok(()) => created.push(folder),
+            Err(PluginError::AlreadyExists(_)) => {}
+            Err(error) => {
+                remove_folders(host, created);
+                return Err(error);
+            }
+        }
+    }
+
+    // Poi ciò che il vault tiene per path di cartella (icona, spazio, ordine dei
+    // figli), che le voci spostate una per una non porterebbero: la prima nota
+    // che lascia la cartella toglierebbe il suo nome dall'ordine scelto a mano.
+    let carried = match host.migrate_folder_organization(from, to) {
+        Ok(()) => true,
+        Err(PluginError::Unserved(_)) => false,
+        Err(error) => {
+            remove_folders(host, created);
+            return Err(error);
+        }
+    };
+
+    let mut moved: Vec<(DocId, DocId)> = Vec::new();
+    let mut warnings = Vec::new();
+    for doc in &tree.entries {
+        let target = DocId::new(rebased(doc.as_str(), from, to));
+        let Err(error) = host.rename_document(doc, &target) else {
+            moved.push((doc.clone(), target));
+            continue;
+        };
+        // La rinomina può riuscire e la riscrittura dei link no: la voce è
+        // al posto nuovo, e tornare indietro adesso vorrebbe dire rifare la
+        // stessa riscrittura che è appena fallita. Si va avanti e lo si dice.
+        if archive_revision(host, doc)?.is_none() && archive_revision(host, &target)?.is_some() {
+            warnings.push(Failure::of(doc.clone(), error));
+            moved.push((doc.clone(), target));
+            continue;
+        }
+        let mut stuck = Vec::new();
+        for (back, there) in moved.iter().rev() {
+            if let Err(failure) = host.rename_document(there, back) {
+                stuck.push(format!("«{there}» ({failure})"));
+            }
+        }
+        if stuck.is_empty() {
+            if carried {
+                let _ = host.migrate_folder_organization(to, from);
+            }
+            remove_folders(host, created);
+            return Err(error);
+        }
+        return Err(PluginError::Conflict(Text::message(
+            E_FOLDER_ROLLBACK,
+            vec![
+                Arg::text(A_FOLDER, from),
+                Arg::text(A_REASON, error.to_string()),
+                Arg::text(A_FAILED, stuck.join("; ")),
+            ],
+        )));
+    }
+
+    let mut origin = vec![from.to_string()];
+    origin.extend(tree.folders.iter().cloned());
+    Ok(FolderMove {
+        count: moved.len(),
+        warnings,
+        kept: remove_folders(host, origin),
+    })
+}
+
+/// I perché da mostrare dopo uno spostamento o un cestinamento riuscito: i
+/// link rimasti vecchi e le cartelle rimaste piene.
+fn folder_leftovers(warnings: &[Failure], kept: &[String]) -> String {
+    let mut parts = Vec::new();
+    if !warnings.is_empty() {
+        parts.push(why(warnings));
+    }
+    parts.extend(
+        kept.iter().map(|folder| {
+            format!("«{folder}» (contiene file che il vault non mostra, ed è rimasta)")
+        }),
+    );
+    parts.join("; ")
+}
+
+fn folder_text(
+    key: &str,
+    folder: &str,
+    to: Option<&str>,
+    count: usize,
+    failed: Option<String>,
+) -> Text {
+    let mut args = vec![Arg::text(A_FOLDER, folder), Arg::int(A_COUNT, count as i64)];
+    if let Some(to) = to {
+        args.push(Arg::text(A_TO, to));
+    }
+    if let Some(failed) = failed {
+        args.push(Arg::text(A_FAILED, failed));
+    }
+    Text::message(key, args)
+}
+
+/// Rinomina o sposta una cartella: ogni voce passa dalla rinomina di una nota
+/// sola, quindi i link che la nominano si riscrivono e lo stato per-documento
+/// la segue. `to` è il path intero della cartella nuova, così rinominare
+/// (`Progetti` → `Lavori`) e spostare (`Progetti` → `Archivio/Progetti`) sono
+/// lo stesso gesto.
+///
+/// La destinazione deve essere libera, o fatta soltanto di cartelle senza voci:
+/// due cartelle con dentro dei file non si fondono in silenzio. L'inverso è la
+/// rinomina all'incontrario, ed è per questo che l'annullamento passa anche
+/// quando all'origine è rimasta una cartella che conteneva file nascosti.
+fn folder_rename(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let folder = folder_arg(&args, "folder")?;
+    let to = folder_arg(&args, "to")?;
+    if to == folder {
+        return Ok(CommandOutcome::done());
+    }
+    if to.starts_with(&format!("{folder}/")) {
+        return Err(PluginError::BadArgs(Text::message(
+            E_FOLDER_INTO_ITSELF,
+            vec![Arg::text(A_FOLDER, &*folder), Arg::text(A_TO, &*to)],
+        )));
+    }
+    let tree =
+        folder_tree(host, &folder)?.ok_or_else(|| PluginError::NotFound(folder.clone().into()))?;
+    // Lo stesso nome per la risoluzione: su un disco che non distingue il caso
+    // è la stessa cartella, e si passa da una tappa intermedia.
+    let only_case =
+        fub_abi::rules::path::resolution_key(&to) == fub_abi::rules::path::resolution_key(&folder);
+    if !only_case {
+        let taken = match folder_tree(host, &to)? {
+            Some(there) => !there.entries.is_empty(),
+            // Non una cartella: forse un file con quel nome.
+            None => archive_revision(host, &DocId::new(&*to))?.is_some(),
+        };
+        if taken {
+            return Err(PluginError::AlreadyExists(to.into()));
+        }
+    }
+
+    if mode.is_dry_run() {
+        let mut docs: Vec<DocId> = Vec::new();
+        let mut seen: HashSet<DocId> = HashSet::new();
+        let mut edits: Vec<PlannedEdit> = Vec::new();
+        for doc in &tree.entries {
+            let target = rebased(doc.as_str(), &folder, &to);
+            let args = serde_json::json!({ "doc": doc.as_str(), "to": target });
+            let CommandOutcome {
+                effect: CommandEffect::Plan(nested),
+                ..
+            } = host.run_command(NOTES_RENAME, args)?
+            else {
+                continue;
+            };
+            for d in nested.docs {
+                if seen.insert(d.clone()) {
+                    docs.push(d);
+                }
+            }
+            edits.extend(nested.edits);
+        }
+        let summary = folder_text(
+            P_FOLDER_RENAME,
+            &folder,
+            Some(&to),
+            tree.entries.len(),
+            None,
+        );
+        let plan = docs
+            .into_iter()
+            .fold(CommandPlan::of_edits(summary, edits), CommandPlan::with_doc);
+        return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
+    }
+
+    let done = if only_case {
+        let hop = free_hop(host, &to)?;
+        let first = move_folder(host, &folder, &hop, &tree)?;
+        let hopped =
+            folder_tree(host, &hop)?.ok_or_else(|| PluginError::NotFound(hop.clone().into()))?;
+        let mut second = move_folder(host, &hop, &to, &hopped)?;
+        second.warnings.extend(first.warnings);
+        second.kept.extend(first.kept);
+        second
+    } else {
+        move_folder(host, &folder, &to, &tree)?
+    };
+
+    let leftovers = folder_leftovers(&done.warnings, &done.kept);
+    let notify = if leftovers.is_empty() {
+        folder_text(D_FOLDER_RENAME, &folder, Some(&to), done.count, None)
+    } else {
+        folder_text(
+            D_FOLDER_RENAME_PARTIAL,
+            &folder,
+            Some(&to),
+            done.count,
+            Some(leftovers),
+        )
+    };
+    let undo = Undo::by_command(
+        folder_text(U_FOLDER_RENAME, &folder, Some(&to), done.count, None),
+        FOLDER_RENAME,
+        serde_json::json!({ "folder": to, "to": folder }),
+    );
+    Ok(CommandOutcome::notify(notify)
+        .undoable(undo)
+        .with_effect(CommandEffect::Custom {
+            ns: "fub.folder.moved".into(),
+            payload: serde_json::json!({ "from": folder, "to": to }),
+        }))
+}
+
+/// Manda nel cestino una cartella: ogni voce col cestino di una nota sola, poi
+/// le cartelle rimaste vuote. Tutto o niente come lo spostamento: se una voce
+/// non parte, quelle già cestinate tornano al loro posto.
+///
+/// L'annullamento ripristina ogni voce al suo path, e con le voci tornano le
+/// cartelle che le contengono. Una sottocartella che era **vuota** non ha una
+/// voce che la riporti, e resta fuori: non c'era niente dentro da perdere.
+fn folder_trash(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let folder = folder_arg(&args, "folder")?;
+    let tree =
+        folder_tree(host, &folder)?.ok_or_else(|| PluginError::NotFound(folder.clone().into()))?;
+    if mode.is_dry_run() {
+        let summary = folder_text(P_FOLDER_TRASH, &folder, None, tree.entries.len(), None);
+        return Ok(plan(summary, tree.entries));
+    }
+
+    let mut trashed: Vec<(DocId, DocId)> = Vec::new();
+    for doc in &tree.entries {
+        match host.trash_document(doc) {
+            Ok(entry) => trashed.push((entry, doc.clone())),
+            Err(error) => {
+                let mut stuck = Vec::new();
+                for (entry, original) in trashed.iter().rev() {
+                    if let Err(failure) = host.restore_document(entry, Some(original.clone())) {
+                        stuck.push(format!("«{original}» ({failure})"));
+                    }
+                }
+                if stuck.is_empty() {
+                    return Err(error);
+                }
+                return Err(PluginError::Conflict(Text::message(
+                    E_FOLDER_ROLLBACK,
+                    vec![
+                        Arg::text(A_FOLDER, &*folder),
+                        Arg::text(A_REASON, error.to_string()),
+                        Arg::text(A_FAILED, stuck.join("; ")),
+                    ],
+                )));
+            }
+        }
+    }
+    let mut origin = vec![folder.clone()];
+    origin.extend(tree.folders.iter().cloned());
+    let kept = remove_folders(host, origin);
+
+    let count = trashed.len();
+    let notify = if kept.is_empty() {
+        folder_text(D_FOLDER_TRASH, &folder, None, count, None)
+    } else {
+        folder_text(
+            D_FOLDER_TRASH_PARTIAL,
+            &folder,
+            None,
+            count,
+            Some(folder_leftovers(&[], &kept)),
+        )
+    };
+    let steps = trashed
+        .into_iter()
+        .map(|(entry, original)| UndoStep::Command {
+            command: TRASH_RESTORE.into(),
+            args: serde_json::json!({ "entry": entry.as_str(), "to": original.as_str() }),
+        })
+        .collect();
+    Ok(CommandOutcome::notify(notify)
+        .undoable(Undo {
+            label: folder_text(U_FOLDER_TRASH, &folder, None, count, None),
+            steps,
+        })
+        .with_effect(CommandEffect::Custom {
+            ns: "fub.folder.trashed".into(),
+            payload: serde_json::json!({ "folder": folder }),
+        }))
+}
+// ---------------------------------------------------------------------------
 // note.task.toggle
 // ---------------------------------------------------------------------------
 
@@ -2435,14 +2980,20 @@ fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
 fn declared(host: &dyn HostApi) -> Result<Vec<SettingEntry>, PluginError> {
     match host.query_index(IndexQuery::Settings { plugin: None })? {
         IndexResult::Settings(entries) => Ok(entries),
-        other => Err(PluginError::Internal(
-            format!(
-                "risposta fuori tema: attese delle impostazioni, arrivato {}",
-                other.kind_name()
-            )
-            .into(),
-        )),
+        other => Err(off_topic("delle impostazioni", &other)),
     }
+}
+
+/// Una risposta di `query_index` di un'altra specie da quella chiesta: è un
+/// guasto dell'host, non dell'utente.
+fn off_topic(expected: &str, other: &IndexResult) -> PluginError {
+    PluginError::Internal(
+        format!(
+            "risposta fuori tema: attese {expected}, arrivato {}",
+            other.kind_name()
+        )
+        .into(),
+    )
 }
 
 /// Legge un valore **dalla stringa**, secondo la specie che la chiave dichiara.

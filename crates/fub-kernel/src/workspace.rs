@@ -8229,6 +8229,100 @@ impl Workspace {
         Ok(id.as_str().to_string())
     }
 
+    /// Toglie dal disco una cartella **vuota** e la fa sparire dall'albero.
+    ///
+    /// È la metà che chiude una rinomina o un cestinamento di cartella: le
+    /// voci si spostano una per una, con la loro storia e i loro link, e alla
+    /// fine resta il guscio. Vuota vuol dire vuota sul disco e non nell'indice:
+    /// un file nascosto o escluso dal vault che sta ancora lì dentro tiene in
+    /// piedi la cartella, e l'errore lo dice invece di cancellarlo.
+    pub fn remove_empty_folder(&mut self, folder: &str) -> Result<()> {
+        let folder = fub_abi::rules::folders::normalized(folder).to_string();
+        if folder.is_empty() {
+            return Err(KernelError::BadName {
+                name: folder,
+                why: "la radice del vault non si toglie".to_string(),
+            });
+        }
+        let path = self.docs.vault.path_for(&DocId::new(folder.as_str()))?;
+        let storage = Arc::clone(self.docs.vault.storage());
+        let io = |path: &Utf8Path, source: std::io::Error| match source.kind() {
+            std::io::ErrorKind::NotFound => KernelError::NotFound(folder.clone()),
+            _ => KernelError::Io {
+                path: path.to_owned(),
+                source,
+            },
+        };
+        // Il supporto tiene accanto a ogni file il suo compagno di lock
+        // (`.nota.md.lock`), stabile per costruzione: non si toglie al rilascio,
+        // ed è lui a restare indietro quando la nota se ne va. Un lock il cui
+        // file non c'è più non protegge niente, e lasciarlo vorrebbe dire una
+        // cartella che non si svuota mai. Tutto il resto — anche un solo file
+        // nascosto — la tiene in piedi.
+        let listed = storage.list(&path).map_err(|source| io(&path, source))?;
+        let names: std::collections::HashSet<&str> = listed
+            .iter()
+            .filter_map(|entry| entry.path.file_name())
+            .collect();
+        let mut orphans = Vec::new();
+        for entry in &listed {
+            let orphan = entry.stat.kind == crate::storage::EntryKind::File
+                && entry
+                    .path
+                    .file_name()
+                    .and_then(|name| name.strip_prefix('.'))
+                    .and_then(|name| name.strip_suffix(".lock"))
+                    .is_some_and(|owner| !owner.is_empty() && !names.contains(owner));
+            if !orphan {
+                return Err(KernelError::Io {
+                    path,
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::DirectoryNotEmpty,
+                        "la cartella contiene ancora dei file",
+                    ),
+                });
+            }
+            orphans.push(entry.path.clone());
+        }
+        for orphan in orphans {
+            storage
+                .remove(&orphan)
+                .map_err(|source| io(&orphan, source))?;
+        }
+        storage
+            .remove_empty_dir(&path)
+            .map_err(|source| io(&path, source))?;
+        self.indexes.core.forget_folder(&folder);
+        self.emit_event(Event::IndexUpdated);
+        Ok(())
+    }
+
+    /// Ciò che l'organizzazione tiene per path di cartella — icona, spazio,
+    /// ordinamento dei figli — segue una cartella che cambia path. Chi sposta
+    /// una cartella voce per voce lo chiama **prima** delle voci
+    /// ([`OrganizationStore::migrate_folder`](crate::organization::OrganizationStore::migrate_folder)).
+    pub fn migrate_folder_organization(&mut self, from: &str, to: &str) -> Result<()> {
+        let from = fub_abi::rules::folders::normalized(from);
+        let to = new_doc_id(fub_abi::rules::folders::normalized(to))?;
+        if from.is_empty() {
+            return Err(KernelError::BadName {
+                name: from.to_string(),
+                why: "la radice del vault non si sposta".to_string(),
+            });
+        }
+        if self
+            .organization
+            .migrate_folder(from, to.as_str())
+            .map_err(|error| KernelError::Io {
+                path: Utf8PathBuf::from(".fub/workspace.json"),
+                source: std::io::Error::other(error),
+            })?
+        {
+            self.emit_event(Event::IndexUpdated);
+        }
+        Ok(())
+    }
+
     /// Il preflight di [`create_folder`](Workspace::create_folder), senza
     /// scrivere: lo stesso giudizio che darebbe la creazione adesso, e il path
     /// normalizzato che nascerebbe. Serve alla prova a vuoto di un comando;

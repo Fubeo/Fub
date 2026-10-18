@@ -275,6 +275,20 @@ impl OrganizationStore {
         Ok(changed)
     }
 
+    /// Una **cartella** cambia path: icona, spazio e ordinamenti scritti per
+    /// lei e per ciò che contiene la seguono, e il suo posto nell'ordine della
+    /// madre segue la regola di [`migrate`](Self::migrate).
+    ///
+    /// Va chiamata **prima** di spostare le voci: lo spostamento di una nota in
+    /// un'altra cartella toglie il suo nome dall'ordine di quella vecchia, e a
+    /// cartella svuotata l'ordine scelto a mano non ci sarebbe più da portare.
+    /// Torna `true` se qualcosa è cambiato.
+    pub fn migrate_folder(&self, from: &str, to: &str) -> Result<bool, String> {
+        let mut changed = false;
+        self.update(|org| changed = migrate_folder(org, from, to))?;
+        Ok(changed)
+    }
+
     /// Ciò che l'organizzazione dice di `doc` **adesso**, da mettere al sicuro
     /// perché la nota sta per lasciare il suo path ([`ParkedOrganization`]).
     ///
@@ -564,6 +578,69 @@ fn migrate(org: &mut Organization, from: &str, to: &str) -> bool {
     changed
 }
 
+/// Le mosse di [`OrganizationStore::migrate_folder`]: ogni chiave che è la
+/// cartella o sta sotto di lei passa sotto il path nuovo. Su una collisione
+/// vince ciò che la destinazione aveva già, come per l'icona di una nota.
+fn migrate_folder(org: &mut Organization, from: &str, to: &str) -> bool {
+    let rebase = |path: &str| -> Option<String> {
+        if path == from {
+            Some(to.to_string())
+        } else {
+            path.strip_prefix(from)
+                .filter(|rest| rest.starts_with('/'))
+                .map(|rest| format!("{to}{rest}"))
+        }
+    };
+    let mut changed = false;
+    let icons: Vec<String> = org
+        .icons
+        .keys()
+        .filter(|k| rebase(k).is_some())
+        .cloned()
+        .collect();
+    for key in icons {
+        let moved = rebase(&key).expect("filtrata");
+        if !org.icons.contains_key(&moved) {
+            let icon = org.icons.remove(&key).expect("presente");
+            org.icons.insert(moved, icon);
+        }
+        changed = true;
+    }
+    let orders: Vec<String> = org
+        .order
+        .keys()
+        .filter(|k| rebase(k).is_some())
+        .cloned()
+        .collect();
+    for key in orders {
+        let moved = rebase(&key).expect("filtrata");
+        if !org.order.contains_key(&moved) {
+            let names = org.order.remove(&key).expect("presente");
+            org.order.insert(moved, names);
+        }
+        changed = true;
+    }
+    for list in [&mut org.pinned, &mut org.spaces] {
+        for path in list.iter_mut() {
+            if let Some(moved) = rebase(path) {
+                *path = moved;
+                changed = true;
+            }
+        }
+    }
+    if let Some(names) = org.order.get_mut(parent_of(from)) {
+        if let Some(at) = names.iter().position(|n| n == child_name(from)) {
+            if parent_of(from) == parent_of(to) {
+                names[at] = child_name(to).to_string();
+            } else {
+                names.remove(at);
+            }
+            changed = true;
+        }
+    }
+    changed
+}
+
 /// Le liste dell'organizzazione sono **insiemi ordinati**: lo stesso id non ci
 /// sta due volte.
 ///
@@ -783,6 +860,47 @@ mod tests {
             !store.snapshot().order.contains_key("note"),
             "alphabetical takes over again, which is what it means"
         );
+    }
+
+    #[test]
+    fn a_moved_folder_carries_what_was_written_for_it_and_inside_it() {
+        let store = OrganizationStore::in_memory();
+        store.set_icon("Progetti", Some("📁".into())).unwrap();
+        store
+            .set_icon("Progetti/Sotto/a.md", Some("⭐".into()))
+            .unwrap();
+        store.set_pinned("Progetti/a.md", true).unwrap();
+        store.set_space("Progetti", true).unwrap();
+        store
+            .set_order("Progetti", vec!["b.md".into(), "a.md".into()])
+            .unwrap();
+        store
+            .set_order("", vec!["Progetti".into(), "Altro".into()])
+            .unwrap();
+        // Un nome che comincia allo stesso modo non è dentro la cartella.
+        store.set_icon("Progetti vecchi", Some("🗄".into())).unwrap();
+
+        assert!(store.migrate_folder("Progetti", "Lavori").unwrap());
+        let org = store.snapshot();
+        assert_eq!(org.icons.get("Lavori").map(String::as_str), Some("📁"));
+        assert_eq!(
+            org.icons.get("Lavori/Sotto/a.md").map(String::as_str),
+            Some("⭐")
+        );
+        assert_eq!(
+            org.icons.get("Progetti vecchi").map(String::as_str),
+            Some("🗄")
+        );
+        assert_eq!(org.pinned, ["Lavori/a.md"]);
+        assert_eq!(org.spaces, ["Lavori"]);
+        assert_eq!(org.order.get("Lavori").unwrap(), &["b.md", "a.md"]);
+        assert_eq!(org.order.get("").unwrap(), &["Lavori", "Altro"]);
+
+        // Altrove: il posto nell'ordine della madre vecchia non si porta.
+        assert!(store.migrate_folder("Lavori", "Archivio/Lavori").unwrap());
+        let org = store.snapshot();
+        assert_eq!(org.order.get("").unwrap(), &["Altro"]);
+        assert!(org.order.contains_key("Archivio/Lavori"));
     }
 
     #[test]

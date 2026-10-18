@@ -20,7 +20,8 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
-import { createFolder, createNote, refreshDocuments } from "../state/vault";
+import { createFolder, createNote, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
+import { confirm } from "../platform/confirm";
 import {
   LEVEL_PAGE,
   childName,
@@ -558,13 +559,16 @@ function treeArrows(lifetime: Lifetime): void {
       // I tasti nudi della keymap dell'albero: un accordo globale non può
       // esserlo. L'azione è quella di `shell.explorer.rename/trash`.
       case "F2": {
-        if (path && renameEntry(path)) e.preventDefault();
+        if (path && (renameEntry(path) || renameFolderRow(path))) e.preventDefault();
         return;
       }
       case "Delete": {
         if (path && entryRow(path)) {
           e.preventDefault();
           void trashWithConfirm(path);
+        } else if (path && folderRowOf(path)) {
+          e.preventDefault();
+          void trashFolderWithConfirm(path);
         }
         return;
       }
@@ -822,6 +826,12 @@ function entryRow(id: string): HTMLElement | null {
   return row && !row.classList.contains("folder") ? row : null;
 }
 
+/// La riga di una cartella dell'albero, se `path` ne è una a schermo.
+function folderRowOf(path: string): HTMLElement | null {
+  const row = entry(path)?.querySelector<HTMLElement>(":scope > .tree-row");
+  return row?.classList.contains("folder") ? row : null;
+}
+
 function treeFocused(): boolean {
   const focused = document.activeElement;
   return focused instanceof HTMLElement && fileListEl.contains(focused);
@@ -891,7 +901,10 @@ async function pickMoveFolders(ids: readonly string[]): Promise<void> {
     more: other,
   });
   if (choice === null) return;
-  for (const id of ids) await moveIntoFolder(id, choice);
+  for (const id of ids) {
+    if (folderRowOf(id)) await moveFolderInto(id, choice);
+    else await moveIntoFolder(id, choice);
+  }
 }
 
 /// Quante cartelle chiede il selettore di destinazione: più di un livello
@@ -1002,9 +1015,12 @@ function folderMenu(at: MouseEvent, path: string): void {
         ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(path) }]
         : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
+      { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
+      { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
       { label: t("explorer.as_space"), run: () => addSpace(path) },
       ...reorder.map((action, index) => ({ ...action, separator: index === 0 })),
+      { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashFolderWithConfirm(path) },
     ],
     { kind: "folder", id: path },
   );
@@ -1325,15 +1341,18 @@ function startNewFolder(parent: string): void {
 /// Si rinomina il **nome pagina**, non il path: cartella ed estensione restano
 /// quelle di prima, perché è ciò che l'utente si aspetta scrivendo sopra un
 /// titolo. Spostare una nota altrove è un'altra operazione.
-function startRename(row: HTMLElement, id: string, preset?: string, problem?: string): void {
+function startRename(row: HTMLElement, id: string, preset?: string, problem?: string, folder = false): void {
+  // Una cartella si chiama col suo ultimo segmento intero: non ha un'estensione
+  // da tenere da parte, e `v1.2` resta `v1.2`.
+  const current = folder ? childName(id) : pageName(id);
   // Il campo vive **dentro la riga**, non al posto del `li`: il `treeitem`
   // resta dov'è (stesso `data-path`, stesso `aria-selected`), quindi un
   // ridisegno concorrente non sposta il fuoco fuori dall'albero e la riga
   // può mostrare il progresso con `aria-busy`.
   const name = row.querySelector<HTMLElement>(".row-name");
   const input = document.createElement("input");
-  input.value = preset ?? pageName(id);
-  input.setAttribute("aria-label", pageName(id));
+  input.value = preset ?? current;
+  input.setAttribute("aria-label", current);
   if (name) {
     name.replaceWith(input);
   } else {
@@ -1373,7 +1392,7 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
   const confirm = async () => {
     if (closed || busy) return;
     const newItem = input.value.trim();
-    if (!newItem || newItem === pageName(id)) {
+    if (!newItem || newItem === current) {
       closed = true;
       renderFileList();
       entry(id)?.focus();
@@ -1385,7 +1404,8 @@ function startRename(row: HTMLElement, id: string, preset?: string, problem?: st
     closed = true;
     input.disabled = true;
     row.setAttribute("aria-busy", "true");
-    await renameDoc(id, newItem, input.value);
+    if (folder) await renameFolderTo(id, newItem, input.value);
+    else await renameDoc(id, newItem, input.value);
   };
 
   input.addEventListener("keydown", (e) => {
@@ -1463,11 +1483,126 @@ async function renameDoc(from: string, newPageName: string, typed?: string): Pro
 
 /// Riapre il campo di rinomina sullo stesso `treeitem` col testo digitato:
 /// su errore il nome precedente resta nel vault e l'input non si perde.
-function reopenRename(id: string, typed: string, problem?: string): void {
+function reopenRename(id: string, typed: string, problem?: string, folder = false): void {
   renderFileList();
-  const li = entry(id);
-  if (!li) return;
-  startRename(li, id, typed, problem);
+  const row = folder ? folderRowOf(id) : entry(id);
+  if (!row) return;
+  startRename(row, id, typed, problem, folder);
+}
+
+/// Il campo del nome sulla riga di una cartella (F2, contestuale): `false` se la
+/// riga non c'è.
+function renameFolderRow(path: string): boolean {
+  const row = folderRowOf(path);
+  if (!row) return false;
+  startRename(row, path, undefined, undefined, true);
+  return true;
+}
+
+/// Rinomina in posto di una cartella: cambia l'ultimo segmento, la madre resta.
+/// Il nome passa dalla stessa regola di un nome che nasce, prima del giro IPC.
+async function renameFolderTo(from: string, newName: string, typed: string): Promise<void> {
+  const parent = parentOf(from);
+  const to = normalizedName(parent ? `${parent}/${newName}` : newName);
+  const failure = nameFault(to, "new");
+  if (failure !== null) {
+    reopenRename(from, typed, t("explorer.bad_name", { name: newName, reason: nameFaultText(failure) }), true);
+    return;
+  }
+  const problem = await moveFolder(from, to);
+  if (problem !== null) reopenRename(from, typed, problem, true);
+}
+
+/// Sposta una cartella dentro un'altra (drag, «Sposta in…»): stesso comando
+/// della rinomina, col path intero nuovo.
+async function moveFolderInto(path: string, folderPath: string): Promise<void> {
+  if (folderPath === path || folderPath.startsWith(`${path}/`)) return;
+  const to = folderPath ? `${folderPath}/${childName(path)}` : childName(path);
+  const problem = await moveFolder(path, to);
+  if (problem !== null) notify(problem, "guasto");
+}
+
+/// `folder.rename`, con ciò che gli serve intorno: i buffer in salvo prima — il
+/// kernel riscrive i link entranti di ogni voce che sposta —, il progresso sulla
+/// riga, e le cartelle aperte e lo spazio attivo che seguono il path nuovo.
+/// Torna il perché di un rifiuto, `null` se è andata.
+async function moveFolder(from: string, to: string): Promise<string | null> {
+  if (to === from || moving.has(from)) return null;
+  if (await ensureSaved()) return t("explorer.folder_move_failed", { folder: from, to, reason: t("explorer.folder_unsaved") });
+  moving.add(from);
+  markMoving(from, true);
+  try {
+    const outcome = await renameFolder(from, to);
+    followFolder(from, to);
+    notify(outcome.notify ?? t("explorer.folder_moved", { folder: from, to }), "info", undoGesture(outcome.undo !== null));
+  } catch (e) {
+    return t("explorer.folder_move_failed", { folder: from, to, reason: errorText(e) });
+  } finally {
+    moving.delete(from);
+    markMoving(from, false);
+  }
+  const parent = parentOf(to);
+  if (parent) state.expanded.add(parent);
+  saveExpanded();
+  await refreshFromKernel(true);
+  return null;
+}
+
+/// Le cartelle aperte, le finestre dei livelli e lo spazio attivo sono stato
+/// della shell scritto per path: una cartella che cambia path se li porta
+/// dietro, o l'albero si richiuderebbe sotto le mani di chi l'ha spostata.
+function followFolder(from: string, to: string): void {
+  const moved = (path: string): string | null =>
+    path === from ? to : path.startsWith(`${from}/`) ? `${to}${path.slice(from.length)}` : null;
+  for (const path of [...state.expanded]) {
+    const next = moved(path);
+    if (next === null) continue;
+    state.expanded.delete(path);
+    state.expanded.add(next);
+  }
+  for (const [path, size] of [...levelWindows]) {
+    const next = moved(path);
+    if (next === null) continue;
+    levelWindows.delete(path);
+    levelWindows.set(next, size);
+  }
+  saveExpanded();
+  const space = state.activeSpace === null ? null : moved(state.activeSpace);
+  if (space !== null) {
+    state.activeSpace = space;
+    saveActiveSpace();
+  }
+}
+
+/// Il gesto «Annulla» accanto all'esito di un'operazione sulle cartelle.
+function undoGesture(undoable: boolean): { label: string; run: () => void } | undefined {
+  if (!undoable) return undefined;
+  return {
+    label: t("app.undo"),
+    run: () => void undoLastOperation().catch((error: unknown) =>
+      notify(t("trash.undo_failed", { reason: errorText(error) }), "guasto")),
+  };
+}
+
+/// Una cartella nel cestino del vault, con tutto ciò che contiene: si chiede
+/// sempre, perché sono molte voci con un gesto solo. Il cestino è quello del
+/// vault anche quando `files.trash` sceglie il sistema: è da lì che
+/// l'annullamento le riporta tutte insieme.
+async function trashFolderWithConfirm(path: string): Promise<void> {
+  const ok = await confirm(t("explorer.folder_trash_confirm", { folder: childName(path) }), {
+    title: t("explorer.folder_trash_title"),
+    okLabel: t("explorer.delete"),
+  }).catch(() => false);
+  if (!ok) return;
+  if (await ensureSaved()) return;
+  try {
+    const outcome = await trashFolder(path);
+    notify(outcome.notify ?? t("explorer.folder_trashed", { folder: path }), "info", undoGesture(outcome.undo !== null));
+  } catch (e) {
+    notify(t("explorer.folder_trash_failed", { folder: path, reason: errorText(e) }), "guasto");
+    return;
+  }
+  await refreshFromKernel(true);
 }
 
 /// **Il testo non salvato esce prima**, e se non ce la fa l'operazione non parte.
@@ -1523,8 +1658,8 @@ async function convertToFolder(id: string): Promise<void> {
 // Due gesti: riordinare tra fratelli dello stesso tipo (l'ordine finisce in
 // `meta.order`, per cartella) e trascinare una nota SU una cartella per
 // spostarcela dentro (che è un rename: il kernel sposta il file e riscrive i
-// wikilink). Le cartelle non si spostano: sarebbero N rename, un'operazione
-// che merita di più di un gesto ambiguo.
+// wikilink). Una cartella trascinata su un'altra ci entra con tutto ciò che
+// contiene: è `folder.rename`, una rinomina per voce con un annullamento solo.
 //
 // Questo gesto è della shell (decisione 0157): il contratto non dichiara un
 // bersaglio di rilascio, e un terzo non ha una porta finché non esiste una
@@ -1570,8 +1705,10 @@ function wireDrag(row: HTMLElement, path: string, kind: "note" | "folder"): void
     clearDropMarks();
     if (!gesture || !drag) return;
     e.preventDefault();
-    if (gesture === "into") await moveIntoFolder(drag.path, path);
-    else applyReorder(drag.parent, childName(drag.path), childName(path), gesture === "before");
+    if (gesture === "into") {
+      if (drag.kind === "folder") await moveFolderInto(drag.path, path);
+      else await moveIntoFolder(drag.path, path);
+    } else applyReorder(drag.parent, childName(drag.path), childName(path), gesture === "before");
     drag = null;
   });
 }
@@ -1587,7 +1724,9 @@ function dropGesture(
 ): "before" | "after" | "into" | null {
   if (!drag || drag.path === path) return null;
   const siblings = drag.kind === kind && drag.parent === parentOf(path);
-  const inside = kind === "folder" && drag.kind === "note" && drag.parent !== path;
+  // Una cartella entra in un'altra, ma non in sé stessa né in una sua figlia.
+  const ownSubtree = drag.kind === "folder" && path.startsWith(`${drag.path}/`);
+  const inside = kind === "folder" && drag.parent !== path && !ownSubtree;
   // `offsetY` sarebbe relativo all'elemento più interno sotto il cursore (uno
   // span, magari): la frazione va calcolata sulla riga intera.
   const box = row.getBoundingClientRect();
@@ -1679,7 +1818,7 @@ function markMoving(id: string, busy: boolean): void {
 function wireRootDropTarget(lifetime: Lifetime): void {
   lifetime.listen(filesTitleEl, "dragover", (e) => {
     const root = state.activeSpace ?? "";
-    if (drag?.kind === "note" && drag.parent !== root) {
+    if (drag && drag.parent !== root) {
       e.preventDefault();
       filesTitleEl.classList.add("drop-into");
     }
@@ -1687,9 +1826,10 @@ function wireRootDropTarget(lifetime: Lifetime): void {
   lifetime.listen(filesTitleEl, "dragleave", () => filesTitleEl.classList.remove("drop-into"));
   lifetime.listen(filesTitleEl, "drop", async (e) => {
     filesTitleEl.classList.remove("drop-into");
-    if (drag?.kind !== "note") return;
+    if (!drag) return;
     e.preventDefault();
-    await moveIntoFolder(drag.path, state.activeSpace ?? "");
+    if (drag.kind === "folder") await moveFolderInto(drag.path, state.activeSpace ?? "");
+    else await moveIntoFolder(drag.path, state.activeSpace ?? "");
     drag = null;
   });
 }

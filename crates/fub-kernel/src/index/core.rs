@@ -992,6 +992,17 @@ impl CoreIndex {
         }
     }
 
+    /// Toglie una cartella, e le sue discendenti, da quelle che ci sono.
+    ///
+    /// Solo per chi l'ha appena tolta dal disco: le voci dentro di lei se ne
+    /// sono già andate per la loro strada, e una cartella sparita che l'albero
+    /// continuasse a mostrare sarebbe una cartella che nessuno può aprire.
+    pub(crate) fn forget_folder(&mut self, path: &str) {
+        let inside = format!("{path}/");
+        self.folders
+            .retain(|folder| folder != path && !folder.starts_with(&inside));
+    }
+
     /// Registra le cartelle che un path **attraversa**, dalla radice in giù.
     ///
     /// Serve a chi tocca un file solo (il rilevatore, una scrittura): un file

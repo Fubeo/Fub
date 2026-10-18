@@ -173,6 +173,16 @@ pub(crate) fn keeping_extension(
     name: &str,
 ) -> String {
     match extension_of(doc) {
+        // Il nome porta già l'estensione del documento: un allegato non ha un
+        // formato che la riconosca, e `foto.png` diventava `foto.png.png`.
+        Some(ext)
+            if extension_of(&DocId::new(name)).is_some_and(|own| {
+                fub_abi::rules::path::resolution_key(own)
+                    == fub_abi::rules::path::resolution_key(ext)
+            }) =>
+        {
+            name.to_string()
+        }
         Some(ext) => with_extension(host, name, ext),
         None => name.to_string(),
     }

@@ -153,39 +153,11 @@ che non finisce con `.pdf` o un PDF che non c'è non si annotano. Il PDF non si
 scrive mai. Impronta e numero di pagine li scrive l'editor col primo gesto,
 come racconta [Annotazioni dei PDF](pdf-annotations.md).
 
-## Albero dei file
+## Explorer e cartelle
 
-L'explorer chiede un livello per volta all'anagrafe del kernel, che contiene
-ogni voce del disco e non solo i documenti. Dopo sottocartelle e note mostra
-quindi anche allegati e file che nessun provider riconosce. Immagini, audio,
-video e PDF si aprono nel visualizzatore in sola lettura. Un SVG si apre invece
-come testo modificabile con l'anteprima accanto, e si salva a byte (vedi
-[Editor e anteprima](editor-and-preview.md)). Per gli altri file la shell
-avvisa che non c'è un visualizzatore e non tenta di leggerli come testo.
-
-Il visualizzatore delle immagini ingrandisce al cursore con la rotella o il
-pizzico, si trascina, ruota di 90°, adatta l'immagine alla finestra o la mostra
-alle dimensioni reali. Sotto la trasparenza alterna una scacchiera, un fondo
-chiaro e uno scuro; la barra dice formato, misure in pixel e peso del file. Un
-SVG, anche con prologo XML, commenti o `<!DOCTYPE>` prima di `<svg>`, si mostra
-come immagine inerte. HEIC e TIFF, che la webview non decodifica, mostrano un
-messaggio al posto dell'immagine e lasciano il file intatto.
-La finestra di duecento voci per livello vale per note e file insieme.
-Dal menu contestuale un allegato si rinomina, conservando l'estensione, e si
-cestina come una nota: il kernel lo toglie dall'anagrafe con `EntryRemoved` e
-il ripristino lo rimette dov'era, byte per byte.
-
-## Cartelle nuove
-
-Il comando `folder.create` (`path` obbligatorio) crea una cartella vuota,
-insieme alle cartelle mancanti sopra di lei. L'explorer lo invoca dal menu
-contestuale di una cartella o del titolo del pannello; la palette lo raggiunge
-come ogni altro comando. Il nome segue le regole di un documento che nasce:
-recinto del vault, `.fub/`, nomi nascosti e caratteri riservati sono
-rifiutati, e una cartella esclusa dalle impostazioni non viene creata. Se il
-path è già occupato da una cartella o da un file, l'esito è un conflitto e il
-disco resta invariato. La prova a vuoto esegue lo stesso controllo senza
-scrivere. La creazione non è annullabile dal registro dei comandi.
+L'albero dei file, le cartelle nuove e le operazioni su una cartella intera
+(rinomina, spostamento, cestino) sono descritti in
+[Explorer e cartelle](explorer-and-folders.md).
 
 ## Cattura rapida
 

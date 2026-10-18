@@ -13,7 +13,7 @@
 // questo modulo è solo il posto dove la shell smette di avere scorciatoie.
 import { api } from "../host/ipc";
 import { settings, vaultEntries } from "../host/query";
-import { COMMANDS, type Undo } from "../host/contract";
+import { COMMANDS, type CommandOutcome, type Undo } from "../host/contract";
 import { emit, openVaultRoot, setCommandSpecs, vaultArg } from "./store";
 import { notify } from "../ui/notify";
 import { errorText } from "../host/errors";
@@ -91,6 +91,23 @@ export async function createFolder(path: string): Promise<string> {
 export async function renameNote(from: string, to: string): Promise<void> {
   await api.invokeCommand(COMMANDS.rename, { doc: from, to }, undefined, openVaultRoot());
   refreshDocuments();
+}
+
+/// Rinomina o sposta una cartella intera (`folder.rename`): ogni voce passa
+/// dalla rinomina del kernel, e le sessioni aperte la seguono con il loro
+/// `document_renamed`. Come per una nota, chi chiama ha già messo in salvo i
+/// buffer. Torna l'esito, che porta la frase e l'annullamento.
+export async function renameFolder(from: string, to: string): Promise<CommandOutcome> {
+  const outcome = await api.invokeCommand(COMMANDS.renameFolder, { folder: from, to }, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome;
+}
+
+/// Manda nel cestino del vault una cartella intera (`folder.trash`).
+export async function trashFolder(folder: string): Promise<CommandOutcome> {
+  const outcome = await api.invokeCommand(COMMANDS.trashFolder, { folder }, undefined, openVaultRoot());
+  refreshDocuments();
+  return outcome;
 }
 
 /// Sposta una nota nel cestino scelto da `files.trash`.

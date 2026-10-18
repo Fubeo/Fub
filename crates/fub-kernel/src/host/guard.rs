@@ -1078,6 +1078,27 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
         })?;
         self.inner.restore_document(entry, Some(target))
     }
+    fn create_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.check_path(Capability::VaultStructure, folder, || {
+            format!("creating folder `{folder}`")
+        })?;
+        self.inner.create_folder(folder)
+    }
+    fn remove_empty_folder(&mut self, folder: &str) -> Result<(), PluginError> {
+        self.check_path(Capability::VaultStructure, folder, || {
+            format!("removing folder `{folder}`")
+        })?;
+        self.inner.remove_empty_folder(folder)
+    }
+    fn migrate_folder_organization(&mut self, from: &str, to: &str) -> Result<(), PluginError> {
+        self.check_path(Capability::VaultStructure, from, || {
+            format!("moving folder `{from}`")
+        })?;
+        self.check_path(Capability::VaultStructure, to, || {
+            format!("moving folder to `{to}`")
+        })?;
+        self.inner.migrate_folder_organization(from, to)
+    }
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
         self.check_path(Capability::VaultStructure, "", || "emptying trash".into())?;
         self.inner.empty_trash()

@@ -326,13 +326,7 @@ propria spec (`surfaces`: `slash` sempre, `slash_selection` solo con del testo
 selezionato, che riempie il primo parametro di testo obbligatorio): la shell
 non ne tiene un elenco, e un plugin vi entra con la stessa dichiarazione;
 estrazione e merge pianificano riferimenti e dati prima di eliminare la
-sorgente. Un merge che cestina una sorgente citata da altre note porta i loro
-link sulla destinazione, con alias e frammenti intatti: il piano lo calcola il
-kernel come per una rinomina (`VaultRead::link_retarget_edits`), il testo lo
-scrive il formato di ciascuna nota, e la simulazione mostra anche quelle note.
-Se un link non passa, la sorgente resta e l'esito lo dice; un host che non sa
-fare il piano (oggi un componente WASM) rifiuta il merge come prima. La
-selezione va in coda a un template che non la colloca; le
+sorgente, e la selezione va in coda a un template che non la colloca; le
 statistiche contano anche lingue senza spazi con aggiornamenti incrementali.
 Di una nota in prosa contano il sorgente; di un formato strutturato (canvas,
 base) il testo del suo modello, non il JSON o lo YAML che lo tiene.

@@ -2148,6 +2148,8 @@ export const COMMANDS = {
   restore: "trash.restore",
   clear: "trash.empty",
   createFolder: "folder.create",
+  renameFolder: "folder.rename",
+  trashFolder: "folder.trash",
   osTrash: "trash.os",
   undo: "vault.undo",
   replace: "vault.replace",

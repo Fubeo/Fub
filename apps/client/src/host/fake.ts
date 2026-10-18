@@ -1065,6 +1065,59 @@ export function createFakeHost(options: Options = {}): FakeHost {
           partial: null,
         };
       }
+      case "folder.rename": {
+        // Come il comando vero: ogni voce sotto la cartella si sposta col suo
+        // `document_renamed`, la destinazione non deve avere voci, e una
+        // cartella non va dentro sé stessa.
+        const trim = (p: unknown) => String(p ?? "").trim().replace(/^\/+|\/+$/g, "");
+        const from = trim(args?.folder);
+        const to = trim(args?.to);
+        if (!from || !to) throw { kind: "bad_args", message: "Manca la cartella." } satisfies PluginError;
+        if (to.startsWith(`${from}/`)) throw { kind: "bad_args", message: `«${from}» non si sposta dentro sé stessa.` } satisfies PluginError;
+        const inside = (id: string, folder: string) => id.startsWith(`${folder}/`);
+        const moving = [...docs.keys()].filter((id) => inside(id, from));
+        const folders = [...createdFolders].filter((f) => f === from || inside(f, from));
+        if (moving.length === 0 && folders.length === 0) throw { kind: "not_found", message: `«${from}» non c'è` } satisfies PluginError;
+        if ([...docs.keys()].some((id) => id === to || inside(id, to))) throw { kind: "already_exists", message: `«${to}» c'è già` } satisfies PluginError;
+        for (const id of moving) {
+          const target = `${to}${id.slice(from.length)}`;
+          docs.set(target, docs.get(id)!);
+          docs.delete(id);
+          emit({ type: "document_renamed", from: id, to: target });
+        }
+        for (const folder of folders) {
+          createdFolders.delete(folder);
+          createdFolders.add(`${to}${folder.slice(from.length)}`);
+        }
+        emit({ type: "index_updated" });
+        return {
+          notify: `«${from}» è diventata «${to}» · Voci: ${moving.length}`,
+          effect: { kind: "custom" as const, ns: "fub.folder.moved", payload: { from, to } },
+          undo: { label: `lo spostamento di «${from}» in «${to}»`, steps: [{ kind: "command" as const, command: "folder.rename", args: { folder: to, to: from } }] },
+          partial: null,
+        };
+      }
+      case "folder.trash": {
+        const folder = String(args?.folder ?? "").trim().replace(/^\/+|\/+$/g, "");
+        const inside = (id: string) => id.startsWith(`${folder}/`);
+        const leaving = [...docs.keys()].filter(inside);
+        const folders = [...createdFolders].filter((f) => f === folder || inside(f));
+        if (!folder || (leaving.length === 0 && folders.length === 0)) throw { kind: "not_found", message: `«${folder}» non c'è` } satisfies PluginError;
+        for (const id of leaving) {
+          trashedCount += 1;
+          trash.set(`.trash/${trashedCount}-${id}`, { original: id, text: docs.get(id)!.text });
+          docs.delete(id);
+          emit({ type: "document_removed", id });
+        }
+        for (const f of folders) createdFolders.delete(f);
+        emit({ type: "index_updated" });
+        return {
+          notify: `«${folder}» è nel cestino · Voci: ${leaving.length}`,
+          effect: { kind: "custom" as const, ns: "fub.folder.trashed", payload: { folder } },
+          undo: { label: `il cestino di «${folder}»`, steps: [] },
+          partial: null,
+        };
+      }
       case "vault.replace": {
         // Come il vero: sostituzione **letterale** nei byte, con la parola intera
         // se richiesta; `dry_run` dà il piano e non scrive, `apply` scrive.

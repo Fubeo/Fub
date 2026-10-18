@@ -8,6 +8,8 @@
   "trash.restore": null,
   "trash.empty": null,
   "vault.archive": null,
+  "folder.rename": null,
+  "folder.trash": null,
   "note.task.toggle": null,
   "settings.set": null,
   "settings.reset": null,

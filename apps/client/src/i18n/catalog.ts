@@ -553,6 +553,13 @@ export const IT = { // --- la scocca -------------------------------------------
 "explorer.no_viewer": "Fub non ha un visualizzatore per {name}: il file resta sul disco com'è.",
 "explorer.new_folder_failed": "Non riesco a creare la cartella {folder}: {reason}",
 "explorer.move_failed": "Non riesco a spostare {doc} in {folder}: {reason}",
+"explorer.folder_move_failed": "Non riesco a spostare la cartella {folder} in {to}: {reason}",
+"explorer.folder_unsaved": "una nota aperta non è ancora salvata",
+"explorer.folder_moved": "Cartella {folder} spostata in {to}",
+"explorer.folder_trash_title": "Cartella nel cestino",
+"explorer.folder_trash_confirm": "Spostare «{folder}» e tutto ciò che contiene nel cestino del vault?",
+"explorer.folder_trashed": "Cartella {folder} nel cestino",
+"explorer.folder_trash_failed": "Non riesco a mettere la cartella {folder} nel cestino: {reason}",
 "explorer.root": "radice",
 
 // --- i nomi che non si possono usare (§15.5) ----------------------------
@@ -2367,6 +2374,13 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "explorer.no_viewer": "Fub has no viewer for {name}: the file stays on disk as it is.",
 "explorer.new_folder_failed": "Cannot create the folder {folder}: {reason}",
 "explorer.move_failed": "Cannot move {doc} into {folder}: {reason}",
+"explorer.folder_move_failed": "Cannot move the folder {folder} to {to}: {reason}",
+"explorer.folder_unsaved": "an open note is not saved yet",
+"explorer.folder_moved": "Folder {folder} moved to {to}",
+"explorer.folder_trash_title": "Folder to trash",
+"explorer.folder_trash_confirm": "Move “{folder}” and everything inside it to the vault trash?",
+"explorer.folder_trashed": "Folder {folder} moved to the trash",
+"explorer.folder_trash_failed": "Cannot move the folder {folder} to the trash: {reason}",
 "explorer.root": "the root",
 
 "explorer.bad_name": "“{name}” cannot be used: {reason}",
