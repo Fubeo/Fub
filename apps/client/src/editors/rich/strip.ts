@@ -2,7 +2,7 @@
 // carattere, colori, sottolineato, apice e pedice, maiuscole, «Copia formato»;
 // e del paragrafo: stile, allineamento, rientri, interlinea e spaziature;
 // ciò che si inserisce: link, tabelle, immagini, note e salti di pagina e di
-// colonna.
+// colonna; la revisione: trova e sostituisci, il conteggio delle parole.
 //
 // La barra di formattazione della shell porta gesti che commutano, dichiarati
 // dai plugin per id; un carattere o un colore sono valori, e la loro scelta è
@@ -34,10 +34,13 @@ import {
   setSize,
   setStyle,
   type StylePick,
+  FIND_ACTION,
+  LINK_ACTION,
 } from "./commands";
 import type { RichEngine } from "./engine";
 import { COLOR_AUTO, HIGHLIGHT_DEFAULT, LAYOUT_LENGTHS, type LayoutLength } from "./projection";
 import { imageMime } from "./schema";
+import { countText, findMatches, nextMatch, replaceAll, replaceMatch, type FindQuery, type TextCount } from "./review";
 
 /// Ciò che la striscia chiede alla shell.
 export interface RichMedia {
@@ -351,7 +354,197 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   note.append(icon(["M5 4h14v10l-5 6H5z", "M14 20v-6h5", "M8 8h8", "M8 11h5"]));
   note.setAttribute("aria-haspopup", "dialog");
   insert.append(link, table, merge, split, image, note, pageBreak, columnBreak);
-  life.add(engine.onLinkAsk(() => openLink(link)));
+  life.add(engine.onAsk(LINK_ACTION, () => openLink(link)));
+
+  // ── Revisione ─────────────────────────────────────────────────────────
+  const review = group();
+  const find = button(() => t("rich.find"), FIND_ACTION, () => engine.run(FIND_ACTION));
+  find.append(icon(["M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z", "M15.5 15.5 20 20"]));
+  find.setAttribute("aria-haspopup", "dialog");
+  const count = button(() => t("rich.count"), null, (anchor) => openCount(anchor));
+  count.append(icon(["M4 6h10", "M4 10h16", "M4 14h12", "M4 18h7", "M17 16v4", "M15 18h4"]));
+  count.setAttribute("aria-haspopup", "dialog");
+  review.append(find, count);
+  life.add(engine.onAsk(FIND_ACTION, () => openFind(find)));
+
+  /// Trova e sostituisci: le occorrenze si vedono nel testo mentre si scrive
+  /// ciò che si cerca; Invio va alla prossima, Maiusc+Invio alla precedente.
+  function openFind(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const form = document.createElement("form");
+    form.className = "rich-strip-swatches";
+    form.style.display = "grid";
+    form.style.gridTemplateColumns = "auto 220px";
+    form.style.alignItems = "center";
+    const field = (control: HTMLInputElement, label: Key, wide = false) => {
+      control.id = `${prefix}-find-${form.childElementCount}`;
+      const caption = document.createElement("label");
+      caption.htmlFor = control.id;
+      caption.textContent = t(label);
+      if (wide) {
+        // Una casella con la sua etichetta accanto, su tutta la riga.
+        const row = document.createElement("span");
+        row.style.gridColumn = "1 / -1";
+        row.append(control, " ", caption);
+        form.append(row);
+        return;
+      }
+      control.className = "rich-strip-select";
+      form.append(caption, control);
+    };
+    const text = document.createElement("input");
+    text.type = "text";
+    const selected = engine.selectedText();
+    if (selected && !selected.includes("\n") && selected.length <= 200) text.value = selected;
+    field(text, "rich.find.text");
+    const replacement = document.createElement("input");
+    replacement.type = "text";
+    field(replacement, "rich.find.replace");
+    const matchCase = document.createElement("input");
+    matchCase.type = "checkbox";
+    field(matchCase, "rich.find.case", true);
+    const wholeWord = document.createElement("input");
+    wholeWord.type = "checkbox";
+    field(wholeWord, "rich.find.word", true);
+    const status = document.createElement("p");
+    status.setAttribute("role", "status");
+    status.style.gridColumn = "1 / -1";
+    status.style.margin = "0";
+    const actions = document.createElement("div");
+    actions.style.gridColumn = "1 / -1";
+    actions.style.display = "flex";
+    actions.style.flexWrap = "wrap";
+    actions.style.gap = "4px";
+    actions.style.justifyContent = "flex-end";
+    const action = (label: Key, onPress: () => void, submit = false) => {
+      const control = document.createElement("button");
+      control.type = submit ? "submit" : "button";
+      control.className = "rich-strip-swatch-none";
+      control.textContent = t(label);
+      if (!submit) life.listen(control, "click", onPress);
+      actions.append(control);
+      return control;
+    };
+    const query = (): FindQuery => ({ text: text.value, matchCase: matchCase.checked, wholeWord: wholeWord.checked });
+    let current = -1;
+    const show = (index: number, said?: string) => {
+      const matches = findMatches(engine.read((state) => state.doc), query());
+      current = index >= 0 && index < matches.length ? index : -1;
+      engine.find(text.value === "" ? null : query(), current);
+      status.textContent =
+        said ??
+        (text.value === ""
+          ? ""
+          : matches.length === 0
+            ? t("rich.find.none")
+            : t("rich.find.count", { current: String(current + 1), total: String(matches.length) }));
+      for (const control of [previous, next, replaceOne, replaceEvery]) control.disabled = matches.length === 0;
+      return matches;
+    };
+    const step = (direction: 1 | -1) => {
+      const matches = findMatches(engine.read((state) => state.doc), query());
+      show(engine.read((state) => nextMatch(state, matches, direction)));
+    };
+    const previous = action("rich.find.previous", () => step(-1));
+    const next = action("rich.find.next", () => step(1), true);
+    const replaceOne = action("rich.find.replace_one", () => {
+      const matches = findMatches(engine.read((state) => state.doc), query());
+      const match = matches[current];
+      if (!match) {
+        step(1);
+        return;
+      }
+      engine.apply(replaceMatch(query(), match, replacement.value), false);
+      step(1);
+    });
+    const replaceEvery = action("rich.find.replace_all", () => {
+      const total = findMatches(engine.read((state) => state.doc), query()).length;
+      if (!engine.apply(replaceAll(query(), replacement.value), false)) return;
+      show(-1, t("rich.find.replaced", { n: String(total) }));
+    });
+    form.append(status, actions);
+    const refind = () => {
+      const matches = findMatches(engine.read((state) => state.doc), query());
+      // Da dove sta il cursore, come quando si comincia a scrivere.
+      const from = engine.read((state) => state.selection.from);
+      const at = matches.findIndex((m) => m.from >= from);
+      show(matches.length === 0 ? -1 : at < 0 ? 0 : at);
+    };
+    life.listen(text, "input", refind);
+    life.listen(matchCase, "change", refind);
+    life.listen(wholeWord, "change", refind);
+    life.listen(form, "submit", (event) => {
+      event.preventDefault();
+      step(1);
+    });
+    life.listen(form, "keydown", (event) => {
+      if (event.key !== "Enter" || !event.shiftKey || event.target !== text) return;
+      event.preventDefault();
+      step(-1);
+    });
+    popover = openPopover({
+      anchor,
+      content: form,
+      label: t("rich.find"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+        engine.find(null);
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+    refind();
+    text.focus();
+    text.select();
+  }
+
+  /// Parole, caratteri e paragrafi del documento e, se c'è, della selezione.
+  function openCount(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const table = document.createElement("table");
+    table.className = "rich-strip-swatches";
+    table.style.display = "table";
+    const { doc, from, to, empty } = engine.read(({ doc, selection }) => ({ doc, from: selection.from, to: selection.to, empty: selection.empty }));
+    const columns: { label: Key; count: TextCount }[] = [
+      ...(empty ? [] : [{ label: "rich.count.selection" as Key, count: countText(doc, from, to) }]),
+      { label: "rich.count.document", count: countText(doc) },
+    ];
+    const cell = (tag: "th" | "td", content: string, scope?: string) => {
+      const el = document.createElement(tag);
+      el.textContent = content;
+      if (scope) el.scope = scope;
+      if (tag === "td") el.style.textAlign = "end";
+      el.style.padding = "2px 6px";
+      return el;
+    };
+    if (!empty) {
+      const head = document.createElement("tr");
+      head.append(cell("td", ""), ...columns.map((column) => cell("th", t(column.label), "col")));
+      table.append(head);
+    }
+    const format = new Intl.NumberFormat(document.documentElement.lang || undefined);
+    for (const key of ["words", "characters", "visible", "paragraphs"] as const) {
+      const row = document.createElement("tr");
+      const name = cell("th", t(`rich.count.${key}` as Key), "row");
+      name.style.textAlign = "start";
+      row.append(name, ...columns.map((column) => cell("td", format.format(column.count[key]))));
+      table.append(row);
+    }
+    popover = openPopover({
+      anchor,
+      content: table,
+      label: t("rich.count"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+  }
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
   /// col mouse o con le frecce.
@@ -814,6 +1007,7 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     const linkState = engine.actionState("rich.link");
     link.disabled = !linkState.enabled;
     setPressed(link, linkState.active === true);
+    find.disabled = !engine.actionState(FIND_ACTION).enabled;
     pageBreak.disabled = !engine.actionState("rich.break.page").enabled;
     columnBreak.disabled = !engine.actionState("rich.break.column").enabled;
     table.disabled = !engine.editable() || !engine.read(insertTable(1, 1));

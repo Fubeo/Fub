@@ -72,6 +72,13 @@ l'IPC.
   rilasciati). **Immagine** sceglie un'immagine del vault con la porta delle
   immagini del disegno (`DrawingImagePort`: `pick`, poi `read` dal documento
   con il tetto di 16 MB), senza IPC propria.
+- `editors/rich/review.ts` trova, sostituisce e conta sul testo verbatim di
+  un paragrafo alla volta, con una foglia (a-capo, oggetto, segno) per
+  posizione: un'occorrenza torna a un intervallo esatto e non porta via un
+  segno. Le occorrenze sono decorazioni del plugin `findPlugin`, che il
+  motore tiene sempre e la striscia accende con `RichEngine.find`; trova e
+  sostituisci è un'azione che chiede (`ASK_ACTIONS`, come il link), aperta
+  da chi la sa chiedere.
 
 Gli import `prosemirror-*` stanno sotto `editors/rich/`, ma nessun guard lo
 verifica ancora come per CodeMirror. Il Markdown non dipende da questa famiglia;

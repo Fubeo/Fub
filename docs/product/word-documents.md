@@ -53,6 +53,19 @@ Si modificano:
   testo, una riga, e se va a piè di pagina o in chiusura, e la scrive con gli
   stili delle note di Word.
 
+Dal gruppo **Revisione** della striscia:
+
+- **Trova e sostituisci** (`Ctrl+H`; `Ctrl+F` resta la ricerca nella nota
+  della shell) mostra nel testo le occorrenze mentre si scrive, con maiuscole
+  e minuscole o soltanto parole intere; Invio va alla prossima, Maiusc+Invio
+  alla precedente. Un'occorrenza sta dentro un paragrafo e non scavalca un
+  oggetto o un segno (l'inizio di un commento, un segnalibro). Il testo nuovo
+  prende l'aspetto del primo carattere sostituito, e **Sostituisci tutto** è
+  una battuta sola, che si annulla in una volta;
+- **Conteggio parole** dice parole, caratteri con e senza spazi e paragrafi
+  del documento e, se c'è, della selezione: una parola è ciò che sta fra due
+  spazi, un oggetto separa senza contare, il testo delle note non conta.
+
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
 intestazioni, immagini, forme, campi, note, formule, commenti) resta nel file

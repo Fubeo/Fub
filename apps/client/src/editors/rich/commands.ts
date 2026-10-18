@@ -806,6 +806,12 @@ export function linkAt(state: EditorState): { href: string; from: number; to: nu
 /// L'azione che chiede un link: la striscia apre il modulo dell'indirizzo.
 export const LINK_ACTION = "rich.link";
 export const LINK_CHORD = "Mod-k";
+/// Trova e sostituisci: `Mod-h` come in Word, perché `Mod-f` è la ricerca
+/// della shell dentro il documento.
+export const FIND_ACTION = "rich.find";
+/// Le azioni che chiedono qualcosa a chi scrive prima di fare: le apre chi
+/// sa chiedere (la striscia).
+export const ASK_ACTIONS: ReadonlySet<string> = new Set([LINK_ACTION, FIND_ACTION]);
 
 /// Mette il link `href` sulla selezione, o sul link al cursore; senza
 /// selezione e fuori da un link scrive `text` (o l'indirizzo) come link.
@@ -1045,6 +1051,7 @@ export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, Ric
   ["rich.break.column", { run: insertBreak("\u000e"), chord: "Mod-Shift-Enter" }],
   [LINK_ACTION, { run: (state) => state.selection.$from.parent.inlineContent, active: (state) => linkAt(state) !== null, chord: LINK_CHORD }],
   ["rich.link.remove", { run: setLink(null) }],
+  [FIND_ACTION, { run: () => true, chord: "Mod-h" }],
   ["markdown.table", { run: insertTable(2, 2) }],
   ["markdown.table.row.before", { run: insertRow("before"), chord: "Mod-Alt-Shift-ArrowUp" }],
   ["markdown.table.row.after", { run: insertRow("after"), chord: "Mod-Alt-Shift-ArrowDown" }],

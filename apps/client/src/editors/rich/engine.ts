@@ -29,16 +29,16 @@ import {
   fillTableKeys,
   insertBreak,
   insertTab,
+  ASK_ACTIONS,
   richActionState,
   RICH_ACTIONS,
-  LINK_ACTION,
-  LINK_CHORD,
   shiftListLevel,
   splitParagraph,
 } from "./commands";
 import { collectKeys, filterSlice, uniqueKeys } from "./paste";
 import { parseProjection, writeHead, type Look, type ParaStyle, type Projection, type ReadOnlyReason } from "./projection";
 import { richProof } from "./proof";
+import { findPlugin, showMatches, type FindQuery } from "./review";
 import { BlockWriter, richSchema, toDoc } from "./schema";
 
 export { mountStrip } from "./strip";
@@ -63,8 +63,9 @@ export class RichEngine {
   readonly #writer = new BlockWriter();
   readonly #known = new Set<string>();
   readonly #listeners = new Set<() => void>();
-  /// Chi apre la richiesta di un link (`Mod-k`): la striscia.
-  readonly #linkAsks = new Set<() => void>();
+  /// Chi apre le richieste delle azioni che chiedono (un link, trova e
+  /// sostituisci): la striscia.
+  readonly #asks = new Map<string, Set<() => void>>();
   readonly #proofClient: ProofClient | null;
   #head: Pick<Projection, "readonly" | "lang" | "f" | "styles"> = {};
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
@@ -126,6 +127,7 @@ export class RichEngine {
     const plugins: Plugin[] = [
       history(),
       fillTableKeys,
+      findPlugin,
       keymap(this.#keys()),
       keymap(baseKeymap),
     ];
@@ -157,12 +159,12 @@ export class RichEngine {
         return true;
       },
     };
-    for (const [, action] of RICH_ACTIONS) {
-      if (action.chord && !(action.chord in keys)) keys[action.chord] = action.run;
+    for (const [id, action] of RICH_ACTIONS) {
+      if (!action.chord || action.chord in keys) continue;
+      keys[action.chord] = ASK_ACTIONS.has(id) ? (state) => action.run(state) && this.#ask(id) : action.run;
     }
     keys["Mod-z"] = undo;
     keys["Mod-Shift-z"] = redo;
-    keys[LINK_CHORD] = (state) => RICH_ACTIONS.get(LINK_ACTION)!.run(state) && this.#askLink();
     return keys;
   }
 
@@ -349,12 +351,12 @@ export class RichEngine {
     });
   }
 
-  /// Esegue un'azione del catalogo come una battuta. Il link chiede
-  /// l'indirizzo a chi lo sa chiedere.
+  /// Esegue un'azione del catalogo come una battuta. Un'azione che chiede
+  /// (il link, trova e sostituisci) passa a chi lo sa chiedere.
   run(id: string): boolean {
     const action = RICH_ACTIONS.get(id);
     if (!action || !this.editable()) return false;
-    if (id === LINK_ACTION) return action.run(this.#view.state) && this.#askLink();
+    if (ASK_ACTIONS.has(id)) return action.run(this.#view.state) && this.#ask(id);
     const done = action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
     if (done) this.#view.focus();
     return done;
@@ -365,21 +367,33 @@ export class RichEngine {
     return richActionState(id, this.#view.state);
   }
 
+  /// Mostra le occorrenze di una ricerca (nessuna con `null`) e seleziona
+  /// quella di indice `current`. Non cambia il documento: vale anche quando
+  /// non si scrive, così una ricerca chiusa non lascia segni.
+  find(query: FindQuery | null, current = -1): void {
+    if (this.#destroyed) return;
+    showMatches(query, current)(this.#view.state, (tr) => this.#view.dispatch(tr));
+  }
+
   /// Avvisa quando stato delle azioni, sola lettura o contenuto cambiano.
   subscribe(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   }
 
-  /// Avvisa quando qualcuno chiede un link (`Mod-k`, o l'azione dalla barra).
-  onLinkAsk(listener: () => void): () => void {
-    this.#linkAsks.add(listener);
-    return () => this.#linkAsks.delete(listener);
+  /// Avvisa quando qualcuno chiede l'azione `id` (`Mod-k` per un link, o
+  /// l'azione dalla barra).
+  onAsk(id: string, listener: () => void): () => void {
+    let listeners = this.#asks.get(id);
+    if (!listeners) this.#asks.set(id, (listeners = new Set()));
+    listeners.add(listener);
+    return () => listeners.delete(listener);
   }
 
-  #askLink(): boolean {
-    if (this.#linkAsks.size === 0 || !this.editable()) return false;
-    for (const listener of [...this.#linkAsks]) listener();
+  #ask(id: string): boolean {
+    const listeners = this.#asks.get(id);
+    if (!listeners || listeners.size === 0 || !this.editable()) return false;
+    for (const listener of [...listeners]) listener();
     return true;
   }
 
@@ -425,7 +439,7 @@ export class RichEngine {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#listeners.clear();
-    this.#linkAsks.clear();
+    this.#asks.clear();
     this.#view.destroy();
     this.#proofClient?.dispose();
   }
