@@ -3574,14 +3574,14 @@ impl Host {
                 )));
             }
         }
-        match crate::rich::save(codec, id, current.as_deref(), source)? {
-            crate::rich::Save::Unchanged => revision.ok_or_else(|| {
-                PluginError::Internal(format!("{id}: an unchanged save without a file").into())
-            }),
-            crate::rich::Save::Bytes(bytes) => {
-                Self::write_bytes_in(workspace, id, &bytes, revision)
-            }
-        }
+        let bytes = match current.as_deref() {
+            None => crate::rich::create(codec, id, source)?,
+            Some(current) => match crate::rich::save(codec, id, current, source)? {
+                crate::rich::Save::Unchanged => return Ok(Revision::of_bytes(current)),
+                crate::rich::Save::Bytes(bytes) => bytes,
+            },
+        };
+        Self::write_bytes_in(workspace, id, &bytes, revision)
     }
 
     /// [`Host::write_document_bytes`] sul workspace già risolto.

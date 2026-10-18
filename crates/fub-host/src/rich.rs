@@ -77,24 +77,18 @@ pub(crate) enum Save {
     Bytes(Vec<u8>),
 }
 
-/// Il salvataggio di `projection` su `current`, i byte alla revisione su cui
-/// la shell ha lavorato; `None` per un file che non c'è ancora.
+/// Il salvataggio di `projection` su `current`, i byte del file alla revisione
+/// su cui la shell ha lavorato.
 pub(crate) fn save(
     codec: Codec,
     doc: &DocId,
-    current: Option<&[u8]>,
+    current: &[u8],
     projection: &str,
 ) -> Result<Save, PluginError> {
     #[cfg(feature = "rich")]
     {
-        let blank = match current {
-            Some(_) => None,
-            None => Some(fub_format_rich::blank(codec).map_err(|error| plugin_error(doc, error))?),
-        };
-        let base = current.or(blank.as_deref()).unwrap_or_default();
-        match fub_format_rich::save(codec, base, projection) {
-            // Un file nuovo si crea anche quando la proiezione è vuota.
-            Ok(fub_format_rich::Saved::Unchanged) => Ok(blank.map_or(Save::Unchanged, Save::Bytes)),
+        match fub_format_rich::save(codec, current, projection) {
+            Ok(fub_format_rich::Saved::Unchanged) => Ok(Save::Unchanged),
             Ok(fub_format_rich::Saved::Bytes(bytes)) => Ok(Save::Bytes(bytes)),
             Err(error) => Err(plugin_error(doc, error)),
         }
@@ -102,6 +96,24 @@ pub(crate) fn save(
     #[cfg(not(feature = "rich"))]
     {
         let _ = (doc, current, projection);
+        match codec {}
+    }
+}
+
+/// I byte di un file che non c'è ancora, scritto da `projection`: si parte da
+/// un documento vuoto, e il file si crea anche quando la proiezione è vuota.
+pub(crate) fn create(codec: Codec, doc: &DocId, projection: &str) -> Result<Vec<u8>, PluginError> {
+    #[cfg(feature = "rich")]
+    {
+        let blank = fub_format_rich::blank(codec).map_err(|error| plugin_error(doc, error))?;
+        match save(codec, doc, &blank, projection)? {
+            Save::Unchanged => Ok(blank),
+            Save::Bytes(bytes) => Ok(bytes),
+        }
+    }
+    #[cfg(not(feature = "rich"))]
+    {
+        let _ = (doc, projection);
         match codec {}
     }
 }
