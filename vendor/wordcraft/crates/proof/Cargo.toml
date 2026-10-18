@@ -25,7 +25,7 @@ all = "allow"
 
 [dependencies]
 log = { workspace = true }
-miniz_oxide = "0.8"
+miniz_oxide = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -1,0 +1,40 @@
+# Copia vendorizzata di `crates/formats/Cargo.toml` di WordCraft (vedi
+# ../../UPSTREAM.md). I campi che là ereditava dal workspace di WordCraft sono
+# scritti per esteso, con le stesse versioni; i lint sono quelli dell'upstream,
+# non quelli di Fub, perché il sorgente resta quello dell'upstream.
+[package]
+name = "wordcraft-formats"
+version = "0.7.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+# WordCraft dichiara 1.95 per il proprio workspace; questo crate compila e
+# passa i propri test con 1.89, il toolchain di Fub.
+rust-version = "1.89"
+repository = "https://github.com/storytold/wordcraft"
+description = "WordCraft import/export: plain text, Markdown, HTML, RTF, OpenDocument Text and LaTeX"
+publish = false
+
+[lints.rust]
+unsafe_code = "forbid"
+# Codice di terzi: gli avvisi li corregge l'upstream, non una copia.
+warnings = "allow"
+
+[lints.clippy]
+all = "allow"
+
+[dependencies]
+wordcraft-doc = { workspace = true }
+wordcraft-geom = { workspace = true }
+# L'upstream accende png, jpeg, webp, gif, bmp e tiff. Qui soltanto i due
+# decodificatori senza dipendenze in più: un'immagine d'altro formato si legge
+# lo stesso, senza la sua misura in pixel (vedi ../../UPSTREAM.md).
+image = { workspace = true, features = ["png", "bmp"] }
+quick-xml = { workspace = true }
+zip = { workspace = true }
+cfb = { workspace = true }
+encoding_rs = "0.8"
+chardetng = "1"
+log = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

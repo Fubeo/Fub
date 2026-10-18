@@ -19,11 +19,12 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-Il diagramma seguente è la fotografia completa delle dipendenze dichiarate fra
-i crate del workspace. Le frecce continue indicano dipendenze normali; quelle
-tratteggiate esistono soltanto in `[dev-dependencies]`. Un test confronta il
-blocco con `cargo metadata`, quindi un crate o un arco non può restare fuori
-senza far fallire la CI.
+I due diagrammi seguenti sono, insieme, la fotografia completa delle
+dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
+dipendenze normali; quelle tratteggiate esistono soltanto in
+`[dev-dependencies]`. Un test confronta l'unione dei due blocchi con
+`cargo metadata`, quindi un crate o un arco non può restare fuori senza far
+fallire la CI.
 
 ```mermaid
 flowchart TD
@@ -46,10 +47,6 @@ flowchart TD
     testkit["fub-testkit"]
     kernel["fub-kernel"]
     abi["fub-abi"]
-    proof["wordcraft-proof"]
-    wdoc["wordcraft-doc"]
-    wdocx["wordcraft-docx"]
-    wgeom["wordcraft-geom"]
 
     app --> abi
     app --> host
@@ -72,15 +69,9 @@ flowchart TD
     canvas --> markdown
     rich --> abi
     rich --> markdown
-    rich --> wdoc
-    rich --> wdocx
-    wdoc --> wgeom
-    wdocx --> wdoc
-    wdocx --> wgeom
     importers --> abi
     features --> abi
     features --> base
-    features --> proof
     markdown --> abi
     markdown --> sdk
     sheet --> abi
@@ -104,6 +95,37 @@ flowchart TD
     wasmhost -.-> testkit
     importers -.-> markdown
     importers -.-> sdk
+```
+
+I crate di WordCraft vendorizzati in `vendor/wordcraft/` sono codice di terzi:
+li usano soltanto il correttore della feature `proof` e `fub-format-rich`, e
+nessuno di loro dipende da Fub. Il secondo blocco è lo stesso grafo, confrontato
+con lo stesso test.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo qui sopra: i crate di WordCraft e chi li usa.
+
+    features["fub-features"]
+    rich["fub-format-rich"]
+    proof["wordcraft-proof"]
+    wdoc["wordcraft-doc"]
+    wdocbin["wordcraft-docbin"]
+    wdocx["wordcraft-docx"]
+    wformats["wordcraft-formats"]
+    wgeom["wordcraft-geom"]
+
+    features --> proof
+    rich --> wdoc
+    rich --> wdocx
+    wdoc --> wgeom
+    wdocx --> wdoc
+    wdocx --> wgeom
+    wdocbin --> wdoc
+    wdocbin --> wgeom
+    wformats --> wdoc
+    wformats --> wgeom
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso

@@ -5,9 +5,10 @@ Questa cartella contiene codice e dati di
 modifiche al sorgente elencate qui sotto. Fub non dipende da WordCraft via Git:
 `deny.toml` ammette soltanto crates.io, e i crate non sono pubblicati là.
 
-Quattro crate: il correttore (`proof`) e, per i documenti di Word, il modello
-del documento (`doc`), le sue unità di misura (`geom`) e il codec DOCX
-(`docx`).
+Sei crate: il correttore (`proof`) e, per i documenti di videoscrittura, il
+modello del documento (`doc`), le sue unità di misura (`geom`), il codec DOCX
+(`docx`), il lettore di Word 97-2003 (`docbin`) e gli import ed export degli
+altri formati di testo (`formats`: OpenDocument, RTF e gli altri).
 
 ## Riferimento
 
@@ -24,6 +25,8 @@ del documento (`doc`), le sue unità di misura (`geom`) e il codec DOCX
 | `crates/geom/` | `crates/geom/` | `src/lib.rs` (la condizione sui test), manifest |
 | `crates/doc/` | `crates/doc/` | `src/lib.rs` (la condizione sui test), manifest |
 | `crates/docx/` | `crates/docx/` | `src/lib.rs` (la condizione sui test e due esportazioni), `src/package.rs` e sei file di `tests/` per `zip` 9, `src/write/settings_merge.rs` e `src/write/mod.rs` (una verifica in più), manifest |
+| `crates/docbin/` | `crates/docbin/` | `src/lib.rs` (la condizione sui test), `src/fmt.rs` (un `let` irrefutabile), manifest |
+| `crates/formats/` | `crates/formats/` | `src/lib.rs` (la condizione sui test), un test di `src/odt.rs` per `zip` 9, manifest |
 | `assets/hyphenation/` | `assets/hyphenation/` | nessuna |
 | `assets/spelling/` | `assets/spelling/` | nessuna |
 | `rustfmt.toml` | `rustfmt.toml` | nessuna |
@@ -39,10 +42,20 @@ Le modifiche al sorgente servono a passare
   compilano sotto `--all-targets`;
 - `src/ru/mod.rs`: nel ramo `[prefix, rest]` di una parola col trattino, la
   variabile mai letta `rest` diventa `_`. Il comportamento non cambia;
+- `docbin/src/fmt.rs`: nel ramo `C_CR`, la catena
+  `if let [r, g, b, ..] = … && let (r, g, b) = (*r, *g, *b)` ha un secondo
+  `let` che corrisponde sempre, e Rust 1.89 lo rifiuta con `-D warnings`
+  (`irrefutable_let_patterns`); i tre byte si dereferenziano nel corpo. Il
+  comportamento non cambia;
 - `docx/src/package.rs`: l'upstream usa `zip` 3, che ha tre avvisi di sicurezza
   (RUSTSEC-2026-0367, -0368, -0369) corretti in `zip` 9. In `zip` 9 il nome di
   una voce dell'archivio è un `Result`: una voce dal nome illeggibile si salta
   con un avviso nel log, come l'upstream fa già con una voce illeggibile;
+- `formats/src/odt.rs`, test `pictures_over_the_budget_are_not_inflated`: con
+  `zip` 9 una voce che si espande oltre la misura dichiarata si ferma a quella
+  misura e fallisce il controllo, quindi è rifiutata senza consumare il budget
+  invece di esaurirlo. Il test verifica ancora che sia rifiutata e che nessuna
+  voce superi il budget, non più che il budget si esaurisca;
 - `docx/tests/*.rs`: per la stessa ragione `f.name()` diventa
   `f.name().unwrap()` nei sei file di test che leggono l'archivio;
 - `docx/src/write/settings_merge.rs`: la funzione nuova `kept_unowned`, con il
@@ -64,10 +77,20 @@ Rispetto all'upstream:
 - `serde_json` non accende `float_roundtrip`: le feature si unificano in tutto
   il workspace, e la libreria lo usa solo per leggere un colore, senza numeri
   in virgola mobile;
-- `image`, che serve solo ai test, accende soltanto `png`, l'unico formato che
-  i test scrivono;
+- in `docx` `image`, che serve solo ai test, accende soltanto `png`, l'unico
+  formato che i test scrivono; in `formats` e `docbin` accende `png` e `bmp`,
+  i due decodificatori senza dipendenze in più. L'upstream accende anche
+  `jpeg`, `webp`, `gif` e `tiff`: senza, un'immagine di quei formati si legge
+  lo stesso, ma senza la misura in pixel, e l'export RTF di WordCraft non la
+  ricodifica in PNG. Fub non usa né l'una né l'altra cosa: un oggetto prende la
+  misura che il documento gli dà, e Fub non esporta in RTF;
+- `js-sys`, che `formats` prende soltanto per `wasm32`, non c'è;
 - manca la dipendenza di `getrandom` per `wasm32`: Fub compila questi crate
   soltanto per il desktop.
+
+`formats` porta una sola dipendenza nuova per Fub, `chardetng` (rilevamento
+della codifica di un testo, `MIT OR Apache-2.0`, dello stesso autore di
+`encoding_rs`); le altre sono già nell'albero.
 
 Le dipendenze crittografiche del codec (`aes`, `sha1`, `sha2`, `hmac`, `cfb`)
 servono ad aprire e scrivere documenti protetti da password e restano alle
@@ -116,7 +139,7 @@ segni d'ortografia ma conserva le regole grammaticali.
 3. riporta nel `Cargo.toml` qui le dipendenze nuove dell'upstream;
 4. aggiorna commit e impronte in questa pagina;
 5. esegui `cargo test -p wordcraft-proof -p wordcraft-geom -p wordcraft-doc
-   -p wordcraft-docx -p fub-format-rich`, i test di `fub-features` con la
+   -p wordcraft-docx -p wordcraft-docbin -p wordcraft-formats -p fub-format-rich`, i test di `fub-features` con la
    feature `proof` e `cargo deny check`.
 
 Una correzione che serve a Fub va proposta all'upstream; finché non entra, va
