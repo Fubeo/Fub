@@ -17,7 +17,7 @@ import {
 } from "./saving";
 import { rejoinDrafts, type DraftBuffer, type DraftBufferStore } from "./drafts";
 import { renameNote } from "./vault";
-import { operationYields, type TextOperation } from "../editors/core/text-operation";
+import { tryApplyOperation, type TextOperation } from "../editors/core/text-operation";
 
 const SAVE_MS = 400;
 const DRAFT_MS = 1_000;
@@ -182,12 +182,6 @@ function copyBase(base: WriteBase): WriteBase {
     : { kind: "descends_from", value: base.value };
 }
 
-/// Il testo a LF. Senza `\r` è già quello: cercare un carattere costa meno
-/// della sostituzione, che su un documento grande pesa a ogni modifica.
-function toLf(text: string): string {
-  return text.indexOf("\r") < 0 ? text : text.replace(/\r\n?/g, "\n");
-}
-
 class DocumentDeletedDuringRead extends Error {
   constructor(id: string) {
     super(`document ${id} was deleted while it was loading`);
@@ -321,9 +315,11 @@ export class DocumentSession implements DraftBuffer {
     // A pending destructive command makes every editor read-only. Keep the
     // authoritative buffer untouched even if a stale adapter callback arrives.
     if (this.#state.pendingDeletion) return { kind: "realigned", text: this.#state.text };
-    // Le due `toLf` sono lo stesso lavello: preimage e atteso devono essere
+    // I due `replace` sono lo stesso lavello: preimage e atteso devono essere
     // normalizzati identicamente, o la validazione regge per caso.
-    if (!operationYields(toLf(this.#state.text), edit.operation, toLf(edit.text))) {
+    const expected = toLf(edit.text);
+    const applied = tryApplyOperation(toLf(this.#state.text), edit.operation);
+    if (applied.kind !== "applied" || applied.text !== expected) {
       return { kind: "realigned", text: this.#state.text };
     }
     this.#acceptTextChange(edit.text);
