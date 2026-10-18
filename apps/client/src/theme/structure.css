@@ -1082,3 +1082,104 @@ html, body, #app {
 #app[data-focus-mode] .drawer-scrim {
   display: none !important;
 }
+
+/* La superficie dei documenti di videoscrittura (`editors/rich/`): una
+   colonna di testo che scorre, con la toolbar del riquadro sopra. Qui stanno
+   ciò che ProseMirror chiede al foglio (gli spazi come sono, la selezione di
+   un oggetto) e la geometria dei blocchi: rientri degli elenchi, tabelle,
+   oggetti in linea. Colori e tipografia sono della pelle (`skin/rich.css`). */
+.rich-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.rich-notice { flex: none; margin: 0; }
+.rich-page { flex: 1; min-height: 0; overflow-y: auto; }
+.rich-content {
+  position: relative;
+  box-sizing: border-box;
+  min-height: 100%;
+  outline: none;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  overflow-wrap: break-word;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+.rich-content .ProseMirror-hideselection *::selection { background: transparent; }
+.rich-content.ProseMirror-hideselection { caret-color: transparent; }
+.rich-content [draggable][contenteditable="false"] { user-select: text; }
+.rich-content img.ProseMirror-separator {
+  display: inline !important;
+  border: none !important;
+  margin: 0 !important;
+}
+.rich-para { margin: 0; }
+/* Gli elenchi sono paragrafi con un livello, come in Word: il segno lo
+   disegna il foglio, il numero lo conta il foglio. Il formato del numero
+   (lettere, romani) non viaggia nella proiezione: qui è sempre decimale. */
+.rich-list { position: relative; }
+.rich-list[data-level="0"] { margin-inline-start: 1.5em; }
+.rich-list[data-level="1"] { margin-inline-start: 3em; }
+.rich-list[data-level="2"] { margin-inline-start: 4.5em; }
+.rich-list[data-level="3"] { margin-inline-start: 6em; }
+.rich-list[data-level="4"] { margin-inline-start: 7.5em; }
+.rich-list[data-level="5"] { margin-inline-start: 9em; }
+.rich-list[data-level="6"] { margin-inline-start: 10.5em; }
+.rich-list[data-level="7"] { margin-inline-start: 12em; }
+.rich-list[data-level="8"] { margin-inline-start: 13.5em; }
+.rich-list::before {
+  position: absolute;
+  inset-inline-end: 100%;
+  padding-inline-end: 0.5em;
+  white-space: nowrap;
+}
+.rich-list[data-list="bullet"]::before { content: "•"; }
+.rich-list[data-level="0"] { counter-increment: rich-list-0; }
+.rich-list[data-level="1"] { counter-increment: rich-list-1; }
+.rich-list[data-level="2"] { counter-increment: rich-list-2; }
+.rich-list[data-level="3"] { counter-increment: rich-list-3; }
+.rich-list[data-level="4"] { counter-increment: rich-list-4; }
+.rich-list[data-level="5"] { counter-increment: rich-list-5; }
+.rich-list[data-level="6"] { counter-increment: rich-list-6; }
+.rich-list[data-level="7"] { counter-increment: rich-list-7; }
+.rich-list[data-level="8"] { counter-increment: rich-list-8; }
+.rich-para:not(.rich-list) {
+  counter-reset: rich-list-0 rich-list-1 rich-list-2 rich-list-3 rich-list-4 rich-list-5 rich-list-6 rich-list-7 rich-list-8;
+}
+.rich-list[data-level="0"] + .rich-list[data-level="1"] { counter-reset: rich-list-1; }
+.rich-list[data-level="1"] + .rich-list[data-level="2"] { counter-reset: rich-list-2; }
+.rich-list[data-level="2"] + .rich-list[data-level="3"] { counter-reset: rich-list-3; }
+.rich-list[data-level="3"] + .rich-list[data-level="4"] { counter-reset: rich-list-4; }
+.rich-list[data-level="4"] + .rich-list[data-level="5"] { counter-reset: rich-list-5; }
+.rich-list[data-level="5"] + .rich-list[data-level="6"] { counter-reset: rich-list-6; }
+.rich-list[data-level="6"] + .rich-list[data-level="7"] { counter-reset: rich-list-7; }
+.rich-list[data-level="7"] + .rich-list[data-level="8"] { counter-reset: rich-list-8; }
+.rich-list[data-list="ordered"][data-level="0"]::before { content: counter(rich-list-0) "."; }
+.rich-list[data-list="ordered"][data-level="1"]::before { content: counter(rich-list-1) "."; }
+.rich-list[data-list="ordered"][data-level="2"]::before { content: counter(rich-list-2) "."; }
+.rich-list[data-list="ordered"][data-level="3"]::before { content: counter(rich-list-3) "."; }
+.rich-list[data-list="ordered"][data-level="4"]::before { content: counter(rich-list-4) "."; }
+.rich-list[data-list="ordered"][data-level="5"]::before { content: counter(rich-list-5) "."; }
+.rich-list[data-list="ordered"][data-level="6"]::before { content: counter(rich-list-6) "."; }
+.rich-list[data-list="ordered"][data-level="7"]::before { content: counter(rich-list-7) "."; }
+.rich-list[data-list="ordered"][data-level="8"]::before { content: counter(rich-list-8) "."; }
+.rich-section { border: none; margin: 0; height: 0; overflow: visible; }
+.rich-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rich-cell { vertical-align: top; overflow-wrap: anywhere; }
+.rich-atom {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
+  vertical-align: text-bottom;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.rich-atom-marker { display: inline; }
+.rich-break-page,
+.rich-break-column { display: block; height: 0; margin-block: 0.75em; }

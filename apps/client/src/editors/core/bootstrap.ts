@@ -13,6 +13,7 @@ import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
 import { CANVAS_MOUNT, mountCanvasSurface } from "../canvas/surface";
+import { mountRichSurface, RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE } from "../rich/surface";
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
@@ -312,6 +313,24 @@ export function createDocumentSurfaceRegistry(
             : undefined,
           media: options.canvasMedia,
           attachments: options.canvasAttachments,
+        });
+      },
+    },
+  });
+  registry.register({
+    owner: RICH_OWNER,
+    family: RICH_FAMILY,
+    defaultProfile: RICH_PROFILE,
+    formats: RICH_FORMATS,
+    factory: {
+      mount(profile, context) {
+        return mountRichSurface(profile, context, {
+          onChange: options.onChange,
+          onSelectionChange: options.onSelectionChange,
+          proof: {
+            ports: proofPorts(openVaultRoot()),
+            notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+          },
         });
       },
     },

@@ -141,6 +141,61 @@ export function primaryLanguage(tag: string | null | undefined): string | null {
   return match ? match[1].toLowerCase() : null;
 }
 
+/// Un tratto del segmento e da dove viene nel documento. Le posizioni nel
+/// documento sono quelle della superficie (code unit del buffer per
+/// CodeMirror, posizioni ProseMirror per la superficie ricca).
+export interface ProsePiece {
+  /// In code unit dentro il segmento.
+  readonly start: number;
+  readonly end: number;
+  /// Nella valuta della superficie.
+  readonly docFrom: number;
+  readonly docTo: number;
+  /// Il testo del pezzo è quello del documento, carattere per carattere.
+  readonly verbatim: boolean;
+}
+
+/// Un blocco di prosa pronto per il motore.
+export interface ProseSegment {
+  readonly text: string;
+  readonly from: number;
+  readonly to: number;
+  readonly pieces: readonly ProsePiece[];
+}
+
+/// Dove sta nel documento un intervallo del segmento. `exact` quando sta dentro
+/// un pezzo verbatim: solo allora una sostituzione è sicura.
+export interface ProseLocation {
+  readonly from: number;
+  readonly to: number;
+  readonly exact: boolean;
+}
+
+function pieceAt(segment: ProseSegment, offset: number): ProsePiece | undefined {
+  return segment.pieces.find((piece) => offset >= piece.start && offset < piece.end);
+}
+
+/// Dove sta nel documento `[start, end)` del segmento, o `null` per un
+/// intervallo vuoto o fuori dal segmento.
+export function locate(segment: ProseSegment, start: number, end: number): ProseLocation | null {
+  if (end <= start) return null;
+  const first = pieceAt(segment, start);
+  const last = pieceAt(segment, end - 1);
+  if (!first || !last) return null;
+  if (first === last && first.verbatim) {
+    return { from: first.docFrom + start - first.start, to: first.docFrom + end - first.start, exact: true };
+  }
+  const from = first.verbatim ? first.docFrom + start - first.start : first.docFrom;
+  const to = last.verbatim ? last.docFrom + end - last.start : last.docTo;
+  return { from, to, exact: false };
+}
+
+/// Cosa si ignora per la sessione: una parola, in ogni sua maiuscola, o un
+/// rilievo di grammatica su quel testo.
+export function ignoreKey(issue: ProofIssue, text: string): string {
+  return issue.kind === "spelling" ? `s\u0000${text.toLocaleLowerCase()}` : `g\u0000${issue.message}\u0000${text}`;
+}
+
 /// Il client del correttore per una superficie. Va chiuso con `dispose`.
 export class ProofClient {
   private config: Promise<Config | null> | null = null;

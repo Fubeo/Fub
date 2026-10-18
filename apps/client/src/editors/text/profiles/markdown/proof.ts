@@ -21,39 +21,23 @@ import { syntaxTree } from "@codemirror/language";
 import { setDiagnostics, type Action, type Diagnostic } from "@codemirror/lint";
 import type { EditorState, Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
-import { PLACEHOLDER, ProofClient, type ProofIssue, type ProofPorts } from "../../../core/proof";
+import {
+  PLACEHOLDER,
+  ProofClient,
+  ignoreKey,
+  locate,
+  type ProofIssue,
+  type ProofPorts,
+  type ProseLocation,
+  type ProsePiece,
+  type ProseSegment,
+} from "../../../core/proof";
 import { inlineDelimiters, scanTags, spans, wikilink, type SyntaxForm } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
 import { FOOTNOTE_DEFINITION } from "./grammar";
 import { frontmatterRange } from "./render";
 
-/// Un tratto del segmento e da dove viene nel buffer.
-export interface ProsePiece {
-  /// In code unit dentro il segmento.
-  readonly start: number;
-  readonly end: number;
-  /// In code unit dentro il buffer.
-  readonly docFrom: number;
-  readonly docTo: number;
-  /// Il testo del pezzo è quello del buffer, carattere per carattere.
-  readonly verbatim: boolean;
-}
-
-/// Un blocco di prosa pronto per il motore.
-export interface ProseSegment {
-  readonly text: string;
-  readonly from: number;
-  readonly to: number;
-  readonly pieces: readonly ProsePiece[];
-}
-
-/// Dove sta nel buffer un intervallo del segmento. `exact` quando sta dentro
-/// un pezzo verbatim: solo allora una sostituzione è sicura.
-export interface ProseLocation {
-  readonly from: number;
-  readonly to: number;
-  readonly exact: boolean;
-}
+export { locate, type ProseLocation, type ProsePiece, type ProseSegment };
 
 /// I blocchi che contengono prosa. Una voce di lista con casella è un
 /// `Task`, non un paragrafo.
@@ -296,25 +280,6 @@ export function extractProse(
   return out;
 }
 
-function pieceAt(segment: ProseSegment, offset: number): ProsePiece | undefined {
-  return segment.pieces.find((piece) => offset >= piece.start && offset < piece.end);
-}
-
-/// Dove sta nel buffer `[start, end)` del segmento, o `null` per un
-/// intervallo vuoto o fuori dal segmento.
-export function locate(segment: ProseSegment, start: number, end: number): ProseLocation | null {
-  if (end <= start) return null;
-  const first = pieceAt(segment, start);
-  const last = pieceAt(segment, end - 1);
-  if (!first || !last) return null;
-  if (first === last && first.verbatim) {
-    return { from: first.docFrom + start - first.start, to: first.docFrom + end - first.start, exact: true };
-  }
-  const from = first.verbatim ? first.docFrom + start - first.start : first.docFrom;
-  const to = last.verbatim ? last.docFrom + end - last.start : last.docTo;
-  return { from, to, exact: false };
-}
-
 /// La lingua dichiarata dal frontmatter (`lang: it-IT`), se c'è.
 export function frontmatterLanguage(state: EditorState): string | null {
   const range = frontmatterRange(state.doc);
@@ -471,12 +436,6 @@ export function markdownProof(options: MarkdownProofOptions): Extension {
       }
     },
   );
-}
-
-/// Cosa si ignora per la sessione: una parola, in ogni sua maiuscola, o un
-/// rilievo di grammatica su quel testo.
-function ignoreKey(issue: ProofIssue, text: string): string {
-  return issue.kind === "spelling" ? `s\u0000${text.toLocaleLowerCase()}` : `g\u0000${issue.message}\u0000${text}`;
 }
 
 /// L'aspetto dei segni: un'ondina sotto la parola, del colore del tema.
