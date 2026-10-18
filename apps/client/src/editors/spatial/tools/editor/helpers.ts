@@ -8,7 +8,7 @@ import { elementChildren, type DocumentModel, type ElementPart } from "../../sce
 import { t, type DrawKey } from "../../strings";
 import type { Destination } from "../edit";
 import { nodeKey, type NodeKey, type NodeKind, type Subpath } from "../nodes";
-import { validClosed, validStep, validSteps, type Grid } from "../grid";
+import { validClosed, validSteady, validStep, validSteps, type Grid, type Steady } from "../grid";
 import type { LayerInfo } from "../hit";
 import { MAX_LAYER_NAME } from "../layers";
 
@@ -154,7 +154,14 @@ export function checkedGrid(next: Grid, before: Grid): Grid {
     twist: flag(next.twist, before.twist),
     taps: flag(next.taps, before.taps),
     pen: validCurve(next.pen) ?? before.pen,
+    // Uno stabilizzatore che non si legge tiene quello di prima.
+    ...steadyOf(next.steady === undefined ? undefined : (validSteady(next.steady) ?? before.steady)),
   };
+}
+
+/// Lo stabilizzatore come campo della griglia: assente se è spento da sempre.
+function steadyOf(steady: Steady | undefined): { readonly steady?: Steady } {
+  return steady === undefined ? {} : { steady };
 }
 
 /// Il verso di una freccia su un asse.

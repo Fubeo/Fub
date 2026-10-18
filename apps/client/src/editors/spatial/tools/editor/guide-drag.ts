@@ -236,7 +236,7 @@ export function installGuideDrag(ctx: EditorContext): void {
     cancelGesture();
     ctx.asking = true;
     try {
-      const answer = await touchDialog({ twist: ctx.grid.twist, taps: ctx.grid.taps, pen: ctx.grid.pen });
+      const answer = await touchDialog({ twist: ctx.grid.twist, taps: ctx.grid.taps, pen: ctx.grid.pen, ...(ctx.grid.steady === undefined ? {} : { steady: ctx.grid.steady }) });
       if (answer === null || ctx.disposed) return;
       ctx.changeGrid({ ...ctx.grid, ...answer });
     } finally {

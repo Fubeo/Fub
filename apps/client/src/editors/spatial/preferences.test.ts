@@ -293,6 +293,17 @@ describe("la griglia ricordata", () => {
     expect(await readGrid()).toEqual({ shown: false, snap: true, step: 20, steps: { mm: 18.9 }, guides: true, rulers: true, rulerGuides: false, panel: null, bar: true, shapes: true, closed: ["transform", "attributes"], twist: true, taps: true, pen: DEFAULT_CURVE });
   });
 
+  it("lo stabilizzatore ricordato torna; uno che non si legge vale spento e non butta la griglia", async () => {
+    const host = createFakeHost();
+    const { readGrid } = await boot(host);
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, steady: { amount: 0.5, string: true } });
+    expect((await readGrid()).steady).toEqual({ amount: 0.5, string: true });
+    await host.module.api.setViewState(GRID_KEY, { shown: true, snap: false, step: 10, steady: { amount: 3, string: true } });
+    const grid = await readGrid();
+    expect(grid.shown).toBe(true);
+    expect("steady" in grid).toBe(false);
+  });
+
   it("se lo stato di vista non si legge, resta l'ultima griglia", async () => {
     const host = createFakeHost();
     const { readGrid, saveGrid } = await boot(host);

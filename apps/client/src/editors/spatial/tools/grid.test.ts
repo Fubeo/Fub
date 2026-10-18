@@ -15,6 +15,8 @@ import {
   snapDelta,
   snapPoint,
   snapValue,
+  stabilizerOf,
+  validSteady,
   MAX_CLOSED,
   MAX_SECTION_NAME,
   UNIT_STEP,
@@ -176,5 +178,20 @@ describe("la griglia", () => {
     expect(gridLines({ scale: 1, angle: 0, tx: 0, ty: 0 }, 0, 100, 20)).toEqual({ minor: "", major: "" });
     expect(gridLines({ scale: 0, angle: 0, tx: 0, ty: 0 }, 100, 100, 20)).toEqual({ minor: "", major: "" });
     expect(gridLines({ scale: 1, angle: 0, tx: 0, ty: 0 }, 100, 100, 0)).toEqual({ minor: "", major: "" });
+  });
+});
+
+describe("lo stabilizzatore della griglia", () => {
+  it("si legge solo con la levigatura in 0…1 e la corda vera o falsa", () => {
+    expect(validSteady({ amount: 0.3, string: false })).toEqual({ amount: 0.3, string: false });
+    for (const bad of [null, 3, { amount: -0.1, string: false }, { amount: 1.5, string: true }, { amount: Number.NaN, string: true }, { amount: 0.5 }]) {
+      expect(validSteady(bad)).toBeNull();
+    }
+  });
+
+  it("diventa la configurazione dell'inchiostro; assente o a zero è spento", () => {
+    expect(stabilizerOf(undefined).amount).toBe(0);
+    expect(stabilizerOf({ amount: 0, string: true }).amount).toBe(0);
+    expect(stabilizerOf({ amount: 0.6, string: true })).toEqual({ amount: 0.6, pulledString: true, catchUp: true, catchUpOnEnd: true });
   });
 });
