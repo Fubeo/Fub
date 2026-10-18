@@ -15,6 +15,7 @@
 export const IT = { // --- la scocca ---------------------------------------------------------
 "app.skip_to_editor": "Vai all'editor",
 "app.open_vault": "Apri vault…",
+"app.initial_vault_failed": "L'ultimo vault, «{path}», non si è aperto: {reason}. Scegline uno o riprova.",
 "app.settings": "Impostazioni",
 "app.settings.hint": "Le impostazioni di questo vault",
 "app.close": "Chiudi",
@@ -1852,6 +1853,7 @@ export type Key = keyof typeof IT;
 /// errore di compilazione, non una chiave nuda scoperta da qualcuno.
 export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the editor",
 "app.open_vault": "Open vault…",
+"app.initial_vault_failed": "The last vault, «{path}», did not open: {reason}. Choose one or try again.",
 "app.settings": "Settings",
 "app.settings.hint": "The settings of this vault",
 "app.close": "Close",

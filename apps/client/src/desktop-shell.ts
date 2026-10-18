@@ -1039,7 +1039,7 @@ async function init(): Promise<Teardown> {
   // l'onboarding a vault vuoto e applica i breakpoint, senza toccare l'ordine
   // di apertura qui sotto.
   mountAdaptiveShell();
-  if (initial) await openVaultPath(initial, alive);
+  if (initial) await openInitialVault(initial, alive);
   else await synchronize();
   if (!alive()) return teardown;
   // L'avviso di una ricarica voluta (un ripristino da snapshot): la finestra
@@ -1047,6 +1047,20 @@ async function init(): Promise<Teardown> {
   const reloaded = takeNoticeAfterReload();
   if (reloaded) notify(reloaded);
   return teardown;
+}
+
+/// L'ultimo vault, all'avvio. Se non si apre — un altro Fub lo tiene, il
+/// disco non risponde — la finestra non è un guasto: dice perché e mostra la
+/// scelta del vault, come al primo avvio. Prima l'errore chiudeva la vita della
+/// pagina, e l'unica via d'uscita era riavviare.
+async function openInitialVault(path: string, alive: () => boolean): Promise<void> {
+  try {
+    await openVaultPath(path, alive);
+  } catch (error) {
+    if (!alive()) return;
+    notify(t("app.initial_vault_failed", { path, reason: errorText(error) }), "guasto");
+    await synchronize();
+  }
 }
 
 /// I gesti sul vault intero che il menu File e il chip del vault offrono:

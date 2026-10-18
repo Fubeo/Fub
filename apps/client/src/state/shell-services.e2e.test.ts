@@ -482,6 +482,22 @@ describe("aprire un vault: i passi e il loro ordine", () => {
     expect(shell.notices().some((n) => n.includes("indice non scritto"))).toBe(true);
   });
 
+  it("l'ultimo vault che all'avvio non si apre lascia la scelta del vault, e dice perché", async () => {
+    let repair = (): void => {};
+    const shell = await start(VAULT, (shell) => {
+      repair = shell.host.fault("openVault", "il vault è usato da un altro Fub");
+    });
+    repair();
+
+    expect(shell.store.state.vaultRoot).toBeFalsy();
+    expect(shell.notices().some((n) => n.includes("il vault è usato da un altro Fub"))).toBe(true);
+    expect(shell.notices().some((n) => n.includes(shell.t("app.start_failed", { reason: "" }).trim()))).toBe(false);
+    // La pagina è viva: la scelta di un vault, dopo, lo apre.
+    const { openVault } = await import("../desktop-shell");
+    await openVault("/altro");
+    expect(shell.store.state.vaultRoot).toBe("/altro");
+  });
+
   it("un vault che l'host rifiuta lascia in piedi quello di prima", async () => {
     const shell = await start(VAULT);
     const owner = shell.sessions.get("Benvenuto.md");
