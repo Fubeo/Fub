@@ -244,7 +244,6 @@
     "canvas-edge-label",
     "rich-surface",
     "rich-notice",
-    "rich-page",
     "rich-content",
     "rich-para",
     "rich-heading",
@@ -1015,7 +1014,6 @@
       "hooks": [
         "rich-surface",
         "rich-notice",
-        "rich-page",
         "rich-content",
         "rich-para",
         "rich-heading",
@@ -1848,7 +1846,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 424,
+    "hooks": 423,
     "state_names": 7,
     "assigned_states": 151,
     "components": 47,
