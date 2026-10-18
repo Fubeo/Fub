@@ -12,7 +12,7 @@ import projectionFixture from "../../__fixtures__/rich-projection.json";
 import type { EditorChange } from "../core/text-operation";
 import { RichEngine } from "./engine";
 import { parseProjection, writeProjection } from "./projection";
-import { setColor, setFont, setHighlight, setLayout, setSize, setStyle } from "./commands";
+import { setColor, setFont, setHighlight, setLayout, setLink, setSize, setStyle } from "./commands";
 import { BlockWriter, toDoc } from "./schema";
 
 const SOURCE = projectionFixture.source;
@@ -102,6 +102,12 @@ describe("la proiezione del codec", () => {
     e.select(find(e.state.doc, "dopo il salto"));
     const subtitle = e.styles().find((style) => style.id === "Subtitle")!;
     expect(e.apply(setStyle({ s: subtitle.id, f: subtitle.f }, e.documentLook()))).toBe(true);
+    // Il link della prosa cambia indirizzo; «Prima» diventa un link.
+    e.select(find(e.state.doc, "link") + 1);
+    expect(e.apply(setLink("https://fub.app/nuovo"))).toBe(true);
+    const before = find(e.state.doc, "Prima");
+    e.select(before, before + "Prima".length);
+    expect(e.apply(setLink("https://fub.app/prima"))).toBe(true);
     // L'ultimo paragrafo diventa un titolo.
     e.select(find(e.state.doc, "Fine."));
     expect(e.run("markdown.heading.2")).toBe(true);

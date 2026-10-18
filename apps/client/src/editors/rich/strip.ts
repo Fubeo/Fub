@@ -1,6 +1,7 @@
 // La striscia del carattere della superficie ricca: tipo e dimensione del
 // carattere, colori, sottolineato, apice e pedice, maiuscole, «Copia formato»;
-// e del paragrafo: stile, allineamento, rientri, interlinea e spaziature.
+// e del paragrafo: stile, allineamento, rientri, interlinea e spaziature;
+// ciò che si inserisce: link e salti di pagina e di colonna.
 //
 // La barra di formattazione della shell porta gesti che commutano, dichiarati
 // dai plugin per id; un carattere o un colore sono valori, e la loro scelta è
@@ -15,6 +16,7 @@ import { onLanguage, t, type Key } from "../../i18n/strings";
 import {
   FONT_SIZES,
   LINE_SPACINGS,
+  linkAt,
   selectedLayout,
   selectedStyle,
   setColor,
@@ -22,6 +24,7 @@ import {
   setHighlight,
   setLayout,
   setLineSpacing,
+  setLink,
   setSize,
   setStyle,
   type StylePick,
@@ -269,6 +272,102 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   spacing.setAttribute("aria-haspopup", "dialog");
   paragraph.append(dedent, indent, spacing);
 
+  // ── Inserisci ─────────────────────────────────────────────────────────
+  const insert = group();
+  const link = button(() => t("rich.link"), "rich.link", () => engine.run("rich.link"));
+  link.append(icon(["M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1", "M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"]));
+  link.dataset.action = "rich.link";
+  link.setAttribute("aria-haspopup", "dialog");
+  const pageBreak = button(() => t("rich.break.page"), "rich.break.page", () => engine.run("rich.break.page"));
+  pageBreak.append(icon(["M5 3v5h14V3", "M5 21v-5h14v5", "M4 12h2", "M9 12h2", "M13 12h2", "M18 12h2"]));
+  const columnBreak = button(() => t("rich.break.column"), "rich.break.column", () => engine.run("rich.break.column"));
+  columnBreak.append(icon(["M4 5h6", "M4 9h6", "M4 13h6", "M14 11h6", "M14 15h6", "M14 19h6", "M12 3v18"]));
+  insert.append(link, pageBreak, columnBreak);
+  life.add(engine.onLinkAsk(() => openLink(link)));
+
+  /// L'indirizzo del link sulla selezione o al cursore; senza selezione,
+  /// anche il testo da scrivere.
+  function openLink(anchor: HTMLButtonElement): void {
+    popover?.close();
+    const current = engine.read(linkAt);
+    const typing = !current && engine.read((state) => state.selection.empty);
+    const form = document.createElement("form");
+    form.className = "rich-strip-swatches";
+    form.style.display = "grid";
+    form.style.gridTemplateColumns = "auto 220px";
+    form.style.alignItems = "center";
+    const field = (input: HTMLInputElement, label: Key) => {
+      input.id = `${prefix}-link-${form.childElementCount}`;
+      input.className = "rich-strip-select";
+      const caption = document.createElement("label");
+      caption.htmlFor = input.id;
+      caption.textContent = t(label);
+      form.append(caption, input);
+    };
+    const address = document.createElement("input");
+    address.type = "text";
+    address.inputMode = "url";
+    address.placeholder = "https://";
+    address.value = current?.href ?? "";
+    field(address, "rich.link.address");
+    const text = document.createElement("input");
+    text.type = "text";
+    if (typing) field(text, "rich.link.text");
+    const problem = document.createElement("p");
+    problem.setAttribute("role", "alert");
+    problem.style.gridColumn = "1 / -1";
+    problem.style.margin = "0";
+    problem.hidden = true;
+    const actions = document.createElement("div");
+    actions.style.gridColumn = "1 / -1";
+    actions.style.display = "flex";
+    actions.style.justifyContent = "flex-end";
+    const done = (applied: boolean) => {
+      if (!applied) return;
+      popover?.close();
+      engine.focus();
+    };
+    if (current) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "rich-strip-swatch-none";
+      remove.textContent = t("rich.link.remove");
+      life.listen(remove, "click", () => done(engine.apply(setLink(null), false)));
+      actions.append(remove);
+    }
+    const apply = document.createElement("button");
+    apply.type = "submit";
+    apply.className = "rich-strip-swatch-none";
+    apply.textContent = t("rich.link.apply");
+    actions.append(apply);
+    form.append(problem, actions);
+    life.listen(form, "submit", (event) => {
+      event.preventDefault();
+      const href = address.value.trim();
+      if (href === "") {
+        done(current ? engine.apply(setLink(null), false) : true);
+        return;
+      }
+      const applied = engine.apply(setLink(href, typing ? text.value : undefined), false);
+      problem.textContent = t("rich.link.invalid");
+      problem.hidden = applied;
+      done(applied);
+    });
+    popover = openPopover({
+      anchor,
+      content: form,
+      label: t("rich.link"),
+      className: "rich-strip-popover",
+      lifetime: life,
+      onClose: () => {
+        popover = null;
+        anchor.setAttribute("aria-expanded", "false");
+      },
+    });
+    anchor.setAttribute("aria-expanded", "true");
+    address.focus();
+  }
+
   function stylePick(value: string): StylePick | null {
     if (value === "body") return { role: { kind: "body" } };
     if (value === "quote") return { role: { kind: "quote" } };
@@ -482,6 +581,11 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
       control.disabled = !state.enabled;
       setPressed(control, state.active === true);
     }
+    const linkState = engine.actionState("rich.link");
+    link.disabled = !linkState.enabled;
+    setPressed(link, linkState.active === true);
+    pageBreak.disabled = !engine.actionState("rich.break.page").enabled;
+    columnBreak.disabled = !engine.actionState("rich.break.column").enabled;
     dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;
     indent.disabled = !engine.actionState("rich.indent.increase").enabled;
     colorBar.style.backgroundColor = look.color && look.color !== COLOR_AUTO ? look.color : "currentColor";

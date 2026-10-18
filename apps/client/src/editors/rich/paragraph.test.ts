@@ -7,6 +7,7 @@ import { Fragment, Slice } from "prosemirror-model";
 import { selectedLayout, selectedStyle, setLayout, setStyle } from "./commands";
 import { RichEngine } from "./engine";
 import { parseProjection, type Block, type Para } from "./projection";
+import { t } from "../../i18n/strings";
 import { richSchema } from "./schema";
 import { mountStrip } from "./strip";
 
@@ -129,7 +130,7 @@ describe("il paragrafo", () => {
     expect(strip.element.querySelector('[data-action="rich.align.right"]')?.getAttribute("aria-pressed")).toBe("true");
     // La spaziatura: ogni campo ha un nome; il valore del paragrafo, o vuoto
     // dove segue lo stile.
-    const spacing = [...strip.element.querySelectorAll<HTMLButtonElement>('[aria-haspopup="dialog"]')].pop()!;
+    const spacing = strip.element.querySelector<HTMLButtonElement>(`[aria-label="${t("rich.spacing")}"]`)!;
     spacing.click();
     const after = [...document.querySelectorAll<HTMLInputElement>('input[type="number"]')];
     expect(after).toHaveLength(5);

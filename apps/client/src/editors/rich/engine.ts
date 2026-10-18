@@ -31,6 +31,8 @@ import {
   insertTab,
   richActionState,
   RICH_ACTIONS,
+  LINK_ACTION,
+  LINK_CHORD,
   shiftListLevel,
   splitParagraph,
 } from "./commands";
@@ -61,6 +63,8 @@ export class RichEngine {
   readonly #writer = new BlockWriter();
   readonly #known = new Set<string>();
   readonly #listeners = new Set<() => void>();
+  /// Chi apre la richiesta di un link (`Mod-k`): la striscia.
+  readonly #linkAsks = new Set<() => void>();
   readonly #proofClient: ProofClient | null;
   #head: Pick<Projection, "readonly" | "lang" | "f" | "styles"> = {};
   /// Il testo del buffer come lo tiene il motore: quello ricevuto finché
@@ -158,6 +162,7 @@ export class RichEngine {
     }
     keys["Mod-z"] = undo;
     keys["Mod-Shift-z"] = redo;
+    keys[LINK_CHORD] = (state) => RICH_ACTIONS.get(LINK_ACTION)!.run(state) && this.#askLink();
     return keys;
   }
 
@@ -344,10 +349,12 @@ export class RichEngine {
     });
   }
 
-  /// Esegue un'azione del catalogo come una battuta.
+  /// Esegue un'azione del catalogo come una battuta. Il link chiede
+  /// l'indirizzo a chi lo sa chiedere.
   run(id: string): boolean {
     const action = RICH_ACTIONS.get(id);
     if (!action || !this.editable()) return false;
+    if (id === LINK_ACTION) return action.run(this.#view.state) && this.#askLink();
     const done = action.run(this.#view.state, (tr) => this.#view.dispatch(tr), this.#view);
     if (done) this.#view.focus();
     return done;
@@ -362,6 +369,18 @@ export class RichEngine {
   subscribe(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /// Avvisa quando qualcuno chiede un link (`Mod-k`, o l'azione dalla barra).
+  onLinkAsk(listener: () => void): () => void {
+    this.#linkAsks.add(listener);
+    return () => this.#linkAsks.delete(listener);
+  }
+
+  #askLink(): boolean {
+    if (this.#linkAsks.size === 0 || !this.editable()) return false;
+    for (const listener of [...this.#linkAsks]) listener();
+    return true;
   }
 
   #notify(): void {
@@ -406,6 +425,7 @@ export class RichEngine {
     if (this.#destroyed) return;
     this.#destroyed = true;
     this.#listeners.clear();
+    this.#linkAsks.clear();
     this.#view.destroy();
     this.#proofClient?.dispose();
   }

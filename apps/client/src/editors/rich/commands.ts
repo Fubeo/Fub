@@ -32,6 +32,7 @@ import {
   type Look,
   type Role,
 } from "./projection";
+import { safeHref } from "./paste";
 import { richSchema } from "./schema";
 
 const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
@@ -347,8 +348,9 @@ export const splitParagraph: Command = (state, dispatch) => {
   return true;
 };
 
-/// Un a-capo dentro il paragrafo (Maiusc+Invio), un salto pagina (Mod+Invio).
-export function insertBreak(ch: "\n" | "\u000c"): Command {
+/// Un a-capo dentro il paragrafo (Maiusc+Invio), un salto pagina (Mod+Invio),
+/// un salto di colonna (Mod+Maiusc+Invio).
+export function insertBreak(ch: "\n" | "\u000c" | "\u000e"): Command {
   return (state, dispatch) => {
     const { $from } = state.selection;
     if (!$from.parent.inlineContent) return false;
@@ -540,6 +542,77 @@ export const fillTableKeys = new Plugin({
     return tr.docChanged ? tr.setMeta("addToHistory", false) : null;
   },
 });
+
+// ── I link ───────────────────────────────────────────────────────────────────
+
+/// Il link al cursore o sulla selezione: il suo indirizzo e il tratto che
+/// copre nel paragrafo. Con una selezione, soltanto se tutta dentro lo stesso
+/// link.
+export function linkAt(state: EditorState): { href: string; from: number; to: number } | null {
+  const { $from, $to } = state.selection;
+  if (!$from.sameParent($to) || $from.parent.type !== para) return null;
+  const type = richSchema.marks.link;
+  const parent = $from.parent;
+  const start = $from.start();
+  // I figli del paragrafo con il loro inizio.
+  const pieces: { from: number; to: number; href: string | null }[] = [];
+  parent.forEach((child, offset) => {
+    const mark = type.isInSet(child.marks);
+    pieces.push({ from: start + offset, to: start + offset + child.nodeSize, href: (mark?.attrs.href as string | undefined) ?? null });
+  });
+  const at = $from.pos;
+  // Il pezzo che contiene il cursore; in fondo a un link, quello prima.
+  let index = pieces.findIndex((piece) => piece.from <= at && at < piece.to && piece.href !== null);
+  if (index < 0) index = pieces.findIndex((piece) => piece.to === at && piece.href !== null);
+  if (index < 0) return null;
+  const href = pieces[index]!.href!;
+  let first = index;
+  let last = index;
+  while (first > 0 && pieces[first - 1]!.href === href) first -= 1;
+  while (last < pieces.length - 1 && pieces[last + 1]!.href === href) last += 1;
+  const from = pieces[first]!.from;
+  const to = pieces[last]!.to;
+  if (!state.selection.empty && ($from.pos < from || $to.pos > to)) return null;
+  return { href, from, to };
+}
+
+/// L'azione che chiede un link: la striscia apre il modulo dell'indirizzo.
+export const LINK_ACTION = "rich.link";
+export const LINK_CHORD = "Mod-k";
+
+/// Mette il link `href` sulla selezione, o sul link al cursore; senza
+/// selezione e fuori da un link scrive `text` (o l'indirizzo) come link.
+/// `null` toglie il link. Un indirizzo che non porta sul web non si scrive.
+export function setLink(href: string | null, text?: string): Command {
+  return (state, dispatch) => {
+    const type = richSchema.marks.link;
+    if (href !== null && !safeHref(href)) return false;
+    const around = linkAt(state);
+    const { from, to, empty } = state.selection;
+    if (href === null) {
+      const range = around ?? (empty ? null : { from, to });
+      if (!range || !state.doc.rangeHasMark(range.from, range.to, type)) return false;
+      if (dispatch) dispatch(state.tr.removeMark(range.from, range.to, type));
+      return true;
+    }
+    if (!state.selection.$from.parent.inlineContent) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      const mark = type.create({ href });
+      if (around && empty) {
+        tr.removeMark(around.from, around.to, type).addMark(around.from, around.to, mark);
+      } else if (!empty) {
+        tr.removeMark(from, to, type).addMark(from, to, mark);
+      } else {
+        const marks = (state.storedMarks ?? state.selection.$from.marks()).filter((m) => m.type !== type);
+        const node = richSchema.text(text || href, [...marks, mark]);
+        tr.replaceSelectionWith(node, false);
+      }
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
 
 // ── Il paragrafo ─────────────────────────────────────────────────────────────
 
@@ -741,6 +814,10 @@ export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, Ric
       chord: multiple === 1 ? "Mod-1" : multiple === 1.5 ? "Mod-5" : multiple === 2 ? "Mod-2" : undefined,
     },
   ]),
+  ["rich.break.page", { run: insertBreak("\u000c"), chord: "Mod-Enter" }],
+  ["rich.break.column", { run: insertBreak("\u000e"), chord: "Mod-Shift-Enter" }],
+  [LINK_ACTION, { run: (state) => state.selection.$from.parent.inlineContent, active: (state) => linkAt(state) !== null, chord: LINK_CHORD }],
+  ["rich.link.remove", { run: setLink(null) }],
   ["markdown.table.row.before", { run: insertRow("before"), chord: "Mod-Alt-Shift-ArrowUp" }],
   ["markdown.table.row.after", { run: insertRow("after"), chord: "Mod-Alt-Shift-ArrowDown" }],
   ["markdown.table.row.up", { run: moveRow(-1), chord: "Mod-Alt-ArrowUp" }],

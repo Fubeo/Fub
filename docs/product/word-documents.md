@@ -12,7 +12,11 @@ delle note. Si salva nel file stesso, senza conversioni e senza copie a lato.
 
 Si modificano:
 
-- il testo, con a-capo, tabulazioni e salti di pagina o di colonna;
+- il testo, con a-capo, tabulazioni e salti di pagina (`Ctrl+Invio`) o di
+  colonna (`Ctrl+Maiusc+Invio`), anche dal gruppo **Inserisci** della striscia;
+- i link: `Ctrl+K` o il pulsante della striscia chiedono l'indirizzo (web o
+  posta) e lo mettono sulla selezione, sul link al cursore o, senza
+  selezione, su un testo nuovo; dallo stesso modulo un link si toglie;
 - grassetto, corsivo, barrato ed evidenziato dalla barra;
 - l'aspetto del carattere dalla striscia sopra il foglio: tipo e
   dimensione (anche a passi, `Ctrl+]` e `Ctrl+[`), colore del testo, colore
@@ -57,8 +61,9 @@ Limiti attuali:
 - un carattere che la macchina non ha si mostra con uno di ripiego, ma nel
   file resta quello scelto; in un `.docx` l'evidenziatore ha soltanto i sedici
   colori di Word;
-- i link si conservano ma non si creano né si modificano; le colonne delle
-  tabelle non si aggiungono né si tolgono;
+- un link porta soltanto a un indirizzo web, di posta o a un segnalibro
+  già nel documento; le colonne delle tabelle non si aggiungono né si
+  tolgono;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
   del documento, che resta quella del file;
 - il codec riscrive il file in forma propria: rinumera intestazioni, piè di

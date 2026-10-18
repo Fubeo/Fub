@@ -176,6 +176,15 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
             ..Layout::default()
         }
     );
+    // I link: uno cambiato, uno nuovo che prende lo stile dei collegamenti.
+    let href = |text: &str| {
+        para_of(&p, text).c.iter().find_map(|i| match i {
+            Inline::Text { x, href, .. } if x == text => href.clone(),
+            _ => None,
+        })
+    };
+    assert_eq!(href("link").as_deref(), Some("https://fub.app/nuovo"));
+    assert_eq!(href("Prima").as_deref(), Some("https://fub.app/prima"));
     // Il paragrafo del salto ha lo stile Sottotitolo.
     assert_eq!(para_of(&p, "dopo il salto").s.as_deref(), Some("Subtitle"));
     // Il paragrafo della sezione: centrato, rientrato, interlinea e spazio.

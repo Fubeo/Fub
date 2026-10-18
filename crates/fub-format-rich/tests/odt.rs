@@ -317,6 +317,50 @@ fn cambiare_una_parola_tocca_soltanto_il_suo_paragrafo() {
 }
 
 #[test]
+fn un_link_si_crea_si_cambia_e_si_toglie() {
+    let bytes = odt(PROSE);
+    let mut projection = projection(&bytes);
+    let set = |inline: &mut Inline, to: Option<&str>| {
+        if let Inline::Text { href, .. } = inline {
+            *href = to.map(str::to_string);
+        }
+    };
+    let prose = para_mut(&mut projection, 1);
+    set(&mut prose.c[1], Some("https://fub.app/"));
+    set(&mut prose.c[5], Some("https://example.org/altro"));
+    let out = saved(&bytes, &projection);
+    let links = |projection: &Projection| -> Vec<(String, Option<String>)> {
+        para(projection, 1)
+            .c
+            .iter()
+            .filter_map(|i| match i {
+                Inline::Text { x, href, .. } => Some((x.clone(), href.clone())),
+                Inline::Atom { .. } => None,
+            })
+            .filter(|(_, href)| href.is_some())
+            .collect()
+    };
+    let reopened = self::projection(&out);
+    assert_eq!(
+        links(&reopened),
+        [
+            ("corsiva".to_string(), Some("https://fub.app/".to_string())),
+            (
+                "un link".to_string(),
+                Some("https://example.org/altro".to_string())
+            ),
+        ]
+    );
+    // Il corsivo resta: il link avvolge il tratto, non lo sostituisce.
+    assert!(texts(para(&reopened, 1)).contains(&("corsiva", &[Mark::I][..])));
+    let mut cleared = reopened.clone();
+    for inline in &mut para_mut(&mut cleared, 1).c {
+        set(inline, None);
+    }
+    assert!(links(&self::projection(&saved(&out, &cleared))).is_empty());
+}
+
+#[test]
 fn gli_spazi_seguono_la_regola_di_odf() {
     let bytes = odt(concat!(
         "<text:p>  a  <text:span text:style-name=\"T1\"> b</text:span><text:s text:c=\"3\"/>c",
