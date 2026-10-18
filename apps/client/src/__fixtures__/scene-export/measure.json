@@ -1,0 +1,182 @@
+[
+  {
+    "name": "scale-default",
+    "description": "un A4 orizzontale alla scala di serie",
+    "width": 1122.52,
+    "height": 793.7,
+    "size": {
+      "scale": 2
+    },
+    "expect": {
+      "scale": 2,
+      "width": 2246,
+      "height": 1588,
+      "reduced": false
+    }
+  },
+  {
+    "name": "scale-fraction",
+    "description": "una scala frazionaria e lati che non sono interi",
+    "width": 333.33,
+    "height": 100.01,
+    "size": {
+      "scale": 1.5
+    },
+    "expect": {
+      "scale": 1.5,
+      "width": 500,
+      "height": 151,
+      "reduced": false
+    }
+  },
+  {
+    "name": "scale-tiny",
+    "description": "un disegno di un'unità per lato alla scala più grande",
+    "width": 1,
+    "height": 1,
+    "size": {
+      "scale": 8
+    },
+    "expect": {
+      "scale": 8,
+      "width": 8,
+      "height": 8,
+      "reduced": false
+    }
+  },
+  {
+    "name": "scale-side-limit",
+    "description": "una scala che farebbe un lato più lungo di 16 384 pixel",
+    "width": 4000,
+    "height": 100,
+    "size": {
+      "scale": 8
+    },
+    "expect": {
+      "scale": 4.0960001945495605,
+      "width": 16384,
+      "height": 410,
+      "reduced": true
+    }
+  },
+  {
+    "name": "scale-area-limit",
+    "description": "una scala che supererebbe 32 milioni di pixel",
+    "width": 8000,
+    "height": 8000,
+    "size": {
+      "scale": 1
+    },
+    "expect": {
+      "scale": 0.7233532667160034,
+      "width": 5787,
+      "height": 5787,
+      "reduced": true
+    }
+  },
+  {
+    "name": "scale-long",
+    "description": "un nastro lungo e stretto",
+    "width": 100000,
+    "height": 10,
+    "size": {
+      "scale": 1
+    },
+    "expect": {
+      "scale": 0.16383999586105347,
+      "width": 16384,
+      "height": 2,
+      "reduced": true
+    }
+  },
+  {
+    "name": "pixels-a4",
+    "description": "un A4 orizzontale largo 1 920 pixel",
+    "width": 1122.52,
+    "height": 793.7,
+    "size": {
+      "pixels": 1920
+    },
+    "expect": {
+      "scale": 1.7104371786117554,
+      "width": 1920,
+      "height": 1358,
+      "reduced": false
+    }
+  },
+  {
+    "name": "pixels-a4-portrait",
+    "description": "un A4 verticale largo 800 pixel: a 32 bit verrebbe 801",
+    "width": 793.7,
+    "height": 1122.52,
+    "size": {
+      "pixels": 800
+    },
+    "expect": {
+      "scale": 1.0079375505447388,
+      "width": 800,
+      "height": 1132,
+      "reduced": false
+    }
+  },
+  {
+    "name": "pixels-exact",
+    "description": "una larghezza che, rifatta a 32 bit come lato per scala, darebbe un pixel in più",
+    "width": 13,
+    "height": 7,
+    "size": {
+      "pixels": 1000
+    },
+    "expect": {
+      "scale": 76.92308044433594,
+      "width": 1000,
+      "height": 539,
+      "reduced": false
+    }
+  },
+  {
+    "name": "pixels-one",
+    "description": "un pixel di larghezza: l'altezza non scende sotto 1",
+    "width": 1122.52,
+    "height": 793.7,
+    "size": {
+      "pixels": 1
+    },
+    "expect": {
+      "scale": 0.0008908527088351548,
+      "width": 1,
+      "height": 1,
+      "reduced": false
+    }
+  },
+  {
+    "name": "pixels-tall",
+    "description": "una larghezza che fa un'immagine più alta del limite",
+    "width": 100,
+    "height": 10000,
+    "size": {
+      "pixels": 16384
+    },
+    "expect": {
+      "scale": 1.6383999586105347,
+      "width": 164,
+      "height": 16384,
+      "reduced": true
+    }
+  },
+  {
+    "name": "pixels-area",
+    "description": "una larghezza che fa un'immagine oltre i 32 milioni di pixel",
+    "width": 1000,
+    "height": 1000,
+    "size": {
+      "pixels": 16384
+    },
+    "expect": {
+      "scale": 5.786826133728027,
+      "width": 5787,
+      "height": 5787,
+      "reduced": true
+    }
+  }
+]

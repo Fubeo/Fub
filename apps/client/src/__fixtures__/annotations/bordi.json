@@ -1,0 +1,100 @@
+{
+  "notes": [
+    {
+      "text": "zero",
+      "body": "fuori dalle pagine",
+      "bytes": [
+        269,
+        316
+      ],
+      "utf16": [
+        269,
+        316
+      ],
+      "content": {
+        "bytes": [
+          305,
+          309
+        ],
+        "utf16": [
+          305,
+          309
+        ]
+      },
+      "value": {
+        "bytes": [
+          285,
+          303
+        ],
+        "utf16": [
+          285,
+          303
+        ]
+      }
+    },
+    {
+      "text": "fuori",
+      "body": "esterna",
+      "bytes": [
+        510,
+        585
+      ],
+      "utf16": [
+        510,
+        585
+      ],
+      "content": {
+        "bytes": [
+          535,
+          578
+        ],
+        "utf16": [
+          535,
+          578
+        ]
+      },
+      "value": {
+        "bytes": [
+          526,
+          533
+        ],
+        "utf16": [
+          526,
+          533
+        ]
+      }
+    }
+  ],
+  "annotates": null,
+  "digest": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "pageCount": 7,
+  "pages": [
+    {
+      "number": 2,
+      "size": null,
+      "bytes": [
+        323,
+        592
+      ],
+      "utf16": [
+        323,
+        592
+      ]
+    },
+    {
+      "number": 2,
+      "size": [
+        612.0,
+        792.0
+      ],
+      "bytes": [
+        595,
+        638
+      ],
+      "utf16": [
+        595,
+        638
+      ]
+    }
+  ]
+}

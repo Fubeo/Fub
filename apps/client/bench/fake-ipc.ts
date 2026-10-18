@@ -50,6 +50,9 @@ import type {
   UiNode,
   ViewSpec,
 } from "../src/host/contract";
+import { BOARDS_DOC, boardsFixture, type BoardsFixture } from "./boards-fixture";
+import { CONNECTORS_DOC, connectorsFixture, type ConnectorsFixture } from "./connectors-fixture";
+import { LARGE_DOC, largeFixture, type LargeFixture } from "./large-fixture";
 import { CORPUS, OUTPUT, RESOURCES } from "./corpus";
 import {
   generateGraphFixture as graphFixture,
@@ -61,6 +64,51 @@ type GraphBenchMetadata = Readonly<{
     nodes: readonly string[];
     edges: readonly { readonly from: string; readonly to: string }[];
     seed: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco delle tavole (`boards.mjs`) legge del disegno che
+/// naviga: dove sta, le tavole nel loro ordine, quanto è grande.
+type BoardsBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    boards: BoardsFixture["boards"];
+    objects: number;
+    elements: number;
+    bytes: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco dei connettori (`connectors.mjs`) legge del disegno che
+/// sposta: dove sta, le forme e i connettori con ciò che li unisce, i nodi.
+type ConnectorsBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    shapes: ConnectorsFixture["shapes"];
+    connectors: ConnectorsFixture["connectors"];
+    hubs: ConnectorsFixture["hubs"];
+    labels: ConnectorsFixture["labels"];
+    elements: number;
+    bytes: number;
+    digest: string;
+  }> | null;
+}>;
+
+/// Ciò che il banco delle scene grandi (`large.mjs`) legge del disegno che
+/// apre: dove sta, quanto è grande, il rettangolo da scegliere.
+type LargeBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    doc: string;
+    elements: number;
+    objects: number;
+    strokes: number;
+    size: LargeFixture["size"];
+    cells: number;
+    columns: number;
+    target: LargeFixture["target"];
+    bytes: number;
     digest: string;
   }> | null;
 }>;
@@ -116,6 +164,100 @@ globalThis.__fubGraphBench = Object.freeze({
       })
     : null,
 });
+
+// `?boards=N` mette nel vault il disegno di N tavole del banco delle tavole
+// (`boards-fixture.ts`), accende la feature `draw`, che apre un `.svg` come
+// disegno, e mette l'editor al livello Standard, il primo che ha le tavole.
+// Senza, il vault e le impostazioni restano quelli che le foto conoscono.
+const boardsParam = params.get("boards");
+let BOARDS: BoardsFixture | null = null;
+if (boardsParam !== null) {
+  if (!/^[1-9]\d*$/.test(boardsParam)) throw new RangeError("boards must be a positive decimal integer");
+  BOARDS = boardsFixture(Number(boardsParam));
+}
+
+globalThis.__fubBoardsBench = Object.freeze({
+  fixture: BOARDS
+    ? Object.freeze({
+        doc: BOARDS_DOC,
+        boards: BOARDS.boards,
+        objects: BOARDS.objects,
+        elements: BOARDS.elements,
+        bytes: new TextEncoder().encode(BOARDS.text).length,
+        digest: BOARDS.digest,
+      })
+    : null,
+});
+
+// `?connectors=N` mette nel vault il disegno di N connettori del banco dei
+// connettori (`connectors-fixture.ts`), con due forme ogni tre connettori, e
+// accende l'editor come `?boards=N`. I due disegni non stanno insieme.
+//
+// Questo modulo sta nel giro fra le stringhe della shell e l'host
+// (`i18n/strings.ts` legge le impostazioni dall'host, che qui è lui): ciò che
+// importa si valuta mentre le stringhe sono a metà. Perciò i due disegni si
+// fanno coi moduli dell'editor che non leggono le stringhe: un catalogo
+// valutato qui troverebbe quello della shell non ancora pronto, e la pagina
+// del catalogo del banco non partirebbe.
+const connectorsParam = params.get("connectors");
+let CONNECTORS: ConnectorsFixture | null = null;
+if (connectorsParam !== null) {
+  if (BOARDS !== null) throw new RangeError("boards and connectors are two different drawings");
+  if (!/^[1-9]\d*$/.test(connectorsParam)) throw new RangeError("connectors must be a positive decimal integer");
+  CONNECTORS = connectorsFixture(Number(connectorsParam));
+}
+
+globalThis.__fubConnectorsBench = Object.freeze({
+  fixture: CONNECTORS
+    ? Object.freeze({
+        doc: CONNECTORS_DOC,
+        shapes: CONNECTORS.shapes,
+        connectors: CONNECTORS.connectors,
+        hubs: CONNECTORS.hubs,
+        labels: CONNECTORS.labels,
+        elements: CONNECTORS.elements,
+        bytes: new TextEncoder().encode(CONNECTORS.text).length,
+        digest: CONNECTORS.digest,
+      })
+    : null,
+});
+
+// `?large=N` mette nel vault la lavagna di N elementi del banco delle scene
+// grandi (`large-fixture.ts`), e accende l'editor come `?boards=N`. Non sta
+// insieme agli altri due disegni.
+const largeParam = params.get("large");
+let LARGE: LargeFixture | null = null;
+if (largeParam !== null) {
+  if (BOARDS !== null || CONNECTORS !== null) throw new RangeError("large is a drawing of its own");
+  if (!/^[1-9]\d*$/.test(largeParam)) throw new RangeError("large must be a positive decimal integer");
+  LARGE = largeFixture(Number(largeParam));
+}
+
+globalThis.__fubLargeBench = Object.freeze({
+  fixture: LARGE
+    ? Object.freeze({
+        doc: LARGE_DOC,
+        elements: LARGE.elements,
+        objects: LARGE.objects,
+        strokes: LARGE.strokes,
+        size: LARGE.size,
+        cells: LARGE.cells,
+        columns: LARGE.columns,
+        target: LARGE.target,
+        bytes: new TextEncoder().encode(LARGE.text).length,
+        digest: LARGE.digest,
+      })
+    : null,
+});
+
+/// Il disegno che il banco apre dall'albero, se ne ha uno.
+const DRAWING = BOARDS !== null
+  ? { doc: BOARDS_DOC, text: BOARDS.text }
+  : CONNECTORS !== null
+    ? { doc: CONNECTORS_DOC, text: CONNECTORS.text }
+    : LARGE !== null
+      ? { doc: LARGE_DOC, text: LARGE.text }
+      : null;
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -225,9 +367,46 @@ const BENCH_COMMANDS: CommandSpec[] = [
   command("stats.open", "Statistiche del documento", "Parole, caratteri, collegamenti", null),
 ];
 
+/// La barra di formattazione la fotografa solo il telefono (`mobile.html`),
+/// dove sta sopra la tastiera. Nelle altre pagine i comandi sono quelli del
+/// banco, e le loro foto con loro.
+const ON_MOBILE = globalThis.window.location.pathname.endsWith("/mobile.html");
+const FORMAT_COMMANDS: CommandSpec[] = (
+  [
+    ["text.undo", "Annulla"],
+    ["text.redo", "Ripeti"],
+    ["markdown.heading.1", "Titolo 1"],
+    ["markdown.heading.2", "Titolo 2"],
+    ["markdown.bold", "Grassetto"],
+    ["markdown.italic", "Corsivo"],
+    ["markdown.code", "Codice"],
+    ["markdown.link", "Collegamento"],
+    ["markdown.list.bullet", "Elenco puntato"],
+    ["markdown.list.task", "Elenco di cose da fare"],
+    ["markdown.quote", "Citazione"],
+  ] as const
+).map(([id, title]) => ({ ...command(id, title, title, null, true), surfaces: ["toolbar"] }));
+
 /// Le settings: una per **ogni** specie di `SettingKind`, perché il pannello
 /// disegna un controllo diverso per ciascuna e una scena che ne mostrasse solo
 /// due fotograferebbe metà del form.
+/// Lo spazio dell'interfaccia lo mostra solo la finestra principale
+/// (`index.html`): il telefono e la finestra documento non hanno la riga.
+const ON_SHELL = globalThis.window.location.pathname.endsWith("/index.html");
+const CHROME_COMPACTNESS: SettingEntry = {
+  spec: {
+    key: "chrome.compactness",
+    label: "Spazio dell'interfaccia",
+    description: "Quanto posto prendono le barre attorno ai fogli: 0 comoda, 4 minima. I fogli non cambiano.",
+    group: "Aspetto",
+    scope: "machine",
+    kind: { kind: "number", default: 0, min: 0, max: 4 },
+    program_writable: false,
+  },
+  value: 0,
+  source: "default",
+};
+
 const SETTINGS: SettingEntry[] = [
   {
     spec: {
@@ -299,10 +478,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Dimensione del testo nelle superfici di lettura.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 16, min: 12, max: 28 },
+      kind: { kind: "number", default: 17, min: 12, max: 28 },
       program_writable: false,
     },
-    value: 16,
+    value: 17,
     source: "default",
   },
   {
@@ -312,10 +491,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Passo verticale della prosa lunga.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 1.7, min: 1.2, max: 2.4 },
+      kind: { kind: "number", default: 1.65, min: 1.2, max: 2.4 },
       program_writable: false,
     },
-    value: 1.7,
+    value: 1.65,
     source: "default",
   },
   {
@@ -325,10 +504,10 @@ const SETTINGS: SettingEntry[] = [
       description: "Larghezza massima della colonna di lettura.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 70, min: 40, max: 100 },
+      kind: { kind: "number", default: 68, min: 40, max: 100 },
       program_writable: false,
     },
-    value: 70,
+    value: 68,
     source: "default",
   },
   {
@@ -340,8 +519,10 @@ const SETTINGS: SettingEntry[] = [
       scope: "machine",
       kind: {
         kind: "choice",
-        default: "literata",
+        default: "newsreader",
         options: [
+          { value: "newsreader", label: "Newsreader" },
+          { value: "hanken", label: "Hanken Grotesk" },
           { value: "literata", label: "Literata" },
           { value: "inter", label: "Inter" },
           { value: "system", label: "Del sistema" },
@@ -349,7 +530,7 @@ const SETTINGS: SettingEntry[] = [
       },
       program_writable: false,
     },
-    value: "literata",
+    value: "newsreader",
     source: "default",
   },
   {
@@ -359,12 +540,13 @@ const SETTINGS: SettingEntry[] = [
       description: "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
       group: "Aspetto",
       scope: "machine",
-      kind: { kind: "number", default: 130, min: 0, max: 360 },
+      kind: { kind: "number", default: 265, min: 0, max: 360 },
       program_writable: false,
     },
-    value: 130,
+    value: 265,
     source: "default",
   },
+  ...(ON_SHELL ? [CHROME_COMPACTNESS] : []),
   {
     spec: {
       key: "appearance.zoom",
@@ -453,6 +635,30 @@ const SETTINGS: SettingEntry[] = [
     source: "default",
   },
 ];
+
+/// Il livello dell'editor dei disegni come lo dichiara il bundle `fub.draw`,
+/// a Standard: serve ai banchi che aprono un disegno, e sta fuori da
+/// `SETTINGS` perché il pannello delle impostazioni si fotografa senza.
+const DRAW_LEVEL: SettingEntry = {
+  spec: {
+    key: "draw.level",
+    label: "Livello d'interfaccia",
+    description: "",
+    group: "Disegni",
+    scope: "vault",
+    kind: {
+      kind: "choice",
+      default: "essential",
+      options: [
+        { value: "essential", label: "Essenziale" },
+        { value: "standard", label: "Standard" },
+      ],
+    },
+    program_writable: false,
+  },
+  value: "standard",
+  source: "vault",
+};
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
 ///
@@ -823,14 +1029,15 @@ const GRID: NonNullable<Options["grid"]> = {
 };
 
 const options: Options = {
-  file: CORPUS,
+  file: DRAWING === null ? CORPUS : { ...CORPUS, [DRAWING.doc]: DRAWING.text },
   resources: RESOURCES,
   root: ROOT,
   view: VIEWS,
-  commands: BENCH_COMMANDS,
-  settings: SETTINGS,
+  commands: ON_MOBILE ? [...BENCH_COMMANDS, ...FORMAT_COMMANDS] : BENCH_COMMANDS,
+  settings: DRAWING === null ? SETTINGS : [...SETTINGS, DRAW_LEVEL],
   syntaxForms: [...MARKDOWN_SYNTAX],
   grid: GRID,
+  ...(DRAWING === null ? {} : { draw: true }),
 };
 
 const host = createFakeHost(options);
@@ -845,6 +1052,9 @@ const host = createFakeHost(options);
 /// codice che non condivide il grafo dei moduli con la pagina.
 declare global {
   var __fubGraphBench: GraphBenchMetadata;
+  var __fubBoardsBench: BoardsBenchMetadata;
+  var __fubConnectorsBench: ConnectorsBenchMetadata;
+  var __fubLargeBench: LargeBenchMetadata;
   interface Window {
     bench: {
       emit: typeof host.emit;
@@ -852,6 +1062,8 @@ declare global {
       throttle: typeof host.throttle;
       calls: typeof host.calls;
       light: "dark" | "light";
+      /// Solo nello Scrittoio: dichiara le voci di un tema (vedi sotto).
+      themeSettings?: () => Promise<void>;
     };
   }
 }
@@ -863,6 +1075,90 @@ globalThis.window.bench = {
   calls: host.calls,
   light: LIGHT,
 };
+
+/// Le voci di un tema, per la scena che fotografa la loro schermata. Il tema di
+/// serie non ne dichiara, e una schermata che non c'è non si fotografa: la
+/// scena le dichiara da fuori, dopo l'avvio, al posto della sorgente vera. Una
+/// voce per specie di controllo — interruttore, scelta breve, scelta lunga,
+/// numero — e una già cambiata, perché «azzera» si veda.
+///
+/// Solo nella finestra principale, e con un `import()`: il modulo della schermata porta
+/// con sé la sua geometria, che nelle altre pagine non deve entrare.
+if (ON_SHELL) {
+  globalThis.window.bench.themeSettings = async () => {
+    const { setThemeSettingsSource } = await import("../src/shells/scrittoio/preferences/theme-settings");
+    const specs = [
+      {
+        key: "fub.serie:trama",
+        label: "Trama della carta",
+        description: "Una grana leggera sul fondo dei fogli.",
+        kind: { kind: "toggle" as const, default: true },
+      },
+      {
+        key: "fub.serie:angoli",
+        label: "Angoli dei fogli",
+        description: "Quanto sono arrotondati i fogli e le schede.",
+        kind: {
+          kind: "choice" as const,
+          default: "morbidi",
+          options: [
+            { value: "vivi", label: "Vivi" },
+            { value: "morbidi", label: "Morbidi" },
+            { value: "tondi", label: "Tondi" },
+          ],
+        },
+      },
+      {
+        key: "fub.serie:scrivania",
+        label: "Fondo della scrivania",
+        description: "Che cosa si vede dietro i fogli.",
+        kind: {
+          kind: "choice" as const,
+          default: "tinta",
+          options: [
+            { value: "tinta", label: "Tinta unita" },
+            { value: "quadretti", label: "Carta a quadretti" },
+            { value: "righe", label: "Carta a righe" },
+            { value: "legno", label: "Venatura del legno" },
+          ],
+        },
+      },
+      {
+        key: "fub.serie:margine",
+        label: "Margine dei fogli",
+        description: "Lo spazio bianco attorno al testo, in pixel.",
+        kind: { kind: "number" as const, default: 24, min: 0, max: 48, step: 1 },
+      },
+    ];
+    const chosen = new Map<string, boolean | string | number>([["fub.serie:trama", false]]);
+    const listeners = new Set<() => void>();
+    const changed = (): void => {
+      for (const listener of [...listeners]) listener();
+    };
+    setThemeSettingsSource({
+      read: () =>
+        Promise.resolve({
+          themeId: "fub.serie",
+          themeName: "Scrittoio",
+          entries: specs.map((spec) => ({ spec, value: chosen.get(spec.key) ?? spec.kind.default })),
+        }),
+      write: (key, value) => {
+        chosen.set(key, value);
+        changed();
+        return Promise.resolve();
+      },
+      reset: (key) => {
+        chosen.delete(key);
+        changed();
+        return Promise.resolve();
+      },
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    });
+  };
+}
 
 const behind = host.module.api;
 
@@ -892,3 +1188,5 @@ export const api: typeof host.module.api = {
 export const onKernelEvent = host.module.onKernelEvent;
 export const onClose = host.module.onClose;
 export const window = host.module.window;
+// Il ponte mobile: lo chiede solo l'ingresso mobile (`mobile.html`).
+export { nativeMobileBridge } from "./fake-mobile-bridge";

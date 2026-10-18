@@ -1,0 +1,881 @@
+{
+  "status": "foreign",
+  "readOnly": [],
+  "version": null,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "foreign",
+      "parentPath": null,
+      "bytes": [
+        0,
+        92
+      ],
+      "utf16": [
+        0,
+        92
+      ],
+      "elements": [
+        0,
+        0
+      ],
+      "indent": ""
+    },
+    {
+      "kind": "root",
+      "bytes": [
+        93,
+        2711
+      ],
+      "utf16": [
+        93,
+        2711
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            93,
+            372
+          ],
+          "utf16": [
+            93,
+            372
+          ]
+        },
+        "close": {
+          "bytes": [
+            2705,
+            2711
+          ],
+          "utf16": [
+            2705,
+            2711
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        375,
+        409
+      ],
+      "utf16": [
+        375,
+        409
+      ],
+      "indent": "  ",
+      "text": "Mappa del quartiere"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": null,
+      "bytes": [
+        412,
+        547
+      ],
+      "utf16": [
+        412,
+        547
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            412,
+            418
+          ],
+          "utf16": [
+            412,
+            418
+          ]
+        },
+        "close": {
+          "bytes": [
+            540,
+            547
+          ],
+          "utf16": [
+            540,
+            547
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "linearGradient",
+      "role": "resource",
+      "id": "cielo",
+      "bytes": [
+        418,
+        540
+      ],
+      "utf16": [
+        418,
+        540
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [],
+      "bytes": [
+        550,
+        660
+      ],
+      "utf16": [
+        550,
+        660
+      ],
+      "elements": [
+        2,
+        4
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "strade",
+      "bytes": [
+        663,
+        1199
+      ],
+      "utf16": [
+        663,
+        1199
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            663,
+            729
+          ],
+          "utf16": [
+            663,
+            729
+          ]
+        },
+        "close": {
+          "bytes": [
+            1195,
+            1199
+          ],
+          "utf16": [
+            1195,
+            1199
+          ]
+        }
+      }
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        4
+      ],
+      "bytes": [
+        734,
+        772
+      ],
+      "utf16": [
+        734,
+        772
+      ],
+      "elements": [
+        0,
+        1
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        1
+      ],
+      "tag": "path",
+      "role": "path",
+      "id": null,
+      "bytes": [
+        777,
+        834
+      ],
+      "utf16": [
+        777,
+        834
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        4
+      ],
+      "bytes": [
+        839,
+        979
+      ],
+      "utf16": [
+        839,
+        979
+      ],
+      "elements": [
+        2,
+        5
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        5
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": null,
+      "bytes": [
+        984,
+        1074
+      ],
+      "utf16": [
+        984,
+        1074
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        4
+      ],
+      "bytes": [
+        1079,
+        1192
+      ],
+      "utf16": [
+        1079,
+        1192
+      ],
+      "elements": [
+        6,
+        8
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        5
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "etichette",
+      "bytes": [
+        1202,
+        2169
+      ],
+      "utf16": [
+        1202,
+        2169
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            1202,
+            1274
+          ],
+          "utf16": [
+            1202,
+            1274
+          ]
+        },
+        "close": {
+          "bytes": [
+            2165,
+            2169
+          ],
+          "utf16": [
+            2165,
+            2169
+          ]
+        }
+      }
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        5
+      ],
+      "bytes": [
+        1279,
+        1515
+      ],
+      "utf16": [
+        1279,
+        1515
+      ],
+      "elements": [
+        0,
+        2
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        5,
+        2
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": null,
+      "bytes": [
+        1520,
+        1582
+      ],
+      "utf16": [
+        1520,
+        1582
+      ],
+      "indent": "    ",
+      "lines": [
+        "Parco"
+      ]
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        5
+      ],
+      "bytes": [
+        1587,
+        1655
+      ],
+      "utf16": [
+        1587,
+        1655
+      ],
+      "elements": [
+        3,
+        4
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        5,
+        4
+      ],
+      "tag": "a",
+      "role": "link",
+      "id": null,
+      "bytes": [
+        1660,
+        1745
+      ],
+      "utf16": [
+        1660,
+        1745
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            1660,
+            1695
+          ],
+          "utf16": [
+            1660,
+            1695
+          ]
+        },
+        "close": {
+          "bytes": [
+            1741,
+            1745
+          ],
+          "utf16": [
+            1741,
+            1745
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        5,
+        4,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": null,
+      "bytes": [
+        1695,
+        1741
+      ],
+      "utf16": [
+        1695,
+        1741
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        5
+      ],
+      "bytes": [
+        1750,
+        2162
+      ],
+      "utf16": [
+        1750,
+        2162
+      ],
+      "elements": [
+        5,
+        10
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "element",
+      "path": [
+        6
+      ],
+      "tag": "image",
+      "role": "image",
+      "id": null,
+      "bytes": [
+        2172,
+        2254
+      ],
+      "utf16": [
+        2172,
+        2254
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [],
+      "bytes": [
+        2257,
+        2632
+      ],
+      "utf16": [
+        2257,
+        2632
+      ],
+      "elements": [
+        7,
+        12
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        12
+      ],
+      "tag": "polyline",
+      "role": "polyline",
+      "id": null,
+      "bytes": [
+        2635,
+        2704
+      ],
+      "utf16": [
+        2635,
+        2704
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": null,
+      "bytes": [
+        2712,
+        2725
+      ],
+      "utf16": [
+        2712,
+        2725
+      ],
+      "elements": [
+        1,
+        1
+      ],
+      "indent": ""
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Mappa del quartiere",
+      "bytes": [
+        375,
+        409
+      ],
+      "utf16": [
+        375,
+        409
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Via Roma Piazza & mercato",
+        "bytes": [
+          1279,
+          1455
+        ],
+        "utf16": [
+          1279,
+          1455
+        ]
+      },
+      {
+        "text": "Scuola",
+        "bytes": [
+          1460,
+          1515
+        ],
+        "utf16": [
+          1460,
+          1515
+        ]
+      },
+      {
+        "text": "Parco",
+        "bytes": [
+          1520,
+          1582
+        ],
+        "utf16": [
+          1520,
+          1582
+        ]
+      },
+      {
+        "text": "Clicca",
+        "bytes": [
+          1617,
+          1651
+        ],
+        "utf16": [
+          1617,
+          1651
+        ]
+      },
+      {
+        "text": "abc",
+        "bytes": [
+          1750,
+          1840
+        ],
+        "utf16": [
+          1750,
+          1840
+        ]
+      },
+      {
+        "text": "ab",
+        "bytes": [
+          1845,
+          1926
+        ],
+        "utf16": [
+          1845,
+          1926
+        ]
+      },
+      {
+        "text": "c",
+        "bytes": [
+          1999,
+          2078
+        ],
+        "utf16": [
+          1999,
+          2078
+        ]
+      },
+      {
+        "text": "d",
+        "bytes": [
+          2083,
+          2162
+        ],
+        "utf16": [
+          2083,
+          2162
+        ]
+      }
+    ],
+    "links": [
+      {
+        "path": "quartiere/parco.md",
+        "bytes": [
+          1660,
+          1745
+        ],
+        "utf16": [
+          1660,
+          1745
+        ],
+        "href": {
+          "bytes": [
+            1675,
+            1693
+          ],
+          "utf16": [
+            1675,
+            1693
+          ]
+        }
+      }
+    ],
+    "embeds": [],
+    "boards": []
+  },
+  "summary": {
+    "version": null,
+    "foreign": true,
+    "truncated": false,
+    "layers": [],
+    "boards": [],
+    "counts": {
+      "strokes": 0,
+      "shapes": 4,
+      "texts": 1,
+      "images": 1,
+      "links": 1,
+      "foreign": 10
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 0.0,
+      "y": 10.0,
+      "width": 200.0,
+      "height": 135.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        0,
+        92
+      ],
+      "utf16": [
+        0,
+        92
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        550,
+        660
+      ],
+      "utf16": [
+        550,
+        660
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        734,
+        772
+      ],
+      "utf16": [
+        734,
+        772
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        839,
+        979
+      ],
+      "utf16": [
+        839,
+        979
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1079,
+        1192
+      ],
+      "utf16": [
+        1079,
+        1192
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1279,
+        1515
+      ],
+      "utf16": [
+        1279,
+        1515
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1587,
+        1655
+      ],
+      "utf16": [
+        1587,
+        1655
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        1750,
+        2162
+      ],
+      "utf16": [
+        1750,
+        2162
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        2257,
+        2632
+      ],
+      "utf16": [
+        2257,
+        2632
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        2712,
+        2725
+      ],
+      "utf16": [
+        2712,
+        2725
+      ]
+    },
+    {
+      "code": "S005",
+      "severity": "warning",
+      "bytes": [
+        93,
+        2711
+      ],
+      "utf16": [
+        93,
+        2711
+      ],
+      "detail": "onload"
+    },
+    {
+      "code": "S005",
+      "severity": "warning",
+      "bytes": [
+        1079,
+        1128
+      ],
+      "utf16": [
+        1079,
+        1128
+      ],
+      "detail": "onclick"
+    },
+    {
+      "code": "S005",
+      "severity": "warning",
+      "bytes": [
+        1587,
+        1655
+      ],
+      "utf16": [
+        1587,
+        1655
+      ],
+      "detail": "href"
+    },
+    {
+      "code": "S005",
+      "severity": "warning",
+      "bytes": [
+        2523,
+        2567
+      ],
+      "utf16": [
+        2523,
+        2567
+      ],
+      "detail": "script"
+    },
+    {
+      "code": "S012",
+      "severity": "warning",
+      "bytes": [
+        2172,
+        2254
+      ],
+      "utf16": [
+        2172,
+        2254
+      ]
+    }
+  ]
+}

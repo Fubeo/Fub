@@ -94,6 +94,14 @@
       .provino-anatomia {
         min-height: 8rem;
       }
+      /* Il testo di prova sta dentro il gancio: in un gancio piccolo (l'attesa
+         del lanciatore è un cerchio di 12 px) sfora la sua scatola, e Chromium
+         fa del provino un contenitore che scorre, raggiungibile col Tab, anche
+         se non scorre di un pixel. Si ritaglia sul gancio; dove la pelle
+         dichiara un suo `overflow`, la pelle viene dopo e vince. */
+      .provino-anatomia > * {
+        overflow: clip;
+      }
       /* La tavolozza. */
       .token {
         display: grid;

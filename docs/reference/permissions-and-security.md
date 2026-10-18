@@ -63,9 +63,18 @@ Un handle di transfer non diventa automaticamente un path filesystem.
 ## Temi installati
 
 Un tema non riceve capability e non può dichiarare permessi. L'host accetta
-soltanto il contratto `theme-1`, un id sicuro e il namespace
+soltanto i motori `theme-1` e `theme-2`, un id sicuro e il namespace
 `theme://<id>/`; installazione e lettura rifiutano symlink, traversal e file
-non regolari. La pubblicazione avviene da staging con rename atomico e non
+non regolari. Una voce del catalogo deve dichiarare lo stesso motore del
+manifest che consegna. Quale motore si possa montare lo decide la shell: un
+tema di un altro motore è rifiutato dal loader con una diagnosi.
+
+Da `theme-2` un tema può dichiarare impostazioni: al massimo 32, con nome
+`a-z`, `0-9`, `-`, etichetta in prosa e specie fra interruttore, numero (con
+minimo e massimo) e scelta. L'host le dichiara al registro delle impostazioni con chiave
+`<id>:<nome>`, a livello macchina e non scrivibili da programma; il tema non
+sceglie chiave né livello. Il client porta il valore corrente sulla radice del
+documento come `data-opt-<nome>` e, per i numeri, `--opt-<nome>`. La pubblicazione avviene da staging con rename atomico e non
 sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
 4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
 

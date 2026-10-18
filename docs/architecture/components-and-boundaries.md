@@ -19,9 +19,14 @@ flowchart LR
     CANVAS["fub-format-canvas"] --> ABI
     CANVAS --> MARKDOWN
     BASE["fub-format-base"] --> ABI
+    INK["fub-ink"]
+    SCENE["fub-scene"] --> INK
+    SVG["fub-format-svg"] --> ABI
+    SVG --> SCENE
     IMPORTERS["fub-importers"] --> ABI
     FEATURES["fub-features"] --> ABI
     FEATURES -. "feature base" .-> BASE
+    FEATURES -. "feature draw" .-> SVG
     HOST["fub-host"] --> KERNEL
     HOST --> ABI
     HOST --> FEATURES
@@ -29,11 +34,13 @@ flowchart LR
     HOST --> SHEET
     HOST --> CANVAS
     HOST --> BASE
+    HOST -. "feature draw" .-> SVG
     HOST --> IMPORTERS
     WASM["fub-wasm-host"] --> ABI
     WASM --> HOST
     APP["fub-app"] --> HOST
     APP --> WASM
+    APP --> LIVE["fub-live"]
     CLI["fub-cli"] --> HOST
     SERVICES["fub-services"] --> ABI
     FRONTEND["frontend"] --> APP
@@ -42,6 +49,20 @@ flowchart LR
 La figura mostra il verso concettuale. I manifest sono la fonte esatta e i guard
 del repository verificano le eccezioni.
 
+Il codice copiato da WordCraft (`vendor/wordcraft/`) non dipende da Fub, e lo
+raggiungono soltanto due crate, ciascuno dietro la propria feature:
+
+```mermaid
+flowchart LR
+    HOST["fub-host"] -. "feature rich" .-> RICH["fub-format-rich"]
+    RICH --> ABI["fub-abi"]
+    RICH --> MARKDOWN["fub-format-markdown"]
+    RICH --> WDOCX["wordcraft-docx e formats"]
+    WDOCX --> WDOC["wordcraft-doc"]
+    HOST --> FEATURES["fub-features"]
+    FEATURES -. "feature proof" .-> PROOF["wordcraft-proof"]
+```
+
 ## Tabella dei componenti
 
 | Componente | Possiede | Non deve possedere |
@@ -49,18 +70,26 @@ del repository verificano le eccezioni.
 | `fub-abi` | tipi, trait, errori, regole, WIT | storage, runtime, Markdown, UI desktop |
 | `fub-kernel` | workspace, path, indici, eventi, policy | Tauri, Wasmtime, parsing Markdown |
 | `fub-host` | sessioni, mount, job, watcher, configurazione | comandi Tauri e DOM |
-| `fub-app` | stato Tauri, comandi IPC, adattamento eventi | regole di business |
+| `fub-app` | stato Tauri, comandi IPC, adattamento eventi, registro delle sessioni live con la finestra che le possiede | regole di business, protocollo della sessione live |
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
 | `fub-format-sheet` | workbook persistito, valutatore, sessioni derivate, provider grid e route di valutazione | host, storage, Tauri, Wasmtime |
 | `fub-format-canvas` | JSON Canvas: modello con i campi ignoti conservati, `DocumentModel`, HTML statico e riscrittura dei link; il Markdown delle card lo analizza e lo disegna il provider Markdown | host, storage, Tauri, Wasmtime |
 | `fub-format-base` | definizioni `.base`: modello YAML persistito, limiti e valutatore di formule | selezione delle righe, che resta del core (`query_index`) |
+| `fub-ink` | il nucleo dell'inchiostro, puro: campione del puntatore, ruoli (il palmo), curva della pressione, inclinazione, stabilizzatore e ciclo di vita del tratto, come riduttore di campioni in effetti; è la copia che fa fede del nucleo TypeScript di `apps/client/src/ink/` | DOM, Tauri, kernel, formati su disco, strumenti o interfaccia di un prodotto |
+| `apps/client/src/ink/` | la copia TypeScript del nucleo dell'inchiostro, per il percorso caldo, e l'adattatore del browser (`dom/`); il formato dei campioni e del pennello, la geometria dei campioni e gli strumenti: penna, evidenziatore e gomma, con il loro registro; vedi [Inchiostro e strumenti](ink-and-tools.md) | prodotti (FubDraw, shell, stato), formati su disco, Tauri, CodeMirror, globali del DOM nel nucleo |
+| `fub-scene` | lettura dei disegni di FubDraw secondo il [formato della scena](../reference/scene-format.md), e delle annotazioni PDF secondo il [loro formato](../reference/annotation-format.md): classificazione, inchiostro, indice e diagnostica | `fub-abi`, host, qualunque I/O |
+| `fub-format-svg` | i formati `svg` e `fubann`: modello per l'indice, segnaposto HTML o elenco delle annotazioni, documento nuovo e riscrittura dei riferimenti | disegno della scena, che resta della shell; verifica del PDF annotato |
+| `fub-format-rich` | documenti di videoscrittura (`.docx`, `.odt`, `.rtf`, `.doc`): codec, provider a byte, proiezione modificabile senza perdite silenziose e copie esportate con la perdita misurata; l'HTML lo disegna il provider Markdown dal modello comune | host, storage, Tauri, Wasmtime, superficie della shell |
 | `fub-importers` | import ed export ufficiali e comandi di conversione | kernel, Tauri |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
+| `wordcraft-proof` | correttore di WordCraft vendorizzato in `vendor/wordcraft/`, usato soltanto dalla feature `proof` | dipendenze da Fub |
+| `wordcraft-doc`, `-docx`, `-geom` | modello del documento, codec DOCX e unità di misura di WordCraft, vendorizzati in `vendor/wordcraft/`, usati soltanto da `fub-format-rich` | dipendenze da Fub |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `fub-cli` | automazione locale sopra `Host`, senza Tauri | un secondo coordinatore di job o di scrittura |
 | `fub-services` | servizio self-hostable separato per account, sync e publish | kernel, host, app |
+| `fub-live` | sessione live di FubDraw: protocollo, abbinamento, TLS con certificato effimero, server sul PC e client dello scrittore ([riferimento](../reference/live-session.md)) | contratto, kernel, host, Tauri, validazione delle operazioni |
 | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |
 
 ## Dipendenze vietate
@@ -68,6 +97,9 @@ del repository verificano le eccezioni.
 - `fub-abi` → `fub-kernel`, Tauri, Wasmtime o Markdown;
 - `fub-kernel` → `fub-host`, Tauri, Wasmtime o `fub-format-markdown`;
 - `fub-host` → Tauri;
+- `fub-scene` → qualunque crate del workspace tranne `fub-ink`;
+- `fub-ink` → qualunque crate del workspace, Tauri, Wasmtime o un prodotto;
+- `fub-live` → `fub-abi`, `fub-kernel`, `fub-host` o Tauri;
 - qualunque crate diverso da `fub-wasm-host` → Wasmtime;
 - dipendenza normale → `fub-testkit`;
 - file frontend arbitrario → `@tauri-apps`;
@@ -120,8 +152,9 @@ id, nome, catalogo, impostazioni, servizi forniti e richiesti, e i provider che
 si costruiscono con una chiamata: view, comandi, indice, regole di sintassi e
 renderer. `fub-host` monta ogni riga con lo stesso ciclo e non confronta id.
 Ciò che soltanto chi monta sa collegare, cioè l'indice di ricerca nella cartella
-dati assegnata e lo store delle versioni dietro l'interruttore dell'host, è una
-variante di `HostWiring` dichiarata nella riga.
+dati assegnata, lo store delle versioni dietro l'interruttore dell'host e i
+dizionari Hunspell della macchina per il correttore, è una variante di
+`HostWiring` dichiarata nella riga.
 
 Una feature che non funziona senza un'altra lo dichiara due volte: la sua
 feature Cargo accende l'altra (`trash` → `commands`, `template` e `base` →
@@ -146,8 +179,11 @@ indipendenti.
 | Markdown | `crates/fub-format-markdown/src/` |
 | foglio | `crates/fub-format-sheet/src/` |
 | lavagna e base | `crates/fub-format-canvas/src/`, `crates/fub-format-base/src/` |
+| disegni | `crates/fub-scene/src/`, `crates/fub-format-svg/src/`, `crates/fub-features/src/draw.rs`, `crates/fub-features/src/draw/` |
 | feature | `crates/fub-features/src/` |
+| codice di terzi vendorizzato | `vendor/` (provenienza in `UPSTREAM.md`) |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |
-| shell | `apps/client/src/main.ts`, `panels/`, `state/`, `ui/` |
+| shell | `apps/client/src/main.ts`, `desktop-shell.ts`, `panels/`, `state/`, `ui/` |
+| finestra | `apps/client/src/shells/scrittoio/`, `kit/`, `moto/`, `theme/scrittoio/` |
 | test | `crates/*/tests/`, `apps/client/src/**/*.test.ts` |

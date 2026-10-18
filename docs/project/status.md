@@ -31,7 +31,8 @@ Sono presenti:
 - ricerca, link, Graph View, editor e anteprima;
 - `DocumentSession` condivisa e `DocumentSurfaceRegistry`;
 - formato `.fubsheet`, `GridEngine` e protocollo Grid a finestre/patch;
-- temi installabili con contratto `theme-1`;
+- finestra Scrittoio, con la serie di serie `theme-2`;
+- temi installabili con contratto `theme-1` o `theme-2`; la shell veste soltanto `theme-2`;
 - runtime WASM, capability, UI non fidata e percorso prodotto installato;
 - sincronizzazione fra superfici limitata alla stessa sessione locale.
 

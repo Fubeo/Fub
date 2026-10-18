@@ -7,32 +7,39 @@
 // questo pannello», non va qui — va nel pannello. È il file che, cresciuto per
 // somma di eccezioni a quella regola, era arrivato a 1622 righe con 81 funzioni
 // e 18 variabili globali (§1.1, §1.2).
-// Il solo CSS importato staticamente: la struttura della shell, che non si
-// tematizza. Foglio e pelle del tema di serie li monta il caricatore
+//
+// Nessun CSS importato qui: la struttura è dell'ingresso che sceglie la shell
+// (`main.ts`, `entrypoints/mobile-main.ts`), perché un altro ingresso ne porta
+// un'altra. Foglio e pelle del tema di serie li monta il caricatore
 // (`theme/loader.ts`) da `mountTheme`, qui sotto — e sono sostituiti, non
 // accatastati.
-import "./theme/structure.css";
 import { pickVaultLocation } from "./platform/vault-picker";
-import { onClose, api, window as nativeWindow } from "./host/ipc";
-import { vaultStatus, vaultEntries, settings } from "./host/query";
+import { api, window as nativeWindow } from "./host/ipc";
+import { settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
-import { loadOrganization } from "./state/organization";
-import { emit, loadActiveSpace, loadExpanded, on, state } from "./state/store";
-import { loadLayout, activeDoc, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
-import { loadCommandSpecs, beforeNote, createNote } from "./state/vault";
+import { emit, on, state } from "./state/store";
+import { loadLayout, layout as paneLayout, split as splitPane, closePane } from "./state/layout";
+import { loadCommandSpecs } from "./state/vault";
 import { $ } from "./ui/dom";
-import { applyIntent, takeNoticeAfterReload } from "./ui/intents";
+import { takeNoticeAfterReload } from "./ui/intents";
 import { mountLinkPreview } from "./ui/link-preview";
+import { FORMATBAR_EVENT } from "./panels/selection-bubble";
 import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
 import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
-  conflictMessage,
+  canCreateDrawing,
+  canImportDrawing,
   displayBinding,
-  keybindingKey,
   loadKeyOverrides,
   mountKeyOverrides,
+  NEW_DRAWING,
+  newDrawing,
+  pickDrawingImport,
+  registerCommandForm,
+  registerCommandStarter,
+  registerDrawingImport,
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
@@ -51,22 +58,19 @@ import { registerMermaidRenderer } from "./ui/mermaid";
 import { mountOnboarding } from "./ui/onboarding";
 import { registerBaseRenderer } from "./editors/base/surface";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
-import { mountStrings, onLanguage, plural, t } from "./i18n/strings";
+import { mountStrings, onLanguage, t } from "./i18n/strings";
+import { mountSplitter } from "./kit";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
 import { mountTheme } from "./theme/theme";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
-  freezeDocumentSurfaces,
   mountDocument,
-  focusEditor,
   openDocument,
-  recoverDrafts,
-  resetDocumentsForVault,
   setEditorTheme,
   synchronize,
 } from "./panels/document";
-import { flushPendingSave, flushBeforeClose } from "./state/document-session";
+import { flushPendingSave } from "./state/document-session";
 import { drainDocumentWindows, openCurrentInNewWindow } from "./state/document-windows";
 import { mountExplorer } from "./panels/explorer";
 import { closeInDocumentSearch, mountDocSearch } from "./panels/doc-search";
@@ -75,7 +79,7 @@ import { mountQuickSwitcher } from "./panels/quick-switcher";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
 import { errorText } from "./host/errors";
 import { pageName } from "./rules/mirrored";
-import type { ShellGeometry } from "./state/shell-geometry";
+import { SHELL_WIDTH_LIMITS, type ShellGeometry } from "./state/shell-geometry";
 import { configureRail } from "./panels/rail";
 import { mountBookmarksPanel } from "./state/bookmarks-ui";
 import { mountWorkspacesPanel } from "./state/workspaces-ui";
@@ -86,6 +90,13 @@ import { setTooltip } from "./ui/tooltip";
 import type { SettingEntry } from "./host/contract";
 import { adoptLegacyChrome, writeChrome } from "./state/machine-chrome";
 import { Race } from "./ui/race";
+import { mountCloseGuard } from "./state/close-guard";
+import { createVaultSession } from "./state/vault-session";
+import { newNoteInActiveSpace } from "./state/new-note";
+import { paletteHost } from "./state/palette-host";
+import { preferredPaneMode } from "./state/pane-mode";
+import { setSearchPort } from "./state/search-port";
+import { zoomBy } from "./state/zoom";
 
 /// Le impostazioni della macchina che ricordano i due pannelli laterali, e le
 /// chiavi `localStorage` dove stavano prima (si adottano una volta).
@@ -119,6 +130,14 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     document.getElementById("app")?.toggleAttribute("data-status-off", valid && values.get("chrome.status.visible") === false);
     toolbarVisible = !valid || values.get("chrome.toolbar.visible") !== false;
     applyToolbar();
+    // La barra di formattazione spenta lascia i suoi gesti alla bolla di
+    // selezione: lo dice l'attributo (per la resa) e l'evento (per la bolla).
+    const formatbarOff = valid && values.get("chrome.formatbar.visible") === false;
+    const app = document.getElementById("app");
+    if (app && app.hasAttribute("data-formatbar-off") !== formatbarOff) {
+      app.toggleAttribute("data-formatbar-off", formatbarOff);
+      window.dispatchEvent(new CustomEvent(FORMATBAR_EVENT));
+    }
     if (frameAtBoot === null) {
       frameAtBoot = valid && values.get("chrome.frame") === "system" ? "system" : "custom";
       if (platformSupports("nativeWindowControls")) {
@@ -286,84 +305,51 @@ function mountAdaptiveShell(): void {
     configureRail(geometry);
     if (geometry.panel) showPanel(geometry.panel);
   }) as EventListener);
+  /// Il divisore fra un cassetto e i fogli è il divisore del kit. La misura è
+  /// quella del cassetto: la scrive sullo stile del riquadro, e senza stile
+  /// vale la variabile della struttura (`--sidebar-w`, `--inspector-w`).
   const mountDivider = (
     divider: HTMLElement | null,
     target: HTMLElement,
-    direction: 1 | -1,
+    side: "sidebar" | "inspector",
     min: number,
     max: number,
   ): void => {
     if (!divider) return;
-    let width = target.offsetWidth || min;
-    let drag: { pointer: number; x: number; width: number; scale: number } | null = null;
-    divider.setAttribute("role", "separator");
-    divider.setAttribute("aria-orientation", "vertical");
-    divider.tabIndex = 0;
-    divider.setAttribute("aria-controls", target.id);
-    divider.setAttribute("aria-valuemin", String(min));
-    divider.setAttribute("aria-valuemax", String(max));
-    const publish = (value: number): void => {
-      width = value;
-      divider.setAttribute("aria-valuenow", String(Math.round(value)));
-      divider.setAttribute("aria-valuetext", `${Math.round(value)} px`);
+    const resize = (px: number): void => {
+      const next = `${Math.round(px)}px`;
+      target.style.flexBasis = next;
+      target.style.width = next;
     };
-    const resize = (value: number): void => {
-      const next = Math.min(max, Math.max(min, Math.round(value)));
-      target.style.flexBasis = `${next}px`;
-      target.style.width = `${next}px`;
-      publish(next);
-    };
-    const endDrag = (): void => {
-      const pointer = drag?.pointer;
-      drag = null;
-      if (pointer !== undefined && divider.hasPointerCapture(pointer)) {
-        divider.releasePointerCapture(pointer);
-      }
-    };
-    const endPointer = (e: PointerEvent): void => {
-      if (drag?.pointer === e.pointerId) endDrag();
-    };
-    const observer = new ResizeObserver(() => {
-      const actual = target.offsetWidth;
-      if (actual > 0) publish(actual);
+    const handle = mountSplitter({
+      handle: divider,
+      orientation: "vertical",
+      value: () => target.offsetWidth || min,
+      min,
+      max,
+      // L'ispettore sta dopo la maniglia: andare a destra lo restringe.
+      reverse: side === "inspector",
+      onInput: resize,
+      onCommit: resize,
+      onReset: () => {
+        target.style.removeProperty("flex-basis");
+        target.style.removeProperty("width");
+      },
+      label: t(side === "sidebar" ? "layout.divider.sidebar" : "layout.divider.inspector"),
+      controls: target.id,
+      lifetime: pageWindowLifetime,
     });
+    // Il cassetto cambia misura anche da solo (finestra, cassetti
+    // sovrapposti): la maniglia rilegge.
+    const observer = new ResizeObserver(() => handle.sync());
     observer.observe(target);
-    publish(width);
+    pageWindowLifetime.add(() => observer.disconnect());
     pageWindowLifetime.listen(window, "shell:restore-geometry", ((event: CustomEvent<ShellGeometry>) => {
-      const side = target.id === "sidebar" ? event.detail.sidebar : event.detail.inspector;
-      if (side?.width !== undefined) resize(side.width);
+      const width = event.detail[side]?.width;
+      if (width === undefined) return;
+      resize(Math.min(max, Math.max(min, width)));
+      handle.sync();
     }) as EventListener);
-    pageWindowLifetime.listen(divider, "keydown", (e) => {
-      const next =
-        e.key === "ArrowLeft" ? width - direction * 16 :
-        e.key === "ArrowRight" ? width + direction * 16 :
-        e.key === "Home" ? min :
-        e.key === "End" ? max : null;
-      if (next === null) return;
-      e.preventDefault();
-      resize(next);
-    });
-    pageWindowLifetime.listen(divider, "pointerdown", (e) => {
-      if (e.button !== 0 || drag) return;
-      e.preventDefault();
-      divider.focus({ preventScroll: true });
-      const scale = target.getBoundingClientRect().width / width || 1;
-      drag = { pointer: e.pointerId, x: e.clientX, width, scale };
-      divider.setPointerCapture(e.pointerId);
-    });
-    pageWindowLifetime.listen(divider, "pointermove", (e) => {
-      if (drag?.pointer === e.pointerId) {
-        resize(drag.width + direction * (e.clientX - drag.x) / drag.scale);
-      }
-    });
-    pageWindowLifetime.listen(divider, "pointerup", endPointer);
-    pageWindowLifetime.listen(divider, "pointercancel", endPointer);
-    pageWindowLifetime.listen(divider, "lostpointercapture", endPointer);
-    pageWindowLifetime.listen(globalThis.window, "blur", endDrag);
-    pageWindowLifetime.add(() => {
-      endDrag();
-      observer.disconnect();
-    });
   };
   const setOpening = (dir: string | null): void => {
     if (!status) return;
@@ -522,8 +508,8 @@ function mountAdaptiveShell(): void {
   if (sidebarScrim) pageWindowLifetime.listen(sidebarScrim, "click", () => { closeDrawers(true); applyAdaptive(); });
   if (inspectorScrim) pageWindowLifetime.listen(inspectorScrim, "click", () => { closeDrawers(true); applyAdaptive(); });
   if (resizable) {
-    mountDivider(divSidebar, sidebar, 1, 200, 360);
-    mountDivider(divInspector, inspector, -1, 240, 400);
+    mountDivider(divSidebar, sidebar, "sidebar", ...SHELL_WIDTH_LIMITS.sidebar);
+    mountDivider(divInspector, inspector, "inspector", ...SHELL_WIDTH_LIMITS.inspector);
   }
   if (openBtn) pageWindowLifetime.listen(openBtn, "click", () => void onPick());
   // Un vault nuovo è una cartella vuota aperta come vault: il selettore di
@@ -643,28 +629,6 @@ function drawWindowTitle(): void {
   void Promise.resolve().then(() => nativeWindow.setTitle(title)).catch(() => {});
 }
 
-/// Ciò che la palette chiede alla shell.
-const paletteHost = {
-  onEffect: applyIntent,
-  notify,
-  flushPendingSave,
-  // Dal canale dati (§14.4), **con una finestra** (§2.9). Questi path
-  // riempiono un `<datalist>`, cioè dei suggerimenti sopra un campo che resta
-  // libero: chiedere l'anagrafe intera per proporne una manciata mandava
-  // attraverso il ponte tutto il vault e creava un `<option>` per documento a
-  // ogni apertura del pannello. Un suggerimento troncato non toglie niente a
-  // chi scrive il path per intero.
-  //
-  // La forma giusta a regime è un'altra, ed è già scritto altrove: chiedere per
-  // prefisso mentre si scrive, cioè `noteDalNome` (0082, 0083 — «le superfici
-  // che propongono dei nomi fanno *la stessa* domanda»). Cablarla qui vuol dire
-  // dare alla palette un campo che ascolta, che è la casella residua.
-  listDocuments: () =>
-    vaultEntries({ offset: 0, limit: 200 }, "document")
-      .then((page) => page.items.map((e) => e.id))
-      .catch(() => []),
-};
-
 /// Gli ascolti globali vivono fino allo smontaggio di questa finestra. Un
 /// remount apre una Lifetime nuova; ogni callback asincrona del montaggio
 /// precedente verifica il proprio epoch prima di disegnare.
@@ -762,41 +726,9 @@ async function init(): Promise<Teardown> {
   // l'iscrizione, non la chiusura — ma non è nemmeno buttata: un `catch` che
   // dice cosa non c'è, perché una finestra che chiudendo perde l'ultima battuta
   // non lo racconta a nessuno.
-  const closeListener = onClose(async () => {
-    freezeDocumentSurfaces(true);
-    try {
-      if (!await drainDocumentWindows()) {
-        freezeDocumentSurfaces(false);
-        return false;
-      }
-      // Un buffer che non è finito né sul disco né in una bozza vive soltanto
-      // in questa webview: la chiusura si rifiuta, e il testo resta aperto.
-      const unprotected = await flushBeforeClose();
-      if (unprotected.length > 0) {
-        freezeDocumentSurfaces(false);
-        notify(t("document.close_unprotected", { docs: unprotected.join(", ") }), "guasto");
-        return false;
-      }
-      return true;
-    } catch (error) {
-      freezeDocumentSurfaces(false);
-      notify(t("document.close_failed", { reason: errorText(error) }), "guasto");
-      return false;
-    }
-  }, (error) => {
-    freezeDocumentSurfaces(false);
-    notify(t("document.close_failed", { reason: errorText(error) }), "guasto");
-  }).catch(() => {
-    notify(t("document.close_unhooked"), "guasto");
-    return () => {};
-  });
+  const closeGuard = mountCloseGuard({ notify });
   lifetime.listen(window, "pagehide", teardown, { once: true });
-  pageWindowLifetime.add(() => {
-    void closeListener.then(
-      (unlisten) => unlisten(),
-      () => notify(t("document.close_unhooked"), "guasto"),
-    );
-  });
+  pageWindowLifetime.add(closeGuard);
 
   // L'host dei pannelli per primo: da qui in poi ogni pannello — nativo o
   // dichiarato dal backend — si presenta al registro invece di iscriversi da
@@ -819,6 +751,9 @@ async function init(): Promise<Teardown> {
   // pannello, quindi qui basta dichiararlo.
   mountDocSearch();
   mountSearch(pageWindowLifetime);
+  // La ricerca come porta: intenti e segnalibri la chiedono senza conoscere
+  // il pannello, che è di questa shell.
+  pageWindowLifetime.add(setSearchPort({ searchFor }));
   pageWindowLifetime.add(mountQuickSwitcher(async (doc, mode) => {
     if (mode === "window") {
       await openCurrentInNewWindow(doc);
@@ -929,6 +864,14 @@ async function init(): Promise<Teardown> {
     run: () => void newNoteInActiveSpace(),
   });
   registerShellCommand({
+    id: "shell.draw.import",
+    title: "commands.draw.import",
+    description: "commands.draw.import.desc",
+    layer: "global",
+    available: () => canImportDrawing(),
+    run: () => void pickDrawingImport(),
+  });
+  registerShellCommand({
     id: "shell.zoom.in",
     title: "commands.zoom.in",
     description: "commands.zoom.in.desc",
@@ -966,6 +909,7 @@ async function init(): Promise<Teardown> {
       const entry = allCommands().find((e) => e.id === id);
       if (entry) startCommand(entry, paletteHost);
     },
+    has: (id) => allCommands().some((e) => e.id === id),
     // Letta a ogni apertura del menu: una scorciatoia rimappata si vede subito.
     shortcut: (id) => displayBinding(allCommands().find((e) => e.id === id)?.binding ?? null),
     // Le stesse view principali che la palette elenca, con la stessa frase.
@@ -973,6 +917,12 @@ async function init(): Promise<Teardown> {
       label: t("palette.open_view", { title: spec.title }),
       run: () => openPrimaryView(spec.id),
     })),
+    // «Nuovo disegno…» e «Importa disegno…» accanto a «Nuova nota», se il
+    // kernel ha il comando.
+    creations: () => [
+      ...(canCreateDrawing() ? [{ label: t("menu.file.new_drawing"), run: () => void newDrawing() }] : []),
+      ...(canImportDrawing() ? [{ label: t("menu.file.import_drawing"), run: () => void pickDrawingImport() }] : []),
+    ],
   }));
   refreshTitlebarShortcuts();
   pageWindowLifetime.add(onLanguage(refreshTitlebarShortcuts));
@@ -999,6 +949,34 @@ async function init(): Promise<Teardown> {
   // sa `ui/keyboard.ts`, che è il posto in cui una sequenza a metà ha un tempo
   // e una via d'uscita (§18.2).
   mountKeyboard(pageWindowLifetime, (entry) => startCommand(entry, paletteHost));
+  // Le porte di creazione dei pannelli (menu di una cartella, riquadro vuoto)
+  // non importano la palette: quando un comando non ha un modulo proprio, la
+  // fanno partire da qui.
+  pageWindowLifetime.add(registerCommandStarter((entry, prefill) => startCommand(entry, paletteHost, prefill)));
+  // «Nuovo disegno» si compila guardando i modelli: la galleria sostituisce il
+  // modulo generico della palette, e il suo codice arriva la prima volta che
+  // serve. Vale anche per la shell mobile, che parte da questa.
+  pageWindowLifetime.add(
+    registerCommandForm(NEW_DRAWING, (prefill) => {
+      void import("./editors/spatial/templates/gallery")
+        .then((module) => module.openGallery(prefill, paletteHost))
+        .catch((error: unknown) => {
+          const command = state.commandSpecs.find((spec) => spec.id === NEW_DRAWING)?.title ?? NEW_DRAWING;
+          notify(t("commands.failed", { command, reason: errorText(error) }), "guasto");
+        });
+    }),
+  );
+  // «Importa disegno» legge il file e prepara il disegno nella sua finestra,
+  // che arriva coi lettori dei due programmi la prima volta che serve.
+  pageWindowLifetime.add(
+    registerDrawingImport((from) => {
+      void import("./editors/spatial/import/dialog")
+        .then((module) => module.openImport(from, paletteHost))
+        .catch((error: unknown) => {
+          notify(t("commands.failed", { command: t("commands.draw.import"), reason: errorText(error) }), "guasto");
+        });
+    }),
+  );
 
   listenForFailures(pageWindowLifetime);
   // Un rifiuto che nessuno ha raccolto è un guasto che nessuno vedrebbe: la
@@ -1068,36 +1046,10 @@ async function init(): Promise<Teardown> {
   return teardown;
 }
 
-/// I passi dello zoom: gli stessi di un browser, dentro i limiti che
-/// `appearance.zoom` ammette.
-const ZOOM_STEPS = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
-
-/// La modalità scelta per i riquadri nuovi (`editor.default-mode`), o niente
-/// se non si riesce a leggerla: allora vale il default del layout.
-async function preferredPaneMode(): Promise<string | undefined> {
-  try {
-    const value = (await settings()).find((entry) => entry.spec.key === "editor.default-mode")?.value;
-    return typeof value === "string" && value !== "" ? value : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function zoomBy(step: -1 | 0 | 1): Promise<void> {
-  try {
-    const entries = await settings();
-    const current = entries.find((entry) => entry.spec.key === "appearance.zoom")?.value;
-    const now = typeof current === "number" ? current : 1;
-    let next = 1;
-    if (step > 0) next = ZOOM_STEPS.find((value) => value > now + 0.001) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]!;
-    if (step < 0) next = [...ZOOM_STEPS].reverse().find((value) => value < now - 0.001) ?? ZOOM_STEPS[0]!;
-    if (Math.abs(next - now) < 0.001) return;
-    await api.setSetting("appearance.zoom", next);
-    notify(t("shell.zoom_now", { percent: Math.round(next * 100) }), "info");
-  } catch (error) {
-    notify(t("shell.zoom_failed", { reason: errorText(error) }), "guasto");
-  }
-}
+/// Come si esce dalla concentrazione lo si dice una volta per finestra: chi
+/// l'ha letto lo sa, e ripeterlo a ogni ingresso riempirebbe le notifiche della
+/// stessa istruzione.
+let focusHinted = false;
 
 /// La scrittura senza cornice: rail, barra laterale, ispettore e divisori
 /// escono di scena; lo stesso comando (o Esc) li rimette.
@@ -1106,16 +1058,9 @@ function toggleFocusMode(force?: boolean): void {
   if (!app) return;
   const on = force ?? !app.hasAttribute("data-focus-mode");
   app.toggleAttribute("data-focus-mode", on);
-  if (on) notify(t("shell.focus_on"), "info");
-}
-
-async function newNoteInActiveSpace(): Promise<void> {
-  try {
-    const created = await createNote(undefined, state.activeSpace ?? undefined);
-    if (created) await openDocument(created);
-    focusEditor();
-  } catch (error) {
-    notify(t("explorer.create_failed", { reason: errorText(error) }), "guasto");
+  if (on && !focusHinted) {
+    focusHinted = true;
+    notify(t("shell.focus_on"), "info");
   }
 }
 
@@ -1133,217 +1078,19 @@ export function openVault(dir: string): Promise<void> {
   return openVaultPath(dir);
 }
 
-async function openVaultPath(
-  dir: string,
-  alive: () => boolean = () => !pageWindowLifetime.closed,
-  alreadyDrained = false,
-): Promise<void> {
-  if (!alive()) return;
-  if (state.vaultRoot && !alreadyDrained) {
-    // Il testo in coda va scritto nel vault a cui appartiene, prima di
-    // lasciarlo: dopo, lo stesso path indicherebbe un file dell'altro vault.
-    if (!await drainDocumentWindows()) return;
-    const pending = await flushPendingSave();
-    if (!alive()) return;
-    if (pending.length > 0) {
-      notify(t("demo.unsaved", { files: pending.join(", ") }), "guasto");
-      return;
-    }
-  }
-  if (!alive()) return;
-  const info = await api.openVault(dir);
-  if (!alive()) return;
-  // **Ciò che è stato battuto mentre l'host apriva il vault nuovo** (FUB-001).
-  // Il vault di prima resta aperto nell'host finché non lo si chiude, e ogni
-  // sessione scrive nel vault in cui è nata (`document-session.ts`): questo
-  // flush lo raggiunge per nome anche se il corrente, adesso, è l'altro. Senza,
-  // quel testo si perdeva con la chiusura delle sessioni qui sotto — e un
-  // autosave o una bozza armati prima potevano finire nel vault nuovo.
-  // Ciò che nemmeno questo salva torna da `resetDocumentsForVault` e si dice.
-  await flushPendingSave();
-  if (!alive()) return;
-  const unsaved = await resetDocumentsForVault();
-  if (unsaved.length > 0) notify(t("demo.unsaved", { files: unsaved.join(", ") }), "guasto");
-  if (!alive()) return;
-  // Il segnale watcher è del vault che si sta aprendo: azzerarlo subito, poi
-  // `warnIfUnwatched` lo rialza col suo stato (I04, mai verità del vault prima).
-  setWatcherOff(false);
-  showVaultName(info.root);
-  // «Questo vault si è aperto a metà» (§15.7): la riga che il contratto teneva
-  // in serbo per una superficie che non c'era. Ogni voce esce anche come evento
-  // `trouble` — e da lì il centro notifiche la mostra già — ma la si legge
-  // **anche** dall'esito, che è la ragione per cui il campo esiste: aprire un
-  // vault è il carico sotto cui la coda eventi tronca (§20.5), e una nota che
-  // la ricerca non trova e che il grafo non collega è precisamente ciò che non
-  // si scopre finché non la si cerca.
-  if (info.unread.length > 0) {
-    notify(plural(info.unread.length, "vault.partial.one", "vault.partial"), "guasto");
-  }
-  state.vaultRoot = info.root;
-  state.handledExtensions =
-    info.extensions.length > 0 ? info.extensions : state.handledExtensions;
-  // Lo stato di vista di **questo** vault (§11.2): come lo si stava guardando.
-  // Dopo l'apertura, perché è il backend a tenerlo e la chiave è il vault
-  // aperto; e prima del segnale, perché chi si iscrive disegna con questi.
-  //
-  // Il layout è il pezzo che il §11.2 aspettava: quanti riquadri, con che tab
-  // dentro, in che modalità ciascuno. Non c'è più un `closeDocument()` qui —
-  // chiudeva il documento del vault precedente perché non c'era niente da
-  // ripristinare al posto suo, e adesso c'è: la finestra riparte com'era.
-  //
-  // **Insieme, e non in fila**: sono quattro domande che non si leggono a
-  // vicenda — l'organizzazione, il layout, le cartelle aperte, lo spazio
-  // attivo — e ciascuna è un giro sull'IPC. In fila costavano cinque andate e
-  // ritorno (`loadLayout` ne fa due di suo), e chi apre un vault le paga
-  // tutte una dopo l'altra prima di vedere qualcosa. L'ordine che i commenti
-  // qui sopra dichiarano è **rispetto a `openVault` e al segnale**, non fra
-  // loro: `Promise.all` lo tiene fermo. Nessuna delle quattro può rifiutare —
-  // tutte e quattro hanno il proprio `catch` dentro — quindi qui non c'è la
-  // domanda «cosa resta a metà se una va storta».
-  await Promise.all([loadOrganization(), loadLayout(preferredPaneMode()), loadExpanded(), loadActiveSpace()]);
-  if (!alive()) return;
-  await synchronize();
-  if (!alive()) return;
-  // **Ciò che era rimasto non salvato** (§15.2), e sta qui accanto a
-  // `vault.partial` perché è la stessa specie di riga: due cose che l'apertura
-  // deve dire e che nessun'altra superficie direbbe. La differenza è il verso —
-  // là il vault ha perso qualcosa da leggere, qui l'utente ritrova qualcosa che
-  // aveva scritto — ed è dopo il layout di proposito: il testo recuperato è un
-  // buffer, e i buffer vanno messi quando i riquadri ci sono già.
-  const recovered = await recoverDrafts();
-  if (!alive()) return;
-  if (recovered > 0) {
-    notify(plural(recovered, "draft.found.one", "draft.found"), "info");
-  }
-  // Da qui in poi lo stato del vault è coerente: chi ne dipende può ripartire.
-  emit("vault", info.root);
-
-  clearSearch();
-  emit("documents");
-
-  // Le view dichiarative si scoprono dal backend, non da id cablati. E come le
-  // view, i comandi: l'elenco serve alle scorciatoie dichiarate — la palette lo
-  // richiede da sé a ogni apertura, perché è il momento in cui costa nulla ed è
-  // l'unico in cui deve essere fresco.
-  //
-  // Gli accordi riconfigurati vivono nelle impostazioni di **questo** vault
-  // (0076), quindi si rileggono quando il vault cambia — insieme ai comandi che
-  // ne sono i proprietari. «Insieme» qui è letterale: i tre elenchi non si
-  // leggono a vicenda, e chi li aspetta è la riga dopo, che li vuole tutti e
-  // tre. In fila erano tre andate e ritorno, adesso una.
-  //
-  // L'unica differenza che resta: se `list_views` rifiuta, i due elenchi che
-  // prima non venivano nemmeno chiesti adesso arrivano lo stesso. È il verso
-  // buono — un vault che si apre male tiene comunque i comandi e gli accordi —
-  // e `Promise.all` rifiuta come rifiutava `mountDeclaredViews` da solo.
-  await Promise.all([mountDeclaredViews(pageWindowLifetime), loadCommandSpecs(), loadKeyOverrides()]);
-  if (!alive()) return;
-  // S5-1: `mountDeclaredViews` svuota i contenitori delle view dichiarate
-  // (views.ts) prima di rimontarle, e il grafo — view dichiarata anche lui —
-  // resta senza superficie. `synchronize()` rifà il giro di `show` per ogni
-  // riquadro e rimonta le view dichiarate (`montaVistaInRiquadro` in
-  // document.ts è idempotente): è il passaggio che rimette a posto la tab del
-  // grafo dopo l'azzeramento di `mountDeclaredViews`.
-  await synchronize();
-  if (!alive()) return;
-  // Le view dichiarate `left_sidebar` sono state montate in `#views-left`:
-  // la rail le scopre e aggiunge i bottoni dopo che `mountDeclaredViews` ha
-  // riempito l'host.
-  syncRail();
-  if (!alive()) return;
-  await warnIfCommandsContendKey();
-  if (!alive()) return;
-  // **Dopo** i conflitti, e non è indifferente: una scorciatoia sospesa non è in
-  // vigore, quindi non partecipa a nessun conflitto — e dire prima «questo vault
-  // ne propone tre» farebbe leggere l'avviso dei conflitti come se le riguardasse.
-  await warnIfVaultProvidesKeys();
-  if (!alive()) return;
-
-  await warnIfUnwatched();
-  if (!alive()) return;
-
-  // La prima nota, chiesta con una finestra da uno (§14.4): l'apertura del
-  // vault non porta più l'elenco intero, e per aprirne una non serve.
-  //
-  // **Solo se non c'era niente da ripristinare.** Aprire la prima nota era la
-  // cosa giusta quando la finestra ripartiva sempre vuota; adesso che si
-  // ricorda com'era, farlo comunque vorrebbe dire scavalcare con una nota
-  // qualunque le tab che l'utente aveva lasciato aperte.
-  if (!activeDoc()) {
-    const before = await beforeNote();
-    if (!alive()) return;
-    if (before) {
-      await openDocument(before);
-      if (!alive()) return;
-    }
-  }
-}
-
-/// Se due comandi si contendono la stessa combinazione, **dirlo** (§18.2).
-///
-/// È l'unica cosa di questa voce che non veniva gratis. Un conflitto non è un
-/// errore da rifiutare — chi ha rimappato ha il diritto di sbagliare, e
-/// rifiutare la scrittura vorrebbe dire non poter scambiare due scorciatoie fra
-/// loro senza passare per uno stato illegale — ma è qualcosa che nessuno
-/// scoprirebbe da sé: si preme, parte l'altro comando, e non c'è niente da
-/// guardare. L'avviso nomina i comandi, perché è da lì che si va a cambiarne
-/// uno.
-async function warnIfCommandsContendKey(): Promise<void> {
-  const phrase = conflictMessage(allCommands());
-  if (phrase) notify(phrase, "guasto");
-}
-
-/// Se questo vault propone dei tasti che nessuno ha guardato, **dirlo** (§23.13).
-///
-/// Un vault viaggia — un repo clonato, una cartella condivisa, un vault di
-/// esempio — e le sue scorciatoie viaggiano con lui. Finché nessuno le ha
-/// guardate non premono niente, che è la metà silenziosa di questa voce; questa
-/// è l'altra metà, perché una scorciatoia sospesa e taciuta sarebbe una
-/// configurazione che non fa effetto e nessuno che sappia dire perché.
-///
-/// L'avviso **nomina i comandi** e non li conta soltanto, per la stessa ragione
-/// dei conflitti: «hai tre scorciatoie in sospeso» manda a cercare quali. E la
-/// risposta non sta qui — sta nel pannello delle impostazioni, dove quelle righe
-/// vivono e si vedono una per una. Un avviso con due bottoni chiederebbe di
-/// decidere senza guardare, che è il gesto che questa voce esiste per non
-/// insegnare.
-async function warnIfVaultProvidesKeys(): Promise<void> {
-  try {
-    const suggested = await api.pendingKeybindings();
-    const keys = Object.keys(suggested);
-    if (keys.length === 0) return;
-    const forKey = new Map(allCommands().map((c) => [keybindingKey(c.id), c.title]));
-    const names = keys.map((k) => forKey.get(k) ?? k).join(", ");
-    notify(plural(keys.length, "app.vault_keys_pending.one", "app.vault_keys_pending", { commands: names }));
-  } catch {
-    // Un vault che non sa dire cosa propone non è un motivo per non aprirlo, e
-    // il silenzio qui è dalla parte giusta: le chiavi restano sospese finché
-    // qualcuno non risponde, quindi ciò che si perde è la domanda, non il
-    // presidio.
-  }
-}
-
-/// Se questo vault non ha il rilevamento delle modifiche esterne, dirlo (§9.7).
-///
-/// È la promessa che Fub non manteneva in silenzio: senza watcher nessuno
-/// vede le scritture altrui — network share, cloud drive, vault sincronizzati
-/// con strumenti esterni — e il salvataggio successivo copre ciò che non è
-/// stato visto. Un avviso all'apertura non è l'indicatore permanente che il
-/// §20.4 chiedeva insieme allo stato del salvataggio — quello, per il watcher,
-/// resta da fare — ma passa dalla stessa porta di tutto il resto, e non da una
-/// console.
-async function warnIfUnwatched(): Promise<void> {
-  try {
-    const state = await vaultStatus();
-    setWatcherOff(!state.watching);
-    if (!state.watching) {
-      notify(t("app.external_changes"));
-    }
-  } catch {
-    // Un vault che non sa dire come sta non è un motivo per non aprirlo: il
-    // canale dati ha già risposto a tutto il resto.
-  }
-}
+/// La sequenza vive in `state/vault-session.ts`; qui stanno le porte di resa
+/// di questa shell: il nome nella barra del titolo, la ricerca, le view
+/// dichiarate, la rail e gli avvisi.
+const vaultSession = createVaultSession({
+  alive: () => !pageWindowLifetime.closed,
+  notify,
+  setWatcherOff,
+  showVaultName,
+  clearSearch,
+  mountDeclaredViews: () => mountDeclaredViews(pageWindowLifetime),
+  syncRail,
+});
+const openVaultPath = vaultSession.open;
 
 // Un avvio che fallisce non deve morire in silenzio: senza questo, un errore
 // dell'IPC lascia la finestra a metà (lista file sì, vault no) e l'unico posto

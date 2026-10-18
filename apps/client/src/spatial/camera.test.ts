@@ -1,0 +1,224 @@
+// Test della camera: tutto puro, niente DOM. Il round-trip mondo↔schermo è la
+// garanzia che il grafo non «scivoli» sotto il puntatore; l'invarianza dello
+// zoom al cursore è ciò che rende la rotella utilizzabile; la convergenza
+// dell'inseguimento è ciò che spegne il rAF (il pittore ridisegna solo quando
+// la camera si muove).
+
+import { describe, expect, it } from "vitest";
+import {
+  createCameraState,
+  createMotionState,
+  fit,
+  fitWithOverhang,
+  GRAPH_SCALE_LIMITS,
+  INERTIA_MS,
+  worldToScreen,
+  stepCamera,
+  screenToWorld,
+  zoomAtPoint,
+} from "./camera";
+
+describe("camera", () => {
+  it("round-trip screenToWorld(worldToScreen(p)) ≈ p", () => {
+    const c = { scale: 2.5, tx: -120, ty: 80 };
+    const p = { x: 33.7, y: -12.5 };
+    const q = screenToWorld(c, worldToScreen(c, p));
+    expect(q.x).toBeCloseTo(p.x, 6);
+    expect(q.y).toBeCloseTo(p.y, 6);
+  });
+
+  it("zoomAtPoint tiene fermo il punto sotto il cursore", () => {
+    const base = { scale: 1.2, tx: 50, ty: -30 };
+    const point = { x: 400, y: 300 };
+    const first = screenToWorld(base, point);
+    const after = zoomAtPoint(base, 1.8, point);
+    const m = screenToWorld(after, point);
+    expect(m.x).toBeCloseTo(first.x, 10);
+    expect(m.y).toBeCloseTo(first.y, 10);
+  });
+
+  it("zoomAtPoint clampata ai limiti del grafo", () => {
+    const { min, max } = GRAPH_SCALE_LIMITS;
+    expect([min, max]).toEqual([0.05, 8]);
+    const c = { scale: 2, tx: 0, ty: 0 };
+    expect(zoomAtPoint(c, 1e9, { x: 10, y: 10 }).scale).toBe(max);
+    expect(zoomAtPoint(c, 1e-9, { x: 10, y: 10 }).scale).toBe(min);
+    // anche con scala già al limite, il punto sotto il cursore resta fermo
+    const blocked = zoomAtPoint({ scale: max, tx: 5, ty: 5 }, 5, { x: 30, y: 40 });
+    expect(screenToWorld(blocked, { x: 30, y: 40 })).toEqual({ x: (30 - 5) / max, y: (40 - 5) / max });
+  });
+
+  it("i limiti scelti da chi usa la camera sostituiscono quelli del grafo", () => {
+    const limits = { min: 0.1, max: 32 };
+    const v = { w: 800, h: 600 };
+    const dot = { minX: 5, minY: 5, maxX: 5, maxY: 5 };
+    const wide = { minX: 0, minY: 0, maxX: 1e9, maxY: 1e9 };
+    const c = { scale: 2, tx: 0, ty: 0 };
+    expect(zoomAtPoint(c, 1e9, { x: 10, y: 10 }, limits).scale).toBe(32);
+    expect(zoomAtPoint(c, 1e-9, { x: 10, y: 10 }, limits).scale).toBe(0.1);
+    expect(fit(dot, v, 0.08, 0, limits).scale).toBe(32);
+    expect(fit(wide, v, 0.08, 0, limits).scale).toBe(0.1);
+    expect(fitWithOverhang(dot, v, () => 0, 0.08, limits).scale).toBe(32);
+    const cs = createCameraState(true, undefined, limits);
+    cs.zoom(1e9, 400, 300);
+    expect(cs.state().scale).toBe(32);
+    cs.centerOn(0, 0, 1e-9, v);
+    expect(cs.state().scale).toBe(0.1);
+    cs.fit(dot, v);
+    expect(cs.step(16).scale).toBe(32);
+  });
+
+  it("fit contiene i bound nel viewport con margine", () => {
+    const c = fit({ minX: -500, minY: -300, maxX: 700, maxY: 200 }, { w: 800, h: 600 });
+    for (const [mx, my] of [
+      [-500, -300],
+      [700, -300],
+      [-500, 200],
+      [700, 200],
+    ]) {
+      const s = worldToScreen(c, { x: mx, y: my });
+      expect(s.x).toBeGreaterThanOrEqual(-1e-9);
+      expect(s.x).toBeLessThanOrEqual(800);
+      expect(s.y).toBeGreaterThanOrEqual(-1e-9);
+      expect(s.y).toBeLessThanOrEqual(600);
+    }
+    // scala = min(800/1200, 600/500) · (1 − 2·0.08) = 0.6667 · 0.84
+    expect(c.scale).toBeCloseTo(0.56, 6);
+  });
+
+  it("fit con pad=0 riempie esattamente il lato limitante", () => {
+    const c = fit({ minX: 0, minY: 0, maxX: 400, maxY: 100 }, { w: 800, h: 200 }, 0);
+    expect(c.scale).toBeCloseTo(Math.min(800 / 400, 200 / 100), 10);
+  });
+
+  it("fit con bound degenere (un solo nodo) non produce Infinity", () => {
+    const c = fit({ minX: 5, minY: 5, maxX: 5, maxY: 5 }, { w: 800, h: 600 });
+    expect(Number.isFinite(c.scale)).toBe(true);
+    expect(c.scale).toBe(GRAPH_SCALE_LIMITS.max);
+  });
+
+  it("fit con riserva lascia libero a destra il posto delle etichette", () => {
+    const b = { minX: 0, minY: 0, maxX: 1000, maxY: 100 };
+    const v = { w: 800, h: 600 };
+    const c = fit(b, v, 0.08, 120);
+    const left = worldToScreen(c, { x: b.minX, y: 0 }).x;
+    const right = worldToScreen(c, { x: b.maxX, y: 0 }).x;
+    // Il grafo più la riserva stanno nel margine, e ci stanno centrati.
+    expect(left).toBeCloseTo(800 * 0.08, 6);
+    expect(right + 120).toBeCloseTo(800 * 0.92, 6);
+  });
+
+  it("la riserva non mangia più di metà della larghezza utile", () => {
+    const c = fit({ minX: 0, minY: 0, maxX: 1000, maxY: 100 }, { w: 800, h: 600 }, 0.08, 1e6);
+    expect(c.scale).toBeCloseTo((800 * 0.84) / 2 / 1000, 10);
+  });
+
+  it("fitWithOverhang tiene dentro le etichette dei nodi di destra", () => {
+    // Il caso del banco: il nodo più a destra ha un'etichetta lunga, scritta
+    // a partire dal bordo del nodo, a corpo fisso.
+    const b = { minX: 0, minY: 0, maxX: 600, maxY: 300 };
+    const v = { w: 680, h: 600 };
+    const label = (scale: number): number => 6 * scale + 5 + 110;
+    const plain = fit(b, v);
+    expect(worldToScreen(plain, { x: b.maxX, y: 0 }).x + label(plain.scale)).toBeGreaterThan(680 * 0.92);
+    const c = fitWithOverhang(b, v, label);
+    expect(worldToScreen(c, { x: b.maxX, y: 0 }).x + label(c.scale)).toBeLessThanOrEqual(680 * 0.92 + 1e-6);
+    expect(worldToScreen(c, { x: b.minX, y: 0 }).x).toBeGreaterThanOrEqual(680 * 0.08 - 1e-6);
+  });
+
+  it("fitWithOverhang senza sporto è il fit di sempre", () => {
+    const b = { minX: -500, minY: -300, maxX: 700, maxY: 200 };
+    const v = { w: 800, h: 600 };
+    expect(fitWithOverhang(b, v, () => 0)).toEqual(fit(b, v));
+  });
+
+  it("createCameraState con sporto insegue il fit che lascia posto alle etichette", () => {
+    const b = { minX: 0, minY: 0, maxX: 600, maxY: 300 };
+    const v = { w: 680, h: 600 };
+    const label = (scale: number): number => 6 * scale + 5 + 110;
+    const cs = createCameraState(true, label);
+    cs.fit(b, v);
+    expect(cs.step(16)).toEqual(fitWithOverhang(b, v, label));
+  });
+
+  it("stepCamera converge ai bersagli", () => {
+    let st = { ...createMotionState(), targetScale: 4, targetTx: 500, targetTy: -300 };
+    for (let i = 0; i < 400; i++) st = stepCamera(st, 16.7);
+    expect(st.scale).toBeCloseTo(4, 2);
+    expect(st.tx).toBeCloseTo(500, 1);
+    expect(st.ty).toBeCloseTo(-300, 1);
+  });
+
+  it("stepCamera: l'inerzia decade nel tempo e sposta vista e bersaglio insieme", () => {
+    let st = { ...createMotionState(), tx: 100, ty: 100, targetTx: 100, targetTy: 100, vx: 1, vy: 0.5 };
+    st = stepCamera(st, 16.7);
+    expect(st.vx).toBeCloseTo(Math.exp(-16.7 / INERTIA_MS), 10);
+    // Vista e bersaglio si muovono dello stesso tratto: niente elastico.
+    expect(st.tx).toBeCloseTo(st.targetTx, 10);
+    for (let i = 0; i < 300; i++) st = stepCamera(st, 16.7);
+    expect(st.vx).toBe(0);
+    expect(st.vy).toBe(0);
+    // Lo spostamento totale è v·τ (meno la coda sotto la soglia di riposo),
+    // a qualunque frequenza di frame.
+    expect(Math.abs(st.tx - (100 + INERTIA_MS))).toBeLessThan(2);
+    let slow = { ...createMotionState(), tx: 100, targetTx: 100, vx: 1 };
+    for (let i = 0; i < 150; i++) slow = stepCamera(slow, 33.4);
+    expect(Math.abs(slow.tx - st.tx)).toBeLessThan(1);
+  });
+
+  it("stepCamera è pura: non tocca lo stato in ingresso", () => {
+    const input = { ...createMotionState(), targetScale: 2, vx: 10 };
+    const out = stepCamera(input, 16.7);
+    expect(input.scale).toBe(1);
+    expect(input.vx).toBe(10); // immutato
+    expect(out).not.toBe(input);
+  });
+
+  it("createCameraState: il pan è immediato, l'inerzia viene dal rilascio", () => {
+    const cs = createCameraState();
+    expect(cs.ready()).toBe(true);
+
+    cs.pan(30, -10);
+    expect(cs.state().tx).toBe(30);
+    expect(cs.state().ty).toBe(-10);
+    expect(cs.ready()).toBe(true); // il pan non lascia inerzia
+
+    cs.fling(0.5, 0);
+    expect(cs.ready()).toBe(false);
+    for (let i = 0; i < 300; i++) cs.step(16.7);
+    expect(Math.abs(cs.state().tx - (30 + 0.5 * INERTIA_MS))).toBeLessThan(2);
+    expect(cs.ready()).toBe(true);
+  });
+
+  it("createCameraState: zoom e centraSu convergono, il rAF può spegnersi", () => {
+    const cs = createCameraState();
+    cs.zoom(2, 400, 300);
+    expect(cs.state().scale).toBe(1); // la corrente resta ferma
+    expect(cs.ready()).toBe(false);
+    let c = cs.state();
+    for (let i = 0; i < 400; i++) c = cs.step(16.7);
+    expect(c.scale).toBeCloseTo(2, 2);
+    expect(cs.ready()).toBe(true);
+
+    cs.centerOn(100, 100, 1.6, { w: 800, h: 600 });
+    for (let i = 0; i < 400; i++) cs.step(16.7);
+    expect(cs.state().scale).toBeCloseTo(1.6, 3);
+    expect(cs.state().tx).toBeCloseTo(400 - 160, 3);
+    expect(cs.state().ty).toBeCloseTo(300 - 160, 3);
+  });
+
+  it("createCameraState: moto ridotto arriva subito e non conserva inerzia", () => {
+    const cs = createCameraState(true);
+    cs.zoom(2, 400, 300);
+    expect(cs.state().scale).toBe(2);
+    expect(cs.ready()).toBe(true);
+    const beforePan = cs.state();
+    cs.pan(30, -10);
+    expect(cs.state()).toMatchObject({ tx: beforePan.tx + 30, ty: beforePan.ty - 10 });
+    expect(cs.ready()).toBe(true);
+    cs.setReducedMotion(false);
+    cs.zoom(2, 400, 300);
+    expect(cs.state().scale).toBe(2);
+    expect(cs.ready()).toBe(false);
+  });
+});

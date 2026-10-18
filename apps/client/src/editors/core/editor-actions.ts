@@ -30,6 +30,16 @@ export interface EditorActionState {
 
 export const ACTION_UNAVAILABLE: EditorActionState = { enabled: false, active: null };
 
+/// Il rettangolo della selezione, in coordinate della finestra: ciò che basta
+/// a posare una bolla accanto al testo scelto, senza dare alla shell un oggetto
+/// dell'editor.
+export interface SelectionBox {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
 export interface SurfaceEditorActions {
   /// La superficie conosce questa azione.
   has(id: string): boolean;
@@ -46,6 +56,10 @@ export interface SurfaceEditorActions {
   /// Avvisa quando lo stato delle azioni può essere cambiato: selezione,
   /// testo, modalità, sola lettura. Restituisce il disposer.
   subscribe(listener: () => void): () => void;
+  /// Dove sta il testo scelto adesso, o `null` se il cursore è vuoto o il testo
+  /// non è visibile. Facoltativo: una superficie senza selezione di testo non
+  /// ha una bolla.
+  selectionBox?(): SelectionBox | null;
 }
 
 /// Il payload di un intento `fub.editor.action`, o `null` se non lo è.

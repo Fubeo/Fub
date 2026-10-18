@@ -7,7 +7,7 @@ import { openLifetime, type Lifetime, type Teardown } from "../../../../ui/lifet
 import { mountMermaidBlocks } from "../../../../ui/mermaid";
 import type { DiagramLight } from "../../../../ui/mermaid-styles";
 import { mountMathBlocks } from "./math";
-import { hydrateVaultMedia, vaultImageSource } from "./media";
+import { hydrateVaultMedia, scenePlaceholder, showEmbeddedDrawing, vaultImageSource } from "./media";
 import { openLightbox } from "../../../../ui/lightbox";
 import { mediaKindOfId, mimeOfId } from "../../../media/media-types";
 import type { MarkdownResources, NativeMarkdownContent } from "../../../../ui/markdown-resources";
@@ -375,6 +375,14 @@ async function hydrateEmbeds(
     if (chain.has(identity)) {
       slot.classList.add("embed-cycle");
       slot.dataset.embedNote = t("markdown.embed_cycle");
+      return;
+    }
+    // Un disegno nominato senza estensione (`![[disegno]]`) torna come il
+    // segnaposto del suo formato: vale la specie del media, come per
+    // `![[disegno.svg]]` che non passa nemmeno di qui.
+    const drawing = mediaKindOfId(content.doc_id) === "image" ? scenePlaceholder(content.html) : null;
+    if (drawing?.doc === content.doc_id) {
+      await showEmbeddedDrawing(container, slot, drawing, life);
       return;
     }
     // Embedded offsets never mutate the containing note.

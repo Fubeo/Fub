@@ -17,6 +17,14 @@ fub-format-markdown = { workspace = true }
 fub-format-sheet = { workspace = true }
 fub-format-canvas = { workspace = true }
 fub-format-base = { workspace = true }
+# Le scene di FubDraw (ADR 0203): i formati `svg` e `fubann`, le annotazioni
+# dei PDF, dietro la feature `draw` qui sotto. Non è nel `default` perché
+# accenderlo cambia la natura di ogni SVG del vault: da allegato a documento,
+# che si salva con `writeDocument`, entra nell'indice e nel grafo e diventa
+# candidato a nota di cartella. È una scelta di chi monta, finché la
+# superficie che li disegna non è pronta.
+fub-format-svg = { workspace = true, optional = true }
+fub-format-rich = { workspace = true, optional = true }
 fub-importers = { workspace = true }
 fub-kernel = { workspace = true }
 serde = { workspace = true }
@@ -132,8 +140,15 @@ ureq = { version = "3", default-features = false, features = [
 rustix = { workspace = true }
 
 [features]
-default = ["notify-watcher", "http-client", "official-features"]
+default = ["notify-watcher", "http-client", "official-features", "rich"]
 notify-watcher = ["dep:notify", "dep:notify-debouncer-full"]
+
+# I documenti di videoscrittura (`fub-format-rich`: Word, OpenDocument, RTF,
+# Word 97-2003): i formati a byte, la proiezione che la superficie ricca
+# modifica e il bundle `fub.rich` che ne esporta una copia in altri formati.
+# Spento, un `.docx` o un `.odt` sono file come altri, e il resto dei
+# formati e delle feature non cambia.
+rich = ["dep:fub-format-rich"]
 
 # Il client HTTP: acceso di default come il watcher, e per la stessa ragione —
 # i client desktop previsti (CLI 27.1, API locale 27.2, l'app) lo vogliono, e
@@ -163,6 +178,7 @@ official-features = [
     "blocks",
     "base",
     "formatting",
+    "proof",
 ]
 search = ["fub-features/search"]
 versioning = ["fub-features/versioning"]
@@ -181,8 +197,21 @@ commands = ["fub-features/commands"]
 blocks = ["fub-features/blocks"]
 base = ["fub-features/base"]
 formatting = ["fub-features/formatting"]
+proof = ["fub-features/proof"]
+
+# Il formato `svg` delle scene di FubDraw (ADR 0203), e con lui l'export dei
+# disegni in PNG, JPEG, SVG e PDF (`fub.draw` in `fub-features`): un export di
+# disegni senza disegni nel vault non avrebbe niente da esportare. Fuori dal
+# `default`: la CI lo compila e lo prova in un passo suo (`FUORI_DAL_DEFAULT`
+# in `check-cargo-feature-default.mjs`).
+draw = ["dep:fub-format-svg", "fub-features/draw"]
 
 [dev-dependencies]
 # Il banco del lato host (§16.2).
 fub-testkit = { workspace = true }
 fub-sdk = { workspace = true }
+# Gli `.odt` dei test dei documenti di videoscrittura, scritti dall'esportatore
+# di WordCraft: l'host non lo usa.
+wordcraft-formats = { workspace = true }
+# Per cambiare una parte di quei pacchetti.
+zip = { workspace = true }

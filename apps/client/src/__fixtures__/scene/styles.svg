@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">
+  <title>Gli stili</title>
+  <defs id="fub-defs">
+    <linearGradient id="r00000005" fub:role="swatch" fub:name="Blu mare" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0072b2"/>
+    </linearGradient>
+    <text id="r00000001" fub:role="style" fub:name="Titolo del capitolo" font-family="Inter, sans-serif" font-size="48" font-weight="600" fill="#1a1a1a" fub:leading="1.2"/>
+    <text id="r00000002" fub:role="style" fub:name="Nota" font-size="14" font-style="italic" letter-spacing="0.5" text-decoration="underline" fill="url(#r00000005) #0072b2">
+      <title>Le note a margine</title>
+    </text>
+    <linearGradient id="r00000003" fub:role="private" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2="0">
+      <stop offset="0" stop-color="#0072b2"/>
+      <stop offset="1" stop-color="#56b4e9"/>
+    </linearGradient>
+    <marker id="r00000006" fub:role="shared" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse" viewBox="0 0 10 10">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#000000"/>
+    </marker>
+    <polyline id="r00000004" fub:role="style" fub:name="Riquadro" points="0,0 100,0 100,100" fill="url(#r00000003) #0072b2" stroke="#1a1a1a" stroke-width="2" stroke-dasharray="4 2" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#r00000006)" opacity="0.9" style="mix-blend-mode: multiply"/>
+    <polyline id="r00000007" fub:role="style" fub:name="Avviso" points="0,0 100,0 100,100" fill="none" stroke="#d55e00"/>
+    <text id="r00000008" fub:role="style" font-size="12"/>
+    <text id="r00000009" fub:role="style" fub:name="Righe">
+      <tspan x="0" dy="0">Ciao</tspan>
+    </text>
+    <text id="r0000000a" fub:role="style" fub:name="Spostato" x="10"/>
+    <text id="r0000000b" fub:role="style" fub:name="Interlinea" fub:leading="1.2345"/>
+    <polyline id="r0000000c" fub:role="style" fub:name="Diagonale" points="0,0 100,100"/>
+    <polyline id="r0000000d" fub:role="style" fub:name="Girato" points="0,0 100,0 100,100" transform="rotate(45)"/>
+    <polyline id="r0000000e" fub:role="style" fub:name="Sbagliato" points="0,0 100,0 100,100" fill="url(#r00000006) #000000"/>
+    <rect id="r0000000f" fub:role="style" fub:name="Rettangolo" width="100" height="100"/>
+  </defs>
+  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>
+  <g id="l00000001" fub:layer="Livello 1">
+    <text id="o00000001" x="100" y="120" font-size="48" fill="#1a1a1a" fub:style="r00000001" font-family="Inter, sans-serif" font-weight="600">
+      <tspan x="100" dy="0">Il ciclo dell'acqua</tspan>
+    </text>
+    <text id="o00000002" x="100" y="200" font-size="14" fill="url(#r00000005) #0072b2" fub:style="r00000002" font-style="italic" letter-spacing="0.5" text-decoration="underline">
+      <tspan x="100" dy="0">Una nota</tspan>
+    </text>
+    <rect id="o00000003" x="100" y="300" width="200" height="120" fill="#e69f00" stroke="#1a1a1a" stroke-width="2" fub:style="r00000004"/>
+    <g id="o00000004" fub:style="r00000004">
+      <polyline id="o00000005" points="100,500 300,500 300,600" fill="none" stroke="#1a1a1a" marker-end="url(#r00000006)"/>
+    </g>
+    <text id="o00000006" x="100" y="700" font-size="16" fill="#1a1a1a" fub:style="r00000004">
+      <tspan x="100" dy="0">Sbagliato</tspan>
+    </text>
+    <rect id="o00000007" x="400" y="300" width="200" height="120" fill="#e69f00" stroke="#1a1a1a" stroke-width="2" fub:style="r00000001"/>
+    <ellipse fub:style="r0000000z" id="o00000008" cx="800" cy="360" rx="80" ry="50" fill="#009e73"/>
+    <circle fub:style="r00000005" id="o00000009" cx="1000" cy="360" r="50" fill="#56b4e9"/>
+    <rect id="o0000000a" x="1100" y="300" width="200" height="120" fill="#e69f00" stroke="#1a1a1a" stroke-width="2" fub:style="r00000008"/>
+    <a id="o0000000b" href="note/acqua.md" fub:style="r00000004">
+      <rect id="o0000000c" x="1300" y="300" width="200" height="120" fill="#e69f00" stroke="#1a1a1a" stroke-width="2"/>
+    </a>
+  </g>
+  <g id="l00000002" fub:layer="Note" fub:style="r00000004">
+  </g>
+</svg>

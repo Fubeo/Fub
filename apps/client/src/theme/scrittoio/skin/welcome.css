@@ -1,0 +1,435 @@
+/* Il benvenuto. */
+
+/* La scrivania prima che ci sia un foglio: al centro, una frase nel carattere
+   della lettura — è la sola volta che la cornice lo usa, perché qui si parla a
+   chi sta per scrivere e non a chi cerca un comando — e sotto, le cose che si
+   possono fare, posate come fogli. La colonna e il suo scorrimento sono della
+   struttura; qui i figli si mettono al centro uno per uno. */
+.onboarding {
+  padding: var(--space-9) var(--space-7);
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.onboarding > h2 {
+  align-self: center;
+  margin: 0;
+  font-family: var(--font-reading);
+  font-size: calc(var(--text-3xl) * 1.5);
+  font-weight: var(--weight-medium);
+  font-optical-sizing: auto;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.onboarding > p {
+  align-self: center;
+  max-width: 46ch;
+  margin: var(--space-4) 0 0;
+  color: var(--muted);
+  font-size: var(--text-lg);
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* --- le azioni -------------------------------------------------------------- */
+/* Un'azione è un foglietto: carta, un'ombra appena, e sotto il puntatore si
+   solleva di un pixel. La sola piena è la prima, quella che quasi tutti
+   cercano. */
+.onboarding-actions {
+  gap: var(--space-4);
+}
+.onboarding > .onboarding-actions {
+  align-self: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-8) 0 var(--space-6);
+}
+
+.onboarding-actions > button {
+  min-height: var(--control-h);
+  padding: 0 var(--space-6);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--text);
+  font: inherit;
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+/* Dentro un foglio un'azione è un gradino della carta, e l'hover scende di un
+   altro: lì non c'è ombra da alzare. */
+.onboarding-actions > button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.onboarding-actions > button:active {
+  background: var(--bg-active);
+  transform: scale(0.98);
+}
+
+/* Le tre in testa stanno sulla scrivania, e lì sono fogli veri. */
+.onboarding > .onboarding-actions > button {
+  min-height: calc(var(--control-h) + var(--space-5));
+  padding: 0 var(--space-7);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-1);
+  font-size: var(--text-md);
+}
+.onboarding > .onboarding-actions > button:hover {
+  background: var(--sheet);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-1px);
+}
+.onboarding > .onboarding-actions > button:active {
+  background: var(--sheet-2);
+  box-shadow: var(--shadow-1);
+  transform: translateY(0);
+}
+
+.onboarding-actions > button.primary,
+.onboarding > .onboarding-actions > button.primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+}
+.onboarding-actions > button.primary:hover,
+.onboarding > .onboarding-actions > button.primary:hover,
+.onboarding-actions > button.primary:active,
+.onboarding > .onboarding-actions > button.primary:active {
+  background: var(--accent-soft);
+  color: var(--bg);
+}
+
+.onboarding-actions > button:disabled,
+.onboarding-actions > button:disabled:hover,
+.onboarding-actions > button.primary:disabled,
+.onboarding-actions > button.primary:disabled:hover {
+  opacity: 0.4;
+  cursor: default;
+  transform: none;
+}
+
+/* --- ciò che succede mentre si apre ------------------------------------------ */
+.onboarding > .onboarding-status {
+  margin: 0 0 var(--space-5);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* Un vault che non si apre: il fondo e il punto dicono la specie, il testo
+   resta inchiostro (il rosso su un fondo rosato non si legge abbastanza nella
+   luce scura), e «Riprova» sta accanto, non sotto un altro titolo. */
+.onboarding-error {
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4) var(--space-6);
+  margin-bottom: var(--space-6);
+  padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6);
+  border-radius: var(--radius-sheet);
+  background: var(--danger-wash);
+  color: var(--text);
+}
+.onboarding-error > p {
+  flex: 1 1 280px;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.onboarding-error > p::before {
+  content: "";
+  flex: none;
+  align-self: flex-start;
+  width: 8px;
+  height: 8px;
+  margin-top: calc((1em * var(--leading-normal) - 8px) / 2);
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+}
+/* Sul rosato la carta è il gradino che si vede. */
+.onboarding-error .onboarding-actions > button {
+  background: var(--sheet);
+}
+.onboarding-error .onboarding-actions > button:hover {
+  background: var(--sheet-2);
+}
+
+/* --- i vault recenti --------------------------------------------------------- */
+/* L'etichetta di una sezione: piccola, maiuscola, in grafite. */
+.onboarding h3 {
+  margin: var(--space-6) 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+/* I recenti sono fogli posati in fila al centro della scrivania; quando non
+   entrano vanno a capo, e la riga in più resta centrata. */
+.onboarding-recent {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-6) var(--space-5);
+  padding: var(--space-2) 0 var(--space-4);
+}
+
+/* Un recente è un vault, cioè una pila: il foglio di sopra porta il nome, e da
+   sotto ne spunta un altro, appena storto. I due fogli sono disegnati dai
+   pseudo-elementi, sotto il contenuto, dentro il contesto che la riga apre per
+   sé: così la pila resta in ordine anche mentre il foglio si muove. Il nome
+   apre, il percorso lo distingue da un omonimo, la × lo toglie dall'elenco. Il
+   foglio intero è il bersaglio del nome — l'area del bottone si stende su
+   tutto — e la ×, che viene dopo, gli resta sopra. */
+.onboarding-recent-item {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 168px;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 108px;
+  padding: var(--space-6) var(--space-6) var(--space-5);
+  border-radius: var(--radius-sheet);
+  transition: translate var(--duration-state) var(--ease);
+}
+.onboarding-recent-item::before,
+.onboarding-recent-item::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-1);
+  transition:
+    rotate var(--duration-state) var(--ease),
+    translate var(--duration-state) var(--ease);
+}
+.onboarding-recent-item::before {
+  z-index: -2;
+  background: var(--sheet-2);
+  rotate: -3deg;
+  translate: 0 2px;
+}
+.onboarding-recent-item::after {
+  z-index: -1;
+  background: var(--sheet);
+}
+/* Sotto il puntatore la pila si solleva e il foglio di sotto si scosta. */
+.onboarding-recent-item:hover {
+  translate: 0 -2px;
+}
+.onboarding-recent-item:hover::after {
+  box-shadow: var(--shadow-2);
+}
+.onboarding-recent-item:hover::before {
+  rotate: -5deg;
+  translate: -1px 4px;
+}
+
+/* Il nome sta nel carattere della lettura, come il titolo di un foglio, e va a
+   capo una volta prima di troncarsi. */
+.onboarding-recent-item > .link-button {
+  display: -webkit-box;
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--space-6) 0 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-reading);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  font-optical-sizing: auto;
+  line-height: var(--leading-tight);
+  text-align: left;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.onboarding-recent-item > .link-button:hover {
+  background: transparent;
+  color: var(--accent);
+  text-decoration: none;
+}
+.onboarding-recent-item > .link-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-sheet);
+}
+/* L'anello del fuoco va dove sta il bersaglio: intorno al foglio. */
+.onboarding-recent-item > .link-button:focus-visible {
+  outline: none;
+}
+.onboarding-recent-item > .link-button:focus-visible::after {
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+
+/* Di un percorso conta la fine: sta in fondo al foglio, allineato a destra, e
+   se non entra è l'inizio a uscire dal bordo e a sfumare. */
+.onboarding-recent-item > .muted {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  margin-top: auto;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, var(--text) var(--space-8));
+  -webkit-mask-image: linear-gradient(90deg, transparent, var(--text) var(--space-8));
+}
+
+/* La × sta nell'angolo e si vede quando serve: sotto il puntatore o col fuoco
+   dentro il foglio. Dove il puntatore non c'è, resta in vista. */
+.onboarding-recent-item > .onboarding-forget {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  opacity: 0;
+}
+.onboarding-recent-item:hover > .onboarding-forget,
+.onboarding-recent-item:focus-within > .onboarding-forget {
+  opacity: 1;
+}
+@media (hover: none) {
+  .onboarding-recent-item > .onboarding-forget {
+    opacity: 1;
+  }
+}
+.onboarding-forget {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    opacity var(--duration-fast) var(--ease),
+    transform var(--duration-state) var(--ease);
+}
+.onboarding-forget:hover {
+  background: var(--sheet-2);
+  color: var(--text);
+}
+.onboarding-forget:active {
+  background: var(--bg-hover);
+  transform: scale(0.96);
+}
+
+/* Dove i colori li decide il sistema le ombre non ci sono: il foglio si
+   riconosce dal bordo. */
+@media (forced-colors: active) {
+  .onboarding-recent-item::after {
+    border: 1px solid CanvasText;
+  }
+  .onboarding-recent-item::before {
+    border: 1px solid GrayText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-recent-item,
+  .onboarding-recent-item::before,
+  .onboarding-recent-item::after {
+    transition: none;
+  }
+}
+
+/* --- il dimostrativo, la diagnostica ----------------------------------------- */
+/* Ciò che viene dopo: una scheda per cosa, ognuna un foglio con il suo titolo,
+   due righe che dicono che cos'è e le sue azioni. */
+.onboarding-extra {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin-top: var(--space-8);
+}
+
+.onboarding-extra section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-7);
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-1);
+}
+.onboarding-extra section > h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0;
+  line-height: var(--leading-tight);
+  text-transform: none;
+}
+.onboarding-extra section p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.onboarding-extra .onboarding-actions {
+  margin-top: var(--space-2);
+}
+/* L'anteprima del rapporto: testo da leggere riga per riga, in un riquadro
+   che scorre al suo posto. */
+.onboarding-extra pre {
+  max-height: 240px;
+  margin: 0;
+  padding: var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Diagnostica e recupero: una riga chiusa sotto tutto il resto, che quasi
+   nessuno deve aprire. */
+.onboarding-trouble {
+  display: flex;
+  flex-direction: column;
+}
+.onboarding-trouble > summary {
+  align-self: center;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.onboarding-trouble > summary:hover {
+  color: var(--text);
+}
+.onboarding-trouble > section {
+  margin-top: var(--space-5);
+}

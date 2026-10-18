@@ -3,7 +3,7 @@ import { activeDoc } from "./layout";
 import { state } from "./store";
 import { documentSessions, type DocumentSession } from "./document-session";
 import { attachRemoteSurface, DocumentWindowUnsupported, type RemoteSurfaceHandle } from "./document-bridge";
-import { showsFileBytes, textProfileFor } from "../panels/document";
+import { showsFileBytes, textProfileFor } from "./document-controller";
 import { pageName } from "../rules/mirrored";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";

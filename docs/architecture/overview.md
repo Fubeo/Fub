@@ -19,11 +19,12 @@ Il core non dipende dal formato, dal toolkit desktop o dal motore WASM.
 
 ## Dipendenze del workspace Rust
 
-Il diagramma seguente è la fotografia completa delle dipendenze dichiarate fra
-i crate del workspace. Le frecce continue indicano dipendenze normali; quelle
-tratteggiate esistono soltanto in `[dev-dependencies]`. Un test confronta il
-blocco con `cargo metadata`, quindi un crate o un arco non può restare fuori
-senza far fallire la CI.
+I due diagrammi seguenti sono, insieme, la fotografia completa delle
+dipendenze dichiarate fra i crate del workspace. Le frecce continue indicano
+dipendenze normali; quelle tratteggiate esistono soltanto in
+`[dev-dependencies]`. Un test confronta l'unione dei due blocchi con
+`cargo metadata`, quindi un crate o un arco non può restare fuori senza far
+fallire la CI.
 
 ```mermaid
 flowchart TD
@@ -37,9 +38,14 @@ flowchart TD
     sheet["fub-format-sheet"]
     base["fub-format-base"]
     canvas["fub-format-canvas"]
+    svg["fub-format-svg"]
+    scene["fub-scene"]
+    ink["fub-ink"]
+    rich["fub-format-rich"]
     importers["fub-importers"]
     cli["fub-cli"]
     services["fub-services"]
+    live["fub-live"]
     wasmhost["fub-wasm-host"]
     sdk["fub-sdk"]
     testkit["fub-testkit"]
@@ -49,6 +55,7 @@ flowchart TD
     app --> abi
     app --> host
     app --> kernel
+    app --> live
     app --> wasmhost
     host --> abi
     host --> base
@@ -56,7 +63,9 @@ flowchart TD
     host --> features
     host --> importers
     host --> markdown
+    host --> rich
     host --> sheet
+    host --> svg
     host --> kernel
     cli --> abi
     cli --> host
@@ -64,12 +73,19 @@ flowchart TD
     base --> abi
     canvas --> abi
     canvas --> markdown
+    rich --> abi
+    rich --> markdown
     importers --> abi
     features --> abi
     features --> base
+    features --> svg
+    features --> scene
     markdown --> abi
     markdown --> sdk
     sheet --> abi
+    svg --> abi
+    svg --> scene
+    scene --> ink
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -90,12 +106,78 @@ flowchart TD
     wasmhost -.-> testkit
     importers -.-> markdown
     importers -.-> sdk
+    svg -.-> sdk
+    rich -.-> sdk
+```
+
+I crate di WordCraft vendorizzati in `vendor/wordcraft/` sono codice di terzi:
+li usano soltanto il correttore della feature `proof` e `fub-format-rich` (più
+i test di `fub-host`, che scrivono `.odt` con l'esportatore), e nessuno di loro
+dipende da Fub. Il secondo blocco è lo stesso grafo, confrontato
+con lo stesso test.
+
+```mermaid
+flowchart LR
+    %% @grafo-dipendenze
+    %% Il seguito del grafo qui sopra: i crate di WordCraft e chi li usa.
+
+    features["fub-features"]
+    host["fub-host"]
+    rich["fub-format-rich"]
+    proof["wordcraft-proof"]
+    wdoc["wordcraft-doc"]
+    wdocbin["wordcraft-docbin"]
+    wdocx["wordcraft-docx"]
+    wformats["wordcraft-formats"]
+    wgeom["wordcraft-geom"]
+
+    features --> proof
+    host -.-> wformats
+    rich --> wdoc
+    rich --> wdocbin
+    rich --> wdocx
+    rich --> wformats
+    wdoc --> wgeom
+    wdocx --> wdoc
+    wdocx --> wgeom
+    wdocbin --> wdoc
+    wdocbin --> wgeom
+    wformats --> wdoc
+    wformats --> wgeom
 ```
 
 Il frontend TypeScript non è un crate Cargo. Entra nel sistema attraverso
 `fub-app`, che adatta Tauri e IPC. `fub-host` compone provider e sessioni;
 `fub-wasm-host` dipende dall'host per montare bundle, ma l'host non dipende da
-Wasmtime.
+Wasmtime. `fub-live`, la sessione live di FubDraw, non dipende da nessun altro
+crate: non vede il contratto, il kernel, l'host né Tauri. La compone `fub-app`
+sul runtime di Tauri e la affaccia alla shell con i comandi `live_*` e un canale
+di eventi per sessione.
+
+`fub-ink`, il nucleo dell'inchiostro, non ha frecce in uscita: non dipende da
+niente, nemmeno da `fub-abi`, perché deve poterlo usare ogni prodotto che
+raccoglie inchiostro e, un domani, un componente `wasm32-wasip2`. Lo
+verificano `dependency_invariant.rs` e la compilazione per quel bersaglio nella
+CI. L'unica freccia in ingresso è quella di `fub-scene`, che ne usa il campione
+del tratto; chi altro può dipenderne è un elenco chiuso, deciso nell'[ADR
+0204](../decisions/0204-nucleo-inchiostro.md).
+
+`fub-scene`, il lettore delle scene di FubDraw, ha come sola freccia in uscita
+`fub-ink`: non dipende da `fub-abi`, dal kernel, da Tauri o da Wasmtime, perché
+deve poterlo usare anche un componente `wasm32-wasip2`. Lo verificano
+`dependency_invariant.rs` e la compilazione per quel bersaglio nella CI. Lo usa
+`fub-format-svg`, il provider del [formato della
+scena](../reference/scene-format.md), che `fub-host` monta solo con la feature
+`draw`: l'arco `host --> svg` è una dipendenza facoltativa, fuori dal
+`default`. La stessa feature accende in `fub-features` l'export dei disegni in
+PNG, JPEG, SVG e PDF, con `resvg`, `svg2pdf`, i caratteri di Fub incorporati e quelli del vault,
+e il comando «Nuovo disegno», che scrive il disegno vuoto con `serialize` del
+provider, o parte da un modello o da un disegno del vault e ne cambia il solo
+titolo con `retitle`: per questo anche `features --> svg` è un arco
+facoltativo, come `features --> base` per le basi. Con la stessa feature
+`fub-features` usa `fub-scene` per derivare dal disegno le tavole o la
+selezione da esportare, e per leggere le annotazioni dei PDF, da esportare nel
+PDF annotato e nel PDF redatto: anche `features --> scene` è facoltativo.
 
 ## Flusso di un comando
 

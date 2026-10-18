@@ -57,12 +57,16 @@ import type {
   KernelNotice,
   Organization,
   PluginError,
+  HealthIssue,
+  InvokeMode,
+  PlannedEdit,
   QueryExpr,
   ResourceDescriptor,
   QueryPredicate,
   SettingEntry,
   SettingValue,
   SyntaxForm,
+  TextEdit,
   ThemeInfo,
   ThemePayload,
   UiNode,
@@ -71,8 +75,17 @@ import type {
   VaultInfo,
   ViewSpec,
   KnownVault,
+  LiveAddress,
+  LiveEvent,
+  LiveLeaveReason,
+  LivePairing,
+  LivePendingCommit,
+  LiveStarted,
+  LiveStats,
+  LiveStatus,
+  LiveWriterStatus,
 } from "./contract";
-import type { SaveArtifactOutcome } from "./ipc";
+import type { PrintArtifactOutcome, SaveArtifactOutcome } from "./ipc";
 import { mediaKindOfMime, mimeOrOctet } from "../editors/media/media-types";
 
 /// Una chiamata arrivata alla porta: quale, e con cosa.
@@ -113,6 +126,8 @@ interface Lease {
 
 /// Il tetto di una fetta di `resourceReadChunk`, come quello del kernel.
 const CHUNK_MAX = 64 * 1024;
+/// I formati di `fub-format-rich` con la feature `rich` dell'host.
+const RICH_FAKE_FORMATS: ReadonlySet<string> = new Set(["docx", "odt", "rtf", "doc"]);
 
 /// Una voce del cestino finto.
 interface Trashed {
@@ -155,8 +170,26 @@ export interface Options {
   /// I file binari del vault: path → byte. Compaiono nell'albero come gli
   /// altri, e le porte risorsa li servono davvero, a fette.
   resources?: Record<string, FakeResource>;
+  /// La feature `draw` del kernel: accesa, un `.svg` ha il formato `svg` e si
+  /// apre come disegno, un `.fubann` ha il formato `fubann` e si apre come
+  /// annotazioni, ci sono `drawing.create` e `pdf.annotate`, ed `export.run`
+  /// accetta i target `draw.*`. Spenta come nel kernel di default: un `.svg`
+  /// resta un file senza formato, testo con l'anteprima accanto.
+  draw?: boolean;
   /** Explicit OS save simulation. Unconfigured fake cannot create files. */
   saveArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<SaveArtifactOutcome>;
+  printArtifact?: (suggestedName: string, mediaType: string, bytes: readonly number[]) => Promise<PrintArtifactOutcome>;
+  /// La rete della macchina per la sessione live. Senza, le porte `live*` non
+  /// sono servite; con zero indirizzi è un PC fuori da una rete locale, che
+  /// l'app rifiuta con `unserved`.
+  live?: LiveNetwork;
+}
+
+/// Gli indirizzi privati delle interfacce attive, quello della rotta
+/// predefinita per primo, e il nome che il tablet mostra.
+export interface LiveNetwork {
+  addresses: LiveAddress[];
+  hostName?: string | null;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -203,7 +236,7 @@ export interface FakeHost {
   /// Chiede di chiudere la finestra, e **aspetta** ciò che la shell fa prima.
   ///
   /// Alza se nessuno si è iscritto: una chiusura consegnata a nessuno non
-  /// fallisce da sé, ed è esattamente il difetto che questo simula (0205).
+  /// fallisce da sé, ed è esattamente il difetto che questo simula (0208).
   close(): Promise<void>;
 
   /// Simula la chiusura nativa di una finestra documento ancora aperta.
@@ -214,6 +247,55 @@ export interface FakeHost {
   /// di più, perché è ciò che succede quando un ascoltatore si monta dopo il
   /// router — e un evento consegnato a nessuno non fallisce da sé.
   emit(event: KernelEvent): boolean;
+  /// Manda alla shell un gruppo di eventi di una sessione live, come farebbe
+  /// l'host quando lo scrittore entra, scrive o esce.
+  ///
+  /// Lo stato della sessione li segue come nell'host vero: lo scrittore che
+  /// entra consuma il QR, un `commit` resta in `liveStatus` finché la shell non
+  /// risponde. Una sequenza che l'host non produrrebbe **lancia**: un commit
+  /// senza scrittore, un `ended` con lo scrittore ancora collegato, un evento
+  /// dopo la fine. Un banco che la scrivesse proverebbe una shell per una rete
+  /// che non esiste.
+  liveEmit(session: string, events: LiveEvent[]): void;
+}
+
+/// Una sessione live del finto: ciò che l'host vero tiene, senza la rete.
+interface LiveSession {
+  document: string;
+  /// `ip:porta`, e il nome del PC che il QR porta.
+  addr: string;
+  hostName: string | null;
+  onEvents: (events: LiveEvent[]) => void;
+  ended: boolean;
+  seq: bigint;
+  pairing: LivePairing | null;
+  writer: LiveBinding | null;
+  /// In ordine di scrittore e di contatore, come nell'host.
+  pending: LivePendingCommit[];
+  stats: Record<keyof LiveStats, bigint>;
+}
+
+/// Lo scrittore abbinato, collegato o in attesa della ripresa.
+interface LiveBinding extends Omit<LiveWriterStatus, "lastC"> {
+  /// L'ultimo commit trattato già detto: non torna indietro.
+  lastC: bigint;
+  maxReceived: bigint;
+}
+
+/// La grafia unica di un contatore: un `u64` in decimale, senza zeri davanti.
+const LIVE_COUNTER = /^(0|[1-9][0-9]{0,19})$/;
+/// Quanto vale un QR nuovo e quanto aspetta la ripresa, in millisecondi. Nel
+/// finto il tempo non passa: la scadenza la manda il banco con un evento.
+const LIVE_PAIRING_MS = 5 * 60 * 1000;
+const LIVE_RESUME_MS = 2 * 60 * 1000;
+
+/// La porta e l'impronta del certificato di ogni sessione del finto.
+const LIVE_PORT = 52143;
+const LIVE_FINGERPRINT = "fake-fingerprint-of-the-session-certificate";
+
+/// Lo scrittore uscito per questi motivi può riprendere, se la sessione vive.
+function resumableLeave(reason: LiveLeaveReason): boolean {
+  return reason === "lost" || reason === "heartbeat" || reason === "congested" || reason === "tooMuchTraffic";
 }
 
 /// Un path di link letto dalla cartella di `from`, come `resolve_against` in
@@ -257,6 +339,11 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const windowCloseRequested = new Set<(event: DocumentWindowEvent) => void>();
   const windowClosed = new Set<(event: DocumentWindowEvent) => void>();
   let nextDocumentWindow = 0;
+  /// Le sessioni live, per id. Una finita resta finché la shell non la ferma,
+  /// come nel registro dell'app.
+  const liveSessions = new Map<string, LiveSession>();
+  let nextLive = 0;
+  let nextPairing = 0;
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
@@ -285,6 +372,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// non inventa byte.
   const leases = new Map<string, Lease>();
   let nextLease = 0;
+  let nextJob = 0;
 
   function write(id: string, text: string): string {
     revision += 1;
@@ -323,7 +411,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
     if (id.endsWith(".canvas")) return "canvas";
     if (id.endsWith(".base")) return "base";
     if (id.endsWith(".md") || id.endsWith(".markdown")) return "markdown";
+    if (options.draw === true && id.toLowerCase().endsWith(".svg")) return "svg";
+    if (options.draw === true && id.toLowerCase().endsWith(".fubann")) return "fubann";
+    if (id.endsWith(".docx")) return "docx";
+    if (id.endsWith(".odt")) return "odt";
+    if (id.endsWith(".rtf")) return "rtf";
+    if (id.endsWith(".doc") || id.endsWith(".dot")) return "doc";
     return null;
+  }
+
+  /// Come il registro dei formati dell'host: un documento di videoscrittura il
+  /// provider lo vuole a byte, e la shell ne riceve la proiezione
+  /// (`fub-format-rich`).
+  function sourceKindOf(id: string): "text" | "bytes" {
+    return RICH_FAKE_FORMATS.has(formatOf(id) ?? "") ? "bytes" : "text";
   }
 
   /// Registra la chiamata e restituisce ciò che la porta risponde.
@@ -375,6 +476,185 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const unavailable = <T>(name: string, args: unknown[]): Promise<T> =>
     gate(name, args, Promise.reject(new Error(`host fake: ${name} requires a configured native service`)));
 
+  // --- la sessione live -----------------------------------------------------
+  //
+  // Gli errori hanno il tipo di quelli dell'app; il testo, che lì è nella
+  // lingua di chi guarda, qui è in inglese. I limiti di misura (messaggi,
+  // snapshot, dettagli dei `nack`) restano dell'host: li provano i test di
+  // `fub-live`, e il finto non li simula.
+
+  function liveSession(session: string): LiveSession {
+    const live = liveSessions.get(session);
+    if (live) return live;
+    throw { kind: "not_found", message: `no live session ${JSON.stringify(session)} in this window` } satisfies PluginError;
+  }
+
+  /// Un contatore nella sua grafia unica, o un errore della shell: l'app
+  /// rifiuterebbe gli argomenti prima di leggerli.
+  function liveCounter(value: string, what: string): bigint {
+    if (LIVE_COUNTER.test(value) && BigInt(value) <= 0xffff_ffff_ffff_ffffn) return BigInt(value);
+    throw new Error(`host fake: ${what} ${JSON.stringify(value)} is not a counter`);
+  }
+
+  /// Un QR nuovo, con un segreto nuovo.
+  function livePairing(session: string, live: Pick<LiveSession, "addr" | "hostName">): LivePairing {
+    nextPairing += 1;
+    const name = live.hostName === null ? "" : `&n=${encodeURIComponent(live.hostName)}`;
+    return {
+      payload: `fubdraw://live?h=${live.addr}&s=${session}&k=secret${String(nextPairing).padStart(16, "0")}&f=${LIVE_FINGERPRINT}${name}`,
+      qrSvg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 29 29"><path d="M4 4h7v7H4z"/></svg>',
+      expiresInMs: LIVE_PAIRING_MS,
+    };
+  }
+
+  /// Ciò che attraversa il canale o la risposta: una copia, come dopo il JSON.
+  function liveCopy<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+
+  function liveStatusOf(live: LiveSession): LiveStatus {
+    const binding = live.writer;
+    let writer: LiveWriterStatus | null = null;
+    if (binding) {
+      // L'ultimo commit trattato: prima del primo ancora in attesa, o l'ultimo
+      // ricevuto, e mai sotto quello già detto.
+      const waiting = live.pending.find((commit) => commit.writer === binding.writer);
+      const treated = waiting ? BigInt(waiting.c) - 1n : binding.maxReceived;
+      if (treated > binding.lastC) binding.lastC = treated;
+      const { maxReceived: _, lastC, ...rest } = binding;
+      writer = { ...rest, lastC: String(lastC) };
+    }
+    return liveCopy({
+      ended: live.ended,
+      seq: String(live.seq),
+      pairingExpiresInMs: live.pairing?.expiresInMs ?? null,
+      writer,
+      pending: live.pending,
+      stats: {
+        accepted: String(live.stats.accepted),
+        refused: String(live.stats.refused),
+        admitted: String(live.stats.admitted),
+        rejected: String(live.stats.rejected),
+        commits: String(live.stats.commits),
+        answered: String(live.stats.answered),
+      },
+    });
+  }
+
+  /// Un evento dell'host applicato allo stato della sessione, o un errore se
+  /// l'host non lo produrrebbe in questo stato.
+  function liveApply(session: string, live: LiveSession, event: LiveEvent): void {
+    const impossible = (why: string) =>
+      new Error(`host fake: the live session ${JSON.stringify(session)} does not emit ${event.t} ${why}`);
+    if (live.ended) throw impossible("after it ended");
+    const binding = live.writer;
+    const connected = (writer: string) => binding?.connected === true && binding.writer === writer;
+    switch (event.t) {
+      case "writerConnected":
+        liveCounter(event.writer, "writer");
+        if (event.resumed) {
+          if (!binding || binding.writer !== event.writer || binding.connected) {
+            throw impossible("without that writer waiting to resume");
+          }
+          Object.assign(binding, {
+            device: { ...event.device },
+            caps: { ...event.caps },
+            connected: true,
+            resumeExpiresInMs: null,
+          });
+        } else {
+          // Il segreto del QR è monouso, e un secondo scrittore riceve 4003
+          // anche mentre il primo è fuori ma può riprendere.
+          if (binding) throw impossible("while another writer is paired");
+          if (!live.pairing) throw impossible("without a valid pairing");
+          live.pairing = null;
+          live.writer = {
+            writer: event.writer,
+            device: { ...event.device },
+            caps: { ...event.caps },
+            connected: true,
+            resumeExpiresInMs: null,
+            clock: null,
+            lastC: 0n,
+            maxReceived: 0n,
+          };
+        }
+        live.stats.accepted += 1n;
+        live.stats.admitted += 1n;
+        return;
+      case "writerDisconnected":
+        if (!connected(event.writer)) throw impossible("without that writer connected");
+        if (event.resumable !== resumableLeave(event.reason)) {
+          throw impossible(`with resumable ${event.resumable} for ${JSON.stringify(event.reason)}`);
+        }
+        if (event.resumable) {
+          Object.assign(binding!, { connected: false, resumeExpiresInMs: LIVE_RESUME_MS });
+        } else {
+          live.writer = null;
+        }
+        return;
+      case "writerReleased":
+        // `pairingRenewed` lo manda `livePairing` con `renew`, non il banco.
+        if (event.reason !== "resumeExpired") throw impossible(`for ${event.reason}: livePairing emits it`);
+        if (!binding || binding.writer !== event.writer || binding.connected) {
+          throw impossible("without that writer waiting to resume");
+        }
+        live.writer = null;
+        return;
+      case "inkBegin":
+      case "inkPoints":
+      case "inkEnd":
+      case "inkCancel":
+      case "view":
+        if (!binding?.connected) throw impossible("without a connected writer");
+        return;
+      case "inkGap":
+        // L'inchiostro cade nella coda verso la shell, anche dopo che lo
+        // scrittore è uscito.
+        return;
+      case "commit": {
+        if (!connected(event.writer)) throw impossible("without that writer connected");
+        const c = liveCounter(event.c, "c");
+        // Un commit rimandato dopo una ripresa non torna alla shell: o
+        // aspetta già la risposta, o l'host rimanda quella data.
+        if (c === 0n || c <= binding!.maxReceived) throw impossible(`for c ${event.c}, already received`);
+        binding!.maxReceived = c;
+        live.pending.push(liveCopy({ writer: event.writer, c: event.c, ops: event.ops }));
+        live.pending.sort((a, b) => {
+          const writer = BigInt(a.writer) - BigInt(b.writer);
+          const commit = writer === 0n ? BigInt(a.c) - BigInt(b.c) : writer;
+          return commit < 0n ? -1 : commit > 0n ? 1 : 0;
+        });
+        live.stats.commits += 1n;
+        return;
+      }
+      case "clock":
+        if (!binding) throw impossible("without a paired writer");
+        binding.clock = { offsetMs: event.offsetMs, rttMs: event.rttMs };
+        return;
+      case "pairingExpired":
+        if (!live.pairing) throw impossible("without a valid pairing");
+        live.pairing = null;
+        return;
+      case "snapshotWanted":
+        return;
+      case "ended":
+        // L'host chiude prima la connessione dello scrittore, con
+        // `sessionEnded`, e solo dopo il canale.
+        if (binding?.connected) throw impossible("while the writer is connected");
+        live.ended = true;
+        live.pairing = null;
+        return;
+    }
+    const unknown: never = event;
+    throw new Error(`host fake: unknown live event ${JSON.stringify(unknown)}`);
+  }
+
+  function liveEmit(session: string, live: LiveSession, events: LiveEvent[]): void {
+    for (const event of events) liveApply(session, live, event);
+    live.onEvents(liveCopy(events));
+  }
+
 
   function installed(id: string): InstalledPluginInfo {
     const plugin = installedPlugins.get(id);
@@ -409,7 +689,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
   /// legge dalla risposta e non dalla propria testa.
   function entryKind(id: string): VaultEntry["kind"] {
-    return id.endsWith(".md") || id.endsWith(".markdown") || id.endsWith(".fubsheet") ? "document" : "asset";
+    const format = formatOf(id);
+    return format !== null && format !== "canvas" && format !== "base" ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -561,6 +842,24 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const drafts: DraftInfo[] = [];
         return { kind: "drafts", value: paginate(drafts, q.page) };
       }
+      case "vault_health": {
+        // Solo i link rotti, i soli che il finto sa riconoscere: un wikilink il
+        // cui nome non è quello di nessuna nota (senza cartella né estensione).
+        const issues: HealthIssue[] = [];
+        if (q.check === "broken_links") {
+          const base = (id: string): string => (id.split("/").pop() ?? id).replace(/\.[^.]+$/, "").toLowerCase();
+          const names = new Set([...docs.keys()].map(base));
+          for (const [id, entry] of [...docs].sort(([a], [b]) => a.localeCompare(b))) {
+            for (const found of entry.text.matchAll(/\[\[([^\]|#\n]+)/g)) {
+              const target = (found[1] ?? "").trim();
+              if (target === "" || names.has(base(target))) continue;
+              const start = found.index ?? 0;
+              issues.push({ doc: id, check: q.check, detail: target, span: { start, end: start + found[0].length } });
+            }
+          }
+        }
+        return { kind: "vault_health", value: paginate(issues, q.page) };
+      }
       case "jobs":
         return { kind: "jobs", value: [] };
       case "resolve": {
@@ -626,7 +925,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// della palette usano per provare che un comando che non scrive non
   /// flussa — e un host finto che non lo sapesse eseguire lancerebbe al posto
   /// di rispondere.
-  function command(id: string, args: Record<string, unknown> | null) {
+  function command(id: string, args: Record<string, unknown> | null, mode: InvokeMode) {
     switch (id) {
       case "search.open":
         return { notify: null, effect: { kind: "done" as const }, undo: null, partial: null };
@@ -692,6 +991,64 @@ export function createFakeHost(options: Options = {}): FakeHost {
           partial: null,
         };
       }
+      case "drawing.create": {
+        // Come il comando della feature `draw`: il documento nuovo del
+        // provider, un modello distribuito o un disegno del vault da copiare,
+        // col titolo che diventa il nome. I modelli sono gli stessi file del
+        // comando vero, in italiano come il resto di questo vault.
+        if (options.draw !== true) throw new Error("host fake: drawing.create senza la feature draw");
+        const template = typeof args?.template === "string" ? args.template : "blank";
+        const from = typeof args?.from === "string" ? args.from : null;
+        if (from !== null && template !== "blank") {
+          throw { kind: "bad_args", message: "Un disegno nasce da un modello o da un disegno del vault, non da tutti e due." } satisfies PluginError;
+        }
+        const folder = typeof args?.folder === "string" ? args.folder.replace(/^\/+|\/+$/g, "") : "";
+        const given = typeof args?.name === "string" ? args.name.trim() : "";
+        const placed = (name: string) => (folder && !name.includes("/") ? `${folder}/${name}` : name);
+        let doc = placed(given ? (/\.svg$/i.test(given) ? given : `${given}.svg`) : "Disegno.svg");
+        if (given && docs.has(doc)) {
+          throw { kind: "already_exists", message: `«${doc}» c'è già: un disegno nuovo non prende il posto di un file.` } satisfies PluginError;
+        }
+        for (let n = 1; !given && docs.has(doc); n++) doc = placed(`Disegno ${n}.svg`);
+        const source = from !== null ? docs.get(from)?.text : template === "blank" ? blankDrawing() : DRAWING_TEMPLATES[template];
+        if (source === undefined) {
+          throw { kind: from !== null ? "not_found" : "bad_args", message: `host fake: «${from ?? template}» non c'è` } satisfies PluginError;
+        }
+        write(doc, titled(source, doc.split("/").pop()!.replace(/\.svg$/i, "")));
+        emit({ type: "document_changed", id: doc });
+        return { notify: `Creato il disegno «${doc}»`, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+      }
+      case "pdf.annotate": {
+        // Come il comando della feature `draw`: le annotazioni accanto al
+        // PDF, nate dal modello del provider la prima volta e aperte dopo.
+        if (options.draw !== true) throw new Error("host fake: pdf.annotate senza la feature draw");
+        const pdf = String(args?.pdf);
+        const doc = `${pdf}.fubann`;
+        if (docs.has(doc)) return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+        const name = pdf.split("/").pop()!;
+        const escaped = name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const href = encodeURI(name).replace(/[#?]/g, encodeURIComponent).replace(/&/g, "&amp;");
+        // Il nome della radice sta in una costante: il controllo delle icone
+        // non vuole tag SVG scritti fuori da `ui/icons.ts`, e questo non è
+        // un'icona ma un documento del vault.
+        const root = "svg";
+        write(
+          doc,
+          `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" fub:annotates="${href}">\n  <title>${escaped}</title>\n</${root}>\n`,
+        );
+        emit({ type: "document_changed", id: doc });
+        return { notify: `Create le annotazioni «${doc}»`, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+      }
+      case "export.run": {
+        // Come il comando del kernel: un target che non è registrato si
+        // rifiuta, gli altri accodano il lavoro e lo dicono, in inglese. Qui il
+        // lavoro non gira, e il file non arriva.
+        const request = JSON.parse(String(args?.request_json)) as { target?: unknown };
+        const drawTarget = typeof request.target === "string" && request.target.startsWith("draw.");
+        if (!drawTarget || options.draw !== true) throw new Error(`host fake: unknown export target \`${String(request.target)}\``);
+        nextJob += 1;
+        return { notify: `export.run queued (job ${nextJob})`, effect: { kind: "done" as const }, undo: null, partial: null };
+      }
       case "folder.create": {
         const path = String(args?.path ?? "");
         const taken =
@@ -704,6 +1061,64 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return {
           notify: null,
           effect: { kind: "custom" as const, ns: "fub.folder.created", payload: { path } },
+          undo: null,
+          partial: null,
+        };
+      }
+      case "vault.replace": {
+        // Come il vero: sostituzione **letterale** nei byte, con la parola intera
+        // se richiesta; `dry_run` dà il piano e non scrive, `apply` scrive.
+        const find = String(args?.find ?? "");
+        const replacement = String(args?.replace ?? "");
+        if (!find) throw new Error("host fake: niente da cercare");
+        const wholeWord = args?.whole_word === true;
+        const named = Array.isArray(args?.docs) ? args.docs.map(String) : [...docs.keys()];
+        const planned: PlannedEdit[] = [];
+        const rewritten = new Map<string, string>();
+        for (const doc of named) {
+          const entry = docs.get(doc);
+          if (!entry || entry.text === null) continue;
+          const text = entry.text;
+          const edits: TextEdit[] = [];
+          let out = "";
+          let from = 0;
+          for (let at = text.indexOf(find); at !== -1; at = text.indexOf(find, from)) {
+            const end = at + find.length;
+            const word = /[\p{L}\p{N}_]/u;
+            const inside = wholeWord && (word.test(text[at - 1] ?? "") || word.test(text[end] ?? ""));
+            if (inside) {
+              out += text.slice(from, end);
+            } else {
+              out += text.slice(from, at) + replacement;
+              edits.push({ span: { start: at, end }, text: replacement });
+            }
+            from = end;
+          }
+          if (edits.length === 0) continue;
+          rewritten.set(doc, out + text.slice(from));
+          planned.push({ doc, edit: { base: entry.revision, edits } });
+        }
+        if (mode === "dry_run") {
+          const count = planned.reduce((n, p) => n + p.edit.edits.length, 0);
+          return {
+            notify: null,
+            effect: {
+              kind: "plan" as const,
+              summary: `${count} sostituzioni in ${planned.length} note`,
+              docs: planned.map((p) => p.doc),
+              edits: planned,
+            },
+            undo: null,
+            partial: null,
+          };
+        }
+        for (const [doc, text] of rewritten) {
+          write(doc, text);
+          emit({ type: "document_changed", id: doc });
+        }
+        return {
+          notify: `Sostituito in ${rewritten.size} note.`,
+          effect: { kind: "done" as const },
           undo: null,
           partial: null,
         };
@@ -733,7 +1148,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
       configHealth: () => gate("configHealth", [], Promise.reject(new Error("host fake: configurazione di macchina non disponibile"))),
       recoverConfig: (path, action) => gate("recoverConfig", [path, action], Promise.reject(new Error("host fake: recovery senza disco"))),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet", "canvas", "base"], plugins: [], unread: [] };
+        const extensions = ["md", "markdown", "docx", "odt", "rtf", "doc", "dot", "fubsheet", "canvas", "base", ...(options.draw === true ? ["svg", "fubann"] : [])];
+        const info: VaultInfo = { root: path, extensions, plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id, vault) => {
@@ -743,7 +1159,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           text: doc.text,
           revision: doc.revision,
           format_id: formatOf(id),
-          source_kind: "text",
+          source_kind: sourceKindOf(id),
         }));
       },
       resourceOpen: (id, vault) => gate("resourceOpen", [id, vault], Promise.resolve().then((): ResourceDescriptor => {
@@ -801,6 +1217,10 @@ export function createFakeHost(options: Options = {}): FakeHost {
         options.saveArtifact
           ? gate("saveArtifact", [suggestedName, mediaType, bytes], options.saveArtifact(suggestedName, mediaType, bytes))
           : unavailable("saveArtifact", [suggestedName, mediaType, bytes]),
+      printArtifact: (suggestedName, mediaType, bytes) =>
+        options.printArtifact
+          ? gate("printArtifact", [suggestedName, mediaType, bytes], options.printArtifact(suggestedName, mediaType, bytes))
+          : unavailable("printArtifact", [suggestedName, mediaType, bytes]),
       listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
       openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
         if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
@@ -880,7 +1300,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
           args: named([v, instance, params, action, payload, fields], vault),
         });
         if (v === TRASH_VIEW && action === "restore") {
-          command("trash.restore", { entry: String(payload) });
+          command("trash.restore", { entry: String(payload) }, "apply");
           return Promise.resolve({ kind: "replace" as const, root: viewTree(v) });
         }
         throw new Error(`host fake: la view «${v}» non ha l'azione «${action}»`);
@@ -893,7 +1313,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const execute = () => {
           const fault = faults.get("invokeCommand");
           if (fault !== undefined) return Promise.reject(new Error(fault));
-          return Promise.resolve(command(commandId, args ?? null));
+          // Un comando che rifiuta **rifiuta la promessa**, come attraverso l'IPC:
+          // un'eccezione sincrona qui sfuggirebbe a chi aspetta con `.catch`.
+          try {
+            return Promise.resolve(command(commandId, args ?? null, mode ?? "apply"));
+          } catch (error) {
+            return Promise.reject(error);
+          }
         };
         const throttle = throttles.get("invokeCommand");
         return throttle ? throttle.then(execute) : execute();
@@ -1066,6 +1492,121 @@ export function createFakeHost(options: Options = {}): FakeHost {
         windowClosed.add(handler);
         return Promise.resolve(() => { windowClosed.delete(handler); });
       },
+      liveSupported: () => options.live !== undefined,
+      // Il registro tiene la richiesta e non il canale: gli eventi li manda
+      // il banco con `liveEmit`.
+      liveStart: (request, onEvents) =>
+        installedOperation("liveStart", [request], (): LiveStarted => {
+          const network = options.live;
+          if (!network) throw new Error("host fake: liveStart requires a configured native service");
+          liveCounter(request.snapshot.seq, "snapshot.seq");
+          const document = request.document.id;
+          if ([...liveSessions.values()].some((live) => live.document === document)) {
+            throw {
+              kind: "already_exists",
+              message: `document ${JSON.stringify(document)} already has a live session`,
+            } satisfies PluginError;
+          }
+          const chosen = request.address === undefined
+            ? network.addresses[0]
+            : network.addresses.find((address) => address.addr === request.address);
+          if (!chosen) {
+            throw (request.address === undefined
+              ? {
+                  kind: "unserved",
+                  message: "the PC is not on a local network: no active interface has a private IPv4 address",
+                }
+              : {
+                  kind: "not_found",
+                  message: `${request.address} is not a private address of an active interface`,
+                }) satisfies PluginError;
+          }
+          const session = `live-${String(++nextLive).padStart(6, "0")}`;
+          const addr = `${chosen.addr}:${LIVE_PORT}`;
+          const hostName = network.hostName ?? null;
+          const pairing = livePairing(session, { addr, hostName });
+          liveSessions.set(session, {
+            document,
+            addr,
+            hostName,
+            onEvents,
+            ended: false,
+            seq: BigInt(request.snapshot.seq),
+            pairing,
+            writer: null,
+            pending: [],
+            stats: { accepted: 0n, refused: 0n, admitted: 0n, rejected: 0n, commits: 0n, answered: 0n },
+          });
+          return liveCopy({
+            session: { session, addr, fingerprint: LIVE_FINGERPRINT, hostName },
+            pairing,
+            addresses: network.addresses,
+          });
+        }),
+      livePairing: (session, renew) =>
+        installedOperation("livePairing", [session, renew], () => {
+          const live = liveSession(session);
+          if (!renew) return live.pairing && liveCopy(live.pairing);
+          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          if (live.writer?.connected) {
+            throw { kind: "already_exists", message: "a writer is connected to the session" } satisfies PluginError;
+          }
+          live.pairing = livePairing(session, live);
+          // Lo scrittore che aspettava la ripresa la perde.
+          const released = live.writer;
+          live.writer = null;
+          if (released) live.onEvents([{ t: "writerReleased", writer: released.writer, reason: "pairingRenewed" }]);
+          return liveCopy(live.pairing);
+        }),
+      liveSend: (session, message) =>
+        installedOperation("liveSend", [session, message], () => {
+          const live = liveSession(session);
+          if (live.ended) throw { kind: "cancelled", message: "the live session has ended" } satisfies PluginError;
+          const regression = (seq: string): PluginError => ({
+            kind: "conflict",
+            message: `seq ${seq} is behind the session seq ${live.seq}`,
+          });
+          if (message.t === "ack" || message.t === "nack") {
+            liveCounter(message.writer, "writer");
+            liveCounter(message.c, "c");
+            const at = live.pending.findIndex((commit) => commit.writer === message.writer && commit.c === message.c);
+            if (at < 0) {
+              throw {
+                kind: "not_found",
+                message: `commit ${message.c} of writer ${message.writer} is not awaiting an answer`,
+              } satisfies PluginError;
+            }
+            // Un `ack` di un duplicato non porta operazioni nuove: il suo
+            // `seq` non conta.
+            if (message.t === "ack" && !message.duplicate) {
+              const seq = liveCounter(message.seq, "seq");
+              if (seq < live.seq) throw regression(message.seq);
+              live.seq = seq;
+            }
+            live.pending.splice(at, 1);
+            live.stats.answered += 1n;
+            return;
+          }
+          const seq = liveCounter(message.seq, "seq");
+          if (seq < live.seq) throw regression(message.seq);
+          live.seq = seq;
+        }),
+      liveStatus: (session) => installedOperation("liveStatus", [session], () => liveStatusOf(liveSession(session))),
+      liveStop: (session, reason) =>
+        installedOperation("liveStop", [session, reason], () => {
+          const live = liveSession(session);
+          liveSessions.delete(session);
+          // Una sessione già finita da sé non manda una seconda fine.
+          if (!live.ended) {
+            const closing: LiveEvent[] = [];
+            if (live.writer?.connected) {
+              closing.push({ t: "writerDisconnected", writer: live.writer.writer, reason: "sessionEnded", resumable: false });
+            }
+            closing.push({ t: "ended", reason });
+            liveEmit(session, live, closing);
+          }
+          return liveCopy({ pending: live.pending });
+        }),
     },
     nativeMobileBridge: () => {
       throw new Error("host fake: mobile native bridge unavailable");
@@ -1174,7 +1715,80 @@ export function createFakeHost(options: Options = {}): FakeHost {
       };
     },
     emit,
+    liveEmit: (session, events) => {
+      const live = liveSessions.get(session);
+      if (!live) throw new Error(`host fake: no live session ${JSON.stringify(session)}`);
+      liveEmit(session, live, events);
+    },
   };
+}
+
+/// I modelli di «Nuovo disegno» in italiano, per id: gli stessi file che il
+/// comando vero distribuisce.
+const DRAWING_TEMPLATES: Record<string, string> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>("../../../../crates/fub-features/templates/*.it.svg", { query: "?raw", import: "default", eager: true }),
+  ).map(([path, text]) => [path.split("/").pop()!.replace(/\.it\.svg$/, ""), text]),
+);
+
+/// La spec di `drawing.create` come la dichiara la feature `draw`, in
+/// italiano: le prove della galleria e delle sue porte la danno all'host.
+export function drawingCreateSpec(): CommandSpec {
+  const choices: [string, string][] = [
+    ["blank", "Vuoto"],
+    ["a4-portrait", "A4 verticale"],
+    ["a4-landscape", "A4 orizzontale"],
+    ["slide", "Diapositiva 16:9"],
+    ["diagram", "Diagramma di flusso"],
+    ["lesson", "Lavagna per la lezione"],
+    ["storyboard", "Storyboard"],
+    ["concept-map", "Mappa concettuale"],
+  ];
+  return {
+    id: "drawing.create",
+    title: "Nuovo disegno",
+    description: "Crea un disegno, vuoto o da un modello, e lo apre.",
+    keybinding: null,
+    params: [
+      { name: "name", title: "Nome", description: "", kind: { kind: "text" }, required: false },
+      { name: "folder", title: "Cartella", description: "", kind: { kind: "text" }, required: false },
+      {
+        name: "template",
+        title: "Modello",
+        description: "",
+        kind: { kind: "choice", value: choices.map(([value, title]) => ({ value, title })) },
+        required: false,
+      },
+      { name: "from", title: "Dal vault", description: "", kind: { kind: "document" }, required: false },
+    ],
+    scope: { writes: true, reach: "document", reversible: true },
+    surfaces: [],
+  };
+}
+
+/// Il documento nuovo del provider dei disegni: radice, titolo, carta e
+/// «Livello 1». Il nome della radice sta in una costante, come per le
+/// annotazioni.
+function blankDrawing(): string {
+  const root = "svg";
+  return [
+    `<${root} xmlns="http://www.w3.org/2000/svg" xmlns:fub="https://fubeo.github.io/ns/scene/1" fub:version="1" viewBox="0 0 1600 1000" width="1600" height="1000">`,
+    "  <title></title>",
+    '  <rect id="fub-paper" fub:role="paper" x="0" y="0" width="1600" height="1000" fill="#ffffff"/>',
+    '  <g id="livello-1" fub:layer="Livello 1">',
+    "  </g>",
+    `</${root}>`,
+    "",
+  ].join("\n");
+}
+
+/// La sorgente col titolo della radice cambiato in `title`: il testo del
+/// `<title>` che apre la radice, o un `<title>` nuovo in testa alla radice.
+/// Il titolo di una forma più in basso resta suo.
+function titled(source: string, title: string): string {
+  const text = title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const root = new RegExp(`(<${"svg"}\\b[^>]*>)(\\s*<title>[\\s\\S]*?</title>)?`);
+  return source.replace(root, (_, head: string, old: string | undefined) => (old === undefined ? `${head}\n  <title>${text}</title>` : `${head}${old.replace(/<title>[\s\S]*<\/title>/, () => `<title>${text}</title>`)}`));
 }
 
 /// L'id della view cestino del finto: la stessa che `fub-features` registra,

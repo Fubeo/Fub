@@ -1,0 +1,642 @@
+/* La cornice: barra del titolo, binario, banda di stato. */
+
+/* Ciò che sta attorno ai fogli e non appartiene a nessun documento. La
+   cornice non ha rilievo: è la scrivania stessa, e i suoi controlli sono
+   segni di grafite che diventano inchiostro sotto il puntatore e matita blu
+   quando sono accesi. Dove sta ogni cosa e quanto è grande lo decide la
+   struttura, con le misure dello «spazio dell'interfaccia»; qui c'è di che
+   superficie è fatta. */
+
+/* ── La barra del titolo ─────────────────────────────────────────────────── */
+
+.titlebar {
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+
+.titlebar-side {
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+}
+
+.titlebar-side--left {
+  gap: var(--space-3);
+}
+
+.titlebar-center {
+  gap: var(--space-4);
+}
+
+/* Il marchio: un quadrato di matita blu con la effe in corsivo. È anche il
+   bottone del menu dell'applicazione. */
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+
+.brand-mark:hover,
+.brand-mark[aria-expanded="true"] {
+  box-shadow: inset 0 0 0 999px var(--overlay-active);
+}
+
+.brand-mark:active {
+  transform: scale(0.96);
+}
+
+.brand-glyph {
+  font-family: var(--font-reading);
+  font-size: var(--text-2xl);
+  font-style: italic;
+  font-weight: var(--weight-medium);
+  line-height: 1;
+  transform: translateY(-1px);
+}
+
+/* Il chip del vault: il nome in inchiostro, un quadratino d'ambra davanti. */
+.vault-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+}
+
+.vault-chip:hover,
+.vault-chip[aria-expanded="true"] {
+  background: var(--bg-hover);
+}
+
+.vault-chip:active {
+  background: var(--bg-active);
+}
+
+.vault-chip-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-xs);
+  background: var(--amber);
+}
+
+.vault-chip[data-empty] .vault-chip-icon {
+  background: var(--border-strong);
+}
+
+.vault-chip-name {
+  max-width: 200px;
+}
+
+.vault-chip-none {
+  color: var(--muted);
+  font-weight: var(--weight-medium);
+}
+
+.vault-chip-caret {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--muted);
+  border-bottom: 1.5px solid var(--muted);
+  transform: translateY(-2px) rotate(45deg);
+}
+
+.frame-nav {
+  gap: var(--space-1);
+}
+
+/* I bottoni della barra: grafite a riposo, inchiostro sotto il puntatore,
+   matita blu quando ciò che comandano è acceso. */
+.titlebar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.titlebar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.titlebar-btn:active {
+  background: var(--bg-active);
+}
+
+.titlebar-btn[aria-expanded="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+}
+
+.titlebar-btn[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+.titlebar-btn:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.titlebar-btn--icon {
+  position: relative;
+  padding: 0;
+}
+
+.titlebar-btn--icon svg,
+.win-ctrl svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.titlebar-btn.ha-novita,
+.titlebar-btn.in-corso {
+  color: var(--text);
+}
+
+/* Il conteggio di avvisi e lavori: una pastiglia sull'angolo dell'icona, con
+   un bordo di scrivania che la stacca dal tratto. Il numero è decorativo, il
+   nome del bottone lo dice per intero. */
+.titlebar-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg);
+  color: var(--accent-contrast);
+  font-size: 9px;
+  font-weight: var(--weight-bold);
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* La pillola: a riposo dice dove sei. La cartella in grafite, il titolo in
+   inchiostro, i tasti del lanciatore su un tassello di foglio. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-2) 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--bg-hover);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+
+.pill:hover {
+  background: var(--bg-active);
+}
+
+.pill:active {
+  transform: scale(0.99);
+}
+
+.pill-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.pill-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pill-path {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill[data-empty] .pill-title {
+  color: var(--muted);
+  font-weight: var(--weight-regular);
+}
+
+.pill .titlebar-shortcut {
+  padding: 0 var(--space-4);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--sheet);
+  color: var(--muted);
+}
+
+/* I controlli della finestra: larghi quanto la struttura dice, alti quanto la
+   barra, senza raggio perché toccano l'angolo. */
+.win-ctrl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.win-ctrl:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.win-ctrl:active {
+  background: var(--bg-active);
+}
+
+.win-ctrl--close:hover,
+.win-ctrl--close:active {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+.titlebar--darwin .titlebar-side--left .window-controls {
+  padding: 0 var(--space-2);
+}
+
+/* Il menu dell'applicazione: una striscia di scrivania che copre l'ala
+   sinistra quando il marchio la apre. */
+.app-menu {
+  gap: var(--space-1);
+  padding: 0 var(--space-5) 0 var(--space-1);
+  background: var(--bg);
+  box-shadow: 12px 0 10px -6px var(--bg);
+}
+
+.app-menu button {
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+
+.app-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.app-menu button[aria-expanded="true"] {
+  background: var(--bg-active);
+}
+
+/* La ricerca fra le voci dei menu: un campo e un elenco sotto il suo pulsante.
+   È un pannello della scrivania come un menu contestuale, e come lui sta sopra
+   la barra del titolo. */
+.app-menu-search-panel {
+  position: fixed;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  max-width: calc(100vw - var(--space-5) * 2);
+  padding: var(--space-2);
+  gap: var(--space-2);
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+}
+
+.app-menu-search-input {
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.app-menu-search-input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+.app-menu-search-list {
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.app-menu-search-option {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.app-menu-search-option[aria-selected="true"] {
+  background: var(--bg-active);
+}
+
+.app-menu-search-group {
+  min-width: 64px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.app-menu-search-label {
+  flex: 1;
+}
+
+.app-menu-search-hint {
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.app-menu-search-status {
+  padding: 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.app-menu-search-status:empty {
+  display: none;
+}
+
+/* ── Il binario ──────────────────────────────────────────────────────────── */
+
+.rail {
+  padding: var(--space-2) 0 var(--space-3);
+  background: var(--bg);
+}
+
+.rail-main {
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
+}
+
+.rail-foot {
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+}
+
+.rail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: transform var(--duration-state) var(--ease);
+}
+
+.rail-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.rail-btn:active {
+  background: var(--bg-active);
+  transform: scale(0.96);
+}
+
+.rail-btn[aria-pressed="true"],
+.rail-btn[aria-expanded="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* L'icona scelta si «inchiostra»: a riposo è solo contorno, da attiva le forme
+   chiuse prendono un velo del colore d'accento. I tratti aperti non si
+   riempiono (un segmento non ha area), quindi non serve distinguerli. */
+.rail-btn[aria-pressed="true"] svg,
+.rail-btn[aria-expanded="true"] svg,
+.inspector-tab[aria-selected="true"] svg {
+  fill: color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
+/* A cassetto chiuso il pannello resta scelto ma non si vede: l'icona torna a
+   riposo, e si riaccende quando il cassetto si apre. */
+.rail[data-drawer="closed"] .rail-btn[aria-pressed="true"] {
+  background: transparent;
+  color: var(--muted);
+}
+
+.rail[data-drawer="closed"] .rail-btn[aria-pressed="true"] svg {
+  fill: none;
+}
+
+.rail[data-drawer="closed"] .rail-btn[aria-pressed="true"]:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.rail-btn:disabled {
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rail-btn-manage {
+  font-family: var(--font-ui);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+/* La tacca del pannello aperto: un tratto di matita blu sul bordo del
+   binario, che scivola da un'icona all'altra. */
+.rail-notch {
+  width: 3px;
+  height: 16px;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  background: var(--accent);
+}
+
+/* ── L'ispettore: titolo e schede ────────────────────────────────────────── */
+
+.inspector-title {
+  display: flex;
+  align-items: center;
+  min-height: var(--drawer-head-h);
+  padding: 0 var(--drawer-pad) 0 calc(var(--drawer-pad) + var(--space-4));
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* «Segue: nota»: a destra del titolo, in grafite. Cede per prima, perché il
+   titolo dice che vista è e questa riga solo da che cosa dipende. */
+.inspector-title > .inspector-follows {
+  flex: 0 1 auto;
+  margin-left: auto;
+  padding-left: var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+}
+.inspector-title > .inspector-follows[hidden] {
+  display: none;
+}
+
+.inspector-tabs {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--drawer-pad) var(--space-3);
+}
+
+.inspector-tab {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.inspector-tab:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.inspector-tab[aria-selected="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+
+/* ── La banda di stato ───────────────────────────────────────────────────── */
+
+.status-band {
+  gap: var(--space-5);
+  padding: 0 var(--space-5);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.status-side {
+  gap: var(--space-5);
+}
+
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  white-space: nowrap;
+}
+
+.status-item[data-tone]::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+
+.status-item[data-tone="ok"]::before {
+  background: var(--success);
+}
+
+.status-item[data-tone="busy"]::before {
+  background: var(--accent);
+}
+
+.status-item[data-tone="warn"]::before {
+  background: var(--warning);
+}
+
+.status-item--button {
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.status-item--button:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+/* ── La concentrazione ───────────────────────────────────────────────────── */
+
+/* La scrivania si spegne di un gradino: il foglio resta l'unica cosa chiara.
+   Il velo è appena un'ombra, perché le linguette dietro restano leggibili. */
+.desk::before {
+  background: color-mix(in oklab, black 9%, transparent);
+  transition: opacity var(--duration-slow) var(--ease);
+}

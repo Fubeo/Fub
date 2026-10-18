@@ -23,6 +23,9 @@ export interface MediaSurfaceDeps {
   pdfLoader?: PdfEngineLoader;
   openExternal?: (id: string) => void | Promise<void>;
   copyText?: (text: string) => Promise<void>;
+  /// «Annota» sul PDF: crea o apre le sue annotazioni. `available` dice se il
+  /// kernel ha il comando, cioè se il vault serve le annotazioni.
+  annotate?: { available(): boolean; run(pdf: string): Promise<void> };
 }
 
 const MEDIA_MODES: SurfaceMode[] = [
@@ -180,6 +183,7 @@ async function mountBytes(
             deps.copyText == null
               ? undefined
               : (n: number) => deps.copyText!(`${pdfIdWithoutFragment(documentId)}#page=${n}`),
+          onAnnotate: deps.annotate?.available() ? () => deps.annotate!.run(pdfIdWithoutFragment(documentId)) : undefined,
         },
         life,
       );

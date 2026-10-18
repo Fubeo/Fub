@@ -1,0 +1,26 @@
+{
+  "name": "remove-instance-keeps-symbol",
+  "description": "togliere l'ultima istanza lascia il simbolo, che non si raccoglie mai; l'inversa la rimette al suo posto",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <defs id=\"fub-defs\">\n    <symbol id=\"r5e6f7a8b\" overflow=\"visible\">\n      <title>Lampadina</title>\n      <circle id=\"o9a8b7c6d\" cx=\"0\" cy=\"0\" r=\"20\" fill=\"#f0e442\"/>\n    </symbol>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n    <use id=\"o1b2c3d4e\" transform=\"translate(200 150)\" href=\"#r5e6f7a8b\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "remove",
+      "target": "o1b2c3d4e"
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Prova</title>\n  <defs id=\"fub-defs\">\n    <symbol id=\"r5e6f7a8b\" overflow=\"visible\">\n      <title>Lampadina</title>\n      <circle id=\"o9a8b7c6d\" cx=\"0\" cy=\"0\" r=\"20\" fill=\"#f0e442\"/>\n    </symbol>\n  </defs>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "add",
+      "slot": {
+        "parent": "l3f8a0c2d",
+        "after": "o2b3c4d5e",
+        "skip": 0,
+        "lead": ""
+      },
+      "gap": "\n    ",
+      "raw": "<use id=\"o1b2c3d4e\" transform=\"translate(200 150)\" href=\"#r5e6f7a8b\"/>"
+    }
+  }
+}

@@ -60,8 +60,12 @@ pub fn specs() -> Vec<CommandSpec> {
             vec![param("job", "Stable import ID")]),
         spec(IMPORT_ABANDON, "Abandon interrupted import", "Keep the vault as it is: discard the journal and preimages of an interrupted import without touching any target. Use it when rollback cannot prove which targets are the import's. A committed import is rolled back instead.", true,
             vec![param("job", "Stable import ID")]),
+        // Un export non scrive nel vault, ma accodarlo è un effetto: dichiarato
+        // di sola lettura, il comando gira su un host in simulazione e il
+        // guardiano gli nega il job.
         spec(EXPORT_RUN, "Export documents", "Run a registered export target; job result contains portable artifact bytes. request_json is a serialized ExportRequest.", false,
-            vec![param("request_json", "ExportRequest JSON")]),
+            vec![param("request_json", "ExportRequest JSON")])
+            .with_scope(CommandScope::writing(CommandReach::Session)),
     ]
 }
 fn required<'a>(args: &'a serde_json::Value, key: &str) -> Result<&'a str, PluginError> {

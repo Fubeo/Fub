@@ -7,7 +7,7 @@ import { $ } from "../ui/dom";
 import { highlighted } from "../ui/highlight";
 import { setTooltip } from "../ui/tooltip";
 import { refreshOn, registerPanel, unregisterPanel } from "../ui/panel-host";
-import { openDocument, reveal } from "./document";
+import { openDocument, reveal } from "../state/document-controller";
 import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -16,6 +16,8 @@ import { rememberSearch } from "../state/recent";
 import { createNote } from "../state/vault";
 import { notify } from "../ui/notify";
 import { Race } from "../ui/race";
+import { applyOptions, queryText, replaceableText } from "../rules/search-options";
+import { mountSearchTools, type Replacement, type SearchTools } from "./search-tools";
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { ClipboardUnavailable, writeClipboardText } from "../platform/clipboard";
@@ -36,13 +38,26 @@ let searchTimer: number | undefined;
 /// tutt'e tre i modi: un giro per ricerca, il controllo anche nel ramo
 /// d'errore, e l'annullamento a mani vuote.
 const race = new Race();
+/// Le opzioni e la sostituzione, create da `mountSearch` e sciolte con lei.
+let searchTools: SearchTools | null = null;
 /// La query del vault **di questa sessione**: aprire un risultato non la azzera
 /// (U17) e cambiarla non tocca quella di un altro vault (R07: il cambio vault
 /// passa da `clearSearch`, non da una memoria condivisa).
 export function mountSearch(lifetime: Lifetime): void {
   // Le esclusioni restano mentre si affina la query: si vedono come etichette
   // sopra i risultati e si tolgono una per una (o tutte con Esc).
-  lifetime.listen(searchInputEl, "input", () => scheduleSearch());
+  searchTools = mountSearchTools(lifetime, {
+    input: searchInputEl,
+    rerun: () => void runSearch(),
+    replacement: currentReplacement,
+  });
+  lifetime.add(() => {
+    searchTools = null;
+  });
+  lifetime.listen(searchInputEl, "input", () => {
+    searchTools?.invalidate();
+    scheduleSearch();
+  });
   lifetime.listen(searchInputEl, "keydown", (e) => {
     // La casella ha i suoi tasti, e sono questi: Invio apre il primo risultato,
     // Escape pulisce l'input e resta nel campo. La navigazione completa della
@@ -108,6 +123,7 @@ function scheduleSearch(): void {
 /// arbitrariamente una view ancora valida — `syncRail` decide cosa mostrare.
 function clearSearchState(): void {
   window.clearTimeout(searchTimer);
+  searchTools?.reset();
   searchInputEl.value = "";
   excluded.clear();
   excludedFolders.clear();
@@ -130,6 +146,32 @@ export function searchFor(query: string): void {
   excludedFolders.clear();
   searchInputEl.value = query;
   void runSearch();
+}
+
+/// Il tetto delle note che una sostituzione nomina: oltre, l'anteprima sarebbe
+/// una lista che nessuno legge, e si chiede di restringere la ricerca.
+const REPLACE_LIMIT = 500;
+
+/// Che cosa sostituirebbe la ricerca di adesso: la stringa, e le note **che i
+/// risultati mostrano** (esclusioni comprese), non il vault intero.
+async function currentReplacement(): Promise<Replacement> {
+  const raw = searchInputEl.value.trim();
+  const options = searchTools?.options();
+  if (raw === "" || !options) return { reason: "empty" };
+  const expression = applyOptions(
+    searchExpression(queryText(raw, options), [...excluded], [...excludedFolders]),
+    options,
+  );
+  const find = replaceableText(expression, options);
+  if (find === null) return { reason: "not_text" };
+  const docs: string[] = [];
+  for (;;) {
+    const page = await matchingDocuments(expression, { offset: docs.length, limit: 200 });
+    docs.push(...page.items.map((hit) => hit.doc));
+    if (docs.length > REPLACE_LIMIT) return { reason: "too_many" };
+    if (page.items.length === 0 || docs.length >= page.total) break;
+  }
+  return { find, docs, wholeWord: options.wholeWord };
 }
 
 /// Stati distinti (U15): iniziale (casella vuota), caricamento (solo se la
@@ -161,7 +203,9 @@ async function runSearch(): Promise<void> {
   // riepilogo e i risultati di prima restano dove sono.
   let expression: ReturnType<typeof searchExpression>;
   try {
-    expression = searchExpression(query, [...excluded], [...excludedFolders]);
+    const options = searchTools?.options();
+    expression = searchExpression(options ? queryText(query, options) : query, [...excluded], [...excludedFolders]);
+    if (options) expression = applyOptions(expression, options);
   } catch (error) {
     if (error instanceof SearchSyntaxError) {
       race.cancel();

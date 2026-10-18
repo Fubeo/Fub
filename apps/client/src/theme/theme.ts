@@ -7,29 +7,28 @@ import { onEvent } from "../state/kernel";
 import { emit, on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { reportThemeTrouble } from "../ui/notify";
-import sheetDarkHigh from "./serie/sheet-dark-high.css?raw";
-import sheetDark from "./serie/sheet-dark.css?raw";
-import sheetLightHigh from "./serie/sheet-light-high.css?raw";
-import sheetLight from "./serie/sheet-light.css?raw";
-import fonts from "./serie/fonts.css?raw";
-import skin from "./serie/skin.css?raw";
 import {
   mount,
   mountPreferences,
   mountThemeBundle,
   validateThemeBundle,
+  declareThemeProfile,
   type ThemeBundleManifest,
   type ThemeMountResult,
+  type ThemeProfile,
 } from "./loader";
-import { accentPalette, type ContrastLevel } from "./serie/recipe";
+import type { ContrastLevel } from "./scrittoio/recipe";
+import { SCRITTOIO_SERIES } from "./scrittoio/series";
 import { mountCssSnippets } from "./snippets";
-import { setReducedMotionPreference } from "./reduced-motion";
+import { setMotionPreference } from "../moto/level";
 import { setFrameRatePreference } from "./frame-rate";
 import { setDiagramStylePreference } from "./diagram-style";
+import { applyThemeOptions, resolveThemeOptions, type ThemeOption } from "./options";
 
 export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
-export type ReadingFont = "literata" | "inter" | "system";
+/** Una voce di `appearance.font`: quali esistono lo dice la serie in vigore. */
+export type ReadingFont = string;
 
 export interface ThemePreviewSelection {
   id: string;
@@ -50,20 +49,12 @@ export const THEME_ID_KEY = "appearance.theme-id";
 export const MOTION_KEY = "appearance.motion";
 export const FRAME_RATE_KEY = "appearance.frame-rate";
 export const DIAGRAM_STYLE_KEY = "appearance.diagram-style";
+export const COMPACTNESS_KEY = "chrome.compactness";
 const THEME_CACHE = "fub.appearance.theme";
 export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
-const SERIES_MANIFEST: ThemeBundleManifest = {
-  id: SERIES_THEME_ID,
-  name: "Fub di serie",
-  version: "1.0.0",
-  engine: "theme-1",
-  lights: ["dark", "light"],
-  asset_namespace: "theme://fub.serie/",
-  motion: ["opacity", "transform"],
-};
 export interface AppearancePreferences {
   density: Density;
   body: number;
@@ -71,33 +62,63 @@ export interface AppearancePreferences {
   measure: number;
   font: ReadingFont;
   accent: number;
+  /** `chrome.compactness`: lo spazio dell'interfaccia, da 0 a 4. Assente = 0. */
+  compactness?: number;
 }
 
-const DEFAULT_PREFERENCES: AppearancePreferences = {
-  density: "comfortable",
-  body: 16,
-  lineHeight: 1.7,
-  measure: 70,
-  font: "literata",
-  accent: 130,
-};
+/**
+ * Una **serie**: ciò che la shell monta quando nessun tema installato è
+ * scelto, e ciò su cui ricade quando quello scelto non regge.
+ *
+ * Tiene insieme le cose che cambiano insieme passando da una shell all'altra:
+ * il profilo del cancello, i fogli, la pelle, i caratteri, i predefiniti e il
+ * modo in cui le preferenze della persona diventano token. Di serie è lo
+ * Scrittoio; chi compone la shell può dichiararla all'avvio
+ * (`declareThemeSeries`), e un banco può dichiararne un'altra e tornare
+ * indietro.
+ */
+export interface ThemeSeries {
+  readonly manifest: ThemeBundleManifest;
+  readonly profile: ThemeProfile;
+  readonly fonts: string;
+  readonly skin: string;
+  /** Ciò che vale finché la persona non ha scelto. */
+  readonly defaults: AppearancePreferences;
+  /** Le voci di `appearance.font` che la serie sa rendere, con la loro pila. */
+  readonly readingFonts: Readonly<Record<string, string>>;
+  sheet(light: Theme, contrast: ContrastLevel): string;
+  /** I token di densità, accento e cornice: ciò che è proprio della serie. */
+  tokens(preferences: AppearancePreferences, light: Theme, contrast: ContrastLevel): Record<string, string>;
+}
 
-const DENSITY_SPACES: Readonly<Record<Density, readonly number[]>> = {
-  compact: [2, 4, 4, 6, 8, 10, 12, 18, 24, 36],
-  comfortable: [2, 4, 6, 8, 10, 12, 16, 24, 32, 48],
-  relaxed: [2, 4, 8, 10, 12, 16, 20, 28, 36, 52],
-};
+let series: ThemeSeries = SCRITTOIO_SERIES;
 
-const READING_FONTS: Readonly<Record<ReadingFont, string>> = {
-  literata: '"Literata Variable", Georgia, "Times New Roman", serif',
-  inter: '"Inter Variable", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-  system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
-};
+/** La serie in vigore in questa finestra. */
+export function themeSeries(): ThemeSeries {
+  return series;
+}
+
+/**
+ * Dichiara la serie della shell, e con lei il profilo del cancello. Va
+ * chiamata prima di `mountTheme`. Rende il modo di tornare alla precedente.
+ */
+export function declareThemeSeries(next: ThemeSeries): () => void {
+  const previous = series;
+  series = next;
+  const restoreProfile = declareThemeProfile(next.profile);
+  preferences = { ...next.defaults };
+  return () => {
+    restoreProfile();
+    if (series !== next) return;
+    series = previous;
+    preferences = { ...previous.defaults };
+  };
+}
 
 let themeChoice: Theme | "" = "";
 let contrastChoice = "";
-let preferences: AppearancePreferences = { ...DEFAULT_PREFERENCES };
-let selectedThemeId = SERIES_MANIFEST.id;
+let preferences: AppearancePreferences = { ...series.defaults };
+let selectedThemeId = SERIES_THEME_ID;
 let previewSelection: ThemePreviewSelection | null = null;
 let installedThemes: ThemeInfo[] = [];
 let catalogLoaded = false;
@@ -115,6 +136,17 @@ let selectionGeneration = 0;
 /// scrivono, la selezione in memoria è loro e `reread` non la tocca.
 let selecting = 0;
 let warn: (theme: Theme) => void = () => {};
+/// L'ultima lettura delle impostazioni: da lì vengono i valori delle scelte
+/// che il tema montato dichiara.
+let settingEntries: readonly SettingEntry[] = [];
+let mountedOptions: ThemeOptions = { themeId: SERIES_THEME_ID, themeName: "", options: [] };
+
+/** Le scelte del tema montato, col valore che vale adesso. */
+export interface ThemeOptions {
+  readonly themeId: string;
+  readonly themeName: string;
+  readonly options: readonly ThemeOption[];
+}
 export function effectiveTheme(choice: unknown, systemDark: boolean): Theme {
   if (choice === "light" || choice === "dark") return choice;
   return systemDark ? "dark" : "light";
@@ -141,6 +173,11 @@ export function currentContrast(): ContrastLevel {
   return document.documentElement.dataset.contrast === "high" ? "high" : "normal";
 }
 
+/** Le preferenze d'aspetto in vigore: una copia, non la cosa viva. */
+export function currentPreferences(): AppearancePreferences {
+  return { ...preferences };
+}
+
 function bounded(value: unknown, fallback: number, min: number, max: number): number {
   return typeof value === "number" && Number.isFinite(value)
     ? Math.min(max, Math.max(min, value))
@@ -148,16 +185,19 @@ function bounded(value: unknown, fallback: number, min: number, max: number): nu
 }
 
 function normalizedPreferences(raw: Partial<AppearancePreferences>): AppearancePreferences {
+  const defaults = series.defaults;
+  const known = typeof raw.font === "string" && Object.prototype.hasOwnProperty.call(series.readingFonts, raw.font);
   return {
     density:
-      raw.density === "compact" || raw.density === "relaxed"
+      raw.density === "compact" || raw.density === "relaxed" || raw.density === "comfortable"
         ? raw.density
-        : "comfortable",
-    body: bounded(raw.body, DEFAULT_PREFERENCES.body, 12, 28),
-    lineHeight: bounded(raw.lineHeight, DEFAULT_PREFERENCES.lineHeight, 1.2, 2.4),
-    measure: bounded(raw.measure, DEFAULT_PREFERENCES.measure, 40, 100),
-    font: raw.font === "inter" || raw.font === "system" ? raw.font : "literata",
-    accent: bounded(raw.accent, DEFAULT_PREFERENCES.accent, 0, 360),
+        : defaults.density,
+    body: bounded(raw.body, defaults.body, 12, 28),
+    lineHeight: bounded(raw.lineHeight, defaults.lineHeight, 1.2, 2.4),
+    measure: bounded(raw.measure, defaults.measure, 40, 100),
+    font: known ? (raw.font as string) : defaults.font,
+    accent: bounded(raw.accent, defaults.accent, 0, 360),
+    compactness: Math.round(bounded(raw.compactness, defaults.compactness ?? 0, 0, 4)),
   };
 }
 
@@ -169,20 +209,12 @@ export function preferenceTokens(
 ): Record<string, string> {
   const safe = normalizedPreferences(value);
   const tokens: Record<string, string> = {};
-  DENSITY_SPACES[safe.density].forEach((space, index) => {
-    tokens[`space-${index + 1}`] = `${space}px`;
-  });
-  tokens["font-reading"] = READING_FONTS[safe.font];
+  tokens["font-reading"] = series.readingFonts[safe.font] ?? series.readingFonts[series.defaults.font]!;
   tokens["text-reading"] = `${safe.body}px`;
   tokens["leading-relaxed"] = String(safe.lineHeight);
   tokens["content-width"] = `${safe.measure}ch`;
-  Object.assign(tokens, accentPalette(light, contrast, safe.accent));
+  Object.assign(tokens, series.tokens(safe, light, contrast));
   return tokens;
-}
-
-function sheetFor(light: Theme, contrast: ContrastLevel): string {
-  if (light === "dark") return contrast === "high" ? sheetDarkHigh : sheetDark;
-  return contrast === "high" ? sheetLightHigh : sheetLight;
 }
 
 function themeBundle(payload: ThemePayload): {
@@ -267,7 +299,7 @@ async function apply(): Promise<void> {
   if (generation !== applyGeneration) return;
   if (!mounted?.mounted) {
     mounted = mountThemeBundle(
-      { manifest: SERIES_MANIFEST, sheet: sheetFor(light, contrast), skin, assets: {} },
+      { manifest: series.manifest, sheet: series.sheet(light, contrast), skin: series.skin, assets: {} },
       light,
     );
     if (!mounted.mounted) return;
@@ -279,6 +311,18 @@ async function apply(): Promise<void> {
     document.documentElement.dataset.theme = light;
     document.documentElement.dataset.contrast = contrast;
   }
+
+  // Le scelte che il tema montato lascia a chi lo usa: sono sue, e cambiato
+  // tema non ne resta nessuna del precedente.
+  const owner = actualId === SERIES_THEME_ID
+    ? series.manifest
+    : installedThemes.find((theme) => theme.manifest.id === actualId)?.manifest ?? series.manifest;
+  mountedOptions = {
+    themeId: actualId,
+    themeName: owner.name,
+    options: resolveThemeOptions(actualId, owner.settings, settingEntries),
+  };
+  applyThemeOptions(document.documentElement, mountedOptions.options);
 
   const tokens = preferenceTokens(preferences, light, contrast);
   const serialized = JSON.stringify(tokens);
@@ -309,6 +353,7 @@ async function reread(): Promise<void> {
     return;
   }
   if (epoch !== catalogEpoch) return;
+  settingEntries = entries;
   const theme = valueOf(entries, THEME_KEY);
   const contrast = valueOf(entries, CONTRAST_KEY);
   const previousChoice = themeChoice;
@@ -318,7 +363,10 @@ async function reread(): Promise<void> {
     if (theme === "lime") themeChoice = "dark";
   }
   contrastChoice = typeof contrast === "string" ? contrast : "";
-  setReducedMotionPreference(valueOf(entries, MOTION_KEY) === "reduced");
+  // Dal canale dei tre livelli, non da quello del moto ridotto: scrivono lo
+  // stesso attributo, e il secondo cancellerebbe «calmo».
+  const motion = valueOf(entries, MOTION_KEY);
+  setMotionPreference(motion === "reduced" ? "reduced" : motion === "calm" ? "calm" : "system");
   setFrameRatePreference(valueOf(entries, FRAME_RATE_KEY));
   setDiagramStylePreference(valueOf(entries, DIAGRAM_STYLE_KEY));
   preferences = normalizedPreferences({
@@ -328,6 +376,7 @@ async function reread(): Promise<void> {
     measure: valueOf(entries, MEASURE_KEY) as number,
     font: valueOf(entries, FONT_KEY) as ReadingFont,
     accent: valueOf(entries, ACCENT_KEY) as number,
+    compactness: valueOf(entries, COMPACTNESS_KEY) as number,
   });
   // L'id scritto nelle impostazioni della macchina è autorevole. Se non è mai
   // stato scritto (una shell precedente lo teneva solo nella cache), vale la
@@ -378,11 +427,13 @@ async function readCatalog(): Promise<ThemeInfo[]> {
             try {
               for (const light of info.manifest.lights) {
                 const payload = await api.readTheme(info.manifest.id, light);
-                if (
-                  payload.manifest.id !== info.manifest.id ||
-                  payload.light !== light ||
-                  validateThemeBundle(themeBundle(payload), light).length > 0
-                ) {
+                if (payload.manifest.id !== info.manifest.id || payload.light !== light) return null;
+                // Un fascio che il cancello rifiuta resta installato ma fuori
+                // dal catalogo, e la persona sa perché: è anche il caso di un
+                // tema `theme-1`, scritto per la shell di prima.
+                const reasons = validateThemeBundle(themeBundle(payload), light);
+                if (reasons.length > 0) {
+                  reportThemeTrouble({ type: "theme", theme: info.manifest.name, reasons });
                   return null;
                 }
                 catalogPayloads.set(`${info.manifest.id}:${light}`, payload);
@@ -420,6 +471,12 @@ export function themeTrust(id: string): "core" | "community" {
 /** L'identità effettivamente scelta, non solo la luce che le appartiene. */
 export function currentThemeId(): string {
   return selectedThemeId;
+}
+
+/** Le scelte del tema montato adesso (anche in anteprima). Cambiano con il
+ * segnale `theme`, come tutto ciò che il tema scrive sulla radice. */
+export function currentThemeOptions(): ThemeOptions {
+  return mountedOptions;
 }
 
 /** L'anteprima temporanea corrente, che non modifica impostazioni o cache. */
@@ -506,7 +563,7 @@ function loadCache(): void {
   selectedThemeId = SERIES_THEME_ID;
   previewSelection = null;
   contrastChoice = "";
-  preferences = { ...DEFAULT_PREFERENCES };
+  preferences = { ...series.defaults };
   try {
     const cachedTheme = localStorage.getItem(THEME_CACHE) ?? "";
     try {
@@ -534,7 +591,7 @@ function loadCache(): void {
     themeChoice = "";
     selectedThemeId = SERIES_THEME_ID;
     contrastChoice = "";
-    preferences = { ...DEFAULT_PREFERENCES };
+    preferences = { ...series.defaults };
   }
 }
 
@@ -556,10 +613,11 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   catalogPayloads = new Map<string, ThemePayload>();
   mountedVariant = "";
   mountedPreferenceText = "";
+  settingEntries = [];
   mountedLight = hadMountedTheme ? mountedLight : null;
   suppressInitialWarning = !hadMountedTheme;
   warn = onChange;
-  mount(fonts, "caratteri");
+  mount(series.fonts, "caratteri");
   mountCssSnippets(lifetime);
   void apply();
   for (const query of [DARK_QUERY, CONTRAST_QUERY]) {

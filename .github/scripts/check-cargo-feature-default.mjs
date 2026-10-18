@@ -53,6 +53,23 @@ import { crateDelWorkspace } from "./workspace-members.mjs";
 // qualcun altro lo faccia.
 const FUORI_DAL_DEFAULT = new Map([
   // ["crates/x/Cargo.toml#feature", "chi la compila, e in quale passo di CI"],
+  //
+  // Il formato `svg` delle scene di FubDraw (ADR 0203). Accenderlo cambia la
+  // natura di ogni `.svg` del vault, da allegato a documento: è una scelta di
+  // chi monta, non un default.
+  [
+    "crates/fub-host/Cargo.toml#draw",
+    "job test, passo «le scene di FubDraw, con la feature `draw` dell'host»; " +
+      "clippy nel job fmt",
+  ],
+  // L'export dei disegni in PNG e PDF: va con il formato qui sopra, che
+  // `fub-host/draw` accende insieme a lei, e porta un rasterizzatore, un
+  // convertitore PDF e i caratteri di Fub che senza disegni non servono.
+  [
+    "crates/fub-features/Cargo.toml#draw",
+    "job test, passo «l'export dei disegni, con la feature `draw` delle feature»; " +
+      "clippy nel job fmt",
+  ],
 ]);
 
 /**

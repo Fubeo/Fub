@@ -1,0 +1,4532 @@
+/* La struttura della shell Scrittoio: ciò che non si tematizza.
+ *
+ * Tre cose stanno qui e in nessun pezzo di pelle:
+ *
+ * 1. **La griglia della finestra**: barra del titolo, binario, cassetti,
+ *    scrivania, banda di stato. Un tema veste queste regioni, non le sposta.
+ * 2. **Le misure della cornice**, come token. Il passo 0 dello «spazio
+ *    dell'interfaccia» è dichiarato qui; gli altri passi li ridichiara la shell
+ *    nel canale delle preferenze, dopo ogni pelle, così la scelta della persona
+ *    vince su qualunque tema. Le misure dei fogli non hanno passi: lo spazio
+ *    che la cornice cede va al foglio, e il foglio non cambia forma.
+ * 3. **Le garanzie**: `[hidden]` nasconde, il fuoco si vede, il moto ridotto è
+ *    ridotto, i colori forzati restano leggibili. Una pelle non le può revocare
+ *    perché non passano da lei.
+ *
+ * Questo file è importato dall'ingresso della shell e non dal caricatore: non
+ * attraversa il sanificatore, quindi può usare ciò che a una pelle è negato
+ * (`container-type`, `overscroll-behavior`, `scrollbar-gutter`).
+ */
+
+:root {
+  /* I piani. Una superficie che intrappola il fuoco sta su `--z-modal`, e
+     sotto di lei non ne passa un'altra che lo intrappoli. */
+  --z-sheet: 1;
+  --z-sheet-active: 2;
+  --z-drawer: 40;
+  --z-menu: 50;
+  --z-picker: 60;
+  --z-popover: 70;
+  --z-dialog: 80;
+  --z-toast: 85;
+  --z-modal: 90;
+  --z-drag: 95;
+
+  /* La cornice al passo 0 di `chrome.compactness`. */
+  --titlebar-h: 40px;
+  --chrome-btn: 28px;
+  --win-ctrl-w: 46px;
+  --rail-w: 44px;
+  --rail-icon: 18px;
+  --rail-target: 32px;
+  --drawer-icon: 16px;
+  --tree-indent: 16px;
+  --drawer-pad: 12px;
+  --drawer-head-h: 36px;
+  --sidebar-w: 264px;
+  --sidebar-min: 208px;
+  --inspector-w: 300px;
+  --inspector-min: 248px;
+  --status-h: 26px;
+
+  /* I fogli: fermi a ogni passo. */
+  --sheet-gap: 8px;
+  /* Il foglio di testo che resta solo in concentrazione. */
+  --focus-sheet-width: 56rem;
+  --tab-h: 34px;
+  --tab-min: 96px;
+  --tab-max: 220px;
+  --sheet-head-h: 40px;
+  --format-bar-h: 36px;
+  --tab-fillet: 8px;
+  --tab-air: 4px;
+  --tab-lap: 2px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ── Le garanzie ─────────────────────────────────────────────────────────── */
+
+[hidden] {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+}
+
+@media (forced-colors: active) {
+  :focus-visible,
+  .kit-dialog-actions > :focus {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Una voce d'albero col fuoco contiene anche il suo sottoalbero: l'anello lo
+     porta la riga, o cingerebbe l'intera cartella aperta. */
+  [role="treeitem"]:focus-visible {
+    outline: none !important;
+  }
+
+  [role="treeitem"]:focus-visible > .tree-row {
+    outline: 2px solid Highlight !important;
+    outline-offset: -2px !important;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    border: 1px solid ButtonText;
+  }
+
+  [aria-current="true"],
+  [aria-selected="true"],
+  [aria-checked="true"],
+  [aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* In un dialogo il pulsante col fuoco è quello che Invio preme. L'anello si
+   vede anche quando il dialogo è nato da un clic: lì il browser, da solo, non
+   lo mostrerebbe, e la risposta di serie resterebbe senza un segno. */
+.kit-dialog-actions > :focus {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ui-webview-frame {
+  display: inline-block;
+  line-height: 0;
+  vertical-align: top;
+}
+
+.ui-webview-frame > .ui-webview {
+  display: block;
+}
+
+.ui-webview-frame:focus-within,
+.ui-webview-frame--keyboard {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.skip-link {
+  position: fixed;
+  z-index: var(--z-modal);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── La finestra ─────────────────────────────────────────────────────────── */
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: var(--titlebar-h) minmax(0, 1fr) auto;
+  position: relative;
+  isolation: isolate;
+}
+
+/* ── La barra del titolo ─────────────────────────────────────────────────── */
+
+#topbar {
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  /* Il menu dell'applicazione e la scena della luce si posano su di lei. */
+  position: relative;
+}
+
+.titlebar {
+  height: var(--titlebar-h);
+  min-height: var(--titlebar-h);
+  max-height: var(--titlebar-h);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar button,
+.titlebar a,
+.titlebar input,
+.titlebar select,
+.titlebar #window-controls,
+.titlebar [data-tauri-drag-region="false"] {
+  -webkit-app-region: no-drag;
+}
+
+#titlebar-left,
+#titlebar-right {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#titlebar-left {
+  justify-self: start;
+  overflow: hidden;
+}
+
+#titlebar-right {
+  justify-self: end;
+}
+
+#titlebar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+#pill {
+  width: min(420px, 38vw);
+  min-width: 0;
+  height: var(--chrome-btn);
+}
+
+/* I bersagli della barra hanno una misura sola, e la decide lo «spazio
+   dell'interfaccia»: un tema li veste, non li ridimensiona. */
+.titlebar .brand-mark,
+.titlebar .titlebar-btn--icon {
+  width: var(--chrome-btn);
+  height: var(--chrome-btn);
+  flex: none;
+}
+
+.titlebar .vault-chip {
+  height: var(--chrome-btn);
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.titlebar .frame-nav {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+#window-controls .win-ctrl {
+  width: var(--win-ctrl-w);
+  height: var(--titlebar-h);
+  flex: none;
+}
+
+#vault-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+#window-controls {
+  display: inline-flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  height: var(--titlebar-h);
+  -webkit-app-region: no-drag;
+}
+
+/* Il menu dell'applicazione si apre dal marchio: a riposo non occupa la
+   barra; aperto è una striscia che copre l'ala sinistra, subito dopo il
+   marchio (`--brand-end` lo misura `frame/brand-menu.ts`). Le tendine restano
+   appese sotto le sue voci. */
+#app-menu {
+  display: none;
+}
+
+#app-menu.open {
+  display: flex;
+  align-items: center;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--brand-end, calc(var(--chrome-btn) + 16px));
+  max-width: calc(100% - var(--brand-end, 48px) - 8px);
+  overflow: auto hidden;
+  scrollbar-width: none;
+  z-index: var(--z-menu);
+}
+
+#app-menu.open > button {
+  height: var(--chrome-btn);
+  flex: none;
+}
+
+/* Il manico del menu compatto: `ui/titlebar.ts` lo accende sotto i 1100 px,
+   ma in questa cornice il menu si apre dal marchio a ogni larghezza. */
+#app-menu-toggle,
+#command-search,
+#open-palette,
+#open-vault {
+  display: none !important;
+}
+
+#app-menu-extra {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+#app-menu-extra .declared-view-panel > .panel-title {
+  display: none;
+}
+
+/* ── Il corpo: binario, cassetti, scrivania ──────────────────────────────── */
+
+#workspace {
+  grid-row: 2;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: var(--rail-w);
+  min-width: var(--rail-w);
+  flex: none;
+  min-height: 0;
+  position: relative;
+}
+
+/* `chrome.rail.visible` spegne la barra degli strumenti; il binario intero la
+   segue, piede compreso. */
+.rail:has(> #views-ribbon[hidden]) {
+  display: none;
+}
+
+#views-ribbon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden auto;
+  scrollbar-width: none;
+}
+
+/* `panels/rail.ts` porta le icone fuori da `#rail-shell`, in coda alla barra:
+   il contenitore resta vuoto e non deve occupare una riga. */
+#rail-shell {
+  display: contents;
+}
+
+#rail-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  width: 100%;
+}
+
+.rail .rail-btn {
+  width: var(--rail-target);
+  height: var(--rail-target);
+  flex: none;
+}
+
+.rail .rail-btn svg {
+  width: var(--rail-icon);
+  height: var(--rail-icon);
+}
+
+/* La tacca del pannello aperto: dove sta lo scrive `frame/rail.ts`. */
+.rail-notch {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* La scena del cambio di luce: un cerchio che parte dal bottone. Colore e
+   misura li scrive chi la recita; non prende mai il puntatore. */
+.light-scene {
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: var(--z-drag);
+}
+
+#layout {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+#sidebar {
+  flex: 0 0 var(--sidebar-w);
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-min);
+  max-width: 400px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden auto;
+  container-type: inline-size;
+  container-name: drawer;
+}
+
+#right-pane {
+  flex: 0 0 var(--inspector-w);
+  width: var(--inspector-w);
+  min-width: var(--inspector-min);
+  max-width: 440px;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: drawer;
+}
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#views-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#views-right > .declared-view-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#views-right > .declared-view-panel[hidden] {
+  display: none !important;
+}
+
+#views-right > .declared-view-panel > .panel-title {
+  display: none;
+}
+
+/* Il divisore sta **sopra** il margine fra cassetto e scrivania, senza
+   allargarlo: la presa è larga, lo spazio che occupa è zero. Largo un pixel,
+   che il margine restituisce, perché è una fermata del Tab: un elemento largo
+   zero per chi misura non c'è, e il fuoco ci arriverebbe dal nulla. */
+.layout-divider {
+  flex: 0 0 1px;
+  width: 1px;
+  margin-right: -1px;
+  align-self: stretch;
+  position: relative;
+  z-index: var(--z-sheet-active);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.layout-divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+}
+
+#views-bottom {
+  flex: 0 0 100%;
+  order: 9;
+  width: 100%;
+  overflow: auto;
+  max-height: 30vh;
+}
+
+#views-bottom .panel-title,
+#views-bottom .declared-view {
+  display: inline-flex;
+}
+
+/* ── La scrivania e i fogli ──────────────────────────────────────────────── */
+
+#panes {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  padding: 0 var(--sheet-gap) var(--sheet-gap) 0;
+}
+
+/* Senza cassetto accanto, il margine torna anche da quel lato. */
+#layout:not(:has(> #sidebar:not([hidden]))) > #panes,
+#layout.layout-compact > #panes {
+  padding-left: var(--sheet-gap);
+}
+
+#layout:has(> #right-pane:not([hidden])):not(.layout-compact):not(.layout-inspector-overlay) > #panes {
+  padding-right: 0;
+}
+
+#panes > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+#panes:has(> .onboarding:not([hidden])) > .pane,
+#panes:has(> .onboarding:not([hidden])) > .pane-split {
+  display: none;
+}
+
+.pane-split {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane-split.row {
+  flex-direction: row;
+}
+
+.pane-split.col {
+  flex-direction: column;
+}
+
+.pane-split > * {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Il divisore fra due fogli **è** lo spazio fra loro. */
+.pane-split > .pane-divider {
+  flex: 0 0 var(--sheet-gap);
+  position: relative;
+  z-index: var(--z-sheet-active);
+  touch-action: none;
+}
+
+.pane-split.row > .pane-divider {
+  width: var(--sheet-gap);
+  cursor: col-resize;
+}
+
+.pane-split.col > .pane-divider {
+  height: var(--sheet-gap);
+  cursor: row-resize;
+}
+
+/* Un foglio: le linguette sopra, sulla scrivania; sotto, la carta. La carta è
+   uno pseudo-elemento del riquadro e non un contenitore, perché testata, barra
+   di formattazione, avvisi e contenuto sono fratelli: così sono una superficie
+   sola senza cambiare il DOM che il controllore conosce. */
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  isolation: isolate;
+}
+
+/* La carta comincia `--tab-lap` sopra il fondo della striscia: lì la linguetta
+   attiva la copre, e il giunto resta chiuso anche a uno zoom frazionario. */
+.pane::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--tab-h) - var(--tab-lap)) 0 0 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Senza linguette non c'è carta da raccordare: il segnaposto prende tutto il
+   riquadro. */
+.pane:has(> .pane-tabs[hidden])::before {
+  inset: 0;
+}
+
+/* La sagoma di un foglio chiuso (`stage-motion.ts`): ferma sul rettangolo
+   della carta che c'era, sopra la scrivania, mai sotto il puntatore. */
+.sheet-ghost {
+  position: fixed;
+  z-index: var(--z-sheet-active);
+  pointer-events: none;
+}
+
+.sheet-ghost::before {
+  content: "";
+  position: absolute;
+  inset: var(--sheet-inset, 0px) 0 0 0;
+}
+
+/* L'angolo vivo sotto la prima linguetta. È una toppa sopra l'angolo
+   arrotondato della carta, non un raggio che cambia: compare e si dissolve con
+   la sola opacità mentre la sagoma scorre, e il layout non si muove. Se la
+   striscia è scorsa la prima linguetta non è più lì, e la toppa nemmeno. */
+.pane::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--tab-h) - var(--tab-lap));
+  left: 0;
+  width: var(--radius-sheet, 12px);
+  height: var(--radius-sheet, 12px);
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.pane:has(> .pane-tabs:not([data-scrolled="start"]):not([data-scrolled="both"]) > [role="tablist"] + .tab-entry > .tab[aria-selected="true"])::after {
+  opacity: 1;
+}
+
+/* La striscia. La prima linguetta parte a filo del fianco del foglio; in fondo
+   stanno il «+» e l'elenco, che tengono il raccordo destro dell'ultima sempre
+   sul tratto dritto del bordo (raggio del foglio più un raccordo). */
+.pane-tabs {
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 var(--tab-h);
+  height: var(--tab-h);
+  min-height: var(--tab-h);
+  max-height: var(--tab-h);
+  min-width: 0;
+  padding: 0 var(--space-2, 4px) 0 0;
+  overflow: auto hidden;
+  scrollbar-width: none;
+  /* Portata a vista, una linguetta non finisce sotto l'elenco né nella
+     sfumatura: da una parte e dall'altra resta lo spazio del suo raccordo. */
+  scroll-padding: 0 calc(24px + var(--tab-fillet) + var(--space-6, 16px)) 0 calc(var(--space-8, 24px) + var(--tab-fillet));
+  position: relative;
+  z-index: 1;
+}
+
+/* Scorsa, la striscia sfuma dal lato da cui continua. A destra lo fa l'elenco,
+   che le sta sopra. */
+.pane-tabs[data-scrolled="start"],
+.pane-tabs[data-scrolled="both"] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--space-8, 24px));
+  mask-image: linear-gradient(to right, transparent, #000 var(--space-8, 24px));
+}
+
+.pane-tabs > [role="tablist"] {
+  display: contents;
+}
+
+.tab-entry {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 var(--tab-max);
+  min-width: var(--tab-min);
+  max-width: var(--tab-max);
+  height: calc(var(--tab-h) - var(--tab-air));
+  position: relative;
+  isolation: isolate;
+}
+
+.tab-entry > .tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
+.tab-entry > .tab-close {
+  flex: 0 0 auto;
+}
+
+/* Una linguetta fissata è stretta quanto il suo nome e non ha chiusura a
+   vista: si chiude dal menu o con Canc, che è il gesto di chi l'ha fissata. */
+.tab-entry:has(> .tab-pinned) {
+  flex: 0 1 auto;
+  min-width: calc(var(--tab-h) + var(--tab-fillet));
+  max-width: calc(var(--tab-max) * 0.7);
+}
+
+.tab-entry:has(> .tab-pinned) > .tab-close {
+  display: none;
+}
+
+/* La sagoma della linguetta attiva. Corpo, angoli alti e raccordi concavi sono
+   una maschera sola su uno pseudo-elemento che sporge di un raccordo per lato:
+   la pelle le dà soltanto il colore del foglio. Sotto la prima linguetta la
+   sporgenza sinistra cade fuori dalla striscia e viene tagliata, e il fianco
+   scende dritto nel fianco del foglio.
+
+   Ogni strato della maschera sormonta il vicino di un pixel: due bordi
+   sfumati accostati lascerebbero un filo a metà copertura. */
+.tab-entry::before {
+  --tab-f: var(--tab-fillet);
+  --tab-r: var(--tab-radius, 8px);
+  --tab-shape:
+    linear-gradient(#000 0 0) left var(--tab-f) bottom 0 / calc(100% - 2 * var(--tab-f)) calc(100% - var(--tab-r) + 1px) no-repeat,
+    linear-gradient(#000 0 0) left calc(var(--tab-f) + var(--tab-r) - 1px) top 0 / calc(100% - 2 * var(--tab-f) - 2 * var(--tab-r) + 2px) var(--tab-r) no-repeat,
+    radial-gradient(circle at 100% 100%, #000 calc(var(--tab-r) - 0.5px), transparent calc(var(--tab-r) + 0.5px)) left var(--tab-f) top 0 / var(--tab-r) var(--tab-r) no-repeat,
+    radial-gradient(circle at 0 100%, #000 calc(var(--tab-r) - 0.5px), transparent calc(var(--tab-r) + 0.5px)) right var(--tab-f) top 0 / var(--tab-r) var(--tab-r) no-repeat,
+    radial-gradient(circle at 0 0, transparent calc(var(--tab-f) - 0.5px), #000 calc(var(--tab-f) + 0.5px)) left 0 bottom 0 / calc(var(--tab-f) + 1px) var(--tab-f) no-repeat,
+    radial-gradient(circle at 100% 0, transparent calc(var(--tab-f) - 0.5px), #000 calc(var(--tab-f) + 0.5px)) right 0 bottom 0 / calc(var(--tab-f) + 1px) var(--tab-f) no-repeat;
+  content: "";
+  position: absolute;
+  inset: 0 calc(-1 * var(--tab-fillet));
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transform-origin: 0 100%;
+  -webkit-mask: var(--tab-shape);
+  mask: var(--tab-shape);
+}
+
+.tab-entry:has(> .tab[aria-selected="true"])::before {
+  opacity: 1;
+}
+
+/* Il fondo al passaggio: una pastiglia che resta staccata dalla carta. */
+.tab-entry::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* Il «+» segue l'ultima linguetta, a un raccordo di distanza; l'elenco sta in
+   fondo e resta a vista anche quando la striscia scorre. Tutti e due sono
+   centrati sulle linguette, non sulla striscia, che sopra ha la sua aria. */
+.pane-tabs > .tab-new {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  margin: 0 var(--space-2, 4px) calc((var(--tab-h) - var(--tab-air) - 24px) / 2) calc(var(--tab-fillet) + 2px);
+}
+
+.pane-tabs > [data-tab-menu] {
+  flex: 0 0 auto;
+  align-self: flex-end;
+  position: sticky;
+  right: 0;
+  margin: 0 0 calc((var(--tab-h) - var(--tab-air) - 24px) / 2) auto;
+  z-index: 1;
+}
+
+/* La testata. La cronologia del riquadro sta nella barra del titolo, che segue
+   il foglio col fuoco: qui non si ripete. L'ordine a vista è percorso,
+   modalità, stato, menu; quello del DOM resta del controllore. */
+.pane-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--sheet-head-h);
+  height: var(--sheet-head-h);
+  min-height: var(--sheet-head-h);
+  max-height: var(--sheet-head-h);
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+  /* La testata misura sé stessa: in un foglio stretto la pelle ne stringe i
+     passi (`skin/sheets.css`). */
+  container-type: inline-size;
+  container-name: sheet-head;
+}
+
+.pane-toolbar > .pane-nav {
+  display: none;
+}
+
+.pane-toolbar > .muted {
+  flex: 1 1 0;
+  min-width: 0;
+  order: 1;
+}
+
+/* Se lo spazio non basta cede prima lo stato, che la banda ripete, poi il
+   selettore; mai il menu, che è la sola strada, dal foglio, per dividerlo e
+   chiuderlo. Il fattore minimo fa cedere il selettore solo a stato esaurito. */
+.pane-toolbar > .segmented {
+  flex: 0 0.001 auto;
+  min-width: 0;
+  overflow: hidden;
+  order: 2;
+}
+
+.pane-toolbar > .pane-status-slot {
+  flex: 0 1 auto;
+  order: 3;
+}
+
+/* In una testata stretta il percorso e lo stato avrebbero un pezzo di lettera
+   e un punto, e il punto dello stato si leggerebbe «modificato». Escono: il
+   percorso tiene il suo posto, lo stato lo dice la banda. */
+@container sheet-head (max-width: 300px) {
+  .pane-toolbar > .muted {
+    visibility: hidden;
+  }
+  .pane-toolbar > .pane-status-slot {
+    display: none;
+  }
+}
+
+.pane-toolbar > [data-pane-menu] {
+  flex: 0 0 auto;
+  order: 4;
+}
+
+/* Il registratore lo monta una superficie dentro la testata: senza un posto
+   finirebbe davanti al nome della nota. Il suo è accanto allo stato. */
+.pane-toolbar > .media-recorder {
+  flex: 0 1 auto;
+  order: 3;
+}
+
+.pane-status-slot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+#pane-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+#app[data-status-off] #pane-status {
+  display: none;
+}
+
+#views-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.format-bar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 var(--format-bar-h);
+  height: var(--format-bar-h);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* La bolla di selezione: la barra, ristretta, accanto al testo scelto. Sta sopra
+   i fogli e sotto i menu (che la bolla può aprire), e va dove la mette
+   `bubblePlace`. */
+.selection-bubble {
+  position: fixed;
+  z-index: var(--z-popover);
+  width: max-content;
+  max-width: calc(100vw - 16px);
+}
+.selection-bubble .format-bar {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.format-bar-group {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+/* Barra spenta: i suoi gesti restano alla bolla di selezione, alla tastiera e al
+   menu «/». */
+#app[data-formatbar-off] .pane > .format-bar {
+  display: none;
+}
+
+.format-bar-overflow {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.pane > [role="tabpanel"] {
+  position: relative;
+  overflow: hidden;
+}
+
+.pane-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: sheet;
+}
+
+.pane-editor[data-markdown-mode] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pane-editor[data-markdown-mode] > .cm-editor {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pane-editor[data-markdown-mode="live_preview"] .cm-gutters {
+  display: none !important;
+}
+
+.pane-editor[data-markdown-mode] > .pane-preview {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.pane-editor[data-markdown-mode="reading"] > .cm-editor {
+  display: none !important;
+}
+
+.pane-editor[data-markdown-mode="source"] > .pane-preview,
+.pane-editor[data-markdown-mode="live_preview"] > .pane-preview {
+  display: none;
+}
+
+.pane-editor[data-svg-mode] {
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+.pane-editor[data-svg-mode][data-svg-stack] {
+  flex-direction: column;
+}
+
+.pane-editor[data-svg-mode] > .cm-editor,
+.pane-editor[data-svg-mode] > .svg-preview {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pane-editor[data-svg-mode="reading"] > .cm-editor {
+  display: none !important;
+}
+
+.pane-editor[data-svg-mode="source"] > .svg-preview {
+  display: none;
+}
+
+.pane-view {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.pane.con-vista .pane-view {
+  display: flex;
+}
+
+.pane.con-vista .pane-editor,
+.pane.con-vista .pane-preview {
+  display: none;
+}
+
+.pane-view > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.pane-empty {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── La banda di stato ───────────────────────────────────────────────────── */
+
+#status-band {
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  height: var(--status-h);
+  min-height: var(--status-h);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#app[data-status-off] #status-band {
+  display: none;
+}
+
+#status-band > .status-side {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+#status-band > .status-side--end {
+  margin-left: auto;
+  flex: none;
+}
+
+#key-pending {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--status-h) + 16px);
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+}
+
+/* ── Il benvenuto ────────────────────────────────────────────────────────── */
+
+/* Senza vault non c'è niente da sfogliare: i cassetti, i loro divisori, le
+   icone del binario che scelgono un pannello, indietro e avanti e il bottone
+   dell'ispettore si ritirano, e il benvenuto ha la scrivania intera. È
+   geometria, non stato: `hidden` resta quello della preferenza, e quando un
+   vault si apre tutto torna dov'era. In fondo al binario restano aiuto,
+   preferenze e luce, che non dipendono dal vault; la barra sopra di loro tiene
+   il suo posto, così non salgono. */
+#app[data-welcome] #sidebar,
+#app[data-welcome] #right-pane,
+#app[data-welcome] .layout-divider,
+#app[data-welcome] .drawer-scrim,
+#app[data-welcome] #rail-notch,
+#app[data-welcome] #nav-back,
+#app[data-welcome] #nav-forward,
+#app[data-welcome] #toggle-inspector {
+  display: none;
+}
+
+#app[data-welcome] #views-ribbon {
+  visibility: hidden;
+}
+
+/* Il binario resta a sinistra: lo stesso spazio a destra tiene il benvenuto
+   al centro della finestra, sotto la pillola, e non al centro di ciò che avanza. */
+#app[data-welcome] #workspace #layout > #panes {
+  padding: 0 calc(var(--rail-w) + var(--sheet-gap)) var(--sheet-gap) var(--sheet-gap);
+}
+
+#app[data-welcome] #workspace:has(> .rail > #views-ribbon[hidden]) #layout > #panes {
+  padding-right: var(--sheet-gap);
+}
+
+.onboarding {
+  margin: auto;
+  max-width: 760px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  overflow-y: auto;
+  max-height: 100%;
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.onboarding-recent {
+  width: 100%;
+  min-width: 0;
+}
+
+#onboarding-recent-wrap {
+  align-self: stretch;
+}
+
+/* I recenti stanno in fila al centro: la loro etichetta li segue. */
+#onboarding-recent-title {
+  text-align: center;
+}
+
+/* ── L'adattamento ───────────────────────────────────────────────────────── */
+
+/* Il velo sta dietro il cassetto in sovrapposizione e copre i fogli, non la
+   cornice: binario e banda di stato restano vivi, così si cambia pannello
+   senza prima chiudere quello aperto. */
+.drawer-scrim {
+  position: fixed;
+  inset: var(--titlebar-h) 0 var(--status-h) var(--rail-w);
+  z-index: calc(var(--z-drawer) - 1);
+}
+
+#workspace:has(> .rail > #views-ribbon[hidden]) .drawer-scrim {
+  left: 0;
+}
+
+/* ── Il cassetto che si affaccia ─────────────────────────────────────────── */
+
+/* Il bordo: una striscia nel margine fra la cornice e i fogli, dalla parte di
+   un cassetto chiuso. Sostandoci il cassetto si affaccia (`frame/peek.ts`). */
+.drawer-edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  z-index: calc(var(--z-drawer) - 2);
+}
+
+.drawer-edge[data-edge="sidebar"] {
+  left: 0;
+}
+
+.drawer-edge[data-edge="inspector"] {
+  right: 0;
+}
+
+.drawer-edge[hidden],
+#app[data-welcome] .drawer-edge,
+#app[data-focus-mode] .drawer-edge {
+  display: none;
+}
+
+/* Affacciato, il cassetto resta `hidden` per la shell — la preferenza è
+   «chiuso» — e si vede sopra i fogli, staccato dal fondo quanto loro. È la
+   sola eccezione alla garanzia «`[hidden]` nasconde», e sta qui, nel foglio
+   che quella garanzia la dà: chi legge `hidden` continua a leggere la
+   preferenza, non ciò che si vede in questo momento. */
+#layout.peek-sidebar > #sidebar[hidden],
+#layout.peek-inspector > #right-pane[hidden] {
+  display: flex !important;
+  position: absolute;
+  top: 0;
+  bottom: var(--sheet-gap);
+  height: auto;
+  z-index: var(--z-drawer);
+  max-width: min(400px, 85vw);
+}
+
+#layout.peek-sidebar > #sidebar[hidden] {
+  left: 0;
+}
+
+#layout.peek-inspector > #right-pane[hidden] {
+  right: 0;
+}
+
+/* Fra 960 e 1199 l'ispettore si sovrappone; sotto 960 tutti e due i cassetti,
+   uno alla volta. La classe la mette la shell: l'adattamento non sovrascrive
+   la preferenza, la sospende. */
+@media (max-width: 1199px) {
+  #layout.layout-inspector-overlay #right-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+  }
+
+  #layout.layout-inspector-overlay #divider-inspector {
+    display: none;
+  }
+}
+
+@media (max-width: 959px) {
+  #layout.layout-compact #sidebar,
+  #layout.layout-compact #right-pane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+    max-width: min(340px, 85vw);
+  }
+
+  #layout.layout-compact #sidebar {
+    left: 0;
+  }
+
+  #layout.layout-compact #right-pane {
+    right: 0;
+  }
+
+  #layout.layout-compact #divider-sidebar,
+  #layout.layout-compact #divider-inspector {
+    display: none;
+  }
+}
+
+/* La barra del titolo cede per gradi: prima il percorso nella pillola, poi il
+   nome del vault, poi la pillola resta un'icona. */
+@media (max-width: 1100px) {
+  #topbar .titlebar-shortcut {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  #topbar .pill-path,
+  #topbar .vault-chip-name {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  #pill {
+    width: var(--chrome-btn);
+  }
+
+  #topbar .pill-title,
+  #topbar .pill-path {
+    display: none;
+  }
+}
+
+/* La concentrazione: restano il foglio e la barra del titolo. */
+#app[data-focus-mode] #rail,
+#app[data-focus-mode] #sidebar,
+#app[data-focus-mode] #right-pane,
+#app[data-focus-mode] #status-band,
+#app[data-focus-mode] .layout-divider,
+#app[data-focus-mode] .drawer-scrim {
+  display: none !important;
+}
+
+/* Il bottone dell'ispettore esce con lui: premuto qui cambierebbe una
+   preferenza senza mostrare niente. Lascia il suo posto, perché i vicini non
+   saltino all'entrata. */
+#app[data-focus-mode] #toggle-inspector {
+  visibility: hidden;
+}
+
+#app[data-focus-mode] #panes {
+  padding-left: var(--sheet-gap);
+  padding-right: var(--sheet-gap);
+  justify-content: center;
+}
+
+/* Un foglio di testo rimasto solo si centra alla sua misura di lettura. Due
+   fogli affiancati, o una vista, tengono tutta la larghezza: là la scrivania
+   serve ancora. */
+#app[data-focus-mode] #panes > .pane:not(.con-vista):has(> [role="tabpanel"] > .pane-editor[data-markdown-mode]) {
+  flex: 0 1 var(--focus-sheet-width);
+}
+
+/* E la scrivania si spegne: un velo sopra il piano e sotto i fogli, che sono
+   posizionati e lo coprono. Si muove la sola opacità; il colore è della pelle. */
+.desk::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+#app[data-focus-mode] .desk::before {
+  opacity: 1;
+}
+
+/* ── Le superfici degli editor: geometria che nessun tema decide ─────────── */
+
+.grid-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.grid-formula-bar {
+  display: flex;
+  flex: 0 0 2.25rem;
+  min-width: 0;
+}
+
+.grid-cell-name {
+  display: inline-flex;
+  flex: 0 0 4.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-formula-editor {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.grid-formula-editor .cm-editor,
+.grid-cell-editor .cm-editor {
+  height: 100%;
+}
+
+.grid-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.grid-canvas {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.grid-cells,
+.grid-column-headers,
+.grid-row-headers {
+  position: absolute;
+  inset: 0;
+}
+
+.grid-column-headers,
+.grid-row-headers {
+  pointer-events: none;
+}
+
+.grid-cell,
+.grid-header,
+.grid-corner,
+.grid-cell-editor {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.grid-cell {
+  overflow: hidden;
+  padding: 0.3rem 0.45rem;
+  white-space: nowrap;
+}
+
+.grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-column-header,
+.grid-row-header {
+  z-index: 3;
+}
+
+.grid-corner {
+  z-index: 4;
+}
+
+.grid-cell-editor {
+  z-index: 5;
+  overflow: hidden;
+}
+
+/* L'ospite del canvas riempie il foglio: senza un'altezza sua la tela, che è
+   alta quanto lui, sarebbe alta zero. */
+.canvas-surface-host {
+  height: 100%;
+  min-height: 0;
+}
+
+.canvas-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+
+/* La superficie dei documenti di videoscrittura (`editors/rich/`): una
+   colonna di testo che scorre, con la toolbar del riquadro sopra. Qui stanno
+   ciò che ProseMirror chiede al foglio (gli spazi come sono, la selezione di
+   un oggetto) e la geometria dei blocchi: rientri degli elenchi, tabelle,
+   oggetti in linea. Colori e tipografia sono della pelle (`skin/editors.css`). */
+.rich-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.rich-notice { flex: none; margin: 0; }
+.rich-page { flex: 1; min-height: 0; overflow-y: auto; }
+.rich-content {
+  position: relative;
+  box-sizing: border-box;
+  min-height: 100%;
+  outline: none;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  overflow-wrap: break-word;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
+.rich-content .ProseMirror-hideselection *::selection { background: transparent; }
+.rich-content.ProseMirror-hideselection { caret-color: transparent; }
+.rich-content [draggable][contenteditable="false"] { user-select: text; }
+.rich-content img.ProseMirror-separator {
+  display: inline !important;
+  border: none !important;
+  margin: 0 !important;
+}
+.rich-para { margin: 0; }
+/* Gli elenchi sono paragrafi con un livello, come in Word: il segno lo
+   disegna il foglio, il numero lo conta il foglio. Il formato del numero
+   (lettere, romani) non viaggia nella proiezione: qui è sempre decimale. */
+.rich-list { position: relative; }
+.rich-list[data-level="0"] { margin-inline-start: 1.5em; }
+.rich-list[data-level="1"] { margin-inline-start: 3em; }
+.rich-list[data-level="2"] { margin-inline-start: 4.5em; }
+.rich-list[data-level="3"] { margin-inline-start: 6em; }
+.rich-list[data-level="4"] { margin-inline-start: 7.5em; }
+.rich-list[data-level="5"] { margin-inline-start: 9em; }
+.rich-list[data-level="6"] { margin-inline-start: 10.5em; }
+.rich-list[data-level="7"] { margin-inline-start: 12em; }
+.rich-list[data-level="8"] { margin-inline-start: 13.5em; }
+.rich-list::before {
+  position: absolute;
+  inset-inline-end: 100%;
+  padding-inline-end: 0.5em;
+  white-space: nowrap;
+}
+.rich-list[data-list="bullet"]::before { content: "•"; }
+.rich-list[data-level="0"] { counter-increment: rich-list-0; }
+.rich-list[data-level="1"] { counter-increment: rich-list-1; }
+.rich-list[data-level="2"] { counter-increment: rich-list-2; }
+.rich-list[data-level="3"] { counter-increment: rich-list-3; }
+.rich-list[data-level="4"] { counter-increment: rich-list-4; }
+.rich-list[data-level="5"] { counter-increment: rich-list-5; }
+.rich-list[data-level="6"] { counter-increment: rich-list-6; }
+.rich-list[data-level="7"] { counter-increment: rich-list-7; }
+.rich-list[data-level="8"] { counter-increment: rich-list-8; }
+.rich-para:not(.rich-list) {
+  counter-reset: rich-list-0 rich-list-1 rich-list-2 rich-list-3 rich-list-4 rich-list-5 rich-list-6 rich-list-7 rich-list-8;
+}
+.rich-list[data-level="0"] + .rich-list[data-level="1"] { counter-reset: rich-list-1; }
+.rich-list[data-level="1"] + .rich-list[data-level="2"] { counter-reset: rich-list-2; }
+.rich-list[data-level="2"] + .rich-list[data-level="3"] { counter-reset: rich-list-3; }
+.rich-list[data-level="3"] + .rich-list[data-level="4"] { counter-reset: rich-list-4; }
+.rich-list[data-level="4"] + .rich-list[data-level="5"] { counter-reset: rich-list-5; }
+.rich-list[data-level="5"] + .rich-list[data-level="6"] { counter-reset: rich-list-6; }
+.rich-list[data-level="6"] + .rich-list[data-level="7"] { counter-reset: rich-list-7; }
+.rich-list[data-level="7"] + .rich-list[data-level="8"] { counter-reset: rich-list-8; }
+/* Un numerato dopo un puntato dello stesso livello è un altro elenco, e
+   ricomincia da uno. */
+.rich-list[data-list="bullet"][data-level="0"] + .rich-list[data-list="ordered"][data-level="0"] { counter-reset: rich-list-0; }
+.rich-list[data-list="bullet"][data-level="1"] + .rich-list[data-list="ordered"][data-level="1"] { counter-reset: rich-list-1; }
+.rich-list[data-list="bullet"][data-level="2"] + .rich-list[data-list="ordered"][data-level="2"] { counter-reset: rich-list-2; }
+.rich-list[data-list="bullet"][data-level="3"] + .rich-list[data-list="ordered"][data-level="3"] { counter-reset: rich-list-3; }
+.rich-list[data-list="bullet"][data-level="4"] + .rich-list[data-list="ordered"][data-level="4"] { counter-reset: rich-list-4; }
+.rich-list[data-list="bullet"][data-level="5"] + .rich-list[data-list="ordered"][data-level="5"] { counter-reset: rich-list-5; }
+.rich-list[data-list="bullet"][data-level="6"] + .rich-list[data-list="ordered"][data-level="6"] { counter-reset: rich-list-6; }
+.rich-list[data-list="bullet"][data-level="7"] + .rich-list[data-list="ordered"][data-level="7"] { counter-reset: rich-list-7; }
+.rich-list[data-list="bullet"][data-level="8"] + .rich-list[data-list="ordered"][data-level="8"] { counter-reset: rich-list-8; }
+.rich-list[data-list="ordered"][data-level="0"]::before { content: counter(rich-list-0) "."; }
+.rich-list[data-list="ordered"][data-level="1"]::before { content: counter(rich-list-1) "."; }
+.rich-list[data-list="ordered"][data-level="2"]::before { content: counter(rich-list-2) "."; }
+.rich-list[data-list="ordered"][data-level="3"]::before { content: counter(rich-list-3) "."; }
+.rich-list[data-list="ordered"][data-level="4"]::before { content: counter(rich-list-4) "."; }
+.rich-list[data-list="ordered"][data-level="5"]::before { content: counter(rich-list-5) "."; }
+.rich-list[data-list="ordered"][data-level="6"]::before { content: counter(rich-list-6) "."; }
+.rich-list[data-list="ordered"][data-level="7"]::before { content: counter(rich-list-7) "."; }
+.rich-list[data-list="ordered"][data-level="8"]::before { content: counter(rich-list-8) "."; }
+.rich-section { border: none; margin: 0; height: 0; overflow: visible; }
+.rich-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.rich-cell { vertical-align: top; overflow-wrap: anywhere; }
+.rich-atom {
+  display: inline-block;
+  box-sizing: border-box;
+  max-width: 100%;
+  vertical-align: text-bottom;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+}
+.rich-atom-marker { display: inline; }
+.rich-break-page,
+.rich-break-column { display: block; height: 0; margin-block: 0.75em; }
+
+/* Il sorgente di un canvas troppo grande per la tela: scorre dentro il foglio. */
+.canvas-source {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  overflow: auto;
+}
+
+.canvas-toolbar {
+  display: flex;
+  flex: none;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.canvas-toolbar > button {
+  flex: none;
+}
+
+.canvas-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.canvas-stage,
+.canvas-edges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
+.canvas-edges {
+  overflow: visible;
+}
+
+.canvas-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+.canvas-node-handle {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+  cursor: grab;
+  user-select: none;
+}
+
+.canvas-node-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-connect {
+  flex: none;
+  min-width: 24px;
+  min-height: 24px;
+}
+
+.canvas-card-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  overscroll-behavior: contain;
+}
+
+.canvas-text-editor,
+.canvas-field-editor {
+  width: 100%;
+  height: 100%;
+  resize: none;
+}
+
+.canvas-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.canvas-edge-hit {
+  pointer-events: stroke;
+  stroke-width: 16;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-edge-line,
+.canvas-edge-arrow,
+.canvas-edge-label {
+  pointer-events: none;
+}
+
+.base-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.base-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.base-search {
+  min-width: 8rem;
+  flex: 1;
+}
+
+.base-status {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.base-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.base-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* L'intestazione resta in vista mentre la tabella scorre. */
+.base-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.base-cell input {
+  width: 100%;
+  min-width: 5rem;
+}
+
+.base-cards,
+.base-list {
+  display: grid;
+}
+
+.base-cards {
+  grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+}
+
+.base-field {
+  display: flex;
+  justify-content: space-between;
+}
+
+.base-kanban {
+  display: flex;
+  align-items: start;
+  overflow-x: auto;
+}
+
+.base-kanban-column {
+  flex: 0 0 min(17rem, 85vw);
+  min-width: 0;
+}
+
+.base-map {
+  min-width: 0;
+}
+
+.base-map-atlas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 1;
+}
+
+.base-summaries {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* ── La finestra documento ───────────────────────────────────────────────── */
+
+.document-window-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  min-height: 0;
+}
+
+.document-window-root > [role="status"] {
+  flex: none;
+  margin: 0;
+}
+
+.document-window-root > [role="status"]:empty {
+  display: none;
+}
+
+.document-window-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.document-window-conflict {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+}
+
+/* ---- L'editor dei disegni (FubDraw) e le sue finestre ---- */
+
+
+  [aria-pressed="mixed"] {
+    outline: 2px dashed Highlight;
+    outline-offset: -2px;
+  }
+
+  /* La riga che divide le voci di un menu è un fondo, e i fondi si
+     forzano: resta del colore del testo, perché i gruppi si vedano. La
+     pelle viene dopo questo foglio e colora lo stesso selettore, quindi il
+     pavimento vince con `!important`. */
+  .context-menu .menu-separator {
+    background: CanvasText !important;
+  }
+/* FubDraw: gli strati del painter e quello sopra, nell'ordine del documento.
+   Uno strato vivo non eredita niente dalla pagina, come un SVG aperto da
+   solo: il testo del disegno parte dai valori iniziali, non dal carattere
+   della shell. Il painter isola: la fusione di un oggetto attraversa gli
+   strati, come in un SVG solo, e si ferma al disegno, come nell'export,
+   senza toccare lo sfondo dell'editor. */
+.spatial-painter,
+.spatial-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Il painter non riceve il puntatore, e non eredita il cursore della
+   superficie: cambiare strumento o maniglia sotto il puntatore cambia il
+   cursore della superficie, e se il painter lo ereditasse andrebbe ricalcolato
+   lo stile di ogni oggetto del disegno. */
+.spatial-painter {
+  isolation: isolate;
+  cursor: auto;
+}
+/* Una scena grande segue la camera con una trasformazione della radice, che
+   il compositor applica senza ridisporre né ridipingere. La radice dipinge un
+   margine attorno alla vista, che il painter misura (`overflow-clip-margin`),
+   e taglia il resto: lo strato del compositor resta della misura della vista,
+   anche quando il disegno è cento volte più largo. Ferma, la radice non ha
+   uno strato suo, e la trasformazione resta, nulla: in Chromium passare da
+   nessuna trasformazione a una fa ridisporre tutti i testi SVG. */
+.spatial-painter[data-large] {
+  overflow: clip;
+  transform: translate(0, 0);
+  transform-origin: 0 0;
+}
+.spatial-overlay {
+  width: 100%;
+  height: 100%;
+}
+.spatial-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: initial;
+  font: initial;
+  /* Come l'export: un grassetto o un corsivo che il carattere non ha non si
+     inventa. */
+  font-synthesis: none;
+  letter-spacing: initial;
+  word-spacing: initial;
+  text-transform: initial;
+  white-space: initial;
+  direction: ltr;
+  writing-mode: initial;
+}
+/* Le risorse vive stanno in un svg senza misura, non nascosto: in un svg con
+   `display: none` i browser non disegnano sfumature, motivi e filtri. */
+.spatial-defs {
+  width: 0;
+  height: 0;
+}
+.spatial-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  max-height: none;
+  transform-origin: 0 0;
+  user-select: none;
+}
+.spatial-image-slot {
+  display: none;
+}
+/* FubDraw: l'editor del disegno. La barra in cima va a capo invece di
+   scorrere, così su un telefono ogni strumento resta a portata di dito; il
+   foglio prende il resto, e i gesti sopra sono suoi: niente scorrimento,
+   zoom o selezione del browser sotto la penna. Ogni bersaglio misura almeno
+   44 px per lato. */
+.draw-editor {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+.draw-header,
+.draw-toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.draw-toolbar {
+  flex: 0 1 auto;
+}
+.draw-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.draw-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+@media (pointer: coarse) {
+  .draw-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+.draw-zoom-level {
+  min-width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+/* Il pulsante dei livelli mostra il nome del livello corrente: largo quanto
+   il nome, fino a un tetto, e coi puntini oltre. Lo stato resta intero. */
+.draw-layer-button {
+  max-width: 14rem;
+}
+.draw-layer-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-layer-state {
+  flex: none;
+  white-space: nowrap;
+}
+/* La forma distingue i campioni anche a chi non distingue i colori. La
+   cornice è la stessa forma, due pixel più grande, nel colore del testo: un
+   filo che segue anche le punte della stella. Il colore vero resta, anche
+   coi colori forzati. */
+.draw-swatch-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  forced-color-adjust: none;
+}
+.draw-swatch {
+  display: block;
+  width: 20px;
+  height: 20px;
+  forced-color-adjust: none;
+}
+.draw-swatch-frame[data-shape="circle"],
+.draw-swatch-frame[data-shape="circle"] > .draw-swatch {
+  clip-path: circle(50%);
+}
+.draw-swatch-frame[data-shape="square"],
+.draw-swatch-frame[data-shape="square"] > .draw-swatch {
+  clip-path: inset(6%);
+}
+.draw-swatch-frame[data-shape="triangle"],
+.draw-swatch-frame[data-shape="triangle"] > .draw-swatch {
+  clip-path: polygon(50% 2%, 98% 94%, 2% 94%);
+}
+.draw-swatch-frame[data-shape="diamond"],
+.draw-swatch-frame[data-shape="diamond"] > .draw-swatch {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.draw-swatch-frame[data-shape="pentagon"],
+.draw-swatch-frame[data-shape="pentagon"] > .draw-swatch {
+  clip-path: polygon(50% 0, 100% 38%, 81% 98%, 19% 98%, 0 38%);
+}
+.draw-swatch-frame[data-shape="hexagon"],
+.draw-swatch-frame[data-shape="hexagon"] > .draw-swatch {
+  clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0 50%);
+}
+.draw-swatch-frame[data-shape="star"],
+.draw-swatch-frame[data-shape="star"] > .draw-swatch {
+  clip-path: polygon(50% 0, 62% 36%, 100% 38%, 70% 60%, 81% 98%, 50% 76%, 19% 98%, 30% 60%, 0 38%, 38% 36%);
+}
+.draw-swatch-frame[data-shape="cross"],
+.draw-swatch-frame[data-shape="cross"] > .draw-swatch {
+  clip-path: polygon(34% 0, 66% 0, 66% 34%, 100% 34%, 100% 66%, 66% 66%, 66% 100%, 34% 100%, 34% 66%, 0 66%, 0 34%, 34% 34%);
+}
+/* Il colore a piacere: un anello, che il centro distingue da ogni forma
+   della tavolozza. */
+.draw-swatch-frame[data-shape="ring"],
+.draw-swatch-frame[data-shape="ring"] > .draw-swatch {
+  clip-path: circle(50%);
+}
+.draw-swatch-frame[data-shape="ring"] > .draw-swatch {
+  mask: radial-gradient(circle, transparent 0 34%, #000000 35%);
+}
+.draw-width-bar {
+  display: block;
+  width: 24px;
+  min-height: 1px;
+}
+.draw-size-glyph {
+  display: block;
+}
+.draw-title {
+  display: flex;
+  flex: 1 1 16rem;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.draw-title-label {
+  flex: none;
+}
+.draw-title-input {
+  flex: 1 1 10rem;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-surface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: crosshair;
+}
+/* Sopra ogni strato del foglio, un velo vuoto prende il puntatore. Gli
+   strati sotto non lo ricevono mai, ma senza il velo il browser li
+   attraverserebbe forma per forma a ogni movimento per scoprirlo: con
+   cinquantamila forme, cinque millisecondi. Il bersaglio resta il foglio. */
+.draw-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+/* Il foglio occupa tutta la larghezza: l'anello del fuoco sta dentro, o lo
+   taglierebbe il riquadro che lo contiene. */
+.draw-surface:focus-visible {
+  outline-offset: calc(-1 * var(--focus-ring-width));
+}
+.draw-surface[data-tool="text"] {
+  cursor: text;
+}
+.draw-surface[data-tool="select"],
+.draw-surface[data-tool="nodes"],
+.draw-surface[data-tool="builder"],
+.draw-editor[data-readonly] .draw-surface {
+  cursor: default;
+}
+/* Col Costruttore di forme, sopra una regione: il tocco e il trascinamento
+   uniscono. */
+.draw-surface[data-tool="builder"][data-region] {
+  cursor: copy;
+}
+/* Sopra una maniglia della cornice, e mentre la si tira: la direzione in cui
+   ridimensiona, o la presa che ruota. */
+.draw-surface[data-grip="ew"] {
+  cursor: ew-resize;
+}
+.draw-surface[data-grip="ns"] {
+  cursor: ns-resize;
+}
+.draw-surface[data-grip="nwse"] {
+  cursor: nwse-resize;
+}
+.draw-surface[data-grip="nesw"] {
+  cursor: nesw-resize;
+}
+.draw-surface[data-grip="rotate"] {
+  cursor: grab;
+}
+.draw-surface[data-grip="rotating"] {
+  cursor: grabbing;
+}
+/* Con lo strumento Tavola, sopra una tavola che si sposta, e con Alt
+   mentre se ne porta una copia; con lo strumento Sfumatura, sopra un capo,
+   un punto o la linea di una sfumatura. */
+.draw-surface[data-grip="move"] {
+  cursor: move;
+}
+.draw-surface[data-grip="copy"] {
+  cursor: copy;
+}
+/* Sopra un righello il cursore è la freccia, anche sopra una maniglia che
+   il righello copre; l'angolo fra i due apre un menu. */
+.draw-surface[data-ruler] {
+  cursor: default;
+}
+.draw-surface[data-ruler="corner"] {
+  cursor: pointer;
+}
+.draw-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  transform-origin: 0 0;
+  forced-color-adjust: none;
+}
+/* Le carte delle tavole sotto il disegno, e i loro nomi sopra. */
+.draw-sheets {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Il nome sta sopra l'angolo della tavola, largo al più quanto lei, e gira
+   col foglio attorno all'angolo. */
+.draw-sheet-name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform-origin: 0 0;
+}
+.draw-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+/* La griglia copre il foglio, sopra la carta e sotto il disegno. Le righe
+   cadono a metà dei pixel e restano nitide, anche nei colori forzati: sono
+   grigie e trasparenti, e si leggono sulla carta bianca come sul tavolo. */
+.draw-grid {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  forced-color-adjust: none;
+}
+.draw-grid path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+}
+/* Su un foglio girato di sbieco le righe e le guide sono oblique: senza
+   l'antialiasing sarebbero a scalini. */
+.draw-grid[data-slanted] path,
+.draw-guides[data-slanted] path {
+  shape-rendering: auto;
+}
+/* Le guide del documento attraversano il foglio sopra il disegno, linee di
+   un pixel a metà dei pixel. Quella sotto il puntatore, o che si tira, è
+   più spessa; una bloccata è tratteggiata, e una che rilasciata se ne va è
+   tratteggiata e sbiadita: lo stato si legge dalla forma, non dal colore. */
+.draw-guides {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-guides path {
+  fill: none;
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+}
+.draw-guides [data-hot] {
+  stroke-width: 2px;
+}
+.draw-guides [data-locked] {
+  stroke-dasharray: 6 4;
+}
+.draw-guides [data-away] {
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+}
+/* Il menu radiale: uno strato su tutta la finestra, che prende il tocco
+   fuori dalle voci, e attorno al punto chiesto il disco con otto voci in
+   cerchio. L'anello è un punto, il centro: il disco, le voci e il nome
+   sopra stanno attorno a lui, e lui si ingrandisce quando il menu entra. */
+.draw-radial {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu);
+  touch-action: none;
+}
+.draw-radial-ring {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.draw-radial-ring::before {
+  content: "";
+  position: absolute;
+  top: -104px;
+  left: -104px;
+  width: 208px;
+  height: 208px;
+  border-radius: 50%;
+}
+.draw-radial-item {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: -24px 0 0 -24px;
+  padding: 0;
+  border-radius: 50%;
+}
+.draw-radial-center {
+  position: absolute;
+  top: -28px;
+  left: -28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+}
+/* La punta che dice la direzione indicata, sul bordo del centro: in alto,
+   e girata di un ottavo di giro per ogni voce dopo. */
+.draw-radial-center[data-pointing]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -6px 0 0 -6px;
+  border: 6px solid transparent;
+  transform: translateY(-36px);
+}
+.draw-radial-center[data-pointing="ne"]::after {
+  transform: rotate(45deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="e"]::after {
+  transform: rotate(90deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="se"]::after {
+  transform: rotate(135deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="s"]::after {
+  transform: rotate(180deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="sw"]::after {
+  transform: rotate(225deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="w"]::after {
+  transform: rotate(270deg) translateY(-36px);
+}
+.draw-radial-center[data-pointing="nw"]::after {
+  transform: rotate(315deg) translateY(-36px);
+}
+/* La prova della penna in «Penna e dita»: il dito e la penna disegnano, e il
+   browser non se li prende per scorrere. */
+.draw-touch-pad {
+  touch-action: none;
+}
+.draw-radial-caption {
+  position: absolute;
+  top: -112px;
+  left: 0;
+  max-width: 80vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
+.draw-radial-caption:empty {
+  display: none;
+}
+/* I righelli, in alto e a sinistra, coprono il bordo del foglio senza
+   spostare il disegno: sopra ogni cosa del foglio, sotto le barre che
+   galleggiano. Le tacche cadono a metà dei pixel; i numeri sono piccoli e
+   a cifre di pari larghezza, che non ballano quando la vista scorre. */
+.draw-rulers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+}
+.draw-rulers path {
+  fill: none;
+  stroke-width: 1px;
+  shape-rendering: crispEdges;
+}
+.draw-rulers text {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+/* Nell'angolo dei righelli, sul foglio girato, la freccia verso il suo alto. */
+.draw-rulers [data-part="north"] {
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  shape-rendering: auto;
+}
+/* Il cursore del foglio, che la tastiera muove: un punto senza misura, e il
+   segno attorno lo disegna la pelle. */
+.draw-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.draw-cursor::before,
+.draw-cursor::after {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 50%;
+}
+.draw-cursor::before {
+  top: -12px;
+  left: -12px;
+  width: 24px;
+  height: 24px;
+}
+.draw-cursor::after {
+  top: -3px;
+  left: -3px;
+  width: 6px;
+  height: 6px;
+}
+/* Il campo in cui si scrive un testo: uno strato sopra il foglio, che lo
+   taglia ai bordi e non scorre, e nello strato il campo, trasparente, al
+   posto del testo. Il carattere, il corpo, l'interlinea, il colore e la
+   trasformazione li dà l'editor, presi dal testo: il campo non ha niente di
+   suo che sposti le righe. Il colore resta quello del testo anche coi colori
+   forzati, perché la carta resta bianca. */
+.draw-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overflow: clip;
+  pointer-events: none;
+}
+/* I segni dei collegamenti, in uno strato sopra il foglio che non scorre e
+   taglia ai bordi. Un segno sta appena fuori dall'angolo in alto a destra del
+   suo collegamento, così non copre il disegno, e si tocca solo quando lo
+   strato è attivo: con gli altri strumenti il tocco va al foglio. */
+.draw-link-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  overflow: clip;
+  pointer-events: none;
+}
+.draw-link-mark {
+  position: absolute;
+  top: -30px;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  pointer-events: none;
+}
+.draw-link-layer[data-active] > .draw-link-mark {
+  pointer-events: auto;
+}
+.draw-text-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: content-box;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  font-style: normal;
+  font-synthesis: none;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-indent: 0;
+  text-transform: none;
+  white-space: pre;
+  overflow-wrap: normal;
+  transform-origin: 0 0;
+  transition: none;
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
+  pointer-events: auto;
+  forced-color-adjust: none;
+}
+/* Una riga del campo e un pezzo con un aspetto suo. La distanza fra le righe
+   e l'aspetto dei pezzi li dà l'editor; i pezzi stanno nella riga. */
+.draw-text-line {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+.draw-text-piece {
+  display: inline;
+}
+/* Il foglio e la sua barra: la barra della selezione galleggia in cima al
+   foglio, al centro, così quando compare il foglio non si sposta. Va a capo
+   invece di uscire da un foglio stretto. */
+.draw-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.draw-arrange {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+  transform: translateX(-50%);
+}
+/* Coi righelli, la barra sta al centro di ciò che si vede, sotto il
+   righello in alto, e i campi di testo e i segni dei collegamenti non
+   escono sopra i righelli. Un righello è largo 24 px, `RULER_PX` di
+   `tools/rulers.ts`. */
+.draw-stage[data-rulers] > .draw-arrange {
+  top: 32px;
+  left: calc(50% + 12px);
+  max-width: calc(100% - 40px);
+}
+/* Accanto alla selezione, la barra parte dall'angolo del foglio e l'editor
+   la sposta dove va (`tools/bar.ts`). Durante un gesto non si vede, ma
+   tiene il suo posto e le sue misure. */
+.draw-stage > .draw-arrange[data-beside],
+.draw-stage[data-rulers] > .draw-arrange[data-beside] {
+  top: 0;
+  left: 0;
+}
+.draw-arrange[data-gesture] {
+  visibility: hidden;
+}
+/* Il campo dell'opacità della barra: il numero, largo quattro cifre e un
+   poco di più per «Misto», e il «%» accanto, alti come i pulsanti. */
+.draw-arrange-field {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 44px;
+}
+.draw-arrange-field[hidden] {
+  display: none;
+}
+.draw-arrange-input {
+  box-sizing: border-box;
+  width: 7ch;
+  min-width: 0;
+  min-height: 44px;
+  padding-block: 0;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.draw-arrange-suffix {
+  flex: none;
+  pointer-events: none;
+}
+/* La barra del gruppo isolato, in basso a sinistra del foglio: il pulsante
+   che esce e il percorso dal livello al gruppo. Un percorso lungo va a capo
+   verso l'alto, e un nome lungo finisce coi puntini; coi righelli la barra
+   non copre quello a sinistra. */
+.draw-isolation {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+}
+.draw-stage[data-rulers] > .draw-isolation {
+  left: 32px;
+  max-width: calc(100% - 40px);
+}
+.draw-isolation-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draw-isolation-path > li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.draw-isolation-crumb {
+  display: block;
+  max-width: 12rem;
+  min-height: 44px;
+  overflow: hidden;
+  line-height: 44px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-isolation-sep {
+  flex: none;
+}
+/* La barra di un incolla lungo, in alto al centro del foglio: che cosa fa,
+   quanto manca, e il pulsante che lo interrompe. Un testo lungo finisce coi
+   puntini; coi righelli la barra non copre quello in alto. */
+.draw-progress {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: calc(100% - 16px);
+  transform: translateX(-50%);
+}
+.draw-stage[data-rulers] > .draw-progress {
+  top: 32px;
+}
+.draw-progress-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-progress-meter {
+  flex: none;
+  width: 8rem;
+}
+.draw-progress-stop {
+  flex: none;
+  min-height: 44px;
+}
+/* Il suggerimento breve, sotto il foglio: una riga dell'editor, non un
+   riquadro sopra il disegno, e il foglio si accorcia per lei. La lampadina,
+   il testo che va a capo, la casella e la croce; stretto, la casella va
+   sotto il testo. */
+.draw-suggestions {
+  flex: none;
+}
+.draw-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+.draw-suggestion-icon {
+  flex: none;
+}
+.draw-suggestion-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-suggestion-off {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+}
+.draw-suggestion-close {
+  flex: none;
+}
+/* La galleria di «Nuovo disegno» (`draw-new-*`): la geometria che nessun tema
+   cambia. Il nome e la cartella affiancati, le schede e i disegni del vault in
+   griglie che si stringono, l'anteprima ritagliata nel suo riquadro; l'avviso
+   c'è sempre, perché chi legge con una voce lo senta quando il testo arriva, e
+   vuoto non occupa posto. Sul telefono una colonna sola per i campi, due per le
+   schede, e le azioni stanno sopra la barra di sistema. Colori, bordi, spazi e
+   il riquadro stanno nella pelle. */
+.draw-new-fields {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.draw-new-cards {
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+}
+.draw-new-vault {
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+}
+.draw-new-image {
+  object-fit: contain;
+}
+.draw-new-alert:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 760px) {
+  .draw-new-fields,
+  .draw-new-vault {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .draw-new-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .modale .palette-box.draw-new {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+/* «Importa disegno» (`draw-import-*`): la geometria che nessun tema cambia.
+   Il nome e la cartella affiancati, l'anteprima ritagliata nel suo riquadro,
+   l'avviso che c'è sempre e vuoto non occupa posto, come nella galleria di
+   «Nuovo disegno». Sul telefono una colonna sola per i campi, e le azioni
+   stanno sopra la barra di sistema. */
+.draw-import-fields {
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+}
+.draw-import-image {
+  object-fit: contain;
+}
+.draw-import-alert:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 760px) {
+  .draw-import-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modale .palette-box.draw-import {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+}
+/* «Esporta» (`draw-export-*`): la geometria che nessun tema cambia. Le
+   scelte e l'anteprima prendono l'altezza che la finestra lascia, e dove la
+   finestra è stretta stanno una sopra l'altra. Un campo ha il nome sopra, e
+   sotto il valore con l'unità accanto. Nell'anteprima il
+   disegno sta al suo posto sulla carta, in proporzione alla carta, e i segni
+   sopra, grandi quanto lei; ciò che va oltre la carta non si vede, come nel
+   PDF. */
+.draw-export-layout {
+  grid-template-rows: minmax(0, 1fr);
+}
+.draw-export-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.draw-export-field > span:first-child,
+.draw-export-select {
+  grid-column: 1 / -1;
+}
+.draw-export-sheet {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+.draw-export-sheet .draw-export-image {
+  position: absolute;
+}
+.draw-export-marks {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+@media (max-width: 760px) {
+  .draw-export-layout {
+    grid-template-rows: none;
+  }
+}
+/* La descrizione di un'immagine appena entrata: in fondo al foglio, al
+   centro; sopra la barra del gruppo isolato quando c'è. */
+.draw-describe {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: min(36rem, calc(100% - 16px));
+  transform: translateX(-50%);
+}
+.draw-isolation:not([hidden]) ~ .draw-describe {
+  bottom: 72px;
+}
+.draw-describe-label {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.draw-describe-input {
+  box-sizing: border-box;
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-describe-action {
+  flex: none;
+  min-height: 44px;
+}
+/* Lo scostamento, la semplificazione e il ricalco: in fondo al foglio come
+   la descrizione delle immagini. Il titolo sopra, i campi in fila coi
+   pulsanti a destra, e sotto ciò che succederà. */
+.draw-paths {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  box-sizing: border-box;
+  width: min(40rem, calc(100% - 16px));
+  transform: translateX(-50%);
+}
+.draw-isolation:not([hidden]) ~ .draw-paths {
+  bottom: 72px;
+}
+.draw-paths-title,
+.draw-paths-status {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.draw-paths-field {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+}
+.draw-paths-field input[type="number"] {
+  box-sizing: border-box;
+  width: 6rem;
+  min-height: 44px;
+}
+.draw-paths-field select {
+  min-height: 44px;
+}
+.draw-paths-field input[type="range"] {
+  width: min(14rem, 50vw);
+  min-height: 44px;
+}
+/* Il valore di un cursore del ricalco, accanto: le cifre non ballano. */
+.draw-paths-value {
+  min-width: 3ch;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.draw-paths-check {
+  min-height: 44px;
+}
+.draw-paths-action {
+  flex: none;
+  min-height: 44px;
+}
+.draw-paths-field + .draw-paths-action {
+  margin-left: auto;
+}
+.draw-stage[data-rulers] > .draw-text-layer,
+.draw-stage[data-rulers] > .draw-link-layer {
+  clip-path: inset(24px 0 0 24px);
+}
+/* Il foglio e, accanto, i pannelli: l'albero degli oggetti, le proprietà e
+   gli attributi, uno sotto l'altro. Su un riquadro stretto i pannelli vanno
+   sotto il foglio. Una riga dell'albero misura almeno 44 px: è un bersaglio
+   come gli altri, e l'albero virtualizzato conta su quell'altezza. */
+.draw-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+/* Il lato del bordo segue la disposizione, che è della struttura; il colore
+   e il tratto sono della pelle. Gli attributi vogliono più spazio dei nomi
+   dell'albero: con loro il pannello si allarga (`data-wide`, che l'editor
+   mette quando si vedono). */
+.draw-dock {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 min(20rem, 40%);
+  min-width: 0;
+  min-height: 0;
+  border-width: 0;
+  border-inline-start-width: 1px;
+}
+.draw-dock[data-wide] {
+  flex-basis: min(26rem, 45%);
+}
+/* I pannelli aperti si dividono l'altezza, con un filo fra loro; le
+   proprietà, che hanno più da mostrare, ne prendono il doppio. */
+.draw-objects,
+.draw-properties,
+.draw-inspector,
+.draw-history,
+.draw-boards,
+.draw-library,
+.draw-symbols,
+.draw-access {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  border-width: 0;
+}
+.draw-properties {
+  flex-grow: 2;
+}
+.draw-dock > :not([hidden]) ~ :not([hidden]) {
+  border-block-start-width: 1px;
+}
+.draw-objects-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.draw-objects-title {
+  margin: 0;
+}
+.draw-objects-empty,
+.draw-objects-status {
+  flex: none;
+  margin: 0;
+}
+/* Il filtro, sotto il titolo: la ricerca prende il posto che resta, il tipo
+   quello che gli serve, e ciascuno è un bersaglio da 44 px. */
+.draw-objects-filter {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.draw-objects-search,
+.draw-objects-kind {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-objects-search {
+  flex: 1;
+}
+.draw-objects-kind {
+  flex: none;
+  max-width: 50%;
+}
+.draw-objects-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-objects-tree {
+  position: relative;
+}
+.draw-object {
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.draw-objects-tree[data-virtual] > .draw-object {
+  position: absolute;
+  right: 0;
+  left: 0;
+}
+/* Una riga rientra di un passo per ogni livello sopra di lei
+   (`--draw-depth`, scritto dall'albero). La freccia che apre e chiude ha il
+   suo posto anche dove non c'è, perché i nomi dello stesso livello stiano in
+   colonna. */
+.draw-object-twisty {
+  flex: none;
+  width: 1.25em;
+  margin-inline-start: calc(var(--draw-depth, 0) * 1.25em);
+  text-align: center;
+}
+.draw-object-mark {
+  flex: none;
+  width: 1.75em;
+  text-align: center;
+}
+/* La miniatura, fra il segno della scelta e il nome: un quadrato con
+   dentro, intero, ciò che la riga disegna. Una riga senza miniatura ne tiene
+   il posto, perché i nomi stiano in colonna. I colori sono quelli del
+   disegno, anche coi colori forzati. */
+.draw-object-thumb {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  forced-color-adjust: none;
+}
+.draw-object-thumb > svg,
+.draw-object-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.draw-object-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il lucchetto e l'occhio sbarrato, in fondo alla riga: si vedono quando
+   l'oggetto è bloccato o nascosto, e il nome lo dice anche a parole. Su una
+   riga che li cambia, col puntatore sopra o quando è la riga attiva, gli
+   altri si vedono appena e si toccano; altrove non si toccano per sbaglio.
+   Ogni segno è un bersaglio da 24 px. */
+.draw-object-signs {
+  display: flex;
+  flex: none;
+  order: 1;
+}
+/* Il campo del nome prende il posto del nome, prima dei segni: sta in fondo
+   alla riga per l'albero, che ne tiene ferme le prime parti. */
+.draw-object[data-renaming] > .draw-object-label {
+  display: none;
+}
+.draw-object-rename {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+}
+.draw-object-sign {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
+}
+.draw-object-sign[data-on] {
+  opacity: 1;
+}
+.draw-object[data-toggles] .draw-object-sign[data-on],
+.draw-object[data-toggles]:hover .draw-object-sign,
+.draw-object[data-toggles][data-active] .draw-object-sign {
+  pointer-events: auto;
+  cursor: pointer;
+}
+.draw-object[data-toggles]:hover .draw-object-sign:not([data-on]),
+.draw-object[data-toggles][data-active] .draw-object-sign:not([data-on]) {
+  opacity: 0.45;
+}
+/* Trascinando, dove andrebbe ciò che si sposta: una linea fra due righe,
+   rientrata quanto il contenitore che lo riceve (`--draw-drop-depth`,
+   scritto dall'albero), o la riga che lo accoglie, contornata. Le righe che
+   si spostano restano al loro posto, sbiadite; accanto al puntatore, il
+   loro nome. */
+.draw-object[data-drop="before"]::before,
+.draw-object[data-drop="after"]::after {
+  position: absolute;
+  inset-inline: calc(var(--draw-drop-depth, 0) * 1.25em) 0;
+  height: 2px;
+  content: "";
+  pointer-events: none;
+}
+.draw-object[data-drop="before"]::before {
+  top: -1px;
+}
+.draw-object[data-drop="after"]::after {
+  bottom: -1px;
+}
+.draw-object[data-moving] {
+  opacity: 0.5;
+}
+.draw-objects-tree[data-dragging],
+.draw-objects-tree[data-dragging] * {
+  cursor: grabbing;
+}
+.draw-objects-tree[data-dragging][data-refused],
+.draw-objects-tree[data-dragging][data-refused] * {
+  cursor: no-drop;
+}
+/* La cronologia: il titolo col conteggio e, in fondo alla stessa riga,
+   «Segna questo punto»; sotto, l'elenco dei passi, che scorre. Le righe hanno tutte la stessa altezza, scritta
+   dal pannello, e stanno al loro posto nell'elenco alto quanto tutte: il
+   pannello ne disegna solo quelle che si vedono. In fondo alla riga di
+   adesso c'è la parola «adesso»; in fondo a quella di un segno, la croce che
+   lo toglie, che si vede e si tocca sulla riga col puntatore sopra e su
+   quella attiva: altrove non si tocca per sbaglio. */
+.draw-history-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.draw-history-title {
+  margin: 0;
+}
+.draw-history-action {
+  margin-inline-start: auto;
+}
+.draw-history-note,
+.draw-history-empty {
+  flex: none;
+  margin: 0;
+}
+.draw-history-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-history-list {
+  position: relative;
+}
+.draw-history-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.draw-history-glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+}
+.draw-history-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Il campo del nome prende il posto del nome, prima della parola «adesso» e
+   della croce. */
+.draw-history-now,
+.draw-history-remove {
+  flex: none;
+  order: 1;
+}
+.draw-history-row[data-renaming] > .draw-history-label {
+  display: none;
+}
+.draw-history-rename {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+}
+.draw-history-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
+}
+.draw-history-row:hover > .draw-history-remove,
+.draw-history-row[data-active] > .draw-history-remove {
+  opacity: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.draw-history-list[aria-disabled="true"] > .draw-history-row {
+  cursor: default;
+}
+
+/* Le tavole, come la cronologia: il titolo col conteggio e, in fondo alla
+   stessa riga, «Nuova tavola»; sotto, l'elenco delle tavole, che scorre e
+   di cui il pannello disegna solo le righe che si vedono. Una riga è il
+   triangolo della tavola di adesso, il numero, allineato a destra con le
+   cifre della stessa larghezza, il nome, che si accorcia, e la misura, che
+   si accorcia solo quando il pannello è stretto. Il campo del nome prende il
+   posto del nome e della misura. */
+.draw-boards-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.draw-boards-title {
+  margin: 0;
+}
+.draw-boards-add {
+  margin-inline-start: auto;
+}
+.draw-boards-empty {
+  flex: none;
+  margin: 0;
+}
+.draw-boards-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-boards-list {
+  position: relative;
+}
+.draw-board-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.draw-board-glyph {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+}
+.draw-board-number {
+  flex: none;
+  min-width: 2em;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.draw-board-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-board-size {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-board-row[data-renaming] > .draw-board-name,
+.draw-board-row[data-renaming] > .draw-board-size {
+  display: none;
+}
+.draw-board-rename {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 32px;
+}
+
+/* Le forme: il titolo col conteggio, il campo di ricerca e sotto le raccolte,
+   che scorrono. Ogni raccolta ha il suo titolo e una griglia di riquadri che
+   va a capo: un riquadro è un bersaglio da 44 px con l'anteprima della forma
+   al centro, e si preme, o si tira sul foglio, col dito senza fermare lo
+   scorrimento verticale dell'elenco. Mentre una forma si tira, il cursore dice
+   se si può lasciare: la copia sul foglio, il divieto fuori. */
+.draw-library-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.draw-library-title {
+  margin: 0;
+}
+.draw-library-count {
+  margin-inline-start: auto;
+}
+.draw-library-find {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.draw-library-search {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-library-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-library-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-library-heading,
+.draw-library-empty {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+}
+.draw-library-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: default;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.draw-library-tile[hidden],
+.draw-library-group[hidden] {
+  display: none;
+}
+.draw-library-preview {
+  display: block;
+  flex: none;
+  max-width: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+/* I simboli: come le forme, il titolo col conteggio, il campo di ricerca e
+   sotto le sezioni, che scorrono: quella del disegno e una per libreria,
+   e in fondo la riga che dice dove si cercano le librerie. Un riquadro ha
+   l'anteprima sopra, quadrata, e il nome sotto, su due righe al più; nel
+   suo angolo, un segno: il numero delle istanze, la spunta o
+   l'aggiornamento. Una sezione che non mostra simboli dice perché al posto
+   della griglia. */
+.draw-symbols-header {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.draw-symbols-title {
+  margin: 0;
+}
+.draw-symbols-count {
+  margin-inline-start: auto;
+}
+.draw-symbols-find {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.draw-symbols-search {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-symbols-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-symbols-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-symbols-heading,
+.draw-symbols-note,
+.draw-symbols-empty,
+.draw-symbols-footer {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-symbols-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+}
+.draw-symbols-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  text-align: center;
+  cursor: default;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.draw-symbols-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-height: 0;
+  pointer-events: none;
+}
+.draw-symbols-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.draw-symbols-name {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.draw-symbols-badge {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  pointer-events: none;
+}
+.draw-symbols-tile[hidden],
+.draw-symbols-group[hidden],
+.draw-symbols-grid[hidden],
+.draw-symbols-preview[hidden],
+.draw-symbols-badge[hidden] {
+  display: none;
+}
+/* «Aggiorna dalla libreria» e «Rendi modificabile»: le due anteprime
+   affiancate, della stessa misura, ognuna col suo nome sotto. */
+.draw-symbol-update-pair,
+.draw-editable-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.draw-symbol-update-side,
+.draw-editable-side {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  margin: 0;
+}
+.draw-symbol-update-frame,
+.draw-editable-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+}
+.draw-symbol-update-preview,
+.draw-editable-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.draw-symbol-update-caption,
+.draw-editable-caption {
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+/* «Rendi modificabile»: gli elenchi di ciò che cambia e di ciò che resta
+   scorrono, e la frase e i pulsanti restano in vista. */
+.draw-editable-details {
+  overflow-y: auto;
+  max-height: 40vh;
+  min-height: 0;
+}
+.draw-editable-list {
+  margin: 0;
+  padding-inline-start: 1.25em;
+}
+.draw-editable-list li {
+  overflow-wrap: anywhere;
+}
+.draw-editor[data-library-drop="copy"],
+.draw-editor[data-library-drop="copy"] * {
+  cursor: copy !important;
+}
+.draw-editor[data-library-drop="none"],
+.draw-editor[data-library-drop="none"] * {
+  cursor: not-allowed !important;
+}
+/* La presentazione copre tutto: lo schermo intero o, dove non c'è, la
+   finestra, sul piano delle superfici che intrappolano il fuoco. Il fondo è
+   nero e gli schermi vuoti sono nero e bianco, e basta: non sono un aspetto,
+   sono ciò che uno schermo vuoto fa in una sala, spegnersi o fare luce, e
+   stanno qui come il moto ridotto, dove un tema non li cambia e i colori
+   forzati non li toccano. La tavola sta dove la mette la presentazione, al
+   centro e il più grande possibile; la sua immagine e l'inchiostro la
+   riempiono e lasciano il puntatore allo stage, dove lo legge la pipeline
+   della penna. Il laser prende il posto del cursore, e col puntatore fermo
+   il cursore sparisce. */
+.draw-present {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  overflow: hidden;
+  background: #000000;
+  forced-color-adjust: none;
+}
+.draw-present[data-laser],
+.draw-present[data-still] {
+  cursor: none;
+}
+.draw-present-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.draw-present-frame {
+  position: absolute;
+}
+.draw-present-board,
+.draw-present-ink {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+.draw-present-end,
+.draw-present-blank {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.draw-present-end {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.draw-present-blank[data-blank="black"] {
+  background: #000000;
+}
+.draw-present-blank[data-blank="white"] {
+  background: #ffffff;
+}
+.draw-present-laser {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* La verifica dell'accessibilità scorre tutta insieme, con l'intestazione
+   ferma in cima: due sezioni che si chiudono, i problemi e l'ordine di
+   lettura. Un problema è una riga: il segno della gravità, il titolo col
+   dettaglio sotto e i pulsanti, che vanno a capo quando il pannello è
+   stretto. L'ordine di lettura scorre per conto suo e disegna solo le righe
+   che si vedono, come la cronologia. */
+.draw-access {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.draw-access-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.draw-access-title {
+  margin: 0;
+}
+.draw-access-count {
+  margin-inline-start: auto;
+}
+.draw-access-section {
+  flex: none;
+}
+.draw-access-summary {
+  line-height: 44px;
+  cursor: pointer;
+}
+.draw-access-note,
+.draw-access-empty,
+.draw-access-warning {
+  margin: 0;
+}
+.draw-access-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.draw-access-problem {
+  display: grid;
+  grid-template-columns: 1.75em minmax(0, 1fr);
+  align-items: start;
+}
+.draw-access-glyph {
+  display: flex;
+  grid-row: 1 / span 2;
+  align-items: center;
+  justify-content: center;
+}
+.draw-access-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 2;
+  min-width: 0;
+}
+.draw-access-action {
+  max-width: 100%;
+}
+.draw-access-object {
+  display: inline-block;
+  overflow: hidden;
+  line-height: 42px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-access-swatch {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  width: 1em;
+  height: 1em;
+}
+.draw-access-detail > .draw-access-swatch {
+  vertical-align: middle;
+}
+.draw-access-describe {
+  box-sizing: border-box;
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: 44px;
+}
+.draw-access-scroll {
+  max-height: min(22rem, 50vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-access-tree {
+  position: relative;
+}
+.draw-access-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  line-height: 44px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.draw-access-moves {
+  display: flex;
+  flex-wrap: wrap;
+}
+.draw-objects-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-menu);
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* Gli attributi: una tabella col nome, il valore e il pulsante che lo
+   toglie. Il nome va a capo dove serve; il valore prende il resto, e il campo
+   che si scrive è un bersaglio da 44 px. Sotto, il riquadro per aggiungerne
+   uno. */
+.draw-inspector-header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+.draw-inspector-title,
+.draw-inspector-subject,
+.draw-inspector-empty,
+.draw-inspector-note,
+.draw-inspector-error,
+.draw-inspector-add-title {
+  margin: 0;
+}
+.draw-inspector-subject {
+  overflow-wrap: anywhere;
+}
+.draw-inspector-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-inspector-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.draw-inspector-key {
+  width: 38%;
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.draw-inspector-key > label {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.draw-inspector-value {
+  vertical-align: top;
+}
+.draw-inspector-actions {
+  width: 44px;
+  vertical-align: top;
+}
+.draw-inspector-field {
+  display: flex;
+  align-items: center;
+}
+.draw-inspector-input {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+}
+textarea.draw-inspector-input {
+  resize: vertical;
+}
+.draw-inspector-swatch {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  forced-color-adjust: none;
+}
+.draw-inspector-note,
+.draw-inspector-error {
+  overflow-wrap: anywhere;
+}
+.draw-inspector-add {
+  display: flex;
+  flex-direction: column;
+}
+.draw-inspector-add-value {
+  display: flex;
+}
+/* Il pannello delle proprietà: il titolo e, sotto, le sezioni che
+   scorrono. L'intestazione di una sezione è un pulsante largo quanto il
+   pannello, con la freccia che dice se è aperta. I campi stanno in due
+   colonne, con accanto la colonna stretta di un pulsante: X e Y, Larghezza e
+   Altezza col lucchetto; ciò che vuole spazio prende la riga. */
+.draw-properties-header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+.draw-properties-title,
+.draw-properties-subject,
+.draw-properties-heading,
+.draw-properties-note,
+.draw-properties-error {
+  margin: 0;
+}
+.draw-properties-subject,
+.draw-properties-label,
+.draw-properties-note,
+.draw-properties-error {
+  overflow-wrap: anywhere;
+}
+.draw-properties-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.draw-properties-toggle {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  text-align: start;
+}
+.draw-properties-toggle-text {
+  flex: 1;
+  min-width: 0;
+}
+.draw-properties-toggle > svg {
+  flex: none;
+}
+.draw-properties-toggle[aria-expanded="false"] > svg {
+  transform: rotate(-90deg);
+}
+.draw-properties-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  align-items: end;
+}
+.draw-properties-body[hidden] {
+  display: none;
+}
+.draw-properties-field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-properties-field[data-column="1"] {
+  grid-column: 1;
+}
+.draw-properties-field[data-column="2"] {
+  grid-column: 2;
+}
+.draw-properties-field[data-column="3"] {
+  grid-column: 3;
+}
+.draw-properties-field[data-column="all"],
+.draw-properties-actions,
+.draw-properties-body > .draw-inspector {
+  grid-column: 1 / -1;
+}
+.draw-properties-apply {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+.draw-properties-number,
+.draw-properties-paint {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.draw-properties-input {
+  box-sizing: border-box;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  font-variant-numeric: tabular-nums;
+}
+textarea.draw-properties-input {
+  resize: vertical;
+}
+/* Un campo a menu è un pulsante largo quanto il campo: la figura della
+   scelta, le parole che la dicono e, in fondo, la freccia che dice che si
+   apre. Le parole vanno a capo invece di uscire dal pannello, e il posto
+   della figura resta anche quando non ce n'è una. */
+.draw-properties-menu {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  text-align: start;
+}
+.draw-properties-menu-picture {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+.draw-properties-menu-picture > svg {
+  width: 24px;
+  height: 24px;
+}
+/* L'anteprima di uno stile, nel menu e sul pulsante del campo: «Aa» nei
+   caratteri dello stile, o un quadratino col suo riempimento e il suo
+   contorno, al posto di un'icona. Tiene i colori dello stile anche coi
+   colori forzati, perché è ciò che mostra. */
+.menu-sample {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  line-height: 1;
+  white-space: nowrap;
+  forced-color-adjust: none;
+}
+.menu-sample-box {
+  width: 18px;
+  height: 18px;
+  margin: 3px;
+  border: 0 solid transparent;
+}
+/* Un campo diverso dallo stile che la selezione segue: un punto dopo il
+   nome. La frase che lo dice sta nel campo, per chi ascolta. */
+.draw-properties-field[data-differs] > .draw-properties-label::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-start: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.draw-properties-menu-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.draw-properties-menu > svg {
+  flex: none;
+}
+.draw-properties-unit {
+  flex: none;
+}
+.draw-properties-picker {
+  flex: none;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.draw-properties-switch {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.draw-properties-check {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.draw-properties-actions {
+  display: flex;
+  flex-direction: column;
+}
+.draw-properties-bar {
+  display: flex;
+  flex-wrap: wrap;
+}
+.draw-properties-bar[hidden] {
+  display: none;
+}
+/* I colori del documento prendono la riga della sezione: «Applica a», le
+   tre griglie e il modulo, uno sotto l'altro. I colori vanno a capo, e
+   ognuno è un pulsante di 44 px col numero degli oggetti sotto il colore. */
+.draw-swatches {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-swatches-target,
+.draw-swatches-group,
+.draw-swatches-form,
+.draw-swatches-form-row {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-swatches-heading,
+.draw-swatches-form-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-swatches-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+.draw-swatches-chip {
+  flex-direction: column;
+}
+.draw-swatches-count {
+  font-variant-numeric: tabular-nums;
+}
+.draw-swatches-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+/* Un colore misto è un tondo a righe, che non è un colore della tavolozza:
+   la pelle dà i colori della tessera. */
+.draw-swatch-frame[data-shape="mixed"],
+.draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
+  clip-path: circle(50%);
+}
+.draw-swatch-frame[data-shape="mixed"] > .draw-swatch {
+  background-size: 6px 6px;
+}
+/* Una sfumatura, una campitura e un motivo del disegno: un quadrato dagli
+   angoli tondi, che non è una forma della tavolozza. I punti della
+   sfumatura, le righe della campitura e la scacchiera del motivo li dipinge
+   la pelle. */
+.draw-swatch-frame[data-shape="gradient"],
+.draw-swatch-frame[data-shape="gradient"] > .draw-swatch,
+.draw-swatch-frame[data-shape="hatch"],
+.draw-swatch-frame[data-shape="hatch"] > .draw-swatch,
+.draw-swatch-frame[data-shape="pattern"],
+.draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
+  clip-path: inset(6% round 4px);
+}
+.draw-swatch-frame[data-shape="pattern"] > .draw-swatch {
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+}
+/* La sfumatura prende la riga della sezione: «Applica a», il tipo, la
+   barra coi punti, i campi del punto scelto, i comandi e l'angolo, uno
+   sotto l'altro. La barra rientra di mezzo punto per lato, così i punti ai
+   capi non escono; sotto, ogni punto è un bersaglio di 24 px al suo posto
+   (`--at`, da 0 a 1), con la punta verso la barra. I colori della barra e
+   dei punti sono quelli del disegno, anche coi colori forzati. I campi del
+   punto stanno nelle colonne del pannello. */
+.draw-gradient {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-gradient-target,
+.draw-gradient-row,
+.draw-gradient-stops {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-gradient-bar {
+  position: relative;
+  height: 56px;
+  touch-action: none;
+}
+.draw-gradient-strip {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  left: 12px;
+  box-sizing: border-box;
+  height: 24px;
+  forced-color-adjust: none;
+}
+.draw-gradient-thumb {
+  position: absolute;
+  top: 24px;
+  left: calc(12px + (100% - 24px) * var(--at, 0));
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  width: 24px;
+  height: 32px;
+  transform: translateX(-50%);
+  touch-action: none;
+}
+.draw-gradient-thumb::before {
+  content: "";
+  flex: none;
+  width: 0;
+  height: 0;
+  border-width: 0 6px 6px;
+  border-style: solid;
+  border-color: transparent;
+}
+.draw-gradient-thumb-color {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  forced-color-adjust: none;
+}
+.draw-gradient-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  align-items: end;
+}
+.draw-gradient-stop-title {
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-gradient-fields > .draw-properties-error {
+  grid-column: 1 / -1;
+}
+.draw-gradient-remove {
+  grid-column: 3;
+}
+/* La campitura prende la riga della sezione: la nota, il menu del tipo e,
+   quando c'è una campitura da regolare, i suoi campi in due colonne, con
+   i colori, il nome e i comandi di un motivo del documento sulla riga
+   intera. */
+.draw-hatch {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-hatch-fields,
+.draw-hatch-motif {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+}
+.draw-hatch-fields > .draw-properties-error,
+.draw-hatch-motif > .draw-properties-error,
+.draw-hatch-motif > .draw-button {
+  grid-column: 1 / -1;
+}
+/* Il connettore non ha una riga sua: i suoi campi sono le celle della
+   griglia della sezione. Il tipo, l'etichetta e le note prendono la riga
+   intera, i due agganci una colonna ciascuno; «Inverti» sta a sinistra. */
+.draw-connector {
+  display: contents;
+}
+.draw-connector > .draw-properties-note {
+  grid-column: 1 / -1;
+}
+.draw-connector > .draw-properties-apply {
+  justify-self: start;
+}
+/* Gli effetti prendono la riga della sezione: sotto la nota, una riga per
+   effetto, coi comandi sotto quando gli oggetti ne hanno di diversi o un
+   filtro d'altri. L'intestazione della sezione porta, accanto al titolo,
+   il pulsante che aggiunge un effetto: il titolo prende lo spazio, il
+   pulsante la sua misura. Una riga ha tre bersagli da 44 px, l'occhio, il
+   nome e il pulsante che toglie; aperta, mostra i suoi campi in due
+   colonne, e il colore ha la riga intera. */
+.draw-properties-section[data-section="effects"] > .draw-properties-heading {
+  display: flex;
+  align-items: center;
+}
+.draw-properties-section[data-section="effects"] > .draw-properties-heading > .draw-properties-toggle {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+.draw-effects {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-effects-add {
+  flex: none;
+}
+.draw-effects-state {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.draw-effects-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-effects-list[hidden],
+.draw-effects-actions[hidden],
+.draw-effect-fields[hidden],
+.draw-effect-chip[hidden] {
+  display: none;
+}
+.draw-effect {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.draw-effect-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.draw-effect-show,
+.draw-effect-remove {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+}
+.draw-effect-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  text-align: start;
+}
+.draw-effect-chip {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  forced-color-adjust: none;
+}
+.draw-effect-title {
+  flex: none;
+}
+.draw-effect-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.draw-effect-name > svg {
+  flex: none;
+}
+.draw-effect-name[aria-expanded="false"] > svg {
+  transform: rotate(-90deg);
+}
+.draw-effect-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: end;
+}
+.draw-effect-fields > .draw-properties-error {
+  grid-column: 1 / -1;
+}
+.draw-effects-actions {
+  display: flex;
+  flex-direction: column;
+}
+/* Gli attributi, come sezione delle proprietà, scorrono con loro e non
+   hanno un titolo loro. */
+.draw-inspector[data-nested] {
+  flex: none;
+}
+.draw-inspector[data-nested] > .draw-inspector-scroll {
+  flex: none;
+  overflow: visible;
+}
+@container (max-width: 36rem) {
+  .draw-body {
+    flex-direction: column;
+  }
+  .draw-dock,
+  .draw-dock[data-wide] {
+    flex: 0 0 40%;
+    border-inline-start-width: 0;
+    border-block-start-width: 1px;
+  }
+}
+/* La superficie del disegno nella shell: una riga d'avviso in cima, quando il
+   documento la chiede, e sotto l'editor o l'immagine del documento intero,
+   che prendono il resto. L'avviso va a capo invece di scorrere: il suo
+   pulsante resta un bersaglio da 44 px anche su un telefono. Finché il
+   codice dell'editor non arriva, il riquadro è il segnaposto che lo aspetta. */
+.vector-pending,
+.vector-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.vector-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.vector-notice-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.vector-notice-action {
+  min-height: 44px;
+}
+/* La sessione live: l'indicatore è una riga fra l'avviso e l'editor, con lo
+   stato che prende lo spazio e «Segui il tablet» accanto; tutti e due sono
+   bersagli da 44 px e vanno a capo su un telefono. Il pallino dello stato
+   è un tondo davanti al testo, che lo ripete a parole. Nel pannello il QR
+   sta al centro a pixel interi, e la diagnostica è una tabella a due
+   colonne. */
+.live-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.live-state,
+.live-follow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+.live-state {
+  flex: 1 1 12rem;
+  min-width: 0;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.live-follow {
+  flex: none;
+}
+.live-state::before {
+  content: "";
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-inline-end: 0.5rem;
+  border-radius: 50%;
+}
+.live-qr {
+  display: flex;
+  justify-content: center;
+}
+.live-qr img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+.live-diagnostics dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0 0;
+}
+.live-diagnostics dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.vector-draw,
+.vector-read {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+/* In Lettura, sotto l'immagine, il disegno a parole: la descrizione, i
+   collegamenti, le connessioni e l'elenco degli oggetti, che scorre da sé e
+   non toglie all'immagine più di un terzo del riquadro. */
+.vector-about {
+  flex: none;
+  max-height: 33%;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+.vector-about-desc {
+  margin: 0;
+  white-space: pre-line;
+}
+.vector-about-objects > summary {
+  box-sizing: border-box;
+  min-height: 44px;
+  cursor: pointer;
+}
+.vector-about-objects ul,
+.vector-about-connections ul {
+  margin: 0;
+  padding-inline-start: 1.5em;
+}
+/* I collegamenti in Lettura: il titolo e una riga di pulsanti, che va a capo. */
+.vector-about-links,
+.vector-about-links ul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.vector-about-links ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vector-about-link {
+  min-height: 44px;
+}
+/* Le annotazioni di un PDF: l'avviso, poi il foglio e, in Lettura, l'elenco
+   delle annotazioni accanto; su uno schermo stretto l'elenco va sotto. La
+   pagina del PDF sta nella carta, sotto il disegno, in canvas posati in
+   percentuali della pagina: lo zoom li porta con sé. In Lettura la barra
+   tiene solo la vista e le pagine, e il titolo non c'è. */
+.pdf-surface {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.pdf-notice-messages {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.pdf-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.pdf-list {
+  flex: 0 1 24rem;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.pdf-list-page {
+  min-height: 44px;
+}
+.pdf-list-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.pdf-surface[data-mode="read"] .draw-group:not([data-group="view"]),
+.pdf-surface[data-mode="read"] .draw-title {
+  display: none;
+}
+.pdf-background {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.pdf-canvas {
+  position: absolute;
+  display: block;
+}
+.pdf-pages {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.pdf-page-previous > svg {
+  transform: scaleX(-1);
+}
+.pdf-page-input {
+  width: 4.5rem;
+  min-height: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.pdf-page-count {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 40rem) {
+  .pdf-body {
+    flex-direction: column;
+  }
+  .pdf-list {
+    flex: 0 1 45%;
+  }
+}
+/* «Annota» nel visore del PDF: un bersaglio da 44 px, come quelli del
+   foglio dove porta. */
+.media-pdf-annotate {
+  min-height: 44px;
+}
+@media (forced-colors: active) {
+  .draw-width-bar,
+  .draw-swatch-frame,
+  .live-state::before {
+    background: CanvasText;
+  }
+  /* Il punto di un campo diverso dallo stile è un fondo, e i fondi si
+     forzano: prende il colore dell'evidenza. L'anteprima di uno stile ha
+     un filo del colore del testo. */
+  .draw-properties-field[data-differs] > .draw-properties-label::after {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+  .menu-sample-box {
+    outline: 1px solid CanvasText;
+  }
+  /* Il pulsante di un campo a menu aperto: il fondo della pelle si forza,
+     e il menu ha il fuoco; l'anello dice di chi è il menu. */
+  .draw-properties-menu[aria-expanded="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  /* La barra e i punti della sfumatura tengono i colori del disegno, col
+     bordo del testo; il punto scelto ha l'anello e la punta della scelta. */
+  .draw-gradient-strip,
+  .draw-gradient-thumb-color {
+    border-color: CanvasText;
+  }
+  .draw-gradient-thumb::before {
+    border-color: transparent transparent CanvasText;
+    forced-color-adjust: none;
+  }
+  .draw-gradient-thumb[data-selected]::before {
+    border-color: transparent transparent Highlight;
+  }
+  .draw-gradient-thumb[data-selected] > .draw-gradient-thumb-color {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
+  /* Il campione di un effetto tiene il suo colore, col bordo del testo; la
+     riga aperta ha il bordo dell'evidenza, oltre alla freccia che si volta. */
+  .draw-effect-chip {
+    border-color: CanvasText;
+  }
+  .draw-effect[data-open] {
+    border-color: Highlight;
+  }
+  .draw-cursor::before,
+  .draw-cursor::after {
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .draw-cursor[data-pressed]::after {
+    background: Highlight;
+  }
+  .draw-surface:focus-visible {
+    outline-offset: -2px !important;
+  }
+  .draw-link-mark {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+  /* La miniatura tiene i colori del disegno, ma il suo bordo è quello del
+     testo; la linea di dove va ciò che si trascina, quella della scelta. */
+  .draw-object-thumb:not([data-empty]) {
+    border: 1px solid CanvasText;
+  }
+  .draw-object[data-drop="before"]::before,
+  .draw-object[data-drop="after"]::after {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+  .draw-object[data-drop="inside"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .draw-objects-ghost {
+    border: 1px solid CanvasText;
+  }
+  /* Il riquadro sollevato dal dito: il fondo e l'ombra si forzano, e
+     l'anello dell'evidenza dice che è in mano. */
+  .draw-library-tile[data-lifted],
+  .draw-symbols-tile[data-lifted] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  /* Il tratto e il riempimento dell'SVG non si forzano da soli: le guide
+     prendono il colore dei collegamenti, distinto da quello della
+     selezione, e i righelli quelli della pagina. La pelle viene dopo questo
+     foglio e colora gli stessi selettori, quindi il pavimento vince con
+     `!important`. */
+  .draw-guides path {
+    stroke: LinkText !important;
+  }
+  .draw-rulers [data-part="bg"],
+  .draw-rulers [data-part="corner"] {
+    fill: Canvas !important;
+  }
+  .draw-rulers [data-part="ticks"],
+  .draw-rulers [data-part="edge"],
+  .draw-rulers [data-part="pointer"] {
+    stroke: CanvasText !important;
+  }
+  .draw-rulers text {
+    fill: CanvasText !important;
+  }
+  .draw-rulers [data-part="page"] {
+    fill: GrayText !important;
+    opacity: 0.3 !important;
+  }
+  .draw-rulers [data-part="selection"] {
+    fill: Highlight !important;
+    opacity: 0.5 !important;
+  }
+  /* «Penna e dita»: la curva col colore della scelta, la diagonale e il
+     tratto d'esempio grigi, quello della penna col testo. */
+  .draw-touch-curve,
+  .draw-touch-pad {
+    border-color: CanvasText !important;
+  }
+  .draw-touch-line {
+    stroke: Highlight !important;
+  }
+  .draw-touch-dot {
+    fill: Highlight !important;
+    stroke: Canvas !important;
+  }
+  .draw-touch-diagonal {
+    stroke: GrayText !important;
+  }
+  .draw-touch-sample {
+    fill: GrayText !important;
+  }
+  .draw-touch-strokes line {
+    stroke: CanvasText !important;
+  }
+  /* Il menu radiale: la voce indicata col colore della scelta, anche senza
+     fondo. */
+  .draw-radial-item[data-hot] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .draw-radial-center[data-pointing]::after {
+    border-bottom-color: Highlight !important;
+  }
+  /* La galleria di «Nuovo disegno»: la scheda scelta ha l'anello
+     dell'evidenza, oltre al pulsante di scelta; la carta bianca del modello
+     vuoto tiene il suo bordo del testo. */
+  .draw-new-card[data-selected],
+  .draw-new-vault-item[data-selected] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .draw-new-blank {
+    border-color: CanvasText;
+  }
+}

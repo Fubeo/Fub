@@ -193,6 +193,38 @@ fn a_registered_export_target_is_accepted_and_run() {
     assert_eq!(report.artifacts[0].path, "Nota.md.zz");
 }
 
+/// Il comando non si ferma alla prova: accoda davvero il job, e l'esito porta
+/// l'artefatto. Dichiarato di sola lettura, girava su un host in simulazione e
+/// il guardiano gli negava il job.
+#[test]
+fn export_run_queues_the_job_for_real() {
+    let (_dir, _root, host) = open(&[("Nota.md", "# Nota\n")]);
+    let events = host.subscribe(None).unwrap();
+    let request = ExportRequest::new(
+        TARGET,
+        ExportSelection::Documents(vec![DocId::new("Nota.md")]),
+    );
+    host.invoke_user_command(
+        None,
+        "export.run",
+        serde_json::json!({"request_json": serde_json::to_string(&request).unwrap()}),
+        InvokeMode::Apply,
+    )
+    .expect("the export is queued");
+    let result = loop {
+        let notice = events
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("the job ends");
+        if let fub_abi::Event::JobDone { job, result, .. } = notice.event {
+            if job == TRANSFER_JOB {
+                break result;
+            }
+        }
+    };
+    let report: ExportReport = serde_json::from_value(result.expect("the export runs")).unwrap();
+    assert_eq!(report.artifacts[0].path, "Nota.md.zz");
+}
+
 #[test]
 fn an_unknown_target_is_still_refused() {
     let (_dir, _root, host) = open(&[("Nota.md", "# Nota\n")]);

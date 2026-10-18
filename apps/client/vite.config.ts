@@ -1,3 +1,4 @@
+import { searchForWorkspaceRoot } from "vite";
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +26,21 @@ export default defineConfig({
         for (const chunk of Object.values(bundle)) {
           if (chunk.type === "chunk" && chunk.isEntry) visit(chunk.fileName);
         }
+        // Vero se dal chunk `from` si arriva, per import statici, a un chunk
+        // che si chiama `name`.
+        const reaches = (from: string, name: string): boolean => {
+          const seen = new Set<string>();
+          const walk = (fileName: string): boolean => {
+            const chunk = bundle[fileName];
+            if (seen.has(fileName) || chunk?.type !== "chunk") return false;
+            seen.add(fileName);
+            return chunk.imports.some((dependency) => {
+              const next = bundle[dependency];
+              return (next?.type === "chunk" && next.name === name) || walk(dependency);
+            });
+          };
+          return walk(from);
+        };
         for (const chunk of Object.values(bundle)) {
           if (chunk.type !== "chunk") continue;
           const modules = Object.keys(chunk.modules);
@@ -35,6 +51,13 @@ export default defineConfig({
           const parser = parserModules > 0 && parserModules === modules.length;
           if (parserModules > 0 && eager.has(chunk.fileName)) {
             this.error(`${chunk.fileName}: il parser Mermaid deve restare fuori dal caricamento iniziale`);
+          }
+          // I chunk dei disegni stanno sotto la superficie: lei li importa, e
+          // nessuno di loro la importa, nemmeno attraverso un altro. Un ciclo
+          // fra chunk si carica, ma l'ordine in cui i moduli partono non è più
+          // quello del codice.
+          if (chunk.name.startsWith("drawing-") && reaches(chunk.fileName, "surface")) {
+            this.error(`${chunk.fileName}: un chunk dei disegni non importa la superficie`);
           }
           const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
           const bytes = Buffer.byteLength(chunk.code, "utf8");
@@ -48,6 +71,15 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    fs: {
+      // I modelli di «Nuovo disegno» stanno nel crate che li distribuisce, e
+      // la galleria ne mostra le anteprime: oltre al client, il server serve
+      // quella cartella e nient'altro del repository.
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+        fileURLToPath(new URL("../../crates/fub-features/templates", import.meta.url)),
+      ],
+    },
   },
   build: {
     target: "es2021",
@@ -74,13 +106,80 @@ export default defineConfig({
           // resta in cache quando cambia la shell, e non gonfia il chunk
           // condiviso dalle tre finestre.
           if (/\/node_modules\/@replit\/codemirror-vim(-core)?\//.test(id)) return "editor-vim";
+          // L'indice dei linguaggi dei blocchi di codice è una libreria a sé:
+          // una tabella di import differiti, che cambia con le sue versioni e
+          // non con la shell.
+          if (/\/node_modules\/@codemirror\/language-data\//.test(id)) return "editor-languages";
           if (/\/node_modules\/@lezer\/(common|lr|highlight)\//.test(id)) return "parser-runtime";
           if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
             return "markdown-grammar";
           }
-          if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
+          // Il formato dei disegni e la sua pittura: il modello, la lettura,
+          // le operazioni e il tratto a mano libera. Cambiano col formato, non
+          // con l'editor che ci lavora sopra, e non dipendono da lui.
+          if (/\/src\/editors\/spatial\/(scene\/|painter\/|ink\/|number\.ts$)|\/node_modules\/perfect-freehand\//.test(id)) {
+            return "drawing-scene";
+          }
+          // La geometria dei disegni senza DOM: i nodi dei tracciati, la
+          // spina dei tratti, le forme e il loro riconoscimento, le aree
+          // booleane, lo scostamento, la semplificazione, la Curvatura, i
+          // tagli e il profilo dello spessore variabile. Dipendono soltanto
+          // dal formato, e gli strumenti dell'editor le usano.
+          if (/\/src\/editors\/spatial\/tools\/(nodes|spine|fit|shapes|recognize|boolean|offset|simplify|curvature|cut|profile)\.ts$/.test(id)) {
+            return "drawing-geometry";
+          }
+          // I fogli di stile dei disegni: leggerli, la loro cascata e lo stile
+          // che resta a ciò che un comando sposta. Seguono CSS, non l'editor
+          // che li chiama, e dipendono soltanto dal formato.
+          if (/\/src\/editors\/spatial\/tools\/(stylesheet|selectors|cascade|styled)\.ts$/.test(id)) {
+            return "drawing-styles";
+          }
+          // I comandi dei disegni senza DOM: l'indice degli oggetti che gli
+          // strumenti toccano, con la parte che se ne vede, e ciò che fa di
+          // una scelta dei passi sul documento: disporre, il contorno,
+          // l'aspetto, i tracciati, le trasformazioni, le booleane, i tagli,
+          // lo spessore variabile, i livelli, la selezione avanzata, il gruppo
+          // di un ricalco, il testo a pezzi del campo in cui si scrive, i suoi
+          // a capo con la misura dei caratteri, il testo su tracciato, le
+          // tavole, i campioni, le sfumature, le punte delle linee, il
+          // ritaglio delle immagini, le maschere, gli effetti, le campiture,
+          // i motivi, i connettori e le etichette nelle forme, con ciò che
+          // il seguito delle une e degli altri ha in comune, le ripetizioni
+          // e la simmetria della penna.
+          // Con loro ciò che i pannelli leggono senza DOM: copiare e
+          // incollare, la cronologia, il controllo dell'accessibilità e la
+          // descrizione del disegno, gli attributi e le misure con le unità,
+          // le scelte dell'export.
+          // E gli aiuti degli strumenti senza DOM: la cornice di
+          // trasformazione, le forme coi parametri, il contagocce, le guide
+          // intelligenti e la griglia.
+          // Dipendono dal formato e dalla geometria, e l'editor li chiama.
+          if (/\/src\/editors\/spatial\/(tools\/(hit|clips|edit|palette|arrange|outline|transform|topath|look|apply|inkshape|paths|width|combine|nodable|scissors|builder|place|layers|selecting|naming|trace-ops|rich|wrap|measure|text-path|boards|swatches|gradients|tips|crop|masks|effects|hatches|patterns|connectors|connector-ops|connector-copies|label-hosts|labels|follow|repeat-ops|symmetry|clipboard|history|audit|attributes|quantity|export-plan|frame|reshape|eyedropper|guides|grid)|describe)\.ts$/.test(id)) {
+            return "drawing-commands";
+          }
+          // I pannelli dei disegni: le proprietà coi loro campi e coi colori
+          // del documento, la sfumatura, la campitura, gli effetti e il
+          // connettore, gli oggetti, le tavole, la cronologia, l'accessibilità,
+          // l'ispettore degli attributi, la finestra «Esporta», le forme e i
+          // simboli, con la finestra dell'aggiornamento di un simbolo, la
+          // finestra di «Rendi modificabile», le finestre «Penna e dita» e
+          // «Guide», il menu radiale, la nota di un'annotazione, i
+          // suggerimenti sotto il foglio e il campo dove si scrive un testo.
+          // Sono DOM attorno al foglio, che l'editor e la superficie montano e
+          // che leggono i comandi; non dipendono dall'editor, e cambiano con
+          // la loro interfaccia.
+          if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog|editable-dialog|fields|touch-dialog|guide-dialog|radial|note|suggestions|text-field)\.ts$/.test(id)) {
+            return "drawing-panels";
+          }
+          // La serie che la shell monta: ricetta, fogli, pelle, e i conti del
+          // colore che la ricetta usa.
+          if (/\/src\/theme\/(scrittoio\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
             return "theme-series";
           }
+          // Il catalogo delle stringhe è testo, cresce con ogni superficie e
+          // lo leggono tutte le finestre: senza un nome suo finisce nel chunk
+          // condiviso più grosso e ne consuma il margine a ogni frase nuova.
+          if (/\/src\/i18n\/catalog\.ts$/.test(id)) return "shell-strings";
           if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
           if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
           if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {

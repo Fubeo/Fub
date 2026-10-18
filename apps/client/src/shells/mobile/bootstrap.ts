@@ -3,7 +3,7 @@
 // Entry: apps/client/src/entrypoints/mobile.ts (solo Main lo collega).
 
 import { documentSessions, flushPendingSave } from "../../state/document-session";
-import { recoverDrafts } from "../../panels/document";
+import { recoverDrafts } from "../../state/document-controller";
 import { notify } from "../../ui/notify";
 import { t } from "../../i18n/strings";
 import { openLifetime, type Lifetime, type Teardown } from "../../ui/lifetime";
@@ -11,6 +11,7 @@ import { declareShell } from "../../platform/capabilities";
 import { MOBILE_SHELL } from "./index";
 import { createLifecycleFlush, defaultLifecyclePorts, type LifecycleFlush } from "./lifecycle";
 import type { MobileBridge } from "./bridge";
+import { mountMobileCreations } from "./creation";
 import { mountMobileChrome } from "./touch";
 import { mountMobileViewport } from "./viewport";
 import { mountMobileOpenedActions, type MobileExternalPorts } from "./opened";
@@ -75,6 +76,7 @@ export function mountMobileShell(bridge: MobileBridge, options: MobileShellOptio
   const lifetime = openLifetime();
   mountMobileLifecycle(lifetime, defaultMobilePorts(bridge));
   mountMobileChrome(lifetime);
+  mountMobileCreations(lifetime);
   mountMobileViewport(lifetime);
   const grantStore = options.grantStore ?? options.storage?.store ?? mobileGrantStore(bridge);
   mountMobileOpenedActions(lifetime, bridge, {

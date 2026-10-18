@@ -1,0 +1,345 @@
+// Le operazioni che gli strumenti scrivono (operazioni sulla scena, §2): un
+// gesto diventa un'operazione sola, o un `batch` quando gli servono più passi,
+// così annulla e ripeti lo disfano intero.
+//
+// - **Dove si scrive.** Un oggetto nuovo va in cima al livello visibile e
+//   sbloccato più in alto, o dal livello Standard in cima al livello
+//   corrente, coi punti portati nelle sue coordinate. Un documento senza
+//   livelli scrive alla radice; un livello senza id ne riceve uno con `ident`
+//   nello stesso `batch`. Se ogni livello è bloccato o nascosto non si
+//   scrive.
+// - **Spostare** cambia solo `transform`, mai la geometria: la matrice nuova
+//   è la traslazione nelle coordinate del genitore composta con quella di
+//   prima, scritta come un `matrix()` solo, e tolta se è l'identità. Lo
+//   spostamento nella scena si arrotonda a due decimali come la geometria: in
+//   un livello senza trasformazioni il file riceve numeri puliti.
+// - **Ridimensionare** e collocare con numeri cambiano solo `transform`, allo
+//   stesso modo: il riquadro della selezione va nel riquadro chiesto con una
+//   scala e una traslazione nella scena, e il contorno scala con l'oggetto.
+// - **Eliminare** toglie gli oggetti dall'ultimo al primo, così il percorso
+//   di un oggetto senza id resta valido fino al suo turno. Un originale di
+//   una ripetizione porta via prima le sue copie, e l'ultimo originale la
+//   ripetizione intera (formato della scena, ripetizioni).
+// - **La pagina** si allarga a passi di 256 unità per lato quando un oggetto
+//   ne esce, nello stesso `batch` dell'operazione che lo fa uscire, e non si
+//   restringe mai da sola (formato della scena, §2). «Adatta la pagina» la
+//   porta attorno a tutto il disegno, con un margine.
+
+import { formatNumber } from "../number";
+import { formatBrush, type Pf1Brush } from "../../../ink/brush";
+import { encodeInk, inkFromQuantized } from "../ink/codec";
+import type { QuantizedInk } from "../../../ink/sample";
+import type { Tool } from "../scene/analysis";
+import type { Bounds } from "../scene/geometry";
+import { createId, type IdKind } from "../scene/ids";
+import { apply, compose, IDENTITY, invert, translate, type Matrix } from "../scene/matrix";
+import { elementChildren, originalsIn, pathOf, tagName, type ContainerNode, type ElementPart } from "../scene/model";
+import { ROOT, type AddOp, type Op, type Target } from "../scene/ops";
+import { formatTransform, type Elem } from "../scene/serialize";
+import type { Page } from "../painter/paint";
+import type { LayerInfo, SceneIndex, Unit } from "./hit";
+import { formatShortest } from "../../../ink/number";
+import { INK_TOOLS } from "../../../ink/tools/registry";
+
+/// Il passo con cui la pagina si allarga.
+export const PAGE_STEP = 256;
+
+/// Il margine attorno al disegno di una pagina adattata, in unità della
+/// scena.
+export const PAGE_MARGIN = 20;
+
+const IDENTITY_TEXT = formatTransform(IDENTITY);
+
+/// Gli id nuovi di un gesto: diversi da quelli del documento e fra loro.
+export class NewIds {
+  private readonly used = new Set<string>();
+
+  constructor(private readonly taken: (id: string) => boolean) {}
+
+  next(kind: IdKind): string {
+    const id = createId(kind, (candidate) => this.used.has(candidate) || this.taken(candidate));
+    this.used.add(id);
+    return id;
+  }
+}
+
+/// Dove uno strumento scrive un oggetto nuovo.
+export interface Destination {
+  /// Il genitore dell'`add`: l'id del livello o del gruppo isolato, o
+  /// `#root`.
+  readonly parent: string;
+  /// Dalle coordinate del livello a quelle della scena.
+  readonly matrix: Matrix;
+  /// Dalla scena alle coordinate del livello.
+  readonly inverse: Matrix;
+  /// Ciò che va fatto prima, nello stesso `batch`: l'`ident` di un livello
+  /// o di un gruppo senza id.
+  readonly prelude: readonly Op[];
+}
+
+/// Il livello visibile e sbloccato più in alto; la radice se il documento non
+/// ha livelli; `null` se ogni livello è bloccato o nascosto, o schiacciato da
+/// una trasformazione che non si inverte.
+export function destination(index: SceneIndex, ids: NewIds): Destination | null {
+  if (index.layers.length === 0) return { parent: ROOT, matrix: IDENTITY, inverse: IDENTITY, prelude: [] };
+  for (let i = index.layers.length - 1; i >= 0; i--) {
+    const layer = index.layers[i]!;
+    if (layer.locked || layer.hidden) continue;
+    const to = destinationIn(layer, ids);
+    if (to !== null) return to;
+  }
+  return null;
+}
+
+/// Il livello `layer` come destinazione, che si veda o no; `null` se lo
+/// schiaccia una trasformazione che non si inverte.
+export function destinationIn(layer: LayerInfo, ids: NewIds): Destination | null {
+  const inverse = invert(layer.matrix);
+  if (inverse === null) return null;
+  if (layer.id !== null) return { parent: layer.id, matrix: layer.matrix, inverse, prelude: [] };
+  const id = ids.next("layer");
+  return { parent: id, matrix: layer.matrix, inverse, prelude: [{ op: "ident", path: layer.path, tag: "g", id }] };
+}
+
+/// Il gruppo o il collegamento isolato `group` come destinazione: ciò che si
+/// disegna entra lì, in cima. `null` se lo schiaccia una trasformazione che
+/// non si inverte.
+export function destinationInto(group: Unit, ids: NewIds): Destination | null {
+  const matrix = group.matrix;
+  const inverse = invert(matrix);
+  if (inverse === null) return null;
+  if (group.id !== null) return { parent: group.id, matrix, inverse, prelude: [] };
+  const id = ids.next("object");
+  return { parent: id, matrix, inverse, prelude: [{ op: "ident", path: group.path, tag: group.tag, id }] };
+}
+
+/// Un'operazione per un gesto: quella sola, o un `batch` di tutte.
+export function gesture(ops: readonly Op[]): Op | null {
+  if (ops.length === 0) return null;
+  return ops.length === 1 ? ops[0]! : { op: "batch", ops };
+}
+
+/// L'`add` di un oggetto in cima al livello di `to`.
+export function addOp(to: Destination, elem: Elem): AddOp {
+  return { op: "add", parent: to.parent, pos: { last: true }, elem };
+}
+
+/// L'elemento di un tratto a mano libera (formato della scena, §5): della
+/// penna, o dell'evidenziatore, che si vede attraverso con l'opacità del
+/// formato. Il `d` non si scrive: il motore lo calcola da `fub:ink` e
+/// `fub:brush`.
+export function strokeElem(id: string, color: string, brush: Pf1Brush, ink: QuantizedInk, at: string | null, tool: Tool = "pen"): Elem {
+  const attrs: Record<string, string> = { id, "fub:tool": tool };
+  if (at !== null) attrs["fub:at"] = at;
+  attrs["fub:brush"] = formatBrush(brush);
+  attrs.fill = color;
+  // Lo strumento dice quanto copre; il file scrive l'opacità solo se è meno di tutto.
+  const opacity = INK_TOOLS.stroke(tool)?.opacity ?? 1;
+  if (opacity < 1) attrs["fill-opacity"] = formatShortest(opacity);
+  attrs["fub:ink"] = encodeInk(inkFromQuantized(ink));
+  return { tag: "path", attrs };
+}
+
+/// Lo spostamento nella scena come lo scrive il file: due decimali.
+export function roundDelta(value: number): number {
+  return Number(formatNumber(value, 2));
+}
+
+/// La matrice di `unit` spostato di (`dx`, `dy`) nella scena; `null` se il
+/// genitore schiaccia il piano e nessuno spostamento lo raggiunge.
+export function movedMatrix(unit: Unit, dx: number, dy: number): Matrix | null {
+  const [a, b, c, d] = unit.parent;
+  const linear = invert([a, b, c, d, 0, 0]);
+  if (linear === null) return null;
+  const [x, y] = apply(linear, [dx, dy]);
+  return compose(translate(x, y), unit.transform);
+}
+
+/// Il valore di `transform` per `m`: `null`, cioè nessun attributo, per
+/// l'identità.
+export function transformValue(m: Matrix): string | null {
+  const text = formatTransform(m);
+  return text === IDENTITY_TEXT ? null : text;
+}
+
+/// Uno spostamento: le operazioni, e le chiavi degli oggetti dopo, che per
+/// un oggetto senza id sono l'id che riceve.
+export interface Moved {
+  readonly ops: readonly Op[];
+  readonly keys: readonly string[];
+}
+
+/// Le operazioni che spostano `units` di (`dx`, `dy`) nella scena.
+export function moveOps(units: readonly Unit[], dx: number, dy: number, ids: NewIds): Moved {
+  const ops: Op[] = [];
+  const keys: string[] = [];
+  for (const unit of units) {
+    const m = movedMatrix(unit, dx, dy);
+    if (m === null) continue;
+    let id = unit.id;
+    if (id === null) {
+      id = ids.next("object");
+      ops.push({ op: "ident", path: unit.path, tag: unit.tag, id });
+    }
+    ops.push({ op: "set", id, attrs: { transform: transformValue(m) } });
+    keys.push(id);
+  }
+  return { ops, keys };
+}
+
+/// La matrice di `unit` dopo `m`, una trasformazione della scena, nelle
+/// coordinate del genitore; `null` se il genitore schiaccia il piano.
+export function transformedMatrix(unit: Unit, m: Matrix): Matrix | null {
+  const inverse = invert(unit.parent);
+  if (inverse === null) return null;
+  return compose(inverse, compose(m, unit.matrix));
+}
+
+/// La scala e la traslazione della scena che portano il riquadro `from` in
+/// `to`. Un lato che misura zero non scala: resta com'è, e si sposta soltanto.
+export function boxMatrix(from: Bounds, to: Bounds): Matrix {
+  const width = from.max[0] - from.min[0];
+  const height = from.max[1] - from.min[1];
+  const sx = width > 0 ? (to.max[0] - to.min[0]) / width : 1;
+  const sy = height > 0 ? (to.max[1] - to.min[1]) / height : 1;
+  return [sx, 0, 0, sy, to.min[0] - sx * from.min[0], to.min[1] - sy * from.min[1]];
+}
+
+/// Il riquadro `bounds` portato da `m`, una scala e una traslazione.
+export function mappedBounds(bounds: Bounds, m: Matrix): Bounds {
+  const [x1, y1] = apply(m, bounds.min);
+  const [x2, y2] = apply(m, bounds.max);
+  return { min: [Math.min(x1, x2), Math.min(y1, y2)], max: [Math.max(x1, x2), Math.max(y1, y2)] };
+}
+
+/// Le operazioni che applicano `m`, una trasformazione della scena, a
+/// `units`; le chiavi come per lo spostamento.
+export function transformOps(units: readonly Unit[], m: Matrix, ids: NewIds): Moved {
+  const ops: Op[] = [];
+  const keys: string[] = [];
+  for (const unit of units) {
+    const next = transformedMatrix(unit, m);
+    if (next === null) continue;
+    let id = unit.id;
+    if (id === null) {
+      id = ids.next("object");
+      ops.push({ op: "ident", path: unit.path, tag: unit.tag, id });
+    }
+    ops.push({ op: "set", id, attrs: { transform: transformValue(next) } });
+    keys.push(id);
+  }
+  return { ops, keys };
+}
+
+function comparePaths(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i]! - b[i]!;
+  return a.length - b.length;
+}
+
+/// Le operazioni che tolgono `units`, dall'ultimo al primo nel documento.
+/// Un originale di una ripetizione porta via prima le sue copie: dopo, se
+/// stanno dopo di lui, o subito prima della prima, se ce n'è una prima, che
+/// lo nomina ancora. Togliere tutti gli originali di una ripetizione toglie
+/// la ripetizione.
+export function removeOps(units: readonly Unit[]): Op[] {
+  const chosen = new Set(units.map((unit) => unit.node));
+  /// Ciò che si toglie, per percorso: gli oggetti, le copie dei loro
+  /// originali e le ripetizioni che restano senza.
+  const doomed = new Map<string, { readonly path: readonly number[]; readonly target: Target; readonly copies: readonly ElementPart[] }>();
+  const add = (path: readonly number[], target: Target, copies: readonly ElementPart[] = []): void => {
+    doomed.set(path.join("."), { path, target, copies });
+  };
+  for (const unit of units) {
+    const parent = unit.node.parent;
+    const copies = parent === null ? [] : copiesOf(parent, unit.node);
+    if (copies.length === 0) {
+      add(unit.path, unit.target);
+      continue;
+    }
+    const repeat = parent as ContainerNode;
+    if (originalsOf(repeat).every((original) => chosen.has(original))) {
+      const path = pathOf(repeat);
+      add(path, repeat.facts.id ?? { path, tag: tagName(repeat) });
+      continue;
+    }
+    add(unit.path, unit.target, copies);
+    for (const copy of copies) {
+      const path = pathOf(copy);
+      add(path, copy.facts.id ?? { path, tag: tagName(copy) });
+    }
+  }
+  // Ciò che sta dentro qualcosa che se ne va se ne va con lui.
+  const all = [...doomed.values()].filter((item) => {
+    for (let n = item.path.length - 1; n > 0; n--) if (doomed.has(item.path.slice(0, n).join("."))) return false;
+    return true;
+  });
+  all.sort((a, b) => comparePaths(b.path, a.path));
+  // Un originale con una copia prima di lui aspetta lei: ha un id, e il suo
+  // percorso non serve.
+  const waiting = new Map<string, Target[]>();
+  const ops: Op[] = [];
+  for (const item of all) {
+    const first = item.copies.length === 0 ? null : pathOf(item.copies[0]!);
+    if (first !== null && comparePaths(first, item.path) < 0) {
+      const key = first.join(".");
+      waiting.set(key, [...(waiting.get(key) ?? []), item.target]);
+    } else {
+      ops.push({ op: "remove", target: item.target });
+    }
+    for (const target of waiting.get(item.path.join(".")) ?? []) ops.push({ op: "remove", target });
+  }
+  return ops;
+}
+
+/// Le copie di `node` fra i figli di `parent`, se è una ripetizione e lui ne
+/// è un originale, in ordine di documento.
+function copiesOf(parent: ContainerNode, node: ElementPart): ElementPart[] {
+  const id = node.facts.id;
+  if (parent.details?.repeat === undefined || id === null || node.details?.role === "copy") return [];
+  return elementChildren(parent).filter((child) => child.details?.role === "copy" && child.details.original === id);
+}
+
+/// Gli originali della ripetizione `repeat`: i figli modificabili con un
+/// id, titoli, descrizioni e copie esclusi.
+function originalsOf(repeat: ContainerNode): ElementPart[] {
+  const ids = originalsIn(repeat);
+  return elementChildren(repeat).filter((child) => child.facts.id !== null && ids.has(child.facts.id));
+}
+
+/// Il `viewBox` della pagina che contiene anche `bounds`: ogni lato da cui
+/// `bounds` esce si allarga di un multiplo di 256 unità. `null` se ci sta già,
+/// o se il documento non ha una pagina. I bordi si arrotondano verso
+/// l'esterno a due decimali: la pagina non perde nemmeno un centesimo.
+export function pageFor(page: Page | null, bounds: Bounds | null): string | null {
+  if (page === null || bounds === null) return null;
+  const steps = (outside: number): number => (outside > 0 ? Math.ceil(outside / PAGE_STEP) * PAGE_STEP : 0);
+  const left = steps(page.x - bounds.min[0]);
+  const top = steps(page.y - bounds.min[1]);
+  const right = steps(bounds.max[0] - (page.x + page.width));
+  const bottom = steps(bounds.max[1] - (page.y + page.height));
+  if (left + top + right + bottom === 0) return null;
+  // Il margine tiene fermo un bordo che è già un centesimo esatto, come
+  // `0.1 + 0.2`, che in virgola mobile ne sfora uno.
+  const down = (v: number): number => Math.floor(v * 100 + 1e-6) / 100;
+  const up = (v: number): number => Math.ceil(v * 100 - 1e-6) / 100;
+  const minX = down(page.x - left);
+  const minY = down(page.y - top);
+  const maxX = up(page.x + page.width + right);
+  const maxY = up(page.y + page.height + bottom);
+  return [minX, minY, maxX - minX, maxY - minY].map((v) => formatNumber(v, 2)).join(" ");
+}
+
+/// Il `viewBox` della pagina adattata a `extent`, il riquadro di tutto il
+/// disegno: [`PAGE_MARGIN`] unità attorno, coi bordi arrotondati all'unità
+/// verso l'esterno. `null` se il disegno è vuoto, o se la pagina è già
+/// quella.
+export function fittedPage(page: Page | null, extent: Bounds | null): string | null {
+  if (extent === null) return null;
+  const minX = Math.floor(extent.min[0] - PAGE_MARGIN + 1e-6);
+  const minY = Math.floor(extent.min[1] - PAGE_MARGIN + 1e-6);
+  const maxX = Math.ceil(extent.max[0] + PAGE_MARGIN - 1e-6);
+  const maxY = Math.ceil(extent.max[1] + PAGE_MARGIN - 1e-6);
+  const box = [minX, minY, maxX - minX, maxY - minY];
+  if (page !== null && box.every((v, i) => v === [page.x, page.y, page.width, page.height][i])) return null;
+  return box.map((v) => formatNumber(v, 2)).join(" ");
+}

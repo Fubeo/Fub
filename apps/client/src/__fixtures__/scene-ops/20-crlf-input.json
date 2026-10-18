@@ -1,0 +1,41 @@
+{
+  "name": "crlf-input",
+  "description": "operazione calcolata sul testo a LF; text consegnato con i CRLF originali",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\r\n  <title>Prova</title>\r\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\r\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\r\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\r\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#e69f00\"/>\r\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\r\n  </g>\r\n</svg>\r\n",
+  "ops": [
+    {
+      "op": "batch",
+      "ops": [
+        {
+          "op": "set",
+          "id": "o2b3c4d5e",
+          "attrs": {
+            "fill": "#000000"
+          }
+        },
+        {
+          "op": "add",
+          "parent": "l3f8a0c2d",
+          "pos": {
+            "last": true
+          },
+          "elem": {
+            "tag": "line",
+            "attrs": {
+              "id": "o4d5e6f7g",
+              "x1": "0",
+              "y1": "0",
+              "x2": "100",
+              "y2": "100",
+              "stroke": "#000000"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\r\n  <title>Prova</title>\r\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\r\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\r\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\r\n    <rect id=\"o2b3c4d5e\" x=\"500\" y=\"100\" width=\"200\" height=\"120\" fill=\"#000000\"/>\r\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\r\n    <line id=\"o4d5e6f7g\" x1=\"0\" y1=\"0\" x2=\"100\" y2=\"100\" stroke=\"#000000\"/>\r\n  </g>\r\n</svg>\r\n"
+  }
+}

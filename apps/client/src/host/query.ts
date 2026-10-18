@@ -14,6 +14,7 @@ import { api } from "./ipc";
 import { openVaultRoot, vaultArg } from "../state/store";
 import type {
   DraftInfo,
+  HealthIssue,
   EmbedContent,
   RenderedDocument,
   Organization,
@@ -21,6 +22,7 @@ import type {
   EntryKind,
   Excerpts,
   FolderScope,
+  Heading,
   IndexQuery,
   JobStatus,
   SettingEntry,
@@ -36,6 +38,7 @@ import type {
   VaultFolder,
   VaultStatus,
 } from "./contract";
+import type { HealthCheck } from "./enums.generated";
 import { EVERY_DOCUMENT, nameQuery, theseDocuments } from "./contract";
 import { parseSearch, type SearchFault, type SearchFaultKind } from "../rules/search-syntax";
 import { t, type Key } from "../i18n/strings";
@@ -269,6 +272,15 @@ export async function existingDocuments(docs: string[]): Promise<Set<string>> {
   return new Set(page.items.map((m) => m.doc));
 }
 
+/// I titoli di un documento come li ha letti l'indice, in ordine di sorgente.
+///
+/// Un id che non è un documento risponde con l'elenco vuoto, come un documento
+/// senza titoli: chi deve distinguere i due casi lo chiede a
+/// [`existingDocuments`].
+export async function documentOutline(doc: string): Promise<Heading[]> {
+  return runQuery({ kind: "outline", doc });
+}
+
 /// I tag del vault con la loro frequenza.
 export async function vaultTags(window: PageWindow): Promise<TagCount[]> {
   const query: Extract<IndexQuery, { kind: "tags" }> = {
@@ -307,6 +319,13 @@ export async function activeJobs(): Promise<JobStatus[]> {
 /// non salvato è il dato più privato di un vault.
 export async function unsavedDrafts(): Promise<DraftInfo[]> {
   return runQuery({ kind: "drafts" }).then((page) => page.items);
+}
+
+/// I problemi che un controllo di salute trova nel vault (§7.2): una riga per
+/// problema, sul documento che lo porta. Si legge e basta — correggere è
+/// scrivere, e passa dai comandi.
+export async function vaultHealth(check: HealthCheck, window: PageWindow): Promise<Paged<HealthIssue>> {
+  return runQuery({ kind: "vault_health", check, page: pageOf(window) });
 }
 
 /// Com'è configurato questo vault (§11.1): schema, valore che vale adesso, e

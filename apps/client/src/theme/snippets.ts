@@ -3,8 +3,7 @@ import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "../ui/lifetime";
 import { sanitizeUserCss } from "../ui/sanitize-css";
-import { mountUserSnippets } from "./loader";
-import { HOOKS } from "./serie/anatomia";
+import { mountUserSnippets, themeProfile } from "./loader";
 
 export const CSS_SNIPPETS_KEY = "appearance.css-snippets";
 export const DEFAULT_CSS_SNIPPETS = '{"version":1,"snippets":[]}';
@@ -14,7 +13,9 @@ export const NOTE_CSS_CLASSES = [
   "wide", "narrow", "compact", "serif", "sans", "minimal",
 ] as const;
 const NOTE_HOOKS = NOTE_CSS_CLASSES.map((name) => `fub-note--${name}`);
-const ALLOWED_HOOKS: readonly string[] = [...HOOKS, ...NOTE_HOOKS];
+// Gli hook sono quelli del profilo in vigore: un frammento nomina le classi
+// della shell che sta girando, non quelle di una shell che non è montata.
+const allowedHooks = (): readonly string[] => [...themeProfile().hooks, ...NOTE_HOOKS];
 const allowedNoteClasses = new Set<string>(NOTE_CSS_CLASSES);
 
 export interface CssSnippet {
@@ -84,7 +85,7 @@ function compile(raw: string, rejectInvalid: boolean): { css: string; statuses: 
     let error: string | undefined;
     if (snippet.enabled) {
       try {
-        chunks.push(sanitizeUserCss(snippet.css, ALLOWED_HOOKS));
+        chunks.push(sanitizeUserCss(snippet.css, allowedHooks()));
       } catch (reason) {
         error = reason instanceof Error ? reason.message : String(reason);
         if (rejectInvalid) throw new Error(`${snippet.id}: ${error}`);

@@ -1,0 +1,1136 @@
+/* Le superfici dei formati: canvas, base, foglio di calcolo. */
+
+/* Prima di loro l'editor di testo, che sta sotto a tutte: il margine, il
+   cursore, la selezione, i pannelli che CodeMirror apre sopra il foglio. Le
+   regole di CodeMirror pesano (0,2,0) o più e arrivano dopo la pelle: qui ogni
+   selettore ne porta almeno una in più, e nessuno ha bisogno di `!important`.
+
+   Niente di ciò che sta in un foglio ha un fondo suo: la carta è del foglio, e
+   ne segue gli angoli. Le superfici dichiarano inchiostro, fili e rilievi. */
+
+/* ── L'editor di testo ───────────────────────────────────────────────────── */
+
+/* Dove si scrive lo dicono il cursore e il rialzo del foglio: l'anello
+   tratteggiato di CodeMirror intorno a tutta la carta è rumore. */
+.pane-editor .cm-editor {
+  background-color: transparent;
+  color: var(--doc-fg);
+}
+.pane-editor .cm-editor.cm-focused {
+  outline: none;
+}
+/* Sorgente: lo stesso testo in monospazio, con l'aria della prosa. Un file che
+   non è Markdown è codice, e sta più serrato. */
+.pane-editor[data-markdown-mode="source"] .cm-content {
+  font-family: var(--font-mono);
+  font-size: var(--text-source);
+  line-height: var(--leading-relaxed);
+}
+.pane-editor:not([data-markdown-mode]) > .cm-editor .cm-content {
+  font-family: var(--font-mono);
+  font-size: var(--text-source);
+  line-height: var(--leading-normal);
+}
+/* Il margine dei numeri: grafite, senza filo e senza banda. Ha il colore della
+   carta e non è trasparente, perché una riga lunga che scorre di lato gli
+   passa sotto. L'interlinea è quella del testo accanto, scritta in pixel: le
+   cifre sono più piccole e devono restare sulla stessa riga. */
+.cm-editor .cm-scroller .cm-gutters {
+  border: 0;
+  background-color: var(--sheet);
+  color: var(--doc-gutter-fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: calc(var(--text-source) * var(--leading-normal));
+}
+.pane-editor[data-markdown-mode="source"] .cm-scroller .cm-gutters {
+  line-height: calc(var(--text-source) * var(--leading-relaxed));
+}
+/* In Sorgente i numeri stanno accanto alla colonna, non sul bordo del foglio:
+   su un foglio largo resterebbero a mezzo schermo dal testo che contano. La
+   colonna cede loro il suo margine sinistro. */
+.pane-editor[data-markdown-mode="source"] .cm-scroller .cm-gutters {
+  margin-left: auto;
+}
+.pane-editor[data-markdown-mode="source"] .cm-scroller .cm-content {
+  margin-left: 0;
+  padding-left: var(--space-4);
+}
+.cm-editor .cm-scroller .cm-lineNumbers .cm-gutterElement {
+  padding: 0 var(--space-3) 0 var(--space-4);
+}
+/* La riga attiva nel margine: il numero in inchiostro, nessuna banda — la
+   banda è della riga, e fra le due c'è il margine della colonna. */
+.cm-editor .cm-scroller .cm-activeLineGutter {
+  background-color: transparent;
+  color: var(--doc-fg);
+}
+/* I segni di piega ci sono su ogni titolo: a voce bassa finché il puntatore
+   non entra nel margine. */
+.cm-editor .cm-scroller .cm-foldGutter span {
+  color: var(--doc-gutter-fg);
+  opacity: 0.45;
+}
+.cm-editor .cm-scroller .cm-gutters:hover .cm-foldGutter span {
+  opacity: 1;
+}
+/* La riga attiva è un tono appena, e solo dove si scrive sorgente. In Live la
+   pagina è resa: una banda che attraversa titoli e citazioni la sporcherebbe.
+   Quella regola pesa (0,3,0) apposta — batte CodeMirror ma non il fondo di un
+   blocco di codice o delle proprietà, che in Live resta intero. */
+.cm-editor .cm-content .cm-activeLine {
+  background-color: var(--doc-active-line);
+}
+[data-markdown-mode="live_preview"] .cm-content .cm-activeLine {
+  background-color: transparent;
+}
+.pane-editor[data-markdown-mode="source"] .cm-content > .cm-line {
+  padding-inline: var(--space-3);
+}
+/* Il cursore: un tratto d'accento, due pixel. */
+.cm-editor .cm-scroller .cm-cursor,
+.cm-editor .cm-scroller .cm-dropCursor {
+  margin-left: -1px;
+  border-left: 2px solid var(--doc-caret);
+}
+/* La selezione è la stessa col fuoco e senza: CodeMirror col fuoco la
+   ridipinge del suo lilla, con un selettore che pesa (0,5,0). */
+.cm-editor .cm-scroller .cm-selectionBackground,
+.pane-editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground {
+  background-color: var(--doc-selection);
+}
+.cm-editor .cm-content .cm-selectionMatch {
+  border-radius: 2px;
+  background-color: var(--doc-fill);
+}
+.pane-editor .cm-editor.cm-focused .cm-matchingBracket {
+  border-radius: 2px;
+  outline: 0;
+  background-color: var(--accent-veil);
+}
+.pane-editor .cm-editor.cm-focused .cm-nonmatchingBracket {
+  border-radius: 2px;
+  outline: 0;
+  background-color: var(--danger-wash);
+}
+/* Ciò che «cerca» ha trovato è evidenziato; quello su cui si è fermi ha in più
+   l'anello d'accento. */
+.cm-editor .cm-content .cm-searchMatch {
+  border-radius: 2px;
+  background-color: var(--doc-highlight);
+}
+.cm-editor .cm-content .cm-searchMatch.cm-searchMatch-selected {
+  background-color: var(--doc-highlight);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.cm-editor .cm-content .cm-foldPlaceholder {
+  margin: 0 var(--space-1);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background-color: var(--doc-fill-soft);
+  color: var(--doc-gutter-fg);
+}
+.cm-editor .cm-content .cm-placeholder {
+  color: var(--muted);
+}
+
+/* ── Cerca nel documento ─────────────────────────────────────────────────── */
+
+/* Il pannello di ricerca è una barra in rialzo posata in fondo al foglio, non
+   una striscia a tutta larghezza: la carta le gira intorno. I comandi restano
+   in riga come li scrive CodeMirror, con l'a capo fra «cerca» e «sostituisci»;
+   dove il foglio è stretto vanno a capo interi, mai a metà di un'etichetta. */
+.cm-editor .cm-panels.cm-panels-bottom,
+.cm-editor .cm-panels.cm-panels-top {
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  border: 0;
+  background-color: transparent;
+  color: var(--text);
+}
+.cm-editor .cm-panels .cm-panel {
+  max-width: 56rem;
+  margin-inline: auto;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.cm-editor .cm-panels .cm-panel.cm-search {
+  padding: var(--space-3) var(--space-10) var(--space-3) var(--space-5);
+}
+.cm-editor .cm-panels .cm-search .cm-textfield {
+  width: 12.5rem;
+  max-width: 100%;
+  height: 28px;
+  margin: var(--space-1) var(--space-3) var(--space-1) 0;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background-color: var(--bg-input);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.cm-editor .cm-panels .cm-search .cm-textfield:hover {
+  border-color: var(--text);
+}
+.cm-editor .cm-panels .cm-search .cm-textfield:focus-visible {
+  border-color: var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+/* I bottoni del pannello sono fantasmi come ogni bottone secondario: il
+   rilievo a gradiente di CodeMirror non è di questa casa. */
+.cm-editor .cm-panels .cm-search .cm-button {
+  margin: var(--space-1) var(--space-1) var(--space-1) 0;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
+  cursor: pointer;
+}
+.cm-editor .cm-panels .cm-search .cm-button:hover,
+.cm-editor .cm-panels .cm-search .cm-button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-editor .cm-panels .cm-search .cm-button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.cm-editor .cm-panels .cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-1) var(--space-4) var(--space-1) var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.cm-editor .cm-panels .cm-search label input {
+  margin: 0;
+}
+/* Chiudi: in alto a destra, grande quanto basta per prenderlo. */
+.cm-editor .cm-panels .cm-search button[name="close"] {
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: pointer;
+}
+.cm-editor .cm-panels .cm-search button[name="close"]:hover,
+.cm-editor .cm-panels .cm-search button[name="close"]:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.cm-editor .cm-panels .cm-search button[name="close"]:active {
+  background: var(--overlay-active);
+}
+
+/* ── Suggerimenti e completamento ────────────────────────────────────────── */
+
+/* Ciò che CodeMirror apre sopra il testo è un rialzo come un menu: stessa
+   carta, stessa ombra, stessa voce evidenziata. */
+.pane-editor .cm-editor .cm-tooltip {
+  border: 0;
+  border-radius: var(--radius-menu);
+  background-color: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+/* Senza bordo la freccia non ha niente da continuare. */
+.pane-editor .cm-editor .cm-tooltip .cm-tooltip-arrow {
+  display: none;
+}
+.pane-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+  min-width: 14rem;
+  max-height: 16rem;
+  padding: var(--space-2);
+  font-family: var(--font-ui);
+  scrollbar-width: thin;
+}
+.pane-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  line-height: var(--leading-normal);
+}
+.pane-editor .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background-color: var(--accent-wash);
+  color: var(--accent);
+}
+/* La parte già scritta si riconosce dal peso, non da una sottolineatura in
+   mezzo alla parola. */
+.pane-editor .cm-editor .cm-completionMatchedText {
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+}
+.pane-editor .cm-editor .cm-completionDetail {
+  margin-left: var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-style: normal;
+}
+.pane-editor .cm-editor .cm-tooltip.cm-completionInfo {
+  margin: 0 var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* ── La superficie che non si apre ───────────────────────────────────────── */
+
+/* Un formato senza visualizzatore, un errore di montaggio: una frase in
+   grafite al centro della carta, col suo segno sopra. Sobria — non è colpa di
+   chi legge. */
+.document-surface-error,
+.document-surface-viewer:not(.media-surface) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  box-sizing: border-box;
+  height: 100%;
+  padding: var(--space-9);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.document-surface-error::before,
+.document-surface-viewer:not(.media-surface)::before {
+  display: grid;
+  place-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--outline);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  content: "!";
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: 1;
+}
+.document-surface-viewer:not(.media-surface)::before {
+  content: "?";
+}
+.document-surface-error:focus-visible,
+.document-surface-viewer:not(.media-surface):focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
+
+/* ── Il foglio di calcolo ────────────────────────────────────────────────── */
+
+/* Una griglia è un dato: carattere dell'interfaccia, cifre in colonna, fili
+   sottili. Le intestazioni stanno un tono sotto la carta; la cella attiva ha
+   l'anello d'accento, la selezione il suo velo. */
+.grid-surface {
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.grid-formula-bar {
+  border-bottom: 1px solid var(--border);
+}
+.grid-cell-name {
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+/* La formula sta al centro della sua barra, con un margine dal nome. È una
+   riga sola: evidenziarla come «riga attiva» la tingerebbe sempre tutta. */
+.grid-formula-editor .cm-editor .cm-content {
+  padding: var(--space-4) var(--space-4);
+}
+.grid-formula-editor .cm-editor .cm-content .cm-activeLine {
+  background-color: transparent;
+}
+.grid-viewport {
+  outline: none;
+}
+.grid-viewport:focus-visible {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.grid-cell,
+.grid-header,
+.grid-corner {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.grid-header,
+.grid-corner {
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+.grid-cell {
+  color: var(--doc-fg);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+/* Il velo è un'ombra interna e non un fondo: una cella può avere un colore
+   suo, scritto dal foglio, e la selezione deve vedersi anche lì sopra. */
+.grid-cell.selected {
+  box-shadow: inset 0 0 0 999px var(--accent-veil);
+}
+.grid-cell.active {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.grid-cell-editor {
+  border: 2px solid var(--accent);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+}
+
+/* ── Il canvas ───────────────────────────────────────────────────────────── */
+
+/* La lavagna è carta: i nodi sono schede posate sopra, staccate da un filo e
+   da un'ombra corta. Coordinate e aree di presa sono della struttura. */
+.canvas-surface {
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+/* I comandi: una riga quieta sotto la testata, come nelle altre superfici.
+   Sono tanti e scorrono di lato; a voce bassa finché non servono. */
+.canvas-toolbar {
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.canvas-toolbar > button {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.canvas-toolbar > button:hover,
+.canvas-toolbar > button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.canvas-toolbar > button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.canvas-toolbar > button:disabled,
+.canvas-toolbar > button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+.canvas-toolbar > select,
+.canvas-toolbar > input {
+  flex: none;
+  height: 26px;
+  margin-inline: var(--space-1);
+  border-radius: var(--radius-chip);
+  font-size: var(--text-sm);
+}
+.canvas-toolbar > input {
+  width: 9rem;
+}
+.canvas-intake-error {
+  margin-left: var(--space-4);
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+.canvas-viewport {
+  outline: none;
+}
+.canvas-viewport:focus-visible {
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--focus-ring);
+}
+.canvas-large-fallback {
+  margin: 0;
+  padding: var(--space-9);
+  color: var(--muted);
+  text-align: center;
+}
+/* Il fondo del nodo lo scrive il motore, in linea, ed è la carta stessa: a
+   staccare la scheda dalla lavagna restano il filo e l'ombra, e al buio
+   l'ombra non si vede — quindi il filo è quello marcato. */
+.canvas-node {
+  border-radius: var(--radius-menu);
+  box-shadow:
+    0 0 0 1px var(--border-strong),
+    var(--shadow-1);
+}
+.canvas-node.selected {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    var(--shadow-2);
+}
+.canvas-node:focus-visible {
+  outline-offset: 3px;
+}
+/* Un gruppo non è una scheda: è un recinto tratteggiato, senza rilievo. */
+.canvas-node-group {
+  border: 1px dashed var(--border-strong);
+  box-shadow: none;
+}
+.canvas-node-group.selected {
+  border-style: solid;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.canvas-node-handle {
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) 0 var(--space-5);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.canvas-connect {
+  padding: 0;
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 1;
+}
+.canvas-connect:hover,
+.canvas-connect:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-connect:active {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.canvas-card-body {
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  line-height: var(--leading-normal);
+  white-space: pre-wrap;
+}
+/* Il testo di una scheda è una nota in piccolo: il carattere di lettura, un
+   gradino sotto, e i titoli che non si prendono la scheda. */
+.canvas-markdown {
+  color: var(--doc-fg);
+  font-family: var(--font-reading);
+  font-size: var(--text-lg);
+  line-height: var(--leading-normal);
+  white-space: normal;
+}
+.canvas-markdown p,
+.canvas-markdown ul,
+.canvas-markdown ol,
+.canvas-markdown blockquote,
+.canvas-markdown pre {
+  margin: 0 0 var(--space-4);
+}
+.canvas-markdown h1,
+.canvas-markdown h2,
+.canvas-markdown h3,
+.canvas-markdown h4,
+.canvas-markdown h5,
+.canvas-markdown h6 {
+  margin: 0 0 var(--space-3);
+  font-size: 1.12em;
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+}
+.canvas-markdown ul,
+.canvas-markdown ol {
+  padding-left: 1.3em;
+}
+.canvas-markdown a {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.canvas-markdown code {
+  padding: 0.08em 0.32em;
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill-soft);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+.canvas-markdown > :last-child {
+  margin-bottom: 0;
+}
+.canvas-empty,
+.canvas-group-bg {
+  color: var(--muted);
+}
+.canvas-group-label {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.canvas-group-bg {
+  display: block;
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.canvas-url-text {
+  display: block;
+  margin-bottom: var(--space-3);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.canvas-media-placeholder {
+  display: block;
+  margin-bottom: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-chip);
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+/* I gesti dentro una scheda sono azioni testuali: l'accento, e un velo al
+   passaggio. */
+.canvas-convert-note,
+.canvas-open-url,
+.canvas-file-link {
+  margin-left: calc(-1 * var(--space-3));
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: normal;
+}
+.canvas-convert-note {
+  display: block;
+  margin-top: var(--space-3);
+}
+.canvas-convert-note:hover,
+.canvas-convert-note:focus-visible,
+.canvas-open-url:hover,
+.canvas-open-url:focus-visible,
+.canvas-file-link:hover,
+.canvas-file-link:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.canvas-convert-note:active,
+.canvas-open-url:active,
+.canvas-file-link:active {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.canvas-open-url:disabled,
+.canvas-open-url:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+/* Si scrive dentro la scheda, non in un campo posato sopra: il campo perde
+   bordo e fondo, e resta l'anello del fuoco. */
+.canvas-text-editor,
+.canvas-field-editor {
+  min-height: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: var(--sheet-2);
+  color: var(--text);
+  font: inherit;
+  line-height: var(--leading-normal);
+}
+/* La presa per ridimensionare: due tratti nell'angolo, visibili quando la
+   scheda è sotto il puntatore o scelta. */
+.canvas-resize::after {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--outline);
+  border-bottom: 1.5px solid var(--outline);
+  border-bottom-right-radius: 2px;
+  content: "";
+  opacity: 0;
+}
+.canvas-node:hover > .canvas-resize::after,
+.canvas-node.selected > .canvas-resize::after {
+  opacity: 1;
+}
+.canvas-edge-hit {
+  fill: none;
+  stroke: transparent;
+}
+/* Un collegamento con un colore suo lo scrive il canvas come attributo, e una
+   regola lo coprirebbe: il tratto di default vale solo per chi non ne ha. */
+.canvas-edge-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.canvas-edge-line:not([stroke]) {
+  stroke: var(--border-strong);
+}
+.canvas-edge-line.selected {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+.canvas-edge-arrow {
+  fill: var(--border-strong);
+}
+.canvas-edge-reconnect {
+  stroke-width: 2;
+}
+.canvas-edge-label {
+  fill: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-anchor: middle;
+}
+/* Il sorgente della lavagna: JSON, in monospazio, sulla carta. */
+.canvas-source {
+  padding: var(--space-8) var(--space-9);
+  color: var(--doc-fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-source);
+  line-height: var(--leading-normal);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.canvas-source:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -2);
+}
+
+/* ── La base ─────────────────────────────────────────────────────────────── */
+
+/* Le viste di una base — tabella, schede, elenco, bacheca, mappa — sono la
+   stessa raccolta di note: stessa riga di comandi in alto, stessi fili, stesse
+   schede in rialzo. Layout e dimensioni stanno nella struttura. */
+.base-surface {
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+.base-toolbar {
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.base-toolbar > select,
+.base-toolbar > input {
+  height: 28px;
+}
+.base-toolbar > button {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.base-toolbar > button:hover,
+.base-toolbar > button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-toolbar > button:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+.base-toolbar > button:disabled,
+.base-toolbar > button:disabled:hover {
+  background: transparent;
+  color: var(--muted);
+}
+.base-status,
+.base-map-attribution {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.base-status {
+  margin-left: auto;
+}
+.base-body {
+  padding: var(--space-6) var(--space-7) var(--space-9);
+}
+/* «Riprova» e «mostra altri»: l'unica azione della superficie, in accento. */
+.base-body > button {
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-chip);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.base-body > button:hover,
+.base-body > button:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.base-body > button:active {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+.base-table {
+  font-variant-numeric: tabular-nums;
+}
+.base-table th,
+.base-table td {
+  padding: 0 var(--space-5);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.base-table th {
+  height: 30px;
+  background: var(--sheet-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+}
+.base-table tbody tr:hover > td {
+  background: var(--sheet-2);
+}
+/* Il nome della nota apre la nota: inchiostro pieno, e la matita blu al
+   passaggio. Vale per la tabella, le schede e la bacheca. */
+.base-table td > button,
+.base-card > button,
+.base-kanban-card > button {
+  max-width: 100%;
+  margin-left: calc(-1 * var(--space-3));
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  overflow: hidden;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-table td > button:hover,
+.base-table td > button:focus-visible,
+.base-card > button:hover,
+.base-card > button:focus-visible,
+.base-kanban-card > button:hover,
+.base-kanban-card > button:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.base-table td > button:active,
+.base-card > button:active,
+.base-kanban-card > button:active {
+  background: var(--accent-wash);
+  color: var(--accent-soft);
+}
+/* Una cella che si scrive sembra una cella, non un campo: il bordo arriva al
+   passaggio e l'anello col fuoco. */
+.base-cell input:where(:not([type="checkbox"])) {
+  height: 26px;
+  margin-left: calc(-1 * var(--space-3));
+  padding: 0 var(--space-3);
+  border-color: transparent;
+  border-radius: var(--radius-chip);
+  background: transparent;
+}
+.base-cell input:where(:not([type="checkbox"])):hover {
+  border-color: var(--border-strong);
+}
+.base-cell input:where(:not([type="checkbox"])):focus-visible {
+  border-color: var(--focus-ring);
+  background: var(--bg-elev);
+}
+.base-cell-error {
+  color: var(--danger);
+}
+.base-cards {
+  gap: var(--space-5);
+}
+.base-card {
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+/* L'elenco è la stessa scheda senza rilievo: una riga fra due fili. */
+.base-list .base-card {
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.base-field {
+  align-items: center;
+  gap: var(--space-5);
+  min-height: 28px;
+  font-size: var(--text-sm);
+}
+/* Etichetta e valore in due colonne ferme: testo, numero o casella, ogni
+   valore comincia alla stessa ascissa in tutte le righe della scheda. */
+.base-field > span:first-child {
+  flex: 0 0 38%;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.base-field > .base-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.base-kanban {
+  gap: var(--space-5);
+}
+.base-kanban-column {
+  padding: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+}
+.base-kanban-column > h3 {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+.base-kanban-column > button {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-chip);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.base-kanban-column > button:hover,
+.base-kanban-column > button:focus-visible {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.base-kanban-column > button:active {
+  background: var(--overlay-active);
+}
+.base-kanban-card {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-chip);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+}
+.base-kanban-card[draggable="true"] {
+  cursor: grab;
+}
+.base-kanban > input {
+  flex: none;
+  width: 12rem;
+}
+.base-map-atlas {
+  margin-block: var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--sheet-2);
+  color: var(--border-strong);
+}
+.base-map-marker {
+  cursor: pointer;
+  fill: var(--accent);
+  stroke: var(--sheet);
+  stroke-width: 2;
+}
+.base-map-marker:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.base-summaries {
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+/* Senza totali il piede è vuoto: niente filo sopra il niente. */
+.base-summaries:not(:empty) {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.base-summaries dt {
+  color: var(--muted);
+}
+.base-summaries dd {
+  margin: 0 var(--space-5) 0 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--weight-bold);
+}
+
+/* ── I documenti di videoscrittura ───────────────────────────────────────── */
+
+/* La superficie dei documenti di videoscrittura (`editors/rich/`): lo stesso
+   foglio, la stessa colonna e lo stesso corpo di lettura della nota, perché
+   scrivere un documento di Word e scrivere una nota sono lo stesso gesto. Ciò
+   che il documento ha in più — oggetti, salti, sezioni — si vede come segno
+   muto, non come contenuto. */
+.rich-surface {
+  background: var(--sheet);
+  color: var(--doc-fg);
+}
+.rich-notice {
+  padding: var(--space-3) var(--space-9);
+  background: var(--info-wash);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.rich-content {
+  max-width: calc(var(--content-width) + 2 * var(--space-9));
+  margin-inline: auto;
+  padding: var(--space-9) var(--space-9) var(--space-11);
+  font-family: var(--font-reading);
+  font-size: var(--text-reading);
+  line-height: var(--leading-relaxed);
+  caret-color: var(--accent);
+}
+.rich-para {
+  margin-block: 0 var(--space-4);
+}
+.rich-heading {
+  color: var(--doc-heading);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  margin: var(--space-7) 0 var(--space-3);
+}
+.rich-heading[data-level="1"] {
+  font-size: max(1.75em, var(--text-3xl));
+  letter-spacing: -0.01em;
+  margin-top: var(--space-8);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--doc-rule-soft);
+}
+.rich-heading[data-level="2"] {
+  font-size: max(1.45em, var(--text-2xl));
+}
+.rich-heading[data-level="3"] {
+  font-size: 1.22em;
+  font-weight: 650;
+}
+.rich-heading[data-level="4"] {
+  font-size: 1.08em;
+  font-weight: 650;
+}
+.rich-heading[data-level="5"],
+.rich-heading[data-level="6"] {
+  font-size: 1em;
+  font-weight: 650;
+  color: var(--muted);
+}
+@container sheet (max-width: 560px) {
+  .rich-content {
+    padding: var(--space-8) var(--space-7) var(--space-10);
+  }
+}
+.rich-content > .rich-para:first-child {
+  margin-top: 0;
+}
+.rich-list {
+  margin-block: 0 var(--space-2);
+}
+.rich-list::before {
+  color: var(--muted);
+}
+.rich-quote {
+  border-left: 3px solid var(--doc-rule);
+  padding-left: var(--space-5);
+  color: var(--muted);
+}
+.rich-content mark {
+  background: var(--doc-highlight);
+  color: inherit;
+}
+.rich-link {
+  color: var(--doc-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* La fine di una sezione: un filo doppio a tutta colonna, che si seleziona
+   come un oggetto e non si cancella per sbaglio. */
+.rich-section {
+  margin-block: var(--space-6);
+  border-top: 3px double var(--doc-rule);
+}
+.rich-break-page {
+  border-top: 1px dashed var(--doc-rule);
+}
+.rich-break-column {
+  border-top: 1px dotted var(--doc-rule-soft);
+}
+.rich-table {
+  margin-block: 0 var(--space-4);
+}
+.rich-cell {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--doc-rule-soft);
+}
+.rich-cell > .rich-para:last-child {
+  margin-bottom: 0;
+}
+/* Un oggetto del documento (un'immagine, un campo, una nota) è una casella:
+   la sua misura viene dal documento, il suo contenuto resta nel file. */
+.rich-atom {
+  min-width: 1.2em;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-xs);
+  background: var(--doc-fill);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+.rich-atom-image,
+.rich-atom-graphic,
+.rich-atom-shape,
+.rich-atom-group {
+  border-style: dashed;
+}
+.rich-atom-note,
+.rich-atom-field {
+  border-radius: 1em;
+}
+.rich-atom-marker {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+.rich-content .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.rich-proof-spelling {
+  text-decoration: underline wavy var(--danger) 1px;
+  text-underline-offset: 3px;
+}
+.rich-proof-grammar {
+  text-decoration: underline wavy var(--warning) 1px;
+  text-underline-offset: 3px;
+}

@@ -59,10 +59,13 @@ pub use fub_host::{
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 mod document_windows;
 mod frame_rate;
+mod live;
 mod mobile;
+mod print;
 mod resources;
 mod support;
 mod web_viewer;
+pub use live::{LiveAddress, LiveStart, LiveStarted};
 pub use support::DemoClosed;
 /// Adattatore OS per `fub://` (P13): thin sopra `fub_host::automation`.
 pub mod uri;
@@ -1688,24 +1691,33 @@ enum SaveArtifactOutcome {
     Cancelled,
 }
 
-#[tauri::command]
-async fn save_artifact(
-    app: AppHandle,
-    window: tauri::WebviewWindow,
-    suggested_name: String,
-    media_type: String,
-    bytes: Vec<u8>,
-) -> Result<SaveArtifactOutcome, PluginError> {
-    use tauri_plugin_dialog::DialogExt;
+/// Chi passa un artefatto al sistema: la finestra principale, sulla sua
+/// origine locale. `what` dice che cosa le altre non possono fare.
+fn guard_main_shell(window: &tauri::WebviewWindow, what: &str) -> Result<(), PluginError> {
     let origin = window
         .url()
         .map_err(|error| PluginError::Internal(error.to_string().into()))?;
     resources::guard_trusted_local(window.label(), origin.as_str())?;
     if window.label() != "main" {
         return Err(PluginError::PermissionDenied(
-            "only the main shell may save artifacts".into(),
+            format!("only the main shell may {what}").into(),
         ));
     }
+    Ok(())
+}
+
+/// Un PDF: il suo tipo di contenuto, e come cominciano i suoi byte.
+const PDF: (&str, &[u8]) = ("application/pdf", b"%PDF-");
+
+/// Un artefatto che si passa al sistema: un nome di file senza cartelle, un
+/// tipo di contenuto, al più 64 MiB. Con `only`, il tipo dev'essere quello e
+/// i byte devono cominciare come lui.
+fn check_artifact(
+    suggested_name: &str,
+    media_type: &str,
+    bytes: &[u8],
+    only: Option<(&str, &[u8])>,
+) -> Result<(), PluginError> {
     if suggested_name.is_empty()
         || suggested_name == "."
         || suggested_name == ".."
@@ -1723,14 +1735,29 @@ async fn save_artifact(
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'.' | b'+' | b'-'))
         || !media_type.contains('/')
+        || only.is_some_and(|(wanted, magic)| media_type != wanted || !bytes.starts_with(magic))
     {
         return Err(PluginError::BadArgs("invalid artifact media type".into()));
     }
     if bytes.len() > 64 * 1024 * 1024 {
         return Err(PluginError::BadArgs(
-            "artifact exceeds the 64 MiB save limit".into(),
+            "artifact exceeds the 64 MiB limit".into(),
         ));
     }
+    Ok(())
+}
+
+#[tauri::command]
+async fn save_artifact(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    suggested_name: String,
+    media_type: String,
+    bytes: Vec<u8>,
+) -> Result<SaveArtifactOutcome, PluginError> {
+    use tauri_plugin_dialog::DialogExt;
+    guard_main_shell(&window, "save artifacts")?;
+    check_artifact(&suggested_name, &media_type, &bytes, None)?;
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     app.dialog()
         .file()
@@ -1764,7 +1791,29 @@ async fn save_artifact(
         })
     })
     .await
-    .map_err(|error| PluginError::Internal(format!("save task did not complete: {error}").into()))?
+    .map_err(|error| unfinished("save", error))?
+}
+
+/// Il lavoro `what` di un comando, su un altro thread, che non è finito.
+fn unfinished(what: &str, error: impl std::fmt::Display) -> PluginError {
+    PluginError::Internal(format!("{what} task did not complete: {error}").into())
+}
+
+/// «Stampa…»: il PDF di un export va nel programma che il sistema usa per i
+/// PDF, da cui si stampa (`print.rs`). Soltanto un PDF, e soltanto dalla
+/// shell.
+#[tauri::command]
+async fn print_artifact(
+    window: tauri::WebviewWindow,
+    suggested_name: String,
+    media_type: String,
+    bytes: Vec<u8>,
+) -> Result<print::PrintOutcome, PluginError> {
+    guard_main_shell(&window, "print artifacts")?;
+    check_artifact(&suggested_name, &media_type, &bytes, Some(PDF))?;
+    tauri::async_runtime::spawn_blocking(move || print::open_for_print(&suggested_name, &bytes))
+        .await
+        .map_err(|error| unfinished("print", error))
 }
 
 // --- superficie IPC da `support` (demo, diagnostica, recupero) ----------------
@@ -1935,6 +1984,93 @@ fn mobile_shared_mount_mode(
     mobile::mobile_shared_mount_mode(grant, backend_cas, copy_accepted)
 }
 
+// --- La sessione live (ADR 0205) ---
+//
+// Il registro delle sessioni, la pompa degli eventi e le chiusure stanno in
+// `live.rs`. La sessione appartiene alla finestra che l'ha aperta, presa dal
+// webview e non dagli argomenti: un'altra finestra non la vede. Gli errori sono
+// chiavi del catalogo del core, e la shell li riceve nella sua lingua.
+
+/// Apre una sessione live sul documento. Gli eventi arrivano a gruppi da
+/// `events`, che vive quanto la sessione.
+#[tauri::command]
+async fn live_start(
+    host: State<'_, Host>,
+    sessions: State<'_, live::LiveSessions>,
+    window: tauri::WebviewWindow,
+    request: LiveStart,
+    events: tauri::ipc::Channel<Vec<fub_live::host::LiveEvent>>,
+) -> Result<LiveStarted, PluginError> {
+    let port = live::port(&host.machine_settings());
+    let (started, pump) = for_the_shell(
+        &host,
+        None,
+        sessions.start(window.label(), request, port, events).await,
+    )?;
+    tauri::async_runtime::spawn(pump);
+    Ok(started)
+}
+
+/// Il QR in corso, o uno nuovo con `renew`.
+#[tauri::command]
+async fn live_pairing(
+    host: State<'_, Host>,
+    sessions: State<'_, live::LiveSessions>,
+    window: tauri::WebviewWindow,
+    session: String,
+    renew: bool,
+) -> Result<Option<fub_live::host::Pairing>, PluginError> {
+    for_the_shell(
+        &host,
+        None,
+        sessions.pairing(window.label(), &session, renew),
+    )
+}
+
+/// Manda allo scrittore `ack`, `nack`, `ops` o `snapshot`.
+#[tauri::command]
+fn live_send(
+    host: State<Host>,
+    sessions: State<live::LiveSessions>,
+    window: tauri::WebviewWindow,
+    session: String,
+    message: fub_live::host::ShellMessage,
+) -> Result<(), PluginError> {
+    for_the_shell(
+        &host,
+        None,
+        sessions.send(window.label(), &session, message),
+    )
+}
+
+/// Lo stato della sessione, con i commit a cui la shell non ha ancora
+/// risposto: il canale non è autorevole (0184), questo sì.
+#[tauri::command]
+fn live_status(
+    host: State<Host>,
+    sessions: State<live::LiveSessions>,
+    window: tauri::WebviewWindow,
+    session: String,
+) -> Result<fub_live::host::LiveStatus, PluginError> {
+    for_the_shell(&host, None, sessions.status(window.label(), &session))
+}
+
+/// Chiude la sessione e restituisce i commit rimasti senza risposta.
+#[tauri::command]
+async fn live_stop(
+    host: State<'_, Host>,
+    sessions: State<'_, live::LiveSessions>,
+    window: tauri::WebviewWindow,
+    session: String,
+    reason: fub_live::host::EndReason,
+) -> Result<fub_live::host::StopReport, PluginError> {
+    for_the_shell(
+        &host,
+        None,
+        sessions.stop(window.label(), &session, reason).await,
+    )
+}
+
 #[cfg(mobile)]
 fn forward_mobile_opened(app: &AppHandle, raw: &str) {
     // Spinta senza coda di recupero: la shell mobile riceve `fub://opened-url`
@@ -2069,8 +2205,17 @@ pub fn run() {
         .manage(CatalogConfig(config_dir.clone()))
         .manage(limited)
         .manage(document_windows::DocumentWindows::default())
+        .manage(live::LiveSessions::new())
         .on_window_event(|window, event| {
             document_windows::on_window_event(window, event);
+            if let tauri::WindowEvent::Destroyed = event {
+                let sessions = window.app_handle().state::<live::LiveSessions>();
+                if let Some(closing) =
+                    sessions.close_owned_by(window.label(), "the window was destroyed")
+                {
+                    tauri::async_runtime::spawn(closing);
+                }
+            }
             // La regola pura di sospensione/ripresa resta quella di `mobile::MobileLifecycle`;
             // il ramo nativo la applica solo dove gli eventi OS esistono (`cfg(mobile)`).
             let _lifecycle = [
@@ -2104,11 +2249,18 @@ pub fn run() {
 
     builder
         // Ogni webview, anche le finestre aperte dopo, prende il tetto dei
-        // fotogrammi prima di disegnare.
+        // fotogrammi prima di disegnare. Una pagina che si ricarica perde le
+        // sue sessioni live: la pagina nuova non ha i loro canali.
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Started {
                 let machine = webview.app_handle().state::<Host>().machine_settings();
                 frame_rate::apply(webview, frame_rate::beyond_60(&machine));
+                let sessions = webview.app_handle().state::<live::LiveSessions>();
+                if let Some(closing) =
+                    sessions.close_owned_by(webview.label(), "the page is reloading")
+                {
+                    tauri::async_runtime::spawn(closing);
+                }
             }
         })
         .setup(move |app| {
@@ -2147,6 +2299,7 @@ pub fn run() {
             initial_vault,
             session_notice,
             save_artifact,
+            print_artifact,
             demo_root,
             open_demo,
             close_demo,
@@ -2234,6 +2387,11 @@ pub fn run() {
             mobile_classify_opened_url,
             mobile_register_tree_grant,
             mobile_shared_mount_mode,
+            live_start,
+            live_pairing,
+            live_send,
+            live_status,
+            live_stop,
         ])
         .build(tauri::generate_context!())
         .expect("error during Fub startup")
@@ -2275,6 +2433,12 @@ pub fn run() {
                 }
             }
             if let tauri::RunEvent::Exit = event {
+                // Lo scrittore riceve `bye` prima che il runtime cada con il
+                // processo; le sessioni non toccano i vault, che si chiudono
+                // dopo.
+                tauri::async_runtime::block_on(
+                    app.state::<live::LiveSessions>().close_on_exit(),
+                );
                 let shutdown = app.state::<InstalledPlugins>().begin_shutdown();
                 for and in app.state::<Host>().close() {
                     // L'app sta uscendo: il ponte verso la shell sta morendo e

@@ -194,7 +194,13 @@ fn str_of<'a>(v: &'a Value, key: &str) -> &'a str {
 
 /// `true` se il nome appartiene a una delle famiglie proibite.
 fn forbidden(name: &str) -> bool {
-    FORBIDDEN.iter().any(|f| {
+    in_families(name, FORBIDDEN)
+}
+
+/// `true` se il nome è una delle `families` o ne comincia uno seguito da `-`
+/// o `_`: `tauri-build` è di `tauri`, `tauribbon` no.
+fn in_families(name: &str, families: &[&str]) -> bool {
+    families.iter().any(|f| {
         name == *f || name.starts_with(&format!("{f}-")) || name.starts_with(&format!("{f}_"))
     })
 }
@@ -561,6 +567,163 @@ fn the_glue_does_not_bypass_the_mounter() {
     );
 }
 
+/// Ciò che il lettore delle scene non deve vedere, per famiglia: il contratto,
+/// il core, il toolkit dell'app e il runtime wasm.
+const SCENE_FORBIDDEN: &[&str] = &["fub-abi", "fub-kernel", "tauri", "wasmtime"];
+
+/// Le dipendenze normali che `fub-scene` può dichiarare. Elenco chiuso, come
+/// quello di `fub-abi` e `fub-kernel`.
+///
+/// `fub-ink` è il nucleo dell'inchiostro: il campione del tratto che il codec
+/// di `fub:ink` quantizza è un tipo suo. È puro e senza dipendenze
+/// (`the_ink_core_stands_alone`), quindi un componente `wasm32-wasip2` che
+/// prenda `fub-scene` via Git prende anche lui dalla stessa `rev`, e non porta
+/// con sé il contratto né il kernel.
+const SCENE_ALLOWED_DIRECT: &[&str] = &["fub-ink", "quick-xml", "serde"];
+
+/// Il lettore delle scene sta da solo.
+///
+/// `fub-scene` legge i disegni per il provider `svg` (ADR 0203), che gira
+/// nell'host accanto al kernel, ma è scritto anche per un secondo
+/// consumatore: un plugin WASM, componente `wasm32-wasip2`, che lo prende via
+/// Git a una `rev` fissata e il contratto lo prende da `fub-sdk`. Se il
+/// lettore dipendesse da `fub-abi`, il guest avrebbe il contratto da due
+/// strade, e ogni cambio del contratto obbligherebbe a spostare insieme le due
+/// `rev`; se dipendesse dal kernel, dal toolkit o dal runtime wasm, il
+/// componente non compilerebbe nemmeno. La CI compila il crate per
+/// `wasm32-wasip2`; questa rete dice il perché prima del linker.
+///
+/// Le dirette sono un elenco chiuso per la stessa ragione di quelle del
+/// contratto: aggiungerne una è una decisione, e il plugin la paga in byte.
+#[test]
+fn the_scene_reader_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let trespassers: Vec<&str> = graph
+        .closure("fub-scene")
+        .into_iter()
+        .filter(|n| in_families(n, SCENE_FORBIDDEN) || forbidden(n))
+        .collect();
+    assert!(
+        trespassers.is_empty(),
+        "`fub-scene` raggiunge {trespassers:?} fra le dipendenze normali.\n\
+         Il lettore delle scene è lo stesso nell'host e in un componente\n\
+         `wasm32-wasip2`: non può portarsi dietro il contratto, il kernel, il\n\
+         toolkit dell'app o un runtime wasm. Vedi\n\
+         ../../../docs/decisions/0203-superfici-spaziali.md."
+    );
+
+    let allowed: BTreeSet<&str> = SCENE_ALLOWED_DIRECT.iter().copied().collect();
+    let extra: Vec<&str> = graph
+        .direct("fub-scene")
+        .into_iter()
+        .filter(|d| !allowed.contains(d))
+        .collect();
+    assert!(
+        extra.is_empty(),
+        "`fub-scene` dichiara {extra:?}, che non sono nell'elenco delle sue\n\
+         dipendenze dirette. Il crate compila per `wasm32-wasip2` e finisce nel\n\
+         plugin: se serve davvero, aggiungilo a `SCENE_ALLOWED_DIRECT` con la\n\
+         ragione accanto."
+    );
+}
+
+/// Il nucleo dell'inchiostro non ha dipendenze.
+///
+/// `fub-ink` è la parte dell'inchiostro che ogni prodotto di Fub deve poter
+/// usare — la scena di FubDraw, un editor futuro, un secondo client — e che un
+/// giorno può diventare un componente: per questo non nomina il contratto, il
+/// kernel, l'host, il toolkit dell'app, il runtime wasm né un formato, e non
+/// dipende da niente. La CI lo compila per `wasm32-wasip2`. Un prodotto non
+/// entra mai qui: è il prodotto a dipendere dal nucleo, mai il contrario.
+///
+/// Le dipendenze di sviluppo sono fuori: il banco dei test legge la fixture
+/// con `serde_json`, ma non finisce in nessun binario.
+#[test]
+fn the_ink_core_stands_alone() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+
+    let direct = graph.direct("fub-ink");
+    assert!(
+        direct.is_empty(),
+        "`fub-ink` dichiara {direct:?} fra le dipendenze normali. Il nucleo\n\
+         dell'inchiostro non dipende da niente: se serve un tipo, va nel nucleo;\n\
+         se serve un prodotto, è il prodotto che dipende dal nucleo."
+    );
+
+    let dependents: Vec<&str> = graph
+        .members()
+        .into_iter()
+        .filter(|m| *m != "fub-ink" && graph.direct(m).contains("fub-ink"))
+        .collect();
+    assert!(
+        dependents
+            .iter()
+            .all(|m| INK_ALLOWED_DEPENDENTS.contains(m)),
+        "{dependents:?} dipendono da `fub-ink`, ma solo {INK_ALLOWED_DEPENDENTS:?}\n\
+         possono. Aggiungere un cliente del nucleo è una decisione: scrivila\n\
+         nell'ADR dell'inchiostro condiviso (docs/decisions/0204-nucleo-inchiostro.md)\n\
+         e poi qui."
+    );
+}
+
+/// Chi può dipendere dal nucleo dell'inchiostro. Elenco chiuso.
+const INK_ALLOWED_DEPENDENTS: &[&str] = &["fub-scene"];
+
+/// La sessione live sta **fuori dal core**: `fub-live` non vede il contratto,
+/// il kernel, il montaggio né il toolkit (ADR 0205).
+///
+/// È il servizio che parla con un tablet sulla rete locale: il tratto arriva
+/// alla shell come testo controllato nella forma, e la shell lo valida come
+/// un'operazione locale. Se il crate raggiungesse il kernel o l'host, un
+/// commit che viene dalla rete avrebbe una strada per toccare il documento
+/// senza passare dalla shell; se raggiungesse `tauri`, l'app compagna e la
+/// CLI non potrebbero prenderlo senza un webview. E `fub-host` resta senza
+/// runtime asincrono proprio perché il `tokio` della sessione sta qui.
+///
+/// La rete guarda la chiusura e non solo il manifesto: una dipendenza che
+/// porta con sé il kernel è lo stesso kernel.
+#[test]
+fn the_live_session_stays_outside_the_core() {
+    let metadata = metadata();
+    let graph = Graph::new(&metadata);
+    let core = ["fub-abi", "fub-kernel", "fub-host"];
+    let toolkit = ["tauri", "wry", "webkit2gtk"];
+    let banned = |name: &str| {
+        core.contains(&name)
+            || toolkit.iter().any(|family| {
+                name == *family
+                    || name.starts_with(&format!("{family}-"))
+                    || name.starts_with(&format!("{family}_"))
+            })
+    };
+
+    let declared: Vec<&str> = graph
+        .direct("fub-live")
+        .into_iter()
+        .filter(|name| banned(name))
+        .collect();
+    assert!(
+        declared.is_empty(),
+        "`fub-live` dichiara {declared:?} fra le dipendenze normali.\n\
+         La sessione live non vede il contratto, il kernel, il montaggio né il\n\
+         toolkit: lo compone `fub-app`, e i commit passano dalla shell."
+    );
+    let reached: Vec<&str> = graph
+        .closure("fub-live")
+        .into_iter()
+        .filter(|name| banned(name))
+        .collect();
+    assert!(
+        reached.is_empty(),
+        "`fub-live` raggiunge {reached:?} fra le dipendenze normali, passando\n\
+         per qualcun altro. Vale la stessa ragione: la sessione live sta fuori\n\
+         dal core."
+    );
+}
+
 // ---------------------------------------------------------------------------
 // La quarta rete: il diagramma dei componenti.
 // ---------------------------------------------------------------------------
@@ -582,7 +745,7 @@ struct Diagram {
     dev: BTreeSet<(String, String)>,
 }
 
-/// Legge il blocco marcato e lo traduce in insiemi confrontabili.
+/// Legge i blocchi marcati e li traduce in insiemi confrontabili.
 ///
 /// Il dialetto ammesso è minuscolo di proposito — dichiarazioni
 /// `id["nome"]:::classe`, archi `a --> b` e `a -.-> b`, commenti `%%`, e le
@@ -606,23 +769,35 @@ fn read_diagram(source: &str) -> Diagram {
         "in {DIAGRAM_DOC} c'è un blocco ```mermaid che nessuna riga chiude"
     );
 
-    let mut marked: Vec<Vec<&str>> = blocks
+    let marked: Vec<Vec<&str>> = blocks
         .into_iter()
         .filter(|b| b.iter().any(|the| the.contains(DIAGRAM_MARKER)))
         .collect();
-    assert_eq!(
-        marked.len(),
-        1,
-        "in {DIAGRAM_DOC} i blocchi mermaid marcati `{DIAGRAM_MARKER}` sono {},\n\
-         e deve essercene esattamente uno: è il grafo che questo test confronta\n\
-         con `cargo metadata`.",
-        marked.len()
+    assert!(
+        !marked.is_empty(),
+        "in {DIAGRAM_DOC} nessun blocco mermaid è marcato `{DIAGRAM_MARKER}`: è il\n\
+         grafo che questo test confronta con `cargo metadata`."
     );
 
+    // Più blocchi marcati sono un grafo solo, disegnato a pezzi perché ogni
+    // figura resti leggibile: si legge ciascuno con i propri riquadri e se ne
+    // prende l'unione. Un crate può comparire in più pezzi.
+    let mut out = Diagram::default();
+    for block in marked {
+        let piece = read_block(&block);
+        out.crates.extend(piece.crates);
+        out.normal.extend(piece.normal);
+        out.dev.extend(piece.dev);
+    }
+    out
+}
+
+/// Un blocco marcato: i riquadri valgono soltanto nel blocco che li dichiara.
+fn read_block(block: &[&str]) -> Diagram {
     let mut names: BTreeMap<&str, String> = BTreeMap::new();
     let mut out = Diagram::default();
 
-    for line in marked.remove(0) {
+    for line in block {
         let the = line.trim();
         if the.is_empty()
             || the.starts_with("%%")
@@ -796,6 +971,14 @@ fn forbidden_families_match_by_prefix() {
     assert!(!forbidden("tauribbon"));
     assert!(!forbidden("serde"));
     assert!(!forbidden("camino"));
+    // Le famiglie del lettore delle scene: il contratto e il core per nome
+    // intero, senza prendere i vicini.
+    assert!(in_families("fub-abi", SCENE_FORBIDDEN));
+    assert!(in_families("fub-kernel", SCENE_FORBIDDEN));
+    assert!(in_families("wasmtime-wasi", SCENE_FORBIDDEN));
+    assert!(!in_families("fub-abilities", SCENE_FORBIDDEN));
+    assert!(!in_families("fub-scene", SCENE_FORBIDDEN));
+    assert!(!in_families("quick-xml", SCENE_FORBIDDEN));
 }
 
 /// Il test del parser: deve distinguere i due archi, e deve saltare il blocco
@@ -831,6 +1014,64 @@ flowchart TD\n\
     assert_eq!(
         d.dev,
         BTreeSet::from([("fub-beta".to_string(), "fub-alfa".to_string())])
+    );
+}
+
+/// Un grafo disegnato in due pezzi è la loro unione: lo stesso crate può stare
+/// in entrambi, e un riquadro vale soltanto nel pezzo che lo dichiara.
+#[test]
+fn the_diagram_parser_joins_the_marked_pieces() {
+    let source = "\
+```mermaid\n\
+flowchart TD\n\
+    %% @grafo-dipendenze\n\
+    a[\"fub-alfa\"]\n\
+    b[\"fub-beta\"]\n\
+    a --> b\n\
+```\n\
+```mermaid\n\
+flowchart LR\n\
+    %% @grafo-dipendenze\n\
+    x[\"fub-beta\"]\n\
+    y[\"terzi-gamma\"]\n\
+    x --> y\n\
+```\n";
+    let d = read_diagram(source);
+    assert_eq!(
+        d.crates,
+        BTreeSet::from([
+            "fub-alfa".to_string(),
+            "fub-beta".to_string(),
+            "terzi-gamma".to_string()
+        ])
+    );
+    assert_eq!(
+        d.normal,
+        BTreeSet::from([
+            ("fub-alfa".to_string(), "fub-beta".to_string()),
+            ("fub-beta".to_string(), "terzi-gamma".to_string())
+        ])
+    );
+}
+
+/// Un arco che nomina un riquadro dichiarato soltanto nell'altro pezzo è un
+/// errore, non un arco: ogni figura si deve leggere da sola.
+#[test]
+#[should_panic(expected = "non è un riquadro dichiarato")]
+fn a_piece_does_not_see_the_boxes_of_another() {
+    read_diagram(
+        "\
+```mermaid\n\
+flowchart TD\n\
+    %% @grafo-dipendenze\n\
+    a[\"fub-alfa\"]\n\
+```\n\
+```mermaid\n\
+flowchart TD\n\
+    %% @grafo-dipendenze\n\
+    b[\"fub-beta\"]\n\
+    a --> b\n\
+```\n",
     );
 }
 

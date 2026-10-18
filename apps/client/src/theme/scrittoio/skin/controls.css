@@ -1,0 +1,414 @@
+/* I controlli generici: campi, segmenti, suggerimenti. */
+
+/* Qui stanno i controlli che la shell scrive **senza una classe** — campo,
+   casella, radio, interruttore, cursore, barra, tasto — più i due che nomina:
+   il gruppo a segmenti e il suggerimento. Il bottone nudo e il primario sono
+   delle fondamenta; l'azione testuale (`.link-button`) è dei cassetti. */
+
+/* ── Il campo ────────────────────────────────────────────────────────────── */
+
+/* Il default di un campo sta a specificità zero (`:where`): chiunque nomini il
+   proprio campo per classe lo scavalca senza doverlo disfare. Le esclusioni
+   hanno una forma loro, più sotto. */
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+textarea,
+select {
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-control);
+  background: var(--bg-input);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+/* Un'area di testo cresce: l'altezza del controllo è il suo minimo, non la
+   sua misura. */
+textarea {
+  height: auto;
+  min-height: calc(var(--control-h) * 2);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* Un elenco a scelta multipla è alto quanto ciò che elenca. */
+select:where([multiple], [size]) {
+  height: auto;
+  padding: var(--space-2);
+}
+
+/* Sulla scrivania il campo è un pezzo di carta (`--sheet`); dentro un foglio
+   o un rialzo resta un gradino sotto (`--sheet-2`), che è il default. */
+:where(.sidebar, .inspector-pane) input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
+:where(.sidebar, .inspector-pane) textarea,
+:where(.sidebar, .inspector-pane) select {
+  background: var(--sheet);
+}
+
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):hover,
+textarea:hover,
+select:hover {
+  border-color: var(--text);
+}
+
+/* Il fuoco è l'anello della shell portato a filo: copre il confine e sporge di
+   un pixel, così il campo sembra prendere un bordo blu spesso due. L'alone è
+   un di più — in colori forzati sparisce e resta l'anello della struttura. */
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--focus-ring);
+  outline-offset: -1px;
+  box-shadow: 0 0 0 4px var(--accent-veil);
+}
+
+/* Un campo che non regge ciò che c'è scritto lo dice anche a colpo d'occhio:
+   `aria-invalid` lo annuncia, il confine lo mostra. */
+:where(input, textarea, select)[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+:where(input, textarea, select)[aria-invalid="true"]:focus-visible {
+  box-shadow: 0 0 0 4px var(--danger-wash);
+}
+
+/* Un campo che non si può cambiare lo sembra, prima del clic. */
+:where(input, textarea, select):disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])):disabled,
+textarea:disabled,
+select:disabled {
+  border-color: var(--outline);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* ── Casella e radio ─────────────────────────────────────────────────────── */
+
+/* Disegnate, non native: il widget del sistema non segue né il confine né la
+   matita blu. Le misure sono scritte quattro volte (`width`, `min-width` e le
+   due altezze) perché una regola larga di un altro pezzo — «ogni campo di
+   questa scatola è largo cento» — non le deformi. Il `:not()` del radio non
+   esclude niente: pareggia il peso della casella. */
+input[type="checkbox"]:not([role="switch"]),
+input[type="radio"]:not([role="switch"]) {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--outline);
+  border-radius: var(--radius-xs);
+  background: var(--bg-elev);
+  box-shadow: none;
+  vertical-align: -3px;
+  cursor: pointer;
+}
+input[type="radio"]:not([role="switch"]) {
+  border-radius: var(--radius-pill);
+}
+/* Il segno: una spunta ritagliata, che entra crescendo. */
+input[type="checkbox"]:not([role="switch"])::before,
+input[type="radio"]:not([role="switch"])::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background: var(--accent-contrast);
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+  transform: scale(0);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+input[type="radio"]:not([role="switch"])::before {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  clip-path: none;
+}
+/* Né sì né no: un tratto. */
+input[type="checkbox"]:not([role="switch"]):indeterminate::before {
+  clip-path: polygon(10% 41%, 90% 41%, 90% 59%, 10% 59%);
+}
+input[type="checkbox"]:not([role="switch"]):hover,
+input[type="radio"]:not([role="switch"]):hover {
+  border-color: var(--text);
+}
+input[type="checkbox"]:not([role="switch"]):checked,
+input[type="checkbox"]:not([role="switch"]):indeterminate,
+input[type="radio"]:not([role="switch"]):checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+input[type="checkbox"]:not([role="switch"]):checked::before,
+input[type="checkbox"]:not([role="switch"]):indeterminate::before,
+input[type="radio"]:not([role="switch"]):checked::before {
+  transform: scale(1);
+}
+input[type="checkbox"]:not([role="switch"]):disabled,
+input[type="radio"]:not([role="switch"]):disabled {
+  border-color: var(--outline);
+}
+input[type="checkbox"]:not([role="switch"]):checked:disabled,
+input[type="radio"]:not([role="switch"]):checked:disabled {
+  border-color: var(--accent);
+}
+
+/* ── L'interruttore ──────────────────────────────────────────────────────── */
+
+/* Un binario a pillola e un pomello che scivola. Il binario spento è
+   `--outline` e non `--border-strong`: è l'unico confine del controllo, e
+   deve staccarsi 3:1 da qualunque superficie gli stia sotto. */
+input[role="switch"] {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: 32px;
+  min-width: 32px;
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--outline);
+  box-shadow: none;
+  vertical-align: -4px;
+  cursor: pointer;
+}
+input[role="switch"]::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+/* Un pomello solo: chi ne disegnasse un secondo qui lo vedrebbe doppio. */
+input[role="switch"]::after {
+  content: none;
+}
+input[role="switch"]:hover {
+  background: var(--muted);
+}
+input[role="switch"]:checked {
+  background: var(--accent);
+}
+input[role="switch"]:checked::before {
+  transform: translateX(14px);
+}
+
+/* ── Il cursore e la barra ───────────────────────────────────────────────── */
+
+/* Il cursore resta quello del sistema, tinto. */
+input:where([type="range"]) {
+  accent-color: var(--accent);
+}
+
+/* La `<progress>` nativa non segue il tema e da indeterminata si anima anche
+   col moto ridotto, perché quell'animazione non è CSS. `appearance: none` la
+   porta dentro il tema e la ferma. Le pseudo-classi dei due motori vanno
+   scritte separate: un selettore che le unisse cadrebbe intero su quello che
+   non conosce l'altra. */
+progress {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 4px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--overlay-active);
+  overflow: hidden;
+}
+/* La pista è il fondo dell'elemento, ed è una velatura perché una barra sta
+   su qualunque superficie: questo strato, che le starebbe sopra, resta
+   trasparente o la velatura si sommerebbe a sé stessa. */
+progress::-webkit-progress-bar {
+  background: transparent;
+}
+progress::-webkit-progress-value {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+progress::-moz-progress-bar {
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+/* Senza conteggio non c'è una misura da riempire: la pista si riga di blu, e
+   dice «al lavoro» stando ferma. */
+progress:indeterminate {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 4px, var(--accent-wash) 4px 8px);
+}
+
+
+/* ── Il gruppo a segmenti ────────────────────────────────────────────────── */
+
+/* Opzioni che si escludono dentro un incavo solo. L'incavo è una velatura,
+   non un colore: sta nella testata di un foglio, nelle preferenze, sulla
+   scrivania, e regge su tutte. Alto 28: entra nella testata del foglio. */
+.segmented {
+  display: inline-flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--overlay-hover);
+}
+.segmented-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* Quando le opzioni sono parole intere il gruppo prende l'altezza di un
+   controllo. */
+.segmented--wide .segmented-option {
+  min-height: calc(var(--control-h) - 2 * var(--space-1));
+  padding: 0 var(--space-5);
+}
+.segmented-option:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.segmented-option:active {
+  background: var(--overlay-active);
+  color: var(--text);
+}
+/* L'accesa si legge **dall'attributo che la annuncia**, e sono tre perché
+   sono tre widget: `aria-pressed` per un gruppo di pulsanti, `aria-selected`
+   in una `tablist`, `aria-checked` in un `radiogroup`. La dice la matita blu,
+   mai un grigio. */
+.segmented-option[aria-pressed="true"],
+.segmented-option[aria-selected="true"],
+.segmented-option[aria-checked="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-weight: var(--weight-bold);
+}
+.segmented-option:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.segmented-option:disabled:hover,
+.segmented-option:disabled:active {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* ── Il suggerimento e il tasto ──────────────────────────────────────────── */
+
+/* Il suggerimento è l'unica superficie a colori invertiti: inchiostro per
+   fondo, scrivania per testo. Sta sopra tutto senza appartenere a niente, e
+   l'inversione lo dice senza bordo e senza freccia. */
+.shell-tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(22rem, calc(100vw - 1rem));
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: var(--shadow-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-normal);
+  pointer-events: none;
+  white-space: normal;
+}
+.shell-tooltip[hidden] {
+  display: none;
+}
+
+/* Un tasto: una pastiglia in grafite, col carattere dell'interfaccia e le
+   cifre in colonna. Non il monospazio: è un nome, non codice. */
+kbd,
+.titlebar-shortcut {
+  flex-shrink: 0;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* ── Garanzie ────────────────────────────────────────────────────────────── */
+
+/* In colori forzati i fondi sono del sistema: una spunta e un pomello
+   disegnati col fondo sparirebbero. Tornano i controlli nativi, che il
+   sistema sa dipingere. */
+@media (forced-colors: active) {
+  input[type="checkbox"]:not([role="switch"]),
+  input[type="radio"]:not([role="switch"]),
+  input[role="switch"] {
+    appearance: auto;
+    -webkit-appearance: auto;
+    display: inline-block;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    padding: 0;
+  }
+  input[type="checkbox"]:not([role="switch"])::before,
+  input[type="radio"]:not([role="switch"])::before,
+  input[role="switch"]::before {
+    content: none;
+  }
+  /* La barra era due fondi, e sparirebbe intera: prende un bordo, e il
+     riempimento è il colore di selezione del sistema. */
+  progress {
+    height: 6px;
+    border: 1px solid CanvasText;
+  }
+  progress::-webkit-progress-value {
+    background: Highlight;
+  }
+  progress::-moz-progress-bar {
+    background: Highlight;
+  }
+  progress:indeterminate {
+    background: repeating-linear-gradient(-45deg, Highlight 0 4px, Canvas 4px 8px);
+  }
+  /* Il suggerimento perde il fondo rovesciato e l'ombra: lo stacca un bordo. */
+  .shell-tooltip {
+    border: 1px solid CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-tooltip,
+  .segmented-option,
+  input[role="switch"]::before,
+  input[type="checkbox"]:not([role="switch"])::before,
+  input[type="radio"]:not([role="switch"])::before {
+    transition: none;
+  }
+}

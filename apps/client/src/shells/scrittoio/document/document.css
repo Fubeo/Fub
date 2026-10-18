@@ -1,0 +1,93 @@
+/* La struttura della finestra documento dello Scrittoio.
+ *
+ * Il foglio è quello della finestra principale (`.pane`, `.pane-tabs`,
+ * `.pane-toolbar` in `theme/scrittoio/structure.css`): qui sta soltanto ciò che
+ * una finestra con un foglio solo ha di suo — la scrivania attorno, lo stato
+ * nella testata, l'avviso e le due scelte quando qualcosa resta in sospeso.
+ */
+
+/* La scrivania: il foglio ha attorno lo stesso margine che ha nella finestra
+   principale, e in alto la striscia delle linguette parte dal bordo. */
+.document-window-root {
+  height: 100dvh;
+  padding: 0 var(--sheet-gap) var(--sheet-gap);
+}
+
+.document-window-sheet {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+/* Una finestra senza un documento valido: la frase che lo dice, al centro
+   della scrivania. */
+.document-window-root.document-window-invalid {
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8, 24px);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  text-align: center;
+}
+
+/* L'editor prende tutta la carta sotto la testata, qualunque sia il profilo. */
+.document-window-editor {
+  display: flex;
+  flex-direction: column;
+}
+
+.document-window-editor > .cm-editor {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Lo stato della finestra: punto e parola, a destra nella testata. Non si
+   preme, quindi non ha il fondo di un bottone. */
+.document-window-link {
+  padding: var(--space-2, 4px) var(--space-4, 8px);
+  cursor: default;
+}
+
+/* La regione viva. Mentre la finestra principale salva lo dice la testata:
+   qui il testo resta per chi ascolta e non occupa una riga. */
+.document-window-sheet > .document-window-notice {
+  flex: none;
+  margin: 0;
+}
+
+.document-window-sheet > .document-window-notice:empty {
+  display: none;
+}
+
+.document-window-sheet > .document-window-notice:not([data-kind="error"]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Qualcosa è rimasto in sospeso: il motivo e le due scelte stanno sulla carta,
+   sotto la testata, e il testo resta sotto di loro. */
+.document-window-sheet > .document-window-notice[data-kind="error"] {
+  padding: var(--space-4, 8px) var(--space-6, 16px);
+  color: var(--danger);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.document-window-sheet > .document-window-conflict {
+  gap: var(--space-4, 8px);
+  padding: 0 var(--space-6, 16px) var(--space-5, 12px);
+}
+
+/* Su una finestra stretta il foglio tocca i fianchi: si stringe la cornice. */
+@media (max-width: 599px) {
+  .document-window-root {
+    padding: 0;
+  }
+}

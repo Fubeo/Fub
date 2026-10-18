@@ -1,0 +1,1459 @@
+// L'indice degli oggetti: che cosa si sceglie intero, e dove si tocca. La
+// geometria è quella che il painter disegna, quindi i documenti qui sono
+// scene vere, aperte dal motore.
+
+import { describe, expect, it, vi } from "vitest";
+import { PF1_DEFAULTS } from "../../../ink/brush";
+import { quantizeInk, type InkSample } from "../../../ink/sample";
+import type { Bounds } from "../scene/geometry";
+import { apply, compose, IDENTITY, rotate, translate, type Point } from "../scene/matrix";
+import { doc } from "../scene/test-support";
+import { strokeElem } from "./edit";
+import { PaintBuilder } from "../painter/paint";
+import { SceneEngine } from "../scene/engine";
+import { elementChildren, type ContainerNode, type LeafNode } from "../scene/model";
+import { elemBounds, geometryBox, linesBounds, SceneIndexer, type SceneIndex, type Unit } from "./hit";
+import { LAYER, open } from "./test-support";
+
+const SHAPES = doc(
+  `<title>Prova</title><rect id="fub-paper" fub:role="paper" x="0" y="0" width="100" height="100" fill="#ffffff"/>${LAYER}`
+    + '<rect id="r" x="10" y="10" width="20" height="20" fill="none" stroke="#000000" stroke-width="2"/>'
+    + '<circle id="c" cx="70" cy="70" r="10" fill="#000000"/>'
+    + '<g id="g" transform="translate(50 0)"><rect id="gr" x="0" y="0" width="10" height="10"/></g>'
+    + '<line x1="0" y1="90" x2="40" y2="90" stroke="#000000" stroke-width="2"/>'
+    + '<rect id="off" x="0" y="0" width="5" height="5" display="none"/>'
+    + '</g><g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="locked" x="0" y="0" width="100" height="100"/></g>'
+    + '<g id="l3" fub:layer="Nascosto" display="none"><rect id="hidden" x="0" y="0" width="100" height="100"/></g>'
+    + '<circle id="loose" cx="95" cy="5" r="2"/>',
+);
+
+const box = (x0: number, y0: number, x1: number, y1: number): Bounds => ({ min: [x0, y0], max: [x1, y1] });
+const container = (opened: ReturnType<typeof open>, id: string): ContainerNode => opened.engine.holder(id) as ContainerNode;
+
+describe("gli oggetti della scena", () => {
+  it("sono i figli dei livelli visibili e sbloccati, e quelli della radice", () => {
+    const { index } = open(SHAPES);
+    expect(index.units.map((unit) => unit.key)).toEqual(["r", "c", "g", "@2.3", "loose"]);
+    // Un oggetto senza id si nomina col percorso, che il motore sa trovare.
+    expect(index.get("@2.3")?.target).toEqual({ path: [2, 3], tag: "line" });
+    expect(index.get("r")?.layer).toBe("l1");
+    expect(index.get("loose")?.layer).toBeNull();
+  });
+
+  it("conoscono i livelli, anche quelli che non si toccano", () => {
+    const { index } = open(SHAPES);
+    expect(index.layers.map((layer) => [layer.id, layer.locked, layer.hidden])).toEqual([
+      ["l1", false, false],
+      ["l2", true, false],
+      ["l3", false, true],
+    ]);
+  });
+
+  it("hanno il riquadro di ciò che si vede, contorno e trasformazioni compresi", () => {
+    const { index } = open(SHAPES);
+    expect(index.get("r")?.bounds).toEqual({ min: [9, 9], max: [31, 31] });
+    expect(index.get("g")?.bounds).toEqual({ min: [50, 0], max: [60, 10] });
+    expect(index.get("g")?.frame()).toEqual({ min: [0, 0], max: [10, 10] });
+  });
+
+  it("sanno dove finirebbero dopo una trasformazione della scena, anche ruotati", () => {
+    const { index } = open(SHAPES);
+    const rect = index.get("r")!;
+    expect(rect.boundsAfter(IDENTITY)).toEqual(rect.bounds);
+    // Ruotato di 45° attorno al centro: gli spigoli vanno sugli assi.
+    const turned = rect.boundsAfter(compose(translate(20, 20), compose(rotate(45), translate(-20, -20))))!;
+    const reach = 10 * Math.SQRT2 + 1;
+    [...turned.min, ...turned.max].forEach((value, at) => expect(value).toBeCloseTo(at < 2 ? 20 - reach : 20 + reach, 6));
+    // Dentro un gruppo vale la scena, non le coordinate del gruppo.
+    expect(index.get("g")!.boundsAfter(translate(0, 5))).toEqual({ min: [50, 5], max: [60, 15] });
+  });
+
+  it("hanno anche il riquadro della geometria, senza contorno, per la griglia", () => {
+    const { index } = open(SHAPES);
+    expect(index.get("r")?.geometry).toEqual({ min: [10, 10], max: [30, 30] });
+    expect(index.get("@2.3")?.geometry).toEqual({ min: [0, 90], max: [40, 90] });
+    expect(index.get("g")?.geometry).toEqual({ min: [50, 0], max: [60, 10] });
+  });
+});
+
+describe("il riquadro di tutto il disegno", () => {
+  it("comprende i livelli bloccati e nascosti, ma non la carta e ciò che è nascosto da sé", () => {
+    const opened = open(doc(
+      `<title>Prova</title><rect id="fub-paper" fub:role="paper" x="0" y="0" width="100" height="100" fill="#ffffff"/>${LAYER}`
+        + '<rect id="a" x="10" y="10" width="20" height="20"/>'
+        + '<rect id="off" x="500" y="500" width="5" height="5" display="none"/></g>'
+        + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><rect id="b" x="40" y="-50" width="10" height="10"/></g>'
+        + '<g id="l3" fub:layer="Nascosto" display="none"><rect id="c" x="200" y="20" width="10" height="10" stroke="#000000" stroke-width="4"/></g>',
+    ));
+    expect(opened.extent()).toEqual({ min: [10, -50], max: [212, 32] });
+    // L'indice resta quello degli oggetti che si toccano.
+    expect(opened.index.units.map((unit) => unit.key)).toEqual(["a"]);
+  });
+
+  it("non c'è in un disegno vuoto", () => {
+    expect(open(doc(`${LAYER}</g>`)).extent()).toBeNull();
+  });
+});
+
+describe("le risorse", () => {
+  it("non sono oggetti: né la defs né ciò che contiene si sceglie, si tocca o fa riquadro", () => {
+    const opened = open(doc(
+      '<defs id="fub-defs"><pattern id="p1" width="200" height="200" patternUnits="userSpaceOnUse">'
+        + '<rect id="dentro" x="0" y="0" width="200" height="200" fill="#000000"/></pattern>'
+        + '<linearGradient id="estraneo" href="#p1"/></defs>'
+        + `${LAYER}<rect id="a" x="10" y="10" width="20" height="20" fill="url(#p1) #000000"/></g>`,
+    ));
+    expect(opened.index.units.map((unit) => unit.key)).toEqual(["a"]);
+    for (const key of ["fub-defs", "p1", "dentro", "estraneo", "@0", "@0.0"]) expect(opened.index.get(key), key).toBeNull();
+    expect(opened.index.at([100, 100], 0)).toBeNull();
+    expect(opened.extent()).toEqual({ min: [10, 10], max: [30, 30] });
+  });
+});
+
+describe("il riquadro di una miniatura", () => {
+  const FRAMED = doc(
+    '<g id="l1" fub:layer="Nascosto" transform="translate(100 0)" display="none">'
+      + '<g id="g" transform="scale(2)" stroke="#000000" stroke-width="2" display="none">'
+      + '<rect id="r" x="0" y="0" width="10" height="10"/><rect id="off" x="50" y="50" width="5" height="5" display="none"/></g>'
+      + '<g id="odd" visibility="hidden"><rect id="inner" x="0" y="0" width="5" height="5"/></g></g>',
+  );
+
+  it("è ciò che l'oggetto disegna nella scena, contorno compreso, anche se lui o chi lo contiene è nascosto", () => {
+    const opened = open(FRAMED);
+    expect(opened.frame("r")).toEqual({ min: [98, -2], max: [122, 22] });
+    expect(opened.frame("off")).toEqual({ min: [198, 98], max: [212, 112] });
+  });
+
+  it("non conta ciò che è nascosto dentro di lui", () => {
+    const opened = open(FRAMED);
+    expect(opened.frame("g")).toEqual({ min: [98, -2], max: [122, 22] });
+    // Il livello ha dentro solo il gruppo nascosto, e ciò che non sa leggere.
+    expect(opened.frame("l1")).toBeNull();
+  });
+
+  it("non c'è per ciò che il disegno non sa leggere", () => {
+    expect(open(FRAMED).frame("inner")).toBeNull();
+  });
+});
+
+describe("i collegamenti che si vedono", () => {
+  it("ci sono a ogni profondità e anche nei livelli bloccati, ma non in ciò che è nascosto", () => {
+    const opened = open(doc(
+      `${LAYER}<a id="a1" href="uno.md"><rect x="10" y="10" width="10" height="10"/></a>`
+        + '<g id="g" transform="translate(50 0)"><a id="a2" href="due.md"><rect x="0" y="0" width="10" height="10"/></a></g>'
+        + '<g id="off" display="none"><a id="a3" href="tre.md"><rect x="0" y="0" width="10" height="10"/></a></g>'
+        + '<a id="a4" href="quattro.md" display="none"><rect x="0" y="0" width="10" height="10"/></a></g>'
+        + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><a id="a5" href="cinque.md"><rect x="0" y="40" width="10" height="10"/></a></g>'
+        + '<g id="l3" fub:layer="Nascosto" display="none"><a id="a6" href="sei.md"><rect x="0" y="0" width="10" height="10"/></a></g>',
+    ));
+    expect(opened.links().map((unit) => [unit.key, unit.layer, unit.bounds])).toEqual([
+      ["a1", "l1", { min: [10, 10], max: [20, 20] }],
+      ["a2", "l1", { min: [50, 0], max: [60, 10] }],
+      ["a5", "l2", { min: [0, 40], max: [10, 50] }],
+    ]);
+    // Quello dentro un gruppo non si sceglie da solo: si sceglie il gruppo,
+    // che è sulla sua strada.
+    expect(opened.index.units.map((unit) => unit.key)).toEqual(["a1", "g"]);
+    expect(opened.links()[1]!.path).toEqual([...opened.index.get("g")!.path, 0]);
+  });
+});
+
+describe("toccare un oggetto", () => {
+  it("vuol dire toccarne ciò che si dipinge: il contorno di un rettangolo vuoto, non il suo interno", () => {
+    const { index } = open(SHAPES);
+    expect(index.at([20, 20], 0.5)).toBeNull();
+    expect(index.at([10.5, 20], 0)?.key).toBe("r");
+    expect(index.at([8.6, 20], 0.5)?.key).toBe("r");
+    expect(index.at([70, 70], 0)?.key).toBe("c");
+  });
+
+  it("dà il gruppo intero, nel posto dove la trasformazione lo porta", () => {
+    const { index } = open(SHAPES);
+    expect(index.at([55, 5], 0)?.key).toBe("g");
+    expect(index.at([5, 5], 0)).toBeNull();
+  });
+
+  it("sa quale forma di un gruppo sta sotto il punto, e con quale matrice si disegna", () => {
+    const { index } = open(doc(
+      `${LAYER}<g id="g" transform="translate(50 0)"><rect id="a" x="0" y="0" width="10" height="10"/>`
+        + '<path id="b" transform="scale(2)" d="M2 2 L8 2"/></g></g>',
+    ));
+    const group = index.get("g")!;
+    expect(group.shapes().map(({ leaf, matrix }) => [leaf.facts.id, matrix])).toEqual([
+      ["a", [1, 0, 0, 1, 50, 0]],
+      ["b", [2, 0, 0, 2, 50, 0]],
+    ]);
+    // La più in alto vince; dove nessuna disegna, niente.
+    expect(group.shapeAt([58, 4], 0.5)?.facts.id).toBe("b");
+    expect(group.shapeAt([55, 8], 0)?.facts.id).toBe("a");
+    expect(group.shapeAt([65, 15], 0.5)).toBeNull();
+    expect(group.shapeAt([200, 200], 0.5)).toBeNull();
+  });
+
+  it("sceglie quello che si vede sopra", () => {
+    const { index } = open(doc(`${LAYER}<rect id="sotto" x="0" y="0" width="50" height="50"/><rect id="sopra" x="25" y="25" width="50" height="50"/></g>`));
+    expect(index.at([30, 30], 0)?.key).toBe("sopra");
+    expect(index.at([10, 10], 0)?.key).toBe("sotto");
+  });
+
+  it("col passaggio della gomma prende ciò che il segmento attraversa", () => {
+    const { index } = open(SHAPES);
+    expect(index.along([20, 80], [20, 100], 1).map((unit) => unit.key)).toEqual(["@2.3"]);
+    expect(index.along([0, 50], [100, 50], 1)).toEqual([]);
+  });
+
+  it("la gomma non riprova ciò che ha già segnato", () => {
+    const { index } = open(SHAPES);
+    const line = index.get("@2.3")!;
+    const touches = vi.spyOn(line, "touches");
+    expect(index.along([20, 80], [20, 100], 1, new Map([[line.key, line]]))).toEqual([]);
+    expect(touches).not.toHaveBeenCalled();
+    // Sotto la chiave c'è un altro oggetto: si prova.
+    expect(index.along([20, 80], [20, 100], 1, new Map([[line.key, index.get("r")!]]))).toEqual([line]);
+  });
+
+  it("con molti oggetti la gomma prende ciò che prenderebbe guardandoli tutti", () => {
+    // Un generatore con seme (mulberry32): la prova si ripete.
+    let state = 5;
+    const next = (): number => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = Math.imul(state ^ (state >>> 15), state | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const shapes = Array.from({ length: 700 }, (_, i) => {
+      const x = (i % 30) * 20 + next() * 10;
+      const y = Math.floor(i / 30) * 20 + next() * 10;
+      switch (i % 6) {
+        case 0:
+          return `<rect x="${x}" y="${y}" width="${4 + next() * 20}" height="${4 + next() * 8}" fill="none" stroke="#000" stroke-width="2"/>`;
+        case 1:
+          return `<circle cx="${x}" cy="${y}" r="${1 + next() * 6}"/>`;
+        case 2:
+          return `<path d="M${x} ${y} Q${x + 8} ${y + 12} ${x + 15} ${y + 3}" fill="none" stroke="#000" stroke-width="${next() * 4}"/>`;
+        case 3:
+          return `<g id="g${i}" transform="translate(${x} ${y}) rotate(${next() * 90})"><rect x="0" y="0" width="8" height="3"/></g>`;
+        case 4:
+          return `<line x1="${x}" y1="${y}" x2="${x + next() * 60}" y2="${y + next() * 30}" stroke="#000"/>`;
+        default:
+          return `<polyline points="${x},${y} ${x + 5},${y + 9} ${x + 11},${y}" fill="none" stroke="#000" stroke-width="3"/>`;
+      }
+    });
+    const { index } = open(doc(
+      `<defs id="fub-defs"><clipPath id="via" fub:role="private"><rect x="5000" y="5000" width="1" height="1"/></clipPath></defs>${LAYER}`
+        + '<rect id="sotto" x="-5" y="-5" width="620" height="500" fill="none" stroke="#000"/><g id="vuoto"/>'
+        + `${shapes.join("")}<rect id="nascosto" x="40" y="40" width="30" height="30" clip-path="url(#via)"/></g>`,
+    ));
+    expect(index.units.length).toBeGreaterThan(700);
+    expect(index.units.some((unit) => unit.bounds === null)).toBe(true);
+    let found = 0;
+    for (let k = 0; k < 600; k++) {
+      const a: Point = [next() * 640 - 20, next() * 520 - 20];
+      const reach = k % 10 === 0 ? 300 : 6;
+      const b: Point = [a[0] + (next() - 0.5) * reach, a[1] + (next() - 0.5) * reach];
+      const tolerance = [0, 0.5, 2, 10][k % 4]!;
+      const expected = index.units.filter((unit) => unit.touches(a, b, tolerance)).map((unit) => unit.key);
+      expect(index.along(a, b, tolerance).map((unit) => unit.key), `segmento ${k}`).toEqual(expected);
+      found += expected.length;
+    }
+    expect(found).toBeGreaterThan(600);
+    // Anche le domande strane danno ciò che darebbe la scansione.
+    const strange: Array<[Point, Point, number]> = [
+      [[Number.NaN, 0], [10, 10], 1],
+      [[0, 0], [10, 10], Number.NaN],
+      [[300, 200], [300, 200], Infinity],
+      [[-1e300, 0], [1e300, 0], 1],
+    ];
+    for (const [a, b, tolerance] of strange) {
+      expect(index.along(a, b, tolerance)).toEqual(index.units.filter((unit) => unit.touches(a, b, tolerance)));
+    }
+    // Ciò che la gomma ha già segnato non torna; il resto sì, nello stesso
+    // ordine.
+    const across = index.along([0, 0], [600, 480], 2);
+    expect(across.length).toBeGreaterThan(20);
+    const half = across.length >> 1;
+    const marked = new Map(across.slice(0, half).map((unit) => [unit.key, unit] as const));
+    expect(index.along([0, 0], [600, 480], 2, marked)).toEqual(across.slice(half));
+  });
+
+  it("col riquadro prende gli oggetti che ci stanno interi", () => {
+    const { index } = open(SHAPES);
+    expect(index.within({ min: [0, 0], max: [65, 35] }).map((unit) => unit.key)).toEqual(["r", "g"]);
+  });
+
+  it("dentro un tratto a penna vuol dire dentro il suo contorno pieno", () => {
+    const samples: InkSample[] = [];
+    for (let i = 0; i <= 25; i++) samples.push({ x: 10 + 2 * i, y: 50, p: 0.5, t: 8 * i });
+    // Il `d` lo calcola il motore all'`add`, come per un tratto vero.
+    const opened = open(doc(`${LAYER}</g>`));
+    const brush = { ...PF1_DEFAULTS, size: 8, thinning: 0, taperStart: 0, taperEnd: 0 };
+    const elem = strokeElem("o7k2m9x4q", "#000000", brush, quantizeInk(samples), null);
+    expect(opened.engine.apply({ op: "add", parent: "l1", pos: { last: true }, elem }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect(index.at([35, 50], 0)?.key).toBe("o7k2m9x4q");
+    expect(index.at([35, 52], 0)?.key).toBe("o7k2m9x4q");
+    expect(index.at([35, 60], 0)).toBeNull();
+    expect(index.at([35, 60], 7)?.key).toBe("o7k2m9x4q");
+  });
+});
+
+describe("il lazo", () => {
+  it("prende gli oggetti che stanno interi dentro il poligono, anche se è concavo", () => {
+    const { index } = open(SHAPES);
+    const corner: Array<[number, number]> = [[-5, -5], [100, -5], [100, 40], [45, 40], [45, 100], [-5, 100]];
+    // Il cerchio sta nel riquadro del lazo, ma nell'angolo che resta fuori.
+    expect(index.inside(corner).map((unit) => unit.key)).toEqual(["r", "g", "@2.3", "loose"]);
+    // Un lato che attraversa un oggetto lo lascia fuori.
+    expect(index.inside([[0, 0], [20, 0], [20, 40], [0, 40]])).toEqual([]);
+    expect(index.inside([[0, 0], [65, 0]])).toEqual([]);
+  });
+
+  it("guarda la forma, non il suo riquadro, e conta il contorno", () => {
+    const { index } = open(doc(`${LAYER}<circle id="c" cx="70" cy="70" r="10"/><circle id="s" cx="20" cy="20" r="10" stroke="#000000" stroke-width="2"/></g>`));
+    // Un rombo attorno al cerchio: gli angoli del riquadro restano fuori.
+    const diamond = (cx: number, cy: number, half: number): Array<[number, number]> => [[cx + half, cy], [cx, cy + half], [cx - half, cy], [cx, cy - half]];
+    expect(index.inside(diamond(70, 70, 14.5)).map((unit) => unit.key)).toEqual(["c"]);
+    expect(index.inside(diamond(70, 70, 14))).toEqual([]);
+    // Il contorno largo 2 deve starci anche lui.
+    expect(index.inside(diamond(20, 20, 14.5))).toEqual([]);
+    expect(index.inside(diamond(20, 20, 16)).map((unit) => unit.key)).toEqual(["s"]);
+  });
+
+  it("chiuso ripassando sull'inizio non lascia buchi", () => {
+    const { index } = open(SHAPES);
+    const square: Array<[number, number]> = [[-5, -5], [65, -5], [65, 35], [-5, 35]];
+    expect(index.inside([...square, ...square]).map((unit) => unit.key)).toEqual(["r", "g"]);
+  });
+});
+
+describe("dentro i gruppi", () => {
+  const NEST = doc(
+    `${LAYER}<g id="g" transform="translate(50 0)"><rect id="a" x="0" y="0" width="10" height="10"/>`
+      + '<g id="inner" transform="translate(0 20)"><circle id="b" cx="5" cy="5" r="5"/><rect x="20" y="0" width="5" height="5"/></g>'
+      + '<rect id="la" x="20" y="0" width="10" height="10" fub:locked="true"/><rect id="hid" x="0" y="0" width="1" height="1" display="none"/></g>'
+      + '<g id="lg" fub:locked="true"><rect id="in-locked" x="0" y="50" width="10" height="10"/></g>'
+      + '<rect id="lr" x="80" y="80" width="10" height="10" fub:locked="true"/></g>'
+      + '<g id="l2" fub:layer="Bloccato" fub:locked="true"><g id="lgg"><rect id="deep" x="0" y="0" width="5" height="5"/></g></g>',
+  );
+
+  it("in cima ci sono solo gli oggetti che si scelgono: niente di bloccato", () => {
+    const { index } = open(NEST);
+    expect(index.units.map((unit) => unit.key)).toEqual(["g"]);
+  });
+
+  it("si trovano a ogni profondità, nel posto dove le trasformazioni li portano", () => {
+    const { index } = open(NEST);
+    expect(index.get("a")?.bounds).toEqual({ min: [50, 0], max: [60, 10] });
+    expect(index.get("b")?.bounds).toEqual({ min: [50, 20], max: [60, 30] });
+    expect(index.get("b")?.path).toEqual([0, 0, 1, 0]);
+    expect(index.get("b")?.layer).toBe("l1");
+    expect(index.get("@0.0.1.1")?.bounds).toEqual({ min: [70, 20], max: [75, 25] });
+    // La stessa chiave dà lo stesso oggetto.
+    expect(index.children(index.get("g")!)[0]).toBe(index.get("a"));
+  });
+
+  it("non si trova ciò che è bloccato, nascosto, dentro qualcosa di bloccato, o che non è un oggetto", () => {
+    const { index } = open(NEST);
+    for (const key of ["la", "hid", "lg", "in-locked", "lr", "lgg", "deep", "l1", "@0", "@0.0.0", "@9.9", "@x", "nessuno"]) expect(index.get(key), key).toBeNull();
+  });
+
+  it("conoscono figli e fratelli che si scelgono", () => {
+    const { index } = open(NEST);
+    expect(index.children(index.get("g")!).map((unit) => unit.key)).toEqual(["a", "inner"]);
+    expect(index.children(index.get("a")!)).toEqual([]);
+    expect(index.siblings(index.get("b")!).map((unit) => unit.key)).toEqual(["b", "@0.0.1.1"]);
+    expect(index.siblings(index.get("g")!).map((unit) => unit.key)).toEqual(["g"]);
+  });
+
+  it("col clic più dentro si prende l'oggetto più dentro sotto il punto", () => {
+    const { index } = open(NEST);
+    expect(index.at([55, 25], 0)?.key).toBe("g");
+    expect(index.deepAt([55, 25], 0)?.key).toBe("b");
+    expect(index.deepAt([72, 22], 0)?.key).toBe("@0.0.1.1");
+    expect(index.deepAt([55, 5], 0)?.key).toBe("a");
+    // Sotto un figlio bloccato resta il gruppo.
+    expect(index.deepAt([75, 5], 0)?.key).toBe("g");
+    expect(index.deepAt([5, 55], 0)).toBeNull();
+  });
+
+  it("isolato un gruppo, si sceglie solo dentro", () => {
+    const opened = open(NEST);
+    const index = opened.reindex(container(opened, "g"));
+    expect(index.units.map((unit) => unit.key)).toEqual(["a", "inner"]);
+    expect(index.layers.map((layer) => layer.id)).toEqual(["l1", "l2"]);
+    expect(index.get("b")?.key).toBe("b");
+    expect(index.get("g")).toBeNull();
+    expect(index.at([55, 25], 0)?.key).toBe("inner");
+    expect(index.siblings(index.get("a")!).map((unit) => unit.key)).toEqual(["a", "inner"]);
+    expect(opened.reindex(container(opened, "inner")).units.map((unit) => unit.key)).toEqual(["b", "@0.0.1.1"]);
+  });
+
+  it("si entra in un gruppo solo se né lui né chi lo contiene è bloccato o nascosto", () => {
+    const opened = open(NEST);
+    const g = container(opened, "g");
+    expect(opened.opens(g)).toBe(true);
+    expect(opened.opens(container(opened, "inner"))).toBe(true);
+    expect(opened.opens(container(opened, "lg"))).toBe(false);
+    expect(opened.opens(container(opened, "lgg"))).toBe(false);
+    expect(opened.engine.apply({ op: "set", id: "g", attrs: { display: "none" } }).outcome).toBe("applied");
+    expect(opened.opens(g)).toBe(false);
+    expect(opened.opens(container(opened, "inner"))).toBe(false);
+    expect(opened.engine.apply({ op: "set", id: "g", attrs: { display: null } }).outcome).toBe("applied");
+    expect(opened.opens(g)).toBe(true);
+    expect(opened.engine.apply({ op: "remove", target: "g" }).outcome).toBe("applied");
+    expect(opened.opens(g)).toBe(false);
+  });
+
+  it("le guide vedono anche ciò che è bloccato, e i figli dei gruppi aperti", () => {
+    const opened = open(NEST);
+    expect(opened.seen().map((unit) => unit.key)).toEqual(["g", "lg", "lr", "lgg"]);
+    expect(opened.seen(new Set([container(opened, "g")])).map((unit) => unit.key)).toEqual(["a", "inner", "la", "lg", "lr", "lgg"]);
+  });
+});
+
+describe("il riquadro di un elemento nuovo", () => {
+  it("è quello che l'indice gli darà dopo l'`add`", () => {
+    const elem = { tag: "rect", attrs: { id: "n", x: "10", y: "10", width: "20", height: "20", fill: "none", stroke: "#000000", "stroke-width": "4" } };
+    expect(elemBounds(elem, [1, 0, 0, 1, 0, 0])).toEqual({ min: [8, 8], max: [32, 32] });
+    expect(elemBounds(elem, [2, 0, 0, 2, 5, 0])).toEqual({ min: [21, 16], max: [69, 64] });
+  });
+
+  it("senza contorno né trasformazione è quello della geometria", () => {
+    const elem = { tag: "rect", attrs: { x: "10", y: "10", width: "20", height: "20", stroke: "#000000", "stroke-width": "4", transform: "scale(3)" } };
+    expect(geometryBox(elem)).toEqual({ min: [10, 10], max: [30, 30] });
+    expect(geometryBox({ tag: "rect", attrs: { width: "0", height: "5" } })).toBeNull();
+  });
+});
+
+describe("che cosa si vede in un punto", () => {
+  const SEEN = doc(
+    `${LAYER}<rect id="r" x="0" y="0" width="40" height="40" fill="#0072b2" stroke="#000000" stroke-width="4"/>` +
+      // Il buco gira al contrario: con `nonzero` non si riempie.
+      '<path id="o" d="M50 0 H90 V40 H50 Z M60 10 V30 H80 V10 Z" fill="#d55e00"/>' +
+      '<g id="g" transform="translate(0 50)"><path id="n" d="M0 0 H40 V40 H0 Z"/><polyline id="p" points="50 0 90 0 90 40" fill="none" stroke="#000000" stroke-width="2"/></g></g>',
+  );
+  const at = (key: string, p: [number, number], tolerance = 0): [string | null, string] | null => {
+    const sampled = open(SEEN).index.get(key)!.sampleAt(p, tolerance);
+    return sampled === null ? null : [sampled.leaf.facts.id, sampled.on];
+  };
+
+  it("il contorno sta sopra il riempimento", () => {
+    expect(at("r", [20, 20])).toEqual(["r", "fill"]);
+    expect(at("r", [1, 20])).toEqual(["r", "stroke"]);
+    expect(at("r", [-1.5, 20])).toEqual(["r", "stroke"]);
+    expect(at("r", [-3, 20])).toBeNull();
+    expect(at("r", [-3, 20], 2)).toEqual(["r", "stroke"]);
+  });
+
+  it("un buco lascia vedere sotto; vicino al suo bordo, con la tolleranza, si vede il riempimento", () => {
+    expect(at("o", [55, 20])).toEqual(["o", "fill"]);
+    expect(at("o", [70, 20])).toBeNull();
+    expect(at("o", [61, 20], 2)).toEqual(["o", "fill"]);
+    expect(at("g", [20, 70])).toEqual(["n", "fill"]);
+  });
+
+  it("il contorno di una spezzata aperta non ha il lato che la chiude, e dà la sua geometria", () => {
+    const { index } = open(SEEN);
+    const sampled = index.get("g")!.sampleAt([90, 70], 0)!;
+    expect([sampled.leaf.facts.id, sampled.on, sampled.matrix]).toEqual(["p", "stroke", [1, 0, 0, 1, 0, 50]]);
+    expect(sampled.segments.length).toBeGreaterThan(0);
+    expect(at("g", [70, 70])).toBeNull();
+  });
+});
+
+describe("le punte delle linee", () => {
+  /// Un triangolo col vertice sul punto di riferimento: largo 4 e lungo 4
+  /// volte il contorno, girato col tracciato e al contrario all'inizio.
+  const ARROW = '<marker id="m" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">'
+    + '<path d="M0 0 L10 5 L0 10 Z" fill="#000000"/></marker>';
+  const tipped = (defs: string, body: string) => open(doc(`<defs id="fub-defs">${defs}</defs>${LAYER}${body}</g>`));
+
+  it("si toccano e stanno nel riquadro col contorno, ma non nella geometria", () => {
+    const opened = tipped(ARROW, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>');
+    const line = opened.index.get("a")!;
+    // La punta va da x 52 a 60, alta da 46 a 54: fuori dal contorno della linea.
+    expect(line.hits([54, 47.5], 0)).toBe(true);
+    expect(line.hits([54, 46.5], 0)).toBe(false);
+    expect(line.touches([55, 40], [55, 48], 0)).toBe(true);
+    expect(line.bounds).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(line.frame()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(opened.extent()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(line.geometry).toEqual({ min: [10, 50], max: [60, 50] });
+    expect(line.shapeFrame()).toEqual({ min: [10, 50], max: [60, 50] });
+    // La punta non è una forma della linea, e il suo riempimento non è il suo.
+    expect(line.shapes().map((shape) => shape.leaf.facts.id)).toEqual(["a"]);
+    expect(line.filled).toBe(false);
+  });
+
+  it("si vedono come il contorno della linea che le porta", () => {
+    const opened = tipped(ARROW, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>');
+    const sampled = opened.index.get("a")!.sampleAt([54, 47.5], 0)!;
+    expect([sampled.leaf.facts.id, sampled.on, sampled.matrix, sampled.segments.length]).toEqual(["a", "stroke", [1, 0, 0, 1, 0, 0], 2]);
+  });
+
+  it("si girano col tracciato, e all'inizio al contrario con auto-start-reverse", () => {
+    const opened = tipped(ARROW, '<path id="v" d="M50 10 V60" fill="none" stroke="#000000" stroke-width="2" marker-start="url(#m)"/>');
+    const path = opened.index.get("v")!;
+    // All'inizio la punta guarda in su: sta da y 10 a 18, non sopra.
+    expect(path.hits([51.5, 14], 0)).toBe(true);
+    expect(path.hits([51.5, 6], 0)).toBe(false);
+    expect(path.bounds).toEqual({ min: [46, 9], max: [54, 61] });
+  });
+
+  it("crescono col contorno che la linea eredita, e nella cornice seguono la sua trasformazione", () => {
+    const opened = tipped(ARROW, '<g id="g" stroke-width="4"><line x1="10" y1="50" x2="60" y2="50" stroke="#000000" marker-end="url(#m)"/></g>'
+      + '<line id="t" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" transform="translate(0 100)" marker-end="url(#m)"/>');
+    expect(opened.index.get("g")!.bounds).toEqual({ min: [8, 42], max: [62, 58] });
+    const moved = opened.index.get("t")!;
+    expect(moved.frame()).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(moved.bounds).toEqual({ min: [9, 146], max: [61, 154] });
+  });
+
+  it("restano dentro la finestra del marcatore, che taglia il contenuto che ne esce", () => {
+    const opened = tipped(
+      '<marker id="o" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" markerUnits="userSpaceOnUse"><circle cx="5" cy="5" r="10" fill="#000000"/></marker>',
+      '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#o)"/>',
+    );
+    // Il cerchio sarebbe largo 12; se ne vede il quadrato di 6 della finestra.
+    expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 47], max: [63, 53] });
+  });
+
+  it("stanno nel riquadro di una forma che uno strumento sta per scrivere al posto di una linea", () => {
+    const source = doc(`<defs id="fub-defs">${ARROW}</defs>${LAYER}<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/></g>`);
+    const engine = SceneEngine.open(source);
+    const builder = new PaintBuilder();
+    builder.build(engine);
+    const indexer = new SceneIndexer(builder, (id) => engine.holder(id));
+    const leaf = engine.holder("a") as LeafNode;
+    // I nodi la portano a 80: la punta con lei, fino a 81 col contorno.
+    const after = { tag: "path", attrs: { id: "a", d: "M10 50 L80 50", fill: "none", stroke: "#000000", "stroke-width": "2", "marker-end": "url(#m)" } };
+    expect(elemBounds(after, IDENTITY)).toEqual({ min: [9, 49], max: [81, 51] });
+    expect(indexer.writtenBounds(after, IDENTITY, leaf)).toEqual({ min: [9, 46], max: [81, 54] });
+    // Senza punte, o con una che non c'è, è il riquadro di prima.
+    const bare = { d: "M10 50 L80 50", fill: "none", stroke: "#000000", "stroke-width": "2" };
+    expect(indexer.writtenBounds({ tag: "path", attrs: bare }, IDENTITY, leaf)).toEqual({ min: [9, 49], max: [81, 51] });
+    expect(indexer.writtenBounds({ tag: "path", attrs: { ...after.attrs, "marker-end": "url(#nessuno)" } }, IDENTITY, leaf)).toEqual({ min: [9, 49], max: [81, 51] });
+  });
+
+  it("non contano se il marcatore non disegna niente", () => {
+    const opened = tipped(
+      '<marker id="vuoto" markerWidth="0"><path d="M0 0 L10 5 L0 10 Z"/></marker>',
+      '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#vuoto)"/>',
+    );
+    expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 49], max: [61, 51] });
+  });
+});
+
+describe("come si vede un testo", () => {
+  const TEXTS = doc(
+    `${LAYER}<text id="t" x="10" y="40" fill="#0072b2" font-family="Inter, sans-serif" font-size="20"><tspan x="10" dy="0">Ciao</tspan><tspan x="10" dy="30">a te</tspan></text>`
+      + '<g id="g"><text id="dentro" x="0" y="0"><tspan x="0" dy="0">no</tspan></text></g></g>'
+      + '<g id="l2" fub:layer="Stile" font-size="12" font-weight="700" fill="#d55e00" text-anchor="middle">'
+      + '<text id="n" x="50" y="80" transform="rotate(90 50 80)"><tspan x="50" dy="0">x</tspan></text></g>',
+  );
+
+  it("sa dove comincia la prima riga, il corpo, il passo e lo stile che eredita", () => {
+    const { index } = open(TEXTS);
+    expect(index.get("t")?.look).toEqual({ x: 10, y: 40, size: 20, leading: 30, anchor: "start", family: "Inter, sans-serif", weight: null, color: "#0072b2", wrap: null, along: null });
+    // Con una riga sola, il passo è quello che l'operazione `text` darà alla
+    // seconda.
+    expect(index.get("n")?.look).toEqual({ x: 50, y: 80, size: 12, leading: 15, anchor: "middle", family: null, weight: "700", color: "#d55e00", wrap: null, along: null });
+    // Un gruppo si sceglie intero: il testo dentro non si cambia sul posto.
+    expect(index.get("g")?.look).toBeNull();
+  });
+
+  it("le righe che si scriveranno hanno il riquadro che l'indice darà loro", () => {
+    const opened = open(TEXTS);
+    const lines = ["Ciao", "a te", "e a voi"];
+    const expected = ["t", "n"].map((id) => {
+      const unit = opened.index.get(id)!;
+      return linesBounds(unit.look!, lines, unit.matrix);
+    });
+    for (const id of ["t", "n"]) expect(opened.engine.apply({ op: "text", id, lines }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect([index.get("t")?.bounds, index.get("n")?.bounds]).toEqual(expected);
+    // Il testo girato va giù, come la sua prima riga.
+    expect(expected[1]!.max[0]).toBeLessThanOrEqual(50 + 12 * 0.8 + 1e-9);
+    const t = opened.index.get("t")!;
+    expect(linesBounds(t.look!, [" ", ""], t.matrix)).toBeNull();
+  });
+});
+
+describe("il testo in area e su tracciato", () => {
+  const FORMS = doc(
+    '<defs id="fub-defs"><path id="r1" fub:role="private" d="M 0 100 L 200 100"/><path id="r2" fub:role="private" d="M 100 0 L 100 200"/></defs>'
+      + `${LAYER}<text id="a" fub:wrap="100" x="10" y="20" font-size="10"><tspan x="10" dy="0">Il testo</tspan><tspan x="10" dy="12.5" fub:join="space">in area</tspan></text>`
+      + '<text id="p" font-size="10" text-anchor="middle"><textPath href="#r1" startOffset="25%">abcdefghij</textPath></text>'
+      + "</g>",
+  );
+
+  it("un testo in area si tocca in tutto il suo riquadro, largo quanto va a capo", () => {
+    const { index } = open(FORMS);
+    const area = index.get("a")!;
+    // Dalla cima della prima riga al fondo della seconda, largo 100.
+    expect(area.bounds).toEqual({ min: [10, 12], max: [110, 35] });
+    expect(index.at([100, 30], 0)?.key).toBe("a");
+    expect(area.look).toMatchObject({ x: 10, y: 20, wrap: 100, along: null });
+    expect(linesBounds(area.look!, ["Il testo", "in area", "va"], area.matrix)).toEqual({ min: [10, 12], max: [110, 47.5] });
+  });
+
+  it("un testo su tracciato si tocca lungo il tracciato, dove ha le lettere", () => {
+    const opened = open(FORMS);
+    const path = opened.index.get("p")!;
+    // Dieci lettere di 6 centrate a 50 sul tracciato: da 20 a 80.
+    expect(path.bounds!.min[0]).toBeCloseTo(20, 6);
+    expect(path.bounds!.max[0]).toBeCloseTo(80, 6);
+    expect(path.bounds!.min[1]).toBeCloseTo(92, 6);
+    expect(path.bounds!.max[1]).toBeCloseTo(102.5, 6);
+    expect(opened.index.at([70, 98], 0)?.key).toBe("p");
+    expect(opened.index.at([150, 98], 0)).toBeNull();
+    expect(path.look).toMatchObject({ x: 50, y: 100, anchor: "middle", wrap: null, along: [1, 0] });
+    expect(linesBounds(path.look!, ["abc"], path.matrix)).toBeNull();
+    // Il tracciato che cambia porta il testo con sé.
+    expect(opened.engine.apply({ op: "text", id: "p", lines: ["ab"] }).outcome).toBe("applied");
+    expect(opened.engine.apply({ op: "set", id: "r1", attrs: { d: "M 100 0 L 100 200" } }).outcome).toBe("applied");
+    const moved = opened.reindex().get("p")!;
+    expect(moved.bounds!.min[1]).toBeCloseTo(44, 6);
+    expect(moved.bounds!.max[1]).toBeCloseTo(56, 6);
+    expect(moved.look?.along).toEqual([0, 1]);
+  });
+
+  it("le lettere che cadono fuori dal tracciato non si toccano", () => {
+    const { index } = open(FORMS.replace('startOffset="25%"', 'startOffset="195"'));
+    const path = index.get("p")!;
+    // Da 165 a 225: la lettera da 195 a 201 ha il centro sul tracciato, le
+    // altre dopo no.
+    expect(path.bounds!.max[0]).toBeCloseTo(201, 6);
+  });
+});
+
+describe("un blocco estraneo dentro un oggetto", () => {
+  // Un `class` o uno `style` fanno di un elemento un blocco estraneo.
+  const FOREIGN = doc(
+    `${LAYER}<g id="w">`
+      + '<rect class="a" x="10" y="10" width="20" height="10"/>'
+      + '<path style="fill: none; stroke: #000000; stroke-width: 4 !important" d="M 40 10 L 80 10"/>'
+      + '<g class="b" transform="translate(0 50)"><circle cx="5" cy="5" r="5"/></g>'
+      + '</g><rect class="sciolto" x="200" y="200" width="10" height="10"/></g>',
+  );
+
+  it("conta nella geometria dell'oggetto, ma da solo non è un oggetto", () => {
+    const { index } = open(FOREIGN);
+    expect(index.units.map((unit) => unit.key)).toEqual(["w"]);
+    // Il tracciato senza riempimento conta col suo contorno, come lo dice lo
+    // `style`.
+    expect(index.get("w")?.bounds).toEqual({ min: [0, 8], max: [82, 60] });
+    expect(index.get("w")?.geometry).toEqual({ min: [0, 10], max: [80, 60] });
+  });
+
+  it("si tocca dove si dipinge", () => {
+    const { index } = open(FOREIGN);
+    for (const p of [[20, 15], [60, 11], [5, 55]] as const) expect(index.at(p, 0.5)?.key).toBe("w");
+    for (const p of [[60, 15], [35, 40]] as const) expect(index.at(p, 0.5)).toBeNull();
+    // Il pezzo toccato non è un tracciato da modificare.
+    expect(index.get("w")!.shapeAt([20, 15], 0.5)?.details).toBeNull();
+  });
+
+  it("dà al riquadro di tutto il disegno anche quando sta da solo", () => {
+    expect(open(FOREIGN).extent()).toEqual({ min: [0, 8], max: [210, 210] });
+  });
+
+  it("non conta ciò che è nascosto, ma un figlio può tornare visibile", () => {
+    const { index } = open(doc(
+      `${LAYER}<g id="v">`
+        + '<rect class="x" x="0" y="0" width="10" height="10" visibility="hidden"/>'
+        + '<g class="y" style="visibility: hidden"><rect x="20" y="0" width="5" height="5" visibility="visible"/><rect x="0" y="40" width="5" height="5"/></g>'
+        + '<rect class="z" x="100" y="100" width="5" height="5" style="display:none"/>'
+        + '<g class="nulla"><rect x="0" y="80" width="5" height="5" fill="none"/></g>'
+        + '</g></g>',
+    ));
+    expect(index.get("v")?.bounds).toEqual({ min: [20, 0], max: [25, 5] });
+  });
+
+  it("dà il riquadro di testi, immagini e documenti annidati", () => {
+    const { index } = open(doc(
+      `${LAYER}<g id="t"><text class="c" x="10" y="20" font-size="10">Ciao</text></g>`
+        + '<g id="righe"><text class="c" style="font-size: 10px"><tspan x="0" y="10">ab</tspan><tspan x="0" y="30">abcd</tspan></text></g>'
+        + '<g id="b"><foreignObject x="0" y="0" width="10" height="10"/><svg x="20" y="0" width="5" height="5"><rect width="100" height="100"/></svg></g>'
+        + '</g>',
+    ));
+    // 0,6 em per carattere, da 0,8 em sopra la linea di base a 0,25 sotto.
+    expect(index.get("t")?.bounds).toEqual({ min: [10, 12], max: [34, 22.5] });
+    expect(index.get("righe")?.bounds).toEqual({ min: [0, 2], max: [24, 32.5] });
+    expect(index.get("b")?.bounds).toEqual({ min: [0, 0], max: [25, 10] });
+  });
+
+  it("allarga le righe con la spaziatura delle lettere e coi pezzi, ciascuno col suo corpo", () => {
+    const { index } = open(doc(
+      `${LAYER}<text id="p" x="0" y="20" font-size="10" letter-spacing="1">`
+        + '<tspan x="0" dy="0">ab<tspan font-size="20" letter-spacing="0">cd</tspan></tspan>'
+        + '<tspan x="0" dy="30" letter-spacing="-1">ef</tspan></text></g>',
+    ));
+    // «ab» 2 × (6 + 1), «cd» 2 × 12 e la riga alta quanto il pezzo più
+    // grande; «ef» 2 × (6 − 1).
+    expect(index.get("p")?.bounds).toEqual({ min: [0, 4], max: [38, 52.5] });
+  });
+
+  it("segue un `use` fino al simbolo, anche in un altro blocco, e se ne accorge quando cambia", () => {
+    const opened = open(doc(
+      `${LAYER}<g id="u"><defs id="d"><symbol id="s" viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10"/></symbol></defs>`
+        + '<use href="#s" x="5" y="5" width="40" height="20"/></g>'
+        + '<g id="x"><use xlink:href="#s" transform="translate(100 0)"/><use href="https://example.com/a.svg#s"/></g></g>',
+    ));
+    // Il `viewBox` sta intero nel riquadro, al centro.
+    expect(opened.index.get("u")?.bounds).toEqual({ min: [15, 5], max: [35, 25] });
+    // Senza misure, il simbolo resta com'è; una risorsa esterna non si legge.
+    expect(opened.index.get("x")?.bounds).toEqual({ min: [100, 0], max: [110, 10] });
+    expect(opened.engine.apply({ op: "remove", target: "d" }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect(index.get("u")?.bounds).toBeNull();
+    expect(index.get("x")?.bounds).toBeNull();
+  });
+
+  it("con tante forme conta come il suo riquadro", () => {
+    const rects = Array.from({ length: 3000 }, (_, i) => `<rect x="${i % 100}" y="${Math.floor(i / 100)}" width="0.5" height="0.5"/>`).join("");
+    const { index } = open(doc(`${LAYER}<g id="m"><g class="tanti">${rects}</g></g></g>`));
+    const unit = index.get("m")!;
+    expect(unit.shapes()).toHaveLength(1);
+    expect(unit.bounds).toEqual({ min: [0, 0], max: [99.5, 29.5] });
+    expect(unit.hits([50.75, 10.75], 0)).toBe(true);
+  });
+
+  it("si sposta con l'oggetto", () => {
+    const opened = open(FOREIGN);
+    expect(opened.engine.apply({ op: "set", id: "w", attrs: { transform: "matrix(1 0 0 1 100 0)" } }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect(index.get("w")?.bounds).toEqual({ min: [100, 8], max: [182, 60] });
+    expect(index.at([120, 15], 0.5)?.key).toBe("w");
+  });
+});
+
+describe("le istanze dei simboli", () => {
+  const SYMBOLS = doc(
+    '<defs id="fub-defs"><symbol id="r1" overflow="visible"><title>Presa</title><rect id="o1" x="0" y="0" width="10" height="10"/>'
+      + '<g id="og" transform="translate(20 0)"><circle id="o2" cx="0" cy="5" r="5"/></g></symbol>'
+      + '<symbol id="r2" overflow="visible"><use id="o3" href="#r1"/><rect id="o4" x="0" y="20" width="5" height="5"/>'
+      + '<a id="o5" href="uno.md"><rect x="40" y="0" width="5" height="5"/></a></symbol></defs>'
+      + `${LAYER}<use id="i1" transform="translate(100 0)" href="#r1"/><use id="i2" transform="matrix(2 0 0 2 0 100)" href="#r1"/>`
+      + '<g id="g" transform="translate(200 200)"><use id="i3" href="#r2"/></g><use id="i4" href="#r1" display="none"/></g>',
+  );
+  const leaf = (opened: ReturnType<typeof open>, id: string): LeafNode => opened.engine.holder(id) as LeafNode;
+
+  it("si toccano dove si vede il contenuto del simbolo, portato dalla loro trasformazione", () => {
+    const { index } = open(SYMBOLS);
+    expect(index.units.map((unit) => unit.key)).toEqual(["i1", "i2", "g"]);
+    expect(index.get("i1")?.bounds).toEqual({ min: [100, 0], max: [125, 10] });
+    expect(index.get("i2")?.bounds).toEqual({ min: [0, 100], max: [50, 120] });
+    expect(index.at([105, 5], 0)?.key).toBe("i1");
+    expect(index.at([119, 5], 0)?.key).toBe("i1");
+    // Fra il quadrato e il cerchio non c'è niente.
+    expect(index.at([113, 5], 0)).toBeNull();
+    expect(index.at([10, 110], 0)?.key).toBe("i2");
+    expect(index.at([42, 108], 0)?.key).toBe("i2");
+  });
+
+  it("anche attraverso le istanze del contenuto", () => {
+    const { index } = open(SYMBOLS);
+    const g = index.get("g")!;
+    expect(index.deepAt([205, 205], 0)?.key).toBe("i3");
+    expect(index.deepAt([202, 222], 0)?.key).toBe("i3");
+    expect(g.bounds).toEqual({ min: [200, 200], max: [245, 225] });
+    // Il contenuto non si sceglie da fuori.
+    expect(index.children(g).map((unit) => unit.key)).toEqual(["i3"]);
+    for (const key of ["o1", "og", "o2", "o3", "o4", "r1"]) expect(index.get(key), key).toBeNull();
+  });
+
+  it("per chi cambia una forma sono una forma sola, ma si vede che cosa c'è sotto il punto", () => {
+    const opened = open(SYMBOLS);
+    const i3 = opened.index.get("i3")!;
+    expect(i3.shapes().map(({ leaf, matrix }) => [leaf.facts.id, matrix])).toEqual([["i3", [1, 0, 0, 1, 200, 200]]]);
+    expect(i3.shapeAt([205, 205], 0)?.facts.id).toBe("i3");
+    expect(i3.shapeAt([215, 215], 0)).toBeNull();
+    expect(i3.sampleAt([205, 205], 0)?.leaf.facts.id).toBe("o1");
+    expect(i3.sampleAt([220, 205], 0)?.matrix).toEqual([1, 0, 0, 1, 220, 200]);
+  });
+
+  it("seguono il simbolo quando cambia", () => {
+    const opened = open(SYMBOLS);
+    expect(opened.engine.apply({ op: "set", id: "o1", attrs: { width: "30" } }).outcome).toBe("applied");
+    let index = opened.reindex();
+    expect(index.get("i1")?.bounds).toEqual({ min: [100, 0], max: [130, 10] });
+    expect(index.get("g")?.bounds).toEqual({ min: [200, 200], max: [245, 225] });
+    expect(opened.engine.apply({ op: "set", id: "o1", attrs: { width: "60" } }).outcome).toBe("applied");
+    index = opened.reindex();
+    expect(index.get("g")?.bounds).toEqual({ min: [200, 200], max: [260, 225] });
+    // Anche la miniatura, attraverso un altro simbolo.
+    expect(opened.frame("i3")).toEqual({ min: [200, 200], max: [260, 225] });
+  });
+
+  it("con troppe forme, un'istanza si tocca nel riquadro del suo simbolo", () => {
+    const rects = Array.from({ length: 70 }, (_, i) => `<rect x="${2 * i}" y="0" width="1" height="1"/>`).join("");
+    const rows = Array.from({ length: 70 }, (_, i) => `<use href="#r5" transform="translate(0 ${2 * i})"/>`).join("");
+    const { index } = open(doc(
+      `<defs id="fub-defs"><symbol id="r5" overflow="visible">${rects}</symbol><symbol id="r6" overflow="visible">${rows}</symbol></defs>`
+        + `${LAYER}<use id="i" href="#r6"/></g>`,
+    ));
+    const unit = index.get("i")!;
+    expect(unit.bounds).toEqual({ min: [0, 0], max: [139, 139] });
+    // Le prime righe si toccano dove disegnano, le ultime nel loro riquadro.
+    expect(unit.hits([0.5, 0.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 0.5], 0)).toBe(false);
+    expect(unit.hits([1.5, 138.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 137.5], 0)).toBe(false);
+  });
+
+  it("isolato un simbolo da un'istanza, il contenuto si sceglie dov'è in lei", () => {
+    const opened = open(SYMBOLS);
+    const i1 = leaf(opened, "i1");
+    const r1 = container(opened, "r1");
+    expect(opened.opens(r1)).toBe(false);
+    expect(opened.opens(r1, [i1])).toBe(true);
+    expect(opened.opens(r1, [leaf(opened, "i4")])).toBe(false);
+    const index = opened.reindex(r1, [i1]);
+    expect(index.units.map((unit) => [unit.key, unit.bounds])).toEqual([
+      ["o1", { min: [100, 0], max: [110, 10] }],
+      ["og", { min: [115, 0], max: [125, 10] }],
+    ]);
+    expect(index.units[0]!.path).toEqual([0, 0, 1]);
+    expect(index.get("o2")?.bounds).toEqual({ min: [115, 0], max: [125, 10] });
+    expect(index.get("i1")).toBeNull();
+    expect(index.at([105, 5], 0)?.key).toBe("o1");
+    // Il simbolo, come oggetto, riceve ciò che si disegna nelle coordinate
+    // dell'istanza.
+    const scope = index.scope()!;
+    expect([scope.key, scope.role, scope.matrix]).toEqual(["r1", "symbol", [1, 0, 0, 1, 100, 0]]);
+    // Da un'altra istanza, il contenuto sta in lei.
+    expect(opened.reindex(r1, [leaf(opened, "i2")]).get("o1")?.bounds).toEqual({ min: [0, 100], max: [20, 120] });
+    // Un gruppo del contenuto si isola anche lui, dalla stessa istanza.
+    expect(opened.opens(container(opened, "og"), [i1])).toBe(true);
+    expect(opened.reindex(container(opened, "og"), [i1]).units.map((unit) => [unit.key, unit.bounds])).toEqual([["o2", { min: [115, 0], max: [125, 10] }]]);
+    expect(opened.reindex(container(opened, "og"), [i1]).scope()?.matrix).toEqual([1, 0, 0, 1, 120, 0]);
+  });
+
+  it("isolato un simbolo dentro un altro, il contenuto passa da tutte e due le istanze", () => {
+    const opened = open(SYMBOLS);
+    const through = [leaf(opened, "i3"), leaf(opened, "o3")];
+    const index = opened.reindex(container(opened, "r1"), through);
+    expect(index.get("o1")?.bounds).toEqual({ min: [200, 200], max: [210, 210] });
+    expect(opened.opens(container(opened, "r1"), [leaf(opened, "o3")])).toBe(false);
+    // Bloccata l'istanza, non si entra più.
+    expect(opened.engine.apply({ op: "set", id: "i3", attrs: { "fub:locked": "true" } }).outcome).toBe("applied");
+    expect(opened.opens(container(opened, "r2"), [leaf(opened, "i3")])).toBe(false);
+  });
+
+  it("le guide vedono il contenuto del simbolo che si modifica, e i collegamenti si aprono da ogni istanza", () => {
+    const opened = open(SYMBOLS);
+    const i1 = leaf(opened, "i1");
+    expect(opened.seen(new Set(), [i1]).map((unit) => unit.key)).toEqual(["o1", "og", "i2", "g"]);
+    expect(opened.links().map((unit) => [unit.key, unit.bounds])).toEqual([["o5", { min: [240, 200], max: [245, 205] }]]);
+  });
+});
+
+describe("le copie delle ripetizioni", () => {
+  const REPEATS = doc(
+    `${LAYER}<g id="p1" fub:repeat="grid 3 1 20 0"><rect id="a" x="0" y="0" width="10" height="10"/>`
+      + '<use id="c1" transform="translate(20 0)" href="#a"/><use id="c2" transform="translate(40 0)" href="#a"/></g>'
+      + '<g id="p2" transform="translate(0 100)" fub:repeat="radial 4 0 0"><g id="o"><rect id="b" x="10" y="-2" width="20" height="4"/></g>'
+      + '<use id="c3" transform="matrix(0 1 -1 0 0 0)" href="#o"/></g></g>',
+  );
+
+  it("si toccano dove si vede l'originale, portato dalla loro trasformazione", () => {
+    const opened = open(REPEATS);
+    const { index } = opened;
+    expect(index.units.map((unit) => unit.key)).toEqual(["p1", "p2"]);
+    expect(index.get("p1")?.bounds).toEqual(box(0, 0, 50, 10));
+    expect(index.get("p2")?.bounds).toEqual(box(-2, 98, 30, 130));
+    expect(index.at([25, 5], 0)?.key).toBe("p1");
+    expect(index.at([45, 5], 0)?.key).toBe("p1");
+    // Fra l'originale e la prima copia non c'è niente.
+    expect(index.at([15, 5], 0)).toBeNull();
+    expect(index.at([0, 120], 0)?.key).toBe("p2");
+    expect(index.along([15, 5], [25, 5], 0).map((unit) => unit.key)).toEqual(["p1"]);
+    expect(opened.frame("p1")).toEqual(box(0, 0, 50, 10));
+    expect(opened.extent()).toEqual(box(-2, 0, 50, 130));
+  });
+
+  it("per chi cambia una forma una copia è una forma sola, ma si vede che cosa c'è sotto il punto", () => {
+    const p1 = open(REPEATS).index.get("p1")!;
+    expect(p1.shapes().map(({ leaf, matrix }) => [leaf.facts.id, matrix])).toEqual([
+      ["a", IDENTITY],
+      ["c1", [1, 0, 0, 1, 20, 0]],
+      ["c2", [1, 0, 0, 1, 40, 0]],
+    ]);
+    expect(p1.shapeAt([25, 5], 0)?.facts.id).toBe("c1");
+    expect(p1.sampleAt([25, 5], 0)?.leaf.facts.id).toBe("a");
+    expect(p1.sampleAt([25, 5], 0)?.matrix).toEqual([1, 0, 0, 1, 20, 0]);
+  });
+
+  it("non sono oggetti: nella ripetizione isolata un clic su una copia dà l'originale", () => {
+    const opened = open(REPEATS);
+    const p1 = opened.index.get("p1")!;
+    expect(opened.index.children(p1).map((unit) => unit.key)).toEqual(["a"]);
+    expect(opened.index.get("c1")).toBeNull();
+    expect(opened.index.deepAt([45, 5], 0)?.key).toBe("a");
+    expect(opened.index.deepAt([0, 120], 0)?.key).toBe("o");
+    const index = opened.reindex(container(opened, "p1"));
+    expect(index.units.map((unit) => unit.key)).toEqual(["a"]);
+    expect(index.get("c1")).toBeNull();
+    expect(index.at([5, 5], 0)?.key).toBe("a");
+    expect(index.at([25, 5], 0)?.key).toBe("a");
+    expect(index.at([15, 5], 0)).toBeNull();
+    expect(index.within(box(18, -1, 32, 11))).toEqual([]);
+    // Le guide vedono l'originale, non le copie che lo seguono.
+    expect(opened.seen(new Set([container(opened, "p1")])).map((unit) => unit.key)).toEqual(["a", "p2"]);
+  });
+
+  it("un originale nascosto nasconde le copie, e uno che cambia le cambia", () => {
+    const opened = open(REPEATS);
+    expect(opened.engine.apply({ op: "set", id: "a", attrs: { width: "15" } }).outcome).toBe("applied");
+    expect(opened.reindex().get("p1")?.bounds).toEqual(box(0, 0, 55, 10));
+    expect(opened.engine.apply({ op: "set", id: "a", attrs: { display: "none" } }).outcome).toBe("applied");
+    const index = opened.reindex();
+    expect(index.get("p1")?.bounds).toBeNull();
+    expect(index.at([25, 5], 0)).toBeNull();
+  });
+
+  it("con troppe forme, una copia si tocca nel riquadro dell'originale", () => {
+    const rects = Array.from({ length: 70 }, (_, i) => `<rect x="${2 * i}" y="0" width="1" height="1"/>`).join("");
+    const copies = Array.from({ length: 69 }, (_, i) => `<use id="c${i}" transform="translate(0 ${2 * (i + 1)})" href="#o"/>`).join("");
+    const { index } = open(doc(`${LAYER}<g id="p" fub:repeat="grid 1 70 0 2"><g id="o">${rects}</g>${copies}</g></g>`));
+    const unit = index.get("p")!;
+    expect(unit.bounds).toEqual(box(0, 0, 139, 139));
+    expect(unit.hits([0.5, 0.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 0.5], 0)).toBe(false);
+    expect(unit.hits([1.5, 138.5], 0)).toBe(true);
+    expect(unit.hits([1.5, 137.5], 0)).toBe(false);
+  });
+
+  it("un ritaglio con objectBoundingBox prende la scatola delle copie", () => {
+    const { index } = open(doc(
+      '<defs id="fub-defs"><clipPath id="k" fub:role="private" clipPathUnits="objectBoundingBox"><rect x="0" y="0" width="0.5" height="1"/></clipPath></defs>'
+        + `${LAYER}<g id="p1" fub:repeat="grid 3 1 20 0" clip-path="url(#k)"><rect id="a" x="0" y="0" width="10" height="10"/>`
+        + '<use id="c1" transform="translate(20 0)" href="#a"/><use id="c2" transform="translate(40 0)" href="#a"/></g></g>',
+    ));
+    expect(index.get("p1")?.bounds).toEqual(box(0, 0, 25, 10));
+    expect(index.at([22, 5], 0)?.key).toBe("p1");
+    expect(index.at([45, 5], 0)).toBeNull();
+  });
+});
+
+describe("sulle pagine di un PDF", () => {
+  it("gli oggetti sono solo quelli dei gruppi della pagina, trattati come livelli", () => {
+    const engine = SceneEngine.open(
+      doc('<g id="p0001" fub:page="1"><rect id="a" x="0" y="0" width="5" height="5"/></g><g id="p0002" fub:page="2"><rect id="b" x="0" y="0" width="5" height="5"/><rect x="9" y="9" width="5" height="5"/></g><rect id="c" x="0" y="0" width="5" height="5"/>'),
+    );
+    const builder = new PaintBuilder();
+    builder.build(engine);
+    const pages = elementChildren(engine.model!.root).filter((child): child is ContainerNode => child.kind === "container");
+    const index = new SceneIndexer(builder, null, () => [pages[1]!]).index(engine.model!);
+    expect(index.units.map((unit) => [unit.key, unit.layer])).toEqual([["b", "p0002"], ["@1.1", "p0002"]]);
+    expect(index.layers.map((layer) => [layer.id, layer.path, layer.locked, layer.hidden])).toEqual([["p0002", [1], false, false]]);
+    // Un oggetto di un'altra pagina, o fuori dalle pagine, non si trova.
+    expect(index.get("a")).toBeNull();
+    expect(index.get("c")).toBeNull();
+    expect(new SceneIndexer(builder, null, () => []).index(engine.model!).units).toEqual([]);
+  });
+});
+
+describe("l'evidenziatore", () => {
+  it("scrive il tratto col suo strumento e trasparente, il resto come la penna", () => {
+    const samples: InkSample[] = [{ x: 10, y: 50, p: 0.5, t: 0 }, { x: 40, y: 50, p: 0.5, t: 16 }];
+    const brush = { ...PF1_DEFAULTS, size: 16, thinning: 0 };
+    const pen = strokeElem("o1", "#f0e442", brush, quantizeInk(samples), null);
+    const marker = strokeElem("o1", "#f0e442", brush, quantizeInk(samples), null, "highlighter");
+    expect(pen.attrs["fub:tool"]).toBe("pen");
+    expect(pen.attrs["fill-opacity"]).toBeUndefined();
+    expect(marker.attrs).toEqual({ ...pen.attrs, "fub:tool": "highlighter", "fill-opacity": "0.4" });
+    expect(Object.keys(marker.attrs)).toEqual(["id", "fub:tool", "fub:brush", "fill", "fill-opacity", "fub:ink"]);
+  });
+});
+
+describe("ciò che si vede di un oggetto ritagliato", () => {
+  const CROP = '<defs id="fub-defs"><clipPath id="r1" fub:role="private"><rect x="20" y="20" width="30" height="30"/></clipPath></defs>';
+  const cropped = (attrs = "") => open(doc(`${CROP}${LAYER}<image id="img" x="0" y="0" width="100" height="100" href="foto.png" clip-path="url(#r1)"${attrs}/></g>`));
+
+  it("un'immagine ritagliata ha il riquadro, la geometria e la cornice del ritaglio", () => {
+    const img = cropped().index.get("img")!;
+    expect(img.bounds).toEqual(box(20, 20, 50, 50));
+    expect(img.geometry).toEqual(box(20, 20, 50, 50));
+    expect(img.frame()).toEqual(box(20, 20, 50, 50));
+    expect(img.shapeFrame()).toEqual(box(20, 20, 50, 50));
+    expect(img.clipped).toBe(true);
+  });
+
+  it("i clic sulla parte nascosta mancano, quelli sulla parte che si vede colpiscono", () => {
+    const { index } = cropped();
+    expect(index.at([10, 10], 0)).toBeNull();
+    expect(index.at([60, 30], 0)).toBeNull();
+    expect(index.at([30, 30], 0)?.key).toBe("img");
+    // La tolleranza vale anche per il bordo del ritaglio, non oltre.
+    expect(index.at([52, 30], 3)?.key).toBe("img");
+    expect(index.at([60, 30], 3)).toBeNull();
+    const img = index.get("img")!;
+    expect(img.shapeAt([10, 10], 0)).toBeNull();
+    expect(img.shapeAt([30, 30], 0)?.facts.id).toBe("img");
+    expect(img.sampleAt([10, 10], 0)).toBeNull();
+    expect(img.sampleAt([30, 30], 0)?.on).toBe("fill");
+  });
+
+  it("ruotata, la cornice è il ritaglio nelle coordinate dell'immagine, e il riquadro quello del ritaglio ruotato", () => {
+    const opened = cropped(' transform="rotate(30)"');
+    const img = opened.index.get("img")!;
+    expect(img.frame()).toEqual(box(20, 20, 50, 50));
+    expect(img.shapeFrame()).toEqual(box(20, 20, 50, 50));
+    const turned = [[20, 20], [50, 20], [50, 50], [20, 50]].map(([x, y]) => apply(rotate(30), [x!, y!]));
+    const xs = turned.map(([x]) => x);
+    const ys = turned.map(([, y]) => y);
+    const bounds = img.bounds!;
+    expect(bounds.min[0]).toBeCloseTo(Math.min(...xs), 9);
+    expect(bounds.min[1]).toBeCloseTo(Math.min(...ys), 9);
+    expect(bounds.max[0]).toBeCloseTo(Math.max(...xs), 9);
+    expect(bounds.max[1]).toBeCloseTo(Math.max(...ys), 9);
+    // Il ritaglio gira con l'immagine: il suo centro colpisce, un punto fuori no.
+    expect(opened.index.at(apply(rotate(30), [35, 35]), 0)?.key).toBe("img");
+    expect(opened.index.at(apply(rotate(30), [10, 10]), 0)).toBeNull();
+  });
+
+  it("il riquadro di selezione prende l'oggetto per ciò che si vede", () => {
+    const { index } = cropped();
+    expect(index.within(box(0, 0, 60, 60)).map((unit) => unit.key)).toEqual(["img"]);
+    expect(index.within(box(0, 0, 40, 60))).toEqual([]);
+  });
+
+  it("il lazo lo prende se contiene la parte che si vede", () => {
+    const { index } = cropped();
+    expect(index.inside([[10, 10], [60, 10], [60, 60], [10, 60]]).map((unit) => unit.key)).toEqual(["img"]);
+    expect(index.inside([[25, 25], [45, 25], [45, 45], [25, 45]])).toEqual([]);
+    // Un lato che attraversa la parte che si vede lo lascia fuori.
+    expect(index.inside([[10, 10], [35, 10], [35, 60], [10, 60]])).toEqual([]);
+  });
+
+  it("la gomma passa senza toccare sulla parte nascosta", () => {
+    const { index } = cropped();
+    expect(index.along([0, 0], [10, 10], 1)).toEqual([]);
+    expect(index.along([0, 35], [18, 35], 1)).toEqual([]);
+    expect(index.along([0, 35], [30, 35], 1).map((unit) => unit.key)).toEqual(["img"]);
+    expect(index.along([35, 35], [35, 35], 1).map((unit) => unit.key)).toEqual(["img"]);
+    expect(index.along([60, 0], [60, 100], 1)).toEqual([]);
+  });
+
+  it("si sposta col suo ritaglio", () => {
+    const { index } = cropped(' transform="translate(5 0)"');
+    const img = index.get("img")!;
+    expect(img.bounds).toEqual(box(25, 20, 55, 50));
+    expect(img.boundsAfter(translate(10, 5))).toEqual(box(35, 25, 65, 55));
+  });
+});
+
+describe("i ritagli dei contenitori", () => {
+  const clipped = (defs: string, body: string) => open(doc(`<defs id="fub-defs">${defs}</defs>${body}`));
+  const CIRCLE = '<clipPath id="c" fub:role="private"><circle cx="50" cy="50" r="30"/></clipPath>';
+  const GROUP = `${LAYER}<g id="grp" clip-path="url(#c)"><image id="im" x="0" y="0" width="60" height="60" href="foto.png"/><rect id="rc" x="70" y="40" width="30" height="20" fill="#cc0000"/></g></g>`;
+
+  it("un gruppo ritagliato ha il riquadro del ritaglio dentro quello del contenuto", () => {
+    const grp = clipped(CIRCLE, GROUP).index.get("grp")!;
+    expect(grp.bounds).toEqual(box(20, 20, 80, 60));
+    expect(grp.geometry).toEqual(box(20, 20, 80, 60));
+    expect(grp.frame()).toEqual(box(20, 20, 80, 60));
+    expect(grp.clipped).toBe(true);
+  });
+
+  it("fuori dal cerchio non si colpisce nemmeno ciò che c'è sotto", () => {
+    const { index } = clipped(CIRCLE, GROUP);
+    expect(index.at([95, 50], 0)).toBeNull();
+    // Dentro il riquadro del cerchio ma fuori dal cerchio, sull'immagine.
+    expect(index.at([25, 25], 0)).toBeNull();
+    expect(index.at([40, 40], 0)?.key).toBe("grp");
+    expect(index.at([75, 50], 0)?.key).toBe("grp");
+    expect(index.deepAt([75, 50], 0)?.key).toBe("rc");
+  });
+
+  it("il lazo e la gomma guardano la parte che si vede", () => {
+    const { index } = clipped(CIRCLE, GROUP);
+    expect(index.inside([[15, 15], [85, 15], [85, 65], [15, 65]]).map((unit) => unit.key)).toEqual(["grp"]);
+    expect(index.inside([[25, 25], [85, 25], [85, 65], [25, 65]])).toEqual([]);
+    expect(index.along([0, 55], [15, 55], 1)).toEqual([]);
+    expect(index.along([0, 55], [25, 55], 1).map((unit) => unit.key)).toEqual(["grp"]);
+    expect(index.along([85, 55], [100, 55], 1)).toEqual([]);
+    expect(index.along([65, 55], [100, 55], 1).map((unit) => unit.key)).toEqual(["grp"]);
+  });
+
+  it("isolato il gruppo, i figli sono ritagliati dal suo cerchio, che non si sposta con loro", () => {
+    const opened = clipped(CIRCLE, GROUP);
+    const index = opened.reindex(container(opened, "grp"));
+    expect(index.units.map((unit) => unit.key)).toEqual(["im", "rc"]);
+    const im = index.get("im")!;
+    const rc = index.get("rc")!;
+    expect(im.bounds).toEqual(box(20, 20, 60, 60));
+    expect(im.frame()).toEqual(box(20, 20, 60, 60));
+    expect(rc.bounds).toEqual(box(70, 40, 80, 60));
+    expect(im.boundsAfter(translate(10, 0))).toEqual(box(20, 20, 70, 60));
+    expect(im.boundsAfter(translate(100, 0))).toBeNull();
+    expect(index.at([95, 50], 0)).toBeNull();
+    expect(index.at([75, 50], 0)?.key).toBe("rc");
+    expect(index.at([25, 25], 0)).toBeNull();
+    expect(index.along([0, 55], [15, 55], 1)).toEqual([]);
+  });
+
+  it("i ritagli di un gruppo dentro un altro si sommano", () => {
+    const opened = clipped(
+      `${CIRCLE}<clipPath id="q" fub:role="private"><rect x="0" y="0" width="50" height="100"/></clipPath>`,
+      `${LAYER}<g id="out" clip-path="url(#q)"><g id="grp" clip-path="url(#c)"><rect id="a" x="0" y="0" width="100" height="100"/></g></g></g>`,
+    );
+    expect(opened.index.get("out")!.bounds).toEqual(box(20, 20, 50, 80));
+    const inner = opened.reindex(container(opened, "grp"));
+    expect(inner.get("a")!.bounds).toEqual(box(20, 20, 50, 80));
+    expect(inner.at([60, 50], 0)).toBeNull();
+  });
+
+  it("i figli in un gruppo ritagliato condividono il ritaglio, letto una volta sola", () => {
+    const rects = Array.from({ length: 30 }, (_, i) => `<rect id="r${i}" x="${i * 3}" y="0" width="3" height="100"/>`).join("");
+    const opened = clipped(CIRCLE, `${LAYER}<g id="grp" clip-path="url(#c)">${rects}</g></g>`);
+    const index = opened.reindex(container(opened, "grp"));
+    const regions = index.units.flatMap((unit) => unit["parts"].flatMap((part) => part.regions ?? []));
+    expect(regions).toHaveLength(30);
+    expect(new Set(regions.map((region) => region.clip)).size).toBe(1);
+    const clip = regions[0]!.clip;
+    expect(clip.solids()).toBe(clip.solids());
+  });
+
+  it("un ritaglio con un tracciato evenodd lascia il buco", () => {
+    const hole = (rule: string) => clipped(
+      `<clipPath id="h" fub:role="private"><path d="M0 0 H100 V100 H0 Z M25 25 H75 V75 H25 Z" clip-rule="${rule}"/></clipPath>`,
+      `${LAYER}<rect id="a" x="0" y="0" width="100" height="100" clip-path="url(#h)"/></g>`,
+    );
+    const even = hole("evenodd").index;
+    expect(even.at([50, 50], 0)).toBeNull();
+    expect(even.at([10, 10], 0)?.key).toBe("a");
+    expect(even.get("a")!.bounds).toEqual(box(0, 0, 100, 100));
+    expect(hole("nonzero").index.at([50, 50], 0)?.key).toBe("a");
+  });
+
+  it("un testo nel ritaglio vale il riquadro che gli si stima", () => {
+    const plain = open(doc(`${LAYER}<text id="t" x="10" y="50" font-size="20" fill="#000000"><tspan x="10" dy="0">Ciao</tspan></text></g>`)).index.get("t")!.bounds!;
+    const opened = clipped(
+      '<clipPath id="t1" fub:role="private"><text x="10" y="50" font-size="20"><tspan x="10" dy="0">Ciao</tspan></text></clipPath>',
+      `${LAYER}<rect id="a" x="0" y="0" width="200" height="200" clip-path="url(#t1)"/></g>`,
+    );
+    expect(opened.index.get("a")!.bounds).toEqual(plain);
+    expect(opened.index.at([plain.min[0] + 1, plain.min[1] + 1], 0)?.key).toBe("a");
+    expect(opened.index.at([150, 150], 0)).toBeNull();
+  });
+});
+
+describe("i ritagli e i blocchi estranei", () => {
+  const CUT = '<defs id="fub-defs"><clipPath id="c" fub:role="private"><rect x="10" y="10" width="30" height="30"/></clipPath></defs>';
+
+  it("un blocco estraneo in un contenitore ritagliato è ritagliato come gli altri", () => {
+    const { index } = open(doc(`${CUT}${LAYER}<g id="w" clip-path="url(#c)"><rect class="a" x="0" y="0" width="100" height="100"/></g></g>`));
+    expect(index.get("w")!.bounds).toEqual({ min: [10, 10], max: [40, 40] });
+    expect(index.at([20, 20], 0)?.key).toBe("w");
+    expect(index.at([60, 60], 0)).toBeNull();
+    expect(index.get("w")!.touches([60, 0], [60, 100], 0)).toBe(false);
+  });
+
+  it("il ritaglio che un blocco estraneo scrive per sé resta ignorato: è una stima", () => {
+    const { index } = open(doc(`${CUT}${LAYER}<g id="w"><rect class="a" x="0" y="0" width="100" height="100" clip-path="url(#c)"/></g></g>`));
+    expect(index.get("w")!.bounds).toEqual({ min: [0, 0], max: [100, 100] });
+    expect(index.get("w")!.clipped).toBe(false);
+  });
+});
+
+describe("i ritagli che dipendono dalla scatola dell'oggetto", () => {
+  const clipped = (defs: string, body: string) => open(doc(`<defs id="fub-defs">${defs}</defs>${LAYER}${body}</g>`));
+
+  it("con objectBoundingBox la scatola vale prima della trasformazione del ritaglio", () => {
+    const opened = clipped(
+      '<clipPath id="c" fub:role="private" clipPathUnits="objectBoundingBox" transform="translate(10 0)"><rect x="0.25" y="0.25" width="0.5" height="0.5"/></clipPath>',
+      '<rect id="a" x="20" y="10" width="40" height="80" clip-path="url(#c)"/>',
+    );
+    const a = opened.index.get("a")!;
+    expect(a.bounds).toEqual(box(40, 30, 60, 70));
+    expect(a.frame()).toEqual(box(40, 30, 60, 70));
+    expect(opened.index.at([45, 50], 0)?.key).toBe("a");
+    expect(opened.index.at([35, 50], 0)).toBeNull();
+    expect(opened.index.at([65, 50], 0)).toBeNull();
+  });
+
+  it("la scatola è quella dell'oggetto senza contorno, e segue la sua trasformazione", () => {
+    const opened = clipped(
+      '<clipPath id="c" fub:role="private" clipPathUnits="objectBoundingBox"><rect x="0" y="0" width="0.5" height="1"/></clipPath>',
+      '<rect id="a" x="10" y="10" width="40" height="40" stroke="#000000" stroke-width="10" clip-path="url(#c)" transform="translate(100 0)"/>',
+    );
+    // La metà sinistra della scatola, da 10 a 30: il contorno che la supera, in alto, in basso e a sinistra, è tagliato.
+    expect(opened.index.get("a")!.bounds).toEqual(box(110, 10, 130, 50));
+    expect(opened.index.get("a")!.frame()).toEqual(box(10, 10, 30, 50));
+    // Il contorno a destra della metà non c'è più, quello dentro sì.
+    expect(opened.index.at([128, 30], 0)?.key).toBe("a");
+    expect(opened.index.at([132, 30], 0)).toBeNull();
+  });
+
+  it("un gruppo prende la scatola di tutto ciò che contiene", () => {
+    const opened = clipped(
+      '<clipPath id="c" fub:role="private" clipPathUnits="objectBoundingBox"><rect x="0" y="0" width="0.5" height="1"/></clipPath>',
+      '<g id="g" clip-path="url(#c)"><rect x="0" y="0" width="60" height="10"/><rect x="60" y="0" width="20" height="10"/></g>',
+    );
+    // La scatola va da 0 a 80: se ne vede la metà.
+    expect(opened.index.get("g")!.bounds).toEqual(box(0, 0, 40, 10));
+  });
+
+  it("una maschera su un gruppo in unità della pagina taglia sulla sua finestra", () => {
+    const opened = clipped(
+      '<mask id="m" fub:role="private" maskUnits="userSpaceOnUse" x="10" y="10" width="50" height="40"><rect x="30" y="0" width="100" height="100" fill="#ffffff"/></mask>',
+      '<g id="g" mask="url(#m)"><rect id="a" x="0" y="0" width="80" height="80"/></g>',
+    );
+    const g = opened.index.get("g")!;
+    // La finestra è 10..60 per 10..50, la forma della maschera va da x 30, il contenuto fino a 80.
+    expect(g.bounds).toEqual(box(30, 10, 60, 50));
+    expect(opened.index.at([20, 30], 0)).toBeNull();
+    expect(opened.index.at([40, 30], 0)?.key).toBe("g");
+    expect(opened.index.at([40, 55], 0)).toBeNull();
+    expect(opened.index.at([70, 30], 0)).toBeNull();
+    const inside = opened.reindex(container(opened, "g"));
+    expect(inside.get("a")!.bounds).toEqual(box(30, 10, 60, 50));
+  });
+
+  it("senza unità scritte la finestra della maschera è la scatola, allargata di un decimo per lato", () => {
+    const opened = clipped(
+      '<mask id="m" fub:role="private"><rect x="0" y="0" width="200" height="200" fill="#ffffff"/></mask>',
+      '<rect id="a" x="20" y="20" width="60" height="60" fill="#cc0000" stroke="#000000" stroke-width="20" mask="url(#m)"/>',
+    );
+    // Il contorno arriverebbe a 10..90, la finestra è 14..86.
+    expect(opened.index.get("a")!.bounds).toEqual(box(14, 14, 86, 86));
+    expect(opened.index.at([12, 50], 0)).toBeNull();
+    expect(opened.index.at([20, 50], 0)?.key).toBe("a");
+    expect(opened.index.at([88, 50], 0)).toBeNull();
+  });
+
+  it("con maskContentUnits in scatola il contenuto si misura sulla scatola dell'oggetto", () => {
+    const opened = clipped(
+      '<mask id="m" fub:role="private" maskContentUnits="objectBoundingBox"><rect x="0" y="0" width="0.5" height="0.5" fill="#ffffff"/></mask>',
+      '<rect id="a" x="20" y="20" width="60" height="60" mask="url(#m)"/>',
+    );
+    expect(opened.index.get("a")!.bounds).toEqual(box(20, 20, 50, 50));
+  });
+
+  it("una maschera nera conta come una che si vede: la luminosità non si legge", () => {
+    const opened = clipped(
+      '<mask id="m" fub:role="private" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100"><rect x="0" y="0" width="50" height="50" fill="#000000"/></mask>',
+      '<rect id="a" x="0" y="0" width="100" height="100" mask="url(#m)"/>',
+    );
+    expect(opened.index.get("a")!.bounds).toEqual(box(0, 0, 50, 50));
+  });
+});
+
+describe("i ritagli dei livelli e delle pagine", () => {
+  const DEFS = '<defs id="fub-defs"><clipPath id="c" fub:role="private"><rect x="10" y="10" width="30" height="30"/></clipPath></defs>';
+
+  it("un livello con un ritaglio ritaglia i suoi oggetti", () => {
+    const opened = open(doc(`${DEFS}<g id="l1" fub:layer="Livello 1" clip-path="url(#c)"><rect id="a" x="0" y="0" width="100" height="100"/><rect id="b" x="60" y="60" width="20" height="20"/></g>`));
+    const { index } = opened;
+    expect(index.units.map((unit) => unit.key)).toEqual(["a", "b"]);
+    expect(index.get("a")!.bounds).toEqual(box(10, 10, 40, 40));
+    expect(index.get("b")!.bounds).toBeNull();
+    expect(index.at([20, 20], 0)?.key).toBe("a");
+    expect(index.at([70, 70], 0)).toBeNull();
+    expect(index.at([5, 5], 0)).toBeNull();
+    expect(opened.extent()).toEqual(box(10, 10, 40, 40));
+    expect(index.within(box(0, 0, 50, 50)).map((unit) => unit.key)).toEqual(["a"]);
+  });
+
+  it("un livello dentro un gruppo isolato porta ancora il suo ritaglio", () => {
+    const opened = open(doc(`${DEFS}<g id="l1" fub:layer="Livello 1" clip-path="url(#c)"><g id="g"><rect id="a" x="0" y="0" width="100" height="100"/></g></g>`));
+    const index = opened.reindex(container(opened, "g"));
+    expect(index.get("a")!.bounds).toEqual(box(10, 10, 40, 40));
+    expect(index.get("a")!.boundsAfter(translate(5, 5))).toEqual(box(10, 10, 40, 40));
+  });
+
+  it("il gruppo di una pagina di un PDF ritaglia ciò che porta", () => {
+    const engine = SceneEngine.open(doc(`${DEFS}<g id="p0001" fub:page="1" clip-path="url(#c)"><rect id="a" x="0" y="0" width="100" height="100"/></g>`));
+    const builder = new PaintBuilder();
+    builder.build(engine);
+    const page = engine.holder("p0001") as ContainerNode;
+    const index = new SceneIndexer(builder, (id) => engine.holder(id), () => [page]).index(engine.model!);
+    expect(index.get("a")!.bounds).toEqual(box(10, 10, 40, 40));
+    expect(index.at([60, 60], 0)).toBeNull();
+  });
+});
+
+describe("i ritagli delle linee con le punte", () => {
+  const ARROW = '<marker id="m" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">'
+    + '<path d="M0 0 L10 5 L0 10 Z" fill="#000000"/></marker>';
+  const CUT = '<clipPath id="c" fub:role="private"><rect x="0" y="0" width="56" height="100"/></clipPath>';
+  const tipped = (defs: string, body: string) => open(doc(`<defs id="fub-defs">${defs}</defs>${LAYER}${body}</g>`));
+
+  it("il ritaglio della linea taglia anche la punta", () => {
+    const opened = tipped(ARROW + CUT, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)" clip-path="url(#c)"/>');
+    const line = opened.index.get("a")!;
+    expect(line.bounds).toEqual({ min: [9, 46], max: [56, 54] });
+    expect(line.frame()).toEqual({ min: [9, 46], max: [56, 54] });
+    // La geometria è quella della linea, tagliata alla stessa ascissa.
+    expect(line.geometry).toEqual({ min: [10, 50], max: [56, 50] });
+    expect(line.hits([54, 47.5], 0)).toBe(true);
+    expect(line.hits([58, 50], 0)).toBe(false);
+    expect(line.hits([58, 47.5], 0)).toBe(false);
+    expect(line.touches([55, 40], [55, 48], 0)).toBe(true);
+    expect(line.touches([58, 40], [58, 55], 0)).toBe(false);
+  });
+
+  it("senza il ritaglio la punta c'è tutta", () => {
+    const opened = tipped(ARROW + CUT, '<line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>');
+    expect(opened.index.get("a")!.bounds).toEqual({ min: [9, 46], max: [61, 54] });
+    expect(opened.index.get("a")!.clipped).toBe(false);
+  });
+
+  it("una linea in un gruppo ritagliato perde la punta che esce", () => {
+    const opened = tipped(ARROW + CUT, '<g id="g" clip-path="url(#c)"><line id="a" x1="10" y1="50" x2="60" y2="50" stroke="#000000" stroke-width="2" marker-end="url(#m)"/></g>');
+    expect(opened.index.get("g")!.bounds).toEqual({ min: [9, 46], max: [56, 54] });
+    expect(opened.index.at([58, 47.5], 0)).toBeNull();
+    expect(opened.index.at([54, 47.5], 0)?.key).toBe("g");
+  });
+});
+
+describe("i ritagli che non lasciano niente", () => {
+  const empty = (clip: string, element = '<rect id="a" x="0" y="0" width="100" height="100" clip-path="url(#c)"/>') =>
+    open(doc(`<defs id="fub-defs">${clip}</defs>${LAYER}${element}</g>`));
+
+  for (const [name, clip] of [
+    ["un ritaglio vuoto", '<clipPath id="c" fub:role="private"/>'],
+    ["un ritaglio con solo ciò che non si disegna", '<clipPath id="c" fub:role="private"><rect x="0" y="0" width="50" height="50" display="none"/></clipPath>'],
+    ["un ritaglio con una forma senza area", '<clipPath id="c" fub:role="private"><rect x="0" y="0" width="0" height="50"/></clipPath>'],
+  ] as const) {
+    it(`${name} non lascia vedere niente, ma l'oggetto resta nell'albero`, () => {
+      const opened = empty(clip);
+      const a = opened.index.get("a")!;
+      expect(a).not.toBeNull();
+      expect(a.bounds).toBeNull();
+      expect(a.geometry).toBeNull();
+      expect(a.frame()).toBeNull();
+      expect(a.shapeFrame()).toBeNull();
+      expect(a.boundsAfter(translate(5, 5))).toBeNull();
+      expect(opened.index.at([50, 50], 5)).toBeNull();
+      expect(a.hits([50, 50], 5)).toBe(false);
+      expect(a.shapeAt([50, 50], 5)).toBeNull();
+      expect(a.sampleAt([50, 50], 5)).toBeNull();
+      expect(a.touches([0, 50], [100, 50], 5)).toBe(false);
+      expect(opened.index.within({ min: [-10, -10], max: [200, 200] })).toEqual([]);
+      expect(opened.extent()).toBeNull();
+    });
+  }
+
+  it("un gruppo ritagliato a niente nasconde anche i figli, e un figlio isolato non si vede", () => {
+    const opened = empty('<clipPath id="c" fub:role="private"/>', '<g id="g" clip-path="url(#c)"><rect id="a" x="0" y="0" width="100" height="100"/></g>');
+    expect(opened.index.get("g")!.bounds).toBeNull();
+    const index = opened.reindex(container(opened, "g"));
+    expect(index.get("a")!.bounds).toBeNull();
+    expect(index.at([50, 50], 5)).toBeNull();
+  });
+
+  it("none non toglie niente", () => {
+    const bare = open(doc(`${LAYER}<rect id="a" x="0" y="0" width="100" height="100"/></g>`)).index.get("a")!;
+    const a = open(doc(`${LAYER}<rect id="a" x="0" y="0" width="100" height="100" clip-path="none" mask="none"/></g>`)).index.get("a")!;
+    expect(a.bounds).toEqual(bare.bounds);
+    expect(a.frame()).toEqual(bare.frame());
+    expect(a.geometry).toEqual(bare.geometry);
+    expect(a.clipped).toBe(false);
+  });
+});
+
+describe("quando niente è ritagliato", () => {
+  const BODY = `${LAYER}<rect id="a" x="0" y="0" width="40" height="40"/><g id="g" transform="translate(50 0)"><circle id="c" cx="20" cy="20" r="10"/><text id="t" x="0" y="80" font-size="10">Ciao</text></g></g>`;
+
+  it("nessuna parte porta ritagli, e i risultati sono quelli di un documento che scrive none", () => {
+    const plain = open(doc(BODY));
+    const named = open(doc(BODY.replace('<rect id="a"', '<rect id="a" clip-path="none" mask="none"').replace('<g id="g"', '<g id="g" clip-path="none"')));
+    for (const opened of [plain, named]) {
+      for (const unit of opened.index.units) {
+        expect(unit.clipped, unit.key).toBe(false);
+        expect(unit["parts"].every((part) => part.regions === null), unit.key).toBe(true);
+      }
+    }
+    for (const unit of plain.index.units) {
+      const other = named.index.get(unit.key)!;
+      expect(other.bounds, unit.key).toEqual(unit.bounds);
+      expect(other.geometry, unit.key).toEqual(unit.geometry);
+      expect(other.frame(), unit.key).toEqual(unit.frame());
+      expect(other.shapeFrame(), unit.key).toEqual(unit.shapeFrame());
+      expect(other.boundsAfter(translate(3, 4)), unit.key).toEqual(unit.boundsAfter(translate(3, 4)));
+    }
+    for (const p of [[10, 10], [70, 20], [55, 78], [90, 90]] as const) {
+      expect(named.index.at(p, 2)?.key, String(p)).toBe(plain.index.at(p, 2)?.key);
+    }
+    expect(named.index.within({ min: [0, 0], max: [100, 100] }).map((unit) => unit.key)).toEqual(plain.index.within({ min: [0, 0], max: [100, 100] }).map((unit) => unit.key));
+    expect(named.index.inside([[-5, -5], [200, -5], [200, 200], [-5, 200]]).map((unit) => unit.key)).toEqual(plain.index.inside([[-5, -5], [200, -5], [200, 200], [-5, 200]]).map((unit) => unit.key));
+  });
+});
+
+describe("l'indice dopo una modifica", () => {
+  const SCENE = doc(
+    '<defs id="fub-defs"><marker id="m" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 L10 5 L0 10 Z"/></marker>'
+      + '<clipPath id="k" fub:role="private"><rect x="0" y="0" width="0.5" height="1"/></clipPath>'
+      + '<mask id="q" fub:role="private" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200"><rect x="0" y="0" width="200" height="200" fill="#ffffff"/></mask>'
+      + '<path id="t1" fub:role="private" d="M 0 100 L 200 100"/>'
+      + '<symbol id="s" overflow="visible"><rect id="sr" x="0" y="0" width="10" height="10"/></symbol></defs>'
+      + `${LAYER}<rect id="r" x="10" y="10" width="20" height="20" stroke="#000000"/>`
+      + '<line x1="0" y1="90" x2="40" y2="90" stroke="#000000" stroke-width="2" marker-end="url(#m)"/>'
+      + '<rect id="k1" x="0" y="0" width="30" height="30" clip-path="url(#k)"/>'
+      + '<rect id="q1" x="20" y="20" width="60" height="60" mask="url(#q)"/>'
+      + '<text id="tx" x="0" y="50"><tspan x="0" dy="0">Titolo</tspan></text>'
+      + '<text id="tp" font-size="10"><textPath href="#t1">abc</textPath></text>'
+      + '<use id="i" href="#s" transform="translate(100 0)"/>'
+      + '<g id="g" stroke="#000000" stroke-width="4" font-size="20"><rect id="gr" x="0" y="0" width="10" height="10"/><text id="gt" x="0" y="0"><tspan x="0" dy="0">Dentro</tspan></text></g>'
+      + '<g id="g2" clip-path="url(#k)"><rect id="g2r" x="40" y="40" width="30" height="30"/></g>'
+      + "</g>",
+  );
+
+  const project = (unit: Unit) => ({
+    key: unit.key,
+    path: unit.path,
+    layer: unit.layer,
+    parent: unit.parent,
+    transform: unit.transform,
+    bounds: unit.bounds,
+    geometry: unit.geometry,
+    frame: unit.frame(),
+    inner: unit.inner,
+    look: unit.look,
+  });
+  const read = (index: SceneIndex) => ({
+    units: index.units.map(project),
+    children: index.units.map((unit) => index.children(unit).map(project)),
+    hits: Array.from({ length: 121 }, (_, k) => index.at([(k % 11) * 12, Math.floor(k / 11) * 12], 2)?.key ?? null),
+  });
+
+  it("dà gli stessi oggetti di un indice nuovo, anche quando cambia solo ciò a cui rimandano", () => {
+    const opened = open(SCENE);
+    const first = opened.reindex();
+    expect(first.units.map((unit) => unit.key)).toEqual(["r", "@1.1", "k1", "q1", "tx", "tp", "i", "g", "g2"]);
+    const edits = [
+      { op: "set", id: "m", attrs: { markerWidth: "8" } },
+      { op: "set", id: "k", attrs: { clipPathUnits: "objectBoundingBox" } },
+      { op: "set", id: "q", attrs: { width: "40", height: "40" } },
+      { op: "set", id: "t1", attrs: { d: "M 100 0 L 100 200" } },
+      { op: "set", id: "sr", attrs: { width: "30" } },
+      { op: "set", id: "g", attrs: { "stroke-width": "8", "font-size": "30" } },
+      { op: "set", id: "l1", attrs: { transform: "translate(5 5)", "font-size": "12" } },
+      { op: "add", parent: "l1", pos: { first: true }, elem: { tag: "rect", attrs: { id: "o7k2m9x4q", x: "60", y: "60", width: "5", height: "5" } } },
+    ] as const;
+    for (const edit of edits) {
+      const result = opened.engine.apply(edit);
+      expect(result.outcome, JSON.stringify([edit, result])).toBe("applied");
+      expect(read(opened.reindex())).toEqual(read(open(opened.engine.text).index));
+    }
+    expect(opened.reindex().get("r")).not.toBe(first.get("r"));
+  });
+
+  it("ritrova gli oggetti che non cambiano, e misura di nuovo quello cambiato", () => {
+    const opened = open(SCENE);
+    const before = opened.reindex();
+    expect(opened.engine.apply({ op: "set", id: "tx", attrs: { y: "60" } }).outcome).toBe("applied");
+    const after = opened.reindex();
+    expect(after.get("r")).toBe(before.get("r"));
+    expect(after.get("gr")).toBe(before.get("gr"));
+    // La punta della linea può cambiare senza di lei: si misura sempre.
+    expect(after.get("@1.1")).not.toBe(before.get("@1.1"));
+    expect(project(after.get("@1.1")!)).toEqual(project(before.get("@1.1")!));
+    expect(after.get("tx")).not.toBe(before.get("tx"));
+    expect(after.get("tx")?.bounds?.min[1]).toBe((before.get("tx")?.bounds?.min[1] ?? 0) + 10);
+  });
+});

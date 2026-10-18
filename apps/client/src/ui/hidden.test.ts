@@ -17,7 +17,7 @@
 // i **manici** di un elemento — id e classi — invece del solo id: cercare ciò
 // che non si scrive più è il modo in cui un presidio diventa verde e vuoto.
 //
-// La difesa sta nella **struttura** (`theme/structure.css`) ed è una riga —
+// La difesa sta nella **struttura** (`theme/scrittoio/structure.css`) ed è una riga —
 // `[hidden] { display: none !important }` — cioè l'unico posto in cui
 // `!important` è la risposta giusta: ristabilisce una garanzia dell'UA che una
 // regola di layout revoca senza dirlo. Sta nella struttura, e non nella pelle,
@@ -32,8 +32,8 @@
 import { describe, expect, it } from "vitest";
 
 import html from "../../index.html?raw";
-import structure from "../theme/structure.css?raw";
-import skin from "../theme/serie/skin.css?raw";
+import structure from "../theme/scrittoio/structure.css?raw";
+import skin from "../theme/scrittoio/skin.css?raw";
 
 /// Il CSS che il presidio attraversa: la struttura (dove sta la guardia) e la
 /// pelle (dove stanno le regole di layout che la possono revocare). La prima è

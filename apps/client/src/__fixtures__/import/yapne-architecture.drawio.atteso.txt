@@ -1,0 +1,164 @@
+File: yapne-architecture.drawio
+Oggetti: 85 (forme 43, testi 17, linee 25, tratti 0, immagini 0)
+Livelli: 1, tavole: 2
+Note: route ×1; html ×4 (background)
+
+Livello «Livello 1»
+  Rettangolo
+  Gruppo «Simulation Controls (Step, Run Full)», 2 oggetti
+    Rettangolo «Simulation Controls (Step, Run Full)»
+    Testo «Simulation Controls (Step, Run Full)»
+  Gruppo «Event Log Generator», 2 oggetti
+    Rettangolo «Event Log Generator»
+    Testo «Event Log Generator»
+  Gruppo «WebPPL code Viewer», 2 oggetti
+    Rettangolo «WebPPL code Viewer»
+    Testo «WebPPL code Viewer»
+  Testo «Existing User Interface Layer»
+  Rettangolo
+  Testo «Probabilistic Engine Subsystem»
+  Connettore da «Main Application Controller (App)» a «DPN Model State (dpn-model.js)»
+  Connettore da «Main Application Controller (App)» a «WebPPL code Viewer»
+  Gruppo «Main Application Controller (App)», 2 oggetti
+    Rettangolo «Main Application Controller (App)»
+    Testo «Main Application Controller (App)»
+  Connettore da «DPN Model State (dpn-model.js)» a «Main Application Controller (App)»
+  Gruppo «DPN Model State (dpn-model.js)», 2 oggetti
+    Rettangolo «DPN Model State (dpn-model.js)»
+    Testo «DPN Model State (dpn-model.js)»
+  Connettore da «Probabilistic Integration Layer (probabilistic-integration.…» a «Main Application Controller (App)»
+  Connettore da «Probabilistic Integration Layer (probabilistic-integration.…» a «Probabilistic Execution Engine (probabilistic-execution.js)»
+  Gruppo «Probabilistic Integration Layer (probabilistic-integration.…», 2 oggetti
+    Rettangolo «Probabilistic Integration Layer (probabilistic-integration.…»
+    Testo «Probabilistic Integration Layer (probabilistic-integration.…»
+  Connettore «Writes New State» da Rettangolo
+  Testo «Writes New State»
+  Rettangolo
+  Gruppo «Native Stepper», 2 oggetti
+    Rettangolo «Native Stepper»
+    Testo «Native Stepper»
+  Connettore da «WebPPL Runner» a Rettangolo
+  Gruppo «WebPPL Runner», 2 oggetti
+    Rettangolo «WebPPL Runner»
+    Testo «WebPPL Runner»
+  Gruppo «Scheduller ST (Uniform / Weighted)», 2 oggetti
+    Rettangolo «Scheduller ST (Uniform / Weighted)»
+    Testo «Scheduller ST (Uniform / Weighted)»
+  Testo «Probabilistic Execution Engine (probabilistic-execution.js)»
+  Connettore «Use Engine for Simulation Steps» da Rettangolo a Rettangolo
+  Testo «Use Engine for Simulation Steps»
+  Connettore «Returns Processed Result» da Rettangolo a Rettangolo
+  Testo «Returns Processed Result»
+  Rettangolo
+  Gruppo, 2 oggetti
+    Rettangolo «Probabilistic Execution Engine (probabilistic-execution.js)»
+    Testo «Probabilistic Execution Engine (probabilistic-execution.js)»
+  Gruppo «Simulation Loop Controller (N Iterations)», 2 oggetti
+    Rettangolo «Simulation Loop Controller (N Iterations)»
+    Testo «Simulation Loop Controller (N Iterations)»
+  Gruppo «Trace. Collector & Formatter», 2 oggetti
+    Rettangolo «Trace. Collector & Formatter»
+    Testo «Trace. Collector & Formatter»
+  Gruppo «XES / CSV Exporter», 2 oggetti
+    Rettangolo «XES / CSV Exporter»
+    Testo «XES / CSV Exporter»
+  Connettore «Fetches Generated Code for Display» verso «Simulation Controls (Step, Run Full)»
+  Testo «Fetches Generated Code for Display»
+  Rettangolo
+  Testo «WebPPL Code Generator (webppl-code-genertor.js)»
+  Gruppo «Csim Translation Engine (Paper Section 5)», 2 oggetti
+    Rettangolo «Csim Translation Engine (Paper Section 5)»
+    Testo «Csim Translation Engine (Paper Section 5)»
+  Gruppo «Generate Initialization (Cinit)», 2 oggetti
+    Rettangolo «Generate Initialization (Cinit)»
+    Testo «Generate Initialization (Cinit)»
+  Gruppo «Generte Enabling & Firing (Benebl, Cfire)», 2 oggetti
+    Rettangolo «Generte Enabling & Firing (Benebl, Cfire)»
+    Testo «Generte Enabling & Firing (Benebl, Cfire)»
+  Gruppo «Generte Main Loop (Cloop)», 2 oggetti
+    Rettangolo «Generte Main Loop (Cloop)»
+    Testo «Generte Main Loop (Cloop)»
+  Gruppo «Constraint Handling (observe statements)», 2 oggetti
+    Rettangolo «Constraint Handling (observe statements)»
+    Testo «Constraint Handling (observe statements)»
+  Connettore da «Event Log Generator» a «Main Application Controller (App)»
+  Connettore da «Simulation Controls (Step, Run Full)»
+  Connettore da «WebPPL code Viewer» a «Probabilistic Integration Layer (probabilistic-integration.…»
+  Connettore «Read DPN State (M, α)»
+  Testo «Read DPN State (M, α)»
+  Testo «Interaction 1: Step/Run Triggers Override»
+  Testo «Interaction 3: Event Log request»
+  Testo «Interaction 2a: Requires WebPPL Execution Input Data: Full…»
+  Rettangolo
+  Testo «External Runtime Enviroment»
+  Connettore da «WebPPL npm package (Probabilistic Interface Runtime)» a «WebPPL Runner»
+  Gruppo «WebPPL npm package (Probabilistic Interface Runtime)», 2 oggetti
+    Rettangolo «WebPPL npm package (Probabilistic Interface Runtime)»
+    Testo «WebPPL npm package (Probabilistic Interface Runtime)»
+  Connettore da «Constraint Handling (observe statements)» a «WebPPL npm package (Probabilistic Interface Runtime)»
+  Testo «Interaction 2c:Return Raw Results»
+  Testo «Interaction 2b: Execute Generated Code»
+  Testo «Data Sent: Generated WebPPL string (Cism program)»
+  Testo «Data Return: Raw WebPPL Result {state:{M, α}, traces: [], s…»
+  Gruppo «Light Blue Box: Existing Code to Interact with the new syst…», 2 oggetti
+    Rettangolo «Light Blue Box: Existing Code to Interact with the new syst…»
+    Testo «Light Blue Box: Existing Code to Interact with the new syst…»
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Rettangolo
+  Connettore da «PNML Importer» a «DPN API»
+  Gruppo «PNML Importer», 2 oggetti
+    Rettangolo «PNML Importer»
+    Testo «PNML Importer»
+  Connettore da «Event Log Generator» a «DPN API»
+  Gruppo «Event Log Generator», 2 oggetti
+    Rettangolo «Event Log Generator»
+    Testo «Event Log Generator»
+  Connettore da «PNG Exporter» a «DPN Renderer»
+  Gruppo «PNG Exporter», 2 oggetti
+    Rettangolo «PNG Exporter»
+    Testo «PNG Exporter»
+  Connettore da «Soundness Checker» a «DPN Model»
+  Gruppo «Soundness Checker», 2 oggetti
+    Rettangolo «Soundness Checker»
+    Testo «Soundness Checker»
+  Gruppo «Z3 Expression Evaluator», 2 oggetti
+    Rettangolo «Z3 Expression Evaluator»
+    Testo «Z3 Expression Evaluator»
+  Connettore da «Ally Layer» a «Editor»
+  Gruppo «Ally Layer», 2 oggetti
+    Rettangolo «Ally Layer»
+    Testo «Ally Layer»
+  Gruppo «DPN Model», 2 oggetti
+    Rettangolo «DPN Model»
+    Testo «DPN Model»
+  Connettore da «DPN Renderer» a «Renderer»
+  Gruppo «DPN Renderer», 2 oggetti
+    Rettangolo «DPN Renderer»
+    Testo «DPN Renderer»
+  Connettore da «DPN API» a «PetriNet API»
+  Gruppo «DPN API», 2 oggetti
+    Rettangolo «DPN API»
+    Testo «DPN API»
+  Gruppo «PetriNet Model», 2 oggetti
+    Rettangolo «PetriNet Model»
+    Testo «PetriNet Model»
+  Gruppo «Renderer», 2 oggetti
+    Rettangolo «Renderer»
+    Testo «Renderer»
+  Gruppo «Editor», 2 oggetti
+    Rettangolo «Editor»
+    Testo «Editor»
+  Gruppo «PetriNet API», 2 oggetti
+    Rettangolo «PetriNet API»
+    Testo «PetriNet API»
+  Connettore verso «DPN Model»
+  Connettore da «DPN Model» a «PetriNet Model»
+  Testo «Integration (F8-F14)»
+  Testo «Verif. / Ally (F5 - F7) (F15 - F19)»
+  Testo «DPN (F1 - F4)»
+  Testo «Core (F20 - F26)»
+
+Tavola «webppl»
+Tavola «architecture»

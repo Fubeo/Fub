@@ -1,0 +1,225 @@
+/* I menu. */
+
+/* Un menu è un rialzo: carta più chiara di tutto ciò che copre, staccata
+   dall'ombra e da nient'altro. Contestuale o a tendina è lo stesso oggetto
+   (`ui/menu.ts`): cambia solo da dove parte. */
+.context-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 200px;
+  max-width: min(320px, 90vw);
+  max-height: calc(100vh - 16px);
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+  color: var(--text);
+  font-size: var(--text-base);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+/* Una voce: alta quanto una riga e mai meno di 28, con il segno, il nome e la
+   scorciatoia su una riga sola. */
+.context-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: max(var(--row-h), 28px);
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-tight);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* **La voce evidenziata** è una sola idea per due gesti: sotto il puntatore e
+   col fuoco da tastiera prende la matita blu. Il fuoco aggiunge il suo anello,
+   dentro la voce perché il menu taglia ciò che sporge: se il puntatore è
+   fermo su un'altra, si vede quale risponde a Invio. */
+.context-menu button:hover,
+.context-menu button:focus-visible {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.context-menu button:focus-visible {
+  outline-offset: calc(var(--focus-ring-width) * -1);
+}
+
+.context-menu .menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* La scorciatoia: a destra, in grafite, con le cifre in colonna. Non è una
+   pastiglia — in una colonna di voci dieci bordini farebbero rumore. */
+.context-menu .menu-hint {
+  flex: none;
+  margin-left: auto;
+  padding: 0 0 0 var(--space-5);
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--leading-tight);
+}
+
+/* Le voci che sono un aspetto: una striscia dei suoi colori, il nome con una
+   riga di spiegazione sotto. */
+.context-menu .menu-swatches {
+  display: flex;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border-strong);
+}
+.context-menu .menu-swatch {
+  width: 6px;
+  height: 20px;
+}
+/* Le voci con una figura: 24 px prima del nome, nel colore della voce, che
+   la spenta attenua con le parole. Chi non ha la sua ne tiene il posto, e il
+   nome si centra sulla figura invece di restare sulla riga di base. */
+.context-menu .menu-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-self: center;
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon > svg {
+  width: 24px;
+  height: 24px;
+}
+.context-menu .menu-icon ~ .menu-label,
+.context-menu .menu-icon ~ .menu-body {
+  align-self: center;
+}
+/* L'anteprima di uno stile: «Aa» nel colore del menu se lo stile non ne
+   dice uno, e il quadratino con un filo che lo stacca dal fondo. */
+.menu-sample {
+  color: var(--text);
+  font-size: var(--text-base);
+}
+.menu-sample-box {
+  border-radius: var(--radius-xs);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.context-menu .menu-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-1) 0;
+}
+.context-menu .menu-description {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+}
+
+/* **Il segno della scelta** sta in una colonna fissa a sinistra. Nel markup
+   viene dopo il nome ed è un carattere: qui passa davanti (`order`), il
+   carattere si spegne e la spunta si disegna — la stessa delle caselle.
+   Le voci senza scelta dello stesso menu tengono il posto della colonna, così
+   i nomi cadono tutti sulla stessa verticale. */
+.context-menu .menu-check {
+  display: inline-flex;
+  flex: none;
+  order: -1;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 0;
+}
+.context-menu button[aria-checked="true"] .menu-check::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  clip-path: polygon(8% 54%, 20% 42%, 40% 62%, 80% 20%, 92% 32%, 40% 86%);
+}
+.context-menu:has(.menu-check) button:not(:has(.menu-check)) {
+  padding-left: calc(var(--space-4) * 2 + 16px);
+}
+
+/* Un filetto da bordo a bordo, con la sua aria sopra e sotto. */
+.context-menu .menu-separator {
+  height: 1px;
+  margin: var(--space-2) calc(var(--space-2) * -1);
+  background: var(--border);
+}
+
+/* **La voce distruttiva** scrive in rosso a riposo. Evidenziata non prende la
+   velatura rossa: il rosso sopra il proprio velo, su un rialzo al buio, si
+   ferma a 4,0:1. Prende il rosso pieno col suo inchiostro, che regge nelle
+   due luci. */
+.context-menu button.danger {
+  color: var(--danger);
+}
+.context-menu button.danger:hover,
+.context-menu button.danger:focus-visible {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+.context-menu button.danger:focus-visible {
+  outline-color: var(--danger-contrast);
+}
+.context-menu button.danger:hover .menu-hint,
+.context-menu button.danger:focus-visible .menu-hint,
+.context-menu button.danger:hover .menu-description,
+.context-menu button.danger:focus-visible .menu-description {
+  color: var(--danger-contrast);
+}
+
+/* Una voce che ora non si può scegliere resta al suo posto, spenta, e non
+   risponde al puntatore. */
+.context-menu button[aria-disabled="true"],
+.context-menu button[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--text);
+  opacity: 0.4;
+  cursor: default;
+}
+.context-menu button.danger[aria-disabled="true"],
+.context-menu button.danger[aria-disabled="true"]:hover {
+  color: var(--danger);
+}
+
+/* In colori forzati il rialzo non ha né fondo suo né ombra: il menu si stacca
+   con un bordo, il filetto e la spunta prendono l'inchiostro del sistema. Le
+   strisce di colore non si possono dipingere, e non tengono il posto. */
+@media (forced-colors: active) {
+  .context-menu {
+    border: 1px solid CanvasText;
+  }
+  .context-menu .menu-separator {
+    background: CanvasText;
+  }
+  .context-menu button[aria-checked="true"] .menu-check::before {
+    background: CanvasText;
+  }
+  .context-menu .menu-swatches {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-menu button {
+    transition: none;
+  }
+}

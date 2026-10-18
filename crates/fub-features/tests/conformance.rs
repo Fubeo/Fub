@@ -143,7 +143,9 @@ fn coverage(surface: ViewSurface) -> Coverage {
              che apriamo noi sono cablati nella shell",
         ),
         ViewSurface::ContextMenu => Coverage::Uncovered(
-            "questa shell non ha un menu contestuale estendibile (`NON_OSPITATE`)",
+            "la shell la ospita in coda al menu contestuale dell'albero e \
+             nessuna feature ufficiale ci sta: i nostri menu sono cablati \
+             nella shell",
         ),
     }
 }

@@ -428,6 +428,82 @@ fn catalog_manager_requires_signed_entries_for_install_update_rollback_and_revok
     ));
 }
 
+/// Il motore della voce firmata è quello del manifest: `theme-1` si installa
+/// ancora come `theme-2` (a non montarlo è la shell, non l'host), una voce che
+/// dichiara un motore e ne consegna un altro è respinta, e un motore che l'host
+/// non conosce non è una voce di tema.
+#[test]
+fn a_signed_theme_entry_names_the_engine_its_manifest_declares() {
+    let authority = authority();
+    let sample = camino::Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/theme/author/sample");
+    let work = tempfile::tempdir().unwrap();
+    let second = root(&work).join("theme");
+    std::fs::create_dir(&second).unwrap();
+    for name in [
+        "manifest.json",
+        "sheet-dark.css",
+        "sheet-light.css",
+        "skin.css",
+    ] {
+        std::fs::copy(sample.join(name), second.join(name)).unwrap();
+    }
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(second.join("manifest.json")).unwrap()).unwrap();
+    manifest["engine"] = "theme-1".into();
+    std::fs::write(
+        second.join("manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let id = "org.fub.theme-bench";
+    let entry = |abi: &str| CatalogEntry {
+        id: id.into(),
+        kind: CatalogKind::Theme,
+        name: "Theme Bench".into(),
+        version: "1.0.0".into(),
+        abi: abi.into(),
+        url: "file://theme-bench/1.0.0".into(),
+        digest: Revision(fub_host::theme::theme_tree_digest(&second).unwrap()),
+        size: std::fs::metadata(second.join("manifest.json"))
+            .unwrap()
+            .len(),
+        permissions: BTreeSet::new(),
+        license: "MIT".into(),
+        compatible: ">=0.1".into(),
+        provenance: "theme-publisher".into(),
+        revoked: false,
+    };
+    let install = |abi: &str| {
+        let config = tempfile::tempdir().unwrap();
+        let manager = InstalledPluginManager::open(root(&config)).unwrap();
+        let signed = sign(&authority, &payload(vec![entry(abi)]));
+        let outcome =
+            manager.catalog_install_theme(&authority.trust, &signed, 0, id, "1.0.0", &second);
+        let installed = fub_host::theme::list_themes(root(&config));
+        (outcome.map(|_| ()), installed)
+    };
+
+    let (outcome, installed) = install("theme-1");
+    outcome.expect("a theme-1 entry installs a theme-1 manifest");
+    assert!(installed.iter().any(|theme| theme.manifest.id == id
+        && theme.manifest.engine == fub_abi::theme::ThemeEngine::Theme1));
+
+    let (outcome, installed) = install("theme-2");
+    assert!(
+        matches!(outcome, Err(CatalogError::Integrity(_))),
+        "an entry that names another engine is refused"
+    );
+    assert!(installed.is_empty(), "and nothing is installed");
+
+    let (outcome, installed) = install("theme-3");
+    assert!(
+        matches!(outcome, Err(CatalogError::Unreadable(_))),
+        "an engine this host does not know is not a theme entry"
+    );
+    assert!(installed.is_empty());
+}
+
 #[test]
 fn signed_theme_releases_cover_assets_update_and_revoke_without_erasing_user_choices() {
     let config = tempfile::tempdir().unwrap();
@@ -459,7 +535,7 @@ fn signed_theme_releases_cover_assets_update_and_revoke_without_erasing_user_cho
         kind: CatalogKind::Theme,
         name: "Theme Bench".into(),
         version: version.into(),
-        abi: "theme-1".into(),
+        abi: "theme-2".into(),
         url: format!("file://theme-bench/{version}"),
         digest: Revision(fub_host::theme::theme_tree_digest(source).unwrap()),
         size: std::fs::metadata(source.join("manifest.json"))

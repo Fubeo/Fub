@@ -93,10 +93,10 @@ import { describe, expect, it } from "vitest";
 // (`theme/contrast.ts`).
 import { contrast } from "./contrast";
 import { AA, PAIRS, PAPER_BACKGROUNDS, SYNTAX_TOKENS } from "./contrast-fixture";
-import darkHigh from "./serie/sheet-dark-high.css?raw";
-import dark from "./serie/sheet-dark.css?raw";
-import lightHigh from "./serie/sheet-light-high.css?raw";
-import light from "./serie/sheet-light.css?raw";
+import darkHigh from "./scrittoio/sheet-dark-high.css?raw";
+import dark from "./scrittoio/sheet-dark.css?raw";
+import lightHigh from "./scrittoio/sheet-light-high.css?raw";
+import light from "./scrittoio/sheet-light.css?raw";
 
 
 type Theme = "dark" | "light" | "dark-high" | "light-high";

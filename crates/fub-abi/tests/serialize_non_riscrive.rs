@@ -123,9 +123,9 @@ fn prose_normalized(source: &str) -> String {
 
 /// **Perché quel punto di codice può nominare `serialize`.**
 ///
-/// Sono due, e nessuna delle due è «sto modificando un documento». Se la ragione
+/// Sono tre, e nessuna delle tre è «sto modificando un documento». Se la ragione
 /// che ti serve non è qui dentro, la risposta quasi sempre non è aggiungerne una
-/// terza: è che quella modifica va fatta con
+/// quarta: è che quella modifica va fatta con
 /// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
 #[derive(Debug)]
 enum Reason {
@@ -144,6 +144,14 @@ enum Reason {
     /// `FormatProvider::serialize`, ma ciò che quel metodo fa. E da lì un file
     /// non si riscrive comunque — un provider non ha un `HostApi` fra le mani.
     TheFormatThatImplementsIt,
+    /// **Un documento che non c'era.** È la generazione che il doc del modulo
+    /// prevede: il testo di `serialize` va soltanto a
+    /// [`create_document`](fub_abi::traits::VaultStructure::create_document), che
+    /// rifiuta un path occupato con `AlreadyExists`, quindi da qui un file che
+    /// esiste non si riscrive nemmeno volendo. Una riga con questa ragione dice
+    /// anche dove finisce il testo: se finisse in `write_document`, la ragione
+    /// sarebbe falsa.
+    ANewDocument,
 }
 
 // ---------------------------------------------------------------------------
@@ -214,6 +222,33 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         1,
         Reason::AnotherSerialize,
     ),
+    (
+        // «Annota il PDF»: le annotazioni vuote del provider `fubann`, scritte
+        // con `create_document` soltanto dopo aver visto che non ci sono. Se ci
+        // sono, il comando le apre e non le serializza.
+        "crates/fub-features/src/draw/annotate.rs",
+        ".serialize",
+        1,
+        Reason::ANewDocument,
+    ),
+    (
+        // «Nuovo disegno»: il documento vuoto del provider dei disegni, scritto
+        // con `create_document` e mai sopra un file che c'è.
+        "crates/fub-features/src/draw/create.rs",
+        ".serialize",
+        1,
+        Reason::ANewDocument,
+    ),
+    (
+        // Le operazioni di un commit della sessione live: il testo JSON
+        // ricevuto dal tablet passa alla shell così com'è, e `serialize` lo
+        // scrive verbatim dentro il messaggio che lo porta. Serde, come gli
+        // altri.
+        "crates/fub-live/src/protocol/ops.rs",
+        ".serialize",
+        1,
+        Reason::AnotherSerialize,
+    ),
 ];
 
 /// L'allowlist per chiave, col rifiuto dei doppioni: due righe per lo stesso
@@ -237,8 +272,22 @@ fn allowlist() -> BTreeMap<(&'static str, &'static str), (usize, &'static Reason
 
 /// Le cartelle in cui non si entra: non contengono sorgenti del progetto, e una
 /// di esse (`target`) ne contiene di generati che direbbero il falso. Anche
-/// `legacy_tests` sta sotto `src/`, ma il modulo che lo dichiara è `#[cfg(test)]`.
-const EXCLUDED: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
+/// `legacy_tests` sta sotto `src/`, ma il modulo che lo dichiara è `#[cfg(test)]`,
+/// e lo stesso vale per una cartella `tests` dentro `src/`, come quella delle
+/// prove di `fub-live`.
+/// `vendor` è codice di terzi che non dipende da `fub-abi`, quindi non chiama
+/// `serialize`: il grafo di `docs/architecture/overview.md` lo disegna senza
+/// archi verso Fub, e `dependency_invariant.rs` lo confronta con Cargo. I suoi
+/// test stanno anche sotto `src/tests/`, che qui sembrerebbero produzione.
+const EXCLUDED: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    ".fub",
+    "legacy_tests",
+    "tests",
+    "vendor",
+];
 
 /// La radice del repo, dedotta dal manifest di questo crate.
 fn root() -> PathBuf {
@@ -482,9 +531,10 @@ fn serialize_is_not_the_way_to_rewrite_an_existing_document() {
          If you are **generating a new document** (a template, \"create\"\n\
          notes) or if it is a `serialize` unrelated to documents (serde),\n\
          then the line should be added here — with its reason in the\n\
-         `Reason` enum, which today has two and neither covers generation.\n\
-         Adding a third is the decision to make, and it is why this file\n\
-         exists.",
+         `Reason` enum. Generation is `ANewDocument`, and only when the\n\
+         text goes to `create_document`, which refuses a taken path; a\n\
+         reason the enum does not have is the decision to make, and it is\n\
+         why this file exists.",
         list(&new)
     );
 

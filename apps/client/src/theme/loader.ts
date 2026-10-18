@@ -30,39 +30,62 @@
 // saprebbe solo *aggiungere* fogli al documento, e il punto è sostituirli. I
 // test del banco (`theme/loader.test.ts`) guardano qui dentro.
 
-import { THEME_ENGINE, type ThemeManifest, type ThemeLight } from "../host/contract";
+import type { ThemeManifest, ThemeLight } from "../host/contract";
 import { reportThemeTrouble, type ThemeTrouble } from "../ui/notify";
-import { themeAssetReferences, themeAssetUrls, themeCssViolations } from "../ui/sanitize-css";
+import {
+  themeAssetReferences,
+  themeAssetUrls,
+  themeCssViolations,
+  type ThemeCssVocabulary,
+} from "../ui/sanitize-css";
 import { contrast } from "./contrast";
-import { REQUIRED_THEME_ROLES, THEME_CONTRAST_PAIRS } from "./contrast-fixture";
-import { HOOKS } from "./serie/anatomia";
+import { mountMirroredOptions, mountedThemeOptions, type MirroredOptions } from "./options";
+import type { ContrastPair } from "./contrast-fixture";
+import { THEME_2_PROFILE } from "./scrittoio/profile";
 
 export type Layer = "caratteri" | "foglio" | "pelle" | "preferenze" | "snippets";
 
-/** I soli token che le preferenze della persona possono ridichiarare. */
-export const PREFERENCE_TOKENS = [
-  "space-1",
-  "space-2",
-  "space-3",
-  "space-4",
-  "space-5",
-  "space-6",
-  "space-7",
-  "space-8",
-  "space-9",
-  "space-10",
-  "font-reading",
-  "text-reading",
-  "leading-relaxed",
-  "content-width",
-  "accent",
-  "accent-soft",
-  "accent-contrast",
-  "focus-ring",
-  "graph-node-active",
-] as const;
+/**
+ * Il **profilo** contro cui il cancello misura un fascio: quale motore, quali
+ * hook, quali ruoli, quali coppie di contrasto e quali token può ridichiarare
+ * la persona.
+ *
+ * Fin qui erano quattro costanti importate in cima al file, cioè un solo tema
+ * possibile per costruzione. Un profilo le tiene insieme perché insieme
+ * cambiano: una shell con un'altra anatomia ha altri hook **e** altri ruoli,
+ * e un cancello che ne aggiornasse metà accetterebbe pelli che non vestono
+ * niente. Di serie è `theme-2`, quello dello Scrittoio; un banco può
+ * dichiararne un altro e tornare indietro.
+ */
+export interface ThemeProfile {
+  readonly engine: string;
+  readonly hooks: readonly string[];
+  readonly requiredRoles: readonly string[];
+  readonly contrastPairs: readonly ContrastPair[];
+  readonly preferenceTokens: readonly string[];
+  /** Assente = il vocabolario comune, quello dei frammenti CSS. */
+  readonly vocabulary?: ThemeCssVocabulary;
+}
 
-export type PreferenceToken = (typeof PREFERENCE_TOKENS)[number];
+
+let profile: ThemeProfile = THEME_2_PROFILE;
+
+/** Il profilo in vigore: uno per finestra, deciso da chi compone la shell. */
+export function themeProfile(): ThemeProfile {
+  return profile;
+}
+
+/**
+ * Dichiara il profilo della shell. Rende il modo di tornare al precedente: un
+ * banco che monta due shell di seguito non deve ereditare il profilo dell'altra.
+ */
+export function declareThemeProfile(next: ThemeProfile): () => void {
+  const previous = profile;
+  profile = next;
+  return () => {
+    if (profile === next) profile = previous;
+  };
+}
 
 /** Forma non fidata letta dal bundle: il cancello controlla anche i literal. */
 export type ThemeBundleManifest = Omit<ThemeManifest, "engine" | "lights" | "motion"> & {
@@ -87,7 +110,6 @@ export type ThemeTroubleReporter = (trouble: ThemeTrouble) => void;
 
 /** L'ordine dichiarato della cascata. Le preferenze vengono dopo ogni pelle. */
 const ORDER: readonly Layer[] = ["caratteri", "foglio", "pelle", "preferenze", "snippets"];
-const PREFERENCE_ALLOWLIST = new Set<string>(PREFERENCE_TOKENS);
 
 /** Sostituisce uno strato e lo inserisce nel punto dichiarato della cascata. */
 function replace(text: string, layer: Layer): void {
@@ -197,8 +219,8 @@ function manifestReasons(manifest: ThemeBundleManifest, light: ThemeLight): stri
   if (manifest.id.trim() === "") reasons.push("manifest: id mancante");
   if (manifest.name.trim() === "") reasons.push("manifest: nome mancante");
   if (manifest.version.trim() === "") reasons.push("manifest: versione mancante");
-  if (manifest.engine !== THEME_ENGINE) {
-    reasons.push(`manifest: engine ${manifest.engine || "<vuoto>"} incompatibile, serve ${THEME_ENGINE}`);
+  if (manifest.engine !== profile.engine) {
+    reasons.push(`manifest: engine ${manifest.engine || "<vuoto>"} incompatibile, serve ${profile.engine}`);
   }
 
   const validLights = manifest.lights.filter((value) => value === "dark" || value === "light");
@@ -217,7 +239,7 @@ function manifestReasons(manifest: ThemeBundleManifest, light: ThemeLight): stri
   }
 
   const hasMotion = Object.prototype.hasOwnProperty.call(manifest, "motion");
-  const motionValues = !hasMotion && manifest.engine === THEME_ENGINE
+  const motionValues = !hasMotion && manifest.engine === profile.engine
     ? ["opacity", "transform"]
     : Array.isArray(manifest.motion) ? manifest.motion : [];
   const motion = new Set(motionValues);
@@ -240,7 +262,7 @@ function tokensOf(css: string): Record<string, string> {
 function contrastReasons(sheet: string): string[] {
   const tokens = tokensOf(sheet);
   const reasons: string[] = [];
-  for (const [ink, background, threshold, where] of THEME_CONTRAST_PAIRS) {
+  for (const [ink, background, threshold, where] of profile.contrastPairs) {
     const foreground = tokens[ink];
     const surface = tokens[background];
     if (foreground === undefined || surface === undefined) continue;
@@ -271,8 +293,9 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
 
   const policy = {
     assetNamespace: bundle.manifest.asset_namespace,
-    allowedHooks: HOOKS,
-    requiredRoles: REQUIRED_THEME_ROLES,
+    allowedHooks: profile.hooks,
+    requiredRoles: profile.requiredRoles,
+    vocabulary: profile.vocabulary,
   };
   if (typeof bundle.sheet === "string") {
     for (const violation of themeCssViolations(bundle.sheet, policy)) {
@@ -346,8 +369,9 @@ export function mount(text: string, layer: Exclude<Layer, "preferenze">): void {
 
 /** Serializza e monta il canale chiuso delle preferenze. */
 export function mountPreferences(tokens: Readonly<Record<string, string>>): void {
+  const allowed = new Set<string>(profile.preferenceTokens);
   for (const [token, value] of Object.entries(tokens)) {
-    if (!PREFERENCE_ALLOWLIST.has(token)) {
+    if (!allowed.has(token)) {
       throw new Error(`il token --${token} non è una preferenza ammessa`);
     }
     if (value.trim() === "" || /[;{}\n\r]/.test(value)) {
@@ -355,7 +379,7 @@ export function mountPreferences(tokens: Readonly<Record<string, string>>): void
     }
   }
 
-  const declarations = PREFERENCE_TOKENS
+  const declarations = profile.preferenceTokens
     .filter((token) => Object.prototype.hasOwnProperty.call(tokens, token))
     .map((token) => `  --${token}: ${tokens[token]};`);
   replace([":root {", ...declarations, "}", ""].join("\n"), "preferenze");
@@ -379,6 +403,8 @@ export interface MirroredTheme {
   readonly light: string;
   readonly contrast: string;
   readonly layers: readonly { readonly layer: Layer; readonly text: string }[];
+  /** Le scelte del tema scritte sulla radice (`data-opt-*`, `--opt-*`). */
+  readonly options?: MirroredOptions;
 }
 
 export function mountedTheme(): MirroredTheme {
@@ -391,6 +417,7 @@ export function mountedTheme(): MirroredTheme {
     light: document.documentElement.dataset.theme ?? "",
     contrast: document.documentElement.dataset.contrast ?? "",
     layers,
+    options: mountedThemeOptions(document.documentElement),
   };
 }
 
@@ -409,4 +436,5 @@ export function mountMirroredTheme(theme: MirroredTheme): void {
   }
   document.documentElement.dataset.theme = theme.light;
   document.documentElement.dataset.contrast = theme.contrast;
+  mountMirroredOptions(document.documentElement, theme.options);
 }

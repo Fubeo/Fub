@@ -6,10 +6,10 @@
 // il giorno che la si dimentica, un comando naviga e una view no.
 import type { CommandEffect, ViewUpdate } from "../host/contract";
 import { t } from "../i18n/strings";
-import { openDocument, openFromView, reveal, runEditorAction } from "../panels/document";
+import { openDocument, openFromView, reveal, runEditorAction } from "../state/document-controller";
 import { EDITOR_ACTION_NS, editorActionOf } from "../editors/core/editor-actions";
 import { state } from "../state/store";
-import { searchFor } from "../panels/search";
+import { searchFor } from "../state/search-port";
 import { notify } from "./notify";
 import { openPrimaryView } from "./primary-views";
 import { writeClipboardText } from "../platform/clipboard";

@@ -1,0 +1,422 @@
+// I gesti di scrittura della superficie ricca, come comandi ProseMirror, e il
+// catalogo che li nomina con gli id delle azioni dell'editor
+// (`editors/core/editor-actions.ts`).
+//
+// Gli id sono quelli che la barra di formattazione e la palette conoscono già
+// (`markdown.bold`, `markdown.heading.2`, `text.undo`): l'id nomina il gesto,
+// non la sintassi, e la superficie che lo esegue decide come. Qui un titolo è
+// un ruolo del paragrafo, il grassetto una marca; il documento ne fa stile o
+// formattazione diretta al salvataggio.
+//
+// Le regole di Word che contano per non perdere niente:
+//
+// - **a capo** divide il paragrafo e le sue proprietà vanno a tutte e due le
+//   metà; la sezione resta dopo la seconda, che finisce dove finiva lui. In
+//   fondo a un titolo il paragrafo nuovo è testo normale, e una voce d'elenco
+//   vuota esce dall'elenco;
+// - **unire** due paragrafi tiene le proprietà del primo; una sezione fra i
+//   due è un blocco a sé, e il Backspace la seleziona prima di toglierla.
+import { chainCommands, deleteSelection, joinBackward, joinForward, selectNodeBackward, selectNodeForward, toggleMark } from "prosemirror-commands";
+import { redo, redoDepth, undo, undoDepth } from "prosemirror-history";
+import type { MarkType, Node as PmNode, ResolvedPos } from "prosemirror-model";
+import { NodeSelection, Plugin, TextSelection, type Command, type EditorState } from "prosemirror-state";
+import { BODY, type Role } from "./projection";
+import { richSchema } from "./schema";
+
+const { para, row: rowType, cell: cellType, table: tableType, brk } = richSchema.nodes;
+
+/// I paragrafi toccati dalla selezione, con la loro posizione.
+function selectedParas(state: EditorState): { node: PmNode; pos: number }[] {
+  const out: { node: PmNode; pos: number }[] = [];
+  const { from, to } = state.selection;
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type === para) {
+      out.push({ node, pos });
+      return false;
+    }
+    return true;
+  });
+  return out;
+}
+
+function sameRole(a: Role, b: Role): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/// Il ruolo comune ai paragrafi selezionati, o `null` se sono diversi.
+export function selectedRole(state: EditorState): Role | null {
+  const paras = selectedParas(state);
+  if (paras.length === 0) return null;
+  const first = paras[0].node.attrs.role as Role;
+  return paras.every(({ node }) => sameRole(node.attrs.role as Role, first)) ? first : null;
+}
+
+/// Dà `role` ai paragrafi selezionati. `toggle`: se l'hanno già tutti, tornano
+/// testo normale.
+export function setRole(role: Role, toggle = false): Command {
+  return (state, dispatch) => {
+    const paras = selectedParas(state);
+    if (paras.length === 0) return false;
+    const current = selectedRole(state);
+    const next = toggle && current && sameRole(current, role) ? BODY : role;
+    if (paras.every(({ node }) => sameRole(node.attrs.role as Role, next))) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      for (const { node, pos } of paras) tr.setNodeMarkup(pos, null, { ...node.attrs, role: next });
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
+
+/// Sposta di `delta` il livello delle voci d'elenco selezionate (da 0 a 8).
+export function shiftListLevel(delta: number): Command {
+  return (state, dispatch) => {
+    const paras = selectedParas(state);
+    if (paras.length === 0) return false;
+    const changes: { node: PmNode; pos: number; role: Role }[] = [];
+    for (const { node, pos } of paras) {
+      const role = node.attrs.role as Role;
+      if (role.kind !== "list") return false;
+      const level = Math.min(8, Math.max(0, role.level + delta));
+      if (level !== role.level) changes.push({ node, pos, role: { ...role, level } });
+    }
+    if (changes.length === 0) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      for (const { node, pos, role } of changes) tr.setNodeMarkup(pos, null, { ...node.attrs, role });
+      dispatch(tr);
+    }
+    return true;
+  };
+}
+
+/// La marca è attiva su tutta la selezione (o nelle marche del cursore).
+export function markActive(state: EditorState, type: MarkType): boolean {
+  const { from, to, empty, $from } = state.selection;
+  if (empty) return !!type.isInSet(state.storedMarks ?? $from.marks());
+  let all = true;
+  let any = false;
+  state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isInline) return true;
+    if (node.type.name === "atom") return false;
+    any = true;
+    if (!type.isInSet(node.marks)) all = false;
+    return false;
+  });
+  return any && all;
+}
+
+/// Toglie la formattazione dei tratti selezionati: l'enfasi e le proprietà del
+/// tratto, che tornano quelle del paragrafo (come «Cancella formattazione» di
+/// Word). Il link resta: è contenuto, non aspetto.
+export const clearFormatting: Command = (state, dispatch) => {
+  const { from, to, empty } = state.selection;
+  const types = ["run", "b", "i", "u", "s", "h", "sup", "sub"].map((name) => richSchema.marks[name]);
+  if (empty) {
+    const marks = state.storedMarks ?? state.selection.$from.marks();
+    if (!marks.some((mark) => types.includes(mark.type))) return false;
+    if (dispatch) dispatch(state.tr.setStoredMarks(marks.filter((mark) => !types.includes(mark.type))));
+    return true;
+  }
+  let found = false;
+  state.doc.nodesBetween(from, to, (node) => {
+    if (node.isInline && node.marks.some((mark) => types.includes(mark.type))) found = true;
+    return !found;
+  });
+  if (!found) return false;
+  if (dispatch) {
+    const tr = state.tr;
+    for (const type of types) tr.removeMark(from, to, type);
+    dispatch(tr);
+  }
+  return true;
+};
+
+/// A capo dentro un paragrafo, con le regole di Word.
+export const splitParagraph: Command = (state, dispatch) => {
+  const { $from, $to } = state.selection;
+  if ($from.parent.type !== para || !$from.sameParent($to)) return false;
+  const paragraph = $from.parent;
+  const role = paragraph.attrs.role as Role;
+  if (paragraph.content.size === 0 && role.kind === "list") {
+    // Una voce vuota esce dall'elenco invece di farne un'altra.
+    if (dispatch) dispatch(state.tr.setNodeMarkup($from.before(), null, { ...paragraph.attrs, role: BODY }));
+    return true;
+  }
+  if (!dispatch) return true;
+  const tr = state.tr;
+  if (!state.selection.empty) tr.deleteSelection();
+  const $pos = tr.selection.$from;
+  const atEnd = $pos.parentOffset === $pos.parent.content.size;
+  const leavesHeading = atEnd && role.kind === "heading";
+  const marks = state.storedMarks ?? $pos.marks();
+  tr.split($pos.pos, 1, [{ type: para, attrs: { ...paragraph.attrs, role: leavesHeading ? BODY : role } }]);
+  // L'enfasi di un titolo viene dal suo stile: non segue nel testo normale.
+  if (!leavesHeading) tr.ensureMarks(marks.filter((mark) => mark.type.name !== "link"));
+  dispatch(tr.scrollIntoView());
+  return true;
+};
+
+/// Un a-capo dentro il paragrafo (Maiusc+Invio), un salto pagina (Mod+Invio).
+export function insertBreak(ch: "\n" | "\u000c"): Command {
+  return (state, dispatch) => {
+    const { $from } = state.selection;
+    if (!$from.parent.inlineContent) return false;
+    if (dispatch) {
+      const marks = (state.storedMarks ?? $from.marks()).filter((mark) => mark.type.name !== "link");
+      dispatch(state.tr.replaceSelectionWith(brk.create({ ch }, null, marks), false).scrollIntoView());
+    }
+    return true;
+  };
+}
+
+/// Inserisce una tabulazione dove sta il cursore.
+export const insertTab: Command = (state, dispatch) => {
+  if (!state.selection.$from.parent.inlineContent) return false;
+  if (dispatch) dispatch(state.tr.insertText("\t").scrollIntoView());
+  return true;
+};
+
+/// Il cursore in testa (o in fondo) a un paragrafo accanto a una sezione la
+/// seleziona: `joinBackward` toglierebbe un blocco atomico vicino senza
+/// mostrarlo, e una sezione porta impaginazione, intestazioni e piè di pagina.
+function selectSection(dir: -1 | 1): Command {
+  return (state, dispatch) => {
+    const { $head, empty } = state.selection;
+    if (!empty || !$head.parent.isTextblock) return false;
+    const atEdge = dir < 0 ? $head.parentOffset === 0 : $head.parentOffset === $head.parent.content.size;
+    if (!atEdge) return false;
+    const $cut = state.doc.resolve(dir < 0 ? $head.before() : $head.after());
+    const node = dir < 0 ? $cut.nodeBefore : $cut.nodeAfter;
+    if (node?.type !== richSchema.nodes.section) return false;
+    if (dispatch) {
+      const pos = dir < 0 ? $cut.pos - node.nodeSize : $cut.pos;
+      dispatch(state.tr.setSelection(NodeSelection.create(state.doc, pos)).scrollIntoView());
+    }
+    return true;
+  };
+}
+
+/// Backspace: cancella la selezione, seleziona una sezione prima invece di
+/// toglierla, unisce al paragrafo prima, oppure seleziona l'oggetto prima.
+export const backspace: Command = chainCommands(deleteSelection, selectSection(-1), joinBackward, selectNodeBackward);
+export const deleteForward: Command = chainCommands(deleteSelection, selectSection(1), joinForward, selectNodeForward);
+
+// ── Le righe di una tabella ──────────────────────────────────────────────────
+
+interface InRow {
+  readonly table: PmNode;
+  readonly tablePos: number;
+  readonly row: PmNode;
+  readonly rowIndex: number;
+  readonly rowPos: number;
+}
+
+function rowAt($pos: ResolvedPos): InRow | null {
+  for (let depth = $pos.depth; depth > 0; depth -= 1) {
+    if ($pos.node(depth).type === rowType && $pos.node(depth - 1).type === tableType) {
+      return {
+        table: $pos.node(depth - 1),
+        tablePos: $pos.before(depth - 1),
+        row: $pos.node(depth),
+        rowIndex: $pos.index(depth - 1),
+        rowPos: $pos.before(depth),
+      };
+    }
+  }
+  return null;
+}
+
+/// Una riga nuova come quella del cursore: stesse proprietà di riga e di
+/// cella (come «Inserisci riga» di Word), celle vuote.
+function emptyRowLike(row: PmNode): PmNode {
+  const cells: PmNode[] = [];
+  row.forEach((cell) => {
+    const first = cell.firstChild;
+    const attrs = first?.type === para ? { ...first.attrs, role: BODY } : undefined;
+    cells.push(cellType.create(cell.attrs, para.create(attrs)));
+  });
+  return rowType.create(row.attrs, cells);
+}
+
+export function insertRow(where: "before" | "after"): Command {
+  return (state, dispatch) => {
+    const at = rowAt(state.selection.$from);
+    if (!at) return false;
+    if (dispatch) {
+      const pos = where === "before" ? at.rowPos : at.rowPos + at.row.nodeSize;
+      const tr = state.tr.insert(pos, emptyRowLike(at.row));
+      dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(pos + 3))).scrollIntoView());
+    }
+    return true;
+  };
+}
+
+export function moveRow(delta: -1 | 1): Command {
+  return (state, dispatch) => {
+    const at = rowAt(state.selection.$from);
+    if (!at) return false;
+    const target = at.rowIndex + delta;
+    if (target < 0 || target >= at.table.childCount) return false;
+    if (dispatch) {
+      const other = at.table.child(target);
+      const offset = state.selection.from - at.rowPos;
+      const tr = state.tr;
+      if (delta < 0) {
+        const otherPos = at.rowPos - other.nodeSize;
+        tr.replaceWith(otherPos, at.rowPos + at.row.nodeSize, [at.row, other]);
+        tr.setSelection(TextSelection.near(tr.doc.resolve(otherPos + offset)));
+      } else {
+        const end = at.rowPos + at.row.nodeSize + other.nodeSize;
+        tr.replaceWith(at.rowPos, end, [other, at.row]);
+        tr.setSelection(TextSelection.near(tr.doc.resolve(at.rowPos + other.nodeSize + offset)));
+      }
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
+
+/// Toglie la riga del cursore; l'ultima no, perché una tabella senza righe
+/// non si scrive: si toglie la tabella intera, apposta.
+export const deleteRow: Command = (state, dispatch) => {
+  const at = rowAt(state.selection.$from);
+  if (!at || at.table.childCount <= 1) return false;
+  if (dispatch) {
+    const tr = state.tr.delete(at.rowPos, at.rowPos + at.row.nodeSize);
+    const near = Math.min(at.rowPos, tr.doc.content.size);
+    dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(near), -1)).scrollIntoView());
+  }
+  return true;
+};
+
+/// Ridà un `k` alle righe e alle celle che ProseMirror ha creato riparando
+/// una tabella: quello della riga accanto, e per una cella quello della cella
+/// alla stessa colonna nella riga accanto, o della cella accanto. Una tabella
+/// non ha mai righe senza proprietà: le avrebbe il file, e qui non si
+/// inventano.
+export const fillTableKeys = new Plugin({
+  appendTransaction(transactions, _old, state) {
+    if (!transactions.some((tr) => tr.docChanged)) return null;
+    const tr = state.tr;
+    state.doc.descendants((node, pos) => {
+      if (node.type !== tableType) return node.isBlock;
+      const rows: PmNode[] = [];
+      node.forEach((row) => rows.push(row));
+      const rowKey = (i: number): string | null => {
+        for (let d = 1; d < rows.length; d += 1) {
+          for (const j of [i - d, i + d]) {
+            const k = rows[j]?.attrs.k as string | null | undefined;
+            if (k) return k;
+          }
+        }
+        return null;
+      };
+      const cellKey = (i: number, c: number): string | null => {
+        for (let d = 1; d < rows.length; d += 1) {
+          for (const j of [i - d, i + d]) {
+            const row = rows[j];
+            const k = row && c < row.childCount ? (row.child(c).attrs.k as string | null) : null;
+            if (k) return k;
+          }
+        }
+        const row = rows[i];
+        for (let d = 1; d < row.childCount; d += 1) {
+          for (const j of [c - d, c + d]) {
+            const k = j >= 0 && j < row.childCount ? (row.child(j).attrs.k as string | null) : null;
+            if (k) return k;
+          }
+        }
+        return null;
+      };
+      let rowPos = pos + 1;
+      rows.forEach((row, i) => {
+        if (!row.attrs.k) {
+          const k = rowKey(i);
+          if (k) tr.setNodeAttribute(rowPos, "k", k);
+        }
+        let cellPos = rowPos + 1;
+        row.forEach((cell, _offset, c) => {
+          if (!cell.attrs.k) {
+            const k = cellKey(i, c);
+            if (k) tr.setNodeAttribute(cellPos, "k", k);
+          }
+          cellPos += cell.nodeSize;
+        });
+        rowPos += row.nodeSize;
+      });
+      return false;
+    });
+    return tr.docChanged ? tr.setMeta("addToHistory", false) : null;
+  },
+});
+
+// ── Il catalogo ──────────────────────────────────────────────────────────────
+
+export interface RichAction {
+  readonly run: Command;
+  /// Per un'azione che commuta: è già applicata.
+  readonly active?: (state: EditorState) => boolean;
+  readonly chord?: string;
+}
+
+function roleAction(role: Role, active: (r: Role | null) => boolean, chord?: string): RichAction {
+  return { run: setRole(role, role.kind !== "body"), active: (state) => active(selectedRole(state)), chord };
+}
+
+function heading(level: number): RichAction {
+  return roleAction({ kind: "heading", level }, (role) => role?.kind === "heading" && role.level === level);
+}
+
+function mark(name: string, chord?: string): RichAction {
+  const type = richSchema.marks[name];
+  return { run: toggleMark(type), active: (state) => markActive(state, type), chord };
+}
+
+function list(ordered: boolean, chord: string): RichAction {
+  return roleAction(
+    { kind: "list", ordered, level: 0 },
+    (role) => role?.kind === "list" && role.ordered === ordered,
+    chord,
+  );
+}
+
+/// Id → azione. Gli accordi sono quelli del profilo Markdown per lo stesso id.
+export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, RichAction>([
+  ["text.undo", { run: undo, chord: "Mod-z" }],
+  ["text.redo", { run: redo, chord: "Mod-Shift-z" }],
+  ["markdown.paragraph", roleAction(BODY, (role) => role?.kind === "body")],
+  ["markdown.heading.1", heading(1)],
+  ["markdown.heading.2", heading(2)],
+  ["markdown.heading.3", heading(3)],
+  ["markdown.heading.4", heading(4)],
+  ["markdown.heading.5", heading(5)],
+  ["markdown.heading.6", heading(6)],
+  ["markdown.bold", mark("b", "Mod-b")],
+  ["markdown.italic", mark("i", "Mod-i")],
+  ["markdown.strikethrough", mark("s", "Mod-Shift-x")],
+  ["markdown.highlight", mark("h")],
+  ["markdown.clear", { run: clearFormatting }],
+  ["markdown.list.bullet", list(false, "Mod-Shift-8")],
+  ["markdown.list.ordered", list(true, "Mod-Shift-7")],
+  ["markdown.list.indent", { run: shiftListLevel(1), chord: "Tab" }],
+  ["markdown.list.dedent", { run: shiftListLevel(-1), chord: "Shift-Tab" }],
+  ["markdown.quote", roleAction({ kind: "quote" }, (role) => role?.kind === "quote")],
+  ["markdown.table.row.before", { run: insertRow("before"), chord: "Mod-Alt-Shift-ArrowUp" }],
+  ["markdown.table.row.after", { run: insertRow("after"), chord: "Mod-Alt-Shift-ArrowDown" }],
+  ["markdown.table.row.up", { run: moveRow(-1), chord: "Mod-Alt-ArrowUp" }],
+  ["markdown.table.row.down", { run: moveRow(1), chord: "Mod-Alt-ArrowDown" }],
+  ["markdown.table.row.delete", { run: deleteRow, chord: "Mod-Alt-Backspace" }],
+]);
+
+/// Lo stato di un'azione: si può eseguire adesso, ed è già applicata.
+export function richActionState(id: string, state: EditorState): { enabled: boolean; active: boolean | null } {
+  const action = RICH_ACTIONS.get(id);
+  if (!action) return { enabled: false, active: null };
+  if (id === "text.undo") return { enabled: undoDepth(state) > 0, active: null };
+  if (id === "text.redo") return { enabled: redoDepth(state) > 0, active: null };
+  const active = action.active ? action.active(state) : null;
+  // Un'azione che commuta ed è attiva si può sempre togliere.
+  return { enabled: active === true || action.run(state), active };
+}

@@ -210,5 +210,5 @@ fn the_emission_is_deterministic() {
 
 #[test]
 fn a_variant_rename_is_the_json_name() {
-    assert!(render().contains("export type ThemeEngine = \"theme-1\";"));
+    assert!(render().contains("export type ThemeEngine = \"theme-1\" | \"theme-2\";"));
 }

@@ -34,7 +34,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
-import css from "../theme/serie/skin.css?raw";
+import css from "../theme/scrittoio/skin.css?raw";
 import { accessibleName, formatIssues, checkAccessibility } from "./a11y-check";
 import { activatable, trapFocus, notActivatable } from "./a11y";
 import { mountTree, unmountTree } from "./node";

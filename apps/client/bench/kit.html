@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kit — banco di Fub</title>
+    <!--
+      La terza pagina del banco: il catalogo delle primitive di `src/kit/`,
+      vestite dalla serie Scrittoio. Non è la shell — non c'è nessun
+      `bootstrap` qui dentro — per la ragione di `catalog.html`: un catalogo
+      non ha uno stato da preparare, ha un elenco da esaurire.
+
+      Ciò che è identico alla shell è ciò che conta: gli stessi strati montati
+      dallo stesso caricatore, e le primitive vere. Qui sotto non c'è markup dei
+      campioni: c'è un contenitore vuoto, e lo riempie `kit.ts`.
+
+      `structure.css` ferma lo scorrimento del `body` (la shell non scorre): la
+      pagina scorre nel suo contenitore, che per questo è alto quanto la
+      finestra.
+
+      Il CSS di questa pagina veste la **cornice** — le griglie, le didascalie,
+      i piani su cui i campioni posano — e mai i campioni: se una didascalia e
+      un campione si somigliassero, il catalogo starebbe mostrando sé stesso.
+      È scritto coi token del tema, così la cornice segue la luce.
+    -->
+    <style>
+      .banco-kit {
+        box-sizing: border-box;
+        height: 100%;
+        overflow: auto;
+        padding: var(--space-5) var(--space-7) var(--space-7);
+      }
+      .testata {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-4);
+        margin-bottom: var(--space-5);
+        padding-bottom: var(--space-3);
+        border-bottom: 1px solid var(--border);
+      }
+      .testata h1 {
+        margin: 0;
+        font-size: var(--text-xl);
+        font-weight: var(--weight-bold);
+      }
+      .testata .luce,
+      .didascalia {
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+      }
+      .testata .luce {
+        letter-spacing: var(--tracking-caps);
+        text-transform: uppercase;
+      }
+      /* Due colonne di sezioni, e sotto ciò che vuole tutta la larghezza. */
+      .tavola {
+        display: grid;
+        grid-template-columns: 1fr 456px;
+        align-items: start;
+        gap: var(--space-7);
+      }
+      .colonna {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-7);
+        min-width: 0;
+      }
+      .sezione {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        min-width: 0;
+      }
+      .sezione > h2 {
+        margin: 0;
+        color: var(--muted);
+        font-size: var(--text-sm);
+        font-weight: var(--weight-medium);
+        letter-spacing: var(--tracking-caps);
+        text-transform: uppercase;
+      }
+      .fila {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: var(--space-5) var(--space-6);
+      }
+      .cella {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+      .cella-larga {
+        flex: 1 1 0;
+      }
+      /* La tavola degli stati: una riga per variante, una colonna per stato. */
+      .stati {
+        display: grid;
+        grid-template-columns: 84px repeat(6, 88px);
+        align-items: center;
+        justify-content: start;
+        justify-items: start;
+        gap: var(--space-4) var(--space-5);
+      }
+      .campi {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        align-items: end;
+        gap: var(--space-5) var(--space-6);
+      }
+      /* Il piano dei rialzi: una lista vive in un menu o in una tavolozza. */
+      .vassoio {
+        box-sizing: border-box;
+        min-width: 176px;
+        padding: var(--space-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-menu);
+        background: var(--bg-elev);
+      }
+      .pannello {
+        padding: var(--space-4) var(--space-2);
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+      .affiancate {
+        display: flex;
+        gap: var(--space-5);
+      }
+      /* I riquadri sono fogli sul piano, e il divisore è lo spazio fra loro. */
+      .riquadri {
+        display: flex;
+        width: 132px;
+        height: 64px;
+      }
+      .riquadri.pila {
+        flex-direction: column;
+      }
+      .riquadro {
+        box-sizing: border-box;
+        flex: none;
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-chip);
+        background: var(--sheet);
+        color: var(--muted);
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+      .riquadro.resto {
+        flex: 1 1 0;
+      }
+      .maniglia {
+        flex: none;
+        width: 10px;
+      }
+      .pila > .maniglia {
+        width: auto;
+        height: 10px;
+      }
+      .rimando {
+        border-radius: var(--radius-xs);
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .scheda p {
+        margin: var(--space-2) 0 0;
+        color: var(--muted);
+      }
+      .riquadro-libero {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+        width: 240px;
+        padding: var(--space-4);
+      }
+      .riquadro-libero .fila {
+        justify-content: flex-end;
+        gap: var(--space-4);
+      }
+      @media (max-width: 960px) {
+        .tavola {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main id="kit" class="banco-kit"></main>
+    <script type="module" src="./kit.ts"></script>
+  </body>
+</html>

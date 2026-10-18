@@ -494,7 +494,7 @@ export function inkTint(p: DiagramPalette, color: string): string {
 // Caratteri.
 // ---------------------------------------------------------------------------
 
-/// Le famiglie, come le dichiara `theme/serie/fonts.css`, con il ripiego del
+/// Le famiglie, come le dichiara `theme/scrittoio/fonts.css`, con il ripiego del
 /// sistema in coda; il file è quello che la shell serve già.
 export const DIAGRAM_FONTS: Record<DiagramFont, { family: string; stack: string; file: string; size: number }> = {
   inter: {

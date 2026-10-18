@@ -26,6 +26,7 @@ test usano un fake.
 | impostazioni | schema, valori e scrittura |
 | tema | manifest e artefatti della skin |
 | eventi | ascolto del canale tipizzato |
+| sessione live | avviare, interrogare e fermare la sessione di un disegno, rispondere allo scrittore |
 
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
@@ -78,6 +79,49 @@ battuta attraversa IPC: la shell pubblica una sola operazione al commit.
 Provider nativo e proxy WASM devono osservare la stessa famiglia/versione,
 limiti, fallback ed errori.
 
+
+## Sessione live
+
+Un tablet scrive su un disegno aperto in una finestra. Il protocollo e la
+composizione nell'app sono in [Sessione live](live-session.md); qui c'è il
+confine con la shell.
+
+| Comando | Cosa fa |
+|---|---|
+| `live_start` | avvia la sessione di un documento e apre il suo canale di eventi |
+| `live_pairing` | il QR in corso, o con `renew` uno nuovo |
+| `live_send` | manda allo scrittore `ack`, `nack`, `ops` o `snapshot` |
+| `live_status` | stato, scrittore, commit in attesa e contatori |
+| `live_stop` | chiude con un motivo e restituisce i commit senza risposta |
+
+`live_start` riceve il documento, lo snapshot iniziale e, se la shell lo
+sceglie, un indirizzo. Restituisce la sessione, il primo QR e gli indirizzi
+privati delle interfacce attive, quello della rotta predefinita per primo.
+Senza indirizzo la sessione ascolta su quello della rotta predefinita.
+
+Gli eventi arrivano su un `Channel` di Tauri che la shell passa a
+`live_start`: ogni messaggio è un gruppo di eventi, nell'ordine della
+sessione, e dopo `ended` il canale si chiude. Il canale non è autorevole:
+i commit senza risposta tornano da `live_status` e da `live_stop`.
+
+I tipi usano i nomi in camelCase e il tipo in `t`; i contatori del protocollo
+sono `u64` e viaggiano come stringhe. La shell li ha in `contract.ts` con il
+prefisso `Live`, e il fake host simula la sessione con `liveEmit`.
+
+I comandi li serve solo l'app: in un browser `api.liveSupported()` è falso e
+la shell non offre la sessione. Il fake host li serve se riceve una rete con
+`live`. Il lato del PC è in [Disegni](../product/drawing-live.md).
+
+| Errore | Quando |
+|---|---|
+| `not_found` | sessione sconosciuta o di un'altra finestra, risposta a un commit che non è in attesa, indirizzo non disponibile |
+| `already_exists` | il documento ha già una sessione, QR nuovo con lo scrittore collegato |
+| `cancelled` | messaggio o QR nuovo dopo la fine della sessione |
+| `conflict` | un `seq` che torna indietro |
+| `bad_args` | documento o snapshot iniziale non validi, messaggio oltre i limiti, snapshot oltre 20 MiB |
+| `unserved` | nessuna interfaccia attiva ha un indirizzo IPv4 privato |
+| `io` | interfacce di rete illeggibili, porta occupata |
+| `internal` | certificato, generatore casuale o QR non disponibili |
 
 ## Tipi principali
 
@@ -197,9 +241,48 @@ uno spegne il pulsante di chi lo nomina. La superficie Markdown conosce:
   `.column.right`, `.column.delete`, `.sort.ascending`, `.sort.descending`
   (tutti col prefisso `markdown.table`).
 
+La superficie ricca dei documenti di videoscrittura conosce un sottoinsieme
+degli stessi id, con lo stesso significato: `text.undo`, `text.redo`,
+`markdown.paragraph`, `markdown.heading.1` … `.6`, `markdown.bold`,
+`markdown.italic`, `markdown.strikethrough`, `markdown.highlight`,
+`markdown.clear`, `markdown.list.bullet`, `markdown.list.ordered`,
+`markdown.list.indent`, `markdown.list.dedent`, `markdown.quote` e
+`markdown.table.row.before`, `.row.after`, `.row.up`, `.row.down`,
+`.row.delete`. Il prefisso è storico: l'id nomina il gesto, non il formato.
+
 Icona, gruppo e menu a tendina di ogni azione sono della shell
 (`panels/format-bar.ts`), come le icone della rail: il contratto porta soltanto
 l'id, il titolo e la descrizione del comando.
+
+## Documenti di videoscrittura
+
+Un documento di un formato di `fub-format-rich` (`docx`, `odt`, `rtf` e
+`doc`, quest'ultimo per `.doc` e `.dot`, con la feature `rich` di `fub-host`)
+passa dalle stesse porte dei documenti, senza una porta in più:
+
+- `read_document` restituisce in `text` la **proiezione** del file: JSON
+  chiuso e versionato (`"format": "fub-rich"`, `"version": 1`), con
+  `format_id` `"docx"` e `source_kind` `"bytes"`. `revision` è quella dei
+  byte del file, non del testo restituito;
+- `write_document` riceve una proiezione in `source` e la `base` letta
+  insieme a essa. L'host riparte dai byte del file a quella revisione, salva
+  con il codec e scrive con il CAS della stessa revisione. Una proiezione che
+  descrive il file com'è non scrive e restituisce la revisione corrente; senza
+  un file, la proiezione crea un documento nuovo;
+- `save_draft` conserva la proiezione come testo del buffer, come per ogni
+  altro documento.
+
+Un documento che il codec o la proiezione non riportano identico si apre con
+`"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
+`projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
+motivo. `import` è il motivo di ogni documento `rtf` e `doc`, e di un `odt`
+che il codec OpenDocument non sa rappresentare: lo legge un importatore che non
+riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
+(`host.rich.no_writer`); un `odt` sì.
+Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
+La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
+fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla
+shell nei due versi (`crates/fub-format-rich/tests/ts_projection.rs`).
 
 ## Percorsi
 

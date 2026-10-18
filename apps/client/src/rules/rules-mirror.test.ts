@@ -5,7 +5,9 @@ import {
   nameFault,
   normalizedName,
   pageName,
+  relativeRef,
   resolutionKey,
+  resolveAgainst,
   scanTags,
   taskChecked,
   topicMatches,
@@ -44,6 +46,12 @@ const fixture = cases as unknown as Record<string, Record<string, unknown>[]>;
 const HANDLERS: Record<string, (c: Record<string, never>) => unknown> = {
   page_name: (c) => pageName(c.id),
   resolution_key: (c) => resolutionKey(c.s),
+  // Il riferimento relativo di un link: la shell lo scrive quando
+  // un disegno si collega a una nota, il kernel quando lo riscrive.
+  relative_ref: (c) => relativeRef(c.from, c.to),
+  // Il path del vault di un riferimento: l'immagine di un disegno incollata
+  // in un altro si riscrive da lì.
+  resolve_against: (c) => resolveAgainst(c.src, c.raw),
   // La politica dei nomi (§15.5). `null` = il nome si può usare; Rust manda
   // `null` per `Ok(())`, quindi la gemella deve rispondere `null` e non
   // `undefined`.

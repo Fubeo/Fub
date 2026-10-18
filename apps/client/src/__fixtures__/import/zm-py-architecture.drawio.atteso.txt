@@ -1,0 +1,204 @@
+File: zm-py-architecture.drawio
+Oggetti: 91 (forme 38, testi 20, linee 33, tratti 0, immagini 0)
+Livelli: 1, tavole: 4
+Note: nessuna
+
+Livello «Livello 1»
+  Testo «zm-py Package Architecture (v0.5.5.dev13)»
+  Gruppo, 3 oggetti
+    Rettangolo «zoneminder/zm.py ZoneMinder (client) ───────────────── logi…»
+    Testo «zoneminder/zm.py ZoneMinder (client) ───────────────── logi…»
+    Linea
+  Gruppo, 3 oggetti
+    Rettangolo «zoneminder/monitor.py Monitor MonitorState (enum) ControlTy…»
+    Testo «zoneminder/monitor.py Monitor MonitorState (enum) ControlTy…»
+    Linea
+  Gruppo, 3 oggetti
+    Rettangolo «zoneminder/server.py Server ───────────────── id / name / h…»
+    Testo «zoneminder/server.py Server ───────────────── id / name / h…»
+    Linea
+  Gruppo, 3 oggetti
+    Rettangolo «zoneminder/run_state.py RunState ───────────────── id / nam…»
+    Testo «zoneminder/run_state.py RunState ───────────────── id / nam…»
+    Linea
+  Gruppo, 3 oggetti
+    Rettangolo «zoneminder/exceptions.py ZoneminderError (base) ├── CommErr…»
+    Testo «zoneminder/exceptions.py ZoneminderError (base) ├── CommErr…»
+    Linea
+  Gruppo, 2 oggetti
+    Rettangolo «requests.Session (external dependency) Connection pooling C…»
+    Testo «requests.Session (external dependency) Connection pooling C…»
+  Connettore «imports Monitor, TimePeriod, get_api_alarm_states» da «zoneminder/zm.py ZoneMinder (client) ───────────────── logi…» a «zoneminder/monitor.py Monitor MonitorState (enum) ControlTy…»
+  Testo «imports Monitor, TimePeriod, get_api_alarm_states»
+  Connettore «imports Server» da «zoneminder/zm.py ZoneMinder (client) ───────────────── logi…» a «zoneminder/server.py Server ───────────────── id / name / h…»
+  Testo «imports Server»
+  Connettore «imports RunState» da «zoneminder/zm.py ZoneMinder (client) ───────────────── logi…» a «zoneminder/run_state.py RunState ───────────────── id / nam…»
+  Testo «imports RunState»
+  Connettore «imports ControlTypeError, MonitorControlTypeError» da «zoneminder/monitor.py Monitor MonitorState (enum) ControlTy…» a «zoneminder/exceptions.py ZoneminderError (base) ├── CommErr…»
+  Testo «imports ControlTypeError, MonitorControlTypeError»
+  Connettore «uses» da «zoneminder/zm.py ZoneMinder (client) ───────────────── logi…» a «requests.Session (external dependency) Connection pooling C…»
+  Testo «uses»
+  Testo «Legend ─── Solid arrow: import dependency - - - Dashed arro…»
+  Testo «zm-py Class Relationships»
+  Gruppo, 4 oggetti
+    Rettangolo «ZoneMinder - _server_url: str - _zms_url: str - _session: r…»
+    Testo «ZoneMinder - _server_url: str - _zms_url: str - _session: r…»
+    Linea
+    Linea
+  Gruppo, 4 oggetti
+    Rettangolo «Monitor - _client: ZoneMinder - _raw_result: dict - _scale:…»
+    Testo «Monitor - _client: ZoneMinder - _raw_result: dict - _scale:…»
+    Linea
+    Linea
+  Gruppo, 4 oggetti
+    Rettangolo «Server - _server_id: int - _name: str - _hostname: str - _p…»
+    Testo «Server - _server_id: int - _name: str - _hostname: str - _p…»
+    Linea
+    Linea
+  Gruppo, 4 oggetti
+    Rettangolo «RunState - _client: ZoneMinder - _state_id: int - _name: st…»
+    Testo «RunState - _client: ZoneMinder - _state_id: int - _name: st…»
+    Linea
+    Linea
+  Gruppo, 3 oggetti
+    Rettangolo «Enums MonitorState: None | Monitor | Modect | Record | Moco…»
+    Testo «Enums MonitorState: None | Monitor | Modect | Record | Moco…»
+    Linea
+  Gruppo, 3 oggetti
+    Rettangolo «Exceptions ZoneminderError (base) ├── CommError ├── LoginEr…»
+    Testo «Exceptions ZoneminderError (base) ├── CommError ├── LoginEr…»
+    Linea
+  Connettore «creates *» da «ZoneMinder - _server_url: str - _zms_url: str - _session: r…» a «Monitor - _client: ZoneMinder - _raw_result: dict - _scale:…»
+  Testo «creates *»
+  Connettore «creates *» da «ZoneMinder - _server_url: str - _zms_url: str - _session: r…» a «Server - _server_id: int - _name: str - _hostname: str - _p…»
+  Testo «creates *»
+  Connettore «creates *» da «ZoneMinder - _server_url: str - _zms_url: str - _session: r…» a «RunState - _client: ZoneMinder - _state_id: int - _name: st…»
+  Testo «creates *»
+  Connettore «_client ref» da «Monitor - _client: ZoneMinder - _raw_result: dict - _scale:…» a «ZoneMinder - _server_url: str - _zms_url: str - _session: r…»
+  Testo «_client ref»
+  Connettore «_client ref» da «RunState - _client: ZoneMinder - _state_id: int - _name: st…» a «ZoneMinder - _server_url: str - _zms_url: str - _session: r…»
+  Testo «_client ref»
+  Connettore «uses» da «Monitor - _client: ZoneMinder - _raw_result: dict - _scale:…» a «Enums MonitorState: None | Monitor | Modect | Record | Moco…»
+  Testo «uses»
+  Connettore «raises» da «Monitor - _client: ZoneMinder - _raw_result: dict - _scale:…» a «Exceptions ZoneminderError (base) ├── CommError ├── LoginEr…»
+  Testo «raises»
+  Testo «zm-py Auth & Request Flow»
+  Gruppo «login()», 2 oggetti
+    Rettangolo «login()»
+    Testo «login()»
+  Gruppo «Clear stale JWT token _auth_token = None», 2 oggetti
+    Rettangolo «Clear stale JWT token _auth_token = None»
+    Testo «Clear stale JWT token _auth_token = None»
+  Gruppo «POST api/host/login.json», 2 oggetti
+    Rettangolo «POST api/host/login.json»
+    Testo «POST api/host/login.json»
+  Gruppo «access_token in response?», 2 oggetti
+    Rombo «access_token in response?»
+    Testo «access_token in response?»
+  Gruppo «Store token Store version Resolve alarm states return True», 2 oggetti
+    Rettangolo «Store token Store version Resolve alarm states return True»
+    Testo «Store token Store version Resolve alarm states return True»
+  Gruppo «_legacy_auth()», 2 oggetti
+    Rettangolo «_legacy_auth()»
+    Testo «_legacy_auth()»
+  Gruppo «POST index.php (session cookies stored)», 2 oggetti
+    Rettangolo «POST index.php (session cookies stored)»
+    Testo «POST index.php (session cookies stored)»
+  Gruppo «GET api/host/getVersion.json (verify cookies work)», 2 oggetti
+    Rettangolo «GET api/host/getVersion.json (verify cookies work)»
+    Testo «GET api/host/getVersion.json (verify cookies work)»
+  Gruppo «Store version Resolve alarm states return True/False», 2 oggetti
+    Rettangolo «Store version Resolve alarm states return True/False»
+    Testo «Store version Resolve alarm states return True/False»
+  Connettore da «login()» a «Clear stale JWT token _auth_token = None»
+  Connettore da «Clear stale JWT token _auth_token = None» a «POST api/host/login.json»
+  Connettore da «POST api/host/login.json» a «access_token in response?»
+  Connettore «Yes» da «access_token in response?» a «Store token Store version Resolve alarm states return True»
+  Testo «Yes»
+  Connettore «No (KeyError)» da «access_token in response?» a «_legacy_auth()»
+  Testo «No (KeyError)»
+  Connettore da «_legacy_auth()» a «POST index.php (session cookies stored)»
+  Connettore da «POST index.php (session cookies stored)» a «GET api/host/getVersion.json (verify cookies work)»
+  Connettore da «GET api/host/getVersion.json (verify cookies work)» a «Store version Resolve alarm states return True/False»
+  Testo «_zm_request() Retry Flow»
+  Gruppo «API call (GET or POST)», 2 oggetti
+    Rettangolo «API call (GET or POST)»
+    Testo «API call (GET or POST)»
+  Gruppo «Send request token=... if JWT auth», 2 oggetti
+    Rettangolo «Send request token=... if JWT auth»
+    Testo «Send request token=... if JWT auth»
+  Gruppo «req.ok?», 2 oggetti
+    Rombo «req.ok?»
+    Testo «req.ok?»
+  Gruppo «return req.json()», 2 oggetti
+    Rettangolo «return req.json()»
+    Testo «return req.json()»
+  Gruppo «Last attempt?», 2 oggetti
+    Rombo «Last attempt?»
+    Testo «Last attempt?»
+  Gruppo «login() (re-authenticate)», 2 oggetti
+    Rettangolo «login() (re-authenticate)»
+    Testo «login() (re-authenticate)»
+  Gruppo «Log error return {}», 2 oggetti
+    Rettangolo «Log error return {}»
+    Testo «Log error return {}»
+  Connettore da «API call (GET or POST)» a «Send request token=... if JWT auth»
+  Connettore da «Send request token=... if JWT auth» a «req.ok?»
+  Connettore «Yes» da «req.ok?» a «return req.json()»
+  Testo «Yes»
+  Connettore «No» da «req.ok?» a «Last attempt?»
+  Testo «No»
+  Connettore «No» da «Last attempt?» a «login() (re-authenticate)»
+  Testo «No»
+  Connettore «retry» da «login() (re-authenticate)» a «Send request token=... if JWT auth»
+  Testo «retry»
+  Connettore «Yes» da «Last attempt?» a «Log error return {}»
+  Testo «Yes»
+  Gruppo «Token injection: JWT: ?token=… query param Legacy: session…», 2 oggetti
+    Rettangolo «Token injection: JWT: ?token=… query param Legacy: session…»
+    Testo «Token injection: JWT: ?token=… query param Legacy: session…»
+  Testo «Multi-Server URL Routing»
+  Gruppo «Monitor raw_monitor["ServerId"]», 2 oggetti
+    Rettangolo «Monitor raw_monitor["ServerId"]»
+    Testo «Monitor raw_monitor["ServerId"]»
+  Gruppo «ServerId?», 2 oggetti
+    Rombo «ServerId?»
+    Testo «ServerId?»
+  Gruppo «Use main client URL self._zms_url self._server_url», 2 oggetti
+    Rettangolo «Use main client URL self._zms_url self._server_url»
+    Testo «Use main client URL self._zms_url self._server_url»
+  Gruppo «_ensure_servers() Lazy-fetch and cache {server_id: Server}», 2 oggetti
+    Rettangolo «_ensure_servers() Lazy-fetch and cache {server_id: Server}»
+    Testo «_ensure_servers() Lazy-fetch and cache {server_id: Server}»
+  Gruppo «Server found in cache?», 2 oggetti
+    Rombo «Server found in cache?»
+    Testo «Server found in cache?»
+  Gruppo «Use server-specific URL server.zms_url server.base_url», 2 oggetti
+    Rettangolo «Use server-specific URL server.zms_url server.base_url»
+    Testo «Use server-specific URL server.zms_url server.base_url»
+  Gruppo «Log warning Fall back to main URL», 2 oggetti
+    Rettangolo «Log warning Fall back to main URL»
+    Testo «Log warning Fall back to main URL»
+  Connettore da «Monitor raw_monitor["ServerId"]» a «ServerId?»
+  Connettore «0 or missing» da «ServerId?» a «Use main client URL self._zms_url self._server_url»
+  Testo «0 or missing»
+  Connettore «> 0» da «ServerId?» a «_ensure_servers() Lazy-fetch and cache {server_id: Server}»
+  Testo «> 0»
+  Connettore da «_ensure_servers() Lazy-fetch and cache {server_id: Server}» a «Server found in cache?»
+  Connettore «Yes» da «Server found in cache?» a «Use server-specific URL server.zms_url server.base_url»
+  Testo «Yes»
+  Connettore «No (unknown)» da «Server found in cache?» a «Log warning Fall back to main URL»
+  Testo «No (unknown)»
+  Gruppo, 3 oggetti
+    Rettangolo
+    Testo «GET api/servers.json Called once, lazily, on first monitor…»
+    Linea
+  Gruppo, 3 oggetti
+    Rettangolo
+    Testo «URL Routing Used By: • get_zms_url_for_monitor() → Monitor…»
+    Linea
+
+Tavola «Package Architecture»
+Tavola «Class Relationships»
+Tavola «Auth & Request Flow»
+Tavola «Multi-Server URL Routing»

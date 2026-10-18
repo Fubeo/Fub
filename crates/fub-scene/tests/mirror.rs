@@ -1,0 +1,3467 @@
+//! Le fixture della scena per la superficie TypeScript: SVG generati
+//! qui, ognuno con ciò che Rust ne legge, perché i due lettori classifichino
+//! allo stesso modo.
+//!
+//! Rigenera con `UPDATE_MIRROR=1 cargo test -p fub-scene --test mirror`.
+//! Senza la variabile il test confronta i file byte per byte e fallisce alla
+//! prima differenza.
+//!
+//! In `apps/client/src/__fixtures__/scene/`:
+//!
+//! - `sparse`: un disegno FubDraw in forma canonica (§7), con ogni ruolo di
+//!   §4 e ogni forma sintetica di §6, tratti che si ridisegnano e tratti che
+//!   no, un blocco estraneo dentro un gruppo, un livello bloccato e nascosto,
+//!   e dentro un livello un gruppo bloccato con una forma nascosta, un
+//!   collegamento e una forma col loro `title`. Una lunghezza in pollici
+//!   resta com'è, come FubDraw copia i valori che non tocca;
+//! - `foreign`: un SVG di un altro programma, senza `fub:version`, con un
+//!   esempio di ogni motivo per cui un elemento è estraneo, contenuto attivo,
+//!   prologo ed epilogo;
+//! - `crlf-bom`: un disegno FubDraw con BOM e righe CRLF, testo fuori dal piano
+//!   base di Unicode e un commento su più righe: gli span UTF-16 si allontanano
+//!   dai byte;
+//! - `doctype`: un disegno con `DOCTYPE` ed entità interne, in sola lettura;
+//! - `resources`: un disegno con la sua `defs` (formato della scena, risorse),
+//!   ogni tipo di risorsa, private e condivise, e gli oggetti che le usano coi
+//!   riempimenti, i marcatori, i ritagli, le maschere e i filtri; una risorsa
+//!   estranea, un riferimento del tipo sbagliato e uno a un id che manca;
+//! - `swatches`: un disegno coi campioni del documento (formato della scena,
+//!   risorse): come li scrive FubDraw e come li scrive Inkscape, uno che
+//!   nessuno usa, uno nel contenuto di un motivo, e una sfumatura per ogni
+//!   modo di dirsi campione senza esserlo;
+//! - `text`: un disegno col testo in area e su tracciato (formato della scena,
+//!   testo): due paragrafi in una cornice, con le righe che vanno a capo fra
+//!   le parole e dentro una parola, una larghezza che non si legge, due testi
+//!   su tracciato con `href` e `xlink:href`, e due estranei, un testo su
+//!   tracciato con `x` e uno che segue un tracciato con una trasformazione;
+//! - `boards`: un disegno con le tavole (formato della scena, tavole): coi
+//!   nomi, senza nome e con un nome già usato, le carte di ogni tavola, e una
+//!   carta per ogni modo di non andare con la sua tavola; un esempio di ogni
+//!   motivo per cui un `view` è estraneo;
+//! - `legend`: un disegno dove il colore fa da codice (S017): su una carta
+//!   colorata, riquadri dello stesso colore che si distinguono soltanto per la
+//!   tinta, scritti in chiaro, con un campione e con un'opacità di gruppo, e
+//!   riquadri dello stesso colore che non contano, perché il loro colore non
+//!   si sa, non hanno area o sono tratti a penna;
+//! - `connectors`: un disegno coi connettori (formato della scena,
+//!   connettori): tre rettangoli uniti da un gomito agganciato ai due capi,
+//!   da una curva e da una linea dritta con un capo libero, una punta
+//!   come marcatore, l'etichetta di un connettore, e tre scritture fuori
+//!   grammatica: un `fub:geom`, un capo e un'etichetta; un'ellisse con la
+//!   sua etichetta in un gruppo (formato della scena, etichette) e una
+//!   `fub:inside` fuori grammatica;
+//! - `styles`: un disegno con gli stili del documento (formato della scena,
+//!   stili): due di testo, uno col colore di un campione, e due grafici, uno
+//!   con una sfumatura privata, un marcatore e la fusione, l'altro che nessuno
+//!   segue; un esempio di ogni modo di dirsi stile senza esserlo; i testi, le
+//!   forme e un gruppo che li seguono, uno per ogni modo di seguire uno stile
+//!   che non c'è (S018), e un collegamento e un livello, che non ne seguono;
+//! - `symbols`: un disegno coi simboli (formato della scena, simboli): uno
+//!   con una sfumatura privata scritta dopo di lui e un testo bianco e
+//!   minuscolo, uno copiato da una libreria con un'istanza del primo e una
+//!   parte estranea, uno che usa un simbolo estraneo; un simbolo che contiene
+//!   sé stesso, due che si contengono a vicenda e due con un attributo che
+//!   non va; le istanze con `href` e con
+//!   `xlink:href`, ruotata e con un titolo, una nascosta, un testo bianco
+//!   sopra un'istanza, e un esempio di ogni modo di non essere un'istanza;
+//! - `repeats`: un disegno con le ripetizioni (formato della scena,
+//!   ripetizioni): un fiore radiale che ha per originale l'istanza di un
+//!   simbolo, a sua volta con una ripetizione dentro; una griglia spostata,
+//!   con una copia scritta con `xlink:href` e un titolo; uno specchio che ha
+//!   per originale un gruppo con dentro un'altra ripetizione, e un testo
+//!   bianco sopra la copia riflessa; un esempio di ogni modo di non essere
+//!   una ripetizione o una copia;
+//!
+//! Ogni `<nome>.svg` ha accanto `<nome>.json`: la [`Scene`] serializzata, con
+//! due spazi di rientro e un a capo finale.
+//!
+//! Le fixture grandi, `dense` e `ink`, non si committano: si generano qui da un
+//! seme fisso con mulberry32, lo stesso generatore di
+//! `apps/client/bench/graph-fixture.ts`, e `generated.json` ne fissa la
+//! lunghezza, l'impronta FNV-1a a 32 bit, il riepilogo e la diagnostica. Chi
+//! le rigenera in TypeScript con l'algoritmo descritto su [`dense`] e [`ink`]
+//! deve ottenere la stessa impronta. Sono solo ASCII: l'impronta sui byte e
+//! quella sulle unità UTF-16 coincidono.
+
+mod common;
+
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
+use common::check_lossless;
+use fub_scene::connectors::{Anchor, ConnectorEnd, ConnectorKind};
+use fub_scene::ink::INK_MAX_SAMPLES;
+use fub_scene::repeat::Repeat;
+use fub_scene::{
+    read, Ink, Item, Lifecycle, Motif, Role, Sample, Scale, Scene, StyleFacts, StyleKind, Swatch,
+    FUB_NS, MAX_ELEMENTS, STYLE_GRAPHIC_POINTS, SVG_NS,
+};
+use serde_json::json;
+
+// ---------------------------------------------------------------------------
+// Il confronto con i file.
+// ---------------------------------------------------------------------------
+
+/// La cartella delle fixture, dalla radice del crate.
+fn fixtures() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../apps/client/src/__fixtures__/scene")
+}
+
+const REGENERATE: &str = "rigenera con UPDATE_MIRROR=1 cargo test -p fub-scene --test mirror";
+
+fn updating() -> bool {
+    std::env::var_os("UPDATE_MIRROR").is_some()
+}
+
+/// Scrive `actual` in `name` con `UPDATE_MIRROR`; altrimenti pretende che il
+/// file abbia esattamente quei byte.
+fn mirror(name: &str, actual: &str) {
+    let path = fixtures().join(name);
+    if updating() {
+        std::fs::create_dir_all(fixtures()).unwrap();
+        std::fs::write(&path, actual).unwrap();
+    }
+    let expected = std::fs::read(&path)
+        .unwrap_or_else(|error| panic!("{name} non si legge ({error}): {REGENERATE}"));
+    let actual = actual.as_bytes();
+    if expected != actual {
+        let at = expected
+            .iter()
+            .zip(actual)
+            .position(|(a, b)| a != b)
+            .unwrap_or(expected.len().min(actual.len()));
+        let context = |bytes: &[u8]| {
+            let end = (at + 60).min(bytes.len());
+            String::from_utf8_lossy(&bytes[at.saturating_sub(20).min(end)..end]).into_owned()
+        };
+        panic!(
+            "{name} differisce dal byte {at} ({} byte attesi, {} generati)\n\
+             atteso:   {:?}\n\
+             generato: {:?}\n\
+             {REGENERATE}",
+            expected.len(),
+            actual.len(),
+            context(&expected),
+            context(actual),
+        );
+    }
+}
+
+/// La scena come la fixture la conserva.
+fn expected_json(scene: &Scene) -> String {
+    format!("{}\n", serde_json::to_string_pretty(scene).unwrap())
+}
+
+/// Legge `source`, ne verifica la copertura e scrive la coppia di fixture.
+fn fixture(name: &str, source: &str) -> Scene {
+    let scene = read(source).unwrap_or_else(|e| panic!("{name}: {e}"));
+    check_lossless(source, &scene);
+    mirror(&format!("{name}.svg"), source);
+    mirror(&format!("{name}.json"), &expected_json(&scene));
+    scene
+}
+
+// ---------------------------------------------------------------------------
+// La scrittura canonica, quanto basta per generare.
+// ---------------------------------------------------------------------------
+
+/// Un nodo da scrivere: un elemento o una riga già fatta.
+enum Node {
+    Element(El),
+    Raw(String),
+}
+
+/// Un elemento con gli attributi nell'ordine in cui li si dà.
+struct El {
+    name: &'static str,
+    attrs: Vec<(&'static str, String)>,
+    text: Option<String>,
+    /// Il contenuto già scritto, sulla riga del tag: i pezzi di una riga.
+    markup: Option<String>,
+    children: Vec<Node>,
+}
+
+impl El {
+    fn new(name: &'static str) -> El {
+        El {
+            name,
+            attrs: Vec::new(),
+            text: None,
+            markup: None,
+            children: Vec::new(),
+        }
+    }
+
+    fn a(mut self, name: &'static str, value: impl ToString) -> El {
+        self.attrs.push((name, value.to_string()));
+        self
+    }
+
+    fn text(mut self, text: &str) -> El {
+        self.text = Some(text.to_owned());
+        self
+    }
+
+    fn markup(mut self, markup: &str) -> El {
+        self.markup = Some(markup.to_owned());
+        self
+    }
+
+    fn child(mut self, child: El) -> El {
+        self.children.push(Node::Element(child));
+        self
+    }
+
+    fn raw(mut self, line: &str) -> El {
+        self.children.push(Node::Raw(line.to_owned()));
+        self
+    }
+
+    /// Scrive l'elemento come §7: una riga per elemento, due spazi di rientro
+    /// per livello, il testo sulla riga del tag, i gruppi vuoti aperti.
+    fn write(&self, depth: usize, newline: &str, out: &mut String) {
+        let indent = "  ".repeat(depth);
+        out.push_str(&indent);
+        out.push('<');
+        out.push_str(self.name);
+        for (name, value) in &self.attrs {
+            out.push(' ');
+            out.push_str(name);
+            out.push_str("=\"");
+            escape(value, true, out);
+            out.push('"');
+        }
+        if let Some(text) = &self.text {
+            out.push('>');
+            escape(text, false, out);
+            out.push_str(&format!("</{}>", self.name));
+        } else if let Some(markup) = &self.markup {
+            out.push('>');
+            out.push_str(markup);
+            out.push_str(&format!("</{}>", self.name));
+        } else if self.children.is_empty() && self.name != "g" {
+            out.push_str("/>");
+        } else {
+            out.push('>');
+            out.push_str(newline);
+            for child in &self.children {
+                match child {
+                    Node::Element(element) => element.write(depth + 1, newline, out),
+                    Node::Raw(line) => {
+                        out.push_str(&"  ".repeat(depth + 1));
+                        out.push_str(line);
+                        out.push_str(newline);
+                    }
+                }
+            }
+            out.push_str(&indent);
+            out.push_str(&format!("</{}>", self.name));
+        }
+        out.push_str(newline);
+    }
+}
+
+/// Gli escape di §7: negli attributi anche virgolette, tabulazioni e a capo.
+fn escape(text: &str, attribute: bool, out: &mut String) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' if attribute => out.push_str("&quot;"),
+            '\t' if attribute => out.push_str("&#9;"),
+            '\n' if attribute => out.push_str("&#10;"),
+            '\r' if attribute => out.push_str("&#13;"),
+            c => out.push(c),
+        }
+    }
+}
+
+/// La radice di un documento FubDraw nuovo (§2).
+fn svg(width: u32, height: u32) -> El {
+    El::new("svg")
+        .a("xmlns", SVG_NS)
+        .a("xmlns:fub", FUB_NS)
+        .a("fub:version", 1)
+        .a("viewBox", format!("0 0 {width} {height}"))
+        .a("width", width)
+        .a("height", height)
+}
+
+/// La carta (§2).
+fn paper(width: u32, height: u32) -> El {
+    El::new("rect")
+        .a("id", "fub-paper")
+        .a("fub:role", "paper")
+        .a("x", 0)
+        .a("y", 0)
+        .a("width", width)
+        .a("height", height)
+        .a("fill", "#ffffff")
+}
+
+fn layer(id: &str, name: &str) -> El {
+    El::new("g").a("id", id).a("fub:layer", name)
+}
+
+/// Il documento intero: radice, a capo finale.
+fn document(root: &El, newline: &str) -> String {
+    let mut out = String::new();
+    root.write(0, newline, &mut out);
+    out
+}
+
+/// `value` con `digits` decimali impliciti, scritto senza zeri finali e
+/// senza esponente: `decimal(12050, 2)` è `120.5`. Solo aritmetica intera,
+/// così TypeScript scrive le stesse cifre.
+fn decimal(value: i64, digits: u32) -> String {
+    let unit = 10u64.pow(digits);
+    let sign = if value < 0 { "-" } else { "" };
+    let (integer, fraction) = (value.unsigned_abs() / unit, value.unsigned_abs() % unit);
+    let mut out = format!("{sign}{integer}");
+    if fraction > 0 {
+        let fraction = format!("{fraction:0width$}", width = digits as usize);
+        out.push('.');
+        out.push_str(fraction.trim_end_matches('0'));
+    }
+    out
+}
+
+/// Il `d` di un tratto: la spezzata dei suoi campioni quantizzati, chiusa.
+/// FubDraw scrive il contorno di `getStroke`; per la lettura basta un `d`
+/// valido.
+fn polyline_d(ink: &Ink) -> String {
+    let digits = match ink.scale() {
+        Scale::S10 => 1,
+        Scale::S100 => 2,
+    };
+    let mut d = String::new();
+    for i in 0..ink.len() {
+        let sample = ink.sample(i);
+        let command = if i == 0 { "M" } else { " L" };
+        d.push_str(&format!(
+            "{command}{} {}",
+            decimal(sample[0], digits),
+            decimal(sample[1], digits)
+        ));
+    }
+    d.push_str(" Z");
+    d
+}
+
+/// Un tratto, con gli attributi nell'ordine canonico.
+fn stroke(id: &str, tool: &str, at: &str, brush: &str, ink: &str, d: &str, fill: &str) -> El {
+    let mut element = El::new("path")
+        .a("id", id)
+        .a("fub:tool", tool)
+        .a("fub:at", at)
+        .a("fub:brush", brush)
+        .a("d", d)
+        .a("fill", fill);
+    if tool == "highlighter" {
+        element = element.a("fill-opacity", "0.4");
+    }
+    element.a("fub:ink", ink)
+}
+
+/// Un tratto con campioni validi.
+fn drawn(
+    id: &str,
+    tool: &str,
+    at: &str,
+    brush: &str,
+    samples: &[Sample],
+    scale: Scale,
+    fill: &str,
+) -> El {
+    let ink = Ink::quantize(samples, scale).unwrap();
+    assert_eq!(Ink::decode(&ink.encode()), Ok(ink.clone()));
+    stroke(id, tool, at, brush, &ink.encode(), &polyline_d(&ink), fill)
+}
+
+const BRUSH: &str =
+    "pf1 size=4 thinning=0.5 smoothing=0.5 streamline=0.5 taperStart=0 taperEnd=0 capStart=1 capEnd=1";
+
+// ---------------------------------------------------------------------------
+// Le quattro fixture committate.
+// ---------------------------------------------------------------------------
+
+/// `sparse`: l'esempio di §13 allargato a ogni ruolo.
+fn sparse() -> String {
+    let pen: Vec<Sample> = (0..12)
+        .map(|i| {
+            let i = f64::from(i);
+            Sample {
+                x: 120.5 + 2.5 * i + 0.013 * (i % 3.0),
+                y: 30.2 - 0.37 * i,
+                p: Some((100.0 + 10.0 * i) / 255.0),
+                t: 8.0 * i,
+                tilt: None,
+            }
+        })
+        .collect();
+    let highlighter: Vec<Sample> = (0..5)
+        .map(|i| {
+            let i = f64::from(i);
+            Sample {
+                x: 300.0 + 40.0 * i,
+                y: 455.0,
+                p: None,
+                t: 16.0 * i,
+                tilt: None,
+            }
+        })
+        .collect();
+    let group = El::new("g")
+        .a("id", "o00000010")
+        .a("fub:locked", "true")
+        .a("transform", "matrix(0.866 0.5 -0.5 0.866 40 -20)")
+        .child(
+            El::new("rect")
+                .a("id", "o00000011")
+                .a("x", 900)
+                .a("y", 100)
+                .a("width", 160)
+                .a("height", 90)
+                .a("rx", 12)
+                .a("fill", "#009e73"),
+        )
+        .child(
+            El::new("circle")
+                .a("id", "o00000012")
+                .a("cx", 1200)
+                .a("cy", 150)
+                .a("r", 40)
+                .a("fill", "#cc79a7"),
+        )
+        .child(
+            El::new("line")
+                .a("id", "o00000013")
+                .a("x1", 900)
+                .a("y1", 250)
+                .a("x2", "1.5in")
+                .a("y2", 250)
+                .a("stroke", "#000000")
+                .a("stroke-width", 2)
+                .a("stroke-dasharray", "8 4"),
+        )
+        .child(
+            El::new("polyline")
+                .a("id", "o00000014")
+                .a("points", "900,300 950,280 1000,320 1050,290")
+                .a("fill", "none")
+                .a("stroke", "#0072b2")
+                .a("stroke-width", 3),
+        )
+        .child(
+            El::new("polygon")
+                .a("id", "o00000015")
+                .a("points", "1100 300 1160 340 1080 360")
+                .a("fill", "#d55e00")
+                .a("opacity", "0.8")
+                .a("display", "none"),
+        )
+        .child(
+            El::new("path")
+                .a("id", "o00000016")
+                .a(
+                    "d",
+                    "M900 400 C950 350 1000 450 1050 400 A40 40 0 0 1 1130 400 Q1160 360 1190 400 Z",
+                )
+                .a("fill", "none")
+                .a("stroke", "#000000")
+                .a("stroke-width", 2),
+        )
+        .child(
+            El::new("image")
+                .a("id", "o00000017")
+                .a("x", 1250)
+                .a("y", 300)
+                .a("width", 200)
+                .a("height", 150)
+                .a("preserveAspectRatio", "xMidYMid slice")
+                .a("href", "foto/mare.png"),
+        )
+        // Un elemento estraneo dentro un gruppo modificabile: un blocco.
+        .child(El::new("use").a("href", "#o1a2b3c4d").a("x", 10));
+    let text = El::new("text")
+        .a("id", "o9i0j1k2l")
+        .a("x", 720)
+        .a("y", 460)
+        .a("fill", "#000000")
+        .a("font-family", "Inter, sans-serif")
+        .a("font-size", 32)
+        .child(El::new("tspan").a("x", 720).a("dy", 0).text("Evaporazione"))
+        .child(El::new("tspan").a("x", 720).a("dy", 40).text("& condensa"))
+        // Una riga coi pezzi e la tipografia: corsivo, spaziatura, colore,
+        // grassetto e sottolineato in un pezzo.
+        .child(
+            El::new("tspan")
+                .a("x", 720)
+                .a("dy", 40)
+                .a("font-style", "italic")
+                .a("letter-spacing", 1.5)
+                .markup(r##"in <tspan fill="#0072b2" font-weight="bold" text-decoration="underline">pioggia</tspan>"##),
+        );
+    let first = layer("l3f8a0c2d", "Livello 1")
+        .child(
+            El::new("ellipse")
+                .a("id", "o1a2b3c4d")
+                .a("cx", 300)
+                .a("cy", 200)
+                .a("rx", 120)
+                .a("ry", 60)
+                .a("fill", "none")
+                .a("stroke", "#0072b2")
+                .a("stroke-width", 4),
+        )
+        .child(
+            El::new("path")
+                .a("id", "o5e6f7g8h")
+                .a("fub:shape", "arrow")
+                .a("fub:geom", "420 200 700 420")
+                .a(
+                    "d",
+                    "M420 200 L700 420 M682.18 417.45 L700 420 L693.3 403.29",
+                )
+                .a("fill", "none")
+                .a("stroke", "#000000")
+                .a("stroke-width", 4)
+                .a("stroke-linecap", "round")
+                .a("stroke-linejoin", "round"),
+        )
+        .child(text)
+        .child(drawn(
+            "o7k2m9x4q",
+            "pen",
+            "2026-10-01T09:20:31.250Z",
+            &format!("{BRUSH} sim=0"),
+            &pen,
+            Scale::S100,
+            "#d55e00",
+        ))
+        .child(drawn(
+            "o00000001",
+            "highlighter",
+            "2026-10-01T09:20:33.000Z",
+            &format!("{BRUSH} sim=1"),
+            &highlighter,
+            Scale::S10,
+            "#f0e442",
+        ))
+        .child(group)
+        .child(
+            El::new("a")
+                .a("id", "o00000020")
+                .a("href", "note/acqua.md")
+                .child(El::new("title").text("Il ciclo nella nota"))
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000021")
+                        .a("x", 1400)
+                        .a("y", 800)
+                        .a("width", 120)
+                        .a("height", 60)
+                        .a("fill", "#56b4e9")
+                        .child(El::new("title").text("Nuvola")),
+                ),
+        )
+        .child(
+            El::new("path")
+                .a("id", "o00000022")
+                .a("fub:shape", "polygon")
+                .a("fub:geom", "1300 560 80 6 0 8")
+                .a(
+                    "d",
+                    "M1264.62 629.28 A8 8 0 0 1 1257.69 625.28 L1222.31 564 A8 8 0 0 1 1222.31 556 \
+                     L1257.69 494.72 A8 8 0 0 1 1264.62 490.72 L1335.38 490.72 A8 8 0 0 1 1342.31 494.72 \
+                     L1377.69 556 A8 8 0 0 1 1377.69 564 L1342.31 625.28 A8 8 0 0 1 1335.38 629.28 Z",
+                )
+                .a("fill", "none")
+                .a("stroke", "#0072b2")
+                .a("stroke-width", 4),
+        )
+        .child(
+            El::new("path")
+                .a("id", "o00000023")
+                .a("fub:shape", "star")
+                .a("fub:geom", "1100 820 70 5 0.382 0 0")
+                .a(
+                    "d",
+                    "M1100 750 L1115.72 798.37 L1166.57 798.37 L1125.43 828.26 L1141.14 876.63 \
+                     L1100 846.74 L1058.86 876.63 L1074.57 828.26 L1033.43 798.37 L1084.28 798.37 Z",
+                )
+                .a("fill", "#009e73"),
+        )
+        // Un contorno a spessore variabile: il `d` lo calcola la superficie.
+        .child(
+            El::new("path")
+                .a("id", "o00000024")
+                .a("fub:shape", "width")
+                .a("fub:geom", "round round 0 1 1 0.4 8 6 1 0 0 M1200 960 L1300 960 L1360 1020")
+                .a(
+                    "d",
+                    "M1200 961 A1 1 0 0 1 1199 960 A1 1 0 0 1 1200 959 C1224.65 955.02 1249.29 952 1273.94 952 \
+                     C1282.63 952 1291.31 952.09 1300 952.31 A7.69 7.69 0 0 1 1305.44 954.56 \
+                     C1324.93 975.07 1343.44 996.56 1360 1020 \
+                     C1338.12 1003.06 1317.57 984.79 1297.73 965.8 C1289.8 965.94 1281.87 966 1273.94 966 \
+                     C1249.29 966 1224.65 963.87 1200 961 Z",
+                )
+                .a("fill", "#cc79a7"),
+        )
+        // Un arancione sulla carta bianca: S009.
+        .child(drawn(
+            "o00000032",
+            "pen",
+            "2026-10-01T09:21:02.000Z",
+            &format!("{BRUSH} sim=1"),
+            &highlighter,
+            Scale::S100,
+            "#e69f00",
+        ));
+    let notes = layer("l9z8y7x6w", "Appunti")
+        .a("fub:locked", "true")
+        .a("display", "none")
+        // Un inchiostro rotto: S004, il tratto si sposta ma non si ridisegna.
+        .child(stroke(
+            "o00000030",
+            "pen",
+            "2026-10-01T09:21:00.000Z",
+            &format!("{BRUSH} sim=1"),
+            "1 s100 cxy 0,0 1",
+            "M0 0 L1 1 Z",
+            "#000000",
+        ))
+        // Un canale sconosciuto: S010.
+        .child(stroke(
+            "o00000031",
+            "pen",
+            "2026-10-01T09:21:01.000Z",
+            &format!("{BRUSH} sim=1"),
+            "1 s10 cxytq 1000,1000,0,5 10,5,8,-5",
+            "M100 100 L101 100.5 Z",
+            "#000000",
+        ))
+        .child(
+            El::new("image")
+                .a("id", "o00000033")
+                .a("x", 10)
+                .a("y", 10)
+                .a("width", 8)
+                .a("height", 8)
+                .a("href", "data:image/png;base64,iVBORw0KGgo="),
+        )
+        .child(El::new("g").a("id", "o00000034"));
+    let root = svg(1600, 1000)
+        .child(El::new("title").text("Ciclo dell'acqua"))
+        .child(El::new("desc").text("Dal mare alle nuvole, e ritorno"))
+        .child(paper(1600, 1000))
+        .child(first)
+        .child(notes);
+    document(&root, "\n")
+}
+
+/// `foreign`: un SVG d'altri, con un esempio per regola di §4.
+fn foreign() -> String {
+    let root = El::new("svg")
+        .a("xmlns", SVG_NS)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .a("xmlns:inkscape", "http://www.inkscape.org/namespaces/inkscape")
+        .a("xmlns:sodipodi", "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd")
+        .a("width", "210mm")
+        .a("height", "148mm")
+        .a("viewBox", "0 0 210 148")
+        .a("onload", "init()")
+        .child(El::new("title").text("Mappa del quartiere"))
+        .raw(r##"<defs><linearGradient id="cielo"><stop offset="0" stop-color="#56b4e9"/><stop offset="1" stop-color="#ffffff"/></linearGradient></defs>"##)
+        .raw("<style><![CDATA[ .strada { stroke: #999999; } ]]></style>")
+        .raw(r#"<sodipodi:namedview id="vista" inkscape:zoom="1"/>"#)
+        .child(
+            El::new("g")
+                .a("id", "strade")
+                .a("inkscape:groupmode", "layer")
+                .a("inkscape:label", "Strade")
+                // Una classe CSS: estraneo.
+                .raw(r#"<path class="strada" d="M10 10 H200"/>"#)
+                .raw(r##"<path d="M10 20 H200" stroke="#999999" stroke-width="2"/>"##)
+                // Un `d` malformato, una percentuale, un `url(` verso una
+                // risorsa del tipo sbagliato: la sfumatura nella `defs` è
+                // modificabile, ma non è un filtro.
+                .raw(r#"<path d="M10 30 L20"/>"#)
+                .raw(r#"<rect x="5%" y="0" width="10" height="10"/>"#)
+                .raw(r#"<rect x="20" y="40" width="30" height="20" filter="url(#cielo)"/>"#)
+                // Un attributo di Inkscape non decide niente.
+                .raw(r##"<rect x="60" y="40" width="30" height="20" rx="4" fill="#cc79a7" inkscape:label="Piazza"/>"##)
+                // Un gestore di evento e un colore funzionale.
+                .raw(r#"<circle cx="100" cy="50" r="5" onclick="apri()"/>"#)
+                .raw(r#"<ellipse cx="120" cy="50" rx="6" ry="4" fill="rgb(0,0,0)"/>"#),
+        )
+        .child(
+            El::new("g")
+                .a("id", "etichette")
+                .a("inkscape:groupmode", "layer")
+                .a("inkscape:label", "Etichette")
+                // Righe di Inkscape: `y` sui `tspan`, che §4 non ammette.
+                .raw(r#"<text x="10" y="80" xml:space="preserve"><tspan sodipodi:role="line" x="10" y="80">Via Roma</tspan><tspan sodipodi:role="line" x="10" y="90">Piazza &amp; mercato</tspan></text>"#)
+                // Testo fuori dai `tspan`: estraneo. Poi un `text` con le
+                // righe di FubDraw, modificabile.
+                .raw(r#"<text x="10" y="100" font-size="4.2333px">Scuola</text>"#)
+                .raw(r#"<text x="10" y="110"><tspan x="10" dy="0">Parco</tspan></text>"#)
+                .raw(r#"<a href="javascript:alert(1)"><text x="10" y="120">Clicca</text></a>"#)
+                .raw(r#"<a xlink:href="quartiere/parco.md"><rect x="150" y="100" width="20" height="10"/></a>"#)
+                // Pezzi fuori da §4: un pezzo dentro un pezzo, un pezzo con la
+                // sua `x`, una sottolineatura su un gruppo, un corsivo e una
+                // spaziatura che §4 non legge.
+                .raw(r#"<text x="10" y="114"><tspan x="10" dy="0">a<tspan>b<tspan>c</tspan></tspan></tspan></text>"#)
+                .raw(r#"<text x="10" y="116"><tspan x="10" dy="0">a<tspan x="20">b</tspan></tspan></text>"#)
+                .raw(r#"<g text-decoration="underline"><rect width="1" height="1"/></g>"#)
+                .raw(r#"<text x="10" y="118" font-style="slanted"><tspan x="10" dy="0">c</tspan></text>"#)
+                .raw(r#"<text x="10" y="119" letter-spacing="10%"><tspan x="10" dy="0">d</tspan></text>"#),
+        )
+        .raw(r#"<image x="150" y="10" width="40" height="30" href="https://example.org/foto.jpg"/>"#)
+        .raw(r#"<image x="150" y="50" width="10" height="10" href="data:image/svg+xml,%3Csvg%2F%3E"/>"#)
+        .raw(r##"<use href="#strade" x="0" y="5"/>"##)
+        .raw(r#"<foreignObject x="0" y="130" width="100" height="18"><div xmlns="http://www.w3.org/1999/xhtml">Nota <b>importante</b></div></foreignObject>"#)
+        .raw("<script>console.log('mai eseguito')</script>")
+        .raw("<?elabora questa istruzione?>")
+        .raw(r#"<polygon points="0,0 10,0 5"/>"#)
+        .raw(r##"<polyline points="0,140 10,145 20,140" fill="none" stroke="#000000"/>"##);
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n\
+         <!-- Creato da un altro programma -->\n\
+         {}<!-- fine -->\n",
+        document(&root, "\n")
+    )
+}
+
+/// `crlf-bom`: BOM, CRLF e caratteri che in UTF-16 valgono due unità.
+fn crlf_bom() -> String {
+    let root = svg(800, 600)
+        .child(El::new("title").text("Città di 東京 🌧"))
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello — uno")
+                .raw("<!-- un commento\r\n     su due righe -->")
+                .child(
+                    El::new("text")
+                        .a("id", "o00000001")
+                        .a("x", 40)
+                        .a("y", 80)
+                        .a("font-family", "Literata, serif")
+                        .a("font-size", 24)
+                        .child(El::new("tspan").a("x", 40).a("dy", 0).text("Perché sì 😀"))
+                        .child(El::new("tspan").a("x", 40).a("dy", 30).text("𝄞 e ♪")),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000002")
+                        .a("x", 40)
+                        .a("y", 200)
+                        .a("width", 100)
+                        .a("height", 50)
+                        .a("fill", "#0072b2")
+                        // Un attributo `fub:*` sconosciuto con un a capo.
+                        .a("fub:nota", "prima riga\nseconda"),
+                ),
+        );
+    format!("\u{feff}{}", document(&root, "\r\n"))
+}
+
+/// `doctype`: entità interne, nei namespace e nel testo.
+fn doctype() -> String {
+    let root = El::new("svg")
+        .a("xmlns", "&ns_svg;")
+        .a("xmlns:fub", "&ns_fub;")
+        .a("fub:version", 1)
+        .a("viewBox", "0 0 100 100")
+        .a("width", 100)
+        .a("height", 100)
+        .raw("<title>&luogo; d'inverno</title>")
+        .child(paper(100, 100))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000001")
+                        .a("x", 10)
+                        .a("y", 10)
+                        .a("width", 20)
+                        .a("height", 20)
+                        .a("fill", "#0072b2"),
+                )
+                .raw(r#"<text x="10" y="60"><tspan x="10" dy="0">&luogo;</tspan></text>"#),
+        );
+    // Gli escape del writer non toccano le entità: si rimettono a mano.
+    let body = document(&root, "\n").replace("&amp;ns_", "&ns_");
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <!DOCTYPE svg [\n  \
+         <!ENTITY ns_svg \"{SVG_NS}\">\n  \
+         <!ENTITY ns_fub \"{FUB_NS}\">\n  \
+         <!ENTITY luogo \"Giardino\">\n\
+         ]>\n{body}"
+    )
+}
+
+/// `resources`: la `fub-defs` dopo il titolo e prima della carta, con ogni
+/// tipo di risorsa, e un livello con chi le usa.
+fn resources() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000001")
+                .a("fub:role", "private")
+                .a("x1", 0)
+                .a("y1", 0)
+                .a("x2", 1)
+                .a("y2", 0)
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#0072b2"))
+                .child(
+                    El::new("stop")
+                        .a("offset", 1)
+                        .a("stop-color", "#56b4e9")
+                        .a("stop-opacity", "0.5"),
+                ),
+        )
+        .child(
+            El::new("radialGradient")
+                .a("id", "r00000002")
+                .a("fub:role", "private")
+                .a("cx", "0.5")
+                .a("cy", "0.5")
+                .a("r", "0.5")
+                .a("fx", "0.3")
+                .a("fy", "0.3")
+                .a("spreadMethod", "reflect")
+                .child(El::new("title").text("Sole"))
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#e69f00"))
+                .child(
+                    El::new("stop")
+                        .a("offset", "100%")
+                        .a("stop-color", "#d55e00"),
+                ),
+        )
+        .child(
+            El::new("pattern")
+                .a("id", "r00000003")
+                .a("fub:role", "shared")
+                .a("x", 0)
+                .a("y", 0)
+                .a("width", 20)
+                .a("height", 20)
+                .a("patternUnits", "userSpaceOnUse")
+                .child(
+                    El::new("rect")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 10)
+                        .a("height", 10)
+                        .a("fill", "url(#r00000001) #0072b2"),
+                ),
+        )
+        .child(
+            El::new("marker")
+                .a("id", "r00000004")
+                .a("fub:role", "shared")
+                .a("refX", 5)
+                .a("refY", 5)
+                .a("markerWidth", 10)
+                .a("markerHeight", 10)
+                .a("orient", "auto-start-reverse")
+                .a("viewBox", "0 0 10 10")
+                .child(
+                    El::new("path")
+                        .a("d", "M0 0 L10 5 L0 10 Z")
+                        .a("fill", "#000000"),
+                ),
+        )
+        .child(
+            El::new("clipPath")
+                .a("id", "r00000005")
+                .a("fub:role", "private")
+                .a("clipPathUnits", "objectBoundingBox")
+                .child(
+                    El::new("circle")
+                        .a("cx", "0.5")
+                        .a("cy", "0.5")
+                        .a("r", "0.5"),
+                ),
+        )
+        .child(
+            El::new("mask")
+                .a("id", "r00000006")
+                .a("fub:role", "private")
+                .a("maskContentUnits", "objectBoundingBox")
+                .child(
+                    El::new("rect")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 1)
+                        .a("height", 1)
+                        .a("fill", "#ffffff"),
+                ),
+        )
+        .child(
+            El::new("filter")
+                .a("id", "r00000007")
+                .a("fub:role", "shared")
+                .a("x", "-0.2")
+                .a("y", "-0.2")
+                .a("width", "1.4")
+                .a("height", "1.4")
+                .child(
+                    El::new("feGaussianBlur")
+                        .a("in", "SourceAlpha")
+                        .a("stdDeviation", 4)
+                        .a("result", "ombra"),
+                )
+                .child(
+                    El::new("feOffset")
+                        .a("in", "ombra")
+                        .a("dx", 2)
+                        .a("dy", 3)
+                        .a("result", "spostata"),
+                )
+                .child(
+                    El::new("feMerge")
+                        .child(El::new("feMergeNode").a("in", "spostata"))
+                        .child(El::new("feMergeNode").a("in", "SourceGraphic")),
+                ),
+        )
+        .child(
+            El::new("filter")
+                .a("id", "r00000008")
+                .a("fub:role", "shared")
+                .child(
+                    El::new("feDropShadow")
+                        .a("dx", 0)
+                        .a("dy", 2)
+                        .a("stdDeviation", 2)
+                        .a("flood-color", "#000000")
+                        .a("flood-opacity", "0.3"),
+                ),
+        )
+        // Una sfumatura che ne eredita un'altra, come le scrive Inkscape:
+        // estranea.
+        .raw(r##"<linearGradient id="inkscape1" xlink:href="#r00000001"/>"##);
+    // Giallo sul verde: sotto 3:1, ma dentro un filtro i colori che si
+    // vedono non si sanno.
+    let shadowed = El::new("g")
+        .a("id", "o00000005")
+        .a("filter", "url(#r00000007)")
+        .child(
+            El::new("rect")
+                .a("id", "o00000006")
+                .a("x", 40)
+                .a("y", 320)
+                .a("width", 160)
+                .a("height", 80)
+                .a("fill", "#009e73"),
+        )
+        .child(
+            El::new("text")
+                .a("id", "o00000007")
+                .a("x", 60)
+                .a("y", 370)
+                .a("fill", "#f0e442")
+                .a("font-size", 24)
+                .child(El::new("tspan").a("x", 60).a("dy", 0).text("Ombra")),
+        );
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("Risorse"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000001")
+                        .a("x", 40)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r00000001) #4593ce"),
+                )
+                .child(
+                    El::new("circle")
+                        .a("id", "o00000002")
+                        .a("cx", 400)
+                        .a("cy", 100)
+                        .a("r", 60)
+                        .a("fill", "url(#r00000002) #e69f00")
+                        .a("stroke", "url(#r00000003) #000000")
+                        .a("stroke-width", 8),
+                )
+                .child(
+                    El::new("path")
+                        .a("id", "o00000003")
+                        .a("d", "M40 250 L300 250")
+                        .a("fill", "none")
+                        .a("stroke", "#000000")
+                        .a("stroke-width", 2)
+                        .a("marker-end", "url(#r00000004)"),
+                )
+                .child(
+                    El::new("image")
+                        .a("id", "o00000004")
+                        .a("x", 500)
+                        .a("y", 40)
+                        .a("width", 160)
+                        .a("height", 120)
+                        .a("clip-path", "url(#r00000005)")
+                        .a("href", "foto.png")
+                        .child(El::new("title").text("Il porto")),
+                )
+                .child(shadowed)
+                .child(
+                    El::new("text")
+                        .a("id", "o00000008")
+                        .a("x", 300)
+                        .a("y", 370)
+                        .a("fill", "url(#r00000001) #0072b2")
+                        .a("font-size", 32)
+                        .child(El::new("tspan").a("x", 300).a("dy", 0).text("Cielo")),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000009")
+                        .a("x", 500)
+                        .a("y", 200)
+                        .a("width", 100)
+                        .a("height", 60)
+                        .a("fill", "#cc79a7")
+                        .a("mask", "url(#r00000006)")
+                        .a("filter", "url(#r00000008)"),
+                )
+                // Estranei: chi usa la sfumatura estranea, un marcatore del
+                // tipo sbagliato, un id che manca (S014).
+                .raw(r#"<rect x="500" y="300" width="100" height="60" fill="url(#inkscape1)"/>"#)
+                .raw(r##"<path d="M40 450 L300 450" stroke="#000000" marker-start="url(#r00000001)"/>"##)
+                .raw(r#"<rect x="620" y="300" width="100" height="60" fill="url(#r0000000z) #cccccc"/>"#),
+        );
+    document(&root, "\n")
+}
+
+/// Un campione del documento come lo scrive FubDraw.
+fn swatch(id: &str, name: &str, color: &str) -> El {
+    El::new("linearGradient")
+        .a("id", id)
+        .a("fub:role", "swatch")
+        .a("fub:name", name)
+        .a("gradientUnits", "userSpaceOnUse")
+        .child(El::new("stop").a("stop-color", color))
+}
+
+fn swatches() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(swatch("r00000001", "Blu mare", "#0072b2"))
+        // Un campione che nessuno usa resta.
+        .child(swatch("r00000002", "Vermiglio", "#d55e00"))
+        // Come lo scrive Inkscape: l'`offset`, l'opacità piena, un titolo,
+        // un attributo suo e un colore col nome.
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000003")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Verde & bosco")
+                .a("inkscape:swatch", "solid")
+                .child(El::new("title").text("Il verde del bosco"))
+                .child(
+                    El::new("stop")
+                        .a("offset", 0)
+                        .a("stop-color", "green")
+                        .a("stop-opacity", 1),
+                ),
+        )
+        // Sfumature che si dicono campioni e non lo sono: risorse senza
+        // ciclo di vita. Due `stop`, le coordinate, la trasparenza, un nome
+        // vuoto, nessun nome, una sfumatura radiale, un `stop` senza colore.
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000004")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Due")
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#000000"))
+                .child(El::new("stop").a("offset", 1).a("stop-color", "#ffffff")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000005")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Coordinate")
+                .a("x2", 1)
+                .child(El::new("stop").a("stop-color", "#009e73")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000006")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Velo")
+                .child(
+                    El::new("stop")
+                        .a("stop-color", "#56b4e9")
+                        .a("stop-opacity", "0.5"),
+                ),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000007")
+                .a("fub:role", "swatch")
+                .a("fub:name", " ")
+                .child(El::new("stop").a("stop-color", "#e69f00")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000008")
+                .a("fub:role", "swatch")
+                .child(El::new("stop").a("stop-color", "#f0e442")),
+        )
+        .child(
+            El::new("radialGradient")
+                .a("id", "r00000009")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Tondo")
+                .child(El::new("stop").a("stop-color", "#cc79a7")),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r0000000a")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Senza colore")
+                .child(El::new("stop").a("offset", 0)),
+        )
+        // Un motivo che usa un campione nel suo contenuto.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000b")
+                .a("fub:role", "shared")
+                .a("x", 0)
+                .a("y", 0)
+                .a("width", 20)
+                .a("height", 20)
+                .a("patternUnits", "userSpaceOnUse")
+                .child(
+                    El::new("rect")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 10)
+                        .a("height", 10)
+                        .a("fill", "url(#r00000001) #0072b2"),
+                ),
+        )
+        // Un campione chiaro, per il contrasto (S009).
+        .child(swatch("r0000000c", "Giallo", "#f0e442"))
+        // Un motivo del documento, un `pattern` col suo nome: un campione
+        // anche lui.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000d")
+                .a("fub:role", "swatch")
+                .a("fub:name", "Pois")
+                .a("patternUnits", "userSpaceOnUse")
+                .a("x", 0)
+                .a("y", 0)
+                .a("width", 12)
+                .a("height", 12)
+                .child(
+                    El::new("circle")
+                        .a("cx", 6)
+                        .a("cy", 6)
+                        .a("r", 3)
+                        .a("fill", "#cc79a7"),
+                ),
+        )
+        // Motivi che si dicono campioni senza un nome: risorse senza ciclo
+        // di vita.
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000e")
+                .a("fub:role", "swatch")
+                .a("fub:name", " ")
+                .a("width", 10)
+                .a("height", 10),
+        )
+        .child(
+            El::new("pattern")
+                .a("id", "r0000000f")
+                .a("fub:role", "swatch")
+                .a("width", 10)
+                .a("height", 10),
+        );
+    let root = svg(800, 600)
+        .a(
+            "xmlns:inkscape",
+            "http://www.inkscape.org/namespaces/inkscape",
+        )
+        .child(El::new("title").text("Campioni"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000001")
+                        .a("x", 40)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r00000001) #0072b2")
+                        .a("stroke", "url(#r00000003) #008000")
+                        .a("stroke-width", 4),
+                )
+                // Una linea orizzontale: il suo riquadro non ha altezza, e il
+                // campione si vede lo stesso.
+                .child(
+                    El::new("line")
+                        .a("id", "o00000002")
+                        .a("x1", 40)
+                        .a("y1", 220)
+                        .a("x2", 400)
+                        .a("y2", 220)
+                        .a("stroke", "url(#r00000001) #0072b2")
+                        .a("stroke-width", 6),
+                )
+                .child(
+                    El::new("text")
+                        .a("id", "o00000003")
+                        .a("x", 40)
+                        .a("y", 320)
+                        .a("fill", "url(#r00000003) #008000")
+                        .a("font-size", 32)
+                        .child(
+                            El::new("tspan")
+                                .a("x", 40)
+                                .a("dy", 0)
+                                .markup(r##"Bosco <tspan fill="#d55e00">rosso</tspan>"##),
+                        ),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000004")
+                        .a("x", 440)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r0000000b) #0072b2"),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000005")
+                        .a("x", 440)
+                        .a("y", 200)
+                        .a("width", 200)
+                        .a("height", 120)
+                        .a("fill", "url(#r00000004) #808080"),
+                )
+                // Il nero sul blu del campione, che S009 legge come fondo.
+                .child(
+                    El::new("text")
+                        .a("id", "o00000006")
+                        .a("x", 60)
+                        .a("y", 120)
+                        .a("fill", "#000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 60).a("dy", 0).text("Sul blu")),
+                )
+                // Un ripiego rimasto indietro: si vede il giallo del campione,
+                // e S009 misura quello.
+                .child(
+                    El::new("text")
+                        .a("id", "o00000007")
+                        .a("x", 440)
+                        .a("y", 400)
+                        .a("fill", "url(#r0000000c) #000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 440).a("dy", 0).text("Giallo")),
+                )
+                // Chi usa il motivo, col suo colore di ripiego.
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000008")
+                        .a("x", 600)
+                        .a("y", 440)
+                        .a("width", 120)
+                        .a("height", 80)
+                        .a("fill", "url(#r0000000d) #e3b4cf"),
+                ),
+        );
+    document(&root, "\n")
+}
+
+fn text() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(
+            El::new("path")
+                .a("id", "r00000001")
+                .a("fub:role", "private")
+                .a("d", "M40 400 C160 300 280 300 400 400"),
+        )
+        .child(
+            El::new("path")
+                .a("id", "r00000002")
+                .a("fub:role", "shared")
+                .a("d", "M440 400 A120 120 0 0 1 680 400")
+                .child(El::new("title").text("Arco")),
+        )
+        // Un tracciato con una trasformazione: estraneo.
+        .raw(r#"<path id="r00000003" d="M40 540 L400 540" transform="rotate(5)"/>"#);
+    let area = El::new("text")
+        .a("id", "o00000001")
+        .a("fub:wrap", 240)
+        .a("x", 40)
+        .a("y", 60)
+        .a("fill", "#000000")
+        .a("font-family", "Inter, sans-serif")
+        .a("font-size", 20)
+        .child(
+            El::new("tspan")
+                .a("x", 40)
+                .a("dy", 0)
+                .text("L'acqua del mare sale"),
+        )
+        .child(
+            El::new("tspan")
+                .a("fub:join", "space")
+                .a("x", 40)
+                .a("dy", 24)
+                .markup(r#"in cielo e <tspan font-style="italic">torna</tspan> giù:"#),
+        )
+        .child(
+            El::new("tspan")
+                .a("fub:join", "space")
+                .a("x", 40)
+                .a("dy", 24)
+                .text("precipitevolissimevol"),
+        )
+        .child(
+            El::new("tspan")
+                .a("fub:join", "word")
+                .a("x", 40)
+                .a("dy", 24)
+                .text("mente."),
+        )
+        .child(El::new("tspan").a("x", 40).a("dy", 24).text("\u{a0}"))
+        .child(El::new("tspan").a("x", 40).a("dy", 24).text("Fine."));
+    // Una larghezza che non si legge: il testo resta modificabile, ma le sue
+    // righe sono righe.
+    let unread = El::new("text")
+        .a("id", "o00000002")
+        .a("fub:wrap", "-5")
+        .a("x", 400)
+        .a("y", 60)
+        .a("font-size", 20)
+        .child(El::new("tspan").a("x", 400).a("dy", 0).text("Due"))
+        .child(
+            El::new("tspan")
+                .a("fub:join", "word")
+                .a("x", 400)
+                .a("dy", 24)
+                .text("righe"),
+        );
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("Testo"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(area)
+                .child(unread)
+                .child(
+                    El::new("text")
+                        .a("id", "o00000003")
+                        .a("fill", "#0072b2")
+                        .a("font-size", 24)
+                        .a("text-anchor", "middle")
+                        .child(
+                            El::new("textPath")
+                                .a("startOffset", "50%")
+                                .a("href", "#r00000001")
+                                .markup(r#"Sopra <tspan font-weight="bold">la</tspan> collina"#),
+                        ),
+                )
+                .child(
+                    El::new("text")
+                        .a("id", "o00000004")
+                        .a("font-size", 18)
+                        .child(
+                            El::new("textPath")
+                                .a("startOffset", 12)
+                                .a("xlink:href", "#r00000002")
+                                .text("Lungo l'arco"),
+                        ),
+                )
+                // Estranei: un testo su tracciato con `x` e `y`, uno che
+                // segue il tracciato con la trasformazione.
+                .raw(r##"<text id="o00000005" x="40" y="500"><textPath href="#r00000001">Con x e y</textPath></text>"##)
+                .raw(r##"<text id="o00000006"><textPath href="#r00000003">Storto</textPath></text>"##),
+        );
+    document(&root, "\n")
+}
+
+fn boards() -> String {
+    let sheet = |id: &str, board: &str, rect: [u32; 4]| {
+        El::new("rect")
+            .a("id", id)
+            .a("fub:role", "paper")
+            .a("fub:board", board)
+            .a("x", rect[0])
+            .a("y", rect[1])
+            .a("width", rect[2])
+            .a("height", rect[3])
+            .a("fill", "#ffffff")
+    };
+    let board = |id: &str, view_box: &str| {
+        El::new("view")
+            .a("id", id)
+            .a("fub:role", "board")
+            .a("viewBox", view_box)
+    };
+    let root = svg(1300, 900)
+        .child(El::new("title").text("Storia"))
+        .child(sheet("fub-paper", "b00000001", [0, 0, 600, 400]))
+        .child(sheet("c00000001", "b00000002", [700, 0, 600, 400]))
+        // Le carte che non vanno con la loro tavola (S015): la seconda della
+        // stessa tavola, una di una tavola che non c'è, una con un'altra
+        // geometria e una senza tavola.
+        .child(sheet("c00000002", "b00000002", [700, 0, 600, 400]))
+        .child(sheet("c00000003", "b0000000z", [0, 500, 300, 200]))
+        .child(sheet("c00000004", "b00000003", [0, 500, 300, 250]))
+        .raw(r##"<rect fub:role="paper" x="400" y="750" width="100" height="100" fill="#ffffff"/>"##)
+        .child(board("b00000001", "0 0 600 400").child(El::new("title").text("Copertina")))
+        .child(
+            board("b00000002", "700,0,600,400")
+                .child(El::new("title").text("  Due\n  tavole "))
+                .child(El::new("desc").text("La seconda")),
+        )
+        // Senza nome: si chiama col suo id.
+        .child(board("b00000003", "0 500 300 200"))
+        // Il nome del disegno e quello di una tavola prima (S016); un
+        // attributo `fub:*` sconosciuto resta.
+        .child(
+            board("b00000004", "400 500 300 200")
+                .a("fub:note", "sì")
+                .child(El::new("title").text("Storia")),
+        )
+        .child(board("b00000005", "800 500 300 200").child(El::new("title").text("Copertina")))
+        // Estranei: senza ruolo, larga zero, con un altro attributo SVG,
+        // senza id, con un altro figlio.
+        .raw(r#"<view id="v1" viewBox="0 0 10 10"/>"#)
+        .raw(r#"<view id="b00000006" fub:role="board" viewBox="0 0 0 10"/>"#)
+        .raw(r#"<view id="b00000007" fub:role="board" viewBox="0 0 10 10" preserveAspectRatio="none"/>"#)
+        .raw(r#"<view fub:role="board" viewBox="0 0 10 10"/>"#)
+        .raw(r#"<view id="b00000008" fub:role="board" viewBox="0 0 10 10"><g/></view>"#)
+        .child(
+            layer("l00000001", "Livello 1")
+                // Una tavola sta solo nella radice.
+                .raw(r#"<view id="b00000009" fub:role="board" viewBox="0 0 10 10"/>"#)
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000001")
+                        .a("x", 40)
+                        .a("y", 40)
+                        .a("width", 200)
+                        .a("height", 100)
+                        .a("fill", "#0072b2"),
+                ),
+        );
+    document(&root, "\n")
+}
+
+/// Un riquadro pieno per `legend`.
+fn key_tile(id: &str, x: u32, y: u32, height: u32, fill: &str) -> El {
+    El::new("rect")
+        .a("id", id)
+        .a("x", x)
+        .a("y", y)
+        .a("width", 60)
+        .a("height", height)
+        .a("fill", fill)
+}
+
+/// `legend`: riquadri il cui colore fa da codice.
+fn legend() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(swatch("r00000001", "Verde chiaro", "#b2df8a"))
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000002")
+                .a("fub:role", "private")
+                .a("x1", 0)
+                .a("y1", 0)
+                .a("x2", 1)
+                .a("y2", 0)
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#fb9a99"))
+                .child(El::new("stop").a("offset", 1).a("stop-color", "#fdbf6f")),
+        )
+        .child(
+            El::new("clipPath")
+                .a("id", "r00000003")
+                .a("fub:role", "private")
+                .a("clipPathUnits", "objectBoundingBox")
+                .child(
+                    El::new("circle")
+                        .a("cx", "0.5")
+                        .a("cy", "0.5")
+                        .a("r", "0.5"),
+                ),
+        );
+    // Una carta colorata: il colore di un riquadro non opaco si compone su
+    // di lei.
+    let colored = El::new("rect")
+        .a("id", "fub-paper")
+        .a("fub:role", "paper")
+        .a("x", 0)
+        .a("y", 0)
+        .a("width", 800)
+        .a("height", 400)
+        .a("fill", "#f0f0f0");
+    let pen: Vec<Sample> = (0..3)
+        .map(|i| Sample {
+            x: 400.0 + 20.0 * f64::from(i),
+            y: 340.0,
+            p: None,
+            t: 8.0 * f64::from(i),
+            tilt: None,
+        })
+        .collect();
+    let root = svg(800, 400)
+        .child(El::new("title").text("Legenda"))
+        .child(defs)
+        .child(colored)
+        .child(
+            layer("l00000001", "Livello 1")
+                // Il verde chiaro, una volta per campione e una in chiaro, e
+                // il blu chiaro due volte: due codici confusi.
+                .child(key_tile("o00000001", 40, 40, 40, "url(#r00000001) #000000"))
+                .child(key_tile("o00000002", 120, 40, 40, "#a6cee3"))
+                .child(key_tile("o00000003", 200, 40, 40, "#b2df8a"))
+                .child(key_tile("o00000004", 280, 40, 40, "#a6cee3"))
+                // Il blu al 50% sulla carta, in un gruppo: #88b4d2, un terzo
+                // codice, confuso con tutti e due.
+                .child(
+                    El::new("g")
+                        .a("id", "o00000005")
+                        .a("opacity", "0.5")
+                        .child(key_tile("o00000006", 40, 120, 40, "#1f78b4"))
+                        .child(key_tile("o00000007", 120, 120, 40, "#1f78b4")),
+                )
+                // Due riquadri quasi neri: 7:1 col resto, nessuna confusione.
+                .child(key_tile("o00000008", 40, 200, 40, "#1f1f1f"))
+                .child(key_tile("o00000009", 120, 200, 40, "#1f1f1f"))
+                // Ciò che non conta: una sfumatura, un ritaglio, una figura
+                // senza altezza e due tratti a penna. Ognuno, se contasse,
+                // darebbe un colore di codice in più.
+                .child(key_tile(
+                    "o0000000a",
+                    200,
+                    200,
+                    40,
+                    "url(#r00000002) #fb9a99",
+                ))
+                .child(key_tile(
+                    "o0000000b",
+                    280,
+                    200,
+                    40,
+                    "url(#r00000002) #fb9a99",
+                ))
+                .child(
+                    key_tile("o0000000c", 360, 200, 40, "#fdbf6f")
+                        .a("clip-path", "url(#r00000003)"),
+                )
+                .child(
+                    key_tile("o0000000d", 440, 200, 40, "#fdbf6f")
+                        .a("clip-path", "url(#r00000003)"),
+                )
+                .child(key_tile("o0000000e", 520, 200, 0, "#cab2d6"))
+                .child(key_tile("o0000000f", 600, 200, 0, "#cab2d6"))
+                .child(drawn(
+                    "o00000010",
+                    "pen",
+                    "2026-10-01T09:21:00.000Z",
+                    BRUSH,
+                    &pen,
+                    Scale::S10,
+                    "#6a3d9a",
+                ))
+                .child(drawn(
+                    "o00000011",
+                    "pen",
+                    "2026-10-01T09:21:01.000Z",
+                    BRUSH,
+                    &pen,
+                    Scale::S10,
+                    "#6a3d9a",
+                )),
+        );
+    document(&root, "\n")
+}
+
+/// Un rettangolo di `connectors`.
+fn box_of(id: &str, x: u32, y: u32, width: u32, height: u32, fill: &str) -> El {
+    El::new("rect")
+        .a("id", id)
+        .a("x", x)
+        .a("y", y)
+        .a("width", width)
+        .a("height", height)
+        .a("rx", 8)
+        .a("fill", fill)
+}
+
+/// Un connettore come lo scrive FubDraw: `fub:shape`, `fub:geom`, `fub:from`
+/// e `fub:to` fra gli attributi noti, `d` ricalcolato dalla geometria.
+fn connector(id: &str, geom: &str, from: Option<&str>, to: Option<&str>, d: &str) -> El {
+    let mut element = El::new("path")
+        .a("id", id)
+        .a("fub:shape", "connector")
+        .a("fub:geom", geom);
+    if let Some(from) = from {
+        element = element.a("fub:from", from);
+    }
+    if let Some(to) = to {
+        element = element.a("fub:to", to);
+    }
+    element
+        .a("d", d)
+        .a("fill", "none")
+        .a("stroke", "#000000")
+        .a("stroke-width", 2)
+        .a("stroke-linecap", "round")
+        .a("stroke-linejoin", "round")
+}
+
+/// `connectors`: tre rettangoli e le linee che li uniscono.
+fn connectors() -> String {
+    let defs = El::new("defs").a("id", "fub-defs").child(
+        El::new("marker")
+            .a("id", "r00000001")
+            .a("fub:role", "shared")
+            .a("refX", 5)
+            .a("refY", 5)
+            .a("markerWidth", 5)
+            .a("markerHeight", 5)
+            .a("orient", "auto-start-reverse")
+            .a("viewBox", "0 0 10 10")
+            .child(
+                El::new("path")
+                    .a("d", "M0 0 L10 5 L0 10 Z")
+                    .a("fill", "#000000"),
+            ),
+    );
+    // Un gomito dal lato alto del primo rettangolo, sopra e giù fino a metà
+    // del lato alto del secondo.
+    let elbow = connector(
+        "o00000004",
+        "elbow 140 60 140 30 440 30 440 300",
+        Some("o00000001 top"),
+        Some("o00000002 auto"),
+        "M140 60 L140 30 L440 30 L440 300",
+    )
+    .a("marker-end", "url(#r00000001)");
+    // Una curva dal lato basso del primo al lato sinistro del secondo.
+    let curve = connector(
+        "o00000005",
+        "curved 140 140 140 240 260 340 360 340",
+        Some("o00000001 bottom"),
+        Some("o00000002 left"),
+        "M140 140 C140 240 260 340 360 340",
+    );
+    // Una linea dritta dal terzo rettangolo, con il capo finale libero.
+    let free = connector(
+        "o00000006",
+        "straight 670 140 670 250",
+        Some("o00000003 bottom"),
+        None,
+        "M670 140 L670 250",
+    )
+    .a("marker-end", "url(#r00000001)");
+    // Un aggancio fuori grammatica: il connettore resta un connettore, con
+    // quel capo libero.
+    let loose = connector(
+        "o00000007",
+        "straight 520 340 600 100",
+        Some("o00000002 middle"),
+        Some("o00000003 left"),
+        "M520 340 L600 100",
+    );
+    let label = El::new("text")
+        .a("id", "o00000008")
+        .a("fub:along", "o00000004 0.5 6")
+        .a("x", 410)
+        .a("y", 24)
+        .a("fill", "#000000")
+        .a("font-size", 16)
+        .a("text-anchor", "middle")
+        .child(El::new("tspan").a("x", 410).a("dy", 0).text("Invio"));
+    let root = svg(800, 600)
+        .child(El::new("title").text("Connettori"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(
+            layer("l00000001", "Livello 1")
+                .child(box_of("o00000001", 60, 60, 160, 80, "#e69f00"))
+                .child(box_of("o00000002", 360, 300, 160, 80, "#56b4e9"))
+                .child(box_of("o00000003", 600, 60, 140, 80, "#cc79a7"))
+                .child(elbow)
+                .child(curve)
+                .child(free)
+                .child(loose)
+                .child(label)
+                // Un `fub:geom` fuori grammatica (un valore dispari) lascia un
+                // tracciato che si legge da `d`, e i suoi agganci restano.
+                .child(
+                    El::new("path")
+                        .a("id", "o00000009")
+                        .a("fub:shape", "connector")
+                        .a("fub:geom", "elbow 520 360 580 360 580")
+                        .a("fub:from", "o00000002 right")
+                        .a("d", "M520 360 L580 360 L580 480")
+                        .a("fill", "none")
+                        .a("stroke", "#000000")
+                        .a("stroke-width", 2),
+                )
+                // Un'etichetta fuori grammatica (`t` oltre 1) è un testo e
+                // basta.
+                .child(
+                    El::new("text")
+                        .a("id", "o0000000a")
+                        .a("fub:along", "o00000004 1.5 6")
+                        .a("x", 600)
+                        .a("y", 520)
+                        .a("fill", "#000000")
+                        .a("font-size", 16)
+                        .child(El::new("tspan").a("x", 600).a("dy", 0).text("Fuori")),
+                )
+                // Un'ellisse con la sua etichetta in un gruppo, su due righe;
+                // e un secondo testo con un `fub:inside` fuori grammatica.
+                .child(
+                    El::new("g")
+                        .a("id", "o0000000b")
+                        .child(
+                            El::new("ellipse")
+                                .a("id", "o0000000c")
+                                .a("cx", 200)
+                                .a("cy", 480)
+                                .a("rx", 90)
+                                .a("ry", 45)
+                                .a("fill", "#f0e442"),
+                        )
+                        .child(
+                            El::new("text")
+                                .a("id", "o0000000d")
+                                .a("fub:inside", "o0000000c")
+                                .a("fub:wrap", 115.28)
+                                .a("x", 0)
+                                .a("y", 0)
+                                .a("fill", "#000000")
+                                .a("font-size", 16)
+                                .a("text-anchor", "middle")
+                                .a("transform", "matrix(1 0 0 1 200 474.4)")
+                                .child(El::new("tspan").a("x", 0).a("dy", 0).text("Controllo"))
+                                .child(
+                                    El::new("tspan")
+                                        .a("fub:join", "space")
+                                        .a("x", 0)
+                                        .a("dy", 19.2)
+                                        .text("finito"),
+                                ),
+                        )
+                        .child(
+                            El::new("text")
+                                .a("id", "o0000000e")
+                                .a("fub:inside", "o0000000c sopra")
+                                .a("x", 200)
+                                .a("y", 420)
+                                .a("fill", "#000000")
+                                .a("font-size", 16)
+                                .a("text-anchor", "middle")
+                                .child(El::new("tspan").a("x", 200).a("dy", 0).text("Sopra")),
+                        ),
+                ),
+        );
+    document(&root, "\n")
+}
+
+/// Uno stile del documento: un prototipo nella `defs` (formato della scena,
+/// stili).
+fn style(tag: &'static str, id: &str, name: &str) -> El {
+    let style = El::new(tag)
+        .a("id", id)
+        .a("fub:role", "style")
+        .a("fub:name", name);
+    if tag == "polyline" {
+        style.a("points", STYLE_GRAPHIC_POINTS)
+    } else {
+        style
+    }
+}
+
+/// Un testo di una riga, con gli attributi di `text`.
+fn line(text: El, x: u32, words: &str) -> El {
+    text.child(El::new("tspan").a("x", x).a("dy", 0).text(words))
+}
+
+fn styles() -> String {
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        .child(swatch("r00000005", "Blu mare", "#0072b2"))
+        .child(
+            style("text", "r00000001", "Titolo del capitolo")
+                .a("font-family", "Inter, sans-serif")
+                .a("font-size", 48)
+                .a("font-weight", 600)
+                .a("fill", "#1a1a1a")
+                .a("fub:leading", "1.2"),
+        )
+        // Uno stile di testo col colore di un campione, un titolo e il
+        // sottolineato.
+        .child(
+            style("text", "r00000002", "Nota")
+                .a("font-size", 14)
+                .a("font-style", "italic")
+                .a("letter-spacing", "0.5")
+                .a("text-decoration", "underline")
+                .a("fill", "url(#r00000005) #0072b2")
+                .child(El::new("title").text("Le note a margine")),
+        )
+        // La sfumatura privata dello stile grafico, nel suo riquadro 100 × 100.
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000003")
+                .a("fub:role", "private")
+                .a("gradientUnits", "userSpaceOnUse")
+                .a("x1", 0)
+                .a("y1", 0)
+                .a("x2", 100)
+                .a("y2", 0)
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#0072b2"))
+                .child(El::new("stop").a("offset", 1).a("stop-color", "#56b4e9")),
+        )
+        .child(
+            El::new("marker")
+                .a("id", "r00000006")
+                .a("fub:role", "shared")
+                .a("refX", 5)
+                .a("refY", 5)
+                .a("markerWidth", 5)
+                .a("markerHeight", 5)
+                .a("orient", "auto-start-reverse")
+                .a("viewBox", "0 0 10 10")
+                .child(
+                    El::new("path")
+                        .a("d", "M0 0 L10 5 L0 10 Z")
+                        .a("fill", "#000000"),
+                ),
+        )
+        .child(
+            style("polyline", "r00000004", "Riquadro")
+                .a("fill", "url(#r00000003) #0072b2")
+                .a("stroke", "#1a1a1a")
+                .a("stroke-width", 2)
+                .a("stroke-dasharray", "4 2")
+                .a("stroke-linecap", "round")
+                .a("stroke-linejoin", "round")
+                .a("marker-end", "url(#r00000006)")
+                .a("opacity", "0.9")
+                .a("style", "mix-blend-mode: multiply"),
+        )
+        // Uno stile che nessuno segue resta.
+        .child(
+            style("polyline", "r00000007", "Avviso")
+                .a("fill", "none")
+                .a("stroke", "#d55e00"),
+        )
+        // Elementi che si dicono stili e non lo sono, estranei: senza nome,
+        // con una riga, con una coordinata, con un'interlinea di quattro
+        // decimali, con altri punti, girato, con un marcatore per
+        // riempimento, e un tag che non fa stili.
+        .child(
+            El::new("text")
+                .a("id", "r00000008")
+                .a("fub:role", "style")
+                .a("font-size", 12),
+        )
+        .child(line(style("text", "r00000009", "Righe"), 0, "Ciao"))
+        .child(style("text", "r0000000a", "Spostato").a("x", 10))
+        .child(style("text", "r0000000b", "Interlinea").a("fub:leading", "1.2345"))
+        .child(
+            El::new("polyline")
+                .a("id", "r0000000c")
+                .a("fub:role", "style")
+                .a("fub:name", "Diagonale")
+                .a("points", "0,0 100,100"),
+        )
+        .child(style("polyline", "r0000000d", "Girato").a("transform", "rotate(45)"))
+        .child(style("polyline", "r0000000e", "Sbagliato").a("fill", "url(#r00000006) #000000"))
+        .child(
+            El::new("rect")
+                .a("id", "r0000000f")
+                .a("fub:role", "style")
+                .a("fub:name", "Rettangolo")
+                .a("width", 100)
+                .a("height", 100),
+        );
+    let follows = |element: El, style: &str| element.a("fub:style", style);
+    let text = |id: &str, y: u32, size: u32, fill: &str| {
+        El::new("text")
+            .a("id", id)
+            .a("x", 100)
+            .a("y", y)
+            .a("font-size", size)
+            .a("fill", fill)
+    };
+    let rect = |id: &str, x: u32, y: u32| {
+        El::new("rect")
+            .a("id", id)
+            .a("x", x)
+            .a("y", y)
+            .a("width", 200)
+            .a("height", 120)
+            .a("fill", "#e69f00")
+            .a("stroke", "#1a1a1a")
+            .a("stroke-width", 2)
+    };
+    let first = layer("l00000001", "Livello 1")
+        .child(line(
+            follows(text("o00000001", 120, 48, "#1a1a1a"), "r00000001")
+                .a("font-family", "Inter, sans-serif")
+                .a("font-weight", 600),
+            100,
+            "Il ciclo dell'acqua",
+        ))
+        .child(line(
+            follows(
+                text("o00000002", 200, 14, "url(#r00000005) #0072b2"),
+                "r00000002",
+            )
+            .a("font-style", "italic")
+            .a("letter-spacing", "0.5")
+            .a("text-decoration", "underline"),
+            100,
+            "Una nota",
+        ))
+        // Una forma che segue lo stile grafico con un riempimento suo: una
+        // differenza locale, che il formato non scrive.
+        .child(follows(rect("o00000003", 100, 300), "r00000004"))
+        // Un gruppo che lo segue, con la sua spezzata.
+        .child(
+            follows(El::new("g").a("id", "o00000004"), "r00000004").child(
+                El::new("polyline")
+                    .a("id", "o00000005")
+                    .a("points", "100,500 300,500 300,600")
+                    .a("fill", "none")
+                    .a("stroke", "#1a1a1a")
+                    .a("marker-end", "url(#r00000006)"),
+            ),
+        )
+        // S018: uno stile grafico su un testo, uno di testo su una forma, un
+        // id che manca, un campione, uno stile estraneo.
+        .child(line(
+            follows(text("o00000006", 700, 16, "#1a1a1a"), "r00000004"),
+            100,
+            "Sbagliato",
+        ))
+        .child(follows(rect("o00000007", 400, 300), "r00000001"))
+        .child(
+            follows(El::new("ellipse"), "r0000000z")
+                .a("id", "o00000008")
+                .a("cx", 800)
+                .a("cy", 360)
+                .a("rx", 80)
+                .a("ry", 50)
+                .a("fill", "#009e73"),
+        )
+        .child(
+            follows(El::new("circle"), "r00000005")
+                .a("id", "o00000009")
+                .a("cx", 1000)
+                .a("cy", 360)
+                .a("r", 50)
+                .a("fill", "#56b4e9"),
+        )
+        .child(follows(rect("o0000000a", 1100, 300), "r00000008"))
+        // Un collegamento non segue stili: `fub:style` resta e non dice
+        // niente.
+        .child(
+            follows(
+                El::new("a").a("id", "o0000000b").a("href", "note/acqua.md"),
+                "r00000004",
+            )
+            .child(rect("o0000000c", 1300, 300)),
+        );
+    // Nemmeno un livello.
+    let second = follows(layer("l00000002", "Note"), "r00000004");
+    let root = svg(1600, 1000)
+        .child(El::new("title").text("Gli stili"))
+        .child(defs)
+        .child(paper(1600, 1000))
+        .child(first)
+        .child(second);
+    document(&root, "\n")
+}
+
+fn symbols() -> String {
+    let symbol = |id: &str| El::new("symbol").a("id", id).a("overflow", "visible");
+    let instance =
+        |id: &str, symbol: &str| El::new("use").a("id", id).a("href", format!("#{symbol}"));
+    let defs = El::new("defs")
+        .a("id", "fub-defs")
+        // Una lampadina, nelle coordinate del simbolo attorno all'origine:
+        // la sfumatura che usa viene dopo, e il testo bianco e minuscolo
+        // non si confronta col fondo ma resta troppo piccolo (S013).
+        .child(
+            symbol("r00000001")
+                .child(El::new("title").text("Lampadina"))
+                .child(
+                    El::new("circle")
+                        .a("id", "o00000001")
+                        .a("cx", 0)
+                        .a("cy", 0)
+                        .a("r", 20)
+                        .a("fill", "url(#r00000002) #f0e442"),
+                )
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000002")
+                        .a("x", -8)
+                        .a("y", 18)
+                        .a("width", 16)
+                        .a("height", 12)
+                        .a("fill", "#999999"),
+                )
+                .child(
+                    El::new("text")
+                        .a("id", "o00000003")
+                        .a("x", -6)
+                        .a("y", 2)
+                        .a("font-size", 6)
+                        .a("fill", "#ffffff")
+                        .child(El::new("tspan").a("x", -6).a("dy", 0).text("ON")),
+                ),
+        )
+        .child(
+            El::new("linearGradient")
+                .a("id", "r00000002")
+                .a("fub:role", "private")
+                .a("x1", 0)
+                .a("y1", 0)
+                .a("x2", 0)
+                .a("y2", 1)
+                .child(El::new("stop").a("offset", 0).a("stop-color", "#f0e442"))
+                .child(El::new("stop").a("offset", 1).a("stop-color", "#e69f00")),
+        )
+        // Un quadro copiato da una libreria, con una lampadina più piccola
+        // e una parte estranea, che resta com'è.
+        .child(
+            symbol("r00000003")
+                .a(
+                    "fub:source",
+                    "Simboli/Impianti.svg#r00000004 0123456789abcdef",
+                )
+                .child(El::new("title").text("Quadro"))
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000004")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 80)
+                        .a("height", 60)
+                        .a("fill", "#0072b2"),
+                )
+                .child(
+                    instance("o00000005", "r00000001")
+                        .a("transform", "translate(40 30) scale(0.5)"),
+                )
+                .child(El::new("switch").child(El::new("rect").a("width", 10).a("height", 10))),
+        )
+        // Simboli estranei: uno che contiene sé stesso, due che si
+        // contengono a vicenda, uno senza `overflow`, uno con un `viewBox`.
+        .child(symbol("r00000005").child(instance("o00000006", "r00000005")))
+        .child(symbol("r00000006").child(instance("o00000007", "r00000007")))
+        .child(symbol("r00000007").child(instance("o00000008", "r00000006")))
+        .child(
+            El::new("symbol")
+                .a("id", "r00000008")
+                .child(El::new("rect").a("width", 10).a("height", 10)),
+        )
+        .child(
+            symbol("r00000009")
+                .a("viewBox", "0 0 10 10")
+                .child(El::new("rect").a("width", 10).a("height", 10)),
+        )
+        // Un simbolo che usa un simbolo estraneo: il simbolo vale, l'istanza
+        // dentro è estranea.
+        .child(
+            symbol("r0000000a")
+                .child(
+                    El::new("circle")
+                        .a("id", "o00000009")
+                        .a("cx", 0)
+                        .a("cy", 0)
+                        .a("r", 5)
+                        .a("fill", "#009e73"),
+                )
+                .child(instance("o0000000a", "r00000006")),
+        );
+    let first = layer("l00000001", "Livello 1")
+        .child(instance("o00000010", "r00000001").a("transform", "translate(200 150)"))
+        // Con `xlink:href`, ruotata e con un titolo.
+        .child(
+            El::new("use")
+                .a("id", "o00000011")
+                .a("xlink:href", "#r00000003")
+                .a("transform", "translate(400 100) rotate(30)")
+                .a("opacity", "0.8")
+                .child(El::new("title").text("Quadro principale")),
+        )
+        // Un testo bianco sopra la lampadina: l'istanza copre il fondo come
+        // un'immagine, e il contrasto non si sa.
+        .child(line(
+            El::new("text")
+                .a("id", "o00000012")
+                .a("x", 190)
+                .a("y", 152)
+                .a("font-size", 16)
+                .a("fill", "#ffffff"),
+            190,
+            "Luce",
+        ))
+        // Un'istanza nascosta non conta nel riquadro del disegno.
+        .child(
+            El::new("g")
+                .a("id", "o00000013")
+                .a("display", "none")
+                .child(instance("o00000014", "r00000001").a("transform", "translate(5000 5000)")),
+        )
+        .child(instance("o00000015", "r0000000a").a("transform", "translate(600 400)"))
+        // Istanze estranee: con una posizione, con un riempimento che il
+        // simbolo erediterebbe, di un simbolo che contiene sé stesso, di una
+        // sfumatura, con due riferimenti, con una forma dentro, di un id che
+        // manca (S014).
+        .child(instance("o00000016", "r00000001").a("x", 10))
+        .child(instance("o00000017", "r00000001").a("fill", "#ff0000"))
+        .child(instance("o00000018", "r00000005"))
+        .child(instance("o00000019", "r00000002"))
+        .child(instance("o0000001a", "r00000001").a("xlink:href", "#r00000001"))
+        .child(
+            instance("o0000001b", "r00000001")
+                .child(El::new("rect").a("width", 10).a("height", 10)),
+        )
+        .child(instance("o0000001c", "r0000000z"))
+        // Un simbolo fuori dalle `defs` è estraneo.
+        .child(symbol("r0000000b").child(El::new("rect").a("width", 10).a("height", 10)));
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("I simboli"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(first);
+    document(&root, "\n")
+}
+
+fn repeats() -> String {
+    let copy = |id: &str, original: &str, transform: &str| {
+        El::new("use")
+            .a("id", id)
+            .a("transform", transform)
+            .a("href", format!("#{original}"))
+    };
+    let circle = |id: &str, cx: i32, cy: i32, r: i32| {
+        El::new("circle")
+            .a("id", id)
+            .a("cx", cx)
+            .a("cy", cy)
+            .a("r", r)
+            .a("fill", "#000000")
+    };
+    let square = |id: &str, x: i32, y: i32| {
+        El::new("rect")
+            .a("id", id)
+            .a("x", x)
+            .a("y", y)
+            .a("width", 20)
+            .a("height", 20)
+            .a("fill", "#e69f00")
+    };
+    // Un petalo, nelle coordinate del simbolo, con due punti in fila: una
+    // ripetizione dentro un simbolo.
+    let defs = El::new("defs").a("id", "fub-defs").child(
+        El::new("symbol")
+            .a("id", "r00000001")
+            .a("overflow", "visible")
+            .child(El::new("title").text("Petalo"))
+            .child(
+                El::new("ellipse")
+                    .a("id", "o00000001")
+                    .a("cx", 0)
+                    .a("cy", -30)
+                    .a("rx", 8)
+                    .a("ry", 20)
+                    .a("fill", "#cc79a7"),
+            )
+            .child(
+                El::new("g")
+                    .a("id", "o00000002")
+                    .a("fub:repeat", "grid 1 2 0 10")
+                    .child(circle("o00000003", 0, -40, 2))
+                    .child(copy("o00000004", "o00000003", "translate(0 10)")),
+            ),
+    );
+    let first = layer("l00000001", "Livello 1")
+        // Un fiore: l'originale è un'istanza del petalo, e le copie lo
+        // ruotano intorno al centro.
+        .child(
+            El::new("g")
+                .a("id", "o00000010")
+                .a("fub:repeat", "radial 6 200 200")
+                .child(El::new("title").text("Fiore"))
+                .child(
+                    El::new("use")
+                        .a("id", "o00000011")
+                        .a("transform", "translate(200 200)")
+                        .a("href", "#r00000001"),
+                )
+                .child(copy(
+                    "o00000012",
+                    "o00000011",
+                    "matrix(0.5 0.866 -0.866 0.5 273.2051 -73.2051)",
+                ))
+                .child(copy(
+                    "o00000013",
+                    "o00000011",
+                    "matrix(-0.5 0.866 -0.866 -0.5 473.2051 126.7949)",
+                ))
+                .child(copy("o00000014", "o00000011", "matrix(-1 0 0 -1 400 400)"))
+                .child(copy(
+                    "o00000015",
+                    "o00000011",
+                    "matrix(-0.5 -0.866 0.866 -0.5 126.7949 473.2051)",
+                ))
+                .child(copy(
+                    "o00000016",
+                    "o00000011",
+                    "matrix(0.5 -0.866 0.866 0.5 -73.2051 273.2051)",
+                )),
+        )
+        // Una griglia spostata: le copie stanno nelle coordinate del gruppo,
+        // una con `xlink:href` e un titolo.
+        .child(
+            El::new("g")
+                .a("id", "o00000020")
+                .a("fub:repeat", "grid 3 2 60 50")
+                .a("transform", "translate(450 80)")
+                .child(
+                    El::new("rect")
+                        .a("id", "o00000021")
+                        .a("x", 0)
+                        .a("y", 0)
+                        .a("width", 40)
+                        .a("height", 30)
+                        .a("fill", "#0072b2"),
+                )
+                .child(copy("o00000022", "o00000021", "translate(60 0)"))
+                .child(
+                    El::new("use")
+                        .a("id", "o00000023")
+                        .a("transform", "translate(120 0)")
+                        .a("xlink:href", "#o00000021")
+                        .child(El::new("title").text("Terza")),
+                )
+                .child(copy("o00000024", "o00000021", "translate(0 50)"))
+                .child(copy("o00000025", "o00000021", "translate(60 50)"))
+                .child(copy("o00000026", "o00000021", "translate(120 50)")),
+        )
+        // Uno specchio: l'originale è un gruppo con dentro un'altra
+        // ripetizione, che le copie di fuori portano con sé.
+        .child(
+            El::new("g")
+                .a("id", "o00000030")
+                .a("fub:repeat", "mirror 400 300 400 400")
+                .child(
+                    El::new("g")
+                        .a("id", "o00000031")
+                        .child(
+                            El::new("path")
+                                .a("id", "o00000032")
+                                .a("d", "M300 450 L380 420 L380 520 Z")
+                                .a("fill", "#009e73"),
+                        )
+                        .child(
+                            El::new("g")
+                                .a("id", "o00000033")
+                                .a("fub:repeat", "grid 2 1 30 0")
+                                .child(circle("o00000034", 320, 470, 6))
+                                .child(copy("o00000035", "o00000034", "translate(30 0)")),
+                        ),
+                )
+                .child(copy("o00000036", "o00000031", "matrix(-1 0 0 1 800 0)")),
+        )
+        // Un testo bianco sopra la copia riflessa: il fondo non si sa.
+        .child(line(
+            El::new("text")
+                .a("id", "o00000040")
+                .a("x", 430)
+                .a("y", 480)
+                .a("font-size", 16)
+                .a("fill", "#ffffff"),
+            430,
+            "Eco",
+        ))
+        // Non sono ripetizioni, o non sono copie: un `fub:repeat` fuori
+        // grammatica, una copia con un'opacità, una verso un cugino.
+        .child(
+            El::new("g")
+                .a("id", "o00000050")
+                .a("fub:repeat", "radial 1 0 0")
+                .child(square("o00000051", 250, 500))
+                .child(copy("o00000052", "o00000051", "translate(30 0)")),
+        )
+        .child(
+            El::new("g")
+                .a("id", "o00000053")
+                .a("fub:repeat", "grid 2 1 30 0")
+                .child(square("o00000054", 250, 540))
+                .child(copy("o00000055", "o00000054", "translate(30 0)").a("opacity", "0.5"))
+                .child(copy("o00000056", "o00000021", "translate(30 0)")),
+        );
+    // Un livello non è una ripetizione.
+    let second = layer("l00000002", "Sfondo")
+        .a("fub:repeat", "grid 2 1 30 0")
+        .child(square("o00000060", 300, 560))
+        .child(copy("o00000061", "o00000060", "translate(30 0)"));
+    let root = svg(800, 600)
+        .a("xmlns:xlink", "http://www.w3.org/1999/xlink")
+        .child(El::new("title").text("Le ripetizioni"))
+        .child(defs)
+        .child(paper(800, 600))
+        .child(first)
+        .child(second);
+    document(&root, "\n")
+}
+
+#[test]
+fn sparse_is_a_complete_drawing() {
+    let scene = fixture("sparse", &sparse());
+    assert!(scene.editable());
+    let summary = &scene.summary;
+    assert_eq!(summary.layers, ["Livello 1", "Appunti"]);
+    assert_eq!(
+        (
+            summary.counts.strokes,
+            summary.counts.shapes,
+            summary.counts.foreign
+        ),
+        (5, 12, 1)
+    );
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    // L'immagine del vault nel gruppo non ha descrizione: S012. Il verde e il
+    // rosa della tavolozza, ciascuno su due forme, si distinguono soltanto
+    // per la tinta: S017 per ognuno.
+    assert_eq!(codes, [S002, S004, S009, S010, S012, S017, S017]);
+    assert_eq!(scene.index.links.len(), 1);
+    assert_eq!(scene.index.embeds.len(), 1);
+    // La riga coi pezzi si legge intera.
+    let Some(Item::Element(text)) = scene
+        .items
+        .iter()
+        .find(|item| matches!(item, Item::Element(e) if e.role == Role::Text))
+    else {
+        panic!("manca il testo")
+    };
+    assert_eq!(
+        text.lines.as_deref(),
+        Some(
+            [
+                "Evaporazione".to_owned(),
+                "& condensa".to_owned(),
+                "in pioggia".to_owned()
+            ]
+            .as_slice()
+        )
+    );
+}
+
+#[test]
+fn foreign_has_one_case_per_rule() {
+    let scene = fixture("foreign", &foreign());
+    assert!(!scene.editable());
+    assert!(scene.summary.foreign);
+    let editable: Vec<_> = scene
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Item::Element(element) => Some((element.path.clone(), element.role)),
+            _ => None,
+        })
+        .collect();
+    assert!(editable.contains(&(vec![4, 1], Role::Path)));
+    assert!(editable.contains(&(vec![4, 5], Role::Rect)));
+    assert!(editable.contains(&(vec![5, 2], Role::Text)));
+    assert!(editable.contains(&(vec![5, 4], Role::Link)));
+    // Un'immagine remota resta modificabile; una spezzata dopo il blocco
+    // pure.
+    assert!(editable.contains(&(vec![6], Role::Image)));
+    assert!(editable.contains(&(vec![12], Role::Polyline)));
+    // I pezzi fuori da §4, dopo il collegamento: estranei tutti e cinque.
+    for at in 5..10 {
+        assert!(
+            !editable.iter().any(|(path, _)| path.starts_with(&[5, at])),
+            "{at}"
+        );
+    }
+    // Prologo, blocchi ed epilogo: dieci blocchi estranei.
+    assert_eq!(scene.summary.counts.foreign, 10);
+    let s005 = scene
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == fub_scene::Code::S005)
+        .count();
+    assert_eq!(s005, 4);
+}
+
+#[test]
+fn resources_are_read_with_their_users() {
+    let scene = fixture("resources", &resources());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    assert_eq!(element(&[1]).map(|e| e.role), Some(Role::Defs));
+    // Le otto risorse modificabili, la nona estranea.
+    for at in 0..8 {
+        assert_eq!(
+            element(&[1, at]).map(|e| e.role),
+            Some(Role::Resource),
+            "{at}"
+        );
+    }
+    assert!(element(&[1, 8]).is_none());
+    assert_eq!(
+        element(&[1, 1]).and_then(|e| e.title.as_deref()),
+        Some("Sole")
+    );
+    use fub_scene::Lifecycle::*;
+    assert_eq!(element(&[1, 0]).and_then(|e| e.lifecycle), Some(Private));
+    assert_eq!(element(&[1, 3]).and_then(|e| e.lifecycle), Some(Shared));
+    // Chi usa una risorsa modificabile è modificabile; i tre estranei no.
+    for at in 0..7 {
+        assert!(element(&[3, at]).is_some(), "{at}");
+    }
+    for at in 7..10 {
+        assert!(element(&[3, at]).is_none(), "{at}");
+    }
+    // Le risorse non sono oggetti: non si contano fra le forme, e il loro
+    // contenuto non entra nelle voci.
+    assert_eq!(
+        (
+            scene.summary.counts.shapes,
+            scene.summary.counts.texts,
+            scene.summary.counts.images
+        ),
+        (5, 2, 1)
+    );
+    assert!(scene.items.iter().all(|item| match item {
+        Item::Element(element) => element.path.len() < 3 || element.path[0] != 1,
+        _ => true,
+    }));
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    // Due blocchi estranei, nella `defs` e nel livello; il giallo sul verde
+    // dentro il filtro tace, il riferimento rotto no.
+    assert_eq!(codes, [S002, S002, S014]);
+    let broken = scene.diagnostics.iter().find(|d| d.code == S014).unwrap();
+    assert_eq!(broken.detail.as_deref(), Some("fill #r0000000z"));
+}
+
+#[test]
+fn swatches_are_read_with_their_names_and_colors() {
+    let scene = fixture("swatches", &swatches());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    let swatch = |at: usize| {
+        let item = element(&[1, at]).unwrap();
+        assert_eq!(item.role, Role::Resource, "{at}");
+        (item.lifecycle, item.swatch.clone())
+    };
+    let named = |name: &str, color: &str| {
+        (
+            Some(Lifecycle::Swatch),
+            Some(Swatch {
+                name: name.to_owned(),
+                color: color.to_owned(),
+            }),
+        )
+    };
+    assert_eq!(swatch(0), named("Blu mare", "#0072b2"));
+    assert_eq!(swatch(1), named("Vermiglio", "#d55e00"));
+    assert_eq!(swatch(2), named("Verde & bosco", "#008000"));
+    // Le sfumature che non hanno la forma di un campione sono risorse senza
+    // ciclo di vita.
+    for at in 3..10 {
+        assert_eq!(swatch(at), (None, None), "{at}");
+    }
+    assert_eq!(
+        element(&[1, 10]).and_then(|e| e.lifecycle),
+        Some(Lifecycle::Shared)
+    );
+    // Un motivo col suo nome è un campione; senza nome non ha ciclo di vita.
+    let motif = element(&[1, 12]).unwrap();
+    assert_eq!(
+        (motif.lifecycle, motif.swatch.clone(), motif.motif.clone()),
+        (
+            Some(Lifecycle::Swatch),
+            None,
+            Some(Motif {
+                name: "Pois".to_owned()
+            })
+        )
+    );
+    for at in 13..15 {
+        let item = element(&[1, at]).unwrap();
+        assert_eq!((item.lifecycle, item.motif.clone()), (None, None), "{at}");
+    }
+    // Chi usa un campione è modificabile, anche la linea senza altezza.
+    for at in 0..5 {
+        assert!(element(&[3, at]).is_some(), "{at}");
+    }
+    // S009 legge il colore del campione: il blu sotto il nero, e il giallo
+    // del testo anche col ripiego nero rimasto indietro.
+    let contrasts: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    assert_eq!(
+        contrasts,
+        [
+            (fub_scene::Code::S009, Some("4.04")),
+            (fub_scene::Code::S009, Some("1.32"))
+        ]
+    );
+}
+
+#[test]
+fn text_is_read_in_a_frame_and_along_a_path() {
+    let scene = fixture("text", &text());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    // Le due risorse `path` e il titolo dell'arco; il terzo tracciato è
+    // estraneo.
+    assert_eq!(element(&[1, 0]).map(|e| e.role), Some(Role::Resource));
+    assert_eq!(element(&[1, 1]).map(|e| e.role), Some(Role::Resource));
+    assert!(element(&[1, 2]).is_none());
+    let area = element(&[3, 0]).unwrap();
+    assert_eq!(area.wrap, Some(240.0));
+    assert_eq!(area.lines.as_ref().map(Vec::len), Some(6));
+    let unread = element(&[3, 1]).unwrap();
+    assert_eq!(unread.wrap, None);
+    let along = element(&[3, 2]).unwrap();
+    assert_eq!(along.text_path.as_deref(), Some("r00000001"));
+    assert_eq!(
+        along.lines.as_deref(),
+        Some(["Sopra la collina".to_owned()].as_slice())
+    );
+    assert_eq!(
+        element(&[3, 3]).and_then(|e| e.text_path.as_deref()),
+        Some("r00000002")
+    );
+    assert!(element(&[3, 4]).is_none());
+    assert!(element(&[3, 5]).is_none());
+    assert_eq!(scene.summary.counts.texts, 4);
+    // L'indice unisce senza spazio le righe spezzate dentro una parola, solo
+    // in una cornice che si legge.
+    let texts: Vec<_> = scene.index.texts.iter().map(|p| p.text.as_str()).collect();
+    assert!(texts.contains(
+        &"L'acqua del mare sale in cielo e torna giù: precipitevolissimevolmente. \u{a0} Fine."
+    ));
+    assert!(texts.contains(&"Due righe"));
+    assert!(texts.contains(&"Sopra la collina"));
+    // L'indice legge anche gli estranei.
+    assert!(texts.contains(&"Storto"));
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    // Il tracciato estraneo nella `defs` e i due testi estranei.
+    assert_eq!(codes, [S002, S002]);
+}
+
+#[test]
+fn boards_are_read_with_their_papers() {
+    let scene = fixture("boards", &boards());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    // Le cinque tavole, dopo il titolo e le sei carte.
+    for at in 7..12 {
+        assert_eq!(element(&[at]).map(|e| e.role), Some(Role::Board), "{at}");
+    }
+    for at in 12..17 {
+        assert!(element(&[at]).is_none(), "{at}");
+    }
+    assert!(element(&[17, 0]).is_none());
+    let second = element(&[8]).unwrap();
+    assert_eq!(second.board_box, Some([700.0, 0.0, 600.0, 400.0]));
+    assert_eq!(second.title.as_deref(), Some("  Due\n  tavole "));
+    assert!(!second.locked && !second.hidden);
+    assert_eq!(
+        element(&[1]).and_then(|e| e.board.as_deref()),
+        Some("b00000001")
+    );
+    assert_eq!(
+        element(&[6]).map(|e| (e.role, e.board.is_none())),
+        Some((Role::Paper, true))
+    );
+    assert_eq!(
+        scene.summary.boards,
+        [
+            "Copertina",
+            "Due tavole",
+            "b00000003",
+            "Storia",
+            "Copertina"
+        ]
+    );
+    let sections: Vec<_> = scene.index.boards.iter().map(|b| b.text.as_str()).collect();
+    assert_eq!(sections, scene.summary.boards);
+    assert_eq!(scene.index.boards[0].span, element(&[7]).unwrap().span);
+    // Le tavole e le carte non sono oggetti.
+    assert_eq!(scene.summary.counts.shapes, 1);
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::*;
+    assert_eq!(codes, [S002, S002, S015, S015, S015, S015, S016, S016]);
+    let details: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .filter_map(|d| d.detail.as_deref())
+        .collect();
+    assert_eq!(
+        details,
+        [
+            "c00000002 second",
+            "c00000003 board",
+            "c00000004 geometry",
+            "free",
+            "Storia",
+            "Copertina"
+        ]
+    );
+}
+
+#[test]
+fn legend_finds_the_colors_told_apart_only_by_hue() {
+    let scene = fixture("legend", &legend());
+    assert!(scene.editable());
+    // Il verde chiaro (un campione e un colore in chiaro), il blu chiaro e il
+    // blu al 50% sulla carta #f0f0f0: tre codici, ognuno col compagno che
+    // contrasta di meno. Il resto non conta, e il rosa e l'arancio non
+    // compaiono.
+    let found: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    use fub_scene::Code::S017;
+    assert_eq!(
+        found,
+        [
+            (S017, Some("#b2df8a #a6cee3 1.10")),
+            (S017, Some("#a6cee3 #b2df8a 1.10")),
+            (S017, Some("#88b4d2 #a6cee3 1.32")),
+        ]
+    );
+}
+
+#[test]
+fn connectors_are_read_with_their_ends() {
+    let scene = fixture("connectors", &connectors());
+    assert!(scene.editable());
+    let element = |id: &str| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.id.as_deref() == Some(id) => Some(element),
+            _ => None,
+        })
+    };
+    let end = |id: &str, anchor| {
+        Some(ConnectorEnd {
+            id: id.to_owned(),
+            anchor,
+        })
+    };
+    let elbow = element("o00000004").unwrap();
+    assert_eq!(elbow.role, Role::Connector);
+    let facts = elbow.connector.as_ref().unwrap();
+    assert_eq!(facts.geom.kind, ConnectorKind::Elbow);
+    assert_eq!(facts.geom.points.len(), 4);
+    assert_eq!(facts.from, end("o00000001", Anchor::Top));
+    assert_eq!(facts.to, end("o00000002", Anchor::Auto));
+    let curve = element("o00000005").unwrap().connector.as_ref().unwrap();
+    assert_eq!(curve.geom.kind, ConnectorKind::Curved);
+    assert_eq!(curve.to, end("o00000002", Anchor::Left));
+    // Un capo senza `fub:to` è libero.
+    let free = element("o00000006").unwrap().connector.as_ref().unwrap();
+    assert_eq!(free.geom.kind, ConnectorKind::Straight);
+    assert_eq!(free.from, end("o00000003", Anchor::Bottom));
+    assert_eq!(free.to, None);
+    // Un aggancio che non si legge lascia il capo libero, e l'altro resta.
+    let loose = element("o00000007").unwrap();
+    assert_eq!(loose.role, Role::Connector);
+    let loose = loose.connector.as_ref().unwrap();
+    assert_eq!(loose.from, None);
+    assert_eq!(loose.to, end("o00000003", Anchor::Left));
+    // Un `fub:geom` fuori grammatica lascia un tracciato.
+    let path = element("o00000009").unwrap();
+    assert_eq!((path.role, path.connector.is_none()), (Role::Path, true));
+    // L'etichetta dice dove sta; una che non si legge non dice niente.
+    let place = element("o00000008").unwrap().along.as_ref().unwrap();
+    assert_eq!(place.id, "o00000004");
+    assert_eq!((place.t, place.offset), (0.5, 6.0));
+    let outside = element("o0000000a").unwrap();
+    assert_eq!((outside.role, outside.along.is_none()), (Role::Text, true));
+    // L'etichetta di una forma porta l'id; una che non si legge no.
+    let label = element("o0000000d").unwrap();
+    assert_eq!(label.inside.as_deref(), Some("o0000000c"));
+    assert_eq!(label.wrap, Some(115.28));
+    let outside = element("o0000000e").unwrap();
+    assert_eq!((outside.role, outside.inside.is_none()), (Role::Text, true));
+    // Quattro connettori e un tracciato, tre rettangoli e un'ellisse: nove
+    // forme.
+    assert_eq!(scene.summary.counts.shapes, 9);
+    assert_eq!(scene.summary.counts.texts, 4);
+    // Nessuna diagnostica: gli agganci non sono riferimenti di cui il formato
+    // controlli l'id, e il marcatore c'è.
+    use fub_scene::Code::S001;
+    let codes: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| d.code)
+        .filter(|code| *code != S001)
+        .collect();
+    assert_eq!(codes, []);
+}
+
+#[test]
+fn styles_are_read_with_their_followers() {
+    let scene = fixture("styles", &styles());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    let style = |at: usize| {
+        let item = element(&[1, at]).unwrap();
+        assert_eq!(item.role, Role::Resource, "{at}");
+        (item.lifecycle, item.style.clone())
+    };
+    let named = |name: &str, kind| {
+        (
+            Some(Lifecycle::Style),
+            Some(StyleFacts {
+                name: name.to_owned(),
+                kind,
+            }),
+        )
+    };
+    assert_eq!(style(1), named("Titolo del capitolo", StyleKind::Text));
+    assert_eq!(style(2), named("Nota", StyleKind::Text));
+    assert_eq!(style(5), named("Riquadro", StyleKind::Graphic));
+    assert_eq!(style(6), named("Avviso", StyleKind::Graphic));
+    // Le risorse dello stile restano le loro.
+    assert_eq!(style(3), (Some(Lifecycle::Private), None));
+    assert_eq!(style(4), (Some(Lifecycle::Shared), None));
+    // Ciò che si dice stile senza esserlo è estraneo.
+    for at in 7..15 {
+        assert!(element(&[1, at]).is_none(), "{at}");
+    }
+    let follows = |path: &[usize]| element(path).unwrap().follows.clone();
+    assert_eq!(follows(&[3, 0]).as_deref(), Some("r00000001"));
+    assert_eq!(follows(&[3, 1]).as_deref(), Some("r00000002"));
+    assert_eq!(follows(&[3, 2]).as_deref(), Some("r00000004"));
+    assert_eq!(follows(&[3, 3]).as_deref(), Some("r00000004"));
+    assert_eq!(follows(&[3, 3, 0]), None);
+    // Un collegamento e un livello non seguono stili.
+    assert_eq!(follows(&[3, 9]), None);
+    assert_eq!(follows(&[4]), None);
+    use fub_scene::Code::{S002, S018};
+    let found: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (S002, None),
+            (S018, Some("r00000004")),
+            (S018, Some("r00000001")),
+            (S018, Some("r0000000z")),
+            (S018, Some("r00000005")),
+            (S018, Some("r00000008")),
+        ]
+    );
+    // Gli stili non si contano fra i testi e le forme.
+    assert_eq!(scene.summary.counts.texts, 3);
+}
+
+#[test]
+fn symbols_are_read_with_their_instances() {
+    let scene = fixture("symbols", &symbols());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    let role = |path: &[usize]| element(path).map(|e| e.role);
+    // I simboli e la sfumatura scritta dopo il primo.
+    assert_eq!(role(&[1, 0]), Some(Role::Symbol));
+    assert_eq!(role(&[1, 1]), Some(Role::Resource));
+    assert_eq!(role(&[1, 2]), Some(Role::Symbol));
+    assert_eq!(role(&[1, 8]), Some(Role::Symbol));
+    // Il contenuto di un simbolo si classifica come quello di un gruppo.
+    assert_eq!(role(&[1, 0, 0]), Some(Role::Title));
+    assert_eq!(role(&[1, 0, 1]), Some(Role::Circle));
+    assert_eq!(role(&[1, 0, 3]), Some(Role::Text));
+    assert_eq!(role(&[1, 2, 2]), Some(Role::Instance));
+    assert_eq!(role(&[1, 2, 3]), None);
+    assert_eq!(role(&[1, 8, 0]), Some(Role::Circle));
+    assert_eq!(role(&[1, 8, 1]), None);
+    assert_eq!(
+        element(&[1, 0]).and_then(|e| e.title.as_deref()),
+        Some("Lampadina")
+    );
+    assert_eq!(
+        element(&[1, 2]).and_then(|e| e.source.as_deref()),
+        Some("Simboli/Impianti.svg#r00000004 0123456789abcdef")
+    );
+    assert_eq!(element(&[1, 0]).and_then(|e| e.source.as_deref()), None);
+    // Chi contiene sé stesso e chi ha un attributo che non va è estraneo.
+    for at in 3..8 {
+        assert!(element(&[1, at]).is_none(), "{at}");
+    }
+    // Le istanze, col loro simbolo.
+    let symbol = |path: &[usize]| element(path).and_then(|e| e.symbol.as_deref());
+    assert_eq!(symbol(&[3, 0]), Some("r00000001"));
+    assert_eq!(symbol(&[3, 1]), Some("r00000003"));
+    assert_eq!(symbol(&[1, 2, 2]), Some("r00000001"));
+    assert_eq!(symbol(&[3, 3, 0]), Some("r00000001"));
+    assert_eq!(symbol(&[3, 4]), Some("r0000000a"));
+    assert_eq!(
+        element(&[3, 1]).and_then(|e| e.title.as_deref()),
+        Some("Quadro principale")
+    );
+    for at in 5..13 {
+        assert!(element(&[3, at]).is_none(), "{at}");
+    }
+    // Il contenuto dei simboli si conta una volta; le istanze no.
+    let counts = &scene.summary.counts;
+    assert_eq!((counts.shapes, counts.texts), (4, 2));
+    // Il riquadro viene dalle istanze visibili: la lampadina in (200, 150),
+    // il quadro ruotato, che contiene una lampadina, e il cerchio in
+    // (600, 400). L'istanza nascosta e il contenuto dei simboli nelle loro
+    // coordinate non contano.
+    let bbox = scene.summary.bbox.as_ref().unwrap();
+    assert_eq!(
+        (bbox.x, bbox.y, bbox.width, bbox.height),
+        (180.0, 100.0, 425.0, 305.0)
+    );
+    use fub_scene::Code::{S002, S013, S014};
+    let found: Vec<_> = scene
+        .diagnostics
+        .iter()
+        .map(|d| (d.code, d.detail.as_deref()))
+        .collect();
+    // Niente S009: il testo bianco della lampadina sta nel simbolo, quello
+    // sopra l'istanza ha un fondo che non si sa.
+    assert_eq!(
+        found,
+        [
+            (S002, None),
+            (S002, None),
+            (S002, None),
+            (S002, None),
+            (S013, Some("6.00")),
+            (S014, Some("href #r0000000z")),
+        ]
+    );
+}
+
+#[test]
+fn repeats_are_read_with_their_copies() {
+    let scene = fixture("repeats", &repeats());
+    assert!(scene.editable());
+    let element = |path: &[usize]| {
+        scene.items.iter().find_map(|item| match item {
+            Item::Element(element) if element.path == path => Some(element),
+            _ => None,
+        })
+    };
+    let role = |path: &[usize]| element(path).map(|e| e.role);
+    let original = |path: &[usize]| element(path).and_then(|e| e.original.as_deref());
+    // Nel simbolo, la ripetizione dei punti.
+    assert_eq!(role(&[1, 0, 2]), Some(Role::Group));
+    assert_eq!(role(&[1, 0, 2, 1]), Some(Role::Copy));
+    // Il fiore: l'istanza è l'originale, le cinque copie la ruotano.
+    assert_eq!(
+        element(&[3, 0]).and_then(|e| e.repeat.clone()),
+        Some(Repeat::Radial {
+            count: 6,
+            center: [200.0, 200.0]
+        })
+    );
+    assert_eq!(role(&[3, 0, 1]), Some(Role::Instance));
+    for at in 2..7 {
+        assert_eq!(role(&[3, 0, at]), Some(Role::Copy), "{at}");
+        assert_eq!(original(&[3, 0, at]), Some("o00000011"), "{at}");
+    }
+    // La griglia, con la copia che ha un titolo.
+    assert_eq!(role(&[3, 1, 2]), Some(Role::Copy));
+    assert_eq!(
+        element(&[3, 1, 2]).and_then(|e| e.title.as_deref()),
+        Some("Terza")
+    );
+    // Lo specchio, col gruppo per originale e la ripetizione dentro.
+    assert_eq!(role(&[3, 2, 0]), Some(Role::Group));
+    assert_eq!(role(&[3, 2, 0, 1, 1]), Some(Role::Copy));
+    assert_eq!(original(&[3, 2, 1]), Some("o00000031"));
+    // Gli esempi di ciò che non è una ripetizione o una copia.
+    assert_eq!(element(&[3, 4]).and_then(|e| e.repeat.clone()), None);
+    assert!(element(&[3, 4, 1]).is_none());
+    assert!(element(&[3, 5, 1]).is_none());
+    assert!(element(&[3, 5, 2]).is_none());
+    assert_eq!(role(&[4]), Some(Role::Layer));
+    assert_eq!(element(&[4]).and_then(|e| e.repeat.clone()), None);
+    assert!(element(&[4, 1]).is_none());
+    // Le copie non si contano, ma il riquadro le comprende: a sinistra i
+    // petali ruotati, a destra l'ultima colonna della griglia.
+    let counts = &scene.summary.counts;
+    assert_eq!((counts.shapes, counts.texts), (8, 1));
+    let bbox = scene.summary.bbox.as_ref().unwrap();
+    assert_eq!(
+        (bbox.x, bbox.y, bbox.width, bbox.height),
+        (152.69, 80.0, 457.31, 500.0)
+    );
+    // Niente S009: il testo bianco sta sopra la copia riflessa.
+    let codes: Vec<_> = scene.diagnostics.iter().map(|d| d.code).collect();
+    use fub_scene::Code::S002;
+    assert_eq!(codes, [S002, S002, S002]);
+}
+
+#[test]
+fn crlf_bom_moves_utf16_away_from_bytes() {
+    let source = crlf_bom();
+    let scene = fixture("crlf-bom", &source);
+    assert!(scene.bom);
+    assert_eq!(scene.line_ending, fub_scene::LineEnding::Crlf);
+    assert!(scene.editable());
+    let Some(Item::Element(text)) = scene
+        .items
+        .iter()
+        .find(|item| matches!(item, Item::Element(e) if e.role == Role::Text))
+    else {
+        panic!("manca il testo")
+    };
+    assert_ne!(text.span.bytes, text.span.utf16);
+    assert_eq!(
+        text.lines.as_deref(),
+        Some(["Perché sì 😀".to_owned(), "𝄞 e ♪".to_owned()].as_slice())
+    );
+}
+
+#[test]
+fn doctype_is_read_only() {
+    let scene = fixture("doctype", &doctype());
+    assert_eq!(scene.read_only, [fub_scene::ReadOnly::Doctype]);
+    assert_eq!(scene.status, fub_scene::Status::Fubdraw);
+    // Il titolo con un'entità è estraneo, ma l'indice lo legge.
+    assert_eq!(
+        scene.index.title.as_ref().map(|t| t.text.as_str()),
+        Some("Giardino d'inverno")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Le fixture generate, fissate da `generated.json`.
+// ---------------------------------------------------------------------------
+
+/// mulberry32: il passo di `seedRandom` in `graph-fixture.ts`, ripetuto su
+/// uno stato che avanza di `0x6d2b79f5` a ogni numero. Il `k`-esimo numero,
+/// da zero, è `seedRandom(seed + k · 0x6d2b79f5)` per 2³², in aritmetica a
+/// 32 bit.
+struct Mulberry32(u32);
+
+impl Mulberry32 {
+    fn next(&mut self) -> u32 {
+        self.0 = self.0.wrapping_add(0x6d2b_79f5);
+        let mut t = self.0;
+        t = (t ^ (t >> 15)).wrapping_mul(t | 1);
+        t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 61));
+        t ^ (t >> 14)
+    }
+
+    /// Un intero in `0..n`, col resto: il piccolo sbilanciamento non conta,
+    /// conta che TypeScript lo rifaccia uguale.
+    fn below(&mut self, n: u32) -> u32 {
+        self.next() % n
+    }
+
+    /// `below(n)` diviso per `unit`, in doppia precisione.
+    fn fraction(&mut self, n: u32, unit: u32) -> f64 {
+        f64::from(self.below(n)) / f64::from(unit)
+    }
+}
+
+/// FNV-1a a 32 bit sui byte, scritto in esadecimale su otto cifre.
+fn fnv1a(text: &str) -> String {
+    let mut hash: u32 = 0x811c_9dc5;
+    for &byte in text.as_bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    format!("{hash:08x}")
+}
+
+/// La tavolozza Okabe–Ito di FubDraw, nell'ordine: nero, Blu, Vermiglio,
+/// Verde, Porpora, Giallo, Arancione, Azzurro.
+const PALETTE: [&str; 8] = [
+    "#000000", "#0072b2", "#d55e00", "#009e73", "#cc79a7", "#f0e442", "#e69f00", "#56b4e9",
+];
+
+const WORDS: [&str; 8] = [
+    "mare", "nuvola", "pioggia", "fiume", "vento", "sole", "neve", "lago",
+];
+
+/// `count` punti a caso nella pagina, in centesimi, separati da spazi.
+fn random_points(rng: &mut Mulberry32, count: u32) -> String {
+    (0..count)
+        .map(|_| {
+            let x = rng.below(160_000);
+            let y = rng.below(100_000);
+            format!("{} {}", decimal(x.into(), 2), decimal(y.into(), 2))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `dense`: un disegno FubDraw di esattamente [`MAX_ELEMENTS`] elementi,
+/// l'ultimo numero che si modifica ancora.
+///
+/// Radice, titolo «Denso», carta di 1600 × 1000 e otto livelli `l0000000k`
+/// di nome «Livello k». Gli elementi rimasti si dividono in parti uguali fra i
+/// livelli, il resto all'ultimo. In ogni livello, finché la sua quota non è
+/// finita, si estrae `below(10)` e si scrive, con l'id `o` più il contatore
+/// su otto cifre e i numeri in centesimi:
+///
+/// 0. `rect`: `x below(160000)`, `y below(100000)`, `width` e `height`
+///    `1 + below(20000)`, `fill` della tavolozza `below(8)`;
+/// 1. `ellipse`: `cx`, `cy`, `rx` e `ry` come sopra, `fill`;
+/// 2. `circle`: `cx`, `cy`, `r 1 + below(10000)`, `fill`;
+/// 3. `line`: due punti, `stroke` della tavolozza, `stroke-width 2`;
+/// 4. `polyline`: `3 + below(4)` punti, `fill none`, `stroke`;
+/// 5. `polygon`: `3 + below(4)` punti, `fill`;
+/// 6. `path`: `M` più tre segmenti; per ognuno `below(4)` sceglie `L` (un
+///    punto), `Q` (due), `C` (tre) o `A`: un arco di cerchio, col raggio
+///    `1 + below(20000)` per `rx` e per `ry`, `0`, i due flag `below(2)` e
+///    `below(2)` e un punto; poi `fill none`, `stroke`. Archi ellittici a
+///    caso, con un raggio molto più piccolo dell'altro, si gonfierebbero di
+///    milioni di unità per raggiungere il punto finale;
+/// 7. `text`: il numero di righe `1 + below(3)`, estratto subito dopo il
+///    tipo; poi `x`, `y`, `fill #000000`, `font-family Inter, sans-serif`,
+///    `font-size 16`, e per ogni riga un `tspan` con la `x` del testo, `dy`
+///    `0` la prima e `20` le altre, e la parola `below(8)` di [`WORDS`];
+/// 8. un gruppo: `g` con `transform translate(dx dy)`, `dx below(1000)` e
+///    `dy below(1000)` interi, poi un `rect` e un `circle` come sopra;
+/// 9. un `use` con `href` verso l'ultimo oggetto scritto, anche di un
+///    livello prima, o verso la carta se non ce n'è: estraneo.
+///
+/// Un `text` costa uno più le sue righe, un gruppo tre, ogni altro elemento
+/// uno; quello che costa più della quota rimasta diventa un `rect`, con le
+/// estrazioni del `rect`. Gli id si contano nell'ordine in cui gli elementi
+/// si aprono: il gruppo prima del suo `rect` e del suo `circle`.
+fn dense(seed: u32) -> String {
+    const LAYERS: usize = 8;
+    let mut rng = Mulberry32(seed);
+    let mut next_id = 0u32;
+    let mut id = || {
+        next_id += 1;
+        format!("o{next_id:08}")
+    };
+    let budget = MAX_ELEMENTS - 3 - LAYERS;
+    let mut root = svg(1600, 1000)
+        .child(El::new("title").text("Denso"))
+        .child(paper(1600, 1000));
+    let mut last = "fub-paper".to_owned();
+    for k in 1..=LAYERS {
+        let mut quota = budget / LAYERS + if k == LAYERS { budget % LAYERS } else { 0 };
+        let mut group = layer(&format!("l{k:08}"), &format!("Livello {k}"));
+        while quota > 0 {
+            let mut kind = rng.below(10);
+            let tspans = if kind == 7 { 1 + rng.below(3) } else { 0 };
+            let cost = match kind {
+                7 => 1 + tspans as usize,
+                8 => 3,
+                _ => 1,
+            };
+            if cost > quota {
+                kind = 0;
+            }
+            let rect = |rng: &mut Mulberry32, id: String| {
+                El::new("rect")
+                    .a("id", id)
+                    .a("x", decimal(rng.below(160_000).into(), 2))
+                    .a("y", decimal(rng.below(100_000).into(), 2))
+                    .a("width", decimal((1 + rng.below(20_000)).into(), 2))
+                    .a("height", decimal((1 + rng.below(20_000)).into(), 2))
+                    .a("fill", PALETTE[rng.below(8) as usize])
+            };
+            let circle = |rng: &mut Mulberry32, id: String| {
+                El::new("circle")
+                    .a("id", id)
+                    .a("cx", decimal(rng.below(160_000).into(), 2))
+                    .a("cy", decimal(rng.below(100_000).into(), 2))
+                    .a("r", decimal((1 + rng.below(10_000)).into(), 2))
+                    .a("fill", PALETTE[rng.below(8) as usize])
+            };
+            let me = id();
+            let element = match kind {
+                0 => rect(&mut rng, me.clone()),
+                1 => El::new("ellipse")
+                    .a("id", &me)
+                    .a("cx", decimal(rng.below(160_000).into(), 2))
+                    .a("cy", decimal(rng.below(100_000).into(), 2))
+                    .a("rx", decimal((1 + rng.below(20_000)).into(), 2))
+                    .a("ry", decimal((1 + rng.below(20_000)).into(), 2))
+                    .a("fill", PALETTE[rng.below(8) as usize]),
+                2 => circle(&mut rng, me.clone()),
+                3 => {
+                    let points = random_points(&mut rng, 2);
+                    let p: Vec<&str> = points.split(' ').collect();
+                    El::new("line")
+                        .a("id", &me)
+                        .a("x1", p[0])
+                        .a("y1", p[1])
+                        .a("x2", p[2])
+                        .a("y2", p[3])
+                        .a("stroke", PALETTE[rng.below(8) as usize])
+                        .a("stroke-width", 2)
+                }
+                4 => {
+                    let count = 3 + rng.below(4);
+                    El::new("polyline")
+                        .a("id", &me)
+                        .a("points", random_points(&mut rng, count))
+                        .a("fill", "none")
+                        .a("stroke", PALETTE[rng.below(8) as usize])
+                }
+                5 => {
+                    let count = 3 + rng.below(4);
+                    El::new("polygon")
+                        .a("id", &me)
+                        .a("points", random_points(&mut rng, count))
+                        .a("fill", PALETTE[rng.below(8) as usize])
+                }
+                6 => {
+                    let mut d = format!("M{}", random_points(&mut rng, 1));
+                    for _ in 0..3 {
+                        match rng.below(4) {
+                            0 => d.push_str(&format!(" L{}", random_points(&mut rng, 1))),
+                            1 => d.push_str(&format!(" Q{}", random_points(&mut rng, 2))),
+                            2 => d.push_str(&format!(" C{}", random_points(&mut rng, 3))),
+                            _ => {
+                                let r = decimal((1 + rng.below(20_000)).into(), 2);
+                                let (large, sweep) = (rng.below(2), rng.below(2));
+                                let to = random_points(&mut rng, 1);
+                                d.push_str(&format!(" A{r} {r} 0 {large} {sweep} {to}"));
+                            }
+                        }
+                    }
+                    El::new("path")
+                        .a("id", &me)
+                        .a("d", d)
+                        .a("fill", "none")
+                        .a("stroke", PALETTE[rng.below(8) as usize])
+                }
+                7 => {
+                    let x = decimal(rng.below(160_000).into(), 2);
+                    let mut text = El::new("text")
+                        .a("id", &me)
+                        .a("x", &x)
+                        .a("y", decimal(rng.below(100_000).into(), 2))
+                        .a("fill", "#000000")
+                        .a("font-family", "Inter, sans-serif")
+                        .a("font-size", 16);
+                    for line in 0..tspans {
+                        let dy = if line == 0 { 0 } else { 20 };
+                        let word = WORDS[rng.below(8) as usize];
+                        text = text.child(El::new("tspan").a("x", &x).a("dy", dy).text(word));
+                    }
+                    text
+                }
+                8 => {
+                    let transform = format!("translate({} {})", rng.below(1000), rng.below(1000));
+                    El::new("g")
+                        .a("id", &me)
+                        .a("transform", transform)
+                        .child(rect(&mut rng, id()))
+                        .child(circle(&mut rng, id()))
+                }
+                _ => El::new("use").a("id", &me).a("href", format!("#{last}")),
+            };
+            last = me;
+            quota -= if kind == 0 { 1 } else { cost };
+            group = group.child(element);
+        }
+        root = root.child(group);
+    }
+    document(&root, "\n")
+}
+
+/// `ink`: quaranta tratti generati, campionati e quantizzati da Rust.
+///
+/// Titolo «Inchiostro», carta di 1600 × 1000, un livello `l00000001`
+/// «Livello 1». Per il tratto `i`, nell'ordine:
+///
+/// 1. i campioni: 1 per `i = 0`, 2 per `i = 1`, [`INK_MAX_SAMPLES`] per
+///    `i = 2`, altrimenti `2 + below(1500)`;
+/// 2. la pressione se `below(2) = 1`, l'inclinazione se `below(2) = 1`;
+/// 3. la scala: `s100` se `below(2) = 1`, altrimenti `s10`. Il tratto
+///    `i = 2` ha comunque pressione, inclinazione e `s100`: il più lungo
+///    possibile, con tutti i canali;
+/// 4. l'evidenziatore se `below(8) = 0`, col Giallo; altrimenti la penna
+///    col colore `below(8)` della tavolozza;
+/// 5. il pennello `below(3)` di [`BRUSHES`], più `sim=1` senza pressione e
+///    `sim=0` con;
+/// 6. la pausa prima del tratto, `below(2000)` millisecondi.
+///
+/// Poi i campioni, ognuno con le estrazioni in quest'ordine: `x` e `y`, per il
+/// primo `below(160000) / 100` e `below(100000) / 100`, per gli altri il
+/// precedente più `(below(2001) − 1000) / 1000`; con la pressione
+/// `p = below(1001) / 1000`; dal secondo campione `t`, il precedente più
+/// `below(17001) / 1000`, mentre il primo ha `t = 0` e non estrae niente; con
+/// l'inclinazione `a = below(90001) / 1000` e `z = below(360000) / 1000`. I
+/// conti sono in doppia precisione, e `Ink::quantize` li arrotonda.
+///
+/// L'id è `o` più `i + 1` su otto cifre. `fub:at` è le 9:00 UTC del 2 ottobre
+/// 2026 più le pause fino a questa compresa e le durate dei tratti precedenti,
+/// cioè il loro `t` quantizzato finale. `d` è la spezzata dei campioni
+/// quantizzati.
+fn ink(seed: u32) -> (String, u64) {
+    let mut rng = Mulberry32(seed);
+    let mut layer = layer("l00000001", "Livello 1");
+    let mut clock: u64 = 0;
+    let mut total = 0u64;
+    for i in 0..40u32 {
+        let count = match i {
+            0 => 1,
+            1 => 2,
+            2 => INK_MAX_SAMPLES as u32,
+            _ => 2 + rng.below(1500),
+        };
+        let pressure = rng.below(2) == 1 || i == 2;
+        let tilt = rng.below(2) == 1 || i == 2;
+        let scale = if rng.below(2) == 1 || i == 2 {
+            Scale::S100
+        } else {
+            Scale::S10
+        };
+        let highlighter = rng.below(8) == 0;
+        let fill = if highlighter {
+            PALETTE[5]
+        } else {
+            PALETTE[rng.below(8) as usize]
+        };
+        let brush = format!(
+            "{} sim={}",
+            BRUSHES[rng.below(3) as usize],
+            u8::from(!pressure)
+        );
+        clock += u64::from(rng.below(2000));
+        let mut samples = Vec::with_capacity(count as usize);
+        let (mut x, mut y, mut t) = (0.0, 0.0, 0.0);
+        for k in 0..count {
+            if k == 0 {
+                x = rng.fraction(160_000, 100);
+                y = rng.fraction(100_000, 100);
+            } else {
+                x += (f64::from(rng.below(2001)) - 1000.0) / 1000.0;
+                y += (f64::from(rng.below(2001)) - 1000.0) / 1000.0;
+            }
+            let p = pressure.then(|| rng.fraction(1001, 1000));
+            if k > 0 {
+                t += rng.fraction(17_001, 1000);
+            }
+            let tilt = tilt.then(|| (rng.fraction(90_001, 1000), rng.fraction(360_000, 1000)));
+            samples.push(Sample { x, y, p, t, tilt });
+        }
+        let quantized = Ink::quantize(&samples, scale).unwrap();
+        let (h, m, s, ms) = (
+            9 + clock / 3_600_000,
+            clock / 60_000 % 60,
+            clock / 1000 % 60,
+            clock % 1000,
+        );
+        let at = format!("2026-10-02T{h:02}:{m:02}:{s:02}.{ms:03}Z");
+        let tool = if highlighter { "highlighter" } else { "pen" };
+        layer = layer.child(drawn(
+            &format!("o{:08}", i + 1),
+            tool,
+            &at,
+            &brush,
+            &samples,
+            scale,
+            fill,
+        ));
+        clock += quantized.duration().unwrap_or(0).max(0) as u64;
+        total += quantized.len() as u64;
+    }
+    let root = svg(1600, 1000)
+        .child(El::new("title").text("Inchiostro"))
+        .child(paper(1600, 1000))
+        .child(layer);
+    (document(&root, "\n"), total)
+}
+
+const BRUSHES: [&str; 3] = [
+    BRUSH,
+    "pf1 size=8 thinning=0.6 smoothing=0.5 streamline=0.4 taperStart=12 taperEnd=12 capStart=0 capEnd=0",
+    "pf1 size=2.5 thinning=-0.2 smoothing=0.7 streamline=0.6 taperStart=0 taperEnd=0 capStart=1 capEnd=1",
+];
+
+const DENSE_SEED: u32 = 0x2026_1002;
+const INK_SEED: u32 = 0x2026_1003;
+
+/// Quel che `generated.json` fissa di una fixture generata.
+fn facts(seed: u32, source: &str, scene: &Scene) -> serde_json::Value {
+    let mut codes: BTreeMap<String, usize> = BTreeMap::new();
+    for diagnostic in &scene.diagnostics {
+        *codes.entry(format!("{:?}", diagnostic.code)).or_default() += 1;
+    }
+    json!({
+        "seed": seed,
+        "bytes": source.len(),
+        "fnv1a": fnv1a(source),
+        "items": scene.items.len(),
+        "diagnostics": codes,
+        "summary": scene.summary,
+    })
+}
+
+#[test]
+fn generated_fixtures_are_pinned() {
+    let source = dense(DENSE_SEED);
+    assert!(source.is_ascii());
+    // Senza commenti né istruzioni, ogni `<` che non chiude apre un elemento.
+    let elements = source.matches('<').count() - source.matches("</").count();
+    assert_eq!(elements, MAX_ELEMENTS);
+    let dense_scene = read(&source).unwrap();
+    check_lossless(&source, &dense_scene);
+    // Esattamente al limite: ancora modificabile.
+    assert!(dense_scene.editable(), "{:?}", dense_scene.read_only);
+    let roles = |scene: &Scene, wanted: Role| {
+        scene
+            .items
+            .iter()
+            .filter(|item| matches!(item, Item::Element(e) if e.role == wanted))
+            .count()
+    };
+    assert!(roles(&dense_scene, Role::Text) > 0 && roles(&dense_scene, Role::Group) > 0);
+    let dense_facts = facts(DENSE_SEED, &source, &dense_scene);
+
+    let (source, samples) = ink(INK_SEED);
+    assert!(source.is_ascii());
+    let ink_scene = read(&source).unwrap();
+    check_lossless(&source, &ink_scene);
+    assert!(ink_scene.editable());
+    assert_eq!(ink_scene.summary.counts.strokes, 40);
+    assert_eq!(ink_scene.summary.ink.samples, samples);
+    // Ogni tratto si ridisegna: il codec rilegge ciò che ha scritto.
+    for item in &ink_scene.items {
+        if let Item::Element(element) = item {
+            if let Some(stroke) = &element.stroke {
+                assert!(stroke.redrawable, "{:?}", element.id);
+            }
+        }
+    }
+    let ink_facts = facts(INK_SEED, &source, &ink_scene);
+
+    let pinned = json!({"dense": dense_facts, "ink": ink_facts});
+    mirror(
+        "generated.json",
+        &format!("{}\n", serde_json::to_string_pretty(&pinned).unwrap()),
+    );
+}
+
+#[test]
+fn the_folder_holds_only_what_this_test_writes() {
+    if updating() {
+        // Gli altri test stanno scrivendo: si guarda al giro dopo.
+        return;
+    }
+    let mut found: Vec<String> = std::fs::read_dir(fixtures())
+        .unwrap_or_else(|error| {
+            panic!("la cartella delle fixture non si legge ({error}): {REGENERATE}")
+        })
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    found.sort();
+    let mut expected: Vec<String> = [
+        "sparse",
+        "foreign",
+        "crlf-bom",
+        "doctype",
+        "resources",
+        "swatches",
+        "text",
+        "boards",
+        "legend",
+        "connectors",
+        "styles",
+        "symbols",
+        "repeats",
+    ]
+    .iter()
+    .flat_map(|name| [format!("{name}.json"), format!("{name}.svg")])
+    .chain(["generated.json".to_owned()])
+    .collect();
+    expected.sort();
+    assert_eq!(found, expected, "file in più o in meno: {REGENERATE}");
+}
+
+#[test]
+fn the_generator_is_mulberry32() {
+    // I primi numeri del seme 0, come li dà `seedRandom` di TypeScript.
+    let mut rng = Mulberry32(0);
+    let first = [rng.next(), rng.next(), rng.next()];
+    assert_eq!(first, [1_144_304_738, 1_416_247, 958_946_056]);
+    assert_eq!(fnv1a(""), "811c9dc5");
+    assert_eq!(fnv1a("a"), "e40c292c");
+    assert_eq!(decimal(12050, 2), "120.5");
+    assert_eq!(decimal(-5, 2), "-0.05");
+    assert_eq!(decimal(300, 2), "3");
+}

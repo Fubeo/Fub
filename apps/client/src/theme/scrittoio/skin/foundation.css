@@ -1,0 +1,132 @@
+/* Le fondamenta: la pagina, il bottone nudo, gli intenti, il testo attenuato,
+   i piani del rilievo. Ogni altro pezzo parte da qui. */
+
+/* La pagina è la scrivania: il piano di fondo, senza rilievo. Il carattere
+   dell'interfaccia vale ovunque, tranne dove un foglio dichiara il suo. */
+html, body, .app {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  font-optical-sizing: auto;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  accent-color: var(--accent);
+}
+
+/* Le barre di scorrimento sono un filo: non hanno pista, e il pollice ha il
+   colore dei tratti. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::selection {
+  background: var(--accent-veil);
+}
+
+/* Il salto al contenuto. Il meccanismo — fisso, fuori dallo schermo, rivelato
+   dal fuoco — è della struttura; qui la superficie con cui arriva. */
+.skip-link {
+  top: var(--space-4);
+  left: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-control);
+  background: var(--bg-elev);
+  color: var(--text);
+  font-weight: var(--weight-bold);
+  text-decoration: none;
+  box-shadow: var(--shadow-3);
+  transition: transform var(--duration-med) var(--ease-out);
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Il bottone nudo è un fantasma: niente fondo finché non lo si sfiora. Sta a
+   specificità zero, così un componente che gli dà una classe decide da solo
+   anche il proprio passaggio, senza doverlo disfare. */
+:where(button) {
+  padding: var(--space-3) var(--space-5);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  cursor: pointer;
+}
+:where(button:hover) {
+  background: var(--overlay-hover);
+}
+:where(button:active) {
+  background: var(--overlay-active);
+}
+:where(button:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+:where(button:disabled:hover),
+:where(button:disabled:active) {
+  background: transparent;
+}
+
+/* L'azione primaria: una per superficie. Dialoghi, stati vuoti, conferme. */
+button.primary,
+.ui-button.intent-primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-weight: var(--weight-bold);
+  transition: scale var(--duration-state) var(--ease);
+}
+/* L'inchiostro cambia col fondo: `--accent-soft` è più chiaro dell'accento al
+   buio e più scuro alla luce, e `--bg` gli sta sopra in tutte e due — è la
+   coppia che il presidio del contrasto misura. */
+button.primary:hover,
+.ui-button.intent-primary:hover {
+  background: var(--accent-soft);
+  color: var(--bg);
+}
+button.primary:active,
+.ui-button.intent-primary:active {
+  scale: 0.98;
+}
+button.primary:disabled,
+.ui-button.intent-primary:disabled {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  scale: 1;
+}
+
+/* L'azione distruttiva non grida a riposo: il rosso arriva col gesto. */
+.ui-button.intent-danger {
+  color: var(--danger);
+}
+/* Pieno e non velato: il rosso sul suo velo non arriva a 4,5:1. */
+.ui-button.intent-danger:hover {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+/* I cinque piani nel catalogo del banco: stessa anatomia, tre token per riga. */
+.elevation-paper,
+.elevation-base,
+.elevation-chrome,
+.elevation-floating,
+.elevation-dialog {
+  min-height: var(--space-10);
+  padding: var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius-control);
+}
+.elevation-paper { background: var(--elevation-paper-surface); border-color: var(--elevation-paper-border); box-shadow: var(--elevation-paper-shadow); }
+.elevation-base { background: var(--elevation-base-surface); border-color: var(--elevation-base-border); box-shadow: var(--elevation-base-shadow); }
+.elevation-chrome { background: var(--elevation-chrome-surface); border-color: var(--elevation-chrome-border); box-shadow: var(--elevation-chrome-shadow); }
+.elevation-floating { background: var(--elevation-floating-surface); border-color: var(--elevation-floating-border); box-shadow: var(--elevation-floating-shadow); }
+.elevation-dialog { background: var(--elevation-dialog-surface); border-color: var(--elevation-dialog-border); box-shadow: var(--elevation-dialog-shadow); }

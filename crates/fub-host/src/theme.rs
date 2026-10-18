@@ -17,7 +17,9 @@
 //! # Il contratto del manifest, e dove si applica
 //!
 //! Un tema dichiara la versione del contratto **per la pelle**, non per il
-//! codice: [`THEME_ENGINE`]. È l'analogo dell'`abi_version` di un plugin, e come
+//! codice: uno dei [`ThemeEngine`] conosciuti. L'host li trasporta tutti; quale
+//! la shell sappia vestire lo decide la shell, che è l'unica ad avere
+//! un'anatomia. È l'analogo dell'`abi_version` di un plugin, e come
 //! quello si verifica **prima** di qualunque altra cosa — prima di
 //! `remember`, prima dell'inventario — e chi non la rispetta è respinto con la
 //! stessa forma del [`BundleError::Abi`]: non è un difetto del tema, è un tema
@@ -34,6 +36,16 @@
 //! fuori dalla propria pasta, che la sintassi regga — girano al montaggio nella
 //! shell, che è l'unica che ha un renderer; qui si valida ciò che è valido
 //! senza renderer: manifest, struttura e namespace.
+//!
+//! # Le impostazioni di un tema
+//!
+//! Da `theme-2` un tema può dichiarare delle impostazioni
+//! ([`ThemeSetting`]): interruttori, numeri fra un minimo e un massimo, e
+//! scelte, che il suo autore lascia a chi lo usa. Non hanno una porta loro. Il bundle le porta nel proprio
+//! [`PluginManifest`] come [`SettingSpec`], e da lì sono impostazioni come le
+//! altre: stesso registro, stessa lettura, stessa scrittura, stesso evento. Ciò
+//! che l'autore non decide lo mette l'host — la chiave è `<id>:<nome>`, il
+//! livello è la macchina (come il tema scelto), il gruppo è il nome del tema.
 //!
 //! # L'installazione è una cartella, e atomica
 //!
@@ -52,9 +64,12 @@
 //! niente).
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::theme::{ThemeEngine, ThemeLight, ThemeManifest, THEME_ENGINE};
+use fub_abi::settings::{SettingKind, SettingSpec};
+use fub_abi::theme::{
+    ThemeEngine, ThemeLight, ThemeManifest, ThemeSetting, MAX_THEME_SETTINGS, THEME_ENGINE,
+};
 use fub_abi::traits::{Plugin, PluginManifest};
-use fub_abi::PluginError;
+use fub_abi::{PluginError, Text};
 
 use crate::registry::{BundleKind, OnlyProviders};
 use std::fs::{File, OpenOptions};
@@ -81,6 +96,11 @@ pub(crate) const STAGING_PREFIX: &str = ".tmp-";
 pub const MAX_THEME_MANIFEST_BYTES: u64 = 64 * 1024;
 /// Hard upper bound for each CSS sheet or optional skin.
 pub const MAX_THEME_CSS_BYTES: u64 = 4 * 1024 * 1024;
+/// Quanto può essere lungo il nome di un'impostazione di tema, o il valore di
+/// una sua opzione: finiscono in un attributo della radice del documento.
+pub const MAX_THEME_SETTING_NAME: usize = 48;
+/// Quante opzioni può offrire una scelta di un tema.
+pub const MAX_THEME_SETTING_OPTIONS: usize = 16;
 
 /// Il manifest del tema di serie: la costante che il §29.4 chiede, identica al
 /// campione pinato dal banco di `fub_abi::theme` (id, nome, versione, motore,
@@ -103,6 +123,7 @@ pub fn series_manifest() -> ThemeManifest {
             fub_abi::theme::ThemeMotion::Opacity,
             fub_abi::theme::ThemeMotion::Transform,
         ],
+        settings: Vec::new(),
     }
 }
 
@@ -116,8 +137,9 @@ pub fn series_manifest() -> ThemeManifest {
 /// chi deve andarci a guardare.
 #[derive(Debug)]
 pub enum ThemeError {
-    /// Il manifest dichiara un motore diverso da [`THEME_ENGINE`]: un tema che
-    /// questo host non serve, respinto prima di ogni altro passo.
+    /// Il manifest dichiara un motore che non è fra i [`ThemeEngine`]
+    /// conosciuti: un tema che questo host non serve, respinto prima di ogni
+    /// altro passo.
     Engine { id: String, declared: String },
     /// Il manifest è illeggibile o non è un [`ThemeManifest`] valido.
     Malformed(String),
@@ -141,7 +163,10 @@ impl std::fmt::Display for ThemeError {
             ThemeError::Engine { id, declared } => write!(
                 f,
                 "`{id}` speaks theme contract `{declared}`, but this host \
-                 speaks `{THEME_ENGINE}`: will not install"
+                 speaks {}: will not install",
+                ThemeEngine::ALL
+                    .map(|engine| format!("`{}`", engine.as_str()))
+                    .join(", ")
             ),
             ThemeError::Malformed(and) => write!(f, "malformed theme manifest: {and}"),
             ThemeError::Permissions { id } => write!(
@@ -211,10 +236,10 @@ impl ThemeBundle {
 
     /// Legge la cartella di un tema installato e valida le tre porte del
     /// manifest, **in questo ordine**: il motore (letto come stringa grezza,
-    /// prima di deserializzare, così un tema-2 produce l'errore nominato e non
-    /// un «unknown variant» di serde), i permessi (rifiutati per nome), la
-    /// forma (deserializzazione piena + id sicuro + luci non vuote + namespace
-    /// sotto `theme://`).
+    /// prima di deserializzare, così un motore sconosciuto produce l'errore
+    /// nominato e non un «unknown variant» di serde), i permessi (rifiutati per
+    /// nome), la forma (deserializzazione piena + id sicuro + luci non vuote +
+    /// namespace sotto `theme://` + impostazioni dichiarabili).
     pub fn load(dir: &Utf8Path) -> Result<Self, ThemeError> {
         let id_hint = dir.file_name().unwrap_or_default().to_string();
         let root = canonical_theme_root(dir, &id_hint)?;
@@ -238,7 +263,7 @@ impl ThemeBundle {
             .get("engine")
             .and_then(serde_json::Value::as_str)
             .unwrap_or(THEME_ENGINE);
-        if declared != THEME_ENGINE {
+        if ThemeEngine::parse(declared).is_none() {
             return Err(ThemeError::Engine {
                 id,
                 declared: declared.to_string(),
@@ -274,6 +299,7 @@ impl ThemeBundle {
             )));
         }
         check_id(&manifest.id)?;
+        check_settings(&manifest)?;
         // Check every well-known bundle file before any later copy/read. Missing
         // sheets and skin remain allowed here; read_theme/list_themes decide
         // whether a requested light is actually loadable.
@@ -320,9 +346,148 @@ pub struct ThemePayload {
     pub assets: std::collections::BTreeMap<String, Vec<u8>>,
 }
 
+/// Le impostazioni di un tema reggono come impostazioni del registro?
+///
+/// Si decide qui, alla lettura del manifest, e non al montaggio: un tema che
+/// dichiara male non si installa e non compare, invece di installarsi e poi
+/// restare spento per un rifiuto del registro che nessuno collegherebbe al
+/// manifest.
+fn check_settings(manifest: &ThemeManifest) -> Result<(), ThemeError> {
+    let bad = |why: String| ThemeError::Malformed(why);
+    if manifest.settings.is_empty() {
+        return Ok(());
+    }
+    if manifest.engine == ThemeEngine::Theme1 {
+        return Err(bad(format!(
+            "settings need `{}`: `{THEME_ENGINE}` has none",
+            ThemeEngine::Theme2.as_str()
+        )));
+    }
+    if manifest.settings.len() > MAX_THEME_SETTINGS {
+        return Err(bad(format!(
+            "{} settings declared, at most {MAX_THEME_SETTINGS} are allowed",
+            manifest.settings.len()
+        )));
+    }
+    // La chiave è `<id>:<nome>`: un id che contiene già il separatore darebbe
+    // una chiave che il registro legge come di qualcun altro.
+    if manifest.id.contains(':') {
+        return Err(bad(format!(
+            "a theme whose id contains `:` cannot declare settings: `{}`",
+            manifest.id
+        )));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for setting in &manifest.settings {
+        let name = setting.name.as_str();
+        if !is_setting_token(name) {
+            return Err(bad(format!(
+                "setting name `{name}` must be 1 to {MAX_THEME_SETTING_NAME} characters \
+                 of a-z, 0-9 or `-`, starting with a letter"
+            )));
+        }
+        if !seen.insert(name) {
+            return Err(bad(format!("setting `{name}` is declared twice")));
+        }
+        if setting.label.trim().is_empty() {
+            return Err(bad(format!("setting `{name}` has no label")));
+        }
+        match &setting.kind {
+            SettingKind::Toggle { .. } => {}
+            SettingKind::Number { default, min, max } => {
+                // I due estremi sono d'obbligo: chi usa il tema regola un
+                // numero con un cursore, e un cursore ha un inizio e una fine.
+                let (Some(min), Some(max)) = (min, max) else {
+                    return Err(bad(format!("setting `{name}` needs both `min` and `max`")));
+                };
+                if !(default.is_finite() && min.is_finite() && max.is_finite() && min <= max) {
+                    return Err(bad(format!("setting `{name}` has an invalid range")));
+                }
+            }
+            SettingKind::Choice { options, .. } => {
+                if options.is_empty() || options.len() > MAX_THEME_SETTING_OPTIONS {
+                    return Err(bad(format!(
+                        "setting `{name}` must offer 1 to {MAX_THEME_SETTING_OPTIONS} options"
+                    )));
+                }
+                let mut values = std::collections::BTreeSet::new();
+                for option in options {
+                    if !is_setting_token(&option.value) {
+                        return Err(bad(format!(
+                            "setting `{name}` has an option `{}` that is not a-z, 0-9 or `-`",
+                            option.value
+                        )));
+                    }
+                    if !values.insert(option.value.as_str()) {
+                        return Err(bad(format!(
+                            "setting `{name}` offers `{}` twice",
+                            option.value
+                        )));
+                    }
+                    // Prosa, come l'etichetta dell'impostazione: un tema non
+                    // ha un catalogo da cui risolvere una chiave.
+                    if !matches!(&option.label, Text::Literal(label) if !label.trim().is_empty()) {
+                        return Err(bad(format!(
+                            "setting `{name}` has an option `{}` without a plain label",
+                            option.value
+                        )));
+                    }
+                }
+            }
+            SettingKind::Text { .. } | SettingKind::List { .. } => {
+                return Err(bad(format!(
+                    "setting `{name}` must be a toggle, a number or a choice"
+                )));
+            }
+        }
+        // Il default deve reggere il proprio schema: è il valore che vale
+        // finché nessuno sceglie, e il registro non lo ricontrolla.
+        if let Some(why) = setting.kind.rejects(&setting.kind.default_value()) {
+            return Err(bad(format!(
+                "setting `{name}` has an invalid default: {why}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Un nome che può stare in un attributo della radice senza essere citato.
+fn is_setting_token(token: &str) -> bool {
+    token.len() <= MAX_THEME_SETTING_NAME
+        && token.starts_with(|c: char| c.is_ascii_lowercase())
+        && token
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// La chiave con cui il registro delle impostazioni conosce un'impostazione di
+/// tema: dentro l'id del tema, come ogni nome di un componente.
+pub fn theme_setting_key(theme: &str, name: &str) -> String {
+    format!("{theme}:{name}")
+}
+
+/// Un'impostazione di tema come impostazione del registro.
+fn setting_spec(manifest: &ThemeManifest, setting: &ThemeSetting) -> SettingSpec {
+    SettingSpec::new(
+        theme_setting_key(&manifest.id, &setting.name),
+        Text::Literal(setting.label.clone()),
+        setting.kind.clone(),
+    )
+    .describing(Text::Literal(setting.description.clone()))
+    .grouped(Text::Literal(manifest.name.clone()))
+    .for_machine()
+}
+
 impl crate::registry::Bundle for ThemeBundle {
     fn manifest(&self) -> PluginManifest {
+        let settings = self
+            .manifest
+            .settings
+            .iter()
+            .map(|setting| setting_spec(&self.manifest, setting))
+            .collect();
         PluginManifest::new(self.manifest.id.clone(), self.manifest.name.clone())
+            .configuring(settings)
     }
 
     fn trust(&self) -> fub_kernel::Trust {

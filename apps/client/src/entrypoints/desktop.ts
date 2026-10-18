@@ -1,1 +1,0 @@
-import "../shells/desktop/bootstrap";

@@ -1,0 +1,1323 @@
+{
+  "status": "fubdraw",
+  "readOnly": [],
+  "version": 1,
+  "bom": false,
+  "lineEnding": "lf",
+  "lineBreak": "lf",
+  "truncated": false,
+  "items": [
+    {
+      "kind": "root",
+      "bytes": [
+        0,
+        3402
+      ],
+      "utf16": [
+        0,
+        3402
+      ],
+      "tags": {
+        "open": {
+          "bytes": [
+            0,
+            193
+          ],
+          "utf16": [
+            0,
+            193
+          ]
+        },
+        "close": {
+          "bytes": [
+            3396,
+            3402
+          ],
+          "utf16": [
+            3396,
+            3402
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        196,
+        225
+      ],
+      "utf16": [
+        196,
+        225
+      ],
+      "indent": "  ",
+      "text": "Le ripetizioni"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1
+      ],
+      "tag": "defs",
+      "role": "defs",
+      "id": "fub-defs",
+      "bytes": [
+        228,
+        634
+      ],
+      "utf16": [
+        228,
+        634
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            228,
+            248
+          ],
+          "utf16": [
+            228,
+            248
+          ]
+        },
+        "close": {
+          "bytes": [
+            627,
+            634
+          ],
+          "utf16": [
+            627,
+            634
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0
+      ],
+      "tag": "symbol",
+      "role": "symbol",
+      "id": "r00000001",
+      "bytes": [
+        253,
+        624
+      ],
+      "utf16": [
+        253,
+        624
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            253,
+            295
+          ],
+          "utf16": [
+            253,
+            295
+          ]
+        },
+        "close": {
+          "bytes": [
+            615,
+            624
+          ],
+          "utf16": [
+            615,
+            624
+          ]
+        }
+      },
+      "title": "Petalo"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        302,
+        323
+      ],
+      "utf16": [
+        302,
+        323
+      ],
+      "indent": "      ",
+      "text": "Petalo"
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        1
+      ],
+      "tag": "ellipse",
+      "role": "ellipse",
+      "id": "o00000001",
+      "bytes": [
+        330,
+        401
+      ],
+      "utf16": [
+        330,
+        401
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        2
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000002",
+      "bytes": [
+        408,
+        610
+      ],
+      "utf16": [
+        408,
+        610
+      ],
+      "indent": "      ",
+      "tags": {
+        "open": {
+          "bytes": [
+            408,
+            453
+          ],
+          "utf16": [
+            408,
+            453
+          ]
+        },
+        "close": {
+          "bytes": [
+            606,
+            610
+          ],
+          "utf16": [
+            606,
+            610
+          ]
+        }
+      },
+      "repeat": {
+        "kind": "grid",
+        "columns": 1,
+        "rows": 2,
+        "step": [
+          0.0,
+          10.0
+        ]
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        2,
+        0
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000003",
+      "bytes": [
+        462,
+        523
+      ],
+      "utf16": [
+        462,
+        523
+      ],
+      "indent": "        "
+    },
+    {
+      "kind": "element",
+      "path": [
+        1,
+        0,
+        2,
+        1
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000004",
+      "bytes": [
+        532,
+        599
+      ],
+      "utf16": [
+        532,
+        599
+      ],
+      "indent": "        ",
+      "original": "o00000003"
+    },
+    {
+      "kind": "element",
+      "path": [
+        2
+      ],
+      "tag": "rect",
+      "role": "paper",
+      "id": "fub-paper",
+      "bytes": [
+        637,
+        728
+      ],
+      "utf16": [
+        637,
+        728
+      ],
+      "indent": "  "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000001",
+      "bytes": [
+        731,
+        3168
+      ],
+      "utf16": [
+        731,
+        3168
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            731,
+            771
+          ],
+          "utf16": [
+            731,
+            771
+          ]
+        },
+        "close": {
+          "bytes": [
+            3164,
+            3168
+          ],
+          "utf16": [
+            3164,
+            3168
+          ]
+        }
+      },
+      "layer": {
+        "name": "Livello 1",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000010",
+      "bytes": [
+        776,
+        1445
+      ],
+      "utf16": [
+        776,
+        1445
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            776,
+            824
+          ],
+          "utf16": [
+            776,
+            824
+          ]
+        },
+        "close": {
+          "bytes": [
+            1441,
+            1445
+          ],
+          "utf16": [
+            1441,
+            1445
+          ]
+        }
+      },
+      "title": "Fiore",
+      "repeat": {
+        "kind": "radial",
+        "count": 6,
+        "center": [
+          200.0,
+          200.0
+        ]
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0,
+        0
+      ],
+      "tag": "title",
+      "role": "title",
+      "id": null,
+      "bytes": [
+        831,
+        851
+      ],
+      "utf16": [
+        831,
+        851
+      ],
+      "indent": "      ",
+      "text": "Fiore"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0,
+        1
+      ],
+      "tag": "use",
+      "role": "instance",
+      "id": "o00000011",
+      "bytes": [
+        858,
+        928
+      ],
+      "utf16": [
+        858,
+        928
+      ],
+      "indent": "      ",
+      "symbol": "r00000001"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0,
+        2
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000012",
+      "bytes": [
+        935,
+        1033
+      ],
+      "utf16": [
+        935,
+        1033
+      ],
+      "indent": "      ",
+      "original": "o00000011"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0,
+        3
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000013",
+      "bytes": [
+        1040,
+        1140
+      ],
+      "utf16": [
+        1040,
+        1140
+      ],
+      "indent": "      ",
+      "original": "o00000011"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0,
+        4
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000014",
+      "bytes": [
+        1147,
+        1224
+      ],
+      "utf16": [
+        1147,
+        1224
+      ],
+      "indent": "      ",
+      "original": "o00000011"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0,
+        5
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000015",
+      "bytes": [
+        1231,
+        1331
+      ],
+      "utf16": [
+        1231,
+        1331
+      ],
+      "indent": "      ",
+      "original": "o00000011"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        0,
+        6
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000016",
+      "bytes": [
+        1338,
+        1436
+      ],
+      "utf16": [
+        1338,
+        1436
+      ],
+      "indent": "      ",
+      "original": "o00000011"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000020",
+      "bytes": [
+        1450,
+        2035
+      ],
+      "utf16": [
+        1450,
+        2035
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            1450,
+            1526
+          ],
+          "utf16": [
+            1450,
+            1526
+          ]
+        },
+        "close": {
+          "bytes": [
+            2031,
+            2035
+          ],
+          "utf16": [
+            2031,
+            2035
+          ]
+        }
+      },
+      "repeat": {
+        "kind": "grid",
+        "columns": 3,
+        "rows": 2,
+        "step": [
+          60.0,
+          50.0
+        ]
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000021",
+      "bytes": [
+        1533,
+        1605
+      ],
+      "utf16": [
+        1533,
+        1605
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1,
+        1
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000022",
+      "bytes": [
+        1612,
+        1679
+      ],
+      "utf16": [
+        1612,
+        1679
+      ],
+      "indent": "      ",
+      "original": "o00000021"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1,
+        2
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000023",
+      "bytes": [
+        1686,
+        1801
+      ],
+      "utf16": [
+        1686,
+        1801
+      ],
+      "indent": "      ",
+      "title": "Terza",
+      "original": "o00000021"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1,
+        3
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000024",
+      "bytes": [
+        1808,
+        1875
+      ],
+      "utf16": [
+        1808,
+        1875
+      ],
+      "indent": "      ",
+      "original": "o00000021"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1,
+        4
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000025",
+      "bytes": [
+        1882,
+        1950
+      ],
+      "utf16": [
+        1882,
+        1950
+      ],
+      "indent": "      ",
+      "original": "o00000021"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        1,
+        5
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000026",
+      "bytes": [
+        1957,
+        2026
+      ],
+      "utf16": [
+        1957,
+        2026
+      ],
+      "indent": "      ",
+      "original": "o00000021"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000030",
+      "bytes": [
+        2040,
+        2518
+      ],
+      "utf16": [
+        2040,
+        2518
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2040,
+            2094
+          ],
+          "utf16": [
+            2040,
+            2094
+          ]
+        },
+        "close": {
+          "bytes": [
+            2514,
+            2518
+          ],
+          "utf16": [
+            2514,
+            2518
+          ]
+        }
+      },
+      "repeat": {
+        "kind": "mirror",
+        "axis": [
+          [
+            400.0,
+            300.0
+          ],
+          [
+            400.0,
+            400.0
+          ]
+        ]
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2,
+        0
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000031",
+      "bytes": [
+        2101,
+        2428
+      ],
+      "utf16": [
+        2101,
+        2428
+      ],
+      "indent": "      ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2101,
+            2119
+          ],
+          "utf16": [
+            2101,
+            2119
+          ]
+        },
+        "close": {
+          "bytes": [
+            2424,
+            2428
+          ],
+          "utf16": [
+            2424,
+            2428
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2,
+        0,
+        0
+      ],
+      "tag": "path",
+      "role": "path",
+      "id": "o00000032",
+      "bytes": [
+        2128,
+        2198
+      ],
+      "utf16": [
+        2128,
+        2198
+      ],
+      "indent": "        "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2,
+        0,
+        1
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000033",
+      "bytes": [
+        2207,
+        2417
+      ],
+      "utf16": [
+        2207,
+        2417
+      ],
+      "indent": "        ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2207,
+            2252
+          ],
+          "utf16": [
+            2207,
+            2252
+          ]
+        },
+        "close": {
+          "bytes": [
+            2413,
+            2417
+          ],
+          "utf16": [
+            2413,
+            2417
+          ]
+        }
+      },
+      "repeat": {
+        "kind": "grid",
+        "columns": 2,
+        "rows": 1,
+        "step": [
+          30.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2,
+        0,
+        1,
+        0
+      ],
+      "tag": "circle",
+      "role": "circle",
+      "id": "o00000034",
+      "bytes": [
+        2263,
+        2326
+      ],
+      "utf16": [
+        2263,
+        2326
+      ],
+      "indent": "          "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2,
+        0,
+        1,
+        1
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000035",
+      "bytes": [
+        2337,
+        2404
+      ],
+      "utf16": [
+        2337,
+        2404
+      ],
+      "indent": "          ",
+      "original": "o00000034"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        2,
+        1
+      ],
+      "tag": "use",
+      "role": "copy",
+      "id": "o00000036",
+      "bytes": [
+        2435,
+        2509
+      ],
+      "utf16": [
+        2435,
+        2509
+      ],
+      "indent": "      ",
+      "original": "o00000031"
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        3
+      ],
+      "tag": "text",
+      "role": "text",
+      "id": "o00000040",
+      "bytes": [
+        2523,
+        2642
+      ],
+      "utf16": [
+        2523,
+        2642
+      ],
+      "indent": "    ",
+      "lines": [
+        "Eco"
+      ]
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000050",
+      "bytes": [
+        2647,
+        2857
+      ],
+      "utf16": [
+        2647,
+        2857
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2647,
+            2691
+          ],
+          "utf16": [
+            2647,
+            2691
+          ]
+        },
+        "close": {
+          "bytes": [
+            2853,
+            2857
+          ],
+          "utf16": [
+            2853,
+            2857
+          ]
+        }
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        4,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000051",
+      "bytes": [
+        2698,
+        2774
+      ],
+      "utf16": [
+        2698,
+        2774
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        3,
+        4
+      ],
+      "bytes": [
+        2781,
+        2848
+      ],
+      "utf16": [
+        2781,
+        2848
+      ],
+      "elements": [
+        1,
+        2
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5
+      ],
+      "tag": "g",
+      "role": "group",
+      "id": "o00000053",
+      "bytes": [
+        2862,
+        3161
+      ],
+      "utf16": [
+        2862,
+        3161
+      ],
+      "indent": "    ",
+      "tags": {
+        "open": {
+          "bytes": [
+            2862,
+            2907
+          ],
+          "utf16": [
+            2862,
+            2907
+          ]
+        },
+        "close": {
+          "bytes": [
+            3157,
+            3161
+          ],
+          "utf16": [
+            3157,
+            3161
+          ]
+        }
+      },
+      "repeat": {
+        "kind": "grid",
+        "columns": 2,
+        "rows": 1,
+        "step": [
+          30.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        3,
+        5,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000054",
+      "bytes": [
+        2914,
+        2990
+      ],
+      "utf16": [
+        2914,
+        2990
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        3,
+        5
+      ],
+      "bytes": [
+        2997,
+        3152
+      ],
+      "utf16": [
+        2997,
+        3152
+      ],
+      "elements": [
+        1,
+        3
+      ],
+      "indent": "      "
+    },
+    {
+      "kind": "element",
+      "path": [
+        4
+      ],
+      "tag": "g",
+      "role": "layer",
+      "id": "l00000002",
+      "bytes": [
+        3171,
+        3395
+      ],
+      "utf16": [
+        3171,
+        3395
+      ],
+      "indent": "  ",
+      "tags": {
+        "open": {
+          "bytes": [
+            3171,
+            3235
+          ],
+          "utf16": [
+            3171,
+            3235
+          ]
+        },
+        "close": {
+          "bytes": [
+            3391,
+            3395
+          ],
+          "utf16": [
+            3391,
+            3395
+          ]
+        }
+      },
+      "layer": {
+        "name": "Sfondo",
+        "locked": false,
+        "hidden": false
+      }
+    },
+    {
+      "kind": "element",
+      "path": [
+        4,
+        0
+      ],
+      "tag": "rect",
+      "role": "rect",
+      "id": "o00000060",
+      "bytes": [
+        3240,
+        3316
+      ],
+      "utf16": [
+        3240,
+        3316
+      ],
+      "indent": "    "
+    },
+    {
+      "kind": "foreign",
+      "parentPath": [
+        4
+      ],
+      "bytes": [
+        3321,
+        3388
+      ],
+      "utf16": [
+        3321,
+        3388
+      ],
+      "elements": [
+        1,
+        2
+      ],
+      "indent": "    "
+    }
+  ],
+  "index": {
+    "title": {
+      "text": "Le ripetizioni",
+      "bytes": [
+        196,
+        225
+      ],
+      "utf16": [
+        196,
+        225
+      ]
+    },
+    "desc": null,
+    "texts": [
+      {
+        "text": "Eco",
+        "bytes": [
+          2523,
+          2642
+        ],
+        "utf16": [
+          2523,
+          2642
+        ]
+      }
+    ],
+    "links": [],
+    "embeds": [],
+    "boards": []
+  },
+  "summary": {
+    "version": 1,
+    "foreign": false,
+    "truncated": false,
+    "layers": [
+      "Livello 1",
+      "Sfondo"
+    ],
+    "boards": [],
+    "counts": {
+      "strokes": 0,
+      "shapes": 8,
+      "texts": 1,
+      "images": 0,
+      "links": 0,
+      "foreign": 3
+    },
+    "ink": {
+      "samples": 0,
+      "duration": 0
+    },
+    "bbox": {
+      "x": 152.69,
+      "y": 80.0,
+      "width": 457.31,
+      "height": 500.0
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        2781,
+        2848
+      ],
+      "utf16": [
+        2781,
+        2848
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        2997,
+        3152
+      ],
+      "utf16": [
+        2997,
+        3152
+      ]
+    },
+    {
+      "code": "S002",
+      "severity": "info",
+      "bytes": [
+        3321,
+        3388
+      ],
+      "utf16": [
+        3321,
+        3388
+      ]
+    }
+  ]
+}

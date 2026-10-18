@@ -147,7 +147,16 @@ pub const CHROME_SIDEBAR_VISIBLE: &str = "chrome.sidebar.visible";
 pub const CHROME_INSPECTOR_VISIBLE: &str = "chrome.inspector.visible";
 pub const CHROME_STATUS_VISIBLE: &str = "chrome.status.visible";
 pub const CHROME_TOOLBAR_VISIBLE: &str = "chrome.toolbar.visible";
+/// La barra di formattazione del foglio. Spenta, gli stessi comandi restano
+/// raggiungibili dalla selezione, dal menu `/` e dalla tastiera.
+pub const CHROME_FORMATBAR_VISIBLE: &str = "chrome.formatbar.visible";
 pub const CHROME_FRAME: &str = "chrome.frame";
+/// Quanto spazio prende l'interfaccia attorno ai fogli: da `0` (ampia) a
+/// [`CHROME_COMPACTNESS_MAX`] (minima). Stringe barre, binario e cassetti; il
+/// foglio e le sue linguette non cambiano misura. Che cosa valga ogni passo lo
+/// decide il tema: l'host custodisce soltanto il passo.
+pub const CHROME_COMPACTNESS: &str = "chrome.compactness";
+pub const CHROME_COMPACTNESS_MAX: f64 = 4.0;
 pub const CHROME_SCHEMA_VERSION: f64 = 1.0;
 /// Preferenze locali del motore testuale, non comandi del documento.
 pub const EDITOR_SPELLCHECK: &str = "editor.spellcheck";
@@ -160,8 +169,9 @@ pub const EDITOR_INDENT: &str = "editor.indent";
 /// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
 /// `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
-/// Le animazioni della shell: `""` segue il sistema, `reduced` le spegne
-/// anche quando il sistema non lo chiede.
+/// Le animazioni della shell: `""` segue il sistema, `calm` toglie rimbalzi e
+/// scene, `reduced` le spegne anche quando il sistema non lo chiede. Nessun
+/// valore scavalca la richiesta di moto ridotto del sistema.
 pub const APPEARANCE_MOTION: &str = "appearance.motion";
 /// Il tetto dei fotogrammi: `""` segue il refresh dello schermo, qualunque
 /// sia; un numero di [`FRAME_RATE_CAPS`] è un tetto in fotogrammi al secondo.
@@ -241,6 +251,9 @@ pub const SYNC_PAUSED: &str = "sync.paused";
 pub const SYNC_EXCLUDE: &str = "sync.exclude";
 /// Endpoint locale di pubblicazione; credenziali e segreti restano fuori dai settings.
 pub const PUBLISH_SERVER_URL: &str = "publish.server_url";
+/// La porta della sessione live (ADR 0205): 0 sceglie una porta libera a ogni
+/// sessione, un altro numero la fissa per le reti con regole del firewall.
+pub const LIVE_PORT: &str = "live.port";
 
 /// Le impostazioni del bundle di core.
 ///
@@ -324,6 +337,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     settings.push(log_verbose_spec());
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
+    settings.extend(live_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -514,7 +528,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_ACCENT,
             C_ACCENT,
             C_ACCENT_DESC,
-            130.0,
+            265.0,
             0.0,
             360.0,
         ),
@@ -529,6 +543,14 @@ fn appearance_settings() -> Vec<SettingSpec> {
                 UiOption::new("relaxed", Text::key(C_DENSITY_RELAXED)),
             ],
         ),
+        number(
+            CHROME_COMPACTNESS,
+            C_COMPACTNESS,
+            C_COMPACTNESS_DESC,
+            0.0,
+            0.0,
+            CHROME_COMPACTNESS_MAX,
+        ),
         number(APPEARANCE_ZOOM, C_ZOOM, C_ZOOM_DESC, DEFAULT_ZOOM, 0.5, 2.0),
         choice(
             APPEARANCE_MOTION,
@@ -537,6 +559,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             fub_kernel::locale::AS_SYSTEM,
             vec![
                 system(),
+                UiOption::new("calm", Text::key(C_MOTION_CALM)),
                 UiOption::new("reduced", Text::key(C_MOTION_REDUCED)),
             ],
         ),
@@ -571,19 +594,21 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_FONT,
             C_FONT,
             C_FONT_DESC,
-            "literata",
+            "newsreader",
             vec![
+                UiOption::new("newsreader", Text::key(C_FONT_NEWSREADER)),
+                UiOption::new("hanken", Text::key(C_FONT_HANKEN)),
                 UiOption::new("literata", Text::key(C_FONT_LITERATA)),
                 UiOption::new("inter", Text::key(C_FONT_INTER)),
                 UiOption::new("system", Text::key(C_FONT_SYSTEM)),
             ],
         ),
-        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 16.0, 12.0, 28.0),
+        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 17.0, 12.0, 28.0),
         number(
             APPEARANCE_LINE_HEIGHT,
             C_LINE_HEIGHT,
             C_LINE_HEIGHT_DESC,
-            1.7,
+            1.65,
             1.2,
             2.4,
         ),
@@ -591,7 +616,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
             APPEARANCE_MEASURE,
             C_MEASURE,
             C_MEASURE_DESC,
-            70.0,
+            68.0,
             40.0,
             100.0,
         ),
@@ -664,6 +689,11 @@ fn chrome_settings() -> Vec<SettingSpec> {
             CHROME_TOOLBAR_VISIBLE,
             C_CHROME_TOOLBAR,
             C_CHROME_TOOLBAR_DESC,
+        ),
+        toggle(
+            CHROME_FORMATBAR_VISIBLE,
+            C_CHROME_FORMATBAR,
+            C_CHROME_FORMATBAR_DESC,
         ),
         SettingSpec::new(
             CHROME_FRAME,
@@ -752,6 +782,31 @@ fn service_settings() -> Vec<SettingSpec> {
         .grouped(Text::key(C_GROUP_PUBLISH))
         .for_machine(),
     ]
+}
+
+/// La sessione live: di macchina, perché la porta è una regola del firewall di
+/// questo PC e non di un vault.
+fn live_settings() -> Vec<SettingSpec> {
+    vec![SettingSpec::new(
+        LIVE_PORT,
+        Text::key(C_LIVE_PORT),
+        SettingKind::Number {
+            default: 0.0,
+            min: Some(0.0),
+            max: Some(f64::from(u16::MAX)),
+        },
+    )
+    .describing(Text::key(C_LIVE_PORT_DESC))
+    .grouped(Text::key(C_GROUP_LIVE))
+    .for_machine()]
+}
+
+/// La porta di [`LIVE_PORT`] da un valore della macchina: 0, cioè una porta
+/// libera, se la chiave manca o il valore non è un intero da 0 a 65535.
+pub fn live_port(value: Option<f64>) -> u16 {
+    value
+        .filter(|port| port.fract() == 0.0 && (0.0..=f64::from(u16::MAX)).contains(port))
+        .map_or(0, |port| port as u16)
 }
 
 /// La memoria di ciò che si è cercato e aperto come [`SettingSpec`] (§21.7).
@@ -892,17 +947,22 @@ const C_MEASURE: &str = "core.measure";
 const C_MEASURE_DESC: &str = "core.measure.desc";
 const C_FONT: &str = "core.font";
 const C_FONT_DESC: &str = "core.font.desc";
+const C_FONT_NEWSREADER: &str = "core.font.newsreader";
+const C_FONT_HANKEN: &str = "core.font.hanken";
 const C_FONT_LITERATA: &str = "core.font.literata";
 const C_FONT_INTER: &str = "core.font.inter";
 const C_FONT_SYSTEM: &str = "core.font.system";
 const C_ACCENT: &str = "core.accent";
 const C_ACCENT_DESC: &str = "core.accent.desc";
+const C_COMPACTNESS: &str = "core.compactness";
+const C_COMPACTNESS_DESC: &str = "core.compactness.desc";
 const C_ZOOM: &str = "core.zoom";
 const C_ZOOM_DESC: &str = "core.zoom.desc";
 const C_THEME_ID: &str = "core.theme_id";
 const C_THEME_ID_DESC: &str = "core.theme_id.desc";
 const C_MOTION: &str = "core.motion";
 const C_MOTION_DESC: &str = "core.motion.desc";
+const C_MOTION_CALM: &str = "core.motion.calm";
 const C_MOTION_REDUCED: &str = "core.motion.reduced";
 const C_FRAME_RATE: &str = "core.frame_rate";
 const C_FRAME_RATE_DESC: &str = "core.frame_rate.desc";
@@ -932,6 +992,8 @@ const C_CHROME_STATUS: &str = "core.chrome.status";
 const C_CHROME_STATUS_DESC: &str = "core.chrome.status.desc";
 const C_CHROME_TOOLBAR: &str = "core.chrome.toolbar";
 const C_CHROME_TOOLBAR_DESC: &str = "core.chrome.toolbar.desc";
+const C_CHROME_FORMATBAR: &str = "core.chrome.formatbar";
+const C_CHROME_FORMATBAR_DESC: &str = "core.chrome.formatbar.desc";
 const C_CHROME_FRAME: &str = "core.chrome.frame";
 const C_CHROME_FRAME_DESC: &str = "core.chrome.frame.desc";
 const C_FRAME_SYSTEM: &str = "core.chrome.frame.system";
@@ -950,6 +1012,9 @@ const C_SYNC_EXCLUDE_DESC: &str = "core.sync.exclude.desc";
 const C_GROUP_PUBLISH: &str = "core.group.publish";
 const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
 const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
+const C_GROUP_LIVE: &str = "core.group.live";
+const C_LIVE_PORT: &str = "core.live.port";
+const C_LIVE_PORT_DESC: &str = "core.live.port.desc";
 
 /// L'etichetta italiana di un gradino del log. È prosa e non il nome tecnico:
 /// «info» dice poco a chi non sviluppa, «Info, avvisi ed errori» dice cosa
@@ -1060,9 +1125,36 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "Un template vale solo per una cattura che crea una nota.")
         .with("host.capture.moved", "«{doc}» è cambiata durante la cattura: riprova.")
         .with("host.vault.moved", "«{doc}» è cambiata dopo aver letto la sua revisione: riprova.")
+        .with("host.rich.encrypted", "«{doc}» è protetto da una password: Fub non lo apre.")
+        .with("host.rich.readonly.revisions", "«{doc}» ha revisioni tracciate: si legge, ma non si scrive da qui.")
+        .with("host.rich.readonly.track_changes", "«{doc}» registra le modifiche: si legge, ma non si scrive da qui.")
+        .with("host.rich.readonly.protected", "«{doc}» è protetto contro le modifiche: si legge, ma non si scrive da qui.")
+        .with("host.rich.readonly.projection", "«{doc}» ha parti che l'editor non sa ricomporre senza perderle: si legge, ma non si scrive da qui.")
+        .with("host.rich.readonly.codec", "«{doc}» non si rileggerebbe identico dopo un salvataggio: si legge, ma non si scrive da qui.")
+        .with("host.rich.readonly.import", "«{doc}» è stato letto da un importatore che non ne riporta tutto il contenuto: si legge, ma non si scrive da qui.")
+        .with("host.rich.no_writer", "Fub legge i file come «{doc}», ma non li scrive.")
+        .with("host.rich.too_large", "«{doc}» pesa {bytes} byte, più di quanto Fub apra.")
+        .with("host.rich.projection", "Il contenuto da salvare in «{doc}» non è leggibile: {why}")
+        .with("host.rich.version", "Il contenuto da salvare in «{doc}» è di una versione ({version}) che questo Fub non legge.")
+        .with("host.rich.missing", "Il contenuto da salvare in «{doc}» nomina {what}, che il documento non ha.")
+        .with("host.rich.duplicate", "Il contenuto da salvare in «{doc}» mostra due volte la stessa nota o casella di testo.")
+        .with("host.rich.fidelity", "«{doc}» non è stato salvato: il file nuovo non si rileggeva uguale a ciò che si voleva scrivere.")
+        .with("host.rich.codec", "«{doc}» non si legge o non si scrive nel suo formato: {why}")
         .with("host.turn.cycle", "Il vault sta salvando una nota che aspetta questo componente, e questo componente aspetta il vault: il lavoro si ferma per lasciar finire il salvataggio. Riprova.")
         .with("host.instance.cycle", "Questo componente aspetta un altro componente che a sua volta aspetta questo: il lavoro si ferma per non bloccarli entrambi. Riprova.")
         .with("host.capture.source", "Fonte: {url}")
+        .with("host.live.offline", "Il PC non è su una rete locale: nessuna interfaccia attiva ha un indirizzo IPv4 privato.")
+        .with("host.live.interfaces", "Le interfacce di rete non si leggono: {why}")
+        .with("host.live.address", "{address} non è l'indirizzo privato di un'interfaccia attiva.")
+        .with("host.live.bind", "Il PC non riesce ad aspettare il tablet su {address}: {why}")
+        .with("host.live.busy", "«{document}» ha già una sessione live.")
+        .with("host.live.unknown", "Questa finestra non ha la sessione live {session}.")
+        .with("host.live.document", "Il percorso o il titolo del disegno sono troppo lunghi per la sessione live.")
+        .with("host.live.too_large", "Il disegno è troppo grande per la sessione live: il tablet non lo può modificare.")
+        .with("host.live.ended", "La sessione live è finita.")
+        .with("host.live.writer_connected", "Il tablet è collegato: un QR nuovo si chiede quando esce.")
+        .with("host.live.refused", "La sessione live ha rifiutato il messaggio: {why}")
+        .with("host.live.internal", "La sessione live non si è potuta preparare: {why}")
         .with("host.snapshot.create.title", "Snapshot completo del vault")
         .with("host.snapshot.create.desc", "Chiude il vault, ne copia ogni voce autorevole in una cartella esterna nuova e lo riapre.")
         .with("host.snapshot.apply.title", "Ripristina uno snapshot completo")
@@ -1123,6 +1215,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_STATUS_DESC, "Mostra salvataggio e statistiche nella barra del riquadro.")
         .with(C_CHROME_TOOLBAR, "Mostra strumenti del pannello")
         .with(C_CHROME_TOOLBAR_DESC, "Mostra i comandi contestuali del pannello.")
+        .with(C_CHROME_FORMATBAR, "Mostra la barra di formattazione")
+        .with(
+            C_CHROME_FORMATBAR_DESC,
+            "Spenta, i comandi di formattazione compaiono sulla selezione.",
+        )
         .with(C_CHROME_FRAME, "Cornice finestra")
         .with(C_CHROME_FRAME_DESC, "Il cambio di cornice richiede la riapertura e dipende dalle capacità del sistema.")
         .with(C_FRAME_SYSTEM, "Del sistema")
@@ -1199,6 +1296,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_FONT, "Carattere di lettura")
         .with(C_FONT_DESC, "Famiglia usata per la prosa lunga.")
+        .with(C_FONT_NEWSREADER, "Newsreader")
+        .with(C_FONT_HANKEN, "Hanken Grotesk")
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "Del sistema")
@@ -1207,12 +1306,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_ACCENT_DESC,
             "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
         )
+        .with(C_COMPACTNESS, "Spazio dell'interfaccia")
+        .with(C_COMPACTNESS_DESC, "Quanto posto prendono barre, binario e cassetti: da 0, ampia, a 4, minima. Il foglio e le sue linguette non cambiano.")
         .with(C_ZOOM, "Zoom interfaccia")
         .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
         .with(C_THEME_ID, "Tema installato")
         .with(C_THEME_ID_DESC, "L'id del tema montato; si sceglie dal catalogo dei temi.")
         .with(C_MOTION, "Animazioni")
-        .with(C_MOTION_DESC, "Segue la preferenza del sistema, oppure riduce sempre le animazioni dell'interfaccia.")
+        .with(C_MOTION_DESC, "Segue la preferenza del sistema, oppure toglie rimbalzi e scene, oppure riduce sempre le animazioni dell'interfaccia.")
+        .with(C_MOTION_CALM, "Calme")
         .with(C_MOTION_REDUCED, "Ridotte")
         .with(C_FRAME_RATE, "Fotogrammi al secondo")
         .with(C_FRAME_RATE_DESC, "Tetto delle animazioni disegnate dall'interfaccia. Il massimo segue il refresh dello schermo, qualunque sia.")
@@ -1251,6 +1353,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
+        )
+        .with(C_GROUP_LIVE, "Sessione live")
+        .with(C_LIVE_PORT, "Porta della sessione live")
+        .with(
+            C_LIVE_PORT_DESC,
+            "La porta su cui il PC aspetta il tablet. 0 sceglie una porta libera a ogni sessione; un numero fisso serve alle reti con regole del firewall.",
         )
         .with(C_GROUP_DIAGNOSTICS, "Diagnostica")
         .with(C_LOG_LEVEL, "Livello del log")
@@ -1315,9 +1423,36 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.capture.template_mode", "A template only applies to a capture that creates a note.")
         .with("host.capture.moved", "“{doc}” changed during the capture: try again.")
         .with("host.vault.moved", "“{doc}” changed after its revision was read: try again.")
+        .with("host.rich.encrypted", "“{doc}” is protected by a password: Fub does not open it.")
+        .with("host.rich.readonly.revisions", "“{doc}” has tracked changes: it can be read, but not written from here.")
+        .with("host.rich.readonly.track_changes", "“{doc}” tracks changes: it can be read, but not written from here.")
+        .with("host.rich.readonly.protected", "“{doc}” is protected against editing: it can be read, but not written from here.")
+        .with("host.rich.readonly.projection", "“{doc}” has parts the editor cannot put back without losing them: it can be read, but not written from here.")
+        .with("host.rich.readonly.codec", "“{doc}” would not read back the same after a save: it can be read, but not written from here.")
+        .with("host.rich.readonly.import", "“{doc}” was read by an importer that does not carry all of its content: it can be read, but not written from here.")
+        .with("host.rich.no_writer", "Fub reads files like “{doc}”, but does not write them.")
+        .with("host.rich.too_large", "“{doc}” is {bytes} bytes, more than Fub opens.")
+        .with("host.rich.projection", "The content to save into “{doc}” cannot be read: {why}")
+        .with("host.rich.version", "The content to save into “{doc}” is of a version ({version}) this Fub does not read.")
+        .with("host.rich.missing", "The content to save into “{doc}” names {what}, which the document does not have.")
+        .with("host.rich.duplicate", "The content to save into “{doc}” shows the same note or text box twice.")
+        .with("host.rich.fidelity", "“{doc}” was not saved: the new file did not read back the same as what was to be written.")
+        .with("host.rich.codec", "“{doc}” cannot be read or written in its format: {why}")
         .with("host.turn.cycle", "The vault is saving a note that waits for this component, and this component waits for the vault: the work stops so the save can finish. Try again.")
         .with("host.instance.cycle", "This component waits for another one that in turn waits for this one: the work stops so neither blocks. Try again.")
         .with("host.capture.source", "Source: {url}")
+        .with("host.live.offline", "The PC is not on a local network: no active interface has a private IPv4 address.")
+        .with("host.live.interfaces", "The network interfaces cannot be read: {why}")
+        .with("host.live.address", "{address} is not the private address of an active interface.")
+        .with("host.live.bind", "The PC cannot wait for the tablet on {address}: {why}")
+        .with("host.live.busy", "“{document}” already has a live session.")
+        .with("host.live.unknown", "This window has no live session {session}.")
+        .with("host.live.document", "The drawing's path or title is too long for the live session.")
+        .with("host.live.too_large", "The drawing is too large for the live session: the tablet cannot edit it.")
+        .with("host.live.ended", "The live session has ended.")
+        .with("host.live.writer_connected", "The tablet is connected: ask for a new QR code once it leaves.")
+        .with("host.live.refused", "The live session refused the message: {why}")
+        .with("host.live.internal", "The live session could not be prepared: {why}")
         .with("host.snapshot.create.title", "Full vault snapshot")
         .with("host.snapshot.create.desc", "Closes the vault, copies every authoritative entry into a new external folder and reopens it.")
         .with("host.snapshot.apply.title", "Restore a full snapshot")
@@ -1355,6 +1490,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_CHROME_STATUS_DESC, "Show save state and statistics in the pane bar.")
         .with(C_CHROME_TOOLBAR, "Show pane tools")
         .with(C_CHROME_TOOLBAR_DESC, "Show contextual pane commands.")
+        .with(C_CHROME_FORMATBAR, "Show the formatting bar")
+        .with(
+            C_CHROME_FORMATBAR_DESC,
+            "When off, formatting commands appear on the selection.",
+        )
         .with(C_CHROME_FRAME, "Window frame")
         .with(C_CHROME_FRAME_DESC, "Frame changes require reopening and depend on platform capabilities.")
         .with(C_FRAME_SYSTEM, "System")
@@ -1448,6 +1588,8 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_MEASURE_DESC, "Maximum width of the reading column.")
         .with(C_FONT, "Reading font")
         .with(C_FONT_DESC, "Font family used for long-form prose.")
+        .with(C_FONT_NEWSREADER, "Newsreader")
+        .with(C_FONT_HANKEN, "Hanken Grotesk")
         .with(C_FONT_LITERATA, "Literata")
         .with(C_FONT_INTER, "Inter")
         .with(C_FONT_SYSTEM, "System")
@@ -1456,12 +1598,15 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_ACCENT_DESC,
             "OKLCH hue; lightness and chroma are derived to preserve contrast.",
         )
+        .with(C_COMPACTNESS, "Interface space")
+        .with(C_COMPACTNESS_DESC, "How much room bars, rail and drawers take: from 0, roomy, to 4, minimal. The sheet and its tabs do not change.")
         .with(C_ZOOM, "Interface zoom")
         .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
         .with(C_THEME_ID, "Installed theme")
         .with(C_THEME_ID_DESC, "The id of the mounted theme; chosen from the theme catalog.")
         .with(C_MOTION, "Animations")
-        .with(C_MOTION_DESC, "Follow the system preference, or always reduce interface animations.")
+        .with(C_MOTION_DESC, "Follow the system preference, or drop bounces and scenes, or always reduce interface animations.")
+        .with(C_MOTION_CALM, "Calm")
         .with(C_MOTION_REDUCED, "Reduced")
         .with(C_FRAME_RATE, "Frame rate")
         .with(C_FRAME_RATE_DESC, "Cap for animations drawn by the interface. The maximum follows the display refresh rate, whatever it is.")
@@ -1500,6 +1645,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
+        .with(C_GROUP_LIVE, "Live session")
+        .with(C_LIVE_PORT, "Live session port")
+        .with(
+            C_LIVE_PORT_DESC,
+            "The port on which the PC waits for the tablet. 0 picks a free port for each session; a fixed number suits networks with firewall rules.",
         )
         .with(C_GROUP_DIAGNOSTICS, "Diagnostics")
         .with(C_LOG_LEVEL, "Log level")
@@ -1763,6 +1914,30 @@ mod tests {
     fn a_vault_without_keys_not_asks_nothing() {
         assert!(keys_to_watch(&BTreeMap::new(), &BTreeMap::new()).is_empty());
         assert!(keys_to_watch(&BTreeMap::new(), &map(&[("keys.a", "Mod-a")])).is_empty());
+    }
+
+    #[test]
+    fn the_live_port_is_a_machine_number_and_reads_back_as_a_port() {
+        let spec = core_settings()
+            .into_iter()
+            .find(|spec| spec.key == LIVE_PORT)
+            .expect("il core dichiara la porta della sessione live");
+        // La porta è una regola del firewall di questo PC, non di un vault.
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        let SettingKind::Number { default, min, max } = spec.kind else {
+            panic!("la porta è un numero");
+        };
+        assert_eq!((default, min, max), (0.0, Some(0.0), Some(65535.0)));
+
+        assert_eq!(live_port(None), 0);
+        assert_eq!(live_port(Some(0.0)), 0);
+        assert_eq!(live_port(Some(4000.0)), 4000);
+        assert_eq!(live_port(Some(65535.0)), 65535);
+        // Un valore che non è una porta vale «una porta libera», non un
+        // troncamento a una porta che nessuno ha scelto.
+        for invalid in [-1.0, 65536.0, 4000.5, f64::NAN, f64::INFINITY] {
+            assert_eq!(live_port(Some(invalid)), 0, "{invalid}");
+        }
     }
 
     #[test]

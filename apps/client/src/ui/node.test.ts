@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Il centro notifiche si finge: qui interessa **che** la porta lo chiami e con
 // che frase, non come disegna. Fingerlo tiene anche `ui/node` fuori dalla
@@ -12,7 +12,7 @@ vi.mock("./notify", () => ({
   },
 }));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
-import { pair, activeFields, mountTree, patchTree, unmountTree } from "./node";
+import { pair, activeFields, mountTree, patchTree, setNodeMotion, unmountTree, type NodeMotion } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 import { registerIcon } from "./icons";
 
@@ -965,5 +965,281 @@ describe("il nodo icona", () => {
     const el = draw("nessuna-figura");
     expect(el.dataset.icon).toBe("nessuna-figura");
     expect(el.querySelector("svg")).toBeNull();
+  });
+});
+
+// La giuntura di movimento (`setNodeMotion`), e prima ancora ciò che non deve
+// cambiare: il riconciliatore senza gancio. Il primo caso è una
+// caratterizzazione scritta **prima** della giuntura, contro il file com'era:
+// le operazioni che `children` fa sul DOM montato, una per una e in ordine.
+// Chi tocca quel giro lo vede qui, non in un'animazione che scatta.
+describe("la giuntura di movimento", () => {
+  const voice = (key: string, title = key): UiNode =>
+    ({ node: "list_item", title, subtitle: null, action: null, selected: false, key }) as UiNode;
+  const field = (key: string): UiNode =>
+    ({
+      node: "text_input",
+      field: key,
+      label: key,
+      value: "",
+      placeholder: null,
+      key,
+      // Senza un'azione il campo nasce spento, e uno spento non prende il fuoco.
+      action: { action: "cambia", payload: null },
+    }) as UiNode;
+  const column = (children: UiNode[], key?: string): UiNode =>
+    ({ node: "stack", dir: "column", gap: 0, children, ...(key ? { key } : {}) }) as UiNode;
+
+  const BEFORE = [field("a"), voice("b"), field("c"), voice("d")];
+  /// Tutto insieme: `c` e `a` restano e si scambiano, `b` resta ed è una
+  /// foglia (si ricostruisce), `d` esce, `e` entra.
+  const AFTER = [field("c"), field("a"), voice("e"), voice("b", "b nuova")];
+
+  const name = (node: unknown): string =>
+    node instanceof HTMLElement ? (node.dataset.key ?? node.className) : "niente";
+
+  /// Registra ciò che viene fatto ai nodi dentro `host`: inserimenti,
+  /// rimozioni, sostituzioni. Solo le chiamate di primo livello, perché il DOM
+  /// di prova ne compone alcune con le altre.
+  function operations(host: HTMLElement): { log: string[]; stop(): void } {
+    const log: string[] = [];
+    let depth = 0;
+    const restore: (() => void)[] = [];
+    const watch = (
+      proto: Record<string, unknown>,
+      method: string,
+      describe: (self: Node, args: unknown[]) => string,
+    ): void => {
+      const original = proto[method] as (...args: unknown[]) => unknown;
+      proto[method] = function (this: Node, ...args: unknown[]) {
+        if (depth === 0 && host.contains(this) && this !== host) log.push(describe(this, args));
+        depth += 1;
+        try {
+          return original.apply(this, args);
+        } finally {
+          depth -= 1;
+        }
+      };
+      restore.push(() => {
+        proto[method] = original;
+      });
+    };
+    watch(Node.prototype as unknown as Record<string, unknown>, "insertBefore", (self, [node, reference]) =>
+      `${name(self)}: ${name(node)} prima di ${name(reference)}`);
+    watch(Element.prototype as unknown as Record<string, unknown>, "remove", (self) => `via ${name(self)}`);
+    watch(Element.prototype as unknown as Record<string, unknown>, "replaceWith", (self, [node]) =>
+      `${name(self)} rifatta: ${name(node)}`);
+    return { log, stop: () => restore.forEach((undo) => undo()) };
+  }
+
+  function mounted(children: UiNode[]): HTMLElement {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, column(children, "radice"), async () => {});
+    return host;
+  }
+
+  const keys = (host: HTMLElement): string[] =>
+    [...host.firstElementChild!.children].map((child) => (child as HTMLElement).dataset.key ?? "");
+
+  /// Ciò che il riconciliatore fa per passare da `BEFORE` ad `AFTER`.
+  const GOLDEN = [
+    "b rifatta: b",
+    "via d",
+    "radice: b prima di niente",
+    "radice: e prima di b",
+    "radice: a prima di e",
+  ];
+
+  it("senza gancio fa le stesse operazioni di sempre, nello stesso ordine", () => {
+    const host = mounted(BEFORE);
+    const recorded = operations(host);
+    try {
+      mountTree(host, column(AFTER, "radice"), async () => {});
+    } finally {
+      recorded.stop();
+    }
+    expect(recorded.log).toEqual(GOLDEN);
+    expect(keys(host)).toEqual(["c", "a", "e", "b"]);
+    host.remove();
+  });
+
+  it("senza gancio il campo a fuoco resta lo stesso, col suo testo", () => {
+    const host = mounted(BEFORE);
+    const input = host.querySelector<HTMLInputElement>('[data-key="c"] input')!;
+    input.focus();
+    input.value = "scritto a mano";
+    mountTree(host, column(AFTER, "radice"), async () => {});
+    expect(host.querySelector('[data-key="c"] input')).toBe(input);
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("scritto a mano");
+    host.remove();
+  });
+
+  describe("col gancio installato", () => {
+    afterEach(() => {
+      setNodeMotion(null);
+    });
+
+    /// Un gancio che annota ciò che vede, e come sta il DOM mentre lo vede.
+    function witness(host: () => HTMLElement) {
+      const calls: string[] = [];
+      const seen: { kept: HTMLElement[]; leaving: HTMLElement[]; after: HTMLElement[]; entered: HTMLElement[] } = {
+        kept: [],
+        leaving: [],
+        after: [],
+        entered: [],
+      };
+      const motion: NodeMotion = {
+        before(parent, kept, leaving, entering) {
+          calls.push(
+            `prima ${name(parent)}: restano ${kept.map(name).join(",")}; escono ${leaving.map(name).join(",")}; entrano ${entering}; ora ${keys(host()).join(",")}`,
+          );
+          if (name(parent) !== "radice") return;
+          seen.kept = [...kept];
+          seen.leaving = [...leaving];
+        },
+        after(parent, kept, entered) {
+          calls.push(
+            `dopo ${name(parent)}: restano ${kept.map(name).join(",")}; entrati ${entered.map(name).join(",")}; ora ${keys(host()).join(",")}`,
+          );
+          if (name(parent) !== "radice") return;
+          seen.after = [...kept];
+          seen.entered = [...entered];
+        },
+      };
+      return { calls, seen, motion };
+    }
+
+    it("il primo disegno non lo chiama: non c'è niente da accoppiare", () => {
+      const before = vi.fn();
+      const after = vi.fn();
+      setNodeMotion({ before, after });
+      const host = mounted(BEFORE);
+      expect(before).not.toHaveBeenCalled();
+      expect(after).not.toHaveBeenCalled();
+      host.remove();
+    });
+
+    it("prima vede il DOM vecchio, dopo quello nuovo, e chi resta è allineato", () => {
+      const host = mounted(BEFORE);
+      const old = Object.fromEntries(
+        [...host.firstElementChild!.children].map((el) => [(el as HTMLElement).dataset.key, el]),
+      );
+      const { calls, seen, motion } = witness(() => host);
+      setNodeMotion(motion);
+      mountTree(host, column(AFTER, "radice"), async () => {});
+
+      expect(calls).toEqual([
+        "prima radice: restano c,a,b; escono d; entrano 1; ora a,b,c,d",
+        "dopo radice: restano c,a,b; entrati e; ora c,a,e,b",
+      ]);
+      // Prima: gli elementi di adesso, e chi esce è ancora al suo posto.
+      expect(seen.kept).toEqual([old.c, old.a, old.b]);
+      expect(seen.leaving).toEqual([old.d]);
+      // Dopo: i campi sono gli stessi elementi, la foglia è un altro elemento
+      // nella stessa posizione dell'elenco. È il solo modo di saperlo.
+      const now = [...host.firstElementChild!.children] as HTMLElement[];
+      expect(seen.after[0]).toBe(old.c);
+      expect(seen.after[1]).toBe(old.a);
+      expect(seen.after[2]).not.toBe(old.b);
+      expect(seen.after).toEqual([now[0], now[1], now[3]]);
+      expect(seen.entered).toEqual([now[2]]);
+      expect(old.d.isConnected).toBe(false);
+      host.remove();
+    });
+
+    it("i contenitori annidati si annidano: il dentro sta fra il prima e il dopo del fuori", () => {
+      const inner = (children: UiNode[]): UiNode => column(children, "dentro");
+      const host = mounted([voice("x"), inner([voice("p"), voice("q")])]);
+      const { calls, motion } = witness(() => host);
+      setNodeMotion(motion);
+      mountTree(host, column([inner([voice("q"), voice("r")]), voice("x")], "radice"), async () => {});
+      expect(calls).toEqual([
+        "prima radice: restano dentro,x; escono ; entrano 0; ora x,dentro",
+        "prima dentro: restano q; escono p; entrano 1; ora x,dentro",
+        "dopo dentro: restano q; entrati r; ora x,dentro",
+        "dopo radice: restano dentro,x; entrati ; ora dentro,x",
+      ]);
+      host.remove();
+    });
+
+    it("una patch su un contenitore passa di qui, una su una foglia no", () => {
+      const host = mounted([voice("x"), column([voice("p")], "dentro")]);
+      const { calls, motion } = witness(() => host);
+      setNodeMotion(motion);
+      expect(patchTree(host, "dentro", column([voice("p"), voice("q")], "dentro"))).toBe(true);
+      expect(calls).toEqual([
+        "prima dentro: restano p; escono ; entrano 1; ora x,dentro",
+        "dopo dentro: restano p; entrati q; ora x,dentro",
+      ]);
+      calls.length = 0;
+      expect(patchTree(host, "x", voice("x", "x nuova"))).toBe(true);
+      expect(calls).toEqual([]);
+      host.remove();
+    });
+
+    it("non cambia né le operazioni né il fuoco, nemmeno quando lancia", () => {
+      const noisy: NodeMotion = {
+        before() {
+          throw new Error("gancio rotto, prima");
+        },
+        after() {
+          throw new Error("gancio rotto, dopo");
+        },
+      };
+      let host!: HTMLElement;
+      for (const motion of [witness(() => host).motion, noisy]) {
+        host = mounted(BEFORE);
+        const input = host.querySelector<HTMLInputElement>('[data-key="c"] input')!;
+        input.focus();
+        input.value = "scritto a mano";
+        setNodeMotion(motion);
+        const recorded = operations(host);
+        try {
+          expect(() => mountTree(host, column(AFTER, "radice"), async () => {})).not.toThrow();
+        } finally {
+          recorded.stop();
+        }
+        expect(recorded.log).toEqual(GOLDEN);
+        expect(keys(host)).toEqual(["c", "a", "e", "b"]);
+        expect(host.querySelector('[data-key="b"]')!.textContent).toBe("b nuova");
+        expect(document.activeElement).toBe(input);
+        expect(input.value).toBe("scritto a mano");
+        host.remove();
+      }
+    });
+
+    it("un gancio che lancia prima viene comunque chiamato dopo", () => {
+      const after = vi.fn();
+      setNodeMotion({
+        before() {
+          throw new Error("gancio rotto");
+        },
+        after,
+      });
+      const host = mounted(BEFORE);
+      mountTree(host, column(AFTER, "radice"), async () => {});
+      expect(after).toHaveBeenCalledTimes(1);
+      host.remove();
+    });
+
+    it("il disfacimento toglie il proprio gancio e lascia quello arrivato dopo", () => {
+      const first = { before: vi.fn() };
+      const second = { before: vi.fn() };
+      const retireFirst = setNodeMotion(first);
+      const retireSecond = setNodeMotion(second);
+      const host = mounted(BEFORE);
+
+      retireFirst();
+      mountTree(host, column(AFTER, "radice"), async () => {});
+      expect(first.before).not.toHaveBeenCalled();
+      expect(second.before).toHaveBeenCalledTimes(1);
+
+      retireSecond();
+      mountTree(host, column(BEFORE, "radice"), async () => {});
+      expect(second.before).toHaveBeenCalledTimes(1);
+      host.remove();
+    });
   });
 });

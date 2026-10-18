@@ -109,6 +109,10 @@ jobs:
             librsvg2-dev patchelf libgtk-3-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: clippy con la feature `draw` dell'host (FUORI_DAL_DEFAULT)
+        run: cargo clippy -p fub-host --features draw --all-targets -- -D warnings
+      - name: clippy con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
+        run: cargo clippy -p fub-features --features draw --all-targets -- -D warnings
       - name: Il ramo Windows del kernel, compilato da qui
         run: cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
 
@@ -136,6 +140,8 @@ jobs:
           rustup target add wasm32-wasip2
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
           cargo check -p fub-format-sheet --target wasm32-wasip2 --all-targets --locked
+          cargo check -p fub-scene --target wasm32-wasip2 --all-targets --locked
+          cargo check -p fub-ink --target wasm32-wasip2 --all-targets --locked
       - name: CAS del backend reale, con diagnostica isolata
         run: cargo test -p fub-kernel --test rooted_cas -- --nocapture
       - name: regressioni unitarie dei backend storage
@@ -143,6 +149,10 @@ jobs:
       - name: cestino e ripristino attraverso il contratto
         run: cargo test -p fub-kernel --test trash --test structural_host -- --nocapture
       - run: cargo test --workspace --no-fail-fast
+      - name: le scene di FubDraw, con la feature `draw` dell'host (FUORI_DAL_DEFAULT)
+        run: cargo test -p fub-host --features draw --no-fail-fast
+      - name: «Nuovo disegno» e l'export dei disegni, con la feature `draw` delle feature (FUORI_DAL_DEFAULT)
+        run: cargo test -p fub-features --features draw --no-fail-fast
 
   docs:
     name: documentazione canonica
@@ -194,7 +204,7 @@ jobs:
       - name: i derivati del tema si rigenerano byte per byte
         run: |
           npm run theme:generate
-          git diff --exit-code -- src/theme/serie theme/author
+          git diff --exit-code -- src/theme/scrittoio theme/author
           npm run theme:verify
         working-directory: apps/client
       - run: npm run typecheck
@@ -285,3 +295,65 @@ jobs:
         if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
         run: npm run bench:a11y
         working-directory: apps/client
+      # Le coreografie si misurano contro sé stesse, non contro una baseline:
+      # stato finale uguale col moto e senza, nessun residuo, solo transform e
+      # opacità, un'inversione a metà che torna al punto di partenza.
+      - name: il movimento rispetta le sue quattro regole
+        id: bench_motion
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:motion
+        working-directory: apps/client
+      - name: referto e fotogrammi del banco del movimento
+        if: ${{ failure() && steps.bench_motion.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-moto-${{ github.sha }}
+          path: apps/client/bench/.output/moto/
+      - name: i disegni si vedono uguali sul foglio, in Lettura e nell'export
+        id: bench_fidelity
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:fidelity
+        working-directory: apps/client
+      - name: le immagini del banco di fedeltà
+        if: ${{ failure() && steps.bench_fidelity.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-fedelta-${{ github.sha }}
+          path: apps/client/bench/.output/fidelity/
+          include-hidden-files: true
+      - name: venti tavole si percorrono senza scatti
+        id: bench_boards
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:boards
+        working-directory: apps/client
+      - name: il referto del banco delle tavole
+        if: ${{ failure() && steps.bench_boards.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-tavole-${{ github.sha }}
+          path: apps/client/bench/.output/boards-20.json
+          include-hidden-files: true
+      - name: trecento connettori si spostano senza scatti
+        id: bench_connectors
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:connectors
+        working-directory: apps/client
+      - name: il referto del banco dei connettori
+        if: ${{ failure() && steps.bench_connectors.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-connettori-${{ github.sha }}
+          path: apps/client/bench/.output/connectors-300.json
+          include-hidden-files: true
+      - name: cinquantamila elementi si aprono e si muovono senza scatti
+        id: bench_large
+        if: ${{ !cancelled() && (steps.bench_verify.outcome == 'success' || steps.bench_verify.outcome == 'failure') }}
+        run: npm run bench:large
+        working-directory: apps/client
+      - name: il referto del banco delle scene grandi
+        if: ${{ failure() && steps.bench_large.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-scene-grandi-${{ github.sha }}
+          path: apps/client/bench/.output/large.json
+          include-hidden-files: true

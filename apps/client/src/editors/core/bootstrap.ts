@@ -3,7 +3,9 @@ import type { CompletionSources } from "../text/profiles/markdown/completions";
 import { api } from "../../host/ipc";
 import { openVaultRoot, vaultArg } from "../../state/store";
 import type { GridHost } from "../grid/engine";
-import { onLanguage, t, type Key } from "../../i18n/strings";
+import { onLanguage, resolvedLanguage, t, type Key } from "../../i18n/strings";
+import { onEvent } from "../../state/kernel";
+import { PROOF_NS, type ProofPorts } from "./proof-ports";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
 import { mountBaseSurface } from "../base/surface";
@@ -11,12 +13,16 @@ import { BASE_OWNER, BASE_PROFILE, BASE_FORMAT } from "../base/data";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
 import { CANVAS_MOUNT, mountCanvasSurface } from "../canvas/surface";
+import { mountRichSurface, RICH_FAMILY, RICH_FORMATS, RICH_OWNER, RICH_PROFILE } from "../rich/surface";
 import { mountMediaSurface, profileForKind, type MediaSurfaceDeps } from "../media/media-surface";
 import { mediaKindOfId, mimeOfId } from "../media/media-types";
 import { mountSvgSurface, SVG_PROFILE } from "../text/profiles/svg";
 import { makePdfJsLoader, pdfIdWithoutFragment, type PdfJsModule } from "../media/pdf-view";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { CanvasAttachmentPort, CanvasMediaPort } from "../canvas/engine";
+import type { DrawingImagePort } from "../canvas/surface";
+import type { VaultFontPort } from "../spatial/fonts/vault";
+import type { SymbolLibraryPort } from "../spatial/tools/symbol-libraries";
 import type { SyntaxForm } from "../../host/contract";
 import {
   DocumentSurfaceRegistry,
@@ -38,6 +44,17 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly canvasAttachments?: CanvasAttachmentPort;
   readonly onCreateCanvasNote?: (text: string) => Promise<string>;
   readonly onPickCanvasFile?: () => Promise<string | null>;
+  /// Il documento a cui porta un collegamento del disegno `from`, scelto
+  /// dall'utente; `current` è l'`href` del collegamento che si cambia.
+  readonly onPickDrawingLink?: (from: string, current: string | null) => Promise<string | null>;
+  /// Le immagini del vault dei disegni: aperte, lette e scelte dalla shell.
+  readonly drawingImages?: DrawingImagePort;
+  /// I file di caratteri del vault, che i testi dei disegni possono usare:
+  /// elencati e letti dalla shell.
+  readonly drawingFonts?: VaultFontPort;
+  /// Le librerie di simboli del vault: la cartella, i file e il loro testo,
+  /// dalla shell.
+  readonly drawingSymbols?: SymbolLibraryPort;
   readonly renderCanvasMarkdown?: (
     nodeId: string,
     text: string,
@@ -45,6 +62,30 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
     documentId: string,
     forms: readonly SyntaxForm[] | undefined,
   ) => (() => void) | void;
+}
+
+/// Le porte del correttore legate al vault in cui la superficie nasce: le
+/// impostazioni e il dizionario personale sono di quel vault.
+function proofPorts(vault: string | null | undefined): ProofPorts {
+  return {
+    queryIndex: (query) => api.queryIndex(query, ...vaultArg(vault)),
+    invokeCommand: (command, args) => api.invokeCommand(command, args, undefined, ...vaultArg(vault)),
+    settings: async () => {
+      const response = await api.queryIndex({ kind: "settings", plugin: PROOF_NS }, ...vaultArg(vault));
+      return response.kind === "settings" ? response.value : [];
+    },
+    interfaceLanguage: resolvedLanguage,
+    watch: (changed) => {
+      const stops = [
+        onEvent("setting_changed", ({ key }) => {
+          if (key.startsWith("proof.") || key === "locale.language") changed();
+        }),
+        onEvent("vault_opened", changed),
+        onLanguage(changed),
+      ];
+      return () => stops.forEach((stop) => stop());
+    },
+  };
 }
 
 const PLAIN_TEXT_MODES = [
@@ -164,6 +205,10 @@ export function createDocumentSurfaceRegistry(
             onSearchTag: options.onSearchTag,
             completions: options.completions,
             slash: options.slash,
+            proof: {
+              ports: proofPorts(openVaultRoot()),
+              notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+            },
           });
         }
         if (profile !== "plain-text") {
@@ -268,6 +313,7 @@ export function createDocumentSurfaceRegistry(
     defaultProfile: CANVAS_MOUNT.defaultProfile,
     profiles: CANVAS_MOUNT.profiles,
     formats: CANVAS_MOUNT.formats,
+    sourceViews: CANVAS_MOUNT.sourceViews,
     factory: {
       mount(profile, context) {
         return mountCanvasSurface(profile, context, {
@@ -277,11 +323,36 @@ export function createDocumentSurfaceRegistry(
           onOpenPath: options.onOpenPath,
           onCreateNote: options.onCreateCanvasNote,
           onPickFile: options.onPickCanvasFile,
+          onPickDrawingLink: options.onPickDrawingLink,
+          drawingImages: options.drawingImages,
+          drawingFonts: options.drawingFonts,
+          drawingSymbols: options.drawingSymbols,
           renderMarkdownForCard: options.renderCanvasMarkdown
             ? (nodeId, text, host, forms) => options.renderCanvasMarkdown!(nodeId, text, host, context.documentId, forms)
             : undefined,
           media: options.canvasMedia,
           attachments: options.canvasAttachments,
+          // Le annotazioni leggono il PDF come il visore: stessi byte, stesso
+          // pdf.js.
+          pdf: options.media ? { transport: options.media.transport, loader: options.media.pdfLoader ?? loadPdf } : undefined,
+        });
+      },
+    },
+  });
+  registry.register({
+    owner: RICH_OWNER,
+    family: RICH_FAMILY,
+    defaultProfile: RICH_PROFILE,
+    formats: RICH_FORMATS,
+    factory: {
+      mount(profile, context) {
+        return mountRichSurface(profile, context, {
+          onChange: options.onChange,
+          onSelectionChange: options.onSelectionChange,
+          proof: {
+            ports: proofPorts(openVaultRoot()),
+            notify: options.slash ? (message) => options.slash!.notify(message) : undefined,
+          },
         });
       },
     },

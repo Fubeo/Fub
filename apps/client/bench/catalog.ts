@@ -20,16 +20,16 @@
 // Il tutto **senza la shell**: qui non gira `main.ts`. Ciò che è identico è ciò
 // che deve esserlo — i tre strati montati dallo stesso caricatore, e il renderer
 // vero per i componenti.
-import "../src/theme/structure.css";
-import darkSheet from "../src/theme/serie/sheet-dark.css?raw";
-import lightSheet from "../src/theme/serie/sheet-light.css?raw";
-import skin from "../src/theme/serie/skin.css?raw";
-import fonts from "../src/theme/serie/fonts.css?raw";
+import "../src/theme/scrittoio/structure.css";
+import darkSheet from "../src/theme/scrittoio/sheet-dark.css?raw";
+import lightSheet from "../src/theme/scrittoio/sheet-light.css?raw";
+import skin from "../src/theme/scrittoio/skin.css?raw";
+import fonts from "../src/theme/scrittoio/fonts.css?raw";
 import { mount as mount } from "../src/theme/loader";
 import { contrast } from "../src/theme/contrast";
 import { mountTree, mountWebviewFocusMonitor } from "../src/ui/node";
 import { openLifetime } from "../src/ui/lifetime";
-import { COMPONENTS } from "../src/theme/serie/anatomia";
+import { COMPONENTS } from "../src/theme/scrittoio/anatomia";
 import { SAMPLES } from "./samples";
 
 const params = new URLSearchParams(window.location.search);
@@ -91,9 +91,17 @@ function section(title: string): HTMLElement {
  * della pelle produce davvero. Il banco fotograferebbe quei composti come se
  * fossero verità, e il presidio del contrasto li condannerebbe a nome della
  * pelle. Un hook, un elemento: ogni foto è quella di un selettore reale. */
-/** Hook che **sono** una superficie di copertura a sé (scrim a pagina
- * intera), non un contenuto: si fotografano senza prosa addosso. */
-const SUPERFICI: Set<string> = new Set(["modale", "views-modal"]);
+/** Hook che **sono** una superficie a sé, non un contenuto: il velo a pagina
+ * intera di una modale, la carta del disegno, la tavola, l'inchiostro e il
+ * laser della presentazione. Si fotografano senza prosa addosso. */
+const SUPERFICI: Set<string> = new Set([
+  "modale",
+  "views-modal",
+  "draw-page",
+  "draw-present-board",
+  "draw-present-ink",
+  "draw-present-laser",
+]);
 
 function anatomy(): void {
   const grid = section("Shell anatomy");
@@ -111,11 +119,19 @@ function anatomy(): void {
           proof.setAttribute("aria-label", "Foglio di calcolo");
           proof.style.minHeight = "var(--space-8)";
         }
+        // La carta non ha una misura sua: gliela dà l'editor, dalla pagina
+        // del disegno e dalla vista. Qui ne ha una qualunque, così si vede.
+        if (hook === "draw-page") {
+          proof.style.width = "8rem";
+          proof.style.height = "5rem";
+        }
         // Le superfici di copertura (`.modale`, `.views-modal`) sono un velo
         // a pagina intera: il loro testo vero sta dentro il pannello che
         // ospitano — che qui arriva per conto suo, come hook a sé. Mettere
         // della prosa **sul velo** fotograferebbe uno stato che la pelle non
-        // produce: il velo si fotografa nudo.
+        // produce: il velo si fotografa nudo. Così la carta del disegno, che
+        // è bianca in ogni tema e non porta mai testo, e nella presentazione
+        // la tavola, l'inchiostro e il punto del laser.
         if (!SUPERFICI.has(hook)) proof.textContent = `${component.name} · ${hook}`;
         const frame = el("div", "provino provino-anatomia");
         frame.dataset.label = `${component.name} · ${state.label} · ${hook}`;

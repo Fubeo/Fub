@@ -27,12 +27,13 @@ import type {
 import { pageName } from "../rules/organizer";
 import { errorText } from "../host/errors";
 import { stableIdentifier, trapFocus } from "./a11y";
-import type { Tone } from "./notify";
+import type { NoticeAction, Tone } from "./notify";
+import type { SelectionBox } from "../editors/core/editor-actions";
 import { type Key, t } from "../i18n/strings";
-import { allCommands, displayBinding, loadKeyOverrides, type CommandEntry } from "./commands";
+import { allCommands, displayBinding, hasCommandForm, loadKeyOverrides, openCommandForm, type CommandEntry } from "./commands";
 import { enterSurface, exitSurface } from "./motion";
 import { readState, setCommandSpecs, writeState } from "../state/store";
-import { openVaultRoot, vaultArg } from "../state/vault";
+import { openVaultRoot, undoLastOperation, vaultArg } from "../state/vault";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
 import { openLifetime, type Lifetime } from "./lifetime";
 import { opensWithoutParams, primaryViews } from "./primary-views";
@@ -46,7 +47,10 @@ export interface PaletteHost {
   // avere lo stesso colore di uno riuscito, o l'unica differenza fra «dodici
   // note archiviate» e «undici su dodici, la dodicesima no» è una frase più
   // lunga che nessuno rilegge (§23.14).
-  notify(message: string, tone?: Tone): void;
+  //
+  // Il terzo argomento sono i gesti accanto al messaggio: l'«Annulla» di un
+  // esito che il kernel sa disfare.
+  notify(message: string, tone?: Tone, action?: NoticeAction | readonly NoticeAction[]): void;
   listDocuments(): Promise<string[]>;
   // **Flush-before-patch** (M3): salva i documenti ancora sporchi e dice
   // quali non ce l'hanno fatta. È la stessa porta che l'esploratore usa per
@@ -488,6 +492,7 @@ export async function openSlashPalette(
     publishContext(): Promise<void>;
   },
   onDismiss?: () => void,
+  anchor: SelectionBox | null = null,
 ): Promise<void> {
   closeCommandPalette();
   slashOwner = owner;
@@ -525,6 +530,12 @@ export async function openSlashPalette(
   const entries = orderCommands(allCommands(), paletteHistory).filter((entry) => allowed.has(entry.id));
   const box = openOverlay(false);
   box.innerHTML = "";
+  // Il menu «/» sta **dove si scrive**: sotto il cursore, o sopra se sotto non
+  // c'è posto. Senza un punto da cui partire resta la scatola in alto.
+  if (anchor) {
+    box.parentElement?.setAttribute("data-anchor", "caret");
+    placeAtCaret(box, anchor);
+  }
   const input = document.createElement("input");
   input.className = "palette-input";
   input.setAttribute("role", "combobox");
@@ -707,6 +718,35 @@ export async function openSlashPalette(
   input.focus();
 }
 
+/// Posa il menu «/» accanto al cursore: sotto la riga, allineato al suo inizio,
+/// e mai fuori dalla finestra. Sotto non c'è posto → sopra la riga.
+const SLASH_WIDTH = 320;
+const SLASH_HEIGHT = 288;
+const SLASH_GAP = 6;
+export function slashPlace(
+  anchor: SelectionBox,
+  view: { width: number; height: number },
+): { left: number; top: number; above: boolean } {
+  const left = Math.min(Math.max(SLASH_GAP, anchor.left), Math.max(SLASH_GAP, view.width - SLASH_WIDTH - SLASH_GAP));
+  const below = anchor.bottom + SLASH_GAP;
+  const above = below + SLASH_HEIGHT > view.height && anchor.top - SLASH_GAP - SLASH_HEIGHT >= SLASH_GAP;
+  return { left: Math.round(left), top: Math.round(above ? anchor.top - SLASH_GAP : below), above };
+}
+function placeAtCaret(box: HTMLElement, anchor: SelectionBox): void {
+  const at = slashPlace(anchor, { width: window.innerWidth, height: window.innerHeight });
+  box.style.left = `${at.left}px`;
+  // Sopra la riga la scatola cresce verso l'alto: il suo bordo basso sta al
+  // cursore, qualunque sia l'altezza dell'elenco. Si ancora con `bottom` e non
+  // con una traslazione, che l'animazione d'ingresso sovrascriverebbe.
+  if (at.above) {
+    box.style.top = "auto";
+    box.style.bottom = `${Math.round(window.innerHeight - at.top)}px`;
+  } else {
+    box.style.top = `${at.top}px`;
+    box.style.bottom = "auto";
+  }
+}
+
 export function closeSlashPalette(owner: HTMLElement): void {
   if (slashOwner === owner) closeCommandPalette();
 }
@@ -718,12 +758,28 @@ export function closeSlashPalette(owner: HTMLElement): void {
 /// passi dopo sono gli stessi della palette — parametri se ce ne sono, piano se
 /// il raggio lo merita: una scorciatoia non è un permesso di saltare il
 /// consenso.
-export function startCommand(entry: CommandEntry, host: PaletteHost) {
+///
+/// `prefill` è ciò che chi lo lancia sa già, come testo per nome di parametro
+/// (la cartella dove si crea, per esempio): lo riceve il modulo proprio del
+/// comando, se ne ha uno, e altrimenti riempie i campi del modulo generico.
+export function startCommand(entry: CommandEntry, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   if (entry.run) {
     runShellCommand(entry, host);
     return;
   }
-  start(entry, openOverlay(), host);
+  if (openOwnForm(entry, prefill)) return;
+  start(entry, openOverlay(), host, prefill);
+}
+
+/// Il comando ha un modulo proprio? Allora la palette si chiude, se era
+/// aperta, e il modulo si apre al posto del suo: vero se è andata così. La
+/// palette si chiude **prima**, perché il fuoco torna a chi l'aveva e il modulo
+/// lo prende da lì; l'esito lo consegna il modulo, con `deliverOutcome`, che
+/// ricorda anche il comando fra i recenti.
+function openOwnForm(entry: CommandEntry, prefill: Readonly<Record<string, string>>): boolean {
+  if (entry.spec === null || !hasCommandForm(entry.spec.id)) return false;
+  closeCommandPalette();
+  return openCommandForm(entry.spec.id, prefill);
 }
 
 /// Un comando di shell che fallisce lo dice: il suo `run` è spesso asincrono,
@@ -764,6 +820,11 @@ function openOverlay(closePrevious = true): HTMLElement {
     document.body.appendChild(overlay);
   }
   overlay.setAttribute("aria-label", t("palette.title"));
+  // Un'apertura riusa il velo ancora in uscita: ciò che l'apertura di prima
+  // aveva ancorato al cursore non deve restargli addosso.
+  overlay.removeAttribute("data-anchor");
+  const stale = overlay.querySelector<HTMLElement>(".palette-box");
+  for (const property of ["left", "top", "bottom"]) stale?.style.removeProperty(property);
   enterSurface(overlay);
   // Dopo l'inserimento nel documento: `intrappolaFuoco` mette a fuoco il primo
   // elemento, e un elemento fuori dal documento non lo può prendere.
@@ -935,7 +996,7 @@ function chooseSpecs(
 
 /// Passo 2: i parametri, se il comando ne dichiara. Se non ne dichiara, si va
 /// dritti all'esecuzione — la palette non inventa domande che nessuno ha fatto.
-function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
+function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   // Un comando di shell si fa e basta: non ha parametri da chiedere né un piano
   // da mostrare, perché non tocca il vault.
   if (entry.run) {
@@ -944,15 +1005,16 @@ function start(entry: CommandEntry, box: HTMLElement, host: PaletteHost) {
     runShellCommand(entry, host);
     return;
   }
+  if (openOwnForm(entry, prefill)) return;
   const spec = entry.spec!;
   if (spec.params.length === 0) {
     void execute(spec, {}, box, host);
     return;
   }
-  renderForm(spec, box, host);
+  renderForm(spec, box, host, prefill);
 }
 
-function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
+function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost, prefill: Readonly<Record<string, string>> = {}) {
   box.innerHTML = "";
   const title = document.createElement("div");
   title.className = "palette-heading";
@@ -997,6 +1059,10 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
     name.textContent = param.required ? t("palette.required", { title: param.title }) : param.title;
     label.appendChild(name);
     const field = fieldFor(param, datalist.id);
+    // Ciò che chi ha aperto il modulo sa già: i campi di testo e le scelte lo
+    // prendono se è un loro valore.
+    const known = prefill[param.name];
+    if (known !== undefined && !(field instanceof HTMLInputElement && field.type === "checkbox")) field.value = known;
     fields.set(param.name, field);
     label.appendChild(field);
     if (param.description) {
@@ -1188,7 +1254,11 @@ function showLayer(
   apply.focus();
 }
 
-async function deliverOutcome(
+/// Consegna l'esito di un comando come lo fa la palette: l'avviso (di un colore
+/// che dice se è andato a metà), il comando fra i recenti, l'effetto alla shell.
+/// Lo usa anche un modulo proprio di un comando (`registerCommandForm`), così il
+/// risultato si tratta ovunque nello stesso modo.
+export async function deliverOutcome(
   outcome: CommandOutcome,
   host: Pick<PaletteHost, "onEffect" | "notify">,
   id?: string,
@@ -1201,7 +1271,25 @@ async function deliverOutcome(
   // Il tono lo decide il campo e non la frase, ed è tutta la differenza: prima
   // della §23.14 questa riga avrebbe dovuto cercare una parola dentro un
   // messaggio già tradotto per sapere com'era andata.
-  if (outcome.notify) host.notify(outcome.notify, outcome.partial ? "guasto" : "info");
+  //
+  // **«Annulla» viene dall'esito** (`outcome.undo`), per ogni comando che il
+  // kernel sa disfare: nessun comando lo dichiara da sé. Senza una frase da
+  // dire il gesto non ha dove stare: un'operazione annullabile e muta resta
+  // annullabile da `vault.undo`, non da un toast che non c'è.
+  if (outcome.notify) {
+    host.notify(
+      outcome.notify,
+      outcome.partial ? "guasto" : "info",
+      outcome.undo
+        ? {
+          label: t("app.undo"),
+          hint: outcome.undo.label,
+          run: () => undoLastOperation().catch((error: unknown) =>
+            host.notify(t("commands.undo_failed", { reason: errorText(error) }), "guasto")),
+        }
+        : undefined,
+    );
+  }
   if (id) rememberCommand(id);
   await host.onEffect(outcome.effect);
 }

@@ -29,6 +29,7 @@ import { showContextMenu, closeContextMenu, type MenuItem } from "./menu";
 import { t } from "../i18n/strings";
 import type { ShellCommandId } from "./shell-keys.generated";
 import { openLifetime, type Teardown } from "./lifetime";
+import { openMenuSearch, type SearchableEntry } from "./app-menu-search";
 
 /// L'unica cosa che il menu chiede alla shell: esegui questo comando.
 ///
@@ -41,9 +42,16 @@ export interface MenuHost {
   /// La scorciatoia del comando come la si preme, se ne ha una: la mostra la
   /// voce accanto al nome, come in ogni menu che insegna le scorciatoie.
   shortcut?(id: ShellCommandId): string;
+  /// Se il comando è dichiarato adesso. Lo chiedono solo le voci `optional`:
+  /// senza questa risposta non compaiono.
+  has?(id: ShellCommandId): boolean;
   /// Le view principali che si aprono senza argomenti, lette a ogni apertura
   /// del menu: un componente acceso o spento cambia l'elenco.
   views?(): readonly MenuView[];
+  /// Le creazioni oltre «Nuova nota» (oggi «Nuovo disegno…»), lette a ogni
+  /// apertura del menu: una feature accesa o spenta ne cambia l'elenco, e
+  /// senza il comando del kernel la voce non c'è.
+  creations?(): readonly MenuCreation[];
 }
 
 /// Una view principale come voce del menu Vista: il nome già tradotto e il
@@ -52,6 +60,11 @@ export interface MenuView {
   readonly label: string;
   run(): void;
 }
+
+/// Una creazione come voce del menu File: il nome già tradotto e il gesto che
+/// la fa partire. Ha la forma di una view principale perché è lo stesso
+/// bisogno: una voce che il kernel decide se c'è.
+export type MenuCreation = MenuView;
 
 
 /// I cinque menu, nell'ordine canonico. Le voci sono i comandi di shell già
@@ -63,11 +76,15 @@ export interface MenuView {
 /// Impostazioni non è un comando di shell (la dieta è chiusa): è il bottone
 /// `#open-settings`, e il menu lo preme invece di inventarsi un id.
 /// `separator` mette una riga prima della voce, per raggruppare i gesti affini.
+/// `optional` è una voce il cui comando non tutte le cornici dichiarano: c'è
+/// solo dove il comando c'è, invece di restare una riga che non fa niente.
 type MenuEntry = (
-  | { label: string; command: ShellCommandId }
+  | { label: string; command: ShellCommandId; optional?: boolean }
   | { label: string; click: string }
   /// Il posto delle view principali dichiarate: zero, una o più voci.
   | { views: true }
+  /// Il posto delle altre creazioni: zero, una o più voci.
+  | { creations: true }
 ) & { separator?: boolean };
 
 const MENU: { title: string; entries: MenuEntry[] }[] = [
@@ -75,6 +92,8 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
     title: "menu.file",
     entries: [
       { label: "menu.file.new_note", command: "shell.note.new" },
+      { creations: true },
+      { label: "launcher.command.templates", command: "shell.launcher.templates", optional: true },
       { label: "menu.file.save", command: "shell.doc.save" },
       { label: "menu.file.open_vault", command: "shell.vault.open", separator: true },
       { label: "menu.file.reopen_tab", command: "shell.tab.reopen", separator: true },
@@ -104,20 +123,38 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
       { label: "menu.view.zoom_in", command: "shell.zoom.in", separator: true },
       { label: "menu.view.zoom_out", command: "shell.zoom.out" },
       { label: "menu.view.zoom_reset", command: "shell.zoom.reset" },
+      { label: "menu.view.compact_more", command: "shell.chrome.compact.more", optional: true, separator: true },
+      { label: "menu.view.compact_less", command: "shell.chrome.compact.less", optional: true },
+      { label: "menu.view.compact_reset", command: "shell.chrome.compact.reset", optional: true },
+      { label: "menu.view.light", command: "shell.light.toggle", optional: true, separator: true },
     ],
   },
   {
     title: "menu.go",
     entries: [
       { label: "menu.go.switcher", command: "shell.switcher" },
+      // I modi del lanciatore, dove una cornice li dichiara: ogni strada che
+      // ha un prefisso da scrivere ha anche una voce da leggere.
+      { label: "launcher.command.search", command: "shell.launcher.search", optional: true },
+      { label: "launcher.command.headings", command: "shell.launcher.headings", optional: true },
+      { label: "launcher.command.line", command: "shell.launcher.line", optional: true },
+      { label: "launcher.command.tags", command: "shell.launcher.tags", optional: true },
       { label: "menu.go.back", command: "shell.pane.back", separator: true },
       { label: "menu.go.forward", command: "shell.pane.forward" },
       { label: "menu.go.next_tab", command: "shell.tab.next", separator: true },
       { label: "menu.go.previous_tab", command: "shell.tab.previous" },
+      { label: "menu.go.pane_left", command: "shell.pane.focus.left", optional: true, separator: true },
+      { label: "menu.go.pane_right", command: "shell.pane.focus.right", optional: true },
+      { label: "menu.go.pane_up", command: "shell.pane.focus.up", optional: true },
+      { label: "menu.go.pane_down", command: "shell.pane.focus.down", optional: true },
     ],
   },
   { title: "menu.tools", entries: [{ label: "menu.tools.settings", command: "shell.settings" }] },
 ];
+/// Il sesto posto della striscia non è un menu: è la ricerca fra le voci degli
+/// altri cinque. Ha il suo pulsante, e per tastiera si raggiunge come gli altri.
+const SEARCH_MENU = { title: "menu.search", entries: [] as MenuEntry[] };
+const TOP_LEVEL = [...MENU, SEARCH_MENU];
 const mountedMenus = new WeakMap<HTMLElement, Teardown>();
 
 /// Monta la menubar. Torna gli smontaggi, perché gli ascoltatori che attacca
@@ -219,11 +256,11 @@ export function mountAppMenu(host: MenuHost): Teardown {
   lifetime.listen(document, "click", onDocClick);
   lifetime.listen(document, "keydown", onKey);
 
-  MENU.forEach((menu, i) => {
+  TOP_LEVEL.forEach((menu, i) => {
     const button = document.createElement("button");
     button.id = `app-menu-${i}`;
     button.setAttribute("role", "menuitem");
-    button.setAttribute("aria-haspopup", "menu");
+    button.setAttribute("aria-haspopup", menu === SEARCH_MENU ? "dialog" : "menu");
     button.setAttribute("aria-expanded", "false");
     button.type = "button";
     button.tabIndex = i === 0 ? 0 : -1;
@@ -240,7 +277,7 @@ export function mountAppMenu(host: MenuHost): Teardown {
     // ogni menubar che l'utente abbia mai usato. È il gesto che chi cerca
     // «Vista» fa dopo aver aperto «File» senza chiuderlo.
     lifetime.listen(button, "mouseenter", () => {
-      if (menuOpen !== null && menuOpen !== i) toggleMenu(i, button);
+      if (menuOpen !== null && menuOpen !== i && menu !== SEARCH_MENU) toggleMenu(i, button);
     });
     lifetime.listen(button, "keydown", (e) => {
       switch (e.key) {
@@ -275,35 +312,14 @@ export function mountAppMenu(host: MenuHost): Teardown {
     menubar.append(button);
   });
 
-  function toggleMenu(index: number, button: HTMLButtonElement): void {
-    button.focus();
-    setTabStop(index);
-    if (menuOpen === index && document.getElementById("context-menu")) {
-      close();
-      return;
-    }
-    if (menuOpen !== null) close();
-    openMenu(index, button);
-  }
-
-  function openMenu(index: number, button: HTMLButtonElement, last = false): void {
-    const existing = document.getElementById("context-menu");
-    if (menuOpen === index && existing) {
-      const entries = existing.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
-      (last ? entries[entries.length - 1] : entries[0])?.focus();
-      return;
-    }
-    if (menuOpen !== null) close();
-    setTabStop(index);
-    button.focus();
-    menuOpen = index;
-    setExpanded(index, true);
-    const generation = ++menuGeneration;
-
-    const entries = MENU[index]!.entries;
-    const items: MenuItem[] = entries.flatMap((v): MenuItem[] => {
-      if ("views" in v) {
-        return (host.views?.() ?? []).map((view, i) => ({
+  /// Le voci di un menu come le vede chi le sceglie: lo stesso costruttore per
+  /// la tendina e per la ricerca, perché scegliere da una o dall'altra è lo
+  /// stesso gesto.
+  function itemsOf(entries: MenuEntry[]): MenuItem[] {
+    return entries.flatMap((v): MenuItem[] => {
+      if ("views" in v || "creations" in v) {
+        const extra = "views" in v ? host.views?.() : host.creations?.();
+        return (extra ?? []).map((view, i) => ({
           label: view.label,
           separator: i === 0 ? v.separator : undefined,
           run: () => {
@@ -312,6 +328,7 @@ export function mountAppMenu(host: MenuHost): Teardown {
           },
         }));
       }
+      if ("command" in v && v.optional && !host.has?.(v.command)) return [];
       return [{
         label: t(v.label as never),
         separator: v.separator,
@@ -329,6 +346,75 @@ export function mountAppMenu(host: MenuHost): Teardown {
         },
       }];
     });
+  }
+
+  /// Tutte le voci di tutti i menu, una volta sola ciascuna (Impostazioni sta
+  /// in due), col nome del menu davanti.
+  function searchable(): SearchableEntry[] {
+    const seen = new Set<string>();
+    return MENU.flatMap((menu) =>
+      itemsOf(menu.entries)
+        .filter((item) => !seen.has(item.label) && seen.add(item.label))
+        .map((item) => ({ group: t(menu.title as never), item })),
+    );
+  }
+
+  let stopSearch: (() => void) | null = null;
+  function toggleSearch(button: HTMLButtonElement): void {
+    if (stopSearch) {
+      stopSearch();
+      return;
+    }
+    if (menuOpen !== null) close();
+    button.setAttribute("aria-expanded", "true");
+    stopSearch = openMenuSearch({
+      anchor: button,
+      entries: searchable(),
+      onClose: () => {
+        stopSearch = null;
+        button.setAttribute("aria-expanded", "false");
+      },
+    });
+  }
+
+  function toggleMenu(index: number, button: HTMLButtonElement): void {
+    button.focus();
+    setTabStop(index);
+    if (index >= MENU.length) {
+      toggleSearch(button);
+      return;
+    }
+    stopSearch?.();
+    if (menuOpen === index && document.getElementById("context-menu")) {
+      close();
+      return;
+    }
+    if (menuOpen !== null) close();
+    openMenu(index, button);
+  }
+
+  function openMenu(index: number, button: HTMLButtonElement, last = false): void {
+    if (index >= MENU.length) {
+      setTabStop(index);
+      button.focus();
+      if (!stopSearch) toggleSearch(button);
+      return;
+    }
+    stopSearch?.();
+    const existing = document.getElementById("context-menu");
+    if (menuOpen === index && existing) {
+      const entries = existing.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+      (last ? entries[entries.length - 1] : entries[0])?.focus();
+      return;
+    }
+    if (menuOpen !== null) close();
+    setTabStop(index);
+    button.focus();
+    menuOpen = index;
+    setExpanded(index, true);
+    const generation = ++menuGeneration;
+
+    const items = itemsOf(MENU[index]!.entries);
     // Il menu si apre sotto la voce, e non nel punto del click: una menubar
     // ha i menu allineati ai bottoni, e aprirli dove capita sarebbe un menu
     // che salta. `showContextMenu` usa `clientX/clientY`, quindi costruiamo
@@ -361,6 +447,7 @@ export function mountAppMenu(host: MenuHost): Teardown {
   teardown = () => {
     if (disposed) return;
     disposed = true;
+    stopSearch?.();
     close();
     lifetime.close();
     buttons.forEach((button) => button.setAttribute("aria-expanded", "false"));

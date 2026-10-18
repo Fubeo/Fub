@@ -1,0 +1,292 @@
+{
+  "id": "atti/Bando di gara.pdf.fubann",
+  "frontmatter": {},
+  "body": [
+    {
+      "kind": "custom",
+      "custom_kind": "fub.annotations.summary",
+      "attrs": {
+        "version": 1,
+        "foreign": false,
+        "truncated": false,
+        "counts": {
+          "strokes": 1,
+          "shapes": 1,
+          "texts": 3,
+          "images": 0,
+          "links": 1,
+          "foreign": 1
+        },
+        "ink": {
+          "samples": 2,
+          "duration": 120
+        },
+        "annotates": "Bando%20di%20gara.pdf",
+        "digest": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "pages": 12,
+        "sections": [
+          "Revisione del bando",
+          "page=1",
+          "page=3"
+        ]
+      },
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "link",
+              "value": {
+                "target": {
+                  "kind": "path",
+                  "value": "Bando%20di%20gara.pdf"
+                },
+                "label": null,
+                "embed": false,
+                "span": {
+                  "start": 118,
+                  "end": 139
+                }
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 118,
+            "end": 139
+          }
+        },
+        {
+          "kind": "heading",
+          "level": 1,
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Revisione del bando"
+            }
+          ],
+          "anchor": "revisione-del-bando",
+          "span": {
+            "start": 244,
+            "end": 278
+          },
+          "explicit_anchor": null
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Le correzioni chieste dall'ufficio gare & contratti"
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 281,
+            "end": 349
+          }
+        },
+        {
+          "kind": "custom",
+          "custom_kind": "fub.annotations.page",
+          "attrs": {
+            "page": 1,
+            "size": [
+              595.28,
+              841.89
+            ]
+          },
+          "blocks": [
+            {
+              "kind": "custom",
+              "custom_kind": "fub.annotations.note",
+              "attrs": {},
+              "blocks": [
+                {
+                  "kind": "paragraph",
+                  "inlines": [
+                    {
+                      "kind": "text",
+                      "value": "L'importo a base d'asta è cambiato."
+                    },
+                    {
+                      "kind": "hard_break"
+                    },
+                    {
+                      "kind": "text",
+                      "value": "Chiedere conferma all'ufficio <gare>."
+                    }
+                  ],
+                  "anchor": null,
+                  "span": {
+                    "start": 849,
+                    "end": 938
+                  }
+                },
+                {
+                  "kind": "paragraph",
+                  "inlines": [
+                    {
+                      "kind": "text",
+                      "value": "Importo da rivedere"
+                    }
+                  ],
+                  "anchor": null,
+                  "span": {
+                    "start": 940,
+                    "end": 1038
+                  }
+                }
+              ],
+              "anchor": null,
+              "span": {
+                "start": 740,
+                "end": 1045
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 352,
+            "end": 1052
+          }
+        },
+        {
+          "kind": "custom",
+          "custom_kind": "fub.annotations.page",
+          "attrs": {
+            "page": 3,
+            "size": [
+              595.28,
+              841.89
+            ]
+          },
+          "blocks": [
+            {
+              "kind": "paragraph",
+              "inlines": [
+                {
+                  "kind": "link",
+                  "value": {
+                    "target": {
+                      "kind": "path",
+                      "value": "../Verbali/Verbale%2012.md"
+                    },
+                    "label": [
+                      {
+                        "kind": "text",
+                        "value": "Vedi il verbale"
+                      }
+                    ],
+                    "embed": false,
+                    "span": {
+                      "start": 1198,
+                      "end": 1431
+                    }
+                  }
+                }
+              ],
+              "anchor": null,
+              "span": {
+                "start": 1198,
+                "end": 1431
+              }
+            },
+            {
+              "kind": "custom",
+              "custom_kind": "fub.annotations.note",
+              "attrs": {},
+              "blocks": [
+                {
+                  "kind": "paragraph",
+                  "inlines": [
+                    {
+                      "kind": "text",
+                      "value": "Manca la firma del RUP: vedi l'allegato B."
+                    }
+                  ],
+                  "anchor": null,
+                  "span": {
+                    "start": 1545,
+                    "end": 1587
+                  }
+                }
+              ],
+              "anchor": null,
+              "span": {
+                "start": 1436,
+                "end": 1590
+              }
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 1055,
+            "end": 1597
+          }
+        },
+        {
+          "kind": "paragraph",
+          "inlines": [
+            {
+              "kind": "text",
+              "value": "Fuori dalle pagine"
+            }
+          ],
+          "anchor": null,
+          "span": {
+            "start": 1600,
+            "end": 1707
+          }
+        }
+      ],
+      "anchor": null,
+      "span": {
+        "start": 0,
+        "end": 1715
+      }
+    }
+  ],
+  "outline": [
+    {
+      "level": 1,
+      "text": "Revisione del bando",
+      "slug": "revisione-del-bando",
+      "span": {
+        "start": 244,
+        "end": 278
+      },
+      "explicit_anchor": null
+    }
+  ],
+  "links": [
+    {
+      "target": {
+        "kind": "path",
+        "value": "Bando%20di%20gara.pdf"
+      },
+      "embed": false,
+      "span": {
+        "start": 118,
+        "end": 139
+      },
+      "context": "Le correzioni chieste dall'ufficio gare & contratti Importo da rivedere L'importo a base d'asta è cambiato. Chiedere conferma all'ufficio <gare>. Vedi il verbale Manca la firma del RUP: vedi l'allegato B. Fuori dalle pag…"
+    },
+    {
+      "target": {
+        "kind": "path",
+        "value": "../Verbali/Verbale%2012.md"
+      },
+      "embed": false,
+      "span": {
+        "start": 1198,
+        "end": 1431
+      },
+      "context": "Vedi il verbale"
+    }
+  ],
+  "tags": [],
+  "anchors": [],
+  "text": "Revisione del bando\nLe correzioni chieste dall'ufficio gare & contratti\nImporto da rivedere\nL'importo a base d'asta è cambiato.\nChiedere conferma all'ufficio <gare>.\nVedi il verbale\nManca la firma del RUP: vedi l'allegato B.\nFuori dalle pagine",
+  "frontmatter_present": false
+}

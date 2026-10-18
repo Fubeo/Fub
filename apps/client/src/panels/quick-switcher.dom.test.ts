@@ -26,7 +26,7 @@ vi.mock("../state/recent", () => ({
 vi.mock("../state/vault", () => ({ createNote: fake.createNote }));
 vi.mock("../ui/notify", () => ({ notify: fake.notify }));
 vi.mock("../ui/tooltip", () => ({ setTooltip: fake.setTooltip }));
-vi.mock("./document", () => ({ openDocument: fake.openDocument }));
+vi.mock("../state/document-controller", () => ({ openDocument: fake.openDocument }));
 
 import { closeQuickSwitcher, mountQuickSwitcher, openQuickSwitcher } from "./quick-switcher";
 

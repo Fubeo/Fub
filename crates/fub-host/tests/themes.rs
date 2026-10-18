@@ -170,19 +170,24 @@ fn theme_inventory_and_read_are_typed_and_path_free() {
 
 // --- i cancelli del manifest, prima di toccare il disco ---------------------
 
-/// Un tema che parla un contratto più nuovo di [`THEME_ENGINE`] è respinto
-/// **per nome** e prima di ogni altro passo: non è un difetto del tema, è un
-/// tema che questo host non serve. Il disco non viene toccato.
+/// Un tema che parla un contratto che l'host non conosce è respinto **per
+/// nome** e prima di ogni altro passo: non è un difetto del tema, è un tema
+/// che questo host non serve. Il disco non viene toccato.
 #[test]
 fn a_theme_with_a_newer_engine_is_rejected_before_installing() {
     let (_config_dir, config) = folders();
     let (_dir, root) = folders();
-    write_theme(&root, "test.future", "theme-2", "");
+    write_theme(&root, "test.future", "theme-3", "");
 
-    let error = fub_host::theme::install_theme(&config, &root).expect_err("theme-2 is not served");
+    let error = fub_host::theme::install_theme(&config, &root).expect_err("theme-3 is not served");
     assert!(
-        matches!(&error, fub_host::theme::ThemeError::Engine { id, .. } if id == "test.future"),
+        matches!(&error, fub_host::theme::ThemeError::Engine { id, declared } if id == "test.future" && declared == "theme-3"),
         "it is the engine that rejects it: {error}"
+    );
+    let told = error.to_string();
+    assert!(
+        told.contains("`theme-1`") && told.contains("`theme-2`"),
+        "the refusal names every engine this host serves: {told}"
     );
     assert!(
         !fub_host::config::themes_dir(&config)
@@ -190,6 +195,286 @@ fn a_theme_with_a_newer_engine_is_rejected_before_installing() {
             .exists(),
         "a rejected theme leaves nothing behind"
     );
+}
+
+// --- theme-2 e le impostazioni che un tema dichiara --------------------------
+
+const SETTINGS: &str = r#", "settings": [
+    {"name": "bordi", "label": "Bordi", "kind": {"kind": "toggle", "default": true}},
+    {"name": "raggio", "label": "Raggio", "description": "Quanto sono tondi gli angoli.",
+     "kind": {"kind": "number", "default": 8, "min": 0, "max": 16}},
+    {"name": "trama", "label": "Trama", "kind": {"kind": "choice", "default": "fine",
+     "options": [{"value": "fine", "label": "Fine"}, {"value": "grossa", "label": "Grossa"}]}}
+]"#;
+
+/// Le righe di configurazione di un tema, lette dalla porta di tutti.
+fn theme_entries(host: &Host, vault: &Utf8Path, id: &str) -> Vec<fub_abi::settings::SettingEntry> {
+    let answer = host
+        .query_index(
+            Some(vault.as_str()),
+            fub_abi::traits::IndexQuery::Settings {
+                plugin: Some(id.to_string()),
+            },
+        )
+        .expect("settings answer");
+    match answer {
+        fub_abi::traits::IndexResult::Settings(entries) => entries,
+        other => panic!("not a settings answer: {other:?}"),
+    }
+}
+
+/// `theme-2` è un motore che l'host trasporta: si installa, si elenca e si
+/// legge come `theme-1`. Se la shell lo sappia vestire lo decide la shell.
+#[test]
+fn a_theme_2_theme_is_installed_listed_and_read() {
+    let (_config_dir, config) = folders();
+    let (_dir, root) = folders();
+    write_theme(&root, "test.due", "theme-2", "");
+    fub_host::theme::install_theme(&config, &root).expect("theme-2 installs");
+
+    let themes = fub_host::theme::list_themes(&config);
+    assert_eq!(themes.len(), 1);
+    assert_eq!(
+        themes[0].manifest.engine,
+        fub_abi::theme::ThemeEngine::Theme2
+    );
+    let payload =
+        fub_host::theme::read_theme(&config, "test.due", fub_abi::theme::ThemeLight::Dark)
+            .expect("reads theme-2");
+    assert_eq!(payload.manifest.engine, fub_abi::theme::ThemeEngine::Theme2);
+    assert!(payload.manifest.settings.is_empty());
+}
+
+/// Le impostazioni di un tema non hanno una porta loro: montato il tema sono
+/// righe del registro, con la chiave dentro il suo id, il livello della
+/// macchina e il default dichiarato. Si scrivono e si rileggono come le altre.
+#[test]
+fn theme_settings_are_ordinary_machine_settings() {
+    let (_config_dir, config) = folders();
+    let (_vault_dir, v) = vault();
+    let (_dir, root) = folders();
+    write_theme(&root, "test.due", "theme-2", SETTINGS);
+    fub_host::theme::install_theme(&config, &root).expect("installs");
+    assert_eq!(
+        fub_host::theme::list_themes(&config)[0]
+            .manifest
+            .settings
+            .len(),
+        3,
+        "the manifest the shell reads carries the declarations"
+    );
+
+    let host = installed(&config);
+    host.open(&v).expect("opens");
+
+    let entries = theme_entries(&host, &v, "test.due");
+    let keys: Vec<&str> = entries.iter().map(|e| e.spec.key.as_str()).collect();
+    for key in ["test.due:bordi", "test.due:raggio", "test.due:trama"] {
+        assert!(keys.contains(&key), "{key} is declared: {keys:?}");
+    }
+    let of = |key: &str| {
+        theme_entries(&host, &v, "test.due")
+            .into_iter()
+            .find(|e| e.spec.key == key)
+            .unwrap_or_else(|| panic!("{key} is declared"))
+    };
+    let trama = of("test.due:trama");
+    assert_eq!(trama.spec.scope, fub_abi::settings::SettingScope::Machine);
+    assert_eq!(trama.spec.group, fub_abi::Text::Literal("Prova".into()));
+    assert_eq!(trama.spec.label, fub_abi::Text::Literal("Trama".into()));
+    assert_eq!(
+        of("test.due:raggio").spec.description,
+        fub_abi::Text::Literal("Quanto sono tondi gli angoli.".into())
+    );
+    assert!(!trama.spec.program_writable);
+    assert_eq!(
+        trama.value,
+        fub_abi::settings::SettingValue::Text("fine".into())
+    );
+    assert_eq!(trama.source, fub_abi::settings::SettingSource::Default);
+
+    host.set_setting_for_user(
+        Some(v.as_str()),
+        "test.due:trama",
+        fub_abi::settings::SettingValue::Text("grossa".into()),
+    )
+    .expect("an admitted choice is written");
+    let trama = of("test.due:trama");
+    assert_eq!(
+        trama.value,
+        fub_abi::settings::SettingValue::Text("grossa".into())
+    );
+    assert_eq!(trama.source, fub_abi::settings::SettingSource::Machine);
+
+    // Lo schema è quello dichiarato: fuori dalle scelte e fuori intervallo
+    // sono rifiuti, e il valore di prima resta.
+    assert!(host
+        .set_setting_for_user(
+            Some(v.as_str()),
+            "test.due:trama",
+            fub_abi::settings::SettingValue::Text("ruvida".into()),
+        )
+        .is_err());
+    assert!(host
+        .set_setting_for_user(
+            Some(v.as_str()),
+            "test.due:raggio",
+            fub_abi::settings::SettingValue::Number(40.0),
+        )
+        .is_err());
+    assert_eq!(
+        of("test.due:trama").value,
+        fub_abi::settings::SettingValue::Text("grossa".into())
+    );
+    assert_eq!(
+        of("test.due:raggio").value,
+        fub_abi::settings::SettingValue::Number(8.0)
+    );
+
+    host.reset_setting_for_user(Some(v.as_str()), "test.due:trama")
+        .expect("resets");
+    assert_eq!(
+        of("test.due:trama").value,
+        fub_abi::settings::SettingValue::Text("fine".into())
+    );
+}
+
+/// Un manifest che dichiara male le proprie impostazioni non si installa, e lo
+/// dice dicendo quale: un tema installato e poi rifiutato dal registro al
+/// montaggio sarebbe un tema spento senza un perché.
+#[test]
+fn a_theme_with_undeclarable_settings_is_rejected() {
+    let setting = |body: &str| format!(r#", "settings": [{body}]"#);
+    let many = (0..33)
+        .map(|i| format!(r#"{{"name": "s{i}", "label": "S", "kind": {{"kind": "toggle", "default": false}}}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let cases: Vec<(&str, &str, String, &str)> = vec![
+        (
+            "theme-1",
+            "test.uno",
+            setting(
+                r#"{"name": "bordi", "label": "Bordi", "kind": {"kind": "toggle", "default": true}}"#,
+            ),
+            "settings need `theme-2`",
+        ),
+        (
+            "theme-2",
+            "test.nome",
+            setting(
+                r#"{"name": "Bordi Larghi", "label": "Bordi", "kind": {"kind": "toggle", "default": true}}"#,
+            ),
+            "setting name",
+        ),
+        (
+            "theme-2",
+            "test.doppia",
+            setting(
+                r#"{"name": "bordi", "label": "A", "kind": {"kind": "toggle", "default": true}},
+                   {"name": "bordi", "label": "B", "kind": {"kind": "toggle", "default": false}}"#,
+            ),
+            "declared twice",
+        ),
+        (
+            "theme-2",
+            "test.etichetta",
+            setting(
+                r#"{"name": "bordi", "label": " ", "kind": {"kind": "toggle", "default": true}}"#,
+            ),
+            "no label",
+        ),
+        (
+            "theme-2",
+            "test.testo",
+            setting(
+                r#"{"name": "motto", "label": "Motto", "kind": {"kind": "text", "default": ""}}"#,
+            ),
+            "toggle, a number or a choice",
+        ),
+        (
+            "theme-2",
+            "test.intervallo",
+            setting(
+                r#"{"name": "raggio", "label": "Raggio", "kind": {"kind": "number", "default": 4, "min": 9, "max": 2}}"#,
+            ),
+            "invalid range",
+        ),
+        (
+            "theme-2",
+            "test.aperto",
+            setting(
+                r#"{"name": "raggio", "label": "Raggio", "kind": {"kind": "number", "default": 4, "min": 0, "max": null}}"#,
+            ),
+            "needs both `min` and `max`",
+        ),
+        (
+            "theme-2",
+            "test.fuori",
+            setting(
+                r#"{"name": "raggio", "label": "Raggio", "kind": {"kind": "number", "default": 40, "min": 0, "max": 16}}"#,
+            ),
+            "invalid default",
+        ),
+        (
+            "theme-2",
+            "test.scelta",
+            setting(
+                r#"{"name": "trama", "label": "Trama", "kind": {"kind": "choice", "default": "ruvida",
+                    "options": [{"value": "fine", "label": "Fine"}]}}"#,
+            ),
+            "invalid default",
+        ),
+        (
+            "theme-2",
+            "test.opzione",
+            setting(
+                r#"{"name": "trama", "label": "Trama", "kind": {"kind": "choice", "default": "a b",
+                    "options": [{"value": "a b", "label": "A"}]}}"#,
+            ),
+            "option",
+        ),
+        (
+            "theme-2",
+            "test.chiave",
+            setting(
+                r#"{"name": "trama", "label": "Trama", "kind": {"kind": "choice", "default": "fine",
+                    "options": [{"value": "fine", "label": {"key": "trama.fine"}}]}}"#,
+            ),
+            "without a plain label",
+        ),
+        (
+            "theme-2",
+            "test.vuota",
+            setting(
+                r#"{"name": "trama", "label": "Trama", "kind": {"kind": "choice", "default": "", "options": []}}"#,
+            ),
+            "options",
+        ),
+        ("theme-2", "test.troppe", setting(&many), "at most 32"),
+        (
+            "theme-2",
+            "test:due",
+            setting(
+                r#"{"name": "bordi", "label": "Bordi", "kind": {"kind": "toggle", "default": true}}"#,
+            ),
+            "contains `:`",
+        ),
+    ];
+    for (engine, id, extra, expected) in cases {
+        let (_config_dir, config) = folders();
+        let (_dir, root) = folders();
+        write_theme(&root, id, engine, &extra);
+        let error = fub_host::theme::install_theme(&config, &root)
+            .expect_err(&format!("`{id}` must not install"));
+        assert!(
+            matches!(&error, fub_host::theme::ThemeError::Malformed(message) if message.contains(expected)),
+            "`{id}` is refused for its settings ({expected}): {error}"
+        );
+        assert!(
+            !fub_host::config::themes_dir(&config).join(id).exists(),
+            "`{id}` leaves nothing behind"
+        );
+    }
 }
 #[test]
 fn a_theme_with_a_mismatched_namespace_is_rejected() {

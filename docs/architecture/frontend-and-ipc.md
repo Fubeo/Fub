@@ -20,10 +20,13 @@
 Soltanto `host/ipc.ts` e `host/dialog.ts` importano `@tauri-apps`. Un pannello
 parla con l'interfaccia host, non con `invoke` direttamente.
 
-Una domanda sì/no all'utente è sempre `confirm` di `host/dialog.ts`, la
-superficie che la piattaforma disegna: nessun pannello ne disegna una propria.
-I dialoghi della shell in `ui/dialogs.ts` coprono ciò che il sistema non offre,
-cioè un nome da scrivere e una scelta in un elenco lungo.
+Una domanda sì/no all'utente passa sempre da `confirm` di
+`platform/confirm.ts`: nessun pannello ne disegna una propria. Di serie risponde
+il dialogo di sistema di `host/dialog.ts`; una shell può dichiarare un
+presentatore che la disegna nella finestra, e in quel caso un guasto, Esc o lo
+smontaggio valgono «no». I dialoghi della shell in `ui/dialogs.ts` coprono ciò
+che il sistema non offre, cioè un nome da scrivere e una scelta in un elenco
+lungo.
 
 ```mermaid
 flowchart LR
@@ -173,11 +176,120 @@ il pulsante di chiusura è un controllo fratello, non un elemento interattivo
 annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
 linguetta, Delete la chiude. Gli aggiornamenti di stato preservano il nodo a
 fuoco; una chiusura trasferisce il focus a una linguetta vicina o al menu del
-riquadro rimasto vuoto.
+riquadro rimasto vuoto. Una linguetta nella vista sorgente lo dice nel testo,
+nel suggerimento e nel nome accessibile («vista sorgente»); aprire o chiudere
+la vista porta il focus sulla superficie montata al posto della precedente.
 
 I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
 trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
 non altera il rapporto fra movimento del puntatore e larghezza risultante.
+
+## La finestra: lo Scrittoio
+
+La finestra è lo Scrittoio ([decisione 0208](../decisions/0208-la-finestra-e-lo-scrittoio.md)):
+la scrivania è il piano di fondo, i documenti sono fogli appoggiati sopra e gli
+strumenti stanno in due cassetti. Le pagine `index.html`, `mobile.html` e
+`document.html` ne portano il markup, e `main.ts` avvia
+`shells/scrittoio/bootstrap.ts`. Non esiste una seconda shell da selezionare.
+
+Sopra la shell comune (`desktop-shell.ts`: sessioni, riquadri, comandi,
+pannelli) lo Scrittoio compone:
+
+- `shells/scrittoio/`: cornice (barra del titolo, binario, banda di stato),
+  fogli e linguette, lanciatore, preferenze, presentatore della conferma,
+  mobile e finestra documento. La shell comune trova per id i manici che le
+  pagine le lasciano;
+- `kit/`: le primitive di interfaccia senza framework (pulsante, campo,
+  elenco, schede, popover, dialogo, divisore, scheda al passaggio). Ogni
+  primitiva ha un owner e un disposer per ciò che registra;
+- `moto/`: molle, FLIP, presenza e gesti. Le animazioni sono fotogrammi
+  chiave WAAPI di sola `transform` e `opacity`; il livello `appearance.motion`
+  e la preferenza del sistema decidono quanto movimento esiste, e lo stato
+  finale è lo stesso con e senza movimento;
+- `theme/scrittoio/`: la serie di serie (motore `theme-2`), con ricetta dei
+  colori, fogli, struttura e pelle a pezzi. La pelle passa dal sanitizer CSS
+  del motore, e ogni classe di un pezzo è un hook dell'anatomia di quel pezzo.
+
+I predefiniti dell'aspetto (accento, carattere, corpo, interlinea, giustezza)
+li dichiara l'host e coincidono con quelli della serie; un test Rust lo
+verifica. I divisori dei cassetti sono il divisore del kit: sidebar da 208 a
+400 px, ispettore da 248 a 440 px. Un tema `theme-1` installato non si monta, e
+la diagnosi del catalogo nomina il motore.
+
+### Comportamenti della shell
+
+Ciò che la shell fa sopra le porte generiche, senza contratti propri:
+
+- **Avvisi.** I toast si impilano (al più tre visibili), portano azioni e un
+  «Annulla» generico quando l'esito del comando dichiara `outcome.undo`; il
+  centro attività tiene lo storico dei lavori. Cestinare più note insieme non
+  ha un «Annulla» unico: l'annullamento del vault disfa l'ultima operazione, e
+  le note tornano dal cestino una a una.
+- **Scrittura.** Con la barra di formattazione spenta
+  (`chrome.formatbar.visible`) compare la bolla di selezione; il menu «/» è
+  ancorato al cursore e passa per l'interfaccia della superficie testuale,
+  mai per oggetti CodeMirror. Sui collegamenti una scheda al passaggio mostra
+  la destinazione (`render_embed`) con apri, di fianco e nuova linguetta; un
+  collegamento irrisolto offre «Crea». In Live le azioni della scheda non
+  sono raggiungibili da tastiera.
+- **Cerca.** Il cassetto espone le opzioni che la porta regge (maiuscole,
+  regex, tolleranza, parola intera) e «Sostituisci nel vault»: prima il piano
+  (`vault.replace` in `dry_run`), poi «Applica». La sostituzione è letterale e
+  sensibile alle maiuscole, solo sulle note dei risultati. Una ricerca si
+  salva come segnalibro.
+- **Scrivania.** Il riquadro vuoto offre nota nuova, nota del giorno, da
+  modello (solo se il comando è nel registro), recenti, bozze da recuperare e
+  «Da sistemare» (una riga per nota con collegamenti rotti, da
+  `vault_health`; se la query fallisce il gruppo manca).
+- **Albero.** Ctrl/Cmd-clic e Ctrl-Spazio aggiungono o tolgono una nota dalla
+  scelta, Maiusc-clic sceglie l'intervallo fra le note visibili, Esc la
+  azzera. Una barra sopra l'albero dice quante sono e offre «Sposta in…»,
+  «Cestina» e «Deseleziona»; la scelta è solo su ciò che l'albero mostra, e
+  ciò che esce dal DOM esce dalla scelta.
+- **Binario.** Riordino e nascondimento sono `chrome.rail.order` e
+  `chrome.rail.hidden`; la voce «Ripristina ordine e icone predefiniti» li
+  riporta a `[]`.
+- **Grafo.** La tela ha i comandi di zoom e «Inquadra tutto»; la legenda è un
+  insieme di interruttori di visibilità per gruppo, che si compone con la
+  maschera della linea del tempo.
+- **Linguette.** Rilasciata sul corpo di un foglio, una linguetta si
+  divide (quattro bordi) o si sposta in coda al riquadro (centro);
+  `splitWithTab` in `state/layout.ts` è la regola pura. Fuori dalla finestra
+  una linguetta di nota diventa finestra, solo con
+  `platformSupports("multipleWindows")` e dove il motore consegna `dragend`
+  fuori finestra. Ogni gesto ha il suo comando nel menu della linguetta.
+- **Menu contestuale estendibile.** Le view sulla superficie `context_menu`
+  (`ui/context-views.ts`) si aggiungono in coda al menu di una nota, di una
+  cartella o di un file dell'albero. Il bersaglio del clic non è nel contesto
+  di sessione: viaggia nei `params` di `render_view` e `view_action`, e la
+  shell manda solo le chiavi che la view dichiara fra i propri `ParamSpec`
+  (`target`, l'id cliccato; `target_kind`, `note`, `folder` o `file`). Dall'albero
+  restituito si prendono i `button` e i `list_item` con un'azione, al più
+  quattro view e otto voci per view, con trecento millisecondi per rispondere:
+  una view che sbaglia o tarda non compare e il menu resta quello della shell.
+- **Ricerca nel menu dell'applicazione.** «Cerca» è il sesto menu del
+  marchio (`ui/app-menu-search.ts`): un campo con elenco che filtra, senza
+  accenti né maiuscole, le voci di tutti gli altri menu, ciascuna col nome del
+  suo menu e la sua scorciatoia. Non ha un elenco proprio: legge quelli dei
+  menu.
+- **Cartelle che si aprono sostando.** Trascinando una nota, una cartella
+  chiusa si apre dopo 700 ms sopra di lei (`scheduleHoverOpen` in
+  `panels/explorer.ts`); il timer è uno solo, e passare oltre, lasciare o
+  finire il trascinamento lo azzera.
+- **Rinomina nell'albero.** Un nome rifiutato (non valido, già in uso, errore
+  del kernel) riapre il campo con ciò che è stato scritto e la frase accanto,
+  `role="alert"`, che sparisce alla prima battuta; il toast non serve.
+- **Avvisi dentro il foglio.** Sotto il banner del conflitto (`drawNotices` in
+  `panels/document.ts`) il foglio tiene una riga per avviso: errore di
+  salvataggio con «Riprova» (`shell.doc.save`), sola lettura mentre una
+  cancellazione aspetta la risposta, bozza ritrovata, nota cambiata o
+  riscritta su disco con buffer sporco, nota ricaricata, e la modalità
+  limitata dei componenti, che è del vault. Quelli derivati dalla sessione
+  durano quanto il suo stato; gli altri sono fatti del controllore
+  (`state/sheet-notices.ts`) che restano finché non si chiudono, e un
+  salvataggio riuscito toglie «cambiato su disco» ma non la bozza. Una nota
+  rimossa da fuori chiude la sua linguetta: l'avviso resta sul riquadro che la
+  mostrava, con «Ricrea» se c'era testo non salvato, finché non si chiude.
 
 ## Shell e piattaforma
 
@@ -198,7 +310,11 @@ Gli appunti passano da una porta sola (`platform/clipboard.ts`): di serie sono
 quelli della webview, e una shell che ne ha di propri li dichiara con
 `declareClipboard`. `writeClipboardText` non lancia mai in modo sincrono, e
 l'assenza degli appunti è un errore tipizzato (`ClipboardUnavailable`), non un
-controllo ripetuto in ogni pannello.
+controllo ripetuto in ogni pannello. Il disegno scrive più tipi insieme, l'SVG
+e il suo PNG, con `writeClipboardData`, dopo aver chiesto a
+`clipboardSupports` se servono, e dal menu legge gli appunti con
+`readClipboard`; una shell che dichiara i suoi appunti dichiara anche questi,
+o il disegno resta agli eventi di copia e incolla del browser.
 
 ## Superfici di editing
 
@@ -210,7 +326,7 @@ CodeMirror e al suo guard, sono in [Superfici dell'editor](editor-surfaces.md).
 Oltre al confine di CodeMirror, i guard del frontend impediscono:
 
 - nuovi import Tauri fuori dal seam;
-- scritture negli appunti della webview fuori da `platform/clipboard.ts`;
+- usi degli appunti della webview fuori da `platform/clipboard.ts`;
 - listener globali senza owner;
 - attese concorrenti senza il primitivo di cancellazione;
 - mirror TypeScript non aggiornati.

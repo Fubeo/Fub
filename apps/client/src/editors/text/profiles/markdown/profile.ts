@@ -138,6 +138,9 @@ export interface MarkdownProfile {
   setLivePreview(on: boolean): void;
   /// Replaces the syntax declaration used by live preview on the next reconfigure.
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
+  /// Mounts the proofing extension (`./proof`) on the next reconfigure. It is
+  /// loaded after the surface, so it arrives here instead of in the options.
+  setProof(extension: Extension): void;
 }
 
 /// Owns Markdown-specific CodeMirror configuration while leaving document,
@@ -146,6 +149,10 @@ export interface MarkdownProfile {
 export function createMarkdownProfile(options: MarkdownProfileOptions): MarkdownProfile {
   let previewOn = true;
   let syntaxForms: readonly SyntaxForm[] | undefined;
+  // Un'estensione sola per la vita del profilo: un `reconfigure` (Live ↔
+  // Sorgente) tiene la stessa istanza del plugin, e con lei le parole
+  // ignorate in questa sessione.
+  let proof: Extension = [];
 
   return {
     extensions() {
@@ -158,6 +165,7 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
         markdown({ base: markdownGrammar, codeLanguages: languages }),
         previewOn ? livePreview(options.callbacks, syntaxForms) : [],
         markdownCompletions(options.completions),
+        proof,
       ];
     },
     setLivePreview(on) {
@@ -165,6 +173,9 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
     },
     setSyntaxForms(forms) {
       syntaxForms = forms;
+    },
+    setProof(extension) {
+      proof = extension;
     },
   };
 }

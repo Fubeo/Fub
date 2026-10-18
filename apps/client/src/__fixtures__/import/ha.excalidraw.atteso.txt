@@ -1,0 +1,129 @@
+File: ha.excalidraw
+Oggetti: 96 (forme 19, testi 24, linee 53, tratti 0, immagini 0)
+Livelli: 1, tavole: 0
+Note: hand-font ×3 (Virgil); rough ×64; image ×1 (image/svg+xml)
+
+Livello «Livello 1»
+  Gruppo «Virtual Table temp.ha Using HA», 2 oggetti
+    Rettangolo «Virtual Table temp.ha Using HA»
+    Testo «Virtual Table temp.ha Using HA»
+  Testo «insert into temp.ha(stream, durable) values('ha_replication…»
+  Rettangolo
+  Rettangolo
+  Connettore «subscribe» da «Virtual Table temp.ha Using HA» a Ellisse
+  Testo «subscribe»
+  Testo «ha instance 1»
+  Connettore «Apply changes»
+  Testo «Apply changes»
+  Testo «https://github.com/litesql/ha»
+  Testo «CREATE VIRTUAL TABLE temp.ha USING HA(servers='nats://broke…»
+  Gruppo, 4 oggetti
+    Tracciato
+    Tracciato
+    Tracciato
+    Ellisse
+  Gruppo, 5 oggetti
+    Ellisse
+    Tracciato
+    Ellisse
+    Linea
+    Linea
+  Gruppo, 5 oggetti
+    Ellisse
+    Tracciato
+    Ellisse
+    Linea
+    Linea
+  Testo «SQLite»
+  Rettangolo
+  Testo «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Connettore da «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306» a Ellisse
+  Connettore da Ellisse
+  Testo «https://github.com/litesql/ha-sync»
+  Rettangolo
+  Gruppo, 4 oggetti
+    Tracciato
+    Tracciato
+    Tracciato
+    Ellisse
+  Testo «NATS broker»
+  Gruppo, 5 oggetti
+    Ellisse
+    Tracciato
+    Ellisse
+    Linea
+    Linea
+  Testo «SQLite»
+  Rettangolo
+  Testo «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Connettore da «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306» a Ellisse
+  Connettore da Ellisse
+  Testo «ha instance N»
+  Connettore verso «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Connettore verso «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Connettore «Embedded NATS cluster»
+  Testo «Embedded NATS cluster»
+  Testo «NATS broker»
+  Testo «SQLite extension»
+  Testo «Local read replica»
+  Connettore «subscribe» da «Virtual Table temp.ha Using HA» a Ellisse
+  Testo «subscribe»
+  Gruppo, 2 oggetti
+    Testo «JDBC Driver»
+    Gruppo, 2 oggetti
+      Gruppo, 3 oggetti
+        Rettangolo
+        Rettangolo
+        Testo «Java»
+      Gruppo, 8 oggetti
+        Tracciato
+        Tracciato
+        Tracciato
+        Tracciato
+        Tracciato
+        Tracciato
+        Tracciato
+        Tracciato
+  Gruppo, 2 oggetti
+    Testo «database/sql»
+    Gruppo, 4 oggetti
+      Rettangolo
+      Rettangolo
+      Testo «Go»
+      Gruppo, 2 oggetti
+        Testo «GO»
+        Gruppo, 3 oggetti
+          Linea
+          Linea
+          Linea
+  Gruppo «Any HTTP, gRPC, PostgreSQL or MySQL Client», 2 oggetti
+    Rettangolo «Any HTTP, gRPC, PostgreSQL or MySQL Client»
+    Testo «Any HTTP, gRPC, PostgreSQL or MySQL Client»
+  Connettore da Rettangolo a «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Connettore da «Any HTTP, gRPC, PostgreSQL or MySQL Client» a «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Connettore da «Any HTTP, gRPC, PostgreSQL or MySQL Client» a «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Connettore da Rettangolo a «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Testo «https://github.com/litesql/go-ha»
+  Testo «https://github.com/litesql/jdbc-ha»
+  Testo «https://buf.build/litesql/sqlite-ha/sdks/main:grpc»
+  Gruppo, 7 oggetti
+    Tracciato
+    Tracciato
+    Tracciato
+    Tracciato
+    Tracciato
+    Tracciato
+    Tracciato
+  Gruppo, 4 oggetti
+    Tracciato
+    Testo «My»
+    Testo «SQL»
+    Linea
+  Connettore «Proxy and Replication» verso Rettangolo
+  Testo «Proxy and Replication»
+  Connettore «Proxy and Replication» da «My» a Rettangolo
+  Testo «Proxy and Replication»
+  Connettore «gRPC leader redirect» da Rettangolo a «gRPC/HTTP 8080 PostgreSQL 5432 MySQL 3306»
+  Testo «gRPC leader redirect»
+  Connettore «Debezium Sink» verso Rettangolo
+  Testo «Debezium Sink»

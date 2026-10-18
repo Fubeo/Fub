@@ -1,0 +1,43 @@
+{
+  "name": "text-runs",
+  "description": "una riga di text fatta di pezzi: il testo della riga e un tspan per pezzo, sulla stessa riga del file, con gli attributi in ordine canonico",
+  "input": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Il ciclo dell'acqua</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <text id=\"o9i0j1k2l\" x=\"720\" y=\"460\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"32\">\n      <tspan x=\"720\" dy=\"0\">Evaporazione</tspan>\n    </text>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+  "ops": [
+    {
+      "op": "text",
+      "id": "o9i0j1k2l",
+      "lines": [
+        [
+          "Il ",
+          {
+            "text": "ciclo",
+            "attrs": {
+              "font-weight": "bold"
+            }
+          },
+          " dell'",
+          {
+            "text": "acqua & sale",
+            "attrs": {
+              "font-style": "italic",
+              "fill": "#0072b2",
+              "text-decoration": "underline"
+            }
+          }
+        ],
+        "in due righe"
+      ]
+    }
+  ],
+  "expect": {
+    "outcome": "applied",
+    "text": "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:fub=\"https://fubeo.github.io/ns/scene/1\" fub:version=\"1\" viewBox=\"0 0 1600 1000\" width=\"1600\" height=\"1000\">\n  <title>Il ciclo dell'acqua</title>\n  <rect id=\"fub-paper\" fub:role=\"paper\" x=\"0\" y=\"0\" width=\"1600\" height=\"1000\" fill=\"#ffffff\"/>\n  <g id=\"l3f8a0c2d\" fub:layer=\"Livello 1\">\n    <ellipse id=\"o1a2b3c4d\" cx=\"300\" cy=\"200\" rx=\"120\" ry=\"60\" fill=\"none\" stroke=\"#0072b2\" stroke-width=\"4\"/>\n    <text id=\"o9i0j1k2l\" x=\"720\" y=\"460\" fill=\"#000000\" font-family=\"Inter, sans-serif\" font-size=\"32\">\n      <tspan x=\"720\" dy=\"0\">Il <tspan font-weight=\"bold\">ciclo</tspan> dell'<tspan fill=\"#0072b2\" font-style=\"italic\" text-decoration=\"underline\">acqua &amp; sale</tspan></tspan>\n      <tspan x=\"720\" dy=\"40\">in due righe</tspan>\n    </text>\n    <rect id=\"o3c4d5e6f\" x=\"800\" y=\"100\" width=\"200\" height=\"120\" fill=\"#009e73\"/>\n  </g>\n</svg>\n",
+    "inverse": {
+      "op": "text",
+      "id": "o9i0j1k2l",
+      "lines": [
+        "Evaporazione"
+      ]
+    }
+  }
+}

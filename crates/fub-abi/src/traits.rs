@@ -1703,16 +1703,18 @@ pub enum ViewSurface {
     Ribbon,
     /// Una voce nel menu dell'app.
     Menu,
-    /// Una voce nel menu contestuale. Questa shell non ne ospita uno
-    /// estendibile, e lo dichiara a chi ci dichiara una view (`NON_OSPITATE`,
-    /// `apps/client/src/ui/views.ts`).
+    /// Una voce nel menu contestuale. La shell le ospita in coda al menu di una
+    /// nota, di una cartella o di un file dell'albero
+    /// (`apps/client/src/ui/context-views.ts`).
     ///
     /// Il bersaglio del clic **non** lo dice il contesto di sessione:
     /// [`ViewContext`](crate::session::ViewContext) non ha quel campo e non lo
     /// avrà, perché un bersaglio è vero per un istante mentre quel record si
-    /// legge quando capita. Il giorno che un terzo contribuisca una voce, il
-    /// bersaglio viaggerà con l'**invocazione**, dove già viaggia ciò su cui un
-    /// comando agisce (decisione 0152).
+    /// legge quando capita. Viaggia con l'**invocazione**, dove già viaggia ciò
+    /// su cui un comando agisce (decisione 0152): nei `params` di
+    /// `render_view` e `view_action`, e solo per le chiavi che la view dichiara
+    /// fra i propri [`ParamSpec`](crate::command::ParamSpec): `target` (l'id di
+    /// ciò su cui si è cliccato) e `target_kind` (`note`, `folder` o `file`).
     ContextMenu,
     /// Una scheda nelle impostazioni (28): è ciò che rende le impostazioni di un
     /// plugin indistinguibili da quelle del core, invece di una finestra a

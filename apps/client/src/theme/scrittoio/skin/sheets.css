@@ -1,0 +1,712 @@
+/* I fogli: la carta, le linguette, la testata, la barra di formattazione, gli
+   avvisi. La geometria — dove sta la carta, come sporge la sagoma della
+   linguetta, l'ordine a vista della testata — è della struttura; qui ci sono
+   colore, carattere, rilievo e stati. */
+
+/* ── La carta ────────────────────────────────────────────────────────────── */
+
+/* Il foglio è l'unico oggetto rialzato della finestra. Quello col fuoco sale
+   di un gradino: con due fogli affiancati è così che si legge dove si scrive. */
+.pane::before {
+  border-radius: var(--radius-sheet);
+  background: var(--sheet);
+  box-shadow: var(--shadow-1);
+}
+.pane.focus::before {
+  box-shadow: var(--shadow-2);
+}
+/* Sotto la prima linguetta, quando è lei l'attiva, l'angolo del foglio è vivo:
+   il fianco della linguetta scende dritto in quello del foglio. La toppa che
+   lo riempie è della struttura; qui ha il colore della carta e il tempo con
+   cui compare. */
+.pane::after {
+  background: var(--sheet);
+  transition: opacity var(--duration-fast) var(--ease);
+}
+/* Un riquadro senza linguette non è un foglio: resta scrivania. */
+.pane:has(> .pane-tabs[hidden])::before {
+  background: transparent;
+  box-shadow: none;
+}
+/* Ciò che sta nel foglio non ha un fondo suo — è la carta — e ne segue gli
+   angoli bassi. */
+.pane > [role="tabpanel"] {
+  border-radius: 0 0 var(--radius-sheet) var(--radius-sheet);
+}
+.pane-editor {
+  background: transparent;
+  color: var(--doc-fg);
+}
+
+/* Lo spazio fra due fogli è anche la maniglia che li ridimensiona. A riposo
+   non si vede; presa, o raggiunta da tastiera, è un tratto d'accento al
+   centro. */
+.pane-divider {
+  background-color: var(--accent);
+  background-clip: content-box;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+.pane-split.row > .pane-divider {
+  padding: var(--space-9) 3px var(--space-6);
+}
+.pane-split.col > .pane-divider {
+  padding: 3px var(--space-6);
+}
+.pane-divider:hover,
+.pane-divider:focus-visible,
+.pane-divider[data-dragging] {
+  opacity: 1;
+}
+.pane-divider:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── Le linguette ────────────────────────────────────────────────────────── */
+
+.pane-tabs {
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+}
+/* Una linguetta a riposo è testo sul piano: niente scatola. Fra due vicine a
+   riposo passa un filo corto, che sparisce accanto all'attiva e a quella sotto
+   il puntatore. */
+.tab-entry {
+  color: var(--muted);
+}
+.tab-entry + .tab-entry {
+  background: linear-gradient(var(--border-strong), var(--border-strong)) left center / 1px 14px no-repeat;
+}
+.tab-entry:hover,
+.tab-entry:hover + .tab-entry,
+.tab-entry:has(> .tab[aria-selected="true"]),
+.tab-entry:has(> .tab[aria-selected="true"]) + .tab-entry {
+  background-image: none;
+}
+/* La sagoma dell'attiva ha il colore del foglio e nessun rilievo suo: l'ombra
+   è del foglio. */
+.tab-entry::before {
+  background: var(--sheet);
+}
+.tab-entry::after {
+  border-radius: var(--radius-chip);
+  background: var(--bg-hover);
+  transition: opacity var(--duration-state) var(--ease);
+}
+.tab-entry:hover::after {
+  opacity: 1;
+}
+.tab-entry:has(> .tab[aria-selected="true"])::after {
+  opacity: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-2) 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--weight-medium);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab-entry:hover > .tab {
+  color: var(--text);
+}
+.tab[aria-selected="true"] {
+  color: var(--text);
+  font-weight: var(--weight-bold);
+}
+.tab:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -3px;
+}
+.tab-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab-pin {
+  width: 12px;
+  height: 12px;
+  margin-right: var(--space-2);
+  color: var(--muted);
+  vertical-align: -1px;
+}
+.tab-pinned {
+  padding-right: var(--space-5);
+}
+
+/* La chiusura c'è sempre per la tastiera, ma si vede solo dove serve: sulla
+   linguetta attiva, su quella sotto il puntatore e su quella che ha il fuoco. */
+.tab-close {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--space-2);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-state) var(--ease);
+}
+.tab-close svg {
+  width: 12px;
+  height: 12px;
+  transition: opacity var(--duration-state) var(--ease);
+}
+.tab-entry:hover > .tab-close,
+.tab-entry:focus-within > .tab-close,
+.tab[aria-selected="true"] + .tab-close,
+.tab.dirty + .tab-close {
+  opacity: 1;
+}
+.tab-close:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.tab-close:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Con del lavoro non salvato, al posto della chiusura c'è un punto blu; la
+   chiusura torna sotto il puntatore o col fuoco. */
+.tab.dirty + .tab-close::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  translate: -50% -50%;
+  transition: opacity var(--duration-state) var(--ease);
+}
+.tab.dirty + .tab-close svg {
+  opacity: 0;
+}
+.tab-entry:hover > .tab.dirty + .tab-close svg,
+.tab.dirty + .tab-close:focus-visible svg {
+  opacity: 1;
+}
+.tab-entry:hover > .tab.dirty + .tab-close::before,
+.tab.dirty + .tab-close:focus-visible::before {
+  opacity: 0;
+}
+/* Una fissata non ha chiusura a vista: il punto sta dopo il nome. */
+.tab-pinned.dirty .tab-name::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: middle;
+}
+/* Fuori dal foglio col fuoco l'attiva resta leggibile ma non grida. */
+.pane-split .pane:not(.focus) .tab[aria-selected="true"] {
+  font-weight: var(--weight-medium);
+}
+
+/* Il «+» in fondo alle linguette: una nota nuova in questo foglio. Sta sul
+   piano come una linguetta a riposo. */
+.tab-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tab-new svg {
+  width: 14px;
+  height: 14px;
+}
+.tab-new:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tab-new:active {
+  background: var(--bg-active);
+}
+.tab-new:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+/* L'elenco delle linguette: sta sul piano, e quando la striscia scorre le
+   linguette gli passano sotto. */
+.pane-tabs > [data-tab-menu] {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+.pane-tabs > [data-tab-menu]:hover,
+.pane-tabs > [data-tab-menu][aria-expanded="true"] {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.pane-tabs > [data-tab-menu]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Dove la striscia continua sotto l'elenco, le linguette ci arrivano sfumando;
+   a destra l'elenco copre anche il margine della striscia, dove altrimenti
+   spunterebbe un pezzo del «+». */
+.pane-tabs[data-scrolled="end"] > [data-tab-menu],
+.pane-tabs[data-scrolled="both"] > [data-tab-menu] {
+  box-shadow: calc(-1 * var(--space-4)) 0 var(--space-4) var(--bg), var(--space-2) 0 0 var(--bg);
+}
+
+/* ── La testata ──────────────────────────────────────────────────────────── */
+
+/* Sta sulla carta e senza filetto: percorso a sinistra, modalità, stato e
+   menu a destra. */
+.pane-toolbar {
+  gap: var(--space-4);
+  padding: 0 var(--space-4) 0 var(--space-6);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.pane-toolbar > .muted {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-toolbar > [data-pane-menu] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-md);
+  line-height: 1;
+  cursor: pointer;
+}
+.pane-toolbar > [data-pane-menu]:hover,
+.pane-toolbar > [data-pane-menu][aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.pane-toolbar > [data-pane-menu]:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Un foglio stretto (tre affiancati, la finestra piccola): i passi del
+   selettore e il menu cedono respiro prima che il selettore ceda una voce. */
+@container sheet-head (max-width: 320px) {
+  .pane-toolbar > .segmented .segmented-option {
+    padding: 0 var(--space-2);
+  }
+  .pane-toolbar > [data-pane-menu] {
+    width: 24px;
+  }
+}
+/* Il riquadro vuoto è scrivania: la sua testata non ha margini da foglio. */
+.pane:has(> .pane-tabs[hidden]) > .pane-toolbar {
+  padding: 0 var(--space-2);
+}
+
+/* Il titolo di un documento si preme per rinominarlo: a riposo è il percorso
+   di sempre, sotto il puntatore prende l'inchiostro. */
+.sheet-title {
+  border-radius: var(--radius-chip);
+}
+.sheet-title:hover {
+  color: var(--text);
+}
+.sheet-title:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: 3px;
+}
+/* Il campo sta nella testata, che è più bassa di un modulo: un passo meno alto
+   dei campi del kit, e l'alone del fuoco resta dentro. */
+.sheet-title-edit .kit-field-box {
+  height: 28px;
+  font-size: var(--text-sm);
+}
+.sheet-title-error {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  color: var(--danger);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+/* Lo stato di salvataggio è un bottone: parola e punto sono quelli della
+   regione viva (`.save-state`), qui c'è solo ciò che lo fa premere. */
+.sheet-save {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  font-family: inherit;
+  line-height: var(--leading-normal);
+  cursor: pointer;
+}
+.sheet-save:hover,
+.sheet-save[aria-expanded="true"] {
+  background: var(--overlay-hover);
+}
+.sheet-save:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Aperto: lo stato a parole, ciò che se ne sa, e i gesti che lo cambiano. */
+.sheet-save-panel {
+  padding: var(--space-4) var(--space-5);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.sheet-save-headline {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+}
+.sheet-save-headline[data-state="fallito"],
+.sheet-save-headline[data-state="conflitto"] {
+  color: var(--danger);
+}
+.sheet-save-detail {
+  margin: 0;
+  color: var(--muted);
+}
+.sheet-save-facts {
+  margin: var(--space-2) 0 0;
+}
+.sheet-save-facts dt {
+  color: var(--muted);
+}
+.sheet-save-facts dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+}
+.sheet-save-mono {
+  font-family: var(--font-mono);
+}
+.sheet-save-actions {
+  margin-top: var(--space-3);
+}
+
+/* ── La barra di formattazione ───────────────────────────────────────────── */
+
+/* Sulla carta come la testata, con un filo sotto che la separa dal testo. I
+   gruppi si dividono con un filo corto, non con una riga a tutta altezza. */
+.format-bar {
+  gap: var(--space-2);
+  padding: 0 var(--space-5);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.format-bar-group {
+  gap: var(--space-1);
+  padding-right: var(--space-3);
+  background: linear-gradient(var(--border-strong), var(--border-strong)) right center / 1px 16px no-repeat;
+}
+.format-bar-group:last-of-type {
+  background-image: none;
+}
+.format-bar-button,
+.format-bar-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 28px;
+  height: 28px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.format-bar-button:hover:not(:disabled),
+.format-bar-menu:hover:not(:disabled),
+.format-bar-menu[aria-expanded="true"] {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+/* «Acceso» è lo stesso ovunque nella shell: velo d'accento e inchiostro blu. */
+.format-bar-button[aria-pressed="true"] {
+  background: var(--accent-wash);
+  color: var(--accent);
+}
+.format-bar-button:focus-visible,
+.format-bar-menu:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.format-bar-button:disabled,
+.format-bar-menu:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* Il selettore dello stile dice lo stile a parole, come in un elaboratore di
+   testi: largo abbastanza da non ballare fra «Titolo 1» e «Testo normale». */
+.format-bar-style {
+  min-width: 128px;
+  justify-content: space-between;
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.format-bar-menu-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* La bolla di selezione è un rialzo come un menu: carta di menu, ombra, raggio.
+   La sua barra non porta il filo sotto, che separa dal testo una testata. */
+.selection-bubble {
+  border-radius: var(--radius-menu);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-3);
+}
+.selection-bubble .format-bar {
+  padding: 0 var(--space-3);
+  box-shadow: none;
+}
+.selection-bubble[hidden] {
+  display: none;
+}
+
+/* ── Il contenuto ────────────────────────────────────────────────────────── */
+
+/* Lettura: la stessa carta e la stessa colonna di Live. Passare a Lettura
+   cambia cosa si può fare sulla nota, non dove sta. */
+.pane-preview {
+  padding: var(--space-8) var(--space-7) var(--space-10);
+  color: var(--doc-fg);
+  user-select: text;
+}
+.pane-preview.markdown-preview {
+  width: min(100%, var(--content-width));
+  margin-inline: auto;
+}
+
+/* Il riquadro vuoto: una frase nel carattere del testo e i gesti per
+   cominciare, sul piano. */
+.pane-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-9);
+  color: var(--muted);
+  font-family: var(--font-ui);
+  text-align: center;
+}
+.pane-empty-title {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-reading);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-medium);
+  letter-spacing: -0.01em;
+}
+.pane-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-5);
+  font-size: var(--text-base);
+}
+
+/* La scrivania: i gesti per cominciare e, sotto, ciò che era in corso. Le
+   righe sono testo sul piano: prendono corpo sotto il puntatore o col fuoco. */
+.sheet-desk {
+  color: var(--text);
+  font-size: var(--text-base);
+  text-align: left;
+}
+.sheet-desk-label {
+  padding: 0 var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+.sheet-desk-row {
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: var(--leading-normal);
+  text-align: left;
+  cursor: pointer;
+}
+.sheet-desk-row:hover {
+  background: var(--overlay-hover);
+}
+.sheet-desk-row:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+}
+.sheet-desk-note {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Il filo dei titoli: tacche sottili nel margine del foglio. Aperto è una
+   superficie sospesa, come ogni cosa che sta sopra il testo. */
+.sheet-thread {
+  border-radius: var(--radius-control);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.sheet-thread:hover,
+.sheet-thread:has(:focus-visible) {
+  border-color: var(--elevation-floating-border);
+  background: var(--elevation-floating-surface);
+  box-shadow: var(--elevation-floating-shadow);
+}
+.sheet-thread-item {
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sheet-thread-item[data-level="1"] {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+.sheet-thread-item:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
+}
+.sheet-thread-item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -2px;
+  color: var(--text);
+}
+.sheet-thread-notch {
+  border-radius: var(--radius-xs);
+  background: var(--border-strong);
+}
+.sheet-thread-item[data-level="1"] > .sheet-thread-notch {
+  background: var(--muted);
+}
+
+/* ── Gli avvisi dentro il foglio ─────────────────────────────────────────── */
+
+/* Il conflitto di salvataggio: una scelta che aspetta, non un errore passato.
+   Un fondo velato di rosso, senza cornice; ridotto («Decidi dopo») è una riga. */
+.conflict-banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0 var(--space-5) var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-control);
+  background: var(--danger-wash);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.conflict-banner p {
+  margin: 0;
+}
+.conflict-banner[data-collapsed] {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-5);
+}
+.conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Gli altri avvisi della nota: una riga ciascuno sotto il conflitto, velata del
+   colore del suo tono (rosso per ciò che non si salva, ambra per ciò che
+   aspetta una scelta, accento per ciò che è solo da sapere). */
+.sheet-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0 var(--space-5) var(--space-3);
+}
+.sheet-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--accent-wash);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+.sheet-notice[data-tone="warning"] {
+  background: var(--warning-wash);
+}
+.sheet-notice[data-tone="danger"] {
+  background: var(--danger-wash);
+}
+.sheet-notice-text {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+/* Dove finirà la linguetta che si sta trascinando: un velo d'accento sulla
+   parte del foglio che occuperà. Sta sopra tutto e non prende il puntatore. */
+.tab-drop-preview {
+  position: fixed;
+  z-index: var(--z-drag);
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-sheet);
+  background: var(--accent-wash);
+  opacity: 0.6;
+  pointer-events: none;
+}

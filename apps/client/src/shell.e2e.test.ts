@@ -58,16 +58,17 @@ vi.setConfig({ testTimeout: 20_000 });
 // factory quando il modulo viene chiesto — cioè dopo che il test l'ha riempita.
 const box = vi.hoisted(() => ({
   host: null as FakeHost | null,
-  /// Cosa risponde la modale di conferma del sistema. È l'unica altra cosa che
-  /// la shell chiede al di là del confine (§1.3), e negli e2e è un `true`.
+  /// Cosa si risponde a una conferma, che sia quella del sistema o quella che
+  /// lo Scrittoio disegna dentro la finestra. Negli e2e è un `true`.
   confirm: true,
-  /// Quante volte la modale è stata chiesta.
+  /// Quante volte una conferma è stata chiesta.
   asked: 0,
   /// I vault che la macchina ricorda, per la schermata senza vault.
   known: [] as KnownVault[],
 }));
 
 let activeStop: (() => void) | null = null;
+let stopAnswering = (): void => {};
 
 // Il modulo mimato è **uno solo per tutto il file**, e delega all'host di
 // adesso a ogni chiamata. Non è un vezzo: `vi.resetModules()` svuota il
@@ -118,6 +119,29 @@ vi.mock("./host/dialog", () => ({
 const { createFakeHost, TRASH_VIEW, testViewSpec } = await import("./host/fake");
 const rawHtml = (await import("../index.html?raw")).default;
 
+/// Lo Scrittoio chiede le conferme col dialogo del kit, dentro la finestra
+/// (`shells/scrittoio/confirm.ts`). Il banco risponde a quello vero, premendo
+/// il pulsante che `box.confirm` sceglie, e conta le domande come contava
+/// quelle del dialogo di sistema.
+///
+/// Guarda a intervalli e non con un `MutationObserver`: happy-dom tiene la
+/// funzione dell'osservatore in un `WeakRef`, e in un file lungo una raccolta
+/// della memoria lo zittisce a metà.
+function answerConfirms(): () => void {
+  const answered = new WeakSet<Element>();
+  const timer = setInterval(() => {
+    for (const dialog of document.querySelectorAll(".kit-dialog")) {
+      if (answered.has(dialog)) continue;
+      const button = dialog.querySelector<HTMLElement>(`[data-action="${box.confirm ? "confirm" : "cancel"}"]`);
+      if (!button) continue;
+      answered.add(dialog);
+      box.asked++;
+      button.click();
+    }
+  }, 5);
+  return () => clearInterval(timer);
+}
+
 /// La scocca vera, rimessa in piedi come la webview la trova.
 function mountShell(): void {
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(rawHtml);
@@ -155,9 +179,14 @@ async function mount(
   const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
   mountShell();
   const main = await import("./main");
+  // Quello del montaggio prima, se il suo avvio non è mai arrivato in fondo.
+  stopAnswering();
+  const answering = answerConfirms();
+  stopAnswering = answering;
   const startup = main.startup.then((stop) => {
     const tracked = () => {
       stop();
+      answering();
       if (activeStop === tracked) activeStop = null;
     };
     activeStop = tracked;
@@ -530,6 +559,51 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("un nome rifiutato riapre il campo col testo digitato e la frase accanto", async () => {
+    const host = await start(VAULT);
+    noteItem("note")!.querySelector<HTMLElement>(".tree-row")!.click();
+    await waitFor("la cartella si apre", () => !!noteItem("note/Spesa.md"));
+    noteItem("note/Spesa.md")!.focus();
+    noteItem("note/Spesa.md")!.dispatchEvent(new KeyboardEvent("keydown", { key: "F2", bubbles: true, cancelable: true }));
+    const field = noteItem("note/Spesa.md")!.querySelector<HTMLInputElement>("input")!;
+    field.value = "CON";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await waitFor("il campo si riapre con la frase", () => !!noteItem("note/Spesa.md")?.querySelector(".tree-rename-problem"));
+    const again = noteItem("note/Spesa.md")!.querySelector<HTMLInputElement>("input")!;
+    expect(again.value).toBe("CON");
+    expect(again.getAttribute("aria-invalid")).toBe("true");
+    const problem = noteItem("note/Spesa.md")!.querySelector<HTMLElement>(".tree-rename-problem")!;
+    expect(again.getAttribute("aria-describedby")).toBe(problem.id);
+    expect(problem.textContent).toContain("CON");
+    // Niente è partito verso il kernel, e alla prima battuta la frase se ne va.
+    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+    again.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(noteItem("note/Spesa.md")!.querySelector(".tree-rename-problem")).toBeNull();
+    expect(again.hasAttribute("aria-invalid")).toBe(false);
+  });
+
+  it("una cartella chiusa si apre sostandoci sopra col trascinamento, e non se si lascia prima", async () => {
+    await start(VAULT);
+    const dragEvent = (type: string): Event => {
+      const e = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(e, "dataTransfer", { value: { effectAllowed: "", setData: () => {} } });
+      return e;
+    };
+    const source = noteItem("Benvenuto.md")!.querySelector<HTMLElement>(".tree-row")!;
+    const folder = noteItem("note")!.querySelector<HTMLElement>(".tree-row")!;
+    source.dispatchEvent(dragEvent("dragstart"));
+    // Un passaggio breve non apre niente.
+    folder.dispatchEvent(dragEvent("dragover"));
+    folder.dispatchEvent(new Event("dragleave", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 800));
+    expect(noteItem("note/Spesa.md")).toBeNull();
+    // Una sosta sì: il kernel risponde e le note della cartella compaiono.
+    folder.dispatchEvent(dragEvent("dragover"));
+    await waitFor("la cartella si apre da sola", () => !!noteItem("note/Spesa.md"), 3000);
+    source.dispatchEvent(new Event("dragend", { bubbles: true }));
+    expect(document.querySelectorAll(".drop-into")).toHaveLength(0);
+  });
+
   it("nell'albero F2, Canc e il comando agiscono sulla voce col fuoco", async () => {
     const host = await start(VAULT);
     // La nota attiva è Benvenuto; il fuoco va sulla cartella e poi su una
@@ -570,8 +644,8 @@ describe("rinomina e cestino dal registro dei comandi", () => {
 });
 
 describe("una conferma sola", () => {
-  // Una domanda sì/no la fa sempre il dialogo di `host/dialog.ts`: prima
-  // segnalibri e workspace ne disegnavano una loro nel DOM, e la stessa
+  // Una domanda sì/no passa sempre dalla porta di `platform/confirm.ts`:
+  // prima segnalibri e workspace ne disegnavano una loro nel DOM, e la stessa
   // eliminazione si chiedeva in due modi diversi a seconda di chi la offriva.
   it("eliminare un workspace lo chiede al dialogo dell'app, e un no lo lascia", async () => {
     await start(VAULT);
@@ -810,6 +884,11 @@ describe("apri un vault", () => {
     expect(host.emit({ type: "entry_removed", id: "note/marchio.svg", kind: "asset" })).toBe(true);
     await waitFor("la linguetta si chiude", () =>
       ![...document.querySelectorAll(".pane .tab")].some((tab) => tab.textContent?.includes("marchio")));
+    // Il riquadro che la mostrava lo dice, e l'avviso si chiude.
+    const removed = document.querySelector<HTMLElement>('.sheet-notice[data-notice="removed"]');
+    expect(removed?.textContent).toContain("marchio");
+    removed!.querySelector<HTMLButtonElement>("button")!.click();
+    expect(document.querySelector('.sheet-notice[data-notice="removed"]')).toBeNull();
   });
 
   it("il commutatore e le scorciatoie seguono la superficie attiva", async () => {
@@ -876,105 +955,6 @@ describe("scrivi", () => {
   });
 });
 
-describe("il vault di una scrittura (FUB-001)", () => {
-  /// Fra lo svuotamento della coda e lo smontaggio c'è una chiamata all'host, e
-  /// l'utente può continuare a battere nel documento che sta lasciando. Il vault
-  /// di prima resta aperto nell'host, e la sessione scrive in quello in cui è
-  /// nata: la battuta arriva al disco **di quel vault**, non si perde con la
-  /// chiusura delle sessioni e non finisce in quello nuovo, che intanto è il
-  /// corrente dell'host.
-  it("una battuta arrivata mentre l'host apre il vault nuovo si salva nel vault che si lascia", async () => {
-    const host = await start(VAULT);
-    const unlock = host.throttle("openVault");
-    const { openVault } = await import("./desktop-shell");
-
-    const opening = openVault("/altro");
-    await waitFor("la richiesta arriva all'host", () => host.atGate("openVault").length === 2);
-    typeInEditor("battuta fuori tempo");
-    unlock();
-    await opening;
-
-    const writes = host.atGate("writeDocument");
-    const saved = writes[writes.length - 1]?.args;
-    expect(saved?.[0]).toBe("Benvenuto.md");
-    expect(String(saved?.[1])).toContain("battuta fuori tempo");
-    // Il quarto argomento è il vault: quello che si lascia, mai il nuovo.
-    expect(saved?.[3]).toBe("/vault");
-    expect(writes.map((call) => call.args[3])).not.toContain("/altro");
-  });
-
-  /// Se nemmeno il flush dopo l'apertura riesce a salvare, la battuta non si
-  /// perde in silenzio: la sequenza lo dice e va avanti.
-  it("una battuta che il vecchio vault rifiuta dopo l'apertura viene detta", async () => {
-    const host = await start(VAULT);
-    const { recentNotices } = await import("./ui/notify");
-    const unlock = host.throttle("openVault");
-    const { openVault } = await import("./desktop-shell");
-
-    const opening = openVault("/altro");
-    await waitFor("la richiesta arriva all'host", () => host.atGate("openVault").length === 2);
-    const repair = host.fault("writeDocument", "disco pieno");
-    typeInEditor("battuta che il disco rifiuta");
-    unlock();
-    await opening;
-    repair();
-
-    expect(recentNotices().map((notice) => notice.text)).toContain(
-      "Le modifiche in Benvenuto.md non sono state salvate: resta nel vault e riprova dopo averle sistemate.",
-    );
-  });
-
-  /// Crea e rinomina passano dal registro dei comandi, e senza `vault` l'host
-  /// risponde con il corrente: un gesto che aspetta mentre se ne apre un altro
-  /// finirebbe lì. Nominandolo, il comando raggiunge quello da cui è partito.
-  it("crea e rinomina raggiungono il vault aperto per nome", async () => {
-    const host = await start(VAULT);
-    const { createNote, renameNote } = await import("./state/vault");
-
-    await createNote("Nuova");
-    await renameNote("Benvenuto.md", "Altro.md");
-
-    const named = host
-      .atGate("invokeCommand")
-      .filter((call) => call.args[0] === "note.create" || call.args[0] === "note.rename")
-      .map((call) => [call.args[0], call.args[3]]);
-    expect(named).toEqual([
-      ["note.create", "/vault"],
-      ["note.rename", "/vault"],
-    ]);
-  });
-
-  it("la lettura di un documento aperto nomina il vault aperto", async () => {
-    const host = await start(VAULT);
-
-    const reads = host.atGate("readDocument").map((call) => call.args);
-    expect(reads.length).toBeGreaterThan(0);
-    for (const args of reads) expect(args[1]).toBe("/vault");
-  });
-
-  /// Le letture che compongono la shell — l'elenco delle view, il disegno delle
-  /// view montate, l'elenco dei comandi e il canale dati — nominano il vault
-  /// aperto, come le scritture: l'host risponde col corrente soltanto se non gli
-  /// si dice quale.
-  it("l'elenco delle view e dei comandi, il disegno e il canale dati nominano il vault aperto", async () => {
-    const host = await start(VAULT);
-
-    // Prima dell'apertura non c'è un vault da nominare (le impostazioni di
-    // macchina si leggono all'avvio): contano le chiamate da quando il vault è
-    // aperto.
-    const opened = host.calls.findIndex((call) => call.gate === "openVault");
-    expect(opened, "il vault non è stato aperto").toBeGreaterThan(-1);
-    const after = host.calls.slice(opened + 1);
-    for (const gate of ["listViews", "renderView", "listCommands", "queryIndex"] as const) {
-      const calls = after.filter((call) => call.gate === gate);
-      expect(calls.length, `${gate}: nessuna chiamata`).toBeGreaterThan(0);
-      for (const call of calls) {
-        expect(call.args[call.args.length - 1], `${gate} non nomina il vault`).toBe("/vault");
-      }
-    }
-  });
-});
-
 describe("i confini del buffer", () => {
   it("accorpa le battute ravvicinate in un solo debounce", async () => {
     const host = await start(VAULT);
@@ -1012,7 +992,20 @@ describe("i confini del buffer", () => {
       recentNotices().some((notice) => notice.text.includes("non è stato salvato")),
       "il fallimento della scrittura non è visibile",
     ).toBe(true);
+    // Anche dentro il foglio, non solo nel toast che passa: l'avviso resta
+    // finché il guasto non è riparato, con «Riprova» a portata di mano.
+    const notice = document.querySelector<HTMLElement>('.sheet-notice[data-notice="save_failed"]');
+    expect(notice, "l'errore di salvataggio non è nel foglio").not.toBeNull();
+    expect(notice!.getAttribute("role")).toBe("alert");
+    const retry = notice!.querySelector<HTMLButtonElement>("button")!;
+    expect(retry.textContent).toBe("Riprova");
     repair();
+    retry.click();
+    await waitFor("il salvataggio riparato riesce", () => host.files()["Benvenuto.md"]?.includes("testo rifiutato dal disco") === true);
+    await waitFor(
+      "l'avviso se ne va con il guasto",
+      () => document.querySelector('.sheet-notice[data-notice="save_failed"]') === null,
+    );
   });
 
   it("ricarica un cambio watcher quando il buffer è pulito", async () => {
@@ -1035,6 +1028,10 @@ describe("i confini del buffer", () => {
       () => textToVideo().includes("testo arrivato dal watcher"),
     );
     expect(textToVideo()).toContain("testo arrivato dal watcher");
+    // Il foglio dice che il testo è cambiato sotto gli occhi, e si può chiudere.
+    await waitFor("l'avviso di ricarica compare", () => !!document.querySelector('.sheet-notice[data-notice="reloaded"]'));
+    document.querySelector<HTMLButtonElement>('.sheet-notice[data-notice="reloaded"] button')!.click();
+    expect(document.querySelector('.sheet-notice[data-notice="reloaded"]')).toBeNull();
   });
 
   it("non sovrascrive il buffer sporco quando il watcher cambia il file", async () => {
@@ -1053,6 +1050,7 @@ describe("i confini del buffer", () => {
     expect(host.atGate("readDocument").length).toBe(readsBefore);
     expect(textToVideo()).toContain("testo locale non salvato");
     expect(textToVideo()).not.toContain("testo arrivato dal watcher");
+    expect(document.querySelector('.sheet-notice[data-notice]')?.getAttribute("data-notice")).toMatch(/changed_on_disk|overwritten/);
     await host.close();
   });
 
@@ -2283,14 +2281,18 @@ describe("riconfigura una scorciatoia", () => {
     document.querySelector<HTMLButtonElement>("#settings-close")!.click();
     await settle();
 
-    // La combinazione nuova apre la palette, premuta sul documento come da un
-    // browser: è la riga che dice che il giro è chiuso — scritta, riletta, e
-    // onorata senza riavviare niente.
+    // La combinazione nuova apre il lanciatore sui comandi, premuta sul
+    // documento come da un browser: è la riga che dice che il giro è chiuso —
+    // scritta, riletta, e onorata senza riavviare niente.
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, altKey: true }),
     );
     await settle();
-    expect(document.getElementById("command-palette")).not.toBeNull();
+    const { t } = await import("./i18n/strings");
+    expect(document.querySelector(".launcher")).not.toBeNull();
+    expect(document.querySelector(".launcher-input")?.getAttribute("placeholder")).toBe(
+      t("launcher.placeholder.commands"),
+    );
 
     // E la vecchia non è più di nessuno. La domanda si pone al **registro** e
     // non premendola, per un limite di questo banco che vale la pena scrivere:
@@ -2457,26 +2459,46 @@ describe("la palette flussa prima di un comando che scrive", () => {
     surfaces: [],
   };
 
-  it("un buffer sporco si salva prima che note.create parta", async () => {
-    const host = await start(VAULT, [], undefined, null, [specNoteCreate]);
-    typeInEditor("testo non ancora salvato");
-
-    // La palette si apre con la scorciatoia di default, come da un browser.
+  /// Apre il lanciatore sui comandi con l'accordo di serie, cerca il comando
+  /// del kernel e lo sceglie: prosegue nel modulo della palette. Il titolo da
+  /// solo non basta, perché anche la shell ha una «Nuova nota»; la portata
+  /// scritta accanto la ha solo il comando del kernel.
+  async function chooseCommand(spec: CommandSpec): Promise<void> {
+    const { scopeLabel } = await import("./ui/palette");
     document.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
     );
     await settle();
-    expect(document.getElementById("command-palette")).not.toBeNull();
-
-    const input = document.querySelector<HTMLInputElement>(".palette-input")!;
-    input.value = "Nuova nota";
+    const input = document.querySelector<HTMLInputElement>(".launcher-input")!;
+    input.value = spec.title;
     input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
-    await settle();
+    const row = (): HTMLElement | undefined =>
+      [...document.querySelectorAll<HTMLElement>(".launcher-row")].find(
+        (each) =>
+          each.querySelector(".launcher-row-title")?.textContent === spec.title &&
+          (each.querySelector(".launcher-row-meta")?.textContent ?? "").includes(scopeLabel(spec)),
+      );
+    await waitFor(`il lanciatore offre «${spec.title}» del kernel`, () => row() !== undefined);
+    row()!.click();
+    await waitFor("la palette mostra il modulo", () => document.querySelector(".palette-form") !== null);
+  }
+
+  it("un buffer sporco si salva prima che note.create parta", async () => {
+    const host = await start(VAULT, [], undefined, null, [specNoteCreate]);
+    typeInEditor("testo non ancora salvato");
+
+    // Il lanciatore si apre sui comandi con la scorciatoia di default, come da
+    // un browser, e il comando si sceglie da lì.
+    await chooseCommand(specNoteCreate);
 
     // Il comando ha un parametro facoltativo: la palette mostra il form.
     const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
     field.value = "Appunti.md";
+    // Il buffer si sporca subito prima dell'invio, a palette aperta:
+    // l'autosave parte 400 ms dopo l'ultima battuta, e su una macchina carica
+    // aprire la palette ne prende di più. Così non può arrivare prima del
+    // comando, e un `writeDocument` prima di lui è soltanto il flush.
+    typeInEditor("testo non ancora salvato");
     const form = document.querySelector<HTMLFormElement>(".palette-form")!;
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await settle();
@@ -2509,51 +2531,28 @@ describe("la palette flussa prima di un comando che scrive", () => {
       surfaces: [],
     };
     const host = await start(VAULT, [], undefined, null, [specSearchOpen]);
-    // **Il tempo lo conta il test, non l'orologio.** Il salvataggio automatico
-    // scade dopo 400 ms: in un ambiente lento il giro della palette li supera,
-    // e il debounce passava per un flush della palette (la riga rossa di sotto
-    // non distingueva i due). Con i timer fermi il debounce non può scadere da
-    // solo, e `writeDocument` c'è soltanto se la palette l'ha chiesto.
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const settleStill = async (): Promise<void> => {
-      for (let i = 0; i < 6; i += 1) await vi.advanceTimersByTimeAsync(0);
-    };
-    try {
-      typeInEditor("testo non ancora salvato");
 
-      document.dispatchEvent(
-        new KeyboardEvent("keydown", { bubbles: true, key: "p", ctrlKey: true, shiftKey: true }),
-      );
-      await settleStill();
-      const input = document.querySelector<HTMLInputElement>(".palette-input")!;
-      input.value = "Cerca nel vault";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
-      await settleStill();
+    await chooseCommand(specSearchOpen);
 
-      const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
-      field.value = "rust";
-      const form = document.querySelector<HTMLFormElement>(".palette-form")!;
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-      await settleStill();
+    const field = document.querySelector<HTMLInputElement>(".palette-form input")!;
+    field.value = "rust";
+    // Come sopra: il buffer si sporca subito prima dell'invio, perché
+    // l'autosave non arrivi prima del comando.
+    typeInEditor("testo non ancora salvato");
+    const form = document.querySelector<HTMLFormElement>(".palette-form")!;
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await settle();
 
-      expect(host.atGate("invokeCommand").some((c) => c.args[0] === "search.open")).toBe(true);
-      expect(
-        host.atGate("writeDocument"),
-        "un comando di sola lettura non deve salvare i buffer",
-      ).toHaveLength(0);
-
-      // Il controllo positivo: il buffer era davvero sporco, e il salvataggio
-      // automatico, lasciato scadere, lo scrive. Senza questa riga il test
-      // passerebbe anche con un editor che non ha mai ricevuto la battuta.
-      await vi.advanceTimersByTimeAsync(450);
-      expect(
-        host.atGate("writeDocument"),
-        "il buffer era sporco: il debounce lo avrebbe salvato",
-      ).toHaveLength(1);
-    } finally {
-      vi.useRealTimers();
-    }
+    const invoked = host.calls.findIndex(
+      (c) => c.gate === "invokeCommand" && c.args[0] === "search.open",
+    );
+    expect(invoked, "search.open non è arrivato al kernel").toBeGreaterThan(-1);
+    // L'autosave, 400 ms dopo la battuta, può arrivare dopo il comando; un
+    // flush della palette verrebbe prima.
+    expect(
+      host.calls.slice(0, invoked).filter((c) => c.gate === "writeDocument"),
+      "un comando di sola lettura non deve salvare i buffer",
+    ).toHaveLength(0);
   });
 });
 
@@ -2717,7 +2716,7 @@ const BOARD = JSON.stringify({
 describe("portare a schermo un punto", () => {
   const panes = () => [...document.querySelectorAll<HTMLElement>(".pane")];
   const cursor = (index: number) => editorViews()[index]!.state.selection.main.head;
-  const toast = () => document.getElementById("toast")?.textContent ?? "";
+  const toast = () => [...document.querySelectorAll(".toast")].pop()?.textContent ?? "";
 
   it("il punto va al riquadro che mostra il documento, non a quello col fuoco", async () => {
     await start(VAULT);

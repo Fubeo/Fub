@@ -79,6 +79,29 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // (`selectSelectionMatches`) e vinceva sempre; `Mod-e` alterna già.
     ("shell.mode.live", None),
     ("shell.mode.source", None),
+    // Apre la linguetta attiva nella vista sorgente che la sua superficie
+    // dichiara (un disegno come testo SVG, ADR 0203), lì o in un riquadro
+    // nuovo accanto, e ne torna. **Senza accordo**: il gesto serve a capire
+    // cosa c'è scritto sotto una resa, o a scriverlo mentre la resa resta
+    // accanto, non si ripete mentre si lavora, e i comandi esistono soltanto
+    // dove una superficie offre la vista; nella palette e nel menu del
+    // riquadro li trova chi li cerca.
+    ("shell.doc.source.open", None),
+    ("shell.doc.source.side", None),
+    ("shell.doc.source.close", None),
+    // Esporta la linguetta attiva in uno dei formati che la sua superficie
+    // offre: un disegno in PNG o in PDF, le annotazioni di un PDF nel PDF
+    // annotato o in quello redatto. **Senza accordo**: si fa alla fine di un
+    // lavoro e non mentre si lavora, e il comando c'è soltanto dove la
+    // superficie dichiara un export.
+    ("shell.doc.export", None),
+    // La sessione live di un disegno (ADR 0205): avviarla col QR, riaprirne
+    // il pannello, terminarla. **Senza accordo**: si avvia una volta per
+    // lezione o riunione, e terminarla con un tasto premuto per sbaglio
+    // staccherebbe il tablet a metà di un tratto.
+    ("shell.live.start", None),
+    ("shell.live.show", None),
+    ("shell.live.stop", None),
     ("shell.pane.split.right", Some("Mod-\\")),
     // **Senza accordo**: `Mod-Shift-\` dentro l'editor è
     // `cursorMatchingBracket`, e lo split non partiva mai mentre si scriveva.
@@ -139,6 +162,10 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // dopo un guasto, il gesto che le dita fanno comunque.
     ("shell.doc.save", Some("Mod-s")),
     ("shell.note.new", Some("Mod-n")),
+    // Fa un disegno nuovo da un file di Excalidraw o di draw.io scelto dal
+    // disco. **Senza accordo**: si fa una volta per file, non mentre si
+    // lavora, e il comando c'è soltanto dove il kernel sa fare disegni.
+    ("shell.draw.import", None),
     ("shell.settings", Some("Mod-,")),
     // I pannelli laterali si mostrano e si nascondono; a finestra stretta
     // aprono il cassetto invece di restare irraggiungibili.
@@ -152,6 +179,31 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.zoom.reset", Some("Mod-0")),
     // La scrittura senza cornice: via pannelli, rail e toolbar.
     ("shell.focus.toggle", None),
+    // Lo spazio dell'interfaccia (`chrome.compactness`), un passo alla volta
+    // come lo zoom: più compatta lascia più posto al foglio. **Senza accordo**:
+    // `Mod-=` e `Mod--` sono dello zoom, e un gesto che si fa quando si cambia
+    // schermo non ne merita uno suo.
+    ("shell.chrome.compact.more", None),
+    ("shell.chrome.compact.less", None),
+    ("shell.chrome.compact.reset", None),
+    // Passa all'altra luce. **Senza accordo**: il bottone sta sempre in vista.
+    ("shell.light.toggle", None),
+    // I modi del lanciatore che non avevano già un gesto: «apri» resta
+    // `shell.switcher` e «comanda» resta `shell.palette`, coi loro accordi.
+    // **Senza accordo**: dentro il lanciatore ognuno ha il suo prefisso (`?`,
+    // `@`, `#`, `:`), e da fuori ci si arriva dai due che l'accordo ce l'hanno.
+    ("shell.launcher.search", None),
+    ("shell.launcher.headings", None),
+    ("shell.launcher.tags", None),
+    ("shell.launcher.line", None),
+    ("shell.launcher.templates", None),
+    // Il fuoco da un foglio a quello che gli sta accanto, per direzione.
+    // **Senza accordo**: `Mod-Alt-frecce` è preso da più di un sistema, e chi
+    // divide spesso se ne sceglie uno dalle scorciatoie.
+    ("shell.pane.focus.left", None),
+    ("shell.pane.focus.right", None),
+    ("shell.pane.focus.up", None),
+    ("shell.pane.focus.down", None),
 ];
 
 /// Le chiavi di configurazione che hanno un gesto loro, e che nel form generico
@@ -182,6 +234,11 @@ pub const SETTINGS_WITH_THEIR_OWN_GESTURE: &[&str] = &[
 /// l'esito dell'export si riconosce dagli `artifacts` di un
 /// [`ExportReport`](fub_abi::transfer::ExportReport).
 pub const ARTIFACT_JOB: &str = fub_importers::transfer_commands::TRANSFER_JOB;
+
+/// Il comando che accoda un export registrato: la shell lo chiede per gli
+/// export che una superficie offre, e l'esito torna come quello di
+/// [`ARTIFACT_JOB`].
+pub const EXPORT_COMMAND: &str = fub_importers::transfer_commands::EXPORT_RUN;
 
 /// Le impostazioni `keys.shell.*`, una per comando di shell (§16.3).
 ///

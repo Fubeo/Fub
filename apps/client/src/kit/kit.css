@@ -1,0 +1,113 @@
+/* La geometria delle primitive di `src/kit/`.
+ *
+ * Qui sta ciò che una pelle non decide: dove una superficie galleggia, su che
+ * piano, che cosa prende il puntatore, che cosa fa da riferimento a ciò che si
+ * sposta. Colore, raggio, ombra e misure sono della pelle
+ * (`theme/scrittoio/skin/kit.css`). È CSS della shell: non passa dal
+ * sanitizer, e una pelle che manca lascia le primitive nude ma al loro posto.
+ */
+
+/* ── Popover e scheda al passaggio ───────────────────────────────────────── */
+
+/* `left` e `top` li scrive `popover.ts` in linea; i margini qui sono gli
+   stessi 8 px che tiene dai bordi della finestra. */
+.kit-popover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: var(--z-popover, 70);
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/* Aperto da dentro un dialogo sale sul suo piano: più in basso finirebbe
+   dietro il velo. */
+.kit-popover[data-layer="modal"] {
+  z-index: var(--z-modal, 90);
+}
+
+/* ── Dialogo ─────────────────────────────────────────────────────────────── */
+
+/* Intrappola il fuoco, quindi sta su `--z-modal`. */
+.kit-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 90);
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.kit-dialog {
+  box-sizing: border-box;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+}
+
+/* ── Lista ───────────────────────────────────────────────────────────────── */
+
+/* La lista è il riferimento del rettangolo, che `list.ts` sposta con
+   `translate` dall'angolo; `isolation` lo tiene sopra lo sfondo della lista e
+   sotto il contenuto delle righe. */
+.kit-list {
+  position: relative;
+  isolation: isolate;
+}
+
+.kit-list-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* ── Schede ──────────────────────────────────────────────────────────────── */
+
+.kit-tabs {
+  position: relative;
+  display: flex;
+}
+
+.kit-tabs[aria-orientation="vertical"] {
+  flex-direction: column;
+}
+
+/* Lungo l'asse della fila lo mette `tabs.ts`; qui il bordo su cui corre. */
+.kit-tab-indicator {
+  position: absolute;
+  pointer-events: none;
+}
+
+.kit-tabs[aria-orientation="horizontal"] > .kit-tab-indicator {
+  bottom: 0;
+  left: 0;
+}
+
+.kit-tabs[aria-orientation="vertical"] > .kit-tab-indicator {
+  top: 0;
+  inset-inline-start: 0;
+}
+
+/* ── Divisore ────────────────────────────────────────────────────────────── */
+
+/* Senza `touch-action: none` un dito fa scorrere la pagina e il gesto viene
+   annullato; senza `user-select: none` trascinando si seleziona il testo. */
+.kit-splitter {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kit-splitter[aria-orientation="vertical"] {
+  cursor: col-resize;
+}
+
+.kit-splitter[aria-orientation="horizontal"] {
+  cursor: row-resize;
+}

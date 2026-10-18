@@ -92,3 +92,23 @@ describe("static editor surfaces and language changes", () => {
     surface.destroy();
   });
 });
+
+describe("the rich surface family", () => {
+  it("binds word-processing documents to the rich surface and leaves Markdown to the text family", () => {
+    const registry = createDocumentSurfaceRegistry(options());
+    expect(registry.resolve({ formatId: "docx", sourceKind: "bytes" })).toMatchObject({
+      owner: "fub.shell.rich",
+      family: "rich",
+      profile: "document",
+    });
+    // OpenDocument, RTF and Word 97-2003 open on the same surface: whether
+    // they write is the projection's to say, not the binding's.
+    for (const formatId of ["odt", "rtf", "doc"]) {
+      expect(registry.resolve({ formatId, sourceKind: "bytes" })).toMatchObject({ family: "rich", profile: "document" });
+    }
+    expect(registry.resolve({ formatId: "markdown", sourceKind: "text" })).toMatchObject({ family: "text", profile: "markdown" });
+    // Without the format (the host built without `rich`) a .docx is bytes no
+    // view shows: the inert error surface, never its projection as text.
+    expect(registry.resolve({ formatId: null, sourceKind: "bytes", documentId: "lettera.docx" })?.family).toBe("error");
+  });
+});

@@ -105,6 +105,7 @@ pub mod registry;
 #[cfg(feature = "http-client")]
 pub mod remote;
 pub mod resources;
+mod rich;
 pub mod runner;
 pub mod session;
 pub mod settings;
