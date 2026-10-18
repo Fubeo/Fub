@@ -117,12 +117,12 @@ describe("i media del vault dentro una nota", () => {
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
     try {
       const root = html(
-        '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Copertina">storia.svg</span>'
-          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Storia">storia.svg</span>'
+        '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Copertina">storia.svg#Copertina</span>'
+          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Storia">storia.svg#Storia</span>'
           + '<span class="embed" data-embed-page="storia.svg">storia.svg</span>'
-          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Retro">storia.svg</span>'
-          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="copertina">storia.svg</span>'
-          + '<span class="embed" data-embed-page="grande.svg" data-embed-heading="Retro">grande.svg</span>',
+          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="Retro">storia.svg#Retro</span>'
+          + '<span class="embed" data-embed-page="storia.svg" data-embed-heading="copertina">storia.svg#copertina</span>'
+          + '<span class="embed" data-embed-page="grande.svg" data-embed-heading="Retro">grande.svg#Retro</span>',
       );
       const { media } = port({ "storia.svg": "Disegni/storia.svg", "grande.svg": "Disegni/grande.svg" });
       media.read = async (id) => (id === "Disegni/grande.svg" ? null : new Blob([DRAWING], { type: "image/svg+xml" }));

@@ -561,17 +561,19 @@ describe("i disegni incorporati nella Lettura", () => {
       expect(inline!.hasAttribute("data-vault-src")).toBe(true);
       expect(written!.hasAttribute("data-vault-src")).toBe(true);
       // Il disegno resta un'immagine: né il suo markup né il segnaposto della
-      // scena entrano nella nota, e la shell non ne legge mai i byte.
+      // scena entrano nella nota. La shell ne legge i byte per portarvi dentro
+      // caratteri e immagini; qui la lettura non riesce, e il disegno si
+      // mostra dal file.
       expect(reading().querySelector("svg, script, figure, foreignObject")).toBeNull();
-      expect(host.read).not.toHaveBeenCalled();
-      expect(host.opened.sort()).toEqual([FLUSSO, ACQUA, ACQUA, ACQUA, ACQUA]);
+      expect(new Set(host.opened)).toEqual(new Set([FLUSSO, ACQUA]));
       const first = images().map((img) => img.getAttribute("src"));
+      const leases = first.map((src) => src!.replace("fub-asset://localhost/", ""));
 
       // Il disegno cambia; la resa successiva lo rilegge con lease nuovi e
       // chiude i vecchi.
       title = "Il ciclo dell'acqua";
       ed.buffer.setDoc(`${NOTE}\n`);
-      expect(host.closed.sort()).toEqual(["1", "2", "3", "4", "5"]);
+      for (const lease of leases) expect(host.closed).toContain(lease);
       await vi.waitFor(() => expect(images().map((img) => img.alt)).toEqual([title, title, title, "La mappa", "flusso"]));
       await vi.waitFor(() => expect(images().every((img) => img.getAttribute("src")?.startsWith("fub-asset:"))).toBe(true));
       for (const src of images().map((img) => img.getAttribute("src"))) expect(first).not.toContain(src);
