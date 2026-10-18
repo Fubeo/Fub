@@ -57,6 +57,7 @@ import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToNormalizedCharIndices, charToByteIndices } from "../../rules/offsets";
 import { onLanguage, t } from "../../i18n/strings";
+import { editorPhrases } from "./phrases";
 import { settings } from "../../host/query";
 import { onEvent } from "../../state/kernel";
 import type { Teardown } from "../../ui/lifetime";
@@ -148,6 +149,7 @@ export class TextEngine {
   private readonly vimCompartment = new Compartment();
   private readonly spellcheckCompartment = new Compartment();
   private readonly layoutCompartment = new Compartment();
+  private readonly phrasesCompartment = new Compartment();
   private readonly nativeHistoryExtension = nativeHistory({
     minDepth: 100,
     newGroupDelay: 500,
@@ -199,7 +201,10 @@ export class TextEngine {
       });
       void this.loadInputPreferences();
     }
-    this.stopLanguage = onLanguage(() => this.updateAccessibleLabels());
+    this.stopLanguage = onLanguage(() => {
+      this.updateAccessibleLabels();
+      if (!this.disposed) this.view.dispatch({ effects: this.phrasesCompartment.reconfigure(editorPhrases()) });
+    });
     this.updateAccessibleLabels();
   }
   public setDoc(text: string): void {
@@ -739,6 +744,7 @@ export class TextEngine {
     return [
       ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
       this.profile.of(this.profileExtensions()),
+      this.phrasesCompartment.of(editorPhrases()),
       this.vimCompartment.of(this.vimEnabled ? vim() : []),
       this.spellcheckCompartment.of(EditorView.contentAttributes.of({
         spellcheck: String(this.spellcheckEnabled),

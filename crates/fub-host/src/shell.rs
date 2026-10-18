@@ -138,11 +138,14 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.tab.move.pane.next", Some("Mod-Alt-PageDown")),
     ("shell.tab.close.others", None),
     ("shell.tab.close.unpinned", None),
-    // **Senza accordo**: `Mod-Alt-←/→` dentro l'editor sono di CodeMirror.
-    // Indietro e avanti passano dai tasti laterali del mouse e dai due
-    // bottoni nella toolbar del riquadro.
-    ("shell.pane.back", None),
-    ("shell.pane.forward", None),
+    // `Alt-←/→`, come nei browser e nei file manager. Fuori dall'editor
+    // (esplora, lettura, toolbar) cambiano nota; dentro l'editor vince
+    // CodeMirror col salto di sintassi (salto di parola su macOS), e lì
+    // restano i tasti laterali del mouse e i bottoni della toolbar. Non
+    // `Mod-Alt-←/→`, che nelle tabelle muovono le colonne, né `Mod-Alt-[`,
+    // che sulle tastiere italiane è AltGr con la parentesi.
+    ("shell.pane.back", Some("Alt-ArrowLeft")),
+    ("shell.pane.forward", Some("Alt-ArrowRight")),
     ("shell.pane.link", None),
     ("shell.pane.unlink", None),
     ("shell.bookmarks.toggle", None),
