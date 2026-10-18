@@ -60,9 +60,10 @@ mostrate.
 - Un documento che non si saprebbe riscrivere si legge comunque.
 - Il formato è additivo: ODT, RTF e gli altri formati della famiglia sono altri
   codec della stessa proiezione e della stessa superficie. Un formato che
-  WordCraft sa soltanto importare (ODT, RTF, Word 97-2003) entra subito, in sola
+  WordCraft sa soltanto importare (RTF, Word 97-2003) entra subito, in sola
   lettura con il motivo `import`, finché un codec che lo riscrive identico non
-  lo rende modificabile.
+  lo rende modificabile, come l'OpenDocument
+  ([0204](0204-opendocument-con-un-codec-di-fub.md)).
 
 ### Negative
 
@@ -98,7 +99,7 @@ documenti prenderebbe la formattazione di un indice omonimo.
 - `crates/fub-format-rich/tests/`: andate e ritorni, normalizzazioni del
   codec che non chiudono il documento, sola lettura per revisioni e per note
   duplicate, rifiuto delle proiezioni malformate o che nominano oggetti che il
-  documento non ha, `importers.rs` per ODT, RTF e Word 97-2003 in sola
+  documento non ha, `importers.rs` per RTF e Word 97-2003 in sola
   lettura, e `ts_projection.rs` che lega la fixture della shell al codec nei
   due versi e i motivi di sola lettura alla lista della shell;
 - `crates/fub-host/tests/rich_documents.rs`: lettura, scrittura, CAS, sola

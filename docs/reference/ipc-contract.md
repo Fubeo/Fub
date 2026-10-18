@@ -231,9 +231,10 @@ passa dalle stesse porte dei documenti, senza una porta in più:
 Un documento che il codec o la proiezione non riportano identico si apre con
 `"readonly"` nella proiezione (`revisions`, `track_changes`, `protected`,
 `projection`, `codec`, `import`) e ogni scrittura viene rifiutata con il suo
-motivo. `import` è il motivo di ogni documento `odt`, `rtf` e `doc`: lo legge
-un importatore che non riporta il file intero. Un file nuovo di questi formati
-non si crea (`host.rich.no_writer`).
+motivo. `import` è il motivo di ogni documento `rtf` e `doc`, e di un `odt`
+che il codec OpenDocument non sa rappresentare: lo legge un importatore che non
+riporta il file intero. Un file nuovo `rtf` o `doc` non si crea
+(`host.rich.no_writer`); un `odt` sì.
 Gli errori del codec arrivano tipizzati con chiave di catalogo `host.rich.*`.
 La forma della proiezione è di `crates/fub-format-rich/src/projection.rs`; la
 fixture `apps/client/src/__fixtures__/rich-projection.json` la lega alla

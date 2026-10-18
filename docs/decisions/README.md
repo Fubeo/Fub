@@ -36,3 +36,4 @@ Nuove decisioni usano il [template](template.md).
 | [0201 — Le superfici strutturate usano sessioni, finestre e patch coordinate](0201-superfici-strutturate-a-finestre.md) | accolta | contratto | — |
 | [0202 — Snapshot globali offline recuperabili](0202-snapshot-globali-recuperabili.md) | accolta | storage | — |
 | [0203 — I documenti di videoscrittura si modificano come proiezione](0203-videoscrittura-come-proiezione.md) | accolta | contratto | — |
+| [0204 — Un OpenDocument si scrive con un codec di Fub che conserva l'XML](0204-opendocument-con-un-codec-di-fub.md) | accolta | storage | — |
