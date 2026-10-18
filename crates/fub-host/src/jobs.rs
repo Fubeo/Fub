@@ -56,7 +56,7 @@ use std::sync::Arc;
 use crate::custody::{Custody, WriteTurn};
 use crate::query::query_workspace;
 
-use fub_abi::command::{CommandOutcome, Failure, InvokeMode, UndoStep};
+use fub_abi::command::{CommandOutcome, Failure, InvokeMode, PlannedEdit, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
@@ -806,6 +806,30 @@ impl VaultRead for JobHost {
             Some(prepared) => prepared.format_link(link),
             None => Ok(None),
         }
+    }
+
+    /// Il piano si fotografa sotto la lettura del workspace; i provider che
+    /// scrivono gli edit girano dopo, senza la guardia.
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        self.stopped()?;
+        let prepared = {
+            let workspace = self.workspace.read()?;
+            let policy = workspace.granted_policy(&self.plugin);
+            authorize_path(&policy, Capability::VaultRead, "", || {
+                format!("planning the links of `{from}` onto `{to}`")
+            })?;
+            workspace.prepare_link_retarget(from, to)?
+        };
+        Ok(prepared
+            .edits()
+            .map_err(PluginError::from)?
+            .into_iter()
+            .map(|(doc, edit)| PlannedEdit::new(doc, edit))
+            .collect())
     }
 
     fn task_state_edit(

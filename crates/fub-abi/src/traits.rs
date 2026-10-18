@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec, Undone};
+use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec, PlannedEdit, Undone};
 use crate::custom::SyntaxForm;
 use crate::edit::{EditReport, EditRequest, Revision, WriteBase};
 use crate::error::PluginError;
@@ -511,6 +511,30 @@ pub trait VaultRead: Send + Sync {
     /// domanda sul **nome**: non legge il documento, che può non esistere
     /// ancora.
     fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError>;
+
+    /// Gli edit che portano su `to` i riferimenti che oggi raggiungono `from`:
+    /// è la riscrittura dei backlink di una rinomina, per quando il contenuto
+    /// di `from` confluisce in un documento che **esiste già** (l'unione di
+    /// note). Il piano è quello del kernel — quali link puntano davvero a
+    /// `from`, con quale nome o path chiamare `to` —, il testo lo scrive il
+    /// formato di ciascun documento, con la sua grammatica, alias e frammenti
+    /// compresi.
+    ///
+    /// Non scrive niente: ogni edit porta la revisione su cui è stato
+    /// calcolato, e chi lo applica con [`apply_edit`](VaultWrite::apply_edit)
+    /// trova un conflitto se il documento è cambiato nel frattempo. Gli edit
+    /// dentro `from` (i link a sé stessa) sono calcolati come se il suo testo
+    /// stesse già in `to`. Un host che non sa fare il piano risponde
+    /// [`PluginError::Unserved`], e chi chiede resta sulla via di prima.
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        Err(PluginError::Unserved(
+            format!("questo host non sa riportare su `{to}` i link verso `{from}`").into(),
+        ))
+    }
 
     /// La modifica che porta a fatto (`done`) o da fare il task di `marker`,
     /// scritta dal formato di `doc` sul sorgente attuale.

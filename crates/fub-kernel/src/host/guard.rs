@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use fub_abi::command::{CommandOutcome, Undone};
+use fub_abi::command::{CommandOutcome, PlannedEdit, Undone};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
@@ -950,6 +950,20 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
             format!("asking the format of `{doc}` for a link")
         })?;
         self.inner.format_link(doc, link)
+    }
+
+    /// Il piano legge i documenti che linkano `from`, che possono essere
+    /// ovunque nel vault: serve la lettura di tutto il vault, come la
+    /// riscrittura dei backlink di una rinomina chiede la scrittura di tutto.
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        self.check_path(Capability::VaultRead, "", || {
+            format!("planning the links of `{from}` onto `{to}`")
+        })?;
+        self.inner.link_retarget_edits(from, to)
     }
 
     fn task_state_edit(

@@ -13,6 +13,8 @@
 //! testo: un template che cita una variabile ignota la ritrova identica nella
 //! nota, non un errore e non una stringa vuota.
 
+use std::collections::BTreeMap;
+
 use fub_abi::command::{
     Args, Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope,
     CommandSpec, CommandSurface, Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit,
@@ -2150,29 +2152,22 @@ fn merge(
     // otherwise a failure discovered halfway through would leave a merge
     // duplicated in one note while the rest were silently skipped.
     let mut bodies: Vec<(DocId, String)> = Vec::new();
+    let mut relinks: Vec<PlannedEdit> = Vec::new();
     for source in &sources {
         let body = host.read_document(source)?;
         if text_policy::strip_bom(&body).trim().is_empty() {
             continue;
         }
         check_relative_assets(host, source, &into, None)?;
-        if trash_sources {
-            match host.query_index(IndexQuery::Backlinks {
-                target: source.clone(),
-                page: None,
-            })? {
-                IndexResult::Backlinks(backlinks) if !backlinks.items.is_empty() => {
-                    return Err(PluginError::Conflict(Text::message(
-                        E_REFERENCED_SOURCE,
-                        vec![Arg::text(A_DOC, source.as_str())],
-                    )));
-                }
-                IndexResult::Backlinks(_) => {}
-                _ => {
-                    return Err(PluginError::Internal(
-                        "backlink query returned another result".into(),
-                    ))
-                }
+        // Una sorgente che altri citano si può cestinare solo se i loro link
+        // passano alla destinazione: lo dice qui il piano dell'host, così la
+        // simulazione li mostra, e un host che non lo sa fare rifiuta prima di
+        // toccare niente, come prima.
+        if trash_sources && has_backlinks(host, source)? {
+            match host.link_retarget_edits(source, &into) {
+                Ok(edits) => relinks.extend(edits.into_iter().filter(|edit| &edit.doc != source)),
+                Err(PluginError::Unserved(_)) => return Err(referenced(source)),
+                Err(and) => return Err(and),
             }
         }
         bodies.push((source.clone(), body));
@@ -2202,12 +2197,10 @@ fn merge(
             format!("{separator}{}", join_bodies(&bodies, &separator))
         };
         let request = EditRequest::new(revision, vec![TextEdit::insert(at, preview)]);
-        return Ok(
-            CommandOutcome::done().with_effect(CommandEffect::Plan(CommandPlan::of_edits(
-                summary,
-                vec![PlannedEdit::new(into, request)],
-            ))),
-        );
+        let mut edits = vec![PlannedEdit::new(into, request)];
+        edits.extend(relinks);
+        return Ok(CommandOutcome::done()
+            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(summary, edits))));
     }
     let mut failed: Vec<Failure> = Vec::new();
     let mut back_edits: Vec<PlannedEdit> = Vec::new();
@@ -2217,13 +2210,18 @@ fn merge(
     // testa però ognuno entra nello stesso punto, sopra quelli già entrati: si
     // parte dall'ultima sorgente, e il risultato è il loro ordine, quello del
     // piano.
-    let mut queue: Vec<&(DocId, String)> = bodies.iter().collect();
+    let mut queue: Vec<DocId> = bodies.iter().map(|(source, _)| source.clone()).collect();
     if prepend {
         queue.reverse();
     }
-    for (source, body) in queue {
+    // Il testo che ogni sorgente deve avere ancora: quello letto prima, o
+    // quello che le ha dato questa stessa unione portando sulla destinazione
+    // un suo link verso una sorgente già entrata.
+    let mut expected: BTreeMap<DocId, String> = bodies.iter().cloned().collect();
+    for source in &queue {
+        let body = expected[source].clone();
         match host.read_document(source) {
-            Ok(latest) if latest == *body => {}
+            Ok(latest) if latest == body => {}
             Ok(_) => {
                 failed.push(Failure::of(
                     source.clone(),
@@ -2258,7 +2256,7 @@ fn merge(
             (current.len(), "")
         };
         let at = snap_to_boundary(&current, at);
-        let inserted = text_policy::strip_bom(body);
+        let inserted = text_policy::strip_bom(&body);
         let text = if prepend {
             format!("{lead}{inserted}{separator}")
         } else {
@@ -2277,11 +2275,20 @@ fn merge(
                 made += 1;
                 back_edits.push(PlannedEdit::new(into.clone(), report.inverse()));
                 if trash_sources {
+                    // I link verso la sorgente passano alla destinazione, che
+                    // adesso ha il suo testo; se uno non passa, la sorgente
+                    // resta dov'è e nessun link resta rotto.
+                    if let Err(and) =
+                        move_links(host, source, &into, &mut back_edits, &mut expected)
+                    {
+                        failed.push(Failure::of(source.clone(), and));
+                        continue;
+                    }
                     // Another writer may have changed the source while we
                     // patched the destination. Keep both copies and surface a
                     // partial merge instead of trashing their newer version.
                     match host.read_document(source) {
-                        Ok(latest) if latest == *body => match host.trash_document(source) {
+                        Ok(latest) if latest == body => match host.trash_document(source) {
                             Ok(entry) => trashed.push((source.clone(), entry)),
                             Err(and) => failed.push(Failure::of(source.clone(), and)),
                         },
@@ -2339,6 +2346,59 @@ fn merge(
     Ok(CommandOutcome::notify(notify)
         .undoable(undo)
         .partially(count))
+}
+
+/// La sorgente ha riferimenti entranti?
+fn has_backlinks(host: &dyn HostApi, source: &DocId) -> Result<bool, PluginError> {
+    match host.query_index(IndexQuery::Backlinks {
+        target: source.clone(),
+        page: None,
+    })? {
+        IndexResult::Backlinks(backlinks) => Ok(!backlinks.items.is_empty()),
+        _ => Err(PluginError::Internal(
+            "backlink query returned another result".into(),
+        )),
+    }
+}
+
+fn referenced(source: &DocId) -> PluginError {
+    PluginError::Conflict(Text::message(
+        E_REFERENCED_SOURCE,
+        vec![Arg::text(A_DOC, source.as_str())],
+    ))
+}
+
+/// Porta su `into` i link che raggiungono `source`, appena il suo testo è
+/// entrato in `into`: il piano si chiede adesso e non al preflight, perché la
+/// destinazione è cambiata e porta con sé anche i link a sé stessa che la
+/// sorgente conteneva. Gli edit dentro la sorgente non servono: va nel
+/// cestino. Ogni inverso finisce nell'annulla, dopo quello dell'inserimento.
+fn move_links(
+    host: &mut dyn HostApi,
+    source: &DocId,
+    into: &DocId,
+    back_edits: &mut Vec<PlannedEdit>,
+    expected: &mut BTreeMap<DocId, String>,
+) -> Result<(), PluginError> {
+    let edits = match host.link_retarget_edits(source, into) {
+        Ok(edits) => edits,
+        Err(PluginError::Unserved(_)) if has_backlinks(host, source)? => {
+            return Err(referenced(source))
+        }
+        Err(PluginError::Unserved(_)) => return Ok(()),
+        Err(and) => return Err(and),
+    };
+    for edit in edits {
+        if &edit.doc == source {
+            continue;
+        }
+        let report = host.apply_edit(&edit.doc, edit.edit)?;
+        back_edits.push(PlannedEdit::new(edit.doc.clone(), report.inverse()));
+        if let Some(body) = expected.get_mut(&edit.doc) {
+            *body = host.read_document(&edit.doc)?;
+        }
+    }
+    Ok(())
 }
 
 /// Dove entra un'unione in testa: dopo il BOM e dopo il frontmatter della

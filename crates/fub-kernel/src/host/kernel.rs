@@ -1,7 +1,7 @@
 //! [`KernelHost`]: l'host che fa davvero le cose.
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandOutcome, InvokeMode, Undone};
+use fub_abi::command::{CommandOutcome, InvokeMode, PlannedEdit, Undone};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::{DocumentFormat, LinkInsert};
 use fub_abi::locale::Locale;
@@ -180,6 +180,19 @@ impl VaultRead for KernelHost<'_> {
 
     fn format_link(&self, doc: &DocId, link: &LinkInsert) -> Result<Option<String>, PluginError> {
         self.ws.format_link(doc, link)
+    }
+
+    fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Vec<PlannedEdit>, PluginError> {
+        Ok(self
+            .ws
+            .link_retarget_edits(from, to)?
+            .into_iter()
+            .map(|(doc, edit)| PlannedEdit::new(doc, edit))
+            .collect())
     }
 
     fn task_state_edit(

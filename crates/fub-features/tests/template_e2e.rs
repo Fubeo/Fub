@@ -494,33 +494,169 @@ fn extraction_rejects_a_stale_selection_without_creating_an_orphan() {
     assert!(!ws.documents().contains(&DocId::new("Extracted.md")));
 }
 
+/// **Una sorgente che altri citano si unisce, e i loro link la seguono** (6.4):
+/// prima l'unione si rifiutava e lasciava all'utente la riscrittura a mano.
+/// Il nome, il titolo dentro la nota e l'alias restano quelli scritti; il link
+/// markdown col path cambia path; la sorgente va nel cestino.
 #[test]
-fn merge_refuses_to_trash_a_source_with_incoming_references() {
+fn merge_moves_the_incoming_links_onto_the_destination() {
+    let vault = Vault::new();
+    vault.put("source.md", "# Parte\nsource text");
+    vault.put("target.md", "target text");
+    vault.put(
+        "reader.md",
+        "See [[source]], [[source#Parte|la parte]] and [md](source.md#parte)",
+    );
+    let mut ws = vault.open();
+    let args = serde_json::json!({"from":["source.md"], "into":"target.md"});
+    let CommandEffect::Plan(plan) = ws
+        .invoke_command(NOTES_MERGE, args.clone(), InvokeMode::DryRun, Actor::User)
+        .expect("the plan")
+        .effect
+    else {
+        panic!("a merge plans first");
+    };
+    let planned: Vec<&str> = plan.edits.iter().map(|edit| edit.doc.as_str()).collect();
+    assert_eq!(
+        planned,
+        ["target.md", "reader.md"],
+        "the plan names the reader too"
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[source]], [[source#Parte|la parte]] and [md](source.md#parte)",
+        "a dry run writes nothing"
+    );
+
+    ws.invoke_command(NOTES_MERGE, args, InvokeMode::Apply, Actor::User)
+        .expect("the merge");
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[target]], [[target#Parte|la parte]] and [md](target.md#parte)"
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("target.md")).unwrap(),
+        "target text\n\n# Parte\nsource text"
+    );
+    assert!(!ws.documents().contains(&DocId::new("source.md")));
+}
+
+/// I link della sorgente a sé stessa entrano nella destinazione e lì puntano
+/// alla destinazione: lasciarli com'erano li avrebbe resi rotti al cestino.
+#[test]
+fn a_merged_self_link_points_at_its_new_home() {
+    let vault = Vault::new();
+    vault.put("source.md", "Back to [[source]]");
+    vault.put("target.md", "Already [[source]]");
+    let mut ws = vault.open();
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target.md"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the merge");
+    assert_eq!(
+        ws.read_source(&DocId::new("target.md")).unwrap(),
+        "Already [[target]]\n\nBack to [[target]]"
+    );
+    assert!(!ws.documents().contains(&DocId::new("source.md")));
+}
+
+/// Una sorgente che ne cita un'altra dello stesso lotto: il suo link cambia
+/// mentre l'unione la aspetta, e non per questo è «cambiata da qualcun altro».
+#[test]
+fn a_source_that_cites_another_source_still_merges() {
+    let vault = Vault::new();
+    vault.put("a.md", "A text");
+    vault.put("b.md", "B cites [[a]]");
+    vault.put("target.md", "T");
+    let mut ws = vault.open();
+    let outcome = ws
+        .invoke_command(
+            NOTES_MERGE,
+            serde_json::json!({"from":["a.md", "b.md"], "into":"target.md"}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("the merge");
+    assert!(
+        outcome
+            .partial
+            .as_ref()
+            .is_none_or(|partial| partial.failures.is_empty()),
+        "{:?}",
+        outcome.partial
+    );
+    assert_eq!(
+        ws.read_source(&DocId::new("target.md")).unwrap(),
+        "T\n\nA text\n\nB cites [[target]]"
+    );
+    assert!(!ws.documents().contains(&DocId::new("a.md")));
+    assert!(!ws.documents().contains(&DocId::new("b.md")));
+}
+
+/// Tenere la sorgente lascia i link dove sono: puntano ancora a una nota che
+/// c'è.
+#[test]
+fn a_kept_source_keeps_its_links() {
     let vault = Vault::new();
     vault.put("source.md", "source text");
     vault.put("target.md", "target text");
     vault.put("reader.md", "See [[source]]");
     let mut ws = vault.open();
-    let err = ws
-        .invoke_command(
-            NOTES_MERGE,
-            serde_json::json!({"from":["source.md"], "into":"target.md"}),
-            InvokeMode::Apply,
-            Actor::User,
-        )
-        .unwrap_err();
-    assert!(matches!(err, fub_abi::PluginError::Conflict(_)));
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target.md", "trash": false}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the merge");
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[source]]"
+    );
     assert_eq!(
         ws.read_source(&DocId::new("source.md")).unwrap(),
         "source text"
+    );
+}
+
+/// Un annulla solo riporta tutto: il testo della destinazione, i link di chi
+/// citava la sorgente e la sorgente stessa.
+#[cfg(all(feature = "properties", feature = "commands"))]
+#[test]
+fn one_undo_takes_back_the_merge_and_its_links() {
+    let vault = Vault::new();
+    vault.put("source.md", "source text");
+    vault.put("target.md", "target text");
+    vault.put("reader.md", "See [[source]]");
+    let mut ws = vault.open_with_properties();
+    ws.invoke_command(
+        NOTES_MERGE,
+        serde_json::json!({"from":["source.md"], "into":"target.md"}),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("the merge");
+    ws.invoke_command(
+        VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("one undo");
+    assert_eq!(
+        ws.read_source(&DocId::new("reader.md")).unwrap(),
+        "See [[source]]"
     );
     assert_eq!(
         ws.read_source(&DocId::new("target.md")).unwrap(),
         "target text"
     );
     assert_eq!(
-        ws.read_source(&DocId::new("reader.md")).unwrap(),
-        "See [[source]]"
+        ws.read_source(&DocId::new("source.md")).unwrap(),
+        "source text"
     );
 }
 

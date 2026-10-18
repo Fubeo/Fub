@@ -2664,6 +2664,28 @@ pub struct PreparedLocalProjection {
     projection_generation: u64,
 }
 
+/// Il piano per portare su un documento esistente i link verso un altro,
+/// fotografato sotto la guardia e da eseguire fuori: [`Self::edits`] chiama i
+/// provider di formato, che non girano sotto il lock del workspace.
+pub struct PreparedLinkRetarget {
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    rewrites: Vec<PreparedExplicitLinkRewrite>,
+}
+
+impl PreparedLinkRetarget {
+    /// Gli edit, uno per documento che cambia, ciascuno sulla revisione dei
+    /// byte appena letti: chi li applica li vede fallire se nel frattempo il
+    /// documento è cambiato.
+    pub fn edits(self) -> Result<Vec<(DocId, EditRequest)>> {
+        Ok(
+            invoke_prepared_link_rewrites(self.storage.as_ref(), self.rewrites)?
+                .into_iter()
+                .map(|edit| (edit.source().clone(), edit.request().clone()))
+                .collect(),
+        )
+    }
+}
+
 /// Lettura del modello risolta fino al confine del parser. La sorgente, il
 /// provider e le regole sono posseduti: `invoke` non prende in prestito il
 /// workspace e può quindi attraversare il codice esterno senza la sua guardia.
@@ -8512,7 +8534,7 @@ impl Workspace {
             source_kind: descriptor.source,
             // Il piano di riscrittura va calcolato PRIMA di toccare il grafo:
             // serve la risoluzione con il vecchio nome ancora in vigore.
-            rewrites: self.prepare_explicit_link_rewrites(from, &to),
+            rewrites: self.prepare_explicit_link_rewrites(from, &to, false),
             side_data: self.prepare_rename_side_data(from, &to),
             recovery_root: self.docs.vault.root().to_owned(),
         }))
@@ -9434,11 +9456,19 @@ impl Workspace {
     /// ogni `[t](altra.md)` che conteneva. Per questo `from` è sempre fra le
     /// sorgenti del piano — i suoi link uscenti vanno ri-basati sulla cartella
     /// nuova — e non solo quando linka se stesso.
+    ///
+    /// `retarget`: `to` esiste già e `from` non si sposta (l'unione di note,
+    /// [`Self::prepare_link_retarget`]). Cambiano due cose: `to` non è un
+    /// omonimo di sé stesso, e la riscrittura dentro `from` resta in `from`.
     fn prepare_explicit_link_rewrites(
         &self,
         from: &DocId,
         to: &DocId,
+        retarget: bool,
     ) -> Vec<PreparedExplicitLinkRewrite> {
+        // Chi conta come omonimo di `to`: nella rinomina `to` non esiste
+        // ancora; nel retarget c'è, ed è proprio lui.
+        let rival = |id: &DocId| id != from && !(retarget && id == to);
         let from_name = resolution_key(from.page_name());
         let from_path = resolution_key(&strip_ext(from.as_str()));
 
@@ -9482,7 +9512,7 @@ impl Workspace {
             .core
             .metas
             .keys()
-            .any(|id| id != from && resolution_key(id.page_name()) == resolution_key(to_name));
+            .any(|id| rival(id) && resolution_key(id.page_name()) == resolution_key(to_name));
         // La stessa domanda sul path senza estensione, che è la chiave di
         // `path_index`: `sub/Nota.md` e `sub/nota.txt` la condividono, quindi
         // due file possono contenderselo esattamente come si contendono un
@@ -9493,7 +9523,7 @@ impl Workspace {
             .core
             .metas
             .keys()
-            .any(|id| id != from && resolution_key(&strip_ext(id.as_str())) == to_path_key);
+            .any(|id| rival(id) && resolution_key(&strip_ext(id.as_str())) == to_path_key);
         let new_ref = if !ambiguous {
             to_name.to_string()
         } else if !path_ambiguous {
@@ -9509,7 +9539,7 @@ impl Workspace {
         let from_full = resolution_key(from.as_str());
         let to_file = file_of(to);
         let file_ambiguous = self.indexes.core.metas.keys().any(|id| {
-            id != from && (file_of(id) == to_file || resolution_key(id.page_name()) == to_file)
+            rival(id) && (file_of(id) == to_file || resolution_key(id.page_name()) == to_file)
         });
         let new_file_ref = if file_ambiguous {
             to.as_str().to_string()
@@ -9594,7 +9624,7 @@ impl Workspace {
             // rename sposta il file senza toccarne il contenuto. È una proprietà
             // della revisione-impronta: un contatore per-documento, qui, avrebbe
             // detto che il documento è cambiato.
-            let destination = if &source == from {
+            let destination = if &source == from && !retarget {
                 to.clone()
             } else {
                 source.clone()
@@ -9705,6 +9735,45 @@ impl Workspace {
     /// non c'è ancora una superficie dove mostrarlo (§20.4).
     pub fn undrawn_kinds(&self) -> Vec<String> {
         self.docs.undrawn_kinds()
+    }
+
+    /// Prepara gli edit che portano su `to`, che esiste già, i link che oggi
+    /// raggiungono `from`: la riscrittura dei backlink di una rinomina, senza
+    /// la rinomina. È ciò che serve a un'unione di note per cestinare la
+    /// sorgente senza lasciare link rotti.
+    pub fn prepare_link_retarget(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> std::result::Result<PreparedLinkRetarget, PluginError> {
+        let from = fenced_doc_id(from)?;
+        let to = fenced_doc_id(to)?;
+        for id in [&from, &to] {
+            if !self.indexes.core.metas.contains_key(id) {
+                return Err(PluginError::NotFound(id.to_string().into()));
+            }
+        }
+        let rewrites = if from == to {
+            Vec::new()
+        } else {
+            self.prepare_explicit_link_rewrites(&from, &to, true)
+        };
+        Ok(PreparedLinkRetarget {
+            storage: Arc::clone(self.docs.vault.storage()),
+            rewrites,
+        })
+    }
+
+    /// [`Self::prepare_link_retarget`] ed esecuzione nello stesso passo, per
+    /// chi tiene già il workspace in mano (l'host del kernel, i test).
+    pub fn link_retarget_edits(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> std::result::Result<Vec<(DocId, EditRequest)>, PluginError> {
+        self.prepare_link_retarget(from, to)?
+            .edits()
+            .map_err(PluginError::from)
     }
 
     /// Congela sorgente, parser e regole per una lettura del modello che verrà
