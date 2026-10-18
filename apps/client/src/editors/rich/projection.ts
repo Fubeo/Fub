@@ -144,6 +144,8 @@ export interface Para {
 /// sue proprietà predefinite.
 export interface Cell {
   readonly k?: string;
+  /// Le colonne che la cella copre quando sono più di una.
+  readonly span?: number;
   readonly blocks: readonly Block[];
 }
 
@@ -381,9 +383,12 @@ function readBlock(value: unknown, where: string): Block {
       const cells = list(row.cells, `${where}.rows[${r}].cells`).map((value, c) => {
         const at = `${where}.rows[${r}].cells[${c}]`;
         const cell = record(value, at);
-        closed(cell, ["k", "blocks"], at);
+        closed(cell, ["k", "span", "blocks"], at);
+        const span = optionalNumber(cell.span, `${at}.span`);
+        if (span !== undefined && (!Number.isInteger(span) || span < 1)) throw new ProjectionError(`${at}.span: atteso un intero positivo`);
         return {
           ...(cell.k !== undefined ? { k: text(cell.k, `${at}.k`) } : {}),
+          ...(span !== undefined && span > 1 ? { span } : {}),
           blocks: list(cell.blocks, `${at}.blocks`).map((b, i) => readBlock(b, `${at}.blocks[${i}]`)),
         };
       });
@@ -510,7 +515,10 @@ export function writeBlock(block: Block): string {
   // Una tabella, una riga o una cella nuova non ha `k`.
   const key = (k: string | undefined, comma: string) => (k === undefined ? "" : `"k":${JSON.stringify(k)}${comma}`);
   const rows = block.rows.map((row) => {
-    const cells = row.cells.map((cell) => `{${key(cell.k, ",")}"blocks":[${cell.blocks.map(writeBlock).join(",")}]}`);
+    const cells = row.cells.map((cell) => {
+      const span = cell.span !== undefined && cell.span > 1 ? `"span":${cell.span},` : "";
+      return `{${key(cell.k, ",")}${span}"blocks":[${cell.blocks.map(writeBlock).join(",")}]}`;
+    });
     return `{${key(row.k, ",")}"cells":[${cells.join(",")}]}`;
   });
   return `{"t":"table",${key(block.k, ",")}"rows":[${rows.join(",")}]}`;

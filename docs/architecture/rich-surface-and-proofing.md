@@ -31,7 +31,9 @@ l'IPC.
   cella nuova non ha `k`: il formato la scrive con le sue proprietà
   predefinite (la griglia di Word, le colonne e un bordo in ODF), e una riga
   che ProseMirror crea riparando una tabella esistente prende il `k` della
-  vicina (`fillTableKeys`). L'enfasi (`m`) e l'aspetto
+  vicina (`fillTableKeys`). Una cella unita in larghezza porta le colonne che
+  copre (`span`), che la superficie disegna e il formato scrive.
+  L'enfasi (`m`) e l'aspetto
   del carattere (`f`: tipo, dimensione, colore, colore dell'evidenziatore)
   sono marche **risolte**, scritte soltanto dove differiscono dal paragrafo;
   il ritorno al documento ne fa formattazione diretta, o la toglie quando

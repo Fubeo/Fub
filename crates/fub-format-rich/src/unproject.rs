@@ -139,8 +139,10 @@ fn blocks(
                     // Una tabella nuova è quella di Word: la griglia a tutta
                     // riga, a colonne uguali, con i bordi.
                     None => {
-                        let cols = table.rows.iter().map(|row| row.cells.len()).max();
-                        let cols = cols.unwrap_or(0);
+                        let cols = table.rows.iter().map(|row| {
+                            row.cells.iter().map(|c| c.span.unwrap_or(1) as usize).sum()
+                        });
+                        let cols = cols.max().unwrap_or(0);
                         let mut fresh =
                             wordcraft_doc::Table::new(1, cols, document.last_section.text_width());
                         fresh.rows.clear();
@@ -149,6 +151,8 @@ fn blocks(
                     }
                 };
                 let grid = out.grid.clone();
+                // Celle unite o divise dalla shell: le larghezze si rifanno.
+                let respanned = std::cell::Cell::new(false);
                 if out
                     .props
                     .style
@@ -178,6 +182,16 @@ fn blocks(
                                         fresh
                                     }
                                 };
+                                let span = cell.span.unwrap_or(1) as usize;
+                                if span == 0 || span > wordcraft_doc::table::MAX_COLS {
+                                    return Err(RichError::Malformed(
+                                        "a cell spanning no or too many columns".into(),
+                                    ));
+                                }
+                                if out.span() != span {
+                                    out.props.span = span as u32;
+                                    respanned.set(true);
+                                }
                                 out.blocks = self::blocks(&cell.blocks, document, state)?;
                                 if !out.blocks.iter().any(|b| matches!(**b, WcBlock::Para(_))) {
                                     // Word vuole un paragrafo in fondo a ogni cella.
@@ -203,6 +217,8 @@ fn blocks(
                 if cols != out.grid.len() {
                     let width = document.last_section.text_width();
                     regrid(&mut out, cols, width);
+                } else if respanned.get() {
+                    fit(&mut out);
                 }
                 Ok(Arc::new(WcBlock::Table(out)))
             }
@@ -590,7 +606,6 @@ fn heading_style(styles: &mut StyleSheet, level: u8) -> Option<String> {
 /// Una tabella a cui la shell ha aggiunto o tolto colonne: la griglia si
 /// rifà dalle larghezze della prima riga senza celle unite, riportate alla
 /// larghezza di prima (o del testo); senza una riga così, a colonne uguali.
-/// Ogni cella prende la larghezza delle colonne che copre.
 fn regrid(table: &mut wordcraft_doc::Table, cols: usize, text: f32) {
     let total = match table.grid.iter().sum::<f32>() {
         sum if sum > 0.0 => sum,
@@ -611,16 +626,22 @@ fn regrid(table: &mut wordcraft_doc::Table, cols: usize, text: f32) {
         }
         None => vec![total / cols as f32; cols],
     };
+    table.grid = grid;
+    fit(table);
+}
+
+/// Ogni cella prende la larghezza delle colonne della griglia che copre.
+fn fit(table: &mut wordcraft_doc::Table) {
+    let grid = &table.grid;
     for row in &mut table.rows {
         let mut at = 0;
         for cell in &mut row.cells {
-            let end = (at + cell.span()).min(cols);
+            let end = (at + cell.span()).min(grid.len());
             cell.props.width = Some(grid[at.min(end)..end].iter().sum());
             cell.props.width_pct = None;
             at = end;
         }
     }
-    table.grid = grid;
 }
 
 /// `id` nel documento, copiato dagli stili predefiniti di WordCraft (con la

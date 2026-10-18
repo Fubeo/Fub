@@ -131,14 +131,66 @@ fn width(table: &Table) -> Result<usize, RichError> {
             None => 0,
         };
         for cell in &row.cells {
-            n += 1 + match &cell.k {
-                Some(k) => covered(&blob::decode::<CellKey>(k)?.tail),
-                None => 0,
+            let span = cell.span.unwrap_or(1) as usize;
+            n += match &cell.k {
+                // Le celle coperte che seguono, tolte quelle di uno span che
+                // la shell ha cambiato.
+                Some(k) => {
+                    let key = blob::decode::<CellKey>(k)?;
+                    (1 + covered(&key.tail) + span).saturating_sub(spanned(&key.open))
+                }
+                None => span,
             };
         }
         width = width.max(n);
     }
     Ok(width)
+}
+
+/// Le colonne che una cella dice di coprire.
+fn spanned(open: &str) -> usize {
+    keys::tag(open)
+        .and_then(|(_, attrs)| {
+            attr(&attrs, "table:number-columns-spanned").and_then(|n| n.parse().ok())
+        })
+        .unwrap_or(1)
+        .max(1)
+}
+
+/// Una cella a cui la shell ha cambiato le colonne coperte (unendo o
+/// dividendo celle): lo span nel tag e le celle coperte che la seguono.
+/// Con celle unite anche in altezza le celle coperte non sono soltanto sue,
+/// e una coperta che ha un contenuto lo perderebbe: in quei casi no.
+fn respan(mut key: CellKey, span: usize, movable: bool) -> Result<CellKey, RichError> {
+    if span == spanned(&key.open) {
+        return Ok(key);
+    }
+    if span == 0 || span > wordcraft_doc::table::MAX_COLS {
+        return Err(RichError::Malformed(
+            "a cell spanning no or too many columns".into(),
+        ));
+    }
+    if !movable || key.tail.contains("</table:covered-table-cell>") {
+        return Err(RichError::Codec(
+            "odt: cells of a table with cells merged across rows cannot be merged or split".into(),
+        ));
+    }
+    let Some((name, mut attrs)) = keys::tag(&key.open) else {
+        return Err(RichError::Malformed("a table cell".into()));
+    };
+    let wanted = (span > 1).then(|| span.to_string());
+    set_attr(&mut attrs, "table:number-columns-spanned", wanted);
+    key.open = xml::open_tag(&name, &attrs, key.open.ends_with("/>"));
+    let mut tail = key.tail.as_str();
+    let mut kept = String::new();
+    while let Some(at) = tail.find("<table:covered-table-cell") {
+        let end = at + tail[at..].find('>').map_or(tail.len() - at, |e| e + 1);
+        kept.push_str(&tail[..at]);
+        tail = &tail[end..];
+    }
+    kept.push_str(tail);
+    key.tail = "<table:covered-table-cell/>".repeat(span - 1) + &kept;
+    Ok(key)
 }
 
 /// Le colonne di una tabella a cui la shell ne ha aggiunte (`delta` positivo)
@@ -1651,6 +1703,7 @@ impl<'a> Writer<'a> {
                         tail: String::new(),
                     },
                 };
+                let ck = respan(ck, cell.span.unwrap_or(1) as usize, key.rows)?;
                 let blocks = if bare_cell(&cell.blocks) {
                     if ck.open.ends_with("/>") {
                         out.push_str(&ck.open);
@@ -1668,6 +1721,7 @@ impl<'a> Writer<'a> {
                 out.push_str(&ck.tail);
                 cells.push(Cell {
                     k: cell.k.clone(),
+                    span: cell.span,
                     blocks,
                 });
             }

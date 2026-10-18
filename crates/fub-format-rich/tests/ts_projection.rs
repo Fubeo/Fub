@@ -184,7 +184,14 @@ fn ciò_che_la_superficie_scrive_il_codec_lo_salva() {
         .nth(1)
         .expect("la tabella nuova");
     assert_eq!(fresh.rows.len(), 2);
-    assert!(fresh.rows.iter().all(|row| row.cells.len() == 3));
+    // La prima cella copre due colonne: due celle nella prima riga, tre
+    // nell'altra.
+    let shape: Vec<Vec<Option<u32>>> = fresh
+        .rows
+        .iter()
+        .map(|row| row.cells.iter().map(|c| c.span).collect())
+        .collect();
+    assert_eq!(shape, [vec![Some(2), None], vec![None, None, None]]);
     assert!(fresh.k.is_some() && fresh.rows[1].cells[2].k.is_some());
     let Block::Para(first) = &fresh.rows[0].cells[0].blocks[0] else {
         panic!("la prima cella")

@@ -250,12 +250,22 @@ const nodes: Record<string, NodeSpec> = {
     parseDOM: [{ tag: "tr[data-rich-k]", getAttrs: keyOf }],
     toDOM: (node) => ["tr", { "data-rich-k": (node.attrs.k as string | null) ?? "" }, 0],
   },
+  // `span`: le colonne che la cella copre, unita in larghezza.
   cell: {
     content: "(block | section)+",
-    attrs: { k: { default: null } },
+    attrs: { k: { default: null }, span: { default: 1 } },
     isolating: true,
-    parseDOM: [{ tag: "td[data-rich-k]", getAttrs: keyOf }],
-    toDOM: (node) => ["td", { class: "rich-cell", "data-rich-k": (node.attrs.k as string | null) ?? "" }, 0],
+    parseDOM: [
+      {
+        tag: "td[data-rich-k]",
+        getAttrs: (dom) => ({ ...keyOf(dom), span: Math.max(1, Number((dom as HTMLElement).getAttribute("colspan")) || 1) }),
+      },
+    ],
+    toDOM: (node) => {
+      const span = node.attrs.span as number;
+      const attrs = { class: "rich-cell", "data-rich-k": (node.attrs.k as string | null) ?? "" };
+      return ["td", span > 1 ? { ...attrs, colspan: String(span) } : attrs, 0];
+    },
   },
   text: { group: "inline" },
   brk: {
@@ -486,7 +496,7 @@ function blockNodes(blocks: readonly Block[]): PmNode[] {
         row.cells.map((cell) => {
           const content = blockNodes(cell.blocks);
           // Una cella vuota nella proiezione ha comunque un paragrafo in Word.
-          return richSchema.nodes.cell.create({ k: cell.k ?? null }, content.length > 0 ? content : [richSchema.nodes.para.create()]);
+          return richSchema.nodes.cell.create({ k: cell.k ?? null, span: cell.span ?? 1 }, content.length > 0 ? content : [richSchema.nodes.para.create()]);
         }),
       ),
     );
@@ -647,7 +657,10 @@ function tableOf(table: PmNode): Block {
   const rows: Row[] = [];
   table.forEach((row) => {
     const cells: Cell[] = [];
-    row.forEach((cell) => cells.push({ ...key(cell), blocks: blocksOf(cell) }));
+    row.forEach((cell) => {
+      const span = cell.attrs.span as number;
+      cells.push({ ...key(cell), ...(span > 1 ? { span } : {}), blocks: blocksOf(cell) });
+    });
     rows.push({ ...key(row), cells });
   });
   return { t: "table", ...key(table), rows };

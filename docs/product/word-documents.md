@@ -43,7 +43,9 @@ Si modificano:
   Righe e colonne si aggiungono, si spostano e si tolgono dal menu tabella
   della barra o con le scorciatoie della tabella Markdown; una colonna nuova
   copia le proprietà delle celle accanto e la griglia si rifà alla larghezza
-  di prima, nelle proporzioni delle colonne.
+  di prima, nelle proporzioni delle colonne. Dalla striscia le celle che la
+  selezione tocca in una riga si uniscono (i loro paragrafi, tranne i vuoti,
+  vanno nella prima) e una cella unita si divide.
 
 Il resto del documento (le altre proprietà dei paragrafi e dei tratti, la
 definizione degli stili, sezioni,
@@ -72,7 +74,8 @@ Limiti attuali:
   già nel documento;
 - le colonne si aggiungono, si spostano e si tolgono soltanto in una tabella
   le cui righe hanno tutte le stesse celle, senza celle unite in larghezza;
-  le celle non si uniscono né si dividono;
+  le celle si uniscono soltanto in larghezza, e una cella unita in altezza si
+  mostra come una cella per riga;
 - un elenco numerato mostra sempre numeri arabi, qualunque sia la numerazione
   del documento, che resta quella del file;
 - il codec riscrive il file in forma propria: rinumera intestazioni, piè di
@@ -86,8 +89,9 @@ Un `.odt` si apre nella stessa superficie e si modifica come un `.docx`, con
 gli stessi limiti; un salto di pagina o di colonna però non si scrive, e una
 tabella nuova ha una colonna per cella della riga più lunga e celle con un
 bordo sottile (lo stile automatico `FubC…`). Le colonne si aggiungono o si
-tolgono soltanto in una tabella con le colonne tutte uguali; altrimenti il
-salvataggio lo rifiuta e il testo resta nel buffer. Il
+tolgono soltanto in una tabella con le colonne tutte uguali, e le celle si
+uniscono o si dividono soltanto in una tabella senza celle unite in altezza;
+altrimenti il salvataggio lo rifiuta e il testo resta nel buffer. Il
 salvataggio riscrive soltanto i blocchi toccati: il resto di `content.xml` e
 ogni altra parte del pacchetto (immagini, impostazioni, metadati) restano byte
 per byte com'erano. Un ruolo, un'enfasi, un aspetto del carattere o una

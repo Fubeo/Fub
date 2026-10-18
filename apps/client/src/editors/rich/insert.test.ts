@@ -219,3 +219,37 @@ describe("le colonne", () => {
     expect(grid(e)).toEqual([["", ""], ["", ""]]);
   });
 });
+
+describe("le celle unite", () => {
+  const cell = (x: string, extra: { span?: number } = {}) => ({ k: `K${x}`, ...extra, blocks: [para(x ? [{ t: "text", x }] : [])] });
+  const cells = (e: RichEngine) =>
+    (parseProjection(e.getDoc()).blocks.find((b) => b.t === "table") as Table).rows.map((row) =>
+      row.cells.map((c) => `${c.blocks.map((b) => ((b as Para).c?.[0] as TextInline | undefined)?.x ?? "").join("+")}${c.span ? `/${c.span}` : ""}`),
+    );
+
+  it("si uniscono dalla selezione in una riga, e si dividono", () => {
+    const e = engine([{ t: "table", k: "T", rows: [{ k: "R", cells: [cell("a"), cell(""), cell("c"), cell("d")] }, { k: "S", cells: [cell("e", { span: 4 })] }] }]);
+    expect(document.querySelector("td[colspan='4']")).not.toBeNull();
+    e.select(at(e, "a"), at(e, "c") + 1);
+    expect(e.actionState("rich.table.split").enabled).toBe(false);
+    expect(e.run("rich.table.merge")).toBe(true);
+    // Il paragrafo vuoto della cella di mezzo se ne va.
+    expect(cells(e)).toEqual([["a+c/3", "d"], ["e/4"]]);
+    expect(e.run("rich.table.split")).toBe(true);
+    expect(cells(e)[0]).toEqual(["a+c", "", "", "d"]);
+    // Il k delle celle nuove è quello della cella divisa.
+    const table = parseProjection(e.getDoc()).blocks[0] as Table;
+    expect(table.rows[0]!.cells.map((c) => c.k)).toEqual(["Ka", "Ka", "Ka", "Kd"]);
+    // Con una cella unita nella tabella le colonne non si toccano.
+    e.select(at(e, "d"));
+    expect(e.actionState("markdown.table.column.after").enabled).toBe(false);
+  });
+
+  it("non si uniscono fra righe diverse né con una cella sola", () => {
+    const e = engine([{ t: "table", k: "T", rows: [{ k: "R", cells: [cell("a"), cell("b")] }, { k: "S", cells: [cell("c"), cell("d")] }] }]);
+    e.select(at(e, "a"), at(e, "c") + 1);
+    expect(e.run("rich.table.merge")).toBe(false);
+    e.select(at(e, "a"), at(e, "a") + 1);
+    expect(e.run("rich.table.merge")).toBe(false);
+  });
+});

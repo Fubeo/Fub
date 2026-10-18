@@ -564,8 +564,10 @@ impl Reader<'_> {
                     open: self.src(e.open.clone())?,
                     tail: self.src(tail)?,
                 };
+                let span = e.attr("table:number-columns-spanned");
                 Ok(Cell {
                     k: Some(blob::encode(&key)?),
+                    span: span.and_then(|n| n.parse().ok()).filter(|n| *n > 1),
                     blocks: self.cell_blocks(cell)?,
                 })
             })

@@ -286,7 +286,11 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
   const table = button(() => t("rich.table"), null, (anchor) => openTable(anchor));
   table.append(icon(["M4 5h16v14H4z", "M4 10h16", "M4 15h16", "M10 5v14"]));
   table.setAttribute("aria-haspopup", "dialog");
-  insert.append(link, table, pageBreak, columnBreak);
+  const merge = button(() => t("rich.table.merge"), "rich.table.merge", () => engine.run("rich.table.merge"));
+  merge.append(icon(["M4 5h16v14H4z", "M7 12h4", "M9 10l2 2-2 2", "M17 12h-4", "M15 10l-2 2 2 2"]));
+  const split = button(() => t("rich.table.split"), "rich.table.split", () => engine.run("rich.table.split"));
+  split.append(icon(["M4 5h16v14H4z", "M12 5v14", "M9 12H6", "M7.5 10.5 6 12l1.5 1.5", "M15 12h3", "M16.5 10.5 18 12l-1.5 1.5"]));
+  insert.append(link, table, merge, split, pageBreak, columnBreak);
   life.add(engine.onLinkAsk(() => openLink(link)));
 
   /// La griglia delle dimensioni: righe e colonne fino alla cella indicata,
@@ -671,6 +675,8 @@ export function mountStrip(engine: RichEngine, chord: (id: string) => string | n
     pageBreak.disabled = !engine.actionState("rich.break.page").enabled;
     columnBreak.disabled = !engine.actionState("rich.break.column").enabled;
     table.disabled = !engine.editable() || !engine.read(insertTable(1, 1));
+    merge.disabled = !engine.actionState("rich.table.merge").enabled;
+    split.disabled = !engine.actionState("rich.table.split").enabled;
     dedent.disabled = !engine.actionState("rich.indent.decrease").enabled;
     indent.disabled = !engine.actionState("rich.indent.increase").enabled;
     colorBar.style.backgroundColor = look.color && look.color !== COLOR_AUTO ? look.color : "currentColor";

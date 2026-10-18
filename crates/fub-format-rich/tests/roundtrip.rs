@@ -424,6 +424,7 @@ fn new_table(rows: usize, cols: usize) -> Block {
                 cells: (0..cols)
                     .map(|c| Cell {
                         k: None,
+                        span: None,
                         blocks: vec![Block::Para(Para {
                             role: Role::Body,
                             align: None,
@@ -529,6 +530,44 @@ fn una_colonna_aggiunta_o_tolta_rifà_la_griglia() {
     };
     assert_eq!(back.grid.len(), was.grid.len());
     assert!((back.grid.iter().sum::<f32>() - total).abs() < 0.5);
+}
+
+#[test]
+fn le_celle_si_uniscono_e_si_dividono_in_larghezza() {
+    let file = bytes(&sample());
+    let mut p = projection(&file);
+    let Block::Table(table) = &mut p.blocks[4] else {
+        panic!()
+    };
+    // Unite: la prima cella copre due colonne, la seconda se ne va.
+    table.rows[0].cells[0].span = Some(2);
+    table.rows[0].cells.remove(1);
+    let out = saved(&file, &p);
+    let WcBlock::Table(now) = &*read(&out).body[4] else {
+        panic!()
+    };
+    let merged = &now.rows[0].cells[0];
+    assert_eq!((now.rows[0].cells.len(), merged.span()), (1, 2));
+    let total: f32 = now.grid.iter().sum();
+    assert!((merged.props.width.unwrap() - total).abs() < 0.01);
+    let mut p = projection(&out);
+    let Block::Table(table) = &mut p.blocks[4] else {
+        panic!()
+    };
+    assert_eq!(table.rows[0].cells[0].span, Some(2));
+    // E divise: la cella nuova copia quella unita.
+    let mut copy = table.rows[0].cells[0].clone();
+    copy.blocks.clear();
+    table.rows[0].cells[0].span = None;
+    copy.span = None;
+    table.rows[0].cells.push(copy);
+    let WcBlock::Table(back) = &*read(&saved(&out, &p)).body[4] else {
+        panic!()
+    };
+    assert_eq!(back.rows[0].cells.len(), 2);
+    assert!(back.rows[0].cells.iter().all(|c| c.span() == 1));
+    assert_eq!(back.grid, now.grid);
+    assert!((back.rows[0].cells[1].props.width.unwrap() - now.grid[1]).abs() < 0.01);
 }
 
 #[test]

@@ -335,6 +335,10 @@ pub struct Cell {
     /// La cella senza contenuto, opaca; assente in una cella nuova.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub k: Option<String>,
+    /// Le colonne che la cella copre quando sono più di una: celle unite in
+    /// larghezza.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<u32>,
     pub blocks: Vec<Block>,
 }
 
@@ -494,6 +498,7 @@ fn table(document: &Document, table: &WcTable) -> Result<Table, RichError> {
                     };
                     Ok(Cell {
                         k: Some(blob::encode(&bare)?),
+                        span: (cell.span() > 1).then_some(cell.span() as u32),
                         blocks: blocks(document, &cell.blocks)?,
                     })
                 })

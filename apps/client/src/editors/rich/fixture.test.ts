@@ -116,6 +116,10 @@ describe("la proiezione del codec", () => {
     e.select(find(e.state.doc, "dopo il salto"));
     expect(e.apply(insertTable(2, 3))).toBe(true);
     expect(e.apply((state, dispatch) => (dispatch?.(state.tr.insertText("nuova")), true))).toBe(true);
+    // La cella della parola si unisce con quella accanto: chiusi paragrafo e
+    // cella, aperti cella e paragrafo, quattro posizioni più avanti.
+    e.select(e.state.selection.from, e.state.selection.from + 4);
+    expect(e.run("rich.table.merge")).toBe(true);
     // L'ultimo paragrafo diventa un titolo.
     e.select(find(e.state.doc, "Fine."));
     expect(e.run("markdown.heading.2")).toBe(true);

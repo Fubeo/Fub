@@ -373,6 +373,7 @@ fn una_tabella_nuova_si_scrive_con_le_colonne_e_il_bordo() {
     };
     let cell = |x: &str| Cell {
         k: None,
+        span: None,
         blocks: vec![Block::Para(Para {
             c: vec![Inline::Text {
                 x: x.into(),
@@ -395,6 +396,7 @@ fn una_tabella_nuova_si_scrive_con_le_colonne_e_il_bordo() {
                 cell("c"),
                 Cell {
                     k: None,
+                    span: None,
                     blocks: Vec::new(),
                 },
             ],
@@ -886,6 +888,61 @@ fn le_colonne_uguali_si_aggiungono_e_si_tolgono_quelle_diverse_no() {
     assert!(matches!(
         save(Codec::Odt, &bytes, &projection.to_json().unwrap()),
         Err(RichError::Codec(reason)) if reason.contains("columns differ")
+    ));
+}
+
+#[test]
+fn le_celle_si_uniscono_e_si_dividono_in_larghezza() {
+    let bytes = odt(TABLE);
+    let mut projection = projection(&bytes);
+    let Block::Table(table) = &mut projection.blocks[0] else {
+        panic!("not a table");
+    };
+    assert_eq!(table.rows[1].cells[0].span, Some(2));
+    // La riga unita si divide, l'ultima si unisce.
+    let mut copy = table.rows[1].cells[0].clone();
+    copy.blocks.clear();
+    table.rows[1].cells[0].span = None;
+    copy.span = None;
+    table.rows[1].cells.push(copy);
+    table.rows[2].cells[0].span = Some(2);
+    table.rows[2].cells.remove(1);
+    let out = saved(&bytes, &projection);
+    let body = body(&out);
+    // Le colonne restano due, e c'è ancora una sola cella coperta.
+    assert!(body.contains("<table:table-column table:number-columns-repeated=\"2\"/>"));
+    assert_eq!(
+        body.matches("<table:covered-table-cell/>").count(),
+        1,
+        "{body}"
+    );
+    let reopened = self::projection(&out);
+    let Block::Table(table) = &reopened.blocks[0] else {
+        panic!("not a table");
+    };
+    let spans: Vec<Vec<Option<u32>>> = table
+        .rows
+        .iter()
+        .map(|row| row.cells.iter().map(|c| c.span).collect())
+        .collect();
+    assert_eq!(spans, [vec![None, None], vec![None, None], vec![Some(2)]]);
+    // Con celle unite in altezza le coperte non sono soltanto sue: no.
+    let tall = odt(concat!(
+        "<table:table table:name=\"T\"><table:table-column table:number-columns-repeated=\"2\"/>",
+        "<table:table-row><table:table-cell table:number-rows-spanned=\"2\"><text:p>a</text:p>",
+        "</table:table-cell><table:table-cell><text:p>b</text:p></table:table-cell></table:table-row>",
+        "<table:table-row><table:covered-table-cell/><table:table-cell><text:p>c</text:p>",
+        "</table:table-cell></table:table-row></table:table>"
+    ));
+    let mut projection = self::projection(&tall);
+    let Block::Table(table) = &mut projection.blocks[0] else {
+        panic!("not a table");
+    };
+    table.rows[0].cells[0].span = Some(2);
+    table.rows[0].cells.remove(1);
+    assert!(matches!(
+        save(Codec::Odt, &tall, &projection.to_json().unwrap()),
+        Err(RichError::Codec(reason)) if reason.contains("merged across rows")
     ));
 }
 

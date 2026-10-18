@@ -495,8 +495,9 @@ interface InColumn extends InRow {
   readonly offset: number;
 }
 
-/// Le colonne si toccano soltanto dove ogni riga ha le stesse celle: con
-/// celle unite in larghezza non si sa di quale colonna sia una cella.
+/// Le colonne si toccano soltanto dove ogni riga ha le stesse celle, nessuna
+/// unita: con celle unite in larghezza non si sa di quale colonna sia una
+/// cella.
 function columnAt(state: EditorState): InColumn | null {
   const { $from } = state.selection;
   const at = rowAt($from);
@@ -504,6 +505,9 @@ function columnAt(state: EditorState): InColumn | null {
   let even = true;
   at.table.forEach((row) => {
     even &&= row.childCount === at.row.childCount;
+    row.forEach((cell) => {
+      even &&= cell.attrs.span === 1;
+    });
   });
   if (!even) return null;
   return { ...at, cellIndex: $from.index(at.depth), offset: $from.pos - $from.start(at.depth + 1) };
@@ -583,6 +587,66 @@ export const deleteColumn: Command = (state, dispatch) => {
       return out;
     };
     rebuildColumns(state, dispatch, at, cells, Math.min(at.cellIndex, at.row.childCount - 2), 0);
+  }
+  return true;
+};
+
+// ── Celle unite ──────────────────────────────────────────────────────────────
+
+/// La posizione della cella `index` della riga in `at`.
+function cellPos(at: InRow, index: number): number {
+  let pos = at.rowPos + 1;
+  for (let c = 0; c < index; c += 1) pos += at.row.child(c).nodeSize;
+  return pos;
+}
+
+/// Unisce le celle che la selezione tocca in una riga: la prima copre le
+/// colonne di tutte e ne raccoglie i blocchi, tranne i paragrafi vuoti.
+export const mergeCells: Command = (state, dispatch) => {
+  const { $from, $to } = state.selection;
+  const at = rowAt($from);
+  const end = rowAt($to);
+  if (!at || !end || at.rowPos !== end.rowPos) return false;
+  const from = $from.index(at.depth);
+  const to = $to.index(at.depth);
+  if (from >= to) return false;
+  let span = 0;
+  const content: PmNode[] = [];
+  for (let c = from; c <= to; c += 1) {
+    const cell = at.row.child(c);
+    span += cell.attrs.span as number;
+    cell.forEach((block) => {
+      if (block.type !== para || block.content.size > 0) content.push(block);
+    });
+  }
+  if (span > TABLE_MAX_COLS) return false;
+  if (dispatch) {
+    const first = at.row.child(from);
+    const blocks = content.length > 0 ? content : [first.firstChild!];
+    const merged = cellType.create({ ...first.attrs, span }, blocks);
+    const pos = cellPos(at, from);
+    const tr = state.tr.replaceWith(pos, cellPos(at, to) + at.row.child(to).nodeSize, merged);
+    dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(pos + 1))).scrollIntoView());
+  }
+  return true;
+};
+
+/// Divide la cella unita del cursore: tiene il contenuto in una colonna, e
+/// le altre tornano celle vuote come lei.
+export const splitCell: Command = (state, dispatch) => {
+  const { $from } = state.selection;
+  const at = rowAt($from);
+  if (!at) return false;
+  const index = $from.index(at.depth);
+  const cell = at.row.child(index);
+  const span = cell.attrs.span as number;
+  if (span <= 1) return false;
+  if (dispatch) {
+    const one = (node: PmNode) => cellType.create({ ...node.attrs, span: 1 }, node.content);
+    const cells = [one(cell), ...Array.from({ length: span - 1 }, () => one(emptyCellLike(cell)))];
+    const pos = cellPos(at, index);
+    const tr = state.tr.replaceWith(pos, pos + cell.nodeSize, cells);
+    dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve($from.pos))).scrollIntoView());
   }
   return true;
 };
@@ -969,6 +1033,8 @@ export const RICH_ACTIONS: ReadonlyMap<string, RichAction> = new Map<string, Ric
   ["markdown.table.column.left", { run: moveColumn(-1), chord: "Mod-Alt-ArrowLeft" }],
   ["markdown.table.column.right", { run: moveColumn(1), chord: "Mod-Alt-ArrowRight" }],
   ["markdown.table.column.delete", { run: deleteColumn, chord: "Mod-Alt-Shift-Backspace" }],
+  ["rich.table.merge", { run: mergeCells }],
+  ["rich.table.split", { run: splitCell }],
 ]);
 
 /// Lo stato di un'azione: si può eseguire adesso, ed è già applicata.

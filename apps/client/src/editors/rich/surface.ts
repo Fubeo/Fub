@@ -87,6 +87,8 @@ export const RICH_ACTION_IDS: ReadonlySet<string> = new Set([
   "markdown.table.column.left",
   "markdown.table.column.right",
   "markdown.table.column.delete",
+  "rich.table.merge",
+  "rich.table.split",
 ]);
 
 export const RICH_CHORDS: Readonly<Record<string, string>> = {
