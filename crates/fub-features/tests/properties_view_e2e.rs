@@ -709,3 +709,25 @@ fn datetime_inside_a_list_keeps_its_clock_and_offset_in_global_values() {
     let global = serde_json::to_string(&ws.render_view(&global_instance()).unwrap()).unwrap();
     assert!(global.contains("2026-01-02T10:20:30+02:00"), "{global}");
 }
+
+/// Senza i modelli di nota il pulsante della nota del giorno non porta da
+/// nessuna parte e lo dice, invece di non fare niente.
+#[test]
+fn without_templates_the_daily_button_says_why() {
+    let vault = Vault::new();
+    vault.put("a.md", "---\ndate: 2024-03-05\n---\n");
+    let mut ws = vault.open();
+    open_notes(&ws, "a.md");
+    let update = ws
+        .view_action(
+            &instance(),
+            UiAction::new("daily").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let fub_abi::ui::ViewUpdate::Replace { root } = update else {
+        panic!("{update:?}");
+    };
+    let shown = serde_json::to_string(&root).unwrap();
+    assert!(shown.contains("i modelli di nota sono spenti"), "{shown}");
+    assert!(!vault.root.join("Daily").exists());
+}

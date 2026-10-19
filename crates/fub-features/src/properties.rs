@@ -84,6 +84,15 @@ const P_TYPE: &str = "p_type";
 const P_RENAME: &str = "p_rename";
 const U_RENAME: &str = "u_rename";
 const FAILED: &str = "failed";
+/// La nota del giorno di una proprietà data: il percorso inverso di
+/// `note.daily`, che la data la scrive nella giornaliera. Il comando si chiama
+/// per id, come ogni comando di un'altra feature: con i modelli spenti non c'è,
+/// e il pannello lo dice.
+const DAILY: &str = "daily";
+const DAILY_COMMAND: &str = "note.daily";
+const DAILY_LABEL: &str = "daily_label";
+const E_DAILY: &str = "e_daily";
+const E_DAILY_OFF: &str = "e_daily_off";
 
 /// Le stringhe del pannello e dei comandi. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
@@ -106,6 +115,12 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_SET, "Annulla: proprietà «{key}» in {doc}")
             .with(U_REMOVE, "Annulla: togli «{key}» da {doc}")
             .with(FAILED, "Non ho aggiornato le proprietà: {reason}")
+            .with(DAILY_LABEL, "Nota del giorno")
+            .with(E_DAILY, "Non ho aperto la nota del {date}: {reason}")
+            .with(
+                E_DAILY_OFF,
+                "La nota del giorno non c'è: i modelli di nota sono spenti.",
+            )
             .with("note.property.set.title", "Imposta proprietà")
             .with(
                 "note.property.set.desc",
@@ -222,6 +237,12 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_SET, "Undo: property «{key}» in {doc}")
             .with(U_REMOVE, "Undo: remove «{key}» from {doc}")
             .with(FAILED, "Could not update properties: {reason}")
+            .with(DAILY_LABEL, "Daily note")
+            .with(E_DAILY, "Could not open the note for {date}: {reason}")
+            .with(
+                E_DAILY_OFF,
+                "There is no daily note: note templates are off.",
+            )
             .with("note.property.set.title", "Set property")
             .with(
                 "note.property.set.desc",
@@ -433,9 +454,41 @@ impl ViewProvider for PropertiesView {
                 }
                 command_then_tree(host, NOTES_PROPERTY_SET, args)
             }
+            DAILY => {
+                let Some(date) = action.payload.get(VALUE).and_then(|v| v.as_str()) else {
+                    return Ok(ViewUpdate::None);
+                };
+                open_daily(host, date)
+            }
             _ => Ok(ViewUpdate::None),
         }
     }
+}
+
+/// Apre (o crea) la giornaliera di `date` e ci porta. Ciò che `note.daily`
+/// rifiuta resta scritto sopra le proprietà, come ogni altro rifiuto.
+fn open_daily(host: &mut dyn HostApi, date: &str) -> Result<ViewUpdate, PluginError> {
+    let warning = match host.run_command(DAILY_COMMAND, serde_json::json!({ "date": date })) {
+        Ok(outcome) => match outcome.effect {
+            CommandEffect::Navigate { doc } => {
+                return Ok(ViewUpdate::Navigate {
+                    doc_id: doc.as_str().to_string(),
+                })
+            }
+            _ => return Ok(ViewUpdate::None),
+        },
+        Err(PluginError::UnknownCommand(_)) => Text::key(E_DAILY_OFF),
+        Err(and) => Text::message(
+            E_DAILY,
+            vec![
+                Arg::text("date", date),
+                Arg::text("reason", and.to_string()),
+            ],
+        ),
+    };
+    Ok(ViewUpdate::Replace {
+        root: tree(host, Some(warning))?,
+    })
 }
 
 fn command_then_tree(
@@ -751,6 +804,18 @@ fn row(doc: &DocId, key: &str, value: &PropertyValue, raw: Option<&serde_json::V
     if source_only {
         controls.push(source_button(doc));
     } else {
+        if let PropertyValue::Date(date) = value {
+            controls.push(UiNode::button(
+                Text::key(DAILY_LABEL),
+                Intent::Neutral,
+                ActionRef::with(
+                    DAILY,
+                    serde_json::json!({
+                        VALUE: format!("{:04}-{:02}-{:02}", date.year, date.month, date.day)
+                    }),
+                ),
+            ));
+        }
         controls.push(UiNode::button(
             Text::key(REMOVE_LABEL),
             Intent::Danger,

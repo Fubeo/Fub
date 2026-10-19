@@ -13,7 +13,8 @@ use fub_abi::ui::{UiAction, UiKind, UiNode};
 use fub_abi::OptionMap;
 #[cfg(all(feature = "properties", feature = "commands"))]
 use fub_features::{
-    CoreCommands, PropertiesCommands, COMMANDS_ID, NOTES_INSERT_TEMPLATE, PROPERTIES_ID, VAULT_UNDO,
+    CoreCommands, PropertiesCommands, PropertiesView, COMMANDS_ID, NOTES_INSERT_TEMPLATE,
+    PROPERTIES_ID, PROPERTIES_VIEW, VAULT_UNDO,
 };
 use fub_features::{
     TemplateCommands, TemplateView, NOTES_DAILY, NOTES_EXTRACT, NOTES_FROM_TEMPLATE, NOTES_MERGE,
@@ -91,6 +92,8 @@ impl Vault {
         .expect("properties");
         ws.register_command_provider(PROPERTIES_ID, Box::new(PropertiesCommands))
             .expect("properties provider");
+        ws.register_view_provider(PROPERTIES_ID, Box::new(PropertiesView))
+            .expect("properties view");
         ws.reindex().expect("reindex");
         ws
     }
@@ -344,6 +347,51 @@ fn a_note_from_a_template_gets_no_property_the_template_does_not_have() {
         assert_eq!(ws.read_source(&doc).unwrap(), expected);
         assert_eq!(ws.read_model(&doc).unwrap().frontmatter.get("date"), None);
     }
+}
+
+/// Il percorso inverso di `note.daily`: dalla data di una nota alla nota di
+/// quel giorno, dal pannello delle proprietà.
+#[cfg(all(feature = "properties", feature = "commands"))]
+#[test]
+fn a_date_property_opens_the_daily_note_of_that_day() {
+    let vault = Vault::new();
+    vault.put("Riunione.md", "---\ndate: 2024-03-05\n---\nappunti\n");
+    let mut ws = vault.open_with_properties();
+    ws.set_active_context(Some(
+        ViewContext::new(MAIN_PANE).with_doc(Some(DocId::new("Riunione.md"))),
+    ));
+    let panel = ViewInstance::only(PROPERTIES_VIEW);
+    let tree = serde_json::to_string(&ws.render_view(&panel).unwrap()).unwrap();
+    assert!(
+        tree.contains("\"action\":\"daily\"") && tree.contains("2024-03-05"),
+        "{tree}"
+    );
+    let update = ws
+        .view_action(
+            &panel,
+            UiAction::new("daily").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    let fub_abi::ui::ViewUpdate::Navigate { doc_id } = update else {
+        panic!("{update:?}");
+    };
+    assert_eq!(doc_id, "Daily/2024-03-05.md");
+    let daily = DocId::new(doc_id.as_str());
+    assert_eq!(
+        ws.read_model(&daily).unwrap().frontmatter.get("date"),
+        Some(&serde_json::json!("2024-03-05")),
+    );
+    // La seconda volta la apre, non ne fa un'altra.
+    let again = ws
+        .view_action(
+            &panel,
+            UiAction::new("daily").with_payload(serde_json::json!({ "value": "2024-03-05" })),
+        )
+        .unwrap();
+    assert!(
+        matches!(&again, fub_abi::ui::ViewUpdate::Navigate { doc_id } if doc_id == "Daily/2024-03-05.md"),
+        "{again:?}"
+    );
 }
 
 #[cfg(all(feature = "properties", feature = "commands"))]
