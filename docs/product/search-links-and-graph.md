@@ -156,6 +156,12 @@ titolo o al paragrafo dove sta il cursore: `[[Nota#Titolo]]`, o
 `[[Nota#^id]]` per un paragrafo, che riceve un id nuovo in coda se non ne ha
 uno. In Lettura si copia solo un id già scritto.
 
+Passando col puntatore su un wikilink si apre l'anteprima della nota: in
+Lettura dopo un breve ritardo, subito con Ctrl/Cmd; mentre si scrive soltanto
+con Ctrl/Cmd. L'impostazione `editor.preview-modifier` chiede Ctrl/Cmd
+dappertutto. Un link che non si risolve, o che nomina un allegato, non apre
+niente.
+
 Un merge che cestina una sorgente citata da altre note porta i loro link sulla
 destinazione, con alias e frammenti intatti. Il piano lo calcola il kernel come
 per una rinomina (`VaultRead::link_retarget_edits`), il testo lo scrive il
