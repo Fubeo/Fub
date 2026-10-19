@@ -1,3 +1,4 @@
+import { isStrictlyInsideCode } from "./parser";
 import { pasteHtml } from "../../paste-html";
 import { EditorView, ViewPlugin } from "@codemirror/view";
 import type TurndownService from "turndown";
@@ -215,9 +216,32 @@ export async function markdownFromClipboard(data: DataTransfer): Promise<string 
   return "markdown" in rich ? rich.markdown : convert(rich.html, await loadConverter());
 }
 
+/// Un indirizzo incollato su un testo selezionato diventa un link Markdown,
+/// `[testo](url)`, come in Obsidian. Solo un indirizzo intero (niente spazi,
+/// `http(s)://` o `mailto:`), una selezione sola su una riga, fuori dal codice,
+/// e che non sia già essa stessa un indirizzo.
+const PASTED_URL = /^(?:https?:\/\/|mailto:)\S+$/iu;
+
+function linkOverSelection(view: EditorView, data: DataTransfer): string | null {
+  const { ranges } = view.state.selection;
+  if (ranges.length !== 1 || ranges[0]!.empty) return null;
+  const url = data.getData("text/plain").trim();
+  if (!PASTED_URL.test(url)) return null;
+  const { from, to } = ranges[0]!;
+  const text = view.state.sliceDoc(from, to);
+  if (text.includes("\n") || PASTED_URL.test(text.trim()) || isStrictlyInsideCode(view.state, from)) return null;
+  return `[${text}](${url.replace(/[()]/gu, (c) => (c === "(" ? "%28" : "%29"))})`;
+}
+
 const pasteHandler = EditorView.domEventHandlers({
   paste(event, view) {
     if (view.state.readOnly || view.compositionStarted || !event.clipboardData) return false;
+    const link = linkOverSelection(view, event.clipboardData);
+    if (link !== null) {
+      event.preventDefault();
+      view.dispatch(view.state.replaceSelection(link), { userEvent: "input.paste" });
+      return true;
+    }
     if (!view.state.facet(pasteHtml)) return false;
     const rich = richPaste(event.clipboardData);
     if (rich === null) return false;

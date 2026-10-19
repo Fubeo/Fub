@@ -49,6 +49,23 @@ describe("Markdown clipboard paste", () => {
     await markdownFromClipboard({ getData: (type: string) => (type === "text/html" ? "<b>x</b>" : "") } as DataTransfer);
   });
 
+  it("un indirizzo incollato sul testo selezionato diventa un link", () => {
+    const link = paste("", "https://example.org/a(b)");
+    expect(link.event.defaultPrevented).toBe(true);
+    expect(link.engine.getDoc()).toBe("prima\r\n[qui](https://example.org/a%28b%29)\r\nfine");
+    link.engine.destroy();
+    link.host.remove();
+    // Senza selezione, o con del testo che non è un indirizzo, l'incolla resta il solito.
+    const plain = paste("", "non è un link");
+    expect(plain.engine.getDoc()).not.toContain("](");
+    plain.engine.destroy();
+    plain.host.remove();
+    const empty = paste("", "https://example.org", "", EditorSelection.single(6));
+    expect(empty.engine.getDoc()).not.toContain("](");
+    empty.engine.destroy();
+    empty.host.remove();
+  });
+
   it("con la conversione spenta lascia l'incolla a CodeMirror", () => {
     const incolla = (convert: boolean) => {
       const host = document.createElement("div");
