@@ -61,6 +61,10 @@ import { byteToNormalizedCharIndices, charToByteIndices } from "../../rules/offs
 import { onLanguage, t } from "../../i18n/strings";
 import { editorPhrases } from "./phrases";
 import { settings } from "../../host/query";
+import { api } from "../../host/ipc";
+import { errorText } from "../../host/errors";
+import { showContextMenu } from "../../ui/menu";
+import { notify } from "../../ui/notify";
 import { onEvent } from "../../state/kernel";
 import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
@@ -206,6 +210,7 @@ export class TextEngine {
   private readonly listener: Extension;
   private readonly stopLanguage: Teardown;
   private readonly stopSettings: Teardown;
+  private readonly stopGutterMenu: Teardown;
   private settingsGeneration = 0;
   private vimEnabled = false;
   private spellcheckEnabled = true;
@@ -240,8 +245,12 @@ export class TextEngine {
     this.view.scrollDOM.tabIndex = 0;
     this.view.scrollDOM.setAttribute("role", "document");
     if (options.field === true) {
-      this.stopSettings = () => {};
+      this.stopSettings = this.stopGutterMenu = () => {};
     } else {
+      // Il margine sta fuori dal contenteditable, dove CodeMirror non ascolta.
+      const gutterMenu = (event: MouseEvent) => this.gutterMenu(event);
+      this.view.dom.addEventListener("contextmenu", gutterMenu);
+      this.stopGutterMenu = () => this.view.dom.removeEventListener("contextmenu", gutterMenu);
       this.stopSettings = onEvent("setting_changed", (event) => {
         if (INPUT_KEYS.has(event.key)) void this.loadInputPreferences();
       });
@@ -473,6 +482,7 @@ export class TextEngine {
     if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
     this.settingsGeneration += 1;
     this.stopSettings();
+    this.stopGutterMenu();
     this.stopLanguage();
     this.footprints.reset();
     this.view.destroy();
@@ -540,6 +550,30 @@ export class TextEngine {
         })),
       });
     }
+  }
+
+  /// Il tasto destro sul margine mostra o nasconde i numeri di riga e le
+  /// frecce per piegare: le stesse impostazioni della pagina Editor, che
+  /// tornano qui da `setting_changed`. Un campo non ha margine da regolare.
+  private gutterMenu(event: MouseEvent): void {
+    if (!(event.target instanceof Element) || !event.target.closest(".cm-gutters")) return;
+    event.preventDefault();
+    const toggle = (key: string, shown: boolean) => () => {
+      void api.setSetting(key, !shown).catch((error: unknown) => {
+        notify(t("editor.gutter.failed", { reason: errorText(error) }), "guasto");
+      });
+    };
+    const { lineNumbers, foldGutter } = this.layout;
+    showContextMenu(event, [
+      {
+        label: t(lineNumbers ? "editor.gutter.line_numbers.hide" : "editor.gutter.line_numbers.show"),
+        run: toggle(EDITOR_LINE_NUMBERS_KEY, lineNumbers),
+      },
+      {
+        label: t(foldGutter ? "editor.gutter.fold.hide" : "editor.gutter.fold.show"),
+        run: toggle(EDITOR_FOLD_GUTTER_KEY, foldGutter),
+      },
+    ]);
   }
 
   private async loadInputPreferences(): Promise<void> {

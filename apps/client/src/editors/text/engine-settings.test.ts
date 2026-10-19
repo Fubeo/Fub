@@ -21,6 +21,11 @@ import {
 } from "./engine";
 
 vi.mock("../../host/query", () => ({ settings: vi.fn() }));
+const setSetting = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock("../../host/ipc", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../../host/ipc")>();
+  return { ...real, api: { ...real.api, setSetting } };
+});
 
 function entry(key: string, value: boolean): SettingEntry {
   return {
@@ -187,5 +192,34 @@ describe("text input settings", () => {
     await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("source"));
     engine.destroy();
     host.remove();
+  });
+
+  it("il tasto destro sul margine mostra o nasconde numeri di riga e frecce, non sul testo né in un campo", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    const field = document.createElement("div");
+    document.body.append(host, field);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    const cell = createTextEngine(field, { onChange: () => {}, onSelectionChange: () => {}, field: true });
+    await vi.waitFor(() => expect(host.querySelector(".cm-gutters")).not.toBeNull());
+    const press = (target: Element) => {
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 4, clientY: 4 });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(press(host.querySelector(".cm-content")!)).toBe(false);
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(press(field.querySelector(".cm-content")!)).toBe(false);
+    expect(press(host.querySelector(".cm-gutters")!)).toBe(true);
+    const items = [...document.querySelectorAll<HTMLButtonElement>("#context-menu [role=menuitem]")];
+    expect(items.map((item) => item.textContent)).toEqual(["Nascondi i numeri di riga", "Nascondi le frecce per piegare"]);
+    items[0]!.click();
+    expect(setSetting).toHaveBeenCalledWith("editor.line-numbers", false);
+    engine.destroy();
+    cell.destroy();
+    host.remove();
+    field.remove();
   });
 });
