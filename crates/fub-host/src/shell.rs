@@ -206,9 +206,12 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.tab.go.7", Some("Mod-7")),
     ("shell.tab.go.8", Some("Mod-8")),
     ("shell.tab.go.last", Some("Mod-9")),
-    // Piega e apre tutti i titoli e le liste della nota col fuoco.
+    // Piega e apre tutti i titoli e le liste della nota col fuoco, o un
+    // livello alla volta.
     ("shell.fold.all", None),
     ("shell.unfold.all", None),
+    ("shell.fold.more", None),
+    ("shell.fold.less", None),
     ("shell.zoom.in", Some("Mod-=")),
     ("shell.zoom.out", Some("Mod--")),
     ("shell.zoom.reset", Some("Mod-0")),

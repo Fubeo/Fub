@@ -1052,6 +1052,8 @@ function registerCommands(): void {
   for (const [id, action, title, description] of [
     ["shell.fold.all", "text.fold.all", "commands.fold.all", "commands.fold.all.desc"],
     ["shell.unfold.all", "text.unfold.all", "commands.unfold.all", "commands.unfold.all.desc"],
+    ["shell.fold.more", "text.fold.more", "commands.fold.more", "commands.fold.more.desc"],
+    ["shell.fold.less", "text.fold.less", "commands.fold.less", "commands.fold.less.desc"],
   ] as const) {
     registerShellCommand({
       id,

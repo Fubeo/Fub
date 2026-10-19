@@ -40,6 +40,7 @@ import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
 import { foldAll, unfoldAll } from "@codemirror/language";
+import { foldLess, foldMore } from "../../fold-levels";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -105,11 +106,14 @@ export interface MarkdownSurface extends BufferedSurface {
   redo(): boolean;
 }
 
-/// Piegare e aprire tutti i titoli, le liste e i blocchi della nota: azioni
-/// della superficie come annulla, fuori dalla barra di formattazione.
+/// Piegare e aprire tutti i titoli, le liste e i blocchi della nota, o un
+/// livello alla volta: azioni della superficie come annulla, fuori dalla
+/// barra di formattazione.
 const FOLDS = new Map([
   ["text.fold.all", foldAll],
   ["text.unfold.all", unfoldAll],
+  ["text.fold.more", foldMore],
+  ["text.fold.less", foldLess],
 ]);
 
 /// La palette slash si apre a inizio riga o dopo uno spazio: dentro una

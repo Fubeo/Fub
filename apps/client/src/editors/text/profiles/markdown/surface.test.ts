@@ -457,6 +457,31 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("piega di più e di meno vanno un livello alla volta, dall'interno e dall'esterno", () => {
+    const { ed, view } = editor();
+    const text = "# Uno\n\n## Sotto\n\ntesto\n\n# Due\n\naltro\n";
+    ed.buffer.setDoc(text);
+    const placeholders = () => view().dom.querySelectorAll(".cm-foldPlaceholder").length;
+    expect(ed.editorActions.state("text.fold.more")).toEqual({ enabled: true, active: null });
+    expect(ed.editorActions.run("text.fold.more")).toBe(true);
+    expect(placeholders()).toBe(1);
+    expect(view().dom.textContent).toContain("Sotto");
+    expect(view().dom.textContent).not.toContain("testo");
+    expect(ed.editorActions.run("text.fold.more")).toBe(true);
+    expect(placeholders()).toBe(2);
+    expect(view().dom.textContent).not.toContain("Sotto");
+    expect(ed.editorActions.run("text.fold.more")).toBe(false);
+    expect(ed.editorActions.run("text.fold.less")).toBe(true);
+    expect(placeholders()).toBe(1);
+    expect(view().dom.textContent).toContain("Sotto");
+    expect(ed.editorActions.run("text.fold.less")).toBe(true);
+    expect(placeholders()).toBe(0);
+    expect(ed.editorActions.run("text.fold.less")).toBe(false);
+    expect(ed.buffer.getDoc()).toBe(text);
+    expect(ed.editorActions.state("text.undo").enabled).toBe(false);
+    ed.destroy();
+  });
+
   it("in lettura e in sola lettura sono spente, e chi le segue lo sa", () => {
     const { ed } = editor();
     ed.buffer.setDoc("testo");
