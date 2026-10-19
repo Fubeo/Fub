@@ -122,9 +122,10 @@ flowchart LR
 
 ### Coerenza della versione
 
-La versione del prodotto sta in quattro posti: `[workspace.package]` di
-`Cargo.toml`, `crates/fub-app/tauri.conf.json`, `apps/client/package.json` e il
-suo lockfile. `node .github/scripts/check-release-version.mjs [vX.Y.Z]` li
+La versione del prodotto sta in sei posti: `[workspace.package]` di
+`Cargo.toml`, le tre configurazioni Tauri (`crates/fub-app/tauri.conf.json`,
+`tauri.android.conf.json` e `tauri.ios.conf.json`), `apps/client/package.json`
+e il suo lockfile. `node .github/scripts/check-release-version.mjs [vX.Y.Z]` li
 confronta fra loro e, se lo riceve, con il tag. La CI lo esegue senza tag; il
 workflow di rilascio con il tag che lo ha avviato.
 
@@ -141,6 +142,15 @@ workflow di rilascio con il tag che lo ha avviato.
 
 Avviato a mano (`workflow_dispatch`) costruisce gli stessi artefatti senza
 toccare le release.
+
+Il mobile ha un workflow suo, [`mobile.yml`](../../.github/workflows/mobile.yml),
+che non pubblica niente: su Android genera il progetto
+(`cargo tauri android init --ci`), fonde i template nativi con
+`crates/fub-app/mobile/install-mobile.sh` e ne verifica la fusione con
+`--check`, poi costruisce un APK di debug per aarch64, caricato come artefatto
+della corsa. Su iOS compila soltanto `fub-app` per il dispositivo: il progetto
+Xcode chiede i target Share e Widget creati a mano e una firma. Non è un
+controllo richiesto.
 
 La firma è facoltativa. Il `.dmg` è firmato e notarizzato soltanto se il
 repository ha i segreti `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`,

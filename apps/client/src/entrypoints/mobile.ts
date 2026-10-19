@@ -7,7 +7,7 @@ import { declareShell } from "../platform/capabilities";
 import type { MobileBridge } from "../shells/mobile/bridge";
 import { MOBILE_SHELL } from "../shells/mobile/index";
 import { mountMobileShell, type MobileShellOptions } from "../shells/mobile/bootstrap";
-import { privateStoragePorts } from "../shells/mobile/storage-ui";
+import { nativeStoragePorts } from "../shells/mobile/storage-ui";
 import { SCRITTOIO_SERIES } from "../theme/scrittoio/series";
 import { declareThemeSeries } from "../theme/theme";
 import type { Teardown } from "../ui/lifetime";
@@ -24,7 +24,7 @@ export async function startupMobile(
   const restoreSeries = declareThemeSeries(SCRITTOIO_SERIES);
   const teardownMobile = mountMobileShell(bridge, {
     ...native,
-    storage: native.storage ?? privateStoragePorts(bridge, openInShell),
+    storage: native.storage ?? nativeStoragePorts(bridge, openInShell),
   });
   try {
     const { composeScrittoioMobile } = await import("../shells/scrittoio/mobile/compose");

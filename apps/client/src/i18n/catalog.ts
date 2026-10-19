@@ -1125,6 +1125,10 @@ export const IT = { // --- la scocca -------------------------------------------
 "mobile.storage.not_connected": "Montaggio mobile non connesso all'Host",
 "mobile.storage.choose": "Scegli esplicitamente spazio privato o cartella condivisa",
 "mobile.storage.shared_unavailable": "Una cartella condivisa chiede la verifica nativa del permesso, che qui non c'è ancora: usa lo spazio privato",
+"mobile.storage.copy_only": "Su questo dispositivo la cartella condivisa si apre come copia: usa «Copia nel privato»",
+"mobile.storage.copied": "Copiati {files} file in «{folder}»",
+"mobile.storage.copied_partial": "Copiati {files} file in «{folder}»; non copiati: {skipped}",
+"mobile.storage.copied_truncated": "Copia fermata al limite: {files} file in «{folder}», il resto è rimasto nella cartella condivisa",
 "mobile.wasm.backend": "WASM configurato: {requested}; attivo: {active}",
 "mobile.wasm.not_started": "non avviato",
 // --- lo Scrittoio su un telefono, e la sua finestra documento ----------
@@ -3098,6 +3102,10 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "mobile.storage.not_connected": "Mobile mount not connected to the Host",
 "mobile.storage.choose": "Explicitly choose private space or a shared folder",
 "mobile.storage.shared_unavailable": "A shared folder needs native permission verification, which is not available here yet: use the private space",
+"mobile.storage.copy_only": "On this device the shared folder opens as a copy: use “Copy into private space”",
+"mobile.storage.copied": "Copied {files} files into “{folder}”",
+"mobile.storage.copied_partial": "Copied {files} files into “{folder}”; not copied: {skipped}",
+"mobile.storage.copied_truncated": "Copy stopped at the limit: {files} files in “{folder}”, the rest stayed in the shared folder",
 "mobile.wasm.backend": "WASM configured: {requested}; active: {active}",
 "mobile.wasm.not_started": "not started",
 // --- the Scrittoio on a phone, and its document window -----------------

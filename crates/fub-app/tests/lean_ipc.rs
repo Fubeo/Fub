@@ -349,6 +349,11 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("mobile_classify_opened_url", Why::AppSurface),
     ("mobile_register_tree_grant", Why::AppSurface),
     ("mobile_shared_mount_mode", Why::AppSurface),
+    ("mobile_pick_tree", Why::AppSurface),
+    ("mobile_verify_tree", Why::AppSurface),
+    ("mobile_open_shared", Why::AppSurface),
+    ("mobile_close_shared", Why::AppSurface),
+    ("mobile_copy_tree", Why::AppSurface),
     // --- byte e finestre fidate: la porta è la credenziale --------------------
     //
     // Risorse, viewer e artefatti toccano byte o finestre native: ogni handler

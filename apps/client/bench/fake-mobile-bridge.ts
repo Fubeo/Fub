@@ -48,6 +48,12 @@ export function nativeMobileBridge(): MobileBridge {
     classifyOpenedUrl: (raw) => Promise.resolve({ kind: "fub", raw }),
     registerTreeGrant: (grant) => Promise.resolve(grant),
     sharedMountMode: () => Promise.resolve("need_grant"),
+    // Nessuna cartella condivisa: il selettore si chiude senza scelta.
+    pickTree: () => Promise.resolve(null),
+    verifyTree: () => Promise.resolve("unknown"),
+    openSharedTree: () => Promise.reject(new Error("banco: nessuna cartella condivisa")),
+    closeSharedTree: () => Promise.resolve([]),
+    copyTree: () => Promise.reject(new Error("banco: nessuna cartella condivisa")),
     onSuspended: silent,
     onResumed: silent,
     onOpenedUrl: silent,

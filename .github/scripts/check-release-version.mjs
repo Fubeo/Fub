@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Una versione del prodotto, scritta in quattro posti che devono dire lo
-// stesso numero: il workspace Cargo (che la scheda «Informazioni» e il
-// controllo degli aggiornamenti leggono), la configurazione Tauri (che dà il
-// nome agli installer), il `package.json` del frontend e il suo lockfile.
+// Una versione del prodotto, scritta in sei posti che devono dire lo stesso
+// numero: il workspace Cargo (che la scheda «Informazioni» e il controllo degli
+// aggiornamenti leggono), le configurazioni Tauri di desktop, Android e iOS
+// (che danno il nome agli installer e ai pacchetti), il `package.json` del
+// frontend e il suo lockfile.
 //
 // Con un tag (`node check-release-version.mjs v0.2.0`) il tag deve essere
 // `v` più quel numero: un installer chiamato 0.1.0 dentro la release 0.2.0
@@ -21,6 +22,8 @@ const lock = json("apps/client/package-lock.json");
 const found = {
   "Cargo.toml [workspace.package]": workspaceVersion(fs.readFileSync("Cargo.toml", "utf8")),
   "crates/fub-app/tauri.conf.json": json("crates/fub-app/tauri.conf.json").version ?? null,
+  "crates/fub-app/tauri.android.conf.json": json("crates/fub-app/tauri.android.conf.json").version ?? null,
+  "crates/fub-app/tauri.ios.conf.json": json("crates/fub-app/tauri.ios.conf.json").version ?? null,
   "apps/client/package.json": json("apps/client/package.json").version ?? null,
   "apps/client/package-lock.json": lock.packages?.[""]?.version ?? lock.version ?? null,
 };

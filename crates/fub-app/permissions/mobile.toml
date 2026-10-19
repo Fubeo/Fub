@@ -1,6 +1,6 @@
 [[permission]]
 identifier = "allow-mobile"
-description = "Mobile shell adapters; no shared mount authority without native OS verification."
+description = "Mobile shell adapters; shared folders only through the native OS bridge (tree_access)."
 commands.allow = [
   "mobile_validate_capture",
   "mobile_submit_capture",
@@ -11,4 +11,9 @@ commands.allow = [
   "mobile_classify_opened_url",
   "mobile_register_tree_grant",
   "mobile_shared_mount_mode",
+  "mobile_pick_tree",
+  "mobile_verify_tree",
+  "mobile_open_shared",
+  "mobile_close_shared",
+  "mobile_copy_tree",
 ]

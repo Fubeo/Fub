@@ -302,9 +302,27 @@ divisori trascinabili, finestre multiple.
 La cartella di un vault la sceglie il selettore della shell attiva
 (`platform/vault-picker.ts`). Sul desktop è il selettore di cartelle del
 sistema. Su mobile è il pannello dello spazio, dove la scelta fra spazio
-privato e cartella condivisa è esplicita. Su mobile il backend monta soltanto
-il vault privato, di cui risolve da sé il path; una cartella condivisa chiede
-una verifica nativa del permesso che non esiste ancora, e resta da concedere.
+privato e cartella condivisa è esplicita. Il backend monta il vault privato,
+di cui risolve da sé il path, e una cartella condivisa soltanto attraverso il
+ponte nativo `fub-tree` (`crates/fub-app/src/tree_access.rs`, con
+`FubTreePlugin.kt` e `FubTreePlugin.swift` in `crates/fub-app/mobile/`). Il
+webview non attesta niente: il selettore, il permesso del sistema e il path li
+danno i comandi `mobile_pick_tree`, `mobile_verify_tree`,
+`mobile_shared_mount_mode`, `mobile_open_shared`, `mobile_copy_tree` e
+`mobile_close_shared`, che chiedono al codice nativo. I due sistemi danno cose
+diverse:
+
+- **iOS** risolve il bookmark in un path con l'accesso security-scoped aperto
+  finché il vault è montato. Il kernel ci scrive come in ogni cartella;
+  `open_vault` accetta quel path e nessun altro oltre al privato.
+- **Android** dà un albero SAF, che non ha path né rinomina atomica. La
+  proposta è sola lettura, e la cartella si apre come **copia** dentro una
+  sottocartella nuova del vault privato, per gesto esplicito: niente si
+  sovrascrive e l'originale resta com'è. File illeggibili, nomi non validi e
+  tetti raggiunti (20 000 file, 4 GiB) sono elencati nell'esito.
+
+Un permesso non più concesso è NeedGrant e smonta la cartella condivisa; non
+ripiega mai sul vault privato.
 
 Gli appunti passano da una porta sola (`platform/clipboard.ts`): di serie sono
 quelli della webview, e una shell che ne ha di propri li dichiara con

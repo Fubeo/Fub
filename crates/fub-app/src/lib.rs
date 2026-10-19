@@ -64,6 +64,7 @@ mod mobile;
 mod print;
 mod resources;
 mod support;
+mod tree_access;
 mod web_viewer;
 pub use live::{LiveAddress, LiveStart, LiveStarted};
 pub use support::DemoClosed;
@@ -335,13 +336,21 @@ impl EventSink for WebviewEvents {
 
 #[tauri::command]
 fn open_vault(app: AppHandle, host: State<Host>, path: String) -> Result<VaultInfo, PluginError> {
-    // Su mobile si monta soltanto il vault privato, che il backend risolve da
-    // sé nella sandbox; una cartella condivisa chiede un grant verificato.
+    // Su mobile si monta il vault privato, che il backend risolve da sé nella
+    // sandbox, o la cartella condivisa che il codice nativo ha consegnato per
+    // un grant verificato (`mobile_open_shared`): nessun altro path.
     #[cfg(mobile)]
     return for_the_shell(
         &host,
         None,
-        mobile::open_private_vault(&host, mobile::private_vault_root(&app).as_deref(), &path),
+        mobile::open_mobile_vault(
+            &host,
+            mobile::private_vault_root(&app).as_deref(),
+            app.try_state::<tree_access::TreeAccess>()
+                .and_then(|tree| tree.shared_root())
+                .as_deref(),
+            &path,
+        ),
     );
     // Il lock di scrittura fra processi lo prende l'host aprendo, e lo lascia
     // chiudendo: qui non c'è niente da tenere. Un altro scrittore è un
@@ -2035,13 +2044,212 @@ fn mobile_register_tree_grant(
     mobile::mobile_register_tree_grant(grant)
 }
 
+/// La proposta di mount per la cartella condivisa. Il permesso lo chiede qui
+/// al sistema operativo (`tree_access`) e il CAS lo dice la piattaforma: i due
+/// booleani del webview restano nella firma per compatibilità e non decidono.
 #[tauri::command]
-fn mobile_shared_mount_mode(
+async fn mobile_shared_mount_mode(
+    app: AppHandle,
     grant: Option<mobile::MobileTreeGrant>,
     backend_cas: bool,
     copy_accepted: bool,
-) -> mobile::MobileMountMode {
-    mobile::mobile_shared_mount_mode(grant, backend_cas, copy_accepted)
+) -> Result<mobile::MobileMountMode, PluginError> {
+    #[cfg(mobile)]
+    {
+        let _ = backend_cas;
+        let Some(grant) = grant else {
+            return Ok(mobile::MobileMountMode::NeedGrant);
+        };
+        let mode = on_tree(&app, move |tree| {
+            let permission = tree.verify(&grant);
+            let cas = tree_access::backend_cas(&grant);
+            Ok(mobile::verified_mount_mode(
+                &grant,
+                permission,
+                cas,
+                copy_accepted,
+            ))
+        })
+        .await;
+        // Senza plugin nativo la proposta resta quella di sempre.
+        Ok(mode.unwrap_or(mobile::MobileMountMode::NeedGrant))
+    }
+    #[cfg(not(mobile))]
+    {
+        let _ = app;
+        Ok(mobile::mobile_shared_mount_mode(
+            grant,
+            backend_cas,
+            copy_accepted,
+        ))
+    }
+}
+
+// --- la cartella condivisa (P14/F37): il sistema operativo risponde ---------
+//
+// Il picker, la verifica del permesso, l'accesso e la copia li fa il codice
+// nativo (`tree_access.rs`), che questi comandi raggiungono fuori dal thread
+// principale: il picker è un'interfaccia del sistema, e aspettarlo lì
+// fermerebbe proprio chi lo deve mostrare. Sul desktop rispondono `Unserved`.
+
+#[cfg(mobile)]
+async fn on_tree<T: Send + 'static>(
+    app: &AppHandle,
+    work: impl FnOnce(&tree_access::TreeAccess) -> Result<T, PluginError> + Send + 'static,
+) -> Result<T, PluginError> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let tree = app
+            .try_state::<tree_access::TreeAccess>()
+            .ok_or_else(no_native_tree)?;
+        work(&*tree)
+    })
+    .await
+    .map_err(|error| {
+        PluginError::Internal(fub_abi::text::Text::message(
+            "host.mobile.native_failed",
+            vec![fub_abi::text::Arg::text("reason", error.to_string())],
+        ))
+    })?
+}
+
+fn no_native_tree() -> PluginError {
+    PluginError::Unserved(fub_abi::text::Text::key("host.mobile.no_native"))
+}
+
+/// Il picker di cartella del sistema. `None`: la persona l'ha chiuso.
+#[tauri::command]
+async fn mobile_pick_tree(
+    app: AppHandle,
+    host: State<'_, Host>,
+) -> Result<Option<mobile::MobileTreeGrant>, PluginError> {
+    #[cfg(mobile)]
+    let picked = on_tree(&app, |tree| tree.pick()).await;
+    #[cfg(not(mobile))]
+    let picked = {
+        let _ = app;
+        Err(no_native_tree())
+    };
+    for_the_shell(&host, None, picked)
+}
+
+/// Il permesso del sistema sul grant, adesso: una ricevuta salvata non basta.
+#[tauri::command]
+async fn mobile_verify_tree(
+    app: AppHandle,
+    grant: mobile::MobileTreeGrant,
+) -> Result<mobile::MobilePermissionState, PluginError> {
+    #[cfg(mobile)]
+    return Ok(on_tree(&app, move |tree| Ok(tree.verify(&grant)))
+        .await
+        .unwrap_or(mobile::MobilePermissionState::Unknown));
+    #[cfg(not(mobile))]
+    {
+        let _ = (app, grant);
+        Ok(mobile::MobilePermissionState::Unknown)
+    }
+}
+
+/// iOS: apre l'accesso alla cartella e ne restituisce il path, che da qui in
+/// poi `open_vault` accetta. Android non ha un path: la cartella si copia.
+#[tauri::command]
+async fn mobile_open_shared(
+    app: AppHandle,
+    host: State<'_, Host>,
+    grant: mobile::MobileTreeGrant,
+) -> Result<String, PluginError> {
+    #[cfg(mobile)]
+    let opened = on_tree(&app, move |tree| tree.open_shared(&grant))
+        .await
+        .map(Utf8PathBuf::into_string);
+    #[cfg(not(mobile))]
+    let opened = {
+        let _ = (app, grant);
+        Err(no_native_tree())
+    };
+    for_the_shell(&host, None, opened)
+}
+
+/// Chiude la cartella condivisa aperta: prima il vault, poi l'accesso del
+/// sistema. Restituisce ciò che non è diventato durevole chiudendo, come
+/// `close_vault`.
+#[tauri::command]
+async fn mobile_close_shared(
+    app: AppHandle,
+    host: State<'_, Host>,
+    windows: State<'_, document_windows::DocumentWindows>,
+) -> Result<Vec<PluginError>, PluginError> {
+    #[cfg(mobile)]
+    {
+        let Some(tree) = app.try_state::<tree_access::TreeAccess>() else {
+            return Ok(Vec::new());
+        };
+        let Some(root) = tree.shared_root() else {
+            return Ok(Vec::new());
+        };
+        let report = if host.vaults().iter().any(|open| *open == root) {
+            for_the_shell(
+                &host,
+                None,
+                document_windows::close_vault(&host, &windows, root.as_str()),
+            )?
+        } else {
+            Vec::new()
+        };
+        let closing = app.clone();
+        let _ = on_tree(&closing, |tree| {
+            tree.close_shared();
+            Ok(())
+        })
+        .await;
+        Ok(report)
+    }
+    #[cfg(not(mobile))]
+    {
+        let _ = (app, host, windows);
+        Ok(Vec::new())
+    }
+}
+
+/// Android: copia la cartella condivisa in una sottocartella nuova del vault
+/// privato. Niente si sovrascrive; il vault da aprire è il privato.
+#[tauri::command]
+async fn mobile_copy_tree(
+    app: AppHandle,
+    host: State<'_, Host>,
+    grant: mobile::MobileTreeGrant,
+) -> Result<MobileCopy, PluginError> {
+    #[cfg(mobile)]
+    let copied = {
+        let private = mobile::private_vault_root(&app);
+        on_tree(&app, move |tree| {
+            let private = private.ok_or_else(no_native_tree)?;
+            let (folder, copied) = tree.copy_into(&grant, &private)?;
+            Ok(MobileCopy {
+                vault: private.into_string(),
+                folder: folder.into_string(),
+                copied,
+            })
+        })
+        .await
+    };
+    #[cfg(not(mobile))]
+    let copied = {
+        let _ = (app, grant);
+        Err(no_native_tree())
+    };
+    for_the_shell(&host, None, copied)
+}
+
+/// L'esito di `mobile_copy_tree`: il vault da aprire, la cartella nuova e
+/// quanto è stato copiato.
+#[derive(serde::Serialize)]
+#[cfg_attr(not(mobile), allow(dead_code))]
+struct MobileCopy {
+    vault: String,
+    folder: String,
+    #[serde(flatten)]
+    copied: tree_access::Copied,
 }
 
 // --- La sessione live (ADR 0205) ---
@@ -2303,6 +2511,12 @@ pub fn run() {
             }
         }));
     }
+    // Il ponte nativo delle cartelle condivise: nessun comando suo, lo
+    // raggiungono soltanto i comandi `mobile_*` qui sopra (`tree_access.rs`).
+    #[cfg(mobile)]
+    {
+        builder = builder.plugin(tree_access::init());
+    }
     builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init());
@@ -2450,6 +2664,11 @@ pub fn run() {
             mobile_classify_opened_url,
             mobile_register_tree_grant,
             mobile_shared_mount_mode,
+            mobile_pick_tree,
+            mobile_verify_tree,
+            mobile_open_shared,
+            mobile_close_shared,
+            mobile_copy_tree,
             live_start,
             live_pairing,
             live_send,

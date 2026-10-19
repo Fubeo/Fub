@@ -1245,6 +1245,22 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.viewer.not_opened", "La finestra del visore web non si è aperta: {reason}")
         .with("host.viewer.bad_action", "«{action}» non è un gesto del visore web.")
         .with("host.viewer.not_open", "Il visore web non è aperto.")
+        .with(
+            "host.mobile.shared_path",
+            "La cartella condivisa non ha un percorso utilizzabile.",
+        )
+        .with(
+            "host.mobile.native_failed",
+            "Il sistema non ha risposto sulla cartella condivisa: {reason}",
+        )
+        .with(
+            "host.mobile.copy_only",
+            "Su questo dispositivo la cartella condivisa si apre come copia nel vault privato.",
+        )
+        .with(
+            "host.mobile.no_native",
+            "La cartella condivisa richiede l'app mobile.",
+        )
         .with("host.viewer.action_failed", "Il gesto del visore web non è riuscito: {reason}")
         .with("host.web.clip.status", "Il sito ha risposto {status} per {url}: la pagina non è stata salvata.")
         .with("host.web.clip.not_html", "La risposta è {kind}, non una pagina web: non è stata salvata.")
@@ -1624,6 +1640,19 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.viewer.not_opened", "The web viewer window did not open: {reason}")
         .with("host.viewer.bad_action", "“{action}” is not a web viewer gesture.")
         .with("host.viewer.not_open", "The web viewer is not open.")
+        .with(
+            "host.mobile.shared_path",
+            "The shared folder has no usable path.",
+        )
+        .with(
+            "host.mobile.native_failed",
+            "The system did not answer about the shared folder: {reason}",
+        )
+        .with(
+            "host.mobile.copy_only",
+            "On this device the shared folder opens as a copy in the private vault.",
+        )
+        .with("host.mobile.no_native", "The shared folder needs the mobile app.")
         .with("host.viewer.action_failed", "The web viewer gesture failed: {reason}")
         .with("host.web.clip.status", "The site answered {status} for {url}: the page was not saved.")
         .with("host.web.clip.not_html", "The answer is {kind}, not a web page: it was not saved.")

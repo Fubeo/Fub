@@ -1,8 +1,8 @@
 // Fub — accesso tree SAF (MobileOwner P14/F37).
 //
 // Posizione finale: `gen/android/app/src/main/java/dev/fub/app/FubTreeAccess.kt`
-// dopo `cargo tauri android init`, fuso da `mobile/install-mobile.sh` (NON
-// eseguito qui: nessun SDK installato, nessuna licenza accettata).
+// dopo `cargo tauri android init`, fuso da `mobile/install-mobile.sh` (lo
+// esegue `.github/workflows/mobile.yml`).
 //
 // Canale reale per il vault condiviso: ACTION_OPEN_DOCUMENT_TREE con grant
 // persistable+prefix. Un file picker (ACTION_OPEN_DOCUMENT) NON conferisce
@@ -23,10 +23,8 @@ import android.provider.OpenableColumns
 
 object FubTreeAccess {
     /**
-     * Intent per il selettore di cartella. Va lanciato da MainActivity con un
-     * ActivityResultLauncher (wiring a cura di NativeIntegration: registrare il
-     * launcher e inoltrare l'URI risultante a `fub://mobile-tree?uri=...` verso
-     * `OpenedUrlKind::TreeGrant`, oppure a `mobile_register_tree_grant`).
+     * Intent per il selettore di cartella. Lo lancia `FubTreePlugin.pick`, e
+     * l'URI scelto torna a Rust (`tree_access.rs`) come grant da validare.
      */
     fun openTreeIntent(): Intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
         addFlags(

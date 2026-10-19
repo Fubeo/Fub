@@ -215,16 +215,6 @@ pub fn decide_shared_mount(
     MobileMountMode::ReadOnly
 }
 
-/// Reason readonly quando `decide_shared_mount` dice ReadOnly: il chiamante
-/// (SystemStorage/BinaryGuard via Main) la propaga come readonly-reason.
-pub fn shared_readonly_reason(backend_cas: bool) -> Option<&'static str> {
-    if backend_cas {
-        None
-    } else {
-        Some("vault condiviso senza CAS atomico: sola lettura, copia per gesto esplicito")
-    }
-}
-
 /// Dove sta un vault su mobile. Esplicito, mai implicito.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -904,22 +894,32 @@ pub fn mobile_register_tree_grant(grant: MobileTreeGrant) -> Result<MobileTreeGr
     Ok(grant)
 }
 
-/// Il webview non può attestare il grant OS né il CAS del provider: finché
-/// SystemStorage non fornisce un verificatore nativo al comando, la proposta
-/// resta NeedGrant. `decide_shared_mount` rimane la regola pura da usare SOLO
-/// dopo verifica OS nel confine di montaggio; mai fidarsi dei booleani IPC.
+/// Il webview non può attestare il grant OS né il CAS del provider: i suoi
+/// booleani non entrano nella decisione. Senza un verificatore nativo (sul
+/// desktop, o se il plugin nativo non c'è) la proposta resta NeedGrant.
 pub fn mobile_shared_mount_mode(
     grant: Option<MobileTreeGrant>,
     backend_cas: bool,
     copy_accepted: bool,
 ) -> MobileMountMode {
-    // La regola pura resta l'unica decisione documentata; finche' SystemStorage
-    // non fornisce un verificatore nativo, il confine di montaggio non si fida
-    // dei booleani IPC e la proposta resta NeedGrant.
-    let _rule = decide_shared_mount as fn(Option<&MobileTreeGrant>, bool, bool) -> MobileMountMode;
-    let _reason = shared_readonly_reason as fn(bool) -> Option<&'static str>;
     let _untrusted_proposal = (grant, backend_cas, copy_accepted);
     MobileMountMode::NeedGrant
+}
+
+/// La decisione dopo la verifica nativa: `permission` l'ha data il sistema
+/// operativo e `backend_cas` la piattaforma (`tree_access::backend_cas`), mai
+/// l'IPC. Un permesso che non è `Granted` è NeedGrant, sempre.
+#[cfg_attr(not(mobile), allow(dead_code))]
+pub fn verified_mount_mode(
+    grant: &MobileTreeGrant,
+    permission: MobilePermissionState,
+    backend_cas: bool,
+    copy_accepted: bool,
+) -> MobileMountMode {
+    if permission != MobilePermissionState::Granted {
+        return MobileMountMode::NeedGrant;
+    }
+    decide_shared_mount(Some(grant), backend_cas, copy_accepted)
 }
 #[cfg(mobile)]
 #[tauri::mobile_entry_point]
@@ -967,6 +967,23 @@ pub fn open_private_vault(
     std::fs::create_dir_all(root)
         .map_err(|e| PluginError::Io(format!("vault privato {root}: {e}").into()))?;
     host.open(root)
+}
+
+/// `open_vault` su mobile con la cartella condivisa: oltre al privato si apre
+/// soltanto `shared`, il path che il codice nativo ha consegnato per un grant
+/// verificato in questa sessione (`tree_access`). Il path che chiede il
+/// webview resta una domanda; quella cartella non si crea mai.
+#[cfg_attr(not(mobile), allow(dead_code))]
+pub fn open_mobile_vault(
+    host: &fub_host::Host,
+    private_root: Option<&Utf8Path>,
+    shared: Option<&Utf8Path>,
+    requested: &str,
+) -> Result<fub_host::VaultInfo, PluginError> {
+    match shared {
+        Some(shared) if shared == Utf8Path::new(requested) => host.open(shared),
+        _ => open_private_vault(host, private_root, requested),
+    }
 }
 
 /// Il vault da riaprire all'avvio: il privato, se è la scelta salvata. Senza
@@ -1111,6 +1128,43 @@ mod tests {
     }
 
     #[test]
+    fn only_a_granted_permission_reaches_the_mount_rule() {
+        let tree = MobileTreeGrant {
+            platform: MobileGrantPlatform::Android,
+            uri: "content://com.android.externalstorage.documents/tree/primary%3AFub".to_string(),
+            display_name: Some("Fub".to_string()),
+            persisted: true,
+            read_write: true,
+            bookmark_b64: None,
+        };
+        for refused in [
+            MobilePermissionState::Unknown,
+            MobilePermissionState::Denied,
+            MobilePermissionState::Revoked,
+        ] {
+            assert_eq!(
+                verified_mount_mode(&tree, refused, true, true),
+                MobileMountMode::NeedGrant
+            );
+        }
+        // Android, senza CAS: sola lettura, o copia per gesto esplicito.
+        let android = crate::tree_access::backend_cas(&tree);
+        assert_eq!(
+            verified_mount_mode(&tree, MobilePermissionState::Granted, android, false),
+            MobileMountMode::ReadOnly
+        );
+        assert_eq!(
+            verified_mount_mode(&tree, MobilePermissionState::Granted, android, true),
+            MobileMountMode::CopyImport
+        );
+        // Il booleano del webview non cambia niente: il comando non lo legge.
+        assert_eq!(
+            mobile_shared_mount_mode(Some(tree), true, false),
+            MobileMountMode::NeedGrant
+        );
+    }
+
+    #[test]
     fn tree_grant_rejects_file_picker_bypass() {
         let tree = MobileTreeGrant {
             platform: MobileGrantPlatform::Android,
@@ -1150,8 +1204,6 @@ mod tests {
             decide_shared_mount(Some(&tree), false, false),
             MobileMountMode::ReadOnly
         );
-        assert!(shared_readonly_reason(false).is_some());
-        assert!(shared_readonly_reason(true).is_none());
         assert_eq!(
             decide_shared_mount(Some(&tree), false, true),
             MobileMountMode::CopyImport
@@ -1264,6 +1316,36 @@ mod tests {
         // Riaprirlo dà lo stesso vault, non un secondo.
         open_private_vault(&host, Some(&root), root.as_str()).unwrap();
         assert_eq!(host.vaults().len(), 1);
+        assert!(host.close().is_empty());
+    }
+
+    #[test]
+    fn a_shared_folder_opens_only_when_the_native_side_handed_it_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = Utf8Path::from_path(dir.path()).unwrap();
+        let root = base.join("vaults").join(PRIVATE_VAULT_DIR);
+        let shared = base.join("iCloud").join("Appunti");
+        let host = fub_host::Host::new().with_watcher(Box::new(fub_host::NoWatcher));
+
+        // Senza consegna nativa la cartella condivisa è una domanda respinta.
+        assert!(matches!(
+            open_mobile_vault(&host, Some(&root), None, shared.as_str()),
+            Err(PluginError::Unserved(_))
+        ));
+        // Una cartella consegnata non apre un'altra cartella qualunque.
+        let other = base.join("Altro");
+        assert!(matches!(
+            open_mobile_vault(&host, Some(&root), Some(&shared), other.as_str()),
+            Err(PluginError::Unserved(_))
+        ));
+        assert!(!other.exists());
+
+        std::fs::create_dir_all(&shared).unwrap();
+        let info = open_mobile_vault(&host, Some(&root), Some(&shared), shared.as_str()).unwrap();
+        assert!(info.root.ends_with("Appunti"));
+        // Il privato resta raggiungibile accanto.
+        open_mobile_vault(&host, Some(&root), Some(&shared), root.as_str()).unwrap();
+        assert_eq!(host.vaults().len(), 2);
         assert!(host.close().is_empty());
     }
 }
