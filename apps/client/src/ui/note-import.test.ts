@@ -8,6 +8,7 @@ const fake = vi.hoisted(() => ({
 vi.mock("../host/ipc", () => ({ api: { invokeCommand: fake.invokeCommand } }));
 vi.mock("../host/query", () => ({ vaultFolders: () => Promise.resolve({ items: [], total: 0 }) }));
 
+const { zip } = await import("../__fixtures__/zip");
 const { forwardNotice } = await import("../state/kernel");
 const { state } = await import("../state/store");
 const { airtableBase, notionId, openNoteImport, planOf, queuedJob, savedTokens, sourceJson, tally } = await import("./note-import");
@@ -140,24 +141,24 @@ describe("la finestra «Importa note»", () => {
   });
 
   it("un job che fallisce lascia l'errore nella finestra, e un file troppo grande non parte", async () => {
-    openNoteImport({}, host(), { file: new File(["x"], "x.zip") });
+    openNoteImport({}, host(), { file: new File(["x"], "x.bin") });
     const form = document.querySelector<HTMLFormElement>(".note-import-form")!;
     fake.invokeCommand.mockResolvedValueOnce(queued("8"));
     form.requestSubmit();
     await settle();
-    done("8", { Err: { kind: "bad_args", message: "no importer for `x.zip`" } });
+    done("8", { Err: { kind: "bad_args", message: "no importer for `x.bin`" } });
     await settle();
     expect(document.querySelector(".note-import-alert")!.textContent).toContain("no importer");
 
     document.body.replaceChildren();
-    const big = new File(["x"], "grande.zip");
+    const big = new File(["x"], "grande.enex");
     Object.defineProperty(big, "size", { value: 65 * 1024 * 1024 });
     fake.invokeCommand.mockClear();
     openNoteImport({}, host(), { file: big });
     document.querySelector<HTMLFormElement>(".note-import-form")!.requestSubmit();
     await settle();
     expect(fake.invokeCommand).not.toHaveBeenCalled();
-    expect(document.querySelector(".note-import-alert")!.textContent).toContain("grande.zip");
+    expect(document.querySelector(".note-import-alert")!.textContent).toContain("grande.enex");
   });
 
   it("da Notion: il token si salva sulla macchina, e la richiesta porta soltanto l'id", async () => {
@@ -201,5 +202,43 @@ describe("la finestra «Importa note»", () => {
     expect(request.options).toEqual({ page_id: "0123456789abcdef0123456789abcdef" });
     expect(JSON.parse(String(prepare[1]!.source_json))).toEqual({ name: "notion://0123456789abcdef0123456789abcdef", media_type: null, content: { kind: "bytes", value: [] } });
     expect(String(prepare[1]!.request_json)).not.toContain("secret_abc");
+  });
+
+  it("un archivio oltre le 10 000 voci entra in parti: una anteprima ciascuna, poi in ordine, e l'annullamento all'indietro", async () => {
+    const items = Array.from({ length: 10_001 }, (_, index) => ({ name: `N/${index}.md`, body: new TextEncoder().encode(`# ${index}\n`) }));
+    const file = new File([await zip(items)], "Export.zip", { type: "application/zip" });
+    let next = 30;
+    const prepared: string[] = [];
+    fake.invokeCommand.mockImplementation((command, args) => {
+      const id = String(next++);
+      const job = String(args?.job ?? "");
+      const answer =
+        command === "import.prepare"
+          ? { Ok: { preview: { mode: "preview", documents: [{ doc: `Import/${job}.md`, outcome: { kind: "created" }, entry: null }], log: [] }, losses: [] } }
+          : command === "import.commit"
+            ? { Ok: { mode: "apply", documents: [{ doc: `Import/${job}.md`, outcome: { kind: "created" }, entry: null }], log: [] } }
+            : { Ok: { rolled_back: true } };
+      if (command === "import.prepare") prepared.push(String(JSON.parse(String(args!.source_json)).name));
+      setTimeout(() => done(id, answer), 0);
+      return Promise.resolve(queued(id));
+    });
+    openNoteImport({ folder: "Import" }, host(), { file });
+    const form = document.querySelector<HTMLFormElement>(".note-import-form")!;
+    form.requestSubmit();
+    for (let i = 0; i < 20 && prepared.length < 3; i++) await settle();
+    await settle();
+    expect(prepared).toEqual(["Export (parte 1 di 3).zip", "Export (parte 2 di 3).zip", "Export (parte 3 di 3).zip"]);
+    expect(document.querySelector(".note-import-plan")!.textContent).toContain("Export.zip, in 3 parti");
+    const jobs = fake.invokeCommand.mock.calls.filter(([command]) => command === "import.prepare").map(([, args]) => args!.job);
+
+    form.requestSubmit();
+    for (let i = 0; i < 20; i++) await settle();
+    const commits = fake.invokeCommand.mock.calls.filter(([command]) => command === "import.commit").map(([, args]) => args!.job);
+    expect(commits).toEqual(jobs);
+
+    [...form.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Annulla l'import")!.click();
+    for (let i = 0; i < 20; i++) await settle();
+    const rollbacks = fake.invokeCommand.mock.calls.filter(([command]) => command === "import.rollback").map(([, args]) => args!.job);
+    expect(rollbacks).toEqual([...jobs].reverse());
   });
 });

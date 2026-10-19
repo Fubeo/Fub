@@ -25,8 +25,28 @@ stessa finestra. L'import ha tre tappe, e solo la seconda scrive nel vault.
    rollback non lo tocca e lo dice.
 
 Chiudere la finestra dopo l'anteprima toglie la sorgente depositata
-(`import.cancel`). Un file che supera il tetto di una sorgente intera, 64 MiB,
-non parte.
+(`import.cancel`).
+
+### Archivi grandi
+
+Un import prende al più 64 MiB e 10 000 voci per volta. Un archivio ZIP più
+grande, come un export di Notion con le immagini o un vault con le foto, entra
+**in parti**. La finestra legge la directory dell'archivio senza caricarlo
+tutto, lo divide in parti da al più 48 MiB, 5 000 voci e 192 MiB decompressi, e
+riscrive ogni parte come un archivio piccolo con le voci copiate così come
+sono. Ogni parte è un import con la sua anteprima e la sua ricevuta:
+
+- il piano le mostra insieme, con le perdite di tutte;
+- «Importa» le esegue in ordine; se una parte fallisce, le seguenti restano in
+  attesa e «Importa» riprende da lì;
+- «Annulla l'import» toglie le parti entrate, dall'ultima alla prima.
+
+L'importer degli archivi tratta ogni voce da sola, e il nome nel vault viene
+dal suo path: dividere non cambia ciò che entra. Due voci che diventano lo
+stesso nome in parti diverse seguono la scelta sui conflitti, come una nota
+che c'è già. Una voce più grande di una parte (oltre 32 MiB decompressa) non
+entra e compare fra le perdite del piano. Un file che non è uno ZIP oltre i
+64 MiB non parte.
 
 ### Da Notion o da Airtable
 

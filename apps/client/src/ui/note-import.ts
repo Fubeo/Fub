@@ -14,6 +14,14 @@
 //    offre «Annulla l'import» (`import.rollback`), che rimette i file come
 //    erano finché nessuno li ha toccati dopo.
 //
+// # Archivi grandi
+//
+// Un archivio ZIP oltre 64 MiB o 10 000 voci non passa intero: la finestra ne
+// legge la directory e lo divide in parti (`zip-parts.ts`). Ogni parte è un job
+// con la sua anteprima e la sua ricevuta; il piano le mostra insieme, l'import
+// le esegue in ordine e l'annullamento le toglie dall'ultima. Una voce che non
+// sta in nessuna parte è fra le perdite del piano.
+//
 // # Notion e Airtable
 //
 // La sorgente può essere anche un connettore: allora non c'è un file ma l'id
@@ -37,6 +45,7 @@ import { state } from "../state/store";
 import { identifier } from "./a11y";
 import { actions, openFrame } from "./dialogs";
 import { openLifetime, type Lifetime } from "./lifetime";
+import { buildPart, partName, planParts, readDirectory, type ZipEntry } from "./zip-parts";
 import type { PaletteHost } from "./palette";
 
 /// Il comando che apre la finestra: è quello che la palette mostra.
@@ -45,6 +54,23 @@ export const IMPORT_PREPARE = "import.prepare";
 /// Quanto pesa al più una sorgente che passa intera dal confine: il tetto
 /// dell'importer (`MAX_SOURCE_BYTES`).
 export const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
+
+/// Quante voci ha al più un archivio che passa intero (`MAX_ENTRIES`).
+export const MAX_ARCHIVE_ENTRIES = 10_000;
+
+/// Una sorgente da depositare: un file, una parte di un archivio, un
+/// connettore. I byte si leggono quando tocca a lei.
+interface Piece {
+  readonly name: string;
+  readonly mediaType: string | null;
+  read(): Promise<Uint8Array>;
+  readonly extra: Record<string, unknown>;
+}
+
+/// Un archivio ZIP, dall'estensione o dal tipo.
+function isZip(file: File): boolean {
+  return /\.zip$/i.test(file.name) || file.type === "application/zip" || file.type === "application/x-zip-compressed";
+}
 
 /// Quante note dell'anteprima si elencano una per una.
 const LISTED = 50;
@@ -251,22 +277,21 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
   let closed = false;
   let busy = false;
   let file: File | null = options.file ?? null;
-  /// Il job depositato e non ancora importato: chiudendo, si toglie.
-  let staged: string | null = null;
-  /// Il job importato, finché lo si può annullare.
-  let committed: string | null = null;
+  /// I job depositati e non ancora importati, uno per parte: chiudendo, si
+  /// tolgono.
+  let staged: string[] = [];
+  /// I job importati, finché li si può annullare.
+  let committed: string[] = [];
 
   const finish = (): void => {
     if (closed) return;
     closed = true;
     if (current === finish) current = null;
     const leftover = staged;
-    staged = null;
+    staged = [];
     life.close();
     frame.close();
-    if (leftover !== null) {
-      dropStaged(leftover);
-    }
+    for (const job of leftover) dropStaged(job);
   };
   current = finish;
   const frame = openFrame(t("import.title"), finish);
@@ -485,7 +510,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
         tokenInput.focus();
         return;
       }
-      await staging(source.name, null, new Uint8Array(), source.options, which === "notion" ? "Notion" : "Airtable");
+      await staging([{ name: source.name, mediaType: null, read: () => Promise.resolve(new Uint8Array()), extra: source.options }], which === "notion" ? "Notion" : "Airtable", []);
       return;
     }
     if (file === null) {
@@ -493,42 +518,78 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
       choose.focus();
       return;
     }
-    if (file.size > MAX_IMPORT_BYTES) {
-      showError(t("import.error.too_big", { name: file.name, max: MAX_IMPORT_BYTES / (1024 * 1024) }));
-      return;
-    }
-    working(true, t("import.reading"));
-    let bytes: Uint8Array;
-    try {
-      bytes = new Uint8Array(await file.arrayBuffer());
-    } catch (error) {
-      if (!closed) {
-        showError(t("import.error.failed", { reason: errorText(error) }));
-        working(false);
-      }
-      return;
-    }
-    if (closed) return;
-    await staging(file.name, file.type === "" ? null : file.type, bytes, {}, file.name);
-  };
-
-  /// Deposita la sorgente e mostra il piano.
-  const staging = async (name: string, mediaType: string | null, bytes: Uint8Array, extra: Record<string, unknown>, label: string): Promise<void> => {
-    working(true, t("import.preparing"));
-    try {
-      const job = newJobId();
-      const request = { mode: "apply", folder: folder.value.trim().replace(/^\/+|\/+$/g, ""), on_conflict: conflict.value, options: extra };
-      const manifest = await runTransfer(IMPORT_PREPARE, { job, source_json: sourceJson(name, mediaType, bytes), request_json: JSON.stringify(request) });
-      if (closed) {
-        // La finestra è andata via durante l'anteprima: la sorgente
-        // depositata non serve a nessuno.
-        dropStaged(job);
+    const chosen = file;
+    const mediaType = chosen.type === "" ? null : chosen.type;
+    if (isZip(chosen)) {
+      // Un archivio si legge prima dalla directory: se non passa intero, si
+      // divide in parti che passano.
+      working(true, t("import.reading"));
+      let entries: ZipEntry[];
+      try {
+        entries = await readDirectory(chosen);
+      } catch (error) {
+        if (!closed) {
+          showError(t("import.error.failed", { reason: errorText(error) }));
+          working(false);
+        }
         return;
       }
-      staged = job;
-      const result = planOf(manifest);
-      showPlan(t("import.plan", { name: label }), result);
-      const count = tally(result.documents);
+      if (closed) return;
+      if (chosen.size > MAX_IMPORT_BYTES || entries.length > MAX_ARCHIVE_ENTRIES) {
+        const { parts, oversized } = planParts(entries);
+        const losses = oversized.map((entry) => t("import.parts.oversized", { name: entry.name, size: Math.ceil(entry.size / (1024 * 1024)) }));
+        if (parts.length === 0) {
+          showError(t("import.error.nothing_fits", { name: chosen.name }));
+          working(false);
+          return;
+        }
+        const pieces = parts.map((part, index) => ({
+          name: partName(chosen.name, t("import.parts.suffix", { index: index + 1, count: parts.length })),
+          mediaType,
+          read: () => buildPart(chosen, part),
+          extra: {},
+        }));
+        await staging(pieces, t("import.parts.plan", { name: chosen.name, count: parts.length }), losses);
+        return;
+      }
+    }
+    if (chosen.size > MAX_IMPORT_BYTES) {
+      showError(t("import.error.too_big", { name: chosen.name, max: MAX_IMPORT_BYTES / (1024 * 1024) }));
+      return;
+    }
+    await staging([{ name: chosen.name, mediaType, read: async () => new Uint8Array(await chosen.arrayBuffer()), extra: {} }], chosen.name, []);
+  };
+
+  /// Deposita le sorgenti, una parte dopo l'altra, e mostra il piano di
+  /// tutte. Se una parte non passa l'anteprima, si tolgono anche quelle già
+  /// depositate: un piano a metà non si importa.
+  const staging = async (pieces: readonly Piece[], label: string, losses: readonly string[]): Promise<void> => {
+    working(true, t("import.preparing"));
+    const jobs: string[] = [];
+    const merged: ImportPlan = { documents: [], log: [], losses: [...losses] };
+    try {
+      for (const [index, piece] of pieces.entries()) {
+        if (pieces.length > 1) status.textContent = t("import.parts.preparing", { index: index + 1, count: pieces.length });
+        const bytes = await piece.read();
+        if (closed) break;
+        const job = newJobId();
+        const request = { mode: "apply", folder: folder.value.trim().replace(/^\/+|\/+$/g, ""), on_conflict: conflict.value, options: piece.extra };
+        jobs.push(job);
+        const result = planOf(await runTransfer(IMPORT_PREPARE, { job, source_json: sourceJson(piece.name, piece.mediaType, bytes), request_json: JSON.stringify(request) }));
+        merged.documents.push(...result.documents);
+        merged.log.push(...result.log);
+        merged.losses.push(...result.losses);
+        if (closed) break;
+      }
+      if (closed) {
+        // La finestra è andata via durante l'anteprima: le sorgenti
+        // depositate non servono a nessuno.
+        for (const job of jobs) dropStaged(job);
+        return;
+      }
+      staged = jobs;
+      showPlan(t("import.plan", { name: label }), merged);
+      const count = tally(merged.documents);
       fields.hidden = true;
       submit.textContent = t("import.commit", { count: count.created + count.replaced });
       submit.disabled = count.created + count.replaced === 0;
@@ -538,48 +599,63 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
       if (!submit.disabled) submit.focus();
       return;
     } catch (error) {
+      for (const job of jobs) dropStaged(job);
       if (!closed) showError(t("import.error.failed", { reason: errorText(error) }));
     }
     if (!closed) working(false);
   };
 
+  /// Importa le parti in ordine. Una parte che fallisce ferma le seguenti, che
+  /// restano depositate: «Importa» riprende da lì, «Annulla l'import» toglie
+  /// quelle già entrate.
   const commit = async (): Promise<void> => {
-    if (staged === null) return;
-    const job = staged;
+    if (staged.length === 0) return;
     working(true, t("import.committing"));
+    const total = staged.length + committed.length;
+    const merged: ImportPlan = { documents: [], log: [], losses: [] };
     try {
-      const report = await runTransfer("import.commit", { job });
-      staged = null;
-      committed = job;
-      if (closed) {
-        host.notify(t("import.done", { count: tally(planOf({ preview: report }).documents).created }), "info");
-        return;
+      while (staged.length > 0) {
+        const job = staged[0]!;
+        if (total > 1) status.textContent = t("import.parts.committing", { index: committed.length + 1, count: total });
+        const report = await runTransfer("import.commit", { job });
+        staged = staged.slice(1);
+        committed = [...committed, job];
+        const result = planOf({ preview: report });
+        merged.documents.push(...result.documents);
+        merged.log.push(...result.log);
       }
-      const result = planOf({ preview: report });
-      const count = tally(result.documents);
-      showPlan(t("import.done_title"), result);
+      const count = tally(merged.documents);
+      host.notify(t("import.done", { count: count.created + count.replaced }), "info");
+      if (closed) return;
+      showPlan(t("import.done_title"), merged);
       submit.hidden = true;
       undo.hidden = false;
       cancel.textContent = t("app.close");
-      host.notify(t("import.done", { count: count.created + count.replaced }), "info");
       working(false);
       cancel.focus();
     } catch (error) {
-      if (closed) host.notify(t("import.error.failed", { reason: errorText(error) }), "guasto");
+      const reason = errorText(error);
+      const message = total > 1 && committed.length > 0 ? t("import.error.part_failed", { done: committed.length, count: total, reason }) : t("import.error.failed", { reason });
+      if (closed) host.notify(message, "guasto");
       else {
-        showError(t("import.error.failed", { reason: errorText(error) }));
+        if (merged.documents.length > 0) showPlan(t("import.done_title"), merged);
+        showError(message);
+        undo.hidden = committed.length === 0;
         working(false);
       }
     }
   };
 
+  /// Annulla le parti importate, dall'ultima alla prima.
   const rollback = async (): Promise<void> => {
-    if (committed === null || busy) return;
-    const job = committed;
+    if (committed.length === 0 || busy) return;
     working(true, t("import.rolling_back"));
     try {
-      await runTransfer("import.rollback", { job });
-      committed = null;
+      while (committed.length > 0) {
+        const job = committed[committed.length - 1]!;
+        await runTransfer("import.rollback", { job });
+        committed = committed.slice(0, -1);
+      }
       if (closed) return;
       undo.hidden = true;
       plan.replaceChildren(element("p", "note-import-tally", t("import.rolled_back")));
@@ -635,7 +711,7 @@ export function openNoteImport(prefill: Readonly<Record<string, string>>, host: 
     event.preventDefault();
     if (busy || closed) return;
     alert.replaceChildren();
-    void (staged === null ? preview() : commit());
+    void (staged.length === 0 ? preview() : commit());
   });
 
   if (connectors) void refreshTokens();
