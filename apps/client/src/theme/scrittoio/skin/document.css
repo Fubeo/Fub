@@ -374,14 +374,16 @@
 .markdown-rendered .callout[data-callout="info"],
 .markdown-rendered .callout[data-callout="abstract"],
 .markdown-rendered .callout[data-callout="summary"],
-.markdown-rendered .callout[data-callout="todo"] {
+.markdown-rendered .callout[data-callout="todo"],
+.markdown-rendered .callout[data-callout="tldr"] {
   background: var(--info-wash);
 }
 .markdown-rendered .callout[data-callout="note"] > .callout-title,
 .markdown-rendered .callout[data-callout="info"] > .callout-title,
 .markdown-rendered .callout[data-callout="abstract"] > .callout-title,
 .markdown-rendered .callout[data-callout="summary"] > .callout-title,
-.markdown-rendered .callout[data-callout="todo"] > .callout-title {
+.markdown-rendered .callout[data-callout="todo"] > .callout-title,
+.markdown-rendered .callout[data-callout="tldr"] > .callout-title {
   color: var(--info);
 }
 .markdown-rendered .callout[data-callout="tip"],
@@ -402,29 +404,45 @@
 .markdown-rendered .callout[data-callout="caution"],
 .markdown-rendered .callout[data-callout="attention"],
 .markdown-rendered .callout[data-callout="important"],
-.markdown-rendered .callout[data-callout="question"] {
+.markdown-rendered .callout[data-callout="question"],
+.markdown-rendered .callout[data-callout="help"],
+.markdown-rendered .callout[data-callout="faq"] {
   background: var(--warning-wash);
 }
 .markdown-rendered .callout[data-callout="warning"] > .callout-title,
 .markdown-rendered .callout[data-callout="caution"] > .callout-title,
 .markdown-rendered .callout[data-callout="attention"] > .callout-title,
 .markdown-rendered .callout[data-callout="important"] > .callout-title,
-.markdown-rendered .callout[data-callout="question"] > .callout-title {
+.markdown-rendered .callout[data-callout="question"] > .callout-title,
+.markdown-rendered .callout[data-callout="help"] > .callout-title,
+.markdown-rendered .callout[data-callout="faq"] > .callout-title {
   color: var(--warning);
 }
 .markdown-rendered .callout[data-callout="danger"],
 .markdown-rendered .callout[data-callout="error"],
 .markdown-rendered .callout[data-callout="failure"],
 .markdown-rendered .callout[data-callout="fail"],
-.markdown-rendered .callout[data-callout="bug"] {
+.markdown-rendered .callout[data-callout="bug"],
+.markdown-rendered .callout[data-callout="missing"] {
   background: var(--danger-wash);
 }
 .markdown-rendered .callout[data-callout="danger"] > .callout-title,
 .markdown-rendered .callout[data-callout="error"] > .callout-title,
 .markdown-rendered .callout[data-callout="failure"] > .callout-title,
 .markdown-rendered .callout[data-callout="fail"] > .callout-title,
-.markdown-rendered .callout[data-callout="bug"] > .callout-title {
+.markdown-rendered .callout[data-callout="bug"] > .callout-title,
+.markdown-rendered .callout[data-callout="missing"] > .callout-title {
   color: var(--danger);
+}
+.markdown-rendered .callout[data-callout="example"] {
+  background: var(--accent-wash);
+}
+.markdown-rendered .callout[data-callout="example"] > .callout-title {
+  color: var(--accent);
+}
+.markdown-rendered .callout[data-callout="quote"] > .callout-title,
+.markdown-rendered .callout[data-callout="cite"] > .callout-title {
+  color: var(--doc-gutter-fg);
 }
 
 /* ── Elenchi e caselle ───────────────────────────────────────────────────── */
