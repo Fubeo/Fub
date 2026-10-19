@@ -1258,6 +1258,14 @@ describe("una sessione e le sue superfici", () => {
     expect(row("Benvenuto")).toBeTruthy();
   });
 
+  it("«Aggiungi ai segnalibri» dal menu della riga salva la nota tra i segnalibri", async () => {
+    await start(VAULT);
+    await contextMenu(row("Benvenuto"), "Aggiungi ai segnalibri");
+    const { listBookmarks } = await import("./state/bookmarks");
+    await waitFor("il segnalibro è salvato", () =>
+      listBookmarks().some((b) => b.target.k === "doc" && b.title.includes("Benvenuto")));
+  });
+
   it("la rinomina non stacca le superfici: due riquadri restano una sessione", async () => {
     const host = await start(VAULT);
     document.dispatchEvent(

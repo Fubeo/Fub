@@ -57,6 +57,7 @@ import { writeClipboardText } from "../platform/clipboard";
 import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { canShowFile, focusEditor, openDocument, openDocumentBeside } from "../state/document-controller";
+import { addBookmark, loadBookmarks, type BookmarkTarget } from "../state/bookmarks";
 import { openCurrentInNewWindow } from "../state/document-windows";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
 import { contextMenuItems, hasContextMenuViews, type ContextTarget } from "../ui/context-views";
@@ -864,6 +865,7 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     { label: t("explorer.open_window"), run: () => void openCurrentInNewWindow(id) },
     { label: t("explorer.duplicate"), run: () => void duplicateEntry(id) },
     { label: t("explorer.copy_path"), run: () => void copyPath(id) },
+    { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "doc", doc: id }, id) },
     ...(move ? [move] : []),
     { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
     { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, id) },
@@ -1112,6 +1114,7 @@ function folderMenu(at: MouseEvent, path: string): void {
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
       { label: t("explorer.copy_path"), run: () => void copyPath(path) },
+      { label: t("explorer.bookmark"), run: () => void bookmarkEntry({ k: "folder", path }, path) },
       { label: t("explorer.search_in_folder"), run: () => searchInFolder(path) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
       { label: t("explorer.as_space"), run: () => addSpace(path) },
@@ -1433,6 +1436,15 @@ async function duplicateEntry(id: string): Promise<void> {
 }
 
 /// Il percorso della voce relativo al vault, negli appunti.
+/// «Segnalibro» dal menu di una riga: carica prima lo stato salvato, così
+/// l'aggiunta non parte da una memoria vuota.
+async function bookmarkEntry(target: BookmarkTarget, path: string): Promise<void> {
+  await loadBookmarks();
+  const title = path.split("/").filter(Boolean).pop() ?? path;
+  if (addBookmark(title, target)) notify(t("bookmarks.saved"), "info");
+  else notify(t("bookmarks.save_failed"), "guasto");
+}
+
 async function copyPath(path: string): Promise<void> {
   try {
     await writeClipboardText(path);
