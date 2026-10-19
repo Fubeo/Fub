@@ -15,8 +15,12 @@
 //! - una rinomina che cambierebbe lo slug di un omonimo (`titolo-1`), perché
 //!   i link a quell'omonimo cambierebbero bersaglio senza essere riscritti.
 //!
-//! I link Markdown con frammento (`[x](Nota.md#titolo)`) restano com'erano: il
-//! loro frammento è uno slug di un'altra grammatica.
+//! Un link Markdown con frammento (`[x](Nota.md#titolo)`, `[x](#Titolo%20due)`)
+//! cambia nel modo in cui era scritto: uno slug diventa lo slug nuovo, un
+//! testo diventa il testo nuovo con gli spazi e i segni che chiuderebbero la
+//! destinazione in percent-encoding. Un link che non si ritrova byte per byte
+//! nel sorgente (una destinazione con escape, un link per riferimento) resta
+//! com'era.
 //!
 //! Come `tag.rename`, le revisioni si fissano prima di scrivere, l'anteprima
 //! mostra il piano e un documento cambiato nel frattempo fallisce il suo CAS.
@@ -31,6 +35,7 @@ use fub_abi::model::{
     canonical_anchor, heading_matches, parse_wikilink_inner, DocId, Heading, HeadingSlugs, Link,
     LinkTarget, Span,
 };
+use fub_abi::rules::path::{percent_decode, split_fragment};
 use fub_abi::text::{Arg, Text};
 use fub_abi::traits::{CommandProvider, HostApi, IndexQuery, IndexResult};
 
@@ -171,6 +176,14 @@ fn link_edits(
 ) -> Result<Vec<TextEdit>, PluginError> {
     let mut edits = Vec::new();
     for link in links {
+        if let LinkTarget::Path(raw) = &link.target {
+            if let Some(edit) = markdown_edit(source, link, raw, outline, index, renamed)? {
+                if points_here(&link.target)? {
+                    edits.push(edit);
+                }
+            }
+            continue;
+        }
         let LinkTarget::Wiki {
             page,
             heading: Some(written),
@@ -217,6 +230,68 @@ fn link_edits(
     Ok(edits)
 }
 
+/// L'edit del frammento di un link Markdown che oggi porta al titolo
+/// `index`, senza ancora chiedere a quale documento porta la sua pagina.
+fn markdown_edit(
+    source: &str,
+    link: &Link,
+    raw: &str,
+    outline: &[Heading],
+    index: usize,
+    renamed: &Heading,
+) -> Result<Option<TextEdit>, PluginError> {
+    let (path, fragment) = split_fragment(raw);
+    let Some(point) = fragment.strip_prefix('#') else {
+        return Ok(None);
+    };
+    let decoded = percent_decode(point);
+    let written = decoded.trim();
+    if written.is_empty() || written.contains('^') {
+        return Ok(None); // un blocco, o niente: il titolo non c'entra
+    }
+    if first_match(outline, written) != Some(index) || heading_matches(written, renamed) {
+        return Ok(None);
+    }
+    let Some(text) = source.get(link.span.start..link.span.end) else {
+        return Ok(None);
+    };
+    // La destinazione com'è scritta, dopo `](`: se non la si ritrova tale e
+    // quale (escape, link per riferimento) non si indovina dove sia.
+    let Some(open) = text.find("](") else {
+        return Ok(None);
+    };
+    let Some(at) = text[open..].find(raw).map(|found| open + found) else {
+        return Ok(None);
+    };
+    let next = if written == outline[index].slug {
+        renamed.slug.clone()
+    } else {
+        encoded_fragment(&renamed.text)
+    };
+    if !heading_matches(&percent_decode(&next), renamed) {
+        return Ok(None);
+    }
+    let start = link.span.start + at + path.len() + 1;
+    Ok(Some(TextEdit::replace(
+        Span::new(start, start + point.len()),
+        next,
+    )))
+}
+
+/// Il testo di un titolo come frammento di una destinazione Markdown: gli
+/// spazi e i segni che la chiuderebbero, o che si leggerebbero come una
+/// sequenza, in `%XX`, come li scrive Obsidian.
+fn encoded_fragment(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            ' ' | '%' | '(' | ')' | '<' | '>' | '\\' => out.push_str(&format!("%{:02X}", c as u32)),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 fn resolves_to(
     host: &dyn HostApi,
     target: &LinkTarget,
@@ -226,12 +301,18 @@ fn resolves_to(
     if target.names_host() {
         return Ok(from == doc);
     }
-    let LinkTarget::Wiki { page, .. } = target else {
-        return Ok(false);
+    let page = match target {
+        LinkTarget::Wiki { page, .. } => LinkTarget::wiki(page.clone()),
+        LinkTarget::Path(raw) => match split_fragment(raw).0 {
+            // `[x](#titolo)`: la pagina è quella che ospita il link.
+            path if path.trim().is_empty() => return Ok(from == doc),
+            path => LinkTarget::Path(path.to_string()),
+        },
+        LinkTarget::Url(_) => return Ok(false),
     };
     Ok(matches!(
         host.query_index(IndexQuery::Resolve {
-            target: LinkTarget::wiki(page.clone()),
+            target: page,
             from: Some(from.clone()),
         })?,
         IndexResult::Resolved(Some(found)) if found.doc == *doc
@@ -311,7 +392,7 @@ fn rename_heading(
         outline,
         index,
         &renamed,
-        |target| Ok(target.names_host()),
+        |target| resolves_to(host, target, &doc, &doc),
     )?);
     own.sort_by_key(|edit| edit.span.start);
     let mut plans = vec![PlannedEdit::new(

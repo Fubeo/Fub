@@ -133,3 +133,34 @@ fn a_rename_that_would_mislead_the_links_is_refused() {
     }
     assert_eq!(vault.read("Nota.md"), body);
 }
+
+#[test]
+fn markdown_links_keep_the_way_their_fragment_was_written() {
+    let vault = Vault::new();
+    let nota =
+        "## Piano iniziale\n\n[qui](#piano-iniziale) e [[Nota#Piano iniziale]].\n\n## Altro\n";
+    let c = "[uno](Nota.md#piano-iniziale) [due](Nota.md#Piano%20iniziale) \
+             [tre](<Nota.md#Piano iniziale>) [quattro](Altra.md#piano-iniziale) \
+             [cinque](Nota.md#altro) [sei](Nota.md#^blocco)\n";
+    vault.put("Nota.md", nota);
+    vault.put("c.md", c);
+    vault.put("Altra.md", ALTRA);
+    let mut ws = vault.open();
+    let args = serde_json::json!({"doc": "Nota.md", "heading": "Piano iniziale", "new_heading": "Piano finale"});
+    let done = ws
+        .invoke_command(HEADING_RENAME, args, InvokeMode::Apply, Actor::User)
+        .unwrap();
+    assert!(done.partial.is_none(), "{:?}", done.partial);
+    assert_eq!(
+        vault.read("Nota.md"),
+        "## Piano finale\n\n[qui](#piano-finale) e [[Nota#Piano finale]].\n\n## Altro\n",
+        "un link della nota a sé stessa, scritto col suo nome, è un link a questo titolo"
+    );
+    assert_eq!(
+        vault.read("c.md"),
+        "[uno](Nota.md#piano-finale) [due](Nota.md#Piano%20finale) \
+         [tre](<Nota.md#Piano%20finale>) [quattro](Altra.md#piano-iniziale) \
+         [cinque](Nota.md#altro) [sei](Nota.md#^blocco)\n"
+    );
+    assert_eq!(vault.read("Altra.md"), ALTRA);
+}
