@@ -57,6 +57,16 @@ type Item =
   | { kind: "literal"; literal: QueryLiteral }
   | { kind: "group"; alternatives: Item[][] };
 
+/// I predicati che dicono «senza distinguere le maiuscole» **per sé**
+/// (`ignore-case:`): l'opzione «maiuscole» della barra non li tocca. Una
+/// identità e non un campo del predicato, perché il contratto Rust non ha dove
+/// metterla: lì l'opzione globale non esiste.
+const CASE_IGNORED = new WeakSet<object>();
+
+export function ignoresCase(predicate: object): boolean {
+  return CASE_IGNORED.has(predicate);
+}
+
 function textPredicate(text: string, mode: TextMode, fields: TextField[], caseSensitive: boolean): QueryPredicate {
   return {
     kind: "text",
@@ -108,7 +118,10 @@ function markPartial(clauses: QueryClause[]): void {
 }
 
 function cloneLiteral(lit: QueryLiteral): QueryLiteral {
-  return JSON.parse(JSON.stringify(lit)) as QueryLiteral;
+  const copy = JSON.parse(JSON.stringify(lit)) as QueryLiteral;
+  // La copia è un altro oggetto: il marchio di `ignore-case:` va rimesso.
+  if (CASE_IGNORED.has(lit.predicate)) CASE_IGNORED.add(copy.predicate);
+  return copy;
 }
 
 function distribute(items: Item[], end: number): QueryClause[] {
@@ -374,6 +387,11 @@ const OPERATORS: Record<string, (value: string, quoted: boolean) => QueryPredica
   content: (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", ["body"], false),
   heading: (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", ["heading"], false),
   "match-case": (value, quoted) => textPredicate(value, quoted ? "phrase" : "terms", [], true),
+  "ignore-case": (value, quoted) => {
+    const predicate = textPredicate(value, quoted ? "phrase" : "terms", [], false);
+    CASE_IGNORED.add(predicate);
+    return predicate;
+  },
   ext: (value) => {
     const extension = value.replace(/^\.+/, "");
     return extension === "" || /[/\\.]/.test(extension) ? null : { kind: "file", extension };

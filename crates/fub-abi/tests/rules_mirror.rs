@@ -760,7 +760,7 @@ fn search_syntax_cases() -> Vec<Value> {
             "path:*.canvas file:\"Città del\" content:note heading:Obiettivi",
             false,
         ),
-        ("task:todo task:done match-case:API", false),
+        ("task:todo task:done match-case:API ignore-case:Api", false),
         ("/fo+\\/bar/ -/x/", false),
         (
             "[stato] [stato:attivo] [priorità:>2] [scadenza:<2026-10-01] [fatto:false]",

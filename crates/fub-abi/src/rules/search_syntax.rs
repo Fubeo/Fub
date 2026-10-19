@@ -23,7 +23,8 @@
 //! - operatori `nome:valore`, con valore anche fra virgolette: `tag:`,
 //!   `path:` (sottostringa, o glob se contiene `*`/`?`), `folder:`, `file:`
 //!   (nel nome), `content:` (nel corpo), `heading:`, `ext:`, `task:todo` /
-//!   `task:done`, `match-case:` (testo con maiuscole esatte);
+//!   `task:done`, `match-case:` (testo con maiuscole esatte), `ignore-case:` (testo senza
+//!   distinguere le maiuscole, anche quando la barra ha «maiuscole» acceso);
 //! - `line:`, `block:`, `section:` vogliono tutte le parole nella stessa riga,
 //!   nello stesso blocco o nella stessa sezione del corpo: più parole fra
 //!   parentesi, `line:(rosa spina)`, una frase fra virgolette o una parola
@@ -479,6 +480,7 @@ enum Operator {
     Ext,
     Task,
     MatchCase,
+    IgnoreCase,
     Line,
     Block,
     Section,
@@ -496,6 +498,7 @@ impl Operator {
             "ext" => Self::Ext,
             "task" => Self::Task,
             "match-case" => Self::MatchCase,
+            "ignore-case" => Self::IgnoreCase,
             "line" => Self::Line,
             "block" => Self::Block,
             "section" => Self::Section,
@@ -565,6 +568,7 @@ impl Operator {
             Self::Content => text_predicate(value, mode, vec![TextField::Body], false),
             Self::Heading => text_predicate(value, mode, vec![TextField::Heading], false),
             Self::MatchCase => text_predicate(value, mode, vec![], true),
+            Self::IgnoreCase => text_predicate(value, mode, vec![], false),
             Self::Ext => {
                 let extension = value.trim_start_matches('.');
                 if extension.is_empty() || extension.contains(['/', '\\', '.']) {

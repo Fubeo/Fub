@@ -391,7 +391,7 @@
       }
     },
     {
-      "input": "task:todo task:done match-case:API",
+      "input": "task:todo task:done match-case:API ignore-case:Api",
       "typing": false,
       "out": {
         "ok": {
@@ -422,6 +422,18 @@
                     "tolerance": "exact",
                     "partial_last_term": false,
                     "case_sensitive": true
+                  }
+                },
+                {
+                  "negated": false,
+                  "predicate": {
+                    "kind": "text",
+                    "text": "Api",
+                    "mode": "terms",
+                    "fields": [],
+                    "tolerance": "exact",
+                    "partial_last_term": false,
+                    "case_sensitive": false
                   }
                 }
               ]

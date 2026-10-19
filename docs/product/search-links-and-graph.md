@@ -38,7 +38,7 @@ e i blocchi `query` incorporati leggono le stesse parole allo stesso modo:
   `[chiave:>v]`, `[chiave:<v]`, con valori numerici, booleani o date ISO
   confrontati per specie;
 - gli operatori `tag:`, `path:`, `folder:`, `file:`, `content:`, `heading:`,
-  `ext:`, `task:todo`, `task:done` e `match-case:`, con valore anche fra
+  `ext:`, `task:todo`, `task:done` e `match-case:` e `ignore-case:` (quest’ultimo vince sull’opzione «maiuscole» della barra), con valore anche fra
   virgolette;
 - `line:`, `block:` e `section:`, che vogliono tutte le parole nella stessa
   riga scritta, nello stesso blocco (paragrafo, titolo, voce, codice, tabella)
