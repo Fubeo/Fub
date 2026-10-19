@@ -162,6 +162,7 @@ fn vault_of(uri: &FubUri) -> Option<&str> {
         | FubUri::Unique { vault, .. }
         | FubUri::Search { vault, .. }
         | FubUri::Capture { vault, .. } => vault.as_deref(),
+        FubUri::ChooseVault => None,
     }
 }
 
@@ -207,7 +208,10 @@ fn describe(host: &Host, raw: &str) -> Value {
     let mut out = json!({
         "raw": raw,
         "action": uri.action(),
-        "writes": !matches!(uri, FubUri::Open { .. } | FubUri::Search { .. }),
+        "writes": !matches!(
+            uri,
+            FubUri::Open { .. } | FubUri::Search { .. } | FubUri::ChooseVault
+        ),
         "vault": vault,
     });
     let fields = match &uri {
@@ -231,6 +235,7 @@ fn describe(host: &Host, raw: &str) -> Value {
         FubUri::Daily { date, .. } => json!({ "date": date }),
         FubUri::Unique { folder, prefix, .. } => json!({ "folder": folder, "name": prefix }),
         FubUri::Search { q, tag, folder, .. } => json!({ "q": q, "tag": tag, "folder": folder }),
+        FubUri::ChooseVault => json!({}),
         FubUri::Capture {
             folder,
             note,
@@ -271,10 +276,12 @@ fn apply(host: &Host, raw: &str, mode: InvokeMode) -> Result<CommandOutcome, Plu
     let registry =
         |command: &str, args: Value| host.invoke_user_command(vault, command, args, mode);
     match uri {
-        FubUri::Open { .. } | FubUri::Search { .. } => Err(PluginError::BadArgs(Text::message(
-            "host.uri.reads",
-            vec![Arg::text("action", uri.action())],
-        ))),
+        FubUri::Open { .. } | FubUri::Search { .. } | FubUri::ChooseVault => {
+            Err(PluginError::BadArgs(Text::message(
+                "host.uri.reads",
+                vec![Arg::text("action", uri.action())],
+            )))
+        }
         FubUri::New {
             folder,
             name,

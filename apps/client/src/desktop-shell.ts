@@ -614,6 +614,7 @@ function mountAdaptiveShell(): void {
       showPanel("search");
       searchFor(query);
     },
+    chooseVault: () => void pickVault(),
     show: (doc) => openDocument(doc),
   });
   // Il visore web: il consenso per sito, la barra e il salvataggio come nota.

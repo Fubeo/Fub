@@ -455,6 +455,7 @@ pub fn uri(
         | FubUri::Unique { vault, .. }
         | FubUri::Search { vault, .. }
         | FubUri::Capture { vault, .. } => vault.clone(),
+        FubUri::ChooseVault => None,
     };
     if let Some(root) = selected_vault.as_deref() {
         connection.open_vault(root)?;
@@ -570,6 +571,11 @@ pub fn uri(
             }
             serde_json::json!({ "action": "unique", "doc": created.map(|d| d.as_str().to_string()),
                 "dry_run": global.dry_run })
+        }
+        FubUri::ChooseVault => {
+            return Err(Failure::bad_args(
+                "choose-vault è un'azione GUI, non eseguibile dalla CLI",
+            ));
         }
         FubUri::Search { q, tag, folder, .. } => {
             vault_required(connection)?;
@@ -689,6 +695,7 @@ fn describe_uri(uri: &fub_host::automation::FubUri) -> String {
         } => {
             format!("unique vault={vault:?} folder={folder:?} prefix={prefix:?} (nome libero)")
         }
+        FubUri::ChooseVault => "choose-vault (azione GUI)".to_string(),
         FubUri::Search {
             vault,
             q,

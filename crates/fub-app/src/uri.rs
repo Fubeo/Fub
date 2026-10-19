@@ -34,6 +34,8 @@ pub enum UriOutcome {
         tag: Option<String>,
         folder: Option<String>,
     },
+    /// Apre il selettore dei vault.
+    ChooseVault,
     /// Nothing is committed or opened by this pure adapter.
     CapturePending {
         vault: Option<String>,
@@ -128,6 +130,7 @@ pub fn handle_fub_uri_with_policy(
             template: None,
             date: None,
         },
+        FubUri::ChooseVault => UriOutcome::ChooseVault,
         FubUri::Search {
             vault,
             q,
@@ -176,6 +179,14 @@ mod tests {
     fn open_maps_to_navigate_without_writing() {
         let outcome = handle_fub_uri("fub://open?vault=v&note=a%2Fb.md#sezione").unwrap();
         assert!(matches!(outcome, UriOutcome::Navigate { .. }));
+    }
+
+    #[test]
+    fn choose_vault_opens_the_picker_and_takes_no_parameters() {
+        let outcome = handle_fub_uri("fub://choose-vault").unwrap();
+        assert!(matches!(outcome, UriOutcome::ChooseVault));
+        assert!(handle_fub_uri("fub://choose-vault?vault=v").is_err());
+        assert!(handle_fub_uri("fub://choose-vault?exec=1").is_err());
     }
 
     #[test]

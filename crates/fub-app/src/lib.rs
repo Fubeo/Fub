@@ -1719,7 +1719,11 @@ fn forward_uri(app: &AppHandle, raw: &str) {
         }
     }
     let action = match uri::handle_fub_uri(raw) {
-        Ok(uri::UriOutcome::Navigate { .. } | uri::UriOutcome::Search { .. }) => OpenedAction {
+        Ok(
+            uri::UriOutcome::Navigate { .. }
+            | uri::UriOutcome::Search { .. }
+            | uri::UriOutcome::ChooseVault,
+        ) => OpenedAction {
             raw: raw.to_string(),
             kind: "navigation",
             reason: None,

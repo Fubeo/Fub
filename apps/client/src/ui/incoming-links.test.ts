@@ -41,6 +41,7 @@ function ports(answer = true): Mocked {
     openVault: vi.fn<IncomingPorts["openVault"]>(async () => true),
     open: vi.fn<IncomingPorts["open"]>(async () => true),
     search: vi.fn<IncomingPorts["search"]>(),
+    chooseVault: vi.fn<IncomingPorts["chooseVault"]>(),
     show: vi.fn<IncomingPorts["show"]>(async () => {}),
   };
 }
@@ -75,6 +76,16 @@ describe("collegamenti fub:// in arrivo", () => {
     await settle();
     expect(p.open).toHaveBeenCalledWith("a", "Due", null, "col");
     expect(p.confirm).not.toHaveBeenCalled();
+  });
+
+  it("«choose-vault» apre il selettore, senza conferma e senza scrivere", async () => {
+    pendingSequence(queue([{ raw: "fub://choose-vault", action: "choose-vault", writes: false }]));
+    const p = ports();
+    mountIncomingLinks(openLifetime(), p);
+    await settle();
+    expect(p.chooseVault).toHaveBeenCalledTimes(1);
+    expect(p.confirm).not.toHaveBeenCalled();
+    expect(fake.invoke).not.toHaveBeenCalledWith("uri.apply", expect.anything(), expect.anything());
   });
 
   it("una nota che non c'è si dice, e non si crea", async () => {

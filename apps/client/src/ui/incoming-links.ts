@@ -25,7 +25,7 @@ export interface IncomingLink {
   raw: string;
   /// Perché non vale, al posto di tutto il resto.
   error?: string;
-  action?: "open" | "new" | "daily" | "unique" | "search" | "capture";
+  action?: "open" | "new" | "daily" | "unique" | "search" | "capture" | "choose-vault";
   writes?: boolean;
   vault?: { asked: string; root: string | null; current: boolean } | null;
   note?: string | null;
@@ -53,6 +53,8 @@ export interface IncomingPorts {
   /// Apre la nota al punto chiesto; `false` se non c'è.
   open(note: string, heading: string | null, block: string | null, place: OpenPlace): Promise<boolean>;
   search(query: string): void;
+  /// Apre il selettore dei vault (`fub://choose-vault`).
+  chooseVault(): void;
   /// Apre la nota che un collegamento ha appena scritto.
   show(doc: string): Promise<void>;
 }
@@ -130,6 +132,10 @@ export function mountIncomingLinks(life: Lifetime, ports: IncomingPorts): void {
   async function handle(link: IncomingLink): Promise<void> {
     if (link.error !== undefined || !link.action) {
       ports.notify(t("incoming.invalid", { why: link.error ?? link.raw }), "guasto");
+      return;
+    }
+    if (link.action === "choose-vault") {
+      ports.chooseVault();
       return;
     }
     const vault = link.vault;
