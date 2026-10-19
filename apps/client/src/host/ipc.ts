@@ -49,6 +49,8 @@ import type {
   ViewContext,
   ViewSpec,
   ViewUpdate,
+  ViewerAction,
+  ViewerEvent,
   WriteBase,
   SettingScope,
   CatalogEntry,
@@ -199,6 +201,11 @@ export const api = {
     openViewer(mediaInvoke, url, title, policy),
   viewerSave: (url: string, title: string, allowlist: readonly string[], attachmentFolder: string, vault?: string) =>
     saveViewer(mediaInvoke, url, title, allowlist, attachmentFolder, vault),
+  /** Indietro, avanti, ricarica, chiudi o porta davanti la finestra del visore. */
+  viewerControl: (action: ViewerAction) => invoke<void>("viewer_control", { action }),
+  /** Le navigazioni del visore, ammesse o fermate, e la sua chiusura. */
+  onViewer: (handler: (event: ViewerEvent) => void): Promise<() => void> =>
+    listen<ViewerEvent>("fub://viewer", ({ payload }) => handler(payload)),
   /** Native picker owns the destination. Never accept a destination path from JS. */
   saveArtifact: (suggestedName: string, mediaType: string, bytes: readonly number[]) =>
     invoke<SaveArtifactOutcome>("save_artifact", { suggestedName, mediaType, bytes }),

@@ -133,6 +133,37 @@ La Content Security Policy impedisce script remoti, iframe e oggetti non
 previsti. Il rendering non deve creare HTML attivo da una stringa del vault o
 del plugin senza sanitizzazione e una decisione esplicita.
 
+## Visore web
+
+Una pagina web non entra mai nella webview della shell. Si apre nella finestra
+`fub-viewer`, che ha un profilo suo, incognito, sotto la cartella di
+configurazione. Non ha un ponte IPC, perché nessuna capability nomina la sua
+label. Nega le nuove finestre e i download.
+
+- **Indirizzi.** Il visore apre soltanto `https` sulla porta 443, senza
+  credenziali nell'URL, e mai `javascript:`, `data:`, `file:`, `blob:` o gli
+  schemi delle risorse del vault. La stessa regola vale per ogni navigazione
+  della pagina.
+- **Siti approvati.** Un host si apre soltanto se sta in `viewer.hosts`, una
+  lista di macchina. La shell lo aggiunge dopo il sì dell'utente a una
+  conferma, e le impostazioni lo mostrano e lo tolgono. Un sottodominio è un
+  sito a parte.
+- **Navigazione fermata.** Una pagina che porta su un sito non approvato viene
+  fermata. La finestra principale riceve l'evento `fub://viewer` e chiede di
+  nuovo; un sito rifiutato non si richiede nella stessa sessione.
+- **Barra.** Indirizzo, indietro, avanti, ricarica, porta davanti e chiudi
+  stanno nella finestra principale e arrivano al visore con `viewer_control`.
+  Quel comando esegue soltanto tre script scritti nel codice nativo.
+- **Salvataggio come nota.** `web.clip` è un comando dell'host. Rilegge da sé
+  `viewer.hosts`, riscarica la pagina dalla rete dell'host, che non segue i
+  redirect, e scrive Markdown con la fonte, attraverso la cattura. Una
+  risposta che non è 2xx, che non è HTML o che supera 2 MiB non scrive niente
+  e lo dice. In prova il comando non chiama la rete.
+
+Un link `https` di una nota va al browser di sistema. Va al visore con Alt+clic
+o quando `viewer.links` è acceso. Un indirizzo che il visore non apre resta al
+browser di sistema.
+
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;

@@ -46,6 +46,7 @@ commands.allow = [
   "resource_close",
   "resource_write",
   "viewer_open",
+  "viewer_control",
   "viewer_save",
   "save_artifact",
   "print_artifact",

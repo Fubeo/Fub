@@ -59,6 +59,7 @@ import { mountWebviewFocusMonitor } from "./ui/node";
 import { registerMermaidRenderer } from "./ui/mermaid";
 import { mountOnboarding } from "./ui/onboarding";
 import { mountIncomingLinks } from "./ui/incoming-links";
+import { mountWebViewer } from "./ui/web-viewer";
 import { confirm } from "./platform/confirm";
 import { registerBaseRenderer } from "./editors/base/surface";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
@@ -614,6 +615,13 @@ function mountAdaptiveShell(): void {
       searchFor(query);
     },
     show: (doc) => openDocument(doc),
+  });
+  // Il visore web: il consenso per sito, la barra e il salvataggio come nota.
+  mountWebViewer(pageWindowLifetime, document.body, {
+    confirm,
+    notify,
+    show: (doc) => openDocument(doc),
+    openExternal: (url) => { window.open(url, "_blank", "noopener,noreferrer"); },
   });
   applyAdaptive();
   syncOnboarding();

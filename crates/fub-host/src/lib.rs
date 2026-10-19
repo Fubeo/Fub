@@ -124,6 +124,7 @@ pub mod waits;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
 mod wall;
 mod watcher;
+pub mod web_clip;
 extern crate self as fub_host;
 pub use custody::Custody;
 #[cfg(feature = "notify-watcher")]

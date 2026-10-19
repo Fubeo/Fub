@@ -1664,34 +1664,26 @@ fn excalidraw(read: &Read, losses: &mut Losses) -> Value {
 // draw.io
 // ---------------------------------------------------------------------------
 
-/// Un valore per un attributo XML.
+/// Un valore per un attributo XML: la tabella di [`fub_abi::html::escape`],
+/// e gli a capo e le tabulazioni come riferimenti numerici, perché un
+/// attributo li normalizzerebbe in spazi. Gli altri caratteri di controllo,
+/// che XML 1.0 non ammette, cadono.
 fn xml_attr(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for c in value.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\n' => out.push_str("&#10;"),
-            '\r' => out.push_str("&#13;"),
-            '\t' => out.push_str("&#9;"),
-            c if (c as u32) < 0x20 => {}
-            c => out.push(c),
-        }
-    }
-    out
+    let clean: String = value
+        .chars()
+        .filter(|c| (*c as u32) >= 0x20 || matches!(c, '\n' | '\r' | '\t'))
+        .collect();
+    fub_abi::html::escape(&clean)
+        .replace('\n', "&#10;")
+        .replace('\r', "&#13;")
+        .replace('\t', "&#9;")
 }
 
 /// Le righe come HTML di draw.io: `html=1` le legge così.
 fn html_lines(lines: &[String]) -> String {
     lines
         .iter()
-        .map(|line| {
-            line.replace('&', "&amp;")
-                .replace('<', "&lt;")
-                .replace('>', "&gt;")
-        })
+        .map(|line| fub_abi::html::escape(line))
         .collect::<Vec<_>>()
         .join("<br>")
 }

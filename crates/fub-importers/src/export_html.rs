@@ -410,12 +410,7 @@ fn attributes(mut tag: &str) -> Option<Vec<(String, String)>> {
 }
 
 fn unescape(value: &str) -> String {
-    value
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&amp;", "&")
+    fub_abi::html::unescape(value)
 }
 
 /// Il testo di un frammento HTML, ancora con le sue entità: va bene così in
@@ -427,7 +422,7 @@ fn text_of(html: &str) -> String {
         match c {
             '<' => inside = true,
             '>' => inside = false,
-            '"' if !inside => out.push_str("&quot;"),
+            '"' if !inside => out.push_str(&fub_abi::html::escape("\"")),
             c if !inside => out.push(c),
             _ => {}
         }

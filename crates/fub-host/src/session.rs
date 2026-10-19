@@ -95,7 +95,7 @@ const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
 /// I comandi che l'host esegue in proprio: il kernel li riserva al mount
 /// (`Workspace::reserve_host_commands`), così un plugin che li invoca sente che
 /// non sono suoi da chiamare e nessun provider ne registra un omonimo.
-pub(crate) const HOST_COMMANDS: [&str; 13] = [
+pub(crate) const HOST_COMMANDS: [&str; 14] = [
     OS_TRASH_COMMAND,
     MOUNT_ADD,
     MOUNT_REMOVE,
@@ -104,6 +104,7 @@ pub(crate) const HOST_COMMANDS: [&str; 13] = [
     SNAPSHOT_CREATE,
     SNAPSHOT_APPLY,
     crate::capture::CAPTURE_APPLY,
+    crate::web_clip::WEB_CLIP,
     crate::export_folder::EXPORT_FOLDER,
     crate::connector_tokens::CONNECTOR_TOKEN,
     crate::connector_tokens::CONNECTOR_TOKENS,
@@ -1067,7 +1068,7 @@ pub struct Host {
     /// Il **livello macchina** della configurazione (§11.1), condiviso da tutti
     /// i vault che questo host apre: la configurazione della macchina è una, e N
     /// copie sarebbero N idee del tema.
-    machine: Arc<MachineSettings>,
+    pub(crate) machine: Arc<MachineSettings>,
     /// Lo **stato di vista** (§11.2): dove ogni esemplare di view era rimasto.
     /// Condiviso come il livello macchina e per la stessa ragione — i vault
     /// aperti sono N e la macchina è una — e potato da chi dimentica un vault
@@ -3749,6 +3750,7 @@ impl Host {
                 spec.id != OS_TRASH_COMMAND
                     && spec.id != FOLDER_CREATE
                     && spec.id != crate::capture::CAPTURE_APPLY
+                    && spec.id != crate::web_clip::WEB_CLIP
                     && spec.id != crate::export_folder::EXPORT_FOLDER
                     && !crate::connector_tokens::specs()
                         .iter()
@@ -3763,6 +3765,7 @@ impl Host {
                 os_trash_spec(),
                 folder_create_spec(),
                 crate::capture::spec(),
+                crate::web_clip::spec(),
                 crate::export_folder::spec(&workspace.export_targets()),
             ];
             own.extend(crate::connector_tokens::specs());
@@ -4146,6 +4149,11 @@ impl Host {
         // workspace deve essere preso qui, perché ognuno prende il suo.
         if command == crate::capture::CAPTURE_APPLY {
             let result = crate::capture::invoke(self, vault, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        // Come la cattura, che compone: la rete si chiama senza prestiti.
+        if command == crate::web_clip::WEB_CLIP {
+            let result = crate::web_clip::invoke(self, vault, args, mode);
             return self.localized_host_result(vault, result);
         }
         if command == crate::export_folder::EXPORT_FOLDER {

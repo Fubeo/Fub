@@ -1267,6 +1267,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("viewerOpen", [url, title, policy], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
       viewerSave: (url, title, allowlist, attachmentFolder, vault) =>
         gate("viewerSave", [url, title, allowlist, attachmentFolder, vault], Promise.reject(new Error("host fake: viewer download is unavailable"))),
+      viewerControl: (action) =>
+        gate("viewerControl", [action], Promise.reject(new Error("host fake: isolated viewer is unavailable"))),
+      // Il finto non ha una finestra del visore: niente da raccontare.
+      onViewer: () => {
+        calls.push({ gate: "onViewer", args: [] });
+        return Promise.resolve(() => {});
+      },
       saveArtifact: (suggestedName, mediaType, bytes) =>
         options.saveArtifact
           ? gate("saveArtifact", [suggestedName, mediaType, bytes], options.saveArtifact(suggestedName, mediaType, bytes))

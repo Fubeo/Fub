@@ -18,6 +18,7 @@ import { notify } from "../../../../ui/notify";
 import { Race, type Expected } from "../../../../ui/race";
 import { external, hasScheme, isAllowedLink, sanitizeMarkdownHtml, setSanitizedHtml } from "../../../../ui/sanitize";
 import { writeClipboardText } from "../../../../platform/clipboard";
+import { openWebLink } from "../../../../ui/web-viewer";
 
 export interface MarkdownMountOptions {
   readonly documentId?: string;
@@ -245,10 +246,12 @@ function wireContent(container: HTMLElement, options: MarkdownMountOptions, life
     }
     // Nessun link naviga la webview: la shell è una pagina sola, e seguirne uno
     // la scaricherebbe con i buffer, le bozze in volo e la storia di ogni
-    // riquadro. Un indirizzo con schema va al sistema, uno relativo è un
-    // documento del vault.
+    // riquadro. Un indirizzo web va al visore o al browser (lo decide il
+    // visore, con l'Alt per forzarlo), un altro schema al sistema, uno
+    // relativo è un documento del vault.
     event.preventDefault();
-    if (hasScheme(href) || external(href)) window.open(href, "_blank", "noopener,noreferrer");
+    if (/^https?:/i.test(href)) openWebLink(href, event.altKey);
+    else if (hasScheme(href) || external(href)) window.open(href, "_blank", "noopener,noreferrer");
     else openPath(safeDecode(href));
   });
 }

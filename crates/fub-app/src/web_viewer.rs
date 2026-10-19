@@ -15,8 +15,9 @@
 //! non risolve nessuna capability), niente accesso al filesystem del vault
 //! (l'asset scope della finestra principale non si eredita), permessi negati
 //! di default, download intercettati (`on_download` torna `false`: niente
-//! scritture implicite; il salvataggio come nota passa da `viewer_save`,
-//! ovvero da una trasformazione controllata via rete consentita).
+//! scritture implicite; il salvataggio come nota è `web.clip` dell'host, che
+//! riscarica la pagina e la converte in Markdown, e `viewer_save` deposita i
+//! byte come allegato: due trasformazioni controllate via rete consentita).
 //!
 //! # Remoto default negato
 //!

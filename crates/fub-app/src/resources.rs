@@ -558,12 +558,14 @@ pub fn prepare_viewer(
 /// Corpo di `viewer_open`, da registrare da NativeIntegration.
 ///
 /// L'origin si rilegge da `window.url()` lato nativo (una `main` navigata su
-/// un remoto non passa il gate). Chiude una finestra viewer precedente con la
-/// stessa label (una sola istanza: niente accumulo di profili), poi costruisce
-/// con isolamento reale: profilo separato, niente bridge IPC (nessuna
-/// capability remota registrata per `fub-viewer`; il gate sopra rifiuta
-/// comunque ogni invoke da li' dentro), permessi negati di default, download
-/// intercettati.
+/// un remoto non passa il gate). Una finestra viewer già aperta riceve la
+/// nuova politica e cambia pagina (una sola istanza: niente accumulo di
+/// profili); altrimenti ne costruisce una con isolamento reale: profilo
+/// separato, niente bridge IPC (nessuna capability remota registrata per
+/// `fub-viewer`; il gate sopra rifiuta comunque ogni invoke da li' dentro),
+/// permessi negati di default, download intercettati. Ogni navigazione, ammessa
+/// o fermata, e la chiusura arrivano alla finestra principale come
+/// [`ViewerEvent`].
 pub async fn open_viewer<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     window: tauri::WebviewWindow<R>,
@@ -573,13 +575,23 @@ pub async fn open_viewer<R: tauri::Runtime>(
     let label = window.label().to_string();
     let origin = window.url().map(|url| url.to_string()).unwrap_or_default();
     let prepared = prepare_viewer(&label, &origin, &open, &config_dir)?;
-    let navigation_policy = open;
-    if let Some(previous) = app.get_webview_window(VIEWER_LABEL) {
-        let _ = previous.close();
-    }
+    // La politica vale per la finestra che c'è e per quella che nasce: una
+    // finestra già aperta riceve la nuova lista e cambia pagina, invece di
+    // chiudersi e rinascere con la stessa label (due finestre con una label
+    // sola non possono esistere, nemmeno per un istante).
+    *viewer_policy() = Some(open);
     use tauri::webview::NewWindowResponse;
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
-    WebviewWindowBuilder::new(&app, VIEWER_LABEL, WebviewUrl::External(prepared.url))
+    if let Some(previous) = app.get_webview_window(VIEWER_LABEL) {
+        previous
+            .navigate(prepared.url)
+            .map_err(|and| PluginError::Internal(format!("viewer not navigated: {and}").into()))?;
+        let _ = previous.set_title(&prepared.title);
+        let _ = previous.set_focus();
+        return Ok(VIEWER_LABEL.to_string());
+    }
+    let navigation = app.clone();
+    let viewer = WebviewWindowBuilder::new(&app, VIEWER_LABEL, WebviewUrl::External(prepared.url))
         .title(prepared.title)
         .inner_size(1024.0, 760.0)
         .center()
@@ -589,18 +601,101 @@ pub async fn open_viewer<R: tauri::Runtime>(
         .incognito(true)
         .data_directory(prepared.data_dir.into_std_path_buf())
         .on_navigation(move |url| {
-            check_viewer_address(
-                url.as_str(),
-                navigation_policy.allow_remote,
-                &navigation_policy.allowlist,
-            )
-            .is_ok()
+            let allowed = viewer_policy().as_ref().is_some_and(|policy| {
+                check_viewer_address(url.as_str(), policy.allow_remote, &policy.allowlist).is_ok()
+            });
+            let address = url.to_string();
+            tell_main(
+                &navigation,
+                if allowed {
+                    ViewerEvent::Navigated { url: address }
+                } else {
+                    ViewerEvent::Blocked { url: address }
+                },
+            );
+            allowed
         })
         .on_new_window(|_url, _features| NewWindowResponse::Deny)
         .on_download(|_webview, _event| false)
         .build()
         .map_err(|and| PluginError::Internal(format!("viewer window not opened: {and}").into()))?;
+    let closing = app.clone();
+    viewer.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            *viewer_policy() = None;
+            tell_main(&closing, ViewerEvent::Closed);
+        }
+    });
     Ok(VIEWER_LABEL.to_string())
+}
+
+/// La politica della finestra del visore che c'è: una sola, come la finestra.
+fn viewer_policy() -> std::sync::MutexGuard<'static, Option<ViewerOpen>> {
+    static POLICY: std::sync::Mutex<Option<ViewerOpen>> = std::sync::Mutex::new(None);
+    POLICY.lock().unwrap_or_else(|poison| poison.into_inner())
+}
+
+/// Che cosa succede nella finestra del visore, detto alla finestra principale
+/// (`fub://viewer`): la shell ci disegna la barra con l'indirizzo, e una
+/// pagina che porta fuori dai siti approvati lo dice invece di fermarsi muta.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ViewerEvent {
+    /// La pagina è passata a `url`, che la politica ammette.
+    Navigated { url: String },
+    /// La pagina voleva andare a `url`, e la politica l'ha fermata.
+    Blocked { url: String },
+    /// La finestra si è chiusa.
+    Closed,
+}
+
+/// L'evento va soltanto alla finestra principale con un'origine locale: mai a
+/// una pagina remota, nemmeno se la principale fosse stata portata altrove.
+fn tell_main<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: ViewerEvent) {
+    use tauri::{Emitter, Manager};
+    if let Some(main) = app.get_webview_window("main") {
+        if main.url().is_ok_and(|url| is_local_origin(url.as_str())) {
+            let _ = main.emit("fub://viewer", event);
+        }
+    }
+}
+
+/// I gesti della barra del visore, dalla finestra principale. Lo script che
+/// si esegue nella pagina è uno di questi tre, scritti qui: niente di ciò che
+/// arriva dalla shell diventa codice.
+pub fn viewer_control<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    window_label: &str,
+    origin: &str,
+    action: &str,
+) -> Result<(), PluginError> {
+    use tauri::Manager;
+    guard_trusted_local(window_label, origin)?;
+    let script = match action {
+        "back" => Some("history.back()"),
+        "forward" => Some("history.forward()"),
+        "reload" => Some("location.reload()"),
+        "close" | "focus" => None,
+        other => {
+            return Err(PluginError::BadArgs(
+                format!("`{other}` is not a viewer action").into(),
+            ))
+        }
+    };
+    let Some(viewer) = app.get_webview_window(VIEWER_LABEL) else {
+        // Chiudere una finestra che non c'è è già fatto.
+        if action == "close" {
+            return Ok(());
+        }
+        return Err(PluginError::NotFound("the web viewer is not open".into()));
+    };
+    let done = match (action, script) {
+        ("close", _) => viewer.close(),
+        ("focus", _) => viewer.set_focus(),
+        (_, Some(script)) => viewer.eval(script),
+        _ => Ok(()),
+    };
+    done.map_err(|and| PluginError::Internal(format!("viewer action failed: {and}").into()))
 }
 
 /// Salvataggio come nota da URL approvato: trasformazione controllata, non
@@ -719,6 +814,24 @@ mod tests {
     const LOCAL: &str = "tauri://localhost/";
     const LOCAL_HTTP: &str = "http://tauri.localhost/";
     const REMOTE: &str = "https://esempio.it/nota";
+
+    /// La forma che la shell legge in `ViewerEvent` di `host/contract.ts`.
+    #[test]
+    fn viewer_events_cross_as_the_shell_reads_them() {
+        let shape = |event: ViewerEvent| serde_json::to_value(event).unwrap();
+        assert_eq!(
+            shape(ViewerEvent::Navigated { url: REMOTE.into() }),
+            serde_json::json!({ "kind": "navigated", "url": REMOTE })
+        );
+        assert_eq!(
+            shape(ViewerEvent::Blocked { url: REMOTE.into() }),
+            serde_json::json!({ "kind": "blocked", "url": REMOTE })
+        );
+        assert_eq!(
+            shape(ViewerEvent::Closed),
+            serde_json::json!({ "kind": "closed" })
+        );
+    }
 
     #[test]
     fn only_local_main_and_document_windows_pass_the_gate() {

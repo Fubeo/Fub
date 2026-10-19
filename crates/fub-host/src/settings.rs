@@ -338,6 +338,7 @@ pub fn core_settings() -> Vec<SettingSpec> {
     #[cfg(feature = "http-client")]
     settings.extend(service_settings());
     settings.extend(live_settings());
+    settings.extend(viewer_settings());
     // **Le famiglie del kernel, tutte, e non una a una.** Quelle righe erano
     // quattro `extend` scritti a mano — `locale`, `journal`, `properties`,
     // `ignore` — e ogni chiave del kernel sta là dove sta chi la legge (§11.1):
@@ -784,6 +785,31 @@ fn service_settings() -> Vec<SettingSpec> {
     ]
 }
 
+/// Il visore web: di macchina, perché fidarsi di un sito è una scelta di chi
+/// usa questo PC, non un dato del vault che si sincronizza altrove.
+fn viewer_settings() -> Vec<SettingSpec> {
+    vec![
+        SettingSpec::new(
+            crate::web_clip::VIEWER_HOSTS,
+            Text::key(C_VIEWER_HOSTS),
+            SettingKind::List {
+                default: Vec::new(),
+            },
+        )
+        .describing(Text::key(C_VIEWER_HOSTS_DESC))
+        .grouped(Text::key(C_GROUP_VIEWER))
+        .for_machine(),
+        SettingSpec::toggle(
+            crate::web_clip::VIEWER_LINKS,
+            Text::key(C_VIEWER_LINKS),
+            false,
+        )
+        .describing(Text::key(C_VIEWER_LINKS_DESC))
+        .grouped(Text::key(C_GROUP_VIEWER))
+        .for_machine(),
+    ]
+}
+
 /// La sessione live: di macchina, perché la porta è una regola del firewall di
 /// questo PC e non di un vault.
 fn live_settings() -> Vec<SettingSpec> {
@@ -1013,6 +1039,11 @@ const C_GROUP_PUBLISH: &str = "core.group.publish";
 const C_PUBLISH_SERVER_URL: &str = "core.publish.server_url";
 const C_PUBLISH_SERVER_URL_DESC: &str = "core.publish.server_url.desc";
 const C_GROUP_LIVE: &str = "core.group.live";
+const C_GROUP_VIEWER: &str = "core.group.viewer";
+const C_VIEWER_HOSTS: &str = "core.viewer.hosts";
+const C_VIEWER_HOSTS_DESC: &str = "core.viewer.hosts.desc";
+const C_VIEWER_LINKS: &str = "core.viewer.links";
+const C_VIEWER_LINKS_DESC: &str = "core.viewer.links.desc";
 const C_LIVE_PORT: &str = "core.live.port";
 const C_LIVE_PORT_DESC: &str = "core.live.port.desc";
 
@@ -1192,6 +1223,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "Nessun vault aperto: il collegamento non ha dove scrivere.")
         .with("host.uri.reads", "«{action}» non scrive: lo esegue la finestra.")
         .with("host.uri.capture_missing", "La cattura chiede anche «{what}».")
+        .with("host.web.clip.title", "Salva la pagina web come nota")
+        .with("host.web.clip.desc", "Scarica di nuovo una pagina di un sito approvato e la scrive come nota Markdown, con la fonte; in prova dice soltanto dove.")
+        .with("host.param.url", "Indirizzo")
+        .with("host.web.clip.not_https", "«{url}» non è un indirizzo https che il visore possa aprire.")
+        .with("host.web.clip.not_approved", "Il sito {site} non è fra quelli approvati per il visore: aprilo e approvalo prima di salvarlo.")
+        .with("host.web.clip.plan", "Salverebbe {url} come nuova nota nella cartella «{folder}».")
+        .with("host.web.clip.plan_root", "Salverebbe {url} come nuova nota nella radice del vault.")
+        .with("host.web.clip.no_network", "Questa finestra non ha accesso alla rete: la pagina non si può scaricare.")
+        .with("host.web.clip.status", "Il sito ha risposto {status} per {url}: la pagina non è stata salvata.")
+        .with("host.web.clip.not_html", "La risposta è {kind}, non una pagina web: non è stata salvata.")
+        .with("host.web.clip.too_large", "La pagina {url} supera i 2 MiB: non è stata salvata.")
+        .with("host.web.clip.refused", "La pagina non si può salvare come nota: {why}")
+        .with("host.web.clip.done", "Pagina salvata in {doc}.")
+        .with("host.web.clip.done_with_notes", "Pagina salvata in {doc}. Rimasto fuori: {notes}")
         .with("host.uri.plan", "Scriverebbe {doc}.")
         .with("host.uri.done", "Scritta {doc}.")
         .with("host.export.done", "Export scritto in «{target}»: {count} file.")
@@ -1395,6 +1440,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
             C_PUBLISH_SERVER_URL_DESC,
             "URL HTTPS del servizio; HTTP è ammesso solo in loopback. Vuoto significa nessun server configurato.",
         )
+        .with(C_GROUP_VIEWER, "Visore web")
+        .with(C_VIEWER_HOSTS, "Siti approvati")
+        .with(
+            C_VIEWER_HOSTS_DESC,
+            "I siti che il visore apre senza chiedere, uno per riga (per esempio it.wikipedia.org). Solo https; un sottodominio va scritto a parte.",
+        )
+        .with(C_VIEWER_LINKS, "Apri i link web nel visore")
+        .with(
+            C_VIEWER_LINKS_DESC,
+            "Un link https di una nota si apre nel visore isolato invece che nel browser di sistema. Alt+clic lo apre nel visore in ogni caso.",
+        )
         .with(C_GROUP_LIVE, "Sessione live")
         .with(C_LIVE_PORT, "Porta della sessione live")
         .with(
@@ -1531,6 +1587,20 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with("host.uri.no_vault", "No vault is open: the link has nowhere to write.")
         .with("host.uri.reads", "“{action}” does not write: the window runs it.")
         .with("host.uri.capture_missing", "The capture also needs “{what}”.")
+        .with("host.web.clip.title", "Save the web page as a note")
+        .with("host.web.clip.desc", "Downloads a page of an approved site again and writes it as a Markdown note, with its source; a dry run only says where.")
+        .with("host.param.url", "Address")
+        .with("host.web.clip.not_https", "“{url}” is not an https address the viewer can open.")
+        .with("host.web.clip.not_approved", "The site {site} is not one approved for the viewer: open it and approve it before saving it.")
+        .with("host.web.clip.plan", "Would save {url} as a new note in the folder “{folder}”.")
+        .with("host.web.clip.plan_root", "Would save {url} as a new note at the root of the vault.")
+        .with("host.web.clip.no_network", "This window has no network access: the page cannot be downloaded.")
+        .with("host.web.clip.status", "The site answered {status} for {url}: the page was not saved.")
+        .with("host.web.clip.not_html", "The answer is {kind}, not a web page: it was not saved.")
+        .with("host.web.clip.too_large", "The page {url} is over 2 MiB: it was not saved.")
+        .with("host.web.clip.refused", "The page cannot be saved as a note: {why}")
+        .with("host.web.clip.done", "Page saved in {doc}.")
+        .with("host.web.clip.done_with_notes", "Page saved in {doc}. Left out: {notes}")
         .with("host.uri.plan", "Would write {doc}.")
         .with("host.uri.done", "Wrote {doc}.")
         .with("host.export.done", "Export written to “{target}”: {count} files.")
@@ -1727,6 +1797,17 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_PUBLISH_SERVER_URL_DESC,
             "Service HTTPS URL; HTTP is allowed only on loopback. Empty means no server configured.",
+        )
+        .with(C_GROUP_VIEWER, "Web viewer")
+        .with(C_VIEWER_HOSTS, "Approved sites")
+        .with(
+            C_VIEWER_HOSTS_DESC,
+            "The sites the viewer opens without asking, one per line (for example en.wikipedia.org). https only; a subdomain is listed on its own.",
+        )
+        .with(C_VIEWER_LINKS, "Open web links in the viewer")
+        .with(
+            C_VIEWER_LINKS_DESC,
+            "An https link in a note opens in the isolated viewer instead of the system browser. Alt+click opens it in the viewer either way.",
         )
         .with(C_GROUP_LIVE, "Live session")
         .with(C_LIVE_PORT, "Live session port")

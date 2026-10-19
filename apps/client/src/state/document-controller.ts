@@ -59,6 +59,7 @@ import { mountSlidePresentation } from "../ui/slides";
 import { mountMarkdown, mountRenderedDocument } from "../editors/text/profiles/markdown/mount";
 import { applyNoteCssClasses } from "../theme/snippets";
 import { Queue } from "../ui/race";
+import { openWebPage } from "../ui/web-viewer";
 import { invalidateDocumentCaches, renameInDocumentCaches } from "./document-caches";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
@@ -612,13 +613,8 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
     }),
     canvasMedia: {
       openExternal: async () => { throw new Error("External opening is not available in this host"); },
-      openViewer: async (url) => {
-        try {
-          await api.viewerOpen(url, url, { allowRemote: false, allowlist: [] });
-        } catch (error) {
-          notify(t("document.viewer_unavailable", { reason: errorText(error) }), "guasto");
-        }
-      },
+      // Il consenso, la barra e gli errori sono del visore della finestra.
+      openViewer: async (url) => { await openWebPage(url); },
     },
     canvasAttachments: {
       expandFiles: droppedFiles,

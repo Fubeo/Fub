@@ -361,6 +361,7 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("resource_close", Why::AppSurface),
     ("resource_write", Why::AppSurface),
     ("viewer_open", Why::AppSurface),
+    ("viewer_control", Why::AppSurface),
     ("viewer_save", Why::AppSurface),
     ("save_artifact", Why::AppSurface),
     ("print_artifact", Why::AppSurface),

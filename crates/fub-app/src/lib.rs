@@ -560,6 +560,20 @@ async fn viewer_open(
     resources::open_viewer(app, window, open, dir).await
 }
 
+/// Indietro, avanti, ricarica, chiudi o porta davanti la finestra del visore:
+/// i gesti della barra che la shell disegna nella finestra principale.
+#[tauri::command]
+fn viewer_control(
+    app: AppHandle,
+    window: tauri::WebviewWindow,
+    action: String,
+) -> Result<(), PluginError> {
+    let origin = window.url().map_err(|error| {
+        PluginError::Internal(format!("viewer window URL unavailable: {error}").into())
+    })?;
+    resources::viewer_control(&app, window.label(), origin.as_str(), &action)
+}
+
 #[tauri::command]
 async fn viewer_save(
     host: State<'_, Host>,
@@ -2327,6 +2341,7 @@ pub fn run() {
             resource_close,
             resource_write,
             viewer_open,
+            viewer_control,
             viewer_save,
             list_grid_surfaces,
             open_grid,

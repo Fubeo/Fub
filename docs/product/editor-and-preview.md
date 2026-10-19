@@ -276,9 +276,9 @@ La preview usa le forme prodotte dal provider e le policy della webview. I
 blocchi HTML attraversano l'allowlist del sanitizzatore prima di diventare nodi
 DOM; classi e attributi `data-*` scritti nella nota non possono imitare i
 contratti privati della shell. Script, iframe, handler e URL di risorsa remoti
-restano inattivi. Se un blocco non contiene alcun elemento consentito, la
-sorgente resta leggibile invece di produrre un riquadro vuoto. Il Markdown
-dentro un blocco HTML non viene reinterpretato.
+restano inattivi. Un blocco senza elementi consentiti resta sorgente leggibile.
+Il Markdown dentro un blocco HTML non viene reinterpretato. Un link `https` apre
+il browser, o il [visore web](../reference/permissions-and-security.md#visore-web).
 
 La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
 prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per

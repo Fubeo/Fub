@@ -928,6 +928,54 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/web_clip.rs::viewer_host",
+            (
+                Family::AsciiCase,
+                "riconosce lo schema `https://` e abbassa l'host DNS della pagina da salvare: è la \
+                 domanda di `web_viewer.rs::host_allowed`, ma qui l'URL arriva come testo da un \
+                 comando del registro, senza il parser di Tauri, e la risposta è l'host da \
+                 confrontare, non un sì.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::approved",
+            (
+                Family::AsciiCase,
+                "confronta l'host della pagina con i siti approvati di `viewer.hosts` con \
+                 `eq_ignore_ascii_case`, come `web_viewer.rs::host_allowed`: chi salva la pagina \
+                 deve dire sì agli stessi siti di chi la apre. Diverge da lei solo perché la lista \
+                 qui si rilegge dalla macchina invece di arrivare dalla shell.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::is_page",
+            (
+                Family::AsciiCase,
+                "abbassa il `Content-Type` della risposta per riconoscere una pagina HTML o di \
+                 testo: il tipo di media non distingue il caso (RFC 9110). Diverge da \
+                 `net.rs::header`, che trova l'header, perché qui si giudica il suo valore.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/web_clip.rs::page_title",
+            (
+                Family::AsciiCase,
+                "abbassa l'HTML in ASCII per trovare il tag `<title>`: i nomi dei tag HTML sono \
+                 ASCII e non distinguono il caso. Diverge da `html.rs::is_http_img` perché qui si \
+                 cerca un tag, non uno schema, e l'esito è solo il titolo proposto per la nota.",
+            ),
+        ),
+        (
+            "crates/fub-features/src/draw/interop.rs::words",
+            (
+                Family::AsciiCase,
+                "abbassa il nome di una famiglia di caratteri per riconoscere un monospazio \
+                 (`mono`, `code`, `courier`) quando il disegno va in Excalidraw: indovina uno stile \
+                 di destinazione, non decide l'identità di un nome, e sbagliare costa solo l'aspetto \
+                 del testo esportato.",
+            ),
+        ),
+        (
             "crates/fub-services/src/main.rs::read_request",
             (
                 Family::AsciiCase,

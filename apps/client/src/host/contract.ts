@@ -2154,3 +2154,15 @@ export const COMMANDS = {
   undo: "vault.undo",
   replace: "vault.replace",
 } as const;
+
+/**
+ * Che cosa succede nella finestra del visore web (`fub://viewer`), detto alla
+ * finestra principale. Rispecchia `fub_app::resources::ViewerEvent`.
+ */
+export type ViewerEvent =
+  | { kind: "navigated"; url: string }
+  | { kind: "blocked"; url: string }
+  | { kind: "closed" };
+
+/** I gesti della barra del visore (`viewer_control`). */
+export type ViewerAction = "back" | "forward" | "reload" | "close" | "focus";
