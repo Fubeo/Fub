@@ -121,6 +121,11 @@ propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
 percorso quando due note hanno lo stesso nome. I blocchi (`#^`, `[[^^`) non si
 completano.
 
+Il pannello Struttura mostra i titoli della nota aperta come un albero. Il
+campo in cima lo filtra: restano i titoli che contengono il testo, con i
+titoli sopra di loro. «Comprimi tutto» chiude l'albero; un filtro lo riapre
+su quello che trova.
+
 `heading.rename`, dalla palette, rinomina un titolo della nota aperta e
 aggiorna i `[[nota#titolo]]` che lo nominano, nella nota stessa
 (`[[#titolo]]`) e nelle altre. Si tocca un link solo se porta a quel titolo
