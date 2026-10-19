@@ -73,6 +73,9 @@ pub enum CliCommand {
     NativeInstall {
         global: GlobalArgs,
         extension_id: String,
+        /// `--browser`, ripetibile: senza, ogni browser trovato.
+        browsers: Vec<String>,
+        uninstall: bool,
     },
     Pair {
         global: GlobalArgs,
@@ -381,8 +384,15 @@ impl CliCommand {
                 execute,
                 global,
             },
-            CliCommand::NativeInstall { extension_id, .. } => CliCommand::NativeInstall {
+            CliCommand::NativeInstall {
                 extension_id,
+                browsers,
+                uninstall,
+                ..
+            } => CliCommand::NativeInstall {
+                extension_id,
+                browsers,
+                uninstall,
                 global,
             },
             CliCommand::Callback { action, .. } => CliCommand::Callback { action, global },
@@ -1957,23 +1967,33 @@ fn parse_command(
         }
         "native-install" => {
             let mut extension_id: Option<String> = None;
+            let mut browsers = Vec::new();
+            let mut uninstall = false;
             while let Some(arg) = parser.peek() {
                 let Some((name, inline)) = split_flag(arg) else {
                     break;
                 };
                 match name {
-                    "extension-id" => {
+                    "extension-id" | "browser" => {
                         let v = inline.map(str::to_string).unwrap_or_else(|| {
                             parser.next();
                             parser.next().unwrap_or("").to_string()
                         });
                         if v.is_empty() {
-                            return Err("--extension-id vuole un valore".to_string());
+                            return Err(format!("--{name} vuole un valore"));
                         }
                         if inline.is_some() {
                             parser.next();
                         }
-                        extension_id = Some(v);
+                        if name == "browser" {
+                            browsers.push(v);
+                        } else {
+                            extension_id = Some(v);
+                        }
+                    }
+                    "uninstall" => {
+                        parser.next();
+                        uninstall = true;
                     }
                     _ => break,
                 }
@@ -1984,6 +2004,8 @@ fn parse_command(
             Ok(CliCommand::NativeInstall {
                 global,
                 extension_id,
+                browsers,
+                uninstall,
             })
         }
         "pair" => {
@@ -2227,7 +2249,7 @@ pub fn help_text(topic: Option<&str>) -> String {
             "config" => "config [--list|--get KEY|--set KEY=VALUE|--reset KEY]".to_string(),
             "sync" => "sync status|once|watch [--interval SEC]".to_string(),
             "pair" => "pair pair --extension-id ID [--vault PATH] [--folder PATH] | pairs | unpair --extension-id ID".to_string(),
-            "native-install" => "native-install --extension-id ID".to_string(),
+            "native-install" => "native-install --extension-id ID [--browser chrome|chromium|edge|brave|vivaldi|firefox]… [--uninstall]\nSenza --yes dice dove scriverebbe il manifest dell'host nativo e lo mostra; con --yes lo scrive per l'utente in ogni browser trovato (Windows: anche la chiave HKCU). L'id decide la famiglia: 32 lettere a–p = Chromium, altrimenti Firefox. Un file d'altri non si tocca. Dopo: `pair pair --extension-id ID`.".to_string(),
             "repl" => "repl: sessione interattiva; history solo comandi non sensibili".to_string(),
             "completion" => "completion bash|zsh|fish".to_string(),
             "help" => "help [comando]".to_string(),

@@ -13,6 +13,7 @@ mod commands;
 mod completer;
 mod local;
 mod login;
+mod native;
 mod output;
 mod remote;
 
@@ -334,9 +335,19 @@ fn dispatch(
         CliCommand::Publish(args) => {
             remote::publish_cmd(connection, global, format, args, print_line(global, format))
         }
-        CliCommand::NativeInstall { extension_id, .. } => {
-            local::native_install(global, format, extension_id, print_line(global, format))
-        }
+        CliCommand::NativeInstall {
+            extension_id,
+            browsers,
+            uninstall,
+            ..
+        } => local::native_install(
+            global,
+            format,
+            extension_id,
+            browsers,
+            uninstall,
+            print_line(global, format),
+        ),
         CliCommand::Pair { action, .. } => {
             local::pairing(global, format, action, print_line(global, format))
         }

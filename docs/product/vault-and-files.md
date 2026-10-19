@@ -167,7 +167,8 @@ Il clipper del browser, la condivisione mobile, `fub-cli capture` e l'URI
 testo JSON; `template` è facoltativo e vale soltanto per una cattura che crea.
 La validazione è la stessa per ogni trasporto: titolo su una riga, testo non
 vuoto, `source_url` http o https senza credenziali, e `vault`, `folder` e
-`note` dentro il recinto del vault.
+`note` dentro il recinto del vault. L'host nativo del clipper si installa come
+in [Permessi e sicurezza](../reference/permissions-and-security.md#host-nativo-del-clipper).
 
 - `create` crea la nota con `note.create`, o con `note.from_template` se c'è
   un template. Il nome è `note` se c'è; altrimenti il titolo diventa un

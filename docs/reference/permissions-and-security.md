@@ -164,6 +164,26 @@ Un link `https` di una nota va al browser di sistema. Va al visore con Alt+clic
 o quando `viewer.links` è acceso. Un indirizzo che il visore non apre resta al
 browser di sistema.
 
+## Host nativo del clipper
+
+Il clipper del browser consegna prima a `fub-clipper-host` (nome
+`local.fub.clipper`), per messaggistica nativa: è il solo canale autenticato,
+perché l'host accetta soltanto un'estensione abbinata con
+`fub-cli pair pair --extension-id ID`. `fub://capture` e il file
+`.fubcapture.json` sono il ripiego, senza autenticazione e con
+un'approvazione per ogni cattura.
+
+Il browser trova l'host da un manifest dell'utente, mai di sistema.
+`fub-cli native-install --extension-id ID` dice dove lo scriverebbe; con
+`--yes` lo scrive in ogni browser installato, o in quelli dati con
+`--browser`. Su Windows scrive anche la chiave di `HKEY_CURRENT_USER` che punta
+al manifest. L'id decide la famiglia: le 32 lettere di un'estensione Chromium
+danno `allowed_origins`, l'id di Firefox `allowed_extensions`, e un id della
+famiglia sbagliata per il browser nominato è un errore d'uso. Un file con quel
+nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
+soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
+due comandi con l'id vero dell'estensione.
+
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;

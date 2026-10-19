@@ -282,3 +282,96 @@ fn paired_native_attachment_verifies_digest_before_writing_bytes() {
         b"right"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn native_install_writes_the_manifest_only_where_the_browser_is_and_only_with_yes() {
+    let home = tempfile::tempdir().unwrap();
+    let config = home.path().join("config");
+    std::fs::create_dir_all(home.path().join(".mozilla")).unwrap();
+    std::fs::create_dir_all(home.path().join(".config/chromium")).unwrap();
+    let run = |args: &[&str]| {
+        let out = Command::new(env!("CARGO_BIN_EXE_fub-cli"))
+            .env("HOME", home.path())
+            .env_remove("FUB_CONFIG_DIR")
+            .args(["--format", "json", "--config-dir", config.to_str().unwrap()])
+            .args(args)
+            .output()
+            .unwrap();
+        // Gli errori vanno su stderr, sempre in JSON.
+        let bytes = if out.stdout.is_empty() {
+            &out.stderr
+        } else {
+            &out.stdout
+        };
+        let value: serde_json::Value = serde_json::from_slice(bytes).unwrap_or_else(|_| {
+            panic!(
+                "json: {} {}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            )
+        });
+        (out.status.code(), value)
+    };
+    let firefox = home
+        .path()
+        .join(".mozilla/native-messaging-hosts/local.fub.clipper.json");
+
+    // Senza --yes dice soltanto dove.
+    let (code, plan) = run(&["native-install", "--extension-id", "clipper@fub.local"]);
+    assert_eq!(code, Some(0), "{plan}");
+    assert_eq!(plan["data"]["applied"], false);
+    assert_eq!(plan["data"]["targets"][0]["status"], "would_write");
+    assert_eq!(plan["data"]["targets"].as_array().unwrap().len(), 1);
+    assert!(!firefox.exists());
+
+    // Con --yes lo scrive, per il solo Firefox: l'id non è di Chromium.
+    let (code, done) = run(&[
+        "native-install",
+        "--extension-id",
+        "clipper@fub.local",
+        "--yes",
+    ]);
+    assert_eq!(code, Some(0), "{done}");
+    assert_eq!(done["data"]["targets"][0]["status"], "written");
+    let written: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&firefox).unwrap()).unwrap();
+    assert_eq!(written["allowed_extensions"][0], "clipper@fub.local");
+    assert!(std::path::Path::new(written["path"].as_str().unwrap()).is_file());
+    assert!(!home
+        .path()
+        .join(".config/chromium/NativeMessagingHosts")
+        .exists());
+
+    // Un id Firefox per Chrome è un errore d'uso, non un manifest inutile.
+    let (code, _) = run(&[
+        "native-install",
+        "--extension-id",
+        "clipper@fub.local",
+        "--browser",
+        "chrome",
+        "--yes",
+    ]);
+    assert_eq!(code, Some(2));
+
+    // Un file d'altri resta com'è; il nostro si toglie.
+    let chromium = home
+        .path()
+        .join(".config/chromium/NativeMessagingHosts/local.fub.clipper.json");
+    std::fs::create_dir_all(chromium.parent().unwrap()).unwrap();
+    std::fs::write(&chromium, br#"{"name":"altro"}"#).unwrap();
+    let id = "abcdefghijklmnopabcdefghijklmnop";
+    let (_, foreign) = run(&["native-install", "--extension-id", id, "--yes"]);
+    assert_eq!(foreign["data"]["targets"][0]["status"], "skipped_foreign");
+    assert_eq!(std::fs::read(&chromium).unwrap(), br#"{"name":"altro"}"#);
+    let (code, removed) = run(&[
+        "native-install",
+        "--extension-id",
+        "clipper@fub.local",
+        "--uninstall",
+        "--yes",
+    ]);
+    assert_eq!(code, Some(0), "{removed}");
+    assert_eq!(removed["data"]["targets"][0]["status"], "removed");
+    assert!(!firefox.exists());
+}
