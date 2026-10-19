@@ -128,8 +128,8 @@ e col nome nuovo smetterebbe di portarci: un link a un omonimo in
 un'altra nota, o scritto con l'id esplicito del titolo, resta com'è. Il
 comando rifiuta un titolo con formattazione nel testo, un nome che un titolo
 precedente porta già e una rinomina che sposterebbe l'indirizzo di un omonimo
-(`titolo-1`). Un link Markdown con frammento (`[x](Nota.md#titolo)`,
-`[x](#Titolo%20due)`) cambia nel modo in cui era scritto: uno slug diventa lo
+(`titolo-1`). Un link Markdown con frammento (`Nota.md#titolo` fra parentesi,
+o solo `#Titolo%20due`) cambia nel modo in cui era scritto: uno slug diventa lo
 slug nuovo, un testo il testo nuovo con gli spazi in `%20`; una destinazione
 con escape o un link per riferimento restano com'erano. Anteprima, CAS e
 annulla funzionano come per `tag.rename`.
