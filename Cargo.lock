@@ -2147,6 +2147,7 @@ name = "fub-format-base"
 version = "0.1.0"
 dependencies = [
  "fub-abi",
+ "regex",
  "serde",
  "serde_json",
  "serde_yaml_ng",
