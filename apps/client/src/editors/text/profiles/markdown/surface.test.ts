@@ -7,6 +7,7 @@ import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type Markd
 import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
+import { declareClipboard } from "../../../../platform/clipboard";
 
 interface TestEditor {
   ed: MarkdownSurface;
@@ -100,6 +101,32 @@ describe("la superficie Markdown", () => {
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
+    }
+  });
+  it("in lettura Ctrl+C senza selezione copia il sorgente, con una selezione no", async () => {
+    const copied: string[] = [];
+    const undeclare = declareClipboard(async (text) => void copied.push(text));
+    try {
+      const { ed, reading } = editor();
+      ed.buffer.setDoc("# Titolo\r\n\r\n**forte**\r\n");
+      ed.setMode("reading");
+      window.getSelection()?.removeAllRanges();
+      const press = () => {
+        const event = new KeyboardEvent("keydown", { key: "c", ctrlKey: true, bubbles: true, cancelable: true });
+        reading().dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      expect(press()).toBe(true);
+      await vi.waitFor(() => expect(copied).toEqual(["# Titolo\r\n\r\n**forte**\r\n"]));
+      const range = document.createRange();
+      range.selectNodeContents(reading());
+      window.getSelection()!.addRange(range);
+      expect(press()).toBe(false);
+      expect(copied).toHaveLength(1);
+      window.getSelection()?.removeAllRanges();
+      ed.destroy();
+    } finally {
+      undeclare();
     }
   });
   it("il task cliccato in lettura cambia solo il simbolo ed è annullabile", () => {

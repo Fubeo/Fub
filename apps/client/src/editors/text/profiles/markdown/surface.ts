@@ -19,6 +19,8 @@ import { acquireMarkdownResources } from "../../../../ui/markdown-resources";
 import { settings } from "../../../../host/query";
 import { onEvent } from "../../../../state/kernel";
 import { openLifetime } from "../../../../ui/lifetime";
+import { notify } from "../../../../ui/notify";
+import { writeClipboardText } from "../../../../platform/clipboard";
 import { closeSlashPalette, openSlashPalette } from "../../../../ui/palette";
 import type {
   BufferedSurface,
@@ -274,6 +276,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       range.selectNodeContents(reading);
       selection.removeAllRanges();
       selection.addRange(range);
+    } else if (key === "c" && !event.shiftKey) {
+      // Senza niente di selezionato nella resa, Ctrl+C copia il sorgente
+      // della nota, com'è nel buffer: una selezione vera resta del browser.
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && selection.anchorNode && reading.contains(selection.anchorNode)) return;
+      event.preventDefault();
+      void writeClipboardText(engine.getDoc()).then(
+        () => notify(t("mode.reading.source_copied"), "info"),
+        () => notify(t("mode.reading.copy_failed"), "guasto"),
+      );
     }
   });
 
