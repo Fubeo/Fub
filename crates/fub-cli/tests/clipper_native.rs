@@ -375,3 +375,43 @@ fn native_install_writes_the_manifest_only_where_the_browser_is_and_only_with_ye
     assert_eq!(removed["data"]["targets"][0]["status"], "removed");
     assert!(!firefox.exists());
 }
+
+#[test]
+fn with_the_app_holding_the_vault_the_native_capture_is_written_by_the_app() {
+    let tmp = tempfile::tempdir().unwrap();
+    let vault = tmp.path().join("vault");
+    std::fs::create_dir(&vault).unwrap();
+    let vault_name = vault.to_str().unwrap().to_string();
+    let pairing = tmp.path().join("clipper-pairing.json");
+    std::fs::write(
+        &pairing,
+        serde_json::json!({ "pairs": [{ "extension_id": "clipper@fub.local",
+            "vault": vault_name, "folder": "Clips" }] })
+        .to_string(),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&pairing, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    // L'app: tiene il vault e ascolta sul canale di controllo.
+    let config = camino::Utf8Path::from_path(tmp.path()).unwrap();
+    let app = std::sync::Arc::new(fub_host::Host::without_watcher().with_config_dir(config));
+    app.open(camino::Utf8Path::from_path(&vault).unwrap())
+        .unwrap();
+    let served = std::sync::Arc::clone(&app);
+    let server = fub_host::control::ControlServer::start(config, move |call| {
+        fub_host::control::answer(&served, call)
+    })
+    .unwrap();
+
+    let mut request = capture();
+    request.payload.target.vault = Some(vault_name);
+    let replies = host_frames(tmp.path(), &[serde_json::to_vec(&request).unwrap()]);
+    assert!(replies[0].ok, "{:?}", replies[0]);
+    let doc = fub_host::doc_id("Clips/Private.md").unwrap();
+    let (source, _) = app.read_document(None, &doc).unwrap();
+    assert!(source.contains("# Private\n\nbytes\n"), "{source:?}");
+    drop(server);
+}

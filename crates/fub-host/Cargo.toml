@@ -33,7 +33,7 @@ tempfile = { workspace = true }
 tracing = { workspace = true }
 cap-std = { workspace = true }
 ring = { workspace = true }
-base64 = { workspace = true, optional = true }
+base64 = { workspace = true }
 uuid = { workspace = true, optional = true }
 
 # Il watcher di default, e l'unico che oggi esiste. Sta dietro una cargo feature
@@ -153,7 +153,7 @@ rich = ["dep:fub-format-rich"]
 # Il client HTTP: acceso di default come il watcher, e per la stessa ragione —
 # i client desktop previsti (CLI 27.1, API locale 27.2, l'app) lo vogliono, e
 # spegnerlo è la scelta di chi non può o non vuole averlo.
-http-client = ["dep:ureq", "dep:base64", "dep:uuid"]
+http-client = ["dep:ureq", "dep:uuid"]
 
 # **Le feature ufficiali, una cargo feature per bundle** (§16.3). Inoltrano e
 # basta: l'elenco vero è `fub_features::ogni_feature_ufficiale`, e questi nomi

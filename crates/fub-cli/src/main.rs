@@ -15,6 +15,7 @@ mod local;
 mod login;
 mod native;
 mod output;
+mod port;
 mod remote;
 
 use std::io::IsTerminal;

@@ -451,6 +451,14 @@ lo stesso host il lease è condiviso: riaprire un vault già aperto, o aprirlo i
 due chiamate concorrenti, non si esclude da solo. Snapshot e azzeramento della
 demo tengono il lease dalla chiusura alla riapertura.
 
+Con il vault aperto nell'app desktop, la CLI e l'host nativo del clipper non
+trovano soltanto `busy`: chiedono all'app per il canale di controllo, e l'app
+scrive con le sue sessioni. L'indirizzo e il token del canale stanno in
+`control.endpoint`, nella cartella di configurazione, del solo proprietario;
+l'app lo scrive all'avvio e lo toglie all'uscita. `--standalone` non passa
+dall'app. Le regole sono in
+[Permessi e sicurezza](permissions-and-security.md#canale-di-controllo).
+
 ## Snapshot globale offline
 
 L'applicazione globale di uno snapshot è distinta dal backup per-file di

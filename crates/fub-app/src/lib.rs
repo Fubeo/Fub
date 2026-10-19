@@ -545,6 +545,32 @@ fn resource_write(
 
 struct ViewerConfig(Option<Utf8PathBuf>);
 
+/// Il canale di controllo dell'app ([`fub_host::control`]): la CLI e l'host
+/// nativo del clipper lavorano attraverso l'app sui vault che lei tiene aperti.
+/// Lo possiede l'app; si chiude all'uscita, prima dei vault.
+#[cfg(not(mobile))]
+struct ControlChannel(std::sync::Mutex<Option<fub_host::control::ControlServer>>);
+
+#[cfg(not(mobile))]
+fn start_control(app: &tauri::App) {
+    let Some(dir) = app.state::<ViewerConfig>().0.clone() else {
+        return;
+    };
+    let handle = app.handle().clone();
+    match fub_host::control::ControlServer::start(&dir, move |call| {
+        fub_host::control::answer(&handle.state::<Host>(), call)
+    }) {
+        Ok(server) => {
+            app.manage(ControlChannel(std::sync::Mutex::new(Some(server))));
+        }
+        // Senza canale la CLI trova il vault occupato, come prima: l'app
+        // funziona lo stesso.
+        Err(error) => {
+            tracing::warn!(target: "fub.app", %error, "canale di controllo non avviato");
+        }
+    }
+}
+
 #[tauri::command]
 async fn viewer_open(
     app: AppHandle,
@@ -2309,6 +2335,8 @@ pub fn run() {
             for raw in std::env::args().filter(|arg| arg.starts_with("fub://")) {
                 forward_uri(app.handle(), &raw);
             }
+            #[cfg(not(mobile))]
+            start_control(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -2457,6 +2485,14 @@ pub fn run() {
                 }
             }
             if let tauri::RunEvent::Exit = event {
+                // Il canale di controllo si chiude prima dei vault: nessuna
+                // domanda della CLI arriva a una sessione che si sta chiudendo.
+                #[cfg(not(mobile))]
+                if let Some(control) = app.try_state::<ControlChannel>() {
+                    if let Some(server) = control.0.lock().ok().and_then(|mut slot| slot.take()) {
+                        server.close();
+                    }
+                }
                 // Lo scrittore riceve `bye` prima che il runtime cada con il
                 // processo; le sessioni non toccano i vault, che si chiudono
                 // dopo.

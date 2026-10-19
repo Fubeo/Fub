@@ -2222,7 +2222,7 @@ pub fn usage() -> &'static str {
 
 pub fn help_text(topic: Option<&str>) -> String {
     match topic {
-        None => format!("fub-cli — automazione locale sopra Host.\n\n{}\n\nflag globali: --vault PATH --format F --config-dir DIR --no-watcher --standalone --limit N --offset N --dry-run --yes --no-input --quiet --verbose --no-color --color\nUsa `help <comando>` per la sintassi. --standalone non elude il writer lock; vault occupato = busy.", usage()),
+        None => format!("fub-cli — automazione locale sopra Host.\n\n{}\n\nflag globali: --vault PATH --format F --config-dir DIR --no-watcher --standalone --limit N --offset N --dry-run --yes --no-input --quiet --verbose --no-color --color\nUsa `help <comando>` per la sintassi. Con il vault aperto nell'app, i comandi passano dall'app (canale di controllo locale); --standalone non passa dall'app e non elude il writer lock: vault occupato = busy.", usage()),
         Some(name) => match name {
             "read" => "read <doc> [--revision] [--model]\nLegge sorgente+revisione via Host::read_document. --model aggiunge il modello parsato. Vault da --vault/FUB_VAULT/corrente.".to_string(),
             "write" => "write <doc> [--base REV|--force] [--stdin|--text T|--file F]\nScrive con guardia CAS: --base la revisione letta, --force detta esplicita. Sorgente da --text/--file/stdin. Exit 5 su conflitto.".to_string(),

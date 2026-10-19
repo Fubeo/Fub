@@ -89,6 +89,9 @@ pub mod capture;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
 mod connector_tokens;
+/// Il canale di controllo: la CLI e l'host nativo del clipper chiedono all'app
+/// che tiene aperto il vault, invece di trovarlo occupato.
+pub mod control;
 mod custody;
 mod export_folder;
 pub mod format_source;

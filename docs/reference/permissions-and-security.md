@@ -184,6 +184,28 @@ nome che non è un manifest dell'host resta com'è; `--uninstall` toglie
 soltanto ciò che l'host ha scritto. Quando l'invio ripiega, il popup scrive i
 due comandi con l'id vero dell'estensione.
 
+## Canale di controllo
+
+Un vault ha un solo scrittore. Quando lo tiene l'app desktop, la CLI e l'host
+nativo del clipper non aprono un secondo writer: mandano all'app le porte
+generiche dell'host (indice, comandi, view, lettura e scrittura con revisione,
+job, impostazioni, cattura) e l'app le esegue con le sue regole, il suo
+`Guard` e i suoi eventi. Una scrittura con una revisione vecchia è un
+conflitto anche da qui, e la shell vede la modifica come vede quella di
+un'altra finestra. Il canale serve soltanto i vault che l'app ha già aperto:
+non apre, non chiude e non cambia il vault corrente; aprire un altro vault,
+chiuderlo o elencare i plugin si fa dall'app, o con l'app chiusa.
+
+Il server (`fub_host::control`) ascolta soltanto su `127.0.0.1`, su una porta
+scelta dal sistema, e risponde soltanto a chi porta il token: 32 byte casuali,
+confrontati senza fermarsi al primo byte diverso. Il token sta in
+`control.endpoint`, che la CLI accetta soltanto se è un file regolare del solo
+proprietario e se indica il loopback. Una domanda è al più 48 MiB, le domande
+servite insieme al più otto. Il server ha un owner: l'app lo chiude
+all'uscita, prima dei vault, e toglie il file se è ancora il suo. Un file
+rimasto da un'app caduta indica una porta che non risponde, e il vault resta
+`busy`. `--standalone` non passa mai dall'app.
+
 ## Supply chain
 
 - sorgenti delle dipendenze limitate dalla policy;

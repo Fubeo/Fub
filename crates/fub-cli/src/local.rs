@@ -84,6 +84,12 @@ pub fn vault(
                     Failure::new(2, "bad_args", "vault open vuole un path (o FUB_VAULT)")
                 })?;
             connection.open_vault(&path)?;
+            if let Some(root) = connection.host.app_root() {
+                print(&envelope_ok(
+                    serde_json::json!({ "root": root.as_str(), "via": "app" }),
+                ));
+                return Ok(());
+            }
             let info = connection
                 .host
                 .open(camino::Utf8Path::new(&path))
