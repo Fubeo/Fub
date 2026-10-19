@@ -366,12 +366,12 @@ wikilink, tag, heading, ancore ed embed. Il provider decide la semantica del
 formato; il kernel conserva path e sorgente senza incorporare regole Markdown.
 
 Le proprietà del frontmatter restano nel file. Un vault può dichiararne il tipo
-per nome nell'impostazione versionata `properties.types`; questa dichiarazione
-sceglie widget e semantica di query, ma non rinomina chiavi convenzionali né
-sposta valori in un database. Gli aggiornamenti strutturati modificano la sola
-chiave interessata e conservano commenti, ordine, virgolette, terminatori e
-corpo non coinvolti. YAML incompatibile o non rappresentabile resta disponibile
-in modalità sorgente.
+per nome nell'impostazione versionata `properties.types`, che sceglie widget e
+semantica di query senza spostare valori in un database. Gli aggiornamenti
+strutturati modificano la sola chiave interessata e conservano commenti, ordine,
+virgolette, terminatori e corpo; rinominare o togliere una chiave da tutto il
+vault (`property.key.rename`, `property.key.delete`) passa da un'anteprima e si
+annulla. YAML incompatibile o non rappresentabile resta in modalità sorgente.
 
 ## Importare ed esportare
 

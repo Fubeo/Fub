@@ -39,6 +39,10 @@ pub const NOTES_PROPERTY_REMOVE: &str = "note.property.remove";
 pub const PROPERTY_TYPE_SET: &str = "property.type.set";
 /// Rinomina una chiave frontmatter in tutte le note che la portano.
 pub const PROPERTY_KEY_RENAME: &str = "property.key.rename";
+/// Toglie una chiave frontmatter da tutte le note che la portano.
+pub const PROPERTY_KEY_DELETE: &str = "property.key.delete";
+/// Aggiunge un alias alla nota, nella lista `aliases` del frontmatter.
+pub const NOTES_ALIAS_ADD: &str = "note.alias.add";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";
@@ -83,6 +87,13 @@ const GLOBAL_DOCS: &str = "global_docs";
 const P_TYPE: &str = "p_type";
 const P_RENAME: &str = "p_rename";
 const U_RENAME: &str = "u_rename";
+const P_DELETE: &str = "p_delete";
+const U_DELETE: &str = "u_delete";
+const ALIAS: &str = "alias";
+const ALIASES: &str = "aliases";
+const P_ALIAS: &str = "p_alias";
+const P_ALIAS_PRESENT: &str = "p_alias_present";
+const U_ALIAS: &str = "u_alias";
 const FAILED: &str = "failed";
 /// La nota del giorno di una proprietà data: il percorso inverso di
 /// `note.daily`, che la data la scrive nella giornaliera. Il comando si chiama
@@ -196,6 +207,11 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Rinominata «{old_key}» in «{new_key}»: {count} note",
             )
             .with(U_RENAME, "Annulla rinomina «{old_key}» in «{new_key}»")
+            .with(P_DELETE, "Tolta «{key}»: {count} note")
+            .with(U_DELETE, "Annulla rimozione di «{key}» dal vault")
+            .with(P_ALIAS, "Alias «{alias}» aggiunto a {doc}")
+            .with(P_ALIAS_PRESENT, "{doc} ha già l'alias «{alias}»")
+            .with(U_ALIAS, "Annulla alias «{alias}»")
             .with("property.type.set.title", "Dichiara tipo proprietà")
             .with(
                 "property.type.set.desc",
@@ -219,6 +235,25 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(
                 "property.key.rename.new_key.desc",
                 "Chiave di destinazione.",
+            )
+            .with("property.key.delete.title", "Elimina proprietà dal vault")
+            .with(
+                "property.key.delete.desc",
+                "Toglie la chiave da tutte le note che la portano, con anteprima.",
+            )
+            .with("property.key.delete.key.title", "Chiave")
+            .with("property.key.delete.key.desc", "Chiave da togliere.")
+            .with("note.alias.add.title", "Aggiungi alias")
+            .with(
+                "note.alias.add.desc",
+                "Aggiunge un nome alternativo alla nota, nella lista aliases.",
+            )
+            .with("note.alias.add.alias.title", "Alias")
+            .with("note.alias.add.alias.desc", "Il nome alternativo.")
+            .with("note.alias.add.doc.title", "Nota")
+            .with(
+                "note.alias.add.doc.desc",
+                "La nota; se manca, quella attiva.",
             ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Properties")
@@ -318,6 +353,11 @@ pub fn catalog() -> Vec<StringCatalog> {
                 "Renamed «{old_key}» to «{new_key}» in {count} notes",
             )
             .with(U_RENAME, "Undo rename «{old_key}» to «{new_key}»")
+            .with(P_DELETE, "Removed «{key}» from {count} notes")
+            .with(U_DELETE, "Undo removing «{key}» from the vault")
+            .with(P_ALIAS, "Alias «{alias}» added to {doc}")
+            .with(P_ALIAS_PRESENT, "{doc} already has the alias «{alias}»")
+            .with(U_ALIAS, "Undo alias «{alias}»")
             .with("property.type.set.title", "Declare property type")
             .with(
                 "property.type.set.desc",
@@ -338,7 +378,26 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("property.key.rename.old_key.title", "Old key")
             .with("property.key.rename.old_key.desc", "Existing key.")
             .with("property.key.rename.new_key.title", "New key")
-            .with("property.key.rename.new_key.desc", "Destination key."),
+            .with("property.key.rename.new_key.desc", "Destination key.")
+            .with("property.key.delete.title", "Delete vault property")
+            .with(
+                "property.key.delete.desc",
+                "Remove the key from every note that has it, with a preview.",
+            )
+            .with("property.key.delete.key.title", "Key")
+            .with("property.key.delete.key.desc", "Key to remove.")
+            .with("note.alias.add.title", "Add alias")
+            .with(
+                "note.alias.add.desc",
+                "Add an alternative name to the note, in the aliases list.",
+            )
+            .with("note.alias.add.alias.title", "Alias")
+            .with("note.alias.add.alias.desc", "The alternative name.")
+            .with("note.alias.add.doc.title", "Note")
+            .with(
+                "note.alias.add.doc.desc",
+                "The note; the active one if omitted.",
+            ),
     ])
 }
 
@@ -1020,6 +1079,13 @@ impl CommandProvider for PropertiesCommands {
                 .with_param(parameter(PROPERTY_KEY_RENAME, OLD_KEY, ParamKind::Text).required())
                 .with_param(parameter(PROPERTY_KEY_RENAME, NEW_KEY, ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(PROPERTY_KEY_DELETE)
+                .with_param(parameter(PROPERTY_KEY_DELETE, KEY, ParamKind::Text).required())
+                .with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(NOTES_ALIAS_ADD)
+                .with_param(parameter(NOTES_ALIAS_ADD, ALIAS, ParamKind::Text).required())
+                .with_param(parameter(NOTES_ALIAS_ADD, DOC, ParamKind::Document))
+                .with_scope(CommandScope::writing(CommandReach::Document)),
         ]
     }
 
@@ -1044,6 +1110,8 @@ impl CommandProvider for PropertiesCommands {
             }
             PROPERTY_TYPE_SET => set_property_type(Args::new(&args), mode, host),
             PROPERTY_KEY_RENAME => rename_property_key(Args::new(&args), mode, host),
+            PROPERTY_KEY_DELETE => delete_property_key(Args::new(&args), mode, host),
+            NOTES_ALIAS_ADD => add_alias(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
     }
@@ -1435,6 +1503,147 @@ fn rename_property_key(
                 U_RENAME,
                 vec![Arg::text(OLD_KEY, old), Arg::text(NEW_KEY, new)],
             ),
+            inverses,
+        ));
+    }
+    Ok(outcome)
+}
+
+/// Un alias in più, accodato alla lista: un `aliases` scritto come stringa
+/// diventa una lista con il vecchio valore davanti. Un vault che usa la chiave
+/// singolare `alias` la tiene, se `aliases` non c'è.
+fn add_alias(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let doc = doc_from(args, host)?;
+    let alias = args.text(ALIAS).unwrap_or("").trim().to_string();
+    if alias.is_empty() {
+        return Err(PluginError::BadArgs(Text::key(E_EMPTY_KEY)));
+    }
+    let model = host.read_model(&doc)?;
+    let key =
+        if model.frontmatter.0.get(ALIASES).is_none() && model.frontmatter.0.get(ALIAS).is_some() {
+            ALIAS
+        } else {
+            ALIASES
+        };
+    let mut list = match model.frontmatter.0.get(key) {
+        None | Some(serde_json::Value::Null) => Vec::new(),
+        Some(serde_json::Value::Array(items)) => items.clone(),
+        Some(other) => vec![other.clone()],
+    };
+    let named = vec![Arg::text(ALIAS, &alias), Arg::text(DOC, doc.as_str())];
+    if list
+        .iter()
+        .any(|item| item.as_str() == Some(alias.as_str()))
+    {
+        return Ok(CommandOutcome::notify(Text::message(
+            P_ALIAS_PRESENT,
+            named,
+        )));
+    }
+    list.push(serde_json::Value::String(alias.clone()));
+    let value = serde_json::Value::Array(list);
+    rewrite(
+        key,
+        &None,
+        None,
+        host,
+        &doc,
+        mode,
+        Text::message(P_ALIAS, named),
+        Text::message(U_ALIAS, vec![Arg::text(ALIAS, &alias)]),
+        |map| {
+            map.insert(key.to_string(), value.clone());
+            Ok(())
+        },
+    )
+}
+
+/// Il gemello di [`rename_property_key`]: stesse revisioni fissate prima di
+/// scrivere, stesso esito parziale, e un annullo che rimette ogni valore. Il
+/// tipo dichiarato resta: la chiave può tornare, e il registro non è un dato
+/// delle note.
+fn delete_property_key(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let key = key_from(args)?;
+    let docs = host
+        .query_index(IndexQuery::Documents {
+            matching: QueryExpr::of(QueryPredicate::Property {
+                filter: PropertyFilter {
+                    key: key.clone(),
+                    test: PropertyTest::Exists,
+                },
+            }),
+            sort: None,
+            select: PropertySelect::None,
+            page: None,
+            excerpts: Excerpts::Omit,
+        })?
+        .documents()?
+        .items;
+    let attempted = docs.len();
+    let mut plans = Vec::with_capacity(attempted);
+    let mut failures = Vec::new();
+    for entry in docs {
+        let doc = entry.doc;
+        let prepared = (|| -> Result<Option<PlannedEdit>, PluginError> {
+            crate::formats::require(host, &doc, fub_abi::options::syntax::FRONTMATTER)?;
+            let revision = host.document_revision(&doc)?;
+            let source = host.read_document(&doc)?;
+            let model = host.read_model(&doc)?;
+            if model.frontmatter.get(&key).is_none() {
+                return Ok(None); // già tolta: si può rilanciare
+            }
+            let edit = edit_property_frontmatter(&source, &model, &key, None)?;
+            Ok(Some(PlannedEdit::new(
+                doc.clone(),
+                EditRequest::new(revision, vec![edit]),
+            )))
+        })();
+        match prepared {
+            Ok(Some(edit)) => plans.push(edit),
+            Ok(None) => {}
+            Err(error) => failures.push(Failure::of(doc, error)),
+        }
+    }
+    let summary = |count: usize| {
+        Text::message(
+            P_DELETE,
+            vec![
+                Arg::text(KEY, key.as_str()),
+                Arg::text("count", count.to_string()),
+            ],
+        )
+    };
+    if mode.is_dry_run() {
+        let planned = plans.len();
+        return Ok(CommandOutcome::done()
+            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                summary(planned),
+                plans,
+            )))
+            .partially(Partial::of(attempted, planned, failures)));
+    }
+    let mut inverses = Vec::new();
+    for planned in plans {
+        match host.apply_edit(&planned.doc, planned.edit) {
+            Ok(report) => inverses.push(PlannedEdit::new(planned.doc, report.inverse())),
+            Err(error) => failures.push(Failure::of(planned.doc, error)),
+        }
+    }
+    let changed = inverses.len();
+    let mut outcome = CommandOutcome::notify(summary(changed))
+        .partially(Partial::of(attempted, changed, failures));
+    if !inverses.is_empty() {
+        inverses.reverse();
+        outcome = outcome.undoable(Undo::of_edits(
+            Text::message(U_DELETE, vec![Arg::text(KEY, key.as_str())]),
             inverses,
         ));
     }

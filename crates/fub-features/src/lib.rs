@@ -149,8 +149,9 @@ pub use outline::{
 pub use proof::{ProofCommands, ProofIndex, PROOF_ID, WORDS_KEY, WORD_ADD, WORD_REMOVE};
 #[cfg(feature = "properties")]
 pub use properties::{
-    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_PROPERTY_REMOVE,
-    NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
+    NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_DELETE,
+    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
 };
 #[cfg(feature = "queries")]
 pub use queries::{

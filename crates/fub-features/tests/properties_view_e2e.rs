@@ -14,8 +14,9 @@ use fub_abi::settings::SettingValue;
 use fub_abi::traits::{PluginManifest, ViewInstance};
 use fub_abi::ui::{FieldValue, UiAction, UiKind, UiNode, UiValue};
 use fub_features::{
-    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_PROPERTY_REMOVE,
-    NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
+    NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID, PROPERTIES_VIEW, PROPERTY_KEY_DELETE,
+    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -730,4 +731,107 @@ fn without_templates_the_daily_button_says_why() {
     let shown = serde_json::to_string(&root).unwrap();
     assert!(shown.contains("i modelli di nota sono spenti"), "{shown}");
     assert!(!vault.root.join("Daily").exists());
+}
+
+#[test]
+fn deleting_a_key_from_the_vault_previews_applies_and_undoes() {
+    let vault = Vault::new();
+    vault.put(
+        "a.md",
+        "---\nstato: bozza # da rivedere\naltro: si\n---\n\n# Resta\n",
+    );
+    vault.put("b.md", "---\nstato: [uno, due]\n---\n\nTesto\n");
+    vault.put("c.md", "---\naltro: no\n---\n");
+    let mut ws = vault.open();
+    let before_a = vault.read("a.md");
+    let before_b = vault.read("b.md");
+    let before_c = vault.read("c.md");
+    let args = serde_json::json!({"key":"stato"});
+    let plan = ws
+        .invoke_command(
+            PROPERTY_KEY_DELETE,
+            args.clone(),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .unwrap();
+    let CommandEffect::Plan(plan) = plan.effect else {
+        panic!("expected dry-run plan")
+    };
+    assert_eq!(plan.edits.len(), 2);
+    assert_eq!(vault.read("a.md"), before_a);
+    let result = ws
+        .invoke_command(
+            PROPERTY_KEY_DELETE,
+            args.clone(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap();
+    assert!(result.partial.is_none());
+    let a = vault.read("a.md");
+    assert!(!a.contains("stato"), "{a}");
+    assert!(a.contains("altro: si") && a.contains("# Resta"), "{a}");
+    assert!(!vault.read("b.md").contains("stato"));
+    assert!(vault.read("b.md").contains("Testo"));
+    assert_eq!(vault.read("c.md"), before_c);
+    let rerun = ws
+        .invoke_command(PROPERTY_KEY_DELETE, args, InvokeMode::Apply, Actor::User)
+        .unwrap();
+    assert!(rerun.undo.is_none());
+    for step in result.undo.unwrap().steps {
+        let UndoStep::Edit(planned) = step else {
+            panic!("inverse edit expected")
+        };
+        ws.apply_edit(&planned.doc, planned.edit).unwrap();
+    }
+    assert_eq!(vault.read("a.md"), before_a);
+    assert_eq!(vault.read("b.md"), before_b);
+}
+
+#[test]
+fn deleting_an_empty_key_is_refused() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    assert!(ws
+        .invoke_command(
+            PROPERTY_KEY_DELETE,
+            serde_json::json!({"key":"  "}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .is_err());
+}
+
+#[test]
+fn an_alias_joins_the_list_and_a_string_becomes_a_list() {
+    let vault = Vault::new();
+    vault.put("a.md", "---\ntitolo: Uno\n---\n\nTesto\n");
+    vault.put("b.md", "---\naliases: Primo\n---\n");
+    vault.put("c.md", "---\nalias: [Vecchio]\n---\n");
+    let mut ws = vault.open();
+    let mut add = |doc: &str, alias: &str| {
+        ws.invoke_command(
+            NOTES_ALIAS_ADD,
+            serde_json::json!({"doc": doc, "alias": alias}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap()
+    };
+    let first = add("a.md", "Uno bis");
+    assert!(first.undo.is_some());
+    add("a.md", "Altro");
+    let a = vault.read("a.md");
+    assert!(a.contains("titolo: Uno") && a.contains("Testo"), "{a}");
+    assert!(a.contains("Uno bis") && a.contains("Altro"), "{a}");
+    let again = add("a.md", "Altro");
+    assert!(again.undo.is_none(), "un alias già presente non riscrive");
+    add("b.md", "Secondo");
+    let b = vault.read("b.md");
+    assert!(b.contains("Primo") && b.contains("Secondo"), "{b}");
+    add("c.md", "Nuovo");
+    let c = vault.read("c.md");
+    assert!(c.contains("alias:") && !c.contains("aliases"), "{c}");
+    assert!(c.contains("Vecchio") && c.contains("Nuovo"), "{c}");
 }
