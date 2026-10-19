@@ -346,9 +346,9 @@ Un pulsante agisce sulla selezione, o sulla parola sotto il cursore, come la
 scorciatoia corrispondente, e la modifica entra nella cronologia locale del
 riquadro. Lo stato si legge sulla barra: il grassetto è premuto con il cursore
 dentro un grassetto, il selettore dello stile dice «Titolo 2» su un titolo di
-secondo livello, le operazioni sulla tabella sono spente fuori da una tabella
-e le formattazioni in riga sono spente dentro il codice. In sola lettura tutto
-è spento.
+secondo livello, le operazioni sulla tabella sono spente fuori da una tabella e
+le formattazioni in riga sono spente dentro il codice. In sola lettura tutto è
+spento. Il tasto destro toglie una nota a piè di pagina e i suoi richiami.
 
 La barra sta su una riga: i gruppi che non entrano scendono nel menu «altri
 strumenti». La tastiera la raggiunge con un solo arresto di tabulazione:

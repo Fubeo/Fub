@@ -598,6 +598,67 @@ const insertFootnote: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+const FOOTNOTE_DEFINITION = /^\[\^([^\]\s]+)\]:/;
+
+/// La nota a piè di pagina sotto `pos`: il richiamo `[^id]` che lo contiene
+/// (i bordi compresi), o la riga della definizione `[^id]: …`.
+export function footnoteAt(state: EditorState, pos: number): string | null {
+  const line = state.doc.lineAt(pos);
+  const definition = FOOTNOTE_DEFINITION.exec(line.text);
+  if (definition) return definition[1]!;
+  for (const match of line.text.matchAll(/\[\^([^\]\s]+)\]/g)) {
+    const from = line.from + match.index;
+    if (pos >= from && pos <= from + match[0].length) return match[1]!;
+  }
+  return null;
+}
+
+/// Toglie la nota a piè di pagina sotto `pos`: ogni suo richiamo e la sua
+/// definizione con le righe rientrate che la continuano. Se la definizione
+/// chiudeva il documento, se ne vanno anche le righe vuote che la
+/// precedevano.
+export function deleteFootnoteAt(pos: number): StateCommand {
+  return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
+    const id = footnoteAt(state, pos);
+    if (id === null) return false;
+    const doc = state.doc;
+    const reference = `[^${id}]`;
+    const changes: { from: number; to: number; insert?: string }[] = [];
+    for (let n = 1; n <= doc.lines; n++) {
+      const line = doc.line(n);
+      if (FOOTNOTE_DEFINITION.exec(line.text)?.[1] === id) {
+        let last = line;
+        while (last.number < doc.lines) {
+          const next = doc.line(last.number + 1);
+          if (next.text.trim() === "" || !/^(\t| {2,})/.test(next.text)) break;
+          last = next;
+        }
+        let from = line.from;
+        let to = last.number < doc.lines ? last.to + 1 : last.to;
+        let insert = "";
+        if (doc.sliceString(to).trim() === "") {
+          let before = line.number - 1;
+          while (before >= 1 && doc.line(before).text.trim() === "") before--;
+          from = before >= 1 ? doc.line(before).to : 0;
+          to = doc.length;
+          insert = before >= 1 && doc.sliceString(doc.length - 1) === "\n" ? state.lineBreak : "";
+        }
+        changes.push({ from, to, insert });
+        n = last.number;
+        continue;
+      }
+      for (let at = line.text.indexOf(reference); at >= 0; at = line.text.indexOf(reference, at + reference.length)) {
+        changes.push({ from: line.from + at, to: line.from + at + reference.length });
+      }
+    }
+    dispatch(state.update({ changes, scrollIntoView: true, userEvent: "delete" }));
+    return true;
+  };
+}
+
+const deleteFootnote: StateCommand = (target) => deleteFootnoteAt(target.state.selection.main.head)(target);
+
 // ── Pulizia ──────────────────────────────────────────────────────────────────
 
 const FORMATTED = nodeSet("StrongEmphasis", "Emphasis", "Strikethrough", "InlineCode");
@@ -698,6 +759,10 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.wikilink", { run: toggleWikilink, active: (s) => insidePair(s, WIKILINK_PAIR), prose: true, chord: "Mod-k" }],
   ["markdown.image", { run: insertImage, prose: true }],
   ["markdown.footnote", { run: insertFootnote, prose: true }],
+  ["markdown.footnote.delete", {
+    run: deleteFootnote,
+    applicable: (state) => footnoteAt(state, state.selection.main.head) !== null,
+  }],
   ["markdown.list.bullet", {
     run: toggleBulletList,
     active: listActive("bullet"),

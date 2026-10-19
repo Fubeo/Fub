@@ -141,6 +141,16 @@ describe("collegamenti e rimandi", () => {
       "Uno[^1] e due[^2]\n\n[^1]: prima\n\n[^2]: |",
     );
   });
+
+  it("eliminare una nota toglie i richiami e la definizione, e chiude il fondo", () => {
+    expect(run("markdown.footnote.delete", "Uno[^1|] e due[^1]\n\n[^1]: prima\n")).toBe("Uno| e due\n");
+    expect(run("markdown.footnote.delete", "Uno[^a] e[^b]\n\n[^a]: prima|\n    seguito\n[^b]: seconda\n")).toBe(
+      "Uno e[^b]\n\n|[^b]: seconda\n",
+    );
+    expect(run("markdown.footnote.delete", "Testo[^1]|\n\n[^1]: x")).toBe("Testo|");
+    expect(stateAt("markdown.footnote.delete", "Testo| [^1]").enabled).toBe(false);
+    expect(stateAt("markdown.footnote.delete", "Testo [^1|]").enabled).toBe(true);
+  });
 });
 
 describe("liste", () => {

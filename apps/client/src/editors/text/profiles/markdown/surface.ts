@@ -38,7 +38,8 @@ import type { CompletionSources } from "./completions";
 import { createMarkdownProfile } from "./profile";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
-import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { deleteFootnoteAt, footnoteAt, MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { showContextMenu } from "../../../../ui/menu";
 import { foldAll, unfoldAll } from "@codemirror/language";
 import { foldLess, foldMore } from "../../fold-levels";
 import {
@@ -187,6 +188,16 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   const actionsChanged = () => {
     for (const listener of [...actionListeners]) listener();
   };
+  // Il tasto destro su un richiamo o sulla definizione di una nota a piè di
+  // pagina offre di eliminarla tutta; altrove resta il menu del sistema.
+  life.listen(parent, "contextmenu", (event) => {
+    if (readOnly || mode === "reading" || event.defaultPrevented) return;
+    if (!(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
+    const pos = engine.posAtPoint(event.clientX, event.clientY);
+    if (pos === null || engine.readState((state) => footnoteAt(state, pos)) === null) return;
+    event.preventDefault();
+    showContextMenu(event, [{ label: t("editor.footnote.delete"), run: () => void engine.runCommand(deleteFootnoteAt(pos)) }]);
+  });
   life.listen(parent, "keydown", (event) => {
     const slash = opts.slash;
     if (

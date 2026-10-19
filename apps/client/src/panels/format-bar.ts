@@ -86,6 +86,7 @@ export const ACTION_LOOKS: Readonly<Record<string, Look>> = {
   "markdown.wikilink": { icon: "fmt-wikilink", group: "links" },
   "markdown.image": { icon: "fmt-image", group: "links" },
   "markdown.footnote": { icon: "footnote", group: "links" },
+  "markdown.footnote.delete": { icon: "", group: "links", menu: true },
   "markdown.list.bullet": { icon: "fmt-bullets", group: "lists" },
   "markdown.list.ordered": { icon: "fmt-numbers", group: "lists" },
   "markdown.list.task": { icon: "fmt-tasks", group: "lists" },

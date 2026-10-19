@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
+import { t } from "../../../../i18n/strings";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
@@ -479,6 +480,30 @@ describe("le azioni dell'editor della superficie", () => {
     expect(ed.editorActions.run("text.fold.less")).toBe(false);
     expect(ed.buffer.getDoc()).toBe(text);
     expect(ed.editorActions.state("text.undo").enabled).toBe(false);
+    ed.destroy();
+  });
+
+  it("il tasto destro su un richiamo offre di eliminare la nota, altrove lascia il menu del sistema", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("Uno[^1] due\n\n[^1]: prima\n");
+    const content = view().contentDOM;
+    const spot = { pos: 4 };
+    const original = view().posAtCoords.bind(view());
+    view().posAtCoords = ((_coords: { x: number; y: number }) => spot.pos) as typeof original;
+    const plain = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+    spot.pos = 9;
+    content.dispatchEvent(plain);
+    expect(plain.defaultPrevented).toBe(false);
+    expect(document.querySelector("#context-menu [role=menuitem]")).toBeNull();
+    spot.pos = 4;
+    const onReference = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+    content.dispatchEvent(onReference);
+    expect(onReference.defaultPrevented).toBe(true);
+    const item = [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")].find((each) =>
+      each.textContent?.includes(t("editor.footnote.delete")));
+    expect(item).toBeDefined();
+    item!.click();
+    expect(ed.buffer.getDoc()).toBe("Uno due\n");
     ed.destroy();
   });
 

@@ -231,7 +231,8 @@ uno spegne il pulsante di chi lo nomina. La superficie Markdown conosce:
 - `markdown.bold`, `markdown.italic`, `markdown.strikethrough`,
   `markdown.highlight`, `markdown.code`, `markdown.math`, `markdown.comment`,
   `markdown.clear`;
-- `markdown.link`, `markdown.wikilink`, `markdown.image`, `markdown.footnote`;
+- `markdown.link`, `markdown.wikilink`, `markdown.image`, `markdown.footnote`,
+  `markdown.footnote.delete`;
 - `markdown.list.bullet`, `markdown.list.ordered`, `markdown.list.task`,
   `markdown.list.indent`, `markdown.list.dedent`;
 - `markdown.quote`, `markdown.callout`, `markdown.codeblock`,

@@ -607,6 +607,13 @@ export class TextEngine {
     return true;
   }
 
+  /// La posizione del testo sotto un punto dello schermo, o `null` fuori dal
+  /// testo disegnato.
+  public posAtPoint(x: number, y: number): number | null {
+    if (this.disposed) return null;
+    return this.view.posAtCoords({ x, y });
+  }
+
   /// Inserisce testo nel punto dello schermo dove qualcosa è stato lasciato
   /// cadere, come battuta dell'utente; il cursore va dopo il testo. Fuori dal
   /// testo (oltre l'ultima riga) vale la posizione più vicina.

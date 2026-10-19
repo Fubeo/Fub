@@ -201,6 +201,13 @@ const BUTTONS: &[Button] = &[
         "Footnote",
         "Inserts a numbered reference and writes its note at the end.",
     ],
+    [
+        "markdown.footnote.delete",
+        "Elimina nota a piè di pagina",
+        "Toglie la nota del cursore: i suoi richiami e la sua definizione.",
+        "Delete footnote",
+        "Removes the cursor's footnote: its references and its definition.",
+    ],
     // Liste.
     [
         "markdown.list.bullet",
