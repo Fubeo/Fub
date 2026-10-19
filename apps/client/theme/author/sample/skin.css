@@ -2852,6 +2852,23 @@ kbd,
   background: var(--highlight);
   color: var(--text);
 }
+/* «Più contesto»: le righe attorno all'occorrenza, come stanno nella nota. */
+.hit-context {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  line-height: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.hit-context mark {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-xs);
+  background: var(--highlight);
+  color: var(--text);
+}
 /* Le occorrenze dopo la prima: non un altro risultato, un altro punto dello
    stesso — più basse, in grafite. */
 .search-results .hit-occurrence {

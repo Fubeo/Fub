@@ -3,6 +3,8 @@ import type { DocumentMatch } from "../host/contract";
 import { entryTimes, matchingDocuments, SearchSyntaxError, searchExpression, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
 import { rowsToShow, SEARCH_SORTS, sortHits, type SearchSort } from "../rules/results";
+import { occurrenceContext } from "../rules/search-context";
+import { api } from "../host/ipc";
 import { $ } from "../ui/dom";
 import { highlighted } from "../ui/highlight";
 import { setTooltip } from "../ui/tooltip";
@@ -37,6 +39,8 @@ const SEARCH_PAGE = 50;
 const SORT_PAGE = 500;
 let sortMode: SearchSort = "relevance";
 let collapsedResults = false;
+/// «Più contesto»: sotto ogni occorrenza le righe attorno, lette dalla nota.
+let widerContext = false;
 const excluded = new Set<string>();
 const excludedFolders = new Set<string>();
 let shownHits: DocumentMatch[] = [];
@@ -410,6 +414,18 @@ function showSearchResults(
       showSearchResults(hits, error, indexing, total);
     });
     tools.append(order, collapse);
+    if (!collapsedResults) {
+      const context = document.createElement("button");
+      context.type = "button";
+      context.className = "search-action";
+      context.textContent = t(widerContext ? "search.less_context" : "search.more_context");
+      context.setAttribute("aria-pressed", String(widerContext));
+      context.addEventListener("click", () => {
+        widerContext = !widerContext;
+        showSearchResults(hits, error, indexing, total);
+      });
+      tools.append(context);
+    }
   }
   searchResultsEl.append(tools);
   // Le righe si montano **fuori dal documento** e si attaccano in una volta
@@ -419,6 +435,17 @@ function showSearchResults(
   // qualche migliaio di volte — a ogni tasto premuto, perché questo pannello si
   // ridisegna mentre si scrive.
   const newItems = document.createDocumentFragment();
+  // Il sorgente di ogni nota si legge una volta sola per disegno, e solo con
+  // «più contesto» acceso.
+  const sources = new Map<string, Promise<Uint8Array>>();
+  const sourceOf = (doc: string) => {
+    let source = sources.get(doc);
+    if (!source) {
+      source = api.readDocument(doc).then(({ text }) => new TextEncoder().encode(text));
+      sources.set(doc, source);
+    }
+    return source;
+  };
   for (const row of rowsToShow(hits, collapsedResults)) {
     const li = document.createElement("li");
     setTooltip(li, row.doc);
@@ -436,7 +463,7 @@ function showSearchResults(
       path.className = "hit-path";
       path.textContent = row.doc;
       button.append(path);
-      if (row.snippet !== undefined && row.snippet !== "") {
+      if (row.snippet !== undefined && row.snippet !== "" && !(widerContext && row.byteEnd !== undefined)) {
         const snippet = document.createElement("span");
         snippet.className = "hit-snippet";
         snippet.appendChild(highlighted(row.snippet, row.highlights ?? []));
@@ -454,6 +481,18 @@ function showSearchResults(
     } else {
       button.classList.add("hit-occurrence");
       button.textContent = t("search.occurrence", { n: row.occurrence });
+    }
+    if (widerContext && row.byteOffset !== undefined && row.byteEnd !== undefined) {
+      const context = document.createElement("span");
+      context.className = "hit-context";
+      button.append(context);
+      const [start, end] = [row.byteOffset, row.byteEnd];
+      // Una nota che non si lascia leggere resta senza contesto: la riga
+      // porta comunque all'occorrenza.
+      void sourceOf(row.doc).then((source) => {
+        const around = occurrenceContext(source, start, end);
+        context.replaceChildren(highlighted(around.text, [around.highlight]));
+      }, () => context.remove());
     }
     openAt(button, row.doc, row.byteOffset);
     li.appendChild(button);

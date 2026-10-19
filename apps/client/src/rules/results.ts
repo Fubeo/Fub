@@ -15,6 +15,9 @@ export interface ResultRow {
   /// è ciò che questo pannello faceva per **tutti** i risultati prima della
   /// §21.3.
   byteOffset?: number;
+  /// Dove finisce l'occorrenza, per disegnarne il contesto; c'è quando c'è
+  /// `byteOffset` e la riga non è compressa.
+  byteEnd?: number;
   /// Il numero dell'occorrenza (2, 3, …) per le righe che ne sono una; assente
   /// per la riga della nota.
   occurrence?: number;
@@ -52,6 +55,7 @@ export function rowsToShow(hits: DocumentMatch[], collapsed = false): ResultRow[
     rows.push({
       doc: hit.doc,
       byteOffset: occurrences[0]?.span.start,
+      ...(occurrences[0] ? { byteEnd: occurrences[0].span.end } : {}),
       snippet: hit.snippet,
       highlights: hit.highlights,
       ...(total === undefined ? {} : { total }),
@@ -60,6 +64,7 @@ export function rowsToShow(hits: DocumentMatch[], collapsed = false): ResultRow[
       rows.push({
         doc: hit.doc,
         byteOffset: position.span.start,
+        byteEnd: position.span.end,
         occurrence: i + 2,
         ...(total === undefined ? {} : { total }),
       });

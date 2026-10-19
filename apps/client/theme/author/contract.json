@@ -313,6 +313,7 @@
     "hit-title",
     "hit-path",
     "hit-snippet",
+    "hit-context",
     "hit-occurrence",
     "hit-create",
     "search-action",
@@ -1970,6 +1971,7 @@
         "hit-title",
         "hit-path",
         "hit-snippet",
+        "hit-context",
         "hit-occurrence",
         "hit-create"
       ],
@@ -5209,7 +5211,7 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1076,
+    "hooks": 1077,
     "state_names": 7,
     "assigned_states": 623,
     "components": 184,

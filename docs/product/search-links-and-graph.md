@@ -55,6 +55,10 @@ Un recinto ```` ```query ```` in una nota porta una ricerca con la stessa
 sintassi: in Lettura mostra al suo posto le prime 50 note trovate, come link, e
 conta le altre. Il testo del documento resta il recinto.
 
+«Più contesto» mette sotto ogni occorrenza la sua riga con quella prima e
+quella dopo, lette dal sorgente della nota attorno alla posizione che l'indice
+ha dato; l'estratto del kernel resta breve e non cambia.
+
 Un risultato del pannello si trascina come una nota dell'albero: in una nota
 diventa un collegamento, sulla striscia delle schede si apre, nei segnalibri
 resta, e fuori dall'app arriva il file. Lo stesso vale per un risultato del

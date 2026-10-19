@@ -14,6 +14,7 @@ export const SEARCH: PartAnatomy = {
         "hit-title",
         "hit-path",
         "hit-snippet",
+        "hit-context",
         "hit-occurrence",
         "hit-create",
       ],
