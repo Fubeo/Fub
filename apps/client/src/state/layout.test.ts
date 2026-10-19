@@ -11,6 +11,7 @@ import {
   openIn,
   openViewIn,
   activateTab,
+  goToTab,
   loadLayout,
   closePane,
   closeTab,
@@ -235,6 +236,19 @@ describe("le tab di un riquadro", () => {
     openIn("main", "a.md", l);
     activateTab("main", 7, l);
     expect(activeDoc("main", l)).toBe("a.md");
+  });
+
+  it("una tab si raggiunge per posizione, e l'ultima per nome", () => {
+    const l = newItem();
+    for (const doc of ["a.md", "b.md", "c.md"]) openIn("main", doc, l);
+    expect(goToTab("main", 0, l)).toBe(true);
+    expect(activeDoc("main", l)).toBe("a.md");
+    expect(goToTab("main", "last", l)).toBe(true);
+    expect(activeDoc("main", l)).toBe("c.md");
+    // Già lì, o una posizione che non c'è: niente da fare, e lo si dice.
+    expect(goToTab("main", "last", l)).toBe(false);
+    expect(goToTab("main", 7, l)).toBe(false);
+    expect(activeDoc("main", l)).toBe("c.md");
   });
 });
 

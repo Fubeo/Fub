@@ -191,6 +191,18 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.tab.reopen", Some("Mod-Shift-t")),
     ("shell.tab.next", Some("Mod-PageDown")),
     ("shell.tab.previous", Some("Mod-PageUp")),
+    // La scheda per posizione, come nei browser: `Mod-1…8` la n-esima,
+    // `Mod-9` l'ultima. Un editor che usa lo stesso accordo (la maschera del
+    // disegno, `Mod-7`) lo tiene, perché la shell cede all'evento già preso.
+    ("shell.tab.go.1", Some("Mod-1")),
+    ("shell.tab.go.2", Some("Mod-2")),
+    ("shell.tab.go.3", Some("Mod-3")),
+    ("shell.tab.go.4", Some("Mod-4")),
+    ("shell.tab.go.5", Some("Mod-5")),
+    ("shell.tab.go.6", Some("Mod-6")),
+    ("shell.tab.go.7", Some("Mod-7")),
+    ("shell.tab.go.8", Some("Mod-8")),
+    ("shell.tab.go.last", Some("Mod-9")),
     ("shell.zoom.in", Some("Mod-=")),
     ("shell.zoom.out", Some("Mod--")),
     ("shell.zoom.reset", Some("Mod-0")),

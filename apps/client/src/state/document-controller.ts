@@ -99,6 +99,7 @@ import {
   setPinnedTab,
   reopenClosedTab,
   cycleTab,
+  goToTab,
   setPaneLink,
   split,
   activeDoc,
@@ -1010,6 +1011,17 @@ function registerCommands(): void {
       if (cycleTab(layout.focus, -1)) void synchronize();
     },
   });
+  for (const position of [1, 2, 3, 4, 5, 6, 7, 8, "last"] as const) {
+    registerShellCommand({
+      id: `shell.tab.go.${position}`,
+      title: `commands.tab.go.${position}`,
+      description: `commands.tab.go.${position}.desc`,
+      layer: "global",
+      run: () => {
+        if (goToTab(layout.focus, position === "last" ? "last" : position - 1)) void synchronize();
+      },
+    });
+  }
   registerShellCommand({
     id: "shell.pane.split.right",
     title: "commands.pane.split.right",
