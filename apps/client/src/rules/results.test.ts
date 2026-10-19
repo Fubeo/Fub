@@ -7,7 +7,7 @@
 // il byte della seconda.
 import { describe, expect, it } from "vitest";
 import type { DocumentMatch } from "../host/contract";
-import { rowsToShow } from "../rules/results";
+import { rowsToShow, sortHits } from "../rules/results";
 
 const REV = "0123456789abcdef";
 
@@ -57,5 +57,37 @@ describe("le righe dell'elenco dei risultati", () => {
       ["a.md", 2],
       ["b.md", undefined],
     ]);
+  });
+});
+
+describe("l'ordine dei risultati e la compressione", () => {
+  const hit = (doc: string, occurrences = 0): DocumentMatch => ({
+    doc,
+    snippet: `…${doc}…`,
+    occurrences: Array.from({ length: occurrences }, (_, i) => ({
+      span: { start: i * 10, end: i * 10 + 3 },
+      revision: REV,
+    })),
+  });
+  const docs = (hits: DocumentMatch[]) => hits.map((h) => h.doc);
+
+  it("la rilevanza lascia l'ordine del kernel, il nome lo cambia in entrambi i versi", () => {
+    const hits = [hit("b.md"), hit("c.md"), hit("a.md")];
+    expect(docs(sortHits(hits, "relevance"))).toEqual(["b.md", "c.md", "a.md"]);
+    expect(docs(sortHits(hits, "name-asc"))).toEqual(["a.md", "b.md", "c.md"]);
+    expect(docs(sortHits(hits, "name-desc"))).toEqual(["c.md", "b.md", "a.md"]);
+  });
+
+  it("per data chi non ha la data va in fondo, e a parità vale il nome", () => {
+    const hits = [hit("x.md"), hit("b.md"), hit("a.md"), hit("c.md")];
+    const times = { "a.md": 10, "b.md": 10, "c.md": 99 };
+    expect(docs(sortHits(hits, "modified-new", times))).toEqual(["c.md", "a.md", "b.md", "x.md"]);
+    expect(docs(sortHits(hits, "modified-old", times))).toEqual(["a.md", "b.md", "c.md", "x.md"]);
+  });
+
+  it("compressa, una nota è una riga sola, senza estratto né occorrenze", () => {
+    const rows = rowsToShow([hit("a.md", 3)], true);
+    expect(rows).toEqual([{ doc: "a.md", byteOffset: 0 }]);
+    expect(rowsToShow([hit("a.md", 3)]).length).toBe(3);
   });
 });

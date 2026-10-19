@@ -1,8 +1,8 @@
 // Il pannello della ricerca: la barra, il debounce, i risultati.
 import type { DocumentMatch } from "../host/contract";
-import { matchingDocuments, SearchSyntaxError, searchExpression, vaultStatus } from "../host/query";
+import { entryTimes, matchingDocuments, SearchSyntaxError, searchExpression, vaultStatus } from "../host/query";
 import { pageName } from "../rules/organizer";
-import { rowsToShow } from "../rules/results";
+import { rowsToShow, SEARCH_SORTS, sortHits, type SearchSort } from "../rules/results";
 import { $ } from "../ui/dom";
 import { highlighted } from "../ui/highlight";
 import { setTooltip } from "../ui/tooltip";
@@ -28,6 +28,12 @@ const searchResultsEl = $("#search-results");
 /// Finestra del disegno: quante righe si chiedono al kernel per volta. La forma
 /// delle righe resta in `rules/results.ts`; qui si decide solo il tetto.
 const SEARCH_PAGE = 50;
+/// Con un ordine che non è la rilevanza il kernel non può dare "i migliori
+/// cinquanta": si carica una finestra più larga e si ordina quella. Se il totale
+/// la supera, il riepilogo lo dice (N di M).
+const SORT_PAGE = 500;
+let sortMode: SearchSort = "relevance";
+let collapsedResults = false;
 const excluded = new Set<string>();
 const excludedFolders = new Set<string>();
 let shownHits: DocumentMatch[] = [];
@@ -245,7 +251,7 @@ async function runSearch(): Promise<void> {
       const isFailure = (v: SearchPage | SearchFailure): v is SearchFailure => "error" in v;
       const page = await expected(
         Promise.resolve()
-          .then(() => matchingDocuments(expression, { offset: 0, limit: SEARCH_PAGE }))
+          .then(() => loadHits(expression, 0))
           .catch((e: unknown): SearchFailure => ({ error: errorText(e) })),
       );
       if (isFailure(page)) {
@@ -281,6 +287,29 @@ async function runSearch(): Promise<void> {
     }
   });
 }
+
+/// Carica i risultati nell'ordine scelto. Per rilevanza è la finestra del
+/// kernel (`already` + una pagina); per nome o data, una finestra larga che si
+/// ordina qui, con le date chieste al vault solo quando servono.
+async function loadHits(
+  expression: ReturnType<typeof searchExpression>,
+  already: number,
+): Promise<{ items: DocumentMatch[]; total: number }> {
+  if (sortMode === "relevance") {
+    return matchingDocuments(expression, { offset: 0, limit: already + SEARCH_PAGE });
+  }
+  const loaded = await matchingDocuments(expression, { offset: 0, limit: already + SORT_PAGE });
+  const times = sortMode.startsWith("modified") ? await entryTimes() : {};
+  return { items: sortHits(loaded.items, sortMode, times), total: loaded.total };
+}
+
+const SORT_LABELS = {
+  relevance: "search.sort.relevance",
+  "name-asc": "search.sort.name_asc",
+  "name-desc": "search.sort.name_desc",
+  "modified-new": "search.sort.modified_new",
+  "modified-old": "search.sort.modified_old",
+} as const satisfies Record<SearchSort, string>;
 
 function showSearchResults(
   hits: DocumentMatch[],
@@ -353,6 +382,32 @@ function showSearchResults(
     help.setAttribute("aria-expanded", "true");
   });
   tools.append(help);
+  if (hits.length > 0) {
+    const order = document.createElement("select");
+    order.className = "search-action";
+    order.setAttribute("aria-label", t("search.sort"));
+    for (const mode of SEARCH_SORTS) {
+      const option = document.createElement("option");
+      option.value = mode;
+      option.textContent = t(SORT_LABELS[mode]);
+      option.selected = mode === sortMode;
+      order.append(option);
+    }
+    order.addEventListener("change", () => {
+      sortMode = SEARCH_SORTS.find((mode) => mode === order.value) ?? "relevance";
+      void runSearch();
+    });
+    const collapse = document.createElement("button");
+    collapse.type = "button";
+    collapse.className = "search-action";
+    collapse.textContent = t(collapsedResults ? "search.expand_results" : "search.collapse_results");
+    collapse.setAttribute("aria-pressed", String(collapsedResults));
+    collapse.addEventListener("click", () => {
+      collapsedResults = !collapsedResults;
+      showSearchResults(hits, error, indexing, total);
+    });
+    tools.append(order, collapse);
+  }
   searchResultsEl.append(tools);
   // Le righe si montano **fuori dal documento** e si attaccano in una volta
   // sola. Non è cosmetica: una pagina di cinquanta note con le loro occorrenze
@@ -361,7 +416,7 @@ function showSearchResults(
   // qualche migliaio di volte — a ogni tasto premuto, perché questo pannello si
   // ridisegna mentre si scrive.
   const newItems = document.createDocumentFragment();
-  for (const row of rowsToShow(hits)) {
+  for (const row of rowsToShow(hits, collapsedResults)) {
     const li = document.createElement("li");
     setTooltip(li, row.doc);
     const button = document.createElement("button");
@@ -579,7 +634,7 @@ async function runSearchMore(knownTotal: number): Promise<void> {
     type SearchPage = { items: DocumentMatch[]; total: number };
     const page: SearchPage | { error: string } = await expected(
       Promise.resolve()
-        .then(() => matchingDocuments(searchExpression(query, [...excluded], [...excludedFolders]), { offset: 0, limit: shown + SEARCH_PAGE }))
+        .then(() => loadHits(searchExpression(query, [...excluded], [...excludedFolders]), shown))
         .then((p) => ({ items: p.items, total: p.total }))
         .catch((e: unknown) => ({ error: errorText(e) })),
     );

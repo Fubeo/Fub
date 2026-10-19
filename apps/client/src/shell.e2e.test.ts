@@ -2286,6 +2286,28 @@ describe("spostare un file col testo non ancora sul disco", () => {
 });
 
 describe("cerca", () => {
+  it("ordina per nome e comprime i risultati, dal pannello", async () => {
+    await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "e";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor("i risultati arrivano", () => document.querySelectorAll("#search-results li > button.search-result").length > 1);
+    const order = document.querySelector<HTMLSelectElement>("#search-results select")!;
+    order.value = "name-desc";
+    order.dispatchEvent(new Event("change", { bubbles: true }));
+    const titles = () =>
+      [...document.querySelectorAll<HTMLElement>("#search-results .hit-path")].map((e) => e.textContent ?? "");
+    await waitFor("l'ordine cambia", () => {
+      const list = titles();
+      return list.length > 1 && list[0] !== [...list].sort((x, y) => x.localeCompare(y, "it", { numeric: true }))[0];
+    });
+    expect(titles()).toEqual([...titles()].sort((x, y) => y.localeCompare(x, "it", { numeric: true })));
+    const collapse = [...document.querySelectorAll<HTMLButtonElement>("#search-results .search-tools button")]
+      .find((b) => b.getAttribute("aria-pressed") === "false")!;
+    collapse.click();
+    expect(document.querySelectorAll("#search-results .hit-snippet").length).toBe(0);
+  });
+
   it("la casella trova, e il risultato apre il documento", async () => {
     const host = await start(VAULT);
     const field = document.querySelector<HTMLInputElement>("#search-input");

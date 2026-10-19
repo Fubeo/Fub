@@ -35,9 +35,15 @@ export interface ResultRow {
 /// **dirla**.
 ///
 /// Sta fuori dal disegno perché è la regola, e una regola si prova senza un DOM.
-export function rowsToShow(hits: DocumentMatch[]): ResultRow[] {
+export function rowsToShow(hits: DocumentMatch[], collapsed = false): ResultRow[] {
   const rows: ResultRow[] = [];
   for (const hit of hits) {
+    // Compressa, una nota è il suo titolo: né estratto né altre occorrenze, ma
+    // il clic apre ancora sulla prima corrispondenza.
+    if (collapsed) {
+      rows.push({ doc: hit.doc, byteOffset: hit.occurrences?.[0]?.span.start });
+      continue;
+    }
     const occurrences = hit.occurrences ?? [];
     // `total` si valorizza solo quando il kernel ha calcolato le occorrenze:
     // `occurrences` assente = «nessuno le ha calcolate» (riga sola, nessun
@@ -60,4 +66,39 @@ export function rowsToShow(hits: DocumentMatch[]): ResultRow[] {
     });
   }
   return rows;
+}
+
+/// L'ordine dei risultati: per rilevanza (quello del kernel) o per nome e data.
+export type SearchSort = "relevance" | "name-asc" | "name-desc" | "modified-new" | "modified-old";
+
+export const SEARCH_SORTS: readonly SearchSort[] = [
+  "relevance",
+  "name-asc",
+  "name-desc",
+  "modified-new",
+  "modified-old",
+];
+
+/// Riordina i risultati. `relevance` li lascia come sono; le date vengono da
+/// `mtimes` (ms unix) e chi non ce l'ha va in fondo, alla pari per nome.
+export function sortHits(
+  hits: readonly DocumentMatch[],
+  mode: SearchSort,
+  mtimes: Readonly<Record<string, number>> = {},
+): DocumentMatch[] {
+  if (mode === "relevance") return [...hits];
+  const collator = new Intl.Collator("it", { sensitivity: "base", numeric: true });
+  const name = (a: DocumentMatch, b: DocumentMatch) => collator.compare(a.doc, b.doc);
+  if (mode === "name-asc") return [...hits].sort(name);
+  if (mode === "name-desc") return [...hits].sort((a, b) => name(b, a));
+  const sign = mode === "modified-new" ? -1 : 1;
+  return [...hits].sort((a, b) => {
+    const x = mtimes[a.doc];
+    const y = mtimes[b.doc];
+    if (x === undefined || y === undefined) {
+      if (x === y) return name(a, b);
+      return x === undefined ? 1 : -1;
+    }
+    return x === y ? name(a, b) : sign * (x - y);
+  });
 }

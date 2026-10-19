@@ -402,6 +402,14 @@ export async function vaultEntries(
   return runQuery(query);
 }
 
+/// Ultima modifica (ms unix) di ogni voce del vault, per id: serve a ordinare
+/// risultati che portano solo il nome. Una domanda sola a tutto il vault, quindi
+/// si chiede soltanto quando l'ordine per data è davvero scelto.
+export async function entryTimes(): Promise<Record<string, number>> {
+  const page = await vaultEntries(WITHOUT_PAGE);
+  return Object.fromEntries(page.items.map((e) => [e.id, e.mtime]));
+}
+
 /// Le cartelle (§14.3), in ordine di path.
 ///
 /// `under` assente = ogni cartella del vault, a ogni profondità: è l'elenco da
