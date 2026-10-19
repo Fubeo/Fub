@@ -19,13 +19,15 @@ const PATH_PARAMS: Readonly<Record<string, Readonly<Record<string, PathKind>>>> 
   "vault.snapshot.create": { target: "new" },
   "vault.snapshot.apply": { source: "existing", backup: "new" },
   "mount.add": { target: "existing" },
+  "vault.export": { target: "new" },
 };
 
 /// Il nome proposto per una cartella nuova: dice cos'è e quando, così due
 /// snapshot dello stesso giorno non si chiamano uguale per caso.
-function suggestedName(param: string, now = new Date()): string {
+function suggestedName(command: string, param: string, now = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}.${pad(now.getMinutes())}`;
+  if (command === "vault.export") return t("path_field.export_name", { stamp });
   return t(param === "backup" ? "path_field.backup_name" : "path_field.snapshot_name", { stamp });
 }
 
@@ -47,7 +49,7 @@ export function withPathPicker(
   browse.textContent = t("path_field.browse");
   browse.setAttribute("aria-label", t("path_field.browse_named", { title }));
   browse.addEventListener("click", () => {
-    const asked = kind === "new" ? pickNewFolder(title, suggestedName(param)) : pickFolder(title);
+    const asked = kind === "new" ? pickNewFolder(title, suggestedName(command, param)) : pickFolder(title);
     void asked.then((path) => {
       // Annullato: il campo resta com'era, anche se ci si era già scritto.
       if (path === null || !field.isConnected) return;

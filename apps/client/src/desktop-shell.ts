@@ -43,6 +43,8 @@ import {
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
+import { openVaultExport, VAULT_EXPORT } from "./ui/vault-export";
+import { IMPORT_PREPARE, openNoteImport } from "./ui/note-import";
 import { openLifetime, type Lifetime, type Teardown } from "./ui/lifetime";
 import { mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { revealSidePanel, setSidePanelController, toggleSidePanel, type SidePanel } from "./ui/side-panels";
@@ -969,6 +971,15 @@ async function init(): Promise<Teardown> {
         });
     }),
   );
+  // «Esporta…» ha la sua finestra: formato, cartella, opzioni e destinazione,
+  // e l'esito con gli avvisi resta lì.
+  pageWindowLifetime.add(
+    registerCommandForm(VAULT_EXPORT, (prefill) => openVaultExport(prefill, paletteHost)),
+  );
+  // «Importa note…»: anteprima, commit e rollback dei comandi `import.*`.
+  pageWindowLifetime.add(
+    registerCommandForm(IMPORT_PREPARE, (prefill) => openNoteImport(prefill, paletteHost)),
+  );
   // «Importa disegno» legge il file e prepara il disegno nella sua finestra,
   // che arriva coi lettori dei due programmi la prima volta che serve.
   pageWindowLifetime.add(
@@ -1068,6 +1079,8 @@ async function openInitialVault(path: string, alive: () => boolean): Promise<voi
 /// (che ora sceglie le cartelle col dialogo di sistema). Senza vault aperto, o
 /// senza il comando nel registro, la voce non c'è.
 const VAULT_GESTURES = [
+  { command: "import.prepare", label: "menu.file.import_notes" },
+  { command: "vault.export", label: "menu.file.export_vault" },
   { command: "vault.snapshot.create", label: "menu.file.snapshot_create" },
   { command: "vault.snapshot.apply", label: "menu.file.snapshot_apply" },
 ] as const;

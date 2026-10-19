@@ -130,6 +130,7 @@ stato autorevole è in [`../project/status.md`](../project/status.md).
 
 - [Vault e file](vault-and-files.md)
 - [Explorer e cartelle](explorer-and-folders.md)
+- [Importare ed esportare](import-and-export.md)
 - [Editor e anteprima](editor-and-preview.md)
 - [Ricerca, link e grafo](search-links-and-graph.md)
 - [Plugin ed estensioni](plugins-and-extensions.md)

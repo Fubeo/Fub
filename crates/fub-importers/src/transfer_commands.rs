@@ -5,7 +5,8 @@
 //! third-party provider takes part in the same dispatch as the bundled ones.
 
 use fub_abi::command::{
-    CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind, ParamSpec,
+    CommandEffect, CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode, ParamKind,
+    ParamSpec,
 };
 use fub_abi::text::Text;
 use fub_abi::traits::{HostApi, JobProgress, JobSpec};
@@ -24,6 +25,8 @@ pub const IMPORT_ROLLBACK: &str = "import.rollback";
 pub const IMPORT_ABANDON: &str = "import.abandon";
 pub const EXPORT_RUN: &str = "export.run";
 pub const TRANSFER_JOB: &str = "import.transfer";
+/// Il namespace dell'effetto di un comando che ha accodato il job.
+pub const TRANSFER_QUEUED: &str = "fub.transfer.queued";
 
 fn param(name: &str, label: &str) -> ParamSpec {
     ParamSpec::new(name, Text::from(label), ParamKind::Text).required()
@@ -137,7 +140,26 @@ pub fn invoke(
                 "raw API tokens cannot be queued or persisted; use token_env",
             ));
         }
-        serde_json::json!({"op":"prepare", "job":required(&args,"job")?, "source":source, "request":request})
+        let job = required(&args, "job")?;
+        StagingManifest::validate_job(job)?;
+        // I byte non viaggiano nel payload del job: un JSON di numeri costa
+        // decine di volte la sorgente, e la coda lo terrebbe in memoria fino
+        // alla partenza. Si depositano subito nello spazio privato, e il job li
+        // rilegge da lì.
+        let SourceContent::Bytes(bytes) = &source.content else {
+            unreachable!("controllato sopra")
+        };
+        let mut payload = serde_json::json!({
+            "op": "prepare",
+            "job": job,
+            "source": ImportSource { content: SourceContent::Bytes(Vec::new()), ..source.clone() },
+            "request": request,
+        });
+        if !mode.is_dry_run() {
+            host.data_write(&incoming_path(job), bytes)?;
+            payload["incoming"] = serde_json::Value::Bool(true);
+        }
+        payload
     } else if command == EXPORT_RUN {
         let request: ExportRequest = serde_json::from_str(required(&args, "request_json")?)
             .map_err(|e| bad_args(format!("request_json is not an ExportRequest: {e}")))?;
@@ -160,14 +182,26 @@ pub fn invoke(
             "{command}: would queue {TRANSFER_JOB}"
         ))));
     }
+    let op = payload["op"].as_str().unwrap_or("").to_owned();
     let id = host.spawn_job(JobSpec {
         job: TRANSFER_JOB.to_string(),
         payload,
     })?;
-    Ok(CommandOutcome::notify(Text::from(format!(
-        "{command} queued (job {})",
-        id.0
-    ))))
+    // L'id del job nell'esito, tipizzato: chi aspetta il `job_done` lo
+    // riconosce da questo, non dalla frase.
+    Ok(
+        CommandOutcome::notify(Text::from(format!("{command} queued (job {})", id.0))).with_effect(
+            CommandEffect::Custom {
+                ns: TRANSFER_QUEUED.into(),
+                payload: serde_json::json!({ "job_id": id.0.to_string(), "op": op }),
+            },
+        ),
+    )
+}
+
+/// Dove `import.prepare` deposita i byte della sorgente per il job.
+fn incoming_path(job: &str) -> String {
+    format!("{}{job}/incoming", crate::template::STAGING_PREFIX)
 }
 
 pub fn run_job(
@@ -187,14 +221,26 @@ pub fn run_job(
     let value = match op {
         "prepare" => {
             let name = required(&payload, "job")?;
-            let source: ImportSource = serde_json::from_value(payload["source"].clone())
+            let mut source: ImportSource = serde_json::from_value(payload["source"].clone())
                 .map_err(|e| bad_args(format!("invalid job source: {e}")))?;
+            let incoming = payload["incoming"].as_bool() == Some(true);
+            if incoming {
+                let bytes = host
+                    .data_read(&incoming_path(name))?
+                    .ok_or_else(|| bad_args(format!("the source of `{name}` is gone")))?;
+                source.content = SourceContent::Bytes(bytes);
+            }
             let request: ImportRequest = serde_json::from_value(payload["request"].clone())
                 .map_err(|e| bad_args(format!("invalid job request: {e}")))?;
             let now_ms = host.now_unix_millis();
-            result(StagingManifest::prepare_registered(
-                name, &source, &request, host, now_ms,
-            )?)?
+            let prepared =
+                StagingManifest::prepare_registered(name, &source, &request, host, now_ms);
+            // La copia di passaggio non serve più, riuscito o no: la
+            // preparazione ha la sua, verificata, accanto al manifest.
+            if incoming {
+                host.data_remove(&incoming_path(name))?;
+            }
+            result(prepared?)?
         }
         "commit" => {
             let name = required(&payload, "job")?;

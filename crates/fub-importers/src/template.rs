@@ -220,7 +220,7 @@ impl StagingManifest {
         Ok(bytes)
     }
 
-    fn validate_job(job: &str) -> Result<(), PluginError> {
+    pub(crate) fn validate_job(job: &str) -> Result<(), PluginError> {
         if job.is_empty()
             || job.len() > 128
             || !job

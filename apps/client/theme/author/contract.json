@@ -942,6 +942,24 @@
     "palette-label",
     "palette-help",
     "palette-path",
+    "vault-export-options",
+    "vault-export-option",
+    "vault-export-result",
+    "vault-export-summary",
+    "vault-export-notes",
+    "vault-export-note",
+    "note-import-fields",
+    "note-import-file",
+    "note-import-file-name",
+    "note-import-status",
+    "note-import-plan",
+    "note-import-plan-title",
+    "note-import-tally",
+    "note-import-docs",
+    "note-import-doc",
+    "note-import-more",
+    "note-import-losses",
+    "note-import-loss",
     "palette-summary",
     "palette-plan",
     "palette-error",
@@ -3588,6 +3606,44 @@
       ]
     },
     {
+      "name": "export-form",
+      "part": "launcher",
+      "hooks": [
+        "vault-export-options",
+        "vault-export-option",
+        "vault-export-result",
+        "vault-export-summary",
+        "vault-export-notes",
+        "vault-export-note"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "import-form",
+      "part": "launcher",
+      "hooks": [
+        "note-import-fields",
+        "note-import-file",
+        "note-import-file-name",
+        "note-import-status",
+        "note-import-plan",
+        "note-import-plan-title",
+        "note-import-tally",
+        "note-import-docs",
+        "note-import-doc",
+        "note-import-more",
+        "note-import-losses",
+        "note-import-loss"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
       "name": "command-plan",
       "part": "launcher",
       "hooks": [
@@ -5128,10 +5184,10 @@
   },
   "counts": {
     "required_roles": 154,
-    "hooks": 1052,
+    "hooks": 1070,
     "state_names": 7,
-    "assigned_states": 614,
-    "components": 181,
+    "assigned_states": 618,
+    "components": 183,
     "preference_tokens": 121
   }
 }

@@ -37,7 +37,19 @@ import {
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
 import { pickIcon, showContextMenu, type MenuItem } from "../ui/menu";
-import { canCreateDrawing, canImportDrawing, canImportFile, importDrawing, newDrawing, pickDrawingImport, registerShellCommand } from "../ui/commands";
+import {
+  canCreateDrawing,
+  canImportDrawing,
+  canImportFile,
+  hasKernelCommand,
+  importDrawing,
+  launchCommand,
+  newDrawing,
+  pickDrawingImport,
+  registerShellCommand,
+} from "../ui/commands";
+import { VAULT_EXPORT } from "../ui/vault-export";
+import { IMPORT_PREPARE } from "../ui/note-import";
 import { showPanel } from "./sidebar";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { canShowFile, focusEditor, openDocument } from "../state/document-controller";
@@ -1024,6 +1036,12 @@ function folderMenu(at: MouseEvent, path: string): void {
       { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
       { label: t("explorer.import_files"), run: () => pickImport(path, false) },
       { label: t("explorer.import_folder"), run: () => pickImport(path, true) },
+      ...(hasKernelCommand(IMPORT_PREPARE)
+        ? [{ label: t("explorer.import_notes"), run: () => void launchCommand(IMPORT_PREPARE, { folder: path }) }]
+        : []),
+      ...(hasKernelCommand(VAULT_EXPORT)
+        ? [{ label: t("explorer.export_folder"), run: () => void launchCommand(VAULT_EXPORT, { folder: path }) }]
+        : []),
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },

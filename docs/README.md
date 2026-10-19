@@ -29,7 +29,7 @@ flowchart LR
 ## Capire il prodotto
 
 - [Panoramica](product/overview.md)
-- [Vault e file](product/vault-and-files.md) ed [explorer e cartelle](product/explorer-and-folders.md)
+- [Vault e file](product/vault-and-files.md), [explorer e cartelle](product/explorer-and-folders.md) e [importare ed esportare](product/import-and-export.md)
 - [Editor e anteprima](product/editor-and-preview.md), [correttore](product/proofing.md) e [documenti di Word](product/word-documents.md)
 - [Disegni](product/drawing.md)
 - [Disegni, modelli e suggerimenti](product/drawing-new.md)

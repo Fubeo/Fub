@@ -95,7 +95,7 @@ const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
 /// I comandi che l'host esegue in proprio: il kernel li riserva al mount
 /// (`Workspace::reserve_host_commands`), così un plugin che li invoca sente che
 /// non sono suoi da chiamare e nessun provider ne registra un omonimo.
-pub(crate) const HOST_COMMANDS: [&str; 8] = [
+pub(crate) const HOST_COMMANDS: [&str; 9] = [
     OS_TRASH_COMMAND,
     MOUNT_ADD,
     MOUNT_REMOVE,
@@ -104,6 +104,7 @@ pub(crate) const HOST_COMMANDS: [&str; 8] = [
     SNAPSHOT_CREATE,
     SNAPSHOT_APPLY,
     crate::capture::CAPTURE_APPLY,
+    crate::export_folder::EXPORT_FOLDER,
 ];
 
 /// Lo stesso catalogo host-owned serve l'elenco e la scelta del dispatcher.
@@ -205,7 +206,7 @@ fn snapshot_specs() -> [CommandSpec; 2] {
 /// Una cartella esterna **nuova** per uno snapshot: path assoluto, genitore
 /// esistente, nome libero e fuori dal vault (anche attraverso symlink del
 /// genitore, che si risolve prima del confronto).
-fn snapshot_destination(root: &Utf8Path, raw: &str) -> Result<Utf8PathBuf, PluginError> {
+pub(crate) fn new_outside_folder(root: &Utf8Path, raw: &str) -> Result<Utf8PathBuf, PluginError> {
     let path = Utf8Path::new(raw.trim());
     if !path.is_absolute() {
         return Err(PluginError::BadArgs(path_text(
@@ -3734,6 +3735,7 @@ impl Host {
                 spec.id != OS_TRASH_COMMAND
                     && spec.id != FOLDER_CREATE
                     && spec.id != crate::capture::CAPTURE_APPLY
+                    && spec.id != crate::export_folder::EXPORT_FOLDER
                     && !mounts.iter().any(|own| own.id == spec.id)
             });
             specs.retain(|spec| spec.id != SNAPSHOT_CREATE && spec.id != SNAPSHOT_APPLY);
@@ -3741,6 +3743,7 @@ impl Host {
                 os_trash_spec(),
                 folder_create_spec(),
                 crate::capture::spec(),
+                crate::export_folder::spec(&workspace.export_targets()),
             ];
             own.extend(mounts);
             own.extend(snapshot_specs());
@@ -3875,7 +3878,7 @@ impl Host {
         spec.validate_args(&args)?;
         let text = |key: &str| args[key].as_str().expect("spec validata").to_owned();
         if spec.id == SNAPSHOT_CREATE {
-            let target = snapshot_destination(&root, &text("target"))?;
+            let target = new_outside_folder(&root, &text("target"))?;
             if mode.is_dry_run() {
                 let summary = Text::message(
                     "host.snapshot.plan.create",
@@ -3919,7 +3922,7 @@ impl Host {
         }
 
         let source = snapshot_source(&root, &text("source"))?;
-        let backup = snapshot_destination(&root, &text("backup"))?;
+        let backup = new_outside_folder(&root, &text("backup"))?;
         if source.starts_with(&backup) || backup.starts_with(&source) {
             return Err(PluginError::BadArgs(Text::key("host.snapshot.distinct")));
         }
@@ -4121,6 +4124,13 @@ impl Host {
         // workspace deve essere preso qui, perché ognuno prende il suo.
         if command == crate::capture::CAPTURE_APPLY {
             let result = crate::capture::invoke(self, vault, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if command == crate::export_folder::EXPORT_FOLDER {
+            let (root, workspace) = self.with_session(vault, |session| {
+                (session.root.clone(), session.workspace.clone())
+            })?;
+            let result = crate::export_folder::invoke(&root, &workspace, args, mode);
             return self.localized_host_result(vault, result);
         }
         let (workspace, mounts, storage) = self.with_session(vault, |session| {
