@@ -49,6 +49,11 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{ActionRef, Intent, UiAction, UiKind, UiNode, ViewUpdate};
 
+mod rename;
+
+pub use rename::{TagCommands, TAG_RENAME};
+use rename::{E_FRONTMATTER, E_INVALID, E_SAME, P_RENAME, U_RENAME};
+
 /// Id del provider (spazio dati/registrazione) e id della view che offre.
 pub const TAGS_ID: &str = "fub.tags";
 /// Id della `ViewSpec`: è ciò con cui la shell chiede questa view al kernel.
@@ -157,7 +162,27 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SORT_COUNT_LABEL, "Conteggio")
             .with(SELECTED_LABEL, "Selezionati: {n}")
             .with(SEARCH_SELECTED_LABEL, "Cerca i selezionati")
-            .with(CLEAR_SELECTION_LABEL, "Azzera"),
+            .with(CLEAR_SELECTION_LABEL, "Azzera")
+            .with("tag.rename.title", "Rinomina tag nel vault")
+            .with(
+                "tag.rename.desc",
+                "Rinomina un tag, e i tag che stanno sotto di lui, nel testo e nel frontmatter di ogni nota.",
+            )
+            .with("tag.rename.old_tag.title", "Tag attuale")
+            .with("tag.rename.old_tag.desc", "Il tag da rinominare, con o senza #.")
+            .with("tag.rename.new_tag.title", "Nuovo nome")
+            .with("tag.rename.new_tag.desc", "Il nome che prende, con o senza #.")
+            .with(P_RENAME, "Rinominato «{old_tag}» in «{new_tag}»: {count} note")
+            .with(U_RENAME, "Annulla rinomina «{old_tag}» in «{new_tag}»")
+            .with(E_SAME, "Il nuovo nome è uguale a quello attuale.")
+            .with(
+                E_INVALID,
+                "Un tag ha lettere, cifre, _, - e /, e non è fatto di sole cifre.",
+            )
+            .with(
+                E_FRONTMATTER,
+                "{doc}: i tag del frontmatter non si lasciano riscrivere senza cambiarne la forma; la nota resta com'era.",
+            ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Tags")
             .with(FILTER_PLACEHOLDER, "filter tags")
@@ -171,7 +196,27 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(SORT_COUNT_LABEL, "Count")
             .with(SELECTED_LABEL, "Selected: {n}")
             .with(SEARCH_SELECTED_LABEL, "Search selected")
-            .with(CLEAR_SELECTION_LABEL, "Clear"),
+            .with(CLEAR_SELECTION_LABEL, "Clear")
+            .with("tag.rename.title", "Rename tag in vault")
+            .with(
+                "tag.rename.desc",
+                "Renames a tag, and the tags nested under it, in the text and frontmatter of every note.",
+            )
+            .with("tag.rename.old_tag.title", "Current tag")
+            .with("tag.rename.old_tag.desc", "The tag to rename, with or without #.")
+            .with("tag.rename.new_tag.title", "New name")
+            .with("tag.rename.new_tag.desc", "The name it takes, with or without #.")
+            .with(P_RENAME, "Renamed «{old_tag}» to «{new_tag}»: {count} notes")
+            .with(U_RENAME, "Undo rename «{old_tag}» to «{new_tag}»")
+            .with(E_SAME, "The new name is the same as the current one.")
+            .with(
+                E_INVALID,
+                "A tag has letters, digits, _, - and /, and is not made of digits only.",
+            )
+            .with(
+                E_FRONTMATTER,
+                "{doc}: the frontmatter tags cannot be rewritten without changing their shape; the note is left as it was.",
+            ),
     ]
 }
 

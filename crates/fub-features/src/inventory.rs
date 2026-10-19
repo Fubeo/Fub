@@ -117,7 +117,7 @@ use crate::search::{self, SEARCH_ID};
 #[cfg(feature = "stats")]
 use crate::stats::{self, StatsView, STATS_ID};
 #[cfg(feature = "tags")]
-use crate::tags::{self, TagPanelView, TAGS_ID};
+use crate::tags::{self, TagCommands, TagPanelView, TAGS_ID};
 #[cfg(feature = "template")]
 use crate::template::{self, TemplateCommands, TemplateView, TEMPLATE_ID};
 #[cfg(feature = "trash")]
@@ -310,7 +310,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         name: "Tags",
         catalog: tags::catalog,
         view: Some(|| Box::new(TagPanelView)),
-        commands: None,
+        commands: Some(|| Box::new(TagCommands)),
         index: None,
         syntax: None,
         renderers: None,

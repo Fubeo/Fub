@@ -161,7 +161,7 @@ pub use stats::{
     build_stats_view, count, reading_minutes, StatsView, TextStats, STATS_ID, STATS_VIEW,
 };
 #[cfg(feature = "tags")]
-pub use tags::{build_tags_view, TagPanelView, TAGS_ID, TAGS_VIEW};
+pub use tags::{build_tags_view, TagCommands, TagPanelView, TAGS_ID, TAGS_VIEW, TAG_RENAME};
 #[cfg(feature = "template")]
 pub use template::{
     TemplateCommands, TemplateView, CLOCK_12, CLOCK_24, CLOCK_DATETIME, CLOCK_TIME,

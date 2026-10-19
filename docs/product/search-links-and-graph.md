@@ -101,6 +101,13 @@ tramite RunSearch la stessa ricerca che si scriverebbe nella barra
 nel documento sono opzioni di presentazione degli stessi dati, non indici
 duplicati.
 
+`tag.rename`, dalla palette, rinomina un tag e i tag sotto di lui in tutto il
+vault: nel testo e nel valore di `tags` del frontmatter, riscrivendo soltanto
+i nomi, mentre il codice e il resto del YAML restano com'erano. L'anteprima
+mostra le note che cambiano; un annulla le riporta tutte indietro. Una nota
+cambiata nel frattempo, o il cui frontmatter non si lascia riscrivere senza
+cambiarne la forma, resta com'era e il risultato la elenca fra i fallimenti.
+
 ```mermaid
 flowchart LR
     SOURCE["sorgente"] --> PARSE["link estratto"]
