@@ -8,13 +8,14 @@ import {
   listBookmarks,
   listGroups,
   loadBookmarks,
-  moveBookmark,
   removeBookmark,
   removeGroup,
   renameBookmark,
   renameGroup,
   saveTabsAsBookmark,
   setBookmarkGroup,
+  stepBookmark,
+  stepGroup,
   type Bookmark,
   type BookmarkTarget,
 } from "./bookmarks";
@@ -162,6 +163,12 @@ async function refresh(): Promise<void> {
             renameGroup(g.id, next);
             void refresh();
           } },
+          { separator: true, label: t("bookmarks.move_up"), run: () => {
+            if (stepGroup(g.id, -1)) void refresh();
+          } },
+          { label: t("bookmarks.move_down"), run: () => {
+            if (stepGroup(g.id, 1)) void refresh();
+          } },
           { separator: true, label: t("bookmarks.delete"), danger: true, run: async () => {
             const ok = await confirm(t("bookmarks.delete_group_confirm", { title: g.title }), {
               title: t("bookmarks.delete"),
@@ -225,14 +232,10 @@ function rowFor(b: Bookmark): HTMLElement {
         void refresh();
       } },
       { separator: true, label: t("bookmarks.move_up"), run: () => {
-        const list = listBookmarks();
-        const at = list.findIndex((x) => x.id === b.id);
-        if (moveBookmark(b.id, Math.max(0, at - 1))) void refresh();
+        if (stepBookmark(b.id, -1)) void refresh();
       } },
       { label: t("bookmarks.move_down"), run: () => {
-        const list = listBookmarks();
-        const at = list.findIndex((x) => x.id === b.id);
-        if (moveBookmark(b.id, Math.min(list.length - 1, at + 1))) void refresh();
+        if (stepBookmark(b.id, 1)) void refresh();
       } },
       { label: t("bookmarks.assign_group"), run: () => void assignGroupFlow(b.id).then(() => refresh()) },
       { separator: true, label: t("bookmarks.delete"), danger: true, run: async () => {
