@@ -1011,6 +1011,19 @@ function registerCommands(): void {
       if (cycleTab(layout.focus, -1)) void synchronize();
     },
   });
+  for (const [id, action, title, description] of [
+    ["shell.fold.all", "text.fold.all", "commands.fold.all", "commands.fold.all.desc"],
+    ["shell.unfold.all", "text.unfold.all", "commands.unfold.all", "commands.unfold.all.desc"],
+  ] as const) {
+    registerShellCommand({
+      id,
+      title,
+      description,
+      layer: "global",
+      available: () => editorActionReady(action),
+      run: () => void runEditorAction(action),
+    });
+  }
   for (const position of [1, 2, 3, 4, 5, 6, 7, 8, "last"] as const) {
     registerShellCommand({
       id: `shell.tab.go.${position}`,
@@ -1968,11 +1981,18 @@ function focusedModes(): readonly SurfaceMode[] {
 /// Esegue un'azione dell'editor nella superficie del riquadro col fuoco: è
 /// l'intento `fub.editor.action` di un comando invocato dalla palette o da una
 /// scorciatoia. La barra non passa di qui: agisce sul proprio riquadro.
+/// L'azione c'è nella superficie del riquadro col fuoco, e si può eseguire.
+export function editorActionReady(action: string): boolean {
+  const r = panes.get(layout.focus);
+  const actions = r?.shown?.k === "doc" ? r.surface?.editorActions : undefined;
+  return !!actions?.has(action) && actions.editable();
+}
+
 export function runEditorAction(action: string): "done" | "nothing" | "unavailable" {
   const r = panes.get(layout.focus);
   const surface = r?.shown?.k === "doc" ? r.surface : null;
   const actions = surface?.editorActions;
-  if (!actions?.has(action) || !actions.editable()) return "unavailable";
+  if (!actions || !editorActionReady(action)) return "unavailable";
   if (!actions.run(action)) return "nothing";
   surface?.focus?.();
   return "done";

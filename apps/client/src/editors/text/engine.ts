@@ -21,6 +21,7 @@ import {
   keymap,
   lineNumbers,
   rectangularSelection,
+  type Command,
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
@@ -402,6 +403,17 @@ export class TextEngine {
   /// Esegue un comando del profilo come una battuta dell'utente: la stessa
   /// via della tastiera, quindi cronologia locale e sessione. Rifiuta in sola
   /// lettura e dopo `destroy`, come ogni altra scrittura del motore.
+  /// Un comando che vuole la vista e non il testo, come piegare: nessuna
+  /// battuta nella cronologia, e vale anche in sola lettura.
+  public runViewCommand(command: Command): boolean {
+    if (this.disposed) return false;
+    try {
+      return command(this.view);
+    } catch {
+      return false;
+    }
+  }
+
   public runCommand(command: StateCommand): boolean {
     if (this.disposed || this.readOnlyEnabled) return false;
     try {

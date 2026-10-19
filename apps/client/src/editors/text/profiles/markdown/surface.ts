@@ -37,6 +37,7 @@ import { createMarkdownProfile } from "./profile";
 import { anchorAtCursor, writeAnchor } from "./anchor-link";
 import type { TableGridActions } from "./table-grid";
 import { MARKDOWN_ACTIONS, markdownActionState } from "./actions";
+import { foldAll, unfoldAll } from "@codemirror/language";
 import {
   ACTION_UNAVAILABLE,
   type EditorActionState,
@@ -101,6 +102,13 @@ export interface MarkdownSurface extends BufferedSurface {
   undo(): boolean;
   redo(): boolean;
 }
+
+/// Piegare e aprire tutti i titoli, le liste e i blocchi della nota: azioni
+/// della superficie come annulla, fuori dalla barra di formattazione.
+const FOLDS = new Map([
+  ["text.fold.all", foldAll],
+  ["text.unfold.all", unfoldAll],
+]);
 
 /// La palette slash si apre a inizio riga o dopo uno spazio: dentro una
 /// parola il `/` è testo («e/o», «km/h», 24/09).
@@ -426,10 +434,11 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
   }
   const editable = () => !readOnly && mode !== "reading" && !life.closed;
   const editorActions: SurfaceEditorActions = {
-    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo",
+    has: (id) => MARKDOWN_ACTIONS.has(id) || id === "text.undo" || id === "text.redo" || FOLDS.has(id),
     editable,
     state(id): EditorActionState {
       if (!editable()) return ACTION_UNAVAILABLE;
+      if (FOLDS.has(id)) return { enabled: true, active: null };
       if (id === "text.undo" || id === "text.redo") {
         const depth = engine.historyDepth();
         return { enabled: (id === "text.undo" ? depth.undo : depth.redo) > 0, active: null };
@@ -444,6 +453,8 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
       closeSlashPalette(parent);
       if (id === "text.undo") return engine.undo();
       if (id === "text.redo") return engine.redo();
+      const fold = FOLDS.get(id);
+      if (fold) return engine.runViewCommand(fold);
       if (tableGrid) return tableGrid.runAction(id);
       const action = MARKDOWN_ACTIONS.get(id);
       if (!action) return false;

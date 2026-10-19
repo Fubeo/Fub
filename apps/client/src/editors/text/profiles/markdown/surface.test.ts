@@ -415,6 +415,21 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("piega tutto e apri tutto non toccano il testo né la cronologia", () => {
+    const { ed, view } = editor();
+    const text = "# Uno\n\ntesto\n\n# Due\n\naltro\n";
+    ed.buffer.setDoc(text);
+    expect(ed.editorActions.has("text.fold.all")).toBe(true);
+    expect(ed.editorActions.state("text.fold.all")).toEqual({ enabled: true, active: null });
+    expect(ed.editorActions.run("text.fold.all")).toBe(true);
+    expect(view().dom.querySelectorAll(".cm-foldPlaceholder").length).toBeGreaterThan(0);
+    expect(ed.editorActions.run("text.unfold.all")).toBe(true);
+    expect(view().dom.querySelectorAll(".cm-foldPlaceholder").length).toBe(0);
+    expect(ed.buffer.getDoc()).toBe(text);
+    expect(ed.editorActions.state("text.undo").enabled).toBe(false);
+    ed.destroy();
+  });
+
   it("in lettura e in sola lettura sono spente, e chi le segue lo sa", () => {
     const { ed } = editor();
     ed.buffer.setDoc("testo");
