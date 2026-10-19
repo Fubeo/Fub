@@ -19,7 +19,7 @@ import {
   setPinned,
   setSpace,
 } from "../state/organization";
-import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
+import { on, saveActiveSpace, saveExpanded, saveExplorerSort, state } from "../state/store";
 import { createFolder, createNote, duplicateNote, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
 import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
 import { confirm } from "../platform/confirm";
@@ -32,7 +32,9 @@ import {
   orderedNames,
   pageName,
   parentOf,
+  EXPLORER_SORTS,
   sortContent,
+  type ExplorerSort,
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
@@ -154,6 +156,9 @@ export function mountExplorer(lifetime: Lifetime): void {
       { label: t("explorer.new_folder"), run: () => startNewFolder(state.activeSpace ?? "") },
       { separator: true, label: t("explorer.import_files"), run: () => pickImport(state.activeSpace ?? "", false) },
       { label: t("explorer.import_folder"), run: () => pickImport(state.activeSpace ?? "", true) },
+      { separator: true, label: t("explorer.sort"), run: () => sortMenu(e) },
+      { label: t("explorer.collapse_all"), run: () => collapseAll() },
+      { label: t("explorer.expand_all"), run: () => void expandAll() },
     ]);
   });
   lifetime.listen(spaceTitleEl, "click", openSpaceNote);
@@ -192,6 +197,56 @@ export function mountExplorer(lifetime: Lifetime): void {
       const id = explorerTarget();
       if (id !== null) await trashWithConfirm(id);
     },
+  });
+  registerShellCommand({
+    id: "shell.explorer.collapse_all",
+    title: "commands.explorer.collapse_all",
+    description: "commands.explorer.collapse_all.desc",
+    layer: "global",
+    available: () => state.expanded.size > 0,
+    run: () => collapseAll(),
+  });
+  registerShellCommand({
+    id: "shell.explorer.expand_all",
+    title: "commands.explorer.expand_all",
+    description: "commands.explorer.expand_all.desc",
+    layer: "global",
+    run: () => expandAll(),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.manual",
+    title: "commands.explorer.sort.manual",
+    description: "commands.explorer.sort.manual.desc",
+    layer: "global",
+    run: () => setSort("manual"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.name_asc",
+    title: "commands.explorer.sort.name_asc",
+    description: "commands.explorer.sort.name_asc.desc",
+    layer: "global",
+    run: () => setSort("name-asc"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.name_desc",
+    title: "commands.explorer.sort.name_desc",
+    description: "commands.explorer.sort.name_desc.desc",
+    layer: "global",
+    run: () => setSort("name-desc"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.modified_new",
+    title: "commands.explorer.sort.modified_new",
+    description: "commands.explorer.sort.modified_new.desc",
+    layer: "global",
+    run: () => setSort("modified-new"),
+  });
+  registerShellCommand({
+    id: "shell.explorer.sort.modified_old",
+    title: "commands.explorer.sort.modified_old",
+    description: "commands.explorer.sort.modified_old.desc",
+    layer: "global",
+    run: () => setSort("modified-old"),
   });
   treeArrows(lifetime);
   wireRootDropTarget(lifetime);
@@ -353,13 +408,18 @@ function signatureOf(v: View): string {
     ([path, c]) =>
       `${path}[${c.folders.map((f) => `${f.path}:${f.folders}:${f.entries}`).join(",")}][${c.notes.join(",")}][${c.files.join(",")}]`,
   );
-  return `${folders.join(";")}|${[...v.existing].sort().join(",")}`;
+  // La data entra nell'impronta solo se è lei a decidere l'ordine: altrimenti
+  // ogni salvataggio ridisegnerebbe l'albero per niente.
+  const dated = state.explorerSort.startsWith("modified")
+    ? [...v.folders.values()].map((c) => JSON.stringify(c.mtimes ?? {})).join(";")
+    : "";
+  return `${folders.join(";")}|${[...v.existing].sort().join(",")}|${state.explorerSort}|${dated}`;
 }
 
 /// Il contenuto di una cartella nell'ordine in cui si vede, se è caricata.
 function children(path: string): FolderContent | null {
   const content = view.folders.get(path);
-  return content ? sortContent(content, state.meta) : null;
+  return content ? sortContent(content, state.meta, state.explorerSort) : null;
 }
 
 function renderFileList(): void {
@@ -1299,6 +1359,66 @@ function openSpaceNote(): void {
 // --- crea, rinomina, converti -----------------------------------------------
 
 /// Crea una nota e la apre.
+
+const SORT_LABELS = {
+  manual: "explorer.sort.manual",
+  "name-asc": "explorer.sort.name-asc",
+  "name-desc": "explorer.sort.name-desc",
+  "modified-new": "explorer.sort.modified-new",
+  "modified-old": "explorer.sort.modified-old",
+} as const satisfies Record<ExplorerSort, string>;
+
+/// Il sotto-menu dell'ordine, con quello in uso selezionato.
+function sortMenu(at: MouseEvent): void {
+  showContextMenu(
+    at,
+    EXPLORER_SORTS.map((mode) => ({
+      label: t(SORT_LABELS[mode]),
+      selected: state.explorerSort === mode,
+      run: () => setSort(mode),
+    })),
+  );
+}
+
+/// Cambia l'ordine dell'albero e lo ridisegna: l'impronta lo include.
+function setSort(mode: ExplorerSort): void {
+  if (state.explorerSort === mode) return;
+  state.explorerSort = mode;
+  saveExplorerSort();
+  void refreshFromKernel(true);
+}
+
+/// Chiude ogni cartella aperta.
+function collapseAll(): void {
+  if (state.expanded.size === 0) return;
+  state.expanded.clear();
+  saveExpanded();
+  void refreshFromKernel(true);
+}
+
+/// Apre ogni cartella che l'albero conosce. Un livello si carica quando si
+/// apre, quindi un livello nuovo porta le sue sottocartelle e ci si ferma
+/// quando non ne arrivano più; il tetto difende da vault enormi.
+async function expandAll(): Promise<void> {
+  for (let round = 0; round < EXPAND_ROUNDS; round += 1) {
+    let added = false;
+    for (const content of view.folders.values()) {
+      for (const sub of content.folders) {
+        if (!state.expanded.has(sub.path)) {
+          state.expanded.add(sub.path);
+          added = true;
+        }
+      }
+    }
+    if (!added) break;
+    saveExpanded();
+    await refreshFromKernel(true);
+  }
+}
+
+/// Quanti livelli di profondità `expandAll` scende al massimo.
+const EXPAND_ROUNDS = 12;
+
 /// Duplica il file e apre la copia: il nome libero lo sceglie il kernel.
 async function duplicateEntry(id: string): Promise<void> {
   try {

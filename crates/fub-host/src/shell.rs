@@ -69,6 +69,16 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     // deve poter fare.
     ("shell.explorer.rename", None),
     ("shell.explorer.trash", None),
+    // Comprimi o espandi ogni cartella dell'albero. **Senza accordo**: sono
+    // gesti d'ordine, non di scrittura, e la palette li trova per nome.
+    ("shell.explorer.collapse_all", None),
+    ("shell.explorer.expand_all", None),
+    // Ordine dell'albero: a mano, per nome (A–Z, Z–A), per data di modifica.
+    ("shell.explorer.sort.manual", None),
+    ("shell.explorer.sort.name_asc", None),
+    ("shell.explorer.sort.name_desc", None),
+    ("shell.explorer.sort.modified_new", None),
+    ("shell.explorer.sort.modified_old", None),
     // L'accordo che era conteso. Lo tiene la shell: qui il gesto è completo —
     // si preme e la ricerca è sotto gli occhi — mentre di là serviva compilare
     // un parametro obbligatorio prima di vedere qualcosa (0081).

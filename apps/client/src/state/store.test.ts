@@ -7,6 +7,8 @@ import {
   emit,
   loadActiveSpace,
   loadExpanded,
+  loadExplorerSort,
+  saveExplorerSort,
   on,
   saveExpanded,
   state,
@@ -172,5 +174,18 @@ describe("durata delle iscrizioni al bus", () => {
     emit("documents");
 
     expect(listener).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("l'ordine dell'albero", () => {
+  it("un valore sconosciuto vale come nessun valore", async () => {
+    viewState.mockResolvedValue("a-caso");
+    await loadExplorerSort();
+    expect(state.explorerSort).toBe("manual");
+    viewState.mockResolvedValue("modified-new");
+    await loadExplorerSort();
+    expect(state.explorerSort).toBe("modified-new");
+    state.explorerSort = "manual";
+    saveExplorerSort();
   });
 });

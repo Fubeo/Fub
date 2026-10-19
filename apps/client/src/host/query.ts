@@ -441,6 +441,8 @@ export interface FolderContent {
   files: string[];
   otherFolders: number;
   otherNote: number;
+  /// Ultima modifica (ms unix) di ogni voce diretta, per l'ordine per data.
+  mtimes: Record<string, number>;
 }
 
 /// Un livello dell'albero: sottocartelle e **ogni** voce dell'anagrafe, note,
@@ -461,6 +463,7 @@ export async function folderContent(
     files: entries.items.filter((e) => e.kind !== "document").map((e) => e.id),
     otherFolders: Math.max(0, folders.total - folders.offset - folders.items.length),
     otherNote: Math.max(0, entries.total - entries.offset - entries.items.length),
+    mtimes: Object.fromEntries(entries.items.map((e) => [e.id, e.mtime])),
   };
 }
 

@@ -23,7 +23,7 @@ import { drainDocumentWindows } from "./document-windows";
 import { activeDoc, loadLayout } from "./layout";
 import { loadOrganization } from "./organization";
 import { preferredPaneMode } from "./pane-mode";
-import { emit, loadActiveSpace, loadExpanded, state } from "./store";
+import { emit, loadActiveSpace, loadExpanded, loadExplorerSort, state } from "./store";
 import { beforeNote, loadCommandSpecs } from "./vault";
 
 /// Ciò che l'apertura di un vault chiede alla shell che la compone.
@@ -157,7 +157,7 @@ export function createVaultSession(ports: VaultSessionPorts): VaultSession {
     // loro: `Promise.all` lo tiene fermo. Nessuna delle quattro può rifiutare —
     // tutte e quattro hanno il proprio `catch` dentro — quindi qui non c'è la
     // domanda «cosa resta a metà se una va storta».
-    await Promise.all([loadOrganization(), loadLayout(preferredPaneMode()), loadExpanded(), loadActiveSpace()]);
+    await Promise.all([loadOrganization(), loadLayout(preferredPaneMode()), loadExpanded(), loadExplorerSort(), loadActiveSpace()]);
     if (!alive()) return;
     await synchronize();
     if (!alive()) return;

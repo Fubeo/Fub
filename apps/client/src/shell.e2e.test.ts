@@ -535,6 +535,25 @@ describe("navigazione accessibile dell'esploratore", () => {
   });
 });
 
+describe("comprimi ed espandi tutto dall'albero", () => {
+  const folderItem = (path: string) =>
+    document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+  const command = async (id: string) => {
+    const registry = await import("./ui/commands");
+    return registry.allCommands().find((entry) => entry.id === id);
+  };
+
+  it("espande ogni cartella, poi le comprime tutte", async () => {
+    await start(VAULT);
+    await (await command("shell.explorer.expand_all"))!.run!();
+    await settle();
+    expect(folderItem("note")?.getAttribute("aria-expanded")).toBe("true");
+    await (await command("shell.explorer.collapse_all"))!.run!();
+    await settle();
+    expect(folderItem("note")?.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
 describe("rinomina e cestino dal registro dei comandi", () => {
   const noteItem = (path: string) =>
     document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
