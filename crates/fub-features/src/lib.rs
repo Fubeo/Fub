@@ -103,7 +103,9 @@ pub mod trash;
 pub mod versioning;
 
 #[cfg(feature = "backlinks")]
-pub use backlinks::{build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_VIEW};
+pub use backlinks::{
+    build_backlinks_view, BacklinksView, BACKLINKS_ID, BACKLINKS_STATUS_VIEW, BACKLINKS_VIEW,
+};
 #[cfg(feature = "backup")]
 pub use backup::{
     BackupCommands, BackupView, BACKUP_ID, BACKUP_KEEP_KEY, BACKUP_VIEW, VAULT_BACKUP,

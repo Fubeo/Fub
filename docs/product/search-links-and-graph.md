@@ -196,6 +196,8 @@ col suo alias o col nome della nota, non con la sua sintassi. Il filtro delle
 menzioni sta in fondo, in una sezione chiusa finché non è attivo, e usa la
 sintassi della barra di ricerca (un filtro salvato come JSON vale ancora); un
 filtro che non si legge lo dice accanto al campo, col carattere a cui si ferma.
+La banda di stato dice quanti collegamenti entrano nella nota attiva
+(vista `backlinks.status`); senza una nota aperta resta vuota.
 
 Il pannello Cronologia elenca le versioni della nota con l'istante e la
 variazione di dimensione rispetto alla precedente. Una versione si sceglie col

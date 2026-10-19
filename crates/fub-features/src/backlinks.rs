@@ -41,6 +41,11 @@ pub const BACKLINKS_ID: &str = "fub.backlinks";
 pub const BACKLINKS_VIEW: &str = "backlinks";
 /// Vista leggera per incorporare i collegamenti nel documento aperto.
 pub const BACKLINKS_INLINE_VIEW: &str = "document_links";
+/// Quanti collegamenti entrano nella nota attiva, nella barra di stato.
+pub const BACKLINKS_STATUS_VIEW: &str = "backlinks.status";
+const STATUS_TITLE: &str = "status_title";
+const STATUS_COUNT: &str = "status_count";
+const COUNT: &str = "count";
 
 /// L'azione di navigazione emessa dai `ListItem` del pannello. L'id è **solo**
 /// l'id (§2.7): quale documento aprire viaggia nel `payload` dell'[`ActionRef`],
@@ -108,6 +113,12 @@ impl ViewProvider for BacklinksView {
                 ParamKind::Document,
             )
             .required()]),
+            ViewSpec::new(
+                BACKLINKS_STATUS_VIEW,
+                Text::key(STATUS_TITLE),
+                ViewSurface::StatusBar,
+            )
+            .open_by_default(),
         ]
     }
 
@@ -116,6 +127,9 @@ impl ViewProvider for BacklinksView {
         instance: &ViewInstance,
         host: &dyn ReadApi,
     ) -> Result<UiNode, PluginError> {
+        if instance.view == BACKLINKS_STATUS_VIEW {
+            return status_count(host);
+        }
         let active = if instance.view == BACKLINKS_INLINE_VIEW {
             let raw = instance.text_param(DOC).ok_or_else(|| {
                 PluginError::BadArgs("document_links requires a doc parameter".into())
@@ -377,6 +391,26 @@ fn link_reference(host: &dyn ReadApi, target: &DocId) -> Result<String, PluginEr
 /// Prende una **chiave**, non una stringa: è il §12.1 applicato al primo dei
 /// suoi clienti veri. La prosa sta nel [`catalog`], che è dato di manifest e non
 /// codice.
+/// La voce della barra di stato: il numero dei collegamenti entranti, come
+/// numero (la frase la compone il catalogo). Senza una nota attiva non dice
+/// niente: una banda che ripete «nessuna nota» è rumore.
+fn status_count(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
+    let Some(active) = host.active_context().and_then(|c| c.doc) else {
+        return Ok(UiNode::row(12, Vec::new()));
+    };
+    match host.query_index(IndexQuery::Backlinks {
+        target: active,
+        page: None,
+    })? {
+        IndexResult::Backlinks(refs) => Ok(UiNode::text(Text::message(
+            STATUS_COUNT,
+            vec![Arg::int(COUNT, i64::from(refs.total))],
+        ))
+        .with_key(STATUS_COUNT)),
+        other => Err(unexpected("backlinks", &other)),
+    }
+}
+
 fn placeholder(key: &str) -> UiNode {
     UiNode::empty_state(Text::key(key))
 }
@@ -427,8 +461,12 @@ pub fn catalog() -> Vec<StringCatalog> {
                 OUTBOUND_UNLINKED_COUNT,
                 "Menzioni uscenti non collegate · {count}",
             )
-            .with(FILTER_SECTION, "Filtro avanzato"),
+            .with(FILTER_SECTION, "Filtro avanzato")
+            .with(STATUS_TITLE, "Collegamenti entranti")
+            .with(STATUS_COUNT, "Entranti: {count}"),
         StringCatalog::new("en")
+            .with(STATUS_TITLE, "Incoming links")
+            .with(STATUS_COUNT, "Incoming: {count}")
             .with(VIEW_TITLE, "Links")
             .with(NO_ACTIVE_DOC, "No note open.")
             .with(INCOMING, "Incoming")
@@ -1232,6 +1270,28 @@ mod tests {
             panic!("the part is a section");
         };
         assert!(matches!(children[0].kind, UiKind::Failed { .. }));
+    }
+
+    #[test]
+    fn the_status_bar_counts_incoming_links_and_is_silent_without_a_note() {
+        let host = MemoryHost::new().with_backlink("target.md", &["a/Uno.md", "Due.md"]);
+        let status = ViewInstance::only(BACKLINKS_STATUS_VIEW);
+        let silent = BacklinksView.render_view(&status, &host).unwrap();
+        assert!(silent.children().is_empty(), "{silent:?}");
+        host.set_active(Some("target.md"));
+        let tree = BacklinksView.render_view(&status, &host).unwrap();
+        assert_eq!(tree.key.as_deref(), Some(STATUS_COUNT));
+        let UiKind::Text { content: text } = &tree.kind else {
+            panic!("the status is a text: {tree:?}");
+        };
+        assert_eq!(*text, Text::message(STATUS_COUNT, vec![Arg::int(COUNT, 2)]));
+        assert!(
+            BacklinksView
+                .views()
+                .iter()
+                .any(|spec| spec.id == BACKLINKS_STATUS_VIEW
+                    && spec.surface == ViewSurface::StatusBar)
+        );
     }
 
     #[test]
