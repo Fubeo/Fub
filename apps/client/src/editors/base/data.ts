@@ -241,6 +241,19 @@ export function baseRowsToCsv(rows: BaseRow[], columns: string[]): string {
   const escape = (value: string): string => /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
   return `${[columns.map(escape).join(","), ...rows.map((row) => columns.map((key) => escape(cellText(row.values[key]))).join(","))].join("\r\n")}\r\n`;
 }
+/// Le righe divise per il valore di `key`, nell'ordine in cui il primo di ogni
+/// gruppo compare: l'ordinamento della vista resta quello dentro ogni gruppo.
+export function groupBaseRows(rows: readonly BaseRow[], key: string): { name: string; rows: BaseRow[] }[] {
+  const groups = new Map<string, BaseRow[]>();
+  for (const row of rows) {
+    const name = cellText(row.values[key]);
+    const members = groups.get(name);
+    if (members) members.push(row);
+    else groups.set(name, [row]);
+  }
+  return [...groups].map(([name, members]) => ({ name, rows: members }));
+}
+
 export function cellText(value: BaseCellValue | undefined): string {
   if (!value || value.kind === "empty") return "";
   switch (value.kind) {

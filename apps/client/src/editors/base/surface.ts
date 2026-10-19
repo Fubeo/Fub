@@ -13,7 +13,7 @@ import type { BufferedSurface, SurfaceMountContext } from "../core/registry";
 import { uniformRowRange } from "../grid/engine";
 import {
   BASE_FORMAT, BASE_MAP_ATTRIBUTION_FALLBACK, BASE_RENDERER_NS,
-  allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty,
+  allowedBaseTileUrl, baseRowsToCsv, baseSurfaceModes, cellText, deriveBaseRows, expectedProperty, groupBaseRows,
   fetchAllDocuments, parseBaseEmbed, parseBaseViews, persistBaseView,
   planBaseView, prepareBaseMutations, restoreBaseView,
   type BaseCellValue, type BasePlan, type BaseRow, type BaseSurfaceDeps,
@@ -92,6 +92,23 @@ export function mountBaseSurface(
   let writeEpoch = 0;
   let persistQueue = Promise.resolve();
   const localLanes = new Map<string, Set<string>>();
+  // I gruppi chiusi di tabella, schede ed elenco, per vista: stato della
+  // superficie, come lo scroll, che il file `.base` non conosce.
+  const collapsedGroups = new Map<string, Set<string>>();
+  const groupToggle = (name: string, count: number): HTMLButtonElement => {
+    const view = plan?.view ?? "";
+    const closed = collapsedGroups.get(view)?.has(name) === true;
+    const toggle = button(`${name || "∅"} (${count})`, () => {
+      let names = collapsedGroups.get(view);
+      if (!names) { names = new Set(); collapsedGroups.set(view, names); }
+      if (!names.delete(name)) names.add(name);
+      draw();
+    });
+    toggle.className = "base-group-toggle";
+    toggle.setAttribute("aria-expanded", String(!closed));
+    return toggle;
+  };
+  const groupOpen = (name: string) => collapsedGroups.get(plan?.view ?? "")?.has(name) !== true;
   const downloads = new Map<string, number>();
   const saveLanes = (view: string) => {
     const laneNames = [...(localLanes.get(view) ?? [])];
@@ -240,13 +257,30 @@ export function mountBaseSurface(
       td.style.cssText = `height:${height}px;padding:0;border:0`;
       return tr;
     };
+    // Con un gruppo la tabella intercala una riga d'intestazione per gruppo,
+    // alta come le altre: la finestra virtuale resta a righe uniformi.
+    const items: ({ group: string; count: number } | BaseRow)[] = plan?.group
+      ? groupBaseRows(page, plan.group).flatMap(({ name, rows }) => [{ group: name, count: rows.length }, ...(groupOpen(name) ? rows : [])])
+      : page;
     const renderWindow = () => {
-      const range = uniformRowRange(page.length, viewport.scrollTop, viewport.clientHeight || TABLE_VIEWPORT_HEIGHT, TABLE_ROW_HEIGHT);
+      const range = uniformRowRange(items.length, viewport.scrollTop, viewport.clientHeight || TABLE_VIEWPORT_HEIGHT, TABLE_ROW_HEIGHT);
       if (!range) { tableBody.replaceChildren(); return; }
       const fragment = document.createDocumentFragment();
       if (range.start) fragment.append(spacer(range.start * TABLE_ROW_HEIGHT));
       for (let index = range.start; index <= range.end; index++) {
-        const row = page[index]!;
+        const item = items[index]!;
+        if ("group" in item) {
+          const tr = document.createElement("tr");
+          tr.className = "base-group-row";
+          tr.dataset.group = item.group;
+          tr.style.height = `${TABLE_ROW_HEIGHT}px`;
+          const cell = tr.insertCell();
+          cell.colSpan = (plan?.columns.length ?? 0) + 1;
+          cell.append(groupToggle(item.group, item.count));
+          fragment.append(tr);
+          continue;
+        }
+        const row = item;
         const tr = document.createElement("tr");
         tr.dataset.doc = row.doc;
         tr.style.height = `${TABLE_ROW_HEIGHT}px`;
@@ -260,7 +294,7 @@ export function mountBaseSurface(
         }
         fragment.append(tr);
       }
-      if (range.end + 1 < page.length) fragment.append(spacer((page.length - range.end - 1) * TABLE_ROW_HEIGHT));
+      if (range.end + 1 < items.length) fragment.append(spacer((items.length - range.end - 1) * TABLE_ROW_HEIGHT));
       tableBody.replaceChildren(fragment);
     };
     viewport.addEventListener("scroll", renderWindow);
@@ -269,6 +303,20 @@ export function mountBaseSurface(
     renderWindow();
   };
   const drawCards = (page: BaseRow[], list: boolean): void => {
+    if (!plan?.group) { body.append(gallery(page, list)); return; }
+    // Un gruppo è una sezione col suo titolo, che apre e chiude le sue schede.
+    for (const { name, rows } of groupBaseRows(page, plan.group)) {
+      const section = document.createElement("section");
+      section.className = "base-group";
+      section.dataset.group = name;
+      const heading = document.createElement("h3");
+      heading.append(groupToggle(name, rows.length));
+      section.append(heading);
+      if (groupOpen(name)) section.append(gallery(rows, list));
+      body.append(section);
+    }
+  };
+  const gallery = (page: BaseRow[], list: boolean): HTMLElement => {
     const gallery = document.createElement("div");
     gallery.className = list ? "base-list" : "base-cards";
     for (const row of page) {
@@ -286,7 +334,7 @@ export function mountBaseSurface(
       }
       gallery.append(card);
     }
-    body.append(gallery);
+    return gallery;
   };
   const drawKanban = (page: BaseRow[]): void => {
     const key = plan?.group, view = plan?.view;

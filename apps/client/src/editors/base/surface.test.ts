@@ -99,3 +99,70 @@ describe("Base table windows", () => {
     }
   });
 });
+
+describe("Base raggruppata", () => {
+  const rows = [
+    { doc: "a.md", values: { status: { kind: "text", value: "fatto" } } },
+    { doc: "b.md", values: { status: { kind: "text", value: "aperto" } } },
+    { doc: "c.md", values: { status: { kind: "text", value: "fatto" } } },
+    { doc: "d.md", values: { status: { kind: "empty" } } },
+  ];
+  const grouped = (viewType: string) => (request: IndexQuery): Promise<IndexResult> => {
+    if (request.kind === "documents") {
+      return Promise.resolve({ kind: "documents", value: { offset: 0, total: rows.length, items: rows.map(({ doc }) => ({ doc, properties: [] })) } });
+    }
+    if (request.kind !== "custom" || typeof request.query !== "object" || !request.query || !("op" in request.query)) throw new Error("unexpected query");
+    const op = request.query.op;
+    if (op === "parse") return Promise.resolve({ kind: "custom", value: { views: ["Vista"] } });
+    if (op === "plan") return Promise.resolve({ kind: "custom", value: {
+      view: "Vista", view_type: viewType, columns: ["status"], column_labels: {},
+      required_props: [], all_properties: false, group: "status", limit: null, map: null, create_defaults: {},
+    } });
+    if (op === "derive") return Promise.resolve({ kind: "custom", value: { rows, summaries: {} } });
+    throw new Error("unexpected Base operation");
+  };
+  const mount = (viewType: string) => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const surface = mountBaseSurface("base", { paneId: `base-${viewType}`, documentId: "views/gruppi.base", parent: host }, {
+      queryIndex: grouped(viewType),
+      invokeCommand: vi.fn(async () => ({})),
+      viewState: async () => null,
+      setViewState: async () => {},
+      onOpenDocument: () => {},
+    });
+    surface.buffer.setDoc(`views:\n  - {name: Vista, type: ${viewType}, group: {key: status}}\n`);
+    return { host, done: () => { surface.destroy(); host.remove(); } };
+  };
+  const toggles = (host: HTMLElement) =>
+    [...host.querySelectorAll<HTMLButtonElement>(".base-group-toggle")].map((toggle) => toggle.textContent);
+
+  it("la tabella intercala un'intestazione per gruppo, nell'ordine della vista, e un gruppo si chiude", async () => {
+    const { host, done } = mount("table");
+    try {
+      await vi.waitFor(() => expect(toggles(host)).toEqual(["fatto (2)", "aperto (1)", "∅ (1)"]));
+      const docs = () => [...host.querySelectorAll<HTMLElement>(".base-table tbody tr[data-doc]")].map((tr) => tr.dataset.doc);
+      expect(docs()).toEqual(["a.md", "c.md", "b.md", "d.md"]);
+      const first = host.querySelector<HTMLButtonElement>(".base-group-toggle")!;
+      expect(first.getAttribute("aria-expanded")).toBe("true");
+      first.click();
+      expect(docs()).toEqual(["b.md", "d.md"]);
+      expect(host.querySelector(".base-group-toggle")!.getAttribute("aria-expanded")).toBe("false");
+      host.querySelector<HTMLButtonElement>(".base-group-toggle")!.click();
+      expect(docs()).toEqual(["a.md", "c.md", "b.md", "d.md"]);
+    } finally { done(); }
+  });
+
+  it("schede ed elenco mettono ogni gruppo nella sua sezione", async () => {
+    for (const viewType of ["cards", "list"]) {
+      const { host, done } = mount(viewType);
+      try {
+        await vi.waitFor(() => expect(host.querySelectorAll("section.base-group").length).toBe(3));
+        const section = host.querySelector<HTMLElement>('section.base-group[data-group="fatto"]')!;
+        expect([...section.querySelectorAll<HTMLElement>(".base-card")].map((card) => card.dataset.doc)).toEqual(["a.md", "c.md"]);
+        section.querySelector<HTMLButtonElement>(".base-group-toggle")!.click();
+        expect(host.querySelector('section.base-group[data-group="fatto"] .base-card')).toBeNull();
+      } finally { done(); }
+    }
+  });
+});
