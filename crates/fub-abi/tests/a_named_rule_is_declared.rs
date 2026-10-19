@@ -223,6 +223,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/outline.rs::kept_by",
+            (
+                Family::ContextualCase,
+                "filtra i titoli del pannello Struttura col testo che l'utente scrive nel campo: \
+                 cerca una sottostringa in un titolo, non stabilisce l'identità di un nome. \
+                 Piega filtro e titolo perché la grafia del filtro non cambi i titoli che \
+                 restano, come la ricerca nelle celle di un foglio.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/custom.rs::claims",
             (
                 Family::ContextualCase,
@@ -442,6 +452,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  metterlo nel QR della sessione live: i nomi DNS sono insensibili al caso solo \
                  nell'ASCII (RFC 4343), e `.local` è un'etichetta ASCII. Non confronta nomi fra \
                  loro: decide solo se togliere un suffisso.",
+            ),
+        ),
+        (
+            "crates/fub-app/src/reveal.rs::runs",
+            (
+                Family::AsciiCase,
+                "decide se aprire un file con l'app di sistema vorrebbe dire eseguirlo, \
+                 confrontando la sua estensione con un elenco di lanciatori (`exe`, `bat`, \
+                 `desktop`, …). Le estensioni dell'elenco sono tutte ASCII, e Windows le \
+                 riconosce senza distinguere le maiuscole: `.EXE` si esegue come `.exe`.",
             ),
         ),
         (
