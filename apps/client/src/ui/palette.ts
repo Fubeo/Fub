@@ -38,6 +38,7 @@ import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../sta
 import { openLifetime, type Lifetime } from "./lifetime";
 import { opensWithoutParams, primaryViews } from "./primary-views";
 import { withPathPicker } from "./path-fields";
+import { listStep } from "./list-step";
 
 /// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
 /// all'utente, e mettere in salvo i buffer prima di un comando che scrive. Il
@@ -704,10 +705,10 @@ export async function openSlashPalette(
     if (event.key === "Escape") {
       event.preventDefault();
       closeSlashPalette(owner);
-    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    } else if (listStep(event)) {
       event.preventDefault();
       if (!visible.length) return;
-      selected = (selected + (event.key === "ArrowDown" ? 1 : -1) + visible.length) % visible.length;
+      selected = (selected + listStep(event) + visible.length) % visible.length;
       render();
     } else if (event.key === "Enter") {
       event.preventDefault();
@@ -953,10 +954,10 @@ function chooseSpecs(
   };
 
   const handleKey = (e: KeyboardEvent) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const step = listStep(e);
+    if (step) {
       e.preventDefault();
       if (visibleItems.length === 0) return;
-      const step = e.key === "ArrowDown" ? 1 : -1;
       // Le frecce spostano la scelta, non cambiano la lista: si ritoccano le
       // due righe, senza rifiltrare e ricostruire tutti i comandi.
       list.children[selected]?.setAttribute("aria-selected", "false");

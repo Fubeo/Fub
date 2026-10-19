@@ -39,6 +39,7 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
+  moveCompletionSelection,
 } from "@codemirror/autocomplete";
 import {
   defaultKeymap,
@@ -849,6 +850,10 @@ export class TextEngine {
         ),
       ),
       keymap.of([
+        // Ctrl-N/Ctrl-P scorrono i suggerimenti come nella palette; senza un
+        // completamento aperto il tasto passa oltre.
+        { key: "Ctrl-n", run: moveCompletionSelection(true) },
+        { key: "Ctrl-p", run: moveCompletionSelection(false) },
         ...defaultKeymap,
         ...historyKeymap,
         ...searchKeymap,

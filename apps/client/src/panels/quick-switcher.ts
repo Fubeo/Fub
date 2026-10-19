@@ -63,6 +63,7 @@ import { enterSurface, exitSurface } from "../ui/motion";
 import { cancelScheduledPreview, hidePreview, schedulePreview, showStickyPreview } from "../state/preview";
 import { openDocument } from "../state/document-controller";
 import { platformSupports } from "../platform/capabilities";
+import { listStep } from "../ui/list-step";
 
 const OVERLAY_ID = "quick-switcher";
 const LIST_ID = `${OVERLAY_ID}-list`;
@@ -418,10 +419,10 @@ export function openQuickSwitcher(): void {
     timer = window.setTimeout(() => void search(), 180);
   });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    const step = listStep(e);
+    if (step) {
       e.preventDefault();
       if (visibleItems.length === 0) return;
-      const step = e.key === "ArrowDown" ? 1 : -1;
       selected = (selected + step + visibleItems.length) % visibleItems.length;
       render();
       list.children[selected]?.scrollIntoView?.({ block: "nearest" });
