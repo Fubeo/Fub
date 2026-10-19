@@ -52,6 +52,7 @@ import { MARKDOWN_EXPORTS } from "./exports";
 import { markdownReference } from "./references";
 import { frontmatterRange, renderMarkdown } from "./render";
 import { addProperty, clearProperties } from "./properties";
+import { clipboardHtml } from "./copy-html";
 import type { ProofPorts } from "../../../core/proof-ports";
 
 /// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
@@ -220,6 +221,32 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     event.preventDefault();
     showContextMenu(event, [{ label: t("editor.footnote.delete"), run: () => void engine.runCommand(deleteFootnoteAt(pos)) }]);
   });
+  // Copiare o tagliare una selezione porta anche l'HTML, per incollare con la
+  // formattazione fuori da Fub. Il testo si legge prima di CodeMirror, perché
+  // un taglio lo toglie dal documento; l'HTML si aggiunge dopo, perché
+  // CodeMirror svuota gli appunti prima di scriverci il testo semplice.
+  let copied: string | null = null;
+  const beforeCopy = (event: ClipboardEvent) => {
+    copied = null;
+    if (mode === "reading" || !(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
+    // La griglia di una tabella copia le sue celle da sé.
+    if (event.target.closest(".cm-md-grid-block")) return;
+    copied = engine.readState((state) => {
+      const parts = state.selection.ranges.filter((range) => !range.empty)
+        .map((range) => state.sliceDoc(range.from, range.to));
+      return parts.length > 0 ? parts.join(state.lineBreak) : null;
+    });
+  };
+  const afterCopy = (event: ClipboardEvent) => {
+    const text = copied;
+    copied = null;
+    if (text === null || !event.defaultPrevented || !event.clipboardData) return;
+    event.clipboardData.setData("text/html", clipboardHtml(text, forms));
+  };
+  life.listen(parent, "copy", beforeCopy, { capture: true });
+  life.listen(parent, "cut", beforeCopy, { capture: true });
+  life.listen(parent, "copy", afterCopy);
+  life.listen(parent, "cut", afterCopy);
   life.listen(parent, "keydown", (event) => {
     const slash = opts.slash;
     if (

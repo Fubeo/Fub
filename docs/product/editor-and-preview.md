@@ -46,19 +46,19 @@ interlinea e misura rispettano le preferenze di lettura.
 
 L'editor testuale supporta folding, selezioni multiple e rettangolari,
 indentazione, liste intelligenti, matching e chiusura delle parentesi. L'incolla
-da HTML passa dal sanitizzatore e viene convertito in Markdown, tabelle, barrato
-ed elenchi di attività GFM compresi; testo semplice e Markdown dichiarato
-restano invece input autorevole. Un allegato depositato incollando o trascinando
-si incorpora se la lettura lo sa mostrare (immagini, audio, video, PDF) e
-diventa un link col suo nome altrimenti; una nota trascinata dall'albero diventa
-un wikilink nel punto in cui cade. Correttore ortografico, modalità Vim, numeri
-di riga (visibili in Sorgente), a capo automatico e unità di rientro sono
-preferenze di macchina aggiornate senza rimontare la sessione; il tasto destro
-sul margine mostra o nasconde numeri di riga e frecce di piegatura. Valgono per
-le superfici di documento: la barra delle formule e l'editor di cella della
-griglia sono campi con una disposizione fissa, senza numeri di riga, Vim o
-correttore. La direzione del testo è automatica per riga e la misura leggibile
-riusa la preferenza di aspetto.
+da HTML passa dal sanitizzatore e diventa Markdown, tabelle, barrato ed elenchi
+di attività GFM compresi; testo semplice e Markdown dichiarato restano input
+autorevole. Copiare o tagliare aggiunge l'HTML della selezione, senza link
+interni. Un allegato incollato o trascinato si incorpora se la lettura lo sa
+mostrare (immagini, audio, video, PDF), altrimenti diventa un link col suo nome;
+una nota trascinata dall'albero diventa un wikilink nel punto in cui cade.
+Correttore ortografico, modalità Vim, numeri di riga (visibili in Sorgente), a
+capo automatico e unità di rientro sono preferenze di macchina aggiornate senza
+rimontare la sessione; il tasto destro sul margine mostra o nasconde numeri di
+riga e frecce di piegatura. Valgono per le superfici di documento: la barra
+delle formule e l'editor di cella della griglia sono campi con una disposizione
+fissa, senza numeri di riga, Vim o correttore. La direzione del testo è
+automatica per riga e la misura leggibile riusa la preferenza di aspetto.
 
 ## Codice e diagrammi Mermaid
 

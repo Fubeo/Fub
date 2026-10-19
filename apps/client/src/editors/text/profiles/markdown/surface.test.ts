@@ -529,6 +529,36 @@ describe("le azioni dell'editor della superficie", () => {
     ed.destroy();
   });
 
+  it("copiare e tagliare portano anche l'HTML della selezione, in lettura no", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("Un **forte** qui\n");
+    const copy = (type: "copy" | "cut") => {
+      const data = new Map<string, string>();
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", {
+        value: {
+          clearData: () => data.clear(),
+          setData: (kind: string, value: string) => void data.set(kind, value),
+          getData: (kind: string) => data.get(kind) ?? "",
+        },
+      });
+      view().contentDOM.dispatchEvent(event);
+      return data;
+    };
+    view().focus();
+    view().dispatch({ selection: { anchor: 0, head: 12 } });
+    const copied = copy("copy");
+    expect(copied.get("text/plain")).toBe("Un **forte**");
+    expect(copied.get("text/html")).toContain("<strong>forte</strong>");
+    view().dispatch({ selection: { anchor: 0, head: 12 } });
+    const cut = copy("cut");
+    expect(cut.get("text/html")).toContain("<strong>forte</strong>");
+    expect(ed.buffer.getDoc()).toBe(" qui\n");
+    view().dispatch({ selection: { anchor: 0 } });
+    expect(copy("copy").has("text/html")).toBe(false);
+    ed.destroy();
+  });
+
   it("il tasto destro su un richiamo offre di eliminare la nota, altrove lascia il menu del sistema", () => {
     const { ed, view } = editor();
     ed.buffer.setDoc("Uno[^1] due\n\n[^1]: prima\n");
