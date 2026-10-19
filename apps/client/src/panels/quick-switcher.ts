@@ -40,7 +40,7 @@
 // Non l'ho trovata, creala. Compare solo a risultati vuoti, e il nome che
 // propone non è la query così com'è: passa da `rules/nome-cercato.ts`, perché
 // `note.create` prende un **path** e una query può contenere uno slash.
-import { notesByName } from "../host/query";
+import { notesByNameWithAliases } from "../host/query";
 import { Race } from "../ui/race";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
@@ -73,6 +73,19 @@ let dispatchOpen: (doc: string, mode: SwitcherOpenMode) => Promise<void> | void 
 
 /// Ctrl/Cmd apre accanto, con Maiusc in una finestra nuova. Dove la
 /// piattaforma ha una finestra sola, Maiusc resta un'apertura accanto.
+/// L'alias per cui una nota è fra i risultati: il primo che contiene tutte le
+/// parole scritte, e solo se il nome non le contiene già. L'indice cerca nome e
+/// alias insieme; qui si ritrova soltanto quale dei due spiega la riga.
+export function matchedAlias(doc: string, aliases: string[], text: string): string | undefined {
+  const terms = text.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const holds = (name: string) => {
+    const lower = name.toLocaleLowerCase();
+    return terms.every((term) => lower.includes(term));
+  };
+  if (terms.length === 0 || holds(pageName(doc))) return undefined;
+  return aliases.find(holds);
+}
+
 function openMode(e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): SwitcherOpenMode {
   if (!e.ctrlKey && !e.metaKey) return "here";
   return e.shiftKey && platformSupports("multipleWindows") ? "window" : "split";
@@ -93,8 +106,9 @@ function optionId(entry: Entry): string {
 /// vorrebbero dire tenere d'accordo un indice con un'aritmetica di confini, che
 /// è la cosa che si sbaglia il giorno in cui se ne aggiunge una quarta.
 type Entry =
-  /// Una nota del vault, per path.
-  | { k: "doc"; doc: string }
+  /// Una nota del vault, per path; `alias` è quello per cui l'ha trovata,
+  /// quando il nome da solo non contiene ciò che si è scritto.
+  | { k: "doc"; doc: string; alias?: string }
   /// Una ricerca fatta di recente: si ripesca per rifarla.
   | { k: "query"; q: string }
   /// La nota che non c'era, col nome che il testo cercato propone.
@@ -244,8 +258,9 @@ export function openQuickSwitcher(): void {
         // è anche il caso in cui questa superficie serve di più.
         // Le parole scritte, segnate nel nome: si vede *perché* una nota è lì,
         // e fra tre omonime quale combacia meglio.
-        title.append(markedTerms(pageName(entry.doc), input.value.trim()));
-        where.textContent = entry.doc;
+        // Trovata per un alias: si mostra l'alias, e sotto di chi è.
+        title.append(markedTerms(entry.alias ?? pageName(entry.doc), input.value.trim()));
+        where.textContent = entry.alias ? t("switcher.alias_of", { doc: entry.doc }) : entry.doc;
         setTooltip(button, entry.doc);
       } else if (entry.k === "query") {
         title.textContent = entry.q;
@@ -355,7 +370,8 @@ export function openQuickSwitcher(): void {
       // `catch`, quindi non c'è dove perdere il segnale di scadenza.
       return expected(
         (text
-          ? notesByName(text).then((d) => d.map((doc): Entry => ({ k: "doc", doc })))
+          ? notesByNameWithAliases(text).then((d) =>
+              d.map(({ doc, aliases }): Entry => ({ k: "doc", doc, alias: matchedAlias(doc, aliases, text) })))
           : existingRecentNotes().then((d) => [
               ...d.map((doc): Entry => ({ k: "doc", doc })),
               ...recentSearches().map((q): Entry => ({ k: "query", q })),

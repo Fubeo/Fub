@@ -23,6 +23,12 @@ documenti e byte. La stessa espressione vale per ricerca globale, viste,
 query salvate e ricerca incorporata: il pianificatore instrada ogni foglia al
 proprietario e ricompone l'AND/OR senza divergenze.
 
+«Vai alla nota» cerca le note per nome e per alias, perché l'indice tiene gli
+alias del frontmatter nello stesso campo del nome. Una nota trovata soltanto
+per un alias mostra l'alias, con le parole scritte segnate, e sotto «alias di»
+la nota. `Maiusc+Invio` crea la nota col nome scritto anche se qualcosa
+combacia.
+
 Le query salvate stanno in `queries.json`, nello spazio dati di `fub.queries`.
 Un file scritto da una versione più recente di Fub non si usa e non si
 riscrive; i campi che questa versione non conosce tornano su disco come erano.

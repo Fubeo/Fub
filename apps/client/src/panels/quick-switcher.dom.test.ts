@@ -15,7 +15,12 @@ const fake = vi.hoisted(() => ({
   setTooltip: vi.fn(),
 }));
 
-vi.mock("../host/query", () => ({ notesByName: fake.notesByName, settings: fake.settings }));
+vi.mock("../host/query", () => ({
+  notesByNameWithAliases: async (text: string) =>
+    ((await fake.notesByName(text)) as (string | { doc: string; aliases: string[] })[])
+      .map((found) => (typeof found === "string" ? { doc: found, aliases: [] } : found)),
+  settings: fake.settings,
+}));
 vi.mock("../state/recent", () => ({
   existingRecentNotes: fake.existingRecentNotes,
   recentSearches: fake.recentSearches,
@@ -155,6 +160,28 @@ describe("combobox del quick switcher", () => {
     await settleSearch();
     expect(fake.createNote).toHaveBeenCalledWith("Riunione");
     expect(fake.openDocument).toHaveBeenCalledWith("Riunione.md");
+  });
+
+  it("una nota trovata per un alias mostra l'alias e di chi è", async () => {
+    const { input, list } = await openSwitcher();
+    fake.notesByName.mockResolvedValue([
+      { doc: "persone/Mario Rossi.md", aliases: ["Il capo", "MR"] },
+      { doc: "notes/Capodanno.md", aliases: ["Il capo"] },
+    ]);
+    input.value = "capo";
+    input.dispatchEvent(new Event("input"));
+    vi.advanceTimersByTime(200);
+    await settleSearch();
+    const [first, second] = options(list);
+    expect(first!.querySelector(".palette-title")?.textContent).toBe("Il capo");
+    expect(first!.querySelector(".palette-title mark")?.textContent).toBe("capo");
+    expect(first!.querySelector(".palette-desc")?.textContent).toContain("persone/Mario Rossi.md");
+    // Il nome combacia già: l'alias non serve a spiegare la riga.
+    expect(second!.querySelector(".palette-title")?.textContent).toBe("Capodanno");
+    expect(second!.querySelector(".palette-desc")?.textContent).toBe("notes/Capodanno.md");
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await settleSearch();
+    expect(fake.openDocument).toHaveBeenCalledWith("persone/Mario Rossi.md");
   });
 
   it("dispatches here, split and window from distinct keyboard modifiers", async () => {

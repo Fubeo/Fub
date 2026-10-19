@@ -254,6 +254,36 @@ export async function notesByName(text: string, count = MAX_NAMES): Promise<stri
   return page.items.map((m) => m.doc);
 }
 
+/// Le note di [`notesByName`], ognuna con i suoi alias del frontmatter.
+///
+/// L'indice cerca il nome **e** gli alias nello stesso campo, quindi una nota
+/// può tornare per un alias senza che il suo nome contenga ciò che si è scritto:
+/// gli alias servono a chi la mostra per dire perché è lì. Stessa domanda,
+/// stesso ordine; in più soltanto le due chiavi `aliases` e `alias`.
+export async function notesByNameWithAliases(
+  text: string,
+  count = MAX_NAMES,
+): Promise<{ doc: string; aliases: string[] }[]> {
+  const written = text.trim();
+  if (!written) return [];
+  const page = await runQuery({
+    kind: "documents",
+    matching: nameQuery(written),
+    sort: null,
+    select: { kind: "keys", keys: ["aliases", "alias"] },
+    page: { offset: 0, limit: count },
+    excerpts: "omit",
+  });
+  return page.items.map((m) => ({ doc: m.doc, aliases: aliasesOf(m.properties) }));
+}
+
+function aliasesOf(properties: DocumentMatch["properties"]): string[] {
+  const value = properties?.find((p) => p.key === "aliases")?.value
+    ?? properties?.find((p) => p.key === "alias")?.value;
+  const list = Array.isArray(value) ? value : [value];
+  return list.filter((alias): alias is string => typeof alias === "string" && alias.trim() !== "");
+}
+
 /// Quali di questi documenti **esistono**, in una domanda sola.
 ///
 /// La foglia `docs` la valuta chi ha i metadati in cache, e la restringe a ciò

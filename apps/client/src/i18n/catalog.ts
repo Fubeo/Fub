@@ -613,6 +613,7 @@ export const IT = { // --- la scocca -------------------------------------------
 // misto il nome da solo non lo direbbe.
 "switcher.recent_search": "Ricerca recente",
 "switcher.create": "Crea questa nota",
+"switcher.alias_of": "alias di {doc}",
 "commands.switcher": "Vai alla nota",
 "commands.switcher.desc": "Apri una nota cercandola per nome, con lo stesso motore del vault.",
 "commands.history_clear": "Cancella ricerche e note recenti",
@@ -2685,6 +2686,7 @@ export const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the edit
 "switcher.empty": "No note with this name",
 "switcher.recent_search": "Recent search",
 "switcher.create": "Create this note",
+"switcher.alias_of": "alias of {doc}",
 "commands.switcher": "Go to note",
 "commands.switcher.desc": "Open a note by searching its name, with the same engine as the vault.",
 "commands.history_clear": "Clear recent searches and notes",
