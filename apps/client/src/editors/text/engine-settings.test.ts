@@ -12,6 +12,7 @@ import {
   EDITOR_CLOSE_BRACKETS_KEY,
   EDITOR_FOLD_GUTTER_KEY,
   EDITOR_SMART_LISTS_KEY,
+  EDITOR_INDENT_GUIDES_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
@@ -136,6 +137,27 @@ describe("text input settings", () => {
       origin: { actor: { kind: "user" }, batch: null },
     });
     await vi.waitFor(() => expect(view.state.facet(pasteHtml)).toBe(false));
+    engine.destroy();
+    host.remove();
+  });
+
+  it("le guide di rientro si accendono dall'impostazione e disegnano un fondo sulle righe rientrate", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    engine.setDoc("- uno\n    - due\n");
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    const guided = () => host.querySelectorAll<HTMLElement>(".cm-line[style*='repeating-linear-gradient']").length;
+    expect(guided()).toBe(0);
+    read.mockResolvedValue([entry(EDITOR_INDENT_GUIDES_KEY, true)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_INDENT_GUIDES_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(guided()).toBe(1));
     engine.destroy();
     host.remove();
   });
