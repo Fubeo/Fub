@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { smartLists } from "./smart-lists";
 import { pasteHtml } from "./paste-html";
+import { propertiesDisplay } from "./properties-display";
 import { describe, expect, it, vi } from "vitest";
 import { getCM } from "@replit/codemirror-vim";
 import { EditorView } from "@codemirror/view";
@@ -14,6 +15,7 @@ import {
   EDITOR_SMART_LISTS_KEY,
   EDITOR_INDENT_GUIDES_KEY,
   EDITOR_PASTE_HTML_KEY,
+  EDITOR_PROPERTIES_KEY,
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
 } from "./engine";
@@ -158,6 +160,31 @@ describe("text input settings", () => {
       origin: { actor: { kind: "user" }, batch: null },
     });
     await vi.waitFor(() => expect(guided()).toBe(1));
+    engine.destroy();
+    host.remove();
+  });
+
+  it("editor.properties sceglie come Live mostra il frontmatter, e un valore ignoto resta YAML", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    const view = EditorView.findFromDOM(host)!;
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(view.state.facet(propertiesDisplay)).toBe("source");
+    const change = (value: string) => {
+      read.mockResolvedValue([{ ...entry(EDITOR_PROPERTIES_KEY, false), value }]);
+      forwardNotice({
+        event: { type: "setting_changed", key: EDITOR_PROPERTIES_KEY, scope: "machine" },
+        origin: { actor: { kind: "user" }, batch: null },
+      });
+    };
+    change("visible");
+    await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("visible"));
+    change("tabella");
+    await vi.waitFor(() => expect(view.state.facet(propertiesDisplay)).toBe("source"));
     engine.destroy();
     host.remove();
   });

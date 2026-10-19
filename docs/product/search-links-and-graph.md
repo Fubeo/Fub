@@ -335,6 +335,25 @@ La modularizzazione del renderer è tracciata nell'issue
 [#12](https://github.com/Fubeo/Fub/issues/12). La prova di scala e durata è
 nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
 
+## Proprietà nella nota
+
+L'impostazione di macchina `editor.properties` sceglie come Live mostra il
+frontmatter in cima alla nota: **YAML** (il default) lo lascia testo,
+**Visibili** lo fa una tabella chiave–valore, **Nascoste** una riga sola col
+numero delle proprietà. La tabella è una lettura: una lista diventa `a, b`, un
+testo su più righe una riga; il valore resta quello del file. Un clic su una
+proprietà, o un cursore che entra nel frontmatter, riapre lo YAML su quella
+riga; Sorgente mostra sempre lo YAML. Con il frontmatter chiuso, ciò che si
+scrive all'inizio del documento finisce sotto la chiusura, non sopra `---`.
+
+Mod+; apre una riga vuota per una proprietà nuova prima della chiusura, o crea
+il frontmatter in cima se non c'è. Alt+↑ e Alt+↓ sulla riga di una chiave
+spostano la proprietà intera, con le righe rientrate della sua lista; ai bordi
+del frontmatter il tasto resta fermo, e fuori da una riga di chiave sposta le
+righe come altrove. I tre gesti sono anche comandi della palette e voci del
+menu dei blocchi nella barra di formattazione. Il pannello Proprietà
+dell'ispettore resta il modo strutturato di scrivere valori tipizzati.
+
 ## Comportamenti da non confondere
 
 | Comportamento | Autorità |

@@ -24,6 +24,7 @@ import { listItem } from "../../../../rules/syntax";
 import { t } from "../../../../i18n/strings";
 import { isStrictlyInsideCode } from "./parser";
 import { containerMath, isMathContainer } from "./render-inline";
+import { addProperty, canMoveProperty, moveProperty } from "./properties";
 import {
   dedentListItem,
   deleteTableColumn,
@@ -677,6 +678,9 @@ export const MARKDOWN_ACTIONS: ReadonlyMap<string, MarkdownAction> = new Map<str
   ["markdown.mathblock", { run: toggleMathBlock, active: (s) => enclosingMathFence(s) !== null, prose: true }],
   ["markdown.rule", { run: insertRule, prose: true }],
   ["markdown.table", { run: insertTable, prose: true }],
+  ["markdown.property.add", { run: addProperty, chord: "Mod-;" }],
+  ["markdown.property.up", { run: moveProperty(-1), applicable: canMoveProperty(-1), chord: "Alt-ArrowUp" }],
+  ["markdown.property.down", { run: moveProperty(1), applicable: canMoveProperty(1), chord: "Alt-ArrowDown" }],
   ["markdown.table.row.before", { ...tableAction(insertTableRow("before")), chord: "Mod-Alt-Shift-ArrowUp" }],
   ["markdown.table.row.after", { ...tableAction(insertTableRow("after")), chord: "Mod-Alt-Shift-ArrowDown" }],
   ["markdown.table.row.up", { ...tableAction(moveTableRow(-1)), chord: "Mod-Alt-ArrowUp" }],

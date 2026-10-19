@@ -15,6 +15,7 @@ import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
 import { smartLists } from "../../smart-lists";
+import { addProperty, moveProperty } from "./properties";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
 
@@ -742,6 +743,11 @@ const markdownKeymapPrefix: KeyBinding[] = [
   { key: "Mod-Enter", run: toggleCheckbox },
   { key: "Tab", run: indentListItem },
   { key: "Shift-Tab", run: dedentListItem },
+  // Prima di `Alt-↑/↓` delle righe: sulla chiave di una proprietà si sposta
+  // la voce intera, altrove passa la mano.
+  { key: "Mod-;", run: addProperty },
+  { key: "Alt-ArrowUp", run: moveProperty(-1) },
+  { key: "Alt-ArrowDown", run: moveProperty(1) },
 ];
 
 const markdownKeymapSuffix: KeyBinding[] = [

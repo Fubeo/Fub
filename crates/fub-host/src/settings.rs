@@ -172,6 +172,10 @@ pub const EDITOR_STRICT_LINE_BREAKS: &str = "editor.strict-line-breaks";
 /// Cosa inserisce Tab e con cosa si rientrano gli elenchi: `tab`, `2` o `4`
 /// spazi. Il default è quello che CodeMirror usava prima che fosse una scelta.
 pub const EDITOR_INDENT: &str = "editor.indent";
+/// Come Live mostra il frontmatter: `visible` lo fa una tabella di
+/// proprietà, `hidden` lo riduce a una riga che si apre, `source` lo lascia
+/// YAML. Il default è quello di prima che fosse una scelta.
+pub const EDITOR_PROPERTIES: &str = "editor.properties";
 /// In che modalità si apre un riquadro nuovo: `source`, `live_preview` o
 /// `reading`, gli id delle modalità della superficie testuale.
 pub const EDITOR_DEFAULT_MODE: &str = "editor.default-mode";
@@ -486,6 +490,17 @@ fn editor_settings() -> Vec<SettingSpec> {
             UiOption::new("tab", Text::key(C_EDITOR_INDENT_TAB)),
             UiOption::new("2", Text::key(C_EDITOR_INDENT_2)),
             UiOption::new("4", Text::key(C_EDITOR_INDENT_4)),
+        ],
+    ));
+    settings.push(choice(
+        EDITOR_PROPERTIES,
+        C_EDITOR_PROPERTIES,
+        C_EDITOR_PROPERTIES_DESC,
+        "source",
+        vec![
+            UiOption::new("visible", Text::key(C_EDITOR_PROPERTIES_VISIBLE)),
+            UiOption::new("hidden", Text::key(C_EDITOR_PROPERTIES_HIDDEN)),
+            UiOption::new("source", Text::key(C_EDITOR_PROPERTIES_SOURCE)),
         ],
     ));
     settings.push(
@@ -1003,6 +1018,11 @@ const C_EDITOR_INDENT_DESC: &str = "core.editor.indent.desc";
 const C_EDITOR_INDENT_TAB: &str = "core.editor.indent.tab";
 const C_EDITOR_INDENT_2: &str = "core.editor.indent.2";
 const C_EDITOR_INDENT_4: &str = "core.editor.indent.4";
+const C_EDITOR_PROPERTIES: &str = "core.editor.properties";
+const C_EDITOR_PROPERTIES_DESC: &str = "core.editor.properties.desc";
+const C_EDITOR_PROPERTIES_VISIBLE: &str = "core.editor.properties.visible";
+const C_EDITOR_PROPERTIES_HIDDEN: &str = "core.editor.properties.hidden";
+const C_EDITOR_PROPERTIES_SOURCE: &str = "core.editor.properties.source";
 const C_EDITOR_DEFAULT_MODE: &str = "core.editor.default_mode";
 const C_EDITOR_DEFAULT_MODE_DESC: &str = "core.editor.default_mode.desc";
 const C_MODE_SOURCE: &str = "core.mode.source";
@@ -1436,6 +1456,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_TAB, "Tabulazione")
         .with(C_EDITOR_INDENT_2, "2 spazi")
         .with(C_EDITOR_INDENT_4, "4 spazi")
+        .with(C_EDITOR_PROPERTIES, "Proprietà nel testo")
+        .with(C_EDITOR_PROPERTIES_DESC, "Come Live mostra il frontmatter in cima alla nota. Un click sulle proprietà riapre lo YAML da scrivere; in Sorgente resta sempre YAML.")
+        .with(C_EDITOR_PROPERTIES_VISIBLE, "Visibili")
+        .with(C_EDITOR_PROPERTIES_HIDDEN, "Nascoste")
+        .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_DEFAULT_MODE, "Modalità iniziale")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "La modalità di una finestra nuova o di un vault aperto per la prima volta. Un riquadro diviso eredita quella del riquadro da cui nasce, e ognuno ricorda la sua.")
         .with(C_MODE_SOURCE, "Sorgente")
@@ -1845,6 +1870,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_EDITOR_INDENT_TAB, "Tab")
         .with(C_EDITOR_INDENT_2, "2 spaces")
         .with(C_EDITOR_INDENT_4, "4 spaces")
+        .with(C_EDITOR_PROPERTIES, "Properties in the text")
+        .with(C_EDITOR_PROPERTIES_DESC, "How Live shows the frontmatter at the top of the note. A click on the properties reopens the YAML for writing; Source always shows YAML.")
+        .with(C_EDITOR_PROPERTIES_VISIBLE, "Visible")
+        .with(C_EDITOR_PROPERTIES_HIDDEN, "Hidden")
+        .with(C_EDITOR_PROPERTIES_SOURCE, "YAML")
         .with(C_EDITOR_DEFAULT_MODE, "Initial mode")
         .with(C_EDITOR_DEFAULT_MODE_DESC, "The mode of a new window or of a vault opened for the first time. A split pane inherits the mode of the pane it comes from, and each pane remembers its own.")
         .with(C_MODE_SOURCE, "Source")

@@ -64,6 +64,7 @@ import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
 import { smartLists } from "./smart-lists";
+import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "./properties-display";
 import { pasteHtml } from "./paste-html";
 import { indentGuides } from "./indent-guides";
 import {
@@ -119,6 +120,7 @@ export const EDITOR_FOLD_GUTTER_KEY = "editor.fold-gutter";
 export const EDITOR_SMART_LISTS_KEY = "editor.smart-lists";
 export const EDITOR_PASTE_HTML_KEY = "editor.paste-html";
 export const EDITOR_INDENT_GUIDES_KEY = "editor.indent-guides";
+export const EDITOR_PROPERTIES_KEY = "editor.properties";
 const INPUT_KEYS = new Set([
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
@@ -130,6 +132,7 @@ const INPUT_KEYS = new Set([
   EDITOR_SMART_LISTS_KEY,
   EDITOR_PASTE_HTML_KEY,
   EDITOR_INDENT_GUIDES_KEY,
+  EDITOR_PROPERTIES_KEY,
 ]);
 
 /// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
@@ -149,6 +152,8 @@ interface LayoutPreferences {
   readonly pasteHtml: boolean;
   /// Righe di rientro nel margine sinistro del testo.
   readonly indentGuides: boolean;
+  /// Come Live mostra il frontmatter (`properties-display.ts`).
+  readonly properties: PropertiesDisplay;
 }
 const DEFAULT_LAYOUT: LayoutPreferences = {
   lineNumbers: true,
@@ -159,6 +164,7 @@ const DEFAULT_LAYOUT: LayoutPreferences = {
   smartLists: true,
   pasteHtml: true,
   indentGuides: false,
+  properties: "source",
 };
 const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
@@ -171,6 +177,7 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     layout.foldGutter ? foldGutter({ openText: "↓" }) : [],
     smartLists.of(layout.smartLists),
     pasteHtml.of(layout.pasteHtml),
+    propertiesDisplay.of(layout.properties),
     layout.indentGuides ? indentGuides : [],
     layout.closeBrackets ? [closeBrackets(), keymap.of(closeBracketsKeymap)] : [],
   ];
@@ -490,7 +497,8 @@ export class TextEngine {
       && next.foldGutter === this.layout.foldGutter
       && next.smartLists === this.layout.smartLists
       && next.pasteHtml === this.layout.pasteHtml
-      && next.indentGuides === this.layout.indentGuides;
+      && next.indentGuides === this.layout.indentGuides
+      && next.properties === this.layout.properties;
     if (this.disposed || same) return;
     this.layout = next;
     this.reconfigureInput();
@@ -539,6 +547,7 @@ export class TextEngine {
         smartLists: value(EDITOR_SMART_LISTS_KEY) !== false,
         pasteHtml: value(EDITOR_PASTE_HTML_KEY) !== false,
         indentGuides: value(EDITOR_INDENT_GUIDES_KEY) === true,
+        properties: propertiesDisplayOf(value(EDITOR_PROPERTIES_KEY)),
       });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.
