@@ -11694,6 +11694,30 @@ describe("gli appunti", () => {
     expect(editor.engine.text).toBe(before);
   });
 
+  it("ciò che Excalidraw e draw.io mettono negli appunti entra coi suoi oggetti, e il rapporto lo dice", async () => {
+    mount();
+    size(1000, 500);
+    const shape = {
+      type: "rectangle", id: "r", x: 0, y: 0, width: 100, height: 50, angle: 0, strokeColor: "#1e1e1e",
+      backgroundColor: "transparent", fillStyle: "hachure", strokeWidth: 2, strokeStyle: "solid", roughness: 1,
+      opacity: 100, groupIds: [], roundness: null, isDeleted: false, locked: false, link: null, boundElements: null,
+    };
+    const excalidraw = JSON.stringify({ type: "excalidraw/clipboard", elements: [shape], files: {} });
+    const pasted = clip("paste", holding(excalidraw));
+    expect(pasted.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(rects().length).toBeGreaterThan(1), { timeout: 4000 });
+    expect(editor.selection.length).toBeGreaterThan(0);
+    // Il tratto a schizzo non entra uguale, e lo si dice.
+    expect(spoken()).toMatch(/schizzo/);
+
+    const drawio = encodeURIComponent(
+      '<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="a" value="" style="rounded=0;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="40" height="20" as="geometry"/></mxCell></root></mxGraphModel>',
+    );
+    const count = rects().length;
+    expect(clip("paste", holding(drawio)).defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(rects().length).toBeGreaterThan(count), { timeout: 4000 });
+  });
+
   it("un file .svg lasciato sul foglio va dove cade, col suo nome; due sono un passo", async () => {
     mount();
     size(1000, 500);

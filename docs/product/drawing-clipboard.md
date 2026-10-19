@@ -76,6 +76,18 @@ la diagnostica li segnala (S005). Le entità di un `DOCTYPE` si sostituiscono
 col loro testo. Un SVG malformato, senza niente da incollare o più grande di un
 disegno modificabile non entra, e lo si dice.
 
+## Da Excalidraw e da draw.io
+
+Gli oggetti copiati in Excalidraw, che vanno negli appunti come JSON
+`excalidraw/clipboard`, e quelli copiati in draw.io, che vanno come XML anche
+codificato come un URL, entrano come oggetti del disegno. Lo stesso vale per
+un file `.excalidraw` o `.drawio` lasciato sul foglio. Passano dallo stesso
+lettore di [«Importa disegno»](drawing-import.md): forme, testi, connettori e
+immagini diventano quelli di FubDraw, e dopo l'incolla una frase dice che cosa
+non è entrato o è entrato cambiato, come il rapporto dell'importazione. Un
+disegno che non si legge, o che non sta in un disegno, resta fuori e lo si
+dice. Un SVG di draw.io entra come gli altri SVG.
+
 I comandi che spostano gli elementi non riscrivono i fogli di stile del
 disegno, incollati o già nel file: riscrivono gli elementi. Se dopo un comando
 un foglio sceglierebbe altri elementi, ciascuno che cambierebbe aspetto riceve
