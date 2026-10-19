@@ -996,6 +996,15 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-features/src/commands/recurrence.rs::rule_of",
+            (
+                Family::AsciiCase,
+                "abbassa la regola scritta dopo `🔁` per riconoscere parole chiave tutte ASCII \
+                 (`every`, `ogni`, `week`, `mesi`, `when done`): non confronta due nomi, legge una \
+                 piccola grammatica, e una parola che non è ASCII non è comunque una delle sue.",
+            ),
+        ),
+        (
             "crates/fub-services/src/main.rs::read_request",
             (
                 Family::AsciiCase,

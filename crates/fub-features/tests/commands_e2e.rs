@@ -733,6 +733,60 @@ fn checking_a_task_goes_through_the_parsed_model_and_writes_one_byte() {
     );
 }
 
+/// Un compito ricorrente spuntato lascia sopra di sé il prossimo, con la
+/// scadenza spostata; le sottovoci restano a quello fatto, e un solo
+/// annullamento toglie tutt'e due le cose.
+#[test]
+fn ticking_a_recurring_task_writes_the_next_one_above_it() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    let source = "- [ ] Annaffia 🔁 every week 📅 2026-10-19\r\n  - [ ] il basilico\r\n";
+    ws.write_document(&DocId::new("casa.md"), source, WriteBase::Dictated)
+        .expect("scrive");
+    let at = source.find("Annaffia").expect("c'è") as u64;
+    let outcome = ws
+        .invoke_command(
+            fub_features::NOTES_TASK_TOGGLE,
+            serde_json::json!({ "doc": "casa.md", "at": [at] }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("spunta");
+    assert_eq!(
+        ws.read_source(&DocId::new("casa.md")).expect("rilegge"),
+        "- [ ] Annaffia 🔁 every week 📅 2026-10-26\r\n\
+         - [x] Annaffia 🔁 every week 📅 2026-10-19\r\n  - [ ] il basilico\r\n"
+    );
+    assert!(outcome.undo.is_some(), "si annulla");
+    ws.invoke_command(
+        fub_features::VAULT_UNDO,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("annulla");
+    assert_eq!(
+        ws.read_source(&DocId::new("casa.md")).expect("rilegge"),
+        source
+    );
+
+    // Togliere la spunta non crea niente: la ricorrenza è del gesto «fatto».
+    let done = "- [x] Annaffia 🔁 every week 📅 2026-10-19\n";
+    ws.write_document(&DocId::new("fatto.md"), done, WriteBase::Dictated)
+        .expect("scrive");
+    ws.invoke_command(
+        fub_features::NOTES_TASK_TOGGLE,
+        serde_json::json!({ "doc": "fatto.md", "at": [8] }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("de-spunta");
+    assert_eq!(
+        ws.read_source(&DocId::new("fatto.md")).expect("rilegge"),
+        "- [ ] Annaffia 🔁 every week 📅 2026-10-19\n"
+    );
+}
+
 /// Una posizione che non sta in nessun task si dice, e non tocca il vault.
 #[test]
 fn a_position_outside_every_task_is_refused_by_the_command_not_guessed() {

@@ -58,6 +58,8 @@ use fub_abi::traits::{
 };
 use serde::{Deserialize, Serialize};
 
+mod recurrence;
+
 /// Id del provider: lo spazio dati e la registrazione, come per le view.
 pub const COMMANDS_ID: &str = "fub.commands";
 
@@ -2874,6 +2876,19 @@ fn notes_task_toggle(
     let mut base: Option<Revision> = None;
     let mut edits = Vec::with_capacity(markers.len());
     let mut done = false;
+    // Il sorgente serve solo se si spunta qualcosa: è lì che sta la regola di
+    // una ricorrenza. Lo si legge una volta, e deve essere della revisione su
+    // cui il formato ha calcolato le spunte.
+    let recurring = if markers.iter().any(|m| m.symbol.is_none()) {
+        let source = host.read_document(&doc)?;
+        let locale = host.user_locale();
+        let today = locale
+            .to_civil_millis(host.now_unix_millis())
+            .div_euclid(86_400_000);
+        Some((source, today))
+    } else {
+        None
+    };
     for marker in &markers {
         let to_done = marker.symbol.is_none();
         done |= to_done;
@@ -2891,12 +2906,26 @@ fn notes_task_toggle(
             Some(_) => {}
             None => base = Some(request.base),
         }
+        // Un compito ricorrente che si spunta lascia sopra di sé il prossimo,
+        // come fa Tasks: la riga fatta resta dov'era, con la sua storia.
+        if let (true, Some((source, today))) = (to_done, &recurring) {
+            if let Some(edit) = next_occurrence(source, marker.span.start, *today) {
+                edits.push(edit);
+            }
+        }
         edits.extend(request.edits);
     }
     let revision = match base {
         Some(base) => base,
         None => host.document_revision(&doc)?,
     };
+    if recurring.is_some() && host.document_revision(&doc)? != revision {
+        return Err(PluginError::Conflict(one(
+            AND_TASK_CHANGED,
+            A_DOC,
+            doc.as_str(),
+        )));
+    }
     let request = EditRequest::new(revision, edits);
     let summary = one(
         if done { P_TASK_DONE } else { P_TASK_TODO },
@@ -2928,6 +2957,23 @@ fn notes_task_toggle(
     Ok(CommandOutcome::notify(summary)
         .undoable(undo)
         .with_effect(effect))
+}
+
+/// Il compito successivo di quello il cui marcatore sta in `at`, da scrivere
+/// all'inizio della sua riga, o `None` se la riga non ricorre.
+///
+/// Si copia la riga e non la voce: le sottovoci appartengono a quella fatta,
+/// e il terminatore è quello della riga, perché un file con `\r\n` non ne
+/// riceva uno diverso.
+fn next_occurrence(source: &str, at: usize, today: i64) -> Option<TextEdit> {
+    let start = source.get(..at)?.rfind('\n').map_or(0, |i| i + 1);
+    let end = source[at..].find('\n').map_or(source.len(), |i| at + i);
+    let (line, eol) = match source[start..end].strip_suffix('\r') {
+        Some(line) => (line, "\r\n"),
+        None => (&source[start..end], "\n"),
+    };
+    let next = recurrence::next_line(line, today)?;
+    Some(TextEdit::insert(start, format!("{next}{eol}")))
 }
 
 /// Un `at` che arriva come numero JSON diventa un offset in byte, o si spiega.

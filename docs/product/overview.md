@@ -81,6 +81,12 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 - frontmatter;
 - wikilink, tag, heading, task, tabelle, callout ed embed supportati dal
   provider Markdown;
+- compiti ricorrenti con la scrittura del plugin Tasks: spuntare
+  `- [ ] … 🔁 every week 📅 2026-10-19` scrive sopra il compito successivo, con
+  scadenza (`📅`), data programmata (`⏳`) e inizio (`🛫`) spostate di un
+  intervallo (`every N day|week|month|year`, anche `ogni 2 settimane`; con
+  `when done` si conta dal giorno della spunta); una regola che non si legge
+  non ricorre;
 - revisioni e conflitti espliciti;
 - sincronizzazione fra più riquadri dello stesso documento nella stessa
   sessione locale.
