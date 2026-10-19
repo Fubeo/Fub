@@ -474,3 +474,10 @@ export function setBookmarksForTest(store: BookmarkStoreV1): void {
 export function futureRawForTest(): { version: number; raw: unknown } {
   return { version: futureVersion, raw: rawFuture };
 }
+
+// Un segnalibro resta col filtro se il titolo o la destinazione lo
+// contengono, senza badare alle maiuscole.
+export function bookmarkMatches(title: string, where: string, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return needle === "" || title.toLowerCase().includes(needle) || where.toLowerCase().includes(needle);
+}

@@ -5,6 +5,7 @@ import {
   addBookmark,
   bookmarkLoadSnapshot,
   addGroup,
+  bookmarkMatches,
   listBookmarks,
   listGroups,
   loadBookmarks,
@@ -31,6 +32,8 @@ import { state } from "./store";
 import { currentWorkspaceId } from "./workspaces-ui";
 
 let lifetime: Lifetime | null = null;
+/// Il testo del filtro: resta fra un ridisegno e l'altro del pannello.
+let filterText = "";
 
 /// L'id del pannello nel registro (`ui/panel-host.ts`): `shell:` perché è di
 /// questa shell.
@@ -137,12 +140,44 @@ async function refresh(): Promise<void> {
     el.appendChild(warn);
     return;
   }
+  const search = document.createElement("input");
+  search.type = "search";
+  search.id = "bookmarks-filter";
+  search.className = "setting-input";
+  search.value = filterText;
+  search.placeholder = t("bookmarks.filter");
+  const searchLabel = document.createElement("label");
+  searchLabel.htmlFor = search.id;
+  searchLabel.className = "sr-only";
+  searchLabel.textContent = t("bookmarks.filter");
+  const body = document.createElement("div");
+  search.addEventListener("input", () => {
+    filterText = search.value;
+    drawLists(body);
+  });
+  el.append(searchLabel, search, body);
+  drawLists(body);
+}
+
+/// Gli elenchi del pannello, ridisegnati da soli a ogni battuta nel filtro:
+/// il campo resta quello, col fuoco e il cursore dove sono.
+function drawLists(el: HTMLElement): void {
+  el.replaceChildren();
+  const query = filterText.trim().toLowerCase();
+  const shown = (b: Bookmark) => bookmarkMatches(b.title, describeTarget(b), query);
   const groups = listGroups();
   const bookmarks = listBookmarks();
   if (groups.length > 0) {
     const glist = document.createElement("ul");
     glist.className = "plain-list";
     for (const g of groups) {
+      // Un gruppo che corrisponde per nome si mostra intero; altrimenti
+      // restano i segnalibri che corrispondono, e un gruppo vuoto sparisce.
+      const whole = query !== "" && g.title.toLowerCase().includes(query);
+      const members = g.bookmarkIds
+        .map((id) => bookmarks.find((x) => x.id === id))
+        .filter((b): b is Bookmark => b !== undefined && (whole || shown(b)));
+      if (query !== "" && members.length === 0) continue;
       const li = document.createElement("li");
       const row = document.createElement("div");
       row.className = "palette-row";
@@ -182,27 +217,23 @@ async function refresh(): Promise<void> {
         ]);
       });
       li.appendChild(row);
-      const members = document.createElement("ul");
-      members.className = "plain-list";
-      for (const id of g.bookmarkIds) {
-        const b = bookmarks.find((x) => x.id === id);
-        if (!b) continue;
-        members.appendChild(rowFor(b));
-      }
-      li.appendChild(members);
+      const memberList = document.createElement("ul");
+      memberList.className = "plain-list";
+      for (const b of members) memberList.appendChild(rowFor(b));
+      li.appendChild(memberList);
       glist.appendChild(li);
     }
     el.appendChild(glist);
   }
-  const ungrouped = bookmarks.filter((b) => !groups.some((g) => g.bookmarkIds.includes(b.id)));
+  const ungrouped = bookmarks.filter((b) => !groups.some((g) => g.bookmarkIds.includes(b.id)) && shown(b));
   const list = document.createElement("ul");
   list.className = "plain-list";
   for (const b of ungrouped) list.appendChild(rowFor(b));
   el.appendChild(list);
-  if (bookmarks.length === 0) {
+  if (bookmarks.length === 0 || (query !== "" && el.querySelector("li") === null)) {
     const empty = document.createElement("p");
     empty.className = "palette-desc";
-    empty.textContent = t("bookmarks.empty");
+    empty.textContent = t(bookmarks.length === 0 ? "bookmarks.empty" : "bookmarks.no_match");
     el.appendChild(empty);
   }
 }
