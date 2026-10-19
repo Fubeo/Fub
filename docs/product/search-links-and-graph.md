@@ -108,6 +108,23 @@ mostra le note che cambiano; un annulla le riporta tutte indietro. Una nota
 cambiata nel frattempo, o il cui frontmatter non si lascia riscrivere senza
 cambiarne la forma, resta com'era e il risultato la elenca fra i fallimenti.
 
+Dentro un wikilink, dopo `[[Nota#` il completamento propone i titoli di quella
+nota, e dopo `[[#` quelli della nota stessa. `[[##parole` cerca i titoli di
+tutto il vault: le note che la ricerca trova per quelle parole, di cui si
+propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
+percorso quando due note hanno lo stesso nome. I blocchi (`#^`, `[[^^`) non si
+completano.
+
+`heading.rename`, dalla palette, rinomina un titolo della nota aperta e
+aggiorna i `[[nota#titolo]]` che lo nominano, nella nota stessa
+(`[[#titolo]]`) e nelle altre. Si tocca un link solo se porta a quel titolo
+e col nome nuovo smetterebbe di portarci: un link a un omonimo in
+un'altra nota, o scritto con l'id esplicito del titolo, resta com'è. Il
+comando rifiuta un titolo con formattazione nel testo, un nome che un titolo
+precedente porta già e una rinomina che sposterebbe l'indirizzo di un omonimo
+(`titolo-1`). I link Markdown con un frammento `#titolo` dopo il file non si
+riscrivono. Anteprima, CAS e annulla funzionano come per `tag.rename`.
+
 ```mermaid
 flowchart LR
     SOURCE["sorgente"] --> PARSE["link estratto"]

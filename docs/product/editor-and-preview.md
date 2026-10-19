@@ -91,13 +91,6 @@ i webfont della pagina. La barra offre anche **Esporta** (SVG copiato o
 salvato, PNG a risoluzione doppia) e **Schermo intero**, nella lightbox. Una
 resa con lo stesso sorgente, stile e luce si riusa senza ridisegnare.
 
-Dentro un wikilink, dopo `[[Nota#` il completamento propone i titoli di quella
-nota, e dopo `[[#` quelli della nota stessa. `[[##parole` cerca i titoli di
-tutto il vault: le note che la ricerca trova per quelle parole, di cui si
-propongono i titoli che le contengono, e la scelta scrive `Nota#Titolo`, col
-percorso quando due note hanno lo stesso nome. I blocchi (`#^`, `[[^^`) non si
-completano ancora.
-
 Dentro un recinto `mermaid` ancora vuoto (righe vuote e commenti `%%` non
 contano) il completamento propone i modelli di diagramma: flusso, sequenza,
 classi, stati, entità e relazioni, Gantt, torta, mappa mentale, linea del

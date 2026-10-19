@@ -3655,6 +3655,21 @@ impl IndexResult {
         }
     }
 
+    /// I backlink, o l'errore che dice cosa è arrivato invece: la stessa
+    /// forma di [`documents`](IndexResult::documents).
+    pub fn backlinks(self) -> Result<Paged<BacklinkRef>, PluginError> {
+        match self {
+            IndexResult::Backlinks(refs) => Ok(refs),
+            other => Err(PluginError::Internal(
+                format!(
+                    "risposta fuori tema: attesi dei backlink, arrivato {}",
+                    other.kind_name()
+                )
+                .into(),
+            )),
+        }
+    }
+
     /// Il nome della variante, per i messaggi d'errore.
     pub fn kind_name(&self) -> &'static str {
         match self {

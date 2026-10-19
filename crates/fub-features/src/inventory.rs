@@ -105,7 +105,7 @@ use crate::formatting::{self, FormattingCommands, FORMATTING_ID};
 #[cfg(feature = "graph")]
 use crate::graph::{self, GraphCommands, GraphView, GRAPH_ID};
 #[cfg(feature = "outline")]
-use crate::outline::{self, OutlineView, OUTLINE_ID};
+use crate::outline::{self, OutlineCommands, OutlineView, OUTLINE_ID};
 #[cfg(feature = "proof")]
 use crate::proof::{self, ProofCommands, PROOF_ID};
 #[cfg(feature = "properties")]
@@ -294,7 +294,7 @@ static OFFICIALS: &[OfficialFeature] = &[
         name: "Structure",
         catalog: outline::catalog,
         view: Some(|| Box::new(OutlineView)),
-        commands: None,
+        commands: Some(|| Box::new(OutlineCommands)),
         index: None,
         syntax: None,
         renderers: None,

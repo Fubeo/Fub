@@ -17,6 +17,9 @@
 
 use std::collections::HashSet;
 
+mod rename;
+pub use rename::{OutlineCommands, HEADING_RENAME};
+
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{EventKind, EventMask};
@@ -526,7 +529,60 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(DOWN, "Giù")
             .with("reorder", "Riordina sezioni")
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
-            .with(EMPTY, "Nessun heading."),
+            .with(EMPTY, "Nessun heading.")
+            .with("heading.rename.title", "Rinomina titolo")
+            .with(
+                "heading.rename.desc",
+                "Rinomina un titolo della nota e aggiorna i link [[nota#titolo]] che lo nominano.",
+            )
+            .with("heading.rename.doc.title", "Nota")
+            .with(
+                "heading.rename.doc.desc",
+                "La nota del titolo; senza, quella aperta.",
+            )
+            .with("heading.rename.heading.title", "Titolo")
+            .with(
+                "heading.rename.heading.desc",
+                "Il titolo da rinominare, com'è scritto.",
+            )
+            .with("heading.rename.new_heading.title", "Nuovo titolo")
+            .with(
+                "heading.rename.new_heading.desc",
+                "Il testo nuovo del titolo.",
+            )
+            .with(
+                rename::P_RENAME,
+                "«{heading}» diventa «{new_heading}»: link aggiornati in {count} altre note.",
+            )
+            .with(
+                rename::U_RENAME,
+                "Rinomina di «{heading}» in «{new_heading}»",
+            )
+            .with(rename::E_NO_DOC, "Nessuna nota a cui rinominare il titolo.")
+            .with(
+                rename::E_MISSING,
+                "Nessun titolo «{heading}» in questa nota.",
+            )
+            .with(
+                rename::E_INVALID,
+                "Il titolo nuovo è vuoto o contiene [ ] | # ^.",
+            )
+            .with(
+                rename::E_SAME,
+                "Il titolo nuovo è uguale a quello di adesso.",
+            )
+            .with(
+                rename::E_FORMATTED,
+                "«{heading}» ha formattazione nel testo: rinominalo a mano.",
+            )
+            .with(
+                rename::E_TAKEN,
+                "Un titolo precedente si chiama già «{new_heading}»: i link andrebbero a quello.",
+            )
+            .with(
+                rename::E_SLUGS,
+                "Con «{new_heading}» cambierebbe l'indirizzo di un titolo omonimo.",
+            ),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Outline")
             .with(FOOTNOTES_TITLE, "Footnotes")
@@ -539,7 +595,54 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(DOWN, "Down")
             .with("reorder", "Reorder sections")
             .with(NO_ACTIVE_DOC, "No note open.")
-            .with(EMPTY, "No headings."),
+            .with(EMPTY, "No headings.")
+            .with("heading.rename.title", "Rename heading")
+            .with(
+                "heading.rename.desc",
+                "Rename a heading of the note and update the [[note#heading]] links that name it.",
+            )
+            .with("heading.rename.doc.title", "Note")
+            .with(
+                "heading.rename.doc.desc",
+                "The note of the heading; without it, the open one.",
+            )
+            .with("heading.rename.heading.title", "Heading")
+            .with(
+                "heading.rename.heading.desc",
+                "The heading to rename, as written.",
+            )
+            .with("heading.rename.new_heading.title", "New heading")
+            .with(
+                "heading.rename.new_heading.desc",
+                "The new text of the heading.",
+            )
+            .with(
+                rename::P_RENAME,
+                "“{heading}” becomes “{new_heading}”: links updated in {count} other notes.",
+            )
+            .with(rename::U_RENAME, "Rename of “{heading}” to “{new_heading}”")
+            .with(rename::E_NO_DOC, "No note to rename the heading in.")
+            .with(rename::E_MISSING, "No heading “{heading}” in this note.")
+            .with(
+                rename::E_INVALID,
+                "The new heading is empty or contains [ ] | # ^.",
+            )
+            .with(
+                rename::E_SAME,
+                "The new heading is the same as the current one.",
+            )
+            .with(
+                rename::E_FORMATTED,
+                "“{heading}” has formatting in its text: rename it by hand.",
+            )
+            .with(
+                rename::E_TAKEN,
+                "An earlier heading is already called “{new_heading}”: links would go there.",
+            )
+            .with(
+                rename::E_SLUGS,
+                "With “{new_heading}” the address of a same-named heading would change.",
+            ),
     ]
 }
 

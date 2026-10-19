@@ -141,7 +141,10 @@ pub use formatting::{FormattingCommands, FORMATTING_ID};
 pub use graph::{GraphCommands, GraphView, GRAPH_ID, GRAPH_NS, GRAPH_OPEN, GRAPH_VIEW};
 pub use inventory::{every_official_feature, every_official_view, HostWiring, OfficialFeature};
 #[cfg(feature = "outline")]
-pub use outline::{build_outline_view, OutlineView, FOOTNOTES_VIEW, OUTLINE_ID, OUTLINE_VIEW};
+pub use outline::{
+    build_outline_view, OutlineCommands, OutlineView, FOOTNOTES_VIEW, HEADING_RENAME, OUTLINE_ID,
+    OUTLINE_VIEW,
+};
 #[cfg(feature = "proof")]
 pub use proof::{ProofCommands, ProofIndex, PROOF_ID, WORDS_KEY, WORD_ADD, WORD_REMOVE};
 #[cfg(feature = "properties")]
