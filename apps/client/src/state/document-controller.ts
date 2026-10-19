@@ -2103,6 +2103,14 @@ export async function openFromView(id: string): Promise<void> {
   await openDocument(id);
 }
 
+/// Apre un documento in un riquadro nuovo accanto a quello col fuoco, a
+/// destra (`row`) o sotto (`col`): è il `split` di un `fub://open`.
+export async function openDocumentBeside(id: string, dir: "row" | "col"): Promise<void> {
+  const other = split(layout.focus, dir);
+  if (other) focusPane(other);
+  await openDocument(id);
+}
+
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa
 /// quando il documento non c'è più (cancellato qui o da fuori), cioè quando
 /// salvarlo lo resusciterebbe.

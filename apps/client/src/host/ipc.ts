@@ -487,6 +487,15 @@ export const api = {
     listen<DocumentWindowEvent>("fub://document-window-close-requested", ({ payload }) => handler(payload)),
   onDocumentWindowClosed: (handler: (event: DocumentWindowEvent) => void): Promise<() => void> =>
     listen<DocumentWindowEvent>("fub://document-window-closed", ({ payload }) => handler(payload)),
+  // Un `fub://` è arrivato dal sistema. L'evento è soltanto un campanello: i
+  // collegamenti li tiene l'host, e la shell li prende con `uri.pending`, così
+  // anche quelli arrivati prima che la finestra esistesse.
+  onPendingUris: (handler: () => void): Promise<() => void> =>
+    listen<unknown>("fub://pending-action", () => handler()),
+  // La coda stessa: è il comando `uri.pending` del registro, con una porta sua
+  // perché la shell lo chiede a ogni avvio e non è un gesto di chi scrive.
+  takePendingUris: () =>
+    invoke<CommandOutcome>("invoke_command", { command: "uri.pending", args: null, mode: null }),
 
   // --- la sessione live (ADR 0205) ------------------------------------------
   //

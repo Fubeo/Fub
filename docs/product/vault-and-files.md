@@ -194,6 +194,33 @@ vuoto dice quale documento verrebbe scritto.
 viene dal titolo, e il titolo va in testa al corpo, dopo l'eventuale
 frontmatter del template.
 
+## Collegamenti `fub://` sul desktop
+
+Il sistema consegna un `fub://` all'app desktop, anche quando l'app parte
+proprio per aprirlo. L'host tiene i collegamenti in una coda della macchina,
+che resta valida anche senza un vault aperto e prima che esista una finestra.
+La coda ne tiene al più 32 e conta quelli che non ha preso. L'evento
+`fub://pending-action` sveglia la finestra, che prende la coda con
+`uri.pending` all'avvio e a ogni evento. Ogni collegamento si prende una
+volta.
+
+`uri.pending` descrive ogni collegamento: l'azione, se scrive, il vault chiesto
+con la sua radice e se è quello aperto. Un vault si riconosce dalla radice o da
+un nome unico fra i vault noti. Un collegamento non valido, o con una callback,
+arriva con il motivo e non si esegue.
+
+- `open` apre la nota al titolo o al blocco chiesti, nel riquadro col fuoco,
+  in uno nuovo (`split`) o in una finestra (`window`). Una nota che non c'è si
+  dice e non si crea.
+- `search` apre la ricerca con il testo e i filtri `tag:` e `folder:`.
+- `new`, `daily`, `unique` e `capture` scrivono con `uri.apply`. La finestra
+  chiede prima la prova a vuoto, che dice quale nota nascerà, e scrive soltanto
+  dopo la conferma. Una cattura mostra anche l'inizio del testo.
+
+Un collegamento per un altro vault noto apre quel vault dopo una conferma, con
+lo stesso flusso del pulsante. Se il vault non si apre, il collegamento si
+ferma. Un vault sconosciuto non si apre mai da un collegamento.
+
 ## Bozze
 
 Una bozza protegge testo che non è ancora diventato una scrittura riuscita sul

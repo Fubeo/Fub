@@ -95,7 +95,7 @@ const SNAPSHOT_APPLY: &str = "vault.snapshot.apply";
 /// I comandi che l'host esegue in proprio: il kernel li riserva al mount
 /// (`Workspace::reserve_host_commands`), così un plugin che li invoca sente che
 /// non sono suoi da chiamare e nessun provider ne registra un omonimo.
-pub(crate) const HOST_COMMANDS: [&str; 11] = [
+pub(crate) const HOST_COMMANDS: [&str; 13] = [
     OS_TRASH_COMMAND,
     MOUNT_ADD,
     MOUNT_REMOVE,
@@ -107,6 +107,8 @@ pub(crate) const HOST_COMMANDS: [&str; 11] = [
     crate::export_folder::EXPORT_FOLDER,
     crate::connector_tokens::CONNECTOR_TOKEN,
     crate::connector_tokens::CONNECTOR_TOKENS,
+    crate::uri_inbox::URI_PENDING,
+    crate::uri_inbox::URI_APPLY,
 ];
 
 /// Lo stesso catalogo host-owned serve l'elenco e la scelta del dispatcher.
@@ -1059,6 +1061,9 @@ pub struct Host {
     /// forma di `Custodia::denuncia` serve a chi deve rispondere a ogni
     /// chiamata, non a chi risponde alla prima.
     session_notice: Mutex<Option<String>>,
+    /// I `fub://` che il sistema ha consegnato e la shell non ha ancora
+    /// preso: la coda è della macchina, come l'app che li riceve.
+    uris: crate::uri_inbox::UriInbox,
     /// Il **livello macchina** della configurazione (§11.1), condiviso da tutti
     /// i vault che questo host apre: la configurazione della macchina è una, e N
     /// copie sarebbero N idee del tema.
@@ -1198,6 +1203,7 @@ impl Host {
             format_source: None,
             startup_source: None,
             session_notice: Mutex::new(None),
+            uris: Default::default(),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
@@ -3099,6 +3105,13 @@ impl Host {
     /// C'è un vault corrente? È la domanda che distingue «la shell sta lavorando
     /// su un archivio» da «la finestra è aperta e basta», e la pone chi deve
     /// decidere se una domanda si può servire senza vault.
+    /// Un `fub://` che il sistema ha consegnato all'app: resta in coda finché
+    /// la shell non lo prende con `uri.pending`, anche se arriva prima che
+    /// la shell esista. `false` se la coda è piena e l'URI resta fuori.
+    pub fn receive_uri(&self, raw: &str) -> bool {
+        self.uris.push(raw)
+    }
+
     pub fn has_current_vault(&self) -> bool {
         self.sessions.read().is_ok_and(|s| s.current().is_some())
     }
@@ -3740,6 +3753,9 @@ impl Host {
                     && !crate::connector_tokens::specs()
                         .iter()
                         .any(|own| own.id == spec.id)
+                    && !crate::uri_inbox::specs()
+                        .iter()
+                        .any(|own| own.id == spec.id)
                     && !mounts.iter().any(|own| own.id == spec.id)
             });
             specs.retain(|spec| spec.id != SNAPSHOT_CREATE && spec.id != SNAPSHOT_APPLY);
@@ -3750,6 +3766,7 @@ impl Host {
                 crate::export_folder::spec(&workspace.export_targets()),
             ];
             own.extend(crate::connector_tokens::specs());
+            own.extend(crate::uri_inbox::specs());
             own.extend(mounts);
             own.extend(snapshot_specs());
             // I comandi dell'host parlano col catalogo del core, nella lingua di
@@ -4136,6 +4153,15 @@ impl Host {
                 (session.root.clone(), session.workspace.clone())
             })?;
             let result = crate::export_folder::invoke(&root, &workspace, args, mode);
+            return self.localized_host_result(vault, result);
+        }
+        if let Some(spec) = crate::uri_inbox::specs()
+            .into_iter()
+            .find(|spec| spec.id == command)
+        {
+            // La coda è della macchina e l'azione compone comandi del
+            // registro, ognuno col suo prestito: niente sessione presa qui.
+            let result = crate::uri_inbox::invoke(self, &self.uris, &spec, args, mode);
             return self.localized_host_result(vault, result);
         }
         if let Some(spec) = crate::connector_tokens::specs()

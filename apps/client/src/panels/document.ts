@@ -107,6 +107,7 @@ export {
   moveCurrentTab,
   moveCurrentTabToPane,
   openDocument,
+  openDocumentBeside,
   openFromView,
   openWikilink,
   paneBack,

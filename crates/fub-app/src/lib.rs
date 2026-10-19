@@ -1649,6 +1649,15 @@ struct OpenedAction {
 }
 
 fn forward_uri(app: &AppHandle, raw: &str) {
+    // Prima la coda dell'host, che c'è anche a freddo, quando la webview non
+    // esiste ancora: la shell la prende con `uri.pending` all'avvio e a ogni
+    // evento qui sotto, che è soltanto il campanello.
+    if let Some(host) = app.try_state::<Host>() {
+        if !host.receive_uri(raw) {
+            // Il testo non va nel log: una cattura porta il ritaglio intero.
+            tracing::warn!(target: "fub.app", "coda dei fub:// piena: un collegamento resta fuori");
+        }
+    }
     let action = match uri::handle_fub_uri(raw) {
         Ok(uri::UriOutcome::Navigate { .. } | uri::UriOutcome::Search { .. }) => OpenedAction {
             raw: raw.to_string(),
@@ -1679,10 +1688,10 @@ fn forward_uri(app: &AppHandle, raw: &str) {
 }
 
 // `pending_opened_urls`, `mobile_pending_opened_urls` e `release_info` non ci
-// sono più: nessuna riga di `apps/client/src` li invocava e nessun listener di
-// eventi li drenava (`fub://pending-action` / `fub://opened-url` restano
-// spinte senza coda di recupero). Una porta che nessuno attraversa è una
-// promessa che nessuno mantiene: toglierla è il modo giusto di reggerla.
+// sono più: nessuna riga di `apps/client/src` li invocava. Sul desktop la coda
+// di recupero è dell'host (`uri.pending`, un comando come gli altri), e
+// `fub://pending-action` è il campanello; `fub://opened-url` del mobile resta
+// una spinta senza coda.
 
 #[derive(serde::Serialize)]
 #[serde(tag = "status", rename_all = "snake_case")]

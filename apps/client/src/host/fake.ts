@@ -1541,6 +1541,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
         windowCloseRequested.add(handler);
         return Promise.resolve(() => { windowCloseRequested.delete(handler); });
       },
+      onPendingUris: () => {
+        calls.push({ gate: "onPendingUris", args: [] });
+        return Promise.resolve(() => {});
+      },
+      // Il finto non riceve collegamenti dal sistema: la sua coda è vuota.
+      takePendingUris: () => {
+        calls.push({ gate: "takePendingUris", args: [] });
+        return Promise.resolve({
+          notify: null,
+          effect: { kind: "custom" as const, ns: "fub.uri.pending", payload: { actions: [], refused: 0 } },
+          undo: null,
+          partial: null,
+        });
+      },
       onDocumentWindowClosed: (handler) => {
         calls.push({ gate: "onDocumentWindowClosed", args: [] });
         windowClosed.add(handler);

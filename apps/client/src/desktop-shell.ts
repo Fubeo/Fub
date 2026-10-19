@@ -15,7 +15,7 @@
 // accatastati.
 import { pickVaultLocation } from "./platform/vault-picker";
 import { api, window as nativeWindow } from "./host/ipc";
-import { settings } from "./host/query";
+import { resolvedReference, settings } from "./host/query";
 import { forwardNotice, onEvent, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
 import { emit, on, state } from "./state/store";
@@ -58,6 +58,8 @@ import { mountAppMenu } from "./ui/app-menu";
 import { mountWebviewFocusMonitor } from "./ui/node";
 import { registerMermaidRenderer } from "./ui/mermaid";
 import { mountOnboarding } from "./ui/onboarding";
+import { mountIncomingLinks } from "./ui/incoming-links";
+import { confirm } from "./platform/confirm";
 import { registerBaseRenderer } from "./editors/base/surface";
 import { applyRailMachineSettings, mountRail, refreshRailShortcuts, syncRail } from "./panels/rail";
 import { mountStrings, onLanguage, t } from "./i18n/strings";
@@ -69,6 +71,8 @@ import { reducedMotion } from "./theme/reduced-motion";
 import {
   mountDocument,
   openDocument,
+  openDocumentBeside,
+  reveal,
   setEditorTheme,
   synchronize,
 } from "./panels/document";
@@ -585,6 +589,32 @@ function mountAdaptiveShell(): void {
       applyAdaptive();
     },
   }, pageWindowLifetime);
+  // I `fub://` del sistema: aprire un altro vault passa dallo stesso flusso del
+  // pulsante, e un vault che non si è aperto ferma il collegamento invece di
+  // eseguirlo in quello di prima.
+  mountIncomingLinks(pageWindowLifetime, {
+    confirm,
+    notify,
+    openVault: async (root) => {
+      await openVaultFlow(root);
+      return !life.closed && state.vaultRoot === root;
+    },
+    open: async (note, heading, block, place) => {
+      const target = await resolvedReference({ kind: "wiki", value: { page: note, heading, block } });
+      if (!target) return false;
+      if (place === "window") await openCurrentInNewWindow(target.doc);
+      else if (place === "here") await openDocument(target.doc);
+      else await openDocumentBeside(target.doc, place);
+      if (target.at && place !== "window") await reveal(target.doc, { span: target.at.span });
+      return true;
+    },
+    search: (query) => {
+      revealSidePanel("sidebar");
+      showPanel("search");
+      searchFor(query);
+    },
+    show: (doc) => openDocument(doc),
+  });
   applyAdaptive();
   syncOnboarding();
   pageWindowLifetime.add(on("vault", () => syncOnboarding()));

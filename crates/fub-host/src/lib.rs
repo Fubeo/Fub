@@ -116,6 +116,7 @@ pub mod shell;
 pub mod support;
 mod teardown;
 pub mod theme;
+pub mod uri_inbox;
 pub mod vaults;
 /// **Chi aspetta cosa** fra il turno di scrittura e l'istanza di un componente
 /// (FUB-019): il grafo che lascia cedere a chi sta dentro il guest.
