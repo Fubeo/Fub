@@ -51,6 +51,15 @@ pub enum CliCommand {
     Properties(PropertiesArgs),
     Tasks(TasksArgs),
     Templates(TemplatesArgs),
+    Daily(DailyArgs),
+    Outline(DocArgs),
+    Wordcount(DocArgs),
+    Random {
+        global: GlobalArgs,
+    },
+    Bookmarks {
+        global: GlobalArgs,
+    },
     Views(ViewsArgs),
     Plugin(PluginArgs),
     Theme(ThemeArgs),
@@ -206,6 +215,31 @@ pub struct TemplatesArgs {
     pub date: Option<String>,
 }
 
+/// `daily`: la giornaliera di un giorno, oggi senza `--date`.
+#[derive(Clone, Debug)]
+pub struct DailyArgs {
+    pub global: GlobalArgs,
+    pub date: Option<String>,
+    pub action: DailyAction,
+}
+
+/// Che cosa fa `daily` della giornaliera: dirne il nome (senza flag), leggerla,
+/// o scriverci una riga in fondo o in testa al corpo.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DailyAction {
+    Path,
+    Read,
+    Append(String),
+    Prepend(String),
+}
+
+/// Un comando che prende soltanto un documento: `outline`, `wordcount`.
+#[derive(Clone, Debug)]
+pub struct DocArgs {
+    pub global: GlobalArgs,
+    pub doc: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct ViewsArgs {
     pub global: GlobalArgs,
@@ -344,6 +378,8 @@ impl CliCommand {
         match self {
             CliCommand::Help { global, .. }
             | CliCommand::Repl { global }
+            | CliCommand::Random { global }
+            | CliCommand::Bookmarks { global }
             | CliCommand::Completion { global, .. }
             | CliCommand::Vault { global, .. }
             | CliCommand::Uri { global, .. }
@@ -361,6 +397,8 @@ impl CliCommand {
             CliCommand::Properties(a) => a.global.clone(),
             CliCommand::Tasks(a) => a.global.clone(),
             CliCommand::Templates(a) => a.global.clone(),
+            CliCommand::Daily(a) => a.global.clone(),
+            CliCommand::Outline(a) | CliCommand::Wordcount(a) => a.global.clone(),
             CliCommand::Views(a) => a.global.clone(),
             CliCommand::Plugin(a) => a.global.clone(),
             CliCommand::Theme(a) => a.global.clone(),
@@ -376,6 +414,8 @@ impl CliCommand {
     pub fn with_global(self, global: GlobalArgs) -> CliCommand {
         match self {
             CliCommand::Repl { .. } => CliCommand::Repl { global },
+            CliCommand::Random { .. } => CliCommand::Random { global },
+            CliCommand::Bookmarks { .. } => CliCommand::Bookmarks { global },
             CliCommand::Completion { shell, .. } => CliCommand::Completion { shell, global },
             CliCommand::Help { topic, .. } => CliCommand::Help { topic, global },
             CliCommand::Vault { action, .. } => CliCommand::Vault { action, global },
@@ -440,6 +480,18 @@ impl CliCommand {
             CliCommand::Templates(mut a) => {
                 a.global = global;
                 CliCommand::Templates(a)
+            }
+            CliCommand::Daily(mut a) => {
+                a.global = global;
+                CliCommand::Daily(a)
+            }
+            CliCommand::Outline(mut a) => {
+                a.global = global;
+                CliCommand::Outline(a)
+            }
+            CliCommand::Wordcount(mut a) => {
+                a.global = global;
+                CliCommand::Wordcount(a)
             }
             CliCommand::Views(mut a) => {
                 a.global = global;
@@ -1340,6 +1392,95 @@ fn parse_command(
             }
             Ok(CliCommand::Templates(args))
         }
+        "daily" => {
+            let mut args = DailyArgs {
+                global,
+                date: None,
+                action: DailyAction::Path,
+            };
+            let mut actions = 0;
+            while let Some(arg) = parser.peek() {
+                let Some((name, inline)) = split_flag(arg) else {
+                    break;
+                };
+                match name {
+                    "path" | "read" => {
+                        if inline.is_some() {
+                            return Err(format!("--{name} non prende valori"));
+                        }
+                        args.action = if name == "path" {
+                            DailyAction::Path
+                        } else {
+                            DailyAction::Read
+                        };
+                        actions += 1;
+                        parser.next();
+                    }
+                    "append" | "prepend" => {
+                        let v = inline.map(str::to_string).unwrap_or_else(|| {
+                            parser.next();
+                            parser.next().unwrap_or("").to_string()
+                        });
+                        if v.trim().is_empty() {
+                            return Err(format!("--{name} vuole un testo"));
+                        }
+                        if inline.is_some() {
+                            parser.next();
+                        }
+                        args.action = if name == "append" {
+                            DailyAction::Append(v)
+                        } else {
+                            DailyAction::Prepend(v)
+                        };
+                        actions += 1;
+                    }
+                    "date" => {
+                        let v = inline.map(str::to_string).unwrap_or_else(|| {
+                            parser.next();
+                            parser.next().unwrap_or("").to_string()
+                        });
+                        if v.is_empty() {
+                            return Err("--date vuole AAAA-MM-GG".to_string());
+                        }
+                        if inline.is_some() {
+                            parser.next();
+                        }
+                        args.date = Some(v);
+                    }
+                    _ => break,
+                }
+            }
+            if actions > 1 {
+                return Err(
+                    "daily: un'azione sola fra --path, --read, --append e --prepend".to_string(),
+                );
+            }
+            Ok(CliCommand::Daily(args))
+        }
+        "outline" | "wordcount" => {
+            let doc = parser
+                .next()
+                .ok_or_else(|| format!("{head} vuole un documento"))?
+                .to_string();
+            let args = DocArgs { global, doc };
+            Ok(if head == "outline" {
+                CliCommand::Outline(args)
+            } else {
+                CliCommand::Wordcount(args)
+            })
+        }
+        "random" => {
+            if parser.peek().is_some_and(|arg| split_flag(arg).is_none()) {
+                return Err("random non prende argomenti".to_string());
+            }
+            Ok(CliCommand::Random { global })
+        }
+        "bookmarks" => {
+            if parser.peek().is_some_and(|arg| split_flag(arg).is_none()) {
+                return Err("bookmarks non prende argomenti".to_string());
+            }
+            Ok(CliCommand::Bookmarks { global })
+        }
         "views" | "view" => {
             let mut args = ViewsArgs {
                 global,
@@ -2197,6 +2338,11 @@ pub fn command_names() -> Vec<&'static str> {
         "properties",
         "tasks",
         "templates",
+        "daily",
+        "outline",
+        "wordcount",
+        "random",
+        "bookmarks",
         "views",
         "plugin",
         "theme",
@@ -2217,7 +2363,7 @@ pub fn command_names() -> Vec<&'static str> {
     ]
 }
 pub fn usage() -> &'static str {
-    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault read write create exec files query search command properties tasks templates views plugin theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
+    "uso: fub-cli [--vault PATH] [--format json|jsonl|tsv|csv|md|text] [--config-dir DIR] [--no-watcher] [--standalone] <comando> [args]\ncomandi: vault read write create exec files query search command properties tasks templates daily outline wordcount random bookmarks views plugin theme diagnostics capture uri callback login mfa config sync publish native-install pair repl completion help"
 }
 
 pub fn help_text(topic: Option<&str>) -> String {
@@ -2242,6 +2388,11 @@ pub fn help_text(topic: Option<&str>) -> String {
             "properties" => "properties <doc> [--list|--set k=v|--remove k]".to_string(),
             "tasks" => "tasks <doc> [--list|--toggle N]".to_string(),
             "templates" => "templates [--list|--from DOC --name N|--daily]".to_string(),
+            "daily" => "daily [--date AAAA-MM-GG] [--path|--read|--append T|--prepend T]\nLa giornaliera del giorno (oggi senza --date), col nome che decide note.daily. Senza flag ne dice il nome e se c'è; --read la legge; --append scrive una riga in fondo, --prepend in testa al corpo, dopo il frontmatter, e la crea se manca (con il suo template).".to_string(),
+            "outline" => "outline <doc>\nGli heading del documento in ordine: livello, testo, slug e span, dal modello parsato.".to_string(),
+            "wordcount" => "wordcount <doc>\nParole e caratteri del documento, contati come il pannello statistiche (view stats.document): la prosa sul sorgente, un formato strutturato sul suo testo.".to_string(),
+            "bookmarks" => "bookmarks\nLe note appuntate in cima alla sidebar, nell'ordine scelto (l'organizzazione del vault).".to_string(),
+            "random" => "random\nUna nota a caso fra quelle in prosa del vault, scelta da note.random. Non scrive.".to_string(),
             "views" => "views [--list|--render ID|--action ID --payload JSON]".to_string(),
             "plugin" => "plugin [--list|--enable ID|--disable ID]".to_string(),
             "theme" => "theme [--list|--show ID|--light ID]".to_string(),

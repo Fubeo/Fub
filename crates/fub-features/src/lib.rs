@@ -161,7 +161,8 @@ pub use queries::{
 pub use search::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "stats")]
 pub use stats::{
-    build_stats_view, count, reading_minutes, StatsView, TextStats, STATS_ID, STATS_VIEW,
+    build_document_counts, build_stats_view, count, reading_minutes, StatsView, TextStats,
+    STATS_DOCUMENT_VIEW, STATS_ID, STATS_VIEW,
 };
 #[cfg(feature = "tags")]
 pub use tags::{build_tags_view, TagCommands, TagPanelView, TAGS_ID, TAGS_VIEW, TAG_RENAME};

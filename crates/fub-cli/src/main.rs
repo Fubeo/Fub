@@ -301,6 +301,21 @@ fn dispatch(
         CliCommand::Templates(args) => {
             local::templates(connection, global, format, args, print_line(global, format))
         }
+        CliCommand::Daily(args) => {
+            local::daily(connection, global, format, args, print_line(global, format))
+        }
+        CliCommand::Outline(args) => {
+            local::outline(connection, global, format, args, print_line(global, format))
+        }
+        CliCommand::Wordcount(args) => {
+            local::wordcount(connection, global, format, args, print_line(global, format))
+        }
+        CliCommand::Random { .. } => {
+            local::random(connection, global, format, print_line(global, format))
+        }
+        CliCommand::Bookmarks { .. } => {
+            local::bookmarks(connection, global, format, print_line(global, format))
+        }
         CliCommand::Views(args) => {
             local::views(connection, global, format, args, print_line(global, format))
         }

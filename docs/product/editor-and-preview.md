@@ -328,8 +328,8 @@ non ne tiene un elenco, e un plugin vi entra con la stessa dichiarazione;
 estrazione e merge pianificano riferimenti e dati prima di eliminare la
 sorgente, e la selezione va in coda a un template che non la colloca; le
 statistiche contano anche lingue senza spazi con aggiornamenti incrementali.
-Di una nota in prosa contano il sorgente; di un formato strutturato (canvas,
-base) il testo del suo modello, non il JSON o lo YAML che lo tiene.
+Contano il sorgente di una nota in prosa, e di un formato strutturato (canvas,
+base) il testo del modello; la view `stats.document` li dà a `fub-cli wordcount`.
 
 ## Barra di formattazione
 
