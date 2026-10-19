@@ -5,7 +5,13 @@ import { EditorView } from "@codemirror/view";
 import type { SettingEntry } from "../../host/contract";
 import { settings } from "../../host/query";
 import { forwardNotice } from "../../state/kernel";
-import { createTextEngine, EDITOR_SPELLCHECK_KEY, EDITOR_VIM_KEY } from "./engine";
+import {
+  createTextEngine,
+  EDITOR_CLOSE_BRACKETS_KEY,
+  EDITOR_FOLD_GUTTER_KEY,
+  EDITOR_SPELLCHECK_KEY,
+  EDITOR_VIM_KEY,
+} from "./engine";
 
 vi.mock("../../host/query", () => ({ settings: vi.fn() }));
 
@@ -73,5 +79,33 @@ describe("text input settings", () => {
     cell.destroy();
     document_.remove();
     field.remove();
+  });
+
+  it("il margine di piegatura e la chiusura delle parentesi si spengono dalla stessa vista", async () => {
+    const read = vi.mocked(settings);
+    read.mockReset();
+    read.mockResolvedValue([]);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const engine = createTextEngine(host, { onChange: () => {}, onSelectionChange: () => {} });
+    const view = EditorView.findFromDOM(host)!;
+    await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(host.querySelector(".cm-foldGutter")).not.toBeNull();
+    const typeBracket = () => {
+      view.dispatch({ selection: { anchor: 0 } });
+      const handled = view.state.facet(EditorView.inputHandler).some((h) => h(view, 0, 0, "(", () => view.state.update({ changes: { from: 0, insert: "(" } })));
+      return { handled, text: view.state.doc.toString() };
+    };
+    expect(typeBracket().handled).toBe(true);
+    read.mockResolvedValue([entry(EDITOR_FOLD_GUTTER_KEY, false), entry(EDITOR_CLOSE_BRACKETS_KEY, false)]);
+    forwardNotice({
+      event: { type: "setting_changed", key: EDITOR_FOLD_GUTTER_KEY, scope: "machine" },
+      origin: { actor: { kind: "user" }, batch: null },
+    });
+    await vi.waitFor(() => expect(host.querySelector(".cm-foldGutter")).toBeNull());
+    expect(view.state.facet(EditorView.inputHandler).some((h) => h(view, 0, 0, "(", () => view.state.update({}))))
+      .toBe(false);
+    engine.destroy();
+    host.remove();
   });
 });

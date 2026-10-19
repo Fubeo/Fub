@@ -111,12 +111,16 @@ export const EDITOR_VIM_KEY = "editor.vim";
 export const EDITOR_LINE_NUMBERS_KEY = "editor.line-numbers";
 export const EDITOR_LINE_WRAP_KEY = "editor.line-wrap";
 export const EDITOR_INDENT_KEY = "editor.indent";
+export const EDITOR_CLOSE_BRACKETS_KEY = "editor.close-brackets";
+export const EDITOR_FOLD_GUTTER_KEY = "editor.fold-gutter";
 const INPUT_KEYS = new Set([
   EDITOR_SPELLCHECK_KEY,
   EDITOR_VIM_KEY,
   EDITOR_LINE_NUMBERS_KEY,
   EDITOR_LINE_WRAP_KEY,
   EDITOR_INDENT_KEY,
+  EDITOR_CLOSE_BRACKETS_KEY,
+  EDITOR_FOLD_GUTTER_KEY,
 ]);
 
 /// Come si dispone il testo: numeri di riga (visibili solo in Sorgente, Live
@@ -126,9 +130,19 @@ interface LayoutPreferences {
   readonly lineNumbers: boolean;
   readonly lineWrap: boolean;
   readonly indent: string;
+  /// Chiude da sé parentesi, virgolette e simboli; e il margine con le frecce
+  /// per piegare. Due interruttori della pagina Editor, di questa macchina.
+  readonly closeBrackets: boolean;
+  readonly foldGutter: boolean;
 }
-const DEFAULT_LAYOUT: LayoutPreferences = { lineNumbers: true, lineWrap: true, indent: "2" };
-const FIELD_LAYOUT: LayoutPreferences = { lineNumbers: false, lineWrap: true, indent: "2" };
+const DEFAULT_LAYOUT: LayoutPreferences = {
+  lineNumbers: true,
+  lineWrap: true,
+  indent: "2",
+  closeBrackets: true,
+  foldGutter: true,
+};
+const FIELD_LAYOUT: LayoutPreferences = { ...DEFAULT_LAYOUT, lineNumbers: false };
 
 function layoutExtensions(layout: LayoutPreferences): Extension {
   const unit = layout.indent === "tab" ? "\t" : layout.indent === "4" ? "    " : "  ";
@@ -136,6 +150,8 @@ function layoutExtensions(layout: LayoutPreferences): Extension {
     layout.lineNumbers ? lineNumbers() : [],
     layout.lineWrap ? EditorView.lineWrapping : [],
     indentUnit.of(unit),
+    layout.foldGutter ? foldGutter({ openText: "↓" }) : [],
+    layout.closeBrackets ? [closeBrackets(), keymap.of(closeBracketsKeymap)] : [],
   ];
 }
 
@@ -448,7 +464,9 @@ export class TextEngine {
   private setLayout(next: LayoutPreferences): void {
     const same = next.lineNumbers === this.layout.lineNumbers
       && next.lineWrap === this.layout.lineWrap
-      && next.indent === this.layout.indent;
+      && next.indent === this.layout.indent
+      && next.closeBrackets === this.layout.closeBrackets
+      && next.foldGutter === this.layout.foldGutter;
     if (this.disposed || same) return;
     this.layout = next;
     this.reconfigureInput();
@@ -492,6 +510,8 @@ export class TextEngine {
         lineNumbers: value(EDITOR_LINE_NUMBERS_KEY) !== false,
         lineWrap: value(EDITOR_LINE_WRAP_KEY) !== false,
         indent: indent === "tab" || indent === "4" ? indent : "2",
+        closeBrackets: value(EDITOR_CLOSE_BRACKETS_KEY) !== false,
+        foldGutter: value(EDITOR_FOLD_GUTTER_KEY) !== false,
       });
     } catch {
       // Defaults remain available before a vault is open or when settings fail.
@@ -764,14 +784,12 @@ export class TextEngine {
       this.layoutCompartment.of(layoutExtensions(this.layout)),
       highlightActiveLineGutter(),
       highlightSpecialChars(),
-      foldGutter({ openText: "↓" }),
       drawSelection(),
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
       syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
       bracketMatching(),
-      closeBrackets(),
       autocompletion(),
       rectangularSelection(),
       crosshairCursor(),
@@ -795,7 +813,6 @@ export class TextEngine {
         ),
       ),
       keymap.of([
-        ...closeBracketsKeymap,
         ...defaultKeymap,
         ...historyKeymap,
         ...searchKeymap,
