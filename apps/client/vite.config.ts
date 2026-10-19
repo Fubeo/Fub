@@ -171,6 +171,10 @@ export default defineConfig({
           if (/\/src\/editors\/spatial\/tools\/(properties|swatches-panel|gradient-panel|hatch-panel|effects-panel|connector-panel|objects|boards-panel|history-panel|accessibility-panel|inspector|export-dialog|library-panel|symbols-panel|symbol-update-dialog|editable-dialog|fields|touch-dialog|guide-dialog|radial|note|suggestions|text-field)\.ts$/.test(id)) {
             return "drawing-panels";
           }
+          // La pelle composta è testo, come il catalogo delle stringhe: cresce
+          // con ogni superficie, e dentro la serie ne consumava tutto il
+          // margine. La leggono la serie e la finestra del documento.
+          if (/\/src\/theme\/scrittoio\/skin\.css\?raw$/.test(id)) return "theme-skin";
           // La serie che la shell monta: ricetta, fogli, pelle, e i conti del
           // colore che la ricetta usa.
           if (/\/src\/theme\/(scrittoio\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
