@@ -59,6 +59,10 @@ export function mountBaseSurface(
   toolbar.className = "base-toolbar";
   const views = document.createElement("select");
   views.className = "base-views";
+  // «Raggruppa»: una scelta della superficie, ricordata per vista come le
+  // corsie della bacheca; il file `.base` non si riscrive.
+  const groupBy = document.createElement("select");
+  groupBy.className = "base-group-by";
   const search = document.createElement("input");
   search.type = "search";
   search.className = "base-search";
@@ -72,7 +76,7 @@ export function mountBaseSurface(
   status.setAttribute("role", "status");
   const body = document.createElement("div");
   body.className = "base-body";
-  toolbar.append(views, search, newNote, copyCsv, downloadCsv, status);
+  toolbar.append(views, groupBy, search, newNote, copyCsv, downloadCsv, status);
   root.append(toolbar, body);
   context.parent.replaceChildren(root);
 
@@ -109,6 +113,33 @@ export function mountBaseSurface(
     return toggle;
   };
   const groupOpen = (name: string) => collapsedGroups.get(plan?.view ?? "")?.has(name) !== true;
+  // Assente: vale il `group:` del file; "" è «senza gruppi».
+  const groupChoices = new Map<string, string>();
+  const regroupable = () => plan?.viewType === "table" || plan?.viewType === "cards" || plan?.viewType === "list";
+  const grouping = (): string | null => {
+    if (!plan || !regroupable()) return plan?.group ?? null;
+    const choice = groupChoices.get(plan.view);
+    if (choice === undefined) return plan.group;
+    if (choice === "") return null;
+    return plan.columns.includes(choice) || choice === plan.group ? choice : plan.group;
+  };
+  const fillGroupBy = (): void => {
+    groupBy.hidden = !regroupable();
+    const current = grouping() ?? "";
+    const keys = [...(plan?.columns ?? [])];
+    if (plan?.group && !keys.includes(plan.group)) keys.push(plan.group);
+    const option = (value: string, label: string) => {
+      const each = document.createElement("option");
+      each.value = value;
+      each.textContent = label;
+      each.selected = value === current;
+      return each;
+    };
+    groupBy.replaceChildren(
+      option("", t("base.group.none")),
+      ...keys.map((key) => option(key, t("base.group.by_named", { name: plan?.columnLabels[key] ?? key }))),
+    );
+  };
   const downloads = new Map<string, number>();
   const saveLanes = (view: string) => {
     const laneNames = [...(localLanes.get(view) ?? [])];
@@ -160,6 +191,11 @@ export function mountBaseSurface(
         names = nextNames;
         activeView = chosen;
         plan = nextPlan;
+        const savedGroup = await deps.viewState<unknown>(`base.group:${context.documentId}:${nextPlan.view}`);
+        if (!valid(ticket)) return;
+        if (savedGroup === null) groupChoices.delete(nextPlan.view);
+        else if (typeof savedGroup === "string" && savedGroup.length <= 256) groupChoices.set(nextPlan.view, savedGroup);
+        else throw new Error("base: gruppo salvato malformato");
         if (nextPlan.viewType === "kanban") {
           const saved = await deps.viewState<unknown>(`base.kanban-lanes:${context.documentId}:${nextPlan.view}`);
           if (!valid(ticket)) return;
@@ -168,6 +204,7 @@ export function mountBaseSurface(
           else throw new Error("base: corsie salvate malformate");
         }
         fillOptions();
+        fillGroupBy();
       }
       const nextPlan = plan;
       if (!nextPlan) throw new Error("base: piano assente");
@@ -259,8 +296,9 @@ export function mountBaseSurface(
     };
     // Con un gruppo la tabella intercala una riga d'intestazione per gruppo,
     // alta come le altre: la finestra virtuale resta a righe uniformi.
-    const items: ({ group: string; count: number } | BaseRow)[] = plan?.group
-      ? groupBaseRows(page, plan.group).flatMap(({ name, rows }) => [{ group: name, count: rows.length }, ...(groupOpen(name) ? rows : [])])
+    const key = grouping();
+    const items: ({ group: string; count: number } | BaseRow)[] = key
+      ? groupBaseRows(page, key).flatMap(({ name, rows }) => [{ group: name, count: rows.length }, ...(groupOpen(name) ? rows : [])])
       : page;
     const renderWindow = () => {
       const range = uniformRowRange(items.length, viewport.scrollTop, viewport.clientHeight || TABLE_VIEWPORT_HEIGHT, TABLE_ROW_HEIGHT);
@@ -303,9 +341,10 @@ export function mountBaseSurface(
     renderWindow();
   };
   const drawCards = (page: BaseRow[], list: boolean): void => {
-    if (!plan?.group) { body.append(gallery(page, list)); return; }
+    const key = grouping();
+    if (!key) { body.append(gallery(page, list)); return; }
     // Un gruppo è una sezione col suo titolo, che apre e chiude le sue schede.
-    for (const { name, rows } of groupBaseRows(page, plan.group)) {
+    for (const { name, rows } of groupBaseRows(page, key)) {
       const section = document.createElement("section");
       section.className = "base-group";
       section.dataset.group = name;
@@ -645,6 +684,8 @@ export function mountBaseSurface(
   ];
   const relabel = () => {
     views.setAttribute("aria-label", labels().view);
+    groupBy.setAttribute("aria-label", t("base.group.by"));
+    if (plan) fillGroupBy();
     search.setAttribute("aria-label", labels().search);
     search.placeholder = labels().search;
     newNote.setAttribute("aria-label", t("explorer.new.hint"));
@@ -662,6 +703,14 @@ export function mountBaseSurface(
       persistQueue = persistQueue.then(() => destroyed ? undefined : persistBaseView(deps, context.documentId, chosen)).catch(presentError);
     }
     void reload(true);
+  });
+  groupBy.addEventListener("change", () => {
+    const view = plan?.view;
+    if (!view) return;
+    const choice = groupBy.value;
+    groupChoices.set(view, choice);
+    persistQueue = persistQueue.then(() => destroyed ? undefined : deps.setViewState(`base.group:${context.documentId}:${view}`, choice)).catch(presentError);
+    draw();
   });
   search.addEventListener("input", () => { displayed = VISIBLE_STEP; draw(); });
   const modes = baseSurfaceModes();

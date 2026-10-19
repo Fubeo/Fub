@@ -121,18 +121,19 @@ describe("Base raggruppata", () => {
     if (op === "derive") return Promise.resolve({ kind: "custom", value: { rows, summaries: {} } });
     throw new Error("unexpected Base operation");
   };
-  const mount = (viewType: string) => {
+  const mount = (viewType: string, saved: Record<string, unknown> = {}) => {
     const host = document.createElement("div");
     document.body.append(host);
+    const setViewState = vi.fn(async () => {});
     const surface = mountBaseSurface("base", { paneId: `base-${viewType}`, documentId: "views/gruppi.base", parent: host }, {
       queryIndex: grouped(viewType),
       invokeCommand: vi.fn(async () => ({})),
-      viewState: async () => null,
-      setViewState: async () => {},
+      viewState: async <T,>(key: string) => (saved[key] ?? null) as T | null,
+      setViewState,
       onOpenDocument: () => {},
     });
     surface.buffer.setDoc(`views:\n  - {name: Vista, type: ${viewType}, group: {key: status}}\n`);
-    return { host, done: () => { surface.destroy(); host.remove(); } };
+    return { host, setViewState, done: () => { surface.destroy(); host.remove(); } };
   };
   const toggles = (host: HTMLElement) =>
     [...host.querySelectorAll<HTMLButtonElement>(".base-group-toggle")].map((toggle) => toggle.textContent);
@@ -151,6 +152,26 @@ describe("Base raggruppata", () => {
       host.querySelector<HTMLButtonElement>(".base-group-toggle")!.click();
       expect(docs()).toEqual(["a.md", "c.md", "b.md", "d.md"]);
     } finally { done(); }
+  });
+
+  it("«Raggruppa» nella barra toglie i gruppi e lo ricorda per vista, senza riscrivere il file", async () => {
+    const { host, setViewState, done } = mount("table");
+    try {
+      await vi.waitFor(() => expect(toggles(host)).toHaveLength(3));
+      const select = host.querySelector<HTMLSelectElement>(".base-group-by")!;
+      expect(select.hidden).toBe(false);
+      expect(select.value).toBe("status");
+      select.value = "";
+      select.dispatchEvent(new Event("change"));
+      expect(toggles(host)).toEqual([]);
+      await vi.waitFor(() => expect(setViewState).toHaveBeenCalledWith("base.group:views/gruppi.base:Vista", ""));
+    } finally { done(); }
+    const again = mount("table", { "base.group:views/gruppi.base:Vista": "" });
+    try {
+      await vi.waitFor(() => expect(again.host.querySelectorAll(".base-table tbody tr[data-doc]").length).toBe(4));
+      expect(toggles(again.host)).toEqual([]);
+      expect(again.host.querySelector<HTMLSelectElement>(".base-group-by")!.value).toBe("");
+    } finally { again.done(); }
   });
 
   it("schede ed elenco mettono ogni gruppo nella sua sezione", async () => {
