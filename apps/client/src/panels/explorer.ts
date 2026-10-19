@@ -594,6 +594,17 @@ function treeArrows(lifetime: Lifetime): void {
     if (!current) return;
     // I binding rimappabili prevalgono: un accordo con modificatori (anche su
     // Invio, Spazio o frecce) è della tastiera globale, non dell'albero.
+    // Ctrl-C e Ctrl-V copiano file da una cartella all'altra, come nel file
+    // manager del sistema. Nessuno dei due è un accordo della tastiera globale.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === "c" || e.key === "v")) {
+      const path = current.dataset.path;
+      if (path === undefined) return;
+      const folder = current.hasAttribute("aria-expanded");
+      e.preventDefault();
+      if (e.key === "c") copyEntries(folder ? [] : pickedOr(path));
+      else void pasteEntries(folder ? path : parentPath(path));
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     // Tasto Menu / Shift+F10: il contestuale della voce a fuoco, per la stessa
     // strada del click destro — stesse voci, stessa disponibilità.
@@ -854,6 +865,7 @@ function fileRow(id: string): HTMLElement {
       [
         ...(canImportFile(id) ? [{ label: t("explorer.import_drawing"), run: () => void importDrawing({ kind: "vault", path: id }) }] : []),
         { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
+        { label: t("explorer.copy"), run: () => copyEntries(pickedOr(id)) },
         { label: t("explorer.move"), run: () => void pickMoveFolder(id) },
         { separator: true, label: t("explorer.delete"), hint: "Del", danger: true, run: () => void trashWithConfirm(id) },
       ],
@@ -886,6 +898,7 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
     { label: t("explorer.open_beside"), run: () => void openDocumentBeside(id, "row") },
     { label: t("explorer.open_window"), run: () => void openCurrentInNewWindow(id) },
     { label: t("explorer.duplicate"), run: () => void duplicateEntry(id) },
+    { label: t("explorer.copy"), run: () => copyEntries(pickedOr(id)) },
     { label: t("explorer.copy_path"), run: () => void copyPath(id) },
     { label: t("explorer.reveal_system"), run: () => void handToSystem(id, false) },
     { label: t("explorer.open_system"), run: () => void handToSystem(id, true) },
@@ -1149,6 +1162,9 @@ function folderMenu(at: MouseEvent, path: string): void {
         ? [{ label: t("explorer.import_drawing_here"), run: () => void pickDrawingImport(path) }]
         : []),
       { label: t("explorer.new_folder"), run: () => startNewFolder(path) },
+      ...(copied.length > 0 && copied[0]!.vault === openVaultRoot()
+        ? [{ label: t("explorer.paste"), run: () => void pasteEntries(path) }]
+        : []),
       { label: t("explorer.import_files"), run: () => pickImport(path, false) },
       { label: t("explorer.import_folder"), run: () => pickImport(path, true) },
       ...(hasKernelCommand(IMPORT_PREPARE)
@@ -1520,6 +1536,44 @@ async function expandAll(): Promise<void> {
 
 /// Quanti livelli di profondità `expandAll` scende al massimo.
 const EXPAND_ROUNDS = 12;
+
+/// I file copiati con Ctrl-C, ciascuno col vault da cui viene: un incolla in
+/// un altro vault non troverebbe l'originale.
+let copied: { vault: string | undefined; id: string }[] = [];
+
+/// Le voci scelte se `id` è fra loro, altrimenti `id` da solo.
+function pickedOr(id: string): string[] {
+  const picked = selection?.paths() ?? [];
+  return picked.includes(id) ? picked : [id];
+}
+
+function parentPath(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? "" : path.slice(0, slash);
+}
+
+/// Copia: niente si scrive finché non si incolla.
+function copyEntries(ids: string[]): void {
+  if (ids.length === 0) return;
+  const vault = openVaultRoot();
+  copied = ids.map((id) => ({ vault, id }));
+  notify(t("explorer.copied", { count: String(ids.length) }), "info");
+}
+
+/// Incolla nella cartella: ogni file è una copia dei suoi byte, col nome
+/// dell'originale se lì è libero. Uno che non riesce non ferma gli altri.
+async function pasteEntries(folder: string): Promise<void> {
+  const vault = openVaultRoot();
+  const ids = copied.filter((entry) => entry.vault === vault).map((entry) => entry.id);
+  if (ids.length === 0) return;
+  for (const id of ids) {
+    try {
+      await duplicateNote(id, folder);
+    } catch (error) {
+      notify(t("explorer.paste_failed", { name: childName(id), reason: errorText(error) }), "guasto");
+    }
+  }
+}
 
 /// Duplica il file e apre la copia: il nome libero lo sceglie il kernel.
 async function duplicateEntry(id: string): Promise<void> {

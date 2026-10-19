@@ -80,6 +80,14 @@ manuale. Una cartella non entra in sé stessa né in una sua figlia. Le voci
 della scelta multipla (Ctrl-clic, Maiusc-clic) si trascinano insieme. Una
 cartella chiusa sotto il cursore si apre dopo una breve sosta.
 
+Ctrl-C (Cmd-C sul Mac) su una nota o un file, o «Copia» nel suo menu, ne
+ricorda la copia, con le altre voci scelte se è fra loro; Ctrl-V su una cartella
+o su una sua voce, o «Incolla» nel menu della cartella, la scrive lì. Niente si
+scrive prima di incollare. La copia porta gli stessi byte (`note.duplicate` con
+`folder`): in un'altra cartella tiene il nome dell'originale se è libero, nella
+stessa diventa «Nota copia», e un nome preso non si sovrascrive. Le cartelle non
+si copiano.
+
 Una nota lasciata in un documento diventa un collegamento, un file un rimando
 relativo al documento; più voci entrano nell'ordine dell'albero. Un
 collegamento web del sistema (`.webloc`, `.url`) lasciato in una nota diventa

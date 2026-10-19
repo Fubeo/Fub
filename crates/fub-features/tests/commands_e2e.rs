@@ -608,6 +608,49 @@ fn duplicating_copies_the_bytes_under_a_free_name_and_undoes_to_trash() {
     );
 }
 
+/// «Incolla» nell'esplora risorse: la copia in un'altra cartella tiene il
+/// nome dell'originale finché è libero; nella stessa cartella resta «copia».
+#[test]
+fn duplicating_into_another_folder_keeps_the_name_while_free() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    for (name, folder) in [("Idee", ""), ("Altro", "archivio")] {
+        ws.invoke_command(
+            NOTES_CREATE,
+            serde_json::json!({ "name": name, "folder": folder }),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .expect("crea");
+    }
+    let paste = |ws: &mut Workspace, doc: &str, folder: &str| {
+        let outcome = ws
+            .invoke_command(
+                NOTES_DUPLICATE,
+                serde_json::json!({ "doc": doc, "folder": folder }),
+                InvokeMode::Apply,
+                Actor::User,
+            )
+            .expect("incolla");
+        let CommandEffect::Navigate { doc } = outcome.effect else {
+            panic!("incollare risponde con la copia")
+        };
+        doc.as_str().to_string()
+    };
+    assert_eq!(paste(&mut ws, "Idee.md", "archivio/"), "archivio/Idee.md");
+    let again = paste(&mut ws, "Idee.md", "archivio");
+    assert!(
+        again.starts_with("archivio/") && again != "archivio/Idee.md",
+        "il nome occupato non si sovrascrive: {again}"
+    );
+    assert_eq!(paste(&mut ws, "archivio/Altro.md", ""), "Altro.md");
+    assert_eq!(paste(&mut ws, "Idee.md", ""), "Idee copia.md");
+    assert_eq!(
+        ws.read_source(&DocId::new("archivio/Idee.md")).unwrap(),
+        ws.read_source(&DocId::new("Idee.md")).unwrap()
+    );
+}
+
 /// Il protocollo staged conserva `AlreadyExists`: è la variante su cui il
 /// pannello cestino decide se proporre un nome alternativo.
 #[test]

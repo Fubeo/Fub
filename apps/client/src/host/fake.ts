@@ -955,8 +955,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const dot = from.lastIndexOf(".");
         const stem = dot > from.lastIndexOf("/") + 1 ? from.slice(0, dot) : from;
         const ext = stem.length === from.length ? "" : from.slice(dot);
-        let doc = `${stem} copia${ext}`;
-        for (let n = 1; docs.has(doc); n += 1) doc = `${stem} copia ${n}${ext}`;
+        // Come il kernel: in un'altra cartella la copia tiene il nome.
+        const folder = typeof args?.folder === "string" ? args.folder.replace(/^\/+|\/+$/g, "") : undefined;
+        const own = from.slice(0, Math.max(from.lastIndexOf("/"), 0));
+        const name = stem.slice(stem.lastIndexOf("/") + 1);
+        const base = folder === undefined || folder === own ? `${stem} copia` : folder === "" ? name : `${folder}/${name}`;
+        let doc = `${base}${ext}`;
+        for (let n = 1; docs.has(doc); n += 1) doc = `${base} ${n}${ext}`;
         docs.set(doc, { ...before });
         emit({ type: "document_changed", id: doc });
         return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };

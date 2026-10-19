@@ -390,6 +390,12 @@ fn catalog_it() -> StringCatalog {
         )
         .with("note.duplicate.doc.title", "Nota")
         .with("note.duplicate.doc.desc", "Il file da duplicare.")
+        .with("note.duplicate.folder.title", "Cartella")
+        .with(
+            "note.duplicate.folder.desc",
+            "La cartella in cui mettere la copia; lì tiene il nome dell'originale \
+             se è libero. Vuota è la radice del vault.",
+        )
         .with("note.rename.title", "Rinomina nota")
         .with(
             "note.rename.desc",
@@ -821,6 +827,12 @@ fn catalog_en() -> StringCatalog {
         )
         .with("note.duplicate.doc.title", "Note")
         .with("note.duplicate.doc.desc", "The file to duplicate.")
+        .with("note.duplicate.folder.title", "Folder")
+        .with(
+            "note.duplicate.folder.desc",
+            "The folder that receives the copy; there it keeps the original name \
+             when free. Empty is the vault root.",
+        )
         .with("note.rename.title", "Rename note")
         .with(
             "note.rename.desc",
@@ -1192,6 +1204,7 @@ impl CoreCommands {
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_DUPLICATE)
                 .with_param(parameter(NOTES_DUPLICATE, "doc", ParamKind::Document).required())
+                .with_param(parameter(NOTES_DUPLICATE, "folder", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_RENAME)
                 .with_param(parameter(NOTES_RENAME, "doc", ParamKind::Document).required())
@@ -1759,7 +1772,22 @@ fn notes_duplicate(
     let doc = args
         .document("doc")
         .expect("l'host ha convalidato un parametro obbligatorio");
-    let id = host.free_name(&DocId::new(duplicate_name(&doc)));
+    // «Incolla» nell'esplora risorse: la copia va in un'altra cartella e lì
+    // tiene il suo nome; nella stessa cartella diventa «Nota copia».
+    let folder = args.text("folder").map(fub_abi::rules::folders::normalized);
+    let wanted = match folder {
+        Some(folder) if folder != fub_abi::query::folder_of(&doc) => {
+            let id = doc.as_str();
+            let name = &id[id.rfind('/').map_or(0, |s| s + 1)..];
+            if folder.is_empty() {
+                name.to_string()
+            } else {
+                format!("{folder}/{name}")
+            }
+        }
+        _ => duplicate_name(&doc),
+    };
+    let id = host.free_name(&DocId::new(wanted));
     if mode.is_dry_run() {
         return Ok(plan(one(P_CREATE, A_DOC, id.as_str()), vec![id]));
     }

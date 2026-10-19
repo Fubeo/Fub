@@ -69,8 +69,9 @@ export async function createNote(name?: string, folder?: string): Promise<string
 
 /// Duplica un file accanto all'originale (`note.duplicate`): il kernel sceglie
 /// il nome libero e copia i byte. Torna l'id della copia, dall'effetto `navigate`.
-export async function duplicateNote(doc: string): Promise<string | null> {
-  const outcome = await api.invokeCommand(COMMANDS.duplicate, { doc }, undefined, openVaultRoot());
+export async function duplicateNote(doc: string, folder?: string): Promise<string | null> {
+  const args = folder === undefined ? { doc } : { doc, folder };
+  const outcome = await api.invokeCommand(COMMANDS.duplicate, args, undefined, openVaultRoot());
   refreshDocuments();
   return outcome.effect.kind === "navigate" ? outcome.effect.doc : null;
 }

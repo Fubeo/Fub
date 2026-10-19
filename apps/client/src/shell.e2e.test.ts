@@ -1337,6 +1337,23 @@ describe("una sessione e le sue superfici", () => {
     expect(row("Benvenuto")).toBeTruthy();
   });
 
+  it("Ctrl-C su una nota e Ctrl-V su una cartella ci mettono una copia col suo nome", async () => {
+    await start(VAULT);
+    const item = (path: string) => document.querySelector<HTMLElement>(`#file-list li[data-path="${path}"]`);
+    const press = (on: HTMLElement, key: string) => {
+      const event = new KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true });
+      on.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(press(item("Benvenuto.md")!, "c")).toBe(true);
+    expect(press(item("note")!, "v")).toBe(true);
+    document.querySelector<HTMLButtonElement>('#file-list li[data-path="note"] > .tree-row > .chevron')!.click();
+    await waitFor("la copia compare nella cartella", () => !!item("note/Benvenuto.md"));
+    expect(item("Benvenuto.md")).toBeTruthy();
+    await contextMenu(item("note")!.querySelector<HTMLElement>(".tree-row")!, "Incolla");
+    await waitFor("la seconda copia prende un nome libero", () => !!item("note/Benvenuto 1.md"));
+  });
+
   it("«Aggiungi ai segnalibri» dal menu della riga salva la nota tra i segnalibri", async () => {
     await start(VAULT);
     await contextMenu(row("Benvenuto"), "Aggiungi ai segnalibri");
