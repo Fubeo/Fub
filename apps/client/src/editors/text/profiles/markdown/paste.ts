@@ -1,8 +1,9 @@
 import { isStrictlyInsideCode } from "./parser";
 import { pasteHtml } from "../../paste-html";
-import { EditorView, ViewPlugin } from "@codemirror/view";
+import { EditorView, ViewPlugin, keymap, type Command } from "@codemirror/view";
 import type TurndownService from "turndown";
 import { inContentSpace, sanitizeFragment, VAULT_SRC_ATTRIBUTE } from "../../../../ui/sanitize";
+import { readClipboard } from "../../../../platform/clipboard";
 
 const markdownSource = /(?:^|\n)[ \t]{0,3}(?:#{1,6}\s|>\s|[-*+]\s|\d+[.)]\s|```|~~~)|\[[^\]\n]+\]\([^\n)]+\)|\*{1,2}[^*\n]+\*{1,2}|_{1,2}[^_\n]+_{1,2}|`[^`\n]+`/u;
 const contentAnchorPrefix = `#${inContentSpace("")}`;
@@ -276,10 +277,38 @@ const pasteHandler = EditorView.domEventHandlers({
   },
 });
 
+/// Il testo semplice degli appunti, o `null` se non ce n'è o il sistema non
+/// li lascia leggere.
+async function plainClipboardText(): Promise<string | null> {
+  try {
+    for (const item of await readClipboard()) {
+      if (item.types.includes("text/plain")) return await (await item.getType("text/plain")).text();
+    }
+  } catch {
+    // Negati o assenti: l'incolla semplice non incolla niente.
+  }
+  return null;
+}
+
+/// `Mod-Shift-v`: incolla il testo semplice degli appunti, così com'è. Niente
+/// conversione dell'HTML e niente link sulla selezione: è il gesto di chi
+/// vuole proprio quei caratteri. Gli appunti si leggono dalla porta della
+/// shell e non dall'evento `paste`, che non tutti i motori mandano su questo
+/// accordo; il testo entra sulla selezione del momento in cui arriva.
+export const pastePlainText: Command = (view) => {
+  if (view.state.readOnly) return false;
+  void plainClipboardText().then((text) => {
+    // Un editor smontato o diventato di sola lettura nel frattempo non riceve niente.
+    if (!text || !view.dom.isConnected || view.state.readOnly) return;
+    view.dispatch(view.state.replaceSelection(text), { userEvent: "input.paste", scrollIntoView: true });
+  });
+  return true;
+};
+
 // Il primo editor Markdown montato fa partire il caricamento di Turndown.
 const preloadConverter = ViewPlugin.define(() => {
   loadConverter().catch(() => {});
   return {};
 });
 
-export const markdownPaste = [pasteHandler, preloadConverter];
+export const markdownPaste = [pasteHandler, preloadConverter, keymap.of([{ key: "Mod-Shift-v", run: pastePlainText }])];

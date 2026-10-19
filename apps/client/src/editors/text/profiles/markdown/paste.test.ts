@@ -4,7 +4,8 @@ import { EditorSelection, Prec } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine } from "../../engine";
 import { createMarkdownProfile } from "./profile";
-import { markdownFromClipboard, markdownPaste } from "./paste";
+import { markdownFromClipboard, markdownPaste, pastePlainText } from "./paste";
+import { declareClipboard } from "../../../../platform/clipboard";
 import { pasteHtml } from "../../paste-html";
 
 function paste(
@@ -64,6 +65,32 @@ describe("Markdown clipboard paste", () => {
     expect(empty.engine.getDoc()).not.toContain("](");
     empty.engine.destroy();
     empty.host.remove();
+  });
+
+  it("Mod-Shift-v incolla il testo semplice, senza link e senza conversione", async () => {
+    const entries = [{
+      types: ["text/html", "text/plain"],
+      getType: async (type: string) => new Blob([type === "text/html" ? "<b>https://example.org</b>" : "https://example.org"]),
+    }];
+    let read = async () => entries;
+    const withdraw = declareClipboard(async () => {}, { write: async () => {}, read: () => read(), supports: () => true });
+    try {
+      const plain = paste("", "", "", undefined, false);
+      expect(pastePlainText(plain.view)).toBe(true);
+      await vi.waitFor(() => expect(plain.engine.getDoc()).toBe("prima\r\nhttps://example.org\r\nfine"));
+      plain.engine.destroy();
+      plain.host.remove();
+      // Appunti negati: non entra niente, e niente salta.
+      read = () => Promise.reject(new Error("negato"));
+      const denied = paste("", "", "", undefined, false);
+      pastePlainText(denied.view);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(denied.engine.getDoc()).toBe("prima\r\nqui\r\nfine");
+      denied.engine.destroy();
+      denied.host.remove();
+    } finally {
+      withdraw();
+    }
   });
 
   it("con la conversione spenta lascia l'incolla a CodeMirror", () => {
