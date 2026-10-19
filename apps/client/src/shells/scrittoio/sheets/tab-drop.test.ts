@@ -10,6 +10,7 @@ const world = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../state/document-controller", () => ({
+  openDocument: (doc: string) => (world.calls.push(`open ${doc}`), Promise.resolve()),
   synchronize: () => {
     world.calls.push("synchronize");
     return Promise.resolve();
@@ -17,6 +18,7 @@ vi.mock("../../../state/document-controller", () => ({
 }));
 vi.mock("../../../state/layout", () => ({
   pane: (id: string) => (id in world.tabs ? { tabs: Array.from({ length: world.tabs[id]! }, (_, i) => ({ k: "doc", doc: `${i}.md` })) } : undefined),
+  focusPane: (id: string) => void world.calls.push(`focus ${id}`),
   moveTab: (...args: unknown[]) => (world.calls.push(`moveTab ${args.join(" ")}`), true),
   moveTabToPane: (...args: unknown[]) => (world.calls.push(`moveTabToPane ${args.join(" ")}`), true),
   splitWithTab: (...args: unknown[]) => (world.calls.push(`splitWithTab ${args.join(" ")}`), "pane-9"),
@@ -223,6 +225,26 @@ describe("rilasciare una linguetta sul foglio", () => {
     start(tab, { pane: "main", index: 1 });
     drag("dragend", tab, { x: -40, y: 300 }, { dataTransfer: { dropEffect: "none" } });
     expect(world.calls).toEqual([]);
+  });
+
+  it("una nota dall'albero sulla striscia si apre in quel riquadro, sul corpo no", () => {
+    const { tab, body } = mountPanes();
+    mountTabDrop(lifetime);
+    const note = () => ({
+      dataTransfer: {
+        dropEffect: "move",
+        types: ["application/x-fub-note"],
+        getData: (key: string) => (key === "application/x-fub-note" ? "note/Diario.md" : ""),
+      },
+    });
+    expect(drag("dragover", body, { x: 200, y: 100 }, note()).defaultPrevented).toBe(false);
+    drag("drop", body, { x: 200, y: 100 }, note());
+    expect(world.calls).toEqual([]);
+    const otherStrip = document.querySelector<HTMLElement>('[data-pane="other"] .pane-tabs')!;
+    expect(drag("dragover", otherStrip, {}, note()).defaultPrevented).toBe(true);
+    drag("drop", otherStrip, {}, note());
+    drag("drop", tab, {}, note());
+    expect(world.calls).toEqual(["focus other", "open note/Diario.md", "focus main", "open note/Diario.md"]);
   });
 
   it("alla chiusura toglie l'anteprima e smette di ascoltare", () => {

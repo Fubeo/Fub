@@ -11,7 +11,10 @@
 //     finirà;
 //   - sulla **striscia**, fuori da ogni linguetta, la linguetta va in coda al
 //     riquadro;
-//   - fuori dalla finestra una linguetta di nota diventa una finestra.
+//   - fuori dalla finestra una linguetta di nota diventa una finestra;
+//   - una **nota dall'albero** lasciata sulla striscia (anche sopra una
+//     linguetta) si apre in quel riquadro: sul corpo, invece, la prende
+//     l'editor e diventa un collegamento.
 //
 // Ogni zona ha il suo comando nel menu della linguetta (`tabmenu.*`): il gesto
 // col mouse non è l'unica strada, come vuole il §18.2.
@@ -24,8 +27,9 @@
 // trascinamento che non parte da una linguetta (un file dal sistema) non è
 // mai preso per uno nostro.
 import { platformSupports } from "../../../platform/capabilities";
-import { synchronize } from "../../../state/document-controller";
-import { moveTab, moveTabToPane, pane, splitWithTab, type SplitEdge } from "../../../state/layout";
+import { openDocument, synchronize } from "../../../state/document-controller";
+import { focusPane, moveTab, moveTabToPane, pane, splitWithTab, type SplitEdge } from "../../../state/layout";
+import { NOTE_DRAG_TYPE } from "../../../ui/drag-types";
 import type { Lifetime } from "../../../ui/lifetime";
 import { byId } from "../frame/dom";
 import { paneIdOf } from "./panes";
@@ -151,7 +155,20 @@ export function mountTabDrop(lifetime: Lifetime): void {
       flight = null;
     }
   });
+  /// Il riquadro della striscia sotto una nota dell'albero in volo, o `null`.
+  const noteStrip = (event: DragEvent): string | null => {
+    if (flight || !event.dataTransfer?.types?.includes(NOTE_DRAG_TYPE)) return null;
+    if (!(event.target instanceof Element) || !event.target.closest(".pane-tabs")) return null;
+    const frame = frameOf(event.target);
+    return frame ? paneIdOf(frame) : null;
+  };
+
   lifetime.listen(panes, "dragover", (event) => {
+    if (noteStrip(event)) {
+      event.preventDefault();
+      event.dataTransfer!.dropEffect = "copy";
+      return;
+    }
     const place = landing(event);
     if (!place) {
       hide();
@@ -167,6 +184,14 @@ export function mountTabDrop(lifetime: Lifetime): void {
     hide();
   });
   lifetime.listen(panes, "drop", (event) => {
+    const strip = noteStrip(event);
+    const note = strip ? event.dataTransfer?.getData(NOTE_DRAG_TYPE) : "";
+    if (strip && note) {
+      event.preventDefault();
+      focusPane(strip);
+      void openDocument(note);
+      return;
+    }
     const place = landing(event);
     const dropped = flight;
     clear();
