@@ -125,6 +125,9 @@ const DAILY_COMMAND: &str = "note.daily";
 const DAILY_LABEL: &str = "daily_label";
 const E_DAILY: &str = "e_daily";
 const E_DAILY_OFF: &str = "e_daily_off";
+/// Una nota con la chiave al singolare e al plurale insieme: la conversione
+/// non sceglie per l'utente.
+const E_BOTH_FORMS: &str = "e_both_forms";
 
 /// Le stringhe del pannello e dei comandi. Vedi
 /// [`backlinks::catalog`](crate::backlinks::catalog) per il perché stiano qui.
@@ -153,6 +156,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 E_DAILY_OFF,
                 "La nota del giorno non c'è: i modelli di nota sono spenti.",
             )
+            .with(E_BOTH_FORMS, "{doc}: «{old}» e «{new}» ci sono entrambe")
             .with("note.property.set.title", "Imposta proprietà")
             .with(
                 "note.property.set.desc",
@@ -327,6 +331,7 @@ pub fn catalog() -> Vec<StringCatalog> {
                 E_DAILY_OFF,
                 "There is no daily note: note templates are off.",
             )
+            .with(E_BOTH_FORMS, "{doc}: both «{old}» and «{new}» are there")
             .with("note.property.set.title", "Set property")
             .with(
                 "note.property.set.desc",
@@ -1841,9 +1846,14 @@ fn migrate_property_keys(
                     continue;
                 }
                 if model.frontmatter.get(new).is_some() {
-                    return Err(PluginError::Conflict(
-                        format!("{doc}: «{old}» e «{new}» ci sono entrambe").into(),
-                    ));
+                    return Err(PluginError::Conflict(Text::message(
+                        E_BOTH_FORMS,
+                        vec![
+                            Arg::text(DOC, doc.as_str()),
+                            Arg::text("old", old),
+                            Arg::text("new", new),
+                        ],
+                    )));
                 }
                 edits.push(edit_property_key(&source, old, new)?);
             }
