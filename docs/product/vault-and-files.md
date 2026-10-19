@@ -370,8 +370,8 @@ per nome nell'impostazione versionata `properties.types`, che sceglie widget e
 semantica di query senza spostare valori in un database. Gli aggiornamenti
 strutturati modificano la sola chiave interessata e conservano commenti, ordine,
 virgolette, terminatori e corpo; rinominare o togliere una chiave da tutto il
-vault (`property.key.rename`, `property.key.delete`) passa da un'anteprima e si
-annulla. YAML incompatibile o non rappresentabile resta in modalità sorgente.
+vault (`property.key.rename`, `property.key.delete`, `property.keys.migrate`)
+si vede in anteprima e si annulla. YAML non rappresentabile resta sorgente.
 
 ## Importare ed esportare
 

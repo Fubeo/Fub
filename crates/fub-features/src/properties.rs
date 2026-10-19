@@ -47,6 +47,9 @@ pub const PROPERTY_KEY_DELETE: &str = "property.key.delete";
 pub const NOTES_ALIAS_ADD: &str = "note.alias.add";
 /// Toglie tutto il frontmatter della nota.
 pub const NOTES_PROPERTIES_CLEAR: &str = "note.properties.clear";
+/// Converte le chiavi vecchie di Obsidian (`tag`, `alias`, `cssclass`) nelle
+/// plurali, su tutto il vault.
+pub const PROPERTY_KEYS_MIGRATE: &str = "property.keys.migrate";
 
 /// Chiavi del core: il formato di data e il registro dei tipi del vault.
 const DATE_FORMAT_KEY: &str = "properties.date-format";
@@ -95,6 +98,15 @@ const P_RENAME: &str = "p_rename";
 const U_RENAME: &str = "u_rename";
 const P_DELETE: &str = "p_delete";
 const U_DELETE: &str = "u_delete";
+const P_MIGRATE: &str = "p_migrate";
+const U_MIGRATE: &str = "u_migrate";
+
+/// Le chiavi singolari che Obsidian ha sostituito con le plurali (1.4).
+const LEGACY_KEYS: [(&str, &str); 3] = [
+    ("tag", "tags"),
+    ("alias", "aliases"),
+    ("cssclass", "cssclasses"),
+];
 const ALIAS: &str = "alias";
 const ALIASES: &str = "aliases";
 const P_ALIAS: &str = "p_alias";
@@ -220,6 +232,16 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_RENAME, "Annulla rinomina «{old_key}» in «{new_key}»")
             .with(P_DELETE, "Tolta «{key}»: {count} note")
             .with(U_DELETE, "Annulla rimozione di «{key}» dal vault")
+            .with(P_MIGRATE, "Proprietà vecchie convertite: {count} note")
+            .with(U_MIGRATE, "Annulla la conversione delle proprietà vecchie")
+            .with(
+                "property.keys.migrate.title",
+                "Converti le proprietà vecchie",
+            )
+            .with(
+                "property.keys.migrate.desc",
+                "Scrive tag, alias e cssclass come tags, aliases e cssclasses in tutto il vault, con anteprima e annullo.",
+            )
             .with(P_ALIAS, "Alias «{alias}» aggiunto a {doc}")
             .with(P_ALIAS_PRESENT, "{doc} ha già l'alias «{alias}»")
             .with(U_ALIAS, "Annulla alias «{alias}»")
@@ -384,6 +406,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(U_RENAME, "Undo rename «{old_key}» to «{new_key}»")
             .with(P_DELETE, "Removed «{key}» from {count} notes")
             .with(U_DELETE, "Undo removing «{key}» from the vault")
+            .with(P_MIGRATE, "Converted old properties: {count} notes")
+            .with(U_MIGRATE, "Undo converting old properties")
+            .with("property.keys.migrate.title", "Convert old properties")
+            .with(
+                "property.keys.migrate.desc",
+                "Write tag, alias and cssclass as tags, aliases and cssclasses across the vault, with a preview and undo.",
+            )
             .with(P_ALIAS, "Alias «{alias}» added to {doc}")
             .with(P_ALIAS_PRESENT, "{doc} already has the alias «{alias}»")
             .with(U_ALIAS, "Undo alias «{alias}»")
@@ -1158,6 +1187,7 @@ impl CommandProvider for PropertiesCommands {
             command(PROPERTY_KEY_DELETE)
                 .with_param(parameter(PROPERTY_KEY_DELETE, KEY, ParamKind::Text).required())
                 .with_scope(CommandScope::writing(CommandReach::Vault)),
+            command(PROPERTY_KEYS_MIGRATE).with_scope(CommandScope::writing(CommandReach::Vault)),
             command(NOTES_ALIAS_ADD)
                 .with_param(parameter(NOTES_ALIAS_ADD, ALIAS, ParamKind::Text).required())
                 .with_param(parameter(NOTES_ALIAS_ADD, DOC, ParamKind::Document))
@@ -1190,6 +1220,7 @@ impl CommandProvider for PropertiesCommands {
             PROPERTY_TYPE_SET => set_property_type(Args::new(&args), mode, host),
             PROPERTY_KEY_RENAME => rename_property_key(Args::new(&args), mode, host),
             PROPERTY_KEY_DELETE => delete_property_key(Args::new(&args), mode, host),
+            PROPERTY_KEYS_MIGRATE => migrate_property_keys(mode, host),
             NOTES_ALIAS_ADD => add_alias(Args::new(&args), mode, host),
             NOTES_PROPERTIES_CLEAR => clear_properties(Args::new(&args), mode, host),
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
@@ -1760,6 +1791,100 @@ fn delete_property_key(
             Text::message(U_DELETE, vec![Arg::text(KEY, key.as_str())]),
             inverses,
         ));
+    }
+    Ok(outcome)
+}
+
+/// [`rename_property_key`] per le tre chiavi vecchie insieme: una nota sola
+/// riceve le sue rinomine in una richiesta, così l'anteprima e l'annullo la
+/// trattano intera. Una nota con entrambe le forme di una chiave non si tocca:
+/// unire i due valori deciderebbe al posto di chi scrive.
+fn migrate_property_keys(
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let mut docs: Vec<DocId> = Vec::new();
+    for (old, _) in LEGACY_KEYS {
+        let found = host
+            .query_index(IndexQuery::Documents {
+                matching: QueryExpr::of(QueryPredicate::Property {
+                    filter: PropertyFilter {
+                        key: old.to_string(),
+                        test: PropertyTest::Exists,
+                    },
+                }),
+                sort: None,
+                select: PropertySelect::None,
+                page: None,
+                excerpts: Excerpts::Omit,
+            })?
+            .documents()?
+            .items;
+        for entry in found {
+            if !docs.contains(&entry.doc) {
+                docs.push(entry.doc);
+            }
+        }
+    }
+    let attempted = docs.len();
+    let mut plans = Vec::with_capacity(attempted);
+    let mut failures = Vec::new();
+    for doc in docs {
+        let prepared = (|| -> Result<Option<PlannedEdit>, PluginError> {
+            crate::formats::require(host, &doc, fub_abi::options::syntax::FRONTMATTER)?;
+            let revision = host.document_revision(&doc)?;
+            let source = host.read_document(&doc)?;
+            let model = host.read_model(&doc)?;
+            let mut edits = Vec::new();
+            for (old, new) in LEGACY_KEYS {
+                if model.frontmatter.get(old).is_none() {
+                    continue;
+                }
+                if model.frontmatter.get(new).is_some() {
+                    return Err(PluginError::Conflict(
+                        format!("{doc}: «{old}» e «{new}» ci sono entrambe").into(),
+                    ));
+                }
+                edits.push(edit_property_key(&source, old, new)?);
+            }
+            if edits.is_empty() {
+                return Ok(None); // già convertita: si può rilanciare
+            }
+            Ok(Some(PlannedEdit::new(
+                doc.clone(),
+                EditRequest::new(revision, edits),
+            )))
+        })();
+        match prepared {
+            Ok(Some(edit)) => plans.push(edit),
+            Ok(None) => {}
+            Err(error) => failures.push(Failure::of(doc, error)),
+        }
+    }
+    let summary =
+        |count: usize| Text::message(P_MIGRATE, vec![Arg::text("count", count.to_string())]);
+    if mode.is_dry_run() {
+        let planned = plans.len();
+        return Ok(CommandOutcome::done()
+            .with_effect(CommandEffect::Plan(CommandPlan::of_edits(
+                summary(planned),
+                plans,
+            )))
+            .partially(Partial::of(attempted, planned, failures)));
+    }
+    let mut inverses = Vec::new();
+    for planned in plans {
+        match host.apply_edit(&planned.doc, planned.edit) {
+            Ok(report) => inverses.push(PlannedEdit::new(planned.doc, report.inverse())),
+            Err(error) => failures.push(Failure::of(planned.doc, error)),
+        }
+    }
+    let changed = inverses.len();
+    let mut outcome = CommandOutcome::notify(summary(changed))
+        .partially(Partial::of(attempted, changed, failures));
+    if !inverses.is_empty() {
+        inverses.reverse();
+        outcome = outcome.undoable(Undo::of_edits(Text::key(U_MIGRATE), inverses));
     }
     Ok(outcome)
 }

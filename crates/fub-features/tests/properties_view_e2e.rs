@@ -17,8 +17,8 @@ use fub_abi::ui::{FieldValue, UiAction, UiKind, UiNode, UiValue};
 use fub_features::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
     NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
-    PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEY_DELETE, PROPERTY_KEY_RENAME,
-    PROPERTY_TYPE_SET,
+    PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEYS_MIGRATE, PROPERTY_KEY_DELETE,
+    PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -808,6 +808,63 @@ fn deleting_a_key_from_the_vault_previews_applies_and_undoes() {
     }
     assert_eq!(vault.read("a.md"), before_a);
     assert_eq!(vault.read("b.md"), before_b);
+}
+
+#[test]
+fn old_keys_become_plural_in_one_edit_per_note_and_both_forms_are_left_alone() {
+    let vault = Vault::new();
+    vault.put(
+        "a.md",
+        "---\ntag: [uno]\nalias: Prima\n\"cssclass\": wide\n---\n\nTesto\n",
+    );
+    vault.put("b.md", "---\ntag: due\ntags: [tre]\n---\n");
+    vault.put("c.md", "---\ntags: [quattro]\n---\n");
+    let mut ws = vault.open();
+    let before_a = vault.read("a.md");
+    let before_b = vault.read("b.md");
+    let before_c = vault.read("c.md");
+    let args = serde_json::json!({});
+    let plan = ws
+        .invoke_command(
+            PROPERTY_KEYS_MIGRATE,
+            args.clone(),
+            InvokeMode::DryRun,
+            Actor::User,
+        )
+        .unwrap();
+    let CommandEffect::Plan(plan) = plan.effect else {
+        panic!("expected dry-run plan")
+    };
+    assert_eq!(plan.edits.len(), 1);
+    assert_eq!(plan.edits[0].edit.edits.len(), 3);
+    assert_eq!(vault.read("a.md"), before_a);
+    let result = ws
+        .invoke_command(
+            PROPERTY_KEYS_MIGRATE,
+            args.clone(),
+            InvokeMode::Apply,
+            Actor::User,
+        )
+        .unwrap();
+    assert_eq!(
+        vault.read("a.md"),
+        "---\ntags: [uno]\naliases: Prima\n\"cssclasses\": wide\n---\n\nTesto\n"
+    );
+    assert_eq!(vault.read("b.md"), before_b);
+    assert_eq!(vault.read("c.md"), before_c);
+    let partial = result.partial.as_ref().expect("b.md non si converte");
+    assert_eq!(partial.failures.len(), 1, "{partial:?}");
+    let rerun = ws
+        .invoke_command(PROPERTY_KEYS_MIGRATE, args, InvokeMode::Apply, Actor::User)
+        .unwrap();
+    assert!(rerun.undo.is_none());
+    for step in result.undo.unwrap().steps {
+        let UndoStep::Edit(planned) = step else {
+            panic!("inverse edit expected")
+        };
+        ws.apply_edit(&planned.doc, planned.edit).unwrap();
+    }
+    assert_eq!(vault.read("a.md"), before_a);
 }
 
 #[test]
