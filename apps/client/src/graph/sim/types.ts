@@ -123,6 +123,13 @@ export interface GraphicsConfig {
   /// 0..1 — quanta gelatina: nodi che si schiacciano e si allungano, archi che
   /// vibrano. Solo resa: 0 la spegne, e il layout non cambia comunque.
   wobble: number;
+  /// Le frecce in punta agli archi, verso la nota a cui il link porta.
+  arrows: boolean;
+  /// Moltiplicatore 0.5..2.5 sul raggio dei nodi: disegno e hit-test, non il
+  /// layout, che resta quello del raggio di base.
+  nodeSize: number;
+  /// Moltiplicatore 0.5..3 sullo spessore degli archi.
+  edgeWidth: number;
 }
 
 export interface GraphConfig {
@@ -176,6 +183,9 @@ export function defaultGraphicsConfig(): GraphicsConfig {
     edgeCurvature: 1,
     labelDensity: 0.5,
     wobble: 0.5,
+    arrows: true,
+    nodeSize: 1,
+    edgeWidth: 1,
   };
 }
 
@@ -247,6 +257,9 @@ export function clampGraphicsConfig(c: Partial<GraphicsConfig>): GraphicsConfig 
     edgeCurvature: num(c.edgeCurvature, 0, 1, d.edgeCurvature),
     labelDensity: num(c.labelDensity, 0, 1, d.labelDensity),
     wobble: num(c.wobble, 0, 1, d.wobble),
+    arrows: typeof c.arrows === "boolean" ? c.arrows : d.arrows,
+    nodeSize: num(c.nodeSize, 0.5, 2.5, d.nodeSize),
+    edgeWidth: num(c.edgeWidth, 0.5, 3, d.edgeWidth),
   };
 }
 

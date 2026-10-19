@@ -292,6 +292,15 @@ scritta. Il quartiere del nodo a fuoco si accende e si spegne in dissolvenza,
 senza transizione col moto ridotto. La scia del movimento è un'opzione spenta
 di default e sbiadisce verso il trasparente, senza coprire la griglia.
 
+La sezione Vista del pannello regola anche la resa degli archi e dei nodi. Le
+**Frecce** in punta agli archi indicano la nota a cui il link porta, e si
+possono spegnere. **Dimensione nodi** moltiplica il raggio da metà a due volte e
+mezza: cambiano il disegno, il bordo da cui partono etichette e frecce e la zona
+che risponde al puntatore, non il layout. **Spessore archi** moltiplica il tratto
+da metà a tre volte. **Densità etichette** sposta la soglia di grado oltre la
+quale i nomi compaiono. «Reimposta» riporta anche queste opzioni ai valori
+predefiniti.
+
 Il loop segue il refresh dello schermo, qualunque sia: il passo della fisica è
 il tempo reale fra due fotogrammi, e la scia sbiadisce a tempo, non a
 fotogrammi. Col moto ridotto il passo è invece quello nominale (1/60 s): conta

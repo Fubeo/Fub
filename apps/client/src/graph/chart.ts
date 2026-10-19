@@ -287,7 +287,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const x = e.clientX - r.left;
     const y = e.clientY - r.top;
-    const h = nodeAt(s, cameraState.state(), x, y, isVisible);
+    const h = nodeAt(s, cameraState.state(), x, y, isVisible, liveGraphics.nodeSize);
     if (h !== hovered) {
       hovered = h;
       // Un piccolo sussulto di gelatina al passaggio: il nodo si accorge del
@@ -744,6 +744,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       cameraState: userCamera,
       isVisible,
       playful: () => !reduced,
+      nodeSize: () => liveGraphics.nodeSize,
       actions: {
         open: (id: string) => openExternal(id),
         warm: (level: number) => warm(level),

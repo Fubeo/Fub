@@ -98,10 +98,12 @@ const GRAPHICS_SLIDERS: NumericField[] = [
   { key: "wobble", min: 0, max: 1, step: 0.01 },
   { key: "edgeCurvature", min: 0, max: 1, step: 0.01 },
   { key: "labelDensity", min: 0, max: 1, step: 0.01 },
+  { key: "nodeSize", min: 0.5, max: 2.5, step: 0.05 },
+  { key: "edgeWidth", min: 0.5, max: 3, step: 0.05 },
 ];
 
 const PHYSICS_TOGGLES = ["collisions"] as const;
-const GRAPHICS_TOGGLES = ["glow", "pulse", "trail", "grid"] as const;
+const GRAPHICS_TOGGLES = ["glow", "pulse", "trail", "grid", "arrows"] as const;
 
 const PRESET_NAMES = ["organica", "gelatina", "costellazione", "alveare", "nebulosa", "rigido", "custom"] as const;
 

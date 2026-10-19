@@ -159,6 +159,22 @@ describe("config v2 — i giochi", () => {
     expect(c.graphics.wobble).toBe(0);
   });
 
+  it("frecce, dimensione dei nodi e spessore degli archi si salvano e si clampano", () => {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({
+      preset: "custom",
+      physics: organicConfig(),
+      graphics: { ...defaultGraphicsConfig(), arrows: false, nodeSize: 9, edgeWidth: 0 },
+    }));
+    const c = loadConfig();
+    expect(c.graphics.arrows).toBe(false);
+    expect(c.graphics.nodeSize).toBe(2.5);
+    expect(c.graphics.edgeWidth).toBe(0.5);
+    // Una conf salvata prima di queste opzioni prende i predefiniti.
+    const { arrows: _a, nodeSize: _n, edgeWidth: _e, ...before } = defaultGraphicsConfig();
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({ preset: "custom", physics: organicConfig(), graphics: before }));
+    expect(loadConfig().graphics).toMatchObject({ arrows: true, nodeSize: 1, edgeWidth: 1 });
+  });
+
   it("il preset gelatina è più vivace di organica, rigido non rimbalza", () => {
     const jelly = applyPreset("gelatina");
     const organic = organicConfig();

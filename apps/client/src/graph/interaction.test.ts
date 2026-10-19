@@ -80,6 +80,13 @@ describe("nodeAt (hit-test puro, screen space)", () => {
     expect(nodeAt(s, { scale: 1, tx: 0, ty: 0 }, 500, 500)).toBe(-1); // fuori da tutto
   });
 
+  it("segue la dimensione dei nodi del pittore", () => {
+    const s = testStructure();
+    // Raggio doppio: la soglia diventa 16+6=22.
+    expect(nodeAt(s, { scale: 1, tx: 0, ty: 0 }, 20, 0, undefined, 2)).toBe(0);
+    expect(nodeAt(s, { scale: 1, tx: 0, ty: 0 }, 20, 0)).toBe(-1);
+  });
+
   it("sceglie il nodo più vicino quando due sono in soglia", () => {
     const s = testStructure();
     expect(nodeAt(s, { scale: 1, tx: 0, ty: 0 }, 90, 0)).toBe(1); // vicino a b(100,0)

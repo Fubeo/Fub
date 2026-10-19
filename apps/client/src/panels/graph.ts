@@ -243,6 +243,9 @@ function panelCopy(): PanelCopy {
     wobble: t("graph.conf.gelatina"),
     edgeCurvature: t("graph.conf.curvaturaArchi"),
     labelDensity: t("graph.conf.densitaEtichette"),
+    arrows: t("graph.conf.frecce"),
+    nodeSize: t("graph.conf.dimensioneNodi"),
+    edgeWidth: t("graph.conf.spessoreArchi"),
   };
   return {
     title: t("graph.conf.titolo"),

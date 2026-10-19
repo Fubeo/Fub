@@ -58,6 +58,11 @@ describe("labelReach", () => {
     expect(labelReach(pair(), 4, 100, (i) => widths[i])).toBeCloseTo(24 + 5 + 40, 10);
   });
 
+  it("parte dal bordo del nodo ingrandito", () => {
+    // Nodi grandi il doppio: a: 12 + 5 + 200 − 100 = 117.
+    expect(labelReach(pair(), 1, 100, (i) => widths[i], 2)).toBeCloseTo(117, 10);
+  });
+
   it("dove le etichette non si disegnano non sporge niente", () => {
     expect(labelFade(0.5)).toBe(0);
     expect(labelReach(pair(), 0.5, 100, (i) => widths[i])).toBe(0);

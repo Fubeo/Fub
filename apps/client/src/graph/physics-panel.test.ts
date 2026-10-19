@@ -56,6 +56,9 @@ function copy(): PanelCopy {
       edgeCurvature: "Curvatura archi",
       labelDensity: "Densità etichette",
       wobble: "Gelatina",
+      arrows: "Frecce",
+      nodeSize: "Dimensione nodi",
+      edgeWidth: "Spessore archi",
     },
   };
 }
@@ -146,6 +149,25 @@ describe("createPhysicsPanel", () => {
     expect(changes.length).toBe(1);
     expect(changes[0].preset).toBe("organica");
     expect(changes[0].graphics.glow).toBe(false);
+    p.destroy();
+  });
+
+  it("frecce, dimensione dei nodi e spessore degli archi cambiano la grafica in place", () => {
+    const p = create();
+    const graphics = config.graphics;
+    const arrows = p.element.querySelector<HTMLInputElement>('input[data-field="arrows"]')!;
+    arrows.checked = false;
+    arrows.dispatchEvent(new Event("change", { bubbles: true }));
+    const names = [...p.element.querySelectorAll<HTMLElement>(".graph-panel-nome")];
+    const slider = (name: string) => names.find((n) => n.textContent === name)!.parentElement!.querySelector<HTMLInputElement>("input")!;
+    for (const [name, value] of [["Dimensione nodi", "2"], ["Spessore archi", "1.5"]] as const) {
+      const input = slider(name);
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    expect(config.graphics).toBe(graphics);
+    expect(graphics).toMatchObject({ arrows: false, nodeSize: 2, edgeWidth: 1.5 });
+    expect(changes[changes.length - 1]!.preset).toBe("organica");
     p.destroy();
   });
 
