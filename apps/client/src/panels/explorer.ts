@@ -8,7 +8,7 @@
 import { ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE, type DraggedEntry } from "../ui/drag-types";
 import { revealSidePanel } from "../ui/side-panels";
 import { pickFromList } from "../ui/dialogs";
-import { vaultFolders, folderContent, existingDocuments } from "../host/query";
+import { vaultFolders, folderContent, existingDocuments, settings } from "../host/query";
 import { Race } from "../ui/race";
 import type { VaultFolder } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -284,6 +284,18 @@ export function mountExplorer(lifetime: Lifetime): void {
     if (fileListEl.querySelector(".tree-empty") !== null) renderFileList();
   }));
   lifetime.add(on("active-doc", markActive));
+  // «Mostra la nota aperta»: cambiando nota l'albero segue, senza aprire il
+  // pannello se è chiuso (a quello pensa il comando «Rivela»).
+  const autoReads = new Race();
+  const readAutoReveal = () => autoReads.last(async (expected) => {
+    const entries = await expected(settings().catch(() => null));
+    if (entries) autoReveal = entries.find((entry) => entry.spec.key === FILES_AUTO_REVEAL)?.value === true;
+  });
+  void readAutoReveal();
+  lifetime.add(onEvent("setting_changed", (event) => {
+    if (event.key === FILES_AUTO_REVEAL) void readAutoReveal();
+  }));
+  lifetime.add(on("active-doc", () => { if (autoReveal) void followActive(); }));
 
   // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
   // pin, ordine) è indicizzata per path, e va riletta prima del ridisegno.
@@ -1147,6 +1159,34 @@ function toggleFolder(path: string): void {
 /// Non prende il fuoco: chi rivela sta scrivendo, e il gesto serve a vedere
 /// dove si trova, non a lasciare l'editor. La voce diventa però la fermata del
 /// tab nell'albero, così chi ci entra da tastiera parte da lì.
+const FILES_AUTO_REVEAL = "files.auto-reveal";
+
+/// Vero se la macchina vuole che l'albero segua la nota aperta.
+let autoReveal = false;
+
+/// Apre le cartelle della nota aperta e la porta in vista, senza toccare il
+/// pannello laterale né il filtro di spazio: se la nota è fuori dallo spazio
+/// attivo l'albero resta com'è.
+async function followActive(): Promise<void> {
+  const doc = state.currentDoc;
+  if (!doc) return;
+  if (state.activeSpace !== null && !doc.startsWith(`${state.activeSpace}/`)) return;
+  const root = state.activeSpace ?? "";
+  let opened = false;
+  for (let folder = parentOf(doc); folder !== "" && folder !== root; folder = parentOf(folder)) {
+    if (!state.expanded.has(folder)) {
+      state.expanded.add(folder);
+      opened = true;
+    }
+  }
+  if (opened) {
+    saveExpanded();
+    await refreshFromKernel(true);
+  }
+  if (state.currentDoc !== doc) return;
+  entry(doc)?.scrollIntoView?.({ block: "nearest" });
+}
+
 async function revealActive(): Promise<void> {
   const doc = state.currentDoc;
   if (!doc) return;

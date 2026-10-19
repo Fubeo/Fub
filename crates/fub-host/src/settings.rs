@@ -211,6 +211,8 @@ pub const DEFAULT_NEW_NOTE_EXTENSION: &str = "md";
 /// operativo tramite `trash.os`, che ripiega sull'interno se il sistema non ne
 /// offre uno. È del vault, come le altre scelte sui suoi file.
 pub const FILES_TRASH: &str = "files.trash";
+/// L'esplora segue la nota aperta: ne apre le cartelle e la porta in vista.
+pub const FILES_AUTO_REVEAL: &str = "files.auto-reveal";
 pub const FILES_TRASH_VAULT: &str = "vault";
 pub const FILES_TRASH_SYSTEM: &str = "system";
 
@@ -320,6 +322,12 @@ pub fn core_settings() -> Vec<SettingSpec> {
         )
         .describing(Text::key(C_FILES_TRASH_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::toggle(FILES_AUTO_REVEAL, Text::key(C_FILES_AUTO_REVEAL), false)
+            .describing(Text::key(C_FILES_AUTO_REVEAL_DESC))
+            .grouped(Text::key(C_GROUP_FILES))
+            .for_machine(),
     );
     // **Non** `program_writable`, ed è la riga che conta: un componente che
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
@@ -949,6 +957,8 @@ const C_NEW_NOTE_EXTENSION: &str = "core.new_note_extension";
 const C_NEW_NOTE_EXTENSION_DESC: &str = "core.new_note_extension.desc";
 const C_FILES_TRASH: &str = "core.files_trash";
 const C_FILES_TRASH_DESC: &str = "core.files_trash.desc";
+const C_FILES_AUTO_REVEAL: &str = "core.files_auto_reveal";
+const C_FILES_AUTO_REVEAL_DESC: &str = "core.files_auto_reveal.desc";
 const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
 const C_FILES_TRASH_SYSTEM: &str = "core.files_trash.system";
 
@@ -1347,6 +1357,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_TRASH_DESC,
             "Dove finisce una nota cancellata: il cestino del vault o quello del sistema. Se il sistema non ne ha uno, si usa il cestino del vault.",
+        )
+        .with(C_FILES_AUTO_REVEAL, "Mostra la nota aperta nell'esplora")
+        .with(
+            C_FILES_AUTO_REVEAL_DESC,
+            "Cambiando nota, l'esplora apre le cartelle che la contengono e la porta in vista.",
         )
         .with(C_FILES_TRASH_VAULT, "Cestino del vault")
         .with(C_FILES_TRASH_SYSTEM, "Cestino del sistema")
@@ -1773,6 +1788,11 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(
             C_FILES_TRASH_DESC,
             "Where a deleted note goes: the vault trash or the system trash. If the system has none, the vault trash is used.",
+        )
+        .with(C_FILES_AUTO_REVEAL, "Reveal the open note in the explorer")
+        .with(
+            C_FILES_AUTO_REVEAL_DESC,
+            "When you switch notes, the explorer opens the folders that contain it and scrolls it into view.",
         )
         .with(C_FILES_TRASH_VAULT, "Vault trash")
         .with(C_FILES_TRASH_SYSTEM, "System trash")

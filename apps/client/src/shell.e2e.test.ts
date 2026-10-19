@@ -562,6 +562,26 @@ describe("rinomina e cestino dal registro dei comandi", () => {
     return registry.allCommands().find((entry) => entry.id === id);
   };
 
+  it("con «Mostra la nota aperta» l'albero apre le cartelle della nota che si apre", async () => {
+    const autoReveal = {
+      spec: {
+        key: "files.auto-reveal",
+        label: "Mostra la nota aperta nell'esplora",
+        description: "",
+        group: "",
+        scope: "machine",
+        kind: { kind: "toggle", default: false },
+        program_writable: false,
+      },
+      value: true,
+      source: "machine",
+    } as SettingEntry;
+    await start(VAULT, [autoReveal]);
+    const { openDocument } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await waitFor("la cartella si apre da sé", () => noteItem("note/Riunione.md") !== null);
+  });
+
   it("da fuori dell'albero rinomina la nota attiva, portandola in vista", async () => {
     await start(VAULT);
     const { openDocument } = await import("./panels/document");
