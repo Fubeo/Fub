@@ -101,6 +101,7 @@ import { mountCloseGuard } from "./state/close-guard";
 import { createVaultSession } from "./state/vault-session";
 import { newNoteInActiveSpace } from "./state/new-note";
 import { paletteHost } from "./state/palette-host";
+import { FILES_STARTUP, startupCommand } from "./state/startup";
 import { preferredPaneMode } from "./state/pane-mode";
 import { setSearchPort } from "./state/search-port";
 import { mountWheelTextSize, zoomBy } from "./state/zoom";
@@ -1111,7 +1112,22 @@ async function openInitialVault(path: string, alive: () => boolean): Promise<voi
     if (!alive()) return;
     notify(t("app.initial_vault_failed", { path, reason: errorText(error) }), "guasto");
     await synchronize();
+    return;
   }
+  // Soltanto all'avvio: cambiare vault riprende le sue schede e basta.
+  await openAtStartup(alive).catch((error: unknown) => {
+    if (alive()) notify(errorText(error), "guasto");
+  });
+}
+
+/// Apre ciò che `files.startup` chiede, se il comando è nel registro: senza la
+/// feature dei modelli la nota del giorno non c'è, e resta la sessione.
+async function openAtStartup(alive: () => boolean): Promise<void> {
+  const entries = await settings();
+  if (!alive()) return;
+  const id = startupCommand(entries.find((entry) => entry.spec.key === FILES_STARTUP)?.value);
+  const entry = id === null ? undefined : allCommands().find((candidate) => candidate.id === id);
+  if (entry) startCommand(entry, paletteHost);
 }
 
 /// I gesti sul vault intero che il menu File e il chip del vault offrono:

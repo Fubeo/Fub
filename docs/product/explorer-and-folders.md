@@ -114,6 +114,13 @@ Perché la webview riceva i file rilasciati, la finestra Tauri ha
 `dragDropEnabled: false`: con il valore predefinito il rilascio lo
 intercetterebbe Tauri, e su Windows la pagina non lo vedrebbe.
 
+## All'avvio
+
+La finestra riapre le schede e la disposizione della volta precedente.
+L'impostazione di vault `files.startup` può aprirci sopra la nota del giorno
+(`daily`, col comando `note.daily`) o una nota nuova (`new`); cambiare vault
+riprende soltanto le sue schede.
+
 ## Approfondimenti
 
 - [Vault e file](vault-and-files.md)

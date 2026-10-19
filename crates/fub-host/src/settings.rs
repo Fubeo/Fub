@@ -223,6 +223,11 @@ pub const FILES_TRASH: &str = "files.trash";
 pub const FILES_AUTO_REVEAL: &str = "files.auto-reveal";
 pub const FILES_TRASH_VAULT: &str = "vault";
 pub const FILES_TRASH_SYSTEM: &str = "system";
+/// Che cosa si apre all'avvio dell'app, sopra la sessione ripristinata: niente
+/// (`""`), la nota del giorno o una nota nuova.
+pub const FILES_STARTUP: &str = "files.startup";
+pub const FILES_STARTUP_DAILY: &str = "daily";
+pub const FILES_STARTUP_NEW: &str = "new";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -329,6 +334,22 @@ pub fn core_settings() -> Vec<SettingSpec> {
             },
         )
         .describing(Text::key(C_FILES_TRASH_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_STARTUP,
+            Text::key(C_FILES_STARTUP),
+            SettingKind::Choice {
+                default: String::new(),
+                options: vec![
+                    UiOption::new("", Text::key(C_FILES_STARTUP_SESSION)),
+                    UiOption::new(FILES_STARTUP_DAILY, Text::key(C_FILES_STARTUP_DAILY)),
+                    UiOption::new(FILES_STARTUP_NEW, Text::key(C_FILES_STARTUP_NEW)),
+                ],
+            },
+        )
+        .describing(Text::key(C_FILES_STARTUP_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
@@ -998,6 +1019,11 @@ const C_FILES_AUTO_REVEAL: &str = "core.files_auto_reveal";
 const C_FILES_AUTO_REVEAL_DESC: &str = "core.files_auto_reveal.desc";
 const C_FILES_TRASH_VAULT: &str = "core.files_trash.vault";
 const C_FILES_TRASH_SYSTEM: &str = "core.files_trash.system";
+const C_FILES_STARTUP: &str = "core.files_startup";
+const C_FILES_STARTUP_DESC: &str = "core.files_startup.desc";
+const C_FILES_STARTUP_SESSION: &str = "core.files_startup.session";
+const C_FILES_STARTUP_DAILY: &str = "core.files_startup.daily";
+const C_FILES_STARTUP_NEW: &str = "core.files_startup.new";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
@@ -1415,6 +1441,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_FILES_TRASH_VAULT, "Cestino del vault")
         .with(C_FILES_TRASH_SYSTEM, "Cestino del sistema")
+        .with(C_FILES_STARTUP, "All'avvio apri")
+        .with(
+            C_FILES_STARTUP_DESC,
+            "Che cosa si apre all'avvio, sopra le schede della volta precedente.",
+        )
+        .with(C_FILES_STARTUP_SESSION, "Le schede della volta precedente")
+        .with(C_FILES_STARTUP_DAILY, "La nota del giorno")
+        .with(C_FILES_STARTUP_NEW, "Una nota nuova")
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_CHROME, "Interfaccia")
         .with(C_CHROME_SCHEMA, "Versione configurazione dell'interfaccia")
@@ -1859,6 +1893,14 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_FILES_TRASH_VAULT, "Vault trash")
         .with(C_FILES_TRASH_SYSTEM, "System trash")
+        .with(C_FILES_STARTUP, "On startup open")
+        .with(
+            C_FILES_STARTUP_DESC,
+            "What opens on startup, on top of the tabs from last time.",
+        )
+        .with(C_FILES_STARTUP_SESSION, "The tabs from last time")
+        .with(C_FILES_STARTUP_DAILY, "Today's note")
+        .with(C_FILES_STARTUP_NEW, "A new note")
         .with(C_GROUP_APPEARANCE, "Appearance")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Spellcheck")
