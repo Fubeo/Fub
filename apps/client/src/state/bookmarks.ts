@@ -481,3 +481,14 @@ export function bookmarkMatches(title: string, where: string, query: string): bo
   const needle = query.trim().toLowerCase();
   return needle === "" || title.toLowerCase().includes(needle) || where.toLowerCase().includes(needle);
 }
+
+// Le voci lasciate cadere sul pannello, ognuna un segnalibro col suo nome:
+// quante sono entrate (una che non entra non ferma le altre).
+export function bookmarkDropped(ids: readonly string[]): number {
+  let added = 0;
+  for (const id of ids) {
+    const title = id.split("/").filter(Boolean).pop() ?? id;
+    if (addBookmark(title, { k: "doc", doc: id })) added += 1;
+  }
+  return added;
+}

@@ -5,6 +5,7 @@ import {
   addBookmark,
   bookmarkLoadSnapshot,
   addGroup,
+  bookmarkDropped,
   bookmarkMatches,
   listBookmarks,
   listGroups,
@@ -27,6 +28,7 @@ import { showContextMenu } from "../ui/menu";
 import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
 import { setTooltip } from "../ui/tooltip";
+import { draggedEntries, ENTRIES_DRAG_TYPE } from "../ui/drag-types";
 import { openBookmarkTarget } from "./shell-commands";
 import { state } from "./store";
 import { currentWorkspaceId } from "./workspaces-ui";
@@ -52,8 +54,31 @@ function ensurePanel(): HTMLElement {
   el.className = "bookmarks-panel";
   el.setAttribute("aria-label", t("bookmarks.title"));
   el.hidden = true;
+  // Una nota o un file dall'albero, lasciati cadere qui, diventano segnalibri.
+  el.addEventListener("dragover", (event) => {
+    if (!event.dataTransfer?.types.includes(ENTRIES_DRAG_TYPE)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  });
+  el.addEventListener("drop", (event) => {
+    const entries = draggedEntries(event.dataTransfer?.getData(ENTRIES_DRAG_TYPE));
+    if (entries.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void dropBookmarks(entries.map((each) => each.id));
+  });
   sidebar?.appendChild(el);
   return el;
+}
+
+// Carica prima lo stato salvato, come il menu dell'albero: l'aggiunta non
+// parte da una memoria vuota.
+async function dropBookmarks(ids: string[]): Promise<void> {
+  await loadBookmarks();
+  const added = bookmarkDropped(ids);
+  if (added < ids.length) notify(t("bookmarks.save_failed"), "guasto");
+  else notify(t("bookmarks.saved"), "info");
+  void refresh();
 }
 
 async function refresh(): Promise<void> {

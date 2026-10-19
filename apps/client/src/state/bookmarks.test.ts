@@ -2,7 +2,7 @@
 // L'ordine dei segnalibri come lo si vede: dentro un gruppo vale l'ordine del
 // gruppo, fuori dai gruppi quello dell'elenco, e i gruppi hanno il loro.
 import { describe, expect, it } from "vitest";
-import { bookmarkMatches, listBookmarks, listGroups, setBookmarksForTest, stepBookmark, stepGroup } from "./bookmarks";
+import { bookmarkDropped, bookmarkMatches, listBookmarks, listGroups, setBookmarksForTest, stepBookmark, stepGroup } from "./bookmarks";
 
 const doc = (id: string) => ({ id, title: id, target: { k: "doc" as const, doc: `${id}.md` }, created: 0 });
 
@@ -56,5 +56,16 @@ describe("filtro dei segnalibri", () => {
     expect(bookmarkMatches("Diario", "note/diario.md", "  dia ")).toBe(true);
     expect(bookmarkMatches("Diario", "note/Viaggi.md", "VIAGGI")).toBe(true);
     expect(bookmarkMatches("Diario", "note/diario.md", "ricette")).toBe(false);
+  });
+});
+
+describe("rilascio sul pannello", () => {
+  it("ogni voce lasciata cadere diventa un segnalibro col suo nome", () => {
+    setBookmarksForTest({ v: 1, bookmarks: [], groups: [] });
+    expect(bookmarkDropped(["note/Diario.md", "foto.png"])).toBe(2);
+    expect(listBookmarks().map((b) => [b.title, b.target])).toEqual([
+      ["Diario.md", { k: "doc", doc: "note/Diario.md" }],
+      ["foto.png", { k: "doc", doc: "foto.png" }],
+    ]);
   });
 });
