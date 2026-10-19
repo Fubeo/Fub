@@ -474,6 +474,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-cli/src/native.rs::parse",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome del vault: riconosce il nome di un browser scritto da \
+                 chi lancia `fub-cli native-install --browser`, fra sei parole ASCII chiuse \
+                 (`chrome`, `firefox`, …). `Chrome` e `chrome` sono lo stesso browser, e una \
+                 piegatura Unicode attribuirebbe equivalenze a un vocabolario che non ne ha.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/edit.rs::matches_bytes",
             (
                 Family::AsciiCase,
