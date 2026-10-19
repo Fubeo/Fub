@@ -2401,6 +2401,25 @@ describe("cerca", () => {
     expect(document.querySelectorAll("#search-results .hit-snippet").length).toBe(0);
   });
 
+  it("un risultato si trascina come la nota che è", async () => {
+    await start(VAULT);
+    const field = document.querySelector<HTMLInputElement>("#search-input")!;
+    field.value = "arance";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    await waitFor("i risultati arrivano", () => document.querySelectorAll("#search-results li > button.search-result").length > 0);
+    const result = document.querySelector<HTMLButtonElement>("#search-results li > button.search-result")!;
+    expect(result.draggable).toBe(true);
+    const offered = new Map<string, string>();
+    const begin = new Event("dragstart", { bubbles: true, cancelable: true });
+    const transfer = { effectAllowed: "", dropEffect: "", types: [], files: [], items: [], setData: (kind: string, value: string) => offered.set(kind, value) };
+    Object.defineProperty(begin, "dataTransfer", { value: transfer });
+    result.dispatchEvent(begin);
+    expect(offered.get("application/x-fub-note")).toBe("note/Spesa.md");
+    expect(JSON.parse(offered.get("application/x-fub-entries")!)).toEqual([{ id: "note/Spesa.md", note: true }]);
+    expect(offered.get("text/uri-list")).toBe("file:///vault/note/Spesa.md");
+    expect(transfer.effectAllowed).toBe("copy");
+  });
+
   it("la casella trova, e il risultato apre il documento", async () => {
     const host = await start(VAULT);
     const field = document.querySelector<HTMLInputElement>("#search-input");

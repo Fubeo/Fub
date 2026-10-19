@@ -17,6 +17,16 @@ export interface DraggedEntry {
   readonly note: boolean;
 }
 
+/// Una nota trascinata da una lista che non è l'albero (i risultati della
+/// ricerca): porta gli stessi tipi di una nota dell'albero, così cade come lei
+/// nell'editor (un collegamento), sulla striscia delle schede (si apre) e nei
+/// segnalibri. Ciò che arriva fuori dall'app lo decide chi chiama.
+export function offerNote(transfer: DataTransfer, doc: string): void {
+  transfer.effectAllowed = "copy";
+  transfer.setData(NOTE_DRAG_TYPE, doc);
+  transfer.setData(ENTRIES_DRAG_TYPE, JSON.stringify([{ id: doc, note: true } satisfies DraggedEntry]));
+}
+
 /// Le voci di un trascinamento dell'albero, o nessuna se il valore non è
 /// della forma attesa (un'altra app che usa lo stesso tipo).
 export function draggedEntries(raw: string | undefined): DraggedEntry[] {

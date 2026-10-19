@@ -21,6 +21,9 @@ import { mountSearchTools, type Replacement, type SearchTools } from "./search-t
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
 import { ClipboardUnavailable, writeClipboardText } from "../platform/clipboard";
+import { offerNote } from "../ui/drag-types";
+import { offerOutside } from "../ui/vault-transfer";
+import { openVaultRoot } from "../state/store";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -439,6 +442,15 @@ function showSearchResults(
         snippet.appendChild(highlighted(row.snippet, row.highlights ?? []));
         button.append(snippet);
       }
+      // Il risultato si trascina come una nota dell'albero: dentro l'app è
+      // la nota, fuori il file vero.
+      button.draggable = true;
+      const doc = row.doc;
+      button.addEventListener("dragstart", (event) => {
+        if (!event.dataTransfer) return;
+        offerOutside(event.dataTransfer, openVaultRoot(), [doc]);
+        offerNote(event.dataTransfer, doc);
+      });
     } else {
       button.classList.add("hit-occurrence");
       button.textContent = t("search.occurrence", { n: row.occurrence });
