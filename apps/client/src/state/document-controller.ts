@@ -46,6 +46,7 @@ import {
 import { modeForContext, offersContext, offersReadingToggle, readingToggleTarget } from "../editors/core/surface-modes";
 import { draggedEntries, ENTRIES_DRAG_TYPE, NOTE_DRAG_TYPE } from "../ui/drag-types";
 import { pageName } from "../rules/organizer";
+import { looksLikeWebShortcut, webShortcut } from "../rules/web-shortcut";
 import { declaredFences } from "../rules/syntax";
 import { pdfIdWithoutFragment } from "../editors/media/pdf-view";
 import { mediaKindOfId, mimeOfId } from "../editors/media/media-types";
@@ -584,7 +585,23 @@ function mountDocumentAttachments(r: Pane, doc: string): void {
     if (!event.dataTransfer?.files.length) return;
     event.preventDefault();
     event.stopPropagation();
-    accept(Array.from(event.dataTransfer.files));
+    const files = Array.from(event.dataTransfer.files);
+    const shortcuts = files.filter((file) => looksLikeWebShortcut(file.name, file.size));
+    if (!shortcuts.length) {
+      accept(files);
+      return;
+    }
+    // Un `.webloc` o un `.url` diventa un link alla pagina dove cade; uno che
+    // non si legge entra come gli altri file, allegato.
+    const { clientX: x, clientY: y } = event;
+    const at = Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
+    void Promise.all(shortcuts.map(async (file) => ({ file, link: webShortcut(file.name, await file.text()) }))).then((read) => {
+      if (life.closed || r.surface !== surface) return;
+      const links = read.flatMap(({ link }): SurfaceReference[] => (link ? [{ kind: "web", ...link }] : []));
+      if (links.length) surface.insertReferences?.(links, at);
+      const rest = files.filter((file) => !read.some((each) => each.file === file && each.link));
+      if (rest.length) accept(rest);
+    }).catch(fail);
   }, { capture: true });
   life.listen(r.editorEl, "paste", (event) => {
     if (!event.clipboardData?.files.length) return;

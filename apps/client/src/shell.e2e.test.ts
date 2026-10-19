@@ -1609,6 +1609,19 @@ describe("trascinare nell'albero e da e verso gli altri programmi", () => {
     expect(editorTexts().join("\n")).not.toContain("/vault/");
   });
 
+  it("un collegamento web lasciato in una nota diventa un link, il resto un allegato", async () => {
+    const host = await start(VAULT);
+    const shortcut = new File(["[InternetShortcut]\r\nURL=https://example.org/pagina\r\n"], "Pagina utile.url");
+    const files = [shortcut, new File([new Uint8Array([1, 2, 3])], "foto.png")];
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "dataTransfer", { value: { types: ["Files"], files, getData: () => "" } });
+    document.querySelector(".cm-content")!.dispatchEvent(drop);
+    expect(drop.defaultPrevented).toBe(true);
+    await waitFor("il link è nel testo", () => editorTexts().some((text) => text.includes("[Pagina utile](https://example.org/pagina)")));
+    await waitFor("l'immagine è depositata", () => host.atGate("resourceWrite").length === 1);
+    expect(String(host.atGate("resourceWrite")[0]!.args[0])).toMatch(/foto\.png$/);
+  });
+
   it("i file del sistema lasciati su una cartella entrano lì, e un nome preso non si sovrascrive", async () => {
     const host = await start(VAULT);
     const folder = row("note")!;

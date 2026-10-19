@@ -81,7 +81,10 @@ della scelta multipla (Ctrl-clic, Maiusc-clic) si trascinano insieme. Una
 cartella chiusa sotto il cursore si apre dopo una breve sosta.
 
 Una nota lasciata in un documento diventa un collegamento, un file un rimando
-relativo al documento; più voci entrano nell'ordine dell'albero.
+relativo al documento; più voci entrano nell'ordine dell'albero. Un
+collegamento web del sistema (`.webloc`, `.url`) lasciato in una nota diventa
+un link alla pagina col nome del file come testo; uno che non si legge, o con
+uno schema diverso da `http`, `https`, `mailto` e `ftp`, entra come allegato.
 
 Da e verso gli altri programmi:
 

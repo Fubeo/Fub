@@ -137,7 +137,9 @@ export type SurfaceReference =
   /** A resource just deposited, as a URL relative to the document. */
   | { readonly kind: "attachment"; readonly link: string }
   /** A note, by the shortest name that resolves to it in this vault. */
-  | { readonly kind: "note"; readonly name: string };
+  | { readonly kind: "note"; readonly name: string }
+  /** A web page, from a dropped `.webloc` or `.url` shortcut. */
+  | { readonly kind: "web"; readonly title: string; readonly url: string };
 
 /**
  * A point inside the document that a link can name: a heading by its text, or
