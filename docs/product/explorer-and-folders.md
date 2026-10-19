@@ -118,8 +118,10 @@ intercetterebbe Tauri, e su Windows la pagina non lo vedrebbe.
 
 La finestra riapre le schede e la disposizione della volta precedente.
 L'impostazione di vault `files.startup` può aprirci sopra la nota del giorno
-(`daily`, col comando `note.daily`) o una nota nuova (`new`); cambiare vault
-riprende soltanto le sue schede.
+(`daily`, col comando `note.daily`), una nota nuova (`new`) o una nota precisa
+(`note`, il percorso in `files.startup-note`, con `.md` se manca l'estensione).
+Una nota precisa che non c'è più si dice con un avviso e non apre una scheda
+vuota. Cambiare vault riprende soltanto le sue schede.
 
 ## Approfondimenti
 

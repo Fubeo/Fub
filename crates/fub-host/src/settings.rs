@@ -224,10 +224,13 @@ pub const FILES_AUTO_REVEAL: &str = "files.auto-reveal";
 pub const FILES_TRASH_VAULT: &str = "vault";
 pub const FILES_TRASH_SYSTEM: &str = "system";
 /// Che cosa si apre all'avvio dell'app, sopra la sessione ripristinata: niente
-/// (`""`), la nota del giorno o una nota nuova.
+/// (`""`), la nota del giorno, una nota nuova o la nota di [`FILES_STARTUP_NOTE`].
 pub const FILES_STARTUP: &str = "files.startup";
 pub const FILES_STARTUP_DAILY: &str = "daily";
 pub const FILES_STARTUP_NEW: &str = "new";
+pub const FILES_STARTUP_FIXED: &str = "note";
+/// Il percorso nel vault della nota che `files.startup = note` apre.
+pub const FILES_STARTUP_NOTE: &str = "files.startup-note";
 
 /// La shell ricorda cosa si è cercato e cosa si è aperto? (chiave dell'app)
 ///
@@ -346,10 +349,22 @@ pub fn core_settings() -> Vec<SettingSpec> {
                     UiOption::new("", Text::key(C_FILES_STARTUP_SESSION)),
                     UiOption::new(FILES_STARTUP_DAILY, Text::key(C_FILES_STARTUP_DAILY)),
                     UiOption::new(FILES_STARTUP_NEW, Text::key(C_FILES_STARTUP_NEW)),
+                    UiOption::new(FILES_STARTUP_FIXED, Text::key(C_FILES_STARTUP_FIXED)),
                 ],
             },
         )
         .describing(Text::key(C_FILES_STARTUP_DESC))
+        .grouped(Text::key(C_GROUP_FILES)),
+    );
+    settings.push(
+        SettingSpec::new(
+            FILES_STARTUP_NOTE,
+            Text::key(C_FILES_STARTUP_NOTE),
+            SettingKind::Text {
+                default: String::new(),
+            },
+        )
+        .describing(Text::key(C_FILES_STARTUP_NOTE_DESC))
         .grouped(Text::key(C_GROUP_FILES)),
     );
     settings.push(
@@ -1024,6 +1039,9 @@ const C_FILES_STARTUP_DESC: &str = "core.files_startup.desc";
 const C_FILES_STARTUP_SESSION: &str = "core.files_startup.session";
 const C_FILES_STARTUP_DAILY: &str = "core.files_startup.daily";
 const C_FILES_STARTUP_NEW: &str = "core.files_startup.new";
+const C_FILES_STARTUP_FIXED: &str = "core.files_startup.note";
+const C_FILES_STARTUP_NOTE: &str = "core.files_startup_note";
+const C_FILES_STARTUP_NOTE_DESC: &str = "core.files_startup_note.desc";
 
 const C_GROUP_APPEARANCE: &str = "core.group.appearance";
 const C_GROUP_EDITOR: &str = "core.group.editor";
@@ -1449,6 +1467,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FILES_STARTUP_SESSION, "Le schede della volta precedente")
         .with(C_FILES_STARTUP_DAILY, "La nota del giorno")
         .with(C_FILES_STARTUP_NEW, "Una nota nuova")
+        .with(C_FILES_STARTUP_FIXED, "Una nota precisa")
+        .with(C_FILES_STARTUP_NOTE, "Nota da aprire all'avvio")
+        .with(
+            C_FILES_STARTUP_NOTE_DESC,
+            "Il percorso nel vault della nota che «Una nota precisa» apre; senza estensione vale .md.",
+        )
         .with(C_GROUP_APPEARANCE, "Aspetto")
         .with(C_GROUP_CHROME, "Interfaccia")
         .with(C_CHROME_SCHEMA, "Versione configurazione dell'interfaccia")
@@ -1901,6 +1925,12 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         .with(C_FILES_STARTUP_SESSION, "The tabs from last time")
         .with(C_FILES_STARTUP_DAILY, "Today's note")
         .with(C_FILES_STARTUP_NEW, "A new note")
+        .with(C_FILES_STARTUP_FIXED, "A specific note")
+        .with(C_FILES_STARTUP_NOTE, "Note to open on startup")
+        .with(
+            C_FILES_STARTUP_NOTE_DESC,
+            "The vault path of the note that «A specific note» opens; without an extension it means .md.",
+        )
         .with(C_GROUP_APPEARANCE, "Appearance")
         .with(C_GROUP_EDITOR, "Editor")
         .with(C_EDITOR_SPELLCHECK, "Spellcheck")

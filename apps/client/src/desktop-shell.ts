@@ -101,7 +101,7 @@ import { mountCloseGuard } from "./state/close-guard";
 import { createVaultSession } from "./state/vault-session";
 import { newNoteInActiveSpace } from "./state/new-note";
 import { paletteHost } from "./state/palette-host";
-import { FILES_STARTUP, startupCommand } from "./state/startup";
+import { FILES_STARTUP, FILES_STARTUP_NOTE, startupCommand, startupNote } from "./state/startup";
 import { preferredPaneMode } from "./state/pane-mode";
 import { setSearchPort } from "./state/search-port";
 import { mountWheelTextSize, zoomBy } from "./state/zoom";
@@ -1125,7 +1125,21 @@ async function openInitialVault(path: string, alive: () => boolean): Promise<voi
 async function openAtStartup(alive: () => boolean): Promise<void> {
   const entries = await settings();
   if (!alive()) return;
-  const id = startupCommand(entries.find((entry) => entry.spec.key === FILES_STARTUP)?.value);
+  const choice = entries.find((entry) => entry.spec.key === FILES_STARTUP)?.value;
+  const note = startupNote(choice, entries.find((entry) => entry.spec.key === FILES_STARTUP_NOTE)?.value);
+  if (note !== null) {
+    // Si legge prima di aprire: una nota che non c'è più si dice, e non lascia
+    // una scheda vuota sopra la sessione.
+    try {
+      await api.readDocument(note);
+      if (!alive()) return;
+      await openDocument(note);
+    } catch (error) {
+      if (alive()) notify(t("app.startup_note_failed", { path: note, reason: errorText(error) }), "guasto");
+    }
+    return;
+  }
+  const id = startupCommand(choice);
   const entry = id === null ? undefined : allCommands().find((candidate) => candidate.id === id);
   if (entry) startCommand(entry, paletteHost);
 }
