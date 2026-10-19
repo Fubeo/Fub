@@ -31,6 +31,8 @@ pub const PROPERTIES_ID: &str = "fub.properties";
 pub const PROPERTIES_VIEW: &str = "properties";
 /// Id della vista globale del vault.
 pub const GLOBAL_PROPERTIES_VIEW: &str = "properties.global";
+/// Id del contatore nella banda di stato: quante proprietà ha la nota attiva.
+pub const PROPERTIES_STATUS_VIEW: &str = "properties.status";
 /// Imposta (o aggiunge) una chiave del frontmatter.
 pub const NOTES_PROPERTY_SET: &str = "note.property.set";
 /// Toglie una chiave del frontmatter.
@@ -81,6 +83,8 @@ const U_SET: &str = "u_set";
 const U_REMOVE: &str = "u_remove";
 const SOURCE_ONLY: &str = "source_only";
 const GLOBAL_TITLE: &str = "global_title";
+const STATUS_TITLE: &str = "status_title";
+const STATUS_COUNT: &str = "status_count";
 const GLOBAL_EMPTY: &str = "global_empty";
 const GLOBAL_FILTER: &str = "global_filter";
 const GLOBAL_COUNT: &str = "global_count";
@@ -201,6 +205,8 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("mode.source", "Sorgente")
             .with("source_open", "Apri il sorgente")
             .with(GLOBAL_TITLE, "Proprietà del vault")
+            .with(STATUS_TITLE, "Proprietà della nota")
+            .with(STATUS_COUNT, "Proprietà: {count}")
             .with(GLOBAL_EMPTY, "Nessuna proprietà trovata.")
             .with(GLOBAL_FILTER, "Cerca chiavi o valori")
             .with(GLOBAL_COUNT, "{key} · {count} note")
@@ -363,6 +369,8 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with("mode.source", "Source")
             .with("source_open", "Open source")
             .with(GLOBAL_TITLE, "Vault properties")
+            .with(STATUS_TITLE, "Note properties")
+            .with(STATUS_COUNT, "Properties: {count}")
             .with(GLOBAL_EMPTY, "No properties found.")
             .with(GLOBAL_FILTER, "Search keys or values")
             .with(GLOBAL_COUNT, "{key} · {count} notes")
@@ -467,6 +475,12 @@ impl ViewProvider for PropertiesView {
             )
             .with_icon("vault")
             .ordered(4),
+            ViewSpec::new(
+                PROPERTIES_STATUS_VIEW,
+                Text::key(STATUS_TITLE),
+                ViewSurface::StatusBar,
+            )
+            .open_by_default(),
         ]
     }
 
@@ -477,6 +491,8 @@ impl ViewProvider for PropertiesView {
     ) -> Result<UiNode, PluginError> {
         if instance.view == GLOBAL_PROPERTIES_VIEW {
             global_tree(host)
+        } else if instance.view == PROPERTIES_STATUS_VIEW {
+            status_count(host)
         } else {
             tree(host, None)
         }
@@ -681,6 +697,32 @@ fn tree(host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError
     }
     children.push(add_form(&doc));
     Ok(UiNode::column(1, children))
+}
+
+/// Il contatore della banda di stato. Tace senza nota, su una nota senza
+/// proprietà e su un documento che non ha un modello Markdown (un foglio, un
+/// disegno): lì non c'è frontmatter da contare, e un errore nella banda non
+/// direbbe niente di utile.
+fn status_count(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
+    let silent = || Ok(UiNode::row(12, Vec::new()));
+    let Some(doc) = host.active_context().and_then(|c| c.doc) else {
+        return silent();
+    };
+    let Ok(model) = host.read_model(&doc) else {
+        return silent();
+    };
+    let count = model
+        .frontmatter
+        .properties_with_types(&date_formats(host), &property_types(host))
+        .len();
+    if count == 0 {
+        return silent();
+    }
+    Ok(UiNode::text(Text::message(
+        STATUS_COUNT,
+        vec![Arg::int("count", i64::try_from(count).unwrap_or(i64::MAX))],
+    ))
+    .with_key(STATUS_COUNT))
 }
 
 fn frontmatter_span(source: &str) -> Span {

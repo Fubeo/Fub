@@ -11,12 +11,14 @@ use fub_abi::event::Actor;
 use fub_abi::model::{DocId, PropertyType, PropertyTypes};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
+use fub_abi::text::Text;
 use fub_abi::traits::{PluginManifest, ViewInstance};
 use fub_abi::ui::{FieldValue, UiAction, UiKind, UiNode, UiValue};
 use fub_features::{
     PropertiesCommands, PropertiesView, GLOBAL_PROPERTIES_VIEW, NOTES_ALIAS_ADD,
     NOTES_PROPERTIES_CLEAR, NOTES_PROPERTY_REMOVE, NOTES_PROPERTY_SET, PROPERTIES_ID,
-    PROPERTIES_VIEW, PROPERTY_KEY_DELETE, PROPERTY_KEY_RENAME, PROPERTY_TYPE_SET,
+    PROPERTIES_STATUS_VIEW, PROPERTIES_VIEW, PROPERTY_KEY_DELETE, PROPERTY_KEY_RENAME,
+    PROPERTY_TYPE_SET,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -156,6 +158,25 @@ fn no_one_notes_open_and_empty_state() {
     let ws = vault.open();
     let tree = ws.render_view(&instance()).unwrap();
     assert!(and_empty_state(&tree));
+}
+
+#[test]
+fn the_status_bar_counts_the_properties_and_is_silent_otherwise() {
+    let vault = Vault::new();
+    vault.put("a.md", MISTA);
+    vault.put("b.md", "# Solo corpo\n");
+    let ws = vault.open();
+    let status = ViewInstance::only(PROPERTIES_STATUS_VIEW);
+    let silent = |tree: &UiNode| tree.children().is_empty();
+    assert!(silent(&ws.render_view(&status).unwrap()));
+    open_notes(&ws, "a.md");
+    let tree = ws.render_view(&status).unwrap();
+    let UiKind::Text { content } = &tree.kind else {
+        panic!("the status is a text: {tree:?}");
+    };
+    assert_eq!(*content, Text::from("Proprietà: 6".to_string()));
+    open_notes(&ws, "b.md");
+    assert!(silent(&ws.render_view(&status).unwrap()));
 }
 
 #[test]

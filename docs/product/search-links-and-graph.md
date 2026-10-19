@@ -376,6 +376,9 @@ del frontmatter il tasto resta fermo, e fuori da una riga di chiave sposta le
 righe come altrove. I tre gesti sono anche comandi della palette e voci del
 menu dei blocchi nella barra di formattazione. Il pannello Proprietà
 dell'ispettore resta il modo strutturato di scrivere valori tipizzati.
+La banda di stato dice quante proprietà ha la nota attiva (vista
+`properties.status`); tace su una nota senza proprietà e su un documento che
+non è Markdown.
 
 ## Comportamenti da non confondere
 
