@@ -114,6 +114,7 @@ import {
   rename,
   sameTab,
   activateTab,
+  recentTabs,
   sameOverride,
   setTabOverride,
   tabOverride,
@@ -621,6 +622,13 @@ export function mountDocumentController(lifetime: Lifetime, d: DocumentDeps, pan
   // vi si cliccano tornano qui, dove ci sono i riquadri e la ricerca.
   setDocumentWindowNavigation({ navigate: followRemote });
   lifetime.add(() => setDocumentWindowNavigation(null));
+  // Il giro di Ctrl+Tab finisce quando si lascia il modificatore.
+  lifetime.listen(document, "keyup", (event) => {
+    if (event.key === "Control" || event.key === "Meta") recentRound = null;
+  });
+  lifetime.add(() => {
+    recentRound = null;
+  });
   surfaceRegistry = createDocumentSurfaceRegistry({
     onChange: written,
     onSelectionChange: (paneId) => {
@@ -888,6 +896,27 @@ function invalidateLoads(doc: string): void {
 // riconfigurare. Passano dalla stessa porta del click, così il cablaggio sta in
 // un punto solo.
 
+/// Il giro di `Ctrl+Tab`: l'ordine d'uso preso alla prima pressione e il punto
+/// raggiunto. Finché il modificatore resta giù le pressioni scendono in quello
+/// stesso ordine; lasciato, il giro finisce e la scheda scelta è la più recente.
+let recentRound: { pane: string; order: Tab[]; at: number } | null = null;
+
+function stepRecentTab(step: 1 | -1): void {
+  const id = layout.focus;
+  const p = layout.panes[id];
+  if (!p || p.tabs.length < 2) return;
+  const current = p.tabs[p.active];
+  const round = recentRound;
+  const going = round && round.pane === id && current && sameTab(current, round.order[round.at]!) ? round : null;
+  const next = going ?? { pane: id, order: recentTabs(id).map((index) => p.tabs[index]!), at: 0 };
+  next.at = (next.at + step + next.order.length) % next.order.length;
+  recentRound = next;
+  const index = p.tabs.findIndex((each) => sameTab(each, next.order[next.at]!));
+  if (index < 0) return;
+  activateTab(id, index);
+  void synchronize();
+}
+
 function registerCommands(): void {
   // Le modalità come comandi (§18.2): erano bottoni nel commutatore, cioè
   // raggiungibili col mouse e con nient'altro. Passano dalla stessa porta del
@@ -1011,6 +1040,15 @@ function registerCommands(): void {
       if (cycleTab(layout.focus, -1)) void synchronize();
     },
   });
+  for (const [id, step] of [["shell.tab.recent", 1], ["shell.tab.recent.back", -1]] as const) {
+    registerShellCommand({
+      id,
+      title: step === 1 ? "commands.tab.recent" : "commands.tab.recent.back",
+      description: step === 1 ? "commands.tab.recent.desc" : "commands.tab.recent.back.desc",
+      layer: "global",
+      run: () => stepRecentTab(step),
+    });
+  }
   for (const [id, action, title, description] of [
     ["shell.fold.all", "text.fold.all", "commands.fold.all", "commands.fold.all.desc"],
     ["shell.unfold.all", "text.unfold.all", "commands.unfold.all", "commands.unfold.all.desc"],

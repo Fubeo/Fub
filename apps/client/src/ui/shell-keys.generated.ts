@@ -83,6 +83,8 @@ export const SHELL_KEYS = {
   "shell.tab.reopen": "Mod-Shift-t",
   "shell.tab.next": "Mod-PageDown",
   "shell.tab.previous": "Mod-PageUp",
+  "shell.tab.recent": "Mod-Tab",
+  "shell.tab.recent.back": "Mod-Shift-Tab",
   "shell.tab.go.1": "Mod-1",
   "shell.tab.go.2": "Mod-2",
   "shell.tab.go.3": "Mod-3",

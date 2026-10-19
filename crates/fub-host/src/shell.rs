@@ -191,6 +191,9 @@ pub const SHELL_COMMANDS: &[(&str, Option<&str>)] = &[
     ("shell.tab.reopen", Some("Mod-Shift-t")),
     ("shell.tab.next", Some("Mod-PageDown")),
     ("shell.tab.previous", Some("Mod-PageUp")),
+    // In ordine d'uso, come Obsidian: tenendo giù il modificatore si scende.
+    ("shell.tab.recent", Some("Mod-Tab")),
+    ("shell.tab.recent.back", Some("Mod-Shift-Tab")),
     // La scheda per posizione, come nei browser: `Mod-1…8` la n-esima,
     // `Mod-9` l'ultima. Un editor che usa lo stesso accordo (la maschera del
     // disegno, `Mod-7`) lo tiene, perché la shell cede all'evento già preso.
