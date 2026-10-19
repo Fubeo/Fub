@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EditorSelection, EditorState, type Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { propertiesDisplay, propertiesDisplayOf, type PropertiesDisplay } from "../../properties-display";
-import { addProperty, moveProperty, propertiesExtension, propertyBlock } from "./properties";
+import { addProperty, clearProperties, moveProperty, propertiesExtension, propertyBlock } from "./properties";
 
 // `|` è il cursore, come in `actions.test.ts`.
 function mk(spec: string, display: PropertiesDisplay = "source", readOnly = false): EditorState {
@@ -76,6 +76,8 @@ describe("le voci del frontmatter", () => {
 describe("aggiungere una proprietà", () => {
   it("apre una riga prima della chiusura", () => {
     expect(run(addProperty, "---\ntitle: x\n---\nTesto|")).toBe("---\ntitle: x\n|\n---\nTesto");
+    expect(run(clearProperties, "---\ntitle: x\ntags: [a]\n---\nTesto|")).toBe("|Testo");
+    expect(run(clearProperties, "Testo|")).toBeNull();
   });
 
   it("riusa una riga vuota già pronta", () => {

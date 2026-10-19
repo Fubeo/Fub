@@ -8,6 +8,7 @@ import { cursorIsLiteral, mountMarkdownSurface, type EditorSlashHost, type Markd
 import { api } from "../../../../host/ipc";
 import { state } from "../../../../state/store";
 import { closeCommandPalette } from "../../../../ui/palette";
+import { closeContextMenu } from "../../../../ui/menu";
 import { declareClipboard } from "../../../../platform/clipboard";
 
 interface TestEditor {
@@ -497,6 +498,34 @@ describe("le azioni dell'editor della superficie", () => {
     expect(ed.editorActions.run("text.fold.less")).toBe(false);
     expect(ed.buffer.getDoc()).toBe(text);
     expect(ed.editorActions.state("text.undo").enabled).toBe(false);
+    ed.destroy();
+  });
+
+  it("il tasto destro sulle proprietà rese offre di aggiungerne una e di svuotarle", () => {
+    const { ed, view } = editor();
+    ed.buffer.setDoc("---\ntitle: x\n---\nTesto\n");
+    const items = (spot: Element) => {
+      const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 1, clientY: 1 });
+      spot.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      return [...document.querySelectorAll<HTMLElement>("#context-menu [role=menuitem]")];
+    };
+    const widget = () => {
+      const spot = document.createElement("div");
+      spot.className = "cm-fub-properties";
+      view().contentDOM.append(spot);
+      return spot;
+    };
+    const add = items(widget()).find((each) => each.textContent?.includes(t("editor.properties.add")));
+    expect(add).toBeDefined();
+    add!.click();
+    expect(ed.buffer.getDoc()).toBe("---\ntitle: x\n\n---\nTesto\n");
+    const clear = items(widget()).find((each) => each.textContent?.includes(t("editor.properties.clear")));
+    expect(clear).toBeDefined();
+    clear!.click();
+    expect(ed.buffer.getDoc()).toBe("Testo\n");
+    closeContextMenu();
+    document.getElementById("context-menu")?.remove();
     ed.destroy();
   });
 

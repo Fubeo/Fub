@@ -262,6 +262,17 @@ export const addProperty: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+/// Toglie tutto il frontmatter, con l'a capo che lo segue: come
+/// `note.properties.clear`, ma nel buffer, e un annullo lo rimette.
+export const clearProperties: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  const block = propertyBlock(state);
+  if (!block) return false;
+  const to = state.doc.sliceString(block.to, block.to + 1) === "\n" ? block.to + 1 : block.to;
+  dispatch(state.update({ changes: { from: block.from, to }, selection: { anchor: block.from }, scrollIntoView: true, userEvent: "delete" }));
+  return true;
+};
+
 /// La voce sulla cui riga di chiave sta l'unico cursore, con le vicine.
 function entryAtCursor(state: EditorState): { block: PropertyBlock; index: number } | null {
   if (state.selection.ranges.length !== 1) return null;

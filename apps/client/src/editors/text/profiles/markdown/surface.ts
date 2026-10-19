@@ -51,6 +51,7 @@ import {
 import { MARKDOWN_EXPORTS } from "./exports";
 import { markdownReference } from "./references";
 import { frontmatterRange, renderMarkdown } from "./render";
+import { addProperty, clearProperties } from "./properties";
 import type { ProofPorts } from "../../../core/proof-ports";
 
 /// Le tre viste esclusive sullo stesso buffer. `source` e `live_preview`
@@ -201,10 +202,19 @@ export function mountMarkdownSurface(context: SurfaceMountContext, opts: Markdow
     for (const listener of [...actionListeners]) listener();
   };
   // Il tasto destro su un richiamo o sulla definizione di una nota a piè di
-  // pagina offre di eliminarla tutta; altrove resta il menu del sistema.
+  // pagina offre di eliminarla tutta; sulle proprietà rese, di aggiungerne
+  // una o di svuotarle; altrove resta il menu del sistema.
   life.listen(parent, "contextmenu", (event) => {
     if (readOnly || mode === "reading" || event.defaultPrevented) return;
     if (!(event.target instanceof Element) || !event.target.closest(".cm-content")) return;
+    if (event.target.closest(".cm-fub-properties")) {
+      event.preventDefault();
+      showContextMenu(event, [
+        { label: t("editor.properties.add"), run: () => void engine.runCommand(addProperty) },
+        { label: t("editor.properties.clear"), run: () => void engine.runCommand(clearProperties) },
+      ]);
+      return;
+    }
     const pos = engine.posAtPoint(event.clientX, event.clientY);
     if (pos === null || engine.readState((state) => footnoteAt(state, pos)) === null) return;
     event.preventDefault();
