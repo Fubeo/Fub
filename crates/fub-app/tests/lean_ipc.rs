@@ -1029,7 +1029,7 @@ fn grid_surface_uses_only_named_typed_ports() {
 /// va mantenuta, documentata e sandboxata come le altre, e a M5 sarà
 /// raggiungibile dal webview come tutte.
 ///
-/// Questi tre non sono una dimenticanza, e per questo stanno in un elenco invece
+/// Questi due non sono una dimenticanza, e per questo stanno in un elenco invece
 /// che in un `assert!(vuoto)`. La
 /// [0029](../../../docs/decisions/0183-composizione-host-kernel.md)
 /// li ha scritti così apposta e lo dice: *«i tre comandi ci sono (`list_vaults`,
@@ -1039,12 +1039,14 @@ fn grid_surface_uses_only_named_typed_ports() {
 /// futuro avrebbe dovuto riscrivere. La metà shell è il §1.2 col modello di
 /// layout e il `PaneId`»*. Sono la metà backend di una voce la cui metà shell è
 /// in roadmap, non codice morto: toglierli sarebbe disfare una decisione presa.
+/// Il terzo, `close_vault`, ha trovato il suo chiamante: al cambio di vault la
+/// shell chiude nell'host quello che lascia.
 ///
 /// Ciò che questa riga compra è che quella frase resti **vera**: il giorno che il
 /// §1.2 arriva e la shell li chiama, questo test è rosso e l'elenco si accorcia;
-/// il giorno che un quarto comando perde il suo chiamante, questo test è rosso e
+/// il giorno che un altro comando perde il suo chiamante, questo test è rosso e
 /// chi lo ha perso deve scrivere qui perché resta — o toglierlo.
-const WITHOUT_CALLER: &[&str] = &["close_vault", "list_vaults", "set_current_vault"];
+const WITHOUT_CALLER: &[&str] = &["list_vaults", "set_current_vault"];
 
 /// I nomi di comando che la shell invoca, letti da `apps/client/src`.
 ///
