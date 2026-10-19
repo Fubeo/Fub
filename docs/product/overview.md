@@ -102,6 +102,10 @@ Rust, con fallback sugli input grezzi quando non è disponibile.
 - backlink e vicini;
 - risoluzione di link per nome, alias e path;
 - outline, proprietà e tag;
+- calendario delle giornaliere nella barra di destra (view `calendar` di
+  `fub.template`): un mese per volta, settimane col numero ISO e primo giorno
+  dal locale; un giorno apre o crea la sua giornaliera con `note.daily`, e
+  quello che l'ha già è in evidenza;
 - Graph View resa dalla shell.
 
 ### Estensibilità
