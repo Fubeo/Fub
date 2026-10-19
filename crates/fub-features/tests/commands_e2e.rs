@@ -20,9 +20,9 @@ use fub_abi::model::{DocId, Span};
 use fub_abi::session::{AnchoredSelection, AnchoredSelections, SelectionSet, ViewContext};
 use fub_abi::PluginError;
 use fub_features::{
-    CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_RENAME, NOTES_TRASH, SELECTION_WIKILINK,
-    SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
-    VAULT_ARCHIVE, VAULT_REPLACE,
+    CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_DUPLICATE, NOTES_RENAME, NOTES_TRASH,
+    SELECTION_WIKILINK, SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET,
+    SETTINGS_SET, TRASH_EMPTY, VAULT_ARCHIVE, VAULT_REPLACE,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
@@ -565,6 +565,47 @@ fn the_whole_life_of_a_notes_uses_registry_and_staged_restore() {
         .expect("dice quante")
         .to_string()
         .contains('0'));
+}
+
+/// «Duplica» copia i byte accanto all'originale con un nome libero, non
+/// sovrascrive mai, e si annulla col cestino.
+#[test]
+fn duplicating_copies_the_bytes_under_a_free_name_and_undoes_to_trash() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.invoke_command(
+        NOTES_CREATE,
+        serde_json::json!({ "name": "Idee" }),
+        InvokeMode::Apply,
+        Actor::User,
+    )
+    .expect("crea");
+    let dup = |ws: &mut Workspace| {
+        let outcome = ws
+            .invoke_command(
+                NOTES_DUPLICATE,
+                serde_json::json!({ "doc": "Idee.md" }),
+                InvokeMode::Apply,
+                Actor::User,
+            )
+            .expect("duplica");
+        let CommandEffect::Navigate { doc } = outcome.effect else {
+            panic!("duplicare risponde con la copia")
+        };
+        doc
+    };
+    assert_eq!(dup(&mut ws).as_str(), "Idee copia.md");
+    let second = dup(&mut ws);
+    assert_ne!(
+        second.as_str(),
+        "Idee copia.md",
+        "il nome occupato non si sovrascrive"
+    );
+    assert_eq!(ws.documents().len(), 3);
+    assert_eq!(
+        ws.read_source(&DocId::new("Idee copia.md")).unwrap(),
+        ws.read_source(&DocId::new("Idee.md")).unwrap()
+    );
 }
 
 /// Il protocollo staged conserva `AlreadyExists`: è la variante su cui il

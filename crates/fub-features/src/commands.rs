@@ -69,6 +69,8 @@ pub const SELECTION_WIKILINK: &str = "selection.wikilink";
 pub const VAULT_REPLACE: &str = "vault.replace";
 /// Crea una nota.
 pub const NOTES_CREATE: &str = "note.create";
+/// Duplica una nota (o un file) accanto all'originale, con un nome libero.
+pub const NOTES_DUPLICATE: &str = "note.duplicate";
 /// Rinomina/sposta una nota (e i wikilink che la nominano).
 pub const NOTES_RENAME: &str = "note.rename";
 /// Sposta una nota nel cestino.
@@ -378,6 +380,14 @@ fn catalog_it() -> StringCatalog {
             "La cartella in cui nasce la nota, al posto di quella configurata. \
              Un nome che è già un path non viene ribasato.",
         )
+        .with("note.duplicate.title", "Duplica nota")
+        .with(
+            "note.duplicate.desc",
+            "Crea una copia del file accanto all'originale, con un nome libero \
+             («Nota copia»). I byte sono gli stessi: vale per ogni formato.",
+        )
+        .with("note.duplicate.doc.title", "Nota")
+        .with("note.duplicate.doc.desc", "Il file da duplicare.")
         .with("note.rename.title", "Rinomina nota")
         .with(
             "note.rename.desc",
@@ -801,6 +811,14 @@ fn catalog_en() -> StringCatalog {
             "The folder the note is born in, instead of the configured one. A \
              name that is already a path is not rebased.",
         )
+        .with("note.duplicate.title", "Duplicate note")
+        .with(
+            "note.duplicate.desc",
+            "Creates a copy of the file next to the original, under a free name \
+             (\"Note copy\"). The bytes are identical: it works for every format.",
+        )
+        .with("note.duplicate.doc.title", "Note")
+        .with("note.duplicate.doc.desc", "The file to duplicate.")
         .with("note.rename.title", "Rename note")
         .with(
             "note.rename.desc",
@@ -1170,6 +1188,9 @@ impl CoreCommands {
                 .with_param(parameter(NOTES_CREATE, "folder", ParamKind::Text))
                 // Una nota sola, e il cestino la rende reversibile.
                 .with_scope(CommandScope::writing(CommandReach::Document)),
+            command(NOTES_DUPLICATE)
+                .with_param(parameter(NOTES_DUPLICATE, "doc", ParamKind::Document).required())
+                .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_RENAME)
                 .with_param(parameter(NOTES_RENAME, "doc", ParamKind::Document).required())
                 .with_param(parameter(NOTES_RENAME, "to", ParamKind::Text).required())
@@ -1289,6 +1310,7 @@ impl CommandProvider for CoreCommands {
             SELECTION_WIKILINK => selection_wikilink(mode, host),
             VAULT_REPLACE => vault_replace(args, mode, host),
             NOTES_CREATE => notes_create(args, mode, host),
+            NOTES_DUPLICATE => notes_duplicate(args, mode, host),
             NOTES_RENAME => notes_rename(args, mode, host),
             NOTES_TRASH => notes_trash(args, mode, host),
             TRASH_RESTORE => trash_restore(args, mode, host),
@@ -1712,6 +1734,43 @@ fn notes_create(
         serde_json::json!({ "doc": id.as_str() }),
     );
     Ok(CommandOutcome::notify(notify)
+        .undoable(undo)
+        .with_effect(CommandEffect::Navigate { doc: id }))
+}
+
+/// Il nome della copia: «Nota.md» diventa «Nota copia.md», e se c'è già
+/// l'host sceglie il primo libero.
+fn duplicate_name(doc: &DocId) -> String {
+    let id = doc.as_str();
+    let (stem, ext) = match id.rfind('.') {
+        Some(dot) if dot > id.rfind('/').map_or(0, |s| s + 1) => id.split_at(dot),
+        _ => (id, ""),
+    };
+    format!("{stem} copia{ext}")
+}
+
+fn notes_duplicate(
+    args: Args<'_>,
+    mode: InvokeMode,
+    host: &mut dyn HostApi,
+) -> Result<CommandOutcome, PluginError> {
+    let doc = args
+        .document("doc")
+        .expect("l'host ha convalidato un parametro obbligatorio");
+    let id = host.free_name(&DocId::new(duplicate_name(&doc)));
+    if mode.is_dry_run() {
+        return Ok(plan(one(P_CREATE, A_DOC, id.as_str()), vec![id]));
+    }
+    // I byte e non il testo: un'immagine o un PDF si duplicano come una nota.
+    // `None` come base = crea soltanto se non esiste, mai sovrascrivere.
+    let bytes = host.read_document_bytes(&doc)?;
+    host.write_document_bytes(&id, &bytes, None)?;
+    let undo = Undo::by_command(
+        one(U_CREATE, A_DOC, id.as_str()),
+        NOTES_TRASH,
+        serde_json::json!({ "doc": id.as_str() }),
+    );
+    Ok(CommandOutcome::notify(one(D_CREATE, A_DOC, id.as_str()))
         .undoable(undo)
         .with_effect(CommandEffect::Navigate { doc: id }))
 }

@@ -20,7 +20,7 @@ import {
   setSpace,
 } from "../state/organization";
 import { on, saveActiveSpace, saveExpanded, state } from "../state/store";
-import { createFolder, createNote, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
+import { createFolder, createNote, duplicateNote, importIntoVault, openVaultRoot, refreshDocuments, renameFolder, trashFolder, undoLastOperation } from "../state/vault";
 import { carriesFiles, offerOutside, pickedFiles, readDropped, type Dropped } from "../ui/vault-transfer";
 import { confirm } from "../platform/confirm";
 import {
@@ -51,6 +51,8 @@ import {
 import { VAULT_EXPORT } from "../ui/vault-export";
 import { IMPORT_PREPARE } from "../ui/note-import";
 import { showPanel } from "./sidebar";
+import { writeClipboardText } from "../platform/clipboard";
+import { searchFor } from "../state/search-port";
 import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { canShowFile, focusEditor, openDocument } from "../state/document-controller";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
@@ -797,6 +799,8 @@ function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
   const reorder = reorderActions(id);
   showMenuFor(at, [
     { label: t("explorer.rename"), hint: "F2", run: () => renameEntry(id, row) },
+    { label: t("explorer.duplicate"), run: () => void duplicateEntry(id) },
+    { label: t("explorer.copy_path"), run: () => void copyPath(id) },
     ...(move ? [move] : []),
     { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
     { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, id) },
@@ -1044,6 +1048,8 @@ function folderMenu(at: MouseEvent, path: string): void {
         : []),
       { separator: true, label: t("explorer.rename"), hint: "F2", run: () => void renameFolderRow(path) },
       { label: t("explorer.move"), run: () => void pickMoveFolders([path]) },
+      { label: t("explorer.copy_path"), run: () => void copyPath(path) },
+      { label: t("explorer.search_in_folder"), run: () => searchInFolder(path) },
       { separator: true, label: t("explorer.icon"), run: () => chooseIcon(at, path) },
       { label: t("explorer.as_space"), run: () => addSpace(path) },
       ...reorder.map((action, index) => ({ ...action, separator: index === 0 })),
@@ -1293,6 +1299,32 @@ function openSpaceNote(): void {
 // --- crea, rinomina, converti -----------------------------------------------
 
 /// Crea una nota e la apre.
+/// Duplica il file e apre la copia: il nome libero lo sceglie il kernel.
+async function duplicateEntry(id: string): Promise<void> {
+  try {
+    const copy = await duplicateNote(id);
+    if (copy) await openDocument(copy);
+  } catch (error) {
+    notify(t("explorer.duplicate_failed", { reason: errorText(error) }), "guasto");
+  }
+}
+
+/// Il percorso della voce relativo al vault, negli appunti.
+async function copyPath(path: string): Promise<void> {
+  try {
+    await writeClipboardText(path);
+  } catch {
+    // Senza appunti non c'è niente da dire: il gesto è un comodo, non un dato.
+  }
+}
+
+/// Porta nel pannello Cerca una domanda ristretta alla cartella.
+function searchInFolder(path: string): void {
+  revealSidePanel("sidebar");
+  showPanel("search");
+  searchFor(`folder:"${path.replace(/"/g, "")}" `);
+}
+
 async function newNote(folder: string | null = state.activeSpace): Promise<void> {
   try {
     const created = await createNote(undefined, folder ?? undefined);

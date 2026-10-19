@@ -2148,6 +2148,7 @@ export interface Organization {
 /// cambia in un posto.
 export const COMMANDS = {
   create: "note.create",
+  duplicate: "note.duplicate",
   rename: "note.rename",
   trash: "note.trash",
   restore: "trash.restore",

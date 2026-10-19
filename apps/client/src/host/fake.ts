@@ -946,6 +946,19 @@ export function createFakeHost(options: Options = {}): FakeHost {
         emit({ type: "document_changed", id: doc });
         return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
       }
+      case "note.duplicate": {
+        const from = String(args?.doc);
+        const before = docs.get(from);
+        if (!before) throw new Error(`host fake: «${from}» non esiste`);
+        const dot = from.lastIndexOf(".");
+        const stem = dot > from.lastIndexOf("/") + 1 ? from.slice(0, dot) : from;
+        const ext = stem.length === from.length ? "" : from.slice(dot);
+        let doc = `${stem} copia${ext}`;
+        for (let n = 1; docs.has(doc); n += 1) doc = `${stem} copia ${n}${ext}`;
+        docs.set(doc, { ...before });
+        emit({ type: "document_changed", id: doc });
+        return { notify: null, effect: { kind: "navigate" as const, doc }, undo: null, partial: null };
+      }
       case "note.rename": {
         const from = String(args?.doc);
         const to = String(args?.to);

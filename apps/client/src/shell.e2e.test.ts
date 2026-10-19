@@ -1226,6 +1226,13 @@ describe("una sessione e le sue superfici", () => {
     expect(texts[0]).toContain(" [dopo il rimonto]");
   });
 
+  it("«Duplica» dal menu della riga crea la copia accanto all'originale e la apre", async () => {
+    await start(VAULT);
+    await contextMenu(row("Benvenuto"), "Duplica");
+    await waitFor("la copia compare nell'albero", () => !!row("Benvenuto copia"));
+    expect(row("Benvenuto")).toBeTruthy();
+  });
+
   it("la rinomina non stacca le superfici: due riquadri restano una sessione", async () => {
     const host = await start(VAULT);
     document.dispatchEvent(
